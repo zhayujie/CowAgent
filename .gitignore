@@ -46,3 +46,4 @@ dist/
 build/
 *.egg-info/
 .cow.pid
+PR_SUBMISSION.md

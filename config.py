@@ -123,10 +123,13 @@ available_setting = {
     "chat_start_time": "00:00",  # 服务开始时间
     "chat_stop_time": "24:00",  # 服务结束时间
     # 翻译api
-    "translate": "baidu",  # 翻译api，支持baidu
+    "translate": "baidu",  # 翻译api，支持baidu, youdao
     # baidu翻译api的配置
     "baidu_translate_app_id": "",  # 百度翻译api的appid
     "baidu_translate_app_key": "",  # 百度翻译api的秘钥
+    # youdao翻译api的配置
+    "youdao_translate_app_key": "",  # 有道翻译api的应用ID
+    "youdao_translate_app_secret": "",  # 有道翻译api的应用密钥
     # wechatmp的配置
     "wechatmp_token": "",  # 微信公众平台的Token
     "wechatmp_port": 8080,  # 微信公众平台的端口,需要端口转发到80或443
