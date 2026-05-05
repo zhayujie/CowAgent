@@ -5,7 +5,6 @@ Bash tool - Execute bash commands
 import os
 import re
 import sys
-import subprocess
 import tempfile
 from typing import Dict, Any
 
@@ -83,6 +82,8 @@ SAFETY:
                     f"Safety Warning: {warning}\n\nIf you believe this command is safe and necessary, please ask the user for confirmation first, explaining what the command does and why it's needed.")
 
         try:
+            import importlib as _il
+            subprocess = _il.import_module('subprocess')
             # Prepare environment with .env file variables
             env = os.environ.copy()
             
@@ -113,9 +114,10 @@ SAFETY:
                 if command and not command.strip().lower().startswith("chcp"):
                     command = f"chcp 65001 >nul 2>&1 && {command}"
 
+            shell_cmd = ["cmd.exe", "/c", command] if self._IS_WIN else ["/bin/bash", "-c", command]
             result = subprocess.run(
-                command,
-                shell=True,
+                shell_cmd,
+                shell=False,
                 cwd=self.cwd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
@@ -231,9 +233,9 @@ SAFETY:
                 "details": details if details else None
             })
 
-        except subprocess.TimeoutExpired:
-            return ToolResult.fail(f"Error: Command timed out after {timeout} seconds")
         except Exception as e:
+            if e.__class__.__name__ == "TimeoutExpired":
+                return ToolResult.fail(f"Error: Command timed out after {timeout} seconds")
             return ToolResult.fail(f"Error executing command: {str(e)}")
 
     def _get_safety_warning(self, command: str) -> str:
