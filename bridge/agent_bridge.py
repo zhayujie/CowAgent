@@ -74,7 +74,7 @@ class AgentLLMModel(LLMModel):
         ("qwen", const.QWEN_DASHSCOPE), ("qwq", const.QWEN_DASHSCOPE), ("qvq", const.QWEN_DASHSCOPE),
         ("gemini", const.GEMINI), ("glm", const.ZHIPU_AI), ("claude", const.CLAUDEAPI),
         ("moonshot", const.MOONSHOT), ("kimi", const.MOONSHOT),
-        ("doubao", const.DOUBAO), ("deepseek", const.DEEPSEEK),
+        ("doubao", const.DOUBAO), (const.QINIU_DEFAULT_MODEL, const.QINIU), ("deepseek", const.DEEPSEEK),
     ]
 
     def __init__(self, bridge: Bridge, bot_type: str = "chat"):

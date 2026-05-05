@@ -342,7 +342,7 @@ class Godcmd(Plugin):
                         elif cmd == "resetall":
                             if bottype in [const.OPEN_AI, const.OPENAI, const.CHATGPT, const.CHATGPTONAZURE, const.LINKAI,
                                            const.BAIDU, const.XUNFEI, const.QWEN, const.QWEN_DASHSCOPE, const.GEMINI, const.ZHIPU_AI, const.MOONSHOT,
-                                           const.MODELSCOPE]:
+                                           const.MODELSCOPE, const.DEEPSEEK, const.QINIU]:
                                 channel.cancel_all_session()
                                 bot.sessions.clear_all_session()
                                 ok, result = True, "重置所有会话成功"

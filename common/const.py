@@ -14,6 +14,7 @@ ZHIPU_AI = "zhipu"
 MOONSHOT = "moonshot"
 MiniMax = "minimax"
 DEEPSEEK = "deepseek"
+QINIU = "qiniu"
 CUSTOM = "custom"  # custom OpenAI-compatible API, bot_type won't auto-switch on model change
 MODELSCOPE = "modelscope"
 
@@ -84,6 +85,9 @@ DEEPSEEK_CHAT = "deepseek-chat"  # DeepSeek-V3对话模型
 DEEPSEEK_REASONER = "deepseek-reasoner"  # DeepSeek-R1模型
 DEEPSEEK_V4_FLASH = "deepseek-v4-flash"  # DeepSeek V4 Flash - 默认推荐 (思考模式 + 工具调用)
 DEEPSEEK_V4_PRO = "deepseek-v4-pro"  # DeepSeek V4 Pro - 复杂任务更强 (思考模式 + 工具调用)
+
+# Qiniu (qnaigc.com OpenAI-compatible gateway; default placeholder model when list not available)
+QINIU_DEFAULT_MODEL = "deepseek-v3"
 
 # Qwen (通义千问 - 阿里云 DashScope)
 QWEN_TURBO = "qwen-turbo"
@@ -180,6 +184,9 @@ MODEL_LIST = [
               GPT_5, GPT_5_MINI, GPT_5_NANO,
               GPT_54, GPT_54_MINI, GPT_54_NANO,
               O1, O1_MINI,
+  
+              # Qiniu
+              QINIU_DEFAULT_MODEL,
 
               # GLM (智谱AI)
               ZHIPU_AI, GLM_5_1, GLM_5_TURBO, GLM_5, GLM_4, GLM_4_PLUS, GLM_4_flash, GLM_4_LONG, GLM_4_ALLTOOLS,

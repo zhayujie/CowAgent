@@ -864,6 +864,13 @@ class ConfigHandler:
             "api_base_placeholder": _PLACEHOLDER_V1,
             "models": [const.KIMI_K2_6, const.KIMI_K2_5, const.KIMI_K2],
         }),
+        ("qiniu", {
+            "label": "七牛云",
+            "api_key_field": "qiniu_api_key",
+            "api_base_key": "qiniu_api_base",
+            "api_base_default": "https://api.qnaigc.com/v1",
+            "models": [const.QINIU_DEFAULT_MODEL],
+        }),
         ("modelscope", {
             "label": "ModelScope",
             "api_key_field": "modelscope_api_key",
@@ -892,9 +899,9 @@ class ConfigHandler:
 
     EDITABLE_KEYS = {
         "model", "bot_type", "use_linkai",
-        "open_ai_api_base", "deepseek_api_base", "claude_api_base", "gemini_api_base",
+        "open_ai_api_base", "deepseek_api_base", "qiniu_api_base", "claude_api_base", "gemini_api_base",
         "zhipu_ai_api_base", "moonshot_base_url", "ark_base_url", "custom_api_base",
-        "open_ai_api_key", "deepseek_api_key", "claude_api_key", "gemini_api_key",
+        "open_ai_api_key", "deepseek_api_key", "qiniu_api_key", "claude_api_key", "gemini_api_key",
         "zhipu_ai_api_key", "dashscope_api_key", "moonshot_api_key",
         "ark_api_key", "minimax_api_key", "linkai_api_key", "custom_api_key",
         "agent_max_context_tokens", "agent_max_context_turns", "agent_max_steps",

@@ -197,6 +197,9 @@ available_setting = {
     "minimax_api_key": "",
     "Minimax_group_id": "",
     "Minimax_base_url": "",
+    # 七牛云 MaaS（OpenAI 兼容网关）
+    "qiniu_api_key": "",
+    "qiniu_api_base": "https://api.qnaigc.com/v1",
     "deepseek_api_key": "",
     "deepseek_api_base": "https://api.deepseek.com/v1",
     "web_port": 9899,
@@ -385,6 +388,8 @@ def load_config():
         "gemini_api_base": "GEMINI_API_BASE",
         "minimax_api_key": "MINIMAX_API_KEY",
         "minimax_api_base": "MINIMAX_API_BASE",
+        "qiniu_api_key": "QINIU_API_KEY",
+        "qiniu_api_base": "QINIU_API_BASE",
         "deepseek_api_key": "DEEPSEEK_API_KEY",
         "deepseek_api_base": "DEEPSEEK_API_BASE",
         "zhipu_ai_api_key": "ZHIPU_AI_API_KEY",

@@ -437,6 +437,7 @@ class CowCliPlugin(Plugin):
             const.MOONSHOT: const.MOONSHOT,
             "moonshot-v1-8k": const.MOONSHOT, "moonshot-v1-32k": const.MOONSHOT,
             "moonshot-v1-128k": const.MOONSHOT,
+            const.QINIU_DEFAULT_MODEL: const.QINIU,
         }
         _PREFIX = [
             ("qwen", const.QWEN_DASHSCOPE), ("qwq", const.QWEN_DASHSCOPE),

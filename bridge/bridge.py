@@ -60,6 +60,9 @@ class Bridge(object):
 
             if model_type and model_type.startswith("deepseek"):
                 self.btype["chat"] = const.DEEPSEEK
+                
+            if model_type in [const.QINIU_DEFAULT_MODEL]:
+                self.btype["chat"] = const.QINIU
 
             if model_type in [const.MODELSCOPE]:
                 self.btype["chat"] = const.MODELSCOPE
