@@ -1,0 +1,43 @@
+---
+title: Baidu Qianfan / ERNIE
+description: Baidu Qianfan ERNIE モデル設定
+---
+
+方法 1: 公式接続（推奨）:
+
+```json
+{
+  "model": "ernie-4.5-turbo-128k",
+  "qianfan_api_key": "",
+  "qianfan_api_base": "https://qianfan.baidubce.com/v2"
+}
+```
+
+| パラメータ | 説明 |
+| --- | --- |
+| `model` | 推奨は `ernie-4.5-turbo-128k`。`ernie-4.5-turbo-32k` と `ernie-x1-turbo-32k` も利用できます |
+| `qianfan_api_key` | Qianfan API Key。通常は `bce-v3/` で始まります |
+| `qianfan_api_base` | 任意。デフォルトは `https://qianfan.baidubce.com/v2` |
+
+## モデル選択
+
+| モデル | 用途 |
+| --- | --- |
+| `ernie-4.5-turbo-128k` | 長いコンテキストと一般的なチャット向けの推奨モデル |
+| `ernie-4.5-turbo-32k` | コンテキスト長とコストのバランスが良い一般チャット向け |
+| `ernie-x1-turbo-32k` | より強い推論が必要なタスク向け |
+
+方法 2: OpenAI 互換接続:
+
+```json
+{
+  "model": "ernie-4.5-turbo-128k",
+  "bot_type": "openai",
+  "open_ai_api_key": "",
+  "open_ai_api_base": "https://qianfan.baidubce.com/v2"
+}
+```
+
+<Tip>
+  新しい設定では `qianfan_api_key` の利用を推奨します。既存の `wenxin`、`wenxin-4`、`baidu_wenxin_api_key`、`baidu_wenxin_secret_key` 設定は引き続き利用できます。
+</Tip>

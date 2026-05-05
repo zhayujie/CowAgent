@@ -771,6 +771,7 @@ class ConfigHandler:
 
     _RECOMMENDED_MODELS = [
         const.DEEPSEEK_V4_FLASH, const.DEEPSEEK_V4_PRO, const.DEEPSEEK_CHAT, const.DEEPSEEK_REASONER,
+        const.ERNIE_45_TURBO_128K, const.ERNIE_45_TURBO_32K, const.ERNIE_X1_TURBO_32K,
         const.MINIMAX_M2_7_HIGHSPEED, const.MINIMAX_M2_7, const.MINIMAX_M2_5, const.MINIMAX_M2_1, const.MINIMAX_M2_1_LIGHTNING,
         const.CLAUDE_4_6_SONNET, const.CLAUDE_4_7_OPUS, const.CLAUDE_4_6_OPUS, const.CLAUDE_4_5_SONNET,
         const.GEMINI_31_FLASH_LITE_PRE, const.GEMINI_31_PRO_PRE, const.GEMINI_3_FLASH_PRE,
@@ -787,6 +788,7 @@ class ConfigHandler:
     # never looks like a real default a user might paste verbatim — and we
     # never auto-rewrite anything on the server side.
     _PLACEHOLDER_V1 = "https://...../v1"
+    _PLACEHOLDER_QIANFAN = "https://...../v2"
     _PLACEHOLDER_ZHIPU = "https://...../api/paas/v4"
     _PLACEHOLDER_DOUBAO = "https://...../api/v3"
     _PLACEHOLDER_GEMINI = "https://....."
@@ -799,6 +801,14 @@ class ConfigHandler:
             "api_base_default": "https://api.deepseek.com/v1",
             "api_base_placeholder": _PLACEHOLDER_V1,
             "models": [const.DEEPSEEK_V4_FLASH, const.DEEPSEEK_V4_PRO, const.DEEPSEEK_CHAT, const.DEEPSEEK_REASONER],
+        }),
+        ("qianfan", {
+            "label": "百度千帆",
+            "api_key_field": "qianfan_api_key",
+            "api_base_key": "qianfan_api_base",
+            "api_base_default": "https://qianfan.baidubce.com/v2",
+            "api_base_placeholder": _PLACEHOLDER_QIANFAN,
+            "models": [const.ERNIE_45_TURBO_128K, const.ERNIE_45_TURBO_32K, const.ERNIE_X1_TURBO_32K],
         }),
         ("minimax", {
             "label": "MiniMax",
@@ -892,9 +902,9 @@ class ConfigHandler:
 
     EDITABLE_KEYS = {
         "model", "bot_type", "use_linkai",
-        "open_ai_api_base", "deepseek_api_base", "claude_api_base", "gemini_api_base",
+        "open_ai_api_base", "deepseek_api_base", "qianfan_api_base", "claude_api_base", "gemini_api_base",
         "zhipu_ai_api_base", "moonshot_base_url", "ark_base_url", "custom_api_base",
-        "open_ai_api_key", "deepseek_api_key", "claude_api_key", "gemini_api_key",
+        "open_ai_api_key", "deepseek_api_key", "qianfan_api_key", "claude_api_key", "gemini_api_key",
         "zhipu_ai_api_key", "dashscope_api_key", "moonshot_api_key",
         "ark_api_key", "minimax_api_key", "linkai_api_key", "custom_api_key",
         "agent_max_context_tokens", "agent_max_context_turns", "agent_max_steps",

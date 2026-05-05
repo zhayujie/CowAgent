@@ -1,0 +1,43 @@
+---
+title: Baidu Qianfan / ERNIE
+description: Baidu Qianfan ERNIE model configuration
+---
+
+Option 1: Native integration (recommended):
+
+```json
+{
+  "model": "ernie-4.5-turbo-128k",
+  "qianfan_api_key": "",
+  "qianfan_api_base": "https://qianfan.baidubce.com/v2"
+}
+```
+
+| Parameter | Description |
+| --- | --- |
+| `model` | Recommended: `ernie-4.5-turbo-128k`; also supports `ernie-4.5-turbo-32k` and `ernie-x1-turbo-32k` |
+| `qianfan_api_key` | Qianfan API key, usually starting with `bce-v3/` |
+| `qianfan_api_base` | Optional, defaults to `https://qianfan.baidubce.com/v2` |
+
+## Model Selection
+
+| Model | Use Case |
+| --- | --- |
+| `ernie-4.5-turbo-128k` | Default recommendation for long-context and general chat |
+| `ernie-4.5-turbo-32k` | General chat with a balanced context window and cost |
+| `ernie-x1-turbo-32k` | Tasks that need stronger reasoning |
+
+Option 2: OpenAI-compatible configuration:
+
+```json
+{
+  "model": "ernie-4.5-turbo-128k",
+  "bot_type": "openai",
+  "open_ai_api_key": "",
+  "open_ai_api_base": "https://qianfan.baidubce.com/v2"
+}
+```
+
+<Tip>
+  Prefer `qianfan_api_key` for new configurations. Existing `wenxin`, `wenxin-4`, `baidu_wenxin_api_key`, and `baidu_wenxin_secret_key` configurations remain supported.
+</Tip>

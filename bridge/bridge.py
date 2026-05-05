@@ -61,6 +61,11 @@ class Bridge(object):
             if model_type and model_type.startswith("deepseek"):
                 self.btype["chat"] = const.DEEPSEEK
 
+            if model_type and isinstance(model_type, str):
+                lowered_model_type = model_type.lower()
+                if lowered_model_type == const.QIANFAN or lowered_model_type.startswith("ernie"):
+                    self.btype["chat"] = const.QIANFAN
+
             if model_type in [const.MODELSCOPE]:
                 self.btype["chat"] = const.MODELSCOPE
             

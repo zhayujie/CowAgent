@@ -115,7 +115,7 @@ irm https://cdn.link-ai.tech/code/cow/run.ps1 | iex
 
 项目支持国内外主流厂商的模型接口，可选模型及配置说明参考：[模型说明](#模型说明)。
 
-> 注：Agent 模式下推荐使用以下模型，可根据效果及成本综合选择：deepseek-v4-flash、MiniMax-M2.7、glm-5.1、kimi-k2.6、qwen3.5-plus、claude-sonnet-4-6、gemini-3.1-pro-preview、gpt-5.4、gpt-5.4-mini
+> 注：Agent 模式下推荐使用以下模型，可根据效果及成本综合选择：deepseek-v4-flash、MiniMax-M2.7、glm-5.1、kimi-k2.6、qwen3.5-plus、claude-sonnet-4-6、gemini-3.1-pro-preview、gpt-5.4、gpt-5.4-mini、ernie-4.5-turbo-128k
 
 同时支持使用 **LinkAI 平台** 接口，支持上述全部模型，并支持知识库、工作流、插件等 Agent 技能，参考 [接口文档](https://docs.link-ai.tech/platform/api)。
 
@@ -597,33 +597,37 @@ API Key 创建：在 [控制台](https://aistudio.google.com/app/apikey?hl=zh-cn
 </details>
 
 <details>
-<summary>百度文心</summary>
-方式一：官方 SDK 接入，配置如下：
+<summary>百度千帆 / ERNIE</summary>
+
+方式一：官方接入（推荐），配置如下：
 
 ```json
 {
-    "model": "wenxin-4", 
-    "baidu_wenxin_api_key": "IajztZ0bDxgnP9bEykU7lBer",
-    "baidu_wenxin_secret_key": "EDPZn6L24uAS9d8RWFfotK47dPvkjD6G"
+  "model": "ernie-4.5-turbo-128k",
+  "qianfan_api_key": "",
+  "qianfan_api_base": "https://qianfan.baidubce.com/v2"
 }
 ```
- - `model`: 可填 `wenxin`和`wenxin-4`，对应模型为 文心-3.5 和 文心-4.0
- - `baidu_wenxin_api_key`：参考 [千帆平台-access_token鉴权](https://cloud.baidu.com/doc/WENXINWORKSHOP/s/dlv4pct3s) 文档获取 API Key
- - `baidu_wenxin_secret_key`：参考 [千帆平台-access_token鉴权](https://cloud.baidu.com/doc/WENXINWORKSHOP/s/dlv4pct3s) 文档获取 Secret Key
+
+ - `model`: 推荐填写 `ernie-4.5-turbo-128k`，也可填写 `ernie-4.5-turbo-32k`、`ernie-x1-turbo-32k`
+ - `qianfan_api_key`: 百度千帆 API Key，通常以 `bce-v3/` 开头，可在百度智能云控制台创建
+ - `qianfan_api_base`: 可选，默认为 `https://qianfan.baidubce.com/v2`
+
+兼容说明：旧配置 `model: "wenxin"`、`model: "wenxin-4"`、`baidu_wenxin_api_key`、`baidu_wenxin_secret_key` 仍可继续使用。
 
 方式二：OpenAI 兼容方式接入，配置如下：
 ```json
 {
   "bot_type": "openai",
-  "model": "ERNIE-4.0-Turbo-8K",
+  "model": "ernie-4.5-turbo-128k",
   "open_ai_api_base": "https://qianfan.baidubce.com/v2",
-  "open_ai_api_key": "bce-v3/ALTxxxxxxd2b"
+  "open_ai_api_key": ""
 }
 ```
 - `bot_type`: OpenAI 兼容方式
-- `model`: 支持官方所有模型，参考[模型列表](https://cloud.baidu.com/doc/WENXINWORKSHOP/s/Wm9cvy6rl)
-- `open_ai_api_base`: 百度文心 API 的 BASE URL
-- `open_ai_api_key`: 百度文心的 API-KEY，参考 [官方文档](https://cloud.baidu.com/doc/qianfan-api/s/ym9chdsy5) ，在 [控制台](https://console.bce.baidu.com/iam/#/iam/apikey/list) 创建 API Key
+- `model`: 支持千帆平台上的 ERNIE 模型
+- `open_ai_api_base`: 百度千帆 OpenAI 兼容 API 的 BASE URL
+- `open_ai_api_key`: 百度千帆 API Key
 
 </details>
 

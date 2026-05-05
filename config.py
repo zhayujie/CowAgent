@@ -76,6 +76,9 @@ available_setting = {
     "baidu_wenxin_api_key": "",  # Baidu api key
     "baidu_wenxin_secret_key": "",  # Baidu secret key
     "baidu_wenxin_prompt_enabled": False,  # Enable prompt if you are using ernie character model
+    # Baidu Qianfan / ERNIE OpenAI-compatible API
+    "qianfan_api_key": "",  # Baidu Qianfan API key in bce-v3 format
+    "qianfan_api_base": "https://qianfan.baidubce.com/v2",  # Qianfan OpenAI-compatible API base
     # 讯飞星火API
     "xunfei_app_id": "",  # 讯飞应用ID
     "xunfei_api_key": "",  # 讯飞 API key
@@ -387,6 +390,8 @@ def load_config():
         "minimax_api_base": "MINIMAX_API_BASE",
         "deepseek_api_key": "DEEPSEEK_API_KEY",
         "deepseek_api_base": "DEEPSEEK_API_BASE",
+        "qianfan_api_key": "QIANFAN_API_KEY",
+        "qianfan_api_base": "QIANFAN_API_BASE",
         "zhipu_ai_api_key": "ZHIPU_AI_API_KEY",
         "zhipu_ai_api_base": "ZHIPU_AI_API_BASE",
         "moonshot_api_key": "MOONSHOT_API_KEY",

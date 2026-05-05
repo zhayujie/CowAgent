@@ -1,0 +1,43 @@
+---
+title: 百度千帆 / ERNIE
+description: 百度千帆 ERNIE 模型配置
+---
+
+方式一：官方接入（推荐）：
+
+```json
+{
+  "model": "ernie-4.5-turbo-128k",
+  "qianfan_api_key": "",
+  "qianfan_api_base": "https://qianfan.baidubce.com/v2"
+}
+```
+
+| 参数 | 说明 |
+| --- | --- |
+| `model` | 推荐使用 `ernie-4.5-turbo-128k`；也可使用 `ernie-4.5-turbo-32k`、`ernie-x1-turbo-32k` |
+| `qianfan_api_key` | 千帆 API Key，格式通常以 `bce-v3/` 开头 |
+| `qianfan_api_base` | 可选，默认为 `https://qianfan.baidubce.com/v2` |
+
+## 模型选择
+
+| 模型 | 适用场景 |
+| --- | --- |
+| `ernie-4.5-turbo-128k` | 默认推荐，适合长上下文和通用对话 |
+| `ernie-4.5-turbo-32k` | 通用对话，成本和上下文更均衡 |
+| `ernie-x1-turbo-32k` | 需要更强推理能力的任务 |
+
+方式二：OpenAI 兼容方式接入：
+
+```json
+{
+  "model": "ernie-4.5-turbo-128k",
+  "bot_type": "openai",
+  "open_ai_api_key": "",
+  "open_ai_api_base": "https://qianfan.baidubce.com/v2"
+}
+```
+
+<Tip>
+  新配置推荐使用 `qianfan_api_key`。旧的 `wenxin`、`wenxin-4`、`baidu_wenxin_api_key`、`baidu_wenxin_secret_key` 配置仍保持兼容。
+</Tip>

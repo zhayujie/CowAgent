@@ -14,6 +14,7 @@ from bridge.reply import Reply, ReplyType
 from common import const
 from common.log import logger
 from common.utils import expand_path
+from config import conf
 from models.openai_compatible_bot import OpenAICompatibleBot
 
 
@@ -68,6 +69,7 @@ class AgentLLMModel(LLMModel):
     _MODEL_BOT_TYPE_MAP = {
         "wenxin": const.BAIDU, "wenxin-4": const.BAIDU,
         "xunfei": const.XUNFEI, const.QWEN: const.QWEN_DASHSCOPE,
+        const.QIANFAN: const.QIANFAN,
         const.MODELSCOPE: const.MODELSCOPE,
     }
     _MODEL_PREFIX_MAP = [
@@ -75,10 +77,10 @@ class AgentLLMModel(LLMModel):
         ("gemini", const.GEMINI), ("glm", const.ZHIPU_AI), ("claude", const.CLAUDEAPI),
         ("moonshot", const.MOONSHOT), ("kimi", const.MOONSHOT),
         ("doubao", const.DOUBAO), ("deepseek", const.DEEPSEEK),
+        ("ernie", const.QIANFAN),
     ]
 
     def __init__(self, bridge: Bridge, bot_type: str = "chat"):
-        from config import conf
         super().__init__(model=conf().get("model", const.GPT_41))
         self.bridge = bridge
         self.bot_type = bot_type
@@ -87,7 +89,6 @@ class AgentLLMModel(LLMModel):
 
     @property
     def model(self):
-        from config import conf
         return conf().get("model", const.GPT_41)
 
     @model.setter
@@ -96,8 +97,6 @@ class AgentLLMModel(LLMModel):
 
     def _resolve_bot_type(self, model_name: str) -> str:
         """Resolve bot type from model name, matching Bridge.__init__ logic."""
-        from config import conf
-
         if conf().get("use_linkai", False) and conf().get("linkai_api_key"):
             return const.LINKAI
         # Support custom bot type configuration
@@ -117,8 +116,9 @@ class AgentLLMModel(LLMModel):
             return const.MOONSHOT
         if conf().get("bot_type") == "modelscope":
             return const.MODELSCOPE
+        lowered_model = model_name.lower()
         for prefix, btype in self._MODEL_PREFIX_MAP:
-            if model_name.startswith(prefix):
+            if lowered_model.startswith(prefix):
                 return btype
         return const.OPENAI
 

@@ -428,11 +428,12 @@ class CowCliPlugin(Plugin):
 
     @staticmethod
     def _resolve_bot_type_for_model(model_name: str) -> str:
-        """Resolve bot_type from model name, reusing AgentBridge mapping."""
+        """Resolve bot_type from model name, matching AgentBridge mapping."""
         from common import const
         _EXACT = {
             "wenxin": const.BAIDU, "wenxin-4": const.BAIDU,
             "xunfei": const.XUNFEI, const.QWEN: const.QWEN_DASHSCOPE,
+            const.QIANFAN: const.QIANFAN,
             const.MODELSCOPE: const.MODELSCOPE,
             const.MOONSHOT: const.MOONSHOT,
             "moonshot-v1-8k": const.MOONSHOT, "moonshot-v1-32k": const.MOONSHOT,
@@ -445,6 +446,7 @@ class CowCliPlugin(Plugin):
             ("claude", const.CLAUDEAPI),
             ("moonshot", const.MOONSHOT), ("kimi", const.MOONSHOT),
             ("doubao", const.DOUBAO), ("deepseek", const.DEEPSEEK),
+            ("ernie", const.QIANFAN),
         ]
         if not model_name:
             return const.OPENAI
@@ -454,8 +456,9 @@ class CowCliPlugin(Plugin):
             return const.MiniMax
         if model_name in [const.QWEN_TURBO, const.QWEN_PLUS, const.QWEN_MAX]:
             return const.QWEN_DASHSCOPE
+        lowered_model = model_name.lower()
         for prefix, btype in _PREFIX:
-            if model_name.startswith(prefix):
+            if lowered_model.startswith(prefix):
                 return btype
         return const.OPENAI
 

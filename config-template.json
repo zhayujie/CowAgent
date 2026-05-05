@@ -3,6 +3,8 @@
   "model": "deepseek-v4-flash",
   "deepseek_api_key": "",
   "deepseek_api_base": "https://api.deepseek.com/v1",
+  "qianfan_api_key": "",
+  "qianfan_api_base": "https://qianfan.baidubce.com/v2",
   "minimax_api_key": "",
   "zhipu_ai_api_key": "",
   "ark_api_key": "",
