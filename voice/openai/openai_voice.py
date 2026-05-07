@@ -3,8 +3,6 @@ google voice service
 """
 import json
 
-import openai
-
 from bridge.reply import Reply, ReplyType
 from common.log import logger
 from config import conf
@@ -15,7 +13,9 @@ import datetime, random
 
 class OpenaiVoice(Voice):
     def __init__(self):
-        openai.api_key = conf().get("open_ai_api_key")
+        # No-op: this implementation calls OpenAI HTTP endpoints directly via
+        # `requests`, so it does not need a global SDK to be configured.
+        pass
 
     def voiceToText(self, voice_file):
         logger.debug("[Openai] voice file name={}".format(voice_file))
@@ -35,10 +35,18 @@ class OpenaiVoice(Voice):
             }
             response = requests.post(url, headers=headers, files=files, data=data)
             response_data = response.json()
-            text = response_data['text']
-            reply = Reply(ReplyType.TEXT, text)
-            logger.info("[Openai] voiceToText text={} voice file name={}".format(text, voice_file))
+            if response.status_code != 200 or "text" not in response_data:
+                logger.error(
+                    f"[Openai] voiceToText failed: status={response.status_code}, "
+                    f"resp={response_data}"
+                )
+                reply = Reply(ReplyType.ERROR, "我暂时还无法听清您的语音，请稍后再试吧~")
+            else:
+                text = response_data["text"]
+                reply = Reply(ReplyType.TEXT, text)
+                logger.info("[Openai] voiceToText text={} voice file name={}".format(text, voice_file))
         except Exception as e:
+            logger.error(f"[Openai] voiceToText exception: {e}", exc_info=True)
             reply = Reply(ReplyType.ERROR, "我暂时还无法听清您的语音，请稍后再试吧~")
         finally:
             return reply

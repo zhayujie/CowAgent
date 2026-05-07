@@ -44,6 +44,7 @@ class StoryTeller:
 @plugins.register(
     name="Dungeon",
     desire_priority=0,
+    enabled=False,
     namecn="文字冒险",
     desc="A plugin to play dungeon game",
     version="1.0",

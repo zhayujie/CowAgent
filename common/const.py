@@ -3,6 +3,7 @@ OPEN_AI = "openAI"
 OPENAI = "openai"
 CHATGPT = "chatGPT"  # legacy alias for OPENAI, kept for backward compatibility
 BAIDU = "baidu"
+QIANFAN = "qianfan"
 XUNFEI = "xunfei"
 CHATGPTONAZURE = "chatGPTOnAzure"
 LINKAI = "linkai"
@@ -89,6 +90,15 @@ DEEPSEEK_V4_PRO = "deepseek-v4-pro"  # DeepSeek V4 Pro - 复杂任务更强 (思
 # Qiniu (qnaigc.com OpenAI-compatible gateway; default placeholder model when list not available)
 QINIU_DEFAULT_MODEL = "deepseek-v3"
 
+# Baidu Qianfan / ERNIE
+ERNIE_5 = "ernie-5.0"  # ERNIE 5.0 - default recommendation
+ERNIE_X1_1 = "ernie-x1.1"  # ERNIE X1.1 - reasoning-focused, multimodal
+ERNIE_45_TURBO_128K = "ernie-4.5-turbo-128k"
+ERNIE_45_TURBO_32K = "ernie-4.5-turbo-32k"
+ERNIE_4_TURBO_8K = "ERNIE-4.0-Turbo-8K"
+ERNIE_45_TURBO_VL = "ernie-4.5-turbo-vl"
+ERNIE_45_TURBO_VL_32K = "ernie-4.5-turbo-vl-32k"
+
 # Qwen (通义千问 - 阿里云 DashScope)
 QWEN_TURBO = "qwen-turbo"
 QWEN_PLUS = "qwen-plus"
@@ -162,6 +172,10 @@ MODELSCOPE_MODEL_LIST = ["deepseek-ai/DeepSeek-R1-0528", "deepseek-ai/DeepSeek-R
 MODEL_LIST = [
               # DeepSeek
               DEEPSEEK_V4_FLASH, DEEPSEEK_V4_PRO, DEEPSEEK_CHAT, DEEPSEEK_REASONER,
+
+              # Baidu Qianfan / ERNIE
+              QIANFAN, ERNIE_5, ERNIE_X1_1, ERNIE_45_TURBO_128K, ERNIE_45_TURBO_32K, ERNIE_4_TURBO_8K,
+              ERNIE_45_TURBO_VL, ERNIE_45_TURBO_VL_32K,
 
               # MiniMax
               MiniMax, MINIMAX_M2_7, MINIMAX_M2_7_HIGHSPEED, MINIMAX_M2_5, MINIMAX_M2_1, MINIMAX_M2_1_LIGHTNING, MINIMAX_M2, MINIMAX_ABAB6_5,

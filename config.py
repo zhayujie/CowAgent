@@ -76,6 +76,9 @@ available_setting = {
     "baidu_wenxin_api_key": "",  # Baidu api key
     "baidu_wenxin_secret_key": "",  # Baidu secret key
     "baidu_wenxin_prompt_enabled": False,  # Enable prompt if you are using ernie character model
+    # Baidu Qianfan / ERNIE OpenAI-compatible API
+    "qianfan_api_key": "",  # Baidu Qianfan API key in bce-v3 format
+    "qianfan_api_base": "https://qianfan.baidubce.com/v2",  # Qianfan OpenAI-compatible API base
     # 讯飞星火API
     "xunfei_app_id": "",  # 讯飞应用ID
     "xunfei_api_key": "",  # 讯飞 API key
@@ -123,10 +126,13 @@ available_setting = {
     "chat_start_time": "00:00",  # 服务开始时间
     "chat_stop_time": "24:00",  # 服务结束时间
     # 翻译api
-    "translate": "baidu",  # 翻译api，支持baidu
+    "translate": "baidu",  # 翻译api，支持baidu, youdao
     # baidu翻译api的配置
     "baidu_translate_app_id": "",  # 百度翻译api的appid
     "baidu_translate_app_key": "",  # 百度翻译api的秘钥
+    # youdao翻译api的配置
+    "youdao_translate_app_key": "",  # 有道翻译api的应用ID
+    "youdao_translate_app_secret": "",  # 有道翻译api的应用密钥
     # wechatmp的配置
     "wechatmp_token": "",  # 微信公众平台的Token
     "wechatmp_port": 8080,  # 微信公众平台的端口,需要端口转发到80或443
@@ -142,12 +148,13 @@ available_setting = {
     "wechatcomapp_agent_id": "",  # 企业微信app的agent_id
     "wechatcomapp_aes_key": "",  # 企业微信app的aes_key
     # 飞书配置
-    "feishu_port": 80,  # 飞书bot监听端口
+    "feishu_port": 80,  # 飞书bot监听端口，仅webhook模式需要
     "feishu_app_id": "",  # 飞书机器人应用APP Id
     "feishu_app_secret": "",  # 飞书机器人APP secret
-    "feishu_token": "",  # 飞书 verification token
-    "feishu_bot_name": "",  # 飞书机器人的名字
+    "feishu_token": "",  # 飞书 verification token，仅webhook模式需要
     "feishu_event_mode": "websocket",  # 飞书事件接收模式: webhook(HTTP服务器) 或 websocket(长连接)
+    # 飞书流式回复（基于官方 cardkit 流式卡片 API，需要机器人开通 cardkit:card:write 权限，且飞书客户端 7.20+）
+    "feishu_stream_reply": True,  # 是否开启流式回复（打字机效果）。失败/老客户端自动降级为非流式或升级提示
     # 钉钉配置
     "dingtalk_client_id": "",  # 钉钉机器人Client ID 
     "dingtalk_client_secret": "",  # 钉钉机器人Client Secret
@@ -231,13 +238,13 @@ class Config(dict):
     def __getitem__(self, key):
         # 跳过以下划线开头的注释字段
         if not key.startswith("_") and key not in available_setting:
-            logger.warning("[Config] key '{}' not in available_setting, may not take effect".format(key))
+            logger.debug("[Config] key '{}' not in available_setting, may not take effect".format(key))
         return super().__getitem__(key)
 
     def __setitem__(self, key, value):
         # 跳过以下划线开头的注释字段
         if not key.startswith("_") and key not in available_setting:
-            logger.warning("[Config] key '{}' not in available_setting, may not take effect".format(key))
+            logger.debug("[Config] key '{}' not in available_setting, may not take effect".format(key))
         return super().__setitem__(key, value)
 
     def get(self, key, default=None):
@@ -391,6 +398,8 @@ def load_config():
         "qiniu_api_base": "QINIU_API_BASE",
         "deepseek_api_key": "DEEPSEEK_API_KEY",
         "deepseek_api_base": "DEEPSEEK_API_BASE",
+        "qianfan_api_key": "QIANFAN_API_KEY",
+        "qianfan_api_base": "QIANFAN_API_BASE",
         "zhipu_ai_api_key": "ZHIPU_AI_API_KEY",
         "zhipu_ai_api_base": "ZHIPU_AI_API_BASE",
         "moonshot_api_key": "MOONSHOT_API_KEY",

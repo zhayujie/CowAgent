@@ -29,7 +29,7 @@ ENVIRONMENT: All API keys from env_config are auto-injected. Use $VAR_NAME direc
 
 SAFETY:
 - Freely create/modify/delete files within the workspace
-- For destructive and out-of-workspace commands, explain and confirm first"""
+- For destructive commands out of workspace, explain and confirm first"""
 
     params: dict = {
         "type": "object",
@@ -238,48 +238,43 @@ SAFETY:
 
     def _get_safety_warning(self, command: str) -> str:
         """
-        Get safety warning for potentially dangerous commands
-        Only warns about extremely dangerous system-level operations
-        
+        Get safety warning for absolutely catastrophic commands only.
+        Keep the blocklist minimal so the agent retains maximum freedom.
+
         :param command: Command to check
         :return: Warning message if dangerous, empty string if safe
         """
-        cmd_lower = command.lower().strip()
+        # Tokenize to avoid substring false positives (e.g. `rm -rf /tmp/x`
+        # must not match `rm -rf /`).
+        tokens = command.lower().split()
 
-        # Only block extremely dangerous system operations
-        dangerous_patterns = [
-            # System shutdown/reboot
-            ("shutdown", "This command will shut down the system"),
-            ("reboot", "This command will reboot the system"),
-            ("halt", "This command will halt the system"),
-            ("poweroff", "This command will power off the system"),
+        # `rm -rf /` or `rm -rf /*` targeting the real root.
+        for i, tok in enumerate(tokens):
+            if tok != "rm":
+                continue
+            has_rf = False
+            for j in range(i + 1, len(tokens)):
+                t = tokens[j]
+                if t.startswith("-") and "r" in t and "f" in t:
+                    has_rf = True
+                elif t in ("--recursive", "--force"):
+                    continue
+                elif t in ("/", "/*"):
+                    if has_rf:
+                        return "This command will delete the entire filesystem"
+                    break
+                else:
+                    break
 
-            # Critical system modifications
-            ("rm -rf /", "This command will delete the entire filesystem"),
-            ("rm -rf /*", "This command will delete the entire filesystem"),
-            ("dd if=/dev/zero", "This command can destroy disk data"),
-            ("mkfs", "This command will format a filesystem, destroying all data"),
-            ("fdisk", "This command modifies disk partitions"),
+        # Disk wiping
+        if "if=/dev/zero" in command.lower() and "dd " in command.lower():
+            return "This command can destroy disk data"
 
-            # User/system management (only if targeting system users)
-            ("userdel root", "This command will delete the root user"),
-            ("passwd root", "This command will change the root password"),
-        ]
+        # Power control - match only as a standalone word (\b enforces word boundary)
+        if re.search(r'\b(shutdown|reboot|halt|poweroff)\b', command.lower()):
+            return "This command will shut down or restart the system"
 
-        for pattern, warning in dangerous_patterns:
-            if pattern in cmd_lower:
-                return warning
-
-        # Check for recursive deletion outside workspace
-        if "rm" in cmd_lower and "-rf" in cmd_lower:
-            # Allow deletion within current workspace
-            if not any(path in cmd_lower for path in ["./", self.cwd.lower()]):
-                # Check if targeting system directories
-                system_dirs = ["/bin", "/usr", "/etc", "/var", "/home", "/root", "/sys", "/proc"]
-                if any(sysdir in cmd_lower for sysdir in system_dirs):
-                    return "This command will recursively delete system directories"
-
-        return ""  # No warning needed
+        return ""
 
     @staticmethod
     def _convert_env_vars_for_windows(command: str, dotenv_vars: dict) -> str:

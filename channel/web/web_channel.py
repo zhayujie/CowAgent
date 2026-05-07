@@ -575,6 +575,7 @@ class WebChannel(ChatChannel):
             '/config', 'ConfigHandler',
             '/api/channels', 'ChannelsHandler',
             '/api/weixin/qrlogin', 'WeixinQrHandler',
+            '/api/feishu/register', 'FeishuRegisterHandler',
             '/api/tools', 'ToolsHandler',
             '/api/skills', 'SkillsHandler',
             '/api/memory', 'MemoryHandler',
@@ -779,7 +780,19 @@ class ConfigHandler:
         const.QWEN36_PLUS, const.QWEN35_PLUS, const.QWEN3_MAX,
         const.DOUBAO_SEED_2_PRO, const.DOUBAO_SEED_2_CODE,
         const.KIMI_K2_6, const.KIMI_K2_5, const.KIMI_K2,
+        const.ERNIE_5, const.ERNIE_X1_1, const.ERNIE_45_TURBO_128K, const.ERNIE_45_TURBO_32K,
     ]
+
+    # Generic placeholder hints surfaced in the web console. We deliberately
+    # show the version-path tail (e.g. "/v1") so users are reminded to type
+    # the full base URL. The form is intentionally vague (`...../v1`) so it
+    # never looks like a real default a user might paste verbatim — and we
+    # never auto-rewrite anything on the server side.
+    _PLACEHOLDER_V1 = "https://...../v1"
+    _PLACEHOLDER_QIANFAN = "https://...../v2"
+    _PLACEHOLDER_ZHIPU = "https://...../api/paas/v4"
+    _PLACEHOLDER_DOUBAO = "https://...../api/v3"
+    _PLACEHOLDER_GEMINI = "https://....."
 
     PROVIDER_MODELS = OrderedDict([
         ("deepseek", {
@@ -787,6 +800,7 @@ class ConfigHandler:
             "api_key_field": "deepseek_api_key",
             "api_base_key": "deepseek_api_base",
             "api_base_default": "https://api.deepseek.com/v1",
+            "api_base_placeholder": _PLACEHOLDER_V1,
             "models": [const.DEEPSEEK_V4_FLASH, const.DEEPSEEK_V4_PRO, const.DEEPSEEK_CHAT, const.DEEPSEEK_REASONER],
         }),
         ("minimax", {
@@ -794,6 +808,7 @@ class ConfigHandler:
             "api_key_field": "minimax_api_key",
             "api_base_key": None,
             "api_base_default": None,
+            "api_base_placeholder": "",
             "models": [const.MINIMAX_M2_7, const.MINIMAX_M2_7_HIGHSPEED, const.MINIMAX_M2_5, const.MINIMAX_M2_1, const.MINIMAX_M2_1_LIGHTNING],
         }),
         ("claudeAPI", {
@@ -801,6 +816,7 @@ class ConfigHandler:
             "api_key_field": "claude_api_key",
             "api_base_key": "claude_api_base",
             "api_base_default": "https://api.anthropic.com/v1",
+            "api_base_placeholder": _PLACEHOLDER_V1,
             "models": [const.CLAUDE_4_6_SONNET, const.CLAUDE_4_7_OPUS, const.CLAUDE_4_6_OPUS, const.CLAUDE_4_5_SONNET],
         }),
         ("gemini", {
@@ -808,6 +824,7 @@ class ConfigHandler:
             "api_key_field": "gemini_api_key",
             "api_base_key": "gemini_api_base",
             "api_base_default": "https://generativelanguage.googleapis.com",
+            "api_base_placeholder": _PLACEHOLDER_GEMINI,
             "models": [const.GEMINI_31_FLASH_LITE_PRE, const.GEMINI_31_PRO_PRE, const.GEMINI_3_FLASH_PRE],
         }),
         ("openai", {
@@ -815,6 +832,7 @@ class ConfigHandler:
             "api_key_field": "open_ai_api_key",
             "api_base_key": "open_ai_api_base",
             "api_base_default": "https://api.openai.com/v1",
+            "api_base_placeholder": _PLACEHOLDER_V1,
             "models": [const.GPT_54, const.GPT_54_MINI, const.GPT_54_NANO, const.GPT_5, const.GPT_41, const.GPT_4o],
         }),
         ("zhipu", {
@@ -822,6 +840,7 @@ class ConfigHandler:
             "api_key_field": "zhipu_ai_api_key",
             "api_base_key": "zhipu_ai_api_base",
             "api_base_default": "https://open.bigmodel.cn/api/paas/v4",
+            "api_base_placeholder": _PLACEHOLDER_ZHIPU,
             "models": [const.GLM_5_1, const.GLM_5_TURBO, const.GLM_5, const.GLM_4_7],
         }),
         ("dashscope", {
@@ -829,6 +848,7 @@ class ConfigHandler:
             "api_key_field": "dashscope_api_key",
             "api_base_key": None,
             "api_base_default": None,
+            "api_base_placeholder": "",
             "models": [const.QWEN36_PLUS, const.QWEN35_PLUS, const.QWEN3_MAX],
         }),
         ("doubao", {
@@ -836,6 +856,7 @@ class ConfigHandler:
             "api_key_field": "ark_api_key",
             "api_base_key": "ark_base_url",
             "api_base_default": "https://ark.cn-beijing.volces.com/api/v3",
+            "api_base_placeholder": _PLACEHOLDER_DOUBAO,
             "models": [const.DOUBAO_SEED_2_PRO, const.DOUBAO_SEED_2_CODE],
         }),
         ("moonshot", {
@@ -843,6 +864,7 @@ class ConfigHandler:
             "api_key_field": "moonshot_api_key",
             "api_base_key": "moonshot_base_url",
             "api_base_default": "https://api.moonshot.cn/v1",
+            "api_base_placeholder": _PLACEHOLDER_V1,
             "models": [const.KIMI_K2_6, const.KIMI_K2_5, const.KIMI_K2],
         }),
         ("qiniu", {
@@ -852,11 +874,20 @@ class ConfigHandler:
             "api_base_default": "https://api.qnaigc.com/v1",
             "models": [const.QINIU_DEFAULT_MODEL],
         }),
+        ("qianfan", {
+            "label": "百度千帆",
+            "api_key_field": "qianfan_api_key",
+            "api_base_key": "qianfan_api_base",
+            "api_base_default": "https://qianfan.baidubce.com/v2",
+            "api_base_placeholder": _PLACEHOLDER_QIANFAN,
+            "models": [const.ERNIE_5, const.ERNIE_X1_1, const.ERNIE_45_TURBO_128K, const.ERNIE_45_TURBO_32K],
+        }),
         ("modelscope", {
             "label": "ModelScope",
             "api_key_field": "modelscope_api_key",
             "api_base_key": None,
             "api_base_default": None,
+            "api_base_placeholder": "",
             "models": [const.QWEN3_5_27B, const.QWEN3_235B_A22B_INSTRUCT_2507],
         }),
         ("linkai", {
@@ -864,6 +895,7 @@ class ConfigHandler:
             "api_key_field": "linkai_api_key",
             "api_base_key": None,
             "api_base_default": None,
+            "api_base_placeholder": "",
             "models": _RECOMMENDED_MODELS,
         }),
         ("custom", {
@@ -871,6 +903,7 @@ class ConfigHandler:
             "api_key_field": "custom_api_key",
             "api_base_key": "custom_api_base",
             "api_base_default": "",
+            "api_base_placeholder": _PLACEHOLDER_V1,
             "models": [],
         }),
     ])
@@ -879,7 +912,9 @@ class ConfigHandler:
         "model", "bot_type", "use_linkai",
         "open_ai_api_base", "deepseek_api_base", "qiniu_api_base", "claude_api_base", "gemini_api_base",
         "zhipu_ai_api_base", "moonshot_base_url", "ark_base_url", "custom_api_base",
-        "open_ai_api_key", "deepseek_api_key", "qiniu_api_key", "claude_api_key", "gemini_api_key",
+        "open_ai_api_key", "deepseek_api_key", "qiniu_api_key", "qianfan_api_base", "claude_api_key", "gemini_api_key",
+        "zhipu_ai_api_base", "moonshot_base_url", "ark_base_url", "custom_api_base",
+        "open_ai_api_key", "deepseek_api_key", "qianfan_api_key", "claude_api_key", "gemini_api_key",
         "zhipu_ai_api_key", "dashscope_api_key", "moonshot_api_key",
         "ark_api_key", "minimax_api_key", "linkai_api_key", "custom_api_key",
         "agent_max_context_tokens", "agent_max_context_turns", "agent_max_steps",
@@ -919,6 +954,7 @@ class ConfigHandler:
                     "models": p["models"],
                     "api_base_key": p["api_base_key"],
                     "api_base_default": p["api_base_default"],
+                    "api_base_placeholder": p.get("api_base_placeholder", ""),
                     "api_key_field": p.get("api_key_field"),
                 }
 
@@ -1018,8 +1054,6 @@ class ChannelsHandler:
             "fields": [
                 {"key": "feishu_app_id", "label": "App ID", "type": "text"},
                 {"key": "feishu_app_secret", "label": "App Secret", "type": "secret"},
-                {"key": "feishu_token", "label": "Verification Token", "type": "secret"},
-                {"key": "feishu_bot_name", "label": "Bot Name", "type": "text"},
             ],
         }),
         ("dingtalk", {
@@ -1512,6 +1546,174 @@ class WeixinQrHandler:
             })
 
         return json.dumps({"status": "success", "qr_status": qr_status})
+
+
+class FeishuRegisterHandler:
+    """飞书智能体应用一键创建（OAuth 设备授权流，基于 lark.register_app SDK）。
+
+    GET  /api/feishu/register   → 启动注册：调用 SDK 生成二维码 URL，立即返回；
+                                   后台线程继续轮询飞书侧直到用户扫码授权。
+    POST /api/feishu/register   → 轮询当前会话状态（pending / done / error / expired）。
+                                   注册成功后不直接写 config，由前端再调
+                                   /api/channels {action:'connect'} 走标准启用流程。
+    """
+
+    # 进程内单例状态（{url, expire_in, status, app_id, app_secret, error, thread}）。
+    # 简单的本地自部署场景下不需要 session 隔离。
+    _state = {}
+    _lock = threading.Lock()
+
+    @staticmethod
+    def _qr_to_data_uri(data: str) -> str:
+        """复用 WeixinQrHandler 的二维码渲染。"""
+        return WeixinQrHandler._qr_to_data_uri(data)
+
+    @classmethod
+    def _reset_state(cls):
+        with cls._lock:
+            cls._state = {}
+
+    @classmethod
+    def _start_register_thread(cls):
+        """启动一次新的注册会话。如已有进行中的会话，先取消（通过 cancel_event）。"""
+        # 先取消可能存在的上一次会话，避免两个 SDK 线程并发 poll 同一个端点
+        with cls._lock:
+            old_cancel = cls._state.get("cancel_event") if cls._state else None
+            if old_cancel is not None:
+                old_cancel.set()
+            cancel_event = threading.Event()
+            cls._state = {"status": "starting", "cancel_event": cancel_event}
+
+        def _worker():
+            try:
+                import lark_oapi as lark
+            except ImportError:
+                with cls._lock:
+                    cls._state["status"] = "error"
+                    cls._state["error"] = "lark-oapi SDK 未安装，请执行 pip install -U lark-oapi"
+                return
+
+            def _on_qr(info):
+                # SDK 拿到二维码 URL 后立即回调；写入 state 让前端 GET 立刻能拿到
+                with cls._lock:
+                    cls._state["url"] = info.get("url", "")
+                    cls._state["expire_in"] = info.get("expire_in", 600)
+                    cls._state["qr_image"] = cls._qr_to_data_uri(info.get("url", ""))
+                    cls._state["status"] = "pending"
+                logger.info(f"[FeishuRegister] QR ready, expire_in={info.get('expire_in')}s")
+
+            def _on_status(info):
+                # 过滤掉 polling 心跳（每 5 秒一次，纯噪音）；
+                # 保留 slow_down / domain_switched 等真正的状态切换事件
+                status = info.get("status")
+                if status == "polling":
+                    return
+                logger.info(f"[FeishuRegister] SDK status: {info}")
+
+            try:
+                result = lark.register_app(
+                    on_qr_code=_on_qr,
+                    on_status_change=_on_status,
+                    source="cowagent",
+                    cancel_event=cancel_event,
+                )
+                with cls._lock:
+                    cls._state["status"] = "done"
+                    cls._state["app_id"] = result.get("client_id", "")
+                    cls._state["app_secret"] = result.get("client_secret", "")
+                logger.info(f"[FeishuRegister] App created: app_id={result.get('client_id')}")
+            except Exception as e:
+                err_msg = str(e)
+                err_cls = e.__class__.__name__
+                # 飞书 SDK 抛出的 AppExpiredError / AppAccessDeniedError / RegisterAppError
+                if "Expired" in err_cls:
+                    status = "expired"
+                elif "Denied" in err_cls:
+                    status = "denied"
+                elif "abort" in err_msg.lower() or "cancel" in err_msg.lower():
+                    # 被新一轮注册抢占，保持安静
+                    return
+                else:
+                    status = "error"
+                with cls._lock:
+                    # 仅当当前 state 仍属于本次 worker 时才写入，避免覆盖更新的会话
+                    if cls._state.get("cancel_event") is cancel_event:
+                        cls._state["status"] = status
+                        cls._state["error"] = err_msg
+                logger.warning(f"[FeishuRegister] Register failed ({err_cls}): {err_msg}")
+
+        threading.Thread(target=_worker, daemon=True, name="feishu-register").start()
+
+    def GET(self):
+        """启动一次新的注册会话。如果已有 pending/done 会话则覆盖。"""
+        _require_auth()
+        web.header('Content-Type', 'application/json; charset=utf-8')
+        try:
+            self._start_register_thread()
+            # 等待 SDK 拿到二维码 URL（最多 10s）。SDK 内部会马上回调 _on_qr。
+            import time as _t
+            for _ in range(100):
+                with self._lock:
+                    if self._state.get("url") or self._state.get("status") in ("error", "expired", "denied"):
+                        break
+                _t.sleep(0.1)
+            with self._lock:
+                if self._state.get("status") in ("error", "expired", "denied"):
+                    return json.dumps({
+                        "status": "error",
+                        "message": self._state.get("error", "register failed"),
+                    })
+                if not self._state.get("url"):
+                    return json.dumps({
+                        "status": "error",
+                        "message": "等待飞书二维码超时，请重试",
+                    })
+                return json.dumps({
+                    "status": "success",
+                    "qrcode_url": self._state["url"],
+                    "qr_image": self._state.get("qr_image", ""),
+                    "expire_in": self._state.get("expire_in", 600),
+                })
+        except Exception as e:
+            logger.error(f"[WebChannel] FeishuRegister GET error: {e}")
+            return json.dumps({"status": "error", "message": str(e)})
+
+    def POST(self):
+        """轮询注册结果。"""
+        _require_auth()
+        web.header('Content-Type', 'application/json; charset=utf-8')
+        try:
+            body = json.loads(web.data() or b"{}")
+            action = body.get("action", "poll")
+            if action != "poll":
+                return json.dumps({"status": "error", "message": f"unknown action: {action}"})
+
+            with self._lock:
+                status = self._state.get("status", "idle")
+                if status == "done":
+                    payload = {
+                        "status": "success",
+                        "register_status": "done",
+                        "app_id": self._state.get("app_id", ""),
+                        "app_secret": self._state.get("app_secret", ""),
+                    }
+                    # 一次性返回凭据后清掉，避免敏感信息长期驻留内存
+                    self._state = {}
+                    return json.dumps(payload)
+                if status in ("error", "expired", "denied"):
+                    return json.dumps({
+                        "status": "success",
+                        "register_status": status,
+                        "message": self._state.get("error", ""),
+                    })
+                # pending / starting：还在等用户扫码
+                return json.dumps({
+                    "status": "success",
+                    "register_status": "pending",
+                })
+        except Exception as e:
+            logger.error(f"[WebChannel] FeishuRegister POST error: {e}")
+            return json.dumps({"status": "error", "message": str(e)})
 
 
 def _get_workspace_root():

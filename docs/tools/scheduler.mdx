@@ -38,3 +38,43 @@ description: 创建和管理定时任务
 <Frame>
   <img src="https://cdn.link-ai.tech/doc/20260202195402.png" width="800" />
 </Frame>
+
+## 结果进入会话上下文
+
+定时任务在隔离 session 中执行（内部规划与 tool 调用不污染用户会话），但**最终输出**会作为一对消息回写到接收者的真实会话，用户可以直接追问"刚才那条第二点展开说说"。
+
+**默认策略**
+
+- Agent 动态任务的输出进入上下文
+- 固定消息类任务默认不进入上下文（可通过配置打开）
+- 每个会话最多保留最近 **3 对** scheduler 消息，更早的自动清理；普通用户消息不受影响
+
+**配置项**
+
+| 配置项 | 默认值 | 说明 |
+| --- | --- | --- |
+| `scheduler_inject_to_session` | `true` | 总开关 |
+| `scheduler_inject_max_per_session` | `3` | 每会话保留 scheduler 消息对数上限 |
+| `scheduler_inject_send_message` | `false` | 是否同时注入固定消息类任务 |
+
+```json
+{
+  "scheduler_inject_to_session": true,
+  "scheduler_inject_max_per_session": 3,
+  "scheduler_inject_send_message": false
+}
+```
+
+## 任务执行时的上下文
+
+定时任务的隔离 session 会保留最近几次执行的对话历史，便于做"对比上次"、"延续之前结论"等操作；但为了避免高频任务（如每 5 分钟监控）prompt 越积越长，会按公式自动裁剪：
+
+```
+scheduler_keep_turns = max(1, agent_max_context_turns / 5)
+```
+
+`agent_max_context_turns` 默认为 `20`，所以定时任务每次执行默认带最近 **4 轮**历史。需要更长记忆可调大 `agent_max_context_turns`。
+
+<Note>
+群聊场景（飞书 / 企微群机器人 / 钉钉等）下用户的真实 session_id 形如 `user_id:group_id`，与 receiver 不同。创建任务时会自动记录正确的 session_id；老的 `tasks.json` 缺该字段时回落到 receiver，行为与历史版本一致。
+</Note>

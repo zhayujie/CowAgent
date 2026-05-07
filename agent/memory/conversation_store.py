@@ -499,6 +499,107 @@ class ConversationStore:
             finally:
                 conn.close()
 
+    def prune_scheduled_messages(
+        self,
+        session_id: str,
+        keep_last_n: int,
+        markers: Optional[List[str]] = None,
+    ) -> int:
+        """
+        Keep at most ``keep_last_n`` scheduler-injected user/assistant pairs in
+        the session, deleting the older ones.
+
+        A scheduler-injected pair is identified by a user message whose first
+        text block starts with one of ``markers``; the immediately following
+        assistant message (next seq) is treated as its paired output.
+
+        Only scheduler-tagged messages are touched; regular user turns are
+        never deleted. Safe to call repeatedly; no-op if nothing to prune.
+
+        Args:
+            session_id: Session to prune.
+            keep_last_n: Maximum scheduler pairs to retain (must be >= 0).
+            markers: Text prefixes that identify scheduler user messages.
+                Defaults to ``["[SCHEDULED]", "Scheduled task"]`` so that
+                pairs written by older versions are also recognised.
+
+        Returns:
+            Number of message rows deleted.
+        """
+        if keep_last_n < 0:
+            keep_last_n = 0
+        if markers is None:
+            markers = ["[SCHEDULED]", "Scheduled task"]
+
+        def _matches_marker(raw_content: str) -> bool:
+            try:
+                parsed = json.loads(raw_content)
+            except Exception:
+                parsed = raw_content
+            text = _extract_display_text(parsed) if not isinstance(parsed, str) else parsed
+            if not text:
+                return False
+            return any(text.startswith(m) for m in markers)
+
+        with self._lock:
+            conn = self._connect()
+            try:
+                rows = conn.execute(
+                    """
+                    SELECT seq, role, content
+                    FROM messages
+                    WHERE session_id = ?
+                    ORDER BY seq ASC
+                    """,
+                    (session_id,),
+                ).fetchall()
+
+                # Find scheduler pairs: each is (user_seq, assistant_seq?)
+                pairs: List[tuple] = []  # list of (user_seq, assistant_seq_or_None)
+                for idx, (seq, role, raw_content) in enumerate(rows):
+                    if role != "user" or not _matches_marker(raw_content):
+                        continue
+                    assistant_seq = None
+                    # Pair with the very next message if it's an assistant turn.
+                    if idx + 1 < len(rows):
+                        next_seq, next_role, _ = rows[idx + 1]
+                        if next_role == "assistant":
+                            assistant_seq = next_seq
+                    pairs.append((seq, assistant_seq))
+
+                if len(pairs) <= keep_last_n:
+                    return 0
+
+                to_delete_pairs = pairs[: len(pairs) - keep_last_n]
+                seqs_to_delete: List[int] = []
+                for user_seq, assistant_seq in to_delete_pairs:
+                    seqs_to_delete.append(user_seq)
+                    if assistant_seq is not None:
+                        seqs_to_delete.append(assistant_seq)
+
+                if not seqs_to_delete:
+                    return 0
+
+                placeholders = ",".join("?" * len(seqs_to_delete))
+                with conn:
+                    conn.execute(
+                        f"DELETE FROM messages WHERE session_id = ? AND seq IN ({placeholders})",
+                        (session_id, *seqs_to_delete),
+                    )
+                    conn.execute(
+                        """
+                        UPDATE sessions
+                        SET msg_count = (
+                            SELECT COUNT(*) FROM messages WHERE session_id = ?
+                        )
+                        WHERE session_id = ?
+                        """,
+                        (session_id, session_id),
+                    )
+                return len(seqs_to_delete)
+            finally:
+                conn.close()
+
     def cleanup_old_sessions(self, max_age_days: Optional[int] = None) -> int:
         """
         Delete sessions that have not been active within max_age_days.

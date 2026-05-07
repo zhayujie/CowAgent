@@ -115,7 +115,7 @@ class MemoryFlushManager:
         self.last_flush_timestamp: Optional[datetime] = None
         self._trim_flushed_hashes: set = set()  # Content hashes of already-flushed messages
         self._last_flushed_content_hash: str = ""  # Content hash at last flush, for daily dedup
-        self._last_dream_input_hash: str = ""  # Hash of dream input, for dedup
+        self._last_dream_input_hash: str = ""  # "{date}:{daily_hash}" of last dream, for dedup
         self._last_flush_thread: Optional[threading.Thread] = None
     
     def get_today_memory_file(self, user_id: Optional[str] = None, ensure_exists: bool = False) -> Path:
@@ -175,6 +175,15 @@ class MemoryFlushManager:
         injection.
         """
         try:
+            # Strip scheduler-injected pairs before any further processing.
+            # These messages already serve as short-term context inside the
+            # receiver session; promoting them into long-term daily memory
+            # produces low-value flat logs (e.g. "11:28 price=1013, normal /
+            # 11:58 price=1013, normal / ...") and wastes summarisation tokens.
+            messages = self._strip_scheduler_pairs(messages)
+            if not messages:
+                return False
+
             import hashlib
             deduped = []
             for m in messages:
@@ -323,13 +332,18 @@ class MemoryFlushManager:
             logger.info("[DeepDream] No recent daily records, skipping to preserve existing MEMORY.md")
             return False
 
-        # Dedup: skip if input materials haven't changed since last dream
+        # Dedup: skip if same daily content already dreamed today.
+        # Note: only hash daily_content (not memory_content), because deep_dream
+        # itself rewrites MEMORY.md as a side effect, which would otherwise
+        # invalidate the hash on every subsequent call within the same window.
         import hashlib
-        input_hash = hashlib.md5((memory_content + daily_content).encode("utf-8")).hexdigest()
-        if not force and input_hash == self._last_dream_input_hash:
-            logger.debug("[DeepDream] Input unchanged since last dream, skipping")
+        daily_hash = hashlib.md5(daily_content.encode("utf-8")).hexdigest()
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        dedup_key = f"{today_str}:{daily_hash}"
+        if not force and dedup_key == self._last_dream_input_hash:
+            logger.info("[DeepDream] Already dreamed today with same daily content, skipping")
             return False
-        self._last_dream_input_hash = input_hash
+        self._last_dream_input_hash = dedup_key
 
         logger.info(
             f"[DeepDream] Materials collected: "
@@ -641,6 +655,40 @@ class MemoryFlushManager:
                     parts.append(block)
             return "\n".join(parts)
         return ""
+
+    @classmethod
+    def _strip_scheduler_pairs(cls, messages: List[Dict]) -> List[Dict]:
+        """Drop scheduler-injected user/assistant pairs from a flush batch.
+
+        A scheduler user message starts with the ``[SCHEDULED]`` marker
+        (written by ``AgentBridge.remember_scheduled_output``); the message
+        immediately following it (if it is an assistant turn) is its paired
+        output and is dropped together. Regular user/assistant turns and
+        any tool_use / tool_result blocks are preserved as-is.
+        """
+        if not messages:
+            return messages
+
+        SCHEDULED_PREFIX = "[SCHEDULED]"
+        result = []
+        skip_next_assistant = False
+        for msg in messages:
+            if not isinstance(msg, dict):
+                result.append(msg)
+                skip_next_assistant = False
+                continue
+            role = msg.get("role")
+            if skip_next_assistant and role == "assistant":
+                skip_next_assistant = False
+                continue
+            skip_next_assistant = False
+            if role == "user":
+                text = cls._extract_text_from_content(msg.get("content", ""))
+                if text.lstrip().startswith(SCHEDULED_PREFIX):
+                    skip_next_assistant = True
+                    continue
+            result.append(msg)
+        return result
 
 
 def create_memory_files_if_needed(workspace_dir: Path, user_id: Optional[str] = None):

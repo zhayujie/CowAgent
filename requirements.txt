@@ -1,4 +1,3 @@
-openai==0.27.8
 aiohttp>=3.8.6,<3.10
 requests>=2.28.2
 chardet>=5.1.0
@@ -19,8 +18,8 @@ zai-sdk
 # tongyi qwen sdk
 dashscope
 
-# feishu websocket mode
-lark-oapi
+# feishu
+lark-oapi>=1.5.5
 # dingtalk
 dingtalk_stream
 # wecom bot websocket mode

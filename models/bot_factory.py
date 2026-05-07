@@ -24,6 +24,10 @@ def create_bot(bot_type):
     elif bot_type == const.QINIU:
         from models.qiniu.qiniu_bot import QiniuBot
         return QiniuBot()
+      
+    elif bot_type == const.QIANFAN:
+        from models.qianfan.qianfan_bot import QianfanBot
+        return QianfanBot()
 
     elif bot_type in (const.OPENAI, const.CHATGPT, const.CUSTOM):  # OpenAI-compatible API
         from models.chatgpt.chat_gpt_bot import ChatGPTBot

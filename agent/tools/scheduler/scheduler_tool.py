@@ -158,6 +158,11 @@ class SchedulerTool(BaseTool):
         # Create task
         task_id = str(uuid.uuid4())[:8]
         
+        # Capture the real chat session_id at task creation time so that scheduler
+        # can later inject the delivered output into the user's actual conversation
+        # (in group chats, session_id != receiver, e.g. "user_id:group_id" on feishu).
+        notify_session_id = context.get("session_id")
+
         # Build action based on message or ai_task
         if message:
             action = {
@@ -166,7 +171,8 @@ class SchedulerTool(BaseTool):
                 "receiver": context.get("receiver"),
                 "receiver_name": self._get_receiver_name(context),
                 "is_group": context.get("isgroup", False),
-                "channel_type": self.config.get("channel_type", "unknown")
+                "channel_type": self.config.get("channel_type", "unknown"),
+                "notify_session_id": notify_session_id,
             }
         else:  # ai_task
             action = {
@@ -175,7 +181,8 @@ class SchedulerTool(BaseTool):
                 "receiver": context.get("receiver"),
                 "receiver_name": self._get_receiver_name(context),
                 "is_group": context.get("isgroup", False),
-                "channel_type": self.config.get("channel_type", "unknown")
+                "channel_type": self.config.get("channel_type", "unknown"),
+                "notify_session_id": notify_session_id,
             }
         
         # 针对钉钉单聊，额外存储 sender_staff_id

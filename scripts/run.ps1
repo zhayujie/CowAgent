@@ -169,7 +169,7 @@ function Install-Dependencies {
 
 # ── model selection ──────────────────────────────────────────────
 $ModelChoices = @{
-    "1" = @{ Provider = "DeepSeek";                 Default = "deepseek-v4-flash";                      Key = "DEEPSEEK_KEY"; Base = "https://api.deepseek.com/v1" }
+    "1" = @{ Provider = "DeepSeek";                 Default = "deepseek-v4-flash";                      Key = "DEEPSEEK_KEY" }
     "2" = @{ Provider = "MiniMax";                  Default = "MiniMax-M2.7";                           Key = "MINIMAX_KEY" }
     "3" = @{ Provider = "Zhipu AI";                 Default = "glm-5.1";                                Key = "ZHIPU_KEY" }
     "4" = @{ Provider = "Kimi (Moonshot)";          Default = "kimi-k2.6";                              Key = "MOONSHOT_KEY" }
@@ -339,7 +339,6 @@ function New-ConfigFile {
 
     # Set API base if provided
     $baseMap = @{
-        "1" = "deepseek_api_base"
         "7" = "claude_api_base"
         "8" = "gemini_api_base"
         "9" = "open_ai_api_base"

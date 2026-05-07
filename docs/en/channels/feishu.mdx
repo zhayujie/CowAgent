@@ -1,69 +1,107 @@
 ---
 title: Feishu (Lark)
-description: Integrate CowAgent into Feishu application
+description: Integrate CowAgent into Feishu via a custom enterprise app
 ---
 
-Integrate CowAgent into Feishu by creating a custom enterprise app. You need to be a Feishu enterprise user with admin privileges.
+> Integrate CowAgent into Feishu via a custom enterprise app. Supports p2p chat and group chat (@bot), uses WebSocket long connection (no public IP needed), supports streaming typewriter replies and voice messages.
 
-## 1. Create Enterprise Custom App
+<Note>
+  You need to be a Feishu enterprise user with admin privileges.
+</Note>
 
-### 1.1 Create App
+## 1. Setup
 
-Go to [Feishu Developer Platform](https://open.feishu.cn/app/), click **Create Enterprise Custom App**, fill in the required information and click **Create**:
+### Option 1: One-click Scan to Create (Recommended)
+
+No need to manually create an app on the Feishu Developer Platform. Start the Cow project, open the web console (default `http://127.0.0.1:9899/`), go to **Channels**, click **Add Channel**, choose **Feishu**, then under the **Scan QR** tab click **One-click Create Feishu App** and scan with the **Feishu App** to complete app creation and connection automatically.
+
+<Note>
+  The created app comes with all required permissions (messaging, card read/write, group events, etc.) and event subscriptions pre-configured. Currently only the Feishu mainland version is supported (Lark international not yet supported).
+</Note>
+
+When starting from CLI without `feishu_app_id` configured, the QR code is also printed to the terminal.
+
+### Option 2: Manual Setup
+
+Manually create a custom app on the Feishu Developer Platform, then connect via Web Console or config file.
+
+**Step 1: Create the App**
+
+1. Go to [Feishu Developer Platform](https://open.feishu.cn/app/), click **Create Enterprise Custom App**:
 
 <img src="https://img-1317903499.cos.ap-guangzhou.myqcloud.com/docs/feishu-hosting-create-app.jpg" width="500"/>
 
-### 1.2 Add Bot Capability
-
-In **Add App Capabilities**, add **Bot** capability to the app:
+2. In **Add App Capabilities**, add the **Bot** capability:
 
 <img src="https://img-1317903499.cos.ap-guangzhou.myqcloud.com/docs/feishu-hosting-add-bot.jpg" width="800"/>
 
-### 1.3 Configure App Permissions
-
-Click **Permission Management**, paste the following permission string into the input box below **Permission Configuration**, select all filtered permissions, click **Batch Enable** and confirm:
+3. In **Permission Management**, paste the following permissions and **Batch Enable** all:
 
 ```
-im:message,im:message.group_at_msg,im:message.group_at_msg:readonly,im:message.p2p_msg,im:message.p2p_msg:readonly,im:message:send_as_bot,im:resource
+im:message,im:message.group_at_msg,im:message.group_at_msg:readonly,im:message.p2p_msg,im:message.p2p_msg:readonly,im:message:send_as_bot,im:resource,cardkit:card:write
 ```
 
 <img src="https://cdn.link-ai.tech/doc/feishu-hosting-add-auth2.png" width="800"/>
 
-## 2. Project Configuration
-
-1. Get `App ID` and `App Secret` from **Credentials & Basic Info**:
+4. Get `App ID` and `App Secret` from **Credentials & Basic Info**:
 
 <img src="https://img-1317903499.cos.ap-guangzhou.myqcloud.com/docs/feishu-hosting-appid-secret.jpg" width="800"/>
 
-2. Add the following configuration to `config.json` in the project root:
+**Step 2: Connect to CowAgent**
 
-```json
-{
-  "channel_type": "feishu",
-  "feishu_app_id": "YOUR_APP_ID",
-  "feishu_app_secret": "YOUR_APP_SECRET",
-  "feishu_bot_name": "YOUR_BOT_NAME"
-}
-```
+<Tabs>
+  <Tab title="Web Console">
+    Open the web console, go to **Channels**, click **Add Channel**, choose **Feishu**, switch to the **Manual** tab, enter App ID and App Secret, then click connect.
+  </Tab>
+  <Tab title="Config File">
+    Add the following to `config.json` and start the program:
 
-| Parameter | Description |
-| --- | --- |
-| `feishu_app_id` | Feishu bot App ID |
-| `feishu_app_secret` | Feishu bot App Secret |
-| `feishu_bot_name` | Bot name (set when creating the app), required for group chat usage |
+    ```json
+    {
+      "channel_type": "feishu",
+      "feishu_app_id": "YOUR_APP_ID",
+      "feishu_app_secret": "YOUR_APP_SECRET",
+      "feishu_stream_reply": true
+    }
+    ```
 
-Start the project after configuration is complete.
+    | Parameter | Description | Default |
+    | --- | --- | --- |
+    | `feishu_app_id` | Feishu app App ID | - |
+    | `feishu_app_secret` | Feishu app App Secret | - |
+    | `feishu_stream_reply` | Enable streaming typewriter reply | `true` |
+  </Tab>
+</Tabs>
 
-## 3. Configure Event Subscription
+**Step 3: Publish the App**
 
-1. After the project is running successfully, go to the Feishu Developer Platform, click **Events & Callbacks**, select **Long Connection** mode, and click save:
+1. After Cow is running, go to **Events & Callbacks** in the Feishu Developer Platform, choose **Long Connection** mode and save:
 
 <img src="https://cdn.link-ai.tech/doc/202601311731183.png" width="600"/>
 
-2. Click **Add Event** below, search for "Receive Message", select "**Receive Message v2.0**", and confirm.
+2. Click **Add Event**, search for "Receive Message" and choose **Receive Message v2.0**.
 
-3. Click **Version Management & Release**, create a new version and apply for **Production Release**. Check the approval message in the Feishu client and approve:
+3. Click **Version Management & Release**, create a version and apply for **Production Release**. Approve the request in the Feishu client:
 
 <img src="https://cdn.link-ai.tech/doc/202601311807356.png" width="600"/>
 
-Once completed, search for the bot name in Feishu to start chatting.
+## 2. Features
+
+| Feature | Status |
+| --- | --- |
+| P2P chat | ✅ |
+| Group chat (@bot) | ✅ |
+| Text messages | ✅ send/receive |
+| Image messages | ✅ send/receive |
+| Voice messages | ✅ send/receive |
+| Streaming reply | ✅ (powered by Feishu cardkit streaming card) |
+
+<Note>
+  Streaming reply requires the `cardkit:card:write` permission (already enabled by one-click creation) and Feishu client version ≥ 7.20. Older clients see an upgrade prompt; if the permission or version is not satisfied, replies fall back to plain text automatically.
+</Note>
+
+## 3. Usage
+
+After connection, search for the bot name in Feishu to start a chat.
+
+To use in groups, add the bot to a group and @-mention it.

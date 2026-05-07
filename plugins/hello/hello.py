@@ -13,6 +13,7 @@ from config import conf
     name="Hello",
     desire_priority=-1,
     hidden=True,
+    enabled=False,
     desc="A simple plugin that says hello",
     version="0.1",
     author="lanvent",

@@ -81,6 +81,7 @@
                   "models/qwen",
                   "models/doubao",
                   "models/kimi",
+                  "models/qianfan",
                   "models/linkai",
                   "models/coding-plan",
                   "models/custom"
@@ -208,6 +209,7 @@
                 "group": "发布记录",
                 "pages": [
                   "releases/overview",
+                  "releases/v2.0.8",
                   "releases/v2.0.7",
                   "releases/v2.0.6",
                   "releases/v2.0.5",
@@ -266,6 +268,7 @@
                   "en/models/qwen",
                   "en/models/doubao",
                   "en/models/kimi",
+                  "en/models/qianfan",
                   "en/models/linkai",
                   "en/models/coding-plan",
                   "en/models/custom"
@@ -392,10 +395,12 @@
                 "group": "Release Notes",
                 "pages": [
                   "en/releases/overview",
+                  "en/releases/v2.0.8",
                   "en/releases/v2.0.7",
                   "en/releases/v2.0.6",
                   "en/releases/v2.0.5",
                   "en/releases/v2.0.4",
+                  "en/releases/v2.0.3",
                   "en/releases/v2.0.2",
                   "en/releases/v2.0.1",
                   "en/releases/v2.0.0"
@@ -450,6 +455,7 @@
                   "ja/models/qwen",
                   "ja/models/doubao",
                   "ja/models/kimi",
+                  "ja/models/qianfan",
                   "ja/models/linkai",
                   "ja/models/coding-plan",
                   "ja/models/custom"
@@ -577,6 +583,7 @@
                 "group": "リリースノート",
                 "pages": [
                   "ja/releases/overview",
+                  "ja/releases/v2.0.8",
                   "ja/releases/v2.0.7",
                   "ja/releases/v2.0.6",
                   "ja/releases/v2.0.5",

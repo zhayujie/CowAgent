@@ -34,7 +34,9 @@ class PluginManager:
             plugincls.version = kwargs.get("version") if kwargs.get("version") != None else "1.0"
             plugincls.namecn = kwargs.get("namecn") if kwargs.get("namecn") != None else name
             plugincls.hidden = kwargs.get("hidden") if kwargs.get("hidden") != None else False
-            plugincls.enabled = True
+            # enabled 默认 True；示例性插件可在装饰器中显式传 enabled=False，
+            # 首次启动写入 plugins.json 时即为关闭状态，避免拦截用户消息。
+            plugincls.enabled = kwargs.get("enabled", True)
             if self.current_plugin_path == None:
                 raise Exception("Plugin path not set")
             self.plugins[name.upper()] = plugincls

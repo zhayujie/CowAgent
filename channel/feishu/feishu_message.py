@@ -162,6 +162,38 @@ class FeishuMessage(ChatMessage):
                 else:
                     logger.info(f"[FeiShu] Failed to download file, key={file_key}, res={response.text}")
             self._prepare_fn = _download_file
+        elif msg_type == "audio":
+            # 飞书用户发送的语音消息类型为 "audio"，文件为 opus 编码格式。
+            # 映射为 ContextType.VOICE，交由 chat_channel 的语音转文字（STT）流程处理。
+            # 文件通过 _prepare_fn 延迟下载，在 chat_channel 调用 cmsg.prepare() 时才执行。
+            self.ctype = ContextType.VOICE
+            content = json.loads(msg.get("content"))
+            file_key = content.get("file_key")
+
+            self.content = TmpDir().path() + file_key + ".opus"
+            logger.info(f"[FeiShu] audio message: file_key={file_key}, save_path={self.content}")
+
+            def _download_audio():
+                logger.info(f"[FeiShu] downloading audio: file_key={file_key}, msg_id={self.msg_id}")
+                url = f"https://open.feishu.cn/open-apis/im/v1/messages/{self.msg_id}/resources/{file_key}"
+                headers = {
+                    "Authorization": "Bearer " + access_token,
+                }
+                params = {
+                    "type": "file"
+                }
+                try:
+                    response = requests.get(url=url, headers=headers, params=params)
+                    logger.info(f"[FeiShu] download audio response: status={response.status_code}, size={len(response.content)} bytes")
+                    if response.status_code == 200:
+                        with open(self.content, "wb") as f:
+                            f.write(response.content)
+                        logger.info(f"[FeiShu] audio saved to: {self.content}")
+                    else:
+                        logger.error(f"[FeiShu] Failed to download audio, key={file_key}, status={response.status_code}, res={response.text}")
+                except Exception as e:
+                    logger.error(f"[FeiShu] Exception downloading audio, key={file_key}: {e}", exc_info=True)
+            self._prepare_fn = _download_audio
         else:
             raise NotImplementedError("Unsupported message type: Type:{} ".format(msg_type))
 

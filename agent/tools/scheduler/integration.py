@@ -84,6 +84,49 @@ def get_scheduler_service():
     return _scheduler_service
 
 
+def _remember_delivered_output(
+    agent_bridge,
+    task: dict,
+    channel_type: str,
+    content: str,
+) -> None:
+    """Best-effort persistence of the message the scheduler sent to a user.
+
+    Uses notify_session_id (the real chat session_id stored at task creation time)
+    so that group chats correctly associate the output with the user's conversation.
+    Falls back to receiver for backward compatibility with old tasks.
+
+    Per-action-type behaviour:
+        - agent_task / tool_call / skill_call: gated by ``scheduler_inject_to_session``
+          (default True). These produce AI-generated content worth remembering.
+        - send_message: additionally gated by ``scheduler_inject_send_message``
+          (default False). Fixed reminder text rarely benefits follow-up Q&A and
+          would just consume context tokens.
+    """
+    if not content:
+        return
+    action = task.get("action", {})
+    action_type = action.get("type", "")
+
+    # send_message defaults to NOT being injected; explicit opt-in via config.
+    if action_type == "send_message":
+        if not conf().get("scheduler_inject_send_message", False):
+            return
+
+    session_id = action.get("notify_session_id") or action.get("receiver")
+    if not session_id:
+        return
+    try:
+        remember = getattr(agent_bridge, "remember_scheduled_output", None)
+        if remember:
+            task_desc = action.get("task_description") or action.get("content", "")
+            remember(session_id, str(content), channel_type=channel_type, task_description=task_desc)
+    except Exception as e:
+        logger.warning(
+            f"[Scheduler] Failed to remember delivered output for {session_id}: {e}"
+        )
+
+
 def _execute_agent_task(task: dict, agent_bridge):
     """
     Execute an agent_task action - let Agent handle the task
@@ -165,6 +208,7 @@ def _execute_agent_task(task: dict, agent_bridge):
                         
                         # Send the reply
                         channel.send(reply, context)
+                        _remember_delivered_output(agent_bridge, task, channel_type, reply.content)
                         logger.info(f"[Scheduler] Task {task['id']} executed successfully, result sent to {receiver}")
                     else:
                         logger.error(f"[Scheduler] Failed to create channel: {channel_type}")
@@ -255,6 +299,7 @@ def _execute_send_message(task: dict, agent_bridge):
                     logger.debug(f"[Scheduler] Registered request_id {request_id} -> session {receiver}")
                 
                 channel.send(reply, context)
+                _remember_delivered_output(agent_bridge, task, channel_type, content)
                 logger.info(f"[Scheduler] Task {task['id']} executed: sent message to {receiver}")
             else:
                 logger.error(f"[Scheduler] Failed to create channel: {channel_type}")
@@ -351,6 +396,7 @@ def _execute_tool_call(task: dict, agent_bridge):
                     logger.debug(f"[Scheduler] Registered request_id {request_id} -> session {receiver}")
 
                 channel.send(reply, context)
+                _remember_delivered_output(agent_bridge, task, channel_type, content)
                 logger.info(f"[Scheduler] Task {task['id']} executed: sent tool result to {receiver}")
             else:
                 logger.error(f"[Scheduler] Failed to create channel: {channel_type}")
@@ -428,6 +474,24 @@ def _execute_skill_call(task: dict, agent_bridge):
                 # Add prefix if specified
                 if result_prefix:
                     content = f"{result_prefix}\n\n{content}"
+                
+                # Send the result via channel
+                from channel.channel_factory import create_channel
+                
+                try:
+                    channel = create_channel(channel_type)
+                    if channel:
+                        # For web channel, register request_id
+                        if channel_type == "web" and hasattr(channel, 'request_to_session'):
+                            req_id = context.get("request_id")
+                            if req_id:
+                                channel.request_to_session[req_id] = receiver
+                                logger.debug(f"[Scheduler] Registered request_id {req_id} -> session {receiver}")
+                        
+                        channel.send(Reply(ReplyType.TEXT, content), context)
+                        _remember_delivered_output(agent_bridge, task, channel_type, content)
+                except Exception as e:
+                    logger.error(f"[Scheduler] Failed to send skill result: {e}")
                 
                 logger.info(f"[Scheduler] Task {task['id']} executed: skill result sent to {receiver}")
             else:

@@ -357,10 +357,7 @@ read_api_base() {
 # Configure model
 configure_model() {
     case "$model_choice" in
-        1)
-            read_model_config "DeepSeek" "deepseek-v4-flash" "DEEPSEEK_KEY"
-            read_api_base "DEEPSEEK_BASE" "https://api.deepseek.com/v1"
-            ;;
+        1) read_model_config "DeepSeek" "deepseek-v4-flash" "DEEPSEEK_KEY" ;;
         2) read_model_config "MiniMax" "MiniMax-M2.7" "MINIMAX_KEY" ;;
         3)
             read_model_config "Claude" "claude-sonnet-4-6" "CLAUDE_KEY"

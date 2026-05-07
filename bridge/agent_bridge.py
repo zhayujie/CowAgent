@@ -14,6 +14,7 @@ from bridge.reply import Reply, ReplyType
 from common import const
 from common.log import logger
 from common.utils import expand_path
+from config import conf
 from models.openai_compatible_bot import OpenAICompatibleBot
 
 
@@ -68,6 +69,7 @@ class AgentLLMModel(LLMModel):
     _MODEL_BOT_TYPE_MAP = {
         "wenxin": const.BAIDU, "wenxin-4": const.BAIDU,
         "xunfei": const.XUNFEI, const.QWEN: const.QWEN_DASHSCOPE,
+        const.QIANFAN: const.QIANFAN,
         const.MODELSCOPE: const.MODELSCOPE,
     }
     _MODEL_PREFIX_MAP = [
@@ -75,10 +77,10 @@ class AgentLLMModel(LLMModel):
         ("gemini", const.GEMINI), ("glm", const.ZHIPU_AI), ("claude", const.CLAUDEAPI),
         ("moonshot", const.MOONSHOT), ("kimi", const.MOONSHOT),
         ("doubao", const.DOUBAO), (const.QINIU_DEFAULT_MODEL, const.QINIU), ("deepseek", const.DEEPSEEK),
+        ("ernie", const.QIANFAN),
     ]
 
     def __init__(self, bridge: Bridge, bot_type: str = "chat"):
-        from config import conf
         super().__init__(model=conf().get("model", const.GPT_41))
         self.bridge = bridge
         self.bot_type = bot_type
@@ -87,7 +89,6 @@ class AgentLLMModel(LLMModel):
 
     @property
     def model(self):
-        from config import conf
         return conf().get("model", const.GPT_41)
 
     @model.setter
@@ -96,8 +97,6 @@ class AgentLLMModel(LLMModel):
 
     def _resolve_bot_type(self, model_name: str) -> str:
         """Resolve bot type from model name, matching Bridge.__init__ logic."""
-        from config import conf
-
         if conf().get("use_linkai", False) and conf().get("linkai_api_key"):
             return const.LINKAI
         # Support custom bot type configuration
@@ -117,8 +116,9 @@ class AgentLLMModel(LLMModel):
             return const.MOONSHOT
         if conf().get("bot_type") == "modelscope":
             return const.MODELSCOPE
+        lowered_model = model_name.lower()
         for prefix, btype in self._MODEL_PREFIX_MAP:
-            if model_name.startswith(prefix):
+            if lowered_model.startswith(prefix):
                 return btype
         return const.OPENAI
 
@@ -418,6 +418,18 @@ class AgentBridge:
             # Store session_id on agent so executor can clear DB on fatal errors
             agent._current_session_id = session_id
 
+            # Bound the in-memory context for scheduler sessions before each run.
+            # Scheduler sessions are stable per-task and append every trigger,
+            # so without trimming they would grow unbounded across runs and
+            # blow up prompt cost. Regular user chats are not touched here —
+            # the agent's own context manager handles that path.
+            if session_id and session_id.startswith("scheduler_"):
+                from config import conf
+                scheduler_keep_turns = max(
+                    1, int(conf().get("agent_max_context_turns", 20)) // 5
+                )
+                self._trim_in_memory_to_turns(agent, scheduler_keep_turns)
+
             try:
                 # Use agent's run_stream method with event handler
                 response = agent.run_stream(
@@ -633,6 +645,196 @@ class AgentBridge:
             logger.warning(
                 f"[AgentBridge] Failed to persist messages for session={session_id}: {e}"
             )
+
+    # Marker used to identify scheduler-injected user messages so we can apply
+    # a sliding window without touching real user turns. The legacy prefix
+    # "Scheduled task" (written by the v2 PR) is also recognised when pruning,
+    # so old data can be aged out instead of leaking forever.
+    _SCHEDULED_MARKER = "[SCHEDULED]"
+    _SCHEDULED_LEGACY_MARKERS = ("Scheduled task",)
+
+    def remember_scheduled_output(
+        self,
+        session_id: str,
+        content: str,
+        channel_type: str = "",
+        task_description: str = "",
+    ) -> None:
+        """Add the visible output of a scheduled task to the receiver's session.
+
+        Scheduled task execution uses an isolated session so internal planning and
+        tool calls do not leak into the user's chat. The final message is still
+        part of the conversation from the user's point of view, so keep a small
+        visible turn in the receiver session for follow-up questions.
+
+        Configuration:
+            scheduler_inject_to_session (bool, default True):
+                Master switch. When False, this method is a no-op.
+            scheduler_inject_max_per_session (int, default 3):
+                Maximum scheduler-injected user/assistant pairs retained per
+                session. Older injections are pruned automatically.
+
+        Content is truncated to 2000 chars to prevent a single high-volume task
+        from bloating one entry.
+        """
+        from config import conf
+        if not conf().get("scheduler_inject_to_session", True):
+            return
+        if not session_id or not content:
+            return
+
+        max_len = 2000
+        if len(content) > max_len:
+            content = content[:max_len] + "..."
+
+        user_text = self._SCHEDULED_MARKER
+        if task_description:
+            user_text = f"{self._SCHEDULED_MARKER} {task_description}"
+
+        messages = [
+            {"role": "user", "content": [{"type": "text", "text": user_text}]},
+            {"role": "assistant", "content": [{"type": "text", "text": content}]},
+        ]
+
+        # Persist first so the new pair gets a stable seq, then prune old
+        # scheduler pairs in DB, then sync the in-memory agent.messages buffer.
+        self._persist_messages(session_id, messages, channel_type)
+
+        keep_last_n = max(int(conf().get("scheduler_inject_max_per_session", 3) or 0), 0)
+        try:
+            from agent.memory import get_conversation_store
+            deleted = get_conversation_store().prune_scheduled_messages(
+                session_id, keep_last_n=keep_last_n
+            )
+            if deleted:
+                logger.debug(
+                    f"[AgentBridge] Pruned {deleted} old scheduler messages "
+                    f"for session={session_id} (keep_last_n={keep_last_n})"
+                )
+        except Exception as e:
+            logger.warning(
+                f"[AgentBridge] Failed to prune scheduled messages "
+                f"for session={session_id}: {e}"
+            )
+
+        agent = self.agents.get(session_id)
+        if agent:
+            try:
+                with agent.messages_lock:
+                    agent.messages.extend(messages)
+                    self._prune_scheduled_in_memory(agent, keep_last_n)
+            except Exception as e:
+                logger.warning(
+                    f"[AgentBridge] Failed to update in-memory scheduled output "
+                    f"for session={session_id}: {e}"
+                )
+
+    @staticmethod
+    def _trim_in_memory_to_turns(agent, keep_turns: int) -> None:
+        """Bound ``agent.messages`` to the most recent ``keep_turns`` real
+        user/assistant turns, dropping older history together with any
+        intermediate tool_use/tool_result blocks that belonged to it.
+
+        A "real" user message is any user message whose content is not solely a
+        tool_result block — matches the heuristic used elsewhere when filtering
+        history (see ``AgentInitializer._filter_text_only_messages``).
+
+        No-op when the session is already within budget. Caller does not need
+        to hold the lock; this method acquires it itself.
+        """
+        if keep_turns <= 0:
+            return
+
+        def _is_real_user(msg) -> bool:
+            if not isinstance(msg, dict) or msg.get("role") != "user":
+                return False
+            content = msg.get("content")
+            if isinstance(content, list):
+                if any(
+                    isinstance(b, dict) and b.get("type") == "tool_result"
+                    for b in content
+                ):
+                    return False
+                return any(
+                    isinstance(b, dict) and b.get("type") == "text" and b.get("text")
+                    for b in content
+                )
+            if isinstance(content, str):
+                return bool(content.strip())
+            return False
+
+        with agent.messages_lock:
+            msgs = agent.messages
+            real_user_indices = [i for i, m in enumerate(msgs) if _is_real_user(m)]
+            if len(real_user_indices) <= keep_turns:
+                return
+
+            # Cut at the (k-th from the end) real user message; keep everything
+            # from there onwards so the surviving slice is still a valid
+            # user/assistant sequence.
+            cut_idx = real_user_indices[-keep_turns]
+            if cut_idx == 0:
+                return
+
+            kept = msgs[cut_idx:]
+            msgs.clear()
+            msgs.extend(kept)
+            logger.debug(
+                f"[AgentBridge] Trimmed in-memory messages to last "
+                f"{keep_turns} turns ({len(kept)} messages remain)"
+            )
+
+    @classmethod
+    def _prune_scheduled_in_memory(cls, agent, keep_last_n: int) -> None:
+        """Mirror conversation_store.prune_scheduled_messages on agent.messages.
+
+        Caller must hold ``agent.messages_lock``.
+        """
+        if keep_last_n < 0:
+            keep_last_n = 0
+
+        markers = (cls._SCHEDULED_MARKER,) + cls._SCHEDULED_LEGACY_MARKERS
+
+        def _is_marker_user(msg) -> bool:
+            if not isinstance(msg, dict) or msg.get("role") != "user":
+                return False
+            content = msg.get("content")
+            text = ""
+            if isinstance(content, str):
+                text = content
+            elif isinstance(content, list):
+                for block in content:
+                    if isinstance(block, dict) and block.get("type") == "text":
+                        text = block.get("text", "")
+                        break
+            return any(text.startswith(m) for m in markers)
+
+        msgs = agent.messages
+        pair_indices = []  # list of (user_idx, assistant_idx_or_None)
+        for idx, msg in enumerate(msgs):
+            if not _is_marker_user(msg):
+                continue
+            assistant_idx = None
+            if idx + 1 < len(msgs):
+                nxt = msgs[idx + 1]
+                if isinstance(nxt, dict) and nxt.get("role") == "assistant":
+                    assistant_idx = idx + 1
+            pair_indices.append((idx, assistant_idx))
+
+        if len(pair_indices) <= keep_last_n:
+            return
+
+        to_drop = pair_indices[: len(pair_indices) - keep_last_n]
+        drop_set = set()
+        for u_idx, a_idx in to_drop:
+            drop_set.add(u_idx)
+            if a_idx is not None:
+                drop_set.add(a_idx)
+
+        # Rebuild the list in place to keep external references stable.
+        kept = [m for i, m in enumerate(msgs) if i not in drop_set]
+        msgs.clear()
+        msgs.extend(kept)
 
     @staticmethod
     def _strip_thinking_blocks(messages: list) -> list:
