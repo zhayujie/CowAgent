@@ -913,8 +913,6 @@ class ConfigHandler:
         "open_ai_api_base", "deepseek_api_base", "qiniu_api_base", "claude_api_base", "gemini_api_base",
         "zhipu_ai_api_base", "moonshot_base_url", "ark_base_url", "custom_api_base",
         "open_ai_api_key", "deepseek_api_key", "qiniu_api_key", "qianfan_api_base", "claude_api_key", "gemini_api_key",
-        "zhipu_ai_api_base", "moonshot_base_url", "ark_base_url", "custom_api_base",
-        "open_ai_api_key", "deepseek_api_key", "qianfan_api_key", "claude_api_key", "gemini_api_key",
         "zhipu_ai_api_key", "dashscope_api_key", "moonshot_api_key",
         "ark_api_key", "minimax_api_key", "linkai_api_key", "custom_api_key",
         "agent_max_context_tokens", "agent_max_context_turns", "agent_max_steps",
