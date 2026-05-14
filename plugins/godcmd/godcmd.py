@@ -131,6 +131,20 @@ ADMIN_COMMANDS = {
         "alias": ["debug", "调试模式", "DEBUG"],
         "desc": "开启机器调试日志",
     },
+    "admin_set_openai_api_base": {
+        "alias": ["admin_set_openai_api_base"],
+        "args": ["api_key"],
+        "desc": "全局设置OpenAI的api_base",
+    },
+    "admin_set_openai_api_key": {
+        "alias": ["admin_set_openai_api_key"],
+        "args": ["api_key"],
+        "desc": "全局设置OpenAI的api_key",
+    },
+    "admin_set_gpt_model": {
+        "alias": ["admin_set_gpt_model"],
+        "desc": "全局设置模型",
+    },
 }
 
 
@@ -338,7 +352,7 @@ class Godcmd(Plugin):
                             ok, result = True, "服务已恢复"
                         elif cmd == "reconf":
                             load_config()
-                            ok, result = True, "配置已重载"
+                            ok, result = True, "配置已重载（私有or管理配置，需要重新设置）"
                         elif cmd == "resetall":
                             if bottype in [const.OPEN_AI, const.OPENAI, const.CHATGPT, const.CHATGPTONAZURE, const.LINKAI,
                                            const.BAIDU, const.QIANFAN, const.XUNFEI, const.QWEN, const.QWEN_DASHSCOPE, const.GEMINI, const.ZHIPU_AI, const.MOONSHOT,
@@ -421,6 +435,25 @@ class Godcmd(Plugin):
                                 ok, result = False, "请提供插件名"
                             else:
                                 ok, result = PluginManager().update_plugin(args[0])
+                        elif cmd == "admin_set_openai_api_base":
+                            if len(args) == 1:
+                                conf()["open_ai_api_base"] = args[0]
+                                ok, result = True, "全局设置OpenAI的api_base为" + args[0]
+                            else:
+                                ok, result = False, "请提供一个api_base"
+                        elif cmd == "admin_set_openai_api_key":
+                            if len(args) == 1:
+                                conf()["open_ai_api_key"] = args[0]
+                                ok, result = True, "全局设置OpenAI的api_key为" + args[0]
+                            else:
+                                ok, result = False, "请提供一个api_key"
+                        elif cmd == "admin_set_gpt_model":
+                            if len(args) == 1:
+                                conf()["model"] = self.model_mapping(args[0])
+                                Bridge().reset_bot()
+                                ok, result = True, "全局设置GPT模型为" + args[0]
+                            else:
+                                ok, result = False, "请提供一个GPT模型"
                         logger.debug("[Godcmd] admin command: %s by %s" % (cmd, user))
                 else:
                     ok, result = False, "需要管理员权限才能执行该指令"
