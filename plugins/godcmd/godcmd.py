@@ -240,7 +240,7 @@ class Godcmd(Plugin):
             cmd = command_parts[0]
             args = command_parts[1:]
             isadmin = False
-            if user in self.admin_users:
+            if session_id in self.admin_users:
                 isadmin = True
             ok = False
             result = "string"
