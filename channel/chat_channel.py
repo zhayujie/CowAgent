@@ -263,6 +263,9 @@ class ChatChannel(Channel):
 
                 if reply.type == ReplyType.TEXT:
                     reply_text = reply.content
+                     # 处理工具调用时 reply_text 为 list 的情况
+                    if type(reply_text) is list:
+                        reply_text = "\n".join(item.text.content for item in reply_text if item.type == "text")
                     if desire_rtype == ReplyType.VOICE and ReplyType.VOICE not in self.NOT_SUPPORT_REPLYTYPE:
                         reply = super().build_text_to_voice(reply.content)
                         return self._decorate_reply(context, reply)
