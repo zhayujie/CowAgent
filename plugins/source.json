@@ -35,6 +35,10 @@
     "HighSpeedTicket": {
       "url": "https://github.com/He0607/HighSpeedTicket.git",
       "desc": "高铁（火车）票查询插件"
+    },
+    "KeywordCall": {
+      "url": "https://github.com/pigracing/keyword_call.git",
+      "desc": "根据关键字触发不同的API"
     }
   }
 }
