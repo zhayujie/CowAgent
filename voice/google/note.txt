@@ -1,0 +1,1 @@
+需要在google cloud控制台创建授权项目，分配IAM角色和权限,下载自己的密钥文件, 把密钥文件命名为google-credentials.json放在本目录。
