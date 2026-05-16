@@ -897,7 +897,10 @@ class FileServeHandler:
             file_path = params.path
             if not file_path or not os.path.isabs(file_path):
                 raise web.notfound()
-            file_path = os.path.normpath(file_path)
+            file_path = os.path.realpath(file_path)
+            allowed_dir = os.path.realpath(_get_upload_dir())
+            if not file_path.startswith(allowed_dir + os.sep) and file_path != allowed_dir:
+                raise web.notfound()
             if not os.path.isfile(file_path):
                 raise web.notfound()
             content_type = mimetypes.guess_type(file_path)[0] or "application/octet-stream"
