@@ -16,7 +16,12 @@ from config import conf, subscribe_msg
 # This class is instantiated once per query
 class Query:
     def GET(self):
-        return verify_server(web.input())
+        response_data = verify_server(web.input())
+        # 显式设置 Content-Length 避免使用 chunked 编码
+        # 某些情况下微信公众号 token 验证不支持 chunked 编码
+        if response_data:
+            web.header("Content-Length", str(len(response_data)))
+        return response_data
 
     def POST(self):
         # Make sure to return the instance that first created, @singleton will do that.
