@@ -19,9 +19,13 @@ from channel.wechatmp.common import *
 from channel.wechatmp.wechatmp_client import WechatMPClient
 from common.log import logger
 from common.singleton import singleton
-from common.utils import split_string_by_utf8_length
+from common.utils import split_string_by_utf8_length, remove_markdown_symbol
 from config import conf
-from voice.audio_convert import any_to_mp3, split_audio
+
+try:
+    from voice.audio_convert import any_to_mp3, split_audio
+except ImportError as e:
+    logger.debug("import voice.audio_convert failed, voice features will not be supported: {}".format(e))
 
 # If using SSL, uncomment the following lines, and modify the certificate path.
 # from cheroot.server import HTTPServer
@@ -37,6 +41,7 @@ class WechatMPChannel(ChatChannel):
         super().__init__()
         self.passive_reply = passive_reply
         self.NOT_SUPPORT_REPLYTYPE = []
+        self._http_server = None
         appid = conf().get("wechatmp_app_id")
         secret = conf().get("wechatmp_app_secret")
         token = conf().get("wechatmp_token")
@@ -65,7 +70,23 @@ class WechatMPChannel(ChatChannel):
             urls = ("/wx", "channel.wechatmp.active_reply.Query")
         app = web.application(urls, globals(), autoreload=False)
         port = conf().get("wechatmp_port", 8080)
-        web.httpserver.runsimple(app.wsgifunc(), ("0.0.0.0", port))
+        func = web.httpserver.StaticMiddleware(app.wsgifunc())
+        func = web.httpserver.LogMiddleware(func)
+        server = web.httpserver.WSGIServer(("0.0.0.0", port), func)
+        self._http_server = server
+        try:
+            server.start()
+        except (KeyboardInterrupt, SystemExit):
+            server.stop()
+
+    def stop(self):
+        if self._http_server:
+            try:
+                self._http_server.stop()
+                logger.info("[wechatmp] HTTP server stopped")
+            except Exception as e:
+                logger.warning(f"[wechatmp] Error stopping HTTP server: {e}")
+            self._http_server = None
 
     def start_loop(self, loop):
         asyncio.set_event_loop(loop)
@@ -81,30 +102,35 @@ class WechatMPChannel(ChatChannel):
         receiver = context["receiver"]
         if self.passive_reply:
             if reply.type == ReplyType.TEXT or reply.type == ReplyType.INFO or reply.type == ReplyType.ERROR:
-                reply_text = reply.content
+                reply_text = remove_markdown_symbol(reply.content)
                 logger.info("[wechatmp] text cached, receiver {}\n{}".format(receiver, reply_text))
                 self.cache_dict[receiver].append(("text", reply_text))
             elif reply.type == ReplyType.VOICE:
-                voice_file_path = reply.content
-                duration, files = split_audio(voice_file_path, 60 * 1000)
-                if len(files) > 1:
-                    logger.info("[wechatmp] voice too long {}s > 60s , split into {} parts".format(duration / 1000.0, len(files)))
+                try:
+                    voice_file_path = reply.content
+                    duration, files = split_audio(voice_file_path, 60 * 1000)
+                    if len(files) > 1:
+                        logger.info("[wechatmp] voice too long {}s > 60s , split into {} parts".format(duration / 1000.0, len(files)))
 
-                for path in files:
-                    # support: <2M, <60s, mp3/wma/wav/amr
-                    try:
-                        with open(path, "rb") as f:
-                            response = self.client.material.add("voice", f)
-                            logger.debug("[wechatmp] upload voice response: {}".format(response))
-                            f_size = os.fstat(f.fileno()).st_size
-                            time.sleep(1.0 + 2 * f_size / 1024 / 1024)
-                            # todo check media_id
-                    except WeChatClientException as e:
-                        logger.error("[wechatmp] upload voice failed: {}".format(e))
-                        return
-                    media_id = response["media_id"]
-                    logger.info("[wechatmp] voice uploaded, receiver {}, media_id {}".format(receiver, media_id))
-                    self.cache_dict[receiver].append(("voice", media_id))
+                    for path in files:
+                        # support: <2M, <60s, mp3/wma/wav/amr
+                        try:
+                            with open(path, "rb") as f:
+                                response = self.client.material.add("voice", f)
+                                logger.debug("[wechatmp] upload voice response: {}".format(response))
+                                f_size = os.fstat(f.fileno()).st_size
+                                time.sleep(1.0 + 2 * f_size / 1024 / 1024)
+                                # todo check media_id
+                        except WeChatClientException as e:
+                            logger.error("[wechatmp] upload voice failed: {}".format(e))
+                            return
+                        media_id = response["media_id"]
+                        logger.info("[wechatmp] voice uploaded, receiver {}, media_id {}".format(receiver, media_id))
+                        self.cache_dict[receiver].append(("voice", media_id))
+                except ImportError as e:
+                    logger.error("[wechatmp] voice conversion failed: {}".format(e))
+                    logger.error("[wechatmp] please install pydub: pip install pydub")
+                    return
 
             elif reply.type == ReplyType.IMAGE_URL:  # 从网络下载图片
                 img_url = reply.content
@@ -140,6 +166,42 @@ class WechatMPChannel(ChatChannel):
                 media_id = response["media_id"]
                 logger.info("[wechatmp] image uploaded, receiver {}, media_id {}".format(receiver, media_id))
                 self.cache_dict[receiver].append(("image", media_id))
+            elif reply.type == ReplyType.VIDEO_URL:  # 从网络下载视频
+                video_url = reply.content
+                video_res = requests.get(video_url, stream=True)
+                video_storage = io.BytesIO()
+                for block in video_res.iter_content(1024):
+                    video_storage.write(block)
+                video_storage.seek(0)
+                video_type = 'mp4'
+                filename = receiver + "-" + str(context["msg"].msg_id) + "." + video_type
+                content_type = "video/" + video_type
+                try:
+                    response = self.client.material.add("video", (filename, video_storage, content_type))
+                    logger.debug("[wechatmp] upload video response: {}".format(response))
+                except WeChatClientException as e:
+                    logger.error("[wechatmp] upload video failed: {}".format(e))
+                    return
+                media_id = response["media_id"]
+                logger.info("[wechatmp] video uploaded, receiver {}, media_id {}".format(receiver, media_id))
+                self.cache_dict[receiver].append(("video", media_id))
+
+            elif reply.type == ReplyType.VIDEO:  # 从文件读取视频
+                video_storage = reply.content
+                video_storage.seek(0)
+                video_type = 'mp4'
+                filename = receiver + "-" + str(context["msg"].msg_id) + "." + video_type
+                content_type = "video/" + video_type
+                try:
+                    response = self.client.material.add("video", (filename, video_storage, content_type))
+                    logger.debug("[wechatmp] upload video response: {}".format(response))
+                except WeChatClientException as e:
+                    logger.error("[wechatmp] upload video failed: {}".format(e))
+                    return
+                media_id = response["media_id"]
+                logger.info("[wechatmp] video uploaded, receiver {}, media_id {}".format(receiver, media_id))
+                self.cache_dict[receiver].append(("video", media_id))
+
         else:
             if reply.type == ReplyType.TEXT or reply.type == ReplyType.INFO or reply.type == ReplyType.ERROR:
                 reply_text = reply.content
@@ -177,6 +239,10 @@ class WechatMPChannel(ChatChannel):
                         logger.debug("[wechatcom] upload voice response: {}".format(response))
                         media_ids.append(response["media_id"])
                         os.remove(path)
+                except ImportError as e:
+                    logger.error("[wechatmp] voice conversion failed: {}".format(e))
+                    logger.error("[wechatmp] please install pydub: pip install pydub")
+                    return
                 except WeChatClientException as e:
                     logger.error("[wechatmp] upload voice failed: {}".format(e))
                     return
@@ -222,6 +288,38 @@ class WechatMPChannel(ChatChannel):
                     return
                 self.client.message.send_image(receiver, response["media_id"])
                 logger.info("[wechatmp] Do send image to {}".format(receiver))
+            elif reply.type == ReplyType.VIDEO_URL:  # 从网络下载视频
+                video_url = reply.content
+                video_res = requests.get(video_url, stream=True)
+                video_storage = io.BytesIO()
+                for block in video_res.iter_content(1024):
+                    video_storage.write(block)
+                video_storage.seek(0)
+                video_type = 'mp4'
+                filename = receiver + "-" + str(context["msg"].msg_id) + "." + video_type
+                content_type = "video/" + video_type
+                try:
+                    response = self.client.media.upload("video", (filename, video_storage, content_type))
+                    logger.debug("[wechatmp] upload video response: {}".format(response))
+                except WeChatClientException as e:
+                    logger.error("[wechatmp] upload video failed: {}".format(e))
+                    return
+                self.client.message.send_video(receiver, response["media_id"])
+                logger.info("[wechatmp] Do send video to {}".format(receiver))
+            elif reply.type == ReplyType.VIDEO:  # 从文件读取视频
+                video_storage = reply.content
+                video_storage.seek(0)
+                video_type = 'mp4'
+                filename = receiver + "-" + str(context["msg"].msg_id) + "." + video_type
+                content_type = "video/" + video_type
+                try:
+                    response = self.client.media.upload("video", (filename, video_storage, content_type))
+                    logger.debug("[wechatmp] upload video response: {}".format(response))
+                except WeChatClientException as e:
+                    logger.error("[wechatmp] upload video failed: {}".format(e))
+                    return
+                self.client.message.send_video(receiver, response["media_id"])
+                logger.info("[wechatmp] Do send video to {}".format(receiver))
         return
 
     def _success_callback(self, session_id, context, **kwargs):  # 线程异常结束时的回调函数

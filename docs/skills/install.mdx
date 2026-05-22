@@ -1,0 +1,66 @@
+---
+title: 安装技能
+description: 通过命令一键安装来自多种来源的技能
+---
+
+CowAgent 支持通过统一的 `install` 命令安装来自 **[Cow 技能广场](https://skills.cowagent.ai/)、GitHub、ClawHub、LinkAI** 以及任意 URL 上的技能。在对话中使用 `/skill install`，在终端中使用 `cow skill install`。
+
+## 从Cow技能广场安装
+
+访问 [skills.cowagent.ai](https://skills.cowagent.ai/) 浏览所有可用技能，找到想要的技能后直接安装，例如：
+
+```text
+/skill list --remote
+/skill install pptx
+```
+
+## 从 GitHub 安装
+
+> Github上的所有技能都可以直接安装，支持仓库级批量安装和指定子目录安装，例如：
+
+```text
+/skill install larksuite/cli
+/skill install https://github.com/larksuite/cli/tree/main/skills/lark-im
+```
+
+## 从 ClawHub 安装
+
+[ClawHub](https://clawhub.ai/) 上的所有技能 (4w+个) 都可以一键安装，例如：
+
+
+```text
+/skill install clawhub:<name>
+```
+
+## 从 LinkAI 安装
+
+[LinkAI](https://link-ai.tech/console) 上的所有公开资源 (1w+个应用/工作流/插件) ，以及自己创建的资源 (应用/工作流/知识库/数据库/插件) 都可以通过命令一键安装：
+
+```text
+/skill install linkai:<code>
+```
+
+> LinkAI平台上创建的所有应用、工作流、知识库、数据库、插件都有唯一的code，可在[控制台](https://link-ai.tech/console)各资源页面中进行获取并填写到命令中
+
+## 从 URL 安装
+
+支持 zip 压缩包和 SKILL.md 文件链接：
+
+```text
+/skill install https://cdn.link-ai.tech/skills/pptx.zip
+/skill install https://example.com/path/to/SKILL.md
+```
+
+## 管理技能
+
+```text
+/skill list                  # 查看已安装技能
+/skill info pptx             # 查看技能详情
+/skill enable pptx           # 启用技能
+/skill disable pptx          # 禁用技能
+/skill uninstall pptx        # 卸载技能
+```
+
+<Tip>
+  以上所有命令在终端中使用时，将 `/skill` 替换为 `cow skill` 即可。完整命令说明参考 [技能管理命令](/cli/skill)。
+</Tip>

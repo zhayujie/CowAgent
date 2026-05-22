@@ -37,9 +37,9 @@ class Keyword(Plugin):
             # 加载关键词
             self.keyword = conf["keyword"]
 
-            logger.info("[keyword] {}".format(self.keyword))
+            logger.debug("[keyword] {}".format(self.keyword))
             self.handlers[Event.ON_HANDLE_CONTEXT] = self.on_handle_context
-            logger.info("[keyword] inited.")
+            logger.debug("[keyword] inited.")
         except Exception as e:
             logger.warn("[keyword] init failed, ignore or see https://github.com/zhayujie/chatgpt-on-wechat/tree/master/plugins/keyword .")
             raise e
@@ -55,7 +55,7 @@ class Keyword(Plugin):
             reply_text = self.keyword[content]
 
             # 判断匹配内容的类型
-            if (reply_text.startswith("http://") or reply_text.startswith("https://")) and any(reply_text.endswith(ext) for ext in [".jpg", ".jpeg", ".png", ".gif", ".img"]):
+            if (reply_text.startswith("http://") or reply_text.startswith("https://")) and any(reply_text.endswith(ext) for ext in [".jpg", ".webp", ".jpeg", ".png", ".gif", ".img"]):
             # 如果是以 http:// 或 https:// 开头，且".jpg", ".jpeg", ".png", ".gif", ".img"结尾，则认为是图片 URL。
                 reply = Reply()
                 reply.type = ReplyType.IMAGE_URL
@@ -71,7 +71,6 @@ class Keyword(Plugin):
                 response = requests.get(reply_text)
                 with open(file_path, "wb") as f:
                     f.write(response.content)
-                #channel/wechat/wechat_channel.py和channel/wechat_channel.py中缺少ReplyType.FILE类型。
                 reply = Reply()
                 reply.type = ReplyType.FILE
                 reply.content = file_path

@@ -1,0 +1,24 @@
+---
+title: edit - File Edit
+description: Edit files via precise text replacement
+---
+
+Edit files via precise text replacement. If `oldText` is empty, appends to the end of the file.
+
+## Dependencies
+
+No extra dependencies, available by default.
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `path` | string | Yes | File path |
+| `oldText` | string | Yes | Original text to replace (empty to append) |
+| `newText` | string | Yes | Replacement text |
+
+## Use Cases
+
+- Modify specific parameters in configuration files
+- Fix bugs in code
+- Insert content at specific positions in files

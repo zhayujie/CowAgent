@@ -1,0 +1,105 @@
+---
+title: v2.0.0
+description: CowAgent 2.0 - 从聊天机器人到超级智能助理的全面升级
+---
+
+CowAgent 2.0 实现了从聊天机器人到**超级智能助理**的全面升级！现在它能够主动思考和规划任务、拥有长期记忆、操作计算机和外部资源、创造和执行技能，真正理解你并和你一起成长。
+
+**发布日期**：2026.02.03 | [GitHub Release](https://github.com/zhayujie/CowAgent/releases/tag/2.0.0)
+
+## 重点更新
+
+### Agent 核心能力
+
+- **复杂任务规划**：能够理解复杂任务并自主规划执行，持续思考和调用工具直到完成目标，支持多轮推理和上下文理解
+- **长期记忆**：自动将对话记忆持久化至本地文件和数据库中，包括全局记忆和天级记忆，支持关键词及向量检索
+- **内置系统工具**：内置实现 10+ 种工具，包括文件操作、Bash 终端、浏览器、文件发送、定时任务、记忆管理等
+- **Skills**：新增 Skill 运行引擎，内置多种技能，并支持通过自然语言对话完成自定义 Skills 开发
+- **安全和成本**：通过秘钥管理工具、提示词控制、系统权限等手段控制 Agent 的访问安全；通过最大记忆轮次、最大上下文 token、工具执行步数对 token 成本进行限制
+
+### 其他更新
+
+- **渠道优化**：飞书及钉钉接入渠道支持长连接接入（无需公网 IP）、支持图片/文件消息的接收和发送
+- **模型更新**：新增 claude-sonnet-4-5、gemini-3-pro-preview、glm-4.7、MiniMax-M2.1、qwen3-max 等最新模型
+- **部署优化**：增加一键安装、配置、运行、管理的脚本，简化部署流程
+
+## 长期记忆系统
+
+Agent 会在用户分享重要信息时主动存储，也会在对话达到一定长度时自动提取摘要。支持语义搜索和向量检索的混合检索模式。
+
+**首次启动**时，Agent 会主动询问关键信息，并记录至工作空间（默认 `~/cow`）中的智能体设定、用户身份、记忆文件中。
+
+**长期对话**中，Agent 会智能记录或检索记忆，不断更新自身设定、用户偏好，总结经验和教训，真正实现自主思考和持续成长。
+
+<Frame>
+  <img src="https://cdn.link-ai.tech/doc/20260203000455.png" width="800" />
+</Frame>
+
+## 任务规划与工具调用
+
+Agent 根据任务需求智能选择和调用工具，完成各类复杂操作。
+
+### 终端和文件访问
+
+最基础和核心的工具能力，用户可通过手机端与 Agent 交互，操作个人电脑或服务器上的资源：
+
+<Frame>
+  <img src="https://cdn.link-ai.tech/doc/20260202181130.png" width="800" />
+</Frame>
+
+### 应用编程能力
+
+基于编程能力和系统访问能力，Agent 可实现从信息搜索、素材生成、编码、测试、部署、Nginx 配置、发布的 **Vibecoding 全流程**，通过手机端一句命令完成应用快速 demo。
+
+<Frame>
+  <img src="https://cdn.link-ai.tech/doc/20260203121008.png" width="800" />
+</Frame>
+
+### 定时任务
+
+支持 **一次性任务、固定时间间隔、Cron 表达式** 三种形式，任务触发可选择 **固定消息发送** 或 **Agent 动态任务执行** 两种模式：
+
+<Frame>
+  <img src="https://cdn.link-ai.tech/doc/20260202195402.png" width="800" />
+</Frame>
+
+### 环境变量管理
+
+通过 `env_config` 工具管理技能所需秘钥，支持对话式更新，内置安全保护和脱敏策略：
+
+<Frame>
+  <img src="https://cdn.link-ai.tech/doc/20260202234939.png" width="800" />
+</Frame>
+
+## 技能系统
+
+每个 Skill 由说明文件、运行脚本（可选）、资源（可选）组成，为 Agent 提供无限扩展性。
+
+### 技能创造器
+
+通过对话方式快速创建技能，将工作流程固化或对接任意第三方接口：
+
+<Frame>
+  <img src="https://cdn.link-ai.tech/doc/20260202202247.png" width="800" />
+</Frame>
+
+### 网页搜索和图像识别
+
+- **网页搜索**：内置 `web_search` 工具，支持多种搜索引擎，配置对应 API Key 即可使用
+- **图像识别**：支持 `gpt-4.1-mini`、`gpt-4.1` 等模型，配置 `OPENAI_API_KEY` 即可使用
+
+<Frame>
+  <img src="https://cdn.link-ai.tech/doc/20260202213219.png" width="800" />
+</Frame>
+
+### 三方知识库和插件
+
+`linkai-agent` 技能可将 [LinkAI](https://link-ai.tech/) 上的所有智能体作为 Skill 使用，实现多智能体决策：
+
+<Frame>
+  <img src="https://cdn.link-ai.tech/doc/20260202234350.png" width="750" />
+</Frame>
+
+## 参与共建
+
+2.0 版本后，项目将持续升级 Agent 能力、拓展接入渠道、内置工具、技能系统，降低模型成本和提升安全性。欢迎 [提出反馈](https://github.com/zhayujie/CowAgent/issues) 和 [贡献代码](https://github.com/zhayujie/CowAgent/pulls)。

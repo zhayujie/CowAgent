@@ -1,0 +1,109 @@
+---
+title: MCP Tools
+description: Integrate external tool ecosystems via the Model Context Protocol
+---
+
+CowAgent supports the [Model Context Protocol (MCP)](https://modelcontextprotocol.io), allowing the Agent to directly invoke tens of thousands of community MCP tools. Configure `mcp.json` once and the tools are exposed to the LLM in exactly the same way as built-in tools — automatically selected and invoked.
+
+## Configuration File
+
+CowAgent reads `~/cow/mcp.json`. If the file does not exist, no MCP tools are loaded — and no error is raised.
+
+For Docker deployments, the official `docker-compose.yml` already mounts the host's `./cow` directory to `/home/agent/cow` inside the container (i.e. the container user's `~/cow`). Just drop `mcp.json` into the host's `./cow/` directory and it will take effect.
+
+### Standard Format
+
+Fully compatible with the MCP community standard, identical to Claude Desktop / Cursor:
+
+```json
+{
+  "mcpServers": {
+    "<server-name>": {
+      "command": "npx",
+      "args": ["-y", "some-mcp-package"],
+      "env": {
+        "API_KEY": "your-key-here"
+      }
+    }
+  }
+}
+```
+
+| Field | Required | Description |
+| --- | --- | --- |
+| `command` | stdio | Executable to launch the server (e.g. `npx`, `python`, `uvx`) |
+| `args` | No | Arguments passed to `command` |
+| `env` | No | Environment variables for the subprocess, commonly used for API keys |
+| `url` | SSE | SSE endpoint URL (alternative to `command`) |
+| `disabled` | No | When `true`, this server is skipped — handy for temporary disabling |
+
+### Full Example
+
+```json
+{
+  "mcpServers": {
+    "fetch": {
+      "command": "uvx",
+      "args": ["mcp-server-fetch"]
+    },
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "<YOUR_TOKEN>"
+      }
+    }
+  }
+}
+```
+
+- **fetch**: Generic web page fetcher that returns page text content. No API key required.
+- **github**: Access GitHub repos, issues, PRs, etc. Requires a Personal Access Token.
+
+## Let the Agent Configure It for You
+
+CowAgent ships with `read` / `write` / `edit` tools, so **you can simply send the MCP config to the Agent and ask it to write the file**:
+
+For example:
+
+```markdown
+Add this MCP to ~/cow/mcp.json:
+
+{"mcpServers":{"fetch":{"command":"uvx","args":["mcp-server-fetch"]}}}
+```
+
+The Agent will:
+
+1. Read the existing MCP config and merge the new server entry, preserving existing ones
+2. Hot-reload the new MCP server, so the corresponding tools become available on the next message
+
+## How It Works
+
+- **Async loading at startup**: All servers configured in `mcp.json` are loaded asynchronously in the background, never blocking the main loop — chat is usable immediately.
+- **Hot reload**: When you or the Agent modifies `mcp.json`, changed servers are automatically reloaded after the current message — no need to restart cow.
+- **Flat exposure**: Each method exposed by an MCP server appears as an individual tool. The LLM picks one directly without a second-stage decision.
+
+## Supported Transports
+
+| Transport | Description | Config Field |
+| --- | --- | --- |
+| **stdio** | Subprocess communication. The most common option, with the richest community ecosystem. | `command` + `args` |
+| **SSE** | HTTP Server-Sent Events, suitable for remotely hosted MCP services. | `url` |
+
+## Troubleshooting
+
+| Symptom | What to Check |
+| --- | --- |
+| Agent has no MCP tools after startup | Verify that `~/cow/mcp.json` exists and contains valid JSON |
+| A specific server fails to load | Look for `[MCP] Server 'xxx' load failed` in startup logs — usually missing dependencies or API keys |
+| Changes to `mcp.json` aren't applied | Changes take effect on **the next message**. If the server config didn't actually change (e.g. only comments edited), no restart is triggered |
+| Docker deployment | Make sure host's `./cow` is mounted to `/home/agent/cow` in the container, then just drop `mcp.json` into host's `./cow/`. Or just ask the Agent to do it |
+
+## Recommended MCP Marketplaces
+
+You can browse third-party MCP marketplaces and copy a JSON config to use directly, for example:
+
+- [mcp.so](https://mcp.so) — Global MCP service index
+- [ModelScope MCP Hub](https://modelscope.cn/mcp) — ModelScope's MCP hub, more reliable from mainland China
+
+Any MCP server that follows the standard protocol (stdio / SSE) integrates with CowAgent out of the box.

@@ -1,0 +1,123 @@
+---
+title: Process Management
+description: Manage CowAgent process lifecycle with cow commands
+---
+
+Process management commands control the CowAgent background process. These commands are only available in the terminal.
+
+## start
+
+Start the CowAgent service. Runs as a background daemon by default and automatically tails logs.
+
+```bash
+cow start
+```
+
+**Options:**
+
+| Option | Description |
+| --- | --- |
+| `-f`, `--foreground` | Run in foreground, not as a background daemon |
+| `--no-logs` | Don't tail logs after starting |
+
+## stop
+
+Stop the running CowAgent service.
+
+```bash
+cow stop
+```
+
+## restart
+
+Restart the CowAgent service (stop then start).
+
+```bash
+cow restart
+```
+
+**Options:**
+
+| Option | Description |
+| --- | --- |
+| `--no-logs` | Don't tail logs after restart |
+
+## update
+
+Update code and restart the service. Automatically performs:
+
+1. Pull latest code (`git pull`)
+2. Stop current service
+3. Update Python dependencies
+4. Reinstall CLI
+5. Start service
+
+```bash
+cow update
+```
+
+<Warning>
+  If `git pull` fails (e.g., uncommitted local changes), the update aborts and the service remains unaffected.
+</Warning>
+
+## status
+
+Check CowAgent service status, including process info, version, and current model/channel configuration.
+
+```bash
+cow status
+```
+
+## logs
+
+View service logs.
+
+```bash
+cow logs
+```
+
+**Options:**
+
+| Option | Description | Default |
+| --- | --- | --- |
+| `-f`, `--follow` | Continuously tail log output | No |
+| `-n`, `--lines` | Show last N lines | 50 |
+
+Examples:
+
+```bash
+# View last 100 lines
+cow logs -n 100
+
+# Continuously tail logs
+cow logs -f
+```
+
+## install-browser
+
+Install Playwright and Chromium browser for the [browser tool](/en/tools/browser).
+
+```bash
+cow install-browser
+```
+
+<Tip>
+  Only needed when using browser tools (web browsing, screenshots, etc.).
+</Tip>
+
+## run.sh Compatibility
+
+If Cow CLI is not installed, you can use `run.sh` to manage the service:
+
+| cow command | run.sh equivalent |
+| --- | --- |
+| `cow start` | `./run.sh start` |
+| `cow stop` | `./run.sh stop` |
+| `cow restart` | `./run.sh restart` |
+| `cow update` | `./run.sh update` |
+| `cow status` | `./run.sh status` |
+| `cow logs` | `./run.sh logs` |
+
+<Note>
+  The `cow` command is recommended — it provides cleaner syntax and richer features. It is automatically installed via the one-click install script.
+</Note>

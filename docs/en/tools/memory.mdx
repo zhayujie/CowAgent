@@ -1,0 +1,43 @@
+---
+title: memory - Memory & Knowledge
+description: Search and read long-term memory and knowledge base files
+---
+
+The memory tool contains two sub-tools: `memory_search` (search memory) and `memory_get` (read memory or knowledge files).
+
+When the [knowledge base](/en/knowledge) feature is enabled, both tools also support accessing files under the `knowledge/` directory.
+
+## Dependencies
+
+No extra dependencies, available by default. Managed by the Agent Core memory system.
+
+## memory_search
+
+Search historical memory and knowledge base content with hybrid keyword and vector retrieval.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `query` | string | Yes | Search query |
+
+## memory_get
+
+Read the content of a specific memory or knowledge file.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `path` | string | Yes | Relative path to the file (e.g. `MEMORY.md`, `memory/2026-01-01.md`, `knowledge/concepts/rag.md`) |
+| `start_line` | integer | No | Start line number |
+| `end_line` | integer | No | End line number |
+
+## How It Works
+
+The Agent automatically invokes memory tools in these scenarios:
+
+- When the user shares important information → stores to memory
+- When historical context is needed → searches relevant memory
+- When conversation reaches a certain length → extracts summary for storage
+- When discussing domain knowledge → retrieves relevant pages from the knowledge base
+
+<Note>
+  When `knowledge` is set to `false` in config, the tool descriptions and search scope automatically adjust to include only memory files.
+</Note>

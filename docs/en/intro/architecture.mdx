@@ -1,0 +1,83 @@
+---
+title: Architecture
+description: CowAgent 2.0 system architecture and core design
+---
+
+CowAgent 2.0 has evolved from a simple chatbot into a super intelligent assistant with Agent architecture, featuring autonomous thinking, task planning, long-term memory, and skill extensibility.
+
+## System Architecture
+
+CowAgent's architecture consists of the following core modules:
+
+<img src="https://cdn.link-ai.tech/doc/cow-agent-arch-en.jpg.jpg" alt="CowAgent Architecture" />
+
+| Module | Description |
+| --- | --- |
+| **Plan** | Understands user intent, decomposes complex tasks into multi-step plans, and iteratively invokes tools until the goal is achieved |
+| **Memory** | Automatically persists important information as core memory and daily memory, with hybrid keyword and vector retrieval for cross-session context continuity |
+| **Knowledge** | Organizes structured knowledge by topic. The Agent autonomously distills valuable information into Markdown pages, maintaining indexes and cross-references to build a growing knowledge network |
+| **Tools** | Core capability for Agent to access OS resources. 10+ built-in tools including file read/write, terminal, browser, scheduler, memory search, web search, and more |
+| **Skills** | Loads and manages Skills. Supports one-click installation from Skill Hub, GitHub, and more, or custom skill creation through conversation |
+| **Models** | Model layer with unified access to OpenAI, Claude, Gemini, DeepSeek, MiniMax, GLM, Qwen, and other mainstream LLMs |
+| **Channels** | Message channel layer for receiving and sending messages. Supports Web console, WeChat, Feishu, DingTalk, WeCom, WeChat Official Account, and more with a unified protocol |
+| **CLI** | Command-line system providing terminal commands (`cow`) and chat commands (`/`) for process management, skill installation, configuration, knowledge base management, and more |
+
+## Agent Mode Workflow
+
+When Agent mode is enabled, CowAgent runs as an autonomous agent with the following workflow:
+
+1. **Receive Message** — Receive user input through channels
+2. **Understand Intent** — Analyze task requirements and context
+3. **Plan Task** — Break complex tasks into multiple steps
+4. **Invoke Tools** — Select and execute appropriate tools for each step
+5. **Update Memory & Knowledge** — Store important information in long-term memory and organize structured knowledge into the knowledge base
+6. **Return Result** — Send execution results back to the user
+
+## Workspace Directory Structure
+
+The Agent workspace is located at `~/cow` by default and stores system prompts, memory files, and skill files:
+
+```
+~/cow/
+├── system.md          # Agent system prompt
+├── user.md            # User profile
+├── MEMORY.md          # Core memory
+├── memory/            # Long-term memory storage
+│   └── YYYY-MM-DD.md  # Daily memory
+├── knowledge/         # Personal knowledge base
+│   ├── index.md       # Knowledge index
+│   └── <category>/    # Topic-based pages
+└── skills/            # Custom skills
+    ├── skill-1/
+    └── skill-2/
+```
+
+Secret keys are stored separately in `~/.cow` directory for security:
+
+```
+~/.cow/
+└── .env               # Secret keys for skills
+```
+
+## Core Configuration
+
+Configure Agent mode parameters in `config.json`:
+
+```json
+{
+  "agent": true,
+  "agent_workspace": "~/cow",
+  "agent_max_context_tokens": 40000,
+  "agent_max_context_turns": 30,
+  "agent_max_steps": 15
+}
+```
+
+| Parameter | Description | Default |
+| --- | --- | --- |
+| `agent` | Enable Agent mode | `true` |
+| `agent_workspace` | Workspace path | `~/cow` |
+| `agent_max_context_tokens` | Max context tokens | `40000` |
+| `agent_max_context_turns` | Max context turns | `30` |
+| `agent_max_steps` | Max decision steps per task | `15` |
+| `knowledge` | Enable personal knowledge base | `true` |

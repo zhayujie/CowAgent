@@ -1,0 +1,81 @@
+---
+title: DeepSeek
+description: DeepSeekモデルの設定
+---
+
+方法1：公式接続（推奨）：
+
+```json
+{
+  "model": "deepseek-v4-flash",
+  "deepseek_api_key": "YOUR_API_KEY"
+}
+```
+
+| パラメータ | 説明 |
+| --- | --- |
+| `model` | `deepseek-v4-flash`（デフォルト）、`deepseek-v4-pro` をサポート |
+| `deepseek_api_key` | [DeepSeek Platform](https://platform.deepseek.com/api_keys) で作成 |
+| `deepseek_api_base` | オプション、デフォルトは `https://api.deepseek.com/v1`。サードパーティプロキシに変更可能 |
+
+## モデルの選び方
+
+| モデル | 適用シーン |
+| --- | --- |
+| `deepseek-v4-flash` | デフォルト推奨、高速・低コスト |
+| `deepseek-v4-pro` | 複雑なタスクでより強力 |
+
+## 思考モード
+
+V4シリーズ（`deepseek-v4-flash` / `deepseek-v4-pro`）は明示的な「思考モード」をサポートします。最終回答の前に思考内容（`reasoning_content`）を出力することで、回答品質を高めます。
+
+### スイッチ
+
+グローバル設定 `enable_thinking` で制御します：
+
+```json
+{
+  "enable_thinking": true
+}
+```
+
+- `true`：すべてのチャネルで思考モードがオン。Webコンソールでは思考過程を表示し、IMチャネル（WeChat / WeCom / DingTalk / Feishu）では表示されないものの、回答品質の向上というメリットを得られます。
+- `false`：思考オフ、応答が速く、初回トークンの遅延も低くなります。
+
+### 推論強度
+
+思考モード下では `reasoning_effort` で推論の深さを制御できます：
+
+```json
+{
+  "enable_thinking": true,
+  "reasoning_effort": "high"
+}
+```
+
+| 値 | 適用シーン |
+| --- | --- |
+| `high`（デフォルト） | 通常の Agent タスク、思考の深さとレスポンス速度のバランス |
+| `max` | 複雑なコーディング、長いプランニング、厳密な制約のあるタスク。より深い推論と引き換えに出力トークンとレイテンシが増加 |
+
+`reasoning_effort` は `enable_thinking` が `true` の場合のみ有効になります。思考モードをサポートしないモデルでは自動的に無視されます。
+
+### 注意事項
+
+- **サンプリングパラメータ**：思考モード時は `temperature`、`top_p`、`presence_penalty`、`frequency_penalty` がサーバ側で無視されます（エラーにはなりません）。CowAgentは自動的に送信をスキップします。
+- **マルチターンのツール呼び出し**：履歴にツール呼び出しが含まれる場合、DeepSeekはすべてのassistantメッセージに `reasoning_content` を返送するよう要求します。CowAgentが自動でラウンドトリップ処理を行うため、セッション途中で思考スイッチを切り替えてもエラーになりません。
+
+<Tip>
+  通常は `deepseek-v4-flash` を使い、難しいタスクでは `deepseek-v4-pro` に切り替え、深い思考が必要な時は `enable_thinking` を有効にしてください。
+</Tip>
+
+方法2：OpenAI互換方式：
+
+```json
+{
+  "model": "deepseek-v4-flash",
+  "bot_type": "openai",
+  "open_ai_api_key": "YOUR_API_KEY",
+  "open_ai_api_base": "https://api.deepseek.com/v1"
+}
+```

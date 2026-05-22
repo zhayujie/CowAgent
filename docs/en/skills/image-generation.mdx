@@ -1,0 +1,158 @@
+---
+title: image-generation - Image Generation
+description: Text-to-image / image-to-image / multi-image fusion with automatic multi-provider routing and fallback
+---
+
+A general-purpose image generation and editing skill supporting six providers: OpenAI, Gemini, Seedream (Volcengine Ark), Qwen (DashScope), MiniMax, and LinkAI. No need to choose a model manually — the script automatically selects a configured provider based on a fixed priority order.
+
+## Model Selection
+
+`image-generation` uses a "fixed priority + automatic fallback" strategy — just configure your keys and it works:
+
+1. **Priority order**: `OpenAI → Gemini → Seedream → Qwen → MiniMax → LinkAI`
+2. **Unconfigured providers are skipped**: only providers with an API key participate
+3. **Automatic fallback on failure**: on errors like 401, model not enabled, or network issues, the next provider is tried
+4. **Specified model goes first**: if a specific model name is provided, its provider is promoted to the front
+
+### Supported Models
+
+| Provider | Models / Aliases | Notes |
+| --- | --- | --- |
+| OpenAI | `gpt-image-2`, `gpt-image-1` | General-purpose, high quality, supports `quality` parameter |
+| Gemini Nano Banana | `nano-banana-2`, `nano-banana-pro`, `nano-banana` | Corresponds to `gemini-3.1-flash`, `gemini-3-pro`, `gemini-2.5-flash` image variants |
+| Seedream (Volcengine Ark) | `seedream-5.0-lite`, `seedream-4.5` | Native 2K–4K, up to 14 reference images for fusion |
+| Qwen (DashScope) | `qwen-image-2.0`, `qwen-image-2.0-pro` | Strong with Chinese text rendering and text-image layouts |
+| MiniMax | `image-01` | Fast and simple image generation |
+| LinkAI | Any model | Universal proxy, used as fallback |
+
+<Note>
+By default, the Agent does not pick a model — it uses automatic routing. If you want a specific model, just say so in the conversation, e.g. "use seedream to draw a cat" or "generate a poster with gpt-image-2". You can also pin a default model via the "Custom Configuration" section below.
+</Note>
+
+## Custom Configuration
+
+### API Key Setup
+
+You need **at least one** provider key. Configuring multiple providers enables automatic fallback. There are three ways to set up keys:
+
+#### Option 1: Automatic Reuse of Existing Keys
+
+If you have already configured model keys in the web console or `config.json` (e.g. `openai_api_key`, `gemini_api_key`, etc.), these keys are **automatically synced** to the corresponding environment variables at startup. In other words, if your chat model works, image generation can use the same key with zero extra configuration.
+
+#### Option 2: Configure in config.json
+
+Add the key fields directly to `config.json`:
+
+```json
+{
+  "openai_api_key": "sk-xxx",
+  "openai_api_base": "https://api.openai.com/v1",
+  "gemini_api_key": "AIza-xxx",
+  "ark_api_key": "xxx",
+  "dashscope_api_key": "sk-xxx",
+  "minimax_api_key": "xxx",
+  "linkai_api_key": "xxx"
+}
+```
+
+A restart is required after changes. Each key also has a corresponding `*_api_base` field for custom endpoints.
+
+#### Option 3: Configure via Conversation
+
+Send an API key in the chat and the Agent will save it to `~/cow/.env` using the `env_config` tool — **no restart needed**. For example:
+
+```
+Set OPENAI_API_KEY to sk-xxx
+```
+
+Or:
+
+```
+Configure ARK_API_KEY as xxx
+```
+
+### API Key Reference
+
+| Environment Variable | config.json Field | Provider | Default Base URL |
+| --- | --- | --- | --- |
+| `OPENAI_API_KEY` | `openai_api_key` | OpenAI | `https://api.openai.com/v1` |
+| `GEMINI_API_KEY` | `gemini_api_key` | Gemini | `https://generativelanguage.googleapis.com` |
+| `ARK_API_KEY` | `ark_api_key` | Volcengine Ark (Seedream) | `https://ark.cn-beijing.volces.com/api/v3` |
+| `DASHSCOPE_API_KEY` | `dashscope_api_key` | Alibaba DashScope (Qwen) | `https://dashscope.aliyuncs.com` |
+| `MINIMAX_API_KEY` | `minimax_api_key` | MiniMax | `https://api.minimaxi.com` |
+| `LINKAI_API_KEY` | `linkai_api_key` | LinkAI | `https://api.link-ai.tech` |
+
+### Pinning a Default Model
+
+To force all image generation through a specific provider's model, add this to `config.json`:
+
+```json
+"skill": {
+  "image-generation": {
+    "model": "seedream-5.0-lite"
+  }
+}
+```
+
+At startup, this is automatically converted to the environment variable `SKILL_IMAGE_GENERATION_MODEL`, and the script will always use this model's provider for generation.
+
+## Enabling and Disabling
+
+`image-generation` is a built-in skill that **automatically adjusts its status based on API keys**:
+
+- **Key configured**: the skill is active — the Agent will invoke it when asked to draw
+- **Key not configured**: the skill still appears in context (marked as "needs configuration") — the Agent will guide the user to set up a key rather than failing silently
+
+To control it manually:
+
+```text
+/skill disable image-generation    # Disable (won't be invoked even if keys are present)
+/skill enable image-generation     # Re-enable
+```
+
+In the terminal: `cow skill disable image-generation` / `cow skill enable image-generation`.
+
+## Parameters
+
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `prompt` | string | Yes | — | Image description |
+| `image_url` | string / list | No | null | Input image(s) for editing — local path or URL. Pass multiple for multi-image fusion |
+| `quality` | string | No | auto | `low` / `medium` / `high` — only some providers support this |
+| `size` | string | No | auto | `512` / `1K` / `2K` / `3K` / `4K`, or pixel value like `1024x1024` |
+| `aspect_ratio` | string | No | null | `1:1` / `3:2` / `2:3` / `16:9` / `9:16` / `21:9`; Gemini also supports `1:4` / `4:1` / `1:8` / `8:1` |
+
+<Warning>
+**Higher quality and larger size cost more and take longer.**
+
+- For everyday conversations and quick previews, use the defaults (`auto`) or `quality=low` + `size=1K` — roughly 20 seconds
+- For posters or when the user explicitly asks for high resolution, use `quality=high` + `size=2K/4K` — may take 1–5 minutes depending on the model
+</Warning>
+
+## Output
+
+On success:
+
+```json
+{
+  "model": "doubao-seedream-5-0-260128",
+  "images": [
+    {"url": "/path/to/output.png"}
+  ]
+}
+```
+
+On failure: `{ "error": "..." }`. After an error, **do not retry directly** — it is almost always a configuration issue (wrong key, incorrect API base, model not enabled). Have the user fix the configuration first.
+
+## Common Use Cases
+
+- **Text-to-image**: generate illustrations, posters, icons, avatars, storyboards, etc. from a description
+- **Image-to-image**: change styles, swap elements, add decorations or text on an existing image
+- **Multi-image fusion**: combine multiple reference images into one (outfit swaps, character group photos, etc.)
+
+<Note>
+- Bash timeout should be set to 600 seconds. Each provider has a 300-second HTTP timeout, but the script may try multiple providers sequentially
+- Input images are automatically compressed to ≤ 4 MB with the longest edge ≤ 4096 px
+- Gemini / Seedream / Qwen / MiniMax do not support the `quality` parameter — passing it has no effect
+- Seedream defaults to 2K; `seedream-5.0-lite` supports up to 3K; `seedream-4.5` supports up to 4K
+</Note>

@@ -1,0 +1,86 @@
+---
+title: はじめに
+description: CowAgent - LLM を活用した AI スーパーアシスタント
+---
+
+<img src="https://cdn.link-ai.tech/doc/78c5dd674e2c828642ecc0406669fed7.png" alt="CowAgent" width="600px"/>
+
+**CowAgent** は、自律的なタスク計画、長期記憶、Skill システム、マルチモーダルメッセージ、複数モデル対応、マルチプラットフォームデプロイを備えた、LLM を活用した AI スーパーアシスタントです。
+
+CowAgent は自ら思考しタスクを計画し、コンピュータや外部リソースを操作し、Skill を作成・実行し、長期記憶により継続的に成長します。複数モデルの柔軟な切り替えをサポートし、テキスト、音声、画像、ファイルなどのマルチモーダルメッセージを処理でき、WeChat、Web、Feishu（飛書）、DingTalk（釘釘）、WeCom（企業微信）、WeChat公式アカウントに統合できます。お使いのパソコンやサーバー上で24時間365日稼働します。
+
+<Card title="GitHub" icon="github" href="https://github.com/zhayujie/CowAgent">
+  github.com/zhayujie/CowAgent
+</Card>
+
+## コア機能
+
+<CardGroup cols={2}>
+  <Card title="自律タスク計画" icon="brain" href="/ja/intro/architecture">
+    複雑なタスクを理解し、自律的に実行計画を立て、目標が達成されるまで思考とツール呼び出しを続けます。ツールを通じてファイルシステム、ターミナル、ブラウザ、スケジューラなどのシステムリソースにアクセスできます。
+  </Card>
+  <Card title="長期記憶" icon="database" href="/ja/memory">
+    三層記憶フロー（コンテキスト→デイリーメモリ→グローバルメモリ）、毎日 Deep Dream 蒸留で整理、キーワード検索とベクトル検索に対応。
+  </Card>
+  <Card title="ナレッジベース" icon="book" href="/ja/knowledge">
+    構造化された知識を自動整理し、ナレッジグラフの可視化をサポート。相互参照により継続的に成長するナレッジネットワークを構築します。
+  </Card>
+  <Card title="Skill システム" icon="puzzle-piece" href="/ja/skills/index">
+    Skill の作成・実行エンジンを実装し、組み込み Skill を搭載。自然言語の会話を通じてカスタム Skill の開発もサポートしています。
+  </Card>
+  <Card title="マルチモーダルメッセージ" icon="image" href="/ja/channels/web">
+    テキスト、画像、音声、ファイルなどのメッセージタイプの解析、処理、生成、送信をサポートします。
+  </Card>
+  <Card title="ツールシステム" icon="wrench" href="/ja/tools/index">
+    ファイル読み書き、ターミナル実行、ブラウザ操作、スケジュールタスク、メッセージ送信などの組み込みツールを提供。Agent が自律的にツールを呼び出して複雑なタスクを完了します。
+  </Card>
+  <Card title="コマンドシステム" icon="terminal" href="/ja/cli/index">
+    ターミナル CLI とチャット内コマンドを提供し、プロセス管理、Skill インストール、設定変更、コンテキスト確認などの一般的な操作をサポートします。
+  </Card>
+  <Card title="複数モデル対応" icon="microchip" href="/ja/models/index">
+    OpenAI、Claude、Gemini、DeepSeek、MiniMax、GLM、Qwen、Kimi、Doubao など、主要なモデルプロバイダーをサポートしています。
+  </Card>
+  <Card title="マルチプラットフォームデプロイ" icon="server" href="/ja/channels/weixin">
+    ローカルコンピュータやサーバー上で動作し、WeChat、Web、Feishu（飛書）、DingTalk（釘釘）、WeChat公式アカウント、WeCom（企業微信）アプリケーションに統合できます。
+  </Card>
+</CardGroup>
+
+## クイック体験
+
+ターミナルで以下のコマンドを実行すると、ワンクリックでインストール、設定、起動ができます：
+
+<Tabs>
+  <Tab title="Linux / macOS">
+    ```bash
+    bash <(curl -fsSL https://cdn.link-ai.tech/code/cow/run.sh)
+    ```
+  </Tab>
+  <Tab title="Windows (PowerShell)">
+    ```powershell
+    irm https://cdn.link-ai.tech/code/cow/run.ps1 | iex
+    ```
+  </Tab>
+</Tabs>
+
+デフォルトでは実行後に Web サービスが起動します。`http://localhost:9899/chat` にアクセスして Web インターフェースでチャットできます。
+
+<CardGroup cols={2}>
+  <Card title="クイックスタート" icon="rocket" href="/ja/guide/quick-start">
+    インストールと実行の完全ガイド
+  </Card>
+  <Card title="アーキテクチャ" icon="sitemap" href="/ja/intro/architecture">
+    CowAgent システムアーキテクチャ設計
+  </Card>
+</CardGroup>
+
+## 免責事項
+
+1. 本プロジェクトは [MIT License](https://github.com/zhayujie/CowAgent/blob/master/LICENSE) に基づき、技術研究および学習を目的としています。利用者は現地の法律、規制、ポリシー、および企業の社内規程を遵守する必要があります。違法行為や権利侵害につながる利用は禁止されています。
+2. Agent モードは通常のチャットモードよりも多くのトークンを消費します。効果とコストを考慮してモデルを選択してください。Agent はホスト OS にアクセスできるため、デプロイには十分注意してください。
+3. CowAgent はオープンソース開発に注力しており、いかなる暗号通貨の発行、認可、参加も行っておりません。
+
+## コミュニティ
+
+WeChat でアシスタントを追加して、オープンソースコミュニティに参加しましょう：
+
+<img width="140" src="https://img-1317903499.cos.ap-guangzhou.myqcloud.com/docs/open-community.png" />

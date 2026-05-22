@@ -9,20 +9,26 @@ class LinkSummary:
     def __init__(self):
         pass
 
-    def summary_file(self, file_path: str):
+    def summary_file(self, file_path: str, app_code: str):
         file_body = {
             "file": open(file_path, "rb"),
-            "name": file_path.split("/")[-1],
+            "name": file_path.split("/")[-1]
+        }
+        body = {
+            "app_code": app_code
         }
         url = self.base_url() + "/v1/summary/file"
-        res = requests.post(url, headers=self.headers(), files=file_body, timeout=(5, 300))
+        logger.info(f"[LinkSum] file summary, app_code={app_code}")
+        res = requests.post(url, headers=self.headers(), files=file_body, data=body, timeout=(5, 300))
         return self._parse_summary_res(res)
 
-    def summary_url(self, url: str):
+    def summary_url(self, url: str, app_code: str):
         url = html.unescape(url)
         body = {
-            "url": url
+            "url": url,
+            "app_code": app_code
         }
+        logger.info(f"[LinkSum] url summary, app_code={app_code}")
         res = requests.post(url=self.base_url() + "/v1/summary/url", headers=self.headers(), json=body, timeout=(5, 180))
         return self._parse_summary_res(res)
 
@@ -48,7 +54,7 @@ class LinkSummary:
     def _parse_summary_res(self, res):
         if res.status_code == 200:
             res = res.json()
-            logger.debug(f"[LinkSum] url summary, res={res}")
+            logger.debug(f"[LinkSum] summary result, res={res}")
             if res.get("code") == 200:
                 data = res.get("data")
                 return {

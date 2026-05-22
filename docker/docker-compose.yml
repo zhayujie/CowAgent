@@ -5,20 +5,44 @@ services:
     container_name: chatgpt-on-wechat
     security_opt:
       - seccomp:unconfined
+    ports:
+      - "9899:9899"
     environment:
-      OPEN_AI_API_KEY: 'YOUR API KEY'
-      MODEL: 'gpt-3.5-turbo'
-      PROXY: ''
-      SINGLE_CHAT_PREFIX: '["bot", "@bot"]'
-      SINGLE_CHAT_REPLY_PREFIX: '"[bot] "'
-      GROUP_CHAT_PREFIX: '["@bot"]'
-      GROUP_NAME_WHITE_LIST: '["ChatGPT测试群", "ChatGPT测试群2"]'
-      IMAGE_CREATE_PREFIX: '["画", "看", "找"]'
-      CONVERSATION_MAX_TOKENS: 1000
-      SPEECH_RECOGNITION: 'False'
-      CHARACTER_DESC: '你是ChatGPT, 一个由OpenAI训练的大型语言模型, 你旨在回答并解决人们的任何问题，并且可以使用多种语言与人交流。'
-      EXPIRES_IN_SECONDS: 3600
-      USE_GLOBAL_PLUGIN_CONFIG: 'True'
+      CHANNEL_TYPE: 'weixin'
+      MODEL: 'deepseek-v4-flash'
+      DEEPSEEK_API_KEY: ''
+      DEEPSEEK_API_BASE: 'https://api.deepseek.com/v1'
+      MINIMAX_API_KEY: ''
+      ZHIPU_AI_API_KEY: ''
+      ARK_API_KEY: ''
+      MOONSHOT_API_KEY: ''
+      DASHSCOPE_API_KEY: ''
+      CLAUDE_API_KEY: ''
+      CLAUDE_API_BASE: 'https://api.anthropic.com/v1'
+      OPEN_AI_API_KEY: ''
+      OPEN_AI_API_BASE: 'https://api.openai.com/v1'
+      GEMINI_API_KEY: ''
+      GEMINI_API_BASE: 'https://generativelanguage.googleapis.com'
+      VOICE_TO_TEXT: 'openai'
+      TEXT_TO_VOICE: 'openai'
+      VOICE_REPLY_VOICE: 'False'
+      SPEECH_RECOGNITION: 'True'
+      GROUP_SPEECH_RECOGNITION: 'False'
       USE_LINKAI: 'False'
       LINKAI_API_KEY: ''
       LINKAI_APP_CODE: ''
+      FEISHU_APP_ID: ''
+      FEISHU_APP_SECRET: ''
+      DINGTALK_CLIENT_ID: ''
+      DINGTALK_CLIENT_SECRET: ''
+      WECOM_BOT_ID: ''
+      WECOM_BOT_SECRET: ''
+      # 如需通过宿主机访问 Web 控制台，改为 '0.0.0.0' 并设置 WEB_PASSWORD
+      WEB_HOST: '127.0.0.1'
+      WEB_PASSWORD: ''
+      AGENT: 'True'
+      AGENT_MAX_CONTEXT_TOKENS: 50000
+      AGENT_MAX_CONTEXT_TURNS: 20
+      AGENT_MAX_STEPS: 20
+    volumes:
+      - ./cow:/home/agent/cow

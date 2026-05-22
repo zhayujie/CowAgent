@@ -1,0 +1,89 @@
+---
+title: Personal Knowledge Base
+description: CowAgent personal knowledge base — structured knowledge accumulation, automatic organization, and knowledge graph
+---
+
+The personal knowledge base is the Agent's long-term structured knowledge store, saved in the `knowledge/` directory within the workspace. Unlike memory, which is organized by timeline, the knowledge base organizes content by topic — articles, conversation insights, and learning materials are structured into interlinked Markdown pages, forming a continuously growing knowledge network.
+
+## Core Concepts
+
+### Knowledge vs Memory
+
+| Dimension | Knowledge Base (knowledge/) | Long-term Memory (memory/) |
+| --- | --- | --- |
+| Organization | By topic, interlinked | By timeline, dated files |
+| Writing | Agent actively structures content | Auto-summarized on context trimming |
+| Content | Refined, structured knowledge | Raw conversation summaries |
+| Use cases | Study notes, tech docs, project knowledge | Conversation history, event records |
+
+### Directory Structure
+
+```
+~/cow/knowledge/
+├── index.md          # Knowledge index, entry point for all pages
+├── log.md            # Change log, records each write
+├── concepts/         # Conceptual knowledge
+│   └── machine-learning.md
+├── entities/         # Entity knowledge (people, orgs, tools)
+│   └── openai.md
+└── sources/          # Source knowledge (articles, papers)
+    └── llm-wiki.md
+```
+
+The directory structure is flexible — the Agent automatically creates appropriate category directories based on actual content. Users can also customize the organization.
+
+## Automatic Organization
+
+Knowledge writing is an autonomous Agent behavior, triggered in these scenarios:
+
+- **User shares an article or document** — The Agent automatically extracts key information and creates a structured knowledge page
+- **Conversation produces valuable conclusions** — The Agent organizes insights into knowledge pages and links them to existing knowledge
+- **User explicitly requests organization** — Users can guide the Agent to organize and update knowledge through conversation
+
+Each knowledge page includes cross-reference links to related pages, gradually building a knowledge graph.
+
+<Frame>
+  <img src="https://gist.github.com/user-attachments/assets/3ce92f78-1863-4820-8fa8-660c0f2b7f09" alt="Conversational knowledge ingest" />
+</Frame>
+
+## Knowledge Retrieval
+
+The Agent can retrieve knowledge during conversation through:
+
+- **Index lookup** — Quickly locate relevant pages via `knowledge/index.md`
+- **Semantic search** — Search knowledge content via the `memory_search` tool
+- **Direct read** — Read specific knowledge files via the `memory_get` tool
+
+## Web Console
+
+The web console provides a dedicated "Knowledge" module with:
+
+- **Document browsing** — Tree-style directory structure, searchable and collapsible, click to view content
+- **Knowledge graph** — Interactive graph visualizing relationships between knowledge pages
+- **Chat integration** — Knowledge document links referenced in Agent replies are clickable for direct navigation
+
+<Frame>
+  <img src="https://gist.github.com/user-attachments/assets/b7b9d6be-0ac1-4c65-803b-2c6b36bd59a7" alt="Knowledge document browsing" />
+</Frame>
+
+<Frame>
+  <img src="https://gist.github.com/user-attachments/assets/44ae68ca-96cc-40b9-ab33-cdbec34c2379" alt="Knowledge graph visualization" />
+</Frame>
+
+## CLI Commands
+
+Manage the knowledge base with the `/knowledge` command:
+
+| Command | Description |
+| --- | --- |
+| `/knowledge` | Show knowledge base statistics |
+| `/knowledge list` | Display file directory as a tree |
+| `/knowledge on` | Enable the knowledge base feature |
+| `/knowledge off` | Disable the knowledge base feature |
+
+## Configuration
+
+| Parameter | Description | Default |
+| --- | --- | --- |
+| `knowledge` | Whether to enable the personal knowledge base | `true` |
+| `agent_workspace` | Workspace path; knowledge is stored under the `knowledge/` subdirectory | `~/cow` |

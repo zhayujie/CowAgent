@@ -1,0 +1,27 @@
+---
+title: 通义千问 Qwen
+description: 通义千问模型配置
+---
+
+```json
+{
+  "model": "qwen3.6-plus",
+  "dashscope_api_key": "YOUR_API_KEY"
+}
+```
+
+| 参数 | 说明 |
+| --- | --- |
+| `model` | 可填 `qwen3.6-plus`、`qwen3.5-plus`、`qwen3-max`、`qwen-max`、`qwen-plus`、`qwen-turbo`、`qwq-plus` 等 |
+| `dashscope_api_key` | 在 [百炼控制台](https://bailian.console.aliyun.com/?tab=model#/api-key) 创建，参考 [官方文档](https://bailian.console.aliyun.com/?tab=api#/api) |
+
+也支持 OpenAI 兼容方式接入：
+
+```json
+{
+  "bot_type": "openai",
+  "model": "qwen3.6-plus",
+  "open_ai_api_base": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+  "open_ai_api_key": "YOUR_API_KEY"
+}
+```

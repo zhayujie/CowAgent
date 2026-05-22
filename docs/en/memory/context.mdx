@@ -1,0 +1,81 @@
+---
+title: Short-term Memory
+description: Conversation context — message management, compression strategies, and context operations
+---
+
+Conversation context is the Agent's short-term memory, containing all messages in the current session (user input, Agent replies, tool calls and results). Proper context management is critical for the Agent's reasoning quality and cost control.
+
+## Context Structure
+
+Each conversation turn consists of:
+
+```
+User message → Agent thinking → Tool call → Tool result → ... → Agent final reply
+```
+
+A single turn may include multiple tool calls (controlled by `agent_max_steps`). All tool calls and results are retained in context until compressed or trimmed.
+
+## Key Configuration
+
+| Parameter | Description | Default |
+| --- | --- | --- |
+| `agent_max_context_tokens` | Maximum context token budget | `50000` |
+| `agent_max_context_turns` | Maximum conversation turns in context | `20` |
+| `agent_max_steps` | Maximum decision steps per turn (tool call count) | `15` |
+
+Configurable via `config.json` or the `/config` chat command.
+
+## Compression Strategy
+
+When context exceeds limits, the system automatically compresses to free space. The process has multiple stages:
+
+### 1. Tool Result Truncation
+
+Before each decision loop, the system checks tool call results in historical turns. Results exceeding **20,000 characters** are truncated, keeping only the beginning and end with a truncation notice. Current turn results are not affected.
+
+### 2. Turn Trimming
+
+When conversation turns exceed `agent_max_context_turns`:
+
+- The **oldest half** of complete turns is trimmed (preserving tool call chain integrity)
+- Trimmed messages are summarized by LLM and **written to the daily memory file**
+- Once the LLM summary is ready, it is also **injected into the first user message** of the retained context, helping the model maintain conversational continuity
+- Summary injection runs asynchronously in the background and takes effect from the next turn onward
+
+### 3. Token Budget Trimming
+
+After turn trimming, if tokens still exceed the budget:
+
+- **Fewer than 5 turns**: All turns undergo **text compression** — each turn keeps only the first user text and last Agent reply, removing intermediate tool call chains
+- **5 or more turns**: The **first half** of turns is trimmed again, with discarded content written to memory and a context summary injected
+
+### 4. Overflow Emergency Handling
+
+When the model API returns a context overflow error:
+
+1. All current messages are summarized and written to memory
+2. Aggressive trimming is applied (tool results limited to 10K chars, user text to 10K, max 5 turns)
+3. If still overflowing, the entire conversation context is cleared
+
+## Session Persistence
+
+Conversation messages are persisted to a local database, automatically restored after service restart. Restore strategy:
+
+- Restores the most recent **`max(3, max_context_turns / 6)`** turns
+- Only retains each turn's **user text and Agent final reply**, not intermediate tool call chains
+- Sessions older than **30 days** are automatically cleaned up
+
+## Commands
+
+Use these commands in chat to manage context:
+
+| Command | Description |
+| --- | --- |
+| `/context` | View current context statistics (message count, role distribution, total characters) |
+| `/context clear` | Clear current session context |
+| `/config agent_max_context_tokens 80000` | Adjust context token budget |
+| `/config agent_max_context_turns 30` | Adjust context turn limit |
+
+<Tip>
+  After clearing context, the Agent "forgets" previous conversation content. Content that was already written to long-term memory can still be retrieved via memory search.
+</Tip>

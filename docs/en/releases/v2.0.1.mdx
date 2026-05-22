@@ -1,0 +1,36 @@
+---
+title: v2.0.1
+description: CowAgent 2.0.1 - Built-in Web Search, smart context management, multiple fixes
+---
+
+**Release Date**: 2026.02.27 | [Full Changelog](https://github.com/zhayujie/CowAgent/compare/2.0.0..2.0.1)
+
+## New Features
+
+- **Built-in Web Search tool**: Integrated web search as a built-in Agent tool, reducing decision cost ([4f0ea5d](https://github.com/zhayujie/CowAgent/commit/4f0ea5d7568d61db91ff69c91c429e785fd1b1c2))
+- **Claude Opus 4.6 model support**: Added support for Claude Opus 4.6 model ([#2661](https://github.com/zhayujie/CowAgent/pull/2661))
+- **WeCom image recognition**: Support image message recognition in WeCom channel ([#2667](https://github.com/zhayujie/CowAgent/pull/2667))
+
+## Improvements
+
+- **Smart context management**: Resolved chat context overflow with intelligent context trimming strategy to prevent token limits ([cea7fb7](https://github.com/zhayujie/CowAgent/commit/cea7fb7490c53454602bf05955a0e9f059bcf0fd), [8acf2db](https://github.com/zhayujie/CowAgent/commit/8acf2dbdfe713b84ad74b761b7f86674b1c1904d)) [#2663](https://github.com/zhayujie/CowAgent/issues/2663)
+- **Runtime info dynamic update**: Automatic update of timestamps and other runtime info in system prompts via dynamic functions ([#2655](https://github.com/zhayujie/CowAgent/pull/2655), [#2657](https://github.com/zhayujie/CowAgent/pull/2657))
+- **Skill prompt optimization**: Improved Skill system prompt generation, simplified tool descriptions for better Agent performance ([6c21833](https://github.com/zhayujie/CowAgent/commit/6c218331b1f1208ea8be6bf226936d3b556ade3e))
+- **GLM custom API Base URL**: Support custom API Base URL for GLM models ([#2660](https://github.com/zhayujie/CowAgent/pull/2660))
+- **Startup script optimization**: Improved `run.sh` script interaction and configuration flow ([#2656](https://github.com/zhayujie/CowAgent/pull/2656))
+- **Decision step logging**: Added Agent decision step logging for debugging ([cb303e6](https://github.com/zhayujie/CowAgent/commit/cb303e6109c50c8dfef1f5e6c1ec47223bf3cd11))
+
+## Bug Fixes
+
+- **Scheduler memory loss**: Fixed memory loss caused by Scheduler dispatcher ([a77a874](https://github.com/zhayujie/CowAgent/commit/a77a8741b500a408c6f5c8868856fb4b018fe9db))
+- **Empty tool calls & long results**: Fixed handling of empty tool calls and excessively long tool results ([0542700](https://github.com/zhayujie/CowAgent/commit/0542700f9091ebb08c1a56103b0f0f45f24aa621))
+- **OpenAI Function Call**: Fixed function call compatibility with OpenAI models ([158c87a](https://github.com/zhayujie/CowAgent/commit/158c87ab8b05bae054cc1b4eacdbb64fc1062ba9))
+- **Claude tool name field**: Removed extraneous tool name field from Claude model responses ([eec10cb](https://github.com/zhayujie/CowAgent/commit/eec10cb5db6a3d5bc12ef606606532237d2c5f6e))
+- **MiniMax reasoning**: Optimized MiniMax model reasoning content handling, hidden thinking process output ([c72cda3](https://github.com/zhayujie/CowAgent/commit/c72cda33864bd1542012ee6e0a8bd8c6c88cb5ed), [72b1cac](https://github.com/zhayujie/CowAgent/commit/72b1cacea1ba0d1f3dedacbab2e088e98fd7e172))
+- **GLM thinking process**: Hidden GLM model thinking process display ([72b1cac](https://github.com/zhayujie/CowAgent/commit/72b1cacea1ba0d1f3dedacbab2e088e98fd7e172))
+- **Feishu connection & SSL**: Fixed Feishu channel SSL certificate errors and connection issues ([229b14b](https://github.com/zhayujie/CowAgent/commit/229b14b6fcabe7123d53cab1dea39f38dab26d6d), [8674421](https://github.com/zhayujie/CowAgent/commit/867442155e7f095b4f38b0856f8c1d8312b5fcf7))
+- **model_type validation**: Fixed `AttributeError` caused by non-string `model_type` ([#2666](https://github.com/zhayujie/CowAgent/pull/2666))
+
+## Platform Compatibility
+
+- **Windows compatibility**: Fixed path handling, file encoding, and `os.getuid()` unavailability on Windows across multiple tool modules ([051ffd7](https://github.com/zhayujie/CowAgent/commit/051ffd78a372f71a967fd3259e37fe19131f83cf), [5264f7c](https://github.com/zhayujie/CowAgent/commit/5264f7ce18360ee4db5dcb4ebe67307977d40014))

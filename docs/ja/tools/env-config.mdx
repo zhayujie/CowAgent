@@ -1,0 +1,36 @@
+---
+title: env_config - 環境設定
+description: APIキーとシークレットの管理
+---
+
+ワークスペースの `.env` ファイルで環境変数（APIキーやシークレット）を管理し、会話形式で安全に更新できます。セキュリティ保護とマスキング機能を内蔵しています。
+
+## 依存関係
+
+| 依存関係 | インストールコマンド |
+| --- | --- |
+| `python-dotenv` ≥ 1.0.0 | `pip install python-dotenv>=1.0.0` |
+
+オプション依存関係のインストールに含まれています：`pip3 install -r requirements-optional.txt`
+
+## パラメータ
+
+| パラメータ | 型 | 必須 | 説明 |
+| --- | --- | --- | --- |
+| `action` | string | はい | 操作タイプ：`get`、`set`、`list`、`delete` |
+| `key` | string | いいえ | 環境変数名 |
+| `value` | string | いいえ | 環境変数の値（`set` の場合のみ） |
+
+## 使い方
+
+設定したいキーをAgentに伝えると、自動的にこのToolが呼び出されます：
+
+- 「BOCHA_API_KEYを設定して」
+- 「OPENAI_API_KEYをsk-xxxに設定して」
+- 「設定済みの環境変数を表示して」
+
+設定されたキーは `bash` Toolの実行環境に自動的に注入されます。
+
+<Frame>
+  <img src="https://cdn.link-ai.tech/doc/20260202234939.png" width="800" />
+</Frame>

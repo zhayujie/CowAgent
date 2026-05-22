@@ -19,7 +19,7 @@ env:
 
 jobs:
   build-and-push-image:
-    if: github.repository == 'zhayujie/chatgpt-on-wechat'
+    if: github.repository == 'zhayujie/CowAgent'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -51,7 +51,12 @@ jobs:
         uses: docker/metadata-action@v4
         with:
           images: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+            ${{ env.REGISTRY }}/zhayujie/chatgpt-on-wechat
+            ${{ env.REGISTRY }}/zhayujie/cowagent
+          tags: |
+            type=raw,value=latest-arm64,enable={{is_default_branch}}
+            type=ref,event=branch,suffix=-arm64
+            type=ref,event=tag,suffix=-arm64
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v3
@@ -60,7 +65,7 @@ jobs:
           push: true
           file: ./docker/Dockerfile.latest
           platforms: linux/arm64
-          tags: ${{ steps.meta.outputs.tags }}-arm64
+          tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
       - uses: actions/delete-package-versions@v4

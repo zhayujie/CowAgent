@@ -1,0 +1,82 @@
+---
+title: 项目介绍
+description: CowAgent - 基于大模型的超级AI助理
+---
+
+<img src="https://cdn.link-ai.tech/doc/78c5dd674e2c828642ecc0406669fed7.png" alt="CowAgent" width="450px"/>
+
+**CowAgent** 是基于大模型的超级AI助理，能够主动思考和任务规划、操作计算机和外部资源、创造和执行Skills、拥有长期记忆和知识库并不断成长。
+
+CowAgent 支持灵活切换多种模型，能处理文本、语音、图片、文件等多模态消息，可接入微信、飞书、钉钉、企业微信应用、微信公众号、网页中使用，7×24小时运行于你的个人电脑或服务器中。
+
+<CardGroup cols={2}>
+  <Card title="GitHub" icon="github" href="https://github.com/zhayujie/CowAgent">
+    开源代码仓库，欢迎 Star 和贡献
+  </Card>
+  <Card title="免部署在线体验" icon="cloud" href="https://link-ai.tech/cowagent/create">
+    无需安装，立即在线体验 CowAgent
+  </Card>
+</CardGroup>
+
+## 核心能力
+
+<CardGroup cols={2}>
+  <Card title="复杂任务规划" icon="brain" href="/intro/architecture">
+    能够理解复杂任务并自主规划执行，持续思考和调用各类工具和技能直到完成目标。
+  </Card>
+  <Card title="长期记忆" icon="database" href="/memory">
+    三层记忆流转（上下文→天级记忆→全局记忆），每日梦境蒸馏整理，支持关键词及向量检索。
+  </Card>
+  <Card title="个人知识库" icon="book" href="/knowledge">
+    自动整理结构化知识，支持知识图谱可视化，通过交叉引用构建持续增长的知识网络。
+  </Card>
+  <Card title="技能系统" icon="puzzle-piece" href="/skills/index">
+    实现了Skills创建和运行的引擎，内置多种技能，并支持通过自然语言对话完成自定义Skills开发。
+  </Card>
+  <Card title="工具系统" icon="wrench" href="/tools/index">
+    内置文件读写、终端执行、浏览器操作、定时任务、消息发送等工具，Agent 可自主调用工具完成复杂任务。
+  </Card>
+  <Card title="命令系统" icon="terminal" href="/cli/index">
+    提供终端 CLI 和对话中的命令，支持进程管理、技能安装、配置修改、上下文查看等常用操作。
+  </Card>
+  <Card title="多模型支持" icon="microchip" href="/models/index">
+    支持 OpenAI, Claude, Gemini, DeepSeek, MiniMax, GLM, Qwen, Kimi, Doubao 等国内外主流模型厂商。
+  </Card>
+  <Card title="多通道接入" icon="server" href="/channels/weixin">
+    支持运行在本地计算机或服务器，可集成到微信、网页、飞书、钉钉、微信公众号、企业微信应用中使用。
+  </Card>
+</CardGroup>
+
+## 快速体验
+
+在终端执行以下命令，即可一键安装、配置、启动 CowAgent：
+
+<Tabs>
+  <Tab title="Linux / macOS">
+    ```bash
+    bash <(curl -fsSL https://cdn.link-ai.tech/code/cow/run.sh)
+    ```
+  </Tab>
+  <Tab title="Windows (PowerShell)">
+    ```powershell
+    irm https://cdn.link-ai.tech/code/cow/run.ps1 | iex
+    ```
+  </Tab>
+</Tabs>
+
+运行后默认会启动 Web 控制台，通过访问 `http://localhost:9899` 可以在网页端进行对话、配置、应用通道接入等操作。
+
+<CardGroup cols={2}>
+  <Card title="快速开始" icon="rocket" href="/guide/quick-start">
+    查看完整的安装和运行指南
+  </Card>
+  <Card title="项目架构" icon="sitemap" href="/intro/architecture">
+    了解 CowAgent 的系统架构设计
+  </Card>
+</CardGroup>
+
+## 社区
+
+添加小助手微信加入开源项目交流群：
+
+<img width="140" src="https://img-1317903499.cos.ap-guangzhou.myqcloud.com/docs/open-community.png" />

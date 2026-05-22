@@ -1,0 +1,60 @@
+---
+title: Tools 概要
+description: CowAgent 組み込みToolシステム
+---
+
+Toolは、AgentがOSリソースにアクセスするための中核機能です。Agentはタスクの要件に基づいてToolをインテリジェントに選択・呼び出し、ファイル操作、コマンド実行、Web検索、スケジュールタスクなどを実行します。Toolは `agent/tools/` ディレクトリに実装されています。
+
+## 組み込みTool
+
+以下のToolは追加設定なしでデフォルトで利用可能です：
+
+<CardGroup cols={2}>
+  <Card title="read - ファイル読み取り" icon="file" href="/ja/tools/read">
+    ファイル内容を読み取り、テキスト・画像・PDFに対応
+  </Card>
+  <Card title="write - ファイル書き込み" icon="pen" href="/ja/tools/write">
+    ファイルの作成または上書き
+  </Card>
+  <Card title="edit - ファイル編集" icon="pen-to-square" href="/ja/tools/edit">
+    テキスト置換によるファイル編集
+  </Card>
+  <Card title="ls - ディレクトリ一覧" icon="folder-open" href="/ja/tools/ls">
+    ディレクトリの内容を一覧表示
+  </Card>
+  <Card title="bash - ターミナル" icon="terminal" href="/ja/tools/bash">
+    システムコマンドの実行
+  </Card>
+  <Card title="send - ファイル送信" icon="paper-plane" href="/ja/tools/send">
+    ファイルや画像をユーザーに送信
+  </Card>
+  <Card title="memory - メモリ" icon="brain" href="/ja/tools/memory">
+    長期メモリの検索と読み取り
+  </Card>
+</CardGroup>
+
+## オプションTool
+
+以下のToolは追加の依存関係またはAPIキーの設定が必要です：
+
+<CardGroup cols={2}>
+  <Card title="env_config - 環境設定" icon="key" href="/ja/tools/env-config">
+    APIキーとシークレットの管理
+  </Card>
+  <Card title="scheduler - スケジューラ" icon="clock" href="/ja/tools/scheduler">
+    スケジュールタスクの作成と管理
+  </Card>
+  <Card title="web_search - Web検索" icon="magnifying-glass" href="/ja/tools/web-search">
+    インターネットからリアルタイム情報を検索
+  </Card>
+</CardGroup>
+
+## MCP Tool
+
+[Model Context Protocol](https://modelcontextprotocol.io) を介して、コミュニティの既製 Tool（地図、GitHub、Notion など数千種類）を統合できます。`mcp.json` を一度設定するだけで利用可能です：
+
+<CardGroup cols={1}>
+  <Card title="MCP - 外部Toolエコシステム" icon="plug" href="/ja/tools/mcp">
+    標準の stdio / SSE トランスポートをサポート。ホットリロードで、コード変更不要
+  </Card>
+</CardGroup>

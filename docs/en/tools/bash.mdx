@@ -1,0 +1,28 @@
+---
+title: bash - Terminal
+description: Execute system commands
+---
+
+Execute Bash commands in the current working directory, returns stdout and stderr. API keys configured via `env_config` are automatically injected into the environment.
+
+## Dependencies
+
+No extra dependencies, available by default.
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `command` | string | Yes | Command to execute |
+| `timeout` | integer | No | Timeout in seconds |
+
+## Use Cases
+
+- Install packages and dependencies
+- Run code and tests
+- Deploy applications and services (Nginx config, process management, etc.)
+- System administration and troubleshooting
+
+<Frame>
+  <img src="https://cdn.link-ai.tech/doc/20260203121008.png" width="800" />
+</Frame>

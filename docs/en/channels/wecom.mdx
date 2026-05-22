@@ -1,0 +1,98 @@
+---
+title: WeCom
+description: Integrate CowAgent into WeCom enterprise app
+---
+
+Integrate CowAgent into WeCom through a custom enterprise app, supporting one-on-one chat for internal employees.
+
+<Note>
+  WeCom only supports Docker deployment or server Python deployment. Local run mode is not supported.
+</Note>
+
+## 1. Prerequisites
+
+Required resources:
+
+1. A server with public IP (overseas server, or domestic server with a proxy for international API access)
+2. A registered WeCom account (individual registration is possible but cannot be certified)
+3. Certified WeCom accounts additionally require a domain filed under the corresponding entity
+
+## 2. Create WeCom App
+
+1. In the [WeCom Admin Console](https://work.weixin.qq.com/wework_admin/frame#profile), click **My Enterprise** and find the **Corp ID** at the bottom of the page. Save this ID for the `wechatcom_corp_id` configuration field.
+
+2. Switch to **Application Management** and click Create Application:
+
+<img src="https://cdn.link-ai.tech/doc/20260228103156.png" width="480"/>
+
+3. On the application creation page, record the `AgentId` and `Secret`:
+
+<img src="https://cdn.link-ai.tech/doc/20260228103218.png" width="580"/>
+
+4. Click **Set API Reception** to configure the application interface:
+
+<img src="https://cdn.link-ai.tech/doc/20260228103211.png" width="520"/>
+
+- URL format: `http://ip:port/wxcomapp` (certified enterprises must use a filed domain)
+- Generate random `Token` and `EncodingAESKey` and save them for the configuration file
+
+<Note>
+  The API reception configuration cannot be saved at this point because the program hasn't started yet. Come back to save it after the project is running.
+</Note>
+
+## 3. Configuration and Run
+
+Add the following configuration to `config.json` (the mapping between each parameter and the WeCom console is shown in the screenshots above):
+
+```json
+{
+  "channel_type": "wechatcom_app",
+  "single_chat_prefix": [""],
+  "wechatcom_corp_id": "YOUR_CORP_ID",
+  "wechatcomapp_token": "YOUR_TOKEN",
+  "wechatcomapp_secret": "YOUR_SECRET",
+  "wechatcomapp_agent_id": "YOUR_AGENT_ID",
+  "wechatcomapp_aes_key": "YOUR_AES_KEY",
+  "wechatcomapp_port": 9898
+}
+```
+
+| Parameter | Description |
+| --- | --- |
+| `wechatcom_corp_id` | Corp ID |
+| `wechatcomapp_token` | Token from API reception config |
+| `wechatcomapp_secret` | App Secret |
+| `wechatcomapp_agent_id` | App AgentId |
+| `wechatcomapp_aes_key` | EncodingAESKey from API reception config |
+| `wechatcomapp_port` | Listen port, default 9898 |
+
+After configuration, start the program. When the log shows `http://0.0.0.0:9898/`, the program is running successfully. You need to open this port externally (e.g., allow it in the cloud server security group).
+
+After the program starts, return to the WeCom Admin Console to save the **Message Server Configuration**. After saving successfully, you also need to add the server IP to **Enterprise Trusted IPs**, otherwise messages cannot be sent or received:
+
+<img src="https://cdn.link-ai.tech/doc/20260228103224.png" width="520"/>
+
+<Warning>
+  If the URL configuration callback fails or the configuration is unsuccessful:
+  1. Ensure the server firewall is disabled and the security group allows the listening port
+  2. Carefully check that Token, Secret Key and other parameter configurations are consistent, and that the URL format is correct
+  3. Certified WeCom accounts must configure a filed domain matching the entity
+</Warning>
+
+## 4. Usage
+
+Search for the app name you just created in WeCom to start chatting directly. You can run multiple instances listening on different ports to create multiple WeCom apps:
+
+<img src="https://cdn.link-ai.tech/doc/20260228103228.png" width="720"/>
+
+To allow external personal WeChat users to use the app, go to **My Enterprise → WeChat Plugin**, share the invite QR code. After scanning and following, personal WeChat users can join and chat with the app:
+
+<img src="https://cdn.link-ai.tech/doc/20260228103232.png" width="520"/>
+
+## FAQ
+
+Make sure the following dependencies are installed:
+
+```bash
+pip install websocket-client pycryptodome
+```

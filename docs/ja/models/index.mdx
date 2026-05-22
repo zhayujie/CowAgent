@@ -1,0 +1,58 @@
+---
+title: モデル概要
+description: CowAgentがサポートするモデルとおすすめの選択肢
+---
+
+CowAgentは国内外の主要なLLMをサポートしています。モデルインターフェースはプロジェクトの`models/`ディレクトリに実装されています。
+
+<Note>
+  Agent モードでは、品質とコストのバランスから以下のモデルをおすすめします: deepseek-v4-flash、MiniMax-M2.7、claude-sonnet-4-6、gemini-3.1-pro-preview、glm-5.1、qwen3.6-plus、kimi-k2.6、ernie-5.1
+</Note>
+
+## 設定
+
+選択したモデルに応じて、`config.json`にモデル名とAPI Keyを設定してください。各モデルは`bot_type`を`openai`に設定し、`open_ai_api_base`と`open_ai_api_key`を設定することで、OpenAI互換アクセスもサポートしています。
+
+また、[LinkAI](https://link-ai.tech)プラットフォームインターフェースを使用すると、ナレッジベース、ワークフロー、その他のAgent機能をサポートしながら、複数のモデルを柔軟に切り替えることができます。
+
+## サポートモデル
+
+<CardGroup cols={2}>
+  <Card title="DeepSeek" href="/ja/models/deepseek">
+    deepseek-v4-flash、deepseek-v4-pro など
+  </Card>
+  <Card title="Baidu Qianfan / ERNIE" href="/ja/models/qianfan">
+    ernie-5.1、ernie-5.0、ernie-4.5-turbo-128k など
+  </Card>
+  <Card title="MiniMax" href="/ja/models/minimax">
+    MiniMax-M2.7およびその他のシリーズモデル
+  </Card>
+  <Card title="Claude" href="/ja/models/claude">
+    claude-sonnet-4-6など
+  </Card>
+  <Card title="Gemini" href="/ja/models/gemini">
+    gemini-3.1-pro-previewなど
+  </Card>
+  <Card title="OpenAI" href="/ja/models/openai">
+    gpt-5.4、gpt-4.1、oシリーズなど
+  </Card>
+  <Card title="GLM (智谱AI)" href="/ja/models/glm">
+    glm-5.1、glm-5-turbo、glm-5およびその他のシリーズモデル
+  </Card>
+  <Card title="Qwen (通义千问)" href="/ja/models/qwen">
+    qwen3.6-plus、qwen3-maxなど
+  </Card>
+  <Card title="Doubao (ByteDance)" href="/ja/models/doubao">
+    doubao-seedシリーズモデル
+  </Card>
+  <Card title="Kimi" href="/ja/models/kimi">
+    kimi-k2.6、kimi-k2.5、kimi-k2など
+  </Card>
+  <Card title="LinkAI" href="/ja/models/linkai">
+    統合マルチモデルインターフェース + ナレッジベース
+  </Card>
+</CardGroup>
+
+<Tip>
+  モデル名の完全なリストについては、プロジェクトの[`common/const.py`](https://github.com/zhayujie/CowAgent/blob/master/common/const.py)ファイルを参照してください。
+</Tip>

@@ -1,0 +1,83 @@
+---
+title: v2.0.6
+description: CowAgent 2.0.6 - Knowledge Base, Deep Dream Memory Distillation, Smart Context Compression, Web Console Multi-Session and More
+---
+
+## Project Renamed to CowAgent
+
+The repository has been officially renamed from `chatgpt-on-wechat` to **CowAgent**, evolving into a full-featured AI Agent assistant.
+
+- New URL: [github.com/zhayujie/CowAgent](https://github.com/zhayujie/CowAgent) — GitHub auto-redirects the old URL
+- CLI commands, config files, and documentation links remain compatible — no extra steps needed
+
+## 📚 Knowledge Base
+
+New personal knowledge base system — Agent can autonomously build and maintain structured knowledge, retrieving it on demand during conversations:
+
+- **Index-driven self-organizing structure**: Knowledge is stored in `knowledge/` directory, auto-organized by category, with each knowledge page as an independent Markdown file
+- **Auto-write**: Send files, links, or other knowledge to the Agent, or it will automatically create/update knowledge pages when valuable information is identified in conversation
+- **Hybrid retrieval**: Supports keyword full-text search and vector semantic retrieval, loading relevant knowledge on demand during conversations
+- **Visualization**: File tree browsing and knowledge graph visualization, with in-document links for direct navigation
+- **Command management**: `/knowledge` for stats, `/knowledge list` for directory structure, `/knowledge on|off` to toggle
+
+<img src="https://cdn.link-ai.tech/doc/20260413105435.png" width="750" />
+
+
+Docs: [Knowledge Base](https://docs.cowagent.ai/en/knowledge)
+
+## 🌙 Deep Dream Memory Distillation
+
+A new memory consolidation mechanism that automatically distills scattered conversation memories into refined long-term memory daily:
+
+- **Three-tier memory flow**: Conversation context (short-term) → Daily memory (mid-term) → MEMORY.md (long-term), forming a complete memory lifecycle
+- **Auto-distillation**: Runs daily at 23:55, reads the day's daily memory and MEMORY.md, performs deduplication, merging, and pruning via LLM, outputting a refined MEMORY.md
+- **Dream diary**: Each distillation generates a narrative-style dream diary recording discoveries and insights, stored in `memory/dreams/`
+- **Manual trigger**: `/memory dream [N]` to manually trigger with configurable lookback days (default 3, max 30), with chat notification on completion
+- **Web console**: Memory management page now includes a "Dream Diary" tab for browsing all dream diaries
+
+Docs: [Deep Dream](https://docs.cowagent.ai/en/memory/deep-dream)
+
+<img src="https://cdn.link-ai.tech/doc/20260414120158.png" width="750" />
+
+## 🧠 Smart Context Compression
+
+When context exceeds limits, trimmed portions are summarized by LLM and asynchronously injected to maintain conversation continuity:
+
+- **Async LLM summary**: Trimmed messages are summarized into key information by LLM, written to daily memory files and injected into retained context
+- **Multi-model compatible**: Uses the primary model for summarization, compatible with Claude, OpenAI, MiniMax and other model message format requirements
+
+Docs: [Short-term Memory](https://docs.cowagent.ai/en/memory/context)
+
+## 💬 Web Console Upgrades
+
+Multiple enhancements to the Web console:
+
+- **Multi-session management**: Create and switch between independent sessions, sidebar session list with auto-generated and manually editable titles
+- **Password protection**: Set a login password via `web_console_password` config option
+- **Deep thinking**: Display model thinking process in Web console, controlled by `enable_thinking` config option
+- **Scheduled push**: Scheduled task results can be pushed to Web console
+- **Message copy**: One-click copy of raw Markdown content from AI reply bubbles
+- **Language toggle**: Top language switch button now shows current language for more intuitive interaction
+
+## 🤖 Model Updates
+
+- **Vision optimization**: Image recognition tool prefers the primary model with automatic multi-provider fallback. Docs: [Vision Tool](https://docs.cowagent.ai/en/tools/vision)
+- **MiniMax new model**: Added MiniMax-M2.7-highspeed model and MiniMax TTS voice synthesis support. Thanks @octo-patch
+- **Qwen**: Added qwen3.6-plus model support
+
+## 🐛 Other Improvements & Fixes
+
+- **Memory prompts**: `MEMORY.md` injected into system prompt by default, with refined memory retrieval and write trigger conditions for enhanced proactive writing
+- **System prompt**: Optimized system prompt style and tone guidance
+- **Browser tool**: Enhanced implicit interactive element detection
+- **File send**: Fixed common file types (tar.gz, zip, etc.) not being sent correctly. Thanks @6vision
+- **macOS compatibility**: Fixed network pre-check timeout compatibility issue. Thanks @Moliang Zhou
+- **Windows compatibility**: Fixed PowerShell compatibility, process updates, terminal encoding and other issues on Windows
+- **Python 3.13+**: Fixed missing `legacy-cgi` dependency for Python 3.13+
+- **WeChat channel**: Updated personal WeChat channel version
+
+## 📦 Upgrade
+
+Run `cow update` or `./run.sh update` to upgrade, or pull the latest code and restart. See [Upgrade Guide](https://docs.cowagent.ai/en/guide/upgrade).
+
+**Release Date**: 2026.04.14 | [Full Changelog](https://github.com/zhayujie/CowAgent/compare/2.0.5...master)

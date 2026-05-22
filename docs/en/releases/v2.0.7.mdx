@@ -1,0 +1,65 @@
+---
+title: v2.0.7
+description: CowAgent 2.0.7 - Image Generation Skill (6-provider auto-routing), new models, knowledge base enhancements, Web Console improvements and bug fixes
+---
+
+## 🎨 Image Generation Skill
+
+New built-in `image-generation` skill supporting text-to-image, image-to-image, and multi-image fusion across six major providers:
+
+- **6-provider auto-routing**: OpenAI (GPT-Image-2) → Gemini (Nano Banana) → Seedream (Volcengine Ark) → Qwen (DashScope) → MiniMax → LinkAI — automatically selects from configured providers in fixed priority order, with automatic fallback on failure
+- **Zero model selection**: Just configure an API key and it works — no need to manually specify a model. You can also name a specific model in conversation (e.g. "draw a cat with seedream")
+- **Flexible control**: Supports `quality`, `size` (512/1K–4K), and `aspect_ratio` parameters, with each provider automatically mapping to its supported values
+- **Image editing**: Pass existing images for editing, style transfer, or multi-image fusion (Seedream supports up to 14 reference images)
+- **Skill-level config**: Pin a default model via `skill.image-generation.model` in `config.json`
+- **Image lightbox**: All images in the Web console now support click-to-enlarge preview
+
+Docs: [Image Generation Skill](https://docs.cowagent.ai/en/skills/image-generation)
+
+## 🤖 New Model Support
+
+- **Kimi K2.6**: Added `kimi-k2.6` model support
+- **Claude Opus 4.7**: Added `claude-opus-4-7` model support
+- **GLM 5.1**: Added `glm-5.1` model support
+- **Kimi Coding Plan**: Support for Kimi Coding Plan mode
+- **Custom model providers**: New custom model provider configuration for easier integration with additional vendors
+
+## 💬 Web Console Improvements
+
+- **Smart auto-scroll**: Improved chat scroll behaviour — no longer forces scroll to bottom while the user is reading earlier messages
+- **Reasoning content cap**: Deep thinking content capped at 4 KB to prevent frontend lag
+- **Mobile optimisation**: Session sidebar hidden by default on mobile, with overlay dismiss support
+- **Session title fix**: Fixed title auto-generation fallback logic and Bridge reset on config change
+- **Image preview dedup**: Fixed duplicate image rendering within the same message
+
+## 📚 Knowledge Base Enhancements
+
+- **Nested directory support**: Knowledge base listing and display now support multi-level nested directories
+- **Root-level file display**: Show `index.md`, `log.md` and other root-level files in the knowledge tree
+- **Empty state stats fix**: Root-level files no longer interfere with empty-state detection
+
+## 🌙 Dream Memory Improvements
+
+- **Structured organisation**: Dream memory files are now auto-archived by date with a cleaner directory structure
+- **Schedule jitter**: Daily dream trigger includes random jitter to avoid concurrency conflicts in cluster deployments
+
+## 🛠 Skill System Improvements
+
+- **Skill manager refresh**: `/skill` commands now automatically refresh the skill manager to keep state in sync
+- **Installation sources**: Skill installation supports multiple source formats (URL, zip, local file, etc.) with automatic target directory handling
+
+## 🐛 Other Fixes
+
+- **Gemini fix**: Fixed Gemini tool calls not returning results
+- **Agent retry**: Empty-response retries no longer drop `tool_calls`
+- **Docker env sync**: Fixed environment variables not syncing after config update in Docker environments
+- **Python 3.7 compat**: Deferred `Literal` import for Python 3.7 compatibility
+- **Model switch notification**: Fixed bot_type change notification not showing after model switch. Thanks @6vision
+- **Config command**: `/config` now supports setting `enable_thinking`
+- **Thinking display**: Deep thinking display disabled by default
+
+## 📦 Upgrade
+
+Run `cow update` or `./run.sh update` to upgrade, or pull the latest code and restart. See [Upgrade Guide](https://docs.cowagent.ai/en/guide/upgrade).
+
+**Release Date**: 2026.04.22 | [Full Changelog](https://github.com/zhayujie/CowAgent/compare/2.0.6...master)

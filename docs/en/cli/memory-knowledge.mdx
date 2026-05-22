@@ -1,0 +1,63 @@
+---
+title: Memory & Knowledge
+description: Memory distillation and knowledge base management commands
+---
+
+## memory
+
+Manage the Agent's long-term memory system.
+
+### memory dream
+
+Manually trigger memory distillation (Deep Dream) — consolidate recent daily memories into MEMORY.md and generate a dream diary.
+
+```text
+/memory dream [N]
+```
+
+- `N`: Consolidate the last N days of memory (default 3, max 30)
+- Runs asynchronously in the background; you'll be notified in chat when complete
+- Works without Agent initialization — can be used before the first conversation
+
+**Examples:**
+
+```text
+/memory dream       # Consolidate last 3 days
+/memory dream 7     # Consolidate last 7 days
+/memory dream 30    # Consolidate last 30 days (full)
+```
+
+On the Web console, the completion notification includes clickable links to view the updated MEMORY.md and dream diary.
+
+<Tip>
+  The system automatically runs distillation daily at 23:55 (lookback 1 day). Manual trigger is useful for consolidating historical memories after first deployment, or when you need an immediate memory update.
+</Tip>
+
+## knowledge
+
+View and manage the personal knowledge base. Shows statistics by default.
+
+```text
+/knowledge
+```
+
+### knowledge list
+
+View the knowledge base directory tree.
+
+```text
+/knowledge list
+```
+
+### knowledge on / off
+
+Enable or disable the knowledge base. When disabled, knowledge prompts and file indexing are not injected.
+
+```text
+/knowledge on
+/knowledge off
+```
+
+<Note>
+  In the terminal CLI, `cow knowledge` and `cow knowledge list` are available, but `on|off` is only supported in chat (requires runtime effect).
+</Note>

@@ -1,0 +1,32 @@
+---
+title: web_search - Web Search
+description: Search the internet for real-time information
+---
+
+Search the internet for real-time information, news, research, and more. Supports two search backends with automatic fallback.
+
+## Dependencies
+
+Requires at least one search API key (configured via `env_config` tool or workspace `.env` file):
+
+| Backend | Environment Variable | Priority | How to Get |
+| --- | --- | --- | --- |
+| Bocha Search | `BOCHA_API_KEY` | Primary | [Bocha Open Platform](https://open.bochaai.com/) |
+| LinkAI Search | `LINKAI_API_KEY` | Fallback | [LinkAI Console](https://link-ai.tech/console/interface) |
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `query` | string | Yes | Search keywords |
+| `count` | integer | No | Number of results (1-50, default 10) |
+| `freshness` | string | No | Time range: `noLimit`, `oneDay`, `oneWeek`, `oneMonth`, `oneYear`, or date range like `2025-01-01..2025-02-01` |
+| `summary` | boolean | No | Return page summaries (default false) |
+
+## Use Cases
+
+When the user asks about latest information, needs fact-checking, or real-time data, the Agent automatically invokes this tool.
+
+<Note>
+  If no search API key is configured, this tool will not be loaded.
+</Note>

@@ -1,0 +1,88 @@
+---
+title: QQ 机器人
+description: 将 CowAgent 接入 QQ 机器人（WebSocket 长连接模式）
+---
+
+> 通过 QQ 开放平台的机器人接口接入 CowAgent，支持 QQ 单聊、QQ 群聊（@机器人）、频道消息和频道私信，无需公网 IP，使用 WebSocket 长连接模式。
+
+<Note>
+  QQ 机器人通过 QQ 开放平台创建，使用 WebSocket 长连接接收消息，通过 OpenAPI 发送消息，无需公网 IP 和域名。
+</Note>
+
+## 一、创建 QQ 机器人
+
+> 进入[QQ 开放平台](https://q.qq.com)，QQ扫码登录，如果未注册开放平台账号，请先完成[账号注册](https://q.qq.com/#/register)。
+
+1.在 [QQ开放平台-机器人列表页](https://q.qq.com/#/apps)，点击创建机器人:
+
+<img src="https://cdn.link-ai.tech/doc/20260317162900.png" width="800"/>
+
+2.填写机器人名称、头像等基本信息，完成创建：
+
+<img src="https://cdn.link-ai.tech/doc/20260317163005.png" width="800"/>
+
+3.点击进入机器人配置页面，选择**开发管理**菜单，完成以下步骤：
+
+  - 复制并记录 **AppID**（机器人ID）
+  - 生成并记录 **AppSecret**（机器人秘钥）
+
+<img src="https://cdn.link-ai.tech/doc/20260317164955.png" width="800"/>
+
+## 二、配置和运行
+
+### 方式一：Web 控制台接入
+
+启动 Cow项目后打开 Web 控制台 (本地链接为: http://127.0.0.1:9899/ )，选择 **通道** 菜单，点击 **接入通道**，选择 **QQ 机器人**，填写上一步保存的 AppID 和 AppSecret，点击接入即可。
+
+<img src="https://cdn.link-ai.tech/doc/20260317165425.png" width="800"/>
+
+### 方式二：配置文件接入
+
+在 `config.json` 中添加以下配置：
+
+```json
+{
+  "channel_type": "qq",
+  "qq_app_id": "YOUR_APP_ID",
+  "qq_app_secret": "YOUR_APP_SECRET"
+}
+```
+
+| 参数 | 说明 |
+| --- | --- |
+| `qq_app_id` | QQ 机器人的 AppID，在开放平台开发管理中获取 |
+| `qq_app_secret` | QQ 机器人的 AppSecret，在开放平台开发管理中获取 |
+
+配置完成后启动程序，日志显示 `[QQ] ✅ Connected successfully` 即表示连接成功。
+
+
+## 三、使用
+
+在 QQ开放平台 - 管理 - **使用范围和人员** 菜单中，使用QQ客户端扫描 "添加到群和消息列表" 的二维码，即可开始与QQ机器人的聊天：
+
+<img src="https://cdn.link-ai.tech/doc/20260317165947.png" width="800"/>
+
+对话效果：
+<img src="https://cdn.link-ai.tech/doc/20260317171508.png" width="800"/>
+
+## 四、功能说明
+
+> 注意：若需在群聊及频道中使用QQ机器人，需完成发布上架审核并在使用范围配置权限使用范围。
+
+| 功能 | 支持情况 |
+| --- | --- |
+| QQ 单聊 | ✅ |
+| QQ 群聊（@机器人） | ✅ |
+| 频道消息（@机器人） | ✅ |
+| 频道私信 | ✅ |
+| 文本消息 | ✅ 收发 |
+| 图片消息 | ✅ 收发（群聊和单聊） |
+| 文件消息 | ✅ 发送（群聊和单聊） |
+| 定时任务 | ✅ 主动推送（每月每用户限 4 条） |
+
+
+## 五、注意事项
+
+- **被动消息限制**：QQ 单聊被动消息有效期为 60 分钟，每条消息最多回复 5 次；QQ 群聊被动消息有效期为 5 分钟。
+- **主动消息限制**：单聊和群聊每月主动消息上限为 4 条，在使用定时任务功能时需要注意这个限制
+- **事件权限**：默认订阅 `GROUP_AND_C2C_EVENT`（QQ群/单聊）和 `PUBLIC_GUILD_MESSAGES`（频道公域消息），如需其他事件类型请在开放平台申请权限。

@@ -1,4 +1,4 @@
-from bot.bot_factory import create_bot
+from models.bot_factory import create_bot
 from bridge.context import Context
 from bridge.reply import Reply
 from common import const
@@ -13,47 +13,76 @@ from voice.factory import create_voice
 class Bridge(object):
     def __init__(self):
         self.btype = {
-            "chat": const.CHATGPT,
+            "chat": const.OPENAI,
             "voice_to_text": conf().get("voice_to_text", "openai"),
             "text_to_voice": conf().get("text_to_voice", "google"),
             "translate": conf().get("translate", "baidu"),
         }
         # 这边取配置的模型
-        model_type = conf().get("model") or const.GPT35
-        if model_type in ["text-davinci-003"]:
-            self.btype["chat"] = const.OPEN_AI
-        if conf().get("use_azure_chatgpt", False):
-            self.btype["chat"] = const.CHATGPTONAZURE
-        if model_type in ["wenxin", "wenxin-4"]:
-            self.btype["chat"] = const.BAIDU
-        if model_type in ["xunfei"]:
-            self.btype["chat"] = const.XUNFEI
-        if model_type in [const.QWEN]:
-            self.btype["chat"] = const.QWEN
-        if model_type in [const.QWEN_TURBO, const.QWEN_PLUS, const.QWEN_MAX]:
-            self.btype["chat"] = const.QWEN_DASHSCOPE
-        if model_type in [const.GEMINI]:
-            self.btype["chat"] = const.GEMINI
-        if model_type in [const.ZHIPU_AI]:
-            self.btype["chat"] = const.ZHIPU_AI
-        if model_type and model_type.startswith("claude-3"):
-            self.btype["chat"] = const.CLAUDEAPI
+        bot_type = conf().get("bot_type")
+        if bot_type:
+            self.btype["chat"] = bot_type
+        else:
+            model_type = conf().get("model") or const.GPT_41_MINI
+            
+            # Ensure model_type is string to prevent AttributeError when using startswith()
+            # This handles cases where numeric model names (e.g., "1") are parsed as integers from YAML
+            if not isinstance(model_type, str):
+                logger.warning(f"[Bridge] model_type is not a string: {model_type} (type: {type(model_type).__name__}), converting to string")
+                model_type = str(model_type)
+            
+            if model_type in ["text-davinci-003"]:
+                self.btype["chat"] = const.OPEN_AI
+            if conf().get("use_azure_chatgpt", False):
+                self.btype["chat"] = const.CHATGPTONAZURE
+            if model_type in ["wenxin", "wenxin-4"]:
+                self.btype["chat"] = const.BAIDU
+            if model_type in ["xunfei"]:
+                self.btype["chat"] = const.XUNFEI
+            if model_type in [const.QWEN, const.QWEN_TURBO, const.QWEN_PLUS, const.QWEN_MAX]:
+                self.btype["chat"] = const.QWEN_DASHSCOPE
+            if model_type and (model_type.startswith("qwen") or model_type.startswith("qwq") or model_type.startswith("qvq")):
+                self.btype["chat"] = const.QWEN_DASHSCOPE
+            if model_type and model_type.startswith("gemini"):
+                self.btype["chat"] = const.GEMINI
+            if model_type and model_type.startswith("glm"):
+                self.btype["chat"] = const.ZHIPU_AI
+            if model_type and model_type.startswith("claude"):
+                self.btype["chat"] = const.CLAUDEAPI
 
-        if model_type in ["claude"]:
-            self.btype["chat"] = const.CLAUDEAI
+            if model_type in [const.MOONSHOT, "moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"]:
+                self.btype["chat"] = const.MOONSHOT
+            if model_type and model_type.startswith("kimi"):
+                self.btype["chat"] = const.MOONSHOT
 
-        if model_type in ["moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"]:
-            self.btype["chat"] = const.MOONSHOT
+            if model_type and model_type.startswith("doubao"):
+                self.btype["chat"] = const.DOUBAO
 
-        if conf().get("use_linkai") and conf().get("linkai_api_key"):
-            self.btype["chat"] = const.LINKAI
-            if not conf().get("voice_to_text") or conf().get("voice_to_text") in ["openai"]:
-                self.btype["voice_to_text"] = const.LINKAI
-            if not conf().get("text_to_voice") or conf().get("text_to_voice") in ["openai", const.TTS_1, const.TTS_1_HD]:
-                self.btype["text_to_voice"] = const.LINKAI
+            if model_type and model_type.startswith("deepseek"):
+                self.btype["chat"] = const.DEEPSEEK
+
+            if model_type and isinstance(model_type, str):
+                lowered_model_type = model_type.lower()
+                if lowered_model_type == const.QIANFAN or lowered_model_type.startswith("ernie"):
+                    self.btype["chat"] = const.QIANFAN
+
+            if model_type in [const.MODELSCOPE]:
+                self.btype["chat"] = const.MODELSCOPE
+            
+            # MiniMax models
+            if model_type and (model_type in ["abab6.5-chat", "abab6.5"] or model_type.lower().startswith("minimax")):
+                self.btype["chat"] = const.MiniMax
+
+            if conf().get("use_linkai") and conf().get("linkai_api_key"):
+                self.btype["chat"] = const.LINKAI
+                if not conf().get("voice_to_text") or conf().get("voice_to_text") in ["openai"]:
+                    self.btype["voice_to_text"] = const.LINKAI
+                if not conf().get("text_to_voice") or conf().get("text_to_voice") in ["openai", const.TTS_1, const.TTS_1_HD]:
+                    self.btype["text_to_voice"] = const.LINKAI
 
         self.bots = {}
         self.chat_bots = {}
+        self._agent_bridge = None
 
     # 模型对应的接口
     def get_bot(self, typename):
@@ -94,3 +123,29 @@ class Bridge(object):
         重置bot路由
         """
         self.__init__()
+
+    def get_agent_bridge(self):
+        """
+        Get agent bridge for agent-based conversations
+        """
+        if self._agent_bridge is None:
+            from bridge.agent_bridge import AgentBridge
+            self._agent_bridge = AgentBridge(self)
+        return self._agent_bridge
+
+    def fetch_agent_reply(self, query: str, context: Context = None,
+                          on_event=None, clear_history: bool = False) -> Reply:
+        """
+        Use super agent to handle the query
+
+        Args:
+            query: User query
+            context: Context object
+            on_event: Event callback for streaming
+            clear_history: Whether to clear conversation history
+
+        Returns:
+            Reply object
+        """
+        agent_bridge = self.get_agent_bridge()
+        return agent_bridge.agent_reply(query, context, on_event, clear_history)

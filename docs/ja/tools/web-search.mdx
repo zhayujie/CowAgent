@@ -1,0 +1,32 @@
+---
+title: web_search - Web検索
+description: インターネットからリアルタイム情報を検索
+---
+
+インターネットからリアルタイムの情報、ニュース、リサーチなどを検索します。2つの検索バックエンドに対応し、自動フォールバック機能を備えています。
+
+## 依存関係
+
+少なくとも1つの検索APIキーが必要です（`env_config` Toolまたはワークスペースの `.env` ファイルで設定）：
+
+| バックエンド | 環境変数 | 優先度 | 取得方法 |
+| --- | --- | --- | --- |
+| Bocha Search | `BOCHA_API_KEY` | プライマリ | [Bocha Open Platform](https://open.bochaai.com/) |
+| LinkAI Search | `LINKAI_API_KEY` | フォールバック | [LinkAI Console](https://link-ai.tech/console/interface) |
+
+## パラメータ
+
+| パラメータ | 型 | 必須 | 説明 |
+| --- | --- | --- | --- |
+| `query` | string | はい | 検索キーワード |
+| `count` | integer | いいえ | 結果件数（1-50、デフォルト10） |
+| `freshness` | string | いいえ | 期間指定：`noLimit`、`oneDay`、`oneWeek`、`oneMonth`、`oneYear`、または `2025-01-01..2025-02-01` のような日付範囲 |
+| `summary` | boolean | いいえ | ページ要約を返す（デフォルトfalse） |
+
+## ユースケース
+
+ユーザーが最新情報について質問したり、事実確認やリアルタイムデータが必要な場合、AgentはこのToolを自動的に呼び出します。
+
+<Note>
+  検索APIキーが設定されていない場合、このToolは読み込まれません。
+</Note>

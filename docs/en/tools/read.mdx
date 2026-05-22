@@ -1,0 +1,24 @@
+---
+title: read - File Read
+description: Read file content
+---
+
+Read file content. Supports text files, PDF files, images (returns metadata), and more.
+
+## Dependencies
+
+No extra dependencies, available by default.
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `path` | string | Yes | File path, relative paths are based on workspace directory |
+| `offset` | integer | No | Start line number (1-indexed), negative values read from the end |
+| `limit` | integer | No | Number of lines to read |
+
+## Use Cases
+
+- View configuration files, log files
+- Read code files for analysis
+- Check image/video file info

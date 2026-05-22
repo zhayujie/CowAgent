@@ -43,9 +43,15 @@ fi
 # fi
 
 
-# go to prefix dir
+# fix ownership of mounted volumes then drop to non-root user
+if [ "$(id -u)" = "0" ]; then
+    mkdir -p /home/agent/cow
+    chown agent:agent /home/agent/cow
+    exec su agent -s /bin/bash -c "cd $CHATGPT_ON_WECHAT_PREFIX && $CHATGPT_ON_WECHAT_EXEC"
+fi
+
+# fallback: already running as agent
 cd $CHATGPT_ON_WECHAT_PREFIX
-# excute
 $CHATGPT_ON_WECHAT_EXEC
 
 

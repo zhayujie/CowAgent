@@ -1,0 +1,179 @@
+---
+title: 手动安装
+description: 手动部署 CowAgent（源码 / Docker）
+---
+
+## 源码部署
+
+### 1. 克隆项目代码
+
+```bash
+git clone https://github.com/zhayujie/CowAgent
+cd CowAgent/
+```
+
+<Tip>
+  若遇到网络问题可使用国内仓库地址：https://gitee.com/zhayujie/CowAgent
+</Tip>
+
+### 2. 安装依赖
+
+核心依赖（必选）：
+
+```bash
+pip3 install -r requirements.txt
+```
+
+扩展依赖（可选，建议安装）：
+
+```bash
+pip3 install -r requirements-optional.txt
+```
+
+> 国内网络可使用镜像源加速：`pip3 install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple`
+
+### 3. 安装 Cow CLI
+
+安装命令行工具，用于管理服务和技能：
+
+```bash
+pip3 install -e .
+```
+
+安装后即可使用 `cow` 命令：
+
+```bash
+cow help
+```
+
+<Note>
+  此步骤为推荐操作。安装后可以使用 `cow start`、`cow stop`、`cow update` 等命令管理服务，也可以使用 `cow skill` 管理技能。如果不安装 CLI，可以使用 `./run.sh` 或 `python3 app.py` 运行。
+</Note>
+
+### 3.1 安装浏览器工具（可选）
+
+如需使用浏览器工具（控制浏览器访问网页、填写表单等），运行：
+
+```bash
+cow install-browser
+```
+
+该命令会自动安装 Playwright 和 Chromium 浏览器。详细说明参考 [浏览器工具文档](/tools/browser)。
+
+<Note>
+  浏览器工具依赖较重（~300MB），如不需要可跳过，不影响其他功能正常使用。
+</Note>
+
+### 4. 配置
+
+复制配置文件模板并编辑：
+
+```bash
+cp config-template.json config.json
+```
+
+在 `config.json` 中填写模型 API Key 和通道类型等配置，详细说明参考各 [模型文档](/models/minimax)。
+
+### 5. 运行
+
+**使用 Cow CLI 运行（推荐）：**
+
+```bash
+cow start
+```
+
+**或者本地前台运行：**
+
+```bash
+python3 app.py
+```
+
+运行后默认启动 Web 控制台，访问 `http://localhost:9899` 开始对话和管理Agent。
+
+**服务器后台运行（不使用 CLI 时）：**
+
+```bash
+nohup python3 app.py & tail -f nohup.out
+```
+
+<Tip>
+  如果在服务器上部署，需要在防火墙或安全组中放行 `9899` 端口才能通过浏览器访问 Web 控制台，建议仅对指定IP开放以保证安全。
+</Tip>
+
+## Docker 部署
+
+使用 Docker 部署无需下载源码和安装依赖。Agent模式下更推荐使用源码部署以获得更多系统访问能力。
+
+<Note>
+  需要安装 [Docker](https://docs.docker.com/engine/install/) 和 docker-compose。
+</Note>
+
+**1. 下载配置文件**
+
+```bash
+curl -O https://cdn.link-ai.tech/code/cow/docker-compose.yml
+```
+
+打开 `docker-compose.yml` 填写所需配置。
+
+**2. 启动容器**
+
+```bash
+sudo docker compose up -d
+```
+
+**3. 查看日志**
+
+```bash
+sudo docker logs -f chatgpt-on-wechat
+```
+
+<Tip>
+  如果在服务器上部署，需要在防火墙或安全组中放行 `9899` 端口才能通过浏览器访问 Web 控制台，建议仅对指定IP开放以保证安全。
+</Tip>
+
+## 核心配置项
+
+<Tabs>
+  <Tab title="源码部署（config.json）">
+    ```json
+    {
+      "channel_type": "web",
+      "model": "deepseek-v4-flash",
+      "deepseek_api_key": "",
+      "agent": true,
+      "agent_workspace": "~/cow",
+      "agent_max_context_tokens": 40000,
+      "agent_max_context_turns": 30,
+      "agent_max_steps": 15
+    }
+    ```
+  </Tab>
+  <Tab title="Docker 部署（docker-compose.yml）">
+    ```yaml
+    environment:
+      CHANNEL_TYPE: 'web'
+      MODEL: 'deepseek-v4-flash'
+      DEEPSEEK_API_KEY: 'your-api-key'
+      DEEPSEEK_API_BASE: 'https://api.deepseek.com/v1'
+      AGENT: 'True'
+      AGENT_MAX_CONTEXT_TOKENS: 40000
+      AGENT_MAX_CONTEXT_TURNS: 30
+      AGENT_MAX_STEPS: 15
+    ```
+  </Tab>
+</Tabs>
+
+| 参数 | 环境变量 | 说明 | 默认值 |
+| --- | --- | --- | --- |
+| `channel_type` | `CHANNEL_TYPE` | 接入渠道类型 | `web` |
+| `model` | `MODEL` | 模型名称 | `deepseek-v4-flash` |
+| `agent` | `AGENT` | 是否启用 Agent 模式 | `true` |
+| `agent_workspace` | - | Agent 工作空间路径 | `~/cow` |
+| `agent_max_context_tokens` | `AGENT_MAX_CONTEXT_TOKENS` | 最大上下文 tokens | `40000` |
+| `agent_max_context_turns` | `AGENT_MAX_CONTEXT_TURNS` | 最大上下文记忆轮次 | `30` |
+| `agent_max_steps` | `AGENT_MAX_STEPS` | 单次任务最大决策步数 | `15` |
+
+<Tip>
+  全部配置项可在项目 [`config.py`](https://github.com/zhayujie/CowAgent/blob/master/config.py) 文件中查看。Docker 部署时，配置项名称需转为大写环境变量格式。
+</Tip>

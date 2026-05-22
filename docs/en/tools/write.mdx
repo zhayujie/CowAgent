@@ -1,0 +1,27 @@
+---
+title: write - File Write
+description: Create or overwrite files
+---
+
+Write content to a file. Creates the file if it doesn't exist, overwrites if it does. Automatically creates parent directories.
+
+## Dependencies
+
+No extra dependencies, available by default.
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `path` | string | Yes | File path |
+| `content` | string | Yes | Content to write |
+
+## Use Cases
+
+- Create new code files or scripts
+- Generate configuration files
+- Save processing results
+
+<Note>
+  Single writes should not exceed 10KB. For large files, create a skeleton first, then use the edit tool to add content in chunks.
+</Note>

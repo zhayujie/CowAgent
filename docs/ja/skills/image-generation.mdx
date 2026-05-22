@@ -1,0 +1,158 @@
+---
+title: image-generation - 画像生成
+description: テキストから画像生成 / 画像編集 / 複数画像の融合、複数プロバイダーの自動ルーティングとフォールバック対応
+---
+
+汎用の画像生成・編集スキルです。OpenAI、Gemini、Seedream（Volcengine Ark）、Qwen（DashScope）、MiniMax、LinkAI の 6 社に対応。モデルを手動で選ぶ必要はなく、固定の優先順位に従って、設定済みのプロバイダーを自動的に選択します。
+
+## モデル選択
+
+`image-generation` は「固定優先度 + 自動フォールバック」のストラテジーを採用しています。API Key を設定するだけで使えます：
+
+1. **優先順位**: `OpenAI → Gemini → Seedream → Qwen → MiniMax → LinkAI`
+2. **未設定のプロバイダーはスキップ**: API Key が設定されているプロバイダーのみが参加
+3. **失敗時は自動で次へ**: 401、モデル未開通、ネットワークエラーなどの場合、次のプロバイダーを試行
+4. **モデル指定時は前置**: 特定のモデル名を渡すと、そのプロバイダーが最前列に昇格
+
+### 対応モデル
+
+| プロバイダー | モデル / エイリアス | 特徴 |
+| --- | --- | --- |
+| OpenAI | `gpt-image-2`、`gpt-image-1` | 汎用テキスト→画像、高品質、`quality` パラメータ対応 |
+| Gemini Nano Banana | `nano-banana-2`、`nano-banana-pro`、`nano-banana` | `gemini-3.1-flash`、`gemini-3-pro`、`gemini-2.5-flash` の画像バージョン |
+| Seedream（Volcengine Ark） | `seedream-5.0-lite`、`seedream-4.5` | ネイティブ 2K–4K、最大 14 枚の参照画像を融合 |
+| Qwen（DashScope） | `qwen-image-2.0`、`qwen-image-2.0-pro` | 中国語テキスト描画やテキスト・画像レイアウトに強い |
+| MiniMax | `image-01` | シンプルで高速な画像生成 |
+| LinkAI | 任意のモデル | 汎用プロキシ、フォールバック用 |
+
+<Note>
+デフォルトでは Agent はモデルを選ばず、自動ルーティングを使用します。特定のモデルを使いたい場合は、会話で直接指定してください（例：「seedream で猫を描いて」「gpt-image-2 でポスターを作って」）。下記の「カスタム設定」でデフォルトモデルを固定することもできます。
+</Note>
+
+## カスタム設定
+
+### API Key の設定
+
+**少なくとも 1 つ**のプロバイダーの Key が必要です。複数設定すると自動フォールバックが有効になります。設定方法は 3 通り：
+
+#### 方法 1：既存のモデル Key を自動再利用
+
+Web コンソールや `config.json` で対話モデルの Key（`openai_api_key`、`gemini_api_key` など）を設定済みの場合、起動時にこれらの Key は対応する環境変数に**自動同期**されます。つまり、対話モデルが使えていれば、画像生成も同じ Key で追加設定なしに利用できます。
+
+#### 方法 2：config.json で設定
+
+`config.json` に Key フィールドを直接記述：
+
+```json
+{
+  "openai_api_key": "sk-xxx",
+  "openai_api_base": "https://api.openai.com/v1",
+  "gemini_api_key": "AIza-xxx",
+  "ark_api_key": "xxx",
+  "dashscope_api_key": "sk-xxx",
+  "minimax_api_key": "xxx",
+  "linkai_api_key": "xxx"
+}
+```
+
+変更後は再起動が必要です。各 Key には対応する `*_api_base` フィールドがあり、カスタムエンドポイントを指定できます。
+
+#### 方法 3：会話で直接設定
+
+チャットで API Key を送信すると、Agent が `env_config` ツールで `~/cow/.env` に保存します。**再起動不要**でただちに反映されます。例：
+
+```
+OPENAI_API_KEY を sk-xxx に設定して
+```
+
+または：
+
+```
+ARK_API_KEY を xxx に設定して
+```
+
+### API Key 一覧
+
+| 環境変数 | config.json フィールド | プロバイダー | デフォルト Base URL |
+| --- | --- | --- | --- |
+| `OPENAI_API_KEY` | `openai_api_key` | OpenAI | `https://api.openai.com/v1` |
+| `GEMINI_API_KEY` | `gemini_api_key` | Gemini | `https://generativelanguage.googleapis.com` |
+| `ARK_API_KEY` | `ark_api_key` | Volcengine Ark（Seedream） | `https://ark.cn-beijing.volces.com/api/v3` |
+| `DASHSCOPE_API_KEY` | `dashscope_api_key` | Alibaba DashScope（Qwen） | `https://dashscope.aliyuncs.com` |
+| `MINIMAX_API_KEY` | `minimax_api_key` | MiniMax | `https://api.minimaxi.com` |
+| `LINKAI_API_KEY` | `linkai_api_key` | LinkAI | `https://api.link-ai.tech` |
+
+### デフォルトモデルの固定
+
+すべての画像生成を特定のプロバイダーのモデルで固定したい場合、`config.json` に以下を追加：
+
+```json
+"skill": {
+  "image-generation": {
+    "model": "seedream-5.0-lite"
+  }
+}
+```
+
+起動時にこの設定は環境変数 `SKILL_IMAGE_GENERATION_MODEL` に自動変換され、スクリプトはこのモデルのプロバイダーを常に使用します。
+
+## 有効化と無効化
+
+`image-generation` は内蔵スキルで、**API Key に基づいてステータスが自動調整**されます：
+
+- **Key 設定済み**：スキルはアクティブ — Agent は画像生成リクエストを受けると呼び出す
+- **Key 未設定**：スキルはコンテキストに表示される（「設定が必要」とマーク）— Agent は呼び出し失敗の代わりに Key の設定を案内する
+
+手動で制御する場合：
+
+```text
+/skill disable image-generation    # 無効化（Key があっても呼び出されない）
+/skill enable image-generation     # 再有効化
+```
+
+ターミナルでは `cow skill disable image-generation` / `cow skill enable image-generation`。
+
+## パラメータ
+
+| パラメータ | 型 | 必須 | デフォルト | 説明 |
+| --- | --- | --- | --- | --- |
+| `prompt` | string | はい | — | 画像の説明 |
+| `image_url` | string / list | いいえ | null | 編集用の入力画像。ローカルパスまたは URL。複数指定で複数画像融合 |
+| `quality` | string | いいえ | auto | `low` / `medium` / `high` — 一部のプロバイダーのみ対応 |
+| `size` | string | いいえ | auto | `512` / `1K` / `2K` / `3K` / `4K`、またはピクセル値（例: `1024x1024`） |
+| `aspect_ratio` | string | いいえ | null | `1:1` / `3:2` / `2:3` / `16:9` / `9:16` / `21:9`；Gemini は `1:4` / `4:1` / `1:8` / `8:1` にも対応 |
+
+<Warning>
+**品質が高いほど・解像度が大きいほど、コストが高く、時間がかかります。**
+
+- 日常の会話やプレビューにはデフォルト（`auto`）、または `quality=low` + `size=1K` を使用 — 約 20 秒で生成
+- ポスターやユーザーが高解像度を明示的に要求した場合は `quality=high` + `size=2K/4K` — モデルによって 1〜5 分かかる場合があります
+</Warning>
+
+## 出力
+
+成功時：
+
+```json
+{
+  "model": "doubao-seedream-5-0-260128",
+  "images": [
+    {"url": "/path/to/output.png"}
+  ]
+}
+```
+
+失敗時：`{ "error": "..." }`。エラー後は**直接リトライしないでください** — ほぼ確実に設定の問題です（Key の誤り、API ベース URL の不一致、モデル未開通など）。まず設定を修正してから再試行してください。
+
+## よくある使い方
+
+- **テキスト→画像**：説明からイラスト、ポスター、アイコン、アバター、絵コンテなどを生成
+- **画像→画像**：既存の画像のスタイル変更、要素の入れ替え、装飾やテキストの追加
+- **複数画像の融合**：複数の参照画像を 1 枚に合成（着せ替え、キャラクター集合写真など）
+
+<Note>
+- bash タイムアウトは 600 秒に設定してください。各プロバイダーの HTTP タイムアウトは 300 秒ですが、スクリプトが複数のプロバイダーを順番に試行する場合があります
+- 入力画像は自動的に 4 MB 以下・最長辺 4096 px 以下に圧縮されます
+- Gemini / Seedream / Qwen / MiniMax は `quality` パラメータに対応していません（渡しても無視されます）
+- Seedream のデフォルトは 2K。`seedream-5.0-lite` は 3K まで、`seedream-4.5` は 4K まで対応
+</Note>

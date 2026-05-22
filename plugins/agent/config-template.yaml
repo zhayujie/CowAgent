@@ -1,0 +1,52 @@
+# 默认选中的Agent Team名称
+team: general_team
+
+tools:
+  google_search:
+    # get your apikey from https://serper.dev/
+    api_key: "YOUR API KEY"
+
+# Agent Team 配置
+teams:
+  # 通用智能体团队
+  general_team:
+    model: "gpt-4.1-mini"        # 团队使用的模型
+    description: "A versatile research and information agent team"
+    max_steps: 5
+    agents:
+      - name: "通用智能助手"
+        description: "Universal assistant specializing in research, information synthesis, and task execution"
+        system_prompt: "You are a versatile assistant who answers questions and completes tasks using available tools. Reply in a clearly structured, attractive and easy to read format."
+        # Agent 支持使用的工具
+        tools:
+          - time
+          - calculator
+          - google_search
+          - browser
+          - terminal
+
+  # 软件开发智能体团队
+  software_team:
+    model: "gpt-4.1-mini"
+    description: "A software development team with product manager, developer and tester."
+    rule: "A normal R&D process should be that Product Manager writes PRD, Developer writes code based on PRD, and Finally, Tester performs testing."
+    max_steps: 10
+    agents:
+      - name: "Product-Manager"
+        description: "Responsible for product requirements and documentation"
+        system_prompt: "You are an experienced product manager who creates concise PRDs, focusing on user needs and feature specifications. You always format your responses in Markdown."
+        tools:
+          - time
+          - file_save
+      - name: "Developer"
+        description: "Implements code based on PRD"
+        system_prompt: "You are a skilled developer. When developing web application, you creates single-page website based on user needs, you deliver HTML files with embedded JavaScript and CSS that are visually appealing, responsive, and user-friendly, featuring a grand layout and beautiful background. The HTML, CSS, and JavaScript code should be well-structured and effectively organized."
+        tools:
+          - file_save
+      - name: "Tester"
+        description: "Tests code and verifies functionality"
+        system_prompt: "You are a tester who validates code against requirements. For HTML applications, use browser tools to test functionality. For Python or other client-side applications, use the terminal tool to run and test. You only need to test a few core cases."
+        tools:
+          - file_save
+          - browser
+          - terminal

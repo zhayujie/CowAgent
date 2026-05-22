@@ -1,0 +1,73 @@
+---
+title: WeCom Bot
+description: CowAgent を WeCom AI Bot に接続する（WebSocket ロングコネクション）
+---
+
+WeCom AI Bot を介して CowAgent を接続し、ダイレクトメッセージとグループチャットの両方に対応します。パブリック IP は不要で、WebSocket ロングコネクションを使用し、Markdown レンダリングとストリーミング出力をサポートします。
+
+<Note>
+  WeCom Bot と WeCom App は異なる統合方式です。WeCom Bot は WebSocket ロングコネクションを使用するため、パブリック IP やドメインが不要で、セットアップが簡単です。
+</Note>
+
+## 1. AI Bot の作成
+
+1. WeCom クライアントを開き、**ワークベンチ**に移動し、**AI Bot** をクリックします：
+
+<img src="https://cdn.link-ai.tech/doc/20260316180959.png" width="800"/>
+
+2. **Bot を作成** → **手動作成**をクリックします：
+
+<img src="https://cdn.link-ai.tech/doc/20260316181118.png" width="600"/>
+
+3. 右パネルの一番下までスクロールし、**API モード**を選択します：
+
+<img src="https://cdn.link-ai.tech/doc/20260316181215.png" width="600"/>
+
+4. Bot 名、アバター、公開範囲を設定します。**ロングコネクション**モードを選択し、**Bot ID** と **Secret** をメモしてから保存をクリックします。
+
+## 2. 設定
+
+### 方法 A: Web コンソール
+
+プログラムを起動し、Web コンソール（ローカルアクセス: http://127.0.0.1:9899）を開きます。**チャネル**タブに移動し、**チャネルを接続**をクリックして **WeCom Bot** を選択し、前のステップで取得した Bot ID と Secret を入力して接続をクリックします。
+
+<img src="https://cdn.link-ai.tech/doc/20260316181711.png" width="600"/>
+
+### 方法 B: 設定ファイル
+
+`config.json` に以下を追加します：
+
+```json
+{
+  "channel_type": "wecom_bot",
+  "wecom_bot_id": "YOUR_BOT_ID",
+  "wecom_bot_secret": "YOUR_SECRET"
+}
+```
+
+| パラメータ | 説明 |
+| --- | --- |
+| `wecom_bot_id` | AI Bot の Bot ID |
+| `wecom_bot_secret` | AI Bot の Secret |
+
+設定後、プログラムを起動します。ログに `[WecomBot] Subscribe success` と表示されれば接続成功です。
+
+## 3. 対応機能
+
+| 機能 | 状態 |
+| --- | --- |
+| ダイレクトメッセージ | ✅ |
+| グループチャット（@bot） | ✅ |
+| テキストメッセージ | ✅ 送受信 |
+| 画像メッセージ | ✅ 送受信 |
+| ファイルメッセージ | ✅ 送受信 |
+| ストリーミング返信 | ✅ |
+| スケジュール配信 | ✅ |
+
+## 4. 使い方
+
+WeCom で Bot 名を検索してダイレクトメッセージを開始できます。
+
+グループチャットで使用するには、Bot をグループに追加し、@メンションしてメッセージを送信します。
+
+<img src="https://cdn.link-ai.tech/doc/20260316182902.png" width="800"/>

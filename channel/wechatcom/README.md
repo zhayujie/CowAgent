@@ -78,8 +78,8 @@ Error code: 60020, message: "not allow to access from your ip, ...from ip: xx.xx
 
 ~~填写配置后，将部署完成后的网址```**.railway.app/wxcomapp```，填写在上一步的URL中。发送信息后观察日志，把报错的IP加入到可信IP。（每次重启后都需要加入可信IP）~~
 
-## 测试体验
+~~## 测试体验~~
 
-AIGC开放社区中已经部署了多个可免费使用的Bot，扫描下方的二维码会自动邀请你来体验。
+~~AIGC开放社区中已经部署了多个可免费使用的Bot，扫描下方的二维码会自动邀请你来体验。~~
 
-<img width="200" src="../../docs/images/aigcopen.png">
+~~<img width="200" src="../../docs/images/aigcopen.png">~~

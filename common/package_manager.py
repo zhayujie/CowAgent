@@ -28,7 +28,7 @@ def check_dulwich():
         except ImportError:
             try:
                 install("dulwich")
-            except:
+            except Exception:
                 needwait = True
     try:
         import dulwich

@@ -1,0 +1,621 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "name": "CowAgent",
+  "description": "CowAgent - AI Super Assistant powered by LLMs, with autonomous task planning, long-term memory, skills system, and multi-channel deployment.",
+  "theme": "mint",
+  "appearance": {
+    "default": "light"
+  },
+  "colors": {
+    "primary": "#35A85B",
+    "light": "#4ABE6E",
+    "dark": "#228547"
+  },
+  "logo": {
+    "light": "/images/logo.jpg",
+    "dark": "/images/logo.jpg"
+  },
+  "favicon": "/images/favicon.ico",
+  "navbar": {
+    "links": [
+      {
+        "label": "官网",
+        "href": "https://cowagent.ai/"
+      },
+      {
+        "label": "GitHub",
+        "href": "https://github.com/zhayujie/CowAgent"
+      }
+    ]
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/zhayujie/CowAgent"
+    }
+  },
+  "navigation": {
+    "languages": [
+      {
+        "language": "zh",
+        "default": true,
+        "tabs": [
+          {
+            "tab": "项目介绍",
+            "groups": [
+              {
+                "group": "概览",
+                "pages": [
+                  "intro/index",
+                  "intro/architecture",
+                  "intro/features"
+                ]
+              }
+            ]
+          },
+          {
+            "tab": "快速开始",
+            "groups": [
+              {
+                "group": "安装部署",
+                "pages": [
+                  "guide/quick-start",
+                  "guide/manual-install",
+                  "guide/upgrade"
+                ]
+              }
+            ]
+          },
+          {
+            "tab": "模型",
+            "groups": [
+              {
+                "group": "模型配置",
+                "pages": [
+                  "models/index",
+                  "models/deepseek",
+                  "models/minimax",
+                  "models/claude",
+                  "models/gemini",
+                  "models/openai",
+                  "models/glm",
+                  "models/qwen",
+                  "models/doubao",
+                  "models/kimi",
+                  "models/qianfan",
+                  "models/linkai",
+                  "models/coding-plan",
+                  "models/custom"
+                ]
+              }
+            ]
+          },
+          {
+            "tab": "工具",
+            "groups": [
+              {
+                "group": "工具系统",
+                "pages": [
+                  "tools/index"
+                ]
+              },
+              {
+                "group": "内置工具",
+                "pages": [
+                  "tools/read",
+                  "tools/write",
+                  "tools/edit",
+                  "tools/ls",
+                  "tools/bash",
+                  "tools/send",
+                  "tools/memory",
+                  "tools/env-config",
+                  "tools/web-fetch",
+                  "tools/scheduler"
+                ]
+              },
+              {
+                "group": "可选工具",
+                "pages": [
+                  "tools/web-search",
+                  "tools/vision",
+                  "tools/browser"
+                ]
+              },
+              {
+                "group": "MCP 工具",
+                "pages": [
+                  "tools/mcp"
+                ]
+              }
+            ]
+          },
+          {
+            "tab": "技能",
+            "groups": [
+              {
+                "group": "技能系统",
+                "pages": [
+                  "skills/index",
+                  "skills/install",
+                  "skills/create",
+                  "skills/hub"
+                ]
+              },
+              {
+                "group": "内置技能",
+                "pages": [
+                  "skills/skill-creator",
+                  "skills/knowledge-wiki",
+                  "skills/image-generation"
+                ]
+              }
+            ]
+          },
+          {
+            "tab": "记忆",
+            "groups": [
+              {
+                "group": "记忆系统",
+                "pages": [
+                  "memory/index",
+                  "memory/context",
+                  "memory/deep-dream"
+                ]
+              }
+            ]
+          },
+          {
+            "tab": "知识",
+            "groups": [
+              {
+                "group": "知识库",
+                "pages": [
+                  "knowledge/index"
+                ]
+              }
+            ]
+          },
+          {
+            "tab": "通道",
+            "groups": [
+              {
+                "group": "接入渠道",
+                "pages": [
+                  "channels/weixin",
+                  "channels/web",
+                  "channels/feishu",
+                  "channels/dingtalk",
+                  "channels/wecom-bot",
+                  "channels/qq",
+                  "channels/wecom",
+                  "channels/wechatmp"
+                ]
+              }
+            ]
+          },
+          {
+            "tab": "命令",
+            "groups": [
+              {
+                "group": "命令系统",
+                "pages": [
+                  "cli/index",
+                  "cli/process",
+                  "cli/skill",
+                  "cli/memory-knowledge",
+                  "cli/general"
+                ]
+              }
+            ]
+          },
+          {
+            "tab": "版本",
+            "groups": [
+              {
+                "group": "发布记录",
+                "pages": [
+                  "releases/overview",
+                  "releases/v2.0.8",
+                  "releases/v2.0.7",
+                  "releases/v2.0.6",
+                  "releases/v2.0.5",
+                  "releases/v2.0.4",
+                  "releases/v2.0.3",
+                  "releases/v2.0.2",
+                  "releases/v2.0.1",
+                  "releases/v2.0.0"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "language": "en",
+        "tabs": [
+          {
+            "tab": "Introduction",
+            "groups": [
+              {
+                "group": "Overview",
+                "pages": [
+                  "en/intro/index",
+                  "en/intro/architecture",
+                  "en/intro/features"
+                ]
+              }
+            ]
+          },
+          {
+            "tab": "Get Started",
+            "groups": [
+              {
+                "group": "Installation",
+                "pages": [
+                  "en/guide/quick-start",
+                  "en/guide/manual-install"
+                ]
+              }
+            ]
+          },
+          {
+            "tab": "Models",
+            "groups": [
+              {
+                "group": "Model Configuration",
+                "pages": [
+                  "en/models/index",
+                  "en/models/deepseek",
+                  "en/models/minimax",
+                  "en/models/claude",
+                  "en/models/gemini",
+                  "en/models/openai",
+                  "en/models/glm",
+                  "en/models/qwen",
+                  "en/models/doubao",
+                  "en/models/kimi",
+                  "en/models/qianfan",
+                  "en/models/linkai",
+                  "en/models/coding-plan",
+                  "en/models/custom"
+                ]
+              }
+            ]
+          },
+          {
+            "tab": "Tools",
+            "groups": [
+              {
+                "group": "Tools System",
+                "pages": [
+                  "en/tools/index"
+                ]
+              },
+              {
+                "group": "Built-in Tools",
+                "pages": [
+                  "en/tools/read",
+                  "en/tools/write",
+                  "en/tools/edit",
+                  "en/tools/ls",
+                  "en/tools/bash",
+                  "en/tools/send",
+                  "en/tools/memory",
+                  "en/tools/env-config",
+                  "en/tools/web-fetch",
+                  "en/tools/scheduler"
+                ]
+              },
+              {
+                "group": "Optional Tools",
+                "pages": [
+                  "en/tools/web-search",
+                  "en/tools/vision",
+                  "en/tools/browser"
+                ]
+              },
+              {
+                "group": "MCP Tools",
+                "pages": [
+                  "en/tools/mcp"
+                ]
+              }
+            ]
+          },
+          {
+            "tab": "Skills",
+            "groups": [
+              {
+                "group": "Skills System",
+                "pages": [
+                  "en/skills/index",
+                  "en/skills/install",
+                  "en/skills/hub"
+                ]
+              },
+              {
+                "group": "Built-in Skills",
+                "pages": [
+                  "en/skills/skill-creator",
+                  "en/skills/knowledge-wiki",
+                  "en/skills/image-generation"
+                ]
+              }
+            ]
+          },
+          {
+            "tab": "Memory",
+            "groups": [
+              {
+                "group": "Memory System",
+                "pages": [
+                  "en/memory/index",
+                  "en/memory/context",
+                  "en/memory/deep-dream"
+                ]
+              }
+            ]
+          },
+          {
+            "tab": "Knowledge",
+            "groups": [
+              {
+                "group": "Knowledge Base",
+                "pages": [
+                  "en/knowledge/index"
+                ]
+              }
+            ]
+          },
+          {
+            "tab": "Channels",
+            "groups": [
+              {
+                "group": "Platforms",
+                "pages": [
+                  "en/channels/weixin",
+                  "en/channels/web",
+                  "en/channels/feishu",
+                  "en/channels/dingtalk",
+                  "en/channels/wecom-bot",
+                  "en/channels/qq",
+                  "en/channels/wecom",
+                  "en/channels/wechatmp"
+                ]
+              }
+            ]
+          },
+          {
+            "tab": "CLI",
+            "groups": [
+              {
+                "group": "Command System",
+                "pages": [
+                  "en/cli/index",
+                  "en/cli/process",
+                  "en/cli/skill",
+                  "en/cli/memory-knowledge",
+                  "en/cli/chat"
+                ]
+              }
+            ]
+          },
+          {
+            "tab": "Releases",
+            "groups": [
+              {
+                "group": "Release Notes",
+                "pages": [
+                  "en/releases/overview",
+                  "en/releases/v2.0.8",
+                  "en/releases/v2.0.7",
+                  "en/releases/v2.0.6",
+                  "en/releases/v2.0.5",
+                  "en/releases/v2.0.4",
+                  "en/releases/v2.0.3",
+                  "en/releases/v2.0.2",
+                  "en/releases/v2.0.1",
+                  "en/releases/v2.0.0"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "language": "ja",
+        "tabs": [
+          {
+            "tab": "紹介",
+            "groups": [
+              {
+                "group": "概要",
+                "pages": [
+                  "ja/intro/index",
+                  "ja/intro/architecture",
+                  "ja/intro/features"
+                ]
+              }
+            ]
+          },
+          {
+            "tab": "クイックスタート",
+            "groups": [
+              {
+                "group": "インストール",
+                "pages": [
+                  "ja/guide/quick-start",
+                  "ja/guide/manual-install",
+                  "ja/guide/upgrade"
+                ]
+              }
+            ]
+          },
+          {
+            "tab": "モデル",
+            "groups": [
+              {
+                "group": "モデル設定",
+                "pages": [
+                  "ja/models/index",
+                  "ja/models/deepseek",
+                  "ja/models/minimax",
+                  "ja/models/claude",
+                  "ja/models/gemini",
+                  "ja/models/openai",
+                  "ja/models/glm",
+                  "ja/models/qwen",
+                  "ja/models/doubao",
+                  "ja/models/kimi",
+                  "ja/models/qianfan",
+                  "ja/models/linkai",
+                  "ja/models/coding-plan",
+                  "ja/models/custom"
+                ]
+              }
+            ]
+          },
+          {
+            "tab": "ツール",
+            "groups": [
+              {
+                "group": "ツールシステム",
+                "pages": [
+                  "ja/tools/index"
+                ]
+              },
+              {
+                "group": "内蔵ツール",
+                "pages": [
+                  "ja/tools/read",
+                  "ja/tools/write",
+                  "ja/tools/edit",
+                  "ja/tools/ls",
+                  "ja/tools/bash",
+                  "ja/tools/send",
+                  "ja/tools/memory",
+                  "ja/tools/env-config",
+                  "ja/tools/web-fetch",
+                  "ja/tools/scheduler"
+                ]
+              },
+              {
+                "group": "オプションツール",
+                "pages": [
+                  "ja/tools/web-search",
+                  "ja/tools/vision",
+                  "ja/tools/browser"
+                ]
+              },
+              {
+                "group": "MCP Tool",
+                "pages": [
+                  "ja/tools/mcp"
+                ]
+              }
+            ]
+          },
+          {
+            "tab": "スキル",
+            "groups": [
+              {
+                "group": "スキルシステム",
+                "pages": [
+                  "ja/skills/index",
+                  "ja/skills/install",
+                  "ja/skills/create",
+                  "ja/skills/hub"
+                ]
+              },
+              {
+                "group": "内蔵スキル",
+                "pages": [
+                  "ja/skills/skill-creator",
+                  "ja/skills/knowledge-wiki",
+                  "ja/skills/image-generation"
+                ]
+              }
+            ]
+          },
+          {
+            "tab": "メモリ",
+            "groups": [
+              {
+                "group": "メモリシステム",
+                "pages": [
+                  "ja/memory/index",
+                  "ja/memory/context",
+                  "ja/memory/deep-dream"
+                ]
+              }
+            ]
+          },
+          {
+            "tab": "ナレッジ",
+            "groups": [
+              {
+                "group": "ナレッジベース",
+                "pages": [
+                  "ja/knowledge/index"
+                ]
+              }
+            ]
+          },
+          {
+            "tab": "チャネル",
+            "groups": [
+              {
+                "group": "プラットフォーム",
+                "pages": [
+                  "ja/channels/weixin",
+                  "ja/channels/web",
+                  "ja/channels/feishu",
+                  "ja/channels/dingtalk",
+                  "ja/channels/wecom-bot",
+                  "ja/channels/qq",
+                  "ja/channels/wecom",
+                  "ja/channels/wechatmp"
+                ]
+              }
+            ]
+          },
+          {
+            "tab": "CLI",
+            "groups": [
+              {
+                "group": "コマンドシステム",
+                "pages": [
+                  "ja/cli/index",
+                  "ja/cli/process",
+                  "ja/cli/skill",
+                  "ja/cli/memory-knowledge",
+                  "ja/cli/general"
+                ]
+              }
+            ]
+          },
+          {
+            "tab": "リリース",
+            "groups": [
+              {
+                "group": "リリースノート",
+                "pages": [
+                  "ja/releases/overview",
+                  "ja/releases/v2.0.8",
+                  "ja/releases/v2.0.7",
+                  "ja/releases/v2.0.6",
+                  "ja/releases/v2.0.5",
+                  "ja/releases/v2.0.4",
+                  "ja/releases/v2.0.3",
+                  "ja/releases/v2.0.2",
+                  "ja/releases/v2.0.1",
+                  "ja/releases/v2.0.0"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

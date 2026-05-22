@@ -65,7 +65,7 @@ class AzureVoice(Voice):
             reply = Reply(ReplyType.TEXT, result.text)
         else:
             cancel_details = result.cancellation_details
-            logger.error("[Azure] voiceToText error, result={}, errordetails={}".format(result, cancel_details.error_details))
+            logger.error("[Azure] voiceToText error, result={}, errordetails={}".format(result, cancel_details))
             reply = Reply(ReplyType.ERROR, "抱歉，语音识别失败")
         return reply
 

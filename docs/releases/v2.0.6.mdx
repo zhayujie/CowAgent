@@ -1,0 +1,83 @@
+---
+title: v2.0.6
+description: CowAgent 2.0.6 - 知识库系统、梦境记忆蒸馏、上下文智能压缩、Web 控制台多会话及多项优化
+---
+
+## 项目正式更名为 CowAgent
+
+项目仓库正式从 `chatgpt-on-wechat` 更名为 **CowAgent**，演进为功能完备的 AI Agent 助理。
+
+- 新地址：[github.com/zhayujie/CowAgent](https://github.com/zhayujie/CowAgent)，旧地址 GitHub 会自动重定向
+- CLI 命令、配置文件、文档链接均保持兼容，无需额外操作
+
+## 📚 知识库系统
+
+新增个人知识库系统，Agent 可自主构建和维护结构化知识，并在对话中按需检索引用。
+
+- **索引驱动的自组织结构**：知识库采用 `knowledge/` 目录，按分类自动组织，每个知识页面为独立的 Markdown 文件
+- **自动写入**：向 Agent 发送文件、链接等知识，或在讨论中识别到有价值的知识时，自动创建或更新知识页面
+- **混合检索**：支持关键词全文搜索和向量语义检索，在对话中按需加载相关知识
+- **可视化**：支持文件树浏览和知识图谱可视化，文档内链接可直接跳转查看
+- **命令管理**：`/knowledge` 查看统计、`/knowledge list` 查看目录结构、`/knowledge on|off` 开关知识库
+
+<img src="https://cdn.link-ai.tech/doc/20260413105435.png" width="750" />
+
+相关文档：[知识库](https://docs.cowagent.ai/knowledge)
+
+Inspired by Karpathy's [LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f).
+
+## 🌙 梦境记忆蒸馏（Deep Dream）
+
+全新的记忆整理机制，每日自动将分散的对话记忆蒸馏为精炼的长期记忆：
+
+- **三层记忆流转**：对话上下文（短期）→ 天级记忆（中期）→ MEMORY.md（长期），形成完整的记忆生命周期
+- **自动蒸馏**：每日 23:55 定时执行，读取当天天级记忆和 MEMORY.md，通过 LLM 进行去重、合并、修剪，输出精炼的新版 MEMORY.md
+- **梦境日记**：每次蒸馏生成一篇叙事风格的梦境日记，记录整理过程的发现和洞察，存储在 `memory/dreams/` 目录
+- **手动触发**：支持 `/memory dream [N]` 手动触发，可指定整理天数（默认 3 天，最大 30 天），完成后在对话中通知结果
+- **Web 控制台**：记忆管理页面新增「梦境日记」tab，可浏览和查看所有梦境日记
+
+相关文档：[梦境蒸馏](https://docs.cowagent.ai/memory/deep-dream)
+
+<img src="https://cdn.link-ai.tech/doc/20260414120158.png" width="750" />
+
+## 🧠 上下文智能压缩
+
+上下文超出限制时将裁剪的部分通过 LLM 总结后异步注入，保持对话连贯性：
+
+- **LLM 异步摘要**：裁剪的消息由 LLM 总结为关键信息，同时写入天级记忆文件和注入保留的上下文
+- **多模型兼容**：优先使用主模型进行摘要，兼容 Claude、OpenAI、MiniMax 等不同模型的消息格式要求
+
+相关文档：[短期记忆](https://docs.cowagent.ai/memory/context)
+
+## 💬 Web 控制台升级
+
+Web 控制台多项功能增强：
+
+- **多会话管理**：支持创建和切换多个独立会话，侧边栏展示会话列表，支持会话标题自动生成和手动编辑
+- **密码保护**：支持为控制台设置登录密码，可通过 `web_console_password` 配置项控制
+- **深度思考**：支持在 Web 端展示模型的思考过程，可通过`enable_thinking` 配置项控制
+- **定时推送**：支持定时任务结果推送到 Web 控制台
+- **消息复制**：AI 回复支持一键复制原始 Markdown 内容
+
+## 🤖 模型相关
+
+- **视觉识别优化**：图片识别工具优先使用主模型，支持多模型厂商自动降级。相关文档：[视觉工具](https://docs.cowagent.ai/tools/vision)
+- **MiniMax 新模型**：新增 MiniMax-M2.7-highspeed 模型和 MiniMax TTS 语音合成支持。Thanks @octo-patch
+- **通义千问**：新增 qwen3.6-plus 模型支持
+
+## 🐛 其他优化与修复
+
+- **记忆提示词优化**：`MEMORY.md` 默认注入系统提示词，精细化记忆检索和写入的触发条件，增强主动写入能力
+- **系统提示词**：优化系统提示词的风格和语气引导
+- **浏览器工具**：增强隐式交互元素检测
+- **文件发送**：修复通用文件类型（tar.gz、zip 等）未能正确发送的问题。Thanks @6vision
+- **macOS 兼容**：修复网络预检超时兼容性问题。Thanks @Moliang Zhou
+- **Windows 兼容**：修复 Windows 下 PowerShell 兼容性、进程更新、终端编码等多项问题
+- **Python 3.13+**：修复 Python 3.13 及以上版本缺少 `legacy-cgi` 依赖的问题
+- **个人微信**：更新个人微信通道版本
+
+## 📦 升级方式
+
+源码部署可执行 `cow update` 或 `./run.sh update` 一键升级，或手动拉取代码后重启。详见 [更新升级文档](https://docs.cowagent.ai/guide/upgrade)。
+
+**发布日期**：2026.04.14 | [Full Changelog](https://github.com/zhayujie/CowAgent/compare/2.0.5...master)

@@ -1,0 +1,81 @@
+---
+title: DeepSeek
+description: DeepSeek model configuration
+---
+
+Option 1: Native integration (recommended):
+
+```json
+{
+  "model": "deepseek-v4-flash",
+  "deepseek_api_key": "YOUR_API_KEY"
+}
+```
+
+| Parameter | Description |
+| --- | --- |
+| `model` | Supports `deepseek-v4-flash` (default) and `deepseek-v4-pro` |
+| `deepseek_api_key` | Create at [DeepSeek Platform](https://platform.deepseek.com/api_keys) |
+| `deepseek_api_base` | Optional, defaults to `https://api.deepseek.com/v1`. Can be changed to a third-party proxy |
+
+## Model Selection
+
+| Model | Use Case |
+| --- | --- |
+| `deepseek-v4-flash` | Default: fast and cost-effective |
+| `deepseek-v4-pro` | Stronger on complex tasks |
+
+## Thinking Mode
+
+The V4 series (`deepseek-v4-flash` / `deepseek-v4-pro`) supports an explicit "thinking mode": the model emits a chain-of-thought (`reasoning_content`) before the final answer to improve answer quality.
+
+### Toggle
+
+Controlled by the global `enable_thinking` setting:
+
+```json
+{
+  "enable_thinking": true
+}
+```
+
+- `true`: thinking is on across all channels. The Web console renders the reasoning trace; IM channels (WeChat / WeCom / DingTalk / Feishu) don't render it but still benefit from higher answer quality.
+- `false`: thinking off, faster responses with lower first-token latency.
+
+### Reasoning Effort
+
+Under thinking mode, `reasoning_effort` controls how hard the model thinks:
+
+```json
+{
+  "enable_thinking": true,
+  "reasoning_effort": "high"
+}
+```
+
+| Value | Use Case |
+| --- | --- |
+| `high` (default) | Day-to-day agent tasks; balanced thinking depth and latency |
+| `max` | Complex coding, long-horizon planning, strict-constraint tasks. Deeper reasoning at the cost of more output tokens and higher latency |
+
+`reasoning_effort` only takes effect when `enable_thinking` is `true`. It is silently ignored on models that do not support thinking mode.
+
+### Notes
+
+- **Sampling parameters**: under thinking mode, `temperature`, `top_p`, `presence_penalty`, and `frequency_penalty` are silently ignored by the server (no error). CowAgent skips sending them automatically.
+- **Multi-turn tool calls**: once the history contains any tool-call turn, DeepSeek requires `reasoning_content` on every assistant message. CowAgent handles the round-trip automatically, including across mid-session toggles of the thinking switch.
+
+<Tip>
+  Start with `deepseek-v4-flash`; switch to `deepseek-v4-pro` for harder tasks; enable `enable_thinking` when you want deeper reasoning.
+</Tip>
+
+Option 2: OpenAI-compatible configuration:
+
+```json
+{
+  "model": "deepseek-v4-flash",
+  "bot_type": "openai",
+  "open_ai_api_key": "YOUR_API_KEY",
+  "open_ai_api_base": "https://api.deepseek.com/v1"
+}
+```

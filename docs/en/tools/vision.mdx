@@ -1,0 +1,73 @@
+---
+title: vision - Image Analysis
+description: Analyze image content (recognition, description, OCR, etc.)
+---
+
+Analyze local images or image URLs using Vision API. Supports content description, text extraction (OCR), object recognition, and more.
+
+## Model Selection
+
+The vision tool uses a multi-level auto-selection strategy with automatic fallback — no manual configuration required:
+
+1. **Main model** — uses the currently configured main model for image recognition (zero extra cost)
+2. **Other configured models** — auto-discovers other models with configured API keys as alternatives
+3. **OpenAI** — uses `open_ai_api_key` to call gpt-4.1-mini
+4. **LinkAI** — uses `linkai_api_key` to call LinkAI vision service
+
+When `use_linkai=true`, LinkAI is promoted to the highest priority.
+
+If the current provider fails, the tool automatically tries the next one until it succeeds or all fail.
+
+### Supported Models
+
+| Vendor | Vision Model | Notes |
+| --- | --- | --- |
+| OpenAI / Compatible | Main model | All OpenAI-compatible multimodal models |
+| Baidu Qianfan | Main model | Multimodal main models (e.g. `ernie-5.1`) handle images directly; falls back to `ernie-4.5-turbo-vl` for text-only main models |
+| Qwen (DashScope) | Main model | Via MultiModalConversation API |
+| Claude | Main model | Anthropic native image format |
+| Gemini | Main model | inlineData format |
+| Doubao | Main model | doubao-seed-2-0 series natively supported |
+| Kimi (Moonshot) | Main model | kimi-k2.6, kimi-k2.5 natively supported |
+| ZhipuAI | glm-5v-turbo | Always uses dedicated vision model |
+| MiniMax | MiniMax-Text-01 | Always uses dedicated vision model |
+
+<Note>
+  ZhipuAI and MiniMax text models do not support image understanding, so their dedicated vision models are always used automatically.
+</Note>
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `image` | string | Yes | Local file path or HTTP(S) image URL |
+| `question` | string | Yes | Question to ask about the image |
+
+Supported image formats: jpg, jpeg, png, gif, webp
+
+## Custom Configuration
+
+To specify a particular model for the vision tool, add to `config.json`:
+
+```json
+{
+    "tool": {
+        "vision": {
+            "model": "ernie-4.5-turbo-vl"
+        }
+    }
+}
+```
+
+In most cases no configuration is needed. The tool works automatically as long as the main model supports multimodal input or any vision-capable API key is configured.
+
+## Use Cases
+
+- Describe image content
+- Extract text from images (OCR)
+- Identify objects, colors, scenes
+- Analyze screenshots and scanned documents
+
+<Note>
+  Images larger than 1MB are automatically compressed (max edge 1536px). All images (including remote URLs) are converted to base64 for transmission to ensure compatibility with all model backends.
+</Note>

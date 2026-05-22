@@ -1,0 +1,36 @@
+---
+title: v2.0.1
+description: CowAgent 2.0.1 - 組み込み Web Search、スマートコンテキスト管理、複数の修正
+---
+
+**リリース日**: 2026.02.27 | [全変更履歴](https://github.com/zhayujie/CowAgent/compare/2.0.0..2.0.1)
+
+## 新機能
+
+- **組み込み Web Search ツール**: Web 検索を Agent の組み込みツールとして統合し、判断コストを削減 ([4f0ea5d](https://github.com/zhayujie/CowAgent/commit/4f0ea5d7568d61db91ff69c91c429e785fd1b1c2))
+- **Claude Opus 4.6 モデル対応**: Claude Opus 4.6 モデルのサポートを追加 ([#2661](https://github.com/zhayujie/CowAgent/pull/2661))
+- **企业微信の画像認識**: 企业微信チャネルでの画像メッセージ認識をサポート ([#2667](https://github.com/zhayujie/CowAgent/pull/2667))
+
+## 改善
+
+- **スマートコンテキスト管理**: インテリジェントなコンテキストトリミング戦略により、チャットコンテキストのオーバーフローを解決し、トークン制限超過を防止 ([cea7fb7](https://github.com/zhayujie/CowAgent/commit/cea7fb7490c53454602bf05955a0e9f059bcf0fd), [8acf2db](https://github.com/zhayujie/CowAgent/commit/8acf2dbdfe713b84ad74b761b7f86674b1c1904d)) [#2663](https://github.com/zhayujie/CowAgent/issues/2663)
+- **ランタイム情報の動的更新**: 動的関数によるシステムプロンプト内のタイムスタンプおよびその他のランタイム情報の自動更新 ([#2655](https://github.com/zhayujie/CowAgent/pull/2655), [#2657](https://github.com/zhayujie/CowAgent/pull/2657))
+- **Skill プロンプトの最適化**: Skill システムプロンプト生成を改善し、ツールの説明を簡素化して Agent のパフォーマンスを向上 ([6c21833](https://github.com/zhayujie/CowAgent/commit/6c218331b1f1208ea8be6bf226936d3b556ade3e))
+- **GLM カスタム API Base URL**: GLM モデルのカスタム API Base URL をサポート ([#2660](https://github.com/zhayujie/CowAgent/pull/2660))
+- **起動スクリプトの最適化**: `run.sh` スクリプトのインタラクションと設定フローを改善 ([#2656](https://github.com/zhayujie/CowAgent/pull/2656))
+- **判断ステップのログ記録**: デバッグ用の Agent 判断ステップログを追加 ([cb303e6](https://github.com/zhayujie/CowAgent/commit/cb303e6109c50c8dfef1f5e6c1ec47223bf3cd11))
+
+## バグ修正
+
+- **Scheduler の記憶喪失**: Scheduler ディスパッチャーによる記憶喪失を修正 ([a77a874](https://github.com/zhayujie/CowAgent/commit/a77a8741b500a408c6f5c8868856fb4b018fe9db))
+- **空のツール呼び出しと長い結果**: 空のツール呼び出しおよび過度に長いツール結果の処理を修正 ([0542700](https://github.com/zhayujie/CowAgent/commit/0542700f9091ebb08c1a56103b0f0f45f24aa621))
+- **OpenAI Function Call**: OpenAI モデルとの Function Call 互換性を修正 ([158c87a](https://github.com/zhayujie/CowAgent/commit/158c87ab8b05bae054cc1b4eacdbb64fc1062ba9))
+- **Claude ツール名フィールド**: Claude モデルのレスポンスから余分なツール名フィールドを削除 ([eec10cb](https://github.com/zhayujie/CowAgent/commit/eec10cb5db6a3d5bc12ef606606532237d2c5f6e))
+- **MiniMax 推論**: MiniMax モデルの推論コンテンツ処理を最適化し、思考プロセスの出力を非表示化 ([c72cda3](https://github.com/zhayujie/CowAgent/commit/c72cda33864bd1542012ee6e0a8bd8c6c88cb5ed), [72b1cac](https://github.com/zhayujie/CowAgent/commit/72b1cacea1ba0d1f3dedacbab2e088e98fd7e172))
+- **GLM 思考プロセス**: GLM モデルの思考プロセス表示を非表示化 ([72b1cac](https://github.com/zhayujie/CowAgent/commit/72b1cacea1ba0d1f3dedacbab2e088e98fd7e172))
+- **飞书の接続と SSL**: 飞书チャネルの SSL 証明書エラーおよび接続問題を修正 ([229b14b](https://github.com/zhayujie/CowAgent/commit/229b14b6fcabe7123d53cab1dea39f38dab26d6d), [8674421](https://github.com/zhayujie/CowAgent/commit/867442155e7f095b4f38b0856f8c1d8312b5fcf7))
+- **model_type バリデーション**: 非文字列の `model_type` による `AttributeError` を修正 ([#2666](https://github.com/zhayujie/CowAgent/pull/2666))
+
+## プラットフォーム互換性
+
+- **Windows 互換性**: 複数のツールモジュールにおける Windows でのパス処理、ファイルエンコーディング、および `os.getuid()` の利用不可問題を修正 ([051ffd7](https://github.com/zhayujie/CowAgent/commit/051ffd78a372f71a967fd3259e37fe19131f83cf), [5264f7c](https://github.com/zhayujie/CowAgent/commit/5264f7ce18360ee4db5dcb4ebe67307977d40014))

@@ -1,0 +1,123 @@
+---
+title: プロセス管理
+description: cow コマンドで CowAgent プロセスのライフサイクルを管理
+---
+
+プロセス管理コマンドは CowAgent バックグラウンドプロセスのライフサイクルを制御します。これらのコマンドはターミナルでのみ使用可能です。
+
+## start
+
+CowAgent サービスを起動します。デフォルトではバックグラウンドデーモンとして実行され、自動的にログを表示します。
+
+```bash
+cow start
+```
+
+**オプション：**
+
+| オプション | 説明 |
+| --- | --- |
+| `-f`, `--foreground` | フォアグラウンドで実行（デーモンとして起動しない） |
+| `--no-logs` | 起動後にログを自動表示しない |
+
+## stop
+
+実行中の CowAgent サービスを停止します。
+
+```bash
+cow stop
+```
+
+## restart
+
+CowAgent サービスを再起動します（停止してから起動）。
+
+```bash
+cow restart
+```
+
+**オプション：**
+
+| オプション | 説明 |
+| --- | --- |
+| `--no-logs` | 再起動後にログを自動表示しない |
+
+## update
+
+コードを更新してサービスを再起動します。自動的に以下を実行します：
+
+1. 最新コードをプル（`git pull`）
+2. 現在のサービスを停止
+3. Python 依存パッケージを更新
+4. CLI を再インストール
+5. サービスを起動
+
+```bash
+cow update
+```
+
+<Warning>
+  `git pull` が失敗した場合（ローカルの未コミットの変更がある場合など）、更新は中止され、サービスには影響しません。
+</Warning>
+
+## status
+
+CowAgent サービスの実行状態を確認します。プロセス情報、バージョン、現在のモデルとチャネルの設定を含みます。
+
+```bash
+cow status
+```
+
+## logs
+
+サービスログを表示します。
+
+```bash
+cow logs
+```
+
+**オプション：**
+
+| オプション | 説明 | デフォルト値 |
+| --- | --- | --- |
+| `-f`, `--follow` | ログ出力を継続的に追跡 | いいえ |
+| `-n`, `--lines` | 最近の N 行を表示 | 50 |
+
+例：
+
+```bash
+# 最近の100行を表示
+cow logs -n 100
+
+# ログを継続的に追跡
+cow logs -f
+```
+
+## install-browser
+
+[ブラウザツール](/ja/tools/browser)のために Playwright と Chromium ブラウザをインストールします。
+
+```bash
+cow install-browser
+```
+
+<Tip>
+  ブラウザツール（Web ブラウジング、スクリーンショットなど）を使用する場合にのみ必要です。
+</Tip>
+
+## run.sh との互換性
+
+Cow CLI がインストールされていない場合は、`run.sh` でサービスを管理できます：
+
+| cow コマンド | run.sh 相当 |
+| --- | --- |
+| `cow start` | `./run.sh start` |
+| `cow stop` | `./run.sh stop` |
+| `cow restart` | `./run.sh restart` |
+| `cow update` | `./run.sh update` |
+| `cow status` | `./run.sh status` |
+| `cow logs` | `./run.sh logs` |
+
+<Note>
+  `cow` コマンドの使用を推奨します。よりシンプルな構文と豊富な機能を提供します。ワンクリックインストールスクリプトで自動的にインストールされます。
+</Note>

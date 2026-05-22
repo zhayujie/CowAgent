@@ -1,0 +1,32 @@
+---
+title: web_search - 联网搜索
+description: 搜索互联网获取实时信息
+---
+
+搜索互联网获取实时信息、新闻、研究等内容。支持两个搜索后端，自动选择可用的后端。
+
+## 依赖
+
+需要配置至少一个搜索 API Key（通过 `env_config` 工具或工作空间 `.env` 文件配置）：
+
+| 后端 | 环境变量 | 优先级 | 获取方式 |
+| --- | --- | --- | --- |
+| 博查搜索 | `BOCHA_API_KEY` | 优先使用 | [博查开放平台](https://open.bochaai.com/) |
+| LinkAI 搜索 | `LINKAI_API_KEY` | 可选 | [LinkAI 控制台](https://link-ai.tech/console/interface) |
+
+## 参数
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `query` | string | 是 | 搜索关键词 |
+| `count` | integer | 否 | 返回结果数量（1-50，默认 10） |
+| `freshness` | string | 否 | 时间范围：`noLimit`、`oneDay`、`oneWeek`、`oneMonth`、`oneYear`，或日期范围如 `2025-01-01..2025-02-01` |
+| `summary` | boolean | 否 | 是否返回页面摘要（默认 false） |
+
+## 使用场景
+
+当用户询问最新信息、需要事实核查或获取实时数据时，Agent 会自动调用此工具。
+
+<Note>
+  如果未配置任何搜索 API Key，该工具不会被加载。
+</Note>

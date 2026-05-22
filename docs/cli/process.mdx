@@ -1,0 +1,134 @@
+---
+title: 进程管理
+description: 使用 cow 命令管理 CowAgent 进程的启动、停止、重启、更新等操作
+---
+
+进程管理命令用于控制 CowAgent 后台进程的生命周期。这些命令仅在终端中可用。
+
+## start
+
+启动 CowAgent 服务。默认以后台进程方式运行，并自动跟踪日志输出。
+
+```bash
+cow start
+```
+
+**选项：**
+
+| 选项 | 说明 |
+| --- | --- |
+| `-f`, `--foreground` | 前台运行，不以后台守护进程方式启动 |
+| `--no-logs` | 启动后不自动跟踪日志 |
+
+## stop
+
+停止正在运行的 CowAgent 服务。
+
+```bash
+cow stop
+```
+
+## restart
+
+重启 CowAgent 服务（先停止再启动）。
+
+```bash
+cow restart
+```
+
+**选项：**
+
+| 选项 | 说明 |
+| --- | --- |
+| `--no-logs` | 重启后不自动跟踪日志 |
+
+## update
+
+更新代码并重启服务。自动执行以下流程：
+
+1. 拉取最新代码（`git pull`）
+2. 停止当前服务
+3. 更新 Python 依赖
+4. 重新安装 CLI
+5. 启动服务
+
+```bash
+cow update
+```
+
+<Warning>
+  如果 `git pull` 失败（如存在本地未提交的修改），更新会中止，服务不受影响。
+</Warning>
+
+## status
+
+查看 CowAgent 服务运行状态，包括进程信息、版本号、当前配置的模型和通道。
+
+```bash
+cow status
+```
+
+输出示例：
+
+```
+🐮 CowAgent Status
+  Status:   ● Running (PID: 12345)
+  Version:  2.0.4
+  Channel:  web
+  Model:    MiniMax-M2.5
+  Mode:     agent
+```
+
+## logs
+
+查看服务日志。
+
+```bash
+cow logs
+```
+
+**选项：**
+
+| 选项 | 说明 | 默认值 |
+| --- | --- | --- |
+| `-f`, `--follow` | 持续跟踪日志输出 | 否 |
+| `-n`, `--lines` | 显示最近 N 行 | 50 |
+
+示例：
+
+```bash
+# 查看最近 100 行日志
+cow logs -n 100
+
+# 持续跟踪日志
+cow logs -f
+```
+
+## install-browser
+
+安装 Playwright 和 Chromium 浏览器，用于启用 [浏览器工具](/tools/browser)。
+
+```bash
+cow install-browser
+```
+
+<Tip>
+  仅在需要使用浏览器工具（如网页浏览、截图等）时才需要安装。
+</Tip>
+
+## run.sh 兼容
+
+如果未安装 Cow CLI，也可以使用 `run.sh` 脚本管理服务：
+
+| cow 命令 | run.sh 等效命令 |
+| --- | --- |
+| `cow start` | `./run.sh start` |
+| `cow stop` | `./run.sh stop` |
+| `cow restart` | `./run.sh restart` |
+| `cow update` | `./run.sh update` |
+| `cow status` | `./run.sh status` |
+| `cow logs` | `./run.sh logs` |
+
+<Note>
+  推荐使用 `cow` 命令，它提供更简洁的语法和更丰富的功能。通过一键安装脚本部署时 `cow` 命令会自动安装。
+</Note>

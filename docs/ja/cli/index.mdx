@@ -1,0 +1,94 @@
+---
+title: コマンド概要
+description: CowAgent コマンドシステム — ターミナル CLI とチャットコマンド
+---
+
+CowAgent は2つのコマンド操作方法を提供しています：
+
+- **ターミナル CLI** — システムターミナルで `cow <コマンド>` を実行し、サービス管理やスキル管理を行います
+- **チャットコマンド** — 会話で `/<コマンド>` または `cow <コマンド>` を入力し、ステータス確認、スキル管理、設定変更を行います
+
+## Cow CLI
+
+ワンクリックインストールスクリプトでデプロイすると、`cow` コマンドが自動的に利用可能になります。手動インストールの場合は以下を実行してください：
+
+```bash
+pip install -e .
+```
+
+インストール後、任意の場所で `cow` コマンドを使用できます：
+
+```bash
+cow help
+```
+
+出力例：
+
+```
+🐮 CowAgent CLI
+
+Usage: cow <command>
+
+Service:
+  start     Start the CowAgent service
+  stop      Stop the CowAgent service
+  restart   Restart the CowAgent service
+  update    Update code and restart service
+  status    Show service status
+  logs      View service logs
+
+Skills:
+  skill     Manage skills (list / search / install / uninstall ...)
+
+Memory & Knowledge:
+  memory    Memory distillation (dream)
+  knowledge View knowledge base stats and structure
+
+Others:
+  help      Show this help message
+  version   Show version
+```
+
+## チャットコマンド
+
+Web コンソールや接続されたチャネルの会話で `/` を入力すると、コマンドの候補が表示されます。使用可能なコマンド：
+
+| コマンド | 説明 |
+| --- | --- |
+| `/help` | コマンドヘルプを表示 |
+| `/status` | サービスの状態と設定を表示 |
+| `/config` | 実行時設定の表示・変更 |
+| `/skill` | スキル管理（インストール、アンインストール、有効化、無効化など） |
+| `/memory dream [N]` | 記憶蒸留を手動トリガー（デフォルト 3 日、最大 30） |
+| `/knowledge` | ナレッジベースの統計情報を表示 |
+| `/knowledge list` | ナレッジベースのディレクトリ構造を表示 |
+| `/knowledge on\|off` | ナレッジベースの有効化・無効化 |
+| `/context` | 現在のセッションのコンテキスト情報を表示 |
+| `/context clear` | 現在のセッションのコンテキストをクリア |
+| `/logs` | 最近のログを表示 |
+| `/version` | バージョン番号を表示 |
+
+<Tip>
+  `/start`、`/stop`、`/restart` などのサービス管理コマンドは、プロセス操作を伴うため、ターミナルでの使用を案内します。
+</Tip>
+
+## コマンド対応表
+
+| コマンド | ターミナル (`cow`) | チャット (`/`) |
+| --- | :---: | :---: |
+| help | ✓ | ✓ |
+| version | ✓ | ✓ |
+| status | ✓ | ✓ |
+| logs | ✓ | ✓ |
+| config | ✗ | ✓ |
+| context | — | ✓ |
+| memory（サブコマンド） | ✗ | ✓ |
+| knowledge（サブコマンド） | ✓ | ✓ |
+| skill（サブコマンド） | ✓ | ✓ |
+| start / stop / restart | ✓ | ✗ |
+| update | ✓ | ✗ |
+| install-browser | ✓ | ✗ |
+
+<Note>
+  `context` はターミナルではチャットでの使用を案内するのみです。`config` はチャットでのみ利用可能です。
+</Note>

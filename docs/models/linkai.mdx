@@ -1,0 +1,21 @@
+---
+title: LinkAI
+description: 通过 LinkAI 平台统一接入多种模型
+---
+
+通过 [LinkAI](https://link-ai.tech) 平台可灵活切换 OpenAI、Claude、Gemini、DeepSeek、MiniMax、Qwen、Kimi 等多种模型，并支持知识库、工作流、插件等 Agent 能力。
+
+```json
+{
+  "use_linkai": true,
+  "linkai_api_key": "YOUR_API_KEY"
+}
+```
+
+| 参数 | 说明 |
+| --- | --- |
+| `use_linkai` | 设为 `true` 启用 LinkAI 接口 |
+| `linkai_api_key` | 在 [控制台](https://link-ai.tech/console/interface) 创建 |
+| `model` | 留空则使用智能体默认模型，可在平台中灵活切换，[模型列表](https://link-ai.tech/console/models) 中的全部模型均可使用 |
+
+参考 [接口文档](https://docs.link-ai.tech/platform/api) 了解更多。

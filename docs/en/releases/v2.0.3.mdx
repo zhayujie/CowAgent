@@ -1,0 +1,91 @@
+---
+title: v2.0.3
+description: CowAgent 2.0.3 - WeCom Smart Bot and QQ channels, Web Console file handling, memory system upgrade
+---
+
+## 🔌 New Channels
+
+### WeCom Smart Bot
+
+Added the WeCom Smart Bot (`wecom_bot`) channel with streaming card output, support for receiving and replying to text and image messages, and full configuration through the Web Console.
+
+Documentation: [WeCom Smart Bot](https://docs.cowagent.ai/en/channels/wecom-bot).
+
+Related commits: [d4480b6](https://github.com/zhayujie/CowAgent/commit/d4480b6), [a42f31f](https://github.com/zhayujie/CowAgent/commit/a42f31f), [4ecd4df](https://github.com/zhayujie/CowAgent/commit/4ecd4df), [8b45d6c](https://github.com/zhayujie/CowAgent/commit/8b45d6c)
+
+### QQ Channel
+
+Added the QQ official bot (`qq`) channel with support for text and image messages in both private chats and group chats.
+
+Documentation: [QQ Bot](https://docs.cowagent.ai/en/channels/qq).
+
+Related commits: [005a0e1](https://github.com/zhayujie/CowAgent/commit/005a0e1), [a4d54f5](https://github.com/zhayujie/CowAgent/commit/a4d54f5)
+
+## 🖥️ Web Console File Input and Processing
+
+The Web Console chat UI now supports file and image uploads — files can be sent directly to the agent for processing. The Read tool gains parsing support for Office documents (Word, Excel, PPT).
+
+Related commits: [30c6d9b](https://github.com/zhayujie/CowAgent/commit/30c6d9b)
+
+## 🤖 New Models
+
+- **GPT-5.4 Series**: Added `gpt-5.4`, `gpt-5.4-mini`, `gpt-5.4-nano` ([1623deb](https://github.com/zhayujie/CowAgent/commit/1623deb))
+- **Gemini 3.1 Flash Lite Preview**: Added `gemini-3.1-flash-lite-preview` ([ba915f2](https://github.com/zhayujie/CowAgent/commit/ba915f2))
+
+## 💰 Coding Plan Support
+
+Added integration with vendor Coding Plan (monthly programming subscription) tiers via the unified OpenAI-compatible path. Supported vendors include Aliyun, MiniMax, Zhipu GLM, Kimi, and Volcengine.
+
+See [Coding Plan docs](https://docs.cowagent.ai/en/models/coding-plan) for detailed configuration.
+
+## 🧠 Memory System Upgrade
+
+Memory flush improvements:
+
+- Use the LLM to summarize out-of-window conversations into compact daily memory entries
+- Summarization runs asynchronously on a background thread, never blocking replies
+- Smarter batch trimming policy reduces flush frequency
+- Daily scheduled flush as a safety net for low-activity scenarios
+- Fixed context-memory loss issues
+
+Related commits: [022c13f](https://github.com/zhayujie/CowAgent/commit/022c13f), [c116235](https://github.com/zhayujie/CowAgent/commit/c116235)
+
+## 🔧 Tool Refactoring
+
+- **Image Vision**: Image recognition (Vision) is refactored from a Skill into a built-in Tool with a dedicated Vision Provider configuration, improving stability and maintainability ([a50fafa](https://github.com/zhayujie/CowAgent/commit/a50fafa), [3b8b562](https://github.com/zhayujie/CowAgent/commit/3b8b562))
+- **Web Fetch**: Web fetch is refactored from a Skill into a built-in Tool with support for downloading and parsing remote documents (PDF, Word, Excel, PPT) ([ccb9030](https://github.com/zhayujie/CowAgent/commit/ccb9030), [fa61744](https://github.com/zhayujie/CowAgent/commit/fa61744))
+
+## 🐳 Docker Deployment Improvements
+
+- **Config Template Alignment**: `docker-compose.yml` env vars aligned with `config-template.json`, covering full model API key and Agent settings
+- **Web Console Port Mapping**: Added `9899` port mapping so the Web Console is reachable in browser after Docker deployment
+- **Hot Config Reload**: Bot API key and API base are now read at request time — changes from the Web Console take effect without restart
+- **Workspace Persistence**: Added a `./cow` volume mount so agent workspace data (memories, persona, skills, etc.) persists across container rebuilds and upgrades
+
+## ⚡ Performance Improvements
+
+- **Faster Startup**: The Feishu channel imports its dependencies lazily, avoiding a 4–10s startup delay ([924dc79](https://github.com/zhayujie/CowAgent/commit/924dc79))
+- **Channel Stability**: Improved channel connection stability and added env-var support for channel configuration ([f1c04bc](https://github.com/zhayujie/CowAgent/commit/f1c04bc), [46d97fd](https://github.com/zhayujie/CowAgent/commit/46d97fd))
+
+## 🐛 Bug Fixes
+
+- **bot_type Propagation**: Fixed `bot_type` propagation under Agent mode ([#2691](https://github.com/zhayujie/CowAgent/pull/2691)) Thanks [@Weikjssss](https://github.com/Weikjssss)
+- **bot_type Resolution Priority**: Adjusted `bot_type` resolution priority under Agent mode ([#2692](https://github.com/zhayujie/CowAgent/pull/2692)) Thanks [@6vision](https://github.com/6vision)
+- **Zhipu Config**: Fixed Zhipu `bot_type` naming, Web Console persistence, and regex escaping ([#2693](https://github.com/zhayujie/CowAgent/pull/2693)) Thanks [@6vision](https://github.com/6vision)
+- **OpenAI-Compat Layer**: Unified error handling via the `openai_compat` layer ([#2688](https://github.com/zhayujie/CowAgent/pull/2688)) Thanks [@JasonOA888](https://github.com/JasonOA888)
+- **OpenAI-Compat Migration**: Completed the `openai_compat` migration across all model bots ([#2689](https://github.com/zhayujie/CowAgent/pull/2689))
+- **Gemini Tool Calling**: Fixed tool-call matching for Gemini ([eda82ba](https://github.com/zhayujie/CowAgent/commit/eda82ba))
+- **Session Concurrency**: Fixed race conditions in concurrent session scenarios ([9879878](https://github.com/zhayujie/CowAgent/commit/9879878))
+- **History Recovery**: Fixed incomplete history recovery — only user/assistant text messages are restored, tool calls are stripped ([b788a3d](https://github.com/zhayujie/CowAgent/commit/b788a3d), [a33ce97](https://github.com/zhayujie/CowAgent/commit/a33ce97))
+- **Feishu Group Chat**: Removed the `bot_name` dependency for Feishu group chats ([b641bff](https://github.com/zhayujie/CowAgent/commit/b641bff))
+- **Safari Compatibility**: Fixed an IME Enter key issue that mistakenly sent messages on Safari ([0687916](https://github.com/zhayujie/CowAgent/commit/0687916))
+- **Windows Compatibility**: Fixed bash-style `$VAR` to `%VAR%` env-var conversion on Windows ([7c67513](https://github.com/zhayujie/CowAgent/commit/7c67513))
+- **MiniMax Params**: Added a `max_tokens` cap for MiniMax models ([1767413](https://github.com/zhayujie/CowAgent/commit/1767413))
+- **.gitignore**: Added Python directory ignore rules ([#2683](https://github.com/zhayujie/CowAgent/pull/2683)) Thanks [@pelioo](https://github.com/pelioo)
+- **AGENT.md Proactive Evolution**: Improved the system prompt guidance around AGENT.md — instead of waiting for explicit user edits, the agent now proactively detects persona/style shifts in the conversation and updates AGENT.md accordingly
+
+## 📦 Upgrade
+
+Run `./run.sh update` for a one-click upgrade, or manually pull the latest code and restart. See [Upgrade Guide](https://docs.cowagent.ai/en/guide/upgrade) for details.
+
+**Release Date**: 2026.03.18 | [Full Changelog](https://github.com/zhayujie/CowAgent/compare/2.0.2...2.0.3)

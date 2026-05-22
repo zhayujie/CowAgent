@@ -1,0 +1,36 @@
+---
+title: v2.0.1
+description: CowAgent 2.0.1 - 内置 Web Search、智能上下文管理、多项修复
+---
+
+**发布日期**：2026.02 | [GitHub Release](https://github.com/zhayujie/CowAgent/releases/tag/2.0.1) | [Full Changelog](https://github.com/zhayujie/CowAgent/compare/2.0.0..2.0.1)
+
+## 新特性
+
+- **内置 Web Search 工具**：将网络搜索作为 Agent 内置工具集成，降低决策成本 ([4f0ea5d](https://github.com/zhayujie/CowAgent/commit/4f0ea5d7568d61db91ff69c91c429e785fd1b1c2))
+- **Claude Opus 4.6 模型支持**：新增对 Claude Opus 4.6 模型的支持 ([#2661](https://github.com/zhayujie/CowAgent/pull/2661))
+- **企业微信图片消息识别**：支持企业微信渠道的图片消息识别功能 ([#2667](https://github.com/zhayujie/CowAgent/pull/2667))
+
+## 优化
+
+- **智能上下文管理**：解决聊天上下文溢出问题，新增智能上下文裁剪策略，防止 token 超限 ([cea7fb7](https://github.com/zhayujie/CowAgent/commit/cea7fb7490c53454602bf05955a0e9f059bcf0fd), [8acf2db](https://github.com/zhayujie/CowAgent/commit/8acf2dbdfe713b84ad74b761b7f86674b1c1904d)) [#2663](https://github.com/zhayujie/CowAgent/issues/2663)
+- **运行时信息动态更新**：通过动态函数方案实现系统提示词中时间戳等运行时信息的自动更新 ([#2655](https://github.com/zhayujie/CowAgent/pull/2655), [#2657](https://github.com/zhayujie/CowAgent/pull/2657))
+- **Skill 提示词优化**：改进 Skill 系统提示词生成逻辑，简化工具描述，提升 Agent 表现 ([6c21833](https://github.com/zhayujie/CowAgent/commit/6c218331b1f1208ea8be6bf226936d3b556ade3e))
+- **智谱 AI 自定义 API Base URL**：支持智谱 AI 配置自定义 API Base URL ([#2660](https://github.com/zhayujie/CowAgent/pull/2660))
+- **启动脚本优化**：改进 `run.sh` 脚本的交互体验和配置流程 ([#2656](https://github.com/zhayujie/CowAgent/pull/2656))
+- **决策轮次日志**：新增 Agent 决策轮次的日志记录，便于调试 ([cb303e6](https://github.com/zhayujie/CowAgent/commit/cb303e6109c50c8dfef1f5e6c1ec47223bf3cd11))
+
+## 问题修复
+
+- **定时任务记忆丢失**：修复 Scheduler 调度器导致的记忆丢失问题 ([a77a874](https://github.com/zhayujie/CowAgent/commit/a77a8741b500a408c6f5c8868856fb4b018fe9db))
+- **空工具调用与超长结果**：修复空 tool calls 及过长工具返回结果的异常处理 ([0542700](https://github.com/zhayujie/CowAgent/commit/0542700f9091ebb08c1a56103b0f0f45f24aa621))
+- **OpenAI Function Call**：修复 OpenAI 模型的 function call 调用兼容性问题 ([158c87a](https://github.com/zhayujie/CowAgent/commit/158c87ab8b05bae054cc1b4eacdbb64fc1062ba9))
+- **Claude 工具名字段**：移除 Claude 模型响应中多余的 tool name 字段 ([eec10cb](https://github.com/zhayujie/CowAgent/commit/eec10cb5db6a3d5bc12ef606606532237d2c5f6e))
+- **MiniMax 推理优化**：优化 MiniMax 模型 reasoning content 处理，隐藏思考过程输出 ([c72cda3](https://github.com/zhayujie/CowAgent/commit/c72cda33864bd1542012ee6e0a8bd8c6c88cb5ed), [72b1cac](https://github.com/zhayujie/CowAgent/commit/72b1cacea1ba0d1f3dedacbab2e088e98fd7e172))
+- **智谱 AI 思考过程**：隐藏智谱 AI 模型的思考过程展示 ([72b1cac](https://github.com/zhayujie/CowAgent/commit/72b1cacea1ba0d1f3dedacbab2e088e98fd7e172))
+- **飞书连接与证书**：修复飞书渠道的 SSL 证书错误和连接异常问题 ([229b14b](https://github.com/zhayujie/CowAgent/commit/229b14b6fcabe7123d53cab1dea39f38dab26d6d), [8674421](https://github.com/zhayujie/CowAgent/commit/867442155e7f095b4f38b0856f8c1d8312b5fcf7))
+- **model_type 类型校验**：修复非字符串 `model_type` 导致的 `AttributeError` ([#2666](https://github.com/zhayujie/CowAgent/pull/2666))
+
+## 平台兼容
+
+- **Windows 兼容性适配**：修复 Windows 平台下路径处理、文件编码及 `os.getuid()` 不可用等问题，涉及多个工具模块 ([051ffd7](https://github.com/zhayujie/CowAgent/commit/051ffd78a372f71a967fd3259e37fe19131f83cf), [5264f7c](https://github.com/zhayujie/CowAgent/commit/5264f7ce18360ee4db5dcb4ebe67307977d40014))

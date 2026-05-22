@@ -1,0 +1,139 @@
+---
+title: Coding Plan
+description: Coding Plan model configuration
+---
+
+> Coding Plan is a monthly subscription package offered by various providers, ideal for high-frequency Agent usage. CowAgent supports all Coding Plan providers via OpenAI-compatible mode.
+
+<Note>
+  Coding Plan API Base and API Key are usually separate from the standard pay-as-you-go ones. Please obtain them from each provider's platform.
+</Note>
+
+## General Configuration
+
+All providers can be accessed via the OpenAI-compatible protocol, and can be quickly configured through the web console. Set the model provider to **OpenAI**, select a custom model and enter the model code, then fill in the corresponding provider's API Base and API Key:
+
+<img src="https://cdn.link-ai.tech/doc/20260318113134.png" width="800"/>
+
+You can also configure directly in `config.json`:
+
+```json
+{
+  "bot_type": "openai",
+  "model": "MODEL_NAME",
+  "open_ai_api_base": "PROVIDER_CODING_PLAN_API_BASE",
+  "open_ai_api_key": "YOUR_API_KEY"
+}
+```
+
+| Parameter | Description |
+| --- | --- |
+| `bot_type` | Must be `openai` (OpenAI-compatible mode) |
+| `model` | Model name supported by the provider |
+| `open_ai_api_base` | Provider's Coding Plan API Base URL |
+| `open_ai_api_key` | Provider's Coding Plan API Key |
+
+---
+
+## Alibaba Cloud
+
+```json
+{
+  "bot_type": "openai",
+  "model": "qwen3.5-plus",
+  "open_ai_api_base": "https://coding.dashscope.aliyuncs.com/v1",
+  "open_ai_api_key": "YOUR_API_KEY"
+}
+```
+
+| Parameter | Description |
+| --- | --- |
+| `model` | `qwen3.5-plus`, `qwen3-max-2026-01-23`, `qwen3-coder-next`, `qwen3-coder-plus`, `glm-5`, `glm-4.7`, `kimi-k2.5`, `MiniMax-M2.5` |
+| `open_ai_api_base` | `https://coding.dashscope.aliyuncs.com/v1` |
+| `open_ai_api_key` | Coding Plan specific key (not shared with pay-as-you-go) |
+
+Reference: [Quick Start](https://help.aliyun.com/zh/model-studio/coding-plan-quickstart?spm=a2c4g.11186623.help-menu-2400256.d_0_2_1.70115203zi5Igc), [Model List](https://help.aliyun.com/zh/model-studio/coding-plan)
+
+---
+
+## MiniMax
+
+```json
+{
+  "bot_type": "openai",
+  "model": "MiniMax-M2.5",
+  "open_ai_api_base": "https://api.minimaxi.com/v1",
+  "open_ai_api_key": "YOUR_API_KEY"
+}
+```
+
+| Parameter | Description |
+| --- | --- |
+| `model` | `MiniMax-M2.5`, `MiniMax-M2.5-highspeed`, `MiniMax-M2.1`, `MiniMax-M2` |
+| `open_ai_api_base` | China: `https://api.minimaxi.com/v1`; Global: `https://api.minimax.io/v1` |
+| `open_ai_api_key` | Coding Plan specific key (not shared with pay-as-you-go) |
+
+Reference: [China Key](https://platform.minimaxi.com/docs/coding-plan/quickstart), [Model List](https://platform.minimaxi.com/docs/guides/pricing-coding-plan), [Global Key](https://platform.minimax.io/docs/coding-plan/quickstart)
+
+---
+
+## Zhipu GLM
+
+```json
+{
+  "bot_type": "openai",
+  "model": "glm-4.7",
+  "open_ai_api_base": "https://open.bigmodel.cn/api/coding/paas/v4",
+  "open_ai_api_key": "YOUR_API_KEY"
+}
+```
+
+| Parameter | Description |
+| --- | --- |
+| `model` | `glm-5`, `glm-4.7`, `glm-4.6`, `glm-4.5`, `glm-4.5-air` |
+| `open_ai_api_base` | China: `https://open.bigmodel.cn/api/coding/paas/v4`; Global: `https://api.z.ai/api/coding/paas/v4` |
+| `open_ai_api_key` | Shared with standard API |
+
+Reference: [China Quick Start](https://docs.bigmodel.cn/cn/coding-plan/quick-start), [Global Quick Start](https://docs.z.ai/devpack/quick-start)
+
+---
+
+## Kimi
+
+```json
+{
+  "bot_type": "moonshot",
+  "model": "kimi-for-coding",
+  "moonshot_base_url": "https://api.kimi.com/coding/v1",
+  "moonshot_api_key": "YOUR_API_KEY"
+}
+```
+
+| Parameter | Description |
+| --- | --- |
+| `model` | Use `kimi-for-coding` for auto-updating model, or specify a model such as `kimi-k2.6` |
+| `moonshot_base_url` | `https://api.kimi.com/coding/v1` |
+| `moonshot_api_key` | Coding Plan specific key (not shared with pay-as-you-go) |
+
+Reference: [Key & Docs](https://www.kimi.com/code/docs/)
+
+---
+
+## Volcengine
+
+```json
+{
+  "bot_type": "openai",
+  "model": "Doubao-Seed-2.0-Code",
+  "open_ai_api_base": "https://ark.cn-beijing.volces.com/api/coding/v3",
+  "open_ai_api_key": "YOUR_API_KEY"
+}
+```
+
+| Parameter | Description |
+| --- | --- |
+| `model` | `Doubao-Seed-2.0-Code`, `Doubao-Seed-2.0-pro`, `Doubao-Seed-2.0-lite`, `Doubao-Seed-Code`, `MiniMax-M2.5`, `Kimi-K2.5`, `GLM-4.7`, `DeepSeek-V3.2` |
+| `open_ai_api_base` | `https://ark.cn-beijing.volces.com/api/coding/v3` |
+| `open_ai_api_key` | Shared with standard API |
+
+Reference: [Quick Start](https://www.volcengine.com/docs/82379/1928261?lang=zh)

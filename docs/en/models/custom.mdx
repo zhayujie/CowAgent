@@ -1,0 +1,62 @@
+---
+title: Custom
+description: Custom provider for third-party APIs and local models
+---
+
+For models accessed via OpenAI-compatible APIs, such as:
+
+- **Third-party API proxies**: Use a unified API Base to call multiple models
+- **Local models**: Models deployed locally via Ollama, vLLM, LocalAI, etc.
+- **Private deployments**: Self-hosted model services within your organization
+
+<Note>
+  Unlike the `openai` provider, switching models under the Custom provider will not auto-switch the provider type. Your custom API address is always preserved.
+</Note>
+
+## Configuration
+
+### Third-party API Proxy
+
+```json
+{
+  "bot_type": "custom",
+  "model": "deepseek-v4-flash",
+  "custom_api_key": "YOUR_API_KEY",
+  "custom_api_base": "https://{your-proxy.com}/v1"
+}
+```
+
+| Parameter | Description |
+| --- | --- |
+| `bot_type` | Must be set to `custom` |
+| `model` | Model name, any model supported by your proxy service |
+| `custom_api_key` | API key provided by your proxy service |
+| `custom_api_base` | API base URL, must be OpenAI-compatible |
+
+### Local Models
+
+Local models typically don't require an API key — just set the API base:
+
+```json
+{
+  "bot_type": "custom",
+  "model": "qwen3.5:27b",
+  "custom_api_base": "http://localhost:11434/v1"
+}
+```
+
+Common local deployment tools and their default addresses:
+
+| Tool | Default API Base |
+| --- | --- |
+| [Ollama](https://ollama.com) | `http://localhost:11434/v1` |
+| [vLLM](https://docs.vllm.ai) | `http://localhost:8000/v1` |
+| [LocalAI](https://localai.io) | `http://localhost:8080/v1` |
+
+## Switching Models
+
+Under the Custom provider, switching models only changes `model` without affecting `bot_type` or the API address:
+
+```
+/config model qwen3.5:27b
+```

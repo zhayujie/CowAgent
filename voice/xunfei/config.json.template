@@ -1,0 +1,7 @@
+{
+  "APPID":"xxx71xxx",
+  "APIKey":"xxxx69058exxxxxx",
+  "APISecret":"xxxx697f0xxxxxx",
+  "BusinessArgsTTS":{"aue": "lame", "sfl": 1, "auf": "audio/L16;rate=16000", "vcn": "xiaoyan", "tte": "utf8"},
+  "BusinessArgsASR":{"domain": "iat", "language": "zh_cn", "accent": "mandarin", "vad_eos":10000, "dwa": "wpgs"}
+}

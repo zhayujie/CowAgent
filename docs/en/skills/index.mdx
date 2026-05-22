@@ -1,0 +1,64 @@
+---
+title: Skills Overview
+description: CowAgent skills system introduction
+---
+
+Skills provide infinite extensibility for the Agent. Each Skill consists of a description file (`SKILL.md`), execution scripts (optional), and resources (optional), describing how to accomplish specific types of tasks.
+
+The difference between Skills and Tools: Tools are atomic operations implemented in code (e.g., file read/write, command execution), while Skills are high-level workflows based on description files that can combine multiple Tools to complete complex tasks.
+
+## Getting Skills
+
+CowAgent offers multiple ways to acquire skills:
+
+- **Cow Skill Hub** — Browse and install community skills via `/skill list --remote`
+- **GitHub** — Install directly from GitHub repositories, with batch install support
+- **ClawHub** — Install ClawHub skills via `/skill install clawhub:name`
+- **URL** — Install from zip archives or SKILL.md links
+- **Conversational creation** — Let the Agent create skills through natural language conversation
+
+See [Install Skills](/en/skills/install) and [Skill Management Commands](/en/cli/skill) for details. You can also [create skills](/en/skills/create) through conversation.
+
+## Skill Loading Priority
+
+1. **Workspace skills** (highest): `~/cow/skills/`
+2. **Project built-in skills** (lowest): `skills/`
+
+Skills with the same name are overridden by priority.
+
+## Skill File Structure
+
+```
+skills/
+├── my-skill/
+│   ├── SKILL.md          # Skill description (frontmatter + instructions)
+│   ├── scripts/          # Execution scripts (optional)
+│   └── resources/        # Additional resources (optional)
+```
+
+### SKILL.md Format
+
+```markdown
+---
+name: my-skill
+description: Brief description of the skill
+metadata:
+  emoji: 🔧
+  requires:
+    bins: ["curl"]
+    env: ["MY_API_KEY"]
+  primaryEnv: "MY_API_KEY"
+---
+
+# My Skill
+
+Detailed instructions...
+```
+
+| Field | Description |
+| --- | --- |
+| `name` | Skill name, must match directory name |
+| `description` | Skill description, Agent decides whether to invoke based on this |
+| `metadata.requires.bins` | Required system commands |
+| `metadata.requires.env` | Required environment variables |
+| `metadata.always` | Always load (default false) |

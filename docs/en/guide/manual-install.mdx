@@ -1,0 +1,146 @@
+---
+title: Manual Install
+description: Deploy CowAgent manually (source code / Docker)
+---
+
+## Source Code Deployment
+
+### 1. Clone the project
+
+```bash
+git clone https://github.com/zhayujie/CowAgent
+cd CowAgent/
+```
+
+<Tip>
+  For network issues, use the mirror: https://gitee.com/zhayujie/CowAgent
+</Tip>
+
+### 2. Install dependencies
+
+Core dependencies (required):
+
+```bash
+pip3 install -r requirements.txt
+```
+
+Optional dependencies (recommended):
+
+```bash
+pip3 install -r requirements-optional.txt
+```
+
+### 3. Install Cow CLI
+
+Install the command-line tool for managing services and skills:
+
+```bash
+pip3 install -e .
+```
+
+Then use the `cow` command:
+
+```bash
+cow help
+```
+
+<Note>
+  This step is recommended. After installation you can use `cow start`, `cow stop`, `cow update` to manage the service, and `cow skill` to manage skills. Without the CLI, you can use `./run.sh` or `python3 app.py` to run.
+</Note>
+
+### 4. Configure
+
+Copy the config template and edit:
+
+```bash
+cp config-template.json config.json
+```
+
+Fill in model API keys, channel type, and other settings in `config.json`. See the [model docs](/en/models/index) for details.
+
+### 5. Run
+
+**Using Cow CLI (recommended):**
+
+```bash
+cow start
+```
+
+**Or run locally in foreground:**
+
+```bash
+python3 app.py
+```
+
+By default, the Web console starts. Access `http://localhost:9899` to chat.
+
+**Background run on server (without CLI):**
+
+```bash
+nohup python3 app.py & tail -f nohup.out
+```
+
+<Tip>
+  If deploying on a server, open port `9899` in your firewall or security group to access the Web console. It's recommended to restrict access to specific IPs for security.
+</Tip>
+
+## Docker Deployment
+
+Docker deployment does not require cloning source code or installing dependencies. For Agent mode, source deployment is recommended for broader system access.
+
+<Note>
+  Requires [Docker](https://docs.docker.com/engine/install/) and docker-compose.
+</Note>
+
+**1. Download config**
+
+```bash
+curl -O https://cdn.link-ai.tech/code/cow/docker-compose.yml
+```
+
+Edit `docker-compose.yml` with your configuration.
+
+**2. Start container**
+
+```bash
+sudo docker compose up -d
+```
+
+**3. View logs**
+
+```bash
+sudo docker logs -f chatgpt-on-wechat
+```
+
+<Tip>
+  If deploying on a server, open port `9899` in your firewall or security group to access the Web console. It's recommended to restrict access to specific IPs for security.
+</Tip>
+
+## Core Configuration
+
+```json
+{
+  "channel_type": "web",
+  "model": "deepseek-v4-flash",
+  "deepseek_api_key": "",
+  "agent": true,
+  "agent_workspace": "~/cow",
+  "agent_max_context_tokens": 40000,
+  "agent_max_context_turns": 30,
+  "agent_max_steps": 15
+}
+```
+
+| Parameter | Description | Default |
+| --- | --- | --- |
+| `channel_type` | Channel type | `web` |
+| `model` | Model name | `deepseek-v4-flash` |
+| `agent` | Enable Agent mode | `true` |
+| `agent_workspace` | Agent workspace path | `~/cow` |
+| `agent_max_context_tokens` | Max context tokens | `40000` |
+| `agent_max_context_turns` | Max context turns | `30` |
+| `agent_max_steps` | Max decision steps per task | `15` |
+
+<Tip>
+  Full configuration options are in the project [`config.py`](https://github.com/zhayujie/CowAgent/blob/master/config.py).
+</Tip>

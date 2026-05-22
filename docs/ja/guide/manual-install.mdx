@@ -1,0 +1,146 @@
+---
+title: 手動インストール
+description: CowAgentの手動デプロイ（ソースコード / Docker）
+---
+
+## ソースコードによるデプロイ
+
+### 1. プロジェクトをクローン
+
+```bash
+git clone https://github.com/zhayujie/CowAgent
+cd CowAgent/
+```
+
+<Tip>
+  ネットワークに問題がある場合は、ミラーを使用してください: https://gitee.com/zhayujie/CowAgent
+</Tip>
+
+### 2. 依存パッケージをインストール
+
+コア依存パッケージ（必須）：
+
+```bash
+pip3 install -r requirements.txt
+```
+
+オプション依存パッケージ（推奨）：
+
+```bash
+pip3 install -r requirements-optional.txt
+```
+
+### 3. Cow CLI をインストール
+
+サービスとスキルを管理するためのコマンドラインツールをインストールします：
+
+```bash
+pip3 install -e .
+```
+
+インストール後、`cow` コマンドが使用可能になります：
+
+```bash
+cow help
+```
+
+<Note>
+  このステップは推奨です。インストール後、`cow start`、`cow stop`、`cow update` でサービスを管理でき、`cow skill` でスキルを管理できます。CLI をインストールしない場合は、`./run.sh` または `python3 app.py` で実行できます。
+</Note>
+
+### 4. 設定
+
+設定テンプレートをコピーして編集します：
+
+```bash
+cp config-template.json config.json
+```
+
+`config.json` にモデルの API キー、チャネルタイプ、その他の設定を入力します。詳細は[モデルのドキュメント](/ja/models/index)を参照してください。
+
+### 5. 実行
+
+**Cow CLI を使用して実行（推奨）：**
+
+```bash
+cow start
+```
+
+**またはローカルでフォアグラウンド実行：**
+
+```bash
+python3 app.py
+```
+
+デフォルトでは Web コンソールが起動します。`http://localhost:9899` にアクセスしてチャットできます。
+
+**サーバーでバックグラウンド実行（CLI 未使用時）：**
+
+```bash
+nohup python3 app.py & tail -f nohup.out
+```
+
+<Tip>
+  サーバーにデプロイする場合は、ファイアウォールまたはセキュリティグループでポート `9899` を開放して Web コンソールにアクセスできるようにしてください。セキュリティのため、特定の IP のみにアクセスを制限することを推奨します。
+</Tip>
+
+## Docker によるデプロイ
+
+Docker デプロイでは、ソースコードのクローンや依存パッケージのインストールは不要です。Agent モードを使用する場合は、より広範なシステムアクセスが可能なソースコードによるデプロイを推奨します。
+
+<Note>
+  [Docker](https://docs.docker.com/engine/install/) と docker-compose が必要です。
+</Note>
+
+**1. 設定ファイルをダウンロード**
+
+```bash
+curl -O https://cdn.link-ai.tech/code/cow/docker-compose.yml
+```
+
+`docker-compose.yml` を編集して設定を行います。
+
+**2. コンテナを起動**
+
+```bash
+sudo docker compose up -d
+```
+
+**3. ログを確認**
+
+```bash
+sudo docker logs -f chatgpt-on-wechat
+```
+
+<Tip>
+  サーバーにデプロイする場合は、ファイアウォールまたはセキュリティグループでポート `9899` を開放して Web コンソールにアクセスできるようにしてください。セキュリティのため、特定の IP のみにアクセスを制限することを推奨します。
+</Tip>
+
+## 主要な設定項目
+
+```json
+{
+  "channel_type": "web",
+  "model": "deepseek-v4-flash",
+  "deepseek_api_key": "",
+  "agent": true,
+  "agent_workspace": "~/cow",
+  "agent_max_context_tokens": 40000,
+  "agent_max_context_turns": 30,
+  "agent_max_steps": 15
+}
+```
+
+| パラメータ | 説明 | デフォルト値 |
+| --- | --- | --- |
+| `channel_type` | チャネルタイプ | `web` |
+| `model` | モデル名 | `deepseek-v4-flash` |
+| `agent` | Agent モードを有効化 | `true` |
+| `agent_workspace` | Agent のワークスペースパス | `~/cow` |
+| `agent_max_context_tokens` | 最大コンテキストトークン数 | `40000` |
+| `agent_max_context_turns` | 最大コンテキストターン数 | `30` |
+| `agent_max_steps` | タスクごとの最大判断ステップ数 | `15` |
+
+<Tip>
+  すべての設定オプションはプロジェクトの [`config.py`](https://github.com/zhayujie/CowAgent/blob/master/config.py) に記載されています。
+</Tip>

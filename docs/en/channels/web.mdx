@@ -1,0 +1,85 @@
+---
+title: Web Console
+description: Use CowAgent through the web console
+---
+
+The Web Console is CowAgent's default channel. It starts automatically after launch, allowing you to chat with the Agent through a browser and manage models, skills, memory, channels, and other configurations online.
+
+## Configuration
+
+```json
+{
+  "channel_type": "web",
+  "web_port": 9899
+}
+```
+
+| Parameter | Description | Default |
+| --- | --- | --- |
+| `channel_type` | Set to `web` | `web` |
+| `web_port` | Web service listen port | `9899` |
+
+## Access URL
+
+After starting the project, visit:
+
+- Local: `http://localhost:9899`
+- Server: `http://<server-ip>:9899`
+
+<Note>
+  Ensure the server firewall and security group allow the corresponding port.
+</Note>
+
+## Features
+
+### Chat Interface
+
+Supports streaming output with real-time display of the Agent's reasoning process and tool calls, providing intuitive observation of the Agent's decision-making:
+
+<img width="850" src="https://cdn.link-ai.tech/doc/20260227180120.png" />
+
+#### Multi-Session Management
+
+The chat interface supports multi-session management. All session records are persistently stored in a SQLite database:
+
+- **Session List**: Click the history icon on the left to expand/collapse the session list panel, with scroll-to-load support for all historical sessions
+- **AI-Generated Titles**: After the first exchange in a new session, the model is automatically called to generate a short summary title
+- **New Session**: Click the "New Chat" button at the top of the session list or the `+` button in the input area to create a new session
+- **Delete Session**: Click the delete button on a session item and confirm to permanently delete the session and all its messages
+- **Clear Context**: Click the clear button in the input area to insert a divider in the current session. Messages above the divider are still displayed but no longer included as context for the model
+
+### Model Management
+
+Manage model configurations online without manually editing config files:
+
+<img width="850" src="https://cdn.link-ai.tech/doc/20260227173811.png" />
+
+### Skill Management
+
+View and manage Agent skills (Skills) online:
+
+<img width="850" src="https://cdn.link-ai.tech/doc/20260227173403.png" />
+
+### Memory Management
+
+View and manage Agent memory online:
+
+<img width="850" src="https://cdn.link-ai.tech/doc/20260227173349.png" />
+
+### Channel Management
+
+Manage connected channels online with real-time connect/disconnect operations:
+
+<img width="850" src="https://cdn.link-ai.tech/doc/20260227173331.png" />
+
+### Scheduled Tasks
+
+View and manage scheduled tasks online, including one-time tasks, fixed intervals, and Cron expressions:
+
+<img width="850" src="https://cdn.link-ai.tech/doc/20260227173704.png" />
+
+### Logs
+
+View Agent runtime logs in real-time for monitoring and troubleshooting:
+
+<img width="850" src="https://cdn.link-ai.tech/doc/20260227173514.png" />

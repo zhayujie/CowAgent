@@ -1,0 +1,116 @@
+---
+title: 常用命令
+description: 查看状态、管理配置和上下文等常用命令
+---
+
+以下命令支持在对话中使用 `/` 前缀，也支持在终端中使用 `cow` 前缀（部分命令仅对话可用）。
+
+<Tip>
+  在 Web 控制台中输入 `/` 会自动弹出命令提示，支持键盘上下选择和 Tab 补全。
+</Tip>
+
+## help
+
+显示所有可用命令的帮助信息。
+
+```text
+/help
+```
+
+## status
+
+查看当前会话和服务的运行状态，包括进程信息、模型配置、会话消息数量和已加载技能数量。
+
+```text
+/status
+```
+
+输出示例：
+
+```
+🐮 CowAgent Status
+
+Process: PID 12345 | Running 2h 15m
+Version: 2.0.4
+Channel: web
+Model:   MiniMax-M2.5
+Mode:    agent
+
+Session: 12 messages | 8 skills loaded
+```
+
+## config
+
+查看或修改运行时配置。修改后立即生效，无需重启服务。
+
+**查看所有可配置项：**
+
+```text
+/config
+```
+
+**查看单个配置项：**
+
+```text
+/config model
+```
+
+**修改配置项：**
+
+```text
+/config model deepseek-v4-flash
+```
+
+**支持修改的配置项：**
+
+| 配置项 | 说明 | 示例值 |
+| --- | --- | --- |
+| `model` | AI 模型名称 | `deepseek-v4-flash` |
+| `agent_max_context_tokens` | 最大上下文 tokens | `40000` |
+| `agent_max_context_turns` | 最大上下文记忆轮次 | `30` |
+| `agent_max_steps` | 单次任务最大决策步数 | `15` |
+| `enable_thinking` | 是否启用深度思考模式 | `true` / `false` |
+
+<Note>
+  修改 `model` 时，系统会自动匹配对应的模型调用方式。配置会写入 `config.json` 并持久保存。
+</Note>
+
+## context
+
+查看当前会话的上下文信息，包括消息数量、内容长度等统计。
+
+```text
+/context
+```
+
+**清空当前会话上下文：**
+
+```text
+/context clear
+```
+
+<Tip>
+  清空上下文后，Agent 会"忘记"之前的对话内容，适用于切换话题或释放上下文空间。
+</Tip>
+
+## logs
+
+查看最近的服务日志，默认显示最近 20 行，最多 50 行。
+
+```text
+/logs
+```
+
+**指定行数：**
+
+```text
+/logs 50
+```
+
+## version
+
+显示当前 CowAgent 版本号。
+
+```text
+/version
+```

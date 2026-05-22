@@ -13,6 +13,7 @@ from config import conf
     name="Hello",
     desire_priority=-1,
     hidden=True,
+    enabled=False,
     desc="A simple plugin that says hello",
     version="0.1",
     author="lanvent",
@@ -35,7 +36,7 @@ class Hello(Plugin):
             self.group_welc_prompt = self.config.get("group_welc_prompt", self.group_welc_prompt)
             self.group_exit_prompt = self.config.get("group_exit_prompt", self.group_exit_prompt)
             self.patpat_prompt = self.config.get("patpat_prompt", self.patpat_prompt)
-            logger.info("[Hello] inited")
+            logger.debug("[Hello] inited")
             self.handlers[Event.ON_HANDLE_CONTEXT] = self.on_handle_context
         except Exception as e:
             logger.error(f"[Hello]初始化异常：{e}")

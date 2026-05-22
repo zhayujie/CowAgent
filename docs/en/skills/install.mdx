@@ -1,0 +1,53 @@
+---
+title: Install Skills
+description: Install skills from multiple sources with a single command
+---
+
+CowAgent supports installing skills from **Cow Skill Hub, GitHub, ClawHub**, and any URL with a unified `install` command. Use `/skill install` in chat or `cow skill install` in the terminal.
+
+## From Skill Hub
+
+Browse the Skill Hub and install:
+
+```text
+/skill list --remote
+/skill install pptx
+```
+
+## From GitHub
+
+Supports batch install from repositories and single skill from subdirectories:
+
+```text
+/skill install larksuite/cli
+/skill install https://github.com/larksuite/cli/tree/main/skills/lark-im
+```
+
+## From ClawHub
+
+```text
+/skill install clawhub:baidu-search
+```
+
+## From URL
+
+Supports zip archives and SKILL.md file links:
+
+```text
+/skill install https://cdn.link-ai.tech/skills/pptx.zip
+/skill install https://example.com/path/to/SKILL.md
+```
+
+## Manage Skills
+
+```text
+/skill list                  # View installed skills
+/skill info pptx             # View skill details
+/skill enable pptx           # Enable a skill
+/skill disable pptx          # Disable a skill
+/skill uninstall pptx        # Uninstall a skill
+```
+
+<Tip>
+  All commands above work in the terminal by replacing `/skill` with `cow skill`. See [Skill Management Commands](/en/cli/skill) for full documentation.
+</Tip>

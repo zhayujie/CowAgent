@@ -1,0 +1,19 @@
+---
+title: OpenAI
+description: OpenAI 模型配置
+---
+
+```json
+{
+  "model": "gpt-5.4",
+  "open_ai_api_key": "YOUR_API_KEY",
+  "open_ai_api_base": "https://api.openai.com/v1"
+}
+```
+
+| 参数 | 说明 |
+| --- | --- |
+| `model` | 与 OpenAI 接口的 [model 参数](https://platform.openai.com/docs/models) 一致，支持 o 系列、gpt-5.4、gpt-5.4-mini、gpt-5.4-nano、gpt-5 系列、gpt-4.1 等，Agent 模式推荐使用 `gpt-5.4` |
+| `open_ai_api_key` | 在 [OpenAI 平台](https://platform.openai.com/api-keys) 创建 |
+| `open_ai_api_base` | 可选，修改可接入第三方代理接口 |
+| `bot_type` | 使用 OpenAI 官方模型时无需填写。当通过代理接口使用 Claude 等非 OpenAI 模型时，设为 `openai` |

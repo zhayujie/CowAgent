@@ -59,7 +59,7 @@ COMMANDS = {
     },
     "id": {
         "alias": ["id", "用户"],
-        "desc": "获取用户id",  # wechaty和wechatmp的用户id不会变化，可用于绑定管理员
+        "desc": "获取用户id",
     },
     "reset": {
         "alias": ["reset", "重置会话"],
@@ -140,7 +140,9 @@ def get_help_text(isadmin, isgroup):
     for cmd, info in COMMANDS.items():
         if cmd in ["auth", "set_openai_api_key", "reset_openai_api_key", "set_gpt_model", "reset_gpt_model", "gpt_model"]:  # 不显示帮助指令
             continue
-        if cmd == "id" and conf().get("channel_type", "wx") not in ["wxy", "wechatmp"]:
+        raw_ct = conf().get("channel_type", "web")
+        active_channels = raw_ct if isinstance(raw_ct, list) else [c.strip() for c in str(raw_ct).split(",")]
+        if cmd == "id" and not any(c in ["wxy", "wechatmp"] for c in active_channels):
             continue
         alias = ["#" + a for a in info["alias"][:1]]
         help_text += f"{','.join(alias)} "
@@ -155,7 +157,7 @@ def get_help_text(isadmin, isgroup):
     for plugin in plugins:
         if plugins[plugin].enabled and not plugins[plugin].hidden:
             namecn = plugins[plugin].namecn
-            help_text += "\n%s:" % namecn
+            help_text += "\n%s: " % namecn
             help_text += PluginManager().instances[plugin].get_help_text(verbose=False).strip()
 
     if ADMIN_COMMANDS and isadmin:
@@ -202,12 +204,12 @@ class Godcmd(Plugin):
                     COMMANDS["reset"]["alias"].append(custom_command)
 
         self.password = gconf["password"]
-        self.admin_users = gconf["admin_users"]  # 预存的管理员账号，这些账号不需要认证。itchat的用户名每次都会变，不可用
+        self.admin_users = gconf["admin_users"]
         global_config["admin_users"] = self.admin_users
         self.isrunning = True  # 机器人是否运行中
 
         self.handlers[Event.ON_HANDLE_CONTEXT] = self.on_handle_context
-        logger.info("[Godcmd] inited")
+        logger.debug("[Godcmd] inited")
 
     def on_handle_context(self, e_context: EventContext):
         context_type = e_context["context"].type
@@ -313,7 +315,7 @@ class Godcmd(Plugin):
                     except Exception as e:
                         ok, result = False, "你没有设置私有GPT模型"
                 elif cmd == "reset":
-                    if bottype in [const.OPEN_AI, const.CHATGPT, const.CHATGPTONAZURE, const.LINKAI, const.BAIDU, const.XUNFEI, const.QWEN, const.GEMINI, const.ZHIPU_AI]:
+                    if bottype in [const.OPEN_AI, const.OPENAI, const.CHATGPT, const.CHATGPTONAZURE, const.LINKAI, const.BAIDU, const.QIANFAN, const.XUNFEI, const.QWEN, const.QWEN_DASHSCOPE, const.GEMINI, const.ZHIPU_AI, const.CLAUDEAPI]:
                         bot.sessions.clear_session(session_id)
                         if Bridge().chat_bots.get(bottype):
                             Bridge().chat_bots.get(bottype).sessions.clear_session(session_id)
@@ -338,8 +340,9 @@ class Godcmd(Plugin):
                             load_config()
                             ok, result = True, "配置已重载"
                         elif cmd == "resetall":
-                            if bottype in [const.OPEN_AI, const.CHATGPT, const.CHATGPTONAZURE, const.LINKAI,
-                                           const.BAIDU, const.XUNFEI, const.QWEN, const.GEMINI, const.ZHIPU_AI, const.MOONSHOT]:
+                            if bottype in [const.OPEN_AI, const.OPENAI, const.CHATGPT, const.CHATGPTONAZURE, const.LINKAI,
+                                           const.BAIDU, const.QIANFAN, const.XUNFEI, const.QWEN, const.QWEN_DASHSCOPE, const.GEMINI, const.ZHIPU_AI, const.MOONSHOT,
+                                           const.MODELSCOPE]:
                                 channel.cancel_all_session()
                                 bot.sessions.clear_all_session()
                                 ok, result = True, "重置所有会话成功"
@@ -477,7 +480,7 @@ class Godcmd(Plugin):
         return model
 
     def reload(self):
-        gconf = plugin_config[self.name]
+        gconf = pconf(self.name)
         if gconf:
             if gconf.get("password"):
                 self.password = gconf["password"]

@@ -1,0 +1,27 @@
+---
+title: Kimi
+description: Kimi (Moonshot) 模型配置
+---
+
+```json
+{
+  "model": "kimi-k2.6",
+  "moonshot_api_key": "YOUR_API_KEY"
+}
+```
+
+| 参数 | 说明 |
+| --- | --- |
+| `model` | 可填 `kimi-k2.6`、`kimi-k2.5`、`kimi-k2`、`moonshot-v1-8k`、`moonshot-v1-32k`、`moonshot-v1-128k` |
+| `moonshot_api_key` | 在 [Moonshot 控制台](https://platform.moonshot.cn/console/api-keys) 创建 |
+
+也支持 OpenAI 兼容方式接入：
+
+```json
+{
+  "bot_type": "openai",
+  "model": "kimi-k2.6",
+  "open_ai_api_base": "https://api.moonshot.cn/v1",
+  "open_ai_api_key": "YOUR_API_KEY"
+}
+```

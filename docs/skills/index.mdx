@@ -1,0 +1,65 @@
+---
+title: 技能概览
+description: CowAgent 技能系统介绍
+---
+
+技能（Skill）为 Agent 提供无限的扩展性。每个 Skill 由说明文件（`SKILL.md`）、运行脚本（可选）、资源（可选）组成，描述如何完成特定类型的任务。
+
+Skill 与 Tool 的区别：Tool 是由代码实现的原子操作（如读写文件、执行命令），Skill 则是基于说明文件的高级工作流，可以组合调用多个 Tool 来完成复杂任务。
+
+## 获取技能
+
+CowAgent 提供多种方式获取技能：
+
+- **[Cow 技能广场](https://skills.cowagent.ai/)** — 在线浏览所有可用技能，或通过 `/skill list --remote` 在对话中浏览和安装
+- **GitHub** — 直接从 GitHub 仓库安装，支持批量安装
+- **ClawHub** — 通过 `/skill install clawhub:名称` 安装 ClawHub 上的技能 (4w+个)
+- **LinkA** — 通过 `/skill install linkai:编码` 安装 LinkAI 上的公开资源和创建的知识库/数据库/工作流/插件等资源
+- **URL** — 从 zip 压缩包或 SKILL.md 链接安装
+- **对话创建** — 通过自然语言对话让 Agent 自动创建技能
+
+详细安装方式参考 [安装技能](/skills/install) 和 [技能管理命令](/cli/skill)。也可以通过对话 [创建技能](/skills/create)，或向 [Skill Hub](https://skills.cowagent.ai/submit) 贡献你的技能。
+
+## 技能加载优先级
+
+1. **工作空间技能**（最高）：`~/cow/skills/`
+2. **项目内置技能**（最低）：`skills/`
+
+同名技能按优先级覆盖。
+
+## 技能文件结构
+
+```
+skills/
+├── my-skill/
+│   ├── SKILL.md          # Skill description (frontmatter + instructions)
+│   ├── scripts/          # Execution scripts (optional)
+│   └── resources/        # Additional resources (optional)
+```
+
+### SKILL.md 格式
+
+```markdown
+---
+name: my-skill
+description: Brief description of the skill
+metadata:
+  emoji: 🔧
+  requires:
+    bins: ["curl"]
+    env: ["MY_API_KEY"]
+  primaryEnv: "MY_API_KEY"
+---
+
+# My Skill
+
+Detailed instructions...
+```
+
+| 字段 | 说明 |
+| --- | --- |
+| `name` | 技能名称，需与目录名一致 |
+| `description` | 技能描述，Agent 据此决定是否调用 |
+| `metadata.requires.bins` | 依赖的系统命令 |
+| `metadata.requires.env` | 依赖的环境变量 |
+| `metadata.always` | 是否始终加载（默认 false） |

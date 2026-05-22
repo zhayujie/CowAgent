@@ -4,32 +4,54 @@ LABEL maintainer="foo@bar.com"
 ARG TZ='Asia/Shanghai'
 
 ARG CHATGPT_ON_WECHAT_VER
+# Set to "false" to skip Playwright/Chromium and produce a smaller image
+ARG INSTALL_BROWSER=true
+# Set to "true" to use China mirrors for apt / pip / playwright (faster in CN)
+ARG USE_CN_MIRROR=false
 
-RUN echo /etc/apt/sources.list
-# RUN sed -i 's/deb.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list
+ENV PLAYWRIGHT_BROWSERS_PATH=/app/ms-playwright
 ENV BUILD_PREFIX=/app
+
+# Optionally switch apt and pip to China mirrors
+RUN if [ "$USE_CN_MIRROR" = "true" ]; then \
+        sed -i 's/deb.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list; \
+        pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple/; \
+    fi
 
 ADD . ${BUILD_PREFIX}
 
+# All heavy installs + user creation in ONE layer to avoid chown duplication
 RUN apt-get update \
-    &&apt-get install -y --no-install-recommends bash ffmpeg espeak libavcodec-extra\
+    && apt-get install -y --no-install-recommends bash ffmpeg espeak libavcodec-extra \
     && cd ${BUILD_PREFIX} \
     && cp config-template.json config.json \
     && /usr/local/bin/python -m pip install --no-cache --upgrade pip \
     && pip install --no-cache -r requirements.txt \
     && pip install --no-cache -r requirements-optional.txt \
-    && pip install azure-cognitiveservices-speech
+    && pip install --no-cache -e . \
+    && if [ "$INSTALL_BROWSER" = "true" ]; then \
+        apt-get install -y --no-install-recommends fonts-wqy-zenhei \
+        && pip install --no-cache "playwright==1.52.0" \
+        && python -m playwright install-deps chromium \
+        && mkdir -p /app/ms-playwright \
+        && if [ "$USE_CN_MIRROR" = "true" ]; then \
+            PLAYWRIGHT_DOWNLOAD_HOST=https://registry.npmmirror.com/-/binary/playwright \
+            python -m playwright install chromium; \
+        else \
+            python -m playwright install chromium; \
+        fi; \
+    fi \
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /home/agent/cow \
+    && groupadd -r agent \
+    && useradd -r -g agent -s /bin/bash -d /home/agent agent \
+    && chown -R agent:agent /home/agent ${BUILD_PREFIX} /usr/local/lib
 
 WORKDIR ${BUILD_PREFIX}
 
 ADD docker/entrypoint.sh /entrypoint.sh
 
 RUN chmod +x /entrypoint.sh \
-    && mkdir -p /home/noroot \
-    && groupadd -r noroot \
-    && useradd -r -g noroot -s /bin/bash -d /home/noroot noroot \
-    && chown -R noroot:noroot /home/noroot ${BUILD_PREFIX} /usr/local/lib
-
-USER noroot
+    && chown agent:agent /entrypoint.sh
 
 ENTRYPOINT ["/entrypoint.sh"]

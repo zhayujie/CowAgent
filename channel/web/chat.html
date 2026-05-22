@@ -1,0 +1,989 @@
+<!DOCTYPE html>
+<html lang="zh" class="">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CowAgent Console</title>
+    <link rel="icon" href="assets/favicon.ico" type="image/x-icon">
+    <!-- Vendored third-party assets (no external CDN dependency).
+         See channel/web/static/vendor/README.md for sources & versions. -->
+    <link rel="stylesheet" href="assets/vendor/fontawesome/css/all.min.css">
+    <link rel="stylesheet" href="assets/vendor/fonts/inter/inter.css">
+    <script src="assets/vendor/tailwind/tailwind.min.js"></script>
+    <script src="assets/vendor/markdown-it/markdown-it.min.js"></script>
+    <link id="hljs-light" rel="stylesheet" href="assets/vendor/highlightjs/styles/github.min.css">
+    <link id="hljs-dark" rel="stylesheet" href="assets/vendor/highlightjs/styles/github-dark.min.css" disabled>
+    <script src="assets/vendor/highlightjs/highlight.min.js"></script>
+    <script src="assets/vendor/highlightjs/languages/python.min.js"></script>
+    <script src="assets/vendor/highlightjs/languages/javascript.min.js"></script>
+    <script src="assets/vendor/highlightjs/languages/java.min.js"></script>
+    <script src="assets/vendor/highlightjs/languages/go.min.js"></script>
+    <script src="assets/vendor/highlightjs/languages/bash.min.js"></script>
+    <script>
+    tailwind.config = {
+        darkMode: 'class',
+        theme: {
+            extend: {
+                fontFamily: {
+                    sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+                    mono: ['"JetBrains Mono"', '"Fira Code"', 'Consolas', 'monospace'],
+                },
+                colors: {
+                    primary: {
+                        50: '#EDFDF3', 100: '#D4FAE2', 200: '#ABF4C7', 300: '#74E9A4',
+                        400: '#4ABE6E', 500: '#35A85B', 600: '#228547', 700: '#1C6B3B',
+                        800: '#1A5532', 900: '#16462A',
+                    }
+                },
+                animation: {
+                    'pulse-dot': 'pulseDot 1.4s infinite ease-in-out both',
+                }
+            }
+        }
+    }
+    </script>
+    <link rel="stylesheet" href="assets/css/console.css">
+    <!-- Apply theme/lang before first paint to avoid flash of unstyled content.
+         This runs synchronously in <head> so the correct class is on <html>
+         before any CSS or body rendering occurs. -->
+    <script>
+    (function() {
+        var theme = localStorage.getItem('cow_theme') || 'dark';
+        if (theme === 'dark') document.documentElement.classList.add('dark');
+        var lang = localStorage.getItem('cow_lang') || 'zh';
+        document.documentElement.setAttribute('lang', lang);
+    })();
+    </script>
+</head>
+<body class="h-screen overflow-hidden bg-gray-50 dark:bg-[#111111] text-slate-800 dark:text-slate-200 font-sans">
+
+    <!-- Login Overlay -->
+    <div id="login-overlay" class="fixed inset-0 z-[200] bg-gray-50 dark:bg-[#111111] flex items-center justify-center hidden">
+        <div class="w-full max-w-sm mx-4">
+            <div class="flex flex-col items-center mb-8">
+                <img src="assets/logo.jpg" alt="CowAgent" class="w-16 h-16 rounded-2xl mb-4 shadow-lg">
+                <h1 class="text-xl font-bold text-slate-800 dark:text-slate-100">CowAgent</h1>
+                <p class="text-sm text-slate-500 dark:text-slate-400 mt-1" id="login-subtitle">请输入密码以访问控制台</p>
+            </div>
+            <form id="login-form" class="space-y-4" onsubmit="return false;">
+                <div class="relative">
+                    <input id="login-password" type="password" autocomplete="current-password"
+                           placeholder="Password"
+                           class="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-white/10
+                                  bg-white dark:bg-[#1A1A1A] text-slate-800 dark:text-slate-200
+                                  placeholder-slate-400 dark:placeholder-slate-500
+                                  focus:outline-none focus:ring-2 focus:ring-primary-400/50 focus:border-primary-400
+                                  transition-all duration-150 text-sm">
+                    <button type="button" id="login-toggle-pwd"
+                            class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600
+                                   dark:hover:text-slate-300 cursor-pointer transition-colors"
+                            onclick="toggleLoginPassword()">
+                        <i class="fas fa-eye text-sm"></i>
+                    </button>
+                </div>
+                <p id="login-error" class="text-sm text-red-500 hidden"></p>
+                <button id="login-btn" type="submit"
+                        class="w-full py-3 rounded-xl bg-primary-500 hover:bg-primary-600 text-white font-medium
+                               text-sm cursor-pointer transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed">
+                    登录
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div id="app" class="flex h-screen">
+
+        <!-- ================================================================ -->
+        <!-- SIDEBAR                                                          -->
+        <!-- ================================================================ -->
+        <aside id="sidebar" class="fixed inset-y-0 left-0 z-50 w-52 bg-[#0A0A0A] text-neutral-400 flex flex-col
+                                    transform -translate-x-full lg:relative lg:translate-x-0
+                                    transition-transform duration-300 ease-in-out">
+            <!-- Logo -->
+            <div class="flex items-center gap-3 px-5 h-14 border-b border-white/10 flex-shrink-0">
+                <img src="assets/logo.jpg" alt="CowAgent" class="w-8 h-8 rounded-lg flex-shrink-0">
+                <div class="flex flex-col min-w-0">
+                    <span class="text-white font-semibold text-sm truncate">CowAgent</span>
+                    <span class="text-neutral-500 text-xs" data-i18n="console">控制台</span>
+                </div>
+            </div>
+
+            <!-- Navigation -->
+            <nav class="flex-1 overflow-y-auto py-4 px-3 space-y-1">
+                <!-- Chat Group -->
+                <div class="menu-group open" data-group="chat">
+                    <button class="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-neutral-500 hover:text-neutral-300 cursor-pointer transition-colors duration-150">
+                        <i class="fas fa-chevron-right text-[10px] chevron"></i>
+                        <span data-i18n="nav_chat">对话</span>
+                    </button>
+                    <div class="menu-group-items pl-2">
+                        <a class="sidebar-item active flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-all duration-150 hover:bg-white/5 hover:text-neutral-200 text-[14px]"
+                           data-view="chat">
+                            <i class="fas fa-message item-icon text-xs w-5 text-center"></i>
+                            <span data-i18n="menu_chat">对话</span>
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Management Group -->
+                <div class="menu-group open" data-group="manage">
+                    <button class="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-neutral-500 hover:text-neutral-300 cursor-pointer transition-colors duration-150">
+                        <i class="fas fa-chevron-right text-[10px] chevron"></i>
+                        <span data-i18n="nav_manage">管理</span>
+                    </button>
+                    <div class="menu-group-items pl-2">
+                        <a class="sidebar-item flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-all duration-150 hover:bg-white/5 hover:text-neutral-200 text-[14px]"
+                           data-view="config">
+                            <i class="fas fa-sliders item-icon text-xs w-5 text-center"></i>
+                            <span data-i18n="menu_config">配置</span>
+                        </a>
+                        <a class="sidebar-item flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-all duration-150 hover:bg-white/5 hover:text-neutral-200 text-[14px]"
+                           data-view="skills">
+                            <i class="fas fa-bolt item-icon text-xs w-5 text-center"></i>
+                            <span data-i18n="menu_skills">技能</span>
+                        </a>
+                        <a class="sidebar-item flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-all duration-150 hover:bg-white/5 hover:text-neutral-200 text-[14px]"
+                           data-view="memory">
+                            <i class="fas fa-brain item-icon text-xs w-5 text-center"></i>
+                            <span data-i18n="menu_memory">记忆</span>
+                        </a>
+                        <a class="sidebar-item flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-all duration-150 hover:bg-white/5 hover:text-neutral-200 text-[14px]"
+                           data-view="knowledge">
+                            <i class="fas fa-book item-icon text-xs w-5 text-center"></i>
+                            <span data-i18n="menu_knowledge">知识</span>
+                        </a>
+                        <a class="sidebar-item flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-all duration-150 hover:bg-white/5 hover:text-neutral-200 text-[14px]"
+                           data-view="channels">
+                            <i class="fas fa-tower-broadcast item-icon text-xs w-5 text-center"></i>
+                            <span data-i18n="menu_channels">通道</span>
+                        </a>
+                        <a class="sidebar-item flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-all duration-150 hover:bg-white/5 hover:text-neutral-200 text-[14px]"
+                           data-view="tasks">
+                            <i class="fas fa-clock item-icon text-xs w-5 text-center"></i>
+                            <span data-i18n="menu_tasks">定时</span>
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Monitor Group -->
+                <div class="menu-group open" data-group="monitor">
+                    <button class="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-neutral-500 hover:text-neutral-300 cursor-pointer transition-colors duration-150">
+                        <i class="fas fa-chevron-right text-[10px] chevron"></i>
+                        <span data-i18n="nav_monitor">监控</span>
+                    </button>
+                    <div class="menu-group-items pl-2">
+                        <a class="sidebar-item flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-all duration-150 hover:bg-white/5 hover:text-neutral-200 text-[14px]"
+                           data-view="logs">
+                            <i class="fas fa-terminal item-icon text-xs w-5 text-center"></i>
+                            <span data-i18n="menu_logs">日志</span>
+                        </a>
+                    </div>
+                </div>
+            </nav>
+
+            <!-- Sidebar Footer -->
+            <div class="px-4 py-3 border-t border-white/10 flex-shrink-0">
+                <div class="flex items-center gap-2 text-xs text-neutral-600">
+                    <i class="fas fa-circle text-[6px] text-primary-400"></i>
+                    <a id="sidebar-version"
+                       href="https://github.com/zhayujie/chatgpt-on-wechat/releases"
+                       target="_blank" rel="noopener noreferrer"
+                       class="hover:text-primary-400 transition-colors duration-150 cursor-pointer"></a>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Mobile Overlay -->
+        <div id="sidebar-overlay" class="fixed inset-0 bg-black/50 z-40 hidden lg:hidden cursor-pointer" onclick="toggleSidebar()"></div>
+
+        <!-- ================================================================ -->
+        <!-- SESSION PANEL (collapsible)                                      -->
+        <!-- ================================================================ -->
+        <aside id="session-panel" class="session-panel hidden">
+            <div class="session-panel-header">
+                <span class="session-panel-title" data-i18n="session_history">历史会话</span>
+                <button class="session-panel-close" onclick="toggleSessionPanel()" title="Close">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <button class="session-panel-new" onclick="newChat()">
+                <i class="fas fa-plus"></i>
+                <span data-i18n="new_chat">新对话</span>
+            </button>
+            <div id="session-list" class="session-list"></div>
+        </aside>
+
+        <!-- Mobile overlay for session panel (click to close) -->
+        <div id="session-panel-overlay" class="session-panel-overlay hidden" onclick="closeSessionPanel()"></div>
+
+        <!-- ================================================================ -->
+        <!-- MAIN CONTENT                                                     -->
+        <!-- ================================================================ -->
+        <div id="main-content" class="flex-1 flex flex-col min-w-0 h-screen">
+            <!-- Top Header -->
+            <header class="h-14 flex items-center gap-3 px-4 border-b border-slate-200 dark:border-white/10 bg-white dark:bg-[#1A1A1A] flex-shrink-0 z-10">
+                <!-- Mobile menu toggle -->
+                <button id="menu-toggle" class="lg:hidden p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-white/10 cursor-pointer transition-colors duration-150"
+                        onclick="toggleSidebar()">
+                    <i class="fas fa-bars text-slate-600 dark:text-slate-300"></i>
+                </button>
+
+                <!-- Session panel toggle -->
+                <button id="session-toggle-btn" class="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-white/10 cursor-pointer transition-colors duration-150"
+                        onclick="toggleSessionPanel()">
+                    <i class="fas fa-clock-rotate-left text-slate-500 dark:text-slate-400"></i>
+                </button>
+
+                <!-- Breadcrumb (hidden on mobile) -->
+                <div class="hidden lg:flex items-center gap-2 text-sm min-w-0">
+                    <span id="breadcrumb-group" class="text-slate-400 dark:text-slate-500 truncate" data-i18n="nav_chat">对话</span>
+                    <i class="fas fa-chevron-right text-[10px] text-slate-300 dark:text-slate-600"></i>
+                    <span id="breadcrumb-page" class="font-medium text-slate-700 dark:text-slate-200 truncate" data-i18n="menu_chat">对话</span>
+                </div>
+
+                <div class="flex-1"></div>
+
+                <!-- Language Toggle -->
+                <button id="lang-toggle" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium
+                                                 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10
+                                                 cursor-pointer transition-colors duration-150"
+                        onclick="toggleLanguage()">
+                    <i class="fas fa-globe text-xs"></i>
+                    <span id="lang-label">EN</span>
+                </button>
+
+                <!-- Theme Toggle -->
+                <button id="theme-toggle" class="p-2 rounded-lg text-slate-500 dark:text-slate-400
+                                                  hover:bg-slate-100 dark:hover:bg-white/10
+                                                  cursor-pointer transition-colors duration-150"
+                        onclick="toggleTheme()">
+                    <i id="theme-icon" class="fas fa-moon"></i>
+                </button>
+
+                <!-- Docs Link -->
+                <a href="https://docs.cowagent.ai" target="_blank" rel="noopener noreferrer"
+                   class="p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10
+                          cursor-pointer transition-colors duration-150" title="Documentation">
+                    <i class="fas fa-book text-base"></i>
+                </a>
+
+                <!-- Website Link -->
+                <a href="https://cowagent.ai" target="_blank" rel="noopener noreferrer"
+                   class="p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10
+                          cursor-pointer transition-colors duration-150" title="Website">
+                    <i class="fas fa-home text-base"></i>
+                </a>
+
+                <!-- GitHub Link -->
+                <a href="https://github.com/zhayujie/chatgpt-on-wechat" target="_blank" rel="noopener noreferrer"
+                   class="p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10
+                          cursor-pointer transition-colors duration-150" title="GitHub">
+                    <i class="fab fa-github text-lg"></i>
+                </a>
+            </header>
+
+            <!-- Content Area -->
+            <div id="content-area" class="flex-1 overflow-hidden">
+
+                <!-- ====================================================== -->
+                <!-- VIEW: Chat                                              -->
+                <!-- ====================================================== -->
+                <div id="view-chat" class="view active relative">
+                    <!-- Messages -->
+                    <div id="chat-messages" class="flex-1 overflow-y-auto">
+                        <!-- Welcome Screen -->
+                        <div id="welcome-screen" class="flex flex-col items-center justify-center h-full px-6 pb-16" style="padding-top: 6vh">
+                            <img src="assets/logo.jpg" alt="CowAgent" class="w-16 h-16 rounded-2xl mb-6 shadow-lg shadow-primary-500/20">
+                            <h1 id="welcome-title" class="text-2xl font-bold text-slate-800 dark:text-slate-100 mb-3">CowAgent</h1>
+                            <p id="welcome-subtitle" class="text-slate-500 dark:text-slate-400 text-center max-w-lg mb-10 leading-relaxed"
+                               data-i18n-html="welcome_subtitle">我可以帮你解答问题、管理计算机、创造和执行技能，并通过<br>长期记忆和知识库不断成长</p>
+
+                            <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 w-full max-w-2xl">
+                                <div class="example-card group bg-white dark:bg-[#1A1A1A] border border-slate-200 dark:border-white/10 rounded-xl p-4
+                                            cursor-pointer hover:border-primary-300 dark:hover:border-primary-600 hover:shadow-md transition-all duration-200">
+                                    <div class="flex items-center gap-2 mb-2">
+                                        <div class="w-7 h-7 rounded-lg bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center">
+                                            <i class="fas fa-folder-open text-blue-500 text-xs"></i>
+                                        </div>
+                                        <span class="font-medium text-sm text-slate-700 dark:text-slate-200" data-i18n="example_sys_title">系统管理</span>
+                                    </div>
+                                    <p class="text-sm text-slate-500 dark:text-slate-400 leading-relaxed" data-i18n="example_sys_text">查看工作空间里有哪些文件</p>
+                                </div>
+                                <div class="example-card group bg-white dark:bg-[#1A1A1A] border border-slate-200 dark:border-white/10 rounded-xl p-4
+                                            cursor-pointer hover:border-primary-300 dark:hover:border-primary-600 hover:shadow-md transition-all duration-200">
+                                    <div class="flex items-center gap-2 mb-2">
+                                        <div class="w-7 h-7 rounded-lg bg-amber-50 dark:bg-amber-900/30 flex items-center justify-center">
+                                            <i class="fas fa-clock text-amber-500 text-xs"></i>
+                                        </div>
+                                        <span class="font-medium text-sm text-slate-700 dark:text-slate-200" data-i18n="example_task_title">定时任务</span>
+                                    </div>
+                                    <p class="text-sm text-slate-500 dark:text-slate-400 leading-relaxed" data-i18n="example_task_text">1分钟后提醒我检查服务器</p>
+                                </div>
+                                <div class="example-card group bg-white dark:bg-[#1A1A1A] border border-slate-200 dark:border-white/10 rounded-xl p-4
+                                            cursor-pointer hover:border-primary-300 dark:hover:border-primary-600 hover:shadow-md transition-all duration-200">
+                                    <div class="flex items-center gap-2 mb-2">
+                                        <div class="w-7 h-7 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 flex items-center justify-center">
+                                            <i class="fas fa-code text-emerald-500 text-xs"></i>
+                                        </div>
+                                        <span class="font-medium text-sm text-slate-700 dark:text-slate-200" data-i18n="example_code_title">编程助手</span>
+                                    </div>
+                                    <p class="text-sm text-slate-500 dark:text-slate-400 leading-relaxed" data-i18n="example_code_text">搜索AI资讯并生成可视化网页报告</p>
+                                </div>
+                                <div class="example-card group bg-white dark:bg-[#1A1A1A] border border-slate-200 dark:border-white/10 rounded-xl p-4
+                                            cursor-pointer hover:border-primary-300 dark:hover:border-primary-600 hover:shadow-md transition-all duration-200">
+                                    <div class="flex items-center gap-2 mb-2">
+                                        <div class="w-7 h-7 rounded-lg bg-violet-50 dark:bg-violet-900/30 flex items-center justify-center">
+                                            <i class="fas fa-book text-violet-500 text-xs"></i>
+                                        </div>
+                                        <span class="font-medium text-sm text-slate-700 dark:text-slate-200" data-i18n="example_knowledge_title">知识库</span>
+                                    </div>
+                                    <p class="text-sm text-slate-500 dark:text-slate-400 leading-relaxed" data-i18n="example_knowledge_text">查看知识库当前文档情况</p>
+                                </div>
+                                <div class="example-card group bg-white dark:bg-[#1A1A1A] border border-slate-200 dark:border-white/10 rounded-xl p-4
+                                            cursor-pointer hover:border-primary-300 dark:hover:border-primary-600 hover:shadow-md transition-all duration-200">
+                                    <div class="flex items-center gap-2 mb-2">
+                                        <div class="w-7 h-7 rounded-lg bg-rose-50 dark:bg-rose-900/30 flex items-center justify-center">
+                                            <i class="fas fa-puzzle-piece text-rose-500 text-xs"></i>
+                                        </div>
+                                        <span class="font-medium text-sm text-slate-700 dark:text-slate-200" data-i18n="example_skill_title">技能系统</span>
+                                    </div>
+                                    <p class="text-sm text-slate-500 dark:text-slate-400 leading-relaxed" data-i18n="example_skill_text">查看所有支持的工具和技能</p>
+                                </div>
+                                <div class="example-card group bg-white dark:bg-[#1A1A1A] border border-slate-200 dark:border-white/10 rounded-xl p-4
+                                            cursor-pointer hover:border-primary-300 dark:hover:border-primary-600 hover:shadow-md transition-all duration-200"
+                                     data-send="/help">
+                                    <div class="flex items-center gap-2 mb-2">
+                                        <div class="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
+                                            <i class="fas fa-terminal text-slate-500 text-xs"></i>
+                                        </div>
+                                        <span class="font-medium text-sm text-slate-700 dark:text-slate-200" data-i18n="example_web_title">指令中心</span>
+                                    </div>
+                                    <p class="text-sm text-slate-500 dark:text-slate-400 leading-relaxed" data-i18n="example_web_text">查看全部命令</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Scroll-to-bottom FAB -->
+                    <button id="scroll-to-bottom-btn"
+                            class="hidden absolute right-5 bottom-[80px] z-10
+                                   w-9 h-9 rounded-full shadow-lg
+                                   bg-white dark:bg-[#2A2A2A] border border-slate-200 dark:border-white/15
+                                   text-slate-500 dark:text-slate-400 hover:text-primary-500 dark:hover:text-primary-400
+                                   flex items-center justify-center cursor-pointer transition-all duration-200
+                                   hover:shadow-xl hover:scale-105"
+                            onclick="_autoScrollEnabled = true; scrollChatToBottom(true);">
+                        <i class="fas fa-chevron-down text-sm"></i>
+                    </button>
+
+                    <!-- Chat Input -->
+                    <div class="flex-shrink-0 border-t border-slate-200 dark:border-white/10 bg-white dark:bg-[#1A1A1A] px-4 py-3">
+                        <div class="max-w-3xl mx-auto">
+                            <!-- Attachment preview bar -->
+                            <div id="attachment-preview" class="attachment-preview hidden"></div>
+                            <div class="flex items-center gap-2 relative">
+                                <div class="flex items-center flex-shrink-0">
+                                    <button id="new-chat-btn" class="w-9 h-10 flex items-center justify-center rounded-lg
+                                                                     text-slate-400 hover:text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20
+                                                                     cursor-pointer transition-colors duration-150"
+                                            onclick="newChat()">
+                                        <i class="fas fa-plus text-base"></i>
+                                    </button>
+                                    <button id="clear-context-btn" class="w-9 h-10 flex items-center justify-center rounded-lg
+                                                                          text-slate-400 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20
+                                                                          cursor-pointer transition-colors duration-150"
+                                            onclick="clearContext()">
+                                        <i class="fas fa-trash-can text-base"></i>
+                                    </button>
+                                    <button id="attach-btn" class="w-9 h-10 flex items-center justify-center rounded-lg
+                                                                   text-slate-400 hover:text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20
+                                                                   cursor-pointer transition-colors duration-150"
+                                            type="button"
+                                            onclick="toggleAttachMenu(event)">
+                                        <i class="fas fa-paperclip text-base"></i>
+                                    </button>
+                                </div>
+                                <input type="file" id="file-input" class="hidden" multiple
+                                       accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.json,.xml,.zip,.rar,.7z,.py,.js,.ts,.java,.c,.cpp,.go,.rs,.md">
+                                <input type="file" id="folder-input" class="hidden" multiple webkitdirectory directory>
+                                <div id="attach-menu" class="attach-menu hidden">
+                                    <button id="attach-file-option" type="button" class="attach-menu-item" onclick="triggerFileUpload()">
+                                        <i class="fas fa-file-arrow-up"></i>
+                                        <span data-i18n="attach_menu_file">上传文件</span>
+                                    </button>
+                                    <button id="attach-folder-option" type="button" class="attach-menu-item" onclick="triggerFolderUpload()">
+                                        <i class="fas fa-folder-plus"></i>
+                                        <span data-i18n="attach_menu_folder">上传文件夹</span>
+                                    </button>
+                                </div>
+                                <div id="slash-menu" class="slash-menu hidden"></div>
+                                <textarea id="chat-input"
+                                          class="flex-1 min-w-0 px-4 py-[10px] rounded-xl border border-slate-200 dark:border-slate-600
+                                                 bg-slate-50 dark:bg-white/5 text-slate-800 dark:text-slate-100
+                                                 placeholder:text-slate-400 dark:placeholder:text-slate-500
+                                                 focus:outline-none focus:ring-0 focus:border-primary-600
+                                                 text-sm leading-relaxed"
+                                          rows="1"
+                                          data-i18n-placeholder="input_placeholder"
+                                          placeholder="输入消息，或输入 / 使用指令"></textarea>
+                                <button id="send-btn"
+                                        class="flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-lg
+                                               bg-primary-400 text-white hover:bg-primary-500
+                                               disabled:bg-slate-300 dark:disabled:bg-slate-600
+                                               disabled:cursor-not-allowed cursor-pointer transition-colors duration-150"
+                                        disabled onclick="sendMessage()">
+                                    <i class="fas fa-paper-plane text-sm"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ====================================================== -->
+                <!-- VIEW: Config                                            -->
+                <!-- ====================================================== -->
+                <div id="view-config" class="view">
+                    <div class="flex-1 overflow-y-auto p-6">
+                        <div class="max-w-4xl mx-auto">
+                            <div class="flex items-center justify-between mb-6">
+                                <div>
+                                    <h2 class="text-xl font-bold text-slate-800 dark:text-slate-100" data-i18n="config_title">配置管理</h2>
+                                    <p class="text-sm text-slate-500 dark:text-slate-400 mt-1" data-i18n="config_desc">管理模型和 Agent 配置</p>
+                                </div>
+                            </div>
+                            <div class="grid gap-6">
+
+                                <!-- Model Config Card -->
+                                <div class="bg-white dark:bg-[#1A1A1A] rounded-xl border border-slate-200 dark:border-white/10 p-6">
+                                    <div class="flex items-center gap-3 mb-5">
+                                        <div class="w-9 h-9 rounded-lg bg-primary-50 dark:bg-primary-900/30 flex items-center justify-center">
+                                            <i class="fas fa-microchip text-primary-500 text-sm"></i>
+                                        </div>
+                                        <h3 class="font-semibold text-slate-800 dark:text-slate-100" data-i18n="config_model">模型配置</h3>
+                                    </div>
+                                    <div class="space-y-5">
+                                        <!-- Provider -->
+                                        <div>
+                                            <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5" data-i18n="config_provider">模型厂商</label>
+                                            <div id="cfg-provider" class="cfg-dropdown" tabindex="0">
+                                                <div class="cfg-dropdown-selected">
+                                                    <span class="cfg-dropdown-text">--</span>
+                                                    <i class="fas fa-chevron-down cfg-dropdown-arrow"></i>
+                                                </div>
+                                                <div class="cfg-dropdown-menu"></div>
+                                            </div>
+                                            <div id="cfg-custom-tip" class="mt-1.5 text-xs text-slate-400 dark:text-slate-500 hidden">
+                                                <i class="fas fa-info-circle mr-1"></i><span data-i18n="config_custom_tip">接口需遵循 OpenAI API 协议</span>
+                                            </div>
+                                        </div>
+                                        <!-- Model -->
+                                        <div>
+                                            <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5" data-i18n="config_model_name">模型</label>
+                                            <div id="cfg-model-select" class="cfg-dropdown" tabindex="0">
+                                                <div class="cfg-dropdown-selected">
+                                                    <span class="cfg-dropdown-text">--</span>
+                                                    <i class="fas fa-chevron-down cfg-dropdown-arrow"></i>
+                                                </div>
+                                                <div class="cfg-dropdown-menu"></div>
+                                            </div>
+                                            <div id="cfg-model-custom-wrap" class="mt-2 hidden">
+                                                <input id="cfg-model-custom" type="text"
+                                                       class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600
+                                                              bg-slate-50 dark:bg-white/5 text-sm text-slate-800 dark:text-slate-100
+                                                              focus:outline-none focus:border-primary-500 font-mono transition-colors"
+                                                       data-i18n-placeholder="config_custom_model_hint" placeholder="输入自定义模型名称">
+                                            </div>
+                                        </div>
+                                        <!-- API Key -->
+                                        <div id="cfg-api-key-wrap">
+                                            <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">API Key</label>
+                                            <div class="relative">
+                                                <input id="cfg-api-key" type="text" autocomplete="off" data-1p-ignore data-lpignore="true"
+                                                       class="w-full px-3 py-2 pr-10 rounded-lg border border-slate-200 dark:border-slate-600
+                                                              bg-slate-50 dark:bg-white/5 text-sm text-slate-800 dark:text-slate-100
+                                                              focus:outline-none focus:border-primary-500 font-mono transition-colors cfg-key-masked"
+                                                       placeholder="sk-...">
+                                                <button type="button" id="cfg-api-key-toggle"
+                                                        class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600
+                                                               dark:hover:text-slate-300 cursor-pointer transition-colors p-1"
+                                                        onclick="toggleApiKeyVisibility()">
+                                                    <i class="fas fa-eye text-xs"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <!-- API Base -->
+                                        <div id="cfg-api-base-wrap" class="hidden">
+                                            <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">API Base</label>
+                                            <input id="cfg-api-base" type="text"
+                                                   class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600
+                                                          bg-slate-50 dark:bg-white/5 text-sm text-slate-800 dark:text-slate-100
+                                                          focus:outline-none focus:border-primary-500 font-mono transition-colors"
+                                                   placeholder="https://...">
+                                        </div>
+                                        <!-- Save Model Button -->
+                                        <div class="flex items-center justify-end gap-3 pt-1">
+                                            <span id="cfg-model-status" class="text-xs text-primary-500 opacity-0 transition-opacity duration-300"></span>
+                                            <button id="cfg-model-save"
+                                                    class="px-4 py-2 rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-sm font-medium
+                                                           cursor-pointer transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                    onclick="saveModelConfig()" data-i18n="config_save">保存</button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Agent Config Card -->
+                                <div class="bg-white dark:bg-[#1A1A1A] rounded-xl border border-slate-200 dark:border-white/10 p-6">
+                                    <div class="flex items-center gap-3 mb-5">
+                                        <div class="w-9 h-9 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 flex items-center justify-center">
+                                            <i class="fas fa-robot text-emerald-500 text-sm"></i>
+                                        </div>
+                                        <h3 class="font-semibold text-slate-800 dark:text-slate-100" data-i18n="config_agent">Agent 配置</h3>
+                                    </div>
+                                    <div class="space-y-4">
+                                        <div>
+                                            <label class="flex items-center gap-1.5 text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">
+                                                <span data-i18n="config_max_tokens">最大上下文 Token</span>
+                                                <span class="cfg-tip" data-tip-key="config_max_tokens_hint"><i class="fas fa-circle-question"></i></span>
+                                            </label>
+                                            <input id="cfg-max-tokens" type="number" min="1000" max="200000" step="1000"
+                                                   class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600
+                                                          bg-slate-50 dark:bg-white/5 text-sm text-slate-800 dark:text-slate-100
+                                                          focus:outline-none focus:border-primary-500 font-mono transition-colors">
+                                        </div>
+                                        <div>
+                                            <label class="flex items-center gap-1.5 text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">
+                                                <span data-i18n="config_max_turns">最大记忆轮次</span>
+                                                <span class="cfg-tip" data-tip-key="config_max_turns_hint"><i class="fas fa-circle-question"></i></span>
+                                            </label>
+                                            <input id="cfg-max-turns" type="number" min="1" max="100" step="1"
+                                                   class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600
+                                                          bg-slate-50 dark:bg-white/5 text-sm text-slate-800 dark:text-slate-100
+                                                          focus:outline-none focus:border-primary-500 font-mono transition-colors">
+                                        </div>
+                                        <div>
+                                            <label class="flex items-center gap-1.5 text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">
+                                                <span data-i18n="config_max_steps">最大执行步数</span>
+                                                <span class="cfg-tip" data-tip-key="config_max_steps_hint"><i class="fas fa-circle-question"></i></span>
+                                            </label>
+                                            <input id="cfg-max-steps" type="number" min="1" max="50" step="1"
+                                                   class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600
+                                                          bg-slate-50 dark:bg-white/5 text-sm text-slate-800 dark:text-slate-100
+                                                          focus:outline-none focus:border-primary-500 font-mono transition-colors">
+                                        </div>
+                                        <div class="flex items-center justify-between">
+                                            <label class="flex items-center gap-1.5 text-sm font-medium text-slate-600 dark:text-slate-400">
+                                                <span data-i18n="config_enable_thinking">Deep Thinking</span>
+                                                <span class="cfg-tip" data-tip-key="config_enable_thinking_hint"><i class="fas fa-circle-question"></i></span>
+                                            </label>
+                                            <label class="relative inline-flex items-center cursor-pointer">
+                                                <input id="cfg-enable-thinking" type="checkbox" class="sr-only peer">
+                                                <div class="w-9 h-5 bg-slate-200 dark:bg-slate-700 peer-checked:bg-primary-400 rounded-full
+                                                            after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white
+                                                            after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full"></div>
+                                            </label>
+                                        </div>
+                                        <div class="flex items-center justify-end gap-3 pt-1">
+                                            <span id="cfg-agent-status" class="text-xs text-primary-500 opacity-0 transition-opacity duration-300"></span>
+                                            <button id="cfg-agent-save"
+                                                    class="px-4 py-2 rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-sm font-medium
+                                                           cursor-pointer transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                    onclick="saveAgentConfig()" data-i18n="config_save">保存</button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Security Config Card -->
+                                <div class="bg-white dark:bg-[#1A1A1A] rounded-xl border border-slate-200 dark:border-white/10 p-6">
+                                    <div class="flex items-center gap-3 mb-5">
+                                        <div class="w-9 h-9 rounded-lg bg-amber-50 dark:bg-amber-900/30 flex items-center justify-center">
+                                            <i class="fas fa-lock text-amber-500 text-sm"></i>
+                                        </div>
+                                        <h3 class="font-semibold text-slate-800 dark:text-slate-100" data-i18n="config_security">安全设置</h3>
+                                    </div>
+                                    <div class="space-y-4">
+                                        <div>
+                                            <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5" data-i18n="config_password">访问密码</label>
+                                            <input id="cfg-password" type="password" autocomplete="new-password"
+                                                   class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600
+                                                          bg-slate-50 dark:bg-white/5 text-sm text-slate-800 dark:text-slate-100
+                                                          focus:outline-none focus:border-primary-500 font-mono transition-colors
+                                                          cfg-key-masked"
+                                                   data-masked="1">
+                                            <p class="text-xs text-slate-400 dark:text-slate-500 mt-1.5" data-i18n="config_password_hint">留空则不启用密码保护</p>
+                                        </div>
+                                        <div class="flex items-center justify-end gap-3 pt-1">
+                                            <span id="cfg-password-status" class="text-xs text-primary-500 opacity-0 transition-opacity duration-300"></span>
+                                            <button id="cfg-password-save"
+                                                    class="px-4 py-2 rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-sm font-medium
+                                                           cursor-pointer transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                    onclick="savePasswordConfig()" data-i18n="config_save">保存</button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ====================================================== -->
+                <!-- VIEW: Skills                                            -->
+                <!-- ====================================================== -->
+                <div id="view-skills" class="view">
+                    <div class="flex-1 overflow-y-auto p-6">
+                        <div class="max-w-4xl mx-auto">
+                            <div class="flex items-center justify-between mb-6">
+                                <div>
+                                    <h2 class="text-xl font-bold text-slate-800 dark:text-slate-100" data-i18n="skills_title">技能管理</h2>
+                                    <p class="text-sm text-slate-500 dark:text-slate-400 mt-1" data-i18n="skills_desc">查看、启用或禁用 Agent 技能</p>
+                                </div>
+                                <a href="https://skills.cowagent.ai/" target="_blank"
+                                   class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-primary-500 bg-primary-50 dark:bg-primary-900/20 hover:bg-primary-100 dark:hover:bg-primary-900/30 transition-colors">
+                                    <i class="fas fa-puzzle-piece text-[10px]"></i>
+                                    <span data-i18n="skills_hub_btn">探索技能广场</span>
+                                </a>
+                            </div>
+
+                            <!-- Built-in Tools Section -->
+                            <div class="mb-8">
+                                <div class="flex items-center gap-2 mb-3">
+                                    <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500" data-i18n="tools_section_title">内置工具</span>
+                                    <span id="tools-count-badge" class="hidden px-2 py-0.5 rounded-full text-xs bg-slate-100 dark:bg-white/10 text-slate-500 dark:text-slate-400"></span>
+                                </div>
+                                <div id="tools-empty" class="flex items-center gap-2 py-4 text-slate-400 dark:text-slate-500 text-sm">
+                                    <i class="fas fa-spinner fa-spin text-xs"></i>
+                                    <span data-i18n="tools_loading">加载工具中...</span>
+                                </div>
+                                <div id="tools-list" class="grid gap-3 sm:grid-cols-2 hidden"></div>
+                            </div>
+
+                            <!-- Skills Section -->
+                            <div>
+                                <div class="flex items-center gap-2 mb-3">
+                                    <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500" data-i18n="skills_section_title">技能</span>
+                                    <span id="skills-count-badge" class="hidden px-2 py-0.5 rounded-full text-xs bg-slate-100 dark:bg-white/10 text-slate-500 dark:text-slate-400"></span>
+                                </div>
+                                <div id="skills-empty" class="flex flex-col items-center justify-center py-12">
+                                    <div class="w-14 h-14 rounded-2xl bg-amber-50 dark:bg-amber-900/20 flex items-center justify-center mb-3">
+                                        <i class="fas fa-bolt text-amber-400 text-lg"></i>
+                                    </div>
+                                    <p class="text-slate-500 dark:text-slate-400 font-medium" data-i18n="skills_loading">加载技能中...</p>
+                                    <p class="text-sm text-slate-400 dark:text-slate-500 mt-1" data-i18n="skills_loading_desc">技能加载后将显示在此处</p>
+                                </div>
+                                <div id="skills-list" class="grid gap-4 sm:grid-cols-2"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ====================================================== -->
+                <!-- VIEW: Memory                                            -->
+                <!-- ====================================================== -->
+                <div id="view-memory" class="view">
+                    <div class="flex-1 overflow-y-auto p-6">
+                        <div class="max-w-4xl mx-auto">
+
+                            <!-- Panel: list -->
+                            <div id="memory-panel-list">
+                                <div class="flex items-center justify-between mb-6">
+                                    <div>
+                                        <h2 class="text-xl font-bold text-slate-800 dark:text-slate-100" data-i18n="memory_title">记忆管理</h2>
+                                        <p class="text-sm text-slate-500 dark:text-slate-400 mt-1" data-i18n="memory_desc">查看 Agent 记忆文件和内容</p>
+                                    </div>
+                                    <div class="flex items-center bg-slate-100 dark:bg-white/10 rounded-lg p-0.5">
+                                        <button id="memory-tab-files" onclick="switchMemoryTab('files')"
+                                                class="memory-tab px-3 py-1.5 rounded-md text-xs font-medium cursor-pointer transition-colors duration-150 active">
+                                            <i class="fas fa-file-lines mr-1.5"></i><span data-i18n="memory_tab_files">记忆文件</span>
+                                        </button>
+                                        <button id="memory-tab-dreams" onclick="switchMemoryTab('dreams')"
+                                                class="memory-tab px-3 py-1.5 rounded-md text-xs font-medium cursor-pointer transition-colors duration-150">
+                                            <i class="fas fa-moon mr-1.5"></i><span data-i18n="memory_tab_dreams">梦境日记</span>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div id="memory-empty" class="flex flex-col items-center justify-center py-20">
+                                    <div class="w-16 h-16 rounded-2xl bg-purple-50 dark:bg-purple-900/20 flex items-center justify-center mb-4">
+                                        <i class="fas fa-brain text-purple-400 text-xl"></i>
+                                    </div>
+                                    <p class="text-slate-500 dark:text-slate-400 font-medium" data-i18n="memory_loading">加载记忆文件中...</p>
+                                    <p class="text-sm text-slate-400 dark:text-slate-500 mt-1" data-i18n="memory_loading_desc">记忆文件将显示在此处</p>
+                                </div>
+                                <div id="memory-list" class="hidden">
+                                    <div class="bg-white dark:bg-[#1A1A1A] rounded-xl border border-slate-200 dark:border-white/10 overflow-hidden">
+                                        <table class="w-full">
+                                            <thead>
+                                                <tr class="border-b border-slate-200 dark:border-white/10">
+                                                    <th class="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400" data-i18n="memory_col_name">文件名</th>
+                                                    <th class="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400" data-i18n="memory_col_type">类型</th>
+                                                    <th class="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400" data-i18n="memory_col_size">大小</th>
+                                                    <th class="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400" data-i18n="memory_col_updated">更新时间</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="memory-table-body"></tbody>
+                                        </table>
+                                    </div>
+                                    <div id="memory-pagination" class="flex items-center justify-between mt-4 text-sm text-slate-500 dark:text-slate-400"></div>
+                                </div>
+                            </div>
+
+                            <!-- Panel: file viewer (replaces list) -->
+                            <div id="memory-panel-viewer" class="hidden">
+                                <div class="flex items-center gap-3 mb-6">
+                                    <button onclick="closeMemoryViewer()"
+                                            class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm
+                                                   text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10
+                                                   border border-slate-200 dark:border-white/10 transition-colors cursor-pointer">
+                                        <i class="fas fa-arrow-left text-xs"></i>
+                                        <span data-i18n="memory_back">返回列表</span>
+                                    </button>
+                                    <h2 id="memory-viewer-title"
+                                        class="text-base font-semibold text-slate-800 dark:text-slate-100 font-mono truncate"></h2>
+                                </div>
+                                <div class="bg-white dark:bg-[#1A1A1A] rounded-xl border border-slate-200 dark:border-white/10 overflow-hidden">
+                                    <div id="memory-viewer-content"
+                                         class="p-5 overflow-y-auto text-sm msg-content text-slate-700 dark:text-slate-200"
+                                         style="max-height: calc(100vh - 220px)"></div>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ====================================================== -->
+                <!-- VIEW: Knowledge                                         -->
+                <!-- ====================================================== -->
+                <div id="view-knowledge" class="view">
+                    <div class="flex-1 overflow-y-auto p-4 md:p-8 lg:p-10">
+                        <div class="w-full max-w-[1600px] mx-auto">
+
+                            <!-- Header -->
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 md:mb-6">
+                                <div>
+                                    <h2 class="text-xl font-bold text-slate-800 dark:text-slate-100" data-i18n="knowledge_title">知识库</h2>
+                                    <p class="text-sm text-slate-500 dark:text-slate-400 mt-1" data-i18n="knowledge_desc">浏览和探索你的知识库</p>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <span id="knowledge-stats" class="text-xs text-slate-400 dark:text-slate-500 hidden sm:inline"></span>
+                                    <div class="flex items-center bg-slate-100 dark:bg-white/10 rounded-lg p-0.5">
+                                        <button id="knowledge-tab-docs" onclick="switchKnowledgeTab('docs')"
+                                                class="knowledge-tab px-3 py-1.5 rounded-md text-xs font-medium cursor-pointer transition-colors duration-150 active">
+                                            <i class="fas fa-folder-tree mr-1.5"></i><span data-i18n="knowledge_tab_docs">文档</span>
+                                        </button>
+                                        <button id="knowledge-tab-graph" onclick="switchKnowledgeTab('graph')"
+                                                class="knowledge-tab px-3 py-1.5 rounded-md text-xs font-medium cursor-pointer transition-colors duration-150">
+                                            <i class="fas fa-diagram-project mr-1.5"></i><span data-i18n="knowledge_tab_graph">图谱</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Empty state -->
+                            <div id="knowledge-empty" class="flex flex-col items-center justify-center py-20">
+                                <div class="w-16 h-16 rounded-2xl bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center mb-4">
+                                    <i class="fas fa-book text-emerald-400 text-xl"></i>
+                                </div>
+                                <p class="text-slate-500 dark:text-slate-400 font-medium" data-i18n="knowledge_loading">加载知识库中...</p>
+                                <p class="text-sm text-slate-400 dark:text-slate-500 mt-1" data-i18n="knowledge_loading_desc">知识页面将显示在这里</p>
+                                <div id="knowledge-empty-guide" class="hidden mt-6 max-w-sm text-center">
+                                    <p class="text-sm text-slate-500 dark:text-slate-400 mb-4" data-i18n="knowledge_empty_guide">在对话中发送文档、链接或主题给 Agent，它会自动整理到你的知识库中。</p>
+                                    <button onclick="navigateTo('chat')"
+                                            class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-500 hover:bg-primary-600
+                                                   text-white text-sm font-medium cursor-pointer transition-colors duration-150">
+                                        <i class="fas fa-message text-xs"></i>
+                                        <span data-i18n="knowledge_go_chat">开始对话</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Documents panel -->
+                            <div id="knowledge-panel-docs" class="hidden">
+                                <div class="flex flex-col md:flex-row gap-4 md:gap-6" style="min-height: calc(100vh - 220px)">
+                                    <!-- File tree -->
+                                    <div id="knowledge-sidebar" class="w-full md:w-72 lg:w-80 flex-shrink-0">
+                                        <div class="bg-white dark:bg-[#1A1A1A] rounded-xl border border-slate-200 dark:border-white/10 overflow-hidden">
+                                            <div class="px-4 py-3 border-b border-slate-200 dark:border-white/10">
+                                                <div class="relative">
+                                                    <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                                                    <input id="knowledge-search" type="text" placeholder="Search..."
+                                                           class="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-lg text-slate-700 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-primary-400/50"
+                                                           oninput="filterKnowledgeTree(this.value)">
+                                                </div>
+                                            </div>
+                                            <div id="knowledge-tree" class="p-2 overflow-y-auto max-h-[50vh] md:max-h-[calc(100vh-300px)]"></div>
+                                        </div>
+                                    </div>
+                                    <!-- Content viewer -->
+                                    <div class="flex-1 min-w-0">
+                                        <div id="knowledge-content-placeholder"
+                                             class="flex flex-col items-center justify-center py-20 text-slate-400 dark:text-slate-500">
+                                            <i class="fas fa-file-lines text-3xl mb-3 opacity-40"></i>
+                                            <p class="text-sm" data-i18n="knowledge_select_hint">选择一个文档查看</p>
+                                        </div>
+                                        <div id="knowledge-content-viewer" class="hidden">
+                                            <div class="bg-white dark:bg-[#1A1A1A] rounded-xl border border-slate-200 dark:border-white/10 overflow-hidden">
+                                                <div class="flex items-center gap-3 px-4 md:px-5 py-3 border-b border-slate-200 dark:border-white/10">
+                                                    <button onclick="knowledgeMobileBack()" class="md:hidden p-1 -ml-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 cursor-pointer">
+                                                        <i class="fas fa-arrow-left text-xs"></i>
+                                                    </button>
+                                                    <i class="fas fa-file-lines text-slate-400 text-sm hidden md:inline"></i>
+                                                    <span id="knowledge-viewer-title" class="text-sm font-medium text-slate-700 dark:text-slate-200 truncate"></span>
+                                                    <span id="knowledge-viewer-path" class="text-xs text-slate-400 dark:text-slate-500 ml-auto font-mono truncate hidden md:inline"></span>
+                                                </div>
+                                                <div id="knowledge-viewer-body"
+                                                     class="p-4 md:p-5 overflow-y-auto text-sm msg-content text-slate-700 dark:text-slate-200"
+                                                     style="max-height: calc(100vh - 280px)"></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Graph panel -->
+                            <div id="knowledge-panel-graph" class="hidden">
+                                <div class="bg-white dark:bg-[#1A1A1A] rounded-xl border border-slate-200 dark:border-white/10 overflow-hidden">
+                                    <div id="knowledge-graph-container" class="w-full h-[60vh] md:h-[calc(100vh-220px)]"></div>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ====================================================== -->
+                <!-- VIEW: Channels                                          -->
+                <!-- ====================================================== -->
+                <div id="view-channels" class="view">
+                    <div class="flex-1 overflow-y-auto p-6">
+                        <div class="max-w-4xl mx-auto">
+                            <div class="flex items-center justify-between mb-6">
+                                <div>
+                                    <h2 class="text-xl font-bold text-slate-800 dark:text-slate-100" data-i18n="channels_title">通道管理</h2>
+                                    <p class="text-sm text-slate-500 dark:text-slate-400 mt-1" data-i18n="channels_desc">管理已接入的消息通道</p>
+                                </div>
+                                <button id="add-channel-btn" onclick="openAddChannelPanel()"
+                                        class="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-500 hover:bg-primary-600
+                                               text-white text-sm font-medium cursor-pointer transition-colors duration-150">
+                                    <i class="fas fa-plus text-xs"></i>
+                                    <span data-i18n="channels_add">接入通道</span>
+                                </button>
+                            </div>
+                            <div id="channels-content" class="grid gap-4"></div>
+                            <div id="channels-add-panel" class="hidden mt-4"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ====================================================== -->
+                <!-- VIEW: Tasks                                             -->
+                <!-- ====================================================== -->
+                <div id="view-tasks" class="view">
+                    <div class="flex-1 overflow-y-auto p-6">
+                        <div class="max-w-4xl mx-auto">
+                            <div class="flex items-center justify-between mb-6">
+                                <div>
+                                    <h2 class="text-xl font-bold text-slate-800 dark:text-slate-100" data-i18n="tasks_title">定时任务</h2>
+                                    <p class="text-sm text-slate-500 dark:text-slate-400 mt-1" data-i18n="tasks_desc">查看和管理定时任务</p>
+                                </div>
+                            </div>
+                            <div id="tasks-empty" class="flex flex-col items-center justify-center py-20">
+                                <div class="w-16 h-16 rounded-2xl bg-rose-50 dark:bg-rose-900/20 flex items-center justify-center mb-4">
+                                    <i class="fas fa-clock text-rose-400 text-xl"></i>
+                                </div>
+                                <p class="text-slate-500 dark:text-slate-400 font-medium">Loading...</p>
+                            </div>
+                            <div id="tasks-list" class="grid gap-4 hidden"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ====================================================== -->
+                <!-- VIEW: Logs                                              -->
+                <!-- ====================================================== -->
+                <div id="view-logs" class="view">
+                    <div class="flex-1 overflow-y-auto p-6">
+                        <div class="max-w-5xl mx-auto">
+                            <div class="flex items-center justify-between mb-6">
+                                <div>
+                                    <h2 class="text-xl font-bold text-slate-800 dark:text-slate-100" data-i18n="logs_title">日志</h2>
+                                    <p class="text-sm text-slate-500 dark:text-slate-400 mt-1" data-i18n="logs_desc">实时日志输出 (run.log)</p>
+                                </div>
+                            </div>
+                            <!-- Log Terminal -->
+                            <div class="bg-slate-900 rounded-xl border border-slate-700 overflow-hidden shadow-lg">
+                                <div class="flex items-center gap-2 px-4 py-2.5 bg-slate-800 border-b border-slate-700">
+                                    <div class="flex gap-1.5">
+                                        <span class="w-3 h-3 rounded-full bg-red-500/80"></span>
+                                        <span class="w-3 h-3 rounded-full bg-amber-500/80"></span>
+                                        <span class="w-3 h-3 rounded-full bg-emerald-500/80"></span>
+                                    </div>
+                                    <span class="text-xs text-slate-400 ml-2 font-mono">run.log</span>
+                                    <div class="flex-1"></div>
+                                    <div class="flex items-center gap-3 mr-2">
+                                        <label class="flex items-center gap-1 cursor-pointer select-none">
+                                            <input type="checkbox" class="log-filter-cb" data-level="debug" checked>
+                                            <span class="text-xs text-slate-400">DEBUG</span>
+                                        </label>
+                                        <label class="flex items-center gap-1 cursor-pointer select-none">
+                                            <input type="checkbox" class="log-filter-cb" data-level="info" checked>
+                                            <span class="text-xs text-blue-400">INFO</span>
+                                        </label>
+                                        <label class="flex items-center gap-1 cursor-pointer select-none">
+                                            <input type="checkbox" class="log-filter-cb" data-level="warning" checked>
+                                            <span class="text-xs text-yellow-400">WARNING</span>
+                                        </label>
+                                        <label class="flex items-center gap-1 cursor-pointer select-none">
+                                            <input type="checkbox" class="log-filter-cb" data-level="error" checked>
+                                            <span class="text-xs text-red-400">ERROR</span>
+                                        </label>
+                                        <label class="flex items-center gap-1 cursor-pointer select-none">
+                                            <input type="checkbox" class="log-filter-cb" data-level="critical" checked>
+                                            <span class="text-xs text-white font-bold">CRITICAL</span>
+                                        </label>
+                                    </div>
+                                    <div class="flex items-center gap-1.5">
+                                        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                                        <span class="text-xs text-slate-500" data-i18n="logs_live">实时</span>
+                                    </div>
+                                </div>
+                                <div id="log-output" class="p-4 overflow-y-auto font-mono text-xs leading-relaxed text-slate-300 whitespace-pre-wrap break-all" style="height: calc(100vh - 272px)">
+                                    <p class="text-slate-500" data-i18n="logs_coming_msg">日志流即将在此提供。将连接 run.log 实现类似 tail -f 的实时输出。</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div><!-- /content-area -->
+        </div><!-- /main-content -->
+    </div><!-- /app -->
+
+    <!-- Confirm Dialog -->
+    <div id="confirm-dialog-overlay" class="fixed inset-0 bg-black/50 z-[100] hidden flex items-center justify-center">
+        <div class="bg-white dark:bg-[#1A1A1A] rounded-2xl border border-slate-200 dark:border-white/10 shadow-xl
+                    w-full max-w-sm mx-4 overflow-hidden">
+            <div class="p-6">
+                <div class="flex items-center gap-3 mb-3">
+                    <div class="w-10 h-10 rounded-xl bg-red-50 dark:bg-red-900/20 flex items-center justify-center flex-shrink-0">
+                        <i class="fas fa-triangle-exclamation text-red-500"></i>
+                    </div>
+                    <h3 id="confirm-dialog-title" class="font-semibold text-slate-800 dark:text-slate-100 text-base"></h3>
+                </div>
+                <p id="confirm-dialog-message" class="text-sm text-slate-500 dark:text-slate-400 leading-relaxed ml-[52px]"></p>
+            </div>
+            <div class="flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-100 dark:border-white/5">
+                <button id="confirm-dialog-cancel"
+                        class="px-4 py-2 rounded-lg border border-slate-200 dark:border-white/10
+                               text-slate-600 dark:text-slate-300 text-sm font-medium
+                               hover:bg-slate-50 dark:hover:bg-white/5
+                               cursor-pointer transition-colors duration-150"></button>
+                <button id="confirm-dialog-ok"
+                        class="px-4 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white text-sm font-medium
+                               cursor-pointer transition-colors duration-150"></button>
+            </div>
+        </div>
+    </div>
+
+    <script defer src="assets/js/console.js"></script>
+</body>
+</html>

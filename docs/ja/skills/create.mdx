@@ -1,0 +1,58 @@
+---
+title: スキルの作成
+description: 会話を通じてカスタムスキルを作成
+---
+
+CowAgent には Skill Creator が組み込まれており、自然言語の会話を通じてスキルの作成、インストール、更新を素早く行えます。
+
+## 使い方
+
+会話で作りたいスキルを説明するだけで、Agent が自動的に作成します：
+
+- ワークフローをスキル化：「このデプロイプロセスからスキルを作成して」
+- サードパーティ API の統合：「この API ドキュメントに基づいてスキルを作成して」
+- リモートスキルのインストール：「xxx スキルをインストールして」
+
+## 作成フロー
+
+1. 作成したいスキルを Agent に伝えます
+2. Agent が自動的に `SKILL.md` の説明と実行スクリプトを生成します
+3. スキルはワークスペースの `~/cow/skills/` ディレクトリに保存されます
+4. 以降の会話で Agent が自動的にそのスキルを認識し使用します
+
+<Frame>
+  <img src="https://cdn.link-ai.tech/doc/20260202202247.png" width="800" />
+</Frame>
+
+## SKILL.md のフォーマット
+
+作成されたスキルは標準の SKILL.md フォーマットに従います：
+
+```markdown
+---
+name: my-skill
+description: Brief description of the skill
+metadata:
+  emoji: 🔧
+  requires:
+    bins: ["curl"]
+    env: ["MY_API_KEY"]
+  primaryEnv: "MY_API_KEY"
+---
+
+# My Skill
+
+Detailed instructions...
+```
+
+| フィールド | 説明 |
+| --- | --- |
+| `name` | スキル名。ディレクトリ名と一致する必要があります |
+| `description` | スキルの説明。Agent はこれに基づいて呼び出すかどうかを判断します |
+| `metadata.requires.bins` | 必要なシステムコマンド |
+| `metadata.requires.env` | 必要な環境変数 |
+| `metadata.always` | 常に読み込む（デフォルトは false） |
+
+<Tip>
+  詳細は [Skill Creator のドキュメント](https://github.com/zhayujie/CowAgent/blob/master/skills/skill-creator/SKILL.md)をご覧ください。
+</Tip>

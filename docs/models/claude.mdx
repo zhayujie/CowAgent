@@ -1,0 +1,17 @@
+---
+title: Claude
+description: Claude 模型配置
+---
+
+```json
+{
+  "model": "claude-sonnet-4-6",
+  "claude_api_key": "YOUR_API_KEY"
+}
+```
+
+| 参数 | 说明 |
+| --- | --- |
+| `model` | 支持 `claude-sonnet-4-6`、`claude-opus-4-7`、`claude-opus-4-6`、`claude-sonnet-4-5`、`claude-sonnet-4-0`、`claude-3-5-sonnet-latest` 等，参考 [官方模型](https://docs.anthropic.com/en/docs/about-claude/models/overview) |
+| `claude_api_key` | 在 [Claude 控制台](https://console.anthropic.com/settings/keys) 创建 |
+| `claude_api_base` | 可选，默认为 `https://api.anthropic.com/v1`，修改可接入第三方代理 |

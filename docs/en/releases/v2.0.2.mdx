@@ -1,0 +1,98 @@
+---
+title: v2.0.2
+description: CowAgent 2.0.2 - Web Console upgrade, multi-channel concurrency, session persistence
+---
+
+**Release Date**: 2026.02.27 | [Full Changelog](https://github.com/zhayujie/CowAgent/compare/2.0.1...master)
+
+## Highlights
+
+### 🖥️ Web Console Upgrade
+
+The Web Console has been fully upgraded with streaming conversation output, visual display of tool execution and reasoning processes, and online management of **models, skills, memory, channels, and Agent configuration**.
+
+#### Chat Interface
+
+Supports streaming output with real-time display of the Agent's reasoning process and tool calls, providing intuitive observation of the Agent's decision-making:
+
+<img width="850" src="https://cdn.link-ai.tech/doc/20260227180120.png" />
+
+#### Model Management
+
+Manage model configurations online without manually editing config files:
+
+<img width="850" src="https://cdn.link-ai.tech/doc/20260227173811.png" />
+
+#### Skill Management
+
+View and manage Agent skills (Skills) online:
+
+<img width="850" src="https://cdn.link-ai.tech/doc/20260227173403.png" />
+
+#### Memory Management
+
+View and manage Agent memory online:
+
+<img width="850" src="https://cdn.link-ai.tech/doc/20260227173349.png" />
+
+#### Channel Management
+
+Manage connected channels online with real-time connect/disconnect operations:
+
+<img width="850" src="https://cdn.link-ai.tech/doc/20260227173331.png" />
+
+#### Scheduled Tasks
+
+View and manage scheduled tasks online, including one-time tasks, fixed intervals, and Cron expressions:
+
+<img width="850" src="https://cdn.link-ai.tech/doc/20260227173704.png" />
+
+#### Logs
+
+View Agent runtime logs in real-time for monitoring and troubleshooting:
+
+<img width="850" src="https://cdn.link-ai.tech/doc/20260227173514.png" />
+
+Related commits: [f1a1413](https://github.com/zhayujie/CowAgent/commit/f1a1413), [c0702c8](https://github.com/zhayujie/CowAgent/commit/c0702c8), [394853c](https://github.com/zhayujie/CowAgent/commit/394853c), [1c71c4e](https://github.com/zhayujie/CowAgent/commit/1c71c4e), [5e3eccb](https://github.com/zhayujie/CowAgent/commit/5e3eccb), [e1dc037](https://github.com/zhayujie/CowAgent/commit/e1dc037), [5edbf4c](https://github.com/zhayujie/CowAgent/commit/5edbf4c), [7d258b5](https://github.com/zhayujie/CowAgent/commit/7d258b5)
+
+### 🔀 Multi-Channel Concurrency
+
+Multiple channels (e.g., Feishu, DingTalk, WeCom, Web) can now run simultaneously, each in an independent thread without interference.
+
+Configuration: Set multiple channels in `config.json` via `channel_type` separated by commas, or connect/disconnect channels in real-time from the Web Console's channel management page.
+
+```json
+{
+  "channel_type": "web,feishu,dingtalk"
+}
+```
+
+Related commits: [4694594](https://github.com/zhayujie/CowAgent/commit/4694594), [7cce224](https://github.com/zhayujie/CowAgent/commit/7cce224), [7d258b5](https://github.com/zhayujie/CowAgent/commit/7d258b5), [c9adddb](https://github.com/zhayujie/CowAgent/commit/c9adddb)
+
+### 💾 Session Persistence
+
+Session history is now persisted to a local SQLite database. Conversation context is automatically restored after service restarts. Historical conversations in the Web Console are also restored.
+
+Related commits: [29bfbec](https://github.com/zhayujie/CowAgent/commit/29bfbec), [9917552](https://github.com/zhayujie/CowAgent/commit/9917552), [925d728](https://github.com/zhayujie/CowAgent/commit/925d728)
+
+## New Models
+
+- **Gemini 3.1 Pro Preview**: Added `gemini-3.1-pro-preview` model support ([52d7cad](https://github.com/zhayujie/CowAgent/commit/52d7cad))
+- **Claude 4.6 Sonnet**: Added `claude-4.6-sonnet` model support ([52d7cad](https://github.com/zhayujie/CowAgent/commit/52d7cad))
+- **Qwen3.5 Plus**: Added `qwen3.5-plus` model support ([e59a289](https://github.com/zhayujie/CowAgent/commit/e59a289))
+- **MiniMax M2.5**: Added `Minimax-M2.5` model support ([48db538](https://github.com/zhayujie/CowAgent/commit/48db538))
+- **GLM-5**: Added `glm-5` model support ([48db538](https://github.com/zhayujie/CowAgent/commit/48db538))
+- **Kimi K2.5**: Added `kimi-k2.5` model support ([48db538](https://github.com/zhayujie/CowAgent/commit/48db538))
+- **Doubao 2.0 Code**: Added `doubao-2.0-code` coding-specialized model ([ab28ee5](https://github.com/zhayujie/CowAgent/commit/ab28ee5))
+- **DashScope Models**: Added Alibaba Cloud DashScope model name support ([ce58f23](https://github.com/zhayujie/CowAgent/commit/ce58f23))
+
+## Website & Documentation
+
+- **Official Website**: [cowagent.ai](https://cowagent.ai/)
+- **Documentation**: [docs.cowagent.ai](https://docs.cowagent.ai/)
+
+## Bug Fixes
+
+- **Gemini DingTalk image recognition**: Fixed Gemini unable to process image markers in DingTalk channel ([05a3304](https://github.com/zhayujie/CowAgent/commit/05a3304)) ([#2670](https://github.com/zhayujie/CowAgent/pull/2670)) Thanks [@SgtPepper114](https://github.com/SgtPepper114)
+- **Startup script dependencies**: Fixed dependency installation issue in `run.sh` script ([b6fc9fa](https://github.com/zhayujie/CowAgent/commit/b6fc9fa))
+- **Bare except cleanup**: Replaced `bare except` with `except Exception` for better exception handling ([adca89b](https://github.com/zhayujie/CowAgent/commit/adca89b)) ([#2674](https://github.com/zhayujie/CowAgent/pull/2674)) Thanks [@haosenwang1018](https://github.com/haosenwang1018)

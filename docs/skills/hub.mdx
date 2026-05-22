@@ -1,0 +1,65 @@
+---
+title: 技能广场
+description: 浏览、搜索和安装 AI Agent 技能
+---
+
+[Cow Skill Hub](https://skills.cowagent.ai/) 是开源的 AI Agent 技能广场，汇集了官方推荐、社区贡献和第三方平台（GitHub、ClawHub 等）的技能。
+
+开源仓库：[github.com/zhayujie/cow-skill-hub](https://github.com/zhayujie/cow-skill-hub)
+
+<img src="https://cdn.link-ai.tech/doc/20260401110103.png" width="800" />
+
+## 功能
+
+- **浏览技能**：按类别（推荐 / 社区 / 第三方）和标签筛选
+- **搜索技能**：按名称或描述搜索
+- **查看详情**：查看技能文档、文件内容、安装命令和依赖的环境变量
+- **一键安装**：复制安装命令即可在 CowAgent 中使用
+
+## 安装技能
+
+在对话中或终端中执行安装命令：
+
+<CodeGroup>
+```text 对话
+/skill install <name>
+```
+
+```bash 终端
+cow skill install <name>
+```
+</CodeGroup>
+
+也可以在对话中浏览技能广场：
+
+```text
+/skill list --remote
+/skill search <关键词>
+```
+
+除了在列表中展示的精选技能，还可以通过 **CLI命令 + Skill Hub** 安装各种第三方技能（**GitHub、ClawHub、LinkAI、URL** 等）参考 [安装技能](/skills/install)。
+
+## 贡献技能
+
+欢迎向技能广场提交你的技能：
+
+1. 访问 [skills.cowagent.ai/submit](https://skills.cowagent.ai/submit)
+2. 使用 GitHub 或 Google 账号登录
+3. 上传包含 `SKILL.md` 的文件夹或 zip 包
+4. 自动解析技能名称、显示名称和描述，可按需修改
+5. 提交后将经过安全检查和审核后发布
+
+<img src="https://cdn.link-ai.tech/doc/20260401111904.png" width="800" />
+
+技能文件结构：
+
+```
+your-skill/
+├── SKILL.md        # 必须，放在根目录
+├── scripts/        # 可选，运行脚本
+└── resources/      # 可选，其他资源
+```
+
+<Tip>
+  技能基于 `SKILL.md` 文件构建，你也可以在技能详情页下载 SKILL.md，用于任何支持自定义指令的 Agent（如 OpenClaw、Cursor、Claude Code 等）。
+</Tip>

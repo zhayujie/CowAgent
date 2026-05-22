@@ -1,0 +1,55 @@
+---
+title: v2.0.4
+description: CowAgent 2.0.4 - 個人WeChat チャネルの追加、新モデルサポート、日本語ドキュメント、スクリプトリファクタリングおよび複数の修正
+---
+
+## 🔌 個人WeChat チャネルの追加
+
+個人WeChat（`weixin`）チャネルを追加しました。本バージョンの最も重要なアップデートです。QRコードをスキャンするだけで CowAgent を個人WeChatに接続でき、以下の機能をサポートします：
+
+- **メッセージ送受信**：テキスト、画像、ファイル、動画メッセージの送受信、音声メッセージの受信をサポート
+- **QRコードログイン**：ターミナルにQRコードを表示、WeChatでスキャンして確認するだけでログイン完了。QRコード期限切れ時は自動更新
+- **認証情報の永続化**：ログイン認証情報を `~/.weixin_cow_credentials.json` に自動保存、再起動時に再スキャン不要
+- **Session 自動再接続**：Session 期限切れ時に旧認証情報を自動クリアし、QRコードログインを再開
+- **Web コンソール接続**：Web コンソールからWeChatチャネルを追加可能、QRコードログインフローを同期表示
+- **Docker・スクリプト対応**：`run.sh` と `docker-compose.yml` がWeChat チャネルに対応
+
+接続ドキュメント：[WeChat 接続](https://docs.cowagent.ai/channels/weixin)。
+
+関連コミット：[ce89869](https://github.com/zhayujie/CowAgent/commit/ce89869), [a483ec0](https://github.com/zhayujie/CowAgent/commit/a483ec0), [c1421e0](https://github.com/zhayujie/CowAgent/commit/c1421e0)
+
+## 🤖 新規モデル
+
+- **MiniMax-M2.7**：MiniMax-M2.7 モデルのサポートを追加
+- **GLM-5-Turbo**：智譜 glm-5-turbo モデルのサポートを追加
+
+関連コミット：[9192f6f](https://github.com/zhayujie/CowAgent/commit/9192f6f)
+
+## 🔧 スクリプトリファクタリング
+
+- **run.sh リファクタリング**：共通ロジックを抽出し、大量の重複コードを削除。スクリプトの行数を 600+ 行から 177 行に圧縮 ([49d8707](https://github.com/zhayujie/CowAgent/commit/49d8707))
+- **実行権限**：`run.sh` ファイルの権限問題を修正 ([652156e](https://github.com/zhayujie/CowAgent/commit/652156e))
+
+## ⚡ 最適化
+
+- **リクエストヘッダー統一**：Agent の各サービス（Chat、Embedding、Vision、WebSearch 等）の外部リクエストに統一的な識別ヘッダーを追加 ([b4e711f](https://github.com/zhayujie/CowAgent/commit/b4e711f))
+- **メッセージ自動修復**：メッセージプロトコルのフォールトトレランスを強化し、フォーマット異常なメッセージシーケンスを自動修復 ([b8b57e3](https://github.com/zhayujie/CowAgent/commit/b8b57e3))
+
+## 🌍 日本語ドキュメント
+
+完全な日本語ドキュメントを追加しました。入門ガイド、チャネル接続、モデル設定などの主要セクションをカバーしています。Thanks [@Ikko Ashimine](https://github.com/ikoamu)
+
+関連コミット：[5487c0b](https://github.com/zhayujie/CowAgent/commit/5487c0b)
+
+## 🐛 バグ修正
+
+- **企業微信ボット互換性**：旧バージョンの `websocket-client` との互換性問題を修正し、統一的な WebSocket 互換レイヤーを追加 ([bc7f627](https://github.com/zhayujie/CowAgent/commit/bc7f627))
+- **run.sh PID 取得**：`run.sh` でのプロセス PID 取得エラーを修正 ([9febb07](https://github.com/zhayujie/CowAgent/commit/9febb07))
+- **飛書エンコーディング**：飛書チャネルのメッセージとログのエンコーディング問題を修正 ([7d0e156](https://github.com/zhayujie/CowAgent/commit/7d0e156))
+- **飛書設定**：`run.sh` での `feishu_bot_name` への冗長な依存を削除 ([1b5be1b](https://github.com/zhayujie/CowAgent/commit/1b5be1b))
+
+## 📦 アップグレード方法
+
+ソースコードデプロイの場合は `./run.sh update` でワンクリックアップグレードできます。または手動でコードをプルして再起動してください。詳細は [アップデートドキュメント](https://docs.cowagent.ai/guide/upgrade) を参照。
+
+**リリース日**：2026.03.22 | [Full Changelog](https://github.com/zhayujie/CowAgent/compare/2.0.3...master)

@@ -1,0 +1,58 @@
+---
+title: Create Skills
+description: Create custom skills through conversation
+---
+
+CowAgent includes a built-in Skill Creator that lets you quickly create, install, or update skills through natural language conversation.
+
+## Usage
+
+Simply describe the skill you want in a conversation, and the Agent will handle the creation:
+
+- Codify workflows as skills: "Create a skill from this deployment process"
+- Integrate third-party APIs: "Create a skill based on this API documentation"
+- Install remote skills: "Install xxx skill for me"
+
+## Creation Flow
+
+1. Tell the Agent what skill you want to create
+2. Agent automatically generates `SKILL.md` description and execution scripts
+3. Skill is saved to the workspace `~/cow/skills/` directory
+4. Agent will automatically recognize and use the skill in future conversations
+
+<Frame>
+  <img src="https://cdn.link-ai.tech/doc/20260202202247.png" width="800" />
+</Frame>
+
+## SKILL.md Format
+
+Created skills follow the standard SKILL.md format:
+
+```markdown
+---
+name: my-skill
+description: Brief description of the skill
+metadata:
+  emoji: 🔧
+  requires:
+    bins: ["curl"]
+    env: ["MY_API_KEY"]
+  primaryEnv: "MY_API_KEY"
+---
+
+# My Skill
+
+Detailed instructions...
+```
+
+| Field | Description |
+| --- | --- |
+| `name` | Skill name, must match directory name |
+| `description` | Skill description, Agent decides whether to invoke based on this |
+| `metadata.requires.bins` | Required system commands |
+| `metadata.requires.env` | Required environment variables |
+| `metadata.always` | Always load (default false) |
+
+<Tip>
+  See the [Skill Creator documentation](https://github.com/zhayujie/CowAgent/blob/master/skills/skill-creator/SKILL.md) for details.
+</Tip>

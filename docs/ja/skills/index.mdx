@@ -1,0 +1,64 @@
+---
+title: スキル概要
+description: CowAgent のスキルシステム紹介
+---
+
+スキル（Skill）は Agent に無限の拡張性を提供します。各スキルは説明ファイル（`SKILL.md`）、実行スクリプト（任意）、リソース（任意）で構成され、特定のタスクをどのように遂行するかを記述します。
+
+スキルとツールの違い：ツールはコードで実装された原子的な操作（例：ファイルの読み書き、コマンドの実行）であるのに対し、スキルは説明ファイルに基づく高レベルなワークフローであり、複数のツールを組み合わせて複雑なタスクを完遂できます。
+
+## スキルの取得
+
+CowAgent ではスキルを取得する複数の方法を提供しています：
+
+- **Cow スキル広場** — `/skill list --remote` でコミュニティスキルを閲覧・インストール
+- **GitHub** — GitHub リポジトリから直接インストール、バッチインストールにも対応
+- **ClawHub** — `/skill install clawhub:名前` で ClawHub のスキルをインストール
+- **URL** — zip アーカイブや SKILL.md リンクからインストール
+- **会話で作成** — 自然言語の会話を通じて Agent にスキルを自動作成させる
+
+詳細は[スキルのインストール](/ja/skills/install)と[スキル管理コマンド](/ja/cli/skill)を参照してください。会話を通じて[スキルを作成](/ja/skills/create)することもできます。
+
+## スキルの読み込み優先順位
+
+1. **ワークスペースのスキル**（最高優先）：`~/cow/skills/`
+2. **プロジェクト組み込みスキル**（最低優先）：`skills/`
+
+同名のスキルは優先順位に従って上書きされます。
+
+## スキルのファイル構成
+
+```
+skills/
+├── my-skill/
+│   ├── SKILL.md          # Skill の説明（frontmatter + 手順）
+│   ├── scripts/          # 実行スクリプト（任意）
+│   └── resources/        # 追加リソース（任意）
+```
+
+### SKILL.md のフォーマット
+
+```markdown
+---
+name: my-skill
+description: Brief description of the skill
+metadata:
+  emoji: 🔧
+  requires:
+    bins: ["curl"]
+    env: ["MY_API_KEY"]
+  primaryEnv: "MY_API_KEY"
+---
+
+# My Skill
+
+Detailed instructions...
+```
+
+| フィールド | 説明 |
+| --- | --- |
+| `name` | スキル名。ディレクトリ名と一致する必要があります |
+| `description` | スキルの説明。Agent はこれに基づいて呼び出すかどうかを判断します |
+| `metadata.requires.bins` | 必要なシステムコマンド |
+| `metadata.requires.env` | 必要な環境変数 |
+| `metadata.always` | 常に読み込む（デフォルトは false） |

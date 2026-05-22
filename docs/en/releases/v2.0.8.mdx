@@ -1,0 +1,68 @@
+---
+title: v2.0.8
+description: CowAgent 2.0.8 - Major Feishu channel upgrade (voice, streaming typewriter, one-click QR app creation), DeepSeek V4 / Baidu Qianfan ERNIE 5.0 support, scheduler memory enhancements and multiple fixes
+---
+
+## 🪶 Major Feishu Channel Upgrade
+
+### 1. One-click QR-scan App Creation
+
+No more manual app setup, permission scopes and event subscriptions in the Feishu Open Platform. When `feishu_app_id` is not configured, both the Web Console and CLI startup flow now show a QR-scan entry — scan with Feishu, authorize, and the bot is created and config is filled back automatically. Out-of-the-box.
+
+Documentation: [Feishu Channel](https://docs.cowagent.ai/en/channels/feishu)
+
+### 2. Voice Messages
+
+Receive Feishu voice messages with automatic speech-to-text, and reply in voice via TTS. Recognition accuracy for short Chinese voice messages has been improved.
+
+### 3. Streaming Typewriter Replies
+
+Integrated with Feishu CardKit streaming cards, **enabled by default**, matching the Web Console experience:
+
+- Multi-turn agent flows render intermediate updates and the final reply on separate cards
+- Tuned for high-throughput models like DeepSeek to keep pace with the Web Console
+- Falls back to plain text replies automatically when not supported, no manual config needed
+- Requires Feishu client ≥ 7.20
+
+The voice and streaming building blocks come from a community contribution #2791. Thanks [@yangluxin613](https://github.com/yangluxin613)
+
+## 🤖 New Model Support
+
+- **DeepSeek V4 series**: Added `deepseek-v4-pro` / `deepseek-v4-flash`, with `deepseek-v4-flash` set as the new default
+- **Unified thinking-mode toggle**: DeepSeek V4, Qwen3 and other thinking-capable models now share the same `enable_thinking` switch
+- **Baidu Qianfan / ERNIE first-class integration**: New `qianfan` provider supporting `ernie-5.0` (default recommendation), `ernie-x1.1`, `ernie-4.5-turbo-128k`, `ernie-4.5-turbo-32k`. Dedicated `qianfan_api_key` / `qianfan_api_base` settings keep OpenAI config clean; legacy `wenxin` / `wenxin-4` paths are fully preserved. #2790 Thanks [@jimmyzhuu](https://github.com/jimmyzhuu)
+
+  Documentation: [Baidu Qianfan / ERNIE](https://docs.cowagent.ai/en/models/qianfan)
+
+## 🌐 Translation Provider
+
+- **Youdao translator**: Added a Youdao provider to the `translate/` module using the v3 SHA-256 signing scheme, with automatic ISO 639-1 language-code mapping (`zh`, `zh-TW`, etc.) #2797 Thanks [@Zmjjeff7](https://github.com/Zmjjeff7)
+
+## 🛠 OpenAI Client Refactor
+
+- **Drop SDK dependency**: The OpenAI bot is reimplemented on a native HTTP client — leaner startup, fewer dependency conflicts
+- **Web Console hint**: API base inputs in the model config UI now include version-path placeholder hints
+
+## ⏰ Scheduler Memory Enhancements
+
+- **Follow-up on task results**: Scheduled task results are automatically injected into the receiver's session history — the next turn can ask follow-up questions without re-stating context. Thanks [@huangrichao2020](https://github.com/huangrichao2020)
+- **No long-term memory pollution**: Scheduler-injected pairs are excluded from the daily memory flush so high-frequency tasks don't drown the memory store
+- **Bounded scheduler context**: The scheduler's own session context is automatically capped, so long-running periodic tasks don't accumulate state and slow down replies
+
+## 🔧 Tools and Safety
+
+- **Vision model selection**: `tool.vision.model` config now actually takes effect, with automatic fallback when unconfigured #2792
+- **Bash safety prompt**: The destructive-deletion confirm prompt is now scoped to paths outside the workspace — routine in-workspace operations are no longer interrupted
+
+## 🐛 Other Fixes
+
+- Fixed Deep Dream firing duplicate runs in multi-instance setups
+- Fixed missing `reasoning_content` on some history turns in DeepSeek multi-turn conversations
+
+## 📦 Upgrade
+
+Source-code deployments can run `cow update` or `./run.sh update` for a one-click upgrade, or pull the latest code and restart manually. See [Upgrade Guide](https://docs.cowagent.ai/en/guide/upgrade) for details.
+
+> ⚠️ One-click Feishu app creation requires `lark-oapi>=1.5.5`. `cow update` pulls it automatically; manual deployments must update dependencies.
+
+**Release Date**: 2026.05.05 | [Full Changelog](https://github.com/zhayujie/CowAgent/compare/2.0.7...2.0.8)

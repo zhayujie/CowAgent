@@ -1,0 +1,180 @@
+---
+title: skill-creator - Skill Creator
+description: Create, install, and update skills — standardises SKILL.md format and directory structure
+---
+
+`skill-creator` is a "meta-skill" that helps the Agent create, install, and update other skills, ensuring every skill follows a consistent `SKILL.md` format and directory layout.
+
+## When It Triggers
+
+- The user wants to install a skill from a URL or remote repository
+- The user wants to create a brand-new skill from scratch
+- An existing skill needs upgrading or restructuring
+
+## What Is a Skill?
+
+A skill is a reusable instruction set plus optional scripts and assets. It injects domain expertise into the Agent so it can handle specific tasks like a specialist.
+
+A skill typically contains:
+
+1. **Specialised workflow** — step-by-step instructions for a category of tasks
+2. **Tool usage** — how to call a particular API or process a particular file format
+3. **Domain knowledge** — team conventions, business rules, data schemas, etc.
+4. **Attached resources** — scripts, reference docs, templates, etc.
+
+<Note>
+**Core principle: less is more.** Only write what the Agent wouldn't figure out on its own. For every line you add, ask yourself: is it worth the tokens?
+</Note>
+
+## Directory Structure
+
+```
+skill-name/
+├── SKILL.md            # Required: skill definition
+│   ├── YAML frontmatter (name / description are mandatory)
+│   └── Markdown body (instructions + examples)
+└── Optional resources
+    ├── scripts/        # Executable scripts (Python / Bash, etc.)
+    ├── references/     # Large reference docs the Agent reads on demand
+    └── assets/         # Templates, icons, etc. used directly in output
+```
+
+## SKILL.md Specification
+
+Frontmatter fields in the SKILL.md header:
+
+| Field | Description |
+| --- | --- |
+| `name` | Skill name — lowercase with hyphens, must match the directory name |
+| `description` | **The most important field.** Clearly state what the skill does and when to use it. The Agent reads this to decide whether to invoke it. All trigger-related descriptions go here, not in the body |
+| `metadata.cowagent.requires.bins` | System CLI tools that must be installed |
+| `metadata.cowagent.requires.env` | Required environment variables (all must be present) |
+| `metadata.cowagent.requires.anyEnv` | Multiple API keys — at least one must be set |
+| `metadata.cowagent.requires.anyBins` | Multiple tools — at least one must be installed |
+| `metadata.cowagent.always` | Set to `true` to always load, skipping dependency checks |
+| `metadata.cowagent.emoji` | Display emoji (optional) |
+| `metadata.cowagent.os` | OS restriction, e.g. `["darwin", "linux"]` |
+
+<Note>
+The `category` field does not need to be set manually — the system automatically sets it to `skill`.
+</Note>
+
+Two ways to declare API key dependencies:
+
+```yaml
+metadata:
+  cowagent:
+    requires:
+      env: ["MYAPI_KEY"]            # Must be present
+```
+
+```yaml
+metadata:
+  cowagent:
+    requires:
+      anyEnv: ["OPENAI_API_KEY", "LINKAI_API_KEY"]   # At least one
+```
+
+**Skills are auto-enabled/disabled based on dependencies**: they activate when all required environment variables are present and deactivate when any are missing — no need for manual `/skill enable`.
+
+## Resource Directories
+
+| Directory | What goes here | What does NOT go here |
+| --- | --- | --- |
+| `scripts/` | Code that needs to run repeatedly, or scripts that produce deterministic results | Demo-only code snippets |
+| `references/` | Documents **over 500 lines** that genuinely won't fit in SKILL.md (e.g. a full DB schema) | General API docs, tutorials, examples |
+| `assets/` | Files that appear in the final output (templates, icons, boilerplate, etc.) | Explanatory documentation |
+
+<Warning>
+**In principle, everything goes in `SKILL.md`** — only split into resource directories when it truly won't fit.
+
+Do not add `README.md`, `CHANGELOG.md`, or `INSTALLATION_GUIDE.md` to a skill — put everything in `SKILL.md`. Resource directories should only contain scripts that actually run or assets that are actually used.
+</Warning>
+
+## Installing External Skills
+
+After installation, the skill lands in `<workspace>/skills/<name>/`.
+
+| Source | How to install |
+| --- | --- |
+| URL (single file) | curl / web_fetch |
+| URL (zip archive) | Download and extract |
+| Local SKILL.md | Read directly |
+| Local zip archive | Extract |
+
+Installation steps:
+
+1. Locate the `SKILL.md` (may be at the root or in a subdirectory of the archive)
+2. Read the `name` from the frontmatter
+3. Copy the **entire skill directory** (including `SKILL.md`, `scripts/`, `assets/`, etc.) to `<workspace>/skills/<name>/`
+4. If the archive contains an `INSTALL.md` or similar setup script, run it — but the final result must still reside under `<workspace>/skills/<name>/`
+
+## Creating a Skill from Scratch
+
+Recommended order:
+
+1. **Clarify requirements** — ask the user for a few concrete use cases (don't ask too many at once)
+2. **Plan the structure** — does this skill need scripts? Reference docs? Template assets?
+3. **Scaffold** — use the init script:
+
+   ```bash
+   scripts/init_skill.py <skill-name> --path <workspace>/skills [--resources scripts,references,assets] [--examples]
+   ```
+
+4. **Fill in content** — write SKILL.md, add scripts and resources. Always test scripts after writing them
+5. **Validate** (optional):
+
+   ```bash
+   scripts/quick_validate.py <workspace>/skills/<skill-name>
+   ```
+
+6. **Iterate** — keep improving based on real-world usage feedback
+
+## Naming Conventions
+
+- Use only lowercase letters, digits, and hyphens. Normalise user-given names, e.g. `Plan Mode` → `plan-mode`
+- Maximum 64 characters
+- Keep it short, start with a verb, make it self-explanatory
+- Use tool names as prefixes when appropriate, e.g. `gh-address-comments`, `linear-address-issue`
+- The directory name and the `name` field must match exactly
+
+## Three-Level Loading
+
+Skills are not loaded into context all at once — they use a three-level progressive loading mechanism:
+
+1. **Metadata** (`name` + `description`) — always in context (~100 words). The Agent uses this to decide whether to invoke the skill
+2. **SKILL.md body** — loaded only when the skill is activated; keep it under 500 lines
+3. **Resource files** — read on demand by the Agent
+
+For skills with multiple variants (e.g. multi-cloud deployment), organise like this:
+
+```
+cloud-deploy/
+├── SKILL.md             # Main workflow and provider selection logic
+└── references/
+    ├── aws.md
+    ├── gcp.md
+    └── azure.md
+```
+
+When the user picks AWS, the Agent only reads `aws.md` — no need to load all three providers.
+
+## Common Design Patterns
+
+**Step-by-step**: numbered steps with corresponding scripts.
+
+```markdown
+1. Analyse form structure (run analyze_form.py)
+2. Generate field mappings (edit fields.json)
+3. Auto-fill the form (run fill_form.py)
+```
+
+**Branching**: different flows based on user intent.
+
+```markdown
+1. Determine operation type:
+   **Creating new content?** → follow the "Create" workflow
+   **Editing existing content?** → follow the "Edit" workflow
+```
+
+**Template-based**: when output format has strict requirements, include a template in SKILL.md for the Agent to follow.

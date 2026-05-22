@@ -1,0 +1,96 @@
+---
+title: 命令总览
+description: CowAgent 命令系统 — 终端 CLI 和对话命令
+---
+
+CowAgent 提供两种命令交互方式：
+
+- **终端CLI** — 在系统终端中执行 `cow <命令>`，用于服务管理、技能管理等运维操作
+- **对话命令** — 在对话中输入 `/<命令>` 或 `cow <命令>`，用于查看状态、管理技能、调整配置等
+
+## 终端命令
+
+通过一键安装脚本部署后，`cow` 命令会自动可用。手动安装的用户需要在项目根目录下额外执行：
+
+```bash
+pip install -e .
+```
+
+安装后即可在任意位置使用 `cow` 命令：
+
+```bash
+cow help
+```
+
+输出示例：
+
+```
+CowAgent CLI
+
+Usage: cow <command>
+
+Service:
+  start     Start the CowAgent service
+  stop      Stop the CowAgent service
+  restart   Restart the CowAgent service
+  update    Update code and restart service
+  status    Show service status
+  logs      View service logs
+
+Skills:
+  skill     Manage skills (list / search / install / uninstall ...)
+
+Memory & Knowledge:
+  memory    Memory distillation (dream)
+  knowledge View knowledge base stats and structure
+
+Others:
+  help      Show this help message
+  version   Show version
+```
+
+## 对话命令
+
+在 Web 控制台或任意接入渠道的对话中，支持输入以 `/` 开头的命令：
+
+| 命令 | 说明 |
+| --- | --- |
+| `/help` | 显示命令帮助 |
+| `/status` | 查看服务状态和配置 |
+| `/config` | 查看或修改运行时配置 |
+| `/skill` | 管理技能（安装、卸载、启用、禁用等） |
+| `/memory dream [N]` | 手动触发记忆蒸馏（默认 3 天，最大 30） |
+| `/knowledge` | 查看知识库统计信息 |
+| `/knowledge list` | 查看知识库目录结构 |
+| `/knowledge on\|off` | 开启或关闭知识库 |
+| `/context` | 查看当前会话上下文信息 |
+| `/context clear` | 清空当前会话上下文 |
+| `/logs` | 查看最近日志 |
+| `/version` | 显示版本号 |
+
+<Tip>
+  对话命令中 `/start`、`/stop`、`/restart` 等服务管理命令会提示到终端中执行，因为它们涉及进程操作。
+</Tip>
+
+## 命令对照表
+
+以下是各命令在终端和对话中的可用性：
+
+| 命令 | 终端 (`cow`) | 对话 (`/`) |
+| --- | :---: | :---: |
+| help | ✓ | ✓ |
+| version | ✓ | ✓ |
+| status | ✓ | ✓ |
+| logs | ✓ | ✓ |
+| config | ✗ | ✓ |
+| context | — | ✓ |
+| memory (子命令) | ✗ | ✓ |
+| knowledge (子命令) | ✓ | ✓ |
+| skill (子命令) | ✓ | ✓ |
+| start / stop / restart | ✓ | ✗ |
+| update | ✓ | ✗ |
+| install-browser | ✓ | ✗ |
+
+<Note>
+  `context` 在终端中仅提示到对话中使用。`config` 仅支持在对话中修改。
+</Note>

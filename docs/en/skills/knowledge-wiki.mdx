@@ -1,0 +1,112 @@
+---
+title: knowledge-wiki - Knowledge Base
+description: Maintain a local structured knowledge base with automatic archiving, categorisation, and cross-referencing
+---
+
+Organises notes, insights, and reference materials from your conversations into a structured local knowledge base, automatically maintaining an index and cross-references between pages.
+
+`knowledge-wiki` maintains a `knowledge/` directory in your workspace — essentially the Agent's "second brain". The skill is marked `always: true`, so it is **always loaded** and requires no external dependencies.
+
+## When It Triggers
+
+- You share an article, document, or URL that you want to keep for future reference
+- A conversation produces conclusions worth retaining long-term
+- You want to look up something you accumulated earlier
+
+## Directory Structure
+
+```
+knowledge/
+├── index.md           # Global index (must be maintained)
+├── log.md             # Operation log (append-only)
+└── <category>/        # Category subdirectories (grouped by content)
+    └── <slug>.md      # Knowledge page (lowercase-hyphenated filename)
+```
+
+## Three Core Operations
+
+### 1. Ingest
+
+When you share some material, the Agent will:
+
+1. Read and understand the original content, extracting key information
+2. Decide which category it belongs to — check `index.md` first; create a new category if none fits
+3. Generate a knowledge page at `knowledge/<category>/<slug>.md`
+4. Update the index `index.md` and the log `log.md`
+
+### 2. Synthesise
+
+When a conversation produces new conclusions or insights:
+
+1. Create a new knowledge page under an appropriate category
+2. Add cross-links to and from related existing pages
+3. Update the index and log
+
+### 3. Query
+
+When you ask about previously accumulated knowledge:
+
+1. Search `index.md` for potentially relevant pages
+2. Open specific pages with the `read` tool
+3. Supplement with `memory_search` if needed
+4. Include links to knowledge pages in the answer so you can click through to the source
+
+## Page Format
+
+```markdown
+# Page Title
+
+> Source: <source URL or brief description>
+
+Body content. Link between pages using relative paths:
+[Related Page](../category/related-page.md)
+
+## Key Points
+
+- ...
+
+## Related Pages
+
+- [Page A](../category/page-a.md) — why it's related
+```
+
+<Note>
+- `> Source:` records where this knowledge came from. Always include it when there is a clear source
+- Cross-references are important: when creating or updating a page, remember to add back-links in the related pages too
+- **Only link to pages that already exist.** If a concept deserves its own page, create it first, then add the link
+</Note>
+
+## Index Format
+
+`knowledge/index.md` uses a flat list grouped by category, one knowledge page per line:
+
+```markdown
+# Knowledge Index
+
+## Category A
+- [Page Title](category-a/page-slug.md) — one-line summary
+
+## Category B
+- [Page Title](category-b/page-slug.md) — one-line summary
+```
+
+No tables, no emojis. Category names and organisation can be adjusted freely.
+
+## Log Format
+
+`knowledge/log.md` is append-only — newest entries go at the bottom:
+
+```markdown
+## [YYYY-MM-DD] ingest | Page Title
+## [YYYY-MM-DD] synthesize | Page Title
+```
+
+## Writing Guidelines
+
+- **Filenames**: lowercase with hyphens, e.g. `machine-learning.md`
+- **One topic per page** — link related content across pages
+- **Update, don't duplicate** — if a page already exists, update it rather than creating a new one
+- **Always update the index** `knowledge/index.md` after any change
+- **Distill, don't copy** — capture the key points, not the entire source
+- **Use full paths when referencing knowledge pages in conversations**, e.g. `[Title](knowledge/<category>/<slug>.md)`. Use relative paths only for inter-page links
+- **Include links when answering questions based on knowledge pages** so users can dig deeper

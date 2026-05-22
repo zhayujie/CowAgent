@@ -1,0 +1,172 @@
+---
+title: browser - ブラウザ
+description: ブラウザを操作してWebページにアクセス・操作する
+---
+
+Chromiumブラウザを操作してWebページのナビゲーション、要素操作、コンテンツ取得を行います。JavaScriptでレンダリングされる動的ページに対応し、簡略化したDOMスナップショットによりAgentが効率的にページ構造を理解できます。
+
+## インストール
+
+<Tabs>
+  <Tab title="CLIインストール（推奨）">
+    ```bash
+    cow install-browser
+    ```
+
+    このコマンドは以下を自動で実行します：
+    - `playwright` Pythonパッケージのインストール（古いシステムでは互換バージョンに自動フォールバック）
+    - Linuxにおけるシステム依存のインストール
+    - Chromiumブラウザのダウンロード（Linuxサーバーでは自動的にヘッドレス軽量版を使用）
+    - 中国本土ネットワークの自動検知とミラー高速化
+  </Tab>
+  <Tab title="手動インストール">
+    ```bash
+    pip install playwright
+    playwright install chromium
+    ```
+
+    Linuxサーバーではシステム依存も必要：
+    ```bash
+    sudo playwright install-deps chromium
+    ```
+
+    古いシステム（例: Ubuntu 18.04、glibc < 2.28）では互換バージョンをインストール：
+    ```bash
+    pip install playwright==1.28.0
+    python -m playwright install chromium
+    ```
+
+    中国からChromiumのダウンロードを高速化したい場合：
+    ```bash
+    export PLAYWRIGHT_DOWNLOAD_HOST=https://registry.npmmirror.com/-/binary/playwright
+    python -m playwright install chromium
+    ```
+  </Tab>
+</Tabs>
+
+<Note>
+  1. Ubuntu 20.04+、Debian 10+、macOS、Windowsをサポート。Ubuntu 18.04などの古いシステムでは互換バージョンに自動フォールバックします。
+  2. ブラウザToolは依存関係が大きい（約300MB）ため、不要な場合はインストールを省略できます。軽量なWebコンテンツ取得には `web_fetch` Toolをご利用ください。
+</Note>
+
+## ワークフロー
+
+Agentがブラウザを使う典型的な流れ：
+
+1. **`navigate`** — 対象URLを開く
+2. **`snapshot`** — 簡略化したDOMを取得し、操作可能な要素には自動で番号（`ref`）が付く
+3. **`click` / `fill` / `select`** — `ref`で要素を操作する
+4. **`snapshot`** — 再度スナップショットを取得して結果を確認
+
+## サポートされる操作
+
+| 操作 | 説明 | 主なパラメータ |
+| --- | --- | --- |
+| `navigate` | URLを開く | `url` |
+| `snapshot` | 構造化されたページテキストを取得（主な利用方法） | `selector`（任意） |
+| `click` | 要素をクリック | `ref` または `selector` |
+| `fill` | 入力欄にテキストを入力 | `ref` または `selector`、`text` |
+| `select` | プルダウンから選択 | `ref` または `selector`、`value` |
+| `scroll` | ページをスクロール | `direction`（up/down/left/right） |
+| `screenshot` | スクリーンショットをワークスペースに保存 | `full_page` |
+| `wait` | 要素または時間を待機 | `selector`、`timeout` |
+| `press` | キー入力（Enter、Tabなど） | `key` |
+| `back` / `forward` | ブラウザの戻る／進む | - |
+| `get_text` | 要素のテキストを取得 | `selector` |
+| `evaluate` | JavaScriptを実行 | `script` |
+
+## ユースケース
+
+- 指定URLにアクセスして動的コンテンツを取得
+- フォーム入力やログイン操作
+- Web要素の操作（ボタンクリック、項目選択など）
+- デプロイ後のWebページ動作確認
+- JSレンダリングが必要な動的コンテンツのスクレイピング
+
+## 動作モード
+
+実行環境に応じてブラウザのモードが自動選択されます：
+
+| 環境 | モード |
+| --- | --- |
+| macOS / Windows | ヘッドモード（ブラウザウィンドウを表示） |
+| Linuxデスクトップ（DISPLAYあり） | ヘッドモード |
+| Linuxサーバー（DISPLAYなし） | ヘッドレスモード |
+
+`config.json`で手動上書き可能：
+
+```json
+{
+  "tools": {
+    "browser": {
+      "headless": true
+    }
+  }
+}
+```
+
+## ログイン状態の永続化
+
+**対象サイトに一度ログインすれば、Agentは以降そのまま利用できます。** 2つの方法があります：
+
+### 方法1: Persistentモード（デフォルト）
+
+設定不要、すぐに利用可能。ログイン情報は `~/.cow/browser_profile` に保存されます。
+
+毎回クリーンな環境で起動したい場合は、永続化を無効化：
+
+```json
+{
+  "tools": {
+    "browser": {
+      "persistent": false
+    }
+  }
+}
+```
+
+### 方法2: CDPモード（既存のChromeに接続）
+
+Playwright付属のChromiumではなく、別途起動した本物のChromeにAgentを接続させることで、完全なブラウザフィンガープリントが得られます。Bot検知が厳しいサイトに有効です。
+
+Chromeをデバッグポートと専用のユーザーデータディレクトリ付きで起動します：
+
+<Tabs>
+  <Tab title="macOS">
+    ```bash
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
+      --remote-debugging-port=9222 \
+      --user-data-dir="$HOME/.cow/chrome-cdp"
+    ```
+  </Tab>
+  <Tab title="Linux">
+    ```bash
+    google-chrome \
+      --remote-debugging-port=9222 \
+      --user-data-dir="$HOME/.cow/chrome-cdp"
+    ```
+  </Tab>
+  <Tab title="Windows">
+    ```powershell
+    & "C:\Program Files\Google\Chrome\Application\chrome.exe" `
+      --remote-debugging-port=9222 `
+      --user-data-dir="$env:USERPROFILE\.cow\chrome-cdp"
+    ```
+  </Tab>
+</Tabs>
+
+`config.json` で接続先を指定：
+
+```json
+{
+  "tools": {
+    "browser": {
+      "cdp_endpoint": "http://localhost:9222"
+    }
+  }
+}
+```
+
+<Note>
+  Chrome 137以降では `--remote-debugging-port` を専用の `--user-data-dir` と組み合わせる必要があるため、CDPで起動するChromeは**普段使いのChromeのログイン状態をそのまま流用できません**。専用プロファイル内で一度ログインし直す必要があります。
+</Note>

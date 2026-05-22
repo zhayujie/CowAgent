@@ -1,0 +1,27 @@
+---
+title: MiniMax
+description: MiniMaxモデルの設定
+---
+
+```json
+{
+  "model": "MiniMax-M2.7",
+  "minimax_api_key": "YOUR_API_KEY"
+}
+```
+
+| パラメータ | 説明 |
+| --- | --- |
+| `model` | `MiniMax-M2.7`、`MiniMax-M2.5`、`MiniMax-M2.1`、`MiniMax-M2.1-lightning`、`MiniMax-M2`などから選択可能 |
+| `minimax_api_key` | [MiniMax Console](https://platform.minimaxi.com/user-center/basic-information/interface-key)で作成 |
+
+OpenAI互換の設定もサポートしています:
+
+```json
+{
+  "bot_type": "openai",
+  "model": "MiniMax-M2.7",
+  "open_ai_api_base": "https://api.minimaxi.com/v1",
+  "open_ai_api_key": "YOUR_API_KEY"
+}
+```

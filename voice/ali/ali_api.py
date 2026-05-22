@@ -8,6 +8,7 @@ Description:
 
 """
 
+import http.client
 import json
 import time
 import requests
@@ -60,6 +61,69 @@ def text_to_speech_aliyun(url, text, appkey, token):
         output_file = None
 
     return output_file
+
+def speech_to_text_aliyun(url, audioContent, appkey, token):
+    """
+    使用阿里云的语音识别服务识别音频文件中的语音。
+
+    参数:
+    - url (str): 阿里云语音识别服务的端点URL。
+    - audioContent (byte): pcm音频数据。
+    - appkey (str): 您的阿里云appkey。
+    - token (str): 阿里云API的认证令牌。
+
+    返回值:
+    - str: 成功时输出识别到的文本，否则为None。
+    """
+    format = 'pcm'
+    sample_rate = 16000
+    enablePunctuationPrediction  = True
+    enableInverseTextNormalization = True
+    enableVoiceDetection  = False
+
+    # 设置RESTful请求参数
+    request = url + '?appkey=' + appkey
+    request = request + '&format=' + format
+    request = request + '&sample_rate=' + str(sample_rate)
+
+    if enablePunctuationPrediction :
+        request = request + '&enable_punctuation_prediction=' + 'true'
+
+    if enableInverseTextNormalization :
+        request = request + '&enable_inverse_text_normalization=' + 'true'
+
+    if enableVoiceDetection :
+        request = request + '&enable_voice_detection=' + 'true'
+        
+    host = 'nls-gateway-cn-shanghai.aliyuncs.com'
+
+    # 设置HTTPS请求头部
+    httpHeaders = {
+        'X-NLS-Token': token,
+        'Content-type': 'application/octet-stream',
+        'Content-Length': len(audioContent)
+        }
+
+    conn = http.client.HTTPSConnection(host)
+    conn.request(method='POST', url=request, body=audioContent, headers=httpHeaders)
+
+    response = conn.getresponse()
+    body = response.read()
+    try:
+        body = json.loads(body)
+        status = body['status']
+        if status == 20000000 :
+            result = body['result']
+            if result :
+                logger.info(f"阿里云语音识别到了：{result}")
+            conn.close()
+            return result
+        else :
+            logger.error(f"语音识别失败，状态码: {status}")
+    except ValueError:
+        logger.error(f"语音识别失败，收到非JSON格式的数据: {body}")
+    conn.close()
+    return None
 
 
 class AliyunTokenGenerator:

@@ -1,0 +1,77 @@
+---
+title: v2.0.5
+description: CowAgent 2.0.5 - Cow CLI, Skill Hub open source, Browser tool, WeCom Bot QR scan, and more
+---
+
+## 🖥️ Cow CLI
+
+New CLI command system for managing CowAgent from terminal and chat:
+
+- **Terminal commands**: Run `cow <command>` for `start`, `stop`, `restart`, `update`, `status`, `logs`, etc.
+- **Chat commands**: Type `/<command>` in conversation for `/help`, `/status`, `/config`, `/skill`, `/context`, `/logs`, `/version`, etc.
+- **Web console**: Type `/` in the input box to open a slash command menu, with arrow-key input history
+- **Windows support**: New PowerShell script `scripts/run.ps1` with `cow` command support
+
+Docs: [Command Overview](https://docs.cowagent.ai/en/cli)
+
+<img src="https://cdn.link-ai.tech/doc/20260401114549.png" width="750" />
+
+## 🧩 Cow Skill Hub Open Source
+
+[Cow Skill Hub](https://skills.cowagent.ai) is now open source and live — browse, search, install, and publish AI Agent skills:
+
+- **One-command install**: `/skill install <name>` in chat or `cow skill install <name>` in terminal
+- **Multi-source**: Install from Skill Hub, GitHub, ClawHub, LinkAI, and more
+- **Search**: `/skill search` and `/skill list --remote` to browse the hub
+- **Publish**: Submit your own skills at [skills.cowagent.ai/submit](https://skills.cowagent.ai/submit)
+- **Mirror**: Mirror acceleration for faster downloads in China
+
+Open source repo: [cow-skill-hub](https://github.com/zhayujie/cow-skill-hub)
+
+Docs: [Skill Hub](https://docs.cowagent.ai/en/skills/hub), [Install Skills](https://docs.cowagent.ai/en/skills/install)
+
+<img src="https://cdn.link-ai.tech/doc/20260401110103.png" width="750" />
+
+## 🌐 Browser Tool
+
+New Browser tool — Agent can control a Chromium browser to visit and interact with web pages:
+
+- **Navigation & interaction**: `navigate`, `click`, `fill`, `select`, `scroll`, `press`, etc.
+- **Page snapshot**: Compact DOM snapshot for efficient page understanding, auto-snapshot after navigation
+- **Screenshot**: Save page screenshots to workspace
+- **JavaScript execution**: Run custom scripts on pages
+- **CLI install**: `cow install-browser` for one-command setup
+- **Docker support**: Browser install built into Docker image
+
+Docs: [Browser Tool](https://docs.cowagent.ai/en/tools/browser)
+
+<img src="https://cdn.link-ai.tech/doc/20260401115728.png" width="750" />
+
+## 🤖 WeCom Bot QR Code Setup
+
+WeCom Bot channel now supports QR code scan for one-click bot creation:
+
+- **QR scan in Web console**: Select "Scan QR" mode, scan with WeCom to auto-create and connect a bot — no manual configuration needed
+- **Manual mode**: Still supports manual Bot ID and Secret input
+- **Stream push optimization**: Throttled push to avoid WebSocket congestion
+
+Docs: [WeCom Bot](https://docs.cowagent.ai/en/channels/wecom-bot)
+
+PR: [#2735](https://github.com/zhayujie/CowAgent/pull/2735). Thanks [@WecomTeam](https://github.com/WecomTeam)
+
+## 🐛 Other Improvements & Fixes
+
+- **DeepSeek module**: Independent DeepSeek Bot with dedicated `deepseek_api_key` config ([#2719](https://github.com/zhayujie/CowAgent/pull/2719)). Thanks [@6vision](https://github.com/6vision)
+- **Web console**: Slash command menu, input history, new model options, mobile optimization ([#2731](https://github.com/zhayujie/CowAgent/pull/2731)). Thanks [@zkjqd](https://github.com/zkjqd)
+- **Context loss**: Fix context loss after trimming ([393f0c0](https://github.com/zhayujie/CowAgent/commit/393f0c0))
+- **System prompt**: Fix system prompt not rebuilding on every turn ([13f5fde](https://github.com/zhayujie/CowAgent/commit/13f5fde))
+- **Gemini**: Fix missing model attribute in GoogleGeminiBot ([#2716](https://github.com/zhayujie/CowAgent/pull/2716)). Thanks [@cowagent](https://github.com/cowagent)
+- **WeChat channel**: Fix file send failures and filename loss ([6d9b7ba](https://github.com/zhayujie/CowAgent/commit/6d9b7ba), [45faa9c](https://github.com/zhayujie/CowAgent/commit/45faa9c))
+- **Docker**: Fix volume permissions, reduce image size ([3eb8348](https://github.com/zhayujie/CowAgent/commit/3eb8348), [4470d4c](https://github.com/zhayujie/CowAgent/commit/4470d4c))
+- **Security**: Fix Memory Content path traversal risk. Thanks [@August829](https://github.com/August829)
+
+## 📦 Upgrade
+
+Run `cow update` or `./run.sh update` to upgrade, or pull the latest code and restart. See [Upgrade Guide](https://docs.cowagent.ai/en/guide/upgrade).
+
+**Release Date**: 2026.04.01 | [Full Changelog](https://github.com/zhayujie/CowAgent/compare/2.0.4...master)

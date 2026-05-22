@@ -44,6 +44,7 @@ class StoryTeller:
 @plugins.register(
     name="Dungeon",
     desire_priority=0,
+    enabled=False,
     namecn="文字冒险",
     desc="A plugin to play dungeon game",
     version="1.0",
@@ -53,7 +54,7 @@ class Dungeon(Plugin):
     def __init__(self):
         super().__init__()
         self.handlers[Event.ON_HANDLE_CONTEXT] = self.on_handle_context
-        logger.info("[Dungeon] inited")
+        logger.debug("[Dungeon] inited")
         # 目前没有设计session过期事件，这里先暂时使用过期字典
         if conf().get("expires_in_seconds"):
             self.games = ExpiredDict(conf().get("expires_in_seconds"))
@@ -64,7 +65,7 @@ class Dungeon(Plugin):
         if e_context["context"].type != ContextType.TEXT:
             return
         bottype = Bridge().get_bot_type("chat")
-        if bottype not in [const.OPEN_AI, const.CHATGPT, const.CHATGPTONAZURE, const.LINKAI]:
+        if bottype not in [const.OPEN_AI, const.OPENAI, const.CHATGPT, const.CHATGPTONAZURE, const.LINKAI]:
             return
         bot = Bridge().get_bot("chat")
         content = e_context["context"].content[:]

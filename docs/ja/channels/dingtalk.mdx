@@ -1,0 +1,58 @@
+---
+title: DingTalk
+description: CowAgent を DingTalk アプリケーションに統合する
+---
+
+DingTalk オープンプラットフォームでインテリジェントロボットアプリを作成して、CowAgent を DingTalk に統合します。
+
+## 1. アプリの作成
+
+1. [DingTalk 開発者コンソール](https://open-dev.dingtalk.com/fe/app#/corp/app)にアクセスし、ログインして**アプリを作成**をクリックし、アプリ情報を入力します：
+
+<img src="https://img-1317903499.cos.ap-guangzhou.myqcloud.com/docs/dingtalk-create-app.png" width="800"/>
+
+2. **アプリ機能の追加**をクリックし、**ロボット**機能を選択して**追加**をクリックします：
+
+<img src="https://img-1317903499.cos.ap-guangzhou.myqcloud.com/docs/dingtalk-add-bot.png" width="800"/>
+
+3. ロボット情報を設定し、**公開**をクリックします。公開後、「**デバッグ**」をクリックすると自動的にテストグループチャットが作成され、クライアントで確認できます：
+
+<img src="https://img-1317903499.cos.ap-guangzhou.myqcloud.com/docs/dingtalk-config-bot.png" width="600"/>
+
+4. **バージョン管理とリリース**をクリックし、新しいバージョンを作成して公開します：
+
+<img src="https://img-1317903499.cos.ap-guangzhou.myqcloud.com/docs/dingtalk-publish-bot.png" width="700"/>
+
+## 2. プロジェクト設定
+
+1. **認証情報と基本情報**をクリックし、`Client ID` と `Client Secret` を取得します：
+
+<img src="https://img-1317903499.cos.ap-guangzhou.myqcloud.com/docs/dingtalk-get-secret.png" width="700"/>
+
+2. プロジェクトルートの `config.json` に以下の設定を追加します：
+
+```json
+{
+  "channel_type": "dingtalk",
+  "dingtalk_client_id": "YOUR_CLIENT_ID",
+  "dingtalk_client_secret": "YOUR_CLIENT_SECRET"
+}
+```
+
+3. 依存パッケージをインストールします：
+
+```bash
+pip3 install dingtalk_stream
+```
+
+<img src="https://img-1317903499.cos.ap-guangzhou.myqcloud.com/docs/dingtalk-app-config.png" width="700"/>
+
+4. プロジェクト起動後、DingTalk 開発者コンソールに移動し、**イベントサブスクリプション**をクリックし、**接続確認済み、チャネルを確認**をクリックします。「**接続成功**」と表示されれば設定完了です：
+
+<img src="https://img-1317903499.cos.ap-guangzhou.myqcloud.com/docs/dingtalk-event-sub.png" width="700"/>
+
+## 3. 使い方
+
+ロボットと個別チャットするか、企業グループに追加して会話を開始します：
+
+<img src="https://img-1317903499.cos.ap-guangzhou.myqcloud.com/docs/dingtalk-hosting-demo.png" width="650"/>

@@ -1,0 +1,27 @@
+---
+title: MiniMax
+description: MiniMax 模型配置
+---
+
+```json
+{
+  "model": "MiniMax-M2.7",
+  "minimax_api_key": "YOUR_API_KEY"
+}
+```
+
+| 参数 | 说明 |
+| --- | --- |
+| `model` | 可填 `MiniMax-M2.7`、`MiniMax-M2.5`、`MiniMax-M2.1`、`MiniMax-M2.1-lightning`、`MiniMax-M2` 等 |
+| `minimax_api_key` | 在 [MiniMax 控制台](https://platform.minimaxi.com/user-center/basic-information/interface-key) 创建 |
+
+也支持 OpenAI 兼容方式接入：
+
+```json
+{
+  "bot_type": "openai",
+  "model": "MiniMax-M2.7",
+  "open_ai_api_base": "https://api.minimaxi.com/v1",
+  "open_ai_api_key": "YOUR_API_KEY"
+}
+```

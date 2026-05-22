@@ -1,0 +1,27 @@
+---
+title: Qwen (通義千問)
+description: 通義千問モデルの設定
+---
+
+```json
+{
+  "model": "qwen3.6-plus",
+  "dashscope_api_key": "YOUR_API_KEY"
+}
+```
+
+| パラメータ | 説明 |
+| --- | --- |
+| `model` | `qwen3.6-plus`、`qwen3.5-plus`、`qwen3-max`、`qwen-max`、`qwen-plus`、`qwen-turbo`、`qwq-plus`などから選択可能 |
+| `dashscope_api_key` | [百炼 Console](https://bailian.console.aliyun.com/?tab=model#/api-key)で作成。[公式ドキュメント](https://bailian.console.aliyun.com/?tab=api#/api)を参照 |
+
+OpenAI互換の設定もサポートしています:
+
+```json
+{
+  "bot_type": "openai",
+  "model": "qwen3.6-plus",
+  "open_ai_api_base": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+  "open_ai_api_key": "YOUR_API_KEY"
+}
+```

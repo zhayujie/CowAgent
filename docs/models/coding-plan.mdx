@@ -1,0 +1,140 @@
+---
+title: Coding Plan
+description: Coding Plan 模式模型配置
+---
+
+> Coding Plan 是各厂商推出的编程包月套餐，适合高频使用 Agent 的场景。CowAgent 支持通过 OpenAI 兼容方式接入各厂商的 Coding Plan 接口。
+
+<Note>
+  Coding Plan 的 API Base 和 API Key 通常与普通按量计费接口不通用，请在各厂商平台单独获取。
+</Note>
+
+## 通用配置格式
+
+所有厂商均可使用 OpenAI 兼容协议接入，可在web控制台快速配置。设置模型厂商为**OpenAI**，选择自定义模型并填入模型编码，最后填写对应厂商的API Base 和 API Key：
+
+<img src="https://cdn.link-ai.tech/doc/20260318113134.png" width="800"/>
+
+也可通过 `config.json` 配置文件直接修改：
+
+```json
+{
+  "bot_type": "openai",
+  "model": "模型名称",
+  "open_ai_api_base": "厂商 Coding Plan API Base",
+  "open_ai_api_key": "YOUR_API_KEY"
+}
+```
+
+| 参数 | 说明 |
+| --- | --- |
+| `bot_type` | 固定为 `openai`（OpenAI 兼容方式） |
+| `model` | 各厂商支持的模型名称 |
+| `open_ai_api_base` | 各厂商 Coding Plan 专用 API Base |
+| `open_ai_api_key` | 各厂商 Coding Plan 专用 API Key |
+
+---
+
+## 阿里云
+
+```json
+{
+  "bot_type": "openai",
+  "model": "qwen3.5-plus",
+  "open_ai_api_base": "https://coding.dashscope.aliyuncs.com/v1",
+  "open_ai_api_key": "YOUR_API_KEY"
+}
+```
+
+| 参数 | 说明 |
+| --- | --- |
+| `model` | `qwen3.5-plus`、`qwen3-max-2026-01-23`、`qwen3-coder-next`、`qwen3-coder-plus`、`glm-5`、`glm-4.7`、`kimi-k2.5`、`MiniMax-M2.5` |
+| `open_ai_api_base` | `https://coding.dashscope.aliyuncs.com/v1` |
+| `open_ai_api_key` | Coding Plan 专用 Key（与按量计费接口不通用） |
+
+官方文档：[快速开始](https://help.aliyun.com/zh/model-studio/coding-plan-quickstart?spm=a2c4g.11186623.help-menu-2400256.d_0_2_1.70115203zi5Igc)、[模型列表](https://help.aliyun.com/zh/model-studio/coding-plan)
+
+---
+
+## MiniMax
+
+```json
+{
+  "bot_type": "openai",
+  "model": "MiniMax-M2.5",
+  "open_ai_api_base": "https://api.minimaxi.com/v1",
+  "open_ai_api_key": "YOUR_API_KEY"
+}
+```
+
+| 参数 | 说明 |
+| --- | --- |
+| `model` | `MiniMax-M2.5`、`MiniMax-M2.5-highspeed`、`MiniMax-M2.1`、`MiniMax-M2` |
+| `open_ai_api_base` | 国内：`https://api.minimaxi.com/v1`；海外：`https://api.minimax.io/v1` |
+| `open_ai_api_key` | Coding Plan 专用 Key（与按量计费接口不通用） |
+
+官方文档：[国内 Key 获取](https://platform.minimaxi.com/docs/coding-plan/quickstart)、[模型列表](https://platform.minimaxi.com/docs/guides/pricing-coding-plan)、[国际 Key 获取](https://platform.minimax.io/docs/coding-plan/quickstart)
+
+---
+
+
+## 智谱 GLM
+
+```json
+{
+  "bot_type": "openai",
+  "model": "glm-4.7",
+  "open_ai_api_base": "https://open.bigmodel.cn/api/coding/paas/v4",
+  "open_ai_api_key": "YOUR_API_KEY"
+}
+```
+
+| 参数 | 说明 |
+| --- | --- |
+| `model` | `glm-5`、`glm-4.7`、`glm-4.6`、`glm-4.5`、`glm-4.5-air` |
+| `open_ai_api_base` | 中国区：`https://open.bigmodel.cn/api/coding/paas/v4`；全球区：`https://api.z.ai/api/coding/paas/v4` |
+| `open_ai_api_key` | API Key 与普通接口通用 |
+
+官方文档：[国内版快速开始](https://docs.bigmodel.cn/cn/coding-plan/quick-start)、[国际版快速开始](https://docs.z.ai/devpack/quick-start)
+
+---
+
+## 火山引擎
+
+```json
+{
+  "bot_type": "openai",
+  "model": "Doubao-Seed-2.0-Code",
+  "open_ai_api_base": "https://ark.cn-beijing.volces.com/api/coding/v3",
+  "open_ai_api_key": "YOUR_API_KEY"
+}
+```
+
+| 参数 | 说明 |
+| --- | --- |
+| `model` | `Doubao-Seed-2.0-Code`、`Doubao-Seed-2.0-pro`、`Doubao-Seed-2.0-lite`、`Doubao-Seed-Code`、`MiniMax-M2.5`、`Kimi-K2.5`、`GLM-4.7`、`DeepSeek-V3.2` |
+| `open_ai_api_base` | `https://ark.cn-beijing.volces.com/api/coding/v3` |
+| `open_ai_api_key` | API Key 与普通接口通用 |
+
+官方文档：[快速开始](https://www.volcengine.com/docs/82379/1928261?lang=zh)
+
+---
+
+## Kimi
+
+```json
+{
+  "bot_type": "moonshot",
+  "model": "kimi-for-coding",
+  "moonshot_base_url": "https://api.kimi.com/coding/v1",
+  "moonshot_api_key": "YOUR_API_KEY"
+}
+```
+
+| 参数 | 说明 |
+| --- | --- |
+| `model` | 填写 `kimi-for-coding` 会自动更新模型，或指定模型例如 `kimi-k2.6` |
+| `moonshot_base_url` | `https://api.kimi.com/coding/v1` |
+| `moonshot_api_key` | Coding Plan 专用 Key（与按量计费接口不通用） |
+
+官方文档：[Key 获取](https://www.kimi.com/code/docs/)

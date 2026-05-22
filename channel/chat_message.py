@@ -1,5 +1,5 @@
 """
-本类表示聊天消息，用于对itchat和wechaty的消息进行统一的封装。
+Unified chat message class for different channel implementations.
 
 填好必填项(群聊6个，非群聊8个)，即可接入ChatChannel，并支持插件，参考TerminalChannel
 

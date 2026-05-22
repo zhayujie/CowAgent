@@ -1,0 +1,77 @@
+---
+title: v2.0.5
+description: CowAgent 2.0.5 - Cow CLI、Skill Hub オープンソース、ブラウザツール、企業微信スキャン作成、その他改善
+---
+
+## 🖥️ Cow CLI コマンドシステム
+
+ターミナルと会話の両方で CowAgent を管理する新しい CLI コマンドシステム：
+
+- **ターミナルコマンド**：`cow <コマンド>` で `start`、`stop`、`restart`、`update`、`status`、`logs` などを実行
+- **チャットコマンド**：会話で `/<コマンド>` を入力して `/help`、`/status`、`/config`、`/skill`、`/context`、`/logs`、`/version` など
+- **Web コンソール**：入力欄で `/` を入力するとスラッシュコマンドメニューが表示、矢印キーで入力履歴を辿れる
+- **Windows サポート**：PowerShell スクリプト `scripts/run.ps1` を追加、`cow` コマンドに対応
+
+ドキュメント：[コマンド一覧](https://docs.cowagent.ai/ja/cli)
+
+<img src="https://cdn.link-ai.tech/doc/20260401114549.png" width="750" />
+
+## 🧩 Cow Skill Hub オープンソース
+
+[Cow Skill Hub](https://skills.cowagent.ai)（スキル広場）がオープンソースとして公開。AI Agent スキルの閲覧、検索、インストール、公開が可能：
+
+- **ワンコマンドインストール**：会話で `/skill install <名前>` またはターミナルで `cow skill install <名前>`
+- **マルチソース**：Skill Hub、GitHub、ClawHub、LinkAI などからインストール可能
+- **検索**：`/skill search` と `/skill list --remote` でスキル広場を閲覧・検索
+- **スキル公開**：[skills.cowagent.ai/submit](https://skills.cowagent.ai/submit) で自作スキルを提出
+- **ミラー加速**：中国国内向けミラーダウンロード対応
+
+オープンソースリポジトリ：[cow-skill-hub](https://github.com/zhayujie/cow-skill-hub)
+
+ドキュメント：[スキル広場](https://docs.cowagent.ai/ja/skills/hub)、[スキルのインストール](https://docs.cowagent.ai/ja/skills/install)
+
+<img src="https://cdn.link-ai.tech/doc/20260401110103.png" width="750" />
+
+## 🌐 ブラウザツール
+
+新しい Browser ツール — Agent が Chromium ブラウザを制御して Web ページにアクセス・操作：
+
+- **ナビゲーションと操作**：`navigate`、`click`、`fill`、`select`、`scroll`、`press` など
+- **ページスナップショット**：精簡 DOM スナップショットで Agent がページ構造を効率的に理解、ナビゲーション後に自動スナップショット
+- **スクリーンショット**：ワークスペースにページのスクリーンショットを保存
+- **JavaScript 実行**：ページでカスタムスクリプトを実行
+- **CLI インストール**：`cow install-browser` でワンコマンドセットアップ
+- **Docker サポート**：Docker イメージにブラウザインストール組み込み
+
+ドキュメント：[ブラウザツール](https://docs.cowagent.ai/ja/tools/browser)
+
+<img src="https://cdn.link-ai.tech/doc/20260401115728.png" width="750" />
+
+## 🤖 企業微信 Bot スキャン作成
+
+企業微信 Bot チャネルで QR コードスキャンによるワンクリック作成をサポート：
+
+- **Web コンソールでスキャン**：「スキャン接入」モードを選択し、企業微信でスキャンするとボットが自動作成・接続
+- **手動モード**：既存の Bot ID と Secret を手動入力する方式も引き続きサポート
+- **ストリーム配信最適化**：WebSocket 混雑を避けるためのスロットリング
+
+ドキュメント：[企業微信 Bot](https://docs.cowagent.ai/ja/channels/wecom-bot)
+
+PR：[#2735](https://github.com/zhayujie/CowAgent/pull/2735)。Thanks [@WecomTeam](https://github.com/WecomTeam)
+
+## 🐛 その他の改善と修正
+
+- **DeepSeek モジュール**：独立 DeepSeek Bot、`deepseek_api_key` 専用設定対応（[#2719](https://github.com/zhayujie/CowAgent/pull/2719)）。Thanks [@6vision](https://github.com/6vision)
+- **Web コンソール**：スラッシュコマンドメニュー、入力履歴、新モデル選択肢、モバイル最適化（[#2731](https://github.com/zhayujie/CowAgent/pull/2731)）。Thanks [@zkjqd](https://github.com/zkjqd)
+- **コンテキスト**：トリミング後のコンテキスト喪失を修正（[393f0c0](https://github.com/zhayujie/CowAgent/commit/393f0c0)）
+- **システムプロンプト**：毎ターン再構築されない問題を修正（[13f5fde](https://github.com/zhayujie/CowAgent/commit/13f5fde)）
+- **Gemini**：GoogleGeminiBot の model 属性欠落を修正（[#2716](https://github.com/zhayujie/CowAgent/pull/2716)）。Thanks [@cowagent](https://github.com/cowagent)
+- **WeChat チャネル**：ファイル送信失敗・ファイル名消失の修正（[6d9b7ba](https://github.com/zhayujie/CowAgent/commit/6d9b7ba)、[45faa9c](https://github.com/zhayujie/CowAgent/commit/45faa9c)）
+- **Docker**：ボリューム権限修正、イメージサイズ削減（[3eb8348](https://github.com/zhayujie/CowAgent/commit/3eb8348)、[4470d4c](https://github.com/zhayujie/CowAgent/commit/4470d4c)）
+- **セキュリティ**：Memory Content パストラバーサルリスクを修正。Thanks [@August829](https://github.com/August829)
+
+## 📦 アップグレード
+
+`cow update` または `./run.sh update` でアップグレード、またはコードを手動で pull して再起動。詳細は[アップグレードガイド](https://docs.cowagent.ai/ja/guide/upgrade)を参照。
+
+**リリース日**：2026.04.01 | [Full Changelog](https://github.com/zhayujie/CowAgent/compare/2.0.4...master)

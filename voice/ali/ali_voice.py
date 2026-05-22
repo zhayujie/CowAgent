@@ -16,9 +16,13 @@ import time
 from bridge.reply import Reply, ReplyType
 from common.log import logger
 from voice.voice import Voice
-from voice.ali.ali_api import AliyunTokenGenerator
-from voice.ali.ali_api import text_to_speech_aliyun
+from voice.ali.ali_api import AliyunTokenGenerator, speech_to_text_aliyun, text_to_speech_aliyun
 from config import conf
+
+try:
+    from voice.audio_convert import get_pcm_from_wav
+except ImportError as e:
+    logger.debug("import voice.audio_convert failed: {}".format(e))
 
 
 class AliVoice(Voice):
@@ -34,7 +38,8 @@ class AliVoice(Voice):
             self.token = None
             self.token_expire_time = 0
             # 默认复用阿里云千问的 access_key 和 access_secret
-            self.api_url = config.get("api_url")
+            self.api_url_voice_to_text = config.get("api_url_voice_to_text")
+            self.api_url_text_to_voice = config.get("api_url_text_to_voice")
             self.app_key = config.get("app_key")
             self.access_key_id = conf().get("qwen_access_key_id") or config.get("access_key_id")
             self.access_key_secret = conf().get("qwen_access_key_secret") or config.get("access_key_secret")
@@ -53,12 +58,31 @@ class AliVoice(Voice):
                       r'äöüÄÖÜáéíóúÁÉÍÓÚàèìòùÀÈÌÒÙâêîôûÂÊÎÔÛçÇñÑ，。！？,.]', '', text)
         # 提取有效的token
         token_id = self.get_valid_token()
-        fileName = text_to_speech_aliyun(self.api_url, text, self.app_key, token_id)
+        fileName = text_to_speech_aliyun(self.api_url_text_to_voice, text, self.app_key, token_id)
         if fileName:
             logger.info("[Ali] textToVoice text={} voice file name={}".format(text, fileName))
             reply = Reply(ReplyType.VOICE, fileName)
         else:
             reply = Reply(ReplyType.ERROR, "抱歉，语音合成失败")
+        return reply
+
+    def voiceToText(self, voice_file):
+        """
+        将语音文件转换为文本。
+
+        :param voice_file: 要转换的语音文件。
+        :return: 返回一个Reply对象，其中包含转换得到的文本或错误信息。
+        """
+        # 提取有效的token
+        token_id = self.get_valid_token()
+        logger.debug("[Ali] voice file name={}".format(voice_file))
+        pcm = get_pcm_from_wav(voice_file)
+        text = speech_to_text_aliyun(self.api_url_voice_to_text, pcm, self.app_key, token_id)
+        if text:
+            logger.info("[Ali] VoicetoText = {}".format(text))
+            reply = Reply(ReplyType.TEXT, text)
+        else:
+            reply = Reply(ReplyType.ERROR, "抱歉，语音识别失败")
         return reply
 
     def get_valid_token(self):

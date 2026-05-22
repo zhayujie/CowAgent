@@ -1,0 +1,90 @@
+---
+title: Deep Dream
+description: Deep Dream — automatic distillation from conversations to permanent memory
+---
+
+Deep Dream is the core consolidation mechanism of CowAgent's memory system, responsible for distilling scattered daily memories into refined long-term memory and generating dream diaries.
+
+## Memory Flow
+
+CowAgent's memory progresses through three stages from short-term to long-term:
+
+```
+Conversation context (short-term) → Daily memory (mid-term) → MEMORY.md (long-term)
+```
+
+### 1. Conversation → Daily Memory
+
+When conversation context is trimmed or during the daily scheduled summary, the system uses LLM to summarize conversation content into key events, writing them to the daily memory file `memory/YYYY-MM-DD.md`.
+
+Triggers:
+- **Context trimming** — Trimmed content is summarized when turn or token limits are exceeded
+- **Daily schedule** — Automatically triggered at 23:55
+- **API overflow** — Emergency save of current conversation summary
+
+### 2. Daily Memory → MEMORY.md (Distillation)
+
+After the daily summary completes, Deep Dream automatically runs distillation:
+
+1. **Read materials** — Current `MEMORY.md` + today's daily memory
+2. **LLM distillation** — Deduplicate, merge, prune, extract new information
+3. **Overwrite MEMORY.md** — Output the refined long-term memory
+4. **Generate dream diary** — Record discoveries and insights from the consolidation
+
+### 3. Role of MEMORY.md
+
+`MEMORY.md` is injected into the system prompt for every conversation, keeping the Agent aware of user preferences, decisions, and key facts. Therefore it must stay concise — Deep Dream targets approximately 30 entries or fewer.
+
+## Distillation Rules
+
+Deep Dream follows these consolidation rules:
+
+| Operation | Description |
+| --- | --- |
+| **Merge & refine** | Combine similar entries into single high-density statements |
+| **Extract new** | Pull preferences, decisions, people, experiences from daily memory |
+| **Conflict update** | When new info contradicts old entries, newer info takes precedence |
+| **Clean invalid** | Remove temporary records, blank entries, formatting artifacts |
+| **Remove redundancy** | Delete old entries already covered by more refined statements |
+
+## Dream Diary
+
+Each distillation generates a dream diary saved at `memory/dreams/YYYY-MM-DD.md`, written in a narrative style recording:
+
+- Duplications or contradictions found
+- New insights extracted from daily memory
+- Cleanups and optimizations performed
+- Overall observations
+
+Dream diaries can be viewed in the Web console under "Memory → Dream Diary" tab.
+
+<Frame>
+  <img src="https://cdn.link-ai.tech/doc/20260414110032.png" width="800" />
+</Frame>
+
+## Manual Trigger
+
+In addition to the automatic daily run, you can manually trigger distillation in chat:
+
+```text
+/memory dream [N]
+```
+
+- `N`: Consolidate the last N days of memory (default 3, max 30)
+- Runs asynchronously in the background; you'll be notified in chat when complete
+- Web notifications include clickable links to view MEMORY.md and dream diary
+- Works without Agent initialization — can be used before the first conversation
+
+<Tip>
+  After first deployment, it's recommended to run `/memory dream 30` once to distill all historical daily memories into MEMORY.md.
+</Tip>
+
+## Safety Mechanisms
+
+| Mechanism | Description |
+| --- | --- |
+| **Skip on no content** | Distillation skipped when no daily memory exists, avoiding empty overwrites |
+| **Input dedup** | In scheduled tasks, automatically skipped when input materials haven't changed |
+| **Async execution** | Distillation runs in a background thread, never blocking conversation |
+| **Sequential guarantee** | In scheduled tasks, daily flush completes before distillation starts |
+| **No fabrication** | Prompt explicitly constrains consolidation to existing materials only |

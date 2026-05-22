@@ -1,0 +1,54 @@
+---
+title: 一键安装
+description: 使用脚本一键安装和管理 CowAgent
+---
+
+项目提供了一键安装、配置、启动、管理程序的脚本，推荐使用脚本快速运行。
+
+支持 Linux、macOS、Windows 操作系统，需安装 Python 3.7 ~ 3.12（推荐 3.9）。
+
+## 安装命令
+
+<Tabs>
+  <Tab title="Linux / macOS">
+    ```bash
+    bash <(curl -fsSL https://cdn.link-ai.tech/code/cow/run.sh)
+    ```
+  </Tab>
+  <Tab title="Windows (PowerShell)">
+    ```powershell
+    irm https://cdn.link-ai.tech/code/cow/run.ps1 | iex
+    ```
+  </Tab>
+</Tabs>
+
+脚本自动执行以下流程：
+
+1. 检查 Python 环境（需要 Python 3.7+）
+2. 安装必要工具（git、curl 等）
+3. 克隆项目代码到 `~/CowAgent`
+4. 安装 Python 依赖和 Cow CLI
+5. 引导配置 AI 模型和通信渠道
+6. 启动服务
+
+运行后默认启动 Web 控制台，访问 `http://localhost:9899` 开始对话和管理Agent。
+
+## 管理命令
+
+安装完成后，使用 `cow` CLI 管理服务：
+
+| 命令 | 说明 |
+| --- | --- |
+| `cow start` | 启动服务 |
+| `cow stop` | 停止服务 |
+| `cow restart` | 重启服务 |
+| `cow status` | 查看运行状态 |
+| `cow logs` | 查看实时日志 |
+| `cow update` | 更新代码并重启 |
+| `cow install-browser` | 安装浏览器工具依赖 |
+
+更多命令和用法参考 [命令文档](/cli/index)。
+
+<Note>
+  如果 `cow` 命令不可用，也可以使用 `./run.sh <命令>`（Linux/macOS）或 `.\scripts\run.ps1 <命令>`（Windows）作为替代，功能等效。
+</Note>

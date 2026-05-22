@@ -1,0 +1,94 @@
+---
+title: Commands Overview
+description: CowAgent command system — Terminal CLI and chat commands
+---
+
+CowAgent provides two ways to interact via commands:
+
+- **Terminal CLI** — Run `cow <command>` in your system terminal for service management, skill management, and other operations
+- **Chat Commands** — Type `/<command>` or `cow <command>` in any conversation to check status, manage skills, adjust configuration, etc.
+
+## Cow CLI
+
+After deploying with the one-click install script, the `cow` command is automatically available. For manual installations, run:
+
+```bash
+pip install -e .
+```
+
+Then use the `cow` command from anywhere:
+
+```bash
+cow help
+```
+
+Example output:
+
+```
+🐮 CowAgent CLI
+
+Usage: cow <command>
+
+Service:
+  start     Start the CowAgent service
+  stop      Stop the CowAgent service
+  restart   Restart the CowAgent service
+  update    Update code and restart service
+  status    Show service status
+  logs      View service logs
+
+Skills:
+  skill     Manage skills (list / search / install / uninstall ...)
+
+Memory & Knowledge:
+  memory    Memory distillation (dream)
+  knowledge View knowledge base stats and structure
+
+Others:
+  help      Show this help message
+  version   Show version
+```
+
+## Chat Commands
+
+In the Web console or any connected channel, type `/` to see command suggestions. Supported commands:
+
+| Command | Description |
+| --- | --- |
+| `/help` | Show command help |
+| `/status` | View service status and configuration |
+| `/config` | View or modify runtime configuration |
+| `/skill` | Manage skills (install, uninstall, enable, disable, etc.) |
+| `/memory dream [N]` | Manually trigger memory distillation (default 3 days, max 30) |
+| `/knowledge` | View knowledge base statistics |
+| `/knowledge list` | View knowledge base directory structure |
+| `/knowledge on\|off` | Enable or disable knowledge base |
+| `/context` | View current session context info |
+| `/context clear` | Clear current session context |
+| `/logs` | View recent logs |
+| `/version` | Show version number |
+
+<Tip>
+  Service management commands like `/start`, `/stop`, `/restart` will prompt you to use them in the terminal instead, as they involve process operations.
+</Tip>
+
+## Command Availability
+
+| Command | Terminal (`cow`) | Chat (`/`) |
+| --- | :---: | :---: |
+| help | ✓ | ✓ |
+| version | ✓ | ✓ |
+| status | ✓ | ✓ |
+| logs | ✓ | ✓ |
+| config | ✗ | ✓ |
+| context | — | ✓ |
+| memory (subcommands) | ✗ | ✓ |
+| knowledge (subcommands) | ✓ | ✓ |
+| skill (subcommands) | ✓ | ✓ |
+| start / stop / restart | ✓ | ✗ |
+| update | ✓ | ✗ |
+| install-browser | ✓ | ✗ |
+
+<Note>
+  `context` only shows a hint in the terminal to use it in chat. `config` is only available in chat.
+</Note>

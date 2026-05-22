@@ -1,0 +1,19 @@
+---
+title: OpenAI
+description: OpenAIモデルの設定
+---
+
+```json
+{
+  "model": "gpt-5.4",
+  "open_ai_api_key": "YOUR_API_KEY",
+  "open_ai_api_base": "https://api.openai.com/v1"
+}
+```
+
+| パラメータ | 説明 |
+| --- | --- |
+| `model` | OpenAI APIの[modelパラメータ](https://platform.openai.com/docs/models)に対応。oシリーズ、gpt-5.4、gpt-5シリーズ、gpt-4.1などをサポート。Agentモードでは`gpt-5.4`を推奨 |
+| `open_ai_api_key` | [OpenAI Platform](https://platform.openai.com/api-keys)で作成 |
+| `open_ai_api_base` | 任意。サードパーティプロキシを使用する場合に変更 |
+| `bot_type` | 公式OpenAIモデルでは不要。Claudeなど非OpenAIモデルをプロキシ経由で使用する場合は`openai`に設定 |

@@ -1,0 +1,91 @@
+---
+title: v2.0.3
+description: CowAgent 2.0.3 - 新增企微智能机器人和 QQ 通道、Web 控制台文件处理、记忆系统升级
+---
+
+## 🔌 新增接入通道
+
+### 企业微信智能机器人
+
+新增企业微信智能机器人（`wecom_bot`）通道，支持流式卡片消息输出，支持文本和图片消息的接收与回复，可在 Web 控制台中进行通道配置和管理。
+
+接入文档：[企微智能机器人接入](https://docs.cowagent.ai/channels/wecom-bot)。
+
+相关提交：[d4480b6](https://github.com/zhayujie/CowAgent/commit/d4480b6), [a42f31f](https://github.com/zhayujie/CowAgent/commit/a42f31f), [4ecd4df](https://github.com/zhayujie/CowAgent/commit/4ecd4df), [8b45d6c](https://github.com/zhayujie/CowAgent/commit/8b45d6c)
+
+### QQ 通道
+
+新增 QQ 官方机器人（`qq`）通道，支持文本和图片消息的接收与回复，支持私聊和群聊场景。
+
+接入文档参考：[QQ机器人接入](https://docs.cowagent.ai/channels/qq)。
+
+相关提交：[005a0e1](https://github.com/zhayujie/CowAgent/commit/005a0e1), [a4d54f5](https://github.com/zhayujie/CowAgent/commit/a4d54f5)
+
+## 🖥️ Web 控制台支持文件输入和处理
+
+Web 控制台对话界面支持文件和图片上传，可直接发送文件给 Agent 进行处理。同时 Read 工具新增对 Office 文档（Word、Excel、PPT）的解析能力。
+
+相关提交：[30c6d9b](https://github.com/zhayujie/CowAgent/commit/30c6d9b)
+
+## 🤖 新增模型
+
+- **GPT-5.4 系列**：新增 `gpt-5.4`、`gpt-5.4-mini`、`gpt-5.4-nano` 模型支持 ([1623deb](https://github.com/zhayujie/CowAgent/commit/1623deb))
+- **Gemini 3.1 Flash Lite Preview**：新增 `gemini-3.1-flash-lite-preview` 模型支持 ([ba915f2](https://github.com/zhayujie/CowAgent/commit/ba915f2))
+
+## 💰 Coding Plan 支持
+
+新增各厂商 Coding Plan（编程包月套餐）的接入支持，通过 OpenAI 兼容方式统一接入。目前已支持阿里云、MiniMax、智谱 GLM、Kimi、火山引擎等厂商。
+
+详细配置参考 [Coding Plan 文档](https://docs.cowagent.ai/models/coding-plan)。
+
+## 🧠 记忆系统升级
+
+记忆写入（Memory Flush）升级：
+
+- 使用 LLM 对超出上下文窗口的对话内容进行智能摘要，生成精炼的每日记忆条目
+- 摘要在后台线程异步执行，不阻塞回复
+- 优化上下文批量裁剪策略，降低冲刷频率
+- 新增每日定时冲刷兜底机制，避免低活跃场景下记忆丢失
+- 修复上下文记忆丢失问题
+
+相关提交：[022c13f](https://github.com/zhayujie/CowAgent/commit/022c13f), [c116235](https://github.com/zhayujie/CowAgent/commit/c116235)
+
+## 🔧 工具重构
+
+- **图片识别**：将图片识别（Image Vision）从 Skill 重构为内置 Tool，新增独立的图片视觉提供方（Vision Provider）配置，提升稳定性和可维护性 ([a50fafa](https://github.com/zhayujie/CowAgent/commit/a50fafa), [3b8b562](https://github.com/zhayujie/CowAgent/commit/3b8b562))
+- **网页抓取**：将网页抓取（Web Fetch）从 Skill 重构为内置 Tool，支持远程文档文件（PDF、Word、Excel、PPT）的下载和解析 ([ccb9030](https://github.com/zhayujie/CowAgent/commit/ccb9030), [fa61744](https://github.com/zhayujie/CowAgent/commit/fa61744))
+
+## 🐳 Docker 部署优化
+
+- **配置模板对齐**：`docker-compose.yml` 环境变量与 `config-template.json` 对齐，补充完整的模型 API Key 和 Agent 等配置项
+- **Web 控制台端口映射**：新增 `9899` 端口映射，Docker 部署后可通过浏览器访问 Web 控制台
+- **配置热更新**：各模型 Bot 的 API Key 和 API Base 改为实时读取，通过 Web 控制台修改配置后无需重启即可生效
+- **工作空间持久化**：新增 `./cow` Volume 挂载，Agent 工作空间数据（记忆、人格、技能等）持久化到宿主机，容器重建或升级不丢失
+
+## ⚡ 性能优化
+
+- **启动加速**：飞书通道采用懒加载方式导入依赖，避免 4-10 秒的启动延迟 ([924dc79](https://github.com/zhayujie/CowAgent/commit/924dc79))
+- **通道稳定性**：优化通道连接稳定性，支持通道配置通过环境变量设置 ([f1c04bc](https://github.com/zhayujie/CowAgent/commit/f1c04bc), [46d97fd](https://github.com/zhayujie/CowAgent/commit/46d97fd))
+
+## 🐛 问题修复
+
+- **bot_type 配置**：修复 Agent 模式下 `bot_type` 配置传递问题 ([#2691](https://github.com/zhayujie/CowAgent/pull/2691)) Thanks [@Weikjssss](https://github.com/Weikjssss)
+- **bot_type 优先级**：调整 Agent 模式下 `bot_type` 的解析优先级 ([#2692](https://github.com/zhayujie/CowAgent/pull/2692)) Thanks [@6vision](https://github.com/6vision)
+- **智谱模型配置**：修复智谱 `bot_type` 命名、Web 控制台持久化及正则转义问题 ([#2693](https://github.com/zhayujie/CowAgent/pull/2693)) Thanks [@6vision](https://github.com/6vision)
+- **OpenAI 兼容层**：使用 `openai_compat` 层统一错误处理 ([#2688](https://github.com/zhayujie/CowAgent/pull/2688)) Thanks [@JasonOA888](https://github.com/JasonOA888)
+- **OpenAI 兼容迁移**：完成所有模型 Bot 的 `openai_compat` 迁移 ([#2689](https://github.com/zhayujie/CowAgent/pull/2689))
+- **Gemini 工具调用**：修复 Gemini 模型的工具调用匹配问题 ([eda82ba](https://github.com/zhayujie/CowAgent/commit/eda82ba))
+- **会话并发**：修复会话并发场景下的竞态条件问题 ([9879878](https://github.com/zhayujie/CowAgent/commit/9879878))
+- **历史消息恢复**：修复历史会话消息不完整问题，仅恢复 user/assistant 文本消息，剥离工具调用 ([b788a3d](https://github.com/zhayujie/CowAgent/commit/b788a3d), [a33ce97](https://github.com/zhayujie/CowAgent/commit/a33ce97))
+- **飞书群聊**：移除飞书群聊场景下对 `bot_name` 的依赖 ([b641bff](https://github.com/zhayujie/CowAgent/commit/b641bff))
+- **Safari 兼容**：修复 Safari 浏览器 IME 回车键误触发消息发送问题 ([0687916](https://github.com/zhayujie/CowAgent/commit/0687916))
+- **Windows 兼容**：修复 Windows 下 bash 风格 `$VAR` 环境变量转换为 `%VAR%` 的问题 ([7c67513](https://github.com/zhayujie/CowAgent/commit/7c67513))
+- **MiniMax 参数**：增加 MiniMax 模型的 `max_tokens` 限制 ([1767413](https://github.com/zhayujie/CowAgent/commit/1767413))
+- **.gitignore 更新**：添加 Python 目录忽略规则 ([#2683](https://github.com/zhayujie/CowAgent/pull/2683)) Thanks [@pelioo](https://github.com/pelioo)
+- **AGENT.md 主动演进**：优化系统提示词中对 AGENT.md 的更新引导，从被动的"用户修改时更新"改为主动识别对话中的性格、风格变化并自动更新
+
+## 📦 升级方式
+
+源码部署可执行 `./run.sh update` 一键升级，或手动拉取代码后重启。详见 [更新升级文档](https://docs.cowagent.ai/guide/upgrade)。
+
+**发布日期**：2026.03.18 | [Full Changelog](https://github.com/zhayujie/CowAgent/compare/2.0.2...master)

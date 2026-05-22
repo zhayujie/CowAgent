@@ -10,6 +10,7 @@ from bridge.context import ContextType
 from plugins import EventContext, EventAction
 from .utils import Util
 
+
 INVALID_REQUEST = 410
 NOT_FOUND_ORIGIN_IMAGE = 461
 NOT_FOUND_TASK = 462
@@ -67,10 +68,11 @@ class MJTask:
 
 # midjourney bot
 class MJBot:
-    def __init__(self, config):
+    def __init__(self, config, fetch_group_app_code):
         self.base_url = conf().get("linkai_api_base", "https://api.link-ai.tech") + "/v1/img/midjourney"
         self.headers = {"Authorization": "Bearer " + conf().get("linkai_api_key")}
         self.config = config
+        self.fetch_group_app_code = fetch_group_app_code
         self.tasks = {}
         self.temp_dict = {}
         self.tasks_lock = threading.Lock()
@@ -98,7 +100,7 @@ class MJBot:
                 return TaskType.VARIATION
             elif cmd_list[0].lower() == f"{trigger_prefix}mjr":
                 return TaskType.RESET
-        elif context.type == ContextType.IMAGE_CREATE and self.config.get("use_image_create_prefix") and self.config.get("enabled"):
+        elif context.type == ContextType.IMAGE_CREATE and self.config.get("use_image_create_prefix") and self._is_mj_open(context):
             return TaskType.GENERATE
 
     def process_mj_task(self, mj_type: TaskType, e_context: EventContext):
@@ -129,8 +131,8 @@ class MJBot:
             self._set_reply_text(f"Midjourney绘画已{tips_text}", e_context, level=ReplyType.INFO)
             return
 
-        if not self.config.get("enabled"):
-            logger.warn("Midjourney绘画未开启，请查看 plugins/linkai/config.json 中的配置")
+        if not self._is_mj_open(context):
+            logger.warn("Midjourney绘画未开启，请查看 plugins/linkai/config.json 中的配置，或者在LinkAI平台 应用中添加/打开”MJ“插件")
             self._set_reply_text(f"Midjourney绘画未开启", e_context, level=ReplyType.INFO)
             return
 
@@ -409,6 +411,25 @@ class MJBot:
                     result.append(task)
         return result
 
+    def _is_mj_open(self, context) -> bool:
+        # 获取远程应用插件状态
+        remote_enabled = False
+        if context.kwargs.get("isgroup"):
+            # 群聊场景只查询群对应的app_code
+            group_name = context.get("msg").from_user_nickname
+            app_code = self.fetch_group_app_code(group_name)
+            if app_code:
+                remote_enabled = Util.fetch_app_plugin(app_code, "Midjourney")
+        else:
+            # 非群聊场景使用全局app_code
+            app_code = conf().get("linkai_app_code")
+            if app_code:
+                remote_enabled = Util.fetch_app_plugin(app_code, "Midjourney")
+
+        # 本地配置
+        base_enabled = self.config.get("enabled")
+
+        return base_enabled or remote_enabled
 
 def _send(channel, reply: Reply, context, retry_cnt=0):
     try:

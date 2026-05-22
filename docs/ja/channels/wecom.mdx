@@ -1,0 +1,98 @@
+---
+title: WeCom
+description: CowAgent を WeCom 企業アプリに統合する
+---
+
+カスタム企業アプリを通じて CowAgent を WeCom に統合し、社内従業員との1対1チャットに対応します。
+
+<Note>
+  WeCom は Docker デプロイまたはサーバー上の Python デプロイのみサポートしています。ローカル実行モードには対応していません。
+</Note>
+
+## 1. 前提条件
+
+必要なリソース：
+
+1. パブリック IP を持つサーバー（海外サーバー、または国際 API アクセス用のプロキシを持つ国内サーバー）
+2. 登録済みの WeCom アカウント（個人登録は可能ですが認証はできません）
+3. 認証済みの WeCom アカウントには、対応する法人名義で届け出済みのドメインが別途必要です
+
+## 2. WeCom アプリの作成
+
+1. [WeCom 管理コンソール](https://work.weixin.qq.com/wework_admin/frame#profile)で、**自社情報**をクリックし、ページ下部の **Corp ID** を確認します。この ID を `wechatcom_corp_id` 設定フィールド用に保存します。
+
+2. **アプリ管理**に切り替え、アプリを作成をクリックします：
+
+<img src="https://cdn.link-ai.tech/doc/20260228103156.png" width="480"/>
+
+3. アプリ作成ページで、`AgentId` と `Secret` を記録します：
+
+<img src="https://cdn.link-ai.tech/doc/20260228103218.png" width="580"/>
+
+4. **API 受信設定**をクリックしてアプリケーションインターフェースを設定します：
+
+<img src="https://cdn.link-ai.tech/doc/20260228103211.png" width="520"/>
+
+- URL の形式: `http://ip:port/wxcomapp`（認証済み企業は届け出済みドメインを使用する必要があります）
+- ランダムな `Token` と `EncodingAESKey` を生成し、設定ファイル用に保存します
+
+<Note>
+  プログラムがまだ起動していないため、この時点では API 受信設定を保存できません。プロジェクトが動作した後に戻って保存してください。
+</Note>
+
+## 3. 設定と起動
+
+`config.json` に以下の設定を追加します（各パラメータと WeCom コンソールの対応関係は上のスクリーンショットを参照してください）：
+
+```json
+{
+  "channel_type": "wechatcom_app",
+  "single_chat_prefix": [""],
+  "wechatcom_corp_id": "YOUR_CORP_ID",
+  "wechatcomapp_token": "YOUR_TOKEN",
+  "wechatcomapp_secret": "YOUR_SECRET",
+  "wechatcomapp_agent_id": "YOUR_AGENT_ID",
+  "wechatcomapp_aes_key": "YOUR_AES_KEY",
+  "wechatcomapp_port": 9898
+}
+```
+
+| パラメータ | 説明 |
+| --- | --- |
+| `wechatcom_corp_id` | Corp ID |
+| `wechatcomapp_token` | API 受信設定の Token |
+| `wechatcomapp_secret` | アプリの Secret |
+| `wechatcomapp_agent_id` | アプリの AgentId |
+| `wechatcomapp_aes_key` | API 受信設定の EncodingAESKey |
+| `wechatcomapp_port` | リスンポート、デフォルトは 9898 |
+
+設定後、プログラムを起動します。ログに `http://0.0.0.0:9898/` と表示されれば、プログラムは正常に動作しています。このポートを外部に公開する必要があります（例：クラウドサーバーのセキュリティグループで許可します）。
+
+プログラム起動後、WeCom 管理コンソールに戻って**メッセージサーバー設定**を保存します。保存が成功したら、サーバー IP を**企業の信頼済み IP** に追加する必要もあります。追加しないとメッセージの送受信ができません：
+
+<img src="https://cdn.link-ai.tech/doc/20260228103224.png" width="520"/>
+
+<Warning>
+  URL 設定のコールバックが失敗する場合や、設定がうまくいかない場合：
+  1. サーバーのファイアウォールが無効になっており、セキュリティグループでリスンポートが許可されていることを確認してください
+  2. Token、Secret Key などのパラメータ設定が一致しているか、URL の形式が正しいか慎重に確認してください
+  3. 認証済みの WeCom アカウントは、法人に対応する届け出済みドメインを設定する必要があります
+</Warning>
+
+## 4. 使い方
+
+WeCom で作成したアプリ名を検索して、直接チャットを開始できます。異なるポートでリスンする複数のインスタンスを実行して、複数の WeCom アプリを作成できます：
+
+<img src="https://cdn.link-ai.tech/doc/20260228103228.png" width="720"/>
+
+外部の個人 WeChat ユーザーにアプリを利用してもらうには、**自社情報 → WeChat プラグイン**に移動し、招待 QR コードを共有します。スキャンしてフォローした後、個人 WeChat ユーザーがアプリとチャットできるようになります：
+
+<img src="https://cdn.link-ai.tech/doc/20260228103232.png" width="520"/>
+
+## FAQ
+
+以下の依存パッケージがインストールされていることを確認してください：
+
+```bash
+pip install websocket-client pycryptodome
+```

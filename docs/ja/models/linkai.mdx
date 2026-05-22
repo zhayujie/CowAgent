@@ -1,0 +1,21 @@
+---
+title: LinkAI
+description: LinkAIプラットフォームで複数モデルに統合アクセス
+---
+
+[LinkAI](https://link-ai.tech)プラットフォームでは、OpenAI、Claude、Gemini、DeepSeek、MiniMax、Qwen、Kimiなどのモデルを柔軟に切り替えることができ、ナレッジベース、ワークフロー、プラグイン、その他のAgent機能をサポートしています。
+
+```json
+{
+  "use_linkai": true,
+  "linkai_api_key": "YOUR_API_KEY"
+}
+```
+
+| パラメータ | 説明 |
+| --- | --- |
+| `use_linkai` | `true`に設定してLinkAIインターフェースを有効化 |
+| `linkai_api_key` | [LinkAI Console](https://link-ai.tech/console/interface)で作成 |
+| `model` | 空のままにするとAgentのデフォルトモデルを使用。プラットフォーム上で柔軟に切り替え可能。[モデル一覧](https://link-ai.tech/console/models)のすべてのモデルをサポート |
+
+詳細は[APIドキュメント](https://docs.link-ai.tech/platform/api)を参照してください。

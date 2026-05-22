@@ -46,4 +46,16 @@ def create_voice(voice_type):
         from voice.edge.edge_voice import EdgeVoice
 
         return EdgeVoice()
+    elif voice_type == "xunfei":
+        from voice.xunfei.xunfei_voice import XunfeiVoice
+
+        return XunfeiVoice()
+    elif voice_type == "tencent":
+        from voice.tencent.tencent_voice import TencentVoice
+
+        return TencentVoice()
+    elif voice_type == "minimax":
+        from voice.minimax.minimax_voice import MinimaxVoice
+
+        return MinimaxVoice()
     raise RuntimeError

@@ -98,6 +98,8 @@
 
 如果不想创建 `plugins/linkai/config.json` 配置，可以直接通过 `$linkai sum open` 指令开启该功能。
 
+也可以通过私聊(全局 `config.json` 中的 `linkai_app_code`)或者群聊绑定(通过`group_app_map`参数配置)的应用来开启该功能：在LinkAI平台 [应用配置](https://link-ai.tech/console/factory) 里添加并开启**内容总结**插件。
+
 #### 使用
 
 功能开启后，向机器人发送 **文件**、 **分享链接卡片**、**图片** 即可生成摘要，进一步可以与文件或链接的内容进行多轮对话。如果需要关闭某种类型的内容总结，设置 `summary`配置中的type字段即可。

@@ -9,7 +9,7 @@ from common.expired_dict import ExpiredDict
 from common import const
 import os
 from .utils import Util
-from config import plugin_config
+from config import plugin_config, conf
 
 
 @plugins.register(
@@ -28,11 +28,11 @@ class LinkAI(Plugin):
             # 未加载到配置，使用模板中的配置
             self.config = self._load_config_template()
         if self.config:
-            self.mj_bot = MJBot(self.config.get("midjourney"))
+            self.mj_bot = MJBot(self.config.get("midjourney"), self._fetch_group_app_code)
         self.sum_config = {}
         if self.config:
             self.sum_config = self.config.get("summary")
-        logger.info(f"[LinkAI] inited, config={self.config}")
+        logger.debug(f"[LinkAI] inited, config={self.config}")
 
     def on_handle_context(self, e_context: EventContext):
         """
@@ -56,7 +56,8 @@ class LinkAI(Plugin):
                 return
             if context.type != ContextType.IMAGE:
                 _send_info(e_context, "正在为你加速生成摘要，请稍后")
-            res = LinkSummary().summary_file(file_path)
+            app_code = self._fetch_app_code(context)
+            res = LinkSummary().summary_file(file_path, app_code)
             if not res:
                 if context.type != ContextType.IMAGE:
                     _set_reply_text("因为神秘力量无法获取内容，请稍后再试吧", e_context, level=ReplyType.TEXT)
@@ -74,7 +75,8 @@ class LinkAI(Plugin):
             if not LinkSummary().check_url(context.content):
                 return
             _send_info(e_context, "正在为你加速生成摘要，请稍后")
-            res = LinkSummary().summary_url(context.content)
+            app_code = self._fetch_app_code(context)
+            res = LinkSummary().summary_url(context.content, app_code)
             if not res:
                 _set_reply_text("因为神秘力量无法获取文章内容，请稍后再试吧~", e_context, level=ReplyType.TEXT)
                 return
@@ -169,7 +171,7 @@ class LinkAI(Plugin):
             return
 
         if len(cmd) == 3 and cmd[1] == "sum" and (cmd[2] == "open" or cmd[2] == "close"):
-            # 知识库开关指令
+            # 总结对话开关指令
             if not Util.is_admin(e_context):
                 _set_reply_text("需要管理员权限执行", e_context, level=ReplyType.ERROR)
                 return
@@ -192,14 +194,36 @@ class LinkAI(Plugin):
         return
 
     def _is_summary_open(self, context) -> bool:
-        if not self.sum_config or not self.sum_config.get("enabled"):
-            return False
-        if context.kwargs.get("isgroup") and not self.sum_config.get("group_enabled"):
-            return False
-        support_type = self.sum_config.get("type") or ["FILE", "SHARING"]
-        if context.type.name not in support_type and context.type.name != "TEXT":
-            return False
-        return True
+        # 获取远程应用插件状态
+        remote_enabled = False
+        if context.kwargs.get("isgroup"):
+            # 群聊场景只查询群对应的app_code
+            group_name = context.get("msg").from_user_nickname
+            app_code = self._fetch_group_app_code(group_name)
+            if app_code:
+                if context.type.name in ["FILE", "SHARING"]:
+                    remote_enabled = Util.fetch_app_plugin(app_code, "内容总结")
+        else:
+            # 非群聊场景使用全局app_code
+            app_code = conf().get("linkai_app_code")
+            if app_code:
+                if context.type.name in ["FILE", "SHARING"]:
+                    remote_enabled = Util.fetch_app_plugin(app_code, "内容总结")
+
+        # 基础条件：总开关开启且消息类型符合要求
+        base_enabled = (
+                self.sum_config
+                and self.sum_config.get("enabled")
+                and (context.type.name in (
+                    self.sum_config.get("type") or ["FILE", "SHARING"]) or context.type.name == "TEXT")
+        )
+
+        # 群聊：需要满足(总开关和群开关)或远程插件开启
+        if context.kwargs.get("isgroup"):
+            return (base_enabled and self.sum_config.get("group_enabled")) or remote_enabled
+
+        # 非群聊：只需要满足总开关或远程插件开启
+        return base_enabled or remote_enabled
 
     # LinkAI 对话任务处理
     def _is_chat_task(self, e_context: EventContext):
@@ -230,6 +254,19 @@ class LinkAI(Plugin):
             app_code = group_mapping.get(group_name) or group_mapping.get("ALL_GROUP")
             return app_code
 
+    def _fetch_app_code(self, context) -> str:
+        """
+        根据主配置或者群聊名称获取对应的应用code,优先获取群聊配置的应用code
+        :param context: 上下文
+        :return: 应用code
+        """
+        app_code = conf().get("linkai_app_code")
+        if context.kwargs.get("isgroup"):
+            # 群聊场景只查询群对应的app_code
+            group_name = context.get("msg").from_user_nickname
+            app_code = self._fetch_group_app_code(group_name)
+        return app_code
+
     def get_help_text(self, verbose=False, **kwargs):
         trigger_prefix = _get_trigger_prefix()
         help_text = "用于集成 LinkAI 提供的知识库、Midjourney绘画、文档总结、联网搜索等能力。\n\n"
@@ -254,7 +291,7 @@ class LinkAI(Plugin):
                     plugin_conf = json.load(f)
                     plugin_conf["midjourney"]["enabled"] = False
                     plugin_conf["summary"]["enabled"] = False
-                    plugin_config["linkai"] = plugin_conf
+                    write_plugin_config({"linkai": plugin_conf})
                     return plugin_conf
         except Exception as e:
             logger.exception(e)

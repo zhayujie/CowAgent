@@ -1,0 +1,64 @@
+---
+title: v2.0.7
+description: CowAgent 2.0.7 - 图像生成技能（六厂商自动路由）、新模型支持、知识库增强、Web 控制台优化及多项修复
+---
+
+## 🎨 图像生成技能
+
+新增图像生成内置技能，支持文生图、图生图、多图融合，支持 `GPT-Image-2`、`Nano Banana` 等多种模型：
+
+- **自动路由**：支持六种模型厂商自动切换，OpenAI (GPT-Image-2) → Gemini (Nano Banana) → Seedream (火山方舟) → Qwen (百炼) → MiniMax → LinkAI
+- **开箱即用**：配置 API Key 即可使用，无需手动指定模型。也支持在对话中指定特定模型
+- **灵活控制**：支持 `quality`（画质）、`size`（分辨率，512/1K~4K）、`aspect_ratio`（宽高比）等参数，各厂商自动适配有效值
+- **图片编辑**：传入已有图片即可进行编辑、风格迁移、多图融合
+- **Skill 级配置**：支持通过 `config.json` 中的 `skill.image-generation.model` 固定默认模型
+
+相关文档：[图像生成技能](https://docs.cowagent.ai/skills/image-generation)
+
+## 🤖 新模型支持
+
+- **Kimi K2.6**：新增 `kimi-k2.6` 模型支持
+- **Claude Opus 4.7**：新增 `claude-opus-4-7` 模型支持
+- **GLM 5.1**：新增 `glm-5.1` 模型支持
+- **Kimi Coding Plan**：支持 Kimi Coding Plan 模式
+- **自定义模型厂商**：新增[自定义模型](https://docs.cowagent.ai/models/custom)提供方配置，方便接入本地模型及更多厂商
+
+## 📚 知识库增强
+
+- **嵌套目录支持**：知识库列表和展示支持多级嵌套目录
+- **根级文件展示**：知识树中显示根目录下的 `index.md`、`log.md` 等文件
+- **空状态统计修复**：排除根级文件对知识库统计的干扰，正确保持空状态
+
+## 🌙 梦境记忆优化
+
+- **结构化组织**：梦境记忆文件按日期自动归档，目录结构更清晰
+- **定时抖动**：每日定时触发增加随机抖动，避免集群场景下的并发冲突
+
+## 🛠 技能系统改进
+
+- **技能管理刷新**：`/skill` 命令执行后自动加载最新技能，确保状态同步
+- **安装来源扩展**：技能安装支持多种来源格式（URL、zip、本地文件等）
+
+## 💬 Web 控制台优化
+
+- **智能自动滚动**：优化聊天窗口滚动逻辑，用户手动翻阅时不再强制跳到底部 Thanks @colin2060
+- **移动端适配**：侧边栏默认隐藏，支持点击遮罩关闭
+- **图片预览去重**：修复同一消息中图片重复渲染的问题
+- **推理内容截断**：深度思考内容超出阶段，解决前端卡顿问题
+- **会话标题修复**：修复标题自动生成的回退逻辑
+
+
+## 🐛 其他修复
+
+- **Gemini 修复**：修复 Gemini tool call 不返回结果的问题
+- **Agent 重试**：空响应重试时不再丢弃 tool_calls
+- **Docker 环境变量**：修复 Docker 环境下更新配置后环境变量未同步的问题 Thanks @sunboy0523 
+- **Python 3.7 兼容**：延迟导入 `Literal` 以兼容 Python 3.7
+- **模型切换通知**：修复切换模型后 bot_type 变更通知未显示的问题。Thanks @6vision
+- **配置命令增强**：`/config` 支持设置 `enable_thinking`
+
+## 📦 升级方式
+
+源码部署可执行 `cow update` 或 `./run.sh update` 一键升级，或手动拉取代码后重启。详见 [更新升级文档](https://docs.cowagent.ai/guide/upgrade)。
+
+**发布日期**：2026.04.22 | [Full Changelog](https://github.com/zhayujie/CowAgent/compare/2.0.6...2.0.7)

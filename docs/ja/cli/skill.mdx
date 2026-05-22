@@ -1,0 +1,192 @@
+---
+title: スキル管理
+description: コマンドでスキルのインストール、アンインストール、有効化、無効化、管理を行う
+---
+
+スキル管理コマンドは CowAgent のスキルのインストール、検索、管理に使用します。チャットでは `/skill <サブコマンド>`、ターミナルでは `cow skill <サブコマンド>` を使用します。
+
+## list
+
+インストール済みスキルとその状態を一覧表示します。
+
+<CodeGroup>
+```text チャット
+/skill list
+```
+
+```bash ターミナル
+cow skill list
+```
+</CodeGroup>
+
+**スキル広場を閲覧**（利用可能なすべてのスキルを表示）：
+
+<CodeGroup>
+```text チャット
+/skill list --remote
+```
+
+```bash ターミナル
+cow skill list --remote
+```
+</CodeGroup>
+
+**オプション：**
+
+| オプション | 説明 | デフォルト値 |
+| --- | --- | --- |
+| `--remote`, `-r` | Skill Hub のリモートスキルリストを閲覧 | いいえ |
+| `--page` | リモートリストのページ番号 | 1 |
+
+## search
+
+スキル広場でスキルを検索します。
+
+<CodeGroup>
+```text チャット
+/skill search pptx
+```
+
+```bash ターミナル
+cow skill search pptx
+```
+</CodeGroup>
+
+## install
+
+統一された `install` コマンドで、Cow スキル広場、GitHub、ClawHub、任意の URL（zip アーカイブ、SKILL.md リンク）からスキルをワンクリックでインストールできます。手動ダウンロードや設定は不要です。
+
+**スキル広場からインストール（推奨）：**
+
+<CodeGroup>
+```text チャット
+/skill install pptx
+```
+
+```bash ターミナル
+cow skill install pptx
+```
+</CodeGroup>
+
+**GitHub からインストール：**
+
+<CodeGroup>
+```text チャット
+# リポジトリ内のすべてのスキルをインストール（SKILL.md を含むサブディレクトリを自動検出）
+/skill install larksuite/cli
+
+# サブディレクトリを指定して単一スキルをインストール
+/skill install https://github.com/larksuite/cli/tree/main/skills/lark-im
+
+# # でサブディレクトリを指定
+/skill install larksuite/cli#skills/lark-minutes
+```
+
+```bash ターミナル
+# リポジトリ内のすべてのスキルをインストール（SKILL.md を含むサブディレクトリを自動検出）
+cow skill install larksuite/cli
+
+# サブディレクトリを指定して単一スキルをインストール
+cow skill install https://github.com/larksuite/cli/tree/main/skills/lark-im
+
+# # でサブディレクトリを指定
+cow skill install larksuite/cli#skills/lark-minutes
+```
+</CodeGroup>
+
+完全な GitHub URL と `owner/repo` 省略形に対応しています。モノリポ（1つのリポジトリに複数のスキル）の場合、サブディレクトリを省略するとすべてのスキルを自動検出して一括インストールします。サブディレクトリを指定した場合は、そのスキルのみをインストールします。
+
+**ClawHub からインストール：**
+
+<CodeGroup>
+```text チャット
+/skill install clawhub:baidu-search
+```
+
+```bash ターミナル
+cow skill install clawhub:baidu-search
+```
+</CodeGroup>
+
+**URL からインストール：**
+
+<CodeGroup>
+```text チャット
+# zip アーカイブからインストール（単一またはバッチ）
+/skill install https://cdn.link-ai.tech/skills/pptx.zip
+
+# SKILL.md リンクからインストール
+/skill install https://example.com/path/to/SKILL.md
+```
+
+```bash ターミナル
+# zip アーカイブからインストール（単一またはバッチ）
+cow skill install https://cdn.link-ai.tech/skills/pptx.zip
+
+# SKILL.md リンクからインストール
+cow skill install https://example.com/path/to/SKILL.md
+```
+</CodeGroup>
+
+zip / tar.gz アーカイブ URL からのインストールに対応しており、自動的に解凍して `SKILL.md` を含むディレクトリを検出し、単一またはバッチインストールをサポートします。`SKILL.md` ファイルの URL から直接インストールすることもでき、スキル名と説明を自動的に解析します。
+
+## uninstall
+
+インストール済みスキルをアンインストールします。
+
+<CodeGroup>
+```text チャット
+/skill uninstall pptx
+```
+
+```bash ターミナル
+cow skill uninstall pptx
+```
+</CodeGroup>
+
+<Warning>
+  アンインストールするとスキルディレクトリ内のすべてのファイルが削除されます。この操作は元に戻せません。
+</Warning>
+
+## enable / disable
+
+スキルの有効化・無効化を行います。無効化されたスキルは Agent から呼び出されません。
+
+<CodeGroup>
+```text チャット
+/skill enable pptx
+/skill disable pptx
+```
+
+```bash ターミナル
+cow skill enable pptx
+cow skill disable pptx
+```
+</CodeGroup>
+
+## info
+
+インストール済みスキルの詳細情報を表示します。`SKILL.md` のプレビューを含みます。
+
+<CodeGroup>
+```text チャット
+/skill info pptx
+```
+
+```bash ターミナル
+cow skill info pptx
+```
+</CodeGroup>
+
+## スキルのソース
+
+インストールされたスキルはソース情報を記録しており、`/skill list` で確認できます：
+
+| ソース | 説明 |
+| --- | --- |
+| `builtin` | プロジェクト内蔵スキル |
+| `cowhub` | CowAgent Skill Hub からインストール |
+| `github` | GitHub URL から直接インストール |
+| `clawhub` | ClawHub からインストール |
+| `url` | SKILL.md URL からインストール |
+| `local` | ローカルで作成されたスキル |

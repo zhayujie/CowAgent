@@ -1,0 +1,139 @@
+---
+title: Features
+description: CowAgent long-term memory, task planning, skills system, CLI commands, and browser tool in detail
+---
+
+## 1. Long-term Memory
+
+The memory system enables the Agent to remember important information over time, using a three-tier memory flow: conversation context (short-term) → daily memory (mid-term) → MEMORY.md (long-term), forming a complete memory lifecycle.
+
+On first launch, the Agent proactively asks the user for key information and records it in the workspace (default `~/cow`) — including agent settings, user identity, and memory files.
+
+In subsequent long-term conversations, the Agent intelligently stores or retrieves memory as needed, continuously updating its own settings, user preferences, and memory files. **Deep Dream** distillation runs daily, consolidating scattered daily memories into refined long-term memory and generating a narrative-style dream diary.
+
+<Frame>
+  <img src="https://cdn.link-ai.tech/doc/20260203000455.png" width="800" />
+</Frame>
+
+See [Long-term Memory](/en/memory) and [Deep Dream](/en/memory/deep-dream) for details.
+
+## 2. Personal Knowledge Base
+
+> The knowledge base system enables the Agent to continuously accumulate and organize structured knowledge. Unlike memory which records along a timeline, the knowledge base is organized by topics, transforming articles, conversation insights, and learning materials into interconnected Markdown pages that form a continuously growing knowledge network.
+
+The Agent automatically organizes valuable information from conversations into knowledge pages, maintaining cross-references and indexes. The Web console provides document browsing and knowledge graph visualization. Knowledge is stored in `~/cow/knowledge/` within the workspace.
+
+- **Auto-organization**: The Agent autonomously extracts and organizes structured knowledge during conversations, maintaining indexes and cross-references
+- **Knowledge graph**: Automatically builds a knowledge graph from cross-references between pages, with interactive graph visualization in the Web console
+- **Chat integration**: Knowledge document links referenced in Agent replies can be clicked directly in the Web console for viewing
+- **CLI management**: Use `/knowledge` commands to view stats, browse directory, and toggle the feature with `/knowledge on|off`
+
+<Frame>
+  <img src="https://cdn.link-ai.tech/doc/20260413105435.png" width="800" />
+</Frame>
+
+See [Personal Knowledge Base](/en/knowledge) for details.
+
+## 3. Task Planning and Tool Use
+
+Tools are the core of how the Agent accesses operating system resources. The Agent intelligently selects and invokes tools based on task requirements, performing file read/write, command execution, scheduled tasks, and more. Built-in tools are implemented in the project's `agent/tools/` directory.
+
+**Key tools:** file read/write/edit, Bash terminal, browser, file send, scheduler, memory search, web search, environment config, and more.
+
+### 3.1 Terminal and File Access
+
+Access to the OS terminal and file system is the most fundamental and core capability. Many other tools and skills build on top of this. Users can interact with the Agent from a mobile device to operate resources on their personal computer or server:
+
+<Frame>
+  <img src="https://cdn.link-ai.tech/doc/20260202181130.png" width="800" />
+</Frame>
+
+### 3.2 Programming Capability
+
+Combining programming and system access, the Agent can execute the complete **Vibecoding workflow** — from information search, asset generation, coding, testing, deployment, Nginx configuration, to publishing — all triggered by a single command from your phone:
+
+<Frame>
+  <img src="https://cdn.link-ai.tech/doc/20260318211018.png" width="800" />
+</Frame>
+
+### 3.3 Scheduled Tasks
+
+The `scheduler` tool enables dynamic scheduled tasks, supporting **one-time tasks, fixed intervals, and Cron expressions**. Tasks can be triggered as either a **fixed message send** or an **Agent dynamic task** execution:
+
+<Frame>
+  <img src="https://cdn.link-ai.tech/doc/20260202195402.png" width="800" />
+</Frame>
+
+### 3.4 Browser
+
+The built-in `browser` tool allows the Agent to control a Chromium browser to visit web pages, fill forms, click elements, and take screenshots, with support for dynamic JS-rendered pages. Run `cow install-browser` to install with one command, automatically adapting to server (headless) and desktop environments:
+
+<Frame>
+  <img src="https://cdn.link-ai.tech/doc/20260401110103.png" width="800" />
+</Frame>
+
+### 3.5 Environment Variable Management
+
+Secrets required by skills are stored in an environment variable file, managed by the `env_config` tool. You can update secrets through conversation, with built-in security protection and desensitization:
+
+<Frame>
+  <img src="https://cdn.link-ai.tech/doc/20260202234939.png" width="800" />
+</Frame>
+
+## 4. Skills System
+
+The Skills system provides infinite extensibility for the Agent. Each Skill consists of a description file, execution scripts (optional), and resources (optional), describing how to complete specific types of tasks. Skills allow the Agent to follow instructions for complex workflows, invoke tools, or integrate third-party systems.
+
+- **[Skill Hub](https://skills.cowagent.ai/):** An open skill marketplace featuring official, community, and third-party skills. Install with one command.
+- **Built-in skills:** Located in the project's `skills/` directory, including skill creator, image recognition, LinkAI agent, web fetch, and more. Built-in skills are automatically enabled based on dependency conditions (API keys, system commands, etc.).
+- **Custom skills:** Created by users through conversation, stored in the workspace (`~/cow/skills/`), capable of implementing any complex business process or third-party integration.
+
+Install skills: `/skill install <name>` or `cow skill install <name>`, supporting Skill Hub, GitHub, ClawHub, URL, and more.
+
+### 4.1 Creating Skills
+
+The `skill-creator` skill enables rapid skill creation through conversation. You can ask the Agent to codify a workflow as a skill, or send any API documentation and examples for the Agent to complete the integration directly:
+
+<Frame>
+  <img src="https://cdn.link-ai.tech/doc/20260202202247.png" width="800" />
+</Frame>
+
+### 4.2 Web Search and Image Recognition
+
+- **Web search:** Built-in `web_search` tool, supports multiple search engines. Configure `BOCHA_API_KEY` or `LINKAI_API_KEY` to enable.
+- **Image recognition:** Built-in `openai-image-vision` skill, supports `gpt-4.1-mini`, `gpt-4.1`, and other models. Requires `OPENAI_API_KEY`.
+
+<Frame>
+  <img src="https://cdn.link-ai.tech/doc/20260202213219.png" width="800" />
+</Frame>
+
+### 4.3 Skill Hub
+
+Visit [skills.cowagent.ai](https://skills.cowagent.ai/) to browse all available skills, or use commands in conversation:
+
+```text
+/skill list --remote          # Browse Skill Hub
+/skill search <keyword>       # Search skills
+/skill install <name>          # Install with one command
+```
+
+Also supports installing skills from GitHub, ClawHub, LinkAI, and other third-party platforms. See [Install Skills](/en/skills/install) for details.
+
+<img src="https://cdn.link-ai.tech/doc/20260401110103.png" width="750" />
+
+## 5. CLI Command System
+
+CowAgent provides two command interaction methods, covering service management, skill installation, configuration, and more:
+
+- **Terminal CLI:** Run `cow <command>` in the system terminal, supporting `start`, `stop`, `restart`, `update`, `status`, `logs`, `skill`, etc.
+- **Chat commands:** Type `/<command>` in conversation. The Web console shows a command menu when you type `/`.
+
+```bash
+cow start              # Start service
+cow stop               # Stop service
+cow update             # Update and restart
+cow skill install pptx # Install a skill
+cow install-browser    # Install browser tool
+```
+
+See [Command Overview](https://docs.cowagent.ai/en/cli) for details.

@@ -1,10 +1,27 @@
-openai==0.27.8
-HTMLParser>=0.0.2
-PyQRCode>=1.2.1
-qrcode>=7.4.2
+aiohttp>=3.8.6,<3.10
 requests>=2.28.2
 chardet>=5.1.0
 Pillow
-pre-commit
 web.py
-linkai>=0.0.6.0
+legacy-cgi; python_version >= "3.13"
+python-dotenv>=1.0.0
+PyYAML>=6.0
+croniter>=2.0.0
+click>=8.0
+qrcode
+
+# wechatcom & wechatmp
+wechatpy
+
+# zhipuai
+zai-sdk
+# tongyi qwen sdk
+dashscope
+
+# feishu
+lark-oapi>=1.5.5
+# dingtalk
+dingtalk_stream
+# wecom bot websocket mode
+websocket-client>=1.4.0
+pycryptodome

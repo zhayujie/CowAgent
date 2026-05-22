@@ -1,0 +1,17 @@
+---
+title: Claude
+description: Claudeモデルの設定
+---
+
+```json
+{
+  "model": "claude-sonnet-4-6",
+  "claude_api_key": "YOUR_API_KEY"
+}
+```
+
+| パラメータ | 説明 |
+| --- | --- |
+| `model` | `claude-sonnet-4-6`、`claude-opus-4-7`、`claude-opus-4-6`、`claude-sonnet-4-5`、`claude-sonnet-4-0`、`claude-3-5-sonnet-latest`などから選択可能。[公式モデル一覧](https://docs.anthropic.com/en/docs/about-claude/models/overview)を参照 |
+| `claude_api_key` | [Claude Console](https://console.anthropic.com/settings/keys)で作成 |
+| `claude_api_base` | 任意。デフォルトは`https://api.anthropic.com/v1`。サードパーティプロキシを使用する場合に変更 |

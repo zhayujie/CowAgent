@@ -1,0 +1,102 @@
+---
+title: General Commands
+description: View status, manage config, and control context with commonly used commands
+---
+
+The following commands can be used in chat with the `/` prefix or in the terminal with the `cow` prefix (some are chat-only).
+
+<Tip>
+  In the Web console, typing `/` brings up an autocomplete menu with keyboard navigation and Tab completion.
+</Tip>
+
+## help
+
+Show help information for all available commands.
+
+```text
+/help
+```
+
+## status
+
+View current session and service status, including process info, model configuration, message count, and loaded skills.
+
+```text
+/status
+```
+
+## config
+
+View or modify runtime configuration. Changes take effect immediately without restarting.
+
+**View all configurable items:**
+
+```text
+/config
+```
+
+**View a single item:**
+
+```text
+/config model
+```
+
+**Modify a config item:**
+
+```text
+/config model deepseek-v4-flash
+```
+
+**Configurable items:**
+
+| Item | Description | Example |
+| --- | --- | --- |
+| `model` | AI model name | `deepseek-v4-flash` |
+| `agent_max_context_tokens` | Max context tokens | `40000` |
+| `agent_max_context_turns` | Max context memory turns | `30` |
+| `agent_max_steps` | Max decision steps per task | `15` |
+| `enable_thinking` | Enable deep thinking mode | `true` / `false` |
+
+<Note>
+  When changing `model`, the system automatically matches the corresponding model API. Configuration is persisted to `config.json`.
+</Note>
+
+## context
+
+View current session context statistics, including message count and content length.
+
+```text
+/context
+```
+
+**Clear current session context:**
+
+```text
+/context clear
+```
+
+<Tip>
+  Clearing context makes the Agent "forget" previous conversation, useful for switching topics or freeing context space.
+</Tip>
+
+## logs
+
+View recent service logs. Shows the last 20 lines by default, up to 50.
+
+```text
+/logs
+```
+
+**Specify line count:**
+
+```text
+/logs 50
+```
+
+## version
+
+Show the current CowAgent version.
+
+```text
+/version
+```

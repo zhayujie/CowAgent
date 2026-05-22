@@ -1,0 +1,27 @@
+---
+title: 智谱 GLM
+description: 智谱AI GLM 模型配置
+---
+
+```json
+{
+  "model": "glm-5.1",
+  "zhipu_ai_api_key": "YOUR_API_KEY"
+}
+```
+
+| 参数 | 说明 |
+| --- | --- |
+| `model` | 可填 `glm-5.1`、`glm-5-turbo`、`glm-5`、`glm-4.7`、`glm-4-plus`、`glm-4-flash`、`glm-4-air` 等，参考 [模型编码](https://bigmodel.cn/dev/api/normal-model/glm-4) |
+| `zhipu_ai_api_key` | 在 [智谱AI 控制台](https://www.bigmodel.cn/usercenter/proj-mgmt/apikeys) 创建 |
+
+也支持 OpenAI 兼容方式接入：
+
+```json
+{
+  "bot_type": "openai",
+  "model": "glm-5.1",
+  "open_ai_api_base": "https://open.bigmodel.cn/api/paas/v4",
+  "open_ai_api_key": "YOUR_API_KEY"
+}
+```

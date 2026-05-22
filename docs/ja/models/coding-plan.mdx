@@ -1,0 +1,139 @@
+---
+title: Coding Plan
+description: Coding Planモデルの設定
+---
+
+> Coding Planは各プロバイダーが提供する月額サブスクリプションパッケージで、高頻度のAgent利用に最適です。CowAgentはOpenAI互換モードにより、すべてのCoding Planプロバイダーをサポートしています。
+
+<Note>
+  Coding PlanのAPI BaseとAPI Keyは、通常の従量課金制のものとは別になっています。各プロバイダーのプラットフォームから取得してください。
+</Note>
+
+## 共通設定
+
+すべてのプロバイダーはOpenAI互換プロトコルでアクセスでき、Webコンソールから素早く設定できます。モデルプロバイダーを**OpenAI**に設定し、カスタムモデルを選択してモデルコードを入力し、対応するプロバイダーのAPI BaseとAPI Keyを入力してください:
+
+<img src="https://cdn.link-ai.tech/doc/20260318113134.png" width="800"/>
+
+`config.json`で直接設定することも可能です:
+
+```json
+{
+  "bot_type": "openai",
+  "model": "MODEL_NAME",
+  "open_ai_api_base": "PROVIDER_CODING_PLAN_API_BASE",
+  "open_ai_api_key": "YOUR_API_KEY"
+}
+```
+
+| パラメータ | 説明 |
+| --- | --- |
+| `bot_type` | `openai`を指定（OpenAI互換モード） |
+| `model` | プロバイダーがサポートするモデル名 |
+| `open_ai_api_base` | プロバイダーのCoding Plan API Base URL |
+| `open_ai_api_key` | プロバイダーのCoding Plan API Key |
+
+---
+
+## 阿里云
+
+```json
+{
+  "bot_type": "openai",
+  "model": "qwen3.5-plus",
+  "open_ai_api_base": "https://coding.dashscope.aliyuncs.com/v1",
+  "open_ai_api_key": "YOUR_API_KEY"
+}
+```
+
+| パラメータ | 説明 |
+| --- | --- |
+| `model` | `qwen3.5-plus`、`qwen3-max-2026-01-23`、`qwen3-coder-next`、`qwen3-coder-plus`、`glm-5`、`glm-4.7`、`kimi-k2.5`、`MiniMax-M2.5` |
+| `open_ai_api_base` | `https://coding.dashscope.aliyuncs.com/v1` |
+| `open_ai_api_key` | Coding Plan専用キー（従量課金とは共有不可） |
+
+参考: [クイックスタート](https://help.aliyun.com/zh/model-studio/coding-plan-quickstart?spm=a2c4g.11186623.help-menu-2400256.d_0_2_1.70115203zi5Igc)、[モデル一覧](https://help.aliyun.com/zh/model-studio/coding-plan)
+
+---
+
+## MiniMax
+
+```json
+{
+  "bot_type": "openai",
+  "model": "MiniMax-M2.5",
+  "open_ai_api_base": "https://api.minimaxi.com/v1",
+  "open_ai_api_key": "YOUR_API_KEY"
+}
+```
+
+| パラメータ | 説明 |
+| --- | --- |
+| `model` | `MiniMax-M2.5`、`MiniMax-M2.5-highspeed`、`MiniMax-M2.1`、`MiniMax-M2` |
+| `open_ai_api_base` | 中国: `https://api.minimaxi.com/v1`、グローバル: `https://api.minimax.io/v1` |
+| `open_ai_api_key` | Coding Plan専用キー（従量課金とは共有不可） |
+
+参考: [中国キー](https://platform.minimaxi.com/docs/coding-plan/quickstart)、[モデル一覧](https://platform.minimaxi.com/docs/guides/pricing-coding-plan)、[グローバルキー](https://platform.minimax.io/docs/coding-plan/quickstart)
+
+---
+
+## 智谱 GLM
+
+```json
+{
+  "bot_type": "openai",
+  "model": "glm-4.7",
+  "open_ai_api_base": "https://open.bigmodel.cn/api/coding/paas/v4",
+  "open_ai_api_key": "YOUR_API_KEY"
+}
+```
+
+| パラメータ | 説明 |
+| --- | --- |
+| `model` | `glm-5`、`glm-4.7`、`glm-4.6`、`glm-4.5`、`glm-4.5-air` |
+| `open_ai_api_base` | 中国: `https://open.bigmodel.cn/api/coding/paas/v4`、グローバル: `https://api.z.ai/api/coding/paas/v4` |
+| `open_ai_api_key` | 標準APIと共有 |
+
+参考: [中国クイックスタート](https://docs.bigmodel.cn/cn/coding-plan/quick-start)、[グローバルクイックスタート](https://docs.z.ai/devpack/quick-start)
+
+---
+
+## Kimi
+
+```json
+{
+  "bot_type": "moonshot",
+  "model": "kimi-for-coding",
+  "moonshot_base_url": "https://api.kimi.com/coding/v1",
+  "moonshot_api_key": "YOUR_API_KEY"
+}
+```
+
+| パラメータ | 説明 |
+| --- | --- |
+| `model` | `kimi-for-coding`で自動更新モデル、または`kimi-k2.6`などのモデルを指定 |
+| `moonshot_base_url` | `https://api.kimi.com/coding/v1` |
+| `moonshot_api_key` | Coding Plan専用キー（従量課金とは共有不可） |
+
+参考: [キー & ドキュメント](https://www.kimi.com/code/docs/)
+
+---
+
+## 火山引擎
+
+```json
+{
+  "bot_type": "openai",
+  "model": "Doubao-Seed-2.0-Code",
+  "open_ai_api_base": "https://ark.cn-beijing.volces.com/api/coding/v3",
+  "open_ai_api_key": "YOUR_API_KEY"
+}
+```
+
+| パラメータ | 説明 |
+| --- | --- |
+| `model` | `Doubao-Seed-2.0-Code`、`Doubao-Seed-2.0-pro`、`Doubao-Seed-2.0-lite`、`Doubao-Seed-Code`、`MiniMax-M2.5`、`Kimi-K2.5`、`GLM-4.7`、`DeepSeek-V3.2` |
+| `open_ai_api_base` | `https://ark.cn-beijing.volces.com/api/coding/v3` |
+| `open_ai_api_key` | 標準APIと共有 |
+
+参考: [クイックスタート](https://www.volcengine.com/docs/82379/1928261?lang=zh)

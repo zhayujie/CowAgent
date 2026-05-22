@@ -1,0 +1,67 @@
+---
+title: 模型概览
+description: CowAgent 支持的模型及推荐选择
+---
+
+CowAgent 支持国内外主流厂商的大语言模型，模型接口实现在项目的 `models/` 目录下。
+
+<Note>
+  Agent 模式下推荐使用以下模型，可根据效果及成本综合选择：deepseek-v4-flash、MiniMax-M2.7、claude-sonnet-4-6、gemini-3.1-pro-preview、glm-5.1、qwen3.6-plus、kimi-k2.6、ernie-5.1
+
+  同时支持使用 [LinkAI](https://link-ai.tech) 平台接口，可灵活切换多种模型，并支持知识库、工作流、插件等 Agent 能力。
+</Note>
+
+## 配置方式
+
+**方式一（推荐）：** 通过 [Web 控制台](/channels/web) 在线管理模型配置，无需手动编辑配置文件：
+
+<img width="850" src="https://cdn.link-ai.tech/doc/20260227173811.png" />
+
+**方式二：** 手动编辑 `config.json`，根据所选模型填写对应的模型名称和 API Key。每个模型也支持 OpenAI 兼容方式接入，将 `bot_type` 设为 `openai`，配置 `open_ai_api_base` 和 `open_ai_api_key` 即可。
+
+
+## 支持的模型
+
+<CardGroup cols={2}>
+  <Card title="DeepSeek" href="/models/deepseek">
+    deepseek-v4-flash、deepseek-v4-pro 等
+  </Card>
+  <Card title="百度千帆 / ERNIE" href="/models/qianfan">
+    ernie-5.1、ernie-5.0、ernie-4.5-turbo-128k 等
+  </Card>
+  <Card title="MiniMax" href="/models/minimax">
+    MiniMax-M2.7 等系列模型
+  </Card>
+  <Card title="Claude" href="/models/claude">
+    claude-sonnet-4-6 等
+  </Card>
+  <Card title="Gemini" href="/models/gemini">
+    gemini-3.1-pro-preview 等
+  </Card>
+  <Card title="OpenAI" href="/models/openai">
+    gpt-5.4、gpt-4.1、o 系列等
+  </Card>
+  <Card title="智谱 GLM" href="/models/glm">
+    glm-5.1、glm-5-turbo、glm-5 等系列模型
+  </Card>
+  <Card title="通义千问 Qwen" href="/models/qwen">
+    qwen3.6-plus、qwen3-max 等
+  </Card>
+  <Card title="豆包 Doubao" href="/models/doubao">
+    doubao-seed 系列模型
+  </Card>
+  <Card title="Kimi" href="/models/kimi">
+    kimi-k2.6、kimi-k2.5、kimi-k2 等
+  </Card>
+  <Card title="LinkAI" href="/models/linkai">
+    多模型统一接口 + 知识库
+  </Card>
+  <Card title="自定义" href="/models/custom">
+    第三方代理、本地模型等
+  </Card>
+</CardGroup>
+
+
+<Tip>
+  全部模型名称可参考项目 [`common/const.py`](https://github.com/zhayujie/CowAgent/blob/master/common/const.py) 文件。
+</Tip>

@@ -1,0 +1,64 @@
+---
+title: Baidu Qianfan / ERNIE
+description: Baidu Qianfan ERNIE model configuration
+---
+
+Option 1: Native integration (recommended):
+
+```json
+{
+  "model": "ernie-5.1",
+  "qianfan_api_key": "",
+  "qianfan_api_base": "https://qianfan.baidubce.com/v2"
+}
+```
+
+| Parameter | Description |
+| --- | --- |
+| `model` | Default recommendation: `ernie-5.1`; also supports `ernie-5.0`, `ernie-x1.1`, `ernie-4.5-turbo-128k`, `ernie-4.5-turbo-32k` |
+| `qianfan_api_key` | Qianfan API key, usually starting with `bce-v3/` |
+| `qianfan_api_base` | Optional, defaults to `https://qianfan.baidubce.com/v2` |
+
+## Model Selection
+
+| Model | Use Case |
+| --- | --- |
+| `ernie-5.1` | Default recommendation; latest ERNIE flagship with the strongest overall capability |
+| `ernie-5.0` | Previous-generation flagship with excellent overall capability |
+| `ernie-x1.1` | Deep-thinking reasoning model with lower hallucination and stronger instruction following / tool calling |
+| `ernie-4.5-turbo-128k` | Long-context and general chat |
+| `ernie-4.5-turbo-32k` | General chat with a balanced context window and cost |
+
+## Vision tool
+
+Once `qianfan_api_key` is configured, Agent mode can auto-discover Qianfan for the Vision tool:
+
+- When the main model itself is multimodal (e.g. `ernie-5.1`, `ernie-5.0`, `ernie-x1.1`, `ernie-4.5-turbo-vl`), images are handled directly by the main model with no extra setup.
+- When the main model is text-only (e.g. `ernie-4.5-turbo-128k`), the Vision tool automatically falls back to `ernie-4.5-turbo-vl`.
+
+To force a specific Vision model, set it explicitly in `config.json`:
+
+```json
+{
+  "tool": {
+    "vision": {
+      "model": "ernie-4.5-turbo-vl"
+    }
+  }
+}
+```
+
+Option 2: OpenAI-compatible configuration:
+
+```json
+{
+  "model": "ernie-5.1",
+  "bot_type": "openai",
+  "open_ai_api_key": "",
+  "open_ai_api_base": "https://qianfan.baidubce.com/v2"
+}
+```
+
+<Tip>
+  Prefer `qianfan_api_key` for new configurations. Existing `wenxin`, `wenxin-4`, `baidu_wenxin_api_key`, and `baidu_wenxin_secret_key` configurations remain supported.
+</Tip>

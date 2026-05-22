@@ -81,7 +81,7 @@
 ```
 
 - `isgroup`: `Context`是否是群聊消息。
-- `msg`: `itchat`中原始的消息对象。
+- `msg`: the original message object from the channel.
 - `receiver`: 需要回复消息的对象ID。
 - `session_id`: 会话ID(一般是发送触发bot消息的用户ID，如果在群聊中并且`conf`里设置了`group_chat_in_one_session`，那么此处便是群聊ID)
 

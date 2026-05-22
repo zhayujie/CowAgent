@@ -1,0 +1,98 @@
+---
+title: v2.0.2
+description: CowAgent 2.0.2 - Web 控制台升级、多通道同时运行、会话持久化
+---
+
+## ✨ 重点更新
+
+### 🖥️ Web 控制台升级
+
+本次对 Web 控制台进行了全面升级，支持流式对话输出、工具执行过程和思考过程的可视化展示，并支持对模型、技能、记忆、通道、Agent 配置的在线查看和管理。
+
+#### 对话界面
+
+支持流式输出，可实时展示 Agent 的思考过程（Reasoning）和工具调用过程（Tool Calls），更直观地观察 Agent 的决策过程：
+
+<img width="850" src="https://cdn.link-ai.tech/doc/20260227180120.png" />
+
+#### 模型管理
+
+支持在线管理模型配置，无需手动编辑配置文件：
+
+<img width="850" src="https://cdn.link-ai.tech/doc/20260227173811.png" />
+
+#### 技能管理
+
+支持在线查看和管理 Agent 技能（Skills）：
+
+<img width="850" src="https://cdn.link-ai.tech/doc/20260227173403.png" />
+
+#### 记忆管理
+
+支持在线查看和管理 Agent 记忆：
+
+<img width="850" src="https://cdn.link-ai.tech/doc/20260227173349.png" />
+
+#### 通道管理
+
+支持在线管理接入通道，支持实时连接/断开操作：
+
+<img width="850" src="https://cdn.link-ai.tech/doc/20260227173331.png" />
+
+#### 定时任务
+
+支持在线查看和管理定时任务，包括一次性任务、固定间隔、Cron 表达式等多种调度方式的可视化管理：
+
+<img width="850" src="https://cdn.link-ai.tech/doc/20260227173704.png" />
+
+#### 日志
+
+支持在线实时查看 Agent 运行日志，便于监控运行状态和排查问题：
+
+<img width="850" src="https://cdn.link-ai.tech/doc/20260227173514.png" />
+
+相关提交：[f1a1413](https://github.com/zhayujie/CowAgent/commit/f1a1413), [c0702c8](https://github.com/zhayujie/CowAgent/commit/c0702c8), [394853c](https://github.com/zhayujie/CowAgent/commit/394853c), [1c71c4e](https://github.com/zhayujie/CowAgent/commit/1c71c4e), [5e3eccb](https://github.com/zhayujie/CowAgent/commit/5e3eccb), [e1dc037](https://github.com/zhayujie/CowAgent/commit/e1dc037), [5edbf4c](https://github.com/zhayujie/CowAgent/commit/5edbf4c), [7d258b5](https://github.com/zhayujie/CowAgent/commit/7d258b5)
+
+### 🔀 多通道同时运行
+
+支持多个接入通道（如飞书、钉钉、企微应用、Web 等）同时运行，每个通道在独立子线程中启动，互不干扰。
+
+配置方式：在 `config.json` 中通过 `channel_type` 配置多个通道，以逗号分隔，也可在 Web 控制台的通道管理页面中实时连接或断开各通道。
+
+```json
+{
+  "channel_type": "web,feishu,dingtalk"
+}
+```
+
+相关提交：[4694594](https://github.com/zhayujie/CowAgent/commit/4694594), [7cce224](https://github.com/zhayujie/CowAgent/commit/7cce224), [7d258b5](https://github.com/zhayujie/CowAgent/commit/7d258b5), [c9adddb](https://github.com/zhayujie/CowAgent/commit/c9adddb)
+
+### 💾 会话持久化
+
+会话历史支持持久化存储至本地 SQLite 数据库，服务重启后会话上下文自动恢复，不再丢失。Web 控制台中的历史对话记录也会同步恢复展示。
+
+相关提交：[29bfbec](https://github.com/zhayujie/CowAgent/commit/29bfbec), [9917552](https://github.com/zhayujie/CowAgent/commit/9917552), [925d728](https://github.com/zhayujie/CowAgent/commit/925d728)
+
+### 🤖 新增模型
+
+- **Gemini 3.1 Pro Preview**：新增 `gemini-3.1-pro-preview` 模型支持 ([52d7cad](https://github.com/zhayujie/CowAgent/commit/52d7cad))
+- **Claude 4.6 Sonnet**：新增 `claude-4.6-sonnet` 模型支持 ([52d7cad](https://github.com/zhayujie/CowAgent/commit/52d7cad))
+- **Qwen3.5 Plus**：新增 `qwen3.5-plus` 模型支持 ([e59a289](https://github.com/zhayujie/CowAgent/commit/e59a289))
+- **MiniMax M2.5**：新增 `Minimax-M2.5` 模型支持 ([48db538](https://github.com/zhayujie/CowAgent/commit/48db538))
+- **GLM-5**：新增 `glm-5` 模型支持 ([48db538](https://github.com/zhayujie/CowAgent/commit/48db538))
+- **Kimi K2.5**：新增 `kimi-k2.5` 模型支持 ([48db538](https://github.com/zhayujie/CowAgent/commit/48db538))
+- **Doubao 2.0 Code**：新增 `doubao-2.0-code` 编程专用模型 ([ab28ee5](https://github.com/zhayujie/CowAgent/commit/ab28ee5))
+- **DashScope 模型**：新增阿里云 DashScope 模型名称支持 ([ce58f23](https://github.com/zhayujie/CowAgent/commit/ce58f23))
+
+### 🌐 新增官网和文档中心
+
+- **官网上线**：[cowagent.ai](https://cowagent.ai/)
+- **文档中心上线**：[docs.cowagent.ai](https://docs.cowagent.ai/)
+
+### 🐛 问题修复
+
+- **Gemini 钉钉图片识别**：修复 Gemini 在钉钉通道中无法处理图片标记的问题 ([05a3304](https://github.com/zhayujie/CowAgent/commit/05a3304)) ([#2670](https://github.com/zhayujie/CowAgent/pull/2670)) Thanks [@SgtPepper114](https://github.com/SgtPepper114)
+- **启动脚本依赖**：修复 `run.sh` 脚本的依赖安装问题 ([b6fc9fa](https://github.com/zhayujie/CowAgent/commit/b6fc9fa))
+- **裸异常捕获**：将代码中的 `bare except` 替换为 `except Exception`，提升异常处理规范性 ([adca89b](https://github.com/zhayujie/CowAgent/commit/adca89b)) ([#2674](https://github.com/zhayujie/CowAgent/pull/2674)) Thanks [@haosenwang1018](https://github.com/haosenwang1018)
+
+**发布日期**：2026.02.27 | [Full Changelog](https://github.com/zhayujie/CowAgent/compare/2.0.1...master)

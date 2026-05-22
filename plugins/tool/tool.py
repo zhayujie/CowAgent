@@ -22,10 +22,12 @@ class Tool(Plugin):
     def __init__(self):
         super().__init__()
         self.handlers[Event.ON_HANDLE_CONTEXT] = self.on_handle_context
-
         self.app = self._reset_app()
-
+        if not self.tool_config.get("tools"):
+            logger.warn("[tool] init failed, ignore ")
+            raise Exception("config.json not found")
         logger.info("[tool] inited")
+
 
     def get_help_text(self, verbose=False, **kwargs):
         help_text = "这是一个能让chatgpt联网，搜索，数字运算的插件，将赋予强大且丰富的扩展能力。"
@@ -50,6 +52,7 @@ class Tool(Plugin):
 
         # 暂时不支持未来扩展的bot
         if Bridge().get_bot_type("chat") not in (
+            const.OPENAI,
             const.CHATGPT,
             const.OPEN_AI,
             const.CHATGPTONAZURE,
@@ -214,11 +217,6 @@ class Tool(Plugin):
             "browser_use_summary": kwargs.get("browser_use_summary", True),  # 是否对返回结果使用tool功能
             # for url-get tool
             "url_get_use_summary": kwargs.get("url_get_use_summary", True),  # 是否对返回结果使用tool功能
-            # for wechat tool
-            "wechat_hot_reload": kwargs.get("wechat_hot_reload", True),  # 是否使用热重载的方式发送wechat
-            "wechat_cpt_path": kwargs.get("wechat_cpt_path", os.path.join(get_appdata_dir(), "itchat.pkl")),  # wechat 配置文件（`itchat.pkl`）
-            "wechat_send_group": kwargs.get("wechat_send_group", False),  # 是否向群组发送消息
-            "wechat_nickname_mapping": kwargs.get("wechat_nickname_mapping", "{}"),  # 关于人的代号映射关系。键为代号值为微信名（昵称、备注名均可）
             # for wikipedia tool
             "wikipedia_top_k_results": kwargs.get("wikipedia_top_k_results", 2),  # 只返回前k个搜索结果
             # for wolfram-alpha tool

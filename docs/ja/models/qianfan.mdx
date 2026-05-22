@@ -1,0 +1,64 @@
+---
+title: Baidu Qianfan / ERNIE
+description: Baidu Qianfan ERNIE モデル設定
+---
+
+方法 1: 公式接続（推奨）:
+
+```json
+{
+  "model": "ernie-5.1",
+  "qianfan_api_key": "",
+  "qianfan_api_base": "https://qianfan.baidubce.com/v2"
+}
+```
+
+| パラメータ | 説明 |
+| --- | --- |
+| `model` | デフォルトの推奨は `ernie-5.1`。`ernie-5.0`、`ernie-x1.1`、`ernie-4.5-turbo-128k`、`ernie-4.5-turbo-32k` も利用できます |
+| `qianfan_api_key` | Qianfan API Key。通常は `bce-v3/` で始まります |
+| `qianfan_api_base` | 任意。デフォルトは `https://qianfan.baidubce.com/v2` |
+
+## モデル選択
+
+| モデル | 用途 |
+| --- | --- |
+| `ernie-5.1` | デフォルト推奨。文心の最新フラッグシップモデルで、総合性能が最も強い |
+| `ernie-5.0` | 前世代フラッグシップ。総合性能に優れる |
+| `ernie-x1.1` | 深層推論モデル。ハルシネーションが少なく、指示追従とツール呼び出しが強化 |
+| `ernie-4.5-turbo-128k` | 長いコンテキストと一般的なチャット向け |
+| `ernie-4.5-turbo-32k` | コンテキスト長とコストのバランスが良い一般チャット向け |
+
+## Vision ツール
+
+`qianfan_api_key` を設定すると、Agent モードの Vision ツールは Qianfan を自動検出します：
+
+- 主モデルが多モーダル（`ernie-5.1`、`ernie-5.0`、`ernie-x1.1`、`ernie-4.5-turbo-vl` など）の場合は、追加設定なしで主モデルがそのまま画像を処理します。
+- 主モデルがテキスト専用（`ernie-4.5-turbo-128k` など）の場合は、Vision ツールが自動的に `ernie-4.5-turbo-vl` にフォールバックします。
+
+特定の Vision モデルを強制したい場合は、`config.json` で明示的に指定できます：
+
+```json
+{
+  "tool": {
+    "vision": {
+      "model": "ernie-4.5-turbo-vl"
+    }
+  }
+}
+```
+
+方法 2: OpenAI 互換接続:
+
+```json
+{
+  "model": "ernie-5.1",
+  "bot_type": "openai",
+  "open_ai_api_key": "",
+  "open_ai_api_base": "https://qianfan.baidubce.com/v2"
+}
+```
+
+<Tip>
+  新しい設定では `qianfan_api_key` の利用を推奨します。既存の `wenxin`、`wenxin-4`、`baidu_wenxin_api_key`、`baidu_wenxin_secret_key` 設定は引き続き利用できます。
+</Tip>

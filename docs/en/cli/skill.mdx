@@ -1,0 +1,192 @@
+---
+title: Skill Management
+description: Install, uninstall, enable, disable, and manage skills via commands
+---
+
+Skill management commands are used to install, query, and manage CowAgent skills. Use `/skill <subcommand>` in chat or `cow skill <subcommand>` in the terminal.
+
+## list
+
+List installed skills and their status.
+
+<CodeGroup>
+```text Chat
+/skill list
+```
+
+```bash Terminal
+cow skill list
+```
+</CodeGroup>
+
+**Browse the Skill Hub** (view all available skills):
+
+<CodeGroup>
+```text Chat
+/skill list --remote
+```
+
+```bash Terminal
+cow skill list --remote
+```
+</CodeGroup>
+
+**Options:**
+
+| Option | Description | Default |
+| --- | --- | --- |
+| `--remote`, `-r` | Browse Skill Hub remote skill list | No |
+| `--page` | Page number for remote listing | 1 |
+
+## search
+
+Search for skills on the Skill Hub.
+
+<CodeGroup>
+```text Chat
+/skill search pptx
+```
+
+```bash Terminal
+cow skill search pptx
+```
+</CodeGroup>
+
+## install
+
+Install skills with a single `install` command from Cow Skill Hub, GitHub, ClawHub, or any URL (zip archives, SKILL.md links) — no manual download or configuration required.
+
+**From Skill Hub (recommended):**
+
+<CodeGroup>
+```text Chat
+/skill install pptx
+```
+
+```bash Terminal
+cow skill install pptx
+```
+</CodeGroup>
+
+**From GitHub:**
+
+<CodeGroup>
+```text Chat
+# Install all skills in a repo (auto-discovers subdirectories with SKILL.md)
+/skill install larksuite/cli
+
+# Specify a subdirectory to install a single skill
+/skill install https://github.com/larksuite/cli/tree/main/skills/lark-im
+
+# Use # to specify a subdirectory
+/skill install larksuite/cli#skills/lark-minutes
+```
+
+```bash Terminal
+# Install all skills in a repo (auto-discovers subdirectories with SKILL.md)
+cow skill install larksuite/cli
+
+# Specify a subdirectory to install a single skill
+cow skill install https://github.com/larksuite/cli/tree/main/skills/lark-im
+
+# Use # to specify a subdirectory
+cow skill install larksuite/cli#skills/lark-minutes
+```
+</CodeGroup>
+
+Supports full GitHub URLs and `owner/repo` shorthand. For mono-repos (multiple skills in one repository), omitting the subdirectory auto-discovers and batch-installs all skills; specifying a subdirectory installs only that skill.
+
+**From ClawHub:**
+
+<CodeGroup>
+```text Chat
+/skill install clawhub:baidu-search
+```
+
+```bash Terminal
+cow skill install clawhub:baidu-search
+```
+</CodeGroup>
+
+**From URL:**
+
+<CodeGroup>
+```text Chat
+# Install from a zip archive (single or batch)
+/skill install https://cdn.link-ai.tech/skills/pptx.zip
+
+# Install from a SKILL.md link
+/skill install https://example.com/path/to/SKILL.md
+```
+
+```bash Terminal
+# Install from a zip archive (single or batch)
+cow skill install https://cdn.link-ai.tech/skills/pptx.zip
+
+# Install from a SKILL.md link
+cow skill install https://example.com/path/to/SKILL.md
+```
+</CodeGroup>
+
+Supports installing from zip / tar.gz archive URLs — automatically extracts and discovers directories containing `SKILL.md`, with support for single or batch install. Also supports installing directly from a `SKILL.md` file URL, automatically parsing the skill name and description.
+
+## uninstall
+
+Uninstall an installed skill.
+
+<CodeGroup>
+```text Chat
+/skill uninstall pptx
+```
+
+```bash Terminal
+cow skill uninstall pptx
+```
+</CodeGroup>
+
+<Warning>
+  Uninstalling deletes all files in the skill directory. This action cannot be undone.
+</Warning>
+
+## enable / disable
+
+Enable or disable a skill. Disabled skills will not be invoked by the Agent.
+
+<CodeGroup>
+```text Chat
+/skill enable pptx
+/skill disable pptx
+```
+
+```bash Terminal
+cow skill enable pptx
+cow skill disable pptx
+```
+</CodeGroup>
+
+## info
+
+View details of an installed skill, including a preview of its `SKILL.md`.
+
+<CodeGroup>
+```text Chat
+/skill info pptx
+```
+
+```bash Terminal
+cow skill info pptx
+```
+</CodeGroup>
+
+## Skill Sources
+
+Installed skills track their origin, viewable via `/skill list`:
+
+| Source | Description |
+| --- | --- |
+| `builtin` | Built-in project skills |
+| `cowhub` | Installed from CowAgent Skill Hub |
+| `github` | Installed directly from a GitHub URL |
+| `clawhub` | Installed from ClawHub |
+| `url` | Installed from a SKILL.md URL |
+| `local` | Locally created skills |

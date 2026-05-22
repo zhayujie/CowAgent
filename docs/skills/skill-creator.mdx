@@ -1,0 +1,180 @@
+---
+title: skill-creator - 技能创建
+description: 创建、安装、更新技能，规范 SKILL.md 写法与目录结构
+---
+
+`skill-creator` 是一个「元技能」，专门用来帮助 Agent 创建、安装和更新其他技能，确保所有技能的 `SKILL.md` 写法和目录结构保持一致。
+
+## 什么时候会触发
+
+- 用户想从 URL 或远程仓库安装一个技能
+- 用户想从头创建一个全新的技能
+- 需要升级或重构已有技能
+
+## 技能是什么
+
+简单来说，技能就是一份「可复用的说明书」加上可选的脚本和资源。它给 Agent 注入了某个领域的专业知识，让 Agent 在遇到对应任务时能像专家一样处理。
+
+一个技能通常包含以下内容：
+
+1. **专项工作流** — 某类任务的完整步骤
+2. **工具用法** — 怎么调某种 API 或处理某种文件
+3. **领域知识** — 团队约定、业务规则、数据结构之类
+4. **附带资源** — 脚本、参考文档、模板等
+
+<Note>
+**核心原则：能省则省**。只写 Agent 自己想不到的内容，每加一行都要问自己：值不值得占这些 token？
+</Note>
+
+## 目录结构
+
+```
+skill-name/
+├── SKILL.md            # 必需：技能定义
+│   ├── YAML frontmatter（必填 name / description）
+│   └── Markdown 正文（说明 + 示例）
+└── 可选资源
+    ├── scripts/        # 可执行脚本（Python / Bash 等）
+    ├── references/     # 内容较多的参考文档，Agent 按需读取
+    └── assets/         # 模板、图标等，会直接用在输出里
+```
+
+## SKILL.md 规范定义
+
+SKILL.md 文件头部的 `frontmatter` 字段：
+
+| 字段 | 说明 |
+| --- | --- |
+| `name` | 技能名，小写加中划线，必须和目录名一致 |
+| `description` | **最关键的字段**。写清楚「这个技能干什么」和「什么情况下该用它」，Agent 看到这段来决定要不要调它。注意：所有触发相关的描述都放在这里，不要写到正文里 |
+| `metadata.cowagent.requires.bins` | 系统里必须装了哪些命令行工具 |
+| `metadata.cowagent.requires.env` | 需要哪些环境变量（全部满足才行） |
+| `metadata.cowagent.requires.anyEnv` | 多个 API Key 满足一个就行 |
+| `metadata.cowagent.requires.anyBins` | 多个工具满足一个就行 |
+| `metadata.cowagent.always` | 设为 `true` 会始终加载，不检查依赖 |
+| `metadata.cowagent.emoji` | 展示用的 emoji（可选） |
+| `metadata.cowagent.os` | 限定系统，如 `["darwin", "linux"]` |
+
+<Note>
+`category` 字段不需要手写，系统会自动设成 `skill`。
+</Note>
+
+声明 API Key 依赖有两种写法：
+
+```yaml
+metadata:
+  cowagent:
+    requires:
+      env: ["MYAPI_KEY"]            # 必须有
+```
+
+```yaml
+metadata:
+  cowagent:
+    requires:
+      anyEnv: ["OPENAI_API_KEY", "LINKAI_API_KEY"]   # 有一个就行
+```
+
+**技能会自动按依赖启禁用**：环境变量齐了就自动启用，缺了就自动禁用，不需要手动 `/skill enable`。
+
+## 资源目录怎么用
+
+| 目录 | 放什么 | 不要放 |
+| --- | --- | --- |
+| `scripts/` | 需要反复执行的代码，或需要确定性结果的脚本 | 纯演示用的代码片段 |
+| `references/` | **超过 500 行**、SKILL.md 实在塞不下的大文档（比如完整的数据库 Schema） | 普通 API 文档、示例、教程 |
+| `assets/` | 会出现在最终产物里的文件（模板、图标、样板代码等） | 说明性文档 |
+
+<Warning>
+**原则上所有内容都写在 `SKILL.md` 里**，只有确实放不下才拆到资源目录。
+
+不要给技能加 `README.md`、`CHANGELOG.md`、`INSTALLATION_GUIDE.md` 之类的文件——全部放进 `SKILL.md`。资源目录里只放真正要跑的脚本或真正要用的素材。
+</Warning>
+
+## 安装外部技能
+
+安装后最终落在 `<workspace>/skills/<name>/` 目录。
+
+| 来源 | 怎么装 |
+| --- | --- |
+| URL（单文件） | curl / web_fetch 直接拉 |
+| URL（zip 包） | 下载解压 |
+| 本地 SKILL.md | 直接读 |
+| 本地 zip 包 | 解压 |
+
+安装步骤：
+
+1. 找到 `SKILL.md`（可能在包的根目录或某个子目录里）
+2. 从 frontmatter 里读出 `name`
+3. 把**整个技能目录**（包括 `SKILL.md`、`scripts/`、`assets/` 等）复制到 `<workspace>/skills/<name>/`
+4. 如果包里有 `INSTALL.md` 之类的安装脚本，照着跑一遍，但最终结果仍然要落在 `<workspace>/skills/<name>/` 下
+
+## 从头创建技能
+
+推荐按这个顺序来：
+
+1. **搞清楚需求** — 让用户举几个具体的使用场景，一次别问太多
+2. **想好结构** — 这个技能需要脚本吗？需要参考文档吗？需要模板素材吗？
+3. **生成骨架** — 用初始化脚本：
+
+   ```bash
+   scripts/init_skill.py <skill-name> --path <workspace>/skills [--resources scripts,references,assets] [--examples]
+   ```
+
+4. **填充内容** — 写好 SKILL.md、补上脚本和资源。脚本写完一定要实际跑一遍
+5. **格式校验**（可选）：
+
+   ```bash
+   scripts/quick_validate.py <workspace>/skills/<skill-name>
+   ```
+
+6. **迭代完善** — 实际用起来之后根据反馈持续改进
+
+## 命名规则
+
+- 只用小写字母、数字和中划线。用户给的名字需要做标准化处理，比如 `Plan Mode` → `plan-mode`
+- 长度别超过 64 个字符
+- 尽量短、用动词开头、一看就知道干什么
+- 必要时用工具名做前缀，比如 `gh-address-comments`、`linear-address-issue`
+- 目录名和 `name` 字段必须完全一致
+
+## 三级加载机制
+
+技能不会一次性全部塞进上下文，而是分三级按需加载：
+
+1. **元信息**（`name` + `description`）— 常驻上下文，约 100 词。Agent 靠它判断「要不要用这个技能」
+2. **SKILL.md 正文** — 确定要用了才加载，建议控制在 500 行以内
+3. **资源文件** — Agent 需要的时候再读
+
+如果一个技能涉及多个变体（比如多云厂商部署），建议这样组织：
+
+```
+cloud-deploy/
+├── SKILL.md             # 主流程和厂商选择逻辑
+└── references/
+    ├── aws.md
+    ├── gcp.md
+    └── azure.md
+```
+
+用户选了 AWS，Agent 只需要读 `aws.md`，不用把三家的文档全加载进来。
+
+## 常见设计模式
+
+**步骤式**：按编号列出操作步骤和对应脚本。
+
+```markdown
+1. 分析表单结构（运行 analyze_form.py）
+2. 生成字段映射（编辑 fields.json）
+3. 自动填充表单（运行 fill_form.py）
+```
+
+**分支式**：根据用户意图走不同流程。
+
+```markdown
+1. 判断操作类型：
+   **新建内容？** → 走「创建流程」
+   **编辑已有内容？** → 走「编辑流程」
+```
+
+**模板式**：输出格式有严格要求时，在 SKILL.md 里直接给一个样板，让 Agent 照着写。

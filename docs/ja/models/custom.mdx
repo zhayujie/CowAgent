@@ -1,0 +1,62 @@
+---
+title: カスタム
+description: サードパーティAPIやローカルモデル向けのカスタムプロバイダー設定
+---
+
+OpenAI互換プロトコルでアクセスするモデルサービスに適用します：
+
+- **サードパーティAPIプロキシ**：統一APIベースで複数モデルを呼び出し
+- **ローカルモデル**：Ollama、vLLM、LocalAIなどでローカルにデプロイされたモデル
+- **プライベートデプロイ**：組織内でホストされたモデルサービス
+
+<Note>
+  `openai` プロバイダーとの違い：カスタムプロバイダーでは `/config model` でモデルを切り替えてもプロバイダータイプは自動切り替えされず、カスタムAPIアドレスが常に保持されます。
+</Note>
+
+## 設定方法
+
+### サードパーティAPIプロキシ
+
+```json
+{
+  "bot_type": "custom",
+  "model": "deepseek-v4-flash",
+  "custom_api_key": "YOUR_API_KEY",
+  "custom_api_base": "https://{your-proxy.com}/v1"
+}
+```
+
+| パラメータ | 説明 |
+| --- | --- |
+| `bot_type` | `custom` に設定必須 |
+| `model` | モデル名、プロキシサービスがサポートする任意のモデル名 |
+| `custom_api_key` | プロキシサービスが提供するAPIキー |
+| `custom_api_base` | APIアドレス、OpenAI互換プロトコルが必要 |
+
+### ローカルモデル
+
+ローカルモデルは通常APIキー不要で、APIベースのみ設定します：
+
+```json
+{
+  "bot_type": "custom",
+  "model": "qwen3.5:27b",
+  "custom_api_base": "http://localhost:11434/v1"
+}
+```
+
+一般的なローカルデプロイツールとデフォルトアドレス：
+
+| ツール | デフォルトAPIベース |
+| --- | --- |
+| [Ollama](https://ollama.com) | `http://localhost:11434/v1` |
+| [vLLM](https://docs.vllm.ai) | `http://localhost:8000/v1` |
+| [LocalAI](https://localai.io) | `http://localhost:8080/v1` |
+
+## モデル切り替え
+
+カスタムプロバイダーではモデル切り替え時に `model` のみ変更され、`bot_type` やAPIアドレスは変わりません：
+
+```
+/config model qwen3.5:27b
+```

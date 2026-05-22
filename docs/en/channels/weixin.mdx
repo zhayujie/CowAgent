@@ -1,0 +1,72 @@
+---
+title: WeChat
+description: Connect CowAgent to personal WeChat
+---
+
+> Connect CowAgent to your personal WeChat. Simply scan a QR code to log in — no public IP required. Supports text, image, voice, file, and video messages.
+
+## 1. Configuration
+
+### Option A: Web Console
+
+Start the program and open the Web console (local access: http://127.0.0.1:9899). Go to the **Channels** tab, click **Connect Channel**, select **WeChat**, and follow the prompts to scan the QR code.
+
+### Option B: Config File
+
+Set `channel_type` to `weixin` in your `config.json`:
+
+```json
+{
+  "channel_type": "weixin"
+}
+```
+
+After starting the program, a QR code will be displayed in the terminal. Scan it with WeChat and confirm on your phone to complete login.
+
+<Note>
+  For backward compatibility, setting `channel_type` to `wx` also activates the WeChat channel.
+</Note>
+
+## 2. Parameters
+
+| Parameter | Description | Default |
+| --- | --- | --- |
+| `channel_type` | Set to `weixin` or `wx` | — |
+
+Login credentials are automatically saved to `~/.weixin_cow_credentials.json`. To force a re-login, delete this file and restart.
+
+## 3. Login
+
+### QR Code Login
+
+On first startup, a QR code is displayed in the terminal (valid for approximately 2 minutes). Scan it with WeChat and confirm on your phone.
+
+- The QR code automatically refreshes when it expires
+- The `qrcode` dependency is already included in `requirements.txt`, enabling QR code rendering directly in the terminal
+
+### Credential Persistence
+
+After successful login, credentials are saved to `~/.weixin_cow_credentials.json`. Subsequent startups will reuse the saved credentials without requiring a new scan.
+
+To force a re-login, delete the credentials file and restart the program.
+
+### Session Expiry
+
+When the WeChat session expires (errcode -14), the program automatically clears old credentials and initiates a new QR login — no manual intervention required.
+
+## 4. Supported Features
+
+| Feature | Status |
+| --- | --- |
+| Direct Messages | ✅ |
+| Text Messages | ✅ Send & Receive |
+| Image Messages | ✅ Send & Receive |
+| File Messages | ✅ Send & Receive |
+| Video Messages | ✅ Send & Receive |
+| Voice Messages | ✅ Receive |
+
+## 5. Notes
+
+1. Ensure network access to `ilinkai.weixin.qq.com`.
+2. Media files (images, files, videos) are transferred via CDN with AES-128-ECB encryption, handled automatically by the program.
+3. A stable network connection is recommended to avoid frequent disconnections that would require re-scanning.

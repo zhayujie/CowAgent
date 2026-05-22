@@ -8,19 +8,6 @@
         "reply_filter": true,
         "reply_action": "ignore"
     },
-    "tool": {
-        "tools": [
-            "python",
-            "url-get",
-            "terminal",
-            "meteo-weather"
-        ],
-        "kwargs": {
-            "top_k_results": 2,
-            "no_default": false,
-            "model_name": "gpt-3.5-turbo"
-        }
-    },
     "linkai": {
         "group_app_map": {
             "测试群1": "default",
@@ -40,5 +27,22 @@
             "max_file_size": 5000,
             "type": ["FILE", "SHARING"]
         }
+    },
+    "hello": {
+        "group_welc_fixed_msg": {
+            "群聊1": "群聊1的固定欢迎语",
+            "群聊2": "群聊2的固定欢迎语"
+        },
+        "group_welc_prompt": "请你随机使用一种风格说一句问候语来欢迎新用户\"{nickname}\"加入群聊。",
+
+        "group_exit_prompt": "请你随机使用一种风格跟其他群用户说他违反规则\"{nickname}\"退出群聊。",
+
+        "patpat_prompt": "请你随机使用一种风格介绍你自己，并告诉用户输入#help可以查看帮助信息。",
+
+        "use_character_desc": false
+    },
+    "Apilot": {
+        "alapi_token": "xxx",
+        "morning_news_text_enabled": false
     }
 }

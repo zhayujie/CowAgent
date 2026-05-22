@@ -1,0 +1,21 @@
+---
+title: LinkAI
+description: Unified access to multiple models via LinkAI platform
+---
+
+The [LinkAI](https://link-ai.tech) platform lets you flexibly switch between OpenAI, Claude, Gemini, DeepSeek, MiniMax, Qwen, Kimi, and other models, with support for knowledge base, workflows, plugins, and other Agent capabilities.
+
+```json
+{
+  "use_linkai": true,
+  "linkai_api_key": "YOUR_API_KEY"
+}
+```
+
+| Parameter | Description |
+| --- | --- |
+| `use_linkai` | Set to `true` to enable LinkAI interface |
+| `linkai_api_key` | Create at [LinkAI Console](https://link-ai.tech/console/interface) |
+| `model` | Leave empty to use the agent's default model. Can be switched flexibly on the platform. All models in the [model list](https://link-ai.tech/console/models) are supported |
+
+See the [API documentation](https://docs.link-ai.tech/platform/api) for more details.

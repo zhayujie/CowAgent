@@ -1,7 +1,0 @@
-[phases.setup]
-nixPkgs = ['python310']
-cmds = ['apt-get update','apt-get install -y --no-install-recommends ffmpeg espeak libavcodec-extra']
-[phases.install]
-cmds = ['python -m venv /opt/venv && . /opt/venv/bin/activate && pip install -r requirements.txt && pip install -r requirements-optional.txt']
-[start]
-cmd = "python ./app.py"

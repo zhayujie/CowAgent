@@ -1,0 +1,27 @@
+---
+title: Qwen (Tongyi Qianwen)
+description: Tongyi Qianwen model configuration
+---
+
+```json
+{
+  "model": "qwen3.6-plus",
+  "dashscope_api_key": "YOUR_API_KEY"
+}
+```
+
+| Parameter | Description |
+| --- | --- |
+| `model` | Options include `qwen3.6-plus`, `qwen3.5-plus`, `qwen3-max`, `qwen-max`, `qwen-plus`, `qwen-turbo`, `qwq-plus`, etc. |
+| `dashscope_api_key` | Create at [Bailian Console](https://bailian.console.aliyun.com/?tab=model#/api-key). See [official docs](https://bailian.console.aliyun.com/?tab=api#/api) |
+
+OpenAI-compatible configuration is also supported:
+
+```json
+{
+  "bot_type": "openai",
+  "model": "qwen3.6-plus",
+  "open_ai_api_base": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+  "open_ai_api_key": "YOUR_API_KEY"
+}
+```

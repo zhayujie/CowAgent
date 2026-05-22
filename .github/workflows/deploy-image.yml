@@ -16,10 +16,11 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+  DOCKERHUB_IMAGE: zhayujie/chatgpt-on-wechat
 
 jobs:
   build-and-push-image:
-    if: github.repository == 'zhayujie/chatgpt-on-wechat'
+    if: github.repository == 'zhayujie/CowAgent'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -47,8 +48,14 @@ jobs:
         uses: docker/metadata-action@v4
         with:
           images: |
-            ${{ env.IMAGE_NAME }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+            zhayujie/chatgpt-on-wechat
+            zhayujie/cowagent
+            ${{ env.REGISTRY }}/zhayujie/chatgpt-on-wechat
+            ${{ env.REGISTRY }}/zhayujie/cowagent
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=branch
+            type=ref,event=tag
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v3

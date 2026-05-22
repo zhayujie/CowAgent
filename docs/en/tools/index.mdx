@@ -1,0 +1,60 @@
+---
+title: Tools Overview
+description: CowAgent built-in tools system
+---
+
+Tools are the core capability for Agent to access operating system resources. The Agent intelligently selects and invokes tools based on task requirements, performing file operations, command execution, web search, scheduled tasks, and more. Tools are implemented in the `agent/tools/` directory.
+
+## Built-in Tools
+
+The following tools are available by default with no extra configuration:
+
+<CardGroup cols={2}>
+  <Card title="read - File Read" icon="file" href="/en/tools/read">
+    Read file content, supports text, images, PDF
+  </Card>
+  <Card title="write - File Write" icon="pen" href="/en/tools/write">
+    Create or overwrite files
+  </Card>
+  <Card title="edit - File Edit" icon="pen-to-square" href="/en/tools/edit">
+    Edit files via precise text replacement
+  </Card>
+  <Card title="ls - Directory List" icon="folder-open" href="/en/tools/ls">
+    List directory contents
+  </Card>
+  <Card title="bash - Terminal" icon="terminal" href="/en/tools/bash">
+    Execute system commands
+  </Card>
+  <Card title="send - File Send" icon="paper-plane" href="/en/tools/send">
+    Send files or images to user
+  </Card>
+  <Card title="memory - Memory" icon="brain" href="/en/tools/memory">
+    Search and read long-term memory
+  </Card>
+</CardGroup>
+
+## Optional Tools
+
+The following tools require additional dependencies or API key configuration:
+
+<CardGroup cols={2}>
+  <Card title="env_config - Environment" icon="key" href="/en/tools/env-config">
+    Manage API keys and secrets
+  </Card>
+  <Card title="scheduler - Scheduler" icon="clock" href="/en/tools/scheduler">
+    Create and manage scheduled tasks
+  </Card>
+  <Card title="web_search - Web Search" icon="magnifying-glass" href="/en/tools/web-search">
+    Search the internet for real-time information
+  </Card>
+</CardGroup>
+
+## MCP Tools
+
+Integrate thousands of community tools (maps, GitHub, Notion, etc.) via the [Model Context Protocol](https://modelcontextprotocol.io). Configure `mcp.json` once, ready to use:
+
+<CardGroup cols={1}>
+  <Card title="MCP - External Tool Ecosystem" icon="plug" href="/en/tools/mcp">
+    Supports standard stdio / SSE transports. Hot-reload, zero code changes.
+  </Card>
+</CardGroup>

@@ -1,0 +1,58 @@
+---
+title: 创造技能
+description: 通过对话创建自定义技能
+---
+
+CowAgent 内置了 Skill Creator，可以通过自然语言对话快速创建、安装或更新技能。
+
+## 使用方式
+
+直接在对话中描述你想要的技能，Agent 会自动完成创建：
+
+- 将工作流程固化为技能："帮我把这个部署流程创建为一个技能"
+- 对接第三方 API："根据这个接口文档创建一个技能"
+- 安装远程技能："帮我安装 xxx 技能"
+
+## 创建流程
+
+1. 告诉 Agent 你想创建的技能功能
+2. Agent 自动生成 `SKILL.md` 说明文件和运行脚本
+3. 技能保存到工作空间的 `~/cow/skills/` 目录
+4. 后续对话中 Agent 会自动识别并使用该技能
+
+<Frame>
+  <img src="https://cdn.link-ai.tech/doc/20260202202247.png" width="800" />
+</Frame>
+
+## SKILL.md 格式
+
+创建的技能遵循标准的 SKILL.md 格式：
+
+```markdown
+---
+name: my-skill
+description: Brief description of the skill
+metadata:
+  emoji: 🔧
+  requires:
+    bins: ["curl"]
+    env: ["MY_API_KEY"]
+  primaryEnv: "MY_API_KEY"
+---
+
+# My Skill
+
+Detailed instructions...
+```
+
+| 字段 | 说明 |
+| --- | --- |
+| `name` | 技能名称，需与目录名一致 |
+| `description` | 技能描述，Agent 据此决定是否调用 |
+| `metadata.requires.bins` | 依赖的系统命令 |
+| `metadata.requires.env` | 依赖的环境变量 |
+| `metadata.always` | 是否始终加载（默认 false） |
+
+<Tip>
+  详细开发文档可参考 [Skill Creator 说明](https://github.com/zhayujie/CowAgent/blob/master/skills/skill-creator/SKILL.md)。
+</Tip>

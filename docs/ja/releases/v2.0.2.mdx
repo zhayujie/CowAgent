@@ -1,0 +1,98 @@
+---
+title: v2.0.2
+description: CowAgent 2.0.2 - Web Console アップグレード、マルチチャネル同時実行、セッション永続化
+---
+
+**リリース日**: 2026.02.27 | [全変更履歴](https://github.com/zhayujie/CowAgent/compare/2.0.1...master)
+
+## ハイライト
+
+### 🖥️ Web Console アップグレード
+
+Web Console が全面的にアップグレードされ、ストリーミング会話出力、ツール実行と推論プロセスの視覚的表示、**モデル、Skill、記憶、チャネル、Agent 設定** のオンライン管理が可能になりました。
+
+#### チャットインターフェース
+
+ストリーミング出力に対応し、Agent の推論プロセスとツール呼び出しをリアルタイムに表示することで、Agent の意思決定を直感的に観察できます：
+
+<img width="850" src="https://cdn.link-ai.tech/doc/20260227180120.png" />
+
+#### モデル管理
+
+設定ファイルを手動で編集せずに、モデル設定をオンラインで管理できます：
+
+<img width="850" src="https://cdn.link-ai.tech/doc/20260227173811.png" />
+
+#### Skill 管理
+
+Agent の Skill をオンラインで表示・管理できます：
+
+<img width="850" src="https://cdn.link-ai.tech/doc/20260227173403.png" />
+
+#### 記憶管理
+
+Agent の記憶をオンラインで表示・管理できます：
+
+<img width="850" src="https://cdn.link-ai.tech/doc/20260227173349.png" />
+
+#### チャネル管理
+
+接続されたチャネルをオンラインで管理し、リアルタイムで接続・切断操作ができます：
+
+<img width="850" src="https://cdn.link-ai.tech/doc/20260227173331.png" />
+
+#### スケジュールタスク
+
+ワンタイムタスク、固定間隔、Cron 式を含むスケジュールタスクをオンラインで表示・管理できます：
+
+<img width="850" src="https://cdn.link-ai.tech/doc/20260227173704.png" />
+
+#### ログ
+
+Agent のランタイムログをリアルタイムで表示し、監視とトラブルシューティングに活用できます：
+
+<img width="850" src="https://cdn.link-ai.tech/doc/20260227173514.png" />
+
+関連コミット: [f1a1413](https://github.com/zhayujie/CowAgent/commit/f1a1413), [c0702c8](https://github.com/zhayujie/CowAgent/commit/c0702c8), [394853c](https://github.com/zhayujie/CowAgent/commit/394853c), [1c71c4e](https://github.com/zhayujie/CowAgent/commit/1c71c4e), [5e3eccb](https://github.com/zhayujie/CowAgent/commit/5e3eccb), [e1dc037](https://github.com/zhayujie/CowAgent/commit/e1dc037), [5edbf4c](https://github.com/zhayujie/CowAgent/commit/5edbf4c), [7d258b5](https://github.com/zhayujie/CowAgent/commit/7d258b5)
+
+### 🔀 マルチチャネル同時実行
+
+複数のチャネル（例：飞书、钉钉、企业微信、Web）を同時に実行できるようになりました。各チャネルは独立したスレッドで動作し、互いに干渉しません。
+
+設定方法: `config.json` の `channel_type` にカンマ区切りで複数のチャネルを設定するか、Web Console のチャネル管理ページからリアルタイムでチャネルの接続・切断を行います。
+
+```json
+{
+  "channel_type": "web,feishu,dingtalk"
+}
+```
+
+関連コミット: [4694594](https://github.com/zhayujie/CowAgent/commit/4694594), [7cce224](https://github.com/zhayujie/CowAgent/commit/7cce224), [7d258b5](https://github.com/zhayujie/CowAgent/commit/7d258b5), [c9adddb](https://github.com/zhayujie/CowAgent/commit/c9adddb)
+
+### 💾 セッション永続化
+
+セッション履歴がローカルの SQLite データベースに永続化されるようになりました。サービス再起動後も会話コンテキストが自動的に復元されます。Web Console の過去の会話も復元されます。
+
+関連コミット: [29bfbec](https://github.com/zhayujie/CowAgent/commit/29bfbec), [9917552](https://github.com/zhayujie/CowAgent/commit/9917552), [925d728](https://github.com/zhayujie/CowAgent/commit/925d728)
+
+## 新モデル
+
+- **Gemini 3.1 Pro Preview**: `gemini-3.1-pro-preview` モデルのサポートを追加 ([52d7cad](https://github.com/zhayujie/CowAgent/commit/52d7cad))
+- **Claude 4.6 Sonnet**: `claude-4.6-sonnet` モデルのサポートを追加 ([52d7cad](https://github.com/zhayujie/CowAgent/commit/52d7cad))
+- **Qwen3.5 Plus**: `qwen3.5-plus` モデルのサポートを追加 ([e59a289](https://github.com/zhayujie/CowAgent/commit/e59a289))
+- **MiniMax M2.5**: `Minimax-M2.5` モデルのサポートを追加 ([48db538](https://github.com/zhayujie/CowAgent/commit/48db538))
+- **GLM-5**: `glm-5` モデルのサポートを追加 ([48db538](https://github.com/zhayujie/CowAgent/commit/48db538))
+- **Kimi K2.5**: `kimi-k2.5` モデルのサポートを追加 ([48db538](https://github.com/zhayujie/CowAgent/commit/48db538))
+- **Doubao 2.0 Code**: コーディング特化型 `doubao-2.0-code` モデルを追加 ([ab28ee5](https://github.com/zhayujie/CowAgent/commit/ab28ee5))
+- **DashScope モデル**: 阿里云 DashScope モデル名のサポートを追加 ([ce58f23](https://github.com/zhayujie/CowAgent/commit/ce58f23))
+
+## ウェブサイトとドキュメント
+
+- **公式サイト**: [cowagent.ai](https://cowagent.ai/)
+- **ドキュメント**: [docs.cowagent.ai](https://docs.cowagent.ai/)
+
+## バグ修正
+
+- **Gemini 钉钉画像認識**: 钉钉チャネルで Gemini が画像マーカーを処理できない問題を修正 ([05a3304](https://github.com/zhayujie/CowAgent/commit/05a3304)) ([#2670](https://github.com/zhayujie/CowAgent/pull/2670)) Thanks [@SgtPepper114](https://github.com/SgtPepper114)
+- **起動スクリプトの依存関係**: `run.sh` スクリプトの依存関係インストール問題を修正 ([b6fc9fa](https://github.com/zhayujie/CowAgent/commit/b6fc9fa))
+- **bare except の整理**: より適切な例外処理のため `bare except` を `except Exception` に置換 ([adca89b](https://github.com/zhayujie/CowAgent/commit/adca89b)) ([#2674](https://github.com/zhayujie/CowAgent/pull/2674)) Thanks [@haosenwang1018](https://github.com/haosenwang1018)

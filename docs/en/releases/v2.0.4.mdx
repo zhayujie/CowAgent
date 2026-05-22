@@ -1,0 +1,55 @@
+---
+title: v2.0.4
+description: CowAgent 2.0.4 - Personal WeChat channel, new model support, Japanese docs, script refactoring and bug fixes
+---
+
+## 🔌 Personal WeChat Channel
+
+Added personal WeChat (`weixin`) channel — the most important update in this release. Simply scan a QR code to connect CowAgent to your personal WeChat account, with support for:
+
+- **Messaging**: Send and receive text, image, file, and video messages; receive voice messages
+- **QR Code Login**: QR code displayed in terminal, scan with WeChat to log in; auto-refresh on expiry
+- **Credential Persistence**: Login credentials saved to `~/.weixin_cow_credentials.json` automatically, no re-scan needed on restart
+- **Session Auto-Reconnect**: Automatically clears expired credentials and re-initiates QR code login
+- **Web Console Integration**: Add WeChat channel from the Web Console with synchronized QR code login flow
+- **Docker & Script Support**: Both `run.sh` and `docker-compose.yml` now support the WeChat channel
+
+Documentation: [WeChat Channel](https://docs.cowagent.ai/channels/weixin).
+
+Related commits: [ce89869](https://github.com/zhayujie/CowAgent/commit/ce89869), [a483ec0](https://github.com/zhayujie/CowAgent/commit/a483ec0), [c1421e0](https://github.com/zhayujie/CowAgent/commit/c1421e0)
+
+## 🤖 New Models
+
+- **MiniMax-M2.7**: Added MiniMax-M2.7 model support
+- **GLM-5-Turbo**: Added Zhipu glm-5-turbo model support
+
+Related commits: [9192f6f](https://github.com/zhayujie/CowAgent/commit/9192f6f)
+
+## 🔧 Script Refactoring
+
+- **run.sh Refactoring**: Extracted shared logic and eliminated duplication, reducing from 600+ lines to 177 lines ([49d8707](https://github.com/zhayujie/CowAgent/commit/49d8707))
+- **Executable Permission**: Fixed `run.sh` file permission issue ([652156e](https://github.com/zhayujie/CowAgent/commit/652156e))
+
+## ⚡ Improvements
+
+- **Unified Request Headers**: Added identification headers to external requests across Agent services (Chat, Embedding, Vision, WebSearch, etc.) ([b4e711f](https://github.com/zhayujie/CowAgent/commit/b4e711f))
+- **Auto-Repair Messages**: Enhanced message protocol fault tolerance with automatic repair of malformed message sequences ([b8b57e3](https://github.com/zhayujie/CowAgent/commit/b8b57e3))
+
+## 🌍 Japanese Documentation
+
+Added complete Japanese documentation covering getting started guide, channel integration, model configuration and other major sections. Thanks [@Ikko Ashimine](https://github.com/ikoamu)
+
+Related commits: [5487c0b](https://github.com/zhayujie/CowAgent/commit/5487c0b)
+
+## 🐛 Bug Fixes
+
+- **WeCom Bot Compatibility**: Fixed compatibility with older `websocket-client` versions, added unified WebSocket compatibility layer ([bc7f627](https://github.com/zhayujie/CowAgent/commit/bc7f627))
+- **run.sh PID**: Fixed process PID retrieval error in `run.sh` ([9febb07](https://github.com/zhayujie/CowAgent/commit/9febb07))
+- **Feishu Encoding**: Fixed message and log encoding issue in Feishu channel ([7d0e156](https://github.com/zhayujie/CowAgent/commit/7d0e156))
+- **Feishu Config**: Removed redundant `feishu_bot_name` dependency in `run.sh` ([1b5be1b](https://github.com/zhayujie/CowAgent/commit/1b5be1b))
+
+## 📦 Upgrade
+
+Run `./run.sh update` for a one-click upgrade, or manually pull the latest code and restart. See [Upgrade Guide](https://docs.cowagent.ai/guide/upgrade) for details.
+
+**Release Date**: 2026.03.22 | [Full Changelog](https://github.com/zhayujie/CowAgent/compare/2.0.3...master)

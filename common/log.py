@@ -1,5 +1,6 @@
 import logging
 import sys
+import io
 
 
 def _reset_logger(log):
@@ -9,7 +10,10 @@ def _reset_logger(log):
         del handler
     log.handlers.clear()
     log.propagate = False
-    console_handle = logging.StreamHandler(sys.stdout)
+    stdout = sys.stdout
+    if hasattr(stdout, "buffer"):
+        stdout = io.TextIOWrapper(stdout.buffer, encoding="utf-8", errors="replace", line_buffering=True)
+    console_handle = logging.StreamHandler(stdout)
     console_handle.setFormatter(
         logging.Formatter(
             "[%(levelname)s][%(asctime)s][%(filename)s:%(lineno)d] - %(message)s",

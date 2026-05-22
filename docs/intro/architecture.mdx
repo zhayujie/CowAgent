@@ -1,0 +1,85 @@
+---
+title: 项目架构
+description: CowAgent 2.0 的系统架构和核心设计
+---
+
+CowAgent 2.0 从简单的聊天机器人全面升级为超级智能助理，采用 Agent 架构设计，具备自主思考、规划任务、长期记忆和技能扩展等能力。
+
+## 系统架构
+
+CowAgent 的整体架构由以下核心模块组成：
+
+<img src="https://cdn.link-ai.tech/doc/cow-agent-arch-zh.jpg" alt="CowAgent Architecture" />
+
+| 模块 | 说明 |
+| --- | --- |
+| **Plan** | 理解用户意图，将复杂任务分解为多步骤计划，循环调用工具直到完成目标 |
+| **Memory** | 自动将重要信息持久化为核心记忆和日级记忆，支持关键词和向量混合检索，跨会话保持上下文连续性 |
+| **Knowledge** | 以主题维度组织结构化知识，Agent 自主整理有价值信息为 Markdown 页面，维护索引和交叉引用，构建持续增长的知识网络 |
+| **Tools** | Agent 访问操作系统资源的核心能力，内置文件读写、终端执行、浏览器操作、定时调度、记忆检索、联网搜索等 10+ 种工具 |
+| **Skills** | 加载和管理 Skills，支持从 Skill Hub、GitHub 等一键安装，或通过对话创建自定义技能 |
+| **Models** | 模型层，统一接入 OpenAI、Claude、Gemini、DeepSeek、MiniMax、GLM、Qwen 等国内外主流大语言模型 |
+| **Channels** | 消息通道层，负责接收和发送消息，支持 Web 控制台、微信、飞书、钉钉、企微、公众号等，统一消息协议 |
+| **CLI** | 命令行系统，提供终端命令（`cow`）和对话命令（`/`），支持进程管理、技能安装、配置修改、知识库管理等操作 |
+
+## Agent 模式
+
+启用 Agent 模式后，CowAgent 会以自主智能体的方式运行，核心工作流如下：
+
+1. **接收消息** — 通过通道接收用户输入
+2. **理解意图** — 分析任务需求和上下文
+3. **规划任务** — 将复杂任务分解为多个步骤
+4. **调用工具** — 选择合适的工具执行每个步骤
+5. **记忆与知识更新** — 将重要信息存入长期记忆，将结构化知识整理至知识库
+6. **返回结果** — 将执行结果发送回用户
+
+## 工作空间
+
+Agent 的工作空间默认位于 `~/cow` 目录，用于存储系统提示词、记忆文件、技能文件等：
+
+```
+~/cow/
+├── SYSTEM.md          # Agent system prompt
+├── USER.md            # User profile
+├── MEMORY.md          # Core memory
+├── memory/            # Long-term memory storage
+│   └── YYYY-MM-DD.md  # Daily memory
+├── knowledge/         # Personal knowledge base
+│   ├── index.md       # Knowledge index
+│   └── <category>/    # Topic-based pages
+└── skills/            # Custom skills
+    ├── skill-1/
+    └── skill-2/
+```
+
+秘钥文件单独存储在 `~/.cow` 目录（出于安全考虑）：
+
+```
+~/.cow/
+└── .env               # Secret keys for skills
+```
+
+## 核心配置
+
+在 `config.json` 中配置 Agent 模式的核心参数：
+
+```json
+{
+  "agent": true,
+  "agent_workspace": "~/cow",
+  "agent_max_context_tokens": 40000,
+  "agent_max_context_turns": 30,
+  "agent_max_steps": 15,
+  "enable_thinking": false
+}
+```
+
+| 参数 | 说明 | 默认值 |
+| --- | --- | --- |
+| `agent` | 是否启用 Agent 模式 | `true` |
+| `agent_workspace` | 工作空间路径 | `~/cow` |
+| `agent_max_context_tokens` | 最大上下文 token 数 | `50000` |
+| `agent_max_context_turns` | 最大上下文记忆轮次 | `20` |
+| `agent_max_steps` | 单次任务最大决策步数 | `20` |
+| `enable_thinking` | 是否启用深度思考模式 | `false` |
+| `knowledge` | 是否启用个人知识库 | `true` |

@@ -1,0 +1,160 @@
+---
+title: image-generation - 图像生成
+description: 文生图 / 图生图 / 多图融合，支持多家厂商自动路由与回退
+---
+
+通用的图像生成与编辑技能，支持 OpenAI、Gemini、Seedream（火山方舟）、Qwen（百炼）、MiniMax、LinkAI 共六家厂商。不需要手动选模型，脚本会按固定优先级自动挑选已配置的厂商来出图。
+
+## 模型选择
+
+`image-generation` 采用「固定优先级 + 自动回退」的策略，配好 Key 就能用：
+
+1. **优先级顺序**：`OpenAI → Gemini → Seedream → Qwen → MiniMax → LinkAI`
+2. **没配 Key 的跳过**：只有设了 API Key 的厂商才会参与
+3. **失败自动切下一家**：遇到 401、模型未开通、网络异常等错误时，会自动试下一个
+4. **指定模型时前置**：如果明确传了某个模型名，对应厂商会被提到最前面先试
+
+### 支持的模型
+
+| 厂商 | 模型 / 别名 | 特点 |
+| --- | --- | --- |
+| OpenAI | `gpt-image-2`、`gpt-image-1` | 通用文生图，高质量、高智能，支持 `quality` 参数控制画质 |
+| Gemini Nano Banana | `nano-banana-2`、`nano-banana-pro`、`nano-banana` | 对应 `gemini-3.1-flash`、`gemini-3-pro`、`gemini-2.5-flash` 的图像版本 |
+| Seedream（火山方舟） | `seedream-5.0-lite`、`seedream-4.5` | 原生 2K–4K，最多 14 张图融合 |
+| Qwen（百炼） | `qwen-image-2.0`、`qwen-image-2.0-pro` | 擅长中文排版和图文融合 |
+| MiniMax | `image-01` | 简单快速的图片生成 |
+| LinkAI | 任意模型 | 通用代理，兜底用 |
+
+<Note>
+默认情况下 Agent 不会主动选模型，而是走自动路由。如果你想用某个特定模型，直接在对话里说就行，比如「用 seedream 画一只猫」或「用 gpt-image-2 生成海报」。也可以通过下面的「自定义配置」固定默认模型。
+</Note>
+
+## 自定义配置
+
+### API Key 配置
+
+至少需要配**一个**厂商的 Key，配多个就能享受自动回退能力。有三种配置方式：
+
+#### 方式一：已有模型 Key 自动复用
+
+如果你在 web控制台 或 `config.json` 中配置了对话模型的 Key（比如 `openai_api_key`、`gemini_api_key` 等），启动时这些 Key 会被**自动同步**到对应的环境变量。也就是说，只要你的对话模型能用，图像生成就能直接用同一个 Key，不需要额外配置。
+
+#### 方式二：在 config.json 中配置
+
+在 `config.json` 中直接写对应的 Key 字段即可，支持的字段如下：
+
+```json
+{
+  "openai_api_key": "sk-xxx",
+  "openai_api_base": "https://api.openai.com/v1",
+  "gemini_api_key": "AIza-xxx",
+  "ark_api_key": "xxx",
+  "dashscope_api_key": "sk-xxx",
+  "minimax_api_key": "xxx",
+  "linkai_api_key": "xxx"
+}
+```
+
+修改后需要重启生效。每个 Key 还有对应的 `*_api_base` 字段可以自定义接口地址。
+
+#### 方式三：对话中直接配置
+
+在对话里发送 API Key，Agent 会通过 `env_config` 工具自动保存到 `~/cow/.env`，**不需要重启**就能生效。例如：
+
+```
+帮我配置 OPENAI_API_KEY 为 sk-xxx
+```
+
+或者：
+
+```
+设置 ARK_API_KEY 为 xxx
+```
+
+### API Key 一览
+
+| 环境变量 | config.json 字段 | 对应厂商 | 默认 Base URL |
+| --- | --- | --- | --- |
+| `OPENAI_API_KEY` | `openai_api_key` | OpenAI | `https://api.openai.com/v1` |
+| `GEMINI_API_KEY` | `gemini_api_key` | Gemini | `https://generativelanguage.googleapis.com` |
+| `ARK_API_KEY` | `ark_api_key` | 火山方舟（Seedream） | `https://ark.cn-beijing.volces.com/api/v3` |
+| `DASHSCOPE_API_KEY` | `dashscope_api_key` | 阿里百炼（Qwen） | `https://dashscope.aliyuncs.com` |
+| `MINIMAX_API_KEY` | `minimax_api_key` | MiniMax | `https://api.minimaxi.com` |
+| `LINKAI_API_KEY` | `linkai_api_key` | LinkAI | `https://api.link-ai.tech` |
+
+
+### 指定默认模型
+
+如果想让所有图像生成固定走某个厂商的模型，可以在 `config.json` 里加：
+
+```json
+"skill": {
+  "image-generation": {
+    "model": "seedream-5.0-lite"
+  }
+}
+```
+
+启动时这段配置会被自动转成环境变量 `SKILL_IMAGE_GENERATION_MODEL`，脚本读到后会固定使用这个模型所在的厂商进行生成。
+
+
+## 开启和关闭
+
+`image-generation` 是内置技能，**会根据 API Key 自动调整状态**：
+
+- **Key 已配置**：技能正常可用，Agent 收到画图请求时会直接调用
+- **Key 未配置**：技能仍然会出现在上下文中（标记为「需要配置」），Agent 会引导用户去配 Key，而不是直接调用失败
+
+如果想手动控制，也可以用命令：
+
+```text
+/skill disable image-generation    # 手动关闭（即使有 Key 也不会被调用）
+/skill enable image-generation     # 重新开启
+```
+
+终端里对应的命令是 `cow skill disable image-generation` / `cow skill enable image-generation`。
+
+## 参数
+
+| 参数 | 类型 | 必填 | 默认 | 说明 |
+| --- | --- | --- | --- | --- |
+| `prompt` | string | 是 | — | 图像描述 |
+| `image_url` | string / list | 否 | null | 编辑用的输入图，支持本地路径或 URL。传多个就是多图融合 |
+| `quality` | string | 否 | auto | `low` / `medium` / `high`，只有部分厂商支持 |
+| `size` | string | 否 | auto | `512` / `1K` / `2K` / `3K` / `4K`，也可以写像素值如 `1024x1024` |
+| `aspect_ratio` | string | 否 | null | `1:1` / `3:2` / `2:3` / `16:9` / `9:16` / `21:9`；Gemini 还支持 `1:4` / `4:1` / `1:8` / `8:1` |
+
+<Warning>
+**质量越高、分辨率越大，花的钱越多、等的时间越长。**
+
+- 日常对话和快速预览直接用默认（`auto`），或者 `quality=low` + `size=1K`，大概 20 秒出图
+- 做海报、用户明确要高清的时候再上 `quality=high` + `size=2K/4K`，可能要等 1～5 分钟，取决于不同模型的速度
+</Warning>
+
+## 输出
+
+成功时返回：
+
+```json
+{
+  "model": "doubao-seedream-5-0-260128",
+  "images": [
+    {"url": "/path/to/output.png"}
+  ]
+}
+```
+
+失败时返回 `{ "error": "..." }`。出错后**不要直接重试**——大概率是配置问题（Key 填错、API 地址不对、模型没开通），让用户修好配置再试。
+
+## 常见用法
+
+- **文生图**：根据描述生成插画、海报、图标、头像、分镜图等
+- **图生图**：在已有图片上改风格、换元素、加装饰、加文字等
+- **多图融合**：把多张参考图合成一张（换装、角色合影等）
+
+<Note>
+- bash 超时建议设 600 秒。单个厂商的 HTTP 超时是 300 秒，但脚本可能依次尝试多个厂商
+- 输入的图片会自动压缩到 4MB 以内、最长边不超过 4096px
+- Gemini / Seedream / Qwen / MiniMax 不支持 `quality` 参数，传了也没用
+- Seedream 默认出 2K 图，`seedream-5.0-lite` 支持到 3K，`seedream-4.5` 支持到 4K
+</Note>

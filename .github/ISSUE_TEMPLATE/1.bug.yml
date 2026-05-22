@@ -79,8 +79,6 @@ body:
       description: |
         请确保你正确配置了该`channel`所需的配置项，所有可选的配置项都写在了[该文件中](https://github.com/zhayujie/chatgpt-on-wechat/blob/master/config.py)，请将所需配置项填写在根目录下的`config.json`文件中。
       options:
-        - wx(个人微信, itchat)
-        - wxy(个人微信, wechaty)
         - wechatmp(公众号, 订阅号)
         - wechatmp_service(公众号, 服务号)
         - terminal

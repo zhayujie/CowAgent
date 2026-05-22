@@ -1,0 +1,109 @@
+---
+title: MCP Tool
+description: Model Context Protocol を介して外部Toolエコシステムを統合
+---
+
+CowAgent は [Model Context Protocol (MCP)](https://modelcontextprotocol.io) をサポートしており、コミュニティで提供されている数万種類の MCP Tool を Agent から直接呼び出せます。`mcp.json` を一度設定すれば、組み込みToolとまったく同じ形で LLM に公開され、自動的に選択・呼び出されます。
+
+## 設定ファイル
+
+CowAgent は `~/cow/mcp.json` を読み込みます。ファイルが存在しない場合は MCP Tool は読み込まれず、エラーにもなりません。
+
+Docker デプロイの場合、公式の `docker-compose.yml` はホスト側の `./cow` をコンテナ内の `/home/agent/cow`（コンテナユーザーの `~/cow`）にマウント済みです。ホスト側の `./cow/` に `mcp.json` を置くだけで反映されます。
+
+### 標準フォーマット
+
+MCP コミュニティ標準に完全準拠しており、Claude Desktop / Cursor と同じです：
+
+```json
+{
+  "mcpServers": {
+    "<server-name>": {
+      "command": "npx",
+      "args": ["-y", "some-mcp-package"],
+      "env": {
+        "API_KEY": "your-key-here"
+      }
+    }
+  }
+}
+```
+
+| フィールド | 必須 | 説明 |
+| --- | --- | --- |
+| `command` | stdio | サーバーを起動する実行コマンド（`npx`、`python`、`uvx` など） |
+| `args` | 任意 | `command` に渡す引数 |
+| `env` | 任意 | サブプロセスの環境変数。API Key などに利用 |
+| `url` | SSE | SSE エンドポイントの URL（`command` と二者択一） |
+| `disabled` | 任意 | `true` のとき該当サーバーをスキップ。一時的に無効化したいときに便利 |
+
+### 完全な例
+
+```json
+{
+  "mcpServers": {
+    "fetch": {
+      "command": "uvx",
+      "args": ["mcp-server-fetch"]
+    },
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "<YOUR_TOKEN>"
+      }
+    }
+  }
+}
+```
+
+- **fetch**：汎用 Web ページ取得。ページ本文を返す。API Key 不要
+- **github**：GitHub のリポジトリ、Issue、PR などにアクセス。Personal Access Token が必要
+
+## Agent に設定を任せる
+
+CowAgent には `read` / `write` / `edit` Tool が組み込まれているため、**MCP の設定をそのまま Agent に渡して、ファイルに書き込んでもらえます**：
+
+例：
+
+```markdown
+この MCP を ~/cow/mcp.json に追加してください：
+
+{"mcpServers":{"fetch":{"command":"uvx","args":["mcp-server-fetch"]}}}
+```
+
+Agent は次のように動作します：
+
+1. 既存の MCP 設定ファイルを読み込み、新しい server エントリをマージ（既存の項目は保持）
+2. 増分の MCP Server を自動でリロードし、次のメッセージから対応する Tool が利用可能に
+
+## 動作の仕組み
+
+- **起動時の非同期ロード**：`mcp.json` に設定された全 server はバックグラウンドで非同期に読み込まれ、メインループをブロックしません。会話はすぐに開始できます
+- **ホットリロード**：ユーザーまたは Agent が `mcp.json` を変更すると、メッセージ処理完了時に変更された server のみが自動でリロードされます。cow の再起動は不要です
+- **フラットな公開**：MCP server が公開する各メソッドは独立した Tool として並列に公開され、LLM が直接選択して呼び出します。二段階の判断は不要です
+
+## サポートされるトランスポート
+
+| トランスポート | 説明 | 設定フィールド |
+| --- | --- | --- |
+| **stdio** | サブプロセス通信。最も一般的で、コミュニティのエコシステムが最も豊富 | `command` + `args` |
+| **SSE** | HTTP Server-Sent Events。リモートホスト型の MCP サービス向け | `url` |
+
+## トラブルシューティング
+
+| 症状 | 確認ポイント |
+| --- | --- |
+| 起動後に MCP Tool が一つもない | `~/cow/mcp.json` が存在し、JSON が正しいか確認 |
+| 特定の server が読み込みに失敗する | 起動ログの `[MCP] Server 'xxx' load failed` を確認。多くは依存関係の不足や API Key 未設定 |
+| `mcp.json` の変更が反映されない | 変更は **次のメッセージ** から有効になる。server の設定が実質的に変わっていない（コメントだけ変更など）場合は再起動されない |
+| Docker デプロイ | ホストの `./cow` がコンテナ内の `/home/agent/cow` にマウントされていることを確認し、ホスト側の `./cow/` に `mcp.json` を配置。または Agent に直接インストールを依頼 |
+
+## おすすめ MCP マーケットプレイス
+
+各種サードパーティのマーケットプレイスから既製の MCP server を探し、JSON 設定をコピーしてそのまま利用できます。例：
+
+- [mcp.so](https://mcp.so) — グローバル MCP サービスインデックス
+- [ModelScope MCP 広場](https://modelscope.cn/mcp) — 魔搭コミュニティの MCP 広場、中国本土からのアクセスが安定
+
+MCP 標準プロトコル（stdio / SSE）に準拠していれば、コードを一切変更せずに CowAgent に統合できます。

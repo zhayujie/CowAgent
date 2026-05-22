@@ -78,6 +78,7 @@ class TerminalChannel(ChatChannel):
                 prompt = trigger_prefixs[0] + prompt  # 给没触发的消息加上触发前缀
 
             context = self._compose_context(ContextType.TEXT, prompt, msg=TerminalMessage(msg_id, prompt))
+            context["isgroup"] = False
             if context:
                 self.produce(context)
             else:

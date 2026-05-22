@@ -2,45 +2,21 @@ tiktoken>=0.3.2 # openai calculate token
 
 #voice
 pydub>=0.25.1 # need ffmpeg
-SpeechRecognition # google speech to text
 gTTS>=2.3.1 # google text to speech
-pyttsx3>=2.90 # pytsx text to speech
-baidu_aip>=4.16.10 # baidu voice
-azure-cognitiveservices-speech # azure voice
 edge-tts # edge-tts
-numpy<=1.24.2
-langid # language detect
 elevenlabs==1.0.3 # elevenlabs TTS
 
 #install plugin
 dulwich
 
-# wechatmp && wechatcom
-web.py
-wechatpy
-
-# chatgpt-tool-hub plugin
-chatgpt_tool_hub==0.5.0
-
 # xunfei spark
 websocket-client==1.2.0
-
-# claude bot
-curl_cffi
-# claude API
-anthropic
-
-# tongyi qwen
-broadscope_bailian
 
 # google
 google-generativeai
 
-# dingtalk
-dingtalk_stream
-
-# zhipuai
-zhipuai>=2.0.1
-
-# tongyi qwen new sdk
-dashscope
+# file parsing (web_fetch document support)
+pypdf
+python-docx
+openpyxl
+python-pptx

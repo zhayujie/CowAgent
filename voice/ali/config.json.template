@@ -1,5 +1,6 @@
 {
-    "api_url": "https://nls-gateway-cn-shanghai.aliyuncs.com/stream/v1/tts",
+    "api_url_text_to_voice": "https://nls-gateway-cn-shanghai.aliyuncs.com/stream/v1/tts",
+    "api_url_voice_to_text": "https://nls-gateway.cn-shanghai.aliyuncs.com/stream/v1/asr",
     "app_key": "",
     "access_key_id": "",
     "access_key_secret": ""

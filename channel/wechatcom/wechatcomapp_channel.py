@@ -1,6 +1,7 @@
 # -*- coding=utf-8 -*-
 import io
 import os
+import sys
 import time
 
 import requests
@@ -17,7 +18,7 @@ from channel.wechatcom.wechatcomapp_client import WechatComAppClient
 from channel.wechatcom.wechatcomapp_message import WechatComAppMessage
 from common.log import logger
 from common.singleton import singleton
-from common.utils import compress_imgfile, fsize, split_string_by_utf8_length
+from common.utils import compress_imgfile, fsize, split_string_by_utf8_length, convert_webp_to_png, remove_markdown_symbol
 from config import conf, subscribe_msg
 from voice.audio_convert import any_to_amr, split_audio
 
@@ -35,24 +36,45 @@ class WechatComAppChannel(ChatChannel):
         self.agent_id = conf().get("wechatcomapp_agent_id")
         self.token = conf().get("wechatcomapp_token")
         self.aes_key = conf().get("wechatcomapp_aes_key")
-        print(self.corp_id, self.secret, self.agent_id, self.token, self.aes_key)
+        self._http_server = None
         logger.info(
-            "[wechatcom] init: corp_id: {}, secret: {}, agent_id: {}, token: {}, aes_key: {}".format(self.corp_id, self.secret, self.agent_id, self.token, self.aes_key)
+            "[wechatcom] Initializing WeCom app channel, corp_id: {}, agent_id: {}".format(self.corp_id, self.agent_id)
         )
         self.crypto = WeChatCrypto(self.token, self.aes_key, self.corp_id)
         self.client = WechatComAppClient(self.corp_id, self.secret)
 
     def startup(self):
         # start message listener
-        urls = ("/wxcomapp", "channel.wechatcom.wechatcomapp_channel.Query")
+        urls = ("/wxcomapp/?", "channel.wechatcom.wechatcomapp_channel.Query")
         app = web.application(urls, globals(), autoreload=False)
         port = conf().get("wechatcomapp_port", 9898)
-        web.httpserver.runsimple(app.wsgifunc(), ("0.0.0.0", port))
+        logger.info("[wechatcom] ✅ WeCom app channel started successfully")
+        logger.info("[wechatcom] 📡 Listening on http://0.0.0.0:{}/wxcomapp/".format(port))
+        logger.info("[wechatcom] 🤖 Ready to receive messages")
+        
+        # Build WSGI app with middleware (same as runsimple but without print)
+        func = web.httpserver.StaticMiddleware(app.wsgifunc())
+        func = web.httpserver.LogMiddleware(func)
+        server = web.httpserver.WSGIServer(("0.0.0.0", port), func)
+        self._http_server = server
+        try:
+            server.start()
+        except (KeyboardInterrupt, SystemExit):
+            server.stop()
+
+    def stop(self):
+        if self._http_server:
+            try:
+                self._http_server.stop()
+                logger.info("[wechatcom] HTTP server stopped")
+            except Exception as e:
+                logger.warning(f"[wechatcom] Error stopping HTTP server: {e}")
+            self._http_server = None
 
     def send(self, reply: Reply, context: Context):
         receiver = context["receiver"]
         if reply.type in [ReplyType.TEXT, ReplyType.ERROR, ReplyType.INFO]:
-            reply_text = reply.content
+            reply_text = remove_markdown_symbol(reply.content)
             texts = split_string_by_utf8_length(reply_text, MAX_UTF8_LEN)
             if len(texts) > 1:
                 logger.info("[wechatcom] text too long, split into {} parts".format(len(texts)))
@@ -74,6 +96,10 @@ class WechatComAppChannel(ChatChannel):
                     response = self.client.media.upload("voice", open(path, "rb"))
                     logger.debug("[wechatcom] upload voice response: {}".format(response))
                     media_ids.append(response["media_id"])
+            except ImportError as e:
+                logger.error("[wechatcom] voice conversion failed: {}".format(e))
+                logger.error("[wechatcom] please install pydub: pip install pydub")
+                return
             except WeChatClientException as e:
                 logger.error("[wechatcom] upload voice failed: {}".format(e))
                 return
@@ -99,6 +125,12 @@ class WechatComAppChannel(ChatChannel):
                 image_storage = compress_imgfile(image_storage, 10 * 1024 * 1024 - 1)
                 logger.info("[wechatcom] image compressed, sz={}".format(fsize(image_storage)))
             image_storage.seek(0)
+            if ".webp" in img_url:
+                try:
+                    image_storage = convert_webp_to_png(image_storage)
+                except Exception as e:
+                    logger.error(f"Failed to convert image: {e}")
+                    return
             try:
                 response = self.client.media.upload("image", image_storage)
                 logger.debug("[wechatcom] upload image response: {}".format(response))
@@ -156,11 +188,12 @@ class Query:
         logger.debug("[wechatcom] receive message: {}, msg= {}".format(message, msg))
         if msg.type == "event":
             if msg.event == "subscribe":
-                reply_content = subscribe_msg()
-                if reply_content:
-                    reply = create_reply(reply_content, msg).render()
-                    res = channel.crypto.encrypt_message(reply, nonce, timestamp)
-                    return res
+                pass
+                # reply_content = subscribe_msg()
+                # if reply_content:
+                #     reply = create_reply(reply_content, msg).render()
+                #     res = channel.crypto.encrypt_message(reply, nonce, timestamp)
+                #     return res
         else:
             try:
                 wechatcom_msg = WechatComAppMessage(msg, client=channel.client)

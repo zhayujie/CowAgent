@@ -1,0 +1,91 @@
+---
+title: v2.0.3
+description: CowAgent 2.0.3 - 企業微信スマートボットとQQチャネルの追加、Webコンソールファイル処理、メモリシステムのアップグレード
+---
+
+## 🔌 新規チャネル
+
+### 企業微信スマートボット
+
+企業微信スマートボット（`wecom_bot`）チャネルを追加しました。ストリーミングカードメッセージ出力、テキストと画像メッセージの送受信をサポートし、Webコンソールでチャネルの設定と管理が可能です。
+
+接続ドキュメント：[企業微信スマートボット接続](https://docs.cowagent.ai/channels/wecom-bot)。
+
+関連コミット：[d4480b6](https://github.com/zhayujie/CowAgent/commit/d4480b6), [a42f31f](https://github.com/zhayujie/CowAgent/commit/a42f31f), [4ecd4df](https://github.com/zhayujie/CowAgent/commit/4ecd4df), [8b45d6c](https://github.com/zhayujie/CowAgent/commit/8b45d6c)
+
+### QQ チャネル
+
+QQ 公式ボット（`qq`）チャネルを追加しました。テキストと画像メッセージの送受信をサポートし、プライベートチャットとグループチャットに対応しています。
+
+接続ドキュメント：[QQボット接続](https://docs.cowagent.ai/channels/qq)。
+
+関連コミット：[005a0e1](https://github.com/zhayujie/CowAgent/commit/005a0e1), [a4d54f5](https://github.com/zhayujie/CowAgent/commit/a4d54f5)
+
+## 🖥️ Web コンソールのファイル入力・処理対応
+
+Web コンソールのチャット画面でファイルや画像のアップロードが可能になり、Agent に直接ファイルを送信して処理できます。また、Read ツールに Office ドキュメント（Word、Excel、PPT）の解析機能を追加しました。
+
+関連コミット：[30c6d9b](https://github.com/zhayujie/CowAgent/commit/30c6d9b)
+
+## 🤖 新規モデル
+
+- **GPT-5.4 シリーズ**：`gpt-5.4`、`gpt-5.4-mini`、`gpt-5.4-nano` モデルのサポートを追加 ([1623deb](https://github.com/zhayujie/CowAgent/commit/1623deb))
+- **Gemini 3.1 Flash Lite Preview**：`gemini-3.1-flash-lite-preview` モデルのサポートを追加 ([ba915f2](https://github.com/zhayujie/CowAgent/commit/ba915f2))
+
+## 💰 Coding Plan サポート
+
+各ベンダーの Coding Plan（プログラミング月額プラン）への接続をサポートしました。OpenAI 互換方式で統一的に接続できます。現在、阿里雲、MiniMax、智譜 GLM、Kimi、火山エンジンなどのベンダーに対応しています。
+
+詳細設定は [Coding Plan ドキュメント](https://docs.cowagent.ai/models/coding-plan) を参照してください。
+
+## 🧠 メモリシステムのアップグレード
+
+メモリ書き込み（Memory Flush）のアップグレード：
+
+- LLM を使用してコンテキストウィンドウを超えた会話内容をインテリジェントに要約し、精製された日次メモリエントリを生成
+- 要約はバックグラウンドスレッドで非同期実行され、応答をブロックしない
+- コンテキストの一括トリミング戦略を最適化し、フラッシュ頻度を低減
+- 日次定期フラッシュのフォールバック機能を追加し、低アクティビティシナリオでのメモリ損失を防止
+- コンテキストメモリの損失問題を修正
+
+関連コミット：[022c13f](https://github.com/zhayujie/CowAgent/commit/022c13f), [c116235](https://github.com/zhayujie/CowAgent/commit/c116235)
+
+## 🔧 ツールリファクタリング
+
+- **画像認識**：画像認識（Image Vision）を Skill から内蔵 Tool にリファクタリングし、独立した画像ビジョンプロバイダー（Vision Provider）設定を追加。安定性と保守性を向上 ([a50fafa](https://github.com/zhayujie/CowAgent/commit/a50fafa), [3b8b562](https://github.com/zhayujie/CowAgent/commit/3b8b562))
+- **Webスクレイピング**：Webスクレイピング（Web Fetch）を Skill から内蔵 Tool にリファクタリング。リモートドキュメントファイル（PDF、Word、Excel、PPT）のダウンロードと解析をサポート ([ccb9030](https://github.com/zhayujie/CowAgent/commit/ccb9030), [fa61744](https://github.com/zhayujie/CowAgent/commit/fa61744))
+
+## 🐳 Docker デプロイメントの最適化
+
+- **設定テンプレートの整合**：`docker-compose.yml` の環境変数を `config-template.json` と整合し、モデル API Key と Agent 設定項目を完備
+- **Web コンソールポートマッピング**：`9899` ポートマッピングを追加。Docker デプロイ後にブラウザから Web コンソールにアクセス可能
+- **設定のホットリロード**：各モデル Bot の API Key と API Base をリアルタイム読み込みに変更。Web コンソールで設定変更後、再起動不要で即時反映
+- **ワークスペースの永続化**：`./cow` Volume マウントを追加。Agent ワークスペースデータ（メモリ、ペルソナ、スキルなど）をホストマシンに永続化し、コンテナの再構築やアップグレードでデータが失われない
+
+## ⚡ パフォーマンス最適化
+
+- **起動高速化**：飛書チャネルで依存関係の遅延読み込みを採用し、4-10秒の起動遅延を回避 ([924dc79](https://github.com/zhayujie/CowAgent/commit/924dc79))
+- **チャネルの安定性**：チャネル接続の安定性を最適化し、環境変数によるチャネル設定をサポート ([f1c04bc](https://github.com/zhayujie/CowAgent/commit/f1c04bc), [46d97fd](https://github.com/zhayujie/CowAgent/commit/46d97fd))
+
+## 🐛 バグ修正
+
+- **bot_type 設定**：Agent モードでの `bot_type` 設定の受け渡し問題を修正 ([#2691](https://github.com/zhayujie/CowAgent/pull/2691)) Thanks [@Weikjssss](https://github.com/Weikjssss)
+- **bot_type 優先順位**：Agent モードでの `bot_type` の解析優先順位を調整 ([#2692](https://github.com/zhayujie/CowAgent/pull/2692)) Thanks [@6vision](https://github.com/6vision)
+- **智譜モデル設定**：智譜の `bot_type` 命名、Web コンソールの永続化、正規表現エスケープの問題を修正 ([#2693](https://github.com/zhayujie/CowAgent/pull/2693)) Thanks [@6vision](https://github.com/6vision)
+- **OpenAI 互換レイヤー**：`openai_compat` レイヤーによる統一エラー処理 ([#2688](https://github.com/zhayujie/CowAgent/pull/2688)) Thanks [@JasonOA888](https://github.com/JasonOA888)
+- **OpenAI 互換移行**：全モデル Bot の `openai_compat` 移行を完了 ([#2689](https://github.com/zhayujie/CowAgent/pull/2689))
+- **Gemini ツール呼び出し**：Gemini モデルのツール呼び出しマッチング問題を修正 ([eda82ba](https://github.com/zhayujie/CowAgent/commit/eda82ba))
+- **セッション並行処理**：セッション並行シナリオでの競合条件の問題を修正 ([9879878](https://github.com/zhayujie/CowAgent/commit/9879878))
+- **履歴メッセージの復元**：履歴セッションメッセージの不完全な問題を修正。user/assistant のテキストメッセージのみを復元し、ツール呼び出しを除外 ([b788a3d](https://github.com/zhayujie/CowAgent/commit/b788a3d), [a33ce97](https://github.com/zhayujie/CowAgent/commit/a33ce97))
+- **飛書グループチャット**：飛書グループチャットシナリオでの `bot_name` 依存を削除 ([b641bff](https://github.com/zhayujie/CowAgent/commit/b641bff))
+- **Safari 互換性**：Safari ブラウザでの IME Enter キーによるメッセージ誤送信の問題を修正 ([0687916](https://github.com/zhayujie/CowAgent/commit/0687916))
+- **Windows 互換性**：Windows での bash スタイル `$VAR` 環境変数を `%VAR%` に変換する問題を修正 ([7c67513](https://github.com/zhayujie/CowAgent/commit/7c67513))
+- **MiniMax パラメータ**：MiniMax モデルの `max_tokens` 制限を追加 ([1767413](https://github.com/zhayujie/CowAgent/commit/1767413))
+- **.gitignore 更新**：Python ディレクトリの無視ルールを追加 ([#2683](https://github.com/zhayujie/CowAgent/pull/2683)) Thanks [@pelioo](https://github.com/pelioo)
+- **AGENT.md の能動的進化**：システムプロンプトでの AGENT.md 更新ガイダンスを最適化。受動的な「ユーザーが変更した時に更新」から、会話中の性格やスタイルの変化を能動的に検出して自動更新するように改善
+
+## 📦 アップグレード方法
+
+ソースコードデプロイの場合は `./run.sh update` でワンクリックアップグレードできます。または手動でコードをプルして再起動してください。詳細は [アップデートドキュメント](https://docs.cowagent.ai/guide/upgrade) を参照。
+
+**リリース日**：2026.03.18 | [Full Changelog](https://github.com/zhayujie/CowAgent/compare/2.0.2...master)
