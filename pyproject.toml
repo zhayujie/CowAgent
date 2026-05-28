@@ -9,11 +9,16 @@ description = "CowAgent - AI Agent on WeChat and more"
 requires-python = ">=3.7"
 dependencies = [
     "click>=8.0",
+    "json5>=0.9.16",
     "requests>=2.28.2",
 ]
 
 [project.scripts]
 cow = "cli.cli:main"
+
+[[tool.uv.index]]
+url = "https://mirrors.aliyun.com/pypi/simple"
+default = true
 
 [tool.setuptools.packages.find]
 include = ["cli*"]

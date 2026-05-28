@@ -1,0 +1,11 @@
+{
+    "title": "论文式回答",
+    "description": "From now on, please write a highly detailed essay with introduction, body, and conclusion paragraphs to respond to each of my questions.",
+    "descn": "从现在开始，对于之后我提出的每个问题，请写一篇高度详细的文章回应，包括引言、主体和结论段落。",
+    "wrapper": "问题是:\n\"%s?\"",
+    "remark": "以论文形式讨论问题，能够获得连贯的、结构化的和更高质量的回答。",
+    "tags": [
+        "mind",
+        "article"
+    ]
+}

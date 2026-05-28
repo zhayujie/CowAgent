@@ -1,0 +1,12 @@
+{
+    "title": "小红书风格",
+    "description": "Please edit the following passage in Chinese using the Xiaohongshu style, which is characterized by captivating headlines, the inclusion of emoticons in each paragraph, and the addition of relevant tags at the end. Be sure to maintain the original meaning of the text.",
+    "descn": "请用小红书风格编辑给出的段落，该风格以引人入胜的标题、每个段落中包含表情符号和在末尾添加相关标签为特点。请确保保持原文的意思。",
+    "wrapper": "内容是:\n\"%s\"",
+    "remark": "用小红书风格改写文本",
+    "tags": [
+        "favorite",
+        "interesting",
+        "write"
+    ]
+}

@@ -1,0 +1,10 @@
+{
+    "title": "内容总结",
+    "description": "Summarize every text I provided into 100 words, making it easy to read and comprehend. The summary should be concise, clear, and capture the main points of the text. Avoid using complex sentence structures or technical jargon. Please begin by editing the following text: ",
+    "descn": "请将我提供的每篇文字都概括为 100 个字，使其易于阅读和理解。避免使用复杂的句子结构或技术术语。",
+    "wrapper": "文章内容是:\n\"%s\"",
+    "remark": "将文本内容总结为 100 字。",
+    "tags": [
+        "write"
+    ]
+}

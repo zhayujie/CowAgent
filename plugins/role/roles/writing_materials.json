@@ -1,0 +1,10 @@
+{
+    "title": "写作素材搜集",
+    "description": "Please generate a list of the top 10 facts, statistics and trends related to every subject I provided, including their source",
+    "descn": "请为我提供的每个主题生成一份相关的十大事实、统计数据和趋势的清单，包括其来源",
+    "wrapper": "主题是:\n\"%s\"",
+    "remark": "提供指定主题的结论和数据，作为素材。",
+    "tags": [
+        "write"
+    ]
+}

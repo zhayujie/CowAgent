@@ -1,0 +1,38 @@
+
+
+/*
+
+  使用json5重构，可以添加注释
+  Use json5 for refactoring and add comments.
+
+  标签：
+      "favorite": "常用",
+      "mind": "思维",
+      "write": "写作",
+      "article": "文章",
+      "text": "文本",
+      "comments": "点评",
+      "code": "编程",
+      "life": "生活百科",
+      "interesting": "有趣",
+      "language": "语言",
+      "speech": "辩论",
+      "social": "社交",
+      "philosophy": "哲学"
+*/  
+
+
+{
+"roles": 
+    {
+      "title":  , // 扮演的角色
+      "description": ,// 核心设定+行为设定
+      "descn":  , // 人设
+      "wrapper": , //对话包装
+      "remark": , //角色备注
+      "tags": [
+
+          //标签
+      ]
+    }
+}

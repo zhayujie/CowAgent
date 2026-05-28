@@ -1,4 +1,37 @@
-# encoding:utf-8
+# from roles.load_role import get_role_list
+# roles_list_path = "role_file_map.json"
+# import json5
+# # from role import update_files
+# def update_files():
+#     try:
+#         now_roles_list = get_role_list()
+#     except FileNotFoundError:
+#         now_roles_list = []
+#     try:
+#         with open(roles_list_path, "r", encoding="utf-8") as f:
+#             old_roles_map = json5.load(f)
+#     except FileNotFoundError:
+#         old_roles_map = {}
+#     old_roles_list = [item for item in old_roles_map.values()]
+
+#     add_list = [item for item in now_roles_list if item not in old_roles_list]
+#     del_list = [item for item in old_roles_list if item not in now_roles_list]
+
+#     if add_list :
+#         for item in add_list:
+#             with open(f"roles/{item}.json", "r", encoding="utf-8") as f:
+#                 ret = json5.load(f)
+#                 old_roles_map[ret["title"]] = item
+#     print(del_list)
+#     for del_item in del_list:
+#         for key, value in list(old_roles_map.items()):
+#             if value == del_item:
+#                 del old_roles_map[key]
+#                 break
+#     with open(roles_list_path, "w", encoding="utf-8") as f:
+#         json5.dump(old_roles_map, f, indent=4, ensure_ascii=False)
+import os
+import json5
 import json5
 import os
 import plugins
@@ -11,41 +44,11 @@ from config import conf
 from plugins import *
 from roles.load_role import get_role_list
 
-ROLES_MAP_PATH = "role_file_map.json"
+
 CURDIR = os.path.dirname(__file__)
 TAGS_PATH = os.path.join(CURDIR, "tag.json")
 ROLES_MAP_PATH = os.path.join(CURDIR, "role_file_map.json")
 ROLES_DIR_PATH = os.path.join(CURDIR, "roles")
-
-def update_files():
-    try:
-        now_roles_list = get_role_list()
-    except FileNotFoundError:
-        now_roles_list = []
-    try:
-        with open(ROLES_MAP_PATH, "r", encoding="utf-8") as f:
-            old_roles_map = json5.load(f)
-    except FileNotFoundError:
-        old_roles_map = {}
-    old_roles_list = [item for item in old_roles_map.values()]
-
-    add_list = [item for item in now_roles_list if item not in old_roles_list]
-    del_list = [item for item in old_roles_list if item not in now_roles_list]
-
-    if add_list :
-        for item in add_list:
-            with open(f"roles/{item}.json", "r", encoding="utf-8") as f:
-                ret = json5.load(f)
-                old_roles_map[ret["title"]] = item
-    for del_item in del_list:
-        for key, value in list(old_roles_map.items()):
-            if value == del_item:
-                del old_roles_map[key]
-                break
-    with open(roles_list_path, "w", encoding="utf-8") as f:
-        json5.dump(old_roles_map, f, indent=4, ensure_ascii=False)
-    
-update_files()
 
 
 class RolePlay:
@@ -63,21 +66,10 @@ class RolePlay:
         session = self.bot.sessions.build_session(self.sessionid)
         if (
             session.system_prompt != self.desc
-        ): 
+        ):  # 目前没有触发session过期事件，这里先简单判断，然后重置
             session.set_system_prompt(self.desc)
         prompt = self.wrapper % user_action
         return prompt
-
-
-@plugins.register(
-    name="Role",
-    desire_priority=0,
-    namecn="角色扮演",
-    desc="为你的Bot设置预设角色",
-    version="1.0",
-    author="lanvent",
-)
-
 
 
 
@@ -263,6 +255,7 @@ class Role(Plugin):
             e_context["reply"] = reply
             e_context.action = EventAction.BREAK_PASS
         else:
+            # 已经处于扮演状态下的日常对话处理
             e_context["context"]["generate_breaked_by"] = EventAction.BREAK
             prompt = self.roleplays[sessionid].action(content)
             e_context["context"].type = ContextType.TEXT
@@ -284,3 +277,7 @@ class Role(Plugin):
         help_text += "\n目前的角色类型有: \n"
         help_text += "，".join([self.tags[tag][0] for tag in self.tags]) + "。\n"
         return help_text
+
+
+ret = Role()
+print(ret.get_role_dict("费曼学习法教练")) 

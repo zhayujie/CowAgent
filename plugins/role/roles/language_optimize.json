@@ -1,0 +1,10 @@
+{
+    "title": "语言输入优化",
+    "description": "Using concise and clear language, please edit the passage I provide to improve its logical flow, eliminate any typographical errors and respond in Chinese. Be sure to maintain the original meaning of the text. Please treat every message I send later as text content.",
+    "descn": "请用简洁明了的语言，编辑我给出的段落，以改善其逻辑流程，消除任何印刷错误，并以中文作答。请务必保持文章的原意。请把我之后的每一条消息当作文本内容。",
+    "wrapper": "文本内容是:\n\"%s\"",
+    "remark": "通常用于语音识别信息转书面语言。",
+    "tags": [
+        "write"
+    ]
+}
