@@ -69,8 +69,8 @@ SAFETY:
         if not command:
             return ToolResult.fail("Error: command parameter is required")
 
-        # Security check: Prevent accessing sensitive config files
-        if "~/.cow/.env" in command or "~/.cow" in command:
+        # Security check: Prevent accessing sensitive credential directory (all path forms)
+        if re.search(r'[/~\\]\.cow\b', command):
             return ToolResult.fail(
                 "Error: Access denied. API keys and credentials must be accessed through the env_config tool only."
             )
@@ -269,6 +269,13 @@ SAFETY:
         # Disk wiping
         if "if=/dev/zero" in command.lower() and "dd " in command.lower():
             return "This command can destroy disk data"
+
+        # Prevent environment variable dumping (would expose loaded API credentials)
+        stripped = command.strip()
+        if re.search(r'(?<!\w)(printenv)(?!\s+\S)', stripped, re.IGNORECASE):
+            return "This command would expose all environment variables including API credentials"
+        if re.search(r'(?<!\w)env\s*$', stripped, re.IGNORECASE):
+            return "This command would expose all environment variables including API credentials"
 
         # Power control - match only as a standalone word (\b enforces word boundary)
         if re.search(r'\b(shutdown|reboot|halt|poweroff)\b', command.lower()):
