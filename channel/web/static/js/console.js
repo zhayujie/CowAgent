@@ -1141,6 +1141,38 @@ messagesDiv.addEventListener('scroll', () => {
 
 // Intercept internal navigation links in chat messages
 messagesDiv.addEventListener('click', (e) => {
+    // Helper: copy text to clipboard with fallback for non-secure contexts (HTTP)
+    function copyToClipboard(text, btn) {
+        const icon = btn.querySelector('i');
+        const showSuccess = () => {
+            if (icon) { icon.className = 'fas fa-check'; setTimeout(() => { icon.className = 'fas fa-copy'; }, 1500); }
+        };
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(text).then(showSuccess).catch(() => {
+                fallbackCopy(text, showSuccess);
+            });
+        } else {
+            fallbackCopy(text, showSuccess);
+        }
+        function fallbackCopy(txt, onSuccess) {
+            const ta = document.createElement('textarea');
+            ta.value = txt;
+            ta.style.position = 'fixed';
+            ta.style.left = '-9999px';
+            ta.style.top = '-9999px';
+            document.body.appendChild(ta);
+            ta.focus();
+            ta.select();
+            try {
+                document.execCommand('copy');
+                onSuccess();
+            } catch (err) {
+                console.error('Copy failed:', err);
+            }
+            document.body.removeChild(ta);
+        }
+    }
+
     // Copy code block
     const codeCopyBtn = e.target.closest('.code-copy-btn');
     if (codeCopyBtn) {
@@ -1148,11 +1180,7 @@ messagesDiv.addEventListener('click', (e) => {
         const wrapper = codeCopyBtn.closest('.code-block-wrapper');
         const codeEl = wrapper && wrapper.querySelector('pre code');
         if (codeEl) {
-            const codeText = codeEl.textContent;
-            navigator.clipboard.writeText(codeText).then(() => {
-                const icon = codeCopyBtn.querySelector('i');
-                if (icon) { icon.className = 'fas fa-check'; setTimeout(() => { icon.className = 'fas fa-copy'; }, 1500); }
-            });
+            copyToClipboard(codeEl.textContent, codeCopyBtn);
         }
         return;
     }
@@ -1164,10 +1192,7 @@ messagesDiv.addEventListener('click', (e) => {
         const answerEl = msgRoot && msgRoot.querySelector('.answer-content');
         const rawMd = answerEl && answerEl.dataset.rawMd;
         if (rawMd) {
-            navigator.clipboard.writeText(rawMd).then(() => {
-                const icon = copyBtn.querySelector('i');
-                if (icon) { icon.className = 'fas fa-check'; setTimeout(() => { icon.className = 'fas fa-copy'; }, 1500); }
-            });
+            copyToClipboard(rawMd, copyBtn);
         }
         return;
     }
