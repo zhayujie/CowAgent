@@ -226,13 +226,13 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
             response = requests.post(url, headers=headers, json=data, timeout=EMBEDDING_HTTP_TIMEOUT)
             response.raise_for_status()
             return response.json()
-        except requests.exceptions.ConnectionError as e:
+        except requests.exceptions.ConnectionError:
             raise ConnectionError(
                 f"Failed to connect to embedding API at {url}. "
-                f"Please check network and api_base. Error: {str(e)}"
+                f"Please check network and api_base."
             )
-        except requests.exceptions.Timeout as e:
-            raise TimeoutError(f"Embedding API request timed out. Error: {str(e)}")
+        except requests.exceptions.Timeout:
+            raise TimeoutError("Embedding API request timed out.")
         except requests.exceptions.HTTPError as e:
             if e.response.status_code == 401:
                 raise ValueError("Invalid embedding API key")
@@ -240,8 +240,7 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
                 raise ValueError("Embedding API rate limit exceeded")
             else:
                 raise ValueError(
-                    f"Embedding API request failed: "
-                    f"{e.response.status_code} - {e.response.text}"
+                    f"Embedding API request failed with status {e.response.status_code}"
                 )
 
     def _post_process(self, raw: List[float]) -> List[float]:
@@ -349,13 +348,13 @@ class DoubaoEmbeddingProvider(EmbeddingProvider):
             response = requests.post(url, headers=headers, json=payload, timeout=EMBEDDING_HTTP_TIMEOUT)
             response.raise_for_status()
             body = response.json()
-        except requests.exceptions.ConnectionError as e:
+        except requests.exceptions.ConnectionError:
             raise ConnectionError(
                 f"Failed to connect to Doubao embedding API at {url}. "
-                f"Please check network and api_base. Error: {str(e)}"
+                f"Please check network and api_base."
             )
-        except requests.exceptions.Timeout as e:
-            raise TimeoutError(f"Doubao embedding API request timed out. Error: {str(e)}")
+        except requests.exceptions.Timeout:
+            raise TimeoutError("Doubao embedding API request timed out.")
         except requests.exceptions.HTTPError as e:
             if e.response.status_code == 401:
                 raise ValueError("Invalid Doubao (ark) embedding API key")
@@ -363,8 +362,7 @@ class DoubaoEmbeddingProvider(EmbeddingProvider):
                 raise ValueError("Doubao embedding API rate limit exceeded")
             else:
                 raise ValueError(
-                    f"Doubao embedding API request failed: "
-                    f"{e.response.status_code} - {e.response.text}"
+                    f"Doubao embedding API request failed with status {e.response.status_code}"
                 )
 
         # Response shape per docs: {"data": {"embedding": [...]}}
@@ -405,7 +403,7 @@ class EmbeddingCache:
     @staticmethod
     def _compute_key(text: str, provider: str, model: str) -> str:
         content = f"{provider}:{model}:{text}"
-        return hashlib.md5(content.encode("utf-8")).hexdigest()
+        return hashlib.sha256(content.encode("utf-8")).hexdigest()
 
     def clear(self):
         self.cache.clear()
