@@ -596,17 +596,18 @@ select_model() {
     echo ""
     local title sel
     title="$(t "选择 AI 模型" "Select AI Model")"
-    # The 11th option is "skip" -> configure later in the web console.
+    # The 12th option is "skip" -> configure later in the web console.
     select_menu sel "$title" \
         "DeepSeek (deepseek-v4-flash, deepseek-v4-pro, etc.)" \
-        "Claude (claude-opus-4-8, claude-opus-4-7, claude-sonnet-4-6, etc.)" \
-        "Gemini (gemini-3.1-flash-lite-preview, gemini-3.1-pro-preview, etc.)" \
-        "OpenAI GPT (gpt-5.4, gpt-5.2, gpt-4.1, etc.)" \
-        "MiniMax (MiniMax-M2.7, MiniMax-M2.5, etc.)" \
-        "Zhipu AI (glm-5.1, glm-5-turbo, glm-5, etc.)" \
-        "Qwen (qwen3.6-plus, qwen3.5-plus, qwen3-max, qwq-plus, etc.)" \
-        "Doubao (doubao-seed-2-0-code-preview-260215, etc.)" \
-        "Kimi (kimi-k2.6, kimi-k2.5, kimi-k2, etc.)" \
+        "Claude (claude-opus-4-8, claude-opus-4-7, etc.)" \
+        "Gemini (gemini-3.5-flash, gemini-3.1-pro-preview, etc.)" \
+        "OpenAI (gpt-5.5, etc.)" \
+        "MiniMax (MiniMax-M3, etc.)" \
+        "GLM (glm-5.1, etc.)" \
+        "Qwen (qwen3.7-plus, qwen3.7-max, etc.)" \
+        "Doubao (doubao-seed-2.0, etc.)" \
+        "Kimi (kimi-k2.6, etc.)" \
+        "MiMo (mimo-v2.5-pro, etc.)" \
         "LinkAI ($(t "一个 Key 接入所有模型" "access all models via one API"))" \
         "$(t "⏭  跳过（稍后在 Web 控制台配置）" "⏭  Skip (configure later in the web console)")"
     model_choice="$sel"
@@ -632,19 +633,20 @@ configure_model() {
         1) read_model_config "DeepSeek" "deepseek-v4-flash" "DEEPSEEK_KEY" ;;
         2) read_model_config "Claude" "claude-opus-4-8" "CLAUDE_KEY" ;;
         3) read_model_config "Gemini" "gemini-3.1-pro-preview" "GEMINI_KEY" ;;
-        4) read_model_config "OpenAI GPT" "gpt-5.4" "OPENAI_KEY" ;;
-        5) read_model_config "MiniMax" "MiniMax-M2.7" "MINIMAX_KEY" ;;
-        6) read_model_config "Zhipu AI" "glm-5.1" "ZHIPU_KEY" ;;
-        7) read_model_config "Qwen (DashScope)" "qwen3.6-plus" "DASHSCOPE_KEY" ;;
+        4) read_model_config "OpenAI" "gpt-5.5" "OPENAI_KEY" ;;
+        5) read_model_config "MiniMax" "MiniMax-M3" "MINIMAX_KEY" ;;
+        6) read_model_config "GLM" "glm-5.1" "ZHIPU_KEY" ;;
+        7) read_model_config "Qwen (DashScope)" "qwen3.7-plus" "DASHSCOPE_KEY" ;;
         8) read_model_config "Doubao (Volcengine Ark)" "doubao-seed-2-0-code-preview-260215" "ARK_KEY" ;;
         9) read_model_config "Kimi (Moonshot)" "kimi-k2.6" "MOONSHOT_KEY" ;;
-        10)
+        10) read_model_config "MiMo" "mimo-v2.5-pro" "MIMO_KEY" ;;
+        11)
             # Show where to obtain a LinkAI key (zh users -> console page).
             echo -e "${CYAN}$(t "获取 LinkAI Key" "Get your LinkAI Key"): https://link-ai.tech/console/interface${NC}"
             read_model_config "LinkAI" "deepseek-v4-flash" "LINKAI_KEY"
             USE_LINKAI="true"
             ;;
-        11)
+        12)
             # Skip: leave model unset, will be configured in web console
             MODEL_SKIPPED="true"
             MODEL_NAME=""
@@ -657,8 +659,8 @@ configure_model() {
 channel_label() {
     case "$1" in
         web)           t "Web 网页控制台（推荐，开箱即用）" "Web Console (recommended, ready to use)" ;;
-        weixin)        t "微信" "WeChat (Weixin)" ;;
-        feishu)        t "飞书" "Feishu / Lark" ;;
+        weixin)        t "微信" "Wechat" ;;
+        feishu)        t "飞书" "Feishu" ;;
         dingtalk)      t "钉钉" "DingTalk" ;;
         wecom_bot)     t "企微智能机器人" "WeCom Bot" ;;
         qq)            printf '%s' "QQ" ;;
@@ -823,6 +825,7 @@ create_config_file() {
     ARK_KEY="${ARK_KEY:-}" \
     DASHSCOPE_KEY="${DASHSCOPE_KEY:-}" \
     MINIMAX_KEY="${MINIMAX_KEY:-}" \
+    MIMO_KEY="${MIMO_KEY:-}" \
     DEEPSEEK_KEY="${DEEPSEEK_KEY:-}" \
     DEEPSEEK_BASE="${DEEPSEEK_BASE:-https://api.deepseek.com/v1}" \
     USE_LINKAI="${USE_LINKAI:-false}" \
@@ -865,6 +868,7 @@ base = {
     'ark_api_key': e('ARK_KEY', ''),
     'dashscope_api_key': e('DASHSCOPE_KEY', ''),
     'minimax_api_key': e('MINIMAX_KEY', ''),
+    'mimo_api_key': e('MIMO_KEY', ''),
     'deepseek_api_key': e('DEEPSEEK_KEY', ''),
     'deepseek_api_base': e('DEEPSEEK_BASE'),
     'voice_to_text': 'openai',

@@ -51,7 +51,7 @@ _MAIN_MODEL_PROVIDER_NAME = "MainModel"
 _DISCOVERABLE_MODELS = [
     ("moonshot_api_key", const.MOONSHOT, const.KIMI_K2_6, "Moonshot"),
     ("ark_api_key", const.DOUBAO, const.DOUBAO_SEED_2_PRO, "Doubao"),
-    ("dashscope_api_key", const.QWEN_DASHSCOPE, const.QWEN36_PLUS, "DashScope"),
+    ("dashscope_api_key", const.QWEN_DASHSCOPE, const.QWEN37_PLUS, "DashScope"),
     ("claude_api_key", const.CLAUDEAPI, const.CLAUDE_4_6_SONNET, "Claude"),
     ("gemini_api_key", const.GEMINI, const.GEMINI_35_FLASH, "Gemini"),
     ("qianfan_api_key", const.QIANFAN, const.ERNIE_45_TURBO_VL, "Qianfan"),
@@ -161,7 +161,7 @@ class Vision(BaseTool):
                 "Error: No model available for Vision.\n"
                 "The main model does not support vision and no other API keys are configured.\n"
                 "Options:\n"
-                "  1. Switch to a multimodal model (e.g. ernie-4.5-turbo-vl, qwen3.6-plus, claude-sonnet-4-6, gemini-2.0-flash)\n"
+                "  1. Switch to a multimodal model (e.g. ernie-4.5-turbo-vl, qwen3.7-plus, claude-sonnet-4-6, gemini-2.0-flash)\n"
                 "  2. Configure OPENAI_API_KEY: env_config(action=\"set\", key=\"OPENAI_API_KEY\", value=\"your-key\")\n"
                 "  3. Configure LINKAI_API_KEY: env_config(action=\"set\", key=\"LINKAI_API_KEY\", value=\"your-key\")"
             )

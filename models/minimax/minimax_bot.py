@@ -22,7 +22,7 @@ class MinimaxBot(Bot):
     def __init__(self):
         super().__init__()
         self.args = {
-            "model": conf().get("model") or "MiniMax-M2.7",
+            "model": conf().get("model") or "MiniMax-M3",
             "temperature": conf().get("temperature", 0.3),
             "top_p": conf().get("top_p", 0.95),
         }

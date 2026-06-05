@@ -1,4 +1,4 @@
-# 微信客服（WeCom Customer Service）通道
+# 微信客服（WeChat Customer Service）通道
 
 > 与 `channel/wechatcom/`（企微自建应用）是两个**独立的 CoW 通道**：
 >

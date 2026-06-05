@@ -24,6 +24,10 @@
       "url": "https://github.com/dividduang/blackroom.git",
       "desc": "小黑屋插件，被拉进小黑屋的人将不能使用@bot的功能的插件"
     },
+    "group_task_board": {
+      "url": "https://github.com/Wyh-max-star/cowagent-plugin-group-task-board.git",
+      "desc": "群聊任务看板插件，支持从群聊消息中创建、查看和管理任务"
+    },
     "midjourney": {
       "url": "https://github.com/baojingyu/midjourney.git",
       "desc": "利用midjourney实现ai绘图的的插件"

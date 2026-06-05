@@ -1,0 +1,9 @@
+Metadata-Version: 2.4
+Name: cowagent
+Version: 1.0.0
+Summary: CowAgent - AI Agent on WeChat and more
+Requires-Python: >=3.7
+License-File: LICENSE
+Requires-Dist: click>=8.0
+Requires-Dist: requests>=2.28.2
+Dynamic: license-file

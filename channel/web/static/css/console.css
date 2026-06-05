@@ -412,63 +412,6 @@
     background: rgba(74, 190, 110, 0.15); color: #74E9A4;
 }
 .msg-content pre code { background: transparent; padding: 0; color: inherit; }
-
-/* Code block wrapper with header */
-.msg-content .code-block-wrapper {
-    position: relative;
-    margin: 0.8em 0;
-    border-radius: 8px;
-    overflow: hidden;
-    border: 1px solid rgba(0,0,0,0.08);
-}
-.dark .msg-content .code-block-wrapper { border-color: rgba(255,255,255,0.08); }
-
-.msg-content .code-block-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 6px 12px;
-    background: #e2e8f0;
-    font-size: 12px;
-    font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
-}
-.dark .msg-content .code-block-header { background: #1a1a1a; }
-
-.msg-content .code-block-lang {
-    color: #64748b;
-    font-weight: 500;
-    text-transform: lowercase;
-}
-.dark .msg-content .code-block-lang { color: #94a3b8; }
-
-.msg-content .code-copy-btn {
-    background: transparent;
-    border: none;
-    cursor: pointer;
-    color: #64748b;
-    padding: 4px 8px;
-    border-radius: 4px;
-    font-size: 12px;
-    transition: all 0.15s;
-    display: flex;
-    align-items: center;
-    gap: 4px;
-}
-.msg-content .code-copy-btn:hover {
-    background: rgba(0,0,0,0.08);
-    color: #1e293b;
-}
-.dark .msg-content .code-copy-btn { color: #94a3b8; }
-.dark .msg-content .code-copy-btn:hover {
-    background: rgba(255,255,255,0.1);
-    color: #e2e8f0;
-}
-
-.msg-content .code-block-wrapper pre {
-    margin: 0;
-    border-radius: 0;
-    border: none;
-}
 .msg-content blockquote {
     border-left: 3px solid #4ABE6E; padding: 0.5em 1em;
     margin: 0.8em 0; background: rgba(74, 190, 110, 0.05); border-radius: 0 6px 6px 0;
@@ -1028,61 +971,6 @@
     border-color: #4ABE6E !important;
 }
 
-/* Drag overlay for full chat view */
-.drag-overlay {
-    position: absolute;
-    inset: 0;
-    background: rgba(74, 190, 110, 0.1);
-    backdrop-filter: blur(4px);
-    z-index: 100;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    pointer-events: none;
-    opacity: 0;
-    transition: opacity 0.2s ease;
-}
-.drag-overlay.hidden {
-    display: none;
-}
-.drag-overlay.active {
-    opacity: 1;
-}
-.drag-overlay-content {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 16px;
-    padding: 40px;
-    background: rgba(255, 255, 255, 0.95);
-    border: 3px dashed #4ABE6E;
-    border-radius: 20px;
-    box-shadow: 0 8px 32px rgba(74, 190, 110, 0.2);
-}
-.dark .drag-overlay-content {
-    background: rgba(26, 26, 26, 0.95);
-    border-color: #4ABE6E;
-}
-.drag-overlay-content i {
-    font-size: 48px;
-    color: #4ABE6E;
-    animation: bounce 1s ease infinite;
-}
-.drag-overlay-content p {
-    font-size: 18px;
-    font-weight: 600;
-    color: #1e293b;
-    margin: 0;
-}
-.dark .drag-overlay-content p {
-    color: #e2e8f0;
-}
-
-@keyframes bounce {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-10px); }
-}
-
 /* User message attachments */
 .user-msg-attachments {
     display: flex;
@@ -1508,17 +1396,174 @@
     color: rgb(203 213 225) !important;
 }
 
-/* Edit and Regenerate buttons - subtle by default, more visible on hover */
-.edit-msg-btn,
-.regenerate-msg-btn {
-    opacity: 0.6;
-    transition: opacity 0.2s ease, color 0.2s ease;
+.agent-cancelled-tag {
+    font-style: italic;
 }
-.edit-msg-btn:hover,
-.regenerate-msg-btn:hover {
+
+/* =====================================================================
+   Code Block Enhancements
+   ===================================================================== */
+.code-block-wrapper {
+    position: relative;
+    margin: 1em 0;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #f8f9fa;
+    border: 1px solid #e2e8f0;
+}
+
+.dark .code-block-wrapper {
+    background: #1e293b;
+    border-color: #334155;
+}
+
+.code-block-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5em 1em;
+    background: #e2e8f0;
+    border-bottom: 1px solid #cbd5e1;
+    font-size: 0.85em;
+}
+
+.dark .code-block-header {
+    background: #0f172a;
+    border-bottom-color: #334155;
+}
+
+.code-block-lang {
+    color: #64748b;
+    font-weight: 500;
+    text-transform: lowercase;
+}
+
+.dark .code-block-lang {
+    color: #94a3b8;
+}
+
+.code-copy-btn {
+    background: transparent;
+    border: none;
+    color: #64748b;
+    cursor: pointer;
+    padding: 0.25em 0.5em;
+    border-radius: 4px;
+    transition: all 0.2s;
+    font-size: 0.9em;
+}
+
+.code-copy-btn:hover {
+    background: rgba(100, 116, 139, 0.1);
+    color: #475569;
+}
+
+.dark .code-copy-btn {
+    color: #94a3b8;
+}
+
+.dark .code-copy-btn:hover {
+    background: rgba(148, 163, 184, 0.1);
+    color: #cbd5e1;
+}
+
+.code-block-wrapper pre {
+    margin: 0;
+    border-radius: 0;
+    border: none;
+}
+
+/* =====================================================================
+   Drag and Drop Overlay
+   ===================================================================== */
+.drag-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(59, 130, 246, 0.1);
+    backdrop-filter: blur(2px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.drag-overlay.active {
     opacity: 1;
 }
 
-.agent-cancelled-tag {
-    font-style: italic;
+.drag-overlay.hidden {
+    display: none;
+}
+
+.drag-overlay-content {
+    background: white;
+    border: 3px dashed #3b82f6;
+    border-radius: 16px;
+    padding: 3em 4em;
+    text-align: center;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+    animation: bounce 1s ease infinite;
+}
+
+.dark .drag-overlay-content {
+    background: #1e293b;
+    border-color: #60a5fa;
+}
+
+.drag-overlay-content i {
+    font-size: 4em;
+    color: #3b82f6;
+    margin-bottom: 0.5em;
+}
+
+.dark .drag-overlay-content i {
+    color: #60a5fa;
+}
+
+.drag-overlay-content p {
+    font-size: 1.5em;
+    font-weight: 600;
+    color: #1e293b;
+    margin: 0;
+}
+
+.dark .drag-overlay-content p {
+    color: #f1f5f9;
+}
+
+@keyframes bounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+}
+
+/* =====================================================================
+   Message Action Buttons
+   ===================================================================== */
+.edit-msg-btn,
+.delete-msg-btn,
+.regenerate-msg-btn {
+    opacity: 0;
+    transition: opacity 0.2s, color 0.2s;
+}
+
+.user-message-group:hover .edit-msg-btn,
+.user-message-group:hover .delete-msg-btn,
+.flex.gap-3:hover .regenerate-msg-btn,
+.flex.gap-3:hover .delete-msg-btn {
+    opacity: 1;
+}
+
+.edit-msg-btn:hover,
+.regenerate-msg-btn:hover {
+    color: #3b82f6 !important;
+}
+
+.delete-msg-btn:hover {
+    color: #ef4444 !important;
 }

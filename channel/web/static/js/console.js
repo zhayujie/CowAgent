@@ -834,10 +834,8 @@ function renderMarkdown(text) {
         html = _rewriteLocalImgSrc(html);
         // Order matters: video first (more specific), then image.
         html = injectImagePreviews(injectVideoPlayers(html));
-        
         // Note: Code block headers are added via DOM manipulation after insertion
         // See addCodeBlockHeadersToElement()
-        
         return html;
     }
     catch (e) { return text.replace(/\n/g, '<br>'); }
@@ -845,37 +843,29 @@ function renderMarkdown(text) {
 
 function _addCodeBlockHeaders(container) {
     // Add header with language label and copy button to each <pre> block using DOM manipulation
-    // This is more reliable than regex replacement, especially after highlight.js processing
     const preBlocks = container.querySelectorAll('pre');
     preBlocks.forEach(pre => {
-        // Skip if already wrapped
-        if (pre.parentElement && pre.parentElement.classList.contains('code-block-wrapper')) {
-            return;
-        }
+        if (pre.parentElement && pre.parentElement.classList.contains('code-block-wrapper')) return;
         
         const codeEl = pre.querySelector('code');
         if (!codeEl) return;
         
-        // Extract language from class
         const langClass = Array.from(codeEl.classList).find(c => c.startsWith('language-'));
         const language = langClass ? langClass.replace('language-', '') : 'code';
         const langLabel = language.charAt(0).toUpperCase() + language.slice(1);
         
-        // Create wrapper
         const wrapper = document.createElement('div');
         wrapper.className = 'code-block-wrapper';
         
-        // Create header
         const header = document.createElement('div');
         header.className = 'code-block-header';
         header.innerHTML = `
             <span class="code-block-lang">${langLabel}</span>
-            <button class="code-copy-btn" title="复制代码">
+            <button class="code-copy-btn" title="Copy code">
                 <i class="fas fa-copy"></i>
             </button>
         `;
         
-        // Insert wrapper before pre, then move pre inside
         pre.parentNode.insertBefore(wrapper, pre);
         wrapper.appendChild(header);
         wrapper.appendChild(pre);
@@ -1141,46 +1131,18 @@ messagesDiv.addEventListener('scroll', () => {
 
 // Intercept internal navigation links in chat messages
 messagesDiv.addEventListener('click', (e) => {
-    // Helper: copy text to clipboard with fallback for non-secure contexts (HTTP)
-    function copyToClipboard(text, btn) {
-        const icon = btn.querySelector('i');
-        const showSuccess = () => {
-            if (icon) { icon.className = 'fas fa-check'; setTimeout(() => { icon.className = 'fas fa-copy'; }, 1500); }
-        };
-        if (navigator.clipboard && window.isSecureContext) {
-            navigator.clipboard.writeText(text).then(showSuccess).catch(() => {
-                fallbackCopy(text, showSuccess);
-            });
-        } else {
-            fallbackCopy(text, showSuccess);
-        }
-        function fallbackCopy(txt, onSuccess) {
-            const ta = document.createElement('textarea');
-            ta.value = txt;
-            ta.style.position = 'fixed';
-            ta.style.left = '-9999px';
-            ta.style.top = '-9999px';
-            document.body.appendChild(ta);
-            ta.focus();
-            ta.select();
-            try {
-                document.execCommand('copy');
-                onSuccess();
-            } catch (err) {
-                console.error('Copy failed:', err);
-            }
-            document.body.removeChild(ta);
-        }
-    }
-
-    // Copy code block
+    // Code block copy button
     const codeCopyBtn = e.target.closest('.code-copy-btn');
     if (codeCopyBtn) {
         e.preventDefault();
         const wrapper = codeCopyBtn.closest('.code-block-wrapper');
         const codeEl = wrapper && wrapper.querySelector('pre code');
         if (codeEl) {
-            copyToClipboard(codeEl.textContent, codeCopyBtn);
+            const codeText = codeEl.textContent;
+            copyToClipboard(codeText).then(() => {
+                const icon = codeCopyBtn.querySelector('i');
+                if (icon) { icon.className = 'fas fa-check'; setTimeout(() => { icon.className = 'fas fa-copy'; }, 1500); }
+            });
         }
         return;
     }
@@ -1192,7 +1154,10 @@ messagesDiv.addEventListener('click', (e) => {
         const answerEl = msgRoot && msgRoot.querySelector('.answer-content');
         const rawMd = answerEl && answerEl.dataset.rawMd;
         if (rawMd) {
-            copyToClipboard(rawMd, copyBtn);
+            copyToClipboard(rawMd).then(() => {
+                const icon = copyBtn.querySelector('i');
+                if (icon) { icon.className = 'fas fa-check'; setTimeout(() => { icon.className = 'fas fa-copy'; }, 1500); }
+            });
         }
         return;
     }
@@ -1202,9 +1167,7 @@ messagesDiv.addEventListener('click', (e) => {
     if (editBtn) {
         e.preventDefault();
         const msgRoot = editBtn.closest('.user-message-group');
-        if (msgRoot) {
-            editUserMessage(msgRoot);
-        }
+        if (msgRoot) editUserMessage(msgRoot);
         return;
     }
 
@@ -1213,9 +1176,7 @@ messagesDiv.addEventListener('click', (e) => {
     if (regenerateBtn) {
         e.preventDefault();
         const botMsgRoot = regenerateBtn.closest('.flex.gap-3');
-        if (botMsgRoot) {
-            regenerateResponse(botMsgRoot);
-        }
+        if (botMsgRoot) regenerateResponse(botMsgRoot);
         return;
     }
 
@@ -1224,55 +1185,60 @@ messagesDiv.addEventListener('click', (e) => {
     if (deleteBtn) {
         e.preventDefault();
         const userMsgEl = deleteBtn.closest('.user-message-group');
-        const botMsgEl = deleteBtn.closest('.flex.gap-3');
+        const botMsgEl = deleteBtn.closest('.flex.gap-3:not(.user-message-group)');
         
         if (userMsgEl) {
-            // Deleting a user message: also delete the corresponding bot reply
             showConfirmModal(t('delete_message_title'), t('delete_message_confirm'), () => {
-                // Find the next bot message (the reply to this user message)
                 let nextSibling = userMsgEl.nextElementSibling;
                 let botReplyEl = null;
-                
-                // Look for the next bot message (has class 'flex gap-3' but not 'user-message-group')
                 while (nextSibling) {
-                    if (nextSibling.classList && 
-                        nextSibling.classList.contains('flex') && 
-                        nextSibling.classList.contains('gap-3') &&
-                        !nextSibling.classList.contains('user-message-group')) {
+                    if (nextSibling.classList && nextSibling.classList.contains('flex') && nextSibling.classList.contains('gap-3') && !nextSibling.classList.contains('user-message-group')) {
                         botReplyEl = nextSibling;
                         break;
                     }
                     nextSibling = nextSibling.nextElementSibling;
                 }
-                
-                // Remove both user message and bot reply from DOM
                 userMsgEl.remove();
-                if (botReplyEl) {
-                    botReplyEl.remove();
-                }
+                if (botReplyEl) botReplyEl.remove();
                 
-                // If this message has a seq, delete from backend
                 const userSeq = userMsgEl.dataset.seq;
                 if (userSeq) {
                     fetch('/api/messages/delete', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            session_id: sessionId,
-                            user_seq: parseInt(userSeq)
-                        })
-                    }).then(r => r.json())
-                      .then(data => {
-                          if (data.status === 'success') {
-                              console.log(`Deleted ${data.deleted} messages from backend`);
-                          }
-                      })
-                      .catch(err => console.error('Failed to delete from backend:', err));
+                        body: JSON.stringify({ session_id: sessionId, user_seq: parseInt(userSeq) })
+                    }).then(r => r.json()).then(data => {
+                        if (data.status === 'success') console.log(`Deleted ${data.deleted} messages`);
+                    }).catch(err => console.error('Failed to delete:', err));
                 }
             });
         } else if (botMsgEl) {
-            // Deleting a bot message only
             showConfirmModal(t('delete_message_title'), t('delete_message_confirm'), () => {
+                // Find the preceding user message to get its seq
+                let prevUserEl = botMsgEl.previousElementSibling;
+                while (prevUserEl && !prevUserEl.classList.contains('user-message-group')) {
+                    prevUserEl = prevUserEl.previousElementSibling;
+                }
+                
+                // Delete from database (keep user message, only delete bot reply)
+                if (prevUserEl) {
+                    const userSeq = prevUserEl.dataset.seq;
+                    if (userSeq) {
+                        fetch('/api/messages/delete', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ 
+                                session_id: sessionId, 
+                                user_seq: parseInt(userSeq),
+                                delete_user: false
+                            })
+                        }).then(r => r.json()).then(data => {
+                            if (data.status === 'success') console.log(`Deleted ${data.deleted} bot reply messages`);
+                        }).catch(err => console.error('Failed to delete bot reply:', err));
+                    }
+                }
+                
+                // Remove from DOM
                 botMsgEl.remove();
             });
         }
@@ -1569,13 +1535,13 @@ if (!dragOverlay) {
     dragOverlay.innerHTML = `
         <div class="drag-overlay-content">
             <i class="fas fa-cloud-arrow-up"></i>
-            <p>拖拽文件到此处上传</p>
+            <p>Drop files here to upload</p>
         </div>
     `;
     chatView.appendChild(dragOverlay);
 }
 
-let dragCounter = 0; // Track nested drag enter/leave events
+let dragCounter = 0;
 
 function showDragOverlay() {
     dragOverlay.classList.remove('hidden');
@@ -1587,7 +1553,6 @@ function hideDragOverlay() {
     dragOverlay.classList.add('hidden');
 }
 
-// Bind drag events to the entire chat view
 chatView.addEventListener('dragenter', (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -1624,7 +1589,6 @@ chatView.addEventListener('drop', (e) => {
     }
 });
 
-// Also prevent default browser behavior on body to avoid opening files
 document.body.addEventListener('dragover', (e) => {
     if (e.dataTransfer.types.includes('Files')) {
         e.preventDefault();
@@ -2012,6 +1976,183 @@ function addUserVoiceMessage(audioUrl, caption, timestamp) {
     scrollChatToBottom(true);
 }
 
+// Clipboard helper with fallback for non-HTTPS environments
+function copyToClipboard(text) {
+    if (navigator.clipboard && window.isSecureContext) {
+        return navigator.clipboard.writeText(text);
+    }
+    // Fallback for HTTP environments
+    return new Promise((resolve, reject) => {
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        textArea.style.top = '-999999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        try {
+            document.execCommand('copy') ? resolve() : reject(new Error('Copy failed'));
+        } catch (err) {
+            reject(err);
+        } finally {
+            textArea.remove();
+        }
+    });
+}
+
+// Edit user message: extract content, remove this and subsequent messages, fill input
+async function editUserMessage(msgEl) {
+    const rawContent = msgEl.dataset.rawContent;
+    if (!rawContent) return;
+
+    // Delete this message and ALL subsequent messages from database (cascade)
+    // Must await to ensure delete completes before user sends a new message
+    const userSeq = msgEl.dataset.seq;
+    if (userSeq) {
+        try {
+            const resp = await fetch('/api/messages/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    session_id: sessionId, 
+                    user_seq: parseInt(userSeq),
+                    delete_user: true,
+                    cascade: true
+                })
+            });
+            const data = await resp.json();
+            if (data.status === 'success') console.log(`Deleted ${data.deleted} old messages`);
+        } catch (err) {
+            console.error('Failed to delete old messages:', err);
+        }
+    }
+
+    // Find all subsequent messages (this message and everything after it)
+    const messagesToRemove = [];
+    let current = msgEl;
+    while (current) {
+        if (current.classList && (current.classList.contains('user-message-group') || current.classList.contains('flex'))) {
+            messagesToRemove.push(current);
+        }
+        current = current.nextElementSibling;
+    }
+
+    // Remove all messages from this one onwards
+    messagesToRemove.forEach(el => {
+        if (el && el.parentNode) el.parentNode.removeChild(el);
+    });
+
+    // Fill input with the original content
+    chatInput.value = rawContent;
+    chatInput.style.height = 'auto';
+    chatInput.style.height = chatInput.scrollHeight + 'px';
+    chatInput.focus();
+    scrollChatToBottom();
+}
+
+// Regenerate bot response: find the preceding user message and resend it
+async function regenerateResponse(botMsgEl) {
+    let prevEl = botMsgEl.previousElementSibling;
+    while (prevEl && !prevEl.classList.contains('user-message-group')) {
+        prevEl = prevEl.previousElementSibling;
+    }
+
+    if (!prevEl) {
+        console.warn('No preceding user message found');
+        return;
+    }
+
+    const userContent = prevEl.dataset.rawContent;
+    if (!userContent) {
+        console.warn('No content in preceding user message');
+        return;
+    }
+
+    // Delete both the old user message AND bot reply from database
+    // (because /message will create a fresh user message + new bot reply)
+    // Must await to ensure delete completes before /message is sent
+    const userSeq = prevEl.dataset.seq;
+    if (userSeq) {
+        try {
+            const resp = await fetch('/api/messages/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    session_id: sessionId, 
+                    user_seq: parseInt(userSeq),
+                    delete_user: true
+                })
+            });
+            const data = await resp.json();
+            if (data.status === 'success') console.log(`Deleted ${data.deleted} old messages`);
+        } catch (err) {
+            console.error('Failed to delete old messages:', err);
+        }
+    }
+
+    // Remove both the old user message and bot message from DOM
+    if (prevEl.parentNode) prevEl.parentNode.removeChild(prevEl);
+    if (botMsgEl.parentNode) botMsgEl.parentNode.removeChild(botMsgEl);
+
+    // Re-add the user message to DOM (so it appears before the loading indicator)
+    addUserMessage(userContent, new Date());
+
+    // Show loading indicator
+    const loadingEl = addLoadingIndicator();
+
+    // Resend the message
+    const timestamp = new Date();
+    const body = { session_id: sessionId, message: userContent, stream: true, timestamp: timestamp.toISOString(), lang: currentLang };
+
+    const MAX_RETRIES = 2;
+    const RETRY_DELAY_MS = 1000;
+
+    function postWithRetry(attempt) {
+        fetch('/message', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.status === 'success') {
+                if (data.inline_reply) {
+                    loadingEl.remove();
+                    addBotMessage(data.inline_reply, new Date());
+                } else if (data.stream) {
+                    setSendBtnCancelMode(data.request_id);
+                    startSSE(data.request_id, loadingEl, timestamp, null);
+                } else {
+                    loadingContainers[data.request_id] = loadingEl;
+                }
+            } else {
+                loadingEl.remove();
+                addBotMessage(t('error_send'), new Date());
+                resetSendBtnSendMode();
+            }
+        })
+        .catch(err => {
+            if (err.name === 'AbortError') {
+                loadingEl.remove();
+                addBotMessage(t('error_timeout'), new Date());
+                resetSendBtnSendMode();
+                return;
+            }
+            if (attempt < MAX_RETRIES) {
+                console.warn(`[regenerateResponse] attempt ${attempt + 1} failed, retrying...`, err);
+                setTimeout(() => postWithRetry(attempt + 1), RETRY_DELAY_MS * (attempt + 1));
+                return;
+            }
+            loadingEl.remove();
+            addBotMessage(t('error_send'), new Date());
+            resetSendBtnSendMode();
+        });
+    }
+
+    postWithRetry(0);
+}
+
 function sendMessage() {
     // Do NOT branch on sendBtnMode here: Enter should always send (so
     // typing "/cancel" submits normally). Cancel is wired only to the
@@ -2105,117 +2246,6 @@ function sendMessage() {
     postWithRetry(0);
 }
 
-// Edit user message: extract content, remove this and subsequent messages, fill input
-function editUserMessage(msgEl) {
-    const rawContent = msgEl.dataset.rawContent;
-    if (!rawContent) return;
-
-    // Find all subsequent messages (this message and everything after it)
-    const messagesToRemove = [];
-    let current = msgEl;
-    while (current) {
-        if (current.classList && (current.classList.contains('user-message-group') || current.classList.contains('flex'))) {
-            messagesToRemove.push(current);
-        }
-        current = current.nextElementSibling;
-    }
-
-    // Remove all messages from this one onwards
-    messagesToRemove.forEach(el => {
-        if (el && el.parentNode) {
-            el.parentNode.removeChild(el);
-        }
-    });
-
-    // Fill input with the original content
-    chatInput.value = rawContent;
-    chatInput.style.height = 'auto';
-    chatInput.style.height = chatInput.scrollHeight + 'px';
-    chatInput.focus();
-    
-    // Scroll to bottom
-    scrollChatToBottom();
-}
-
-// Regenerate bot response: find the preceding user message and resend it
-function regenerateResponse(botMsgEl) {
-    // Find the preceding user message
-    let prevEl = botMsgEl.previousElementSibling;
-    while (prevEl && !prevEl.classList.contains('user-message-group')) {
-        prevEl = prevEl.previousElementSibling;
-    }
-
-    if (!prevEl) {
-        console.warn('No preceding user message found');
-        return;
-    }
-
-    const userContent = prevEl.dataset.rawContent;
-    if (!userContent) {
-        console.warn('No content in preceding user message');
-        return;
-    }
-
-    // Remove the bot message
-    if (botMsgEl.parentNode) {
-        botMsgEl.parentNode.removeChild(botMsgEl);
-    }
-
-    // Show loading indicator
-    const loadingEl = addLoadingIndicator();
-
-    // Resend the message
-    const timestamp = new Date();
-    const body = { session_id: sessionId, message: userContent, stream: true, timestamp: timestamp.toISOString(), lang: currentLang };
-
-    const MAX_RETRIES = 2;
-    const RETRY_DELAY_MS = 1000;
-
-    function postWithRetry(attempt) {
-        fetch('/message', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body)
-        })
-        .then(r => r.json())
-        .then(data => {
-            if (data.status === 'success') {
-                if (data.inline_reply) {
-                    loadingEl.remove();
-                    addBotMessage(data.inline_reply, new Date());
-                } else if (data.stream) {
-                    setSendBtnCancelMode(data.request_id);
-                    startSSE(data.request_id, loadingEl, timestamp, null);
-                } else {
-                    loadingContainers[data.request_id] = loadingEl;
-                }
-            } else {
-                loadingEl.remove();
-                addBotMessage(t('error_send'), new Date());
-                resetSendBtnSendMode();
-            }
-        })
-        .catch(err => {
-            if (err.name === 'AbortError') {
-                loadingEl.remove();
-                addBotMessage(t('error_timeout'), new Date());
-                resetSendBtnSendMode();
-                return;
-            }
-            if (attempt < MAX_RETRIES) {
-                console.warn(`[regenerateResponse] attempt ${attempt + 1} failed, retrying...`, err);
-                setTimeout(() => postWithRetry(attempt + 1), RETRY_DELAY_MS * (attempt + 1));
-                return;
-            }
-            loadingEl.remove();
-            addBotMessage(t('error_send'), new Date());
-            resetSendBtnSendMode();
-        });
-    }
-
-    postWithRetry(0);
-}
-
 function startSSE(requestId, loadingEl, timestamp, titleInfo) {
     let botEl = null;
     let stepsEl = null;    // .agent-steps  (thinking summaries + tool indicators)
@@ -2251,12 +2281,6 @@ function startSSE(requestId, loadingEl, timestamp, titleInfo) {
                     <span class="text-xs text-slate-400 dark:text-slate-500">${formatTime(timestamp)}</span>
                     <button class="copy-msg-btn text-xs text-slate-300 dark:text-slate-600 hover:text-slate-500 dark:hover:text-slate-400 transition-colors cursor-pointer" title="${currentLang === 'zh' ? '复制' : 'Copy'}" style="display:none">
                         <i class="fas fa-copy"></i>
-                    </button>
-                    <button class="regenerate-msg-btn text-xs text-slate-300 dark:text-slate-600 hover:text-primary-400 dark:hover:text-primary-400 transition-colors cursor-pointer" title="${t('regenerate_response')}">
-                        <i class="fas fa-rotate-right"></i>
-                    </button>
-                    <button class="delete-msg-btn text-xs text-slate-300 dark:text-slate-600 hover:text-red-500 dark:hover:text-red-400 transition-colors cursor-pointer" title="${t('delete_message_title')}">
-                        <i class="fas fa-trash"></i>
                     </button>
                     <button class="speak-msg-btn text-xs text-slate-300 dark:text-slate-600 hover:text-slate-500 dark:hover:text-slate-400 transition-colors cursor-pointer" title="${t('speak_msg')}" style="display:none;">
                         <i class="fas fa-volume-up"></i>
@@ -3093,8 +3117,8 @@ function loadHistory(page) {
                 const el = msg.role === 'user'
                     ? createUserMessageEl(msg.content, ts)
                     : createBotMessageEl(msg.content || '', ts, null, msg);
-                // Store seq for user messages so we can delete message pairs
-                if (msg.role === 'user' && msg._seq !== undefined) {
+                // Store seq for delete functionality
+                if (msg._seq !== undefined) {
                     el.dataset.seq = msg._seq;
                 }
                 fragment.appendChild(el);
@@ -3673,7 +3697,7 @@ function applyHighlighting(container) {
                 hljsLib.highlightElement(block);
             }
         });
-        // Add code block headers (with copy buttons) after highlighting
+        // Add language labels and copy buttons to code blocks
         _addCodeBlockHeaders(root);
     }, 0);
 }
@@ -4415,7 +4439,7 @@ const MODELS_CAPABILITY_DEFS = [
       iconChip: 'bg-blue-50 dark:bg-blue-900/30',        iconGlyph: 'text-blue-500' },
     { id: 'image',     icon: 'fa-image',            editable: true,  needsModel: true,  titleKey: 'models_capability_image',     descKey: 'models_capability_image_desc',
       iconChip: 'bg-blue-50 dark:bg-blue-900/30',        iconGlyph: 'text-blue-500' },
-    { id: 'asr',       icon: 'fa-microphone',       editable: true,  needsModel: false, titleKey: 'models_capability_asr',       descKey: 'models_capability_asr_desc',
+    { id: 'asr',       icon: 'fa-microphone',       editable: true,  needsModel: true,  titleKey: 'models_capability_asr',       descKey: 'models_capability_asr_desc',
       iconChip: 'bg-amber-50 dark:bg-amber-900/30',      iconGlyph: 'text-amber-500' },
     { id: 'tts',       icon: 'fa-volume-high',      editable: true,  needsModel: true,  titleKey: 'models_capability_tts',       descKey: 'models_capability_tts_desc',
       iconChip: 'bg-amber-50 dark:bg-amber-900/30',      iconGlyph: 'text-amber-500' },

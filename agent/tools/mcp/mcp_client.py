@@ -7,7 +7,7 @@ without any external MCP SDK dependency.
 
 import json
 import os
-import select
+import queue
 import subprocess
 import threading
 import urllib.request
@@ -34,6 +34,8 @@ class McpClient:
         self.config = config
         self.name: str = config.get("name", "unknown")
         raw_transport: str = config.get("type", "stdio")
+        # Per-server timeout for tool calls (default 120s, suitable for data queries)
+        self._timeout: int = int(config.get("timeout", 120))
         # Normalize streamable-http aliases to a single internal key
         self.transport: str = (
             "streamable-http"
@@ -43,6 +45,7 @@ class McpClient:
 
         # stdio state
         self._proc: Optional[subprocess.Popen] = None
+        self._read_queue: queue.Queue = queue.Queue()
 
         # SSE state
         self._sse_url: Optional[str] = None
@@ -56,7 +59,13 @@ class McpClient:
         # Shared state
         self._next_id = 1
         self._id_lock = threading.Lock()
+        # _call_lock serializes all requests on the single stdio pipe.
+        # SSE and streamable-http use independent HTTP requests, so they
+        # do not acquire this lock (see _send_request).
         self._call_lock = threading.Lock()
+        # _http_lock protects _http_session_id initialization across
+        # concurrent streamable-http requests.
+        self._http_lock = threading.Lock()
         self._initialized = False
 
     # ------------------------------------------------------------------
@@ -172,6 +181,9 @@ class McpClient:
         threading.Thread(
             target=self._drain_stderr, daemon=True, name=f"mcp-stderr-{self.name}"
         ).start()
+        threading.Thread(
+            target=self._drain_stdout, daemon=True, name=f"mcp-stdout-{self.name}"
+        ).start()
 
         return self._handshake()
 
@@ -179,14 +191,35 @@ class McpClient:
         for line in self._proc.stderr:
             line = line.strip()
             if line:
-                logger.debug(f"[MCP:{self.name}] stderr: {line}")
+                logger.warning(f"[MCP:{self.name}] stderr: {line}")
 
-    def _readline_with_timeout(self, timeout: int = 30) -> str:
-        """Read one line from stdio stdout with a hard timeout."""
-        ready, _, _ = select.select([self._proc.stdout], [], [], timeout)
-        if not ready:
-            raise TimeoutError(f"[MCP:{self.name}] stdio read timed out after {timeout}s")
-        return self._proc.stdout.readline()
+    def _drain_stdout(self):
+        """Background thread: read lines from stdout and put them into the queue."""
+        try:
+            for line in self._proc.stdout:
+                self._read_queue.put(line)
+        except Exception:
+            pass
+        finally:
+            try:
+                self._read_queue.put("")
+            except Exception:
+                pass
+
+    def _readline_with_timeout(self, timeout: Optional[int] = None) -> str:
+        """Read one line from stdio stdout with a hard timeout (cross-platform).
+
+        Uses the per-server timeout from mcp.json config when no explicit
+        timeout is provided.
+        """
+        effective = timeout if timeout is not None else self._timeout
+        try:
+            line = self._read_queue.get(timeout=effective)
+        except queue.Empty:
+            raise TimeoutError(f"[MCP:{self.name}] stdio read timed out after {effective}s")
+        if not line:
+            raise IOError(f"[MCP:{self.name}] stdio process closed unexpectedly")
+        return line
 
     def _stdio_send(self, message: dict) -> dict:
         """Send a JSON-RPC message over stdio and read the response."""
@@ -194,6 +227,7 @@ class McpClient:
         self._proc.stdin.write(raw)
         self._proc.stdin.flush()
 
+        expected_id = message.get("id")
         while True:
             line = self._readline_with_timeout()
             if not line:
@@ -207,6 +241,14 @@ class McpClient:
                 continue
             if "id" not in data:
                 logger.debug(f"[MCP:{self.name}] notification skipped: {data.get('method', '?')}")
+                continue
+            # Verify response id matches request id to avoid consuming a stale
+            # response left over from a previously failed/timed-out request.
+            if data.get("id") != expected_id:
+                logger.warning(
+                    f"[MCP:{self.name}] Stale response id={data.get('id')} "
+                    f"(expected {expected_id}), skipping"
+                )
                 continue
             return data
 
@@ -302,8 +344,12 @@ class McpClient:
             "Content-Type": "application/json",
             "Accept": "application/json, text/event-stream",
         }
-        if self._http_session_id:
-            headers["Mcp-Session-Id"] = self._http_session_id
+        # Read session id under lock to avoid racing with the
+        # initialization write below during concurrent requests.
+        with self._http_lock:
+            sid = self._http_session_id
+        if sid:
+            headers["Mcp-Session-Id"] = sid
         headers.update(self._http_headers)
 
         req = urllib.request.Request(
@@ -329,8 +375,13 @@ class McpClient:
         with resp:
             # Capture session id assigned by the server (if any)
             session_id = resp.headers.get("Mcp-Session-Id")
+            # Double-checked lock: only the first response sets the
+            # session id, preventing concurrent initializers from
+            # overwriting each other.
             if session_id and not self._http_session_id:
-                self._http_session_id = session_id
+                with self._http_lock:
+                    if not self._http_session_id:
+                        self._http_session_id = session_id
 
             status = resp.status if hasattr(resp, "status") else resp.getcode()
 
@@ -409,15 +460,18 @@ class McpClient:
 
         message = self._build_request(method, params)
 
-        with self._call_lock:
-            if self.transport == "stdio":
+        # stdio transport uses a single pipe and must be serialized.
+        # SSE and streamable-http use independent HTTP requests and
+        # can safely run concurrently across sessions.
+        if self.transport == "stdio":
+            with self._call_lock:
                 return self._stdio_send(message)
-            elif self.transport == "sse":
-                return self._sse_send(message)
-            elif self.transport == "streamable-http":
-                return self._streamable_http_send(message)
-            else:
-                raise ValueError(f"[MCP:{self.name}] Unsupported transport: {self.transport}")
+        elif self.transport == "sse":
+            return self._sse_send(message)
+        elif self.transport == "streamable-http":
+            return self._streamable_http_send(message)
+        else:
+            raise ValueError(f"[MCP:{self.name}] Unsupported transport: {self.transport}")
 
     def _send_notification(self, method: str, params: dict):
         """Fire-and-forget notification (no response expected)."""

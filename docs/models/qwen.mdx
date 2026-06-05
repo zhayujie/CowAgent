@@ -13,19 +13,19 @@ Qwen (Alibaba DashScope / Bailian) is one of the most fully-featured vendors. Te
 
 ```json
 {
-  "model": "qwen3.6-plus",
+  "model": "qwen3.7-plus",
   "dashscope_api_key": "YOUR_API_KEY"
 }
 ```
 
 | Parameter | Description |
 | --- | --- |
-| `model` | Can be `qwen3.6-plus`, `qwen3.7-max`, `qwen3.5-plus`, `qwen3-max`, `qwen-max`, `qwen-plus`, `qwen-turbo`, `qwq-plus`, etc. |
+| `model` | Can be `qwen3.7-plus`, `qwen3.7-max`, `qwen3.6-plus`, `qwen3.5-plus`, `qwen3-max`, `qwen-max`, `qwen-plus`, `qwen-turbo`, `qwq-plus`, etc. |
 | `dashscope_api_key` | Create one in the [Bailian Console](https://bailian.console.aliyun.com/?tab=model#/api-key); see the [official docs](https://bailian.console.aliyun.com/?tab=api#/api) |
 
 ## Image Understanding
 
-Once `dashscope_api_key` is configured, the Agent's Vision tool automatically calls Qwen's vision models to recognize images. Models like `qwen3-max` / `qwen3.5-plus` / `qwen3.6-plus` are already multimodal; if the main model is text-only (e.g. `qwen-turbo`), it automatically falls back to `qwen-vl-max`.
+Once `dashscope_api_key` is configured, the Agent's Vision tool automatically calls Qwen's vision models to recognize images. Models like `qwen3.7-plus` / `qwen3.6-plus` / `qwen3.5-plus` / `qwen3-max` are already multimodal; if the main model is text-only (e.g. `qwen-turbo`), it automatically falls back to `qwen-vl-max`.
 
 To manually specify a Vision model:
 
@@ -33,13 +33,13 @@ To manually specify a Vision model:
 {
   "tools": {
     "vision": {
-      "model": "qwen3.6-plus"
+      "model": "qwen3.7-plus"
     }
   }
 }
 ```
 
-Supported models: `qwen3.6-plus`, `qwen3.5-plus`, `qwen3-max`.
+Supported models: `qwen3.7-plus`, `qwen3.6-plus`, `qwen3.5-plus`, `qwen3-max`.
 
 ## Image Generation
 

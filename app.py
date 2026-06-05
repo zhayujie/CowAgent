@@ -236,6 +236,9 @@ def _clear_singleton_cache(channel_name: str):
         const.DINGTALK: "channel.dingtalk.dingtalk_channel.DingTalkChanel",
         const.WECOM_BOT: "channel.wecom_bot.wecom_bot_channel.WecomBotChannel",
         const.QQ: "channel.qq.qq_channel.QQChannel",
+        const.TELEGRAM: "channel.telegram.telegram_channel.TelegramChannel",
+        const.SLACK: "channel.slack.slack_channel.SlackChannel",
+        const.DISCORD: "channel.discord.discord_channel.DiscordChannel",
         const.WEIXIN: "channel.weixin.weixin_channel.WeixinChannel",
         "wx": "channel.weixin.weixin_channel.WeixinChannel",
     }

@@ -171,6 +171,12 @@ class ChatService:
 
         from agent.protocol.agent_stream import AgentStreamExecutor
 
+        # Register a cancel token so /cancel can abort this in-flight run.
+        # IM channels key on session_id (no per-turn request_id here).
+        from agent.protocol import get_cancel_registry
+        registry = get_cancel_registry()
+        cancel_event = registry.register(session_id, session_id=session_id) if session_id else None
+
         executor = AgentStreamExecutor(
             agent=agent,
             model=agent.model,
@@ -180,6 +186,7 @@ class ChatService:
             on_event=on_event,
             messages=messages_copy,
             max_context_turns=max_context_turns,
+            cancel_event=cancel_event,
         )
 
         try:
@@ -191,6 +198,13 @@ class ChatService:
                     agent.messages.clear()
                     logger.info("[ChatService] Cleared agent message history after executor recovery")
             raise
+        finally:
+            # Release cancel token to keep the registry bounded.
+            if session_id:
+                try:
+                    registry.unregister(session_id)
+                except Exception:
+                    pass
 
         # Sync executor messages back to agent (thread-safe).
         # The executor may have trimmed context, making its list shorter than

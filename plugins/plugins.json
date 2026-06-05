@@ -1,0 +1,40 @@
+{
+    "plugins": {
+        "cow_cli": {
+            "enabled": true,
+            "priority": 1000
+        },
+        "Godcmd": {
+            "enabled": true,
+            "priority": 999
+        },
+        "Keyword": {
+            "enabled": true,
+            "priority": 900
+        },
+        "Banwords": {
+            "enabled": false,
+            "priority": 100
+        },
+        "linkai": {
+            "enabled": true,
+            "priority": 99
+        },
+        "Role": {
+            "enabled": true,
+            "priority": 0
+        },
+        "Dungeon": {
+            "enabled": false,
+            "priority": 0
+        },
+        "Hello": {
+            "enabled": false,
+            "priority": -1
+        },
+        "Finish": {
+            "enabled": true,
+            "priority": -999
+        }
+    }
+}

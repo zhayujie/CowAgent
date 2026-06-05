@@ -367,13 +367,14 @@ $ModelChoices = @{
     1  = @{ Provider = "DeepSeek";                Default = "deepseek-v4-flash";                   Field = "deepseek_api_key" }
     2  = @{ Provider = "Claude";                  Default = "claude-opus-4-8";                     Field = "claude_api_key";    BaseField = "claude_api_base" }
     3  = @{ Provider = "Gemini";                  Default = "gemini-3.1-pro-preview";              Field = "gemini_api_key";    BaseField = "gemini_api_base" }
-    4  = @{ Provider = "OpenAI GPT";              Default = "gpt-5.4";                             Field = "open_ai_api_key";   BaseField = "open_ai_api_base" }
-    5  = @{ Provider = "MiniMax";                 Default = "MiniMax-M2.7";                        Field = "minimax_api_key" }
-    6  = @{ Provider = "Zhipu AI";                Default = "glm-5.1";                             Field = "zhipu_ai_api_key" }
-    7  = @{ Provider = "Qwen (DashScope)";        Default = "qwen3.6-plus";                        Field = "dashscope_api_key" }
+    4  = @{ Provider = "OpenAI";                  Default = "gpt-5.5";                             Field = "open_ai_api_key";   BaseField = "open_ai_api_base" }
+    5  = @{ Provider = "MiniMax";                 Default = "MiniMax-M3";                          Field = "minimax_api_key" }
+    6  = @{ Provider = "GLM";                     Default = "glm-5.1";                             Field = "zhipu_ai_api_key" }
+    7  = @{ Provider = "Qwen (DashScope)";        Default = "qwen3.7-plus";                        Field = "dashscope_api_key" }
     8  = @{ Provider = "Doubao (Volcengine Ark)"; Default = "doubao-seed-2-0-code-preview-260215"; Field = "ark_api_key" }
     9  = @{ Provider = "Kimi (Moonshot)";         Default = "kimi-k2.6";                           Field = "moonshot_api_key" }
-    10 = @{ Provider = "LinkAI";                  Default = "deepseek-v4-flash";                   Field = "linkai_api_key";    Linkai = $true }
+    10 = @{ Provider = "MiMo";                    Default = "mimo-v2.5-pro";                       Field = "mimo_api_key" }
+    11 = @{ Provider = "LinkAI";                  Default = "deepseek-v4-flash";                   Field = "linkai_api_key";    Linkai = $true }
 }
 
 function Select-Model {
@@ -381,14 +382,15 @@ function Select-Model {
     $title = T "选择 AI 模型" "Select AI Model"
     $options = @(
         "DeepSeek (deepseek-v4-flash, deepseek-v4-pro, etc.)",
-        "Claude (claude-opus-4-8, claude-opus-4-7, claude-sonnet-4-6, etc.)",
-        "Gemini (gemini-3.1-flash-lite-preview, gemini-3.1-pro-preview, etc.)",
-        "OpenAI GPT (gpt-5.4, gpt-5.2, gpt-4.1, etc.)",
-        "MiniMax (MiniMax-M2.7, MiniMax-M2.5, etc.)",
-        "Zhipu AI (glm-5.1, glm-5-turbo, glm-5, etc.)",
-        "Qwen (qwen3.6-plus, qwen3.5-plus, qwen3-max, qwq-plus, etc.)",
-        "Doubao (doubao-seed-2-0-code-preview-260215, etc.)",
-        "Kimi (kimi-k2.6, kimi-k2.5, kimi-k2, etc.)",
+        "Claude (claude-opus-4-8, claude-opus-4-7, etc.)",
+        "Gemini (gemini-3.5-flash, gemini-3.1-pro-preview, etc.)",
+        "OpenAI (gpt-5.5, etc.)",
+        "MiniMax (MiniMax-M3, etc.)",
+        "GLM (glm-5.1, etc.)",
+        "Qwen (qwen3.7-plus, qwen3.7-max, etc.)",
+        "Doubao (doubao-seed-2.0, etc.)",
+        "Kimi (kimi-k2.6, etc.)",
+        "MiMo (mimo-v2.5-pro, etc.)",
         ("LinkAI (" + (T "一个 Key 接入所有模型" "access all models via one API") + ")"),
         (T "⏭  跳过（稍后在 Web 控制台配置）" "⏭  Skip (configure later in the web console)")
     )
@@ -406,7 +408,7 @@ function Configure-Model {
     $script:ApiBaseField = ""
     $script:UseLinkai    = $false
 
-    if ($script:ModelChoice -eq 11) {
+    if ($script:ModelChoice -eq 12) {
         # Skip: leave model unset, will be configured in the web console.
         Write-Warn (T "已跳过模型配置，稍后可在 Web 控制台填写" "Model configuration skipped, you can set it later in the web console")
         return
@@ -432,8 +434,8 @@ function Get-ChannelLabel {
     param([string]$Key)
     switch ($Key) {
         "web"           { return (T "Web 网页控制台（推荐，开箱即用）" "Web Console (recommended, ready to use)") }
-        "weixin"        { return (T "微信 Weixin" "WeChat (Weixin)") }
-        "feishu"        { return (T "飞书 Feishu" "Feishu / Lark") }
+        "weixin"        { return (T "微信 Weixin" "Wechat") }
+        "feishu"        { return (T "飞书 Feishu" "Feishu") }
         "dingtalk"      { return (T "钉钉 DingTalk" "DingTalk") }
         "wecom_bot"     { return (T "企微智能机器人 WeCom Bot" "WeCom Bot") }
         "qq"            { return "QQ" }
@@ -563,6 +565,7 @@ function New-ConfigFile {
         ark_api_key               = ""
         dashscope_api_key         = ""
         minimax_api_key           = ""
+        mimo_api_key              = ""
         deepseek_api_key          = ""
         deepseek_api_base         = "https://api.deepseek.com/v1"
         voice_to_text             = "openai"

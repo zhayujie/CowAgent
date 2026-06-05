@@ -57,7 +57,6 @@ class MemoryChunk:
     embedding: Optional[List[float]]
     hash: str
     metadata: Optional[Dict[str, Any]] = None
-    session_id: Optional[str] = None  # Track which conversation session created this memory
 
 
 @dataclass
@@ -166,7 +165,6 @@ class MemoryStorage:
                 embedding TEXT,
                 hash TEXT NOT NULL,
                 metadata TEXT,
-                session_id TEXT,
                 created_at INTEGER DEFAULT (strftime('%s', 'now')),
                 updated_at INTEGER DEFAULT (strftime('%s', 'now'))
             )
@@ -179,11 +177,6 @@ class MemoryStorage:
         """)
         
         self.conn.execute("""
-            CREATE INDEX IF NOT EXISTS idx_chunks_session
-            ON chunks(session_id)
-        """)
-        
-        self.conn.execute("""
             CREATE INDEX IF NOT EXISTS idx_chunks_scope 
             ON chunks(scope)
         """)
@@ -192,14 +185,6 @@ class MemoryStorage:
             CREATE INDEX IF NOT EXISTS idx_chunks_hash 
             ON chunks(path, hash)
         """)
-        
-        # Migration: add session_id column to existing chunks table
-        try:
-            self.conn.execute("SELECT session_id FROM chunks LIMIT 1")
-        except sqlite3.OperationalError:
-            # Column doesn't exist, add it
-            self.conn.execute("ALTER TABLE chunks ADD COLUMN session_id TEXT")
-            self.conn.commit()
         
         # Create FTS5 virtual table + triggers (only if supported).
         # Self-heal: if the previous process crashed mid-rebuild and left
@@ -440,8 +425,8 @@ class MemoryStorage:
             _SQL = """
                 INSERT INTO chunks
                 (id, user_id, scope, source, path, start_line, end_line,
-                 text, embedding, hash, metadata, session_id, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now'))
+                 text, embedding, hash, metadata, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now'))
                 ON CONFLICT(id) DO UPDATE SET
                     user_id     = excluded.user_id,
                     scope       = excluded.scope,
@@ -453,15 +438,14 @@ class MemoryStorage:
                     embedding   = excluded.embedding,
                     hash        = excluded.hash,
                     metadata    = excluded.metadata,
-                    session_id  = excluded.session_id,
                     updated_at  = strftime('%s', 'now')
             """
         else:
             _SQL = """
                 INSERT OR REPLACE INTO chunks
                 (id, user_id, scope, source, path, start_line, end_line,
-                 text, embedding, hash, metadata, session_id, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now'))
+                 text, embedding, hash, metadata, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now'))
             """
         params = (
             chunk.id, chunk.user_id, chunk.scope, chunk.source, chunk.path,
@@ -469,7 +453,6 @@ class MemoryStorage:
             self._encode_embedding(chunk.embedding),
             chunk.hash,
             json.dumps(chunk.metadata) if chunk.metadata else None,
-            chunk.session_id,
         )
         with self._lock:
             self.conn.execute(_SQL, params)
@@ -484,8 +467,8 @@ class MemoryStorage:
             _SQL = """
                 INSERT INTO chunks
                 (id, user_id, scope, source, path, start_line, end_line,
-                 text, embedding, hash, metadata, session_id, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now'))
+                 text, embedding, hash, metadata, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now'))
                 ON CONFLICT(id) DO UPDATE SET
                     user_id     = excluded.user_id,
                     scope       = excluded.scope,
@@ -497,15 +480,14 @@ class MemoryStorage:
                     embedding   = excluded.embedding,
                     hash        = excluded.hash,
                     metadata    = excluded.metadata,
-                    session_id  = excluded.session_id,
                     updated_at  = strftime('%s', 'now')
             """
         else:
             _SQL = """
                 INSERT OR REPLACE INTO chunks
                 (id, user_id, scope, source, path, start_line, end_line,
-                 text, embedding, hash, metadata, session_id, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now'))
+                 text, embedding, hash, metadata, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now'))
             """
         params_list = [
             (
@@ -514,7 +496,6 @@ class MemoryStorage:
                 self._encode_embedding(c.embedding),
                 c.hash,
                 json.dumps(c.metadata) if c.metadata else None,
-                c.session_id,
             )
             for c in chunks
         ]
@@ -849,20 +830,6 @@ class MemoryStorage:
             self.conn.execute("DELETE FROM chunks WHERE path = ?", (path,))
             self.conn.commit()
 
-    def delete_by_session(self, session_id: str) -> int:
-        """Delete all chunks from a conversation session
-        
-        Args:
-            session_id: The session ID to delete
-            
-        Returns:
-            Number of chunks deleted
-        """
-        with self._lock:
-            cursor = self.conn.execute("DELETE FROM chunks WHERE session_id = ?", (session_id,))
-            self.conn.commit()
-            return cursor.rowcount
-
     def get_file_hash(self, path: str) -> Optional[str]:
         """Get stored file hash"""
         row = self.conn.execute("""
@@ -958,8 +925,7 @@ class MemoryStorage:
             text=row['text'],
             embedding=self._decode_embedding(row['embedding']),
             hash=row['hash'],
-            metadata=json.loads(row['metadata']) if row['metadata'] else None,
-            session_id=row['session_id']
+            metadata=json.loads(row['metadata']) if row['metadata'] else None
         )
     
     @staticmethod

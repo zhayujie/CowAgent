@@ -140,17 +140,6 @@ class Edit(BaseTool):
             # Restore original line endings
             final_content = bom + restore_line_endings(new_content, original_ending)
             
-            # Check if this is a memory file and append session comment
-            is_memory_file = self._is_memory_file(path)
-            if is_memory_file:
-                session_id = self._get_current_session_id()
-                if session_id:
-                    # Append session comment if not already present
-                    if f"<!-- session: {session_id} -->" not in final_content:
-                        if not final_content.endswith('\n'):
-                            final_content += '\n'
-                        final_content += f"\n<!-- session: {session_id} -->\n"
-            
             # Write file
             with open(absolute_path, 'w', encoding='utf-8') as f:
                 f.write(final_content)
@@ -166,7 +155,7 @@ class Edit(BaseTool):
             }
             
             # Notify memory manager if file is in memory directory
-            if self.memory_manager and is_memory_file:
+            if self.memory_manager and "memory/" in path:
                 try:
                     self.memory_manager.mark_dirty()
                 except Exception as e:
@@ -181,25 +170,6 @@ class Edit(BaseTool):
             return ToolResult.fail(f"Error: Permission denied accessing {path}")
         except Exception as e:
             return ToolResult.fail(f"Error editing file: {str(e)}")
-    
-    def _is_memory_file(self, path: str) -> bool:
-        """Check if path is a memory-related file"""
-        path_lower = path.lower()
-        return (
-            'memory/' in path_lower or 
-            'knowledge/' in path_lower or 
-            path_lower.endswith('memory.md') or
-            path_lower == 'memory.md'
-        )
-    
-    def _get_current_session_id(self) -> str:
-        """Get current session ID from context"""
-        try:
-            if hasattr(self, 'context') and self.context:
-                return getattr(self.context, '_current_session_id', None)
-        except Exception:
-            pass
-        return None
     
     def _resolve_path(self, path: str) -> str:
         """

@@ -28,15 +28,15 @@ dashscope_models = {
 
 # Model name prefixes that require MultiModalConversation API instead of Generation API.
 # Qwen3.5+ series are omni models that only support MultiModalConversation.
-MULTIMODAL_MODEL_PREFIXES = ("qwen3.5-", "qwen3.6-")
+MULTIMODAL_MODEL_PREFIXES = ("qwen3.5-", "qwen3.6-", "qwen3.7-plus")
 
 
 # Qwen对话模型API
 class DashscopeBot(Bot):
     def __init__(self):
         super().__init__()
-        self.sessions = SessionManager(DashscopeSession, model=conf().get("model") or "qwen3.6-plus")
-        self.model_name = conf().get("model") or "qwen3.6-plus"
+        self.sessions = SessionManager(DashscopeSession, model=conf().get("model") or "qwen3.7-plus")
+        self.model_name = conf().get("model") or "qwen3.7-plus"
         self.client = dashscope.Generation
         api_key = conf().get("dashscope_api_key")
         if api_key:

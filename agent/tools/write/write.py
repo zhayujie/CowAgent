@@ -59,17 +59,6 @@ class Write(BaseTool):
             if parent_dir:
                 os.makedirs(parent_dir, exist_ok=True)
             
-            # Check if this is a memory file and append session comment
-            is_memory_file = self._is_memory_file(path)
-            if is_memory_file:
-                session_id = self._get_current_session_id()
-                if session_id:
-                    # Append session comment if not already present
-                    if f"<!-- session: {session_id} -->" not in content:
-                        if not content.endswith('\n'):
-                            content += '\n'
-                        content += f"\n<!-- session: {session_id} -->\n"
-            
             # Write file
             with open(absolute_path, 'w', encoding='utf-8') as f:
                 f.write(content)
@@ -78,7 +67,7 @@ class Write(BaseTool):
             bytes_written = len(content.encode('utf-8'))
             
             # Auto-sync to memory database if this is a memory file
-            if self.memory_manager and is_memory_file:
+            if self.memory_manager and 'memory/' in path:
                 self.memory_manager.mark_dirty()
             
             result = {
@@ -93,25 +82,6 @@ class Write(BaseTool):
             return ToolResult.fail(f"Error: Permission denied writing to {path}")
         except Exception as e:
             return ToolResult.fail(f"Error writing file: {str(e)}")
-    
-    def _is_memory_file(self, path: str) -> bool:
-        """Check if path is a memory-related file"""
-        path_lower = path.lower()
-        return (
-            'memory/' in path_lower or 
-            'knowledge/' in path_lower or 
-            path_lower.endswith('memory.md') or
-            path_lower == 'memory.md'
-        )
-    
-    def _get_current_session_id(self) -> str:
-        """Get current session ID from context"""
-        try:
-            if hasattr(self, 'context') and self.context:
-                return getattr(self.context, '_current_session_id', None)
-        except Exception:
-            pass
-        return None
     
     def _resolve_path(self, path: str) -> str:
         """

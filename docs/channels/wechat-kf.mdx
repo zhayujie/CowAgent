@@ -1,12 +1,12 @@
 ---
-title: WeCom Customer Service
-description: Integrate CowAgent into WeCom Customer Service (微信客服)
+title: WeChat Customer Service
+description: Integrate CowAgent into WeChat Customer Service
 ---
 
-By binding a WeCom custom enterprise app to a WeCom Customer Service (微信客服) account, CowAgent can take over inbound inquiries from external WeChat users and serve them through links or QR codes embedded in WeChat Mini Programs, Official Accounts, Video Channels, and Video Channel stores.
+By binding a WeCom custom enterprise app to a WeChat Customer Service account, CowAgent can take over inbound inquiries from external WeChat users and serve them through links or QR codes embedded in WeChat Mini Programs, Official Accounts, Video Channels, and Video Channel stores.
 
 <Note>
-  WeCom Customer Service only supports Docker deployment or server Python deployment. A publicly reachable callback URL is required; local run mode is not supported.
+  WeChat Customer Service only supports Docker deployment or server Python deployment. A publicly reachable callback URL is required; local run mode is not supported.
 </Note>
 
 ## 1. Prerequisites
@@ -15,7 +15,7 @@ Required resources:
 
 1. A server with a public IP
 2. A registered and verified WeCom account
-3. WeCom Customer Service capability enabled
+3. WeChat Customer Service capability enabled
 
 <Note>
   It is recommended to create a **dedicated** WeCom custom app for Customer Service rather than reusing the existing `wechatcom_app` one — otherwise the two channels will compete for the same callback URL.
@@ -49,7 +49,7 @@ Fill in the 4 fields collected from the previous step (Corp ID / Secret / Token 
 
 <Tabs>
   <Tab title="Web Console">
-    Start the Cow project and open the Web Console. Go to the **Channels** menu, click **Connect**, choose **WeCom Customer Service**, fill in Corp ID / Secret / Token / AES Key (port defaults to 9888, configurable), and click Connect.
+    Start the Cow project and open the Web Console. Go to the **Channels** menu, click **Connect**, choose **WeChat Customer Service**, fill in Corp ID / Secret / Token / AES Key (port defaults to 9888, configurable), and click Connect.
 
     <img src="https://cdn.link-ai.tech/doc/cow-weixinkefu-web-control.png" width="800"/>
   </Tab>
@@ -92,9 +92,9 @@ Then go back to **Receive Messages → Set API Reception** in the WeCom console 
   3. Verified WeCom accounts must use a filed domain matching the entity
 </Warning>
 
-## 4. Bind a WeCom Customer Service Account
+## 4. Bind a WeChat Customer Service Account
 
-In the WeCom Admin Console, go to **WeCom Customer Service**, create a customer service account, and bind it to the custom app you created above:
+In the WeCom Admin Console, go to **WeChat Customer Service**, create a customer service account, and bind it to the custom app you created above:
 
 <img src="https://img-1317903499.cos.ap-guangzhou.myqcloud.com/docs/wxcustomer-hosting-step1.jpg" width="600"/>
 
@@ -102,7 +102,7 @@ In the WeCom Admin Console, go to **WeCom Customer Service**, create a customer 
 
 <img src="https://img-1317903499.cos.ap-guangzhou.myqcloud.com/docs/wxcustomer-hosting-step3.jpg" width="600"/>
 
-After binding, go to **WeCom Customer Service → Account Details**, and under **"Access Link"**:
+After binding, go to **WeChat Customer Service → Account Details**, and under **"Access Link"**:
 
 - Click **"Copy Link"** to get an access link like `https://work.weixin.qq.com/kfid/kfcd83e5896b9ba07be`
 - Click **"Generate QR Code"** to get the corresponding QR code
@@ -117,7 +117,7 @@ After WeChat users enter the customer service conversation via the link or QR co
 
 <img src="https://img-1317903499.cos.ap-guangzhou.myqcloud.com/docs/wxcustomer-hosting-chat-demo.jpg" width="900"/>
 
-Beyond that, leveraging the official WeChat ecosystem, WeCom Customer Service can also be embedded into Official Accounts, Mini Programs, Video Channels and more. See the **WeCom Customer Service → Access Scenarios** section in the [WeCom Admin Console](https://work.weixin.qq.com/wework_admin/frame#/app/servicer) for details:
+Beyond that, leveraging the official WeChat ecosystem, WeChat Customer Service can also be embedded into Official Accounts, Mini Programs, Video Channels and more. See the **WeChat Customer Service → Access Scenarios** section in the [WeCom Admin Console](https://work.weixin.qq.com/wework_admin/frame#/app/servicer) for details:
 
 <img src="https://img-1317903499.cos.ap-guangzhou.myqcloud.com/docs/wxcustomer-hosting-interface-demo.png" width="800"/>
 
