@@ -1,6 +1,6 @@
 # -*- coding=utf-8 -*-
 """
-WeChat Customer Service (微信客服) channel for CoW.
+WeCom Customer Service (微信客服) channel for CoW.
 
 Differences from `channel/wechatcom/` (企微自建应用):
     1. Audience: external WeChat users (not internal members).

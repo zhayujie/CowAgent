@@ -184,6 +184,8 @@ const I18N = {
         today: '今天', yesterday: '昨天', earlier: '更早',
         delete_session_confirm: '确认删除该会话？所有消息将被清除。',
         delete_session_title: '删除会话',
+        delete_message_confirm: '确认删除这条消息？',
+        delete_message_title: '删除消息',
         untitled_session: '新对话',
         context_cleared: '— 以上内容已从上下文中移除 —',
         tip_new_chat: '新建对话',
@@ -206,6 +208,10 @@ const I18N = {
         confirm_cancel: '取消',
         error_send: '发送失败，请稍后再试。', error_timeout: '请求超时，请再试一次。',
         thinking_in_progress: '思考中...', thinking_done: '已深度思考', thinking_duration: '耗时',
+        edit_message: '编辑消息',
+        regenerate_response: '重新生成',
+        edit_save: '保存并发送',
+        edit_cancel: '取消',
     },
     en: {
         console: 'Console',
@@ -380,6 +386,8 @@ const I18N = {
         today: 'Today', yesterday: 'Yesterday', earlier: 'Earlier',
         delete_session_confirm: 'Delete this session? All messages will be removed.',
         delete_session_title: 'Delete Session',
+        delete_message_confirm: 'Delete this message?',
+        delete_message_title: 'Delete Message',
         untitled_session: 'New Chat',
         context_cleared: '— Context above has been cleared —',
         tip_new_chat: 'New Chat',
@@ -402,6 +410,10 @@ const I18N = {
         confirm_cancel: 'Cancel',
         error_send: 'Failed to send. Please try again.', error_timeout: 'Request timeout. Please try again.',
         thinking_in_progress: 'Thinking...', thinking_done: 'Thought', thinking_duration: 'Duration',
+        edit_message: 'Edit message',
+        regenerate_response: 'Regenerate',
+        edit_save: 'Save and send',
+        edit_cancel: 'Cancel',
     }
 };
 
@@ -821,9 +833,53 @@ function renderMarkdown(text) {
         let html = md.render(text);
         html = _rewriteLocalImgSrc(html);
         // Order matters: video first (more specific), then image.
-        return injectImagePreviews(injectVideoPlayers(html));
+        html = injectImagePreviews(injectVideoPlayers(html));
+        
+        // Note: Code block headers are added via DOM manipulation after insertion
+        // See addCodeBlockHeadersToElement()
+        
+        return html;
     }
     catch (e) { return text.replace(/\n/g, '<br>'); }
+}
+
+function _addCodeBlockHeaders(container) {
+    // Add header with language label and copy button to each <pre> block using DOM manipulation
+    // This is more reliable than regex replacement, especially after highlight.js processing
+    const preBlocks = container.querySelectorAll('pre');
+    preBlocks.forEach(pre => {
+        // Skip if already wrapped
+        if (pre.parentElement && pre.parentElement.classList.contains('code-block-wrapper')) {
+            return;
+        }
+        
+        const codeEl = pre.querySelector('code');
+        if (!codeEl) return;
+        
+        // Extract language from class
+        const langClass = Array.from(codeEl.classList).find(c => c.startsWith('language-'));
+        const language = langClass ? langClass.replace('language-', '') : 'code';
+        const langLabel = language.charAt(0).toUpperCase() + language.slice(1);
+        
+        // Create wrapper
+        const wrapper = document.createElement('div');
+        wrapper.className = 'code-block-wrapper';
+        
+        // Create header
+        const header = document.createElement('div');
+        header.className = 'code-block-header';
+        header.innerHTML = `
+            <span class="code-block-lang">${langLabel}</span>
+            <button class="code-copy-btn" title="复制代码">
+                <i class="fas fa-copy"></i>
+            </button>
+        `;
+        
+        // Insert wrapper before pre, then move pre inside
+        pre.parentNode.insertBefore(wrapper, pre);
+        wrapper.appendChild(header);
+        wrapper.appendChild(pre);
+    });
 }
 
 // =====================================================================
@@ -1085,6 +1141,22 @@ messagesDiv.addEventListener('scroll', () => {
 
 // Intercept internal navigation links in chat messages
 messagesDiv.addEventListener('click', (e) => {
+    // Copy code block
+    const codeCopyBtn = e.target.closest('.code-copy-btn');
+    if (codeCopyBtn) {
+        e.preventDefault();
+        const wrapper = codeCopyBtn.closest('.code-block-wrapper');
+        const codeEl = wrapper && wrapper.querySelector('pre code');
+        if (codeEl) {
+            const codeText = codeEl.textContent;
+            navigator.clipboard.writeText(codeText).then(() => {
+                const icon = codeCopyBtn.querySelector('i');
+                if (icon) { icon.className = 'fas fa-check'; setTimeout(() => { icon.className = 'fas fa-copy'; }, 1500); }
+            });
+        }
+        return;
+    }
+
     const copyBtn = e.target.closest('.copy-msg-btn');
     if (copyBtn) {
         e.preventDefault();
@@ -1099,6 +1171,89 @@ messagesDiv.addEventListener('click', (e) => {
         }
         return;
     }
+
+    // Edit user message
+    const editBtn = e.target.closest('.edit-msg-btn');
+    if (editBtn) {
+        e.preventDefault();
+        const msgRoot = editBtn.closest('.user-message-group');
+        if (msgRoot) {
+            editUserMessage(msgRoot);
+        }
+        return;
+    }
+
+    // Regenerate bot response
+    const regenerateBtn = e.target.closest('.regenerate-msg-btn');
+    if (regenerateBtn) {
+        e.preventDefault();
+        const botMsgRoot = regenerateBtn.closest('.flex.gap-3');
+        if (botMsgRoot) {
+            regenerateResponse(botMsgRoot);
+        }
+        return;
+    }
+
+    // Delete message
+    const deleteBtn = e.target.closest('.delete-msg-btn');
+    if (deleteBtn) {
+        e.preventDefault();
+        const userMsgEl = deleteBtn.closest('.user-message-group');
+        const botMsgEl = deleteBtn.closest('.flex.gap-3');
+        
+        if (userMsgEl) {
+            // Deleting a user message: also delete the corresponding bot reply
+            showConfirmModal(t('delete_message_title'), t('delete_message_confirm'), () => {
+                // Find the next bot message (the reply to this user message)
+                let nextSibling = userMsgEl.nextElementSibling;
+                let botReplyEl = null;
+                
+                // Look for the next bot message (has class 'flex gap-3' but not 'user-message-group')
+                while (nextSibling) {
+                    if (nextSibling.classList && 
+                        nextSibling.classList.contains('flex') && 
+                        nextSibling.classList.contains('gap-3') &&
+                        !nextSibling.classList.contains('user-message-group')) {
+                        botReplyEl = nextSibling;
+                        break;
+                    }
+                    nextSibling = nextSibling.nextElementSibling;
+                }
+                
+                // Remove both user message and bot reply from DOM
+                userMsgEl.remove();
+                if (botReplyEl) {
+                    botReplyEl.remove();
+                }
+                
+                // If this message has a seq, delete from backend
+                const userSeq = userMsgEl.dataset.seq;
+                if (userSeq) {
+                    fetch('/api/messages/delete', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            session_id: sessionId,
+                            user_seq: parseInt(userSeq)
+                        })
+                    }).then(r => r.json())
+                      .then(data => {
+                          if (data.status === 'success') {
+                              console.log(`Deleted ${data.deleted} messages from backend`);
+                          }
+                      })
+                      .catch(err => console.error('Failed to delete from backend:', err));
+                }
+            });
+        } else if (botMsgEl) {
+            // Deleting a bot message only
+            showConfirmModal(t('delete_message_title'), t('delete_message_confirm'), () => {
+                botMsgEl.remove();
+            });
+        }
+        return;
+    }
+
     const a = e.target.closest('a');
     if (!a) return;
     const href = a.getAttribute('href') || '';
@@ -1376,14 +1531,85 @@ document.addEventListener('click', (e) => {
     hideAttachMenu();
 });
 
-// Drag-and-drop support on chat input area
+// Drag-and-drop support on entire chat view
+const chatView = document.getElementById('view-chat');
 const chatInputArea = chatInput.closest('.flex-shrink-0');
-chatInputArea.addEventListener('dragover', (e) => { e.preventDefault(); e.stopPropagation(); chatInputArea.classList.add('drag-over'); });
-chatInputArea.addEventListener('dragleave', (e) => { e.preventDefault(); e.stopPropagation(); chatInputArea.classList.remove('drag-over'); });
-chatInputArea.addEventListener('drop', (e) => {
-    e.preventDefault(); e.stopPropagation();
+
+// Create drag overlay for visual feedback
+let dragOverlay = document.getElementById('drag-overlay');
+if (!dragOverlay) {
+    dragOverlay = document.createElement('div');
+    dragOverlay.id = 'drag-overlay';
+    dragOverlay.className = 'drag-overlay hidden';
+    dragOverlay.innerHTML = `
+        <div class="drag-overlay-content">
+            <i class="fas fa-cloud-arrow-up"></i>
+            <p>拖拽文件到此处上传</p>
+        </div>
+    `;
+    chatView.appendChild(dragOverlay);
+}
+
+let dragCounter = 0; // Track nested drag enter/leave events
+
+function showDragOverlay() {
+    dragOverlay.classList.remove('hidden');
+    dragOverlay.classList.add('active');
+}
+
+function hideDragOverlay() {
+    dragOverlay.classList.remove('active');
+    dragOverlay.classList.add('hidden');
+}
+
+// Bind drag events to the entire chat view
+chatView.addEventListener('dragenter', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter++;
+    if (e.dataTransfer.types.includes('Files')) {
+        showDragOverlay();
+    }
+});
+
+chatView.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    chatInputArea.classList.add('drag-over');
+});
+
+chatView.addEventListener('dragleave', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter--;
+    if (dragCounter === 0) {
+        hideDragOverlay();
+        chatInputArea.classList.remove('drag-over');
+    }
+});
+
+chatView.addEventListener('drop', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter = 0;
+    hideDragOverlay();
     chatInputArea.classList.remove('drag-over');
-    if (e.dataTransfer.files.length) handleFileSelect(e.dataTransfer.files);
+    if (e.dataTransfer.files.length) {
+        handleFileSelect(e.dataTransfer.files);
+    }
+});
+
+// Also prevent default browser behavior on body to avoid opening files
+document.body.addEventListener('dragover', (e) => {
+    if (e.dataTransfer.types.includes('Files')) {
+        e.preventDefault();
+    }
+});
+
+document.body.addEventListener('drop', (e) => {
+    if (e.dataTransfer.types.includes('Files')) {
+        e.preventDefault();
+    }
 });
 
 // Paste image support
@@ -1854,6 +2080,117 @@ function sendMessage() {
     postWithRetry(0);
 }
 
+// Edit user message: extract content, remove this and subsequent messages, fill input
+function editUserMessage(msgEl) {
+    const rawContent = msgEl.dataset.rawContent;
+    if (!rawContent) return;
+
+    // Find all subsequent messages (this message and everything after it)
+    const messagesToRemove = [];
+    let current = msgEl;
+    while (current) {
+        if (current.classList && (current.classList.contains('user-message-group') || current.classList.contains('flex'))) {
+            messagesToRemove.push(current);
+        }
+        current = current.nextElementSibling;
+    }
+
+    // Remove all messages from this one onwards
+    messagesToRemove.forEach(el => {
+        if (el && el.parentNode) {
+            el.parentNode.removeChild(el);
+        }
+    });
+
+    // Fill input with the original content
+    chatInput.value = rawContent;
+    chatInput.style.height = 'auto';
+    chatInput.style.height = chatInput.scrollHeight + 'px';
+    chatInput.focus();
+    
+    // Scroll to bottom
+    scrollChatToBottom();
+}
+
+// Regenerate bot response: find the preceding user message and resend it
+function regenerateResponse(botMsgEl) {
+    // Find the preceding user message
+    let prevEl = botMsgEl.previousElementSibling;
+    while (prevEl && !prevEl.classList.contains('user-message-group')) {
+        prevEl = prevEl.previousElementSibling;
+    }
+
+    if (!prevEl) {
+        console.warn('No preceding user message found');
+        return;
+    }
+
+    const userContent = prevEl.dataset.rawContent;
+    if (!userContent) {
+        console.warn('No content in preceding user message');
+        return;
+    }
+
+    // Remove the bot message
+    if (botMsgEl.parentNode) {
+        botMsgEl.parentNode.removeChild(botMsgEl);
+    }
+
+    // Show loading indicator
+    const loadingEl = addLoadingIndicator();
+
+    // Resend the message
+    const timestamp = new Date();
+    const body = { session_id: sessionId, message: userContent, stream: true, timestamp: timestamp.toISOString(), lang: currentLang };
+
+    const MAX_RETRIES = 2;
+    const RETRY_DELAY_MS = 1000;
+
+    function postWithRetry(attempt) {
+        fetch('/message', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.status === 'success') {
+                if (data.inline_reply) {
+                    loadingEl.remove();
+                    addBotMessage(data.inline_reply, new Date());
+                } else if (data.stream) {
+                    setSendBtnCancelMode(data.request_id);
+                    startSSE(data.request_id, loadingEl, timestamp, null);
+                } else {
+                    loadingContainers[data.request_id] = loadingEl;
+                }
+            } else {
+                loadingEl.remove();
+                addBotMessage(t('error_send'), new Date());
+                resetSendBtnSendMode();
+            }
+        })
+        .catch(err => {
+            if (err.name === 'AbortError') {
+                loadingEl.remove();
+                addBotMessage(t('error_timeout'), new Date());
+                resetSendBtnSendMode();
+                return;
+            }
+            if (attempt < MAX_RETRIES) {
+                console.warn(`[regenerateResponse] attempt ${attempt + 1} failed, retrying...`, err);
+                setTimeout(() => postWithRetry(attempt + 1), RETRY_DELAY_MS * (attempt + 1));
+                return;
+            }
+            loadingEl.remove();
+            addBotMessage(t('error_send'), new Date());
+            resetSendBtnSendMode();
+        });
+    }
+
+    postWithRetry(0);
+}
+
 function startSSE(requestId, loadingEl, timestamp, titleInfo) {
     let botEl = null;
     let stepsEl = null;    // .agent-steps  (thinking summaries + tool indicators)
@@ -1889,6 +2226,12 @@ function startSSE(requestId, loadingEl, timestamp, titleInfo) {
                     <span class="text-xs text-slate-400 dark:text-slate-500">${formatTime(timestamp)}</span>
                     <button class="copy-msg-btn text-xs text-slate-300 dark:text-slate-600 hover:text-slate-500 dark:hover:text-slate-400 transition-colors cursor-pointer" title="${currentLang === 'zh' ? '复制' : 'Copy'}" style="display:none">
                         <i class="fas fa-copy"></i>
+                    </button>
+                    <button class="regenerate-msg-btn text-xs text-slate-300 dark:text-slate-600 hover:text-primary-400 dark:hover:text-primary-400 transition-colors cursor-pointer" title="${t('regenerate_response')}">
+                        <i class="fas fa-rotate-right"></i>
+                    </button>
+                    <button class="delete-msg-btn text-xs text-slate-300 dark:text-slate-600 hover:text-red-500 dark:hover:text-red-400 transition-colors cursor-pointer" title="${t('delete_message_title')}">
+                        <i class="fas fa-trash"></i>
                     </button>
                     <button class="speak-msg-btn text-xs text-slate-300 dark:text-slate-600 hover:text-slate-500 dark:hover:text-slate-400 transition-colors cursor-pointer" title="${t('speak_msg')}" style="display:none;">
                         <i class="fas fa-volume-up"></i>
@@ -2252,7 +2595,7 @@ function startPolling() {
 
 function createUserMessageEl(content, timestamp, attachments) {
     const el = document.createElement('div');
-    el.className = 'flex justify-end px-4 sm:px-6 py-3';
+    el.className = 'flex justify-end px-4 sm:px-6 py-3 user-message-group';
 
     let attachHtml = '';
     if (attachments && attachments.length > 0) {
@@ -2277,9 +2620,19 @@ function createUserMessageEl(content, timestamp, attachments) {
             <div class="bg-primary-400 text-white rounded-2xl px-4 py-2.5 text-sm leading-relaxed msg-content user-bubble">
                 ${attachHtml}${textHtml}
             </div>
-            <div class="text-xs text-slate-400 dark:text-slate-500 mt-1.5 text-right">${formatTime(timestamp)}</div>
+            <div class="flex items-center justify-end gap-2 mt-1.5">
+                <button class="edit-msg-btn text-xs text-slate-300 dark:text-slate-600 hover:text-primary-400 dark:hover:text-primary-400 transition-colors cursor-pointer" title="${t('edit_message')}">
+                    <i class="fas fa-pen-to-square"></i>
+                </button>
+                <button class="delete-msg-btn text-xs text-slate-300 dark:text-slate-600 hover:text-red-500 dark:hover:text-red-400 transition-colors cursor-pointer" title="${t('delete_message_title')}">
+                    <i class="fas fa-trash"></i>
+                </button>
+                <span class="text-xs text-slate-400 dark:text-slate-500">${formatTime(timestamp)}</span>
+            </div>
         </div>
     `;
+    // Store raw content for editing
+    el.dataset.rawContent = content || '';
     return el;
 }
 
@@ -2486,6 +2839,12 @@ function createBotMessageEl(content, timestamp, requestId, msg) {
                 <span class="text-xs text-slate-400 dark:text-slate-500">${formatTime(timestamp)}</span>
                 <button class="copy-msg-btn text-xs text-slate-300 dark:text-slate-600 hover:text-slate-500 dark:hover:text-slate-400 transition-colors cursor-pointer" title="${currentLang === 'zh' ? '复制' : 'Copy'}">
                     <i class="fas fa-copy"></i>
+                </button>
+                <button class="regenerate-msg-btn text-xs text-slate-300 dark:text-slate-600 hover:text-primary-400 dark:hover:text-primary-400 transition-colors cursor-pointer" title="${t('regenerate_response')}">
+                    <i class="fas fa-rotate-right"></i>
+                </button>
+                <button class="delete-msg-btn text-xs text-slate-300 dark:text-slate-600 hover:text-red-500 dark:hover:text-red-400 transition-colors cursor-pointer" title="${t('delete_message_title')}">
+                    <i class="fas fa-trash"></i>
                 </button>
                 <button class="speak-msg-btn text-xs text-slate-300 dark:text-slate-600 hover:text-slate-500 dark:hover:text-slate-400 transition-colors cursor-pointer" title="${t('speak_msg')}" style="display:none;">
                     <i class="fas fa-volume-up"></i>
@@ -2709,6 +3068,10 @@ function loadHistory(page) {
                 const el = msg.role === 'user'
                     ? createUserMessageEl(msg.content, ts)
                     : createBotMessageEl(msg.content || '', ts, null, msg);
+                // Store seq for user messages so we can delete message pairs
+                if (msg.role === 'user' && msg._seq !== undefined) {
+                    el.dataset.seq = msg._seq;
+                }
                 fragment.appendChild(el);
             });
 
@@ -3285,6 +3648,8 @@ function applyHighlighting(container) {
                 hljsLib.highlightElement(block);
             }
         });
+        // Add code block headers (with copy buttons) after highlighting
+        _addCodeBlockHeaders(root);
     }, 0);
 }
 
@@ -4025,7 +4390,7 @@ const MODELS_CAPABILITY_DEFS = [
       iconChip: 'bg-blue-50 dark:bg-blue-900/30',        iconGlyph: 'text-blue-500' },
     { id: 'image',     icon: 'fa-image',            editable: true,  needsModel: true,  titleKey: 'models_capability_image',     descKey: 'models_capability_image_desc',
       iconChip: 'bg-blue-50 dark:bg-blue-900/30',        iconGlyph: 'text-blue-500' },
-    { id: 'asr',       icon: 'fa-microphone',       editable: true,  needsModel: true,  titleKey: 'models_capability_asr',       descKey: 'models_capability_asr_desc',
+    { id: 'asr',       icon: 'fa-microphone',       editable: true,  needsModel: false, titleKey: 'models_capability_asr',       descKey: 'models_capability_asr_desc',
       iconChip: 'bg-amber-50 dark:bg-amber-900/30',      iconGlyph: 'text-amber-500' },
     { id: 'tts',       icon: 'fa-volume-high',      editable: true,  needsModel: true,  titleKey: 'models_capability_tts',       descKey: 'models_capability_tts_desc',
       iconChip: 'bg-amber-50 dark:bg-amber-900/30',      iconGlyph: 'text-amber-500' },

@@ -1,17 +1,9 @@
 <p align="center"><img src= "https://github.com/user-attachments/assets/eca9a9ec-8534-4615-9e0f-96c5ac1d10a3" alt="CowAgent" width="420" /></p>
 
 <p align="center">
-  <a href="https://github.com/zhayujie/CowAgent/releases/latest"><img src="https://img.shields.io/github/v/release/zhayujie/CowAgent?cacheSeconds=3600" alt="Latest release"></a>
-  <a href="https://github.com/zhayujie/CowAgent/blob/master/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License: MIT"></a>
-  <a href="https://github.com/zhayujie/CowAgent"><img src="https://img.shields.io/github/stars/zhayujie/CowAgent?style=flat-square&cacheSeconds=3600" alt="Stars"></a>
-  <a href="https://docs.cowagent.ai/zh"><img src="https://img.shields.io/badge/%E6%96%87%E6%A1%A3-cowagent.ai-blue?style=flat&logo=readthedocs&logoColor=white" alt="文档"></a>
-</p>
-
-<p align="center">
-  <a href="https://trendshift.io/repositories/25763" target="_blank"><img src="https://trendshift.io/api/badge/repositories/25763" alt="zhayujie%2FCowAgent | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
-</p>
-
-<p align="center">
+  <a href="https://github.com/zhayujie/CowAgent/releases/latest"><img src="https://img.shields.io/github/v/release/zhayujie/CowAgent" alt="Latest release"></a>
+  <a href="https://github.com/zhayujie/CowAgent/blob/master/LICENSE"><img src="https://img.shields.io/github/license/zhayujie/CowAgent" alt="License: MIT"></a>
+  <a href="https://github.com/zhayujie/CowAgent"><img src="https://img.shields.io/github/stars/zhayujie/CowAgent?style=flat-square" alt="Stars"></a> <br/>
   [<a href="../../README.md">English</a>] | [中文] | [<a href="../ja/README.md">日本語</a>]
 </p>
 
@@ -103,12 +95,12 @@ CowAgent 支持国内外主流厂商的大语言模型。**文本对话、图像
 | 厂商 | 代表模型 | 文本 | 图像理解 | 图像生成 | 语音识别 | 语音合成 | 向量 |
 | --- | --- | :-: | :-: | :-: | :-: | :-: | :-: |
 | [DeepSeek](https://docs.cowagent.ai/zh/models/deepseek) | deepseek-v4-flash / pro | ✅ | | | | | |
-| [MiniMax](https://docs.cowagent.ai/zh/models/minimax) | MiniMax-M3 | ✅ | ✅ | ✅ | | ✅ | |
+| [MiniMax](https://docs.cowagent.ai/zh/models/minimax) | MiniMax-M2.7 | ✅ | ✅ | ✅ | | ✅ | |
 | [Claude](https://docs.cowagent.ai/zh/models/claude) | claude-opus-4-8 | ✅ | ✅ | | | | |
 | [Gemini](https://docs.cowagent.ai/zh/models/gemini) | gemini-3.5-flash | ✅ | ✅ | ✅ | | | |
 | [OpenAI](https://docs.cowagent.ai/zh/models/openai) | gpt-5.5、o 系列 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | [智谱 GLM](https://docs.cowagent.ai/zh/models/glm) | glm-5.1、glm-5v-turbo | ✅ | ✅ | | ✅ | | ✅ |
-| [通义千问](https://docs.cowagent.ai/zh/models/qwen) | qwen3.7-plus | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| [通义千问](https://docs.cowagent.ai/zh/models/qwen) | qwen3.7-max | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | [豆包 Doubao](https://docs.cowagent.ai/zh/models/doubao) | doubao-seed-2.0 系列 | ✅ | ✅ | ✅ | | | ✅ |
 | [Kimi](https://docs.cowagent.ai/zh/models/kimi) | kimi-k2.6 | ✅ | ✅ | | | | |
 | [百度ERNIE](https://docs.cowagent.ai/zh/models/qianfan) | ernie-5.1 | ✅ | ✅ | | | | |
@@ -199,8 +191,6 @@ CowAgent 支持国内外主流厂商的大语言模型。**文本对话、图像
 
 ## 🏷 更新日志
 
-> **2026.06.01：** [v2.1.0](https://github.com/zhayujie/CowAgent/releases/tag/2.1.0) — 国际化支持、新增通道（Telegram、Discord、Slack、微信客服）、命令行交互升级、一键安装脚本优化、MCP Streamable HTTP 支持、新模型接入（claude-opus-4-8、MiMo）
-
 > **2026.05.22：** [v2.0.9](https://github.com/zhayujie/CowAgent/releases/tag/2.0.9) — 模型管理、MCP 协议支持、浏览器登录态持久化、新模型接入（gpt-5.5、gemini-3.5-flash、qwen3.7-max）、部署安全加固
 
 > **2026.05.06：** [v2.0.8](https://github.com/zhayujie/CowAgent/releases/tag/2.0.8) — 飞书渠道全面升级（语音、流式输出、扫码接入）、新模型支持（DeepSeek V4、百度千帆）、定时任务工具增强
@@ -258,9 +248,9 @@ CowAgent 支持国内外主流厂商的大语言模型。**文本对话、图像
 
 ## 🛠️ 开发与贡献
 
-欢迎各种形式的贡献：新功能、Bug 修复、性能优化、文档完善，或向 [Skill Hub](https://skills.cowagent.ai/submit) 分享你的技能。请先阅读 [CONTRIBUTING.md](/CONTRIBUTING.md) 了解如何开始，然后提交 Issue 讨论或直接发起 PR。
+欢迎接入更多应用通道，参考 [飞书通道实现](https://github.com/zhayujie/CowAgent/blob/master/channel/feishu/feishu_channel.py) 新增自定义通道；同时欢迎贡献新技能，向 [Skill Hub](https://skills.cowagent.ai/submit) 提交。
 
-欢迎 ⭐ Star 支持项目，并通过 Watch → Custom → Releases 订阅新版本通知。也欢迎提交 PR、Issue 进行反馈。
+通过 ⭐ Star 关注项目更新，欢迎提交 PR、Issue 进行反馈。
 
 ## 🌟 贡献者
 

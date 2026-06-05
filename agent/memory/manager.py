@@ -5,6 +5,7 @@ Provides high-level interface for memory operations
 """
 
 import os
+import re
 from typing import List, Optional, Dict, Any
 from pathlib import Path
 import hashlib
@@ -15,6 +16,20 @@ from agent.memory.storage import MemoryStorage, MemoryChunk, SearchResult
 from agent.memory.chunker import TextChunker
 from agent.memory.embedding import EmbeddingProvider, EmbeddingCache
 from agent.memory.summarizer import MemoryFlushManager, create_memory_files_if_needed
+
+
+# Pattern to extract session_id from HTML comment: <!-- session: xxx -->
+_SESSION_PATTERN = re.compile(r'<!--\s*session:\s*([a-zA-Z0-9_-]+)\s*-->', re.IGNORECASE)
+
+
+def extract_session_id_from_content(content: str) -> Optional[str]:
+    """Extract session_id from file content.
+    
+    Looks for HTML comment pattern: <!-- session: xxx -->
+    Returns the last match (in case of multiple sessions in history).
+    """
+    matches = _SESSION_PATTERN.findall(content)
+    return matches[-1] if matches else None
 
 
 class MemoryManager:
@@ -180,7 +195,8 @@ class MemoryManager:
         scope: str = "shared",
         source: str = "memory",
         path: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
+        session_id: Optional[str] = None
     ):
         """
         Add new memory content
@@ -192,6 +208,7 @@ class MemoryManager:
             source: Memory source ("memory" or "session")
             path: File path (auto-generated if not provided)
             metadata: Additional metadata
+            session_id: Conversation session ID that created this memory
         """
         if not content.strip():
             return
@@ -232,7 +249,8 @@ class MemoryManager:
                 text=chunk.text,
                 embedding=embedding,
                 hash=chunk_hash,
-                metadata=metadata
+                metadata=metadata,
+                session_id=session_id
             ))
         
         # Save to storage
@@ -326,12 +344,15 @@ class MemoryManager:
             chunks = self.chunker.chunk_text(content)
             if not chunks:
                 continue
+            # Extract session_id from file content (<!-- session: xxx -->)
+            session_id = extract_session_id_from_content(content)
             pending.append({
                 "file_path": file_path,
                 "rel_path": rel_path,
                 "source": source,
                 "scope": scope,
                 "user_id": user_id,
+                "session_id": session_id,
                 "file_hash": file_hash,
                 "chunks": chunks,
                 "texts": [c.text for c in chunks],
@@ -377,6 +398,7 @@ class MemoryManager:
             cursor += n
 
             rel_path = entry["rel_path"]
+            session_id = entry.get("session_id")
             self.storage.delete_by_path(rel_path)
             memory_chunks = []
             for chunk, embedding in zip(entry["chunks"], entry_embeddings):
@@ -394,6 +416,7 @@ class MemoryManager:
                     embedding=embedding,
                     hash=chunk_hash,
                     metadata=None,
+                    session_id=session_id,
                 ))
             self.storage.save_chunks_batch(memory_chunks)
             stat = entry["file_path"].stat()

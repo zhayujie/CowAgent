@@ -524,6 +524,76 @@ class ConversationStore:
             finally:
                 conn.close()
 
+    def delete_message_pair(self, session_id: str, user_seq: int) -> int:
+        """
+        Delete a user message and its corresponding assistant reply.
+        
+        The assistant reply is identified as all messages between user_seq
+        and the next visible user message (or end of session).
+        
+        Args:
+            session_id: Session identifier.
+            user_seq: The seq number of the user message to delete.
+        
+        Returns:
+            Number of message rows deleted.
+        """
+        with self._lock:
+            conn = self._connect()
+            try:
+                with conn:
+                    # Verify this is a user message
+                    row = conn.execute(
+                        "SELECT role FROM messages WHERE session_id = ? AND seq = ?",
+                        (session_id, user_seq),
+                    ).fetchone()
+                    if not row or row[0] != "user":
+                        return 0
+                    
+                    # Find the next visible user message seq
+                    next_user_row = conn.execute(
+                        """
+                        SELECT seq, content FROM messages
+                        WHERE session_id = ? AND seq > ? AND role = 'user'
+                        ORDER BY seq ASC LIMIT 1
+                        """,
+                        (session_id, user_seq),
+                    ).fetchone()
+                    
+                    # Determine the end boundary for deletion
+                    if next_user_row:
+                        end_seq = next_user_row[0]
+                    else:
+                        # No more user messages, delete to end
+                        end_seq_row = conn.execute(
+                            "SELECT MAX(seq) FROM messages WHERE session_id = ?",
+                            (session_id,),
+                        ).fetchone()
+                        end_seq = (end_seq_row[0] or user_seq) + 1
+                    
+                    # Delete all messages from user_seq to end_seq (exclusive)
+                    cur = conn.execute(
+                        "DELETE FROM messages WHERE session_id = ? AND seq >= ? AND seq < ?",
+                        (session_id, user_seq, end_seq),
+                    )
+                    deleted = cur.rowcount
+                    
+                    # Update session msg_count
+                    conn.execute(
+                        """
+                        UPDATE sessions
+                        SET msg_count = (
+                            SELECT COUNT(*) FROM messages WHERE session_id = ?
+                        )
+                        WHERE session_id = ?
+                        """,
+                        (session_id, session_id),
+                    )
+                    
+                    return deleted
+            finally:
+                conn.close()
+
     def prune_scheduled_messages(
         self,
         session_id: str,
