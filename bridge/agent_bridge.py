@@ -78,6 +78,7 @@ class AgentLLMModel(LLMModel):
         ("moonshot", const.MOONSHOT), ("kimi", const.MOONSHOT),
         ("doubao", const.DOUBAO), ("deepseek", const.DEEPSEEK),
         ("ernie", const.QIANFAN),
+        ("mimo-", const.MIMO),
     ]
 
     def __init__(self, bridge: Bridge, bot_type: str = "chat"):

@@ -19,9 +19,15 @@ def verify_server(data):
         nonce = data.nonce
         echostr = data.get("echostr", None)
         token = conf().get("wechatmp_token")  # 请按照公众平台官网\基本配置中信息填写
+        # Reject when token is empty: an empty token reduces signature verification
+        # to a predictable hash over attacker-controlled values.
+        if not token:
+            raise web.Forbidden("wechatmp_token is not configured")
         check_signature(token, signature, timestamp, nonce)
         return echostr
     except InvalidSignatureException:
         raise web.Forbidden("Invalid signature")
+    except web.Forbidden:
+        raise
     except Exception as e:
         raise web.Forbidden(str(e))
