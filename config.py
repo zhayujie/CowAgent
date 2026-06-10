@@ -24,8 +24,12 @@ available_setting = {
     "open_ai_api_base": "https://api.openai.com/v1",
     "claude_api_base": "https://api.anthropic.com/v1",  # claude api base
     "gemini_api_base": "https://generativelanguage.googleapis.com",  # gemini api base
-    "custom_api_key": "",  # custom OpenAI-compatible provider api key (used when bot_type is "custom")
-    "custom_api_base": "",  # custom OpenAI-compatible provider api base (used when bot_type is "custom")
+    "custom_api_key": "",  # custom OpenAI-compatible provider api key (used when bot_type is "custom"); legacy single-provider field
+    "custom_api_base": "",  # custom OpenAI-compatible provider api base (used when bot_type is "custom"); legacy single-provider field
+    # Multiple custom (OpenAI-compatible) providers. When non-empty, supersedes the legacy custom_api_key/base above.
+    # Each item: {"name": "siliconflow", "api_key": "sk-...", "api_base": "https://api.siliconflow.cn/v1", "model": "deepseek-ai/DeepSeek-V3"}
+    "custom_providers": [],
+    "custom_active_provider": "",  # name of the active provider in custom_providers; empty = use the first entry / legacy fields
     "proxy": "",  # proxy used by openai
     # chatgpt model; when use_azure_chatgpt is true, this is the Azure model deployment name
     "model": "gpt-3.5-turbo",  # options: gpt-4o, gpt-4o-mini, gpt-4-turbo, claude-3-sonnet, wenxin, moonshot, qwen-turbo, xunfei, glm-4, minimax, gemini, etc. See common/const.py for the full list

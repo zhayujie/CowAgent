@@ -60,3 +60,37 @@ Switching models under a custom vendor only changes `model` — `bot_type` and t
 ```
 /config model qwen3.5:27b
 ```
+
+## Configuring Multiple Custom Providers
+
+If you need to configure several OpenAI-compatible third-party services at once (e.g. SiliconFlow, Qiniu), use the `custom_providers` list and select the active one with `custom_active_provider`:
+
+```json
+{
+  "bot_type": "custom",
+  "custom_active_provider": "siliconflow",
+  "custom_providers": [
+    {
+      "name": "siliconflow",
+      "api_key": "YOUR_SILICONFLOW_KEY",
+      "api_base": "https://api.siliconflow.cn/v1",
+      "model": "deepseek-ai/DeepSeek-V3"
+    },
+    {
+      "name": "qiniu",
+      "api_key": "YOUR_QINIU_KEY",
+      "api_base": "https://api.qnaigc.com/v1",
+      "model": "deepseek-v3"
+    }
+  ]
+}
+```
+
+| Parameter | Description |
+| --- | --- |
+| `custom_providers` | List of custom providers; each item has `name`, `api_key`, `api_base`, and an optional `model` |
+| `custom_active_provider` | The `name` of the active provider; when empty, the first entry in the list is used |
+
+<Note>
+  When `custom_providers` is empty, CowAgent automatically falls back to the single-provider `custom_api_key` / `custom_api_base` fields above, so existing configurations keep working without any changes.
+</Note>
