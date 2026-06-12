@@ -257,7 +257,7 @@ class GoogleGeminiBot(Bot):
             }
             endpoint = f"{self.api_base}/v1beta/models/{model_name}:generateContent"
             headers = {"x-goog-api-key": self.api_key, "Content-Type": "application/json"}
-            resp = requests.post(endpoint, headers=headers, json=payload, timeout=60)
+            resp = requests.post(endpoint, headers=headers, json=payload, timeout=180)
 
             if resp.status_code != 200:
                 return {"error": True, "message": f"HTTP {resp.status_code}: {resp.text[:300]}"}

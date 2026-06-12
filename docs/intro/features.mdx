@@ -1,142 +1,145 @@
 ---
-title: 功能介绍
-description: CowAgent 长期记忆、个人知识库、任务规划、技能系统、CLI 命令、浏览器工具详细说明
+title: Features
+description: CowAgent long-term memory, task planning, skills system, CLI commands, and browser tool in detail
 ---
 
-## 1. 长期记忆
+## 1. Long-term Memory
 
-> 记忆系统让 Agent 能够长期记住重要信息，采用三层记忆流转架构：对话上下文（短期）→ 天级记忆（中期）→ MEMORY.md（长期），形成完整的记忆生命周期。
+The memory system enables the Agent to remember important information over time, using a three-tier memory flow: conversation context (short-term) → daily memory (mid-term) → MEMORY.md (long-term), forming a complete memory lifecycle.
 
-第一次启动 Agent 时，Agent 会主动询问关键信息，并记录至工作空间（默认 `~/cow`）中的智能体设定、用户身份、记忆文件中。
+On first launch, the Agent proactively asks the user for key information and records it in the workspace (default `~/cow`) — including agent settings, user identity, and memory files.
 
-在后续的长期对话中，Agent 会在需要时智能记录或检索记忆，并对自身设定、用户偏好、记忆文件等进行不断更新。每日自动执行 **梦境蒸馏（Deep Dream）**，将分散的天级记忆整合为精炼的长期记忆，同时生成叙事风格的梦境日记。
+In subsequent long-term conversations, the Agent intelligently stores or retrieves memory as needed, continuously updating its own settings, user preferences, and memory files. **Deep Dream** distillation runs daily, consolidating scattered daily memories into refined long-term memory and generating a narrative-style dream diary.
 
 <Frame>
   <img src="https://cdn.link-ai.tech/doc/20260203000455.png" width="800" />
 </Frame>
 
-详细说明请参考 [长期记忆](/memory) 和 [梦境蒸馏](/memory/deep-dream)。
+Building on this, **Self-Evolution** lets the Agent keep growing through everyday use: after a conversation goes idle, it reviews it automatically to improve skills, follow up on unfinished tasks, and backfill memory and knowledge. It speaks up only when it actually made a change, and every change can be undone. Enabled by default for new installs.
 
-## 2. 个人知识库
+<Frame>
+  <img src="https://cdn.jsdelivr.net/gh/zhayujie/cowagent-assets@main/screenshots/en/web-console-evolution-demo.png" width="800" />
+</Frame>
 
-> 知识库系统让 Agent 能够持续积累和组织结构化知识。与按时间线记录的记忆不同，知识库以主题为维度，将文章、对话洞察、学习材料等整理为互相关联的 Markdown 页面，形成持续增长的知识网络。
+See [Long-term Memory](/memory), [Deep Dream](/memory/deep-dream), and [Self-Evolution](/memory/self-evolution) for details.
 
-Agent 会在对话中自动将有价值的信息整理为知识页面，维护交叉引用和索引，通过 Web 控制台可浏览文档和查看知识图谱。知识库存储在工作空间的 `~/cow/knowledge/` 目录下。
+## 2. Personal Knowledge Base
 
-- **自动整理**：Agent 在对话中自主提取和整理结构化知识，维护索引和交叉引用
-- **知识图谱**：基于页面间的交叉引用自动构建知识图谱，Web 控制台提供可视化关系图浏览
-- **对话联动**：Agent 回复中引用的知识文档链接可在 Web 控制台中直接点击跳转查看
-- **CLI 管理**：通过 `/knowledge` 命令查看统计、浏览目录，通过 `/knowledge on|off` 开关功能
+> The knowledge base system enables the Agent to continuously accumulate and organize structured knowledge. Unlike memory which records along a timeline, the knowledge base is organized by topics, transforming articles, conversation insights, and learning materials into interconnected Markdown pages that form a continuously growing knowledge network.
+
+The Agent automatically organizes valuable information from conversations into knowledge pages, maintaining cross-references and indexes. The Web console provides document browsing and knowledge graph visualization. Knowledge is stored in `~/cow/knowledge/` within the workspace.
+
+- **Auto-organization**: The Agent autonomously extracts and organizes structured knowledge during conversations, maintaining indexes and cross-references
+- **Knowledge graph**: Automatically builds a knowledge graph from cross-references between pages, with interactive graph visualization in the Web console
+- **Chat integration**: Knowledge document links referenced in Agent replies can be clicked directly in the Web console for viewing
+- **CLI management**: Use `/knowledge` commands to view stats, browse directory, and toggle the feature with `/knowledge on|off`
 
 <Frame>
   <img src="https://cdn.link-ai.tech/doc/20260413105435.png" width="800" />
 </Frame>
 
-详细说明请参考 [个人知识库](/knowledge)。
+See [Personal Knowledge Base](/knowledge) for details.
 
-## 3. 任务规划和工具调用
+## 3. Task Planning and Tool Use
 
-工具是 Agent 访问操作系统资源的核心，Agent 会根据任务需求智能选择和调用工具，完成文件读写、命令执行、定时任务等各类操作。内置工具的实现在项目的 `agent/tools/` 目录下。
+Tools are the core of how the Agent accesses operating system resources. The Agent intelligently selects and invokes tools based on task requirements, performing file read/write, command execution, scheduled tasks, and more. Built-in tools are implemented in the project's `agent/tools/` directory.
 
-**主要工具：** 文件读写编辑、Bash 终端、浏览器操作、文件发送、定时调度、记忆搜索、联网搜索、环境配置等。
+**Key tools:** file read/write/edit, Bash terminal, browser, file send, scheduler, memory search, web search, environment config, and more.
 
-### 3.1 终端和文件访问
+### 3.1 Terminal and File Access
 
-针对操作系统的终端和文件的访问能力，是最基础和核心的工具，其他很多工具或技能都是基于此进行扩展。用户可通过手机端与 Agent 交互，操作个人电脑或服务器上的资源：
+Access to the OS terminal and file system is the most fundamental and core capability. Many other tools and skills build on top of this. Users can interact with the Agent from a mobile device to operate resources on their personal computer or server:
 
 <Frame>
   <img src="https://cdn.link-ai.tech/doc/20260202181130.png" width="800" />
 </Frame>
 
-### 3.2 编程能力
+### 3.2 Programming Capability
 
-基于编程能力和系统访问能力，Agent 可以实现从信息搜索、图片等素材生成、编码、测试、部署、Nginx 配置修改、发布的 **Vibecoding 全流程**，通过手机端简单的一句命令完成应用的快速 demo：
+Combining programming and system access, the Agent can execute the complete **Vibecoding workflow** — from information search, asset generation, coding, testing, deployment, Nginx configuration, to publishing — all triggered by a single command from your phone:
 
 <Frame>
   <img src="https://cdn.link-ai.tech/doc/20260318211018.png" width="800" />
 </Frame>
 
-### 3.3 定时任务
+### 3.3 Scheduled Tasks
 
-基于 `scheduler` 工具实现动态定时任务，支持**一次性任务、固定时间间隔、Cron 表达式**三种形式，任务触发可选择**固定消息发送**或 **Agent 动态任务**执行两种模式：
+The `scheduler` tool enables dynamic scheduled tasks, supporting **one-time tasks, fixed intervals, and Cron expressions**. Tasks can be triggered as either a **fixed message send** or an **Agent dynamic task** execution:
 
 <Frame>
   <img src="https://cdn.link-ai.tech/doc/20260202195402.png" width="800" />
 </Frame>
 
-### 3.4 浏览器操作
+### 3.4 Browser
 
-内置 `browser` 工具，Agent 可控制浏览器访问网页、填写表单、点击元素、截图，支持动态 JS 渲染页面。运行 `cow install-browser` 一键安装，自动适配服务器（无头模式）和桌面环境：
+The built-in `browser` tool allows the Agent to control a Chromium browser to visit web pages, fill forms, click elements, and take screenshots, with support for dynamic JS-rendered pages. Run `cow install-browser` to install with one command, automatically adapting to server (headless) and desktop environments:
 
 <Frame>
-  <img src="https://cdn.link-ai.tech/doc/20260401115728.png" width="750" />
+  <img src="https://cdn.link-ai.tech/doc/20260401110103.png" width="800" />
 </Frame>
 
-### 3.5 环境变量管理
+### 3.5 Environment Variable Management
 
-技能所需的秘钥存储在环境变量文件中，由 `env_config` 工具进行管理，你可以通过对话的方式更新秘钥，工具内置安全保护和脱敏策略：
+Secrets required by skills are stored in an environment variable file, managed by the `env_config` tool. You can update secrets through conversation, with built-in security protection and desensitization:
 
 <Frame>
   <img src="https://cdn.link-ai.tech/doc/20260202234939.png" width="800" />
 </Frame>
 
-## 4. 技能系统
+## 4. Skills System
 
-技能系统为 Agent 提供无限的扩展性，每个 Skill 由说明文件、运行脚本（可选）、资源（可选）组成，描述如何完成特定类型的任务。通过 Skill 可以让 Agent 遵循说明完成复杂流程、调用各类工具或对接第三方系统。
+The Skills system provides infinite extensibility for the Agent. Each Skill consists of a description file, execution scripts (optional), and resources (optional), describing how to complete specific types of tasks. Skills allow the Agent to follow instructions for complex workflows, invoke tools, or integrate third-party systems.
 
-- [Skill Hub](https://skills.cowagent.ai/)：开放的技能广场，汇集官方推荐、社区贡献和第三方技能，支持一键安装。
-- **内置技能：** 在项目的 `skills/` 目录下，包含技能创造器、图像识别、LinkAI 智能体、网页抓取等。内置 Skill 根据依赖条件（API Key、系统命令等）自动判断是否启用。
-- **自定义技能：** 由用户通过对话创建，存放在工作空间中（`~/cow/skills/`），可实现任何复杂的业务流程和第三方系统对接。
+- [Skill Hub](https://skills.cowagent.ai/): An open skill marketplace featuring official, community, and third-party skills. Install with one command.
+- **Built-in skills:** Located in the project's `skills/` directory, including skill creator, image recognition, LinkAI agent, web fetch, and more. Built-in skills are automatically enabled based on dependency conditions (API keys, system commands, etc.).
+- **Custom skills:** Created by users through conversation, stored in the workspace (`~/cow/skills/`), capable of implementing any complex business process or third-party integration.
 
-安装技能：`/skill install <名称>` 或 `cow skill install <名称>`，支持从 Skill Hub、GitHub、ClawHub、URL 等来源安装。
+Install skills: `/skill install <name>` or `cow skill install <name>`, supporting Skill Hub, GitHub, ClawHub, URL, and more.
 
-### 4.1 创建技能
+### 4.1 Creating Skills
 
-通过 `skill-creator` 技能可以通过对话的方式快速创建技能。你可以让 Agent 将某个工作流程固化为技能，或者把任意接口文档和示例发送给 Agent，让他直接完成对接：
+The `skill-creator` skill enables rapid skill creation through conversation. You can ask the Agent to codify a workflow as a skill, or send any API documentation and examples for the Agent to complete the integration directly:
 
 <Frame>
   <img src="https://cdn.link-ai.tech/doc/20260202202247.png" width="800" />
 </Frame>
 
-### 4.2 搜索和图像识别
+### 4.2 Web Search and Image Recognition
 
-- **联网搜索：** 内置 `web_search` 工具，支持多种搜索引擎，配置 `BOCHA_API_KEY` 或 `LINKAI_API_KEY` 后启用。
-- **图像识别：** 内置 `openai-image-vision` 技能，可使用 `gpt-4.1-mini`、`gpt-4.1` 等模型，依赖 `OPENAI_API_KEY`。
+- **Web search:** Built-in `web_search` tool, supports multiple search engines. Configure `BOCHA_API_KEY` or `LINKAI_API_KEY` to enable.
+- **Image recognition:** Built-in `openai-image-vision` skill, supports `gpt-4.1-mini`, `gpt-4.1`, and other models. Requires `OPENAI_API_KEY`.
 
 <Frame>
   <img src="https://cdn.link-ai.tech/doc/20260202213219.png" width="800" />
 </Frame>
 
-### 4.3 技能广场
+### 4.3 Skill Hub
 
-访问 [skills.cowagent.ai](https://skills.cowagent.ai/) 浏览所有可用技能，或在对话中执行：
+Visit [skills.cowagent.ai](https://skills.cowagent.ai/) to browse all available skills, or use commands in conversation:
 
 ```text
-/skill list --remote          # 浏览技能广场
-/skill search <关键词>         # 搜索技能
-/skill install <名称>          # 一键安装
+/skill list --remote          # Browse Skill Hub
+/skill search <keyword>       # Search skills
+/skill install <name>          # Install with one command
 ```
 
-同时还支持安装Github、ClawHub、LinkAI等第三方平台上的所有技能，详情查看 [技能安装](/skills/install)
+Also supports installing skills from GitHub, ClawHub, LinkAI, and other third-party platforms. See [Install Skills](/skills/install) for details.
 
 <img src="https://cdn.link-ai.tech/doc/20260401110103.png" width="750" />
 
+## 5. CLI Command System
 
-## 5. CLI 命令系统
+CowAgent provides two command interaction methods, covering service management, skill installation, configuration, and more:
 
-CowAgent 提供两种命令交互方式，覆盖服务管理、技能安装、配置调整等日常运维操作：
-
-- **终端 CLI：** 在系统终端执行 `cow <命令>`，支持 `start`、`stop`、`restart`、`update`、`status`、`logs`、`skill` 等
-- **对话命令：** 在对话中输入 `/<命令>`，Web 控制台输入 `/` 可弹出指令菜单快速选择
+- **Terminal CLI:** Run `cow <command>` in the system terminal, supporting `start`, `stop`, `restart`, `update`, `status`, `logs`, `skill`, etc.
+- **Chat commands:** Type `/<command>` in conversation. The Web console shows a command menu when you type `/`.
 
 ```bash
-cow start              # 启动服务
-cow stop               # 停止服务
-cow update             # 更新并重启
-cow skill install pptx # 安装技能
-cow install-browser    # 安装浏览器工具
+cow start              # Start service
+cow stop               # Stop service
+cow update             # Update and restart
+cow skill install pptx # Install a skill
+cow install-browser    # Install browser tool
 ```
 
-详细命令参考 [命令总览](https://docs.cowagent.ai/cli)。
-
-<img src="https://cdn.link-ai.tech/doc/20260401114549.png" width="750" />
+See [Command Overview](https://docs.cowagent.ai/en/cli) for details.

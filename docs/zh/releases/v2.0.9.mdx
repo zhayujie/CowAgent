@@ -1,0 +1,65 @@
+---
+title: v2.0.9
+description: CowAgent 2.0.9 - 新增模型管理、MCP 协议支持、浏览器登录态持久化、新模型接入
+---
+
+## 🖥️ 新增模型管理
+
+Web 控制台新增「模型」页面，按 **模型厂商 + 模型能力** 进行管理，支持对话、图像、语音、向量模型和搜索能力的配置：
+
+- **多厂商配置**：所有厂商的 API Key / API Base 在顶部统一维护，下方所有能力立即生效，无需重复填写
+- **图像模型**：图像理解与图像生成均可独立选择厂商和模型，未指定时跟随主模型自动选择
+- **语音模型**：语音识别和合成可独立配置，新增千问、智谱 ASR/TTS 模型
+- **向量模型**：支持配置 Embedding 模型（用于记忆及知识库检索），新增支持 OpenAI、通义、豆包、智谱等；切换模型后需执行 `/memory rebuild-index` 在线重建索引
+- **搜索能力**：联网搜索能力升级，支持博查、百度、智谱等多个厂商，自动模式下 Agent 可综合多来源搜索结果进行深度研究
+
+相关文档：[模型概览](https://docs.cowagent.ai/models)
+
+<img width="720" alt="20260522113305" src="https://cdn.link-ai.tech/doc/20260522113305.png" />
+
+
+## 🧩 MCP 协议支持
+
+支持 **MCP（Model Context Protocol）** 协议，从固定工具集扩展为开放可插拔的工具生态，任何兼容 MCP 协议的服务均可作为工具直接接入 Agent。
+
+- 原生 JSON-RPC 实现，零额外依赖，同时支持 `stdio` 和 `sse` 两种传输
+- 兼容 Claude Desktop / Cursor 等主流风格的 `mcpServers` 配置，优先读取 `~/cow/mcp.json`
+
+相关文档：[MCP 工具](https://docs.cowagent.ai/tools/mcp)。Thanks @yangluxin613 (#2801)
+
+## 🌐 浏览器登录态持久化
+
+针对需要登录、有反爬机制的网站，浏览器工具支持登录一次后长期复用登录态，并允许接入用户自己的真实 Chrome 以通过指纹检测：
+
+- **持久化用户配置（默认）**：默认使用 `~/.cow/browser_profile` 作为浏览器用户目录，登录一次后下次自动复用登录态
+- **CDP 模式**：通过 `tools.browser.cdp_endpoint` 接管真实 Chrome 浏览器，享有完整浏览器权限
+
+相关文档：[浏览器工具](https://docs.cowagent.ai/tools/browser)。Thanks @leafmove (#2809)
+
+## 🤖 模型新增与优化
+
+- **模型新增**：`gpt-5.5`、`gemini-3.5-flash`、`qwen3.7-max`、`ernie-5.1`
+- **模型优化**：DeepSeek V4 支持 `reasoning_effort` 思考深度参数；修复 MiMo 等思考模型通过 OpenAI 兼容协议接入的问题
+
+## 🔒 部署与安全
+
+- **默认本机访问**：Web 控制台 `web_host` 配置默认绑定 `127.0.0.1`，服务器部署时可手动设置为 `0.0.0.0` 并设置密码。Thanks @August829、@yidaozhongqing、@YLChen-007、@icysun
+- **前端资源完全本地化**：第三方 CSS / JS 全部本地分发，离线 / 内网环境也能正常加载控制台。Thanks @gitlayzer (#2816)
+
+## 🛠 体验优化与修复
+
+- **TTS 适配更多通道**：Web对话、个人微信、飞书、钉钉、企微智能机器人均已支持回复语音，详情查看 [通道概览](https://docs.cowagent.ai/channels)
+- **日志面板增强**：根据日志等级差异化高亮展示、支持根据等级筛选。Thanks @yangluxin613 (#2807)
+- **Web 控制台自动启动**：程序启动后自动打开 Web 控制台。Thanks @yangluxin613 (#2804)
+- **Ctrl+C 干净退出**：不再打印一长串 `KeyboardInterrupt` 堆栈。Thanks @yangluxin613 (#2806)
+- **文件夹上传**：Web 端支持目录上传，路径校验适配 Windows。Thanks @TryToMakeUsBetter (#2814)
+- 修复定时任务在某些情况下重复执行的问题。Thanks @CNXudiandian (#2820)
+- 修复定时任务带时区时单次任务不触发的问题。Thanks @AethericSpace
+- 修复执行失败的工具调用在页面刷新后不显示的问题。Thanks @a1094174619 (#2822)
+- 修复企微机器人消息中包含非法控制字符导致投递失败的问题。Thanks @Jacques-Zhao (#2810)
+
+## 📦 升级方式
+
+源码部署可执行 `cow update` 一键升级，或手动拉取代码后重启。详见 [更新升级文档](https://docs.cowagent.ai/guide/upgrade)。
+
+**发布日期**：2026.05.22 | [Full Changelog](https://github.com/zhayujie/CowAgent/compare/2.0.8...2.0.9)

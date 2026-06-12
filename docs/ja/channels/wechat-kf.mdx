@@ -1,0 +1,130 @@
+---
+title: WeChat Customer Service
+description: CowAgent を WeChat Customer Service に統合する
+---
+
+WeCom の自建アプリを WeChat Customer Service アカウントにバインドすることで、CowAgent は外部 WeChat ユーザーからの問い合わせを引き受けることができます。WeChat ミニプログラム、公式アカウント、ビデオチャンネル、ビデオチャンネルストアなどから、リンクや QR コードで WeChat ユーザーに到達できます。
+
+<Note>
+  WeChat Customer Service は Docker デプロイまたはサーバー Python デプロイのみサポートしており、外部からアクセス可能なコールバック URL が必要です。ローカル実行モードには対応していません。
+</Note>
+
+## 1. 前提条件
+
+必要なリソース：
+
+1. パブリック IP を持つサーバー
+2. 登録済みかつ認証済みの WeCom アカウント
+3. WeChat Customer Service 機能が有効になっていること
+
+<Note>
+  カスタマーサービス専用に **新たな** 企業微信自建アプリを作成することを推奨します。既存の `wechatcom_app` アプリを流用すると、2 つのチャネルが同じコールバック URL を奪い合うことになります。
+</Note>
+
+## 2. 企業微信自建アプリの作成
+
+1. [WeCom 管理コンソール](https://work.weixin.qq.com/wework_admin/frame#apps) で **アプリ管理 → アプリ作成** をクリックします：
+
+<img src="https://cdn.link-ai.tech/doc/20260228103156.png" width="480"/>
+
+2. **自社情報** をクリックし、ページ下部で **企業ID（Corp ID）** を確認します（`wechat_kf_corp_id` に設定します）：
+
+<img src="https://cdn.link-ai.tech/doc/wechatcom-hosting-companyid.png" width="600"/>
+
+3. 上で作成したアプリに入り、Secret の隣の「**表示**」をクリックします。Secret は管理者のスマートフォンの WeCom アプリに送られ、そこで確認できます：
+
+<img src="https://cdn.link-ai.tech/doc/wechatcom-hosting-agent-secret.png" width="600"/>
+
+4. アプリの **メッセージ受信 → API 受信設定** に入り、右側の「**ランダム生成**」をクリックして **Token** と **EncodingAESKey** を生成し、保存します：
+
+<img src="https://img-1317903499.cos.ap-guangzhou.myqcloud.com/docs/wechatcom-hosting-token-aeskey.jpg" width="600"/>
+
+<Note>
+  プログラムがまだ起動していないため、この時点では API 受信設定を保存できません。プロジェクトが動作した後に戻って保存してください。
+</Note>
+
+## 3. 設定と起動
+
+前のステップで収集した 4 つのフィールド（Corp ID / Secret / Token / EncodingAESKey）を入力します：
+
+<Tabs>
+  <Tab title="Web コンソール">
+    Cow プロジェクトを起動した後、Web コンソールを開きます。**チャネル** メニューを選択し、**接入チャネル** をクリックし、**WeChat Customer Service** を選択して、Corp ID / Secret / Token / AES Key を入力し（ポートはデフォルト 9888、変更可能）、接入をクリックします。
+
+    <img src="https://cdn.link-ai.tech/doc/cow-weixinkefu-web-control.png" width="800"/>
+  </Tab>
+  <Tab title="設定ファイル">
+    `config.json` に以下の設定を追加します（各パラメータと WeCom コンソールの対応関係は上のスクリーンショットを参照してください）：
+
+    ```json
+    {
+      "channel_type": "wechat_kf",
+      "wechat_kf_corp_id": "YOUR_CORP_ID",
+      "wechat_kf_secret": "YOUR_SECRET",
+      "wechat_kf_token": "YOUR_TOKEN",
+      "wechat_kf_aes_key": "YOUR_AES_KEY",
+      "wechat_kf_port": 9888
+    }
+    ```
+
+    | パラメータ | 説明 |
+    | --- | --- |
+    | `wechat_kf_corp_id` | 企業 ID |
+    | `wechat_kf_secret` | カスタマーサービスにバインドした企業微信自建アプリの Secret |
+    | `wechat_kf_token` | API 受信設定の Token |
+    | `wechat_kf_aes_key` | API 受信設定の EncodingAESKey |
+    | `wechat_kf_port` | リスンポート、デフォルトは 9888 |
+  </Tab>
+</Tabs>
+
+接入完了後、プログラムを起動します（Web コンソール方式ではチャネルが自動的に再起動されます）。ログに `Listening on http://0.0.0.0:9888/wxkf/` と表示されれば、プログラムは正常に動作しています。このポートを外部に公開する必要があります（例：クラウドサーバーのセキュリティグループで許可します）。
+
+続いて、WeCom 管理コンソールの **メッセージ受信 → API 受信設定** に戻り、コールバック URL に `http://<your-host>:9888/wxkf/` を入力して保存します。保存が成功したら、サーバー IP を **企業の信頼済み IP** に追加する必要もあります。追加しないとメッセージの送受信ができません：
+
+<img src="https://cdn.link-ai.tech/doc/wechat-com_config.png" width="600"/>
+
+<img src="https://cdn.link-ai.tech/doc/20260228103224.png" width="520"/>
+
+<Warning>
+  URL のコールバック検証が通らない、または設定がうまくいかない場合：
+  1. サーバーのファイアウォールが無効になっており、セキュリティグループでリスンポート（デフォルト 9888）が許可されていることを確認してください
+  2. Token、Secret、EncodingAESKey などのパラメータが一致しているか、URL の形式が正しいか慎重に確認してください
+  3. 認証済みの WeCom アカウントは、法人に対応する届け出済みドメインを設定する必要があります
+</Warning>
+
+## 4. WeChat Customer Service アカウントとのバインド
+
+WeCom 管理コンソールの **WeChat Customer Service** ページに入り、カスタマーサービスアカウントを作成し、上で作成した WeCom 自建アプリとバインドします：
+
+<img src="https://img-1317903499.cos.ap-guangzhou.myqcloud.com/docs/wxcustomer-hosting-step1.jpg" width="600"/>
+
+<img src="https://img-1317903499.cos.ap-guangzhou.myqcloud.com/docs/wxcustomer-hosting-step2.jpg" width="600"/>
+
+<img src="https://img-1317903499.cos.ap-guangzhou.myqcloud.com/docs/wxcustomer-hosting-step3.jpg" width="600"/>
+
+バインド完了後、**WeChat Customer Service → WeChat Customer Service アカウント詳細** に入り、「**接入リンク**」の項目で：
+
+- 「**リンクをコピー**」をクリックすると、`https://work.weixin.qq.com/kfid/kfcd83e5896b9ba07be` のような接入リンクが取得できます
+- 「**QR コード生成**」をクリックすると、対応する QR コードが取得できます
+
+リンクまたは QR コードを WeChat 顧客に配布してください：
+
+<img src="https://cdn.link-ai.tech/doc/wechat-customer-service_use.png" width="600"/>
+
+## 5. 使い方
+
+WeChat ユーザーがリンクや QR コードからカスタマーサービス対話に入った後、AI とテキスト・画像・音声などのマルチターン対話が可能です：
+
+<img src="https://img-1317903499.cos.ap-guangzhou.myqcloud.com/docs/wxcustomer-hosting-chat-demo.jpg" width="900"/>
+
+これに加え、WeChat 公式エコシステムの機能に基づき、WeChat Customer Service を公式アカウント、ミニプログラム、ビデオチャンネルなどの場面でも使用できます。詳細は [WeCom 管理コンソール](https://work.weixin.qq.com/wework_admin/frame#/app/servicer) の **WeChat Customer Service → 接入シナリオ** を参照してください：
+
+<img src="https://img-1317903499.cos.ap-guangzhou.myqcloud.com/docs/wxcustomer-hosting-interface-demo.png" width="800"/>
+
+## FAQ
+
+以下の依存パッケージがインストールされていることを確認してください：
+
+```bash
+pip install websocket-client pycryptodome
+```

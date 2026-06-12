@@ -517,18 +517,26 @@ def _install_targz_bytes(content: bytes, name: str, skills_dir: str, result: Ins
 
 def _print_install_success(name: str, source: str):
     """Print a unified install success message with description and source."""
+    from cli.utils import get_cli_language
+
+    # Import `common` only after get_cli_language() runs ensure_sys_path(),
+    # so it works when `cow` is invoked from outside the project directory.
+    get_cli_language()  # resolve cow_lang so i18n.t reflects config
+    from common import i18n
+    _t = i18n.t
+
     skills_dir = get_skills_dir()
     config = load_skills_config()
     display = config.get(name, {}).get("display_name", "")
     desc = _read_skill_description(os.path.join(skills_dir, name))
     click.echo(click.style(f"✓ {name}", fg="green"))
     if display and display != name:
-        click.echo(f"  名称: {display}")
+        click.echo(_t(f"  名称: {display}", f"  Name: {display}"))
     if desc:
         if len(desc) > 60:
             desc = desc[:57] + "…"
-        click.echo(f"  描述: {desc}")
-    click.echo(f"  来源: {source}")
+        click.echo(_t(f"  描述: {desc}", f"  Description: {desc}"))
+    click.echo(_t(f"  来源: {source}", f"  Source: {source}"))
 
 
 def _validate_skill_name(name: str):

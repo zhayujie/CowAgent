@@ -1,27 +1,27 @@
 ---
-title: bash - 终端
-description: 执行系统命令
+title: bash - Terminal
+description: Execute system commands
 ---
 
-在当前工作目录执行 Bash 命令，返回 stdout 和 stderr。`env_config` 中配置的 API Key 会自动注入到环境变量中。
+Execute Bash commands in the current working directory, returns stdout and stderr. API keys configured via `env_config` are automatically injected into the environment.
 
-## 依赖
+## Dependencies
 
-无额外依赖，默认可用。
+No extra dependencies, available by default.
 
-## 参数
+## Parameters
 
-| 参数 | 类型 | 必填 | 说明 |
+| Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
-| `command` | string | 是 | 要执行的命令 |
-| `timeout` | integer | 否 | 超时时间（秒） |
+| `command` | string | Yes | Command to execute |
+| `timeout` | integer | No | Timeout in seconds |
 
-## 使用场景
+## Use Cases
 
-- 安装软件包和依赖
-- 运行代码和测试
-- 部署应用和服务（Nginx 配置、进程管理等）
-- 系统运维和排查
+- Install packages and dependencies
+- Run code and tests
+- Deploy applications and services (Nginx config, process management, etc.)
+- System administration and troubleshooting
 
 <Frame>
   <img src="https://cdn.link-ai.tech/doc/20260203121008.png" width="800" />

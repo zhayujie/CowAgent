@@ -1,65 +1,65 @@
 ---
-title: 技能广场
-description: 浏览、搜索和安装 AI Agent 技能
+title: Skill Hub
+description: Browse, search, and install AI Agent skills
 ---
 
-[Cow Skill Hub](https://skills.cowagent.ai/) 是开源的 AI Agent 技能广场，汇集了官方推荐、社区贡献和第三方平台（GitHub、ClawHub 等）的技能。
+[Cow Skill Hub](https://skills.cowagent.ai/) is an open-source skill marketplace for AI Agents, aggregating official picks, community contributions, and third-party skills from GitHub, ClawHub, and beyond.
 
-开源仓库：[github.com/zhayujie/cow-skill-hub](https://github.com/zhayujie/cow-skill-hub)
+Source code: [github.com/zhayujie/cow-skill-hub](https://github.com/zhayujie/cow-skill-hub)
 
 <img src="https://cdn.link-ai.tech/doc/20260401110103.png" width="800" />
 
-## 功能
+## Features
 
-- **浏览技能**：按类别（推荐 / 社区 / 第三方）和标签筛选
-- **搜索技能**：按名称或描述搜索
-- **查看详情**：查看技能文档、文件内容、安装命令和依赖的环境变量
-- **一键安装**：复制安装命令即可在 CowAgent 中使用
+- **Browse skills** — filter by category (Featured / Community / Third-party) and tags
+- **Search skills** — find skills by name or description
+- **View details** — read the skill manifest, file contents, install command, and required environment variables
+- **One-click install** — copy the install command and run it in CowAgent
 
-## 安装技能
+## Installing a skill
 
-在对话中或终端中执行安装命令：
+Run the install command in chat or in your terminal:
 
 <CodeGroup>
-```text 对话
+```text Chat
 /skill install <name>
 ```
 
-```bash 终端
+```bash Terminal
 cow skill install <name>
 ```
 </CodeGroup>
 
-也可以在对话中浏览技能广场：
+You can also browse the marketplace directly from chat:
 
 ```text
 /skill list --remote
-/skill search <关键词>
+/skill search <keyword>
 ```
 
-除了在列表中展示的精选技能，还可以通过 **CLI命令 + Skill Hub** 安装各种第三方技能（**GitHub、ClawHub、LinkAI、URL** 等）参考 [安装技能](/skills/install)。
+Beyond the curated list, you can install third-party skills from **GitHub, ClawHub, LinkAI, or any URL** via the CLI. See [Installing skills](/skills/install) for details.
 
-## 贡献技能
+## Contributing a skill
 
-欢迎向技能广场提交你的技能：
+To submit your own skill:
 
-1. 访问 [skills.cowagent.ai/submit](https://skills.cowagent.ai/submit)
-2. 使用 GitHub 或 Google 账号登录
-3. 上传包含 `SKILL.md` 的文件夹或 zip 包
-4. 自动解析技能名称、显示名称和描述，可按需修改
-5. 提交后将经过安全检查和审核后发布
+1. Visit [skills.cowagent.ai/submit](https://skills.cowagent.ai/submit)
+2. Sign in with GitHub or Google
+3. Upload a folder or zip file containing `SKILL.md`
+4. Skill name, display name, and description are auto-detected — adjust as needed
+5. Submit for review; skills go live after security and quality checks
 
 <img src="https://cdn.link-ai.tech/doc/20260401111904.png" width="800" />
 
-技能文件结构：
+Skill file layout:
 
 ```
 your-skill/
-├── SKILL.md        # 必须，放在根目录
-├── scripts/        # 可选，运行脚本
-└── resources/      # 可选，其他资源
+├── SKILL.md        # required, in the root
+├── scripts/        # optional, runtime scripts
+└── resources/      # optional, additional assets
 ```
 
 <Tip>
-  技能基于 `SKILL.md` 文件构建，你也可以在技能详情页下载 SKILL.md，用于任何支持自定义指令的 Agent（如 OpenClaw、Cursor、Claude Code 等）。
+  Skills are built around the `SKILL.md` manifest. You can also download `SKILL.md` from a skill's detail page and use it with any Agent that supports custom instructions (OpenClaw, Cursor, Claude Code, and more).
 </Tip>

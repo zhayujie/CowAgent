@@ -1,0 +1,135 @@
+---
+title: Xiaomi MiMo
+description: Xiaomi MiMo モデル設定（テキスト対話 + 画像理解 + 音声合成）
+---
+
+Xiaomi MiMo はネイティブ全モーダル大規模言語モデルです。1 つの `mimo_api_key` でテキスト対話、画像理解、音声合成を同時に有効化できます。
+
+<Tip>
+  Web コンソールの「モデル管理」ページから、以下のすべての機能をワンストップで設定でき、設定ファイルを手動で編集する必要はありません。
+</Tip>
+
+## テキスト対話
+
+```json
+{
+  "model": "mimo-v2.5-pro",
+  "mimo_api_key": "YOUR_API_KEY",
+  "mimo_api_base": "https://api.xiaomimimo.com/v1"
+}
+```
+
+| パラメータ | 説明 |
+| --- | --- |
+| `model` | 推奨は `mimo-v2.5-pro`。`mimo-v2.5` も使用可能 |
+| `mimo_api_key` | [MiMo Open Platform](https://platform.xiaomimimo.com/console/api-keys) で作成 |
+| `mimo_api_base` | 任意。デフォルトは `https://api.xiaomimimo.com/v1` |
+
+### モデル選択
+
+| モデル | ユースケース |
+| --- | --- |
+| `mimo-v2.5-pro` | フラッグシップ。ネイティブ全モーダル + Agent 能力、最大 100 万トークンのコンテキスト |
+| `mimo-v2.5` | 汎用版。ネイティブ全モーダル（テキスト / 画像 / 動画 / 音声） |
+
+## 思考モード
+
+MiMo V2.5 シリーズはデフォルトで「思考モード」が有効です。最終回答の前に `reasoning_content`（思考過程）を出力することで、複雑なタスクのパフォーマンスを高めます。
+
+表示の有無はグローバル設定 `enable_thinking` で切り替え可能です（Web コンソールの設定ページからも変更できます）：
+
+```json
+{
+  "enable_thinking": true
+}
+```
+
+## 画像理解
+
+`mimo_api_key` を設定すると、Agent の Vision ツールは自動的に MiMo のビジョンモデルを利用します：
+
+- メインモデル自体がマルチモーダル（`mimo-v2.5-pro` / `mimo-v2.5`）の場合は、画像はメインモデルが直接処理し、追加設定は不要です。
+- メインモデルが他社製の場合、Vision ツールは順序に従い `mimo-v2.5-pro` にフォールバックします。
+
+特定の Vision モデルを強制したい場合は、設定ファイルで明示的に指定してください：
+
+```json
+{
+  "tools": {
+    "vision": {
+      "provider": "mimo",
+      "model": "mimo-v2.5-pro"
+    }
+  }
+}
+```
+
+## 音声合成
+
+```json
+{
+  "text_to_voice": "mimo",
+  "text_to_voice_model": "mimo-v2.5-tts",
+  "tts_voice_id": "冰糖"
+}
+```
+
+| パラメータ | 説明 |
+| --- | --- |
+| `text_to_voice_model` | 現在は `mimo-v2.5-tts` のみ対応（プリセット音色 + 歌唱モード） |
+| `tts_voice_id` | プリセット音色名（中国語の音色は中国語名がそのまま ID） |
+
+### プリセット音色
+
+| 音色 ID | 説明 |
+| --- | --- |
+| `冰糖` | 中国語 · 女声（デフォルト） |
+| `茉莉` | 中国語 · 女声 |
+| `苏打` | 中国語 · 男声 |
+| `白桦` | 中国語 · 男声 |
+| `Mia` | 英語 · 女声 |
+| `Chloe` | 英語 · 女声 |
+| `Milo` | 英語 · 男声 |
+| `Dean` | 英語 · 男声 |
+
+Web コンソールの「モデル管理 → 音声合成」のドロップダウンから視覚的に選択することもできます。
+
+### スタイル制御
+
+MiMo TTS は合成テキスト内に **音声タグ** を埋め込むことで、感情、語調、方言、キャラクター、さらには歌唱まで制御できます。タグは **最終的に音声合成されるテキスト（つまり Agent の返信内容）** に含める必要があり、全体スタイルのタグは先頭に置きます：
+
+```
+(スタイル)合成するテキスト
+```
+
+半角 `()`、全角 `（）`、`[]` の 3 種類の括弧に対応。スタイル記述は中国語・英語のどちらでも OK で、最も的確に表現できる言語を選んでください。代表的なスタイル例：
+
+| 種類 | サンプルタグ |
+| --- | --- |
+| 基本感情 | `happy` `sad` `angry` `fear` `surprised` `excited` `aggrieved` `calm` `indifferent` |
+| 複合感情 | `wistful` `relieved` `helpless` `guilty` `at ease` `uneasy` `touched` |
+| 全体トーン | `gentle` `aloof` `lively` `serious` `languid` `playful` `deep` `sharp` `cutting` |
+| 声質 | `magnetic` `mellow` `bright` `ethereal` `childlike` `aged` `sweet` `husky` |
+| キャラクター調 | `squeaky` `mature lady` `young boy` `uncle` `Taiwanese accent` |
+| 方言 | `Northeastern` `Sichuan` `Henan` `Cantonese` |
+| ロールプレイ | `Sun Wukong` `Lin Daiyu` |
+| 歌唱 | `sing` / `singing` |
+
+例：
+
+- `(magnetic)夜が深まり、街はまだ呼吸している。`
+- `(gentle)深呼吸して。きっと大丈夫。`
+- `(serious)これがシステム再起動前の最後の警告です。`
+- `(singing)Twinkle, twinkle, little star, how I wonder what you are…`
+
+テキストの任意の位置に細かい音声タグを挿入して、呼吸、笑い声、間などを制御することもできます。例：
+
+```
+(nervous, deep breath) ふぅ……落ち着いて、落ち着いて。(faster pace) 自己紹介は五十回練習したから大丈夫。
+```
+
+タグの完全な一覧は [MiMo 音声合成ドキュメント](https://platform.xiaomimimo.com/docs/zh-CN/usage-guide/speech-synthesis-v2.5) を参照してください。
+
+<Tip>
+  CowAgent は TTS 呼び出し時、Agent の返信原文（`(...)` タグを含む）をそのまま MiMo に送信します。ペルソナ / システムプロンプトで「返信の冒頭に `(スタイル)` タグを付けて口調を指定する」よう指示すれば、IM チャネル（WeChat / Feishu / DingTalk / WeCom）の音声返信に感情・方言・歌唱などの効果を付与できます。
+</Tip>

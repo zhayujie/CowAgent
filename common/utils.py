@@ -117,6 +117,18 @@ def expand_path(path: str) -> str:
     return expanded
 
 
+def is_cloud_deployment() -> bool:
+    if os.environ.get("CLOUD_DEPLOYMENT_ID"):
+        return True
+    try:
+        from config import conf
+        if conf().get("cloud_deployment_id"):
+            return True
+    except Exception:
+        pass
+    return False
+
+
 def get_cloud_headers(api_key: str) -> dict:
     """
     Build standard headers for LinkAI API requests,

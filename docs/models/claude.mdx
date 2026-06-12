@@ -1,42 +1,44 @@
 ---
 title: Claude
-description: Anthropic Claude 模型配置（文本对话 + 图像理解）
+description: Anthropic Claude model configuration (Text Chat + Image Understanding)
 ---
 
-Claude 由 Anthropic 提供，支持文本对话与图像理解，主流 Sonnet / Opus 模型均原生支持视觉，无需额外指定 Vision 模型。
+Claude is provided by Anthropic and supports both text chat and image understanding. The mainstream Sonnet / Opus models natively support vision, so no separate Vision model needs to be specified.
 
 <Tip>
-  通过 Web 控制台的「模型管理」页面可一站式配置以下全部能力，无需手动改配置文件。
+  All capabilities below can be configured in one place via the "Model Management" page in the Web Console, with no need to manually edit the configuration file.
 </Tip>
 
-## 文本对话
+## Text Chat
 
 ```json
 {
-  "model": "claude-sonnet-4-6",
+  "model": "claude-fable-5",
   "claude_api_key": "YOUR_API_KEY"
 }
 ```
 
-| 参数 | 说明 |
+| Parameter | Description |
 | --- | --- |
-| `model` | 支持 `claude-sonnet-4-6`、`claude-opus-4-7`、`claude-opus-4-6`、`claude-sonnet-4-5`、`claude-sonnet-4-0`、`claude-3-5-sonnet-latest` 等，参考 [官方模型](https://docs.anthropic.com/en/docs/about-claude/models/overview) |
-| `claude_api_key` | 在 [Claude 控制台](https://console.anthropic.com/settings/keys) 创建 |
-| `claude_api_base` | 可选，默认为 `https://api.anthropic.com/v1`，可改为第三方代理 |
+| `model` | Supports `claude-fable-5`, `claude-opus-4-8`, `claude-opus-4-7`, `claude-sonnet-4-6`, `claude-opus-4-6`, `claude-sonnet-4-5`, `claude-sonnet-4-0`, `claude-3-5-sonnet-latest`, etc. See [official models](https://docs.anthropic.com/en/docs/about-claude/models/overview) |
+| `claude_api_key` | Create one in the [Claude Console](https://console.anthropic.com/settings/keys) |
+| `claude_api_base` | Optional, defaults to `https://api.anthropic.com/v1`. Can be changed to a third-party proxy |
 
-### 模型选择
+### Model Selection
 
-| 模型 | 适用场景 |
+| Model | Use Case |
 | --- | --- |
-| `claude-sonnet-4-6` | 默认推荐，性价比与速度平衡 |
-| `claude-opus-4-7` | 复杂推理与长链路任务，效果最佳但成本更高 |
-| `claude-sonnet-4-5` / `claude-sonnet-4-0` | 上一代旗舰，价格更低 |
+| `claude-fable-5` | Latest flagship; best for complex reasoning and long-running tasks, at a higher price |
+| `claude-opus-4-8` | Previous flagship with balanced quality and cost |
+| `claude-opus-4-7` | Earlier Opus flagship |
+| `claude-sonnet-4-6` | Balanced cost and speed, lower cost |
+| `claude-opus-4-6` / `claude-sonnet-4-5` / `claude-sonnet-4-0` | Earlier flagships at a lower price |
 
-## 图像理解
+## Image Understanding
 
-配置 `claude_api_key` 后 Agent 的 Vision 工具会自动使用 Claude 主模型识别图像，无需额外配置。
+Once `claude_api_key` is configured, the Agent's Vision tool automatically uses the Claude main model to recognize images, with no extra setup required.
 
-如需手动指定 Vision 模型，可在配置文件中显式配置：
+To manually specify a Vision model, set it explicitly in the configuration file:
 
 ```json
 {

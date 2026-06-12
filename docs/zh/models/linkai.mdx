@@ -1,0 +1,103 @@
+---
+title: LinkAI
+description: 通过 LinkAI 平台统一接入文本、视觉、图像、语音与向量能力
+---
+
+通过一份 `linkai_api_key` 即可访问 OpenAI、Claude、Gemini、DeepSeek、MiniMax、Qwen、Kimi、豆包 等主流厂商的全部能力。
+
+<Tip>
+  通过 Web 控制台的「模型管理」页面可一站式配置以下全部能力，无需手动改配置文件。
+</Tip>
+
+## 文本对话
+
+```json
+{
+  "use_linkai": true,
+  "linkai_api_key": "YOUR_API_KEY"
+}
+```
+
+| 参数 | 说明 |
+| --- | --- |
+| `use_linkai` | 设为 `true` 启用 |
+| `linkai_api_key` | 在 [控制台](https://link-ai.tech/console/interface) 创建 |
+| `model` | 可填写 [模型列表](https://link-ai.tech/console/models) 中任意编码 |
+
+前往 [模型服务](https://link-ai.tech/console/models) 了解更多。
+
+## 图像理解
+
+配置完成后 Agent 的 Vision 工具会自动调用网关上的多模态模型，无需额外配置。如需手动指定 Vision 模型：
+
+```json
+{
+  "tools": {
+    "vision": {
+      "model": "gpt-5.4-mini"
+    }
+  }
+}
+```
+
+可选模型：`gpt-4.1-mini`、`gpt-5.4-mini`、`qwen3.7-plus`、`doubao-seed-2-0-pro-260215`、`kimi-k2.6`、`claude-sonnet-4-6`、`gemini-3.1-flash-lite-preview` 等。
+
+## 图像生成
+
+```json
+{
+  "skills": {
+    "image-generation": {
+      "model": "gpt-image-2"
+    }
+  }
+}
+```
+
+| 模型 ID | 别名 |
+| --- | --- |
+| `gpt-image-2` | OpenAI |
+| `gemini-3.1-flash-image-preview` | Nano Banana 2 |
+| `gemini-3-pro-image-preview` | Nano Banana Pro |
+| `seedream-5.0-lite` | 字节豆包 Seedream |
+
+## 语音识别
+
+```json
+{
+  "voice_to_text": "linkai"
+}
+```
+
+ASR 固定使用 Whisper，凭证自动复用 `linkai_api_key`。
+
+## 语音合成
+
+语音合成网关下支持多个底层 TTS 引擎，按 `text_to_voice_model` 选择引擎，音色随引擎切换。
+
+```json
+{
+  "text_to_voice": "linkai",
+  "text_to_voice_model": "doubao",
+  "tts_voice_id": "BV001_streaming"
+}
+```
+
+| `text_to_voice_model` | 引擎说明 |
+| --- | --- |
+| `tts-1` | OpenAI · 多语种通用（音色 `alloy` / `nova` / `echo` 等） |
+| `doubao` | 字节豆包 · 中文音色丰富 |
+| `baidu` | 百度 · 中文主播音色 |
+
+不同引擎对应的音色不同，建议在 Web 控制台「模型管理 → 语音合成」中可视化选择。
+
+## 向量
+
+```json
+{
+  "embedding_provider": "linkai",
+  "embedding_model": "text-embedding-3-small"
+}
+```
+
+默认模型 `text-embedding-3-small`（OpenAI 兼容）。修改 embedding 后需执行 `/memory rebuild-index` 命令重建索引。

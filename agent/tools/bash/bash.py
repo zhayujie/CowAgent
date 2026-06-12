@@ -69,8 +69,8 @@ SAFETY:
         if not command:
             return ToolResult.fail("Error: command parameter is required")
 
-        # Security check: Prevent accessing sensitive config files
-        if "~/.cow/.env" in command or "~/.cow" in command:
+        # Security check: Prevent direct access to the credential file
+        if re.search(r'\.cow[/\\]\.env', command):
             return ToolResult.fail(
                 "Error: Access denied. API keys and credentials must be accessed through the env_config tool only."
             )

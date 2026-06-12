@@ -1,0 +1,72 @@
+---
+title: 微信公众号
+description: 将 CowAgent 接入微信公众号
+---
+
+CowAgent 支持接入个人订阅号和企业服务号两种公众号类型。
+
+| 类型 | 要求 | 特点 |
+| --- | --- | --- |
+| **个人订阅号** | 个人可申请 | 收到消息时会回复一条提示，回复生成后需用户主动发消息获取 |
+| **企业服务号** | 企业申请，需通过微信认证开通客服接口 | 回复生成后可主动推送给用户 |
+
+<Note>
+  公众号仅支持服务器和 Docker 部署，不支持本地运行。需额外安装扩展依赖：`pip3 install -r requirements-optional.txt`
+</Note>
+
+## 一、个人订阅号
+
+在 `config.json` 中添加以下配置：
+
+```json
+{
+  "channel_type": "wechatmp",
+  "single_chat_prefix": [""],
+  "wechatmp_app_id": "wx73f9******d1e48",
+  "wechatmp_app_secret": "YOUR_APP_SECRET",
+  "wechatmp_aes_key": "",
+  "wechatmp_token": "YOUR_TOKEN",
+  "wechatmp_port": 80
+}
+```
+
+### 配置步骤
+
+这些配置需要和 [微信公众号后台](https://mp.weixin.qq.com/advanced/advanced?action=dev&t=advanced/dev) 中的保持一致，进入页面后，在左侧菜单选择 **设置与开发 → 基本配置 → 服务器配置**，按下图进行配置：
+
+<img src="https://cdn.link-ai.tech/doc/20260228103506.png" width="480"/>
+
+1. 在公众平台启用开发者密码（对应配置 `wechatmp_app_secret`），并将服务器 IP 填入白名单
+2. 按上图填写 `config.json` 中与公众号相关的配置，要与公众号后台的配置一致
+3. 启动程序，启动后会监听 80 端口（若无权限监听，则在启动命令前加上 `sudo`；若 80 端口已被占用，则关闭该占用进程）
+4. 在公众号后台 **启用服务器配置** 并提交，保存成功则表示已成功配置。注意 **"服务器地址(URL)"** 需要配置为 `http://{HOST}/wx` 的格式，其中 `{HOST}` 可以是服务器的 IP 或域名
+
+随后关注公众号并发送消息即可看到以下效果：
+
+<img src="https://cdn.link-ai.tech/doc/20260228103522.png" width="720"/>
+
+由于受订阅号限制，回复内容较短的情况下（15s 内），可以立即完成回复，但耗时较长的回复则会先回复一句 "正在思考中"，后续需要用户输入任意文字主动获取答案，而服务号则可以通过客服接口解决这一问题。
+
+<Tip>
+  **语音识别**：可利用微信自带的语音识别功能，需要在公众号管理页面的 "设置与开发 → 接口权限" 页面开启 "接收语音识别结果"。
+</Tip>
+
+## 二、企业服务号
+
+企业服务号与上述个人订阅号的接入过程基本相同，差异如下：
+
+1. 在公众平台申请企业服务号并完成微信认证，在接口权限中确认已获得 **客服接口** 的权限
+2. 在 `config.json` 中设置 `"channel_type": "wechatmp_service"`，其他配置与上述订阅号相同
+3. 交互效果上，即使是较长耗时的回复，也可以主动推送给用户，无需用户手动获取
+
+```json
+{
+  "channel_type": "wechatmp_service",
+  "single_chat_prefix": [""],
+  "wechatmp_app_id": "YOUR_APP_ID",
+  "wechatmp_app_secret": "YOUR_APP_SECRET",
+  "wechatmp_aes_key": "",
+  "wechatmp_token": "YOUR_TOKEN",
+  "wechatmp_port": 80
+}
+```

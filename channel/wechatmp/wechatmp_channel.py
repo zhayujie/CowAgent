@@ -134,10 +134,16 @@ class WechatMPChannel(ChatChannel):
 
             elif reply.type == ReplyType.IMAGE_URL:  # 从网络下载图片
                 img_url = reply.content
-                pic_res = requests.get(img_url, stream=True)
                 image_storage = io.BytesIO()
-                for block in pic_res.iter_content(1024):
-                    image_storage.write(block)
+                if img_url.startswith("file://") or os.path.isfile(img_url):
+                    # Local file produced by the agent (e.g. a generated image)
+                    local_path = img_url[len("file://"):] if img_url.startswith("file://") else img_url
+                    with open(local_path, "rb") as f:
+                        image_storage.write(f.read())
+                else:
+                    pic_res = requests.get(img_url, stream=True)
+                    for block in pic_res.iter_content(1024):
+                        image_storage.write(block)
                 image_storage.seek(0)
                 image_type = imghdr.what(image_storage)
                 filename = receiver + "-" + str(context["msg"].msg_id) + "." + image_type
@@ -258,10 +264,16 @@ class WechatMPChannel(ChatChannel):
                 logger.info("[wechatmp] Do send voice to {}".format(receiver))
             elif reply.type == ReplyType.IMAGE_URL:  # 从网络下载图片
                 img_url = reply.content
-                pic_res = requests.get(img_url, stream=True)
                 image_storage = io.BytesIO()
-                for block in pic_res.iter_content(1024):
-                    image_storage.write(block)
+                if img_url.startswith("file://") or os.path.isfile(img_url):
+                    # Local file produced by the agent (e.g. a generated image)
+                    local_path = img_url[len("file://"):] if img_url.startswith("file://") else img_url
+                    with open(local_path, "rb") as f:
+                        image_storage.write(f.read())
+                else:
+                    pic_res = requests.get(img_url, stream=True)
+                    for block in pic_res.iter_content(1024):
+                        image_storage.write(block)
                 image_storage.seek(0)
                 image_type = imghdr.what(image_storage)
                 filename = receiver + "-" + str(context["msg"].msg_id) + "." + image_type

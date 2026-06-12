@@ -1,0 +1,98 @@
+---
+title: image-generation - 图像生成
+description: 文生图 / 图生图 / 多图融合，支持多家厂商自动路由与回退
+---
+
+通用的图像生成与编辑技能，支持 OpenAI、Gemini、Seedream（火山方舟）、Qwen（百炼）、MiniMax、LinkAI 共六家厂商。配好任意一家的 Key 即可使用，配多家可享受自动回退。
+
+## 支持的模型
+
+| 厂商 | 模型 / 别名 | 特点 |
+| --- | --- | --- |
+| OpenAI | `gpt-image-2`、`gpt-image-1` | 通用文生图，高质量，支持 `quality` 控制画质 |
+| Gemini Nano Banana | `nano-banana-2`、`nano-banana-pro`、`nano-banana` | 对应 `gemini-3.1-flash`、`gemini-3-pro`、`gemini-2.5-flash` 的图像版本 |
+| Seedream（火山方舟） | `seedream-5.0-lite`、`seedream-4.5` | 原生 2K–4K，最多 14 张图融合 |
+| Qwen（百炼） | `qwen-image-2.0`、`qwen-image-2.0-pro` | 擅长中文排版和图文融合 |
+| MiniMax | `image-01` | 简单快速 |
+| LinkAI | 任意模型 | 统一网关，作为兜底 |
+
+## 模型选择
+
+默认走「自动路由 + 失败回退」：
+
+1. 按 `OpenAI → Gemini → Seedream → Qwen → MiniMax → LinkAI` 顺序选第一个已配置的厂商
+2. 遇到 401、模型未开通、网络异常等错误时，自动切到下一家
+3. 用户在对话里指定模型时（如「用 seedream 画一只猫」），对应厂商会被提到最前优先尝试
+
+如需固定使用某个模型：
+
+```json
+{
+  "skills": {
+    "image-generation": {
+      "model": "seedream-5.0-lite"
+    }
+  }
+}
+```
+
+## 配置 API Key
+
+<Tip>
+  推荐通过 [Web 控制台](/zh/channels/web) 的「模型管理」页面配置，配好的对话模型 Key 会被图像生成技能自动复用，无需重复配置。也可手动编辑配置文件或在对话中通过 `env_config` 工具临时设置。
+</Tip>
+
+凭证统一复用主模型厂商的 Key：
+
+| 字段 | 对应厂商 |
+| --- | --- |
+| `openai_api_key` | OpenAI |
+| `gemini_api_key` | Gemini |
+| `ark_api_key` | 火山方舟（Seedream） |
+| `dashscope_api_key` | 阿里百炼（Qwen） |
+| `minimax_api_key` | MiniMax |
+| `linkai_api_key` | LinkAI |
+
+
+## 开启和关闭
+
+技能会根据 API Key 自动调整状态：
+
+- **已配置 Key**：Agent 收到画图请求时直接调用
+- **未配置 Key**：技能仍会出现在上下文中（标记为「需要配置」），Agent 会引导用户去配 Key
+
+如需手动控制：
+
+```text
+/skill disable image-generation    # 关闭
+/skill enable image-generation     # 重新开启
+```
+
+终端等价命令：`cow skill disable image-generation` / `cow skill enable image-generation`。
+
+## 参数
+
+| 参数 | 类型 | 必填 | 默认 | 说明 |
+| --- | --- | --- | --- | --- |
+| `prompt` | string | 是 | — | 图像描述 |
+| `image_url` | string / list | 否 | null | 编辑用的输入图，本地路径或 URL；传列表为多图融合 |
+| `quality` | string | 否 | auto | `low` / `medium` / `high`，仅部分厂商支持 |
+| `size` | string | 否 | auto | `512` / `1K` / `2K` / `3K` / `4K`，或像素值如 `1024x1024` |
+| `aspect_ratio` | string | 否 | null | `1:1` / `3:2` / `2:3` / `16:9` / `9:16` / `21:9`；Gemini 还支持 `1:4` / `4:1` / `1:8` / `8:1` |
+
+<Warning>
+  **质量越高、分辨率越大，耗时和成本越高。** 日常对话用默认（`auto`）或 `quality=low` + `size=1K` 即可，约 20 秒出图；做海报或明确要高清时再上 `high` + `2K/4K`，可能需要 1–5 分钟。
+</Warning>
+
+## 常见用法
+
+- **文生图**：根据描述生成插画、海报、图标、头像、分镜图等
+- **图生图**：在已有图片上改风格、换元素、加装饰、加文字等
+- **多图融合**：把多张参考图合成一张（换装、角色合影等）
+
+<Note>
+- bash 超时建议设 600 秒：单厂商 HTTP 超时 300 秒，脚本可能依次尝试多家
+- 输入图片自动压缩到 4MB 以内、最长边不超过 4096px
+- Gemini / Seedream / Qwen / MiniMax 不支持 `quality` 参数
+- Seedream 默认出 2K 图；`seedream-5.0-lite` 支持到 3K，`seedream-4.5` 支持到 4K
+</Note>

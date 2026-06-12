@@ -1,0 +1,32 @@
+---
+title: web_fetch - 网页获取
+description: 获取网页或文档内容
+---
+
+获取 HTTP/HTTPS URL 的内容。对网页提取可读文本，对文档文件（PDF、Word、Excel 等）自动下载并解析内容。
+
+## 参数
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `url` | string | 是 | HTTP/HTTPS URL（网页或文档链接） |
+
+## 支持的文件类型
+
+| 类型 | 格式 |
+| --- | --- |
+| PDF | `.pdf` |
+| Word | `.docx` |
+| 文本 | `.txt`、`.md`、`.csv`、`.log` |
+| 表格 | `.xls`、`.xlsx` |
+| 演示文稿 | `.ppt`、`.pptx` |
+
+## 使用场景
+
+- 获取网页的文本内容
+- 下载并解析远程文档
+- 获取 API 响应内容
+
+<Note>
+  `web_fetch` 只能获取静态 HTML 内容。如果页面需要 JavaScript 渲染（如 SPA 单页应用），请使用 `browser` 工具。
+</Note>

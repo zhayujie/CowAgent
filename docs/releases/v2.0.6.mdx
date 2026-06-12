@@ -1,83 +1,83 @@
 ---
 title: v2.0.6
-description: CowAgent 2.0.6 - 知识库系统、梦境记忆蒸馏、上下文智能压缩、Web 控制台多会话及多项优化
+description: CowAgent 2.0.6 - Knowledge Base, Deep Dream Memory Distillation, Smart Context Compression, Web Console Multi-Session and More
 ---
 
-## 项目正式更名为 CowAgent
+## Project Renamed to CowAgent
 
-项目仓库正式从 `chatgpt-on-wechat` 更名为 **CowAgent**，演进为功能完备的 AI Agent 助理。
+The repository has been officially renamed from `chatgpt-on-wechat` to **CowAgent**, evolving into a full-featured AI Agent assistant.
 
-- 新地址：[github.com/zhayujie/CowAgent](https://github.com/zhayujie/CowAgent)，旧地址 GitHub 会自动重定向
-- CLI 命令、配置文件、文档链接均保持兼容，无需额外操作
+- New URL: [github.com/zhayujie/CowAgent](https://github.com/zhayujie/CowAgent) — GitHub auto-redirects the old URL
+- CLI commands, config files, and documentation links remain compatible — no extra steps needed
 
-## 📚 知识库系统
+## 📚 Knowledge Base
 
-新增个人知识库系统，Agent 可自主构建和维护结构化知识，并在对话中按需检索引用。
+New personal knowledge base system — Agent can autonomously build and maintain structured knowledge, retrieving it on demand during conversations:
 
-- **索引驱动的自组织结构**：知识库采用 `knowledge/` 目录，按分类自动组织，每个知识页面为独立的 Markdown 文件
-- **自动写入**：向 Agent 发送文件、链接等知识，或在讨论中识别到有价值的知识时，自动创建或更新知识页面
-- **混合检索**：支持关键词全文搜索和向量语义检索，在对话中按需加载相关知识
-- **可视化**：支持文件树浏览和知识图谱可视化，文档内链接可直接跳转查看
-- **命令管理**：`/knowledge` 查看统计、`/knowledge list` 查看目录结构、`/knowledge on|off` 开关知识库
+- **Index-driven self-organizing structure**: Knowledge is stored in `knowledge/` directory, auto-organized by category, with each knowledge page as an independent Markdown file
+- **Auto-write**: Send files, links, or other knowledge to the Agent, or it will automatically create/update knowledge pages when valuable information is identified in conversation
+- **Hybrid retrieval**: Supports keyword full-text search and vector semantic retrieval, loading relevant knowledge on demand during conversations
+- **Visualization**: File tree browsing and knowledge graph visualization, with in-document links for direct navigation
+- **Command management**: `/knowledge` for stats, `/knowledge list` for directory structure, `/knowledge on|off` to toggle
 
 <img src="https://cdn.link-ai.tech/doc/20260413105435.png" width="750" />
 
-相关文档：[知识库](https://docs.cowagent.ai/knowledge)
 
-Inspired by Karpathy's [LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f).
+Docs: [Knowledge Base](https://docs.cowagent.ai/en/knowledge)
 
-## 🌙 梦境记忆蒸馏（Deep Dream）
+## 🌙 Deep Dream Memory Distillation
 
-全新的记忆整理机制，每日自动将分散的对话记忆蒸馏为精炼的长期记忆：
+A new memory consolidation mechanism that automatically distills scattered conversation memories into refined long-term memory daily:
 
-- **三层记忆流转**：对话上下文（短期）→ 天级记忆（中期）→ MEMORY.md（长期），形成完整的记忆生命周期
-- **自动蒸馏**：每日 23:55 定时执行，读取当天天级记忆和 MEMORY.md，通过 LLM 进行去重、合并、修剪，输出精炼的新版 MEMORY.md
-- **梦境日记**：每次蒸馏生成一篇叙事风格的梦境日记，记录整理过程的发现和洞察，存储在 `memory/dreams/` 目录
-- **手动触发**：支持 `/memory dream [N]` 手动触发，可指定整理天数（默认 3 天，最大 30 天），完成后在对话中通知结果
-- **Web 控制台**：记忆管理页面新增「梦境日记」tab，可浏览和查看所有梦境日记
+- **Three-tier memory flow**: Conversation context (short-term) → Daily memory (mid-term) → MEMORY.md (long-term), forming a complete memory lifecycle
+- **Auto-distillation**: Runs daily at 23:55, reads the day's daily memory and MEMORY.md, performs deduplication, merging, and pruning via LLM, outputting a refined MEMORY.md
+- **Dream diary**: Each distillation generates a narrative-style dream diary recording discoveries and insights, stored in `memory/dreams/`
+- **Manual trigger**: `/memory dream [N]` to manually trigger with configurable lookback days (default 3, max 30), with chat notification on completion
+- **Web console**: Memory management page now includes a "Dream Diary" tab for browsing all dream diaries
 
-相关文档：[梦境蒸馏](https://docs.cowagent.ai/memory/deep-dream)
+Docs: [Deep Dream](https://docs.cowagent.ai/en/memory/deep-dream)
 
 <img src="https://cdn.link-ai.tech/doc/20260414120158.png" width="750" />
 
-## 🧠 上下文智能压缩
+## 🧠 Smart Context Compression
 
-上下文超出限制时将裁剪的部分通过 LLM 总结后异步注入，保持对话连贯性：
+When context exceeds limits, trimmed portions are summarized by LLM and asynchronously injected to maintain conversation continuity:
 
-- **LLM 异步摘要**：裁剪的消息由 LLM 总结为关键信息，同时写入天级记忆文件和注入保留的上下文
-- **多模型兼容**：优先使用主模型进行摘要，兼容 Claude、OpenAI、MiniMax 等不同模型的消息格式要求
+- **Async LLM summary**: Trimmed messages are summarized into key information by LLM, written to daily memory files and injected into retained context
+- **Multi-model compatible**: Uses the primary model for summarization, compatible with Claude, OpenAI, MiniMax and other model message format requirements
 
-相关文档：[短期记忆](https://docs.cowagent.ai/memory/context)
+Docs: [Short-term Memory](https://docs.cowagent.ai/en/memory/context)
 
-## 💬 Web 控制台升级
+## 💬 Web Console Upgrades
 
-Web 控制台多项功能增强：
+Multiple enhancements to the Web console:
 
-- **多会话管理**：支持创建和切换多个独立会话，侧边栏展示会话列表，支持会话标题自动生成和手动编辑
-- **密码保护**：支持为控制台设置登录密码，可通过 `web_console_password` 配置项控制
-- **深度思考**：支持在 Web 端展示模型的思考过程，可通过`enable_thinking` 配置项控制
-- **定时推送**：支持定时任务结果推送到 Web 控制台
-- **消息复制**：AI 回复支持一键复制原始 Markdown 内容
+- **Multi-session management**: Create and switch between independent sessions, sidebar session list with auto-generated and manually editable titles
+- **Password protection**: Set a login password via `web_console_password` config option
+- **Deep thinking**: Display model thinking process in Web console, controlled by `enable_thinking` config option
+- **Scheduled push**: Scheduled task results can be pushed to Web console
+- **Message copy**: One-click copy of raw Markdown content from AI reply bubbles
+- **Language toggle**: Top language switch button now shows current language for more intuitive interaction
 
-## 🤖 模型相关
+## 🤖 Model Updates
 
-- **视觉识别优化**：图片识别工具优先使用主模型，支持多模型厂商自动降级。相关文档：[视觉工具](https://docs.cowagent.ai/tools/vision)
-- **MiniMax 新模型**：新增 MiniMax-M2.7-highspeed 模型和 MiniMax TTS 语音合成支持。Thanks @octo-patch
-- **通义千问**：新增 qwen3.6-plus 模型支持
+- **Vision optimization**: Image recognition tool prefers the primary model with automatic multi-provider fallback. Docs: [Vision Tool](https://docs.cowagent.ai/en/tools/vision)
+- **MiniMax new model**: Added MiniMax-M2.7-highspeed model and MiniMax TTS voice synthesis support. Thanks @octo-patch
+- **Qwen**: Added qwen3.6-plus model support
 
-## 🐛 其他优化与修复
+## 🐛 Other Improvements & Fixes
 
-- **记忆提示词优化**：`MEMORY.md` 默认注入系统提示词，精细化记忆检索和写入的触发条件，增强主动写入能力
-- **系统提示词**：优化系统提示词的风格和语气引导
-- **浏览器工具**：增强隐式交互元素检测
-- **文件发送**：修复通用文件类型（tar.gz、zip 等）未能正确发送的问题。Thanks @6vision
-- **macOS 兼容**：修复网络预检超时兼容性问题。Thanks @Moliang Zhou
-- **Windows 兼容**：修复 Windows 下 PowerShell 兼容性、进程更新、终端编码等多项问题
-- **Python 3.13+**：修复 Python 3.13 及以上版本缺少 `legacy-cgi` 依赖的问题
-- **个人微信**：更新个人微信通道版本
+- **Memory prompts**: `MEMORY.md` injected into system prompt by default, with refined memory retrieval and write trigger conditions for enhanced proactive writing
+- **System prompt**: Optimized system prompt style and tone guidance
+- **Browser tool**: Enhanced implicit interactive element detection
+- **File send**: Fixed common file types (tar.gz, zip, etc.) not being sent correctly. Thanks @6vision
+- **macOS compatibility**: Fixed network pre-check timeout compatibility issue. Thanks @Moliang Zhou
+- **Windows compatibility**: Fixed PowerShell compatibility, process updates, terminal encoding and other issues on Windows
+- **Python 3.13+**: Fixed missing `legacy-cgi` dependency for Python 3.13+
+- **WeChat channel**: Updated personal WeChat channel version
 
-## 📦 升级方式
+## 📦 Upgrade
 
-源码部署可执行 `cow update` 或 `./run.sh update` 一键升级，或手动拉取代码后重启。详见 [更新升级文档](https://docs.cowagent.ai/guide/upgrade)。
+Run `cow update` or `./run.sh update` to upgrade, or pull the latest code and restart. See [Upgrade Guide](https://docs.cowagent.ai/en/guide/upgrade).
 
-**发布日期**：2026.04.14 | [Full Changelog](https://github.com/zhayujie/CowAgent/compare/2.0.5...master)
+**Release Date**: 2026.04.14 | [Full Changelog](https://github.com/zhayujie/CowAgent/compare/2.0.5...master)

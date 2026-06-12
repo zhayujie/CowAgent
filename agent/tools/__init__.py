@@ -14,6 +14,9 @@ from agent.tools.send.send import Send
 from agent.tools.memory.memory_search import MemorySearchTool
 from agent.tools.memory.memory_get import MemoryGetTool
 
+# Import self-evolution tools
+from agent.tools.evolution_undo.evolution_undo import EvolutionUndoTool
+
 # Import tools with optional dependencies
 def _import_optional_tools():
     """Import tools that have optional dependencies"""
@@ -135,6 +138,7 @@ __all__ = [
     'Send',
     'MemorySearchTool',
     'MemoryGetTool',
+    'EvolutionUndoTool',
     'EnvConfig',
     'SchedulerTool',
     'WebSearch',

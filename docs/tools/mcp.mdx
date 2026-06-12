@@ -1,19 +1,19 @@
 ---
-title: MCP 工具
-description: 通过 Model Context Protocol 接入外部工具生态
+title: MCP Tools
+description: Integrate external tool ecosystems via the Model Context Protocol
 ---
 
-CowAgent 支持 [Model Context Protocol (MCP)](https://modelcontextprotocol.io)，让 Agent 能够直接调用社区中数以万计的 MCP 工具。配置一次 `mcp.json`，工具就会以与内置工具完全相同的方式呈现给 LLM，可被自动选择和调用。
+CowAgent supports the [Model Context Protocol (MCP)](https://modelcontextprotocol.io), allowing the Agent to directly invoke tens of thousands of community MCP tools. Configure `mcp.json` once and the tools are exposed to the LLM in exactly the same way as built-in tools — automatically selected and invoked.
 
-## 配置文件
+## Configuration File
 
-CowAgent 读取 `~/cow/mcp.json`。文件不存在时不会启用任何 MCP 工具，也不会报错。
+CowAgent reads `~/cow/mcp.json`. If the file does not exist, no MCP tools are loaded — and no error is raised.
 
-Docker 部署时，官方 `docker-compose.yml` 已经把宿主机 `./cow` 挂载到容器内 `/home/agent/cow`（即容器用户的 `~/cow`），把 `mcp.json` 放进宿主机 `./cow/` 目录即可生效。
+For Docker deployments, the official `docker-compose.yml` already mounts the host's `./cow` directory to `/home/agent/cow` inside the container (i.e. the container user's `~/cow`). Just drop `mcp.json` into the host's `./cow/` directory and it will take effect.
 
-### 标准格式
+### Standard Format
 
-完全兼容 MCP 社区标准，同 Claude Desktop / Cursor 一致：
+Fully compatible with the MCP community standard, identical to Claude Desktop / Cursor:
 
 ```json
 {
@@ -29,17 +29,17 @@ Docker 部署时，官方 `docker-compose.yml` 已经把宿主机 `./cow` 挂载
 }
 ```
 
-| 字段 | 必填 | 说明 |
+| Field | Required | Description |
 | --- | --- | --- |
-| `command` | stdio | 启动 server 的可执行命令（如 `npx`、`python`、`uvx`） |
-| `args` | 否 | 传给 command 的参数列表 |
-| `env` | 否 | 子进程的环境变量，常用于 API Key |
-| `url` | SSE / Streamable HTTP | 远程端点 URL（与 `command` 二选一） |
-| `type` | 远程 | 远程传输类型，可选 `sse` 或 `streamable-http`，默认 `sse` |
-| `headers` | 否 | 远程请求附加 HTTP 头（如 `Authorization`），仅 Streamable HTTP 使用 |
-| `disabled` | 否 | `true` 时跳过该 server，便于临时关闭 |
+| `command` | stdio | Executable to launch the server (e.g. `npx`, `python`, `uvx`) |
+| `args` | No | Arguments passed to `command` |
+| `env` | No | Environment variables for the subprocess, commonly used for API keys |
+| `url` | SSE / Streamable HTTP | Remote endpoint URL (alternative to `command`) |
+| `type` | Remote | Remote transport type: `sse` or `streamable-http` (defaults to `sse`) |
+| `headers` | No | Extra HTTP headers for remote requests (e.g. `Authorization`); Streamable HTTP only |
+| `disabled` | No | When `true`, this server is skipped — handy for temporary disabling |
 
-### 完整示例
+### Full Example
 
 ```json
 {
@@ -59,54 +59,54 @@ Docker 部署时，官方 `docker-compose.yml` 已经把宿主机 `./cow` 挂载
 }
 ```
 
-- **fetch**：通用网页抓取，返回页面文本内容，无需 API Key
-- **github**：访问 GitHub 仓库、Issue、PR 等，需要 Personal Access Token
+- **fetch**: Generic web page fetcher that returns page text content. No API key required.
+- **github**: Access GitHub repos, issues, PRs, etc. Requires a Personal Access Token.
 
-## 让 Agent 帮你配置
+## Let the Agent Configure It for You
 
-CowAgent 自带 `read` / `write` / `edit` 工具，**直接把要装的 MCP 配置发给 Agent，让它写到配置文件中：
+CowAgent ships with `read` / `write` / `edit` tools, so **you can simply send the MCP config to the Agent and ask it to write the file**:
 
-例如：
+For example:
 
 ```markdown
-帮我把这个 MCP 加到 ~/cow/mcp.json 里：
+Add this MCP to ~/cow/mcp.json:
 
 {"mcpServers":{"fetch":{"command":"uvx","args":["mcp-server-fetch"]}}}
 ```
 
-Agent 会：
+The Agent will:
 
-1. 访问 MCP 配置文件，合并新 server 配置，保留已有项
-2. 自动重载增量的 MCP Server，下一次对话即可使用相应 Tools
+1. Read the existing MCP config and merge the new server entry, preserving existing ones
+2. Hot-reload the new MCP server, so the corresponding tools become available on the next message
 
-## 工作方式
+## How It Works
 
-- 启动时**异步加载**：`mcp.json` 中配置的所有 server 会在后台异步加载，不阻塞主流程，对话可以立刻使用
-- **热更新**：用户或 Agent 修改 `mcp.json` 后，消息处理完成时会自动重载变更的 server，无需重启 cow
-- **平铺呈现**：每个 MCP server 暴露的多个方法会平铺为独立的工具，LLM 直接选择调用，不需要二次决策
+- **Async loading at startup**: All servers configured in `mcp.json` are loaded asynchronously in the background, never blocking the main loop — chat is usable immediately.
+- **Hot reload**: When you or the Agent modifies `mcp.json`, changed servers are automatically reloaded after the current message — no need to restart cow.
+- **Flat exposure**: Each method exposed by an MCP server appears as an individual tool. The LLM picks one directly without a second-stage decision.
 
-## 支持的传输协议
+## Supported Transports
 
-| 协议 | 说明 | 配置字段 |
+| Transport | Description | Config Field |
 | --- | --- | --- |
-| **stdio** | 子进程通信，最常见，社区生态最丰富 | `command` + `args` |
-| **SSE** | HTTP Server-Sent Events，旧版远程协议 | `url`（默认） |
-| **Streamable HTTP** | 新版远程协议，单端点收发，逐步取代 SSE | `type: "streamable-http"` + `url` |
+| **stdio** | Subprocess communication. The most common option, with the richest community ecosystem. | `command` + `args` |
+| **SSE** | HTTP Server-Sent Events. Legacy remote transport. | `url` (default) |
+| **Streamable HTTP** | New unified remote transport, gradually replacing SSE. | `type: "streamable-http"` + `url` |
 
-## 排错
+## Troubleshooting
 
-| 现象 | 排查方向 |
+| Symptom | What to Check |
 | --- | --- |
-| 启动后 Agent 没有 MCP 工具 | 检查 `~/cow/mcp.json` 是否存在、JSON 格式是否合法 |
-| 某个 server 加载失败 | 查看启动日志中的 `[MCP] Server 'xxx' load failed`，常见为依赖未装、API Key 缺失 |
-| 修改 `mcp.json` 没有生效 | 改动会在**下一条消息**生效；若 server 配置不变（如只改注释），不会触发重启 |
-| Docker 部署 | 确认宿主机 `./cow` 已挂载到容器内 `/home/agent/cow`，`mcp.json` 直接放进宿主机 `./cow/` 目录即可，或者直接对话 Agent 安装 |
+| Agent has no MCP tools after startup | Verify that `~/cow/mcp.json` exists and contains valid JSON |
+| A specific server fails to load | Look for `[MCP] Server 'xxx' load failed` in startup logs — usually missing dependencies or API keys |
+| Changes to `mcp.json` aren't applied | Changes take effect on **the next message**. If the server config didn't actually change (e.g. only comments edited), no restart is triggered |
+| Docker deployment | Make sure host's `./cow` is mounted to `/home/agent/cow` in the container, then just drop `mcp.json` into host's `./cow/`. Or just ask the Agent to do it |
 
-## MCP 市场推荐
+## Recommended MCP Marketplaces
 
-可以从各个第三方广场寻找现成的 MCP server，复制 JSON 配置即可使用，例如：
+You can browse third-party MCP marketplaces and copy a JSON config to use directly, for example:
 
-- [mcp.so](https://mcp.so) — 全球 MCP 服务索引
-- [ModelScope MCP 广场](https://modelscope.cn/mcp) — 魔搭社区 MCP 广场，国内访问更稳定
+- [mcp.so](https://mcp.so) — Global MCP service index
+- [ModelScope MCP Hub](https://modelscope.cn/mcp) — ModelScope's MCP hub, more reliable from mainland China
 
-只要遵循 MCP 标准协议（stdio / SSE / Streamable HTTP），都可以直接接入 CowAgent。
+Any MCP server that follows the standard protocol (stdio / SSE / Streamable HTTP) integrates with CowAgent out of the box.

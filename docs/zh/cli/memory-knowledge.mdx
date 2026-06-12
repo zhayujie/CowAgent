@@ -1,0 +1,77 @@
+---
+title: 记忆与知识库
+description: 记忆蒸馏和知识库管理命令
+---
+
+## memory
+
+管理 Agent 的长期记忆系统。
+
+### memory dream
+
+手动触发记忆蒸馏（Deep Dream），整理近期的天级记忆，蒸馏合并到 MEMORY.md，并生成梦境日记。
+
+```text
+/memory dream [N]
+```
+
+- `N`：整理近 N 天的记忆，默认 3 天，最大 30 天
+- 蒸馏在后台异步执行，完成后会在对话中通知结果
+- 无需等待 Agent 初始化，首次对话前即可使用
+
+**示例：**
+
+```text
+/memory dream       # 整理近 3 天
+/memory dream 7     # 整理近 7 天
+/memory dream 30    # 整理近 30 天（全量）
+```
+
+蒸馏完成后，Web 端会收到带有跳转链接的通知，可直接查看更新后的 MEMORY.md 和梦境日记。
+
+<Tip>
+  系统每天 23:55 会自动执行一次蒸馏（lookback 1 天）。手动触发适用于首次部署后的历史整理，或需要立即更新记忆时使用。
+</Tip>
+
+## knowledge
+
+查看和管理个人知识库。默认显示知识库统计信息。
+
+```text
+/knowledge
+```
+
+输出示例：
+
+```
+📚 知识库
+
+- 状态：已开启
+- 页面数：12
+- 总大小：45.2 KB
+- 分类明细：
+  - concepts/: 5 篇
+  - entities/: 4 篇
+  - sources/: 3 篇
+```
+
+### knowledge list
+
+查看知识库目录树结构。
+
+```text
+/knowledge list
+```
+
+### knowledge on / off
+
+开启或关闭知识库。关闭后不再注入知识提示词和索引知识文件。
+
+```text
+/knowledge on
+/knowledge off
+```
+
+<Note>
+  终端 CLI 中 `cow knowledge` 和 `cow knowledge list` 可用，但 `on|off` 仅支持在对话中使用（需实时生效）。
+</Note>

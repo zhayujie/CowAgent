@@ -1,11 +1,11 @@
 ---
-title: Web 控制台
-description: 通过 Web 控制台使用 CowAgent
+title: Web Console
+description: Use CowAgent through the Web Console
 ---
 
-Web 控制台是 CowAgent 的默认通道，启动后会自动运行，通过浏览器即可与 Agent 对话，并支持在线管理模型、技能、记忆、通道等配置。
+The Web Console is CowAgent's default channel. It runs automatically once started, letting you chat with the Agent in a browser and manage models, skills, memory, channels, and other configuration online.
 
-## 配置
+## Configuration
 
 ```json
 {
@@ -17,78 +17,79 @@ Web 控制台是 CowAgent 的默认通道，启动后会自动运行，通过浏
 }
 ```
 
-| 参数 | 说明 | 默认值 |
+| Parameter | Description | Default |
 | --- | --- | --- |
-| `channel_type` | 设为 `web` | `web` |
-| `web_host` | Web 服务监听地址，默认监听 `127.0.0.1`（仅本机），如需公网访问请改为 `0.0.0.0` 并设置密码 | `""` |
-| `web_port` | Web 服务监听端口 | `9899` |
-| `web_password` | 访问密码，留空表示不启用密码保护；监听 `0.0.0.0` 时建议设置 | `""` |
-| `web_session_expire_days` | 登录会话有效天数 | `30` |
-| `enable_thinking` | 是否启用深度思考模式 | `false` |
+| `channel_type` | Set to `web` | `web` |
+| `web_host` | Web service listen address. Defaults to `127.0.0.1` (local only); set to `0.0.0.0` for public access and configure a password | `""` |
+| `web_port` | Web service listen port | `9899` |
+| `web_password` | Access password. Leave empty to disable password protection; recommended when listening on `0.0.0.0` | `""` |
+| `web_session_expire_days` | Login session validity in days | `30` |
+| `web_file_serve_root` | Root directory the web console can directly read/send files from. Defaults to the user home dir and agent workspace only; set to `/` to allow the whole filesystem | `"~"` |
+| `enable_thinking` | Whether to enable deep thinking mode | `false` |
 
-配置密码后，访问控制台时需先输入密码完成登录。登录状态默认保持 30 天，期间重启服务也无需重新登录。密码也支持在控制台的「配置」页面中在线修改。
+Once a password is configured, you must enter it to log in when accessing the console. The login session is kept for 30 days by default, so restarting the service during that period does not require re-login. The password can also be changed online from the "Configuration" page in the console.
 
-## 访问地址
+## Access URL
 
-启动项目后访问：
+After starting the project, visit:
 
-- 本地运行：`http://localhost:9899`
-- 服务器运行：`http://<server-ip>:9899`
+- Local: `http://localhost:9899`
+- Server: `http://<server-ip>:9899`
 
 <Note>
-  请确保服务器防火墙和安全组已放行对应端口。
+  Ensure the server firewall and security group allow the corresponding port.
 </Note>
 
-## 功能介绍
+## Features
 
-### 对话界面
+### Chat Interface
 
-支持流式输出，可实时展示 Agent 的思考过程（Reasoning）和工具调用过程（Tool Calls），更直观地观察 Agent 的决策过程。深度思考功能可通过配置或控制台的「Agent 配置」开关控制。
+Supports streaming output with real-time display of the Agent's reasoning process and tool calls, providing intuitive observation of the Agent's decision-making. Deep thinking can be toggled via configuration or the "Agent Configuration" switch in the console.
 
 <img width="850" src="https://cdn.link-ai.tech/doc/20260227180120.png" />
 
-#### 多会话管理
+#### Multi-Session Management
 
-对话界面支持多会话（Session）管理，所有会话记录持久化存储在数据库中：
+The chat interface supports multi-session management. All session records are persistently stored in the database:
 
-- **会话列表**：点击左侧历史会话图标可展开/收起会话列表面板，支持滚动加载全部历史会话
-- **AI 生成标题**：新会话在首轮对话完成后，自动调用模型生成简短的会话摘要标题
-- **新建会话**：点击会话列表顶部的「新对话」按钮或输入区的 `+` 按钮创建新会话
-- **删除会话**：点击会话项的删除按钮，确认后永久删除该会话及其所有消息
-- **清除上下文**：点击输入区的清除按钮，在当前会话中插入一条分隔线，分隔线以上的消息仍然展示但不再作为模型的上下文输入
+- **Session List**: Click the history icon on the left to expand/collapse the session list panel, with scroll-to-load support for all historical sessions
+- **AI-Generated Titles**: After the first exchange in a new session, the model is automatically called to generate a short summary title
+- **New Session**: Click the "New Chat" button at the top of the session list or the `+` button in the input area to create a new session
+- **Delete Session**: Click the delete button on a session item and confirm to permanently delete the session and all its messages
+- **Clear Context**: Click the clear button in the input area to insert a divider in the current session. Messages above the divider are still displayed but no longer included as context for the model
 
-### 模型管理
+### Model Management
 
-支持在线管理不同模型厂商的文本、图像、语音、向量模型配置，无需手动编辑配置文件：
+Manage text, image, voice, and embedding model configurations for different providers online — no need to edit config files manually:
 
 <img width="850" src="https://cdn.link-ai.tech/doc/20260521212949.png" />
 
-### 技能管理
+### Skill Management
 
-支持在线查看和管理 Agent 技能（Skills）：
+View and manage Agent skills (Skills) online:
 
 <img width="850" src="https://cdn.link-ai.tech/doc/20260227173403.png" />
 
-### 记忆管理
+### Memory Management
 
-支持在线查看和管理 Agent 记忆：
+View and manage Agent memory online:
 
 <img width="850" src="https://cdn.link-ai.tech/doc/20260227173349.png" />
 
-### 通道管理
+### Channel Management
 
-支持在线管理接入通道，支持实时连接/断开操作：
+Manage connected channels online with real-time connect/disconnect operations:
 
 <img width="850" src="https://cdn.link-ai.tech/doc/20260227173331.png" />
 
-### 定时任务
+### Scheduled Tasks
 
-支持在线查看和管理定时任务，包括一次性任务、固定间隔、Cron 表达式等多种调度方式的可视化管理：
+View and manage scheduled tasks online, including one-time tasks, fixed intervals, and Cron expressions:
 
 <img width="850" src="https://cdn.link-ai.tech/doc/20260227173704.png" />
 
-### 日志
+### Logs
 
-支持在线实时查看 Agent 运行日志，便于监控运行状态和排查问题：
+View Agent runtime logs in real time for monitoring and troubleshooting:
 
 <img width="850" src="https://cdn.link-ai.tech/doc/20260227173514.png" />

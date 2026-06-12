@@ -1,0 +1,93 @@
+---
+title: Discord
+description: Integrate CowAgent with a Discord Bot
+---
+
+> Integrate CowAgent into Discord via a Discord Bot using the **Gateway** (persistent WebSocket). Supports direct messages (DM) and server channels (triggered by @mention or replying to the bot). The Gateway uses a persistent WebSocket connection — no public IP or callback URL required, works out of the box.
+
+## 1. Setup
+
+### Step 1: Create a Discord Application and Bot
+
+1. Open the [Discord Developer Portal](https://discord.com/developers/applications), click **New Application**, enter a name (e.g. `CowAgent`), and create it.
+2. Go to the **Bot** page in the left sidebar, click **Reset Token** to generate a Bot Token, then copy and store it safely (shown only once).
+
+<Tip>
+  This token is your bot's password — keep it secret. If it leaks, click **Reset Token** again on the Bot page to regenerate it.
+</Tip>
+
+### Step 2: Enable the Message Content Intent
+
+Reading message text in both DMs and channels depends on this privileged intent.
+
+1. On the **Bot** page, find **Privileged Gateway Intents**.
+2. Turn on **Message Content Intent** and save.
+
+<Note>
+  Without this intent enabled, incoming message content will be empty and the bot will not respond.
+</Note>
+
+### Step 3: Invite the Bot to a Server
+
+1. Go to **OAuth2 → URL Generator** in the left sidebar.
+2. Under **Scopes**, check `bot`.
+3. Under **Bot Permissions**, check at least: `Send Messages`, `Read Message History`, `Attach Files`, `View Channels`.
+4. Copy the generated authorization URL at the bottom, open it in a browser, and authorize it for your target server.
+
+<Note>
+  You can skip this step if you only need DMs, but you still need a DM channel with the bot (e.g. the user messages the bot directly).
+</Note>
+
+### Step 4: Connect to CowAgent
+
+<Tabs>
+  <Tab title="Web Console (Recommended)">
+    Open the Web Console (default `http://127.0.0.1:9899`), go to **Channels**, click **Add Channel**, choose **Discord**, paste the Bot Token, and click connect.
+  </Tab>
+  <Tab title="Config File">
+    Add the following to `config.json` and start Cow:
+
+    ```json
+    {
+      "channel_type": "discord",
+      "discord_token": "your-discord-bot-token",
+      "discord_group_trigger": "mention_or_reply"
+    }
+    ```
+
+    | Key | Description | Default |
+    | --- | --- | --- |
+    | `discord_token` | Bot Token generated on the Bot page of the Developer Portal | - |
+    | `discord_group_trigger` | Channel trigger: `mention_or_reply` (@ or reply to bot) / `mention_only` (@ only) / `all` (all messages) | `mention_or_reply` |
+  </Tab>
+</Tabs>
+
+The integration is ready when you see logs like:
+
+```
+[Discord] Bot logged in as CowAgent#1234 (id=123456789)
+[Discord] ✅ Discord bot ready, listening for messages
+```
+
+## 2. Capabilities
+
+| Feature | Support |
+| --- | --- |
+| Direct message (DM) | ✅ |
+| Server channel (@bot / reply to bot) | ✅ |
+| Text messages | ✅ send / receive |
+| Image messages | ✅ send / receive |
+| File messages | ✅ send / receive (PDF / Word / Excel, etc.) |
+
+<Note>
+  A single Discord message is capped at 2000 characters; long replies are automatically split across multiple messages by line breaks.
+</Note>
+
+## 3. Usage
+
+Once connected:
+
+- **Direct message (DM)**: find your bot in the server member list, click its avatar, and message it directly.
+- **Channel**: in a channel where the bot is invited, trigger it with `@your-bot hello` or by **replying to one of the bot's messages**.
+
+When sending an image or file, you can **add a text caption** (description / question) in the attachment input — the bot will answer based on both. Sending an attachment first and then a follow-up question also works; the two messages are merged automatically.

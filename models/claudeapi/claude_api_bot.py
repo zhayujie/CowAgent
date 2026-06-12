@@ -223,7 +223,7 @@ class ClaudeAPIBot(Bot, OpenAIImage):
             return 8192
         elif model and model.startswith("claude-3") and "opus" in model:
             return 4096
-        elif model and (model.startswith("claude-sonnet-4") or model.startswith("claude-opus-4")):
+        elif model and (model.startswith("claude-sonnet-4") or model.startswith("claude-opus-4") or model.startswith("claude-fable")):
             return 64000
         return 8192
 

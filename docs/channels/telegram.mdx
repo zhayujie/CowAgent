@@ -1,0 +1,111 @@
+---
+title: Telegram
+description: Integrate CowAgent with Telegram via the Bot API
+---
+
+> Integrate CowAgent into Telegram via the official Bot API. Supports private chat and group chat (triggered by @mention or replying to the bot). Uses Long Polling — no public IP required, works out of the box.
+
+
+## 1. Setup
+
+### Step 1: Create a Bot via BotFather
+
+1. Open the official account [@BotFather](https://t.me/BotFather) in Telegram.
+2. Send `/newbot` and follow the prompts:
+   - **Bot name** (display name, e.g. `My CowAgent Bot`)
+   - **Bot username** (must end with `bot`, e.g. `my_cowagent_bot`)
+3. Once created, BotFather returns an **HTTP API Token** (e.g. `123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ`). Keep it safe.
+
+<Tip>
+  The token is the password of your bot — never share it. If it leaks, send `/revoke` to `@BotFather` to reset it.
+</Tip>
+
+### Step 2: (Group chat only) Disable Privacy Mode
+
+Skip this step if you only use private chat. Telegram bots run in **Privacy Mode** by default — in groups they can only see commands suffixed with `@bot` (e.g. `/start@your_bot`) and replies to bot messages; **plain `@bot hello` text messages are not delivered**, so the bot will appear unresponsive in groups.
+
+Send the following to `@BotFather`:
+
+1. `/setprivacy`
+2. Pick the bot you just created
+3. Choose `Disable`
+
+<Note>
+  If the bot is still silent in groups after this, try removing it from the group and adding it back.
+</Note>
+
+### Step 3: Connect to CowAgent
+
+<Tabs>
+  <Tab title="Web Console (Recommended)">
+    Open the Web Console (default `http://127.0.0.1:9899`), go to **Channels**, click **Add Channel**, choose **Telegram**, paste the Bot Token, and click connect.
+  </Tab>
+  <Tab title="Config File">
+    Add the following to `config.json` and start Cow:
+
+    ```json
+    {
+      "channel_type": "telegram",
+      "telegram_token": "123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ",
+      "telegram_group_trigger": "mention_or_reply"
+    }
+    ```
+
+    | Key | Description | Default |
+    | --- | --- | --- |
+    | `telegram_token` | HTTP API Token returned by BotFather | - |
+    | `telegram_group_trigger` | Group trigger: `mention_or_reply` (@ or reply) / `mention_only` (@ only) / `all` (all messages) | `mention_or_reply` |
+    | `telegram_register_commands` | Whether to register the command menu with BotFather on startup | `true` |
+  </Tab>
+</Tabs>
+
+The integration is ready when you see logs like:
+
+```
+[Telegram] Bot logged in as @my_cowagent_bot (id=123456789)
+[Telegram] Registered 10 bot commands
+[Telegram] ✅ Telegram bot ready, polling for updates
+```
+
+## 2. Capabilities
+
+| Feature | Support |
+| --- | --- |
+| Private chat | ✅ |
+| Group chat (@bot / reply to bot) | ✅ |
+| Text messages | ✅ send / receive |
+| Image messages | ✅ send / receive |
+| Voice messages | ✅ send / receive (OGG/Opus) |
+| Video messages | ✅ send / receive |
+| File messages | ✅ send / receive (PDF / Word / Excel, etc.) |
+| Command menu | ✅ aligned with Web Console slash commands |
+
+### Command Menu
+
+On startup, the channel registers a command menu with BotFather. Typing `/` in Telegram shows a dropdown:
+
+| Command | Description |
+| --- | --- |
+| `/help` | Show command help |
+| `/status` | View runtime status |
+| `/context` | View conversation context (`/context clear` to clear) |
+| `/skill` | Skill management (`/skill list`, `/skill install`, ...) |
+| `/memory` | Memory management (`/memory dream`) |
+| `/knowledge` | Knowledge base (`/knowledge list` / `on` / `off`) |
+| `/config` | View current config |
+| `/cancel` | Cancel the running Agent task |
+| `/logs` | View recent logs |
+| `/version` | Show version |
+
+<Note>
+  Telegram's command menu only displays top-level commands; subcommands are entered with a space, e.g. `/skill list`, `/context clear`.
+</Note>
+
+## 3. Usage
+
+Once connected:
+
+- **Private chat**: search for your bot username (e.g. `@my_cowagent_bot`) in Telegram, click `Start` and chat away.
+- **Group chat**: add the bot to a group, then trigger it with `@bot hello` or by **replying to one of the bot's messages**. If the bot doesn't respond in groups, double-check Privacy Mode in [Step 2](#step-2-group-chat-only-disable-privacy-mode).
+
+When sending an image or file, you can **add a caption** (description / question) directly in the attachment input — the bot will answer based on both. Sending an attachment first and then a follow-up question also works; the two messages are merged automatically.

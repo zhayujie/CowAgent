@@ -1,0 +1,112 @@
+---
+title: 通义千问 Qwen
+description: 通义千问模型配置（文本 / 图像理解 / 图像生成 / 语音识别 / 语音合成 / 向量）
+---
+
+通义千问（DashScope / 百炼）是国内覆盖最完整的厂商之一，文本、图像理解、图像生成、语音识别、语音合成与向量能力均可用一份 `dashscope_api_key` 启用。
+
+<Tip>
+  通过 Web 控制台的「模型管理」页面可一站式配置以下全部能力，无需手动改配置文件。
+</Tip>
+
+## 文本对话
+
+```json
+{
+  "model": "qwen3.7-plus",
+  "dashscope_api_key": "YOUR_API_KEY"
+}
+```
+
+| 参数 | 说明 |
+| --- | --- |
+| `model` | 可填 `qwen3.7-plus`、`qwen3.7-max`、`qwen3.6-plus`、`qwen3.5-plus`、`qwen3-max`、`qwen-max`、`qwen-plus`、`qwen-turbo`、`qwq-plus` 等 |
+| `dashscope_api_key` | 在 [百炼控制台](https://bailian.console.aliyun.com/?tab=model#/api-key) 创建，参考 [官方文档](https://bailian.console.aliyun.com/?tab=api#/api) |
+
+## 图像理解
+
+配置 `dashscope_api_key` 后 Agent 的 Vision 工具会自动调用千问的视觉模型识别图像。`qwen3.7-plus` / `qwen3.6-plus` / `qwen3.5-plus` / `qwen3-max` 等模型本身就是多模态；若主模型是纯文本（如 `qwen-turbo`），会自动回落到 `qwen-vl-max`。
+
+如需手动指定 Vision 模型：
+
+```json
+{
+  "tools": {
+    "vision": {
+      "model": "qwen3.7-plus"
+    }
+  }
+}
+```
+
+支持模型：`qwen3.7-plus`、`qwen3.6-plus`、`qwen3.5-plus`、`qwen3-max`。
+
+## 图像生成
+
+```json
+{
+  "skills": {
+    "image-generation": {
+      "model": "qwen-image-2.0"
+    }
+  }
+}
+```
+
+可选模型：`qwen-image-2.0`、`qwen-image-2.0-pro`。
+
+## 语音识别
+
+```json
+{
+  "voice_to_text": "dashscope",
+  "voice_to_text_model": "qwen3-asr-flash"
+}
+```
+
+| 参数 | 说明 |
+| --- | --- |
+| `voice_to_text` | 设为 `dashscope` 启用通义千问 ASR |
+| `voice_to_text_model` | 可选，默认 `qwen3-asr-flash` |
+
+凭证自动复用 `dashscope_api_key`。单段音频建议小于 10MB、时长不超过 300 秒。
+
+## 语音合成
+
+```json
+{
+  "text_to_voice": "dashscope",
+  "text_to_voice_model": "qwen3-tts-flash",
+  "tts_voice_id": "Cherry"
+}
+```
+
+| 参数 | 说明 |
+| --- | --- |
+| `text_to_voice_model` | 可选，默认 `qwen3-tts-flash`，覆盖普通话、方言与主流外语 |
+| `tts_voice_id` | 音色 ID，详见下方常用列表 |
+
+常用音色示例：
+
+| 音色 ID | 说明 |
+| --- | --- |
+| `Cherry` | 芊悦 · 阳光女声 |
+| `Serena` | 苏瑶 · 温柔女声 |
+| `Ethan` | 晨煦 · 阳光男声 |
+| `Chelsie` | 千雪 · 二次元少女 |
+| `Dylan` | 北京话 · 晓东 |
+| `Rocky` | 粤语 · 阿强 |
+| `Sunny` | 四川话 · 晴儿 |
+
+完整音色（普通话 / 各地方言 / 双语等）可在 Web 控制台的「模型管理 → 语音合成」下拉框中可视化选择。
+
+## 向量
+
+```json
+{
+  "embedding_provider": "dashscope",
+  "embedding_model": "text-embedding-v4"
+}
+```
+
+默认模型 `text-embedding-v4`。修改 embedding 后需执行 `/memory rebuild-index` 命令重建索引。

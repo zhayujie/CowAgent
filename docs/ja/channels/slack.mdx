@@ -1,0 +1,118 @@
+---
+title: Slack
+description: Slack App 経由で CowAgent を接続
+---
+
+> Slack App の **Socket Mode** を通じて CowAgent を接続します。ダイレクトメッセージ（DM）およびチャンネル（@メンションまたはスレッド内の返信で起動）に対応。Socket Mode は WebSocket の常時接続を使うため公開 IP やコールバック URL は不要で、すぐに利用できます。
+
+## 1. 接続手順
+
+### ステップ 1: Slack App を作成
+
+1. [Slack API アプリ管理ページ](https://api.slack.com/apps) を開き、**Create New App** → **From scratch** をクリックします。
+2. **App Name**（例: `CowAgent`）を入力し、インストール先の **Workspace** を選択して作成します。
+
+### ステップ 2: Socket Mode を有効化し App Token を取得
+
+1. 左メニューの **Settings → Socket Mode** で **Enable Socket Mode** をオンにします。
+2. `connections:write` スコープを持つ **App-Level Token** の生成を求められます。`xapp-` で始まるこの Token を保存してください。
+
+<Tip>
+  Socket Mode は WebSocket 接続でイベントを受信するため、公開コールバック URL を公開する必要がありません。ローカルやイントラネットでの運用に最適です。
+</Tip>
+
+### ステップ 3: Bot 権限を設定してインストール
+
+1. **Features → OAuth & Permissions** を開き、**Bot Token Scopes** で **Add an OAuth Scope** をクリックして以下を 1 つずつ追加します:
+
+   ```
+   app_mentions:read
+   channels:history
+   chat:write
+   commands
+   files:read
+   files:write
+   groups:history
+   im:history
+   mpim:history
+   users:read
+   ```
+
+   <Note>
+     `files:read` / `files:write` は画像・ファイルの送受信に使用します。テキスト会話のみであれば省略可能です。
+   </Note>
+
+2. **Features → Event Subscriptions** を開き、**Enable Events** をオンにして、**Subscribe to bot events** で **Add Bot User Event** をクリックし、以下を追加します:
+
+   ```
+   app_mention
+   message.im
+   message.channels
+   ```
+
+   <Note>
+     非公開チャンネルで使用する場合は `message.groups` も追加してください。
+   </Note>
+3. **Features → App Home** を開き、**Show Tabs** 内の **Messages Tab** を有効にして、下の **Allow users to send Slash commands and messages from the messages tab**（メッセージタブからの送信を許可）にチェックを入れます。これを行わないと DM の入力欄が無効化され、ボットにメッセージを送れません。
+4. **OAuth & Permissions** に戻り、**Install to Workspace** をクリックしてインストールします。インストール後、`xoxb-` で始まる **Bot User OAuth Token** を取得します。
+
+<Tip>
+  Slack クライアントで「このアプリへのメッセージ送信は無効です」と表示される場合は、上記の App Home 設定が完了しているか確認し、Slack クライアントを再読み込み／再起動してください（必要に応じてアプリを会話一覧から削除して再度開きます）。
+</Tip>
+
+### ステップ 4: CowAgent に接続
+
+<Tabs>
+  <Tab title="Web コンソール（推奨）">
+    Web コンソール（既定 `http://127.0.0.1:9899`）を開き、**チャネル** メニュー → **チャネルを追加** → **Slack** を選択し、Bot Token（`xoxb-`）と App Token（`xapp-`）を貼り付けて接続をクリックします。
+  </Tab>
+  <Tab title="設定ファイル">
+    `config.json` に以下を追加して Cow を起動します:
+
+    ```json
+    {
+      "channel_type": "slack",
+      "slack_bot_token": "xoxb-xxxxxxxxxxxx",
+      "slack_app_token": "xapp-xxxxxxxxxxxx",
+      "slack_group_trigger": "mention_or_reply"
+    }
+    ```
+
+    | パラメータ | 説明 | 既定値 |
+    | --- | --- | --- |
+    | `slack_bot_token` | Bot User OAuth Token、`xoxb-...` の形式 | - |
+    | `slack_app_token` | App-Level Token（Socket Mode 有効化後に生成）、`xapp-...` の形式 | - |
+    | `slack_group_trigger` | チャンネルのトリガー方式: `mention_or_reply`（@ またはスレッド返信）/ `mention_only`（@ のみ）/ `all`（全メッセージ） | `mention_or_reply` |
+  </Tab>
+</Tabs>
+
+ログに以下のような出力が表示されれば接続成功です:
+
+```
+[Slack] Bot logged in as user_id=U0XXXXXXX, team=Txxxxxxxx
+[Slack] ✅ Slack bot ready, listening for events
+```
+
+## 2. 機能
+
+| 機能 | 対応状況 |
+| --- | --- |
+| ダイレクトメッセージ（DM） | ✅ |
+| チャンネル（@bot / スレッド返信） | ✅ |
+| テキストメッセージ | ✅ 送受信 |
+| 画像メッセージ | ✅ 送受信 |
+| ファイルメッセージ | ✅ 送受信（PDF / Word / Excel など） |
+| スレッド返信 | ✅ 起動メッセージのスレッドに返信を送信 |
+
+<Note>
+  Slack はスレッドで会話を整理します。Bot は起動メッセージのスレッドに返信を送信するため、チャンネルがすっきりします。
+</Note>
+
+## 3. 使い方
+
+接続が完了したら:
+
+- **ダイレクトメッセージ（DM）**: Slack の左サイドバー **Apps** からアプリを開き、直接メッセージを送ります。
+- **チャンネル**: アプリをチャンネルに招待し（`/invite @your-app`）、`@your-app こんにちは` で起動します。以降は同じスレッド内で返信すれば会話を継続できます。
+
+画像やファイルを送るときは、添付の入力欄に **テキスト説明**（説明・質問）を書いて一緒に送信できます。Bot は添付ファイルと説明を合わせて回答します。先に添付を送り、その後に質問を送る形でも、2 つのメッセージは自動でまとめて処理されます。

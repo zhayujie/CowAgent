@@ -1,81 +1,81 @@
 ---
-title: 短期记忆
-description: 对话上下文 — 消息管理、压缩策略和上下文操作
+title: Short-term Memory
+description: Conversation context — message management, compression strategies, and context operations
 ---
 
-对话上下文是 Agent 的短期记忆，包含当前会话中的所有消息（用户输入、Agent 回复、工具调用及结果）。合理管理上下文对于 Agent 的推理质量和成本控制至关重要。
+Conversation context is the Agent's short-term memory, containing all messages in the current session (user input, Agent replies, tool calls and results). Proper context management is critical for the Agent's reasoning quality and cost control.
 
-## 上下文结构
+## Context Structure
 
-每一轮对话由以下消息组成：
+Each conversation turn consists of:
 
 ```
-用户消息 → Agent 思考 → 工具调用 → 工具结果 → ... → Agent 最终回复
+User message → Agent thinking → Tool call → Tool result → ... → Agent final reply
 ```
 
-一轮中可能包含多次工具调用（Agent 的决策步数由 `agent_max_steps` 控制），所有工具调用和结果都会保留在上下文中，直到被压缩或裁剪。
+A single turn may include multiple tool calls (controlled by `agent_max_steps`). All tool calls and results are retained in context until compressed or trimmed.
 
-## 关键配置
+## Key Configuration
 
-| 参数 | 说明 | 默认值 |
+| Parameter | Description | Default |
 | --- | --- | --- |
-| `agent_max_context_tokens` | 上下文最大 token 预算 | `50000` |
-| `agent_max_context_turns` | 上下文最大对话轮次 | `20` |
-| `agent_max_steps` | 单轮对话最大决策步数（工具调用次数） | `15` |
+| `agent_max_context_tokens` | Maximum context token budget | `50000` |
+| `agent_max_context_turns` | Maximum conversation turns in context | `20` |
+| `agent_max_steps` | Maximum decision steps per turn (tool call count) | `15` |
 
-可通过 `config.json` 或对话中的 `/config` 命令修改。
+Configurable via `config.json` or the `/config` chat command.
 
-## 压缩策略
+## Compression Strategy
 
-当上下文超出限制时，系统会自动执行压缩以释放空间。整个过程分为多个阶段：
+When context exceeds limits, the system automatically compresses to free space. The process has multiple stages:
 
-### 1. 工具结果截断
+### 1. Tool Result Truncation
 
-在每次决策循环开始前，系统会检查历史轮次中的工具调用结果。超过 **20000 字符** 的工具结果会被截断，仅保留首尾内容和截断说明。当前轮次的工具结果不受影响。
+Before each decision loop, the system checks tool call results in historical turns. Results exceeding **20,000 characters** are truncated, keeping only the beginning and end with a truncation notice. Current turn results are not affected.
 
-### 2. 轮次裁剪
+### 2. Turn Trimming
 
-当对话轮次超过 `agent_max_context_turns` 时：
+When conversation turns exceed `agent_max_context_turns`:
 
-- 裁剪 **最早一半** 的完整轮次（保证工具调用链的完整性）
-- 被裁剪的消息会通过 LLM 总结后**写入当天的日级记忆文件**
-- LLM 摘要完成后，同时将摘要**注入到保留消息的第一条用户消息开头**，帮助模型在后续对话中保持上下文连贯性
-- 摘要注入在后台异步完成，不阻塞当前回复；注入的摘要在下一轮对话时生效
+- The **oldest half** of complete turns is trimmed (preserving tool call chain integrity)
+- Trimmed messages are summarized by LLM and **written to the daily memory file**
+- Once the LLM summary is ready, it is also **injected into the first user message** of the retained context, helping the model maintain conversational continuity
+- Summary injection runs asynchronously in the background and takes effect from the next turn onward
 
-### 3. Token 预算裁剪
+### 3. Token Budget Trimming
 
-裁剪轮次后，如果 token 数仍超出预算：
+After turn trimming, if tokens still exceed the budget:
 
-- **轮次 < 5 时**：对所有轮次进行**文本压缩** — 每轮只保留第一条用户文本和最后一条 Agent 回复，去掉中间的工具调用链
-- **轮次 ≥ 5 时**：再次裁剪**前半轮次**，被丢弃内容同样写入记忆并注入上下文摘要
+- **Fewer than 5 turns**: All turns undergo **text compression** — each turn keeps only the first user text and last Agent reply, removing intermediate tool call chains
+- **5 or more turns**: The **first half** of turns is trimmed again, with discarded content written to memory and a context summary injected
 
-### 4. 溢出应急处理
+### 4. Overflow Emergency Handling
 
-当模型 API 返回上下文溢出错误时：
+When the model API returns a context overflow error:
 
-1. 先将当前所有消息总结写入记忆
-2. 执行激进裁剪（工具结果限制 10K 字符、用户文本限制 10K、最多保留 5 轮）
-3. 如果仍然溢出，清空整个对话上下文
+1. All current messages are summarized and written to memory
+2. Aggressive trimming is applied (tool results limited to 10K chars, user text to 10K, max 5 turns)
+3. If still overflowing, the entire conversation context is cleared
 
-## 会话持久化
+## Session Persistence
 
-对话消息会持久化到本地数据库，服务重启后自动恢复。恢复策略：
+Conversation messages are persisted to a local database, automatically restored after service restart. Restore strategy:
 
-- 恢复最近的 **`max(3, max_context_turns / 6)`** 轮对话
-- 只保留每轮的**用户文本和 Agent 最终回复**，不恢复中间工具调用链
-- 超过 **30 天**的历史会话自动清理
+- Restores the most recent **`max(3, max_context_turns / 6)`** turns
+- Only retains each turn's **user text and Agent final reply**, not intermediate tool call chains
+- Sessions older than **30 days** are automatically cleaned up
 
-## 操作命令
+## Commands
 
-在对话中可以使用以下命令管理上下文：
+Use these commands in chat to manage context:
 
-| 命令 | 说明 |
+| Command | Description |
 | --- | --- |
-| `/context` | 查看当前上下文统计（消息数、角色分布、总字符数） |
-| `/context clear` | 清空当前会话上下文 |
-| `/config agent_max_context_tokens 80000` | 调整上下文 token 预算 |
-| `/config agent_max_context_turns 30` | 调整上下文轮次上限 |
+| `/context` | View current context statistics (message count, role distribution, total characters) |
+| `/context clear` | Clear current session context |
+| `/config agent_max_context_tokens 80000` | Adjust context token budget |
+| `/config agent_max_context_turns 30` | Adjust context turn limit |
 
 <Tip>
-  清空上下文后，Agent 会"忘记"之前的对话内容。被裁剪和清空的内容如果已经写入长期记忆，仍可通过记忆检索找回。
+  After clearing context, the Agent "forgets" previous conversation content. Content that was already written to long-term memory can still be retrieved via memory search.
 </Tip>

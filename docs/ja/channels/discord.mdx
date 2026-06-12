@@ -1,0 +1,93 @@
+---
+title: Discord
+description: Discord Bot 経由で CowAgent を接続
+---
+
+> Discord Bot の **Gateway 常時接続** を通じて CowAgent を接続します。ダイレクトメッセージ（DM）およびサーバーチャンネル（@メンションまたはボットへの返信で起動）に対応。Gateway は WebSocket の常時接続を使うため公開 IP やコールバック URL は不要で、すぐに利用できます。
+
+## 1. 接続手順
+
+### ステップ 1: Discord アプリと Bot を作成
+
+1. [Discord 開発者ポータル](https://discord.com/developers/applications) を開き、**New Application** をクリックして名前（例: `CowAgent`）を入力し作成します。
+2. 左メニューの **Bot** ページで **Reset Token** をクリックして Bot Token を生成し、コピーして安全に保管します（一度だけ表示されます）。
+
+<Tip>
+  この Token は Bot のパスワードに相当します。漏洩しないようにしてください。万一漏洩した場合は Bot ページで再度 **Reset Token** をクリックして再生成できます。
+</Tip>
+
+### ステップ 2: Message Content Intent を有効化
+
+DM・チャンネルいずれもテキスト読み取りにこの権限が必要です。
+
+1. **Bot** ページの **Privileged Gateway Intents** を探します。
+2. **Message Content Intent** をオンにして保存します。
+
+<Note>
+  この権限を有効にしないと、受信メッセージの本文が空になり、ボットが応答しません。
+</Note>
+
+### ステップ 3: Bot をサーバーに招待
+
+1. 左メニューの **OAuth2 → URL Generator** を開きます。
+2. **Scopes** で `bot` をチェックします。
+3. **Bot Permissions** で最低限以下をチェックします: `Send Messages`、`Read Message History`、`Attach Files`、`View Channels`。
+4. 下部に生成された認証 URL をコピーしてブラウザで開き、対象のサーバーを選択して認証を完了します。
+
+<Note>
+  DM のみを利用する場合はこのステップを省略できますが、ボットとの DM チャンネルが必要です（ユーザーがボットに直接メッセージを送るなど）。
+</Note>
+
+### ステップ 4: CowAgent に接続
+
+<Tabs>
+  <Tab title="Web コンソール（推奨）">
+    Web コンソール（既定 `http://127.0.0.1:9899`）を開き、**チャネル** メニュー → **チャネルを追加** → **Discord** を選択し、Bot Token を貼り付けて接続をクリックします。
+  </Tab>
+  <Tab title="設定ファイル">
+    `config.json` に以下を追加して Cow を起動します:
+
+    ```json
+    {
+      "channel_type": "discord",
+      "discord_token": "your-discord-bot-token",
+      "discord_group_trigger": "mention_or_reply"
+    }
+    ```
+
+    | パラメータ | 説明 | 既定値 |
+    | --- | --- | --- |
+    | `discord_token` | 開発者ポータルの Bot ページで生成した Bot Token | - |
+    | `discord_group_trigger` | チャンネルのトリガー方式: `mention_or_reply`（@ またはボットへの返信）/ `mention_only`（@ のみ）/ `all`（全メッセージ） | `mention_or_reply` |
+  </Tab>
+</Tabs>
+
+ログに以下のような出力が表示されれば接続成功です:
+
+```
+[Discord] Bot logged in as CowAgent#1234 (id=123456789)
+[Discord] ✅ Discord bot ready, listening for messages
+```
+
+## 2. 機能
+
+| 機能 | 対応状況 |
+| --- | --- |
+| ダイレクトメッセージ（DM） | ✅ |
+| サーバーチャンネル（@bot / ボットへの返信） | ✅ |
+| テキストメッセージ | ✅ 送受信 |
+| 画像メッセージ | ✅ 送受信 |
+| ファイルメッセージ | ✅ 送受信（PDF / Word / Excel など） |
+
+<Note>
+  Discord の 1 メッセージは最大 2000 文字です。長い返信は改行単位で自動的に複数メッセージに分割して送信されます。
+</Note>
+
+## 3. 使い方
+
+接続が完了したら:
+
+- **ダイレクトメッセージ（DM）**: サーバーのメンバー一覧からボットを見つけ、アイコンをクリックして直接メッセージを送ります。
+- **チャンネル**: ボットを招待したチャンネルで、`@your-bot こんにちは` または **ボットのメッセージへの返信** で起動します。
+
+画像やファイルを送るときは、添付の入力欄に **テキスト説明**（説明・質問）を書いて一緒に送信できます。Bot は添付ファイルと説明を合わせて回答します。先に添付を送り、その後に質問を送る形でも、2 つのメッセージは自動でまとめて処理されます。

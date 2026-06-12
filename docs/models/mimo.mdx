@@ -1,0 +1,136 @@
+---
+title: MiMo
+description: Xiaomi MiMo model configuration (Text Chat + Image Understanding + Text-to-Speech)
+---
+
+Xiaomi MiMo is a native omni-modal large model. A single `mimo_api_key` enables text chat, image understanding, and text-to-speech all at once.
+
+<Tip>
+  All capabilities below can be configured in one place via the "Model Management" page in the Web Console — no need to manually edit the configuration file.
+</Tip>
+
+## Text Chat
+
+```json
+{
+  "model": "mimo-v2.5-pro",
+  "mimo_api_key": "YOUR_API_KEY",
+  "mimo_api_base": "https://api.xiaomimimo.com/v1"
+}
+```
+
+| Parameter | Description |
+| --- | --- |
+| `model` | Default recommendation: `mimo-v2.5-pro`; `mimo-v2.5` is also supported |
+| `mimo_api_key` | Create one in the [MiMo Open Platform](https://platform.xiaomimimo.com/console/api-keys) |
+| `mimo_api_base` | Optional, defaults to `https://api.xiaomimimo.com/v1` |
+
+### Model Selection
+
+| Model | Use Case |
+| --- | --- |
+| `mimo-v2.5-pro` | Flagship: native omni-modal + Agent capability, up to 1M tokens context |
+| `mimo-v2.5` | General-purpose, native omni-modal (text / image / video / audio) |
+
+## Thinking Mode
+
+The MiMo V2.5 series enables "thinking mode" by default: the model emits `reasoning_content` (chain-of-thought) before the final answer, improving performance on complex tasks.
+
+Use the global `enable_thinking` flag to toggle visibility (also switchable from the Web Console settings):
+
+```json
+{
+  "enable_thinking": true
+}
+```
+
+## Image Understanding
+
+Once `mimo_api_key` is configured, the Agent's Vision tool can automatically use MiMo's vision models:
+
+- When the main model itself is multimodal (`mimo-v2.5-pro` / `mimo-v2.5`), images are handled directly by the main model with no extra setup.
+- When the main model belongs to another vendor, the Vision tool falls back to `mimo-v2.5-pro` in order.
+
+To force a specific Vision model, set it explicitly in the configuration:
+
+```json
+{
+  "tools": {
+    "vision": {
+      "provider": "mimo",
+      "model": "mimo-v2.5-pro"
+    }
+  }
+}
+```
+
+## Text-to-Speech (TTS)
+
+```json
+{
+  "text_to_voice": "mimo",
+  "text_to_voice_model": "mimo-v2.5-tts",
+  "tts_voice_id": "冰糖"
+}
+```
+
+| Parameter | Description |
+| --- | --- |
+| `text_to_voice_model` | Currently only `mimo-v2.5-tts` (preset voices + singing mode) |
+| `tts_voice_id` | Preset voice name (Chinese voice IDs use the Chinese name directly) |
+
+### Preset Voices
+
+| Voice ID | Description |
+| --- | --- |
+| `Mia` | English · Female |
+| `Chloe` | English · Female |
+| `Milo` | English · Male |
+| `Dean` | English · Male |
+| `冰糖` | Chinese · Female (default) |
+| `茉莉` | Chinese · Female |
+| `苏打` | Chinese · Male |
+| `白桦` | Chinese · Male |
+
+
+You can also pick a voice visually from the Web Console under "Model Management → Text-to-Speech".
+
+### Style Control
+
+MiMo TTS supports embedding **audio tags** in the synthesis text to control emotion, tone, dialect, persona, and even singing. Tags must appear in the **text that will be synthesized to speech (i.e. the Agent's reply)**, with the overall style tag placed at the very beginning:
+
+```
+(style)content-to-synthesize
+```
+
+Half-width `()`, full-width `（）`, and `[]` brackets are all accepted. Both Chinese and English style descriptors work — pick whichever language expresses the timbre most precisely. Common examples:
+
+| Category | Example tags |
+| --- | --- |
+| Basic emotions | `happy` `sad` `angry` `fear` `surprised` `excited` `aggrieved` `calm` `indifferent` |
+| Compound emotions | `wistful` `relieved` `helpless` `guilty` `at ease` `uneasy` `touched` |
+| Overall tone | `gentle` `aloof` `lively` `serious` `languid` `playful` `deep` `sharp` `cutting` |
+| Voice character | `magnetic` `mellow` `bright` `ethereal` `childlike` `aged` `sweet` `husky` |
+| Persona | `squeaky` `mature lady` `young boy` `uncle` `Taiwanese accent` |
+| Dialect | `Northeastern` `Sichuan` `Henan` `Cantonese` |
+| Role-play | `Sun Wukong` `Lin Daiyu` |
+| Singing | `sing` / `singing` |
+
+Examples:
+
+- `(magnetic)The night is deep, and the city is still breathing.`
+- `(gentle)Take a breath. You've got this.`
+- `(serious)This is the final warning before the system reboots.`
+- `(singing)Oh, when the saints go marching in…`
+
+You can also insert fine-grained audio tags at any position in the text to control breathing, laughter, pauses, etc. For example:
+
+```
+(nervous, deep breath) Phew… stay calm, stay calm. (faster pace) I've rehearsed this intro fifty times, it'll be fine.
+```
+
+See the [MiMo speech synthesis documentation](https://platform.xiaomimimo.com/docs/zh-CN/usage-guide/speech-synthesis-v2.5) for the full tag list.
+
+<Tip>
+  When CowAgent calls TTS, the Agent's reply text (including any `(...)` tags) is forwarded directly to MiMo for synthesis. Tell the model in its persona / system prompt to "prefix replies with a `(style)` tag to control the tone", and IM channels (WeChat / Feishu / DingTalk / WeCom) will play voice replies with the corresponding emotion, dialect, or even singing.
+</Tip>

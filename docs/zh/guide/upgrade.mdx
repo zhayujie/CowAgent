@@ -1,0 +1,61 @@
+---
+title: 更新升级
+description: CowAgent 的升级方式说明
+---
+
+## 命令升级（推荐）
+
+使用 `cow update` 一键完成代码更新和服务重启：
+
+```bash
+cow update
+```
+
+该命令会自动完成以下流程：
+
+1. 拉取最新代码（`git pull`）
+2. 停止当前服务
+3. 更新 Python 依赖
+4. 重新安装 CLI
+5. 启动服务
+
+<Note>
+  如果未安装 Cow CLI，也可以使用 `./run.sh update` 完成相同操作。
+</Note>
+
+## 手动升级
+
+在项目根目录下执行：
+
+```bash
+git pull
+pip3 install -r requirements.txt
+pip3 install -e .
+```
+
+更新完成后重启服务：
+
+```bash
+# 使用 Cow CLI (推荐)
+cow restart
+
+# 或使用 run.sh
+./run.sh restart
+
+# 或使用 nohup 直接运行
+kill $(ps -ef | grep app.py | grep -v grep | awk '{print $2}')
+nohup python3 app.py & tail -f nohup.out
+```
+
+## Docker 升级
+
+在 `docker-compose.yml` 所在目录下执行：
+
+```bash
+sudo docker compose pull
+sudo docker compose up -d
+```
+
+<Tip>
+  升级前建议备份 `config.json` 配置文件。Docker 环境下如需保留数据，可通过 volume 挂载持久化工作空间目录。
+</Tip>

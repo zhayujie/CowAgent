@@ -133,7 +133,7 @@ class LinkAIBot(Bot, OpenAICompatibleBot):
             if file_id:
                 body["file_id"] = file_id
             logger.info(f"[LINKAI] query={query}, app_code={app_code}, model={body.get('model')}, file_id={file_id}")
-            headers = {"Authorization": "Bearer " + linkai_api_key}
+            headers = {"Authorization": "Bearer " + linkai_api_key, "X-Title": "CowAgent"}
 
             # do http request
             base_url = conf().get("linkai_api_base", "https://api.link-ai.tech")
@@ -272,7 +272,7 @@ class LinkAIBot(Bot, OpenAICompatibleBot):
             }
             if self.args.get("max_tokens"):
                 body["max_tokens"] = self.args.get("max_tokens")
-            headers = {"Authorization": "Bearer " + conf().get("linkai_api_key")}
+            headers = {"Authorization": "Bearer " + conf().get("linkai_api_key"), "X-Title": "CowAgent"}
 
             # do http request
             base_url = conf().get("linkai_api_base", "https://api.link-ai.tech")
@@ -565,7 +565,7 @@ def _linkai_call_with_tools(self, messages, tools=None, stream=False, **kwargs):
             body["thinking"] = thinking
 
         # Prepare headers
-        headers = {"Authorization": "Bearer " + conf().get("linkai_api_key")}
+        headers = {"Authorization": "Bearer " + conf().get("linkai_api_key"), "X-Title": "CowAgent"}
         base_url = conf().get("linkai_api_base", "https://api.link-ai.tech")
         
         if stream:

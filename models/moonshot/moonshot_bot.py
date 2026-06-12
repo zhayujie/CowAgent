@@ -195,7 +195,7 @@ class MoonshotBot(Bot):
             }
             headers = self._build_headers()
             resp = requests.post(f"{self.base_url}/chat/completions",
-                                 headers=headers, json=payload, timeout=60)
+                                 headers=headers, json=payload, timeout=180)
             if resp.status_code != 200:
                 return {"error": True, "message": f"HTTP {resp.status_code}: {resp.text[:300]}"}
             data = resp.json()

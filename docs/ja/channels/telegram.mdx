@@ -1,0 +1,111 @@
+---
+title: Telegram
+description: Telegram Bot API 経由で CowAgent を接続
+---
+
+> 公式の Telegram Bot API を通じて CowAgent を接続します。1 対 1 チャットおよびグループチャット（@メンションまたはボットへの返信で起動）に対応。Long Polling 方式のため公開 IP は不要で、すぐに利用できます。
+
+
+## 1. 接続手順
+
+### ステップ 1: BotFather で Bot を作成
+
+1. Telegram で公式アカウント [@BotFather](https://t.me/BotFather) を開きます。
+2. `/newbot` を送り、案内に従って入力します:
+   - **Bot 名**（表示名、例: `My CowAgent Bot`）
+   - **Bot ユーザー名**（`bot` で終わる必要があります、例: `my_cowagent_bot`）
+3. 作成完了後、BotFather から **HTTP API Token**（例: `123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ`）が返されます。大切に保管してください。
+
+<Tip>
+  Token は Bot のパスワードに相当します。漏えいしないよう注意してください。万が一漏れた場合は `@BotFather` に `/revoke` を送って再発行できます。
+</Tip>
+
+### ステップ 2:（グループ利用時）Privacy Mode を無効化
+
+1 対 1 チャットのみ利用する場合はスキップ可能です。Telegram Bot は既定で **Privacy Mode** が有効で、グループ内では `@bot` 接尾辞付きのコマンド（例: `/start@your_bot`）と、Bot メッセージへの返信のみ受信できます。**通常の `@bot こんにちは` のようなテキストメッセージは届きません**。そのままだとグループで反応しないので、必要に応じて以下を設定してください。
+
+`@BotFather` に対して:
+
+1. `/setprivacy` を送信
+2. 作成した Bot を選択
+3. `Disable` を選択
+
+<Note>
+  設定後もグループで反応しない場合は、Bot を一度グループから外して再度追加してみてください。
+</Note>
+
+### ステップ 3: CowAgent に接続
+
+<Tabs>
+  <Tab title="Web コンソール（推奨）">
+    Web コンソール（既定 `http://127.0.0.1:9899`）を開き、**チャネル** メニュー → **チャネルを追加** → **Telegram** を選択し、Bot Token を貼り付けて接続をクリックします。
+  </Tab>
+  <Tab title="設定ファイル">
+    `config.json` に以下を追加して Cow を起動します:
+
+    ```json
+    {
+      "channel_type": "telegram",
+      "telegram_token": "123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ",
+      "telegram_group_trigger": "mention_or_reply"
+    }
+    ```
+
+    | パラメータ | 説明 | 既定値 |
+    | --- | --- | --- |
+    | `telegram_token` | BotFather から発行された HTTP API Token | - |
+    | `telegram_group_trigger` | グループのトリガー方式: `mention_or_reply`（@ または返信）/ `mention_only`（@ のみ）/ `all`（全メッセージ） | `mention_or_reply` |
+    | `telegram_register_commands` | 起動時に BotFather にコマンドメニューを登録するかどうか | `true` |
+  </Tab>
+</Tabs>
+
+ログに以下のような出力が表示されれば接続成功です:
+
+```
+[Telegram] Bot logged in as @my_cowagent_bot (id=123456789)
+[Telegram] Registered 10 bot commands
+[Telegram] ✅ Telegram bot ready, polling for updates
+```
+
+## 2. 機能
+
+| 機能 | 対応状況 |
+| --- | --- |
+| 1 対 1 チャット | ✅ |
+| グループチャット（@bot / Bot への返信） | ✅ |
+| テキストメッセージ | ✅ 送受信 |
+| 画像メッセージ | ✅ 送受信 |
+| 音声メッセージ | ✅ 送受信（OGG/Opus） |
+| 動画メッセージ | ✅ 送受信 |
+| ファイルメッセージ | ✅ 送受信（PDF / Word / Excel など） |
+| コマンドメニュー | ✅ Web コンソールの slash コマンドと一致 |
+
+### コマンドメニュー
+
+起動時に BotFather へコマンドメニューを自動登録します。Telegram の入力欄で `/` を入力するとサジェストが表示されます:
+
+| コマンド | 説明 |
+| --- | --- |
+| `/help` | コマンドヘルプを表示 |
+| `/status` | 実行ステータスを確認 |
+| `/context` | 対話コンテキストを表示（`/context clear` でクリア） |
+| `/skill` | スキル管理（`/skill list`、`/skill install` など） |
+| `/memory` | 記憶管理（`/memory dream`） |
+| `/knowledge` | ナレッジベース管理（`/knowledge list` / `on` / `off`） |
+| `/config` | 現在の設定を表示 |
+| `/cancel` | 実行中の Agent タスクを中断 |
+| `/logs` | 最近のログを表示 |
+| `/version` | バージョンを表示 |
+
+<Note>
+  Telegram のコマンドメニューはトップレベルのコマンドのみ表示されます。サブコマンドはスペース区切りで入力します（例: `/skill list`、`/context clear`）。
+</Note>
+
+## 3. 使い方
+
+接続が完了したら:
+
+- **1 対 1 チャット**: Telegram で Bot のユーザー名（例: `@my_cowagent_bot`）を検索し、`Start` をタップして会話を開始します。
+- **グループチャット**: Bot をグループに追加し、`@bot こんにちは` または **Bot のメッセージに返信** することで起動します。グループで反応しない場合は [ステップ 2](#ステップ-2-グループ利用時-privacy-mode-を無効化) の Privacy Mode 設定を確認してください。
+
+画像やファイルを送るときは、添付欄の上の入力欄に **キャプション**（説明・質問）を直接書いて一緒に送信できます。Bot は添付ファイルとキャプションを合わせて回答します。先に添付を送り、その後に質問を送る形でも、2 つのメッセージは自動でまとめて処理されます。

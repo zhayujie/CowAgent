@@ -14,7 +14,7 @@ CHINA_MIRROR = "https://registry.npmmirror.com/-/binary/playwright"
 
 # stream(msg, fg=None) — fg is "yellow" | "green" | "red" | None
 StreamFn = Callable[[str, Optional[str]], None]
-# on_phase(msg) — coarse-grained progress for chat channels (Chinese)
+# on_phase(msg) — coarse-grained progress for chat channels (localized via i18n)
 PhaseFn = Callable[[str], None]
 
 
@@ -112,16 +112,27 @@ def run_install_browser(
         stream: Optional callback ``(message, fg)`` for each line. ``fg`` is
             ``yellow`` / ``green`` / ``red`` or None. Defaults to colored click output.
         on_phase: Optional callback for coarse progress (e.g. push to chat);
-            messages are short Chinese status lines.
+            messages are short status lines localized via i18n.
 
     Returns:
         0 on success, 1 on fatal failure (pip or chromium install failed).
     """
+    from cli.utils import get_cli_language
+
+    # Import `common` only after get_cli_language() runs ensure_sys_path(),
+    # so it works when `cow` is invoked from outside the project directory.
+    get_cli_language()  # resolve cow_lang so i18n.t reflects config
+    from common import i18n
+    _t = i18n.t
+
     stream = stream or _default_stream
     python = sys.executable
     legacy_mode = False
 
-    _phase(on_phase, "🔧 开始安装浏览器工具依赖（约几分钟，请耐心等待）…")
+    _phase(on_phase, _t(
+        "🔧 开始安装浏览器工具依赖（约几分钟，请耐心等待）…",
+        "🔧 Installing browser tool dependencies (a few minutes, please wait)…",
+    ))
 
     glibc = _get_glibc_version()
     if glibc and glibc < GLIBC_THRESHOLD:
@@ -136,27 +147,36 @@ def run_install_browser(
         stream("")
         _phase(
             on_phase,
-            f"ℹ️ 检测到 glibc {glibc_str}（较旧），将安装兼容版 Playwright {PLAYWRIGHT_LEGACY_VERSION}。",
+            _t(
+                f"ℹ️ 检测到 glibc {glibc_str}（较旧），将安装兼容版 Playwright {PLAYWRIGHT_LEGACY_VERSION}。",
+                f"ℹ️ Detected glibc {glibc_str} (older); installing compatible Playwright {PLAYWRIGHT_LEGACY_VERSION}.",
+            ),
         )
 
     target_version = PLAYWRIGHT_LEGACY_VERSION if legacy_mode else PLAYWRIGHT_VERSION
 
-    _phase(on_phase, "📦 [1/3] 正在安装 Playwright Python 包…")
+    _phase(on_phase, _t("📦 [1/3] 正在安装 Playwright Python 包…", "📦 [1/3] Installing Playwright Python package…"))
     stream("[1/3] Installing playwright Python package...", "yellow")
     ret = _pip_install(f"playwright=={target_version}", stream)
     if ret != 0:
         stream("Failed to install playwright package.", "red")
-        _phase(on_phase, "❌ [1/3] Playwright Python 包安装失败。")
+        _phase(on_phase, _t("❌ [1/3] Playwright Python 包安装失败。", "❌ [1/3] Failed to install Playwright Python package."))
         return 1
 
     installed = _get_installed_version()
     if installed:
         stream(f"  playwright {installed} installed.", "green")
     stream("")
-    _phase(on_phase, f"✅ [1/3] Playwright 包已安装（{installed or target_version}）。")
+    _phase(on_phase, _t(
+        f"✅ [1/3] Playwright 包已安装（{installed or target_version}）。",
+        f"✅ [1/3] Playwright package installed ({installed or target_version}).",
+    ))
 
     if sys.platform == "linux":
-        _phase(on_phase, "🔧 [2/3] 正在安装 Linux 系统依赖与轻量中文字体（文泉驿正黑，部分步骤可能需要 sudo）…")
+        _phase(on_phase, _t(
+            "🔧 [2/3] 正在安装 Linux 系统依赖与轻量中文字体（文泉驿正黑，部分步骤可能需要 sudo）…",
+            "🔧 [2/3] Installing Linux system deps and a lightweight CJK font (WenQuanYi Zen Hei; some steps may need sudo)…",
+        ))
         stream("[2/3] Installing system dependencies (Linux)...", "yellow")
         ret = subprocess.call([python, "-m", "playwright", "install-deps", "chromium"])
         if ret != 0:
@@ -183,14 +203,23 @@ def run_install_browser(
             stream("  CJK font (wqy-zenhei) installed.", "green")
         _phase(
             on_phase,
-            "✅ [2/3] Linux 依赖与字体步骤已执行（若有权限问题请查看服务器日志或手动执行提示命令）。",
+            _t(
+                "✅ [2/3] Linux 依赖与字体步骤已执行（若有权限问题请查看服务器日志或手动执行提示命令）。",
+                "✅ [2/3] Linux deps and font steps executed (on permission issues, check the server log or run the suggested commands manually).",
+            ),
         )
     else:
         stream(f"[2/3] Skipping system deps (not needed on {sys.platform}).", "yellow")
-        _phase(on_phase, f"ℹ️ [2/3] 当前系统（{sys.platform}）跳过 Linux 专用依赖。")
+        _phase(on_phase, _t(
+            f"ℹ️ [2/3] 当前系统（{sys.platform}）跳过 Linux 专用依赖。",
+            f"ℹ️ [2/3] Skipping Linux-specific deps on this platform ({sys.platform}).",
+        ))
     stream("")
 
-    _phase(on_phase, "🌐 [3/3] 正在下载并安装 Chromium（体积较大，请耐心等待）…")
+    _phase(on_phase, _t(
+        "🌐 [3/3] 正在下载并安装 Chromium（体积较大，请耐心等待）…",
+        "🌐 [3/3] Downloading and installing Chromium (large download, please wait)…",
+    ))
     stream("[3/3] Installing Chromium browser...", "yellow")
     cmd = [python, "-m", "playwright", "install", "chromium"]
 
@@ -209,27 +238,33 @@ def run_install_browser(
     if use_mirror:
         env["PLAYWRIGHT_DOWNLOAD_HOST"] = CHINA_MIRROR
         stream(f"  (using China mirror: {CHINA_MIRROR})", None)
-        _phase(on_phase, "📡 检测到国内 pip 源配置，Chromium 将优先走国内镜像下载。")
+        _phase(on_phase, _t(
+            "📡 检测到国内 pip 源配置，Chromium 将优先走国内镜像下载。",
+            "📡 Detected a China pip mirror; Chromium will be downloaded from the China mirror first.",
+        ))
 
     ret = subprocess.call(cmd, env=env)
 
     if ret != 0 and use_mirror:
         stream("  Mirror download failed, retrying with official CDN...", "yellow")
-        _phase(on_phase, "⚠️ 镜像下载失败，正在改用官方源重试…")
+        _phase(on_phase, _t(
+            "⚠️ 镜像下载失败，正在改用官方源重试…",
+            "⚠️ Mirror download failed; retrying with the official CDN…",
+        ))
         env_no_mirror = os.environ.copy()
         env_no_mirror.pop("PLAYWRIGHT_DOWNLOAD_HOST", None)
         ret = subprocess.call(cmd, env=env_no_mirror)
 
     if ret != 0:
         stream("Failed to install Chromium.", "red")
-        _phase(on_phase, "❌ [3/3] Chromium 安装失败。")
+        _phase(on_phase, _t("❌ [3/3] Chromium 安装失败。", "❌ [3/3] Failed to install Chromium."))
         return 1
 
     stream("")
-    _phase(on_phase, "✅ [3/3] Chromium 已安装。")
+    _phase(on_phase, _t("✅ [3/3] Chromium 已安装。", "✅ [3/3] Chromium installed."))
 
     stream("Verifying browser installation...", None)
-    _phase(on_phase, "🔍 正在验证 Playwright 能否正常加载…")
+    _phase(on_phase, _t("🔍 正在验证 Playwright 能否正常加载…", "🔍 Verifying that Playwright loads correctly…"))
     ret = subprocess.call(
         [python, "-c", "from playwright.sync_api import sync_playwright; print('OK')"],
         stderr=subprocess.DEVNULL,
@@ -240,14 +275,20 @@ def run_install_browser(
             "  Consider upgrading your OS or using Docker.",
             "yellow",
         )
-        _phase(on_phase, "⚠️ 验证未完全通过：本机可能仍无法使用浏览器工具，请查看日志或升级系统。")
+        _phase(on_phase, _t(
+            "⚠️ 验证未完全通过：本机可能仍无法使用浏览器工具，请查看日志或升级系统。",
+            "⚠️ Verification did not fully pass: the browser tool may still not work here; check the log or upgrade your system.",
+        ))
     else:
         stream("  Verification passed.", "green")
-        _phase(on_phase, "✅ 验证通过。")
+        _phase(on_phase, _t("✅ 验证通过。", "✅ Verification passed."))
 
     stream("")
     stream("Browser tool ready! Restart CowAgent to enable it.", "green")
-    _phase(on_phase, "🎉 全部步骤结束。请重启 CowAgent 后使用 browser 工具。")
+    _phase(on_phase, _t(
+        "🎉 全部步骤结束。请重启 CowAgent 后使用 browser 工具。",
+        "🎉 All steps finished. Restart CowAgent to use the browser tool.",
+    ))
     return 0
 
 

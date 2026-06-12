@@ -1,28 +1,33 @@
 name: Feature request 🚀
-description: 提出你对项目的新想法或建议。
+description: Suggest a new idea or improvement.
+title: "[Feature] "
 labels: ['status: needs check']
 body:
   - type: markdown
     attributes:
       value: |
-        请在上方的`title`中填写简略总结，谢谢❤️。
+        > 💡 English is recommended so global developers can help. 推荐使用英文提交，谢谢 ❤️
   - type: checkboxes
     attributes:
-      label: ⚠️ 搜索是否存在类似issue
-      description: >
-        请在 [历史issue](https://github.com/zhayujie/chatgpt-on-wechat/issues) 中清空输入框，搜索关键词查找是否存在相似issue。
+      label: Self check
       options:
-        - label: 我已经搜索过issues和disscussions，没有发现相似issue
+        - label: I searched [existing issues](https://github.com/zhayujie/CowAgent/issues) (incl. closed) — no duplicate.
           required: true
   - type: textarea
     attributes:
-      label: 总结
-      description: 描述feature的功能。
+      label: What's the problem?
+      description: "The pain point or what's not working for you right now."
+    validations:
+      required: true
   - type: textarea
     attributes:
-      label: 举例
-      description: 提供聊天示例，草图或相关网址。
-  - type: textarea
+      label: What would you like?
+      description: "How you'd expect it to work. Examples, sketches, or links welcome."
+    validations:
+      required: false
+  - type: checkboxes
     attributes:
-      label: 动机
-      description: 描述你提出该feature的动机，比如没有这项feature对你的使用造成了怎样的影响。 请提供更详细的场景描述，这可能会帮助我们发现并提出更好的解决方案。
+      label: Contribution
+      options:
+        - label: I'd be interested in helping implement this.
+          required: false

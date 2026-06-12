@@ -1,0 +1,63 @@
+---
+title: v2.1.1
+description: CowAgent 2.1.1：自主进化能力、Web 控制台消息管理与多会话并行、MCP 跨平台增强、多模型接入与优化
+---
+
+🌐 [English](https://docs.cowagent.ai/releases/v2.1.1) | [中文](https://docs.cowagent.ai/zh/releases/v2.1.1)
+
+## 🧬 自主进化能力
+
+CowAgent 新增 **自主进化（Self-Evolution）** 能力，让 Agent 不止于完成单次任务，而是在与你的日常协作中持续成长：
+
+- **空闲后自动复盘**：对话空闲后自动复盘，修正技能在使用中暴露的问题、创建可复用的新技能，处理遗留的未完成事项，并将重要信息补充进记忆与知识库
+- **静默执行、按需提醒**：仅在实际有改动时主动告知本次调整内容，无变更时全程静默
+- **安全可回退**：每次复盘前自动备份，可随时撤销本次改动；内置技能受保护，所有读写均限定在工作空间内
+
+新安装用户默认开启，已有用户可在 Web 控制台 **设置 → Agent 配置** 中一键开启。
+
+<img src="https://cdn.jsdelivr.net/gh/zhayujie/cowagent-assets@main/screenshots/zh/web-console-evolution-demo-zh.png" alt="自主进化对话示例" />
+
+相关文档：[自主进化](https://docs.cowagent.ai/zh/memory/self-evolution)
+
+## 💬 Web 控制台升级
+
+Web 控制台的聊天体验进一步增强：
+
+- **消息管理**：用户与机器人的消息均支持编辑、删除、重新生成；代码块新增语言标签和一键复制按钮
+- **多会话并行**：支持多个会话同时进行、互不干扰，切回会话时自动恢复实时流式输出
+- **细节优化**：支持将文件拖拽到整个聊天区域；删除当前会话后自动切换到相邻会话
+
+Thanks @core-power (#2865)
+
+## 🧩 MCP 跨平台增强
+
+- **Windows 兼容修复**：修复 MCP 在 Windows 下 `stdio` 通信不可用的问题，并支持通过 `mcp.json` 配置服务超时时间
+- **并发调用支持**：`sse` 与 `streamable-http` 传输支持跨会话并发调用，多工具响应更快
+
+Thanks @xliu123321 (#2859)
+
+相关文档：[MCP 工具](https://docs.cowagent.ai/zh/tools/mcp)
+
+## 🤖 模型新增与优化
+
+- **MiniMax-M3**：新增并设为默认模型，保留 M2.7 系列作为可选项。Thanks @octo-patch (#2855)
+- **通义千问 qwen3.7-plus**：支持多模态对话
+- **语音识别模型可选**：Web 控制台支持选择 ASR（语音识别）模型并持久化保存。Thanks @nightwhite (#2857)
+- **安装菜单简化**：一键安装脚本精简模型选择菜单，新增小米 MiMo 选项
+
+相关文档：[模型概览](https://docs.cowagent.ai/zh/models)
+
+## 🛠 体验优化与修复
+
+- **Python 3.13 支持**：修复在 Python 3.13 环境下的安装与依赖兼容问题
+- **国际化体验**：通道列表按界面语言排序展示；优化 `auto` 模式下的语言自动回退逻辑
+- **任务取消更可靠**：修复部分场景下流式回复无法中断的问题
+- **CLI 增强**：`cow status` 新增显示当前项目路径
+- **部署安全加固**：凭证文件拦截范围收敛至 `~/.cow/.env`，不再误拦其他目录（Thanks @orbisai0security #2863）；微信公众号在 `wechatmp_token` 为空时拒绝 Webhook 请求
+- **群任务看板插件**：新增群聊任务看板插件源。Thanks @Wyh-max-star (#2853)
+
+## 📦 升级方式
+
+源码部署可执行 `cow update` 一键升级，或手动拉取代码后重启。详见 [更新升级文档](https://docs.cowagent.ai/zh/guide/upgrade)。
+
+**发布日期**：2026.06.09 | [Full Changelog](https://github.com/zhayujie/CowAgent/compare/2.1.0...2.1.1)

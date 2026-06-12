@@ -1,5 +1,6 @@
 {
-  "channel_type": "weixin",
+  "cow_lang": "auto",
+  "channel_type": "web",
   "model": "deepseek-v4-flash",
   "deepseek_api_key": "",
   "deepseek_api_base": "https://api.deepseek.com/v1",
@@ -39,5 +40,6 @@
   "agent_max_steps": 20,
   "enable_thinking": false,
   "reasoning_effort": "high",
-  "knowledge": true
+  "knowledge": true,
+  "self_evolution_enabled": true
 }

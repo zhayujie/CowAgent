@@ -91,9 +91,31 @@ const I18N = {
         example_knowledge_title: '知识库', example_knowledge_text: '查看知识库当前文档情况',
         example_skill_title: '技能系统', example_skill_text: '查看所有支持的工具和技能',
         example_web_title: '指令中心', example_web_text: '查看全部命令',
+        slash_help: '显示命令帮助',
+        slash_status: '查看运行状态',
+        slash_context: '查看对话上下文',
+        slash_context_clear: '清除对话上下文',
+        slash_skill_list: '查看已安装技能',
+        slash_skill_list_remote: '浏览技能广场',
+        slash_skill_search: '搜索技能',
+        slash_skill_install: '安装技能 (名称或 GitHub URL)',
+        slash_skill_uninstall: '卸载技能',
+        slash_skill_info: '查看技能详情',
+        slash_skill_enable: '启用技能',
+        slash_skill_disable: '禁用技能',
+        slash_memory_dream: '手动触发记忆蒸馏 (可指定天数, 默认3)',
+        slash_knowledge: '查看知识库统计',
+        slash_knowledge_list: '查看知识库文件树',
+        slash_knowledge_on: '开启知识库',
+        slash_knowledge_off: '关闭知识库',
+        slash_config: '查看当前配置',
+        slash_cancel: '中止当前正在运行的 Agent 任务',
+        slash_logs: '查看最近日志',
+        slash_version: '查看版本',
         input_placeholder: '输入消息，或输入 / 使用指令',
         config_title: '配置管理', config_desc: '管理模型和 Agent 配置',
         config_model: '模型配置', config_agent: 'Agent 配置',
+        config_language: '语言', config_language_hint: '界面展示、命令文案、系统提示词等使用的语言（与右上角切换同步）',
         config_model_advanced: '高级配置',
         config_channel: '通道配置',
         config_agent_enabled: 'Agent 模式',
@@ -101,6 +123,8 @@ const I18N = {
         config_max_turns: '最大记忆轮次', config_max_turns_hint: '一问一答为一轮，超过后会智能压缩处理',
         config_max_steps: '最大执行步数', config_max_steps_hint: '单次对话中 Agent 最多调用工具的次数',
         config_enable_thinking: '深度思考', config_enable_thinking_hint: '是否启用深度思考模式',
+        config_self_evolution: '自主进化', config_self_evolution_hint: '会话空闲后自动复盘，沉淀记忆、优化技能、处理未完成事项',
+        evolution_badge: '自主学习',
         config_channel_type: '通道类型',
         config_provider: '模型厂商', config_model_name: '模型',
         config_custom_model_hint: '输入自定义模型名称',
@@ -118,7 +142,7 @@ const I18N = {
         skills_section_title: '技能', skill_enable: '启用', skill_disable: '禁用',
         skill_toggle_error: '操作失败，请稍后再试',
         memory_title: '记忆管理', memory_desc: '查看 Agent 记忆文件和内容',
-        memory_tab_files: '记忆文件', memory_tab_dreams: '梦境日记',
+        memory_tab_files: '记忆文件', memory_tab_dreams: '自主进化',
         memory_loading: '加载记忆文件中...', memory_loading_desc: '记忆文件将显示在此处',
         memory_back: '返回列表',
         memory_col_name: '文件名', memory_col_type: '类型', memory_col_size: '大小', memory_col_updated: '更新时间',
@@ -162,6 +186,8 @@ const I18N = {
         today: '今天', yesterday: '昨天', earlier: '更早',
         delete_session_confirm: '确认删除该会话？所有消息将被清除。',
         delete_session_title: '删除会话',
+        delete_message_confirm: '确认删除这条消息？',
+        delete_message_title: '删除消息',
         untitled_session: '新对话',
         context_cleared: '— 以上内容已从上下文中移除 —',
         tip_new_chat: '新建对话',
@@ -184,6 +210,10 @@ const I18N = {
         confirm_cancel: '取消',
         error_send: '发送失败，请稍后再试。', error_timeout: '请求超时，请再试一次。',
         thinking_in_progress: '思考中...', thinking_done: '已深度思考', thinking_duration: '耗时',
+        edit_message: '编辑消息',
+        regenerate_response: '重新生成',
+        edit_save: '保存并发送',
+        edit_cancel: '取消',
     },
     en: {
         console: 'Console',
@@ -265,9 +295,31 @@ const I18N = {
         example_knowledge_title: 'Knowledge', example_knowledge_text: 'Show me the current knowledge base',
         example_skill_title: 'Skills', example_skill_text: 'Show current tools and skills',
         example_web_title: 'Commands', example_web_text: 'Show all commands',
+        slash_help: 'Show this help',
+        slash_status: 'Show running status',
+        slash_context: 'Show conversation context',
+        slash_context_clear: 'Clear conversation context',
+        slash_skill_list: 'List installed skills',
+        slash_skill_list_remote: 'Browse Skill Hub',
+        slash_skill_search: 'Search skills',
+        slash_skill_install: 'Install a skill (name or GitHub URL)',
+        slash_skill_uninstall: 'Uninstall a skill',
+        slash_skill_info: 'Show skill details',
+        slash_skill_enable: 'Enable a skill',
+        slash_skill_disable: 'Disable a skill',
+        slash_memory_dream: 'Trigger memory distillation (optional days, default 3)',
+        slash_knowledge: 'Show knowledge base stats',
+        slash_knowledge_list: 'Show knowledge base file tree',
+        slash_knowledge_on: 'Enable knowledge base',
+        slash_knowledge_off: 'Disable knowledge base',
+        slash_config: 'Show current config',
+        slash_cancel: 'Abort the running Agent task',
+        slash_logs: 'Show recent logs',
+        slash_version: 'Show version',
         input_placeholder: 'Type a message, or press / for commands',
         config_title: 'Configuration', config_desc: 'Manage model and agent settings',
         config_model: 'Model Configuration', config_agent: 'Agent Configuration',
+        config_language: 'Language', config_language_hint: 'Language for the UI, command text, system prompts and more (synced with the top-right switch)',
         config_model_advanced: 'Advanced',
         config_channel: 'Channel Configuration',
         config_agent_enabled: 'Agent Mode',
@@ -275,6 +327,8 @@ const I18N = {
         config_max_turns: 'Max Memory Turns', config_max_turns_hint: 'One Q&A pair = one turn, auto-compressed when exceeded',
         config_max_steps: 'Max Steps', config_max_steps_hint: 'Max tool calls the Agent can make in a single conversation',
         config_enable_thinking: 'Deep Thinking', config_enable_thinking_hint: 'Enable deep thinking mode',
+        config_self_evolution: 'Self-Evolution', config_self_evolution_hint: 'Auto-review idle conversations to consolidate memory, improve skills, and follow up on unfinished tasks',
+        evolution_badge: 'Self-learned',
         config_channel_type: 'Channel Type',
         config_provider: 'Provider', config_model_name: 'Model',
         config_custom_model_hint: 'Enter custom model name',
@@ -292,7 +346,7 @@ const I18N = {
         skills_section_title: 'Skills', skill_enable: 'Enable', skill_disable: 'Disable',
         skill_toggle_error: 'Operation failed, please try again',
         memory_title: 'Memory', memory_desc: 'View agent memory files and contents',
-        memory_tab_files: 'Memory Files', memory_tab_dreams: 'Dream Diary',
+        memory_tab_files: 'Memory Files', memory_tab_dreams: 'Self-Evolution',
         memory_loading: 'Loading memory files...', memory_loading_desc: 'Memory files will be displayed here',
         memory_back: 'Back to list',
         memory_col_name: 'Filename', memory_col_type: 'Type', memory_col_size: 'Size', memory_col_updated: 'Updated',
@@ -336,6 +390,8 @@ const I18N = {
         today: 'Today', yesterday: 'Yesterday', earlier: 'Earlier',
         delete_session_confirm: 'Delete this session? All messages will be removed.',
         delete_session_title: 'Delete Session',
+        delete_message_confirm: 'Delete this message?',
+        delete_message_title: 'Delete Message',
         untitled_session: 'New Chat',
         context_cleared: '— Context above has been cleared —',
         tip_new_chat: 'New Chat',
@@ -358,10 +414,32 @@ const I18N = {
         confirm_cancel: 'Cancel',
         error_send: 'Failed to send. Please try again.', error_timeout: 'Request timeout. Please try again.',
         thinking_in_progress: 'Thinking...', thinking_done: 'Thought', thinking_duration: 'Duration',
+        edit_message: 'Edit message',
+        regenerate_response: 'Regenerate',
+        edit_save: 'Save and send',
+        edit_cancel: 'Cancel',
     }
 };
 
-let currentLang = localStorage.getItem('cow_lang') || 'zh';
+// Resolve language by priority: user choice (localStorage) -> backend-detected
+// (cow_lang) -> browser language -> 'zh'. Shares __cowResolveLang__ defined in
+// chat.html; falls back to a local resolver if loaded standalone.
+let currentLang = (typeof window.__cowResolveLang__ === 'function')
+    ? window.__cowResolveLang__()
+    : (function () {
+        const norm = (raw) => {
+            if (!raw) return '';
+            const v = String(raw).trim().toLowerCase();
+            if (v === 'auto') return '';
+            if (v.indexOf('zh') === 0) return 'zh';
+            if (v.indexOf('en') === 0) return 'en';
+            return '';
+        };
+        return norm(localStorage.getItem('cow_lang'))
+            || norm(window.__COW_DEFAULT_LANG__)
+            || norm(navigator.language)
+            || 'zh';
+    })();
 
 function t(key) {
     return (I18N[currentLang] && I18N[currentLang][key]) || (I18N.en[key]) || key;
@@ -392,16 +470,65 @@ function applyI18n() {
     installCfgTipPortal();
     const langLabel = document.getElementById('lang-label');
     if (langLabel) langLabel.textContent = currentLang === 'zh' ? '中文' : 'EN';
+    // Point the docs link to the locale-specific documentation site.
+    const docsLink = document.getElementById('docs-link');
+    if (docsLink) docsLink.href = currentLang === 'zh' ? 'https://docs.cowagent.ai/zh' : 'https://docs.cowagent.ai';
 }
 
-function toggleLanguage() {
-    currentLang = currentLang === 'zh' ? 'en' : 'zh';
+// Single entry point for switching language. Updates the in-memory language,
+// persists the user choice locally, re-renders the UI, and binds the choice to
+// the backend `cow_lang` config so logs / agent replies / CLI follow suit.
+function setLanguage(lang) {
+    const next = (lang === 'en') ? 'en' : 'zh';
+    if (next === currentLang) {
+        // Still persist + sync in case storage/backend drifted from the UI.
+        syncLanguageToBackend(next);
+        return;
+    }
+    currentLang = next;
     localStorage.setItem('cow_lang', currentLang);
     applyI18n();
     _applyInputTooltips();
     // Re-render views whose DOM is built in JS (data-i18n alone does not
     // cover strings interpolated via t() into innerHTML).
     try { rerenderDynamicViews(); } catch (e) {}
+    // Keep the language switch button and config selector visually in sync.
+    try { updateLangControls(); } catch (e) {}
+    syncLanguageToBackend(currentLang);
+}
+
+// Persist the language to the backend `cow_lang` config (best-effort; the UI
+// has already switched locally, so a network failure is non-blocking).
+function syncLanguageToBackend(lang) {
+    try {
+        fetch('/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ updates: { cow_lang: lang } })
+        }).catch(() => {});
+    } catch (e) {}
+}
+
+// Reflect the current language on both the top-right toggle and the config
+// selector (if present), so the two entry points stay synchronized.
+function updateLangControls() {
+    const langLabel = document.getElementById('lang-label');
+    if (langLabel) langLabel.textContent = currentLang === 'zh' ? '中文' : 'EN';
+    // The config language picker is the custom .cfg-dropdown component. Only
+    // sync it once it has been initialized (i.e. the config panel was opened).
+    const sel = document.getElementById('cfg-lang-select');
+    if (sel && sel._ddValue !== undefined && sel._ddValue !== currentLang) {
+        sel._ddValue = currentLang;
+        const textEl = sel.querySelector('.cfg-dropdown-text');
+        if (textEl) textEl.textContent = currentLang === 'zh' ? '中文' : 'English';
+        sel.querySelectorAll('.cfg-dropdown-item').forEach(i => {
+            i.classList.toggle('active', i.dataset.value === currentLang);
+        });
+    }
+}
+
+function toggleLanguage() {
+    setLanguage(currentLang === 'zh' ? 'en' : 'zh');
 }
 
 // Refresh JS-rendered views after a language switch. Each branch uses the
@@ -713,9 +840,45 @@ function renderMarkdown(text) {
         let html = md.render(text);
         html = _rewriteLocalImgSrc(html);
         // Order matters: video first (more specific), then image.
-        return injectImagePreviews(injectVideoPlayers(html));
+        html = injectImagePreviews(injectVideoPlayers(html));
+        // Note: Code block headers are added via DOM manipulation after insertion
+        // See addCodeBlockHeadersToElement()
+        return html;
     }
     catch (e) { return text.replace(/\n/g, '<br>'); }
+}
+
+function _addCodeBlockHeaders(container) {
+    // Add header with language label and copy button to each <pre> block using DOM manipulation
+    const preBlocks = container.querySelectorAll('pre');
+    preBlocks.forEach(pre => {
+        if (pre.parentElement && pre.parentElement.classList.contains('code-block-wrapper')) return;
+        
+        const codeEl = pre.querySelector('code');
+        if (!codeEl) return;
+        
+        const langClass = Array.from(codeEl.classList).find(c => c.startsWith('language-'));
+        const language = langClass ? langClass.replace('language-', '') : '';
+        // Hide label for unknown/empty languages (e.g. language-undefined)
+        const showLang = language && language !== 'undefined' && language !== 'code';
+        const langLabel = showLang ? language.charAt(0).toUpperCase() + language.slice(1) : '';
+        
+        const wrapper = document.createElement('div');
+        wrapper.className = 'code-block-wrapper';
+        
+        const header = document.createElement('div');
+        header.className = 'code-block-header';
+        header.innerHTML = `
+            <span class="code-block-lang">${langLabel}</span>
+            <button class="code-copy-btn" title="Copy code">
+                <i class="fas fa-copy"></i>
+            </button>
+        `;
+        
+        pre.parentNode.insertBefore(wrapper, pre);
+        wrapper.appendChild(header);
+        wrapper.appendChild(pre);
+    });
 }
 
 // =====================================================================
@@ -725,6 +888,8 @@ let isPolling = false;
 let pollGeneration = 0;   // incremented on each restart to cancel stale poll loops
 let loadingContainers = {};
 let activeStreams = {};   // request_id -> EventSource
+let sessionActiveRequest = {};   // session_id -> request_id (in-flight stream per session)
+let streamBuffers = {};   // request_id -> { items: [event...], timestamp } for re-attach replay
 let isComposing = false;
 let appConfig = { use_agent: false, title: 'CowAgent', subtitle: '', providers: {}, api_bases: {} };
 
@@ -977,6 +1142,22 @@ messagesDiv.addEventListener('scroll', () => {
 
 // Intercept internal navigation links in chat messages
 messagesDiv.addEventListener('click', (e) => {
+    // Code block copy button
+    const codeCopyBtn = e.target.closest('.code-copy-btn');
+    if (codeCopyBtn) {
+        e.preventDefault();
+        const wrapper = codeCopyBtn.closest('.code-block-wrapper');
+        const codeEl = wrapper && wrapper.querySelector('pre code');
+        if (codeEl) {
+            const codeText = codeEl.textContent;
+            copyToClipboard(codeText).then(() => {
+                const icon = codeCopyBtn.querySelector('i');
+                if (icon) { icon.className = 'fas fa-check'; setTimeout(() => { icon.className = 'fas fa-copy'; }, 1500); }
+            });
+        }
+        return;
+    }
+
     const copyBtn = e.target.closest('.copy-msg-btn');
     if (copyBtn) {
         e.preventDefault();
@@ -984,13 +1165,69 @@ messagesDiv.addEventListener('click', (e) => {
         const answerEl = msgRoot && msgRoot.querySelector('.answer-content');
         const rawMd = answerEl && answerEl.dataset.rawMd;
         if (rawMd) {
-            navigator.clipboard.writeText(rawMd).then(() => {
+            copyToClipboard(rawMd).then(() => {
                 const icon = copyBtn.querySelector('i');
                 if (icon) { icon.className = 'fas fa-check'; setTimeout(() => { icon.className = 'fas fa-copy'; }, 1500); }
             });
         }
         return;
     }
+
+    // Edit user message
+    const editBtn = e.target.closest('.edit-msg-btn');
+    if (editBtn) {
+        e.preventDefault();
+        const msgRoot = editBtn.closest('.user-message-group');
+        if (msgRoot) editUserMessage(msgRoot);
+        return;
+    }
+
+    // Regenerate bot response
+    const regenerateBtn = e.target.closest('.regenerate-msg-btn');
+    if (regenerateBtn) {
+        e.preventDefault();
+        const botMsgRoot = regenerateBtn.closest('.flex.gap-3');
+        if (botMsgRoot) regenerateResponse(botMsgRoot);
+        return;
+    }
+
+    // Delete message (user bubble only; bot bubbles intentionally lack a
+    // delete button — removing only the bot reply would leave an orphan
+    // user message that breaks LLM context alternation).
+    const deleteBtn = e.target.closest('.delete-msg-btn');
+    if (deleteBtn) {
+        e.preventDefault();
+        const userMsgEl = deleteBtn.closest('.user-message-group');
+        if (!userMsgEl) return;
+
+        showConfirmModal(t('delete_message_title'), t('delete_message_confirm'), () => {
+            // Find the next bot reply for this turn (skip non-message nodes).
+            let botReplyEl = null;
+            let sibling = userMsgEl.nextElementSibling;
+            while (sibling) {
+                if (sibling.classList && sibling.classList.contains('bot-message-group')) {
+                    botReplyEl = sibling;
+                    break;
+                }
+                sibling = sibling.nextElementSibling;
+            }
+            userMsgEl.remove();
+            if (botReplyEl) botReplyEl.remove();
+
+            const userSeq = userMsgEl.dataset.seq;
+            if (userSeq) {
+                fetch('/api/messages/delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ session_id: sessionId, user_seq: parseInt(userSeq) })
+                }).then(r => r.json()).then(data => {
+                    if (data.status === 'success') console.log(`Deleted ${data.deleted} messages`);
+                }).catch(err => console.error('Failed to delete:', err));
+            }
+        });
+        return;
+    }
+
     const a = e.target.closest('a');
     if (!a) return;
     const href = a.getAttribute('href') || '';
@@ -1067,8 +1304,15 @@ sendBtn.addEventListener('click', () => {
 
 function updateSendBtnState() {
     if (sendBtnMode === 'cancel') {
-        // Don't downgrade a Cancel button on input edits.
-        return;
+        // Self-heal a stuck Cancel button: if there's no live stream backing
+        // the current request, the cancel state leaked (e.g. a stream ended
+        // without resetting). Recover to Send so the input isn't blocked.
+        if (!activeRequestId || !activeStreams[activeRequestId]) {
+            resetSendBtnSendMode();
+        } else {
+            // Don't downgrade a genuinely active Cancel button on input edits.
+            return;
+        }
     }
     sendBtn.disabled = uploadingCount > 0 || (!chatInput.value.trim() && pendingAttachments.length === 0);
 }
@@ -1268,14 +1512,83 @@ document.addEventListener('click', (e) => {
     hideAttachMenu();
 });
 
-// Drag-and-drop support on chat input area
+// Drag-and-drop support on entire chat view
+const chatView = document.getElementById('view-chat');
 const chatInputArea = chatInput.closest('.flex-shrink-0');
-chatInputArea.addEventListener('dragover', (e) => { e.preventDefault(); e.stopPropagation(); chatInputArea.classList.add('drag-over'); });
-chatInputArea.addEventListener('dragleave', (e) => { e.preventDefault(); e.stopPropagation(); chatInputArea.classList.remove('drag-over'); });
-chatInputArea.addEventListener('drop', (e) => {
-    e.preventDefault(); e.stopPropagation();
+
+// Create drag overlay for visual feedback
+let dragOverlay = document.getElementById('drag-overlay');
+if (!dragOverlay) {
+    dragOverlay = document.createElement('div');
+    dragOverlay.id = 'drag-overlay';
+    dragOverlay.className = 'drag-overlay hidden';
+    dragOverlay.innerHTML = `
+        <div class="drag-overlay-content">
+            <i class="fas fa-cloud-arrow-up"></i>
+            <p>Drop files here to upload</p>
+        </div>
+    `;
+    chatView.appendChild(dragOverlay);
+}
+
+let dragCounter = 0;
+
+function showDragOverlay() {
+    dragOverlay.classList.remove('hidden');
+    dragOverlay.classList.add('active');
+}
+
+function hideDragOverlay() {
+    dragOverlay.classList.remove('active');
+    dragOverlay.classList.add('hidden');
+}
+
+chatView.addEventListener('dragenter', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter++;
+    if (e.dataTransfer.types.includes('Files')) {
+        showDragOverlay();
+    }
+});
+
+chatView.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    chatInputArea.classList.add('drag-over');
+});
+
+chatView.addEventListener('dragleave', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter--;
+    if (dragCounter === 0) {
+        hideDragOverlay();
+        chatInputArea.classList.remove('drag-over');
+    }
+});
+
+chatView.addEventListener('drop', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter = 0;
+    hideDragOverlay();
     chatInputArea.classList.remove('drag-over');
-    if (e.dataTransfer.files.length) handleFileSelect(e.dataTransfer.files);
+    if (e.dataTransfer.files.length) {
+        handleFileSelect(e.dataTransfer.files);
+    }
+});
+
+document.body.addEventListener('dragover', (e) => {
+    if (e.dataTransfer.types.includes('Files')) {
+        e.preventDefault();
+    }
+});
+
+document.body.addEventListener('drop', (e) => {
+    if (e.dataTransfer.types.includes('Files')) {
+        e.preventDefault();
+    }
 });
 
 // Paste image support
@@ -1298,28 +1611,30 @@ chatInput.addEventListener('compositionstart', () => { isComposing = true; });
 chatInput.addEventListener('compositionend', () => { setTimeout(() => { isComposing = false; }, 100); });
 
 // ── Slash Command Menu ───────────────────────────────────────
+// desc holds an i18n key, resolved via t() at render time so the menu follows
+// the current UI language.
 const SLASH_COMMANDS = [
-    { cmd: '/help',                desc: '显示命令帮助' },
-    { cmd: '/status',              desc: '查看运行状态' },
-    { cmd: '/context',             desc: '查看对话上下文' },
-    { cmd: '/context clear',       desc: '清除对话上下文' },
-    { cmd: '/skill list',          desc: '查看已安装技能' },
-    { cmd: '/skill list --remote', desc: '浏览技能广场' },
-    { cmd: '/skill search ',       desc: '搜索技能' },
-    { cmd: '/skill install ',      desc: '安装技能 (名称或 GitHub URL)' },
-    { cmd: '/skill uninstall ',    desc: '卸载技能' },
-    { cmd: '/skill info ',         desc: '查看技能详情' },
-    { cmd: '/skill enable ',       desc: '启用技能' },
-    { cmd: '/skill disable ',      desc: '禁用技能' },
-    { cmd: '/memory dream ',        desc: '手动触发记忆蒸馏 (可指定天数, 默认3)' },
-    { cmd: '/knowledge',            desc: '查看知识库统计' },
-    { cmd: '/knowledge list',      desc: '查看知识库文件树' },
-    { cmd: '/knowledge on',        desc: '开启知识库' },
-    { cmd: '/knowledge off',       desc: '关闭知识库' },
-    { cmd: '/config',              desc: '查看当前配置' },
-    { cmd: '/cancel',              desc: '中止当前正在运行的 Agent 任务' },
-    { cmd: '/logs',                desc: '查看最近日志' },
-    { cmd: '/version',             desc: '查看版本' },
+    { cmd: '/help',                desc: 'slash_help' },
+    { cmd: '/status',              desc: 'slash_status' },
+    { cmd: '/context',             desc: 'slash_context' },
+    { cmd: '/context clear',       desc: 'slash_context_clear' },
+    { cmd: '/skill list',          desc: 'slash_skill_list' },
+    { cmd: '/skill list --remote', desc: 'slash_skill_list_remote' },
+    { cmd: '/skill search ',       desc: 'slash_skill_search' },
+    { cmd: '/skill install ',      desc: 'slash_skill_install' },
+    { cmd: '/skill uninstall ',    desc: 'slash_skill_uninstall' },
+    { cmd: '/skill info ',         desc: 'slash_skill_info' },
+    { cmd: '/skill enable ',       desc: 'slash_skill_enable' },
+    { cmd: '/skill disable ',      desc: 'slash_skill_disable' },
+    { cmd: '/memory dream ',       desc: 'slash_memory_dream' },
+    { cmd: '/knowledge',           desc: 'slash_knowledge' },
+    { cmd: '/knowledge list',      desc: 'slash_knowledge_list' },
+    { cmd: '/knowledge on',        desc: 'slash_knowledge_on' },
+    { cmd: '/knowledge off',       desc: 'slash_knowledge_off' },
+    { cmd: '/config',              desc: 'slash_config' },
+    { cmd: '/cancel',              desc: 'slash_cancel' },
+    { cmd: '/logs',                desc: 'slash_logs' },
+    { cmd: '/version',             desc: 'slash_version' },
 ];
 
 const slashMenu = document.getElementById('slash-menu');
@@ -1373,7 +1688,7 @@ function renderSlashItems() {
         slashFiltered.map((c, i) =>
             `<div class="slash-menu-item${i === slashActiveIdx ? ' active' : ''}" data-idx="${i}">` +
             `<span class="cmd">${escapeHtml(c.cmd)}</span>` +
-            `<span class="desc">${escapeHtml(c.desc)}</span></div>`
+            `<span class="desc">${escapeHtml(t(c.desc))}</span></div>`
         ).join('');
 
     const activeEl = slashMenu.querySelector('.slash-menu-item.active');
@@ -1651,6 +1966,191 @@ function addUserVoiceMessage(audioUrl, caption, timestamp) {
     scrollChatToBottom(true);
 }
 
+// Clipboard helper with fallback for non-HTTPS environments
+function copyToClipboard(text) {
+    if (navigator.clipboard && window.isSecureContext) {
+        return navigator.clipboard.writeText(text);
+    }
+    // Fallback for HTTP environments
+    return new Promise((resolve, reject) => {
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        textArea.style.top = '-999999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        try {
+            document.execCommand('copy') ? resolve() : reject(new Error('Copy failed'));
+        } catch (err) {
+            reject(err);
+        } finally {
+            textArea.remove();
+        }
+    });
+}
+
+// Edit user message: extract content, remove this and subsequent messages, fill input
+async function editUserMessage(msgEl) {
+    const rawContent = msgEl.dataset.rawContent;
+    if (!rawContent) return;
+
+    // Delete this message and ALL subsequent messages from database (cascade)
+    // Must await to ensure delete completes before user sends a new message
+    const userSeq = msgEl.dataset.seq;
+    if (userSeq) {
+        try {
+            const resp = await fetch('/api/messages/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    session_id: sessionId, 
+                    user_seq: parseInt(userSeq),
+                    delete_user: true,
+                    cascade: true
+                })
+            });
+            const data = await resp.json();
+            if (data.status === 'success') console.log(`Deleted ${data.deleted} old messages`);
+        } catch (err) {
+            console.error('Failed to delete old messages:', err);
+        }
+    }
+
+    // Remove this message bubble and every later bubble that belongs to
+    // this or a subsequent turn. We mirror the backend cascade contract:
+    // anything with a data-seq >= current seq, plus any live SSE bubble
+    // that is still being streamed (no seq yet) after this point.
+    const currentSeqNum = userSeq ? parseInt(userSeq) : null;
+    const messagesToRemove = [];
+    let current = msgEl;
+    while (current) {
+        if (current.classList && (current.classList.contains('user-message-group') || current.classList.contains('bot-message-group'))) {
+            const seqAttr = current.dataset.seq;
+            if (seqAttr === undefined || seqAttr === '') {
+                // Live message without a persisted seq yet — treat as later.
+                messagesToRemove.push(current);
+            } else if (currentSeqNum === null || parseInt(seqAttr) >= currentSeqNum) {
+                messagesToRemove.push(current);
+            }
+        }
+        current = current.nextElementSibling;
+    }
+    messagesToRemove.forEach(el => {
+        if (el && el.parentNode) el.parentNode.removeChild(el);
+    });
+
+    // Fill input with the original content
+    chatInput.value = rawContent;
+    chatInput.style.height = 'auto';
+    chatInput.style.height = chatInput.scrollHeight + 'px';
+    chatInput.focus();
+    scrollChatToBottom();
+}
+
+// Regenerate bot response: find the preceding user message and resend it
+async function regenerateResponse(botMsgEl) {
+    let prevEl = botMsgEl.previousElementSibling;
+    while (prevEl && !prevEl.classList.contains('user-message-group')) {
+        prevEl = prevEl.previousElementSibling;
+    }
+
+    if (!prevEl) {
+        console.warn('No preceding user message found');
+        return;
+    }
+
+    const userContent = prevEl.dataset.rawContent;
+    if (!userContent) {
+        console.warn('No content in preceding user message');
+        return;
+    }
+
+    // Delete both the old user message AND bot reply from database
+    // (because /message will create a fresh user message + new bot reply)
+    // Must await to ensure delete completes before /message is sent
+    const userSeq = prevEl.dataset.seq;
+    if (userSeq) {
+        try {
+            const resp = await fetch('/api/messages/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    session_id: sessionId, 
+                    user_seq: parseInt(userSeq),
+                    delete_user: true
+                })
+            });
+            const data = await resp.json();
+            if (data.status === 'success') console.log(`Deleted ${data.deleted} old messages`);
+        } catch (err) {
+            console.error('Failed to delete old messages:', err);
+        }
+    }
+
+    // Remove both the old user message and bot message from DOM
+    if (prevEl.parentNode) prevEl.parentNode.removeChild(prevEl);
+    if (botMsgEl.parentNode) botMsgEl.parentNode.removeChild(botMsgEl);
+
+    // Re-add the user message to DOM (so it appears before the loading indicator)
+    addUserMessage(userContent, new Date());
+
+    // Show loading indicator
+    const loadingEl = addLoadingIndicator();
+
+    // Resend the message
+    const timestamp = new Date();
+    const body = { session_id: sessionId, message: userContent, stream: true, timestamp: timestamp.toISOString(), lang: currentLang };
+
+    const MAX_RETRIES = 2;
+    const RETRY_DELAY_MS = 1000;
+
+    function postWithRetry(attempt) {
+        fetch('/message', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.status === 'success') {
+                if (data.inline_reply) {
+                    loadingEl.remove();
+                    addBotMessage(data.inline_reply, new Date());
+                } else if (data.stream) {
+                    setSendBtnCancelMode(data.request_id);
+                    startSSE(data.request_id, loadingEl, timestamp, null);
+                } else {
+                    loadingContainers[data.request_id] = loadingEl;
+                }
+            } else {
+                loadingEl.remove();
+                addBotMessage(t('error_send'), new Date());
+                resetSendBtnSendMode();
+            }
+        })
+        .catch(err => {
+            if (err.name === 'AbortError') {
+                loadingEl.remove();
+                addBotMessage(t('error_timeout'), new Date());
+                resetSendBtnSendMode();
+                return;
+            }
+            if (attempt < MAX_RETRIES) {
+                console.warn(`[regenerateResponse] attempt ${attempt + 1} failed, retrying...`, err);
+                setTimeout(() => postWithRetry(attempt + 1), RETRY_DELAY_MS * (attempt + 1));
+                return;
+            }
+            loadingEl.remove();
+            addBotMessage(t('error_send'), new Date());
+            resetSendBtnSendMode();
+        });
+    }
+
+    postWithRetry(0);
+}
+
 function sendMessage() {
     // Do NOT branch on sendBtnMode here: Enter should always send (so
     // typing "/cancel" submits normally). Cancel is wired only to the
@@ -1744,7 +2244,7 @@ function sendMessage() {
     postWithRetry(0);
 }
 
-function startSSE(requestId, loadingEl, timestamp, titleInfo) {
+function startSSE(requestId, loadingEl, timestamp, titleInfo, replayItems) {
     let botEl = null;
     let stepsEl = null;    // .agent-steps  (thinking summaries + tool indicators)
     let contentEl = null;  // .answer-content (final streaming answer)
@@ -1756,6 +2256,25 @@ function startSSE(requestId, loadingEl, timestamp, titleInfo) {
     let reasoningStartTime = 0;
     let done = false;
 
+    // The session this stream belongs to. Sessions run in parallel: the user
+    // may switch to another session while this one is still streaming. The
+    // stream keeps running in the background (so the reply still completes and
+    // persists); when foreign it does not touch the view but still records
+    // every event into a buffer, so returning to the session can rebuild the
+    // bubble by replaying the buffer and then resume live rendering.
+    const ownerSession = sessionId;
+    const isActive = () => ownerSession === sessionId;
+    sessionActiveRequest[ownerSession] = requestId;
+    // Per-request event buffer used to rebuild the bubble on re-attach.
+    const buffer = streamBuffers[requestId] || { items: [], timestamp };
+    streamBuffers[requestId] = buffer;
+    const clearOwnerRequest = () => {
+        if (sessionActiveRequest[ownerSession] === requestId) {
+            delete sessionActiveRequest[ownerSession];
+        }
+        delete streamBuffers[requestId];
+    };
+
     const MAX_RECONNECTS = 10;
     const RECONNECT_BASE_MS = 1000;
     let reconnectCount = 0;
@@ -1764,8 +2283,10 @@ function startSSE(requestId, loadingEl, timestamp, titleInfo) {
         if (botEl) return;
         if (loadingEl) { loadingEl.remove(); loadingEl = null; }
         botEl = document.createElement('div');
-        botEl.className = 'flex gap-3 px-4 sm:px-6 py-3';
+        botEl.className = 'flex gap-3 px-4 sm:px-6 py-3 bot-message-group';
         botEl.dataset.requestId = requestId;
+        // Regenerate button starts hidden; it's revealed in the "done"
+        // event handler once seq metadata arrives from the backend.
         botEl.innerHTML = `
             <img src="assets/logo.jpg" alt="CowAgent" class="w-8 h-8 rounded-lg flex-shrink-0">
             <div class="min-w-0 flex-1 max-w-[85%]">
@@ -1783,6 +2304,9 @@ function startSSE(requestId, loadingEl, timestamp, titleInfo) {
                     <button class="speak-msg-btn text-xs text-slate-300 dark:text-slate-600 hover:text-slate-500 dark:hover:text-slate-400 transition-colors cursor-pointer" title="${t('speak_msg')}" style="display:none;">
                         <i class="fas fa-volume-up"></i>
                     </button>
+                    <button class="regenerate-msg-btn text-xs text-slate-300 dark:text-slate-600 hover:text-primary-400 dark:hover:text-primary-400 transition-colors cursor-pointer" title="${t('regenerate_response')}" style="display:none;">
+                        <i class="fas fa-rotate-right"></i>
+                    </button>
                 </div>
             </div>
         `;
@@ -1792,17 +2316,13 @@ function startSSE(requestId, loadingEl, timestamp, titleInfo) {
         mediaEl = botEl.querySelector('.media-content');
     }
 
-    function connect() {
-        const es = new EventSource(`/stream?request_id=${encodeURIComponent(requestId)}`);
-        activeStreams[requestId] = es;
+    // Holds the live EventSource so terminal events (done/voice_attach/error)
+    // can close it. During replay there is no live connection (null).
+    let currentEs = null;
 
-        es.onmessage = function(e) {
-            let item;
-            try { item = JSON.parse(e.data); } catch (_) { return; }
-
-            // Successful data received, reset reconnect counter
-            reconnectCount = 0;
-
+    // Render one SSE event into the bubble. Used by the live handler and by
+    // re-attach replay alike, so both paths produce identical UI.
+    function processSSEItem(item) {
             if (item.type === 'reasoning') {
                 ensureBotEl();
                 reasoningText += item.content;
@@ -2016,6 +2536,7 @@ function startSSE(requestId, loadingEl, timestamp, titleInfo) {
                 // TTS audio (`voice_attach`). It will close the stream on
                 // its own via onerror once the tail expires.
                 done = true;
+                clearOwnerRequest();
                 resetSendBtnSendMode();
 
                 const finalTextRaw = item.content || accumulatedText;
@@ -2031,6 +2552,29 @@ function startSSE(requestId, loadingEl, timestamp, titleInfo) {
                     const copyBtn = botEl.querySelector('.copy-msg-btn');
                     if (copyBtn && finalText) copyBtn.style.display = '';
                     applyHighlighting(botEl);
+                }
+
+                // Backfill seq metadata so edit/regenerate buttons can call
+                // the delete API without a page refresh. Backend includes
+                // user_seq / bot_seq on the done event after persistence.
+                const targetBotEl = botEl || (requestId ? messagesDiv.querySelector(`[data-request-id="${requestId}"]`) : null);
+                if (targetBotEl) {
+                    if (item.bot_seq !== undefined && item.bot_seq !== null) {
+                        targetBotEl.dataset.seq = item.bot_seq;
+                    }
+                    // Reveal regenerate button now that the seq is wired up.
+                    const regenBtn = targetBotEl.querySelector('.regenerate-msg-btn');
+                    if (regenBtn) regenBtn.style.display = '';
+                    if (item.user_seq !== undefined && item.user_seq !== null) {
+                        // Locate the preceding user bubble for this turn.
+                        let prev = targetBotEl.previousElementSibling;
+                        while (prev && !prev.classList.contains('user-message-group')) {
+                            prev = prev.previousElementSibling;
+                        }
+                        if (prev && !prev.dataset.seq) {
+                            prev.dataset.seq = item.user_seq;
+                        }
+                    }
                 }
                 renderBotSpeakerButton(botEl, finalText);
                 scrollChatToBottom();
@@ -2048,17 +2592,52 @@ function startSSE(requestId, loadingEl, timestamp, titleInfo) {
                 if (botEl && item.url) {
                     attachAudioToBotBubble(botEl, item.url, { autoplay: true });
                 }
-                es.close();
+                if (currentEs) { currentEs.close(); }
                 delete activeStreams[requestId];
+                clearOwnerRequest();
 
             } else if (item.type === 'error') {
                 done = true;
-                es.close();
+                if (currentEs) { currentEs.close(); }
                 delete activeStreams[requestId];
+                clearOwnerRequest();
                 if (loadingEl) { loadingEl.remove(); loadingEl = null; }
                 addBotMessage(t('error_send'), new Date());
                 resetSendBtnSendMode();
             }
+    }
+
+    function connect() {
+        const es = new EventSource(`/stream?request_id=${encodeURIComponent(requestId)}`);
+        currentEs = es;
+        activeStreams[requestId] = es;
+
+        es.onmessage = function(e) {
+            let item;
+            try { item = JSON.parse(e.data); } catch (_) { return; }
+
+            // Successful data received, reset reconnect counter
+            reconnectCount = 0;
+
+            // Record every event for re-attach replay (capped to avoid
+            // unbounded growth on very long streams).
+            if (buffer.items.length < 5000) buffer.items.push(item);
+
+            // Background session: keep the stream alive so the reply finishes
+            // and persists, but skip rendering into the now-foreign view. The
+            // buffer above still grows so returning to the session can rebuild
+            // the bubble and resume live rendering.
+            if (ownerSession !== sessionId) {
+                if (item.type === 'done' || item.type === 'error' || item.type === 'voice_attach') {
+                    done = true;
+                    es.close();
+                    delete activeStreams[requestId];
+                    clearOwnerRequest();
+                }
+                return;
+            }
+
+            processSSEItem(item);
         };
 
         es.onerror = function() {
@@ -2084,7 +2663,10 @@ function startSSE(requestId, loadingEl, timestamp, titleInfo) {
                 return;
             }
 
-            // Exhausted retries, show whatever we have
+            // Exhausted retries. Only surface the failure in the owning view —
+            // a background session must not mutate the currently shown chat.
+            clearOwnerRequest();
+            if (!isActive()) return;
             if (loadingEl) { loadingEl.remove(); loadingEl = null; }
             if (!botEl) {
                 addBotMessage(t('error_send'), new Date());
@@ -2096,6 +2678,27 @@ function startSSE(requestId, loadingEl, timestamp, titleInfo) {
             }
             resetSendBtnSendMode();
         };
+    }
+
+    // Re-attach replay: rebuild the bubble from buffered events (snapshot,
+    // not animated) before connecting for the live tail. `processSSEItem`
+    // is the same renderer used by the live onmessage handler, so the
+    // snapshot matches exactly what live rendering would have produced.
+    if (replayItems && replayItems.length) {
+        for (const item of replayItems) {
+            try { processSSEItem(item); } catch (_) {}
+            if (item.type === 'done' || item.type === 'error' || item.type === 'voice_attach') {
+                done = true;
+            }
+        }
+        // If the buffered stream already finished, don't reconnect — the
+        // reply is complete and persisted; show its final state and stop.
+        if (done) {
+            clearOwnerRequest();
+            resetSendBtnSendMode();
+            scrollChatToBottom(true);
+            return;
+        }
     }
 
     connect();
@@ -2127,10 +2730,19 @@ function startPolling() {
                     loadingContainers[rid].remove();
                     delete loadingContainers[rid];
                 }
-                const welcomeScreen = document.getElementById('welcome-screen');
-                if (welcomeScreen) welcomeScreen.remove();
-                addBotMessage(data.content, new Date(data.timestamp * 1000), rid);
-                scrollChatToBottom();
+                // Skip if this reply is already on screen. Happens when a reply
+                // arrives via both the SSE stream and the poll queue (e.g. the
+                // user switched away mid-run, leaving the queued reply to be
+                // re-fetched on return) — render it only once.
+                const already = rid && messagesDiv.querySelector(
+                    `[data-request-id="${rid}"]`
+                );
+                if (!already) {
+                    const welcomeScreen = document.getElementById('welcome-screen');
+                    if (welcomeScreen) welcomeScreen.remove();
+                    addBotMessage(data.content, new Date(data.timestamp * 1000), rid);
+                    scrollChatToBottom();
+                }
             }
             const delay = (data.status === 'success' && data.has_content) ? 5000 : 10000;
             setTimeout(poll, delay);
@@ -2142,7 +2754,7 @@ function startPolling() {
 
 function createUserMessageEl(content, timestamp, attachments) {
     const el = document.createElement('div');
-    el.className = 'flex justify-end px-4 sm:px-6 py-3';
+    el.className = 'flex justify-end px-4 sm:px-6 py-3 user-message-group';
 
     let attachHtml = '';
     if (attachments && attachments.length > 0) {
@@ -2167,9 +2779,19 @@ function createUserMessageEl(content, timestamp, attachments) {
             <div class="bg-primary-400 text-white rounded-2xl px-4 py-2.5 text-sm leading-relaxed msg-content user-bubble">
                 ${attachHtml}${textHtml}
             </div>
-            <div class="text-xs text-slate-400 dark:text-slate-500 mt-1.5 text-right">${formatTime(timestamp)}</div>
+            <div class="flex items-center justify-end gap-2 mt-1.5">
+                <button class="edit-msg-btn text-xs text-slate-300 dark:text-slate-600 hover:text-primary-400 dark:hover:text-primary-400 transition-colors cursor-pointer" title="${t('edit_message')}">
+                    <i class="fas fa-pen-to-square"></i>
+                </button>
+                <button class="delete-msg-btn text-xs text-slate-300 dark:text-slate-600 hover:text-red-500 dark:hover:text-red-400 transition-colors cursor-pointer" title="${t('delete_message_title')}">
+                    <i class="fas fa-trash"></i>
+                </button>
+                <span class="text-xs text-slate-400 dark:text-slate-500">${formatTime(timestamp)}</span>
+            </div>
         </div>
     `;
+    // Store raw content for editing
+    el.dataset.rawContent = content || '';
     return el;
 }
 
@@ -2345,7 +2967,7 @@ function localizeCancelMarker(text) {
 
 function createBotMessageEl(content, timestamp, requestId, msg) {
     const el = document.createElement('div');
-    el.className = 'flex gap-3 px-4 sm:px-6 py-3';
+    el.className = 'flex gap-3 px-4 sm:px-6 py-3 bot-message-group';
     if (requestId) el.dataset.requestId = requestId;
 
     let stepsHtml = '';
@@ -2364,10 +2986,23 @@ function createBotMessageEl(content, timestamp, requestId, msg) {
         stepsHtml = renderThinkingHtml(reasoning) + renderToolCallsHtml(toolCalls);
     }
 
+    // Self-evolution bubbles get a small badge so the user can feel the agent
+    // learned something on its own (text itself stays clean). History replay
+    // carries msg.kind; live pushes are identified by the evolution_ request id.
+    const isEvolution = (msg && msg.kind === 'evolution')
+        || (typeof requestId === 'string' && requestId.startsWith('evolution_'));
+    const evolutionBadge = isEvolution
+        ? `<div class="flex items-center gap-1 mb-1.5 text-xs text-slate-400 dark:text-slate-500">
+                <i class="fas fa-seedling text-[11px]"></i>
+                <span>${t('evolution_badge')}</span>
+           </div>`
+        : '';
+
     el.innerHTML = `
         <img src="assets/logo.jpg" alt="CowAgent" class="w-8 h-8 rounded-lg flex-shrink-0">
         <div class="min-w-0 flex-1 max-w-[85%]">
             <div class="bg-white dark:bg-[#1A1A1A] border border-slate-200 dark:border-white/10 rounded-2xl px-4 py-3 text-sm leading-relaxed msg-content text-slate-700 dark:text-slate-200">
+                ${evolutionBadge}
                 ${stepsHtml ? `<div class="agent-steps">${stepsHtml}</div>` : ''}
                 <div class="answer-content">${renderMarkdown(displayContent)}</div>
                 <div class="bot-audio-slot"></div>
@@ -2379,6 +3014,9 @@ function createBotMessageEl(content, timestamp, requestId, msg) {
                 </button>
                 <button class="speak-msg-btn text-xs text-slate-300 dark:text-slate-600 hover:text-slate-500 dark:hover:text-slate-400 transition-colors cursor-pointer" title="${t('speak_msg')}" style="display:none;">
                     <i class="fas fa-volume-up"></i>
+                </button>
+                <button class="regenerate-msg-btn text-xs text-slate-300 dark:text-slate-600 hover:text-primary-400 dark:hover:text-primary-400 transition-colors cursor-pointer" title="${t('regenerate_response')}">
+                    <i class="fas fa-rotate-right"></i>
                 </button>
             </div>
         </div>
@@ -2599,6 +3237,10 @@ function loadHistory(page) {
                 const el = msg.role === 'user'
                     ? createUserMessageEl(msg.content, ts)
                     : createBotMessageEl(msg.content || '', ts, null, msg);
+                // Store seq for delete functionality
+                if (msg._seq !== undefined) {
+                    el.dataset.seq = msg._seq;
+                }
                 fragment.appendChild(el);
             });
 
@@ -2633,9 +3275,12 @@ function loadHistory(page) {
             historyPage = page;
 
             if (isFirstLoad) {
-                // Use requestAnimationFrame to ensure the DOM has fully rendered
-                // before scrolling, otherwise scrollHeight may not reflect new content.
+                // Scroll to the very bottom after the DOM settles. A single
+                // rAF isn't enough: markdown/code-highlight/images keep growing
+                // scrollHeight after the first paint, leaving the last bubble's
+                // timestamp clipped. Re-pin a few times to catch late layout.
                 requestAnimationFrame(() => scrollChatToBottom(true));
+                [120, 350, 700].forEach(d => setTimeout(() => scrollChatToBottom(true), d));
             } else {
                 // Restore scroll position so loading older messages doesn't jump the view
                 messagesDiv.scrollTop = messagesDiv.scrollHeight - prevScrollHeight;
@@ -2663,15 +3308,15 @@ function addLoadingIndicator() {
     return el;
 }
 
-function newChat() {
-    // Close all active SSE connections for the current session
-    Object.values(activeStreams).forEach(es => { try { es.close(); } catch (_) {} });
-    activeStreams = {};
+function newChat(optimistic = true) {
+    // Do NOT close active streams: other sessions keep streaming in the
+    // background (each stream self-guards against the foreign view) and their
+    // replies still complete and persist.
 
     // Generate a fresh session and persist it so the next page load also starts clean
     sessionId = generateSessionId();
     localStorage.setItem(SESSION_ID_KEY, sessionId);
-    loadingContainers = {};
+    resetSendBtnSendMode();  // fresh session has no in-flight reply
     startPolling();  // bump generation so old loop self-cancels, new loop uses fresh sessionId
     messagesDiv.innerHTML = '';
     const ws = document.createElement('div');
@@ -2767,8 +3412,16 @@ function newChat() {
         _showSessionOverlay();
         _persistPanelState();
     }
+    // Only prepend an optimistic "new chat" item when this is a real new-chat
+    // action. When called after deleting the current session, skip it: the
+    // fresh session has no backend record yet, so inserting it would leave an
+    // empty, undeletable item in the list (deleting it just spawns another).
     const newSid = sessionId;
-    loadSessionList(() => _addOptimisticSessionItem(newSid));
+    if (optimistic) {
+        loadSessionList(() => _addOptimisticSessionItem(newSid));
+    } else {
+        loadSessionList();
+    }
 }
 
 // =====================================================================
@@ -3006,15 +3659,56 @@ function _onSessionListScroll() {
     }
 })();
 
+// Returning to a session whose reply is still streaming in the background.
+// Close the background EventSource, rebuild the bubble from the buffered
+// events (snapshot), then resume live streaming via a fresh connection that
+// reads the remaining tail from the backend queue. Returns true if a stream
+// was re-attached. The user's own bubble is already in history (persisted
+// eagerly), so it was rendered by loadHistory before this runs.
+function _reattachStream(sid) {
+    const requestId = sessionActiveRequest[sid];
+    if (!requestId) return false;
+    const buffer = streamBuffers[requestId];
+    if (!buffer) return false;
+
+    // If the buffered stream already finished, the assistant reply is already
+    // persisted and rendered by loadHistory — re-attaching would duplicate it.
+    // Just clean up the buffer/cursor and rely on history.
+    const finished = buffer.items.some(
+        it => it.type === 'done' || it.type === 'error'
+    );
+    if (finished) {
+        const oldEs = activeStreams[requestId];
+        if (oldEs) { try { oldEs.close(); } catch (_) {} delete activeStreams[requestId]; }
+        delete streamBuffers[requestId];
+        delete sessionActiveRequest[sid];
+        resetSendBtnSendMode();
+        return false;
+    }
+
+    // Stop the background stream so the rebuilt one is the sole consumer of
+    // the backend queue (the queue survives until "done", so the new
+    // connection picks up any remaining events).
+    const oldEs = activeStreams[requestId];
+    if (oldEs) { try { oldEs.close(); } catch (_) {} delete activeStreams[requestId]; }
+
+    // Snapshot the buffered events into the replay, then start a fresh stream
+    // that replays them and reconnects for the live tail.
+    const replay = buffer.items.slice();
+    startSSE(requestId, null, buffer.timestamp || new Date(), null, replay);
+    return true;
+}
+
 function switchSession(newSessionId) {
     if (newSessionId === sessionId) {
         if (currentView !== 'chat') navigateTo('chat');
         return;
     }
 
-    Object.values(activeStreams).forEach(es => { try { es.close(); } catch (_) {} });
-    activeStreams = {};
-    loadingContainers = {};
+    // Do NOT close active streams here: sessions run in parallel, so any
+    // in-flight reply for another session must keep streaming in the
+    // background (it self-guards against rendering into the foreign view).
+    // Switching back re-attaches and resumes live streaming.
 
     sessionId = newSessionId;
     localStorage.setItem(SESSION_ID_KEY, sessionId);
@@ -3027,6 +3721,17 @@ function switchSession(newSessionId) {
     loadHistory(1);
     startPolling();
 
+    // Restore the send button to match this session's stream state, and if a
+    // reply is still streaming in the background, re-attach to resume showing
+    // it live (the user turn itself comes from history above).
+    const pendingReq = sessionActiveRequest[sessionId];
+    if (pendingReq) {
+        setSendBtnCancelMode(pendingReq);
+        _reattachStream(sessionId);
+    } else {
+        resetSendBtnSendMode();
+    }
+
     document.querySelectorAll('.session-item').forEach(el => {
         el.classList.toggle('active', el.dataset.sessionId === sessionId);
     });
@@ -3037,18 +3742,47 @@ function switchSession(newSessionId) {
 
 function deleteSession(sid) {
     showConfirmModal(t('delete_session_title'), t('delete_session_confirm'), () => {
+        // Before deleting, find the next real session to fall back to when the
+        // current one is removed (the sibling item in the list, which is sorted
+        // newest-first). Falls back to the welcome screen if none remain.
+        const nextSid = sid === sessionId ? _findNextSessionId(sid) : null;
+
         fetch(`/api/sessions/${encodeURIComponent(sid)}`, { method: 'DELETE' })
             .then(r => r.json())
             .then(data => {
                 if (data.status !== 'success') return;
-                if (sid === sessionId) {
-                    newChat();
-                } else {
+                if (sid !== sessionId) {
                     loadSessionList();
+                    return;
+                }
+                if (nextSid) {
+                    // Switch to an existing session; refresh the list afterwards
+                    // so the deleted item disappears.
+                    switchSession(nextSid);
+                    loadSessionList();
+                } else {
+                    // No other sessions: reset to a fresh empty session without
+                    // inserting an optimistic placeholder (it has no backend
+                    // record and would be an empty, undeletable item).
+                    newChat(false);
                 }
             })
             .catch(() => {});
     });
+}
+
+// Pick the session to show after deleting `sid` (the current session): prefer
+// the next item below it in the list, otherwise the previous one. Returns null
+// if no other session exists.
+function _findNextSessionId(sid) {
+    const items = Array.from(document.querySelectorAll('.session-item[data-session-id]'));
+    const idx = items.findIndex(el => el.dataset.sessionId === sid);
+    if (idx === -1) {
+        const other = items.find(el => el.dataset.sessionId !== sid);
+        return other ? other.dataset.sessionId : null;
+    }
+    const next = items[idx + 1] || items[idx - 1];
+    return next ? next.dataset.sessionId : null;
 }
 
 function showConfirmModal(title, message, onConfirm) {
@@ -3175,6 +3909,8 @@ function applyHighlighting(container) {
                 hljsLib.highlightElement(block);
             }
         });
+        // Add language labels and copy buttons to code blocks
+        _addCodeBlockHeaders(root);
     }, 0);
 }
 
@@ -3295,6 +4031,19 @@ function initConfigView(data) {
     document.getElementById('cfg-max-turns').value = data.agent_max_context_turns || 20;
     document.getElementById('cfg-max-steps').value = data.agent_max_steps || 20;
     document.getElementById('cfg-enable-thinking').checked = data.enable_thinking === true;
+    document.getElementById('cfg-self-evolution').checked = data.self_evolution_enabled === true;
+
+    // Reflect the current UI language (already resolved, may include the user's
+    // local choice) on the selector so it stays in sync with the top-right toggle.
+    const langSel = document.getElementById('cfg-lang-select');
+    if (langSel) {
+        initDropdown(
+            langSel,
+            [{ value: 'zh', label: '中文' }, { value: 'en', label: 'English' }],
+            currentLang,
+            (val) => setLanguage(val)
+        );
+    }
 
     const pwdInput = document.getElementById('cfg-password');
     const maskedPwd = data.web_password_masked || '';
@@ -3538,6 +4287,7 @@ function saveAgentConfig() {
         agent_max_context_turns: parseInt(document.getElementById('cfg-max-turns').value) || 20,
         agent_max_steps: parseInt(document.getElementById('cfg-max-steps').value) || 20,
         enable_thinking: document.getElementById('cfg-enable-thinking').checked,
+        self_evolution_enabled: document.getElementById('cfg-self-evolution').checked,
     };
 
     const btn = document.getElementById('cfg-agent-save');
@@ -3763,13 +4513,14 @@ function toggleSkill(name, currentlyEnabled) {
 // Memory View
 // =====================================================================
 let memoryPage = 1;
-let memoryCategory = 'memory';   // 'memory' | 'dream'
+let memoryCategory = 'memory';   // 'memory' | 'evolution'
 const memoryPageSize = 10;
 
 function switchMemoryTab(tab) {
     document.querySelectorAll('.memory-tab').forEach(el => el.classList.remove('active'));
     document.getElementById('memory-tab-' + tab).classList.add('active');
-    memoryCategory = tab === 'dreams' ? 'dream' : 'memory';
+    // The "dreams" tab now surfaces self-evolution logs (merged with dream diaries).
+    memoryCategory = tab === 'dreams' ? 'evolution' : 'memory';
     loadMemoryView(1);
 }
 
@@ -3786,9 +4537,9 @@ function loadMemoryView(page) {
         if (total === 0) {
             const emptyIcon = emptyEl.querySelector('i');
             const emptyTitle = emptyEl.querySelector('p');
-            if (memoryCategory === 'dream') {
-                emptyIcon.className = 'fas fa-moon text-purple-400 text-xl';
-                emptyTitle.textContent = currentLang === 'zh' ? '暂无梦境日记' : 'No dream diaries yet';
+            if (memoryCategory === 'evolution') {
+                emptyIcon.className = 'fas fa-seedling text-emerald-400 text-xl';
+                emptyTitle.textContent = currentLang === 'zh' ? '暂无进化记录' : 'No evolution records yet';
             } else {
                 emptyIcon.className = 'fas fa-brain text-purple-400 text-xl';
                 emptyTitle.textContent = currentLang === 'zh' ? '暂无记忆文件' : 'No memory files';
@@ -3805,10 +4556,15 @@ function loadMemoryView(page) {
         files.forEach(f => {
             const tr = document.createElement('tr');
             tr.className = 'border-b border-slate-100 dark:border-white/5 hover:bg-slate-50 dark:hover:bg-white/5 cursor-pointer transition-colors';
-            tr.onclick = () => openMemoryFile(f.filename, memoryCategory);
+            // In the merged evolution tab, resolve each file by its own origin
+            // (evolution logs vs dream diaries live in different dirs).
+            const fileCategory = (f.type === 'dream' || f.type === 'evolution') ? f.type : memoryCategory;
+            tr.onclick = () => openMemoryFile(f.filename, fileCategory);
             let typeLabel;
             if (f.type === 'global') {
                 typeLabel = '<span class="px-2 py-0.5 rounded-full text-xs bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400">Global</span>';
+            } else if (f.type === 'evolution') {
+                typeLabel = '<span class="px-2 py-0.5 rounded-full text-xs bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400">Evolution</span>';
             } else if (f.type === 'dream') {
                 typeLabel = '<span class="px-2 py-0.5 rounded-full text-xs bg-violet-50 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400">Dream</span>';
             } else {
@@ -3903,7 +4659,7 @@ const MODELS_CAPABILITY_DEFS = [
       iconChip: 'bg-blue-50 dark:bg-blue-900/30',        iconGlyph: 'text-blue-500' },
     { id: 'image',     icon: 'fa-image',            editable: true,  needsModel: true,  titleKey: 'models_capability_image',     descKey: 'models_capability_image_desc',
       iconChip: 'bg-blue-50 dark:bg-blue-900/30',        iconGlyph: 'text-blue-500' },
-    { id: 'asr',       icon: 'fa-microphone',       editable: true,  needsModel: false, titleKey: 'models_capability_asr',       descKey: 'models_capability_asr_desc',
+    { id: 'asr',       icon: 'fa-microphone',       editable: true,  needsModel: true,  titleKey: 'models_capability_asr',       descKey: 'models_capability_asr_desc',
       iconChip: 'bg-amber-50 dark:bg-amber-900/30',      iconGlyph: 'text-amber-500' },
     { id: 'tts',       icon: 'fa-volume-high',      editable: true,  needsModel: true,  titleKey: 'models_capability_tts',       descKey: 'models_capability_tts_desc',
       iconChip: 'bg-amber-50 dark:bg-amber-900/30',      iconGlyph: 'text-amber-500' },

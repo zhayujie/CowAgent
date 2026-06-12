@@ -657,7 +657,7 @@ class DeepSeekBot(Bot, OpenAICompatibleBot):
             headers = self._build_headers()
             resp = requests.post(
                 f"{self.api_base}/chat/completions",
-                headers=headers, json=payload, timeout=60,
+                headers=headers, json=payload, timeout=180,
             )
             if resp.status_code != 200:
                 return {"error": True, "message": f"HTTP {resp.status_code}: {resp.text[:300]}"}

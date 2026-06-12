@@ -1,45 +1,44 @@
 ---
-title: 飞书
-description: 将 CowAgent 接入飞书应用
+title: Feishu (Lark)
+description: Integrate CowAgent into Feishu via a custom enterprise app
 ---
 
-> 通过飞书自建应用接入 CowAgent，支持单聊与群聊（@机器人），使用 WebSocket 长连接模式，无需公网 IP，支持流式打字机回复、语音消息收发。
+> Integrate CowAgent into Feishu via a custom enterprise app. Supports p2p chat and group chat (@bot), uses WebSocket long connection (no public IP needed), supports streaming typewriter replies and voice messages.
 
 <Note>
-  接入需要是飞书企业用户且具有企业管理权限。
+  You need to be a Feishu enterprise user with admin privileges.
 </Note>
 
-## 一、接入方式
+## 1. Setup
 
-### 方式一：扫码一键接入（推荐）
+### Option 1: One-click Scan to Create (Recommended)
 
-启动 Cow 项目后在终端中即可完成扫码创建。或打开 Web 控制台（本地链接：http://127.0.0.1:9899 ），选择 **通道** 菜单，点击 **接入通道**，选择 **飞书**，点击 **一键创建飞书应用**，使用 **飞书 App** 扫描二维码即可自动完成应用创建并接入:
-
+No need to manually create an app on the Feishu Developer Platform. Start the Cow project, open the web console (default `http://127.0.0.1:9899/`), go to **Channels**, click **Add Channel**, choose **Feishu**, then under the **Scan QR** tab click **One-click Create Feishu App** and scan with the **Feishu App** to complete app creation and connection automatically.
 
 <img src="https://cdn.link-ai.tech/doc/20260505181126.png" width="800"/>
 
-
 <Note>
-  1. `lark-oapi` 依赖版本需要 >=1.5.5
-  2. 扫码创建出的应用会自动预置全部所需权限（消息收发、卡片读写、群聊事件等）和事件订阅，无需到开发者后台手动配置。
+  1. Requires `lark-oapi` ≥ 1.5.5.
+  2. The created app comes with all required permissions (messaging, card read/write, group events, etc.) and event subscriptions pre-configured — no manual setup on the developer console needed. Currently only the Feishu mainland version is supported (Lark international not yet supported).
 </Note>
 
+When starting from CLI without `feishu_app_id` configured, the QR code is also printed to the terminal.
 
-### 方式二：手动创建接入
+### Option 2: Manual Setup
 
-需要先在飞书开放平台创建自建应用并配置权限，再通过 Web 控制台或配置文件接入。
+Manually create a custom app on the Feishu Developer Platform, then connect via Web Console or config file.
 
-**步骤一：创建应用**
+**Step 1: Create the App**
 
-1. 进入 [飞书开发平台](https://open.feishu.cn/app/)，点击 **创建企业自建应用**：
+1. Go to [Feishu Developer Platform](https://open.feishu.cn/app/), click **Create Enterprise Custom App**:
 
 <img src="https://img-1317903499.cos.ap-guangzhou.myqcloud.com/docs/feishu-hosting-create-app.jpg" width="500"/>
 
-2. 在 **添加应用能力** 中，为应用添加 **机器人** 能力：
+2. In **Add App Capabilities**, add the **Bot** capability:
 
 <img src="https://img-1317903499.cos.ap-guangzhou.myqcloud.com/docs/feishu-hosting-add-bot.jpg" width="800"/>
 
-3. 在 **权限管理** 中，将以下权限粘贴到输入框，全选并 **批量开通**：
+3. In **Permission Management**, paste the following permissions and **Batch Enable** all:
 
 ```
 im:message,im:message.group_at_msg,im:message.group_at_msg:readonly,im:message.p2p_msg,im:message.p2p_msg:readonly,im:message:send_as_bot,im:resource,cardkit:card:write
@@ -47,18 +46,18 @@ im:message,im:message.group_at_msg,im:message.group_at_msg:readonly,im:message.p
 
 <img src="https://cdn.link-ai.tech/doc/feishu-hosting-add-auth2.png" width="800"/>
 
-4. 在 **凭证与基础信息** 中获取 `App ID` 和 `App Secret`：
+4. Get `App ID` and `App Secret` from **Credentials & Basic Info**:
 
 <img src="https://img-1317903499.cos.ap-guangzhou.myqcloud.com/docs/feishu-hosting-appid-secret.jpg" width="800"/>
 
-**步骤二：接入 CowAgent**
+**Step 2: Connect to CowAgent**
 
 <Tabs>
-  <Tab title="Web 控制台">
-    打开 Web 控制台，选择 **通道** 菜单，点击 **接入通道**，选择 **飞书**，切换到「手动填写」Tab，输入 App ID 和 App Secret，点击接入即可。
+  <Tab title="Web Console">
+    Open the web console, go to **Channels**, click **Add Channel**, choose **Feishu**, switch to the **Manual** tab, enter App ID and App Secret, then click connect.
   </Tab>
-  <Tab title="配置文件">
-    在 `config.json` 中添加以下配置后启动程序：
+  <Tab title="Config File">
+    Add the following to `config.json` and start the program:
 
     ```json
     {
@@ -69,43 +68,43 @@ im:message,im:message.group_at_msg,im:message.group_at_msg:readonly,im:message.p
     }
     ```
 
-    | 参数 | 说明 | 默认值 |
+    | Parameter | Description | Default |
     | --- | --- | --- |
-    | `feishu_app_id` | 飞书应用 App ID | - |
-    | `feishu_app_secret` | 飞书应用 App Secret | - |
-    | `feishu_stream_reply` | 是否开启流式打字机回复 | `true` |
+    | `feishu_app_id` | Feishu app App ID | - |
+    | `feishu_app_secret` | Feishu app App Secret | - |
+    | `feishu_stream_reply` | Enable streaming typewriter reply | `true` |
   </Tab>
 </Tabs>
 
-**步骤三：发布应用**
+**Step 3: Publish the App**
 
-1. 启动 Cow 项目后，在飞书开放平台点击 **事件与回调**，选择 **长连接** 模式并保存：
+1. After Cow is running, go to **Events & Callbacks** in the Feishu Developer Platform, choose **Long Connection** mode and save:
 
 <img src="https://cdn.link-ai.tech/doc/202601311731183.png" width="600"/>
 
-2. 点击 **添加事件**，搜索 "接收消息"，选择 **接收消息 v2.0** 并确认。
+2. Click **Add Event**, search for "Receive Message" and choose **Receive Message v2.0**.
 
-3. 点击 **版本管理与发布**，创建版本并申请 **线上发布**，在飞书客户端审核通过：
+3. Click **Version Management & Release**, create a version and apply for **Production Release**. Approve the request in the Feishu client:
 
 <img src="https://cdn.link-ai.tech/doc/202601311807356.png" width="600"/>
 
-## 二、功能说明
+## 2. Features
 
-| 功能 | 支持情况 |
+| Feature | Status |
 | --- | --- |
-| 单聊 | ✅ |
-| 群聊（@机器人） | ✅ |
-| 文本消息 | ✅ 收发 |
-| 图片消息 | ✅ 收发 |
-| 语音消息 | ✅ 收发 |
-| 流式回复 | ✅（通过 `feishu_stream_reply` 配置控制，默认开启） |
+| P2P chat | ✅ |
+| Group chat (@bot) | ✅ |
+| Text messages | ✅ send/receive |
+| Image messages | ✅ send/receive |
+| Voice messages | ✅ send/receive |
+| Streaming reply | ✅ (powered by Feishu cardkit streaming card) |
 
 <Note>
-  流式回复需要机器人具备 `cardkit:card:write` 权限（一键创建已默认开通），且接收方飞书客户端版本 ≥ 7.20。低版本客户端会显示升级提示，权限或版本不满足时自动降级为普通文本回复。
+  Streaming reply requires the `cardkit:card:write` permission (already enabled by one-click creation) and Feishu client version ≥ 7.20. Older clients see an upgrade prompt; if the permission or version is not satisfied, replies fall back to plain text automatically.
 </Note>
 
-## 三、使用
+## 3. Usage
 
-完成接入后，在飞书中搜索机器人名称即可开始单聊对话。
+After connection, search for the bot name in Feishu to start a chat.
 
-如需在群聊中使用，将机器人添加到群中，@机器人发送消息即可。
+To use in groups, add the bot to a group and @-mention it.

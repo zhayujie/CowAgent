@@ -34,7 +34,9 @@ chat_client: LinkAIClient
 
 CHANNEL_ACTIONS = {"channel_create", "channel_update", "channel_delete"}
 
-# channelType -> config key mapping for app credentials
+# channelType -> config key mapping for app credentials.
+# secret_key may be "" for single-token channels (e.g. telegram/discord).
+# For slack, appId carries bot_token and appSecret carries app_token.
 CREDENTIAL_MAP = {
     "feishu":            ("feishu_app_id",          "feishu_app_secret"),
     "dingtalk":          ("dingtalk_client_id",      "dingtalk_client_secret"),
@@ -43,6 +45,9 @@ CREDENTIAL_MAP = {
     "wechatmp":          ("wechatmp_app_id",         "wechatmp_app_secret"),
     "wechatmp_service":  ("wechatmp_app_id",         "wechatmp_app_secret"),
     "wechatcom_app":     ("wechatcomapp_agent_id",   "wechatcomapp_secret"),
+    "telegram":          ("telegram_token",          ""),
+    "slack":             ("slack_bot_token",         "slack_app_token"),
+    "discord":           ("discord_token",           ""),
 }
 
 
@@ -357,7 +362,8 @@ class CloudClient(LinkAIClient):
             local_config[id_key] = app_id
             os.environ[id_key.upper()] = str(app_id)
             changed = True
-        if app_secret is not None and local_config.get(secret_key) != app_secret:
+        # secret_key may be empty for single-token channels (e.g. telegram/discord)
+        if secret_key and app_secret is not None and local_config.get(secret_key) != app_secret:
             local_config[secret_key] = app_secret
             os.environ[secret_key.upper()] = str(app_secret)
             changed = True
@@ -372,9 +378,10 @@ class CloudClient(LinkAIClient):
             return
         id_key, secret_key = cred
         local_config.pop(id_key, None)
-        local_config.pop(secret_key, None)
         os.environ.pop(id_key.upper(), None)
-        os.environ.pop(secret_key.upper(), None)
+        if secret_key:
+            local_config.pop(secret_key, None)
+            os.environ.pop(secret_key.upper(), None)
 
     # ------------------------------------------------------------------
     # channel_type list helpers
@@ -862,25 +869,16 @@ def _build_config():
     if plugin_config.get("Godcmd"):
         config["admin_password"] = plugin_config.get("Godcmd").get("password")
 
-    # Add channel-specific app credentials
+    # Add channel-specific app credentials based on CREDENTIAL_MAP.
+    # For multi-channel channel_type (comma-separated), the first matched type wins.
     current_channel_type = local_conf.get("channel_type", "")
-    if current_channel_type == "feishu":
-        config["app_id"] = local_conf.get("feishu_app_id")
-        config["app_secret"] = local_conf.get("feishu_app_secret")
-    elif current_channel_type == "dingtalk":
-        config["app_id"] = local_conf.get("dingtalk_client_id")
-        config["app_secret"] = local_conf.get("dingtalk_client_secret")
-    elif current_channel_type in ("wechatmp", "wechatmp_service"):
-        config["app_id"] = local_conf.get("wechatmp_app_id")
-        config["app_secret"] = local_conf.get("wechatmp_app_secret")
-    elif current_channel_type == "wecom_bot":
-        config["app_id"] = local_conf.get("wecom_bot_id")
-        config["app_secret"] = local_conf.get("wecom_bot_secret")
-    elif current_channel_type == "qq":
-        config["app_id"] = local_conf.get("qq_app_id")
-        config["app_secret"] = local_conf.get("qq_app_secret")
-    elif current_channel_type == "wechatcom_app":
-        config["app_id"] = local_conf.get("wechatcomapp_agent_id")
-        config["app_secret"] = local_conf.get("wechatcomapp_secret")
+    for ch_type in CloudClient._parse_channel_types({"channel_type": current_channel_type}):
+        cred = CREDENTIAL_MAP.get(ch_type)
+        if not cred:
+            continue
+        id_key, secret_key = cred
+        config["app_id"] = local_conf.get(id_key)
+        config["app_secret"] = local_conf.get(secret_key) if secret_key else ""
+        break
 
     return config

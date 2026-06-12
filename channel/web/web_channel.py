@@ -21,6 +21,7 @@ from channel.chat_channel import ChatChannel, check_prefix
 from channel.chat_message import ChatMessage
 from collections import OrderedDict
 from common import const
+from common import i18n
 from common.log import logger
 from common.singleton import singleton
 from config import conf
@@ -98,7 +99,7 @@ def _require_auth():
 def _cancel_reply_text(cancelled: int, lang: str) -> str:
     en = lang.startswith("en")
     if cancelled > 0:
-        return "🛑 Cancelled." if en else "🛑 已中止"
+        return "🛑 Cancelled" if en else "🛑 已中止"
     return "Nothing to cancel." if en else "当前没有可中止的任务。"
 
 
@@ -250,6 +251,21 @@ class WebChannel(ChatChannel):
         """生成唯一的请求ID"""
         return str(uuid.uuid4())
 
+    def _fetch_latest_pair_seqs(self, session_id: str):
+        """Query the conversation store for the latest user/bot message seqs.
+
+        Returned as ``{"user_seq": int|None, "bot_seq": int|None}``; used to
+        attach seq metadata onto the SSE ``done`` event so the frontend can
+        wire edit / regenerate buttons for live-streamed bubbles without a
+        page refresh.
+        """
+        try:
+            from agent.memory import get_conversation_store
+            return get_conversation_store().get_latest_pair_seqs(session_id)
+        except Exception as e:
+            logger.debug(f"[WebChannel] _fetch_latest_pair_seqs failed: {e}")
+            return {"user_seq": None, "bot_seq": None}
+
     def send(self, reply: Reply, context: Context):
         try:
             if reply.type in self.NOT_SUPPORT_REPLYTYPE:
@@ -290,11 +306,14 @@ class WebChannel(ChatChannel):
                 if reply.type in (ReplyType.IMAGE_URL, ReplyType.FILE) and content.startswith("file://"):
                     text_content = getattr(reply, 'text_content', '')
                     if text_content:
+                        seqs = self._fetch_latest_pair_seqs(session_id)
                         self.sse_queues[request_id].put({
                             "type": "done",
                             "content": text_content,
                             "request_id": request_id,
-                            "timestamp": time.time()
+                            "timestamp": time.time(),
+                            "user_seq": seqs.get("user_seq"),
+                            "bot_seq": seqs.get("bot_seq"),
                         })
                     logger.debug(f"SSE skipped duplicate file for request {request_id}")
                     return
@@ -306,11 +325,14 @@ class WebChannel(ChatChannel):
                     logger.debug(f"SSE skipped http media reply for request {request_id}")
                     return
 
+                seqs = self._fetch_latest_pair_seqs(session_id)
                 self.sse_queues[request_id].put({
                     "type": "done",
                     "content": content,
                     "request_id": request_id,
-                    "timestamp": time.time()
+                    "timestamp": time.time(),
+                    "user_seq": seqs.get("user_seq"),
+                    "bot_seq": seqs.get("bot_seq"),
                 })
                 logger.debug(f"SSE done sent for request {request_id}")
                 # Auto-trigger TTS once the bot finishes its text reply. The
@@ -337,6 +359,13 @@ class WebChannel(ChatChannel):
                     and context.get("on_event") is not None
                 ):
                     logger.debug(f"Polling skipped duplicate file reply for session {session_id}")
+                    return
+                # SSE-enabled requests already stream the text reply to the
+                # client. Do NOT also enqueue it for polling: if the user
+                # switched away mid-run, the queued copy would resurface as a
+                # duplicate bubble when they return and poll the session.
+                if reply.type == ReplyType.TEXT and context.get("on_event") is not None:
+                    logger.debug(f"Polling skipped SSE text reply for session {session_id}")
                     return
                 response_data = {
                     "type": str(reply.type),
@@ -477,7 +506,10 @@ class WebChannel(ChatChannel):
                         )
                         q.put({
                             "type": "done",
-                            "content": "(模型未返回任何内容，请重试或换一种方式描述你的需求)",
+                            "content": i18n.t(
+                                "(模型未返回任何内容，请重试或换一种方式描述你的需求)",
+                                "(The model returned no content. Please retry or rephrase your request.)",
+                            ),
                             "request_id": request_id,
                             "timestamp": time.time(),
                         })
@@ -805,13 +837,13 @@ class WebChannel(ChatChannel):
                     if not fpath:
                         continue
                     if ftype == "image":
-                        file_refs.append(f"[图片: {fpath}]")
+                        file_refs.append(f"[{i18n.t('图片', 'Image')}: {fpath}]")
                     elif ftype == "video":
-                        file_refs.append(f"[视频: {fpath}]")
+                        file_refs.append(f"[{i18n.t('视频', 'Video')}: {fpath}]")
                     elif ftype == "directory":
-                        file_refs.append(f"[目录: {fpath}]")
+                        file_refs.append(f"[{i18n.t('目录', 'Directory')}: {fpath}]")
                     else:
-                        file_refs.append(f"[文件: {fpath}]")
+                        file_refs.append(f"[{i18n.t('文件', 'File')}: {fpath}]")
                 if file_refs:
                     prompt = prompt + "\n" + "\n".join(file_refs)
                     logger.info(f"[WebChannel] Attached {len(file_refs)} file(s) to message")
@@ -915,7 +947,12 @@ class WebChannel(ChatChannel):
                     post_done = True
                     post_deadline = time.time() + 2  # 2s post-attach tail
         finally:
-            self.sse_queues.pop(request_id, None)
+            # Only drop the queue once the reply is actually complete. If the
+            # client disconnected early (e.g. switched sessions and will
+            # re-attach with the same request_id), keep the queue so the new
+            # connection can resume reading the remaining events.
+            if post_done or time.time() >= deadline:
+                self.sse_queues.pop(request_id, None)
 
     def cancel_request(self):
         """
@@ -952,7 +989,7 @@ class WebChannel(ChatChannel):
             if request_id and request_id in self.sse_queues:
                 self.sse_queues[request_id].put({
                     "type": "cancelled",
-                    "content": "Cancelled" if lang.startswith("en") else "已中止",
+                    "content": "🛑 Cancelled" if lang.startswith("en") else "🛑 已中止",
                     "request_id": request_id,
                     "timestamp": time.time(),
                 })
@@ -1008,7 +1045,10 @@ class WebChannel(ChatChannel):
         """Serve the chat HTML page."""
         file_path = os.path.join(os.path.dirname(__file__), 'chat.html')  # 使用绝对路径
         with open(file_path, 'r', encoding='utf-8') as f:
-            return f.read()
+            html = f.read()
+        # Inject the backend-resolved default language so the console can use
+        # it on first load (when the user has no saved cow_lang preference).
+        return html.replace("{{COW_DEFAULT_LANG}}", i18n.get_language())
 
     def startup(self):
         configured_host = conf().get("web_host", "")
@@ -1018,26 +1058,52 @@ class WebChannel(ChatChannel):
 
         self._cleanup_stale_voice_recordings()
 
-        # 打印可用渠道类型提示
+        # Print available channel types (ordered by language: prioritize
+        # locally-popular channels for the current UI language)
         logger.info(
-            "[WebChannel] 全部可用通道如下，可修改 config.json 配置文件中的 channel_type 字段进行切换，多个通道用逗号分隔：")
-        logger.info("[WebChannel]   1. weixin           - 微信")
-        logger.info("[WebChannel]   2. web              - 网页")
-        logger.info("[WebChannel]   3. terminal         - 终端")
-        logger.info("[WebChannel]   4. feishu           - 飞书")
-        logger.info("[WebChannel]   5. dingtalk         - 钉钉")
-        logger.info("[WebChannel]   6. wecom_bot        - 企微智能机器人")
-        logger.info("[WebChannel]   7. wechatcom_app    - 企微自建应用")
-        logger.info("[WebChannel]   8. wechatmp         - 个人公众号")
-        logger.info("[WebChannel]   9. wechatmp_service - 企业公众号")
-        logger.info("[WebChannel] ✅ Web控制台已运行")
-        logger.info(f"[WebChannel] 🌐 本地访问: http://localhost:{port}")
+            "[WebChannel] Available channels (edit `channel_type` in config.json to switch, separate multiple with commas):")
+        zh_channels = [
+            ("web", "Web"),
+            ("terminal", "Terminal"),
+            ("weixin", "WeChat"),
+            ("feishu", "Feishu"),
+            ("dingtalk", "DingTalk"),
+            ("wecom_bot", "WeCom Bot"),
+            ("wechatcom_app", "WeCom App"),
+            ("wechat_kf", "WeChat Customer Service"),
+            ("wechatmp", "WeChat Official Account"),
+            ("wechatmp_service", "WeChat Official Account (Service)"),
+            ("telegram", "Telegram"),
+            ("slack", "Slack"),
+            ("discord", "Discord"),
+        ]
+        en_channels = [
+            ("web", "Web"),
+            ("terminal", "Terminal"),
+            ("telegram", "Telegram"),
+            ("slack", "Slack"),
+            ("discord", "Discord"),
+            ("weixin", "WeChat"),
+            ("feishu", "Feishu"),
+            ("dingtalk", "DingTalk"),
+            ("wecom_bot", "WeCom Bot"),
+            ("wechatcom_app", "WeCom App"),
+            ("wechat_kf", "WeChat Customer Service"),
+            ("wechatmp", "WeChat Official Account"),
+            ("wechatmp_service", "WeChat Official Account (Service)"),
+        ]
+        channels = en_channels if i18n.get_language() == "en" else zh_channels
+        name_width = max(len(name) for name, _ in channels)
+        for idx, (name, label) in enumerate(channels, 1):
+            logger.info(f"[WebChannel]  {idx:>2}. {name:<{name_width}} - {label}")
+        logger.info("[WebChannel] ✅ Web console is running")
+        logger.info(f"[WebChannel] 🌐 Local access: http://localhost:{port}")
         if is_public_bind:
-            logger.info(f"[WebChannel] 🌍 服务器访问: http://YOUR_IP:{port} (将YOUR_IP替换为服务器IP)")
+            logger.info(f"[WebChannel] 🌍 Server access: http://YOUR_IP:{port} (replace YOUR_IP with your server IP)")
             if not _is_password_enabled():
-                logger.info("[WebChannel] ⚠️  当前监听 0.0.0.0 且未设置 web_password，公网部署建议在 config.json 中配置访问密码")
+                logger.info("[WebChannel] ⚠️  Listening on 0.0.0.0 without web_password set; set an access password in config.json for public deployment")
         else:
-            logger.info(f"[WebChannel] 🔒 当前仅监听 {host}，仅本机可访问。如需公网访问，请将 web_host 改为 0.0.0.0 并配置 web_password 密码")
+            logger.info(f"[WebChannel] 🔒 Listening on {host} only (local access). For public access, set web_host to 0.0.0.0 and configure web_password")
 
         try:
             import webbrowser
@@ -1085,6 +1151,7 @@ class WebChannel(ChatChannel):
             '/api/sessions/(.*)/clear_context', 'SessionClearContextHandler',
             '/api/sessions/(.*)', 'SessionDetailHandler',
             '/api/history', 'HistoryHandler',
+            '/api/messages/delete', 'MessageDeleteHandler',
             '/api/logs', 'LogsHandler',
             '/api/version', 'VersionHandler',
             '/assets/(.*)', 'AssetsHandler',
@@ -1315,7 +1382,20 @@ class FileServeHandler:
             file_path = params.path
             if not file_path or not os.path.isabs(file_path):
                 raise web.notfound()
-            file_path = os.path.normpath(file_path)
+            # Resolve symlinks and confine access to the allowed root dirs,
+            # so this endpoint can't be abused to read arbitrary files (e.g. /etc/passwd, ~/.ssh).
+            # Defaults to the user home dir plus the agent workspace; set web_file_serve_root="/"
+            # to allow the whole filesystem.
+            file_path = os.path.realpath(file_path)
+            serve_root = conf().get("web_file_serve_root", "~") or "~"
+            allowed_roots = [
+                os.path.realpath(os.path.expanduser(serve_root)),
+                os.path.realpath(os.path.expanduser(conf().get("agent_workspace", "~/cow"))),
+            ]
+            if os.sep not in allowed_roots and not any(
+                os.path.commonpath([file_path, root]) == root for root in allowed_roots
+            ):
+                raise web.notfound()
             if not os.path.isfile(file_path):
                 raise web.notfound()
             content_type = mimetypes.guess_type(file_path)[0] or "application/octet-stream"
@@ -1371,22 +1451,28 @@ class ChatHandler:
         cache_bust = str(int(time.time()))
         html = html.replace('assets/js/console.js', f'assets/js/console.js?v={cache_bust}')
         html = html.replace('assets/css/console.css', f'assets/css/console.css?v={cache_bust}')
+        # Inject the backend-resolved default language for first-load fallback.
+        html = html.replace("{{COW_DEFAULT_LANG}}", i18n.get_language())
         return html
 
 
 class ConfigHandler:
 
     _RECOMMENDED_MODELS = [
-        const.DEEPSEEK_V4_FLASH, const.DEEPSEEK_V4_PRO, const.DEEPSEEK_CHAT, const.DEEPSEEK_REASONER,
-        const.MINIMAX_M2_7_HIGHSPEED, const.MINIMAX_M2_7, const.MINIMAX_M2_5, const.MINIMAX_M2_1, const.MINIMAX_M2_1_LIGHTNING,
-        const.CLAUDE_4_6_SONNET, const.CLAUDE_4_7_OPUS, const.CLAUDE_4_6_OPUS, const.CLAUDE_4_5_SONNET,
+        const.DEEPSEEK_V4_FLASH, const.DEEPSEEK_V4_PRO,
+        const.MINIMAX_M3, const.MINIMAX_M2_7_HIGHSPEED, const.MINIMAX_M2_7,
+        # claude-fable-5 is intentionally placed at the end of the Claude
+        # group here: it is expensive, so avoid surfacing it too early in
+        # the LinkAI dropdown.
+        const.CLAUDE_4_8_OPUS, const.CLAUDE_4_7_OPUS, const.CLAUDE_4_6_SONNET, const.CLAUDE_4_6_OPUS, const.CLAUDE_FABLE_5,
         const.GEMINI_35_FLASH, const.GEMINI_31_FLASH_LITE_PRE, const.GEMINI_31_PRO_PRE, const.GEMINI_3_FLASH_PRE,
         const.GPT_55, const.GPT_54, const.GPT_54_MINI, const.GPT_54_NANO, const.GPT_5, const.GPT_41, const.GPT_4o,
         const.GLM_5_1, const.GLM_5_TURBO, const.GLM_5, const.GLM_4_7,
-        const.QWEN36_PLUS, const.QWEN37_MAX, const.QWEN35_PLUS, const.QWEN3_MAX,
+        const.QWEN37_PLUS, const.QWEN37_MAX, const.QWEN36_PLUS,
         const.DOUBAO_SEED_2_PRO, const.DOUBAO_SEED_2_CODE,
         const.KIMI_K2_6, const.KIMI_K2_5, const.KIMI_K2,
         const.ERNIE_5_1, const.ERNIE_5, const.ERNIE_X1_1, const.ERNIE_45_TURBO_128K, const.ERNIE_45_TURBO_32K,
+        const.MIMO_V2_5_PRO, const.MIMO_V2_5,
     ]
 
     # Generic placeholder hints surfaced in the web console. We deliberately
@@ -1415,7 +1501,7 @@ class ConfigHandler:
             "api_base_key": None,
             "api_base_default": None,
             "api_base_placeholder": "",
-            "models": [const.MINIMAX_M2_7, const.MINIMAX_M2_7_HIGHSPEED, const.MINIMAX_M2_5, const.MINIMAX_M2_1, const.MINIMAX_M2_1_LIGHTNING],
+            "models": [const.MINIMAX_M3, const.MINIMAX_M2_7, const.MINIMAX_M2_7_HIGHSPEED],
         }),
         ("claudeAPI", {
             "label": "Claude",
@@ -1423,7 +1509,7 @@ class ConfigHandler:
             "api_base_key": "claude_api_base",
             "api_base_default": "https://api.anthropic.com/v1",
             "api_base_placeholder": _PLACEHOLDER_V1,
-            "models": [const.CLAUDE_4_6_SONNET, const.CLAUDE_4_7_OPUS, const.CLAUDE_4_6_OPUS, const.CLAUDE_4_5_SONNET],
+            "models": [const.CLAUDE_FABLE_5, const.CLAUDE_4_8_OPUS, const.CLAUDE_4_7_OPUS, const.CLAUDE_4_6_SONNET, const.CLAUDE_4_6_OPUS],
         }),
         ("gemini", {
             "label": "Gemini",
@@ -1455,7 +1541,7 @@ class ConfigHandler:
             "api_base_key": None,
             "api_base_default": None,
             "api_base_placeholder": "",
-            "models": [const.QWEN36_PLUS, const.QWEN37_MAX, const.QWEN35_PLUS, const.QWEN3_MAX],
+            "models": [const.QWEN37_PLUS, const.QWEN37_MAX, const.QWEN36_PLUS],
         }),
         ("doubao", {
             "label": {"zh": "豆包", "en": "Doubao"},
@@ -1481,6 +1567,14 @@ class ConfigHandler:
             "api_base_placeholder": _PLACEHOLDER_QIANFAN,
             "models": [const.ERNIE_5_1, const.ERNIE_5, const.ERNIE_X1_1, const.ERNIE_45_TURBO_128K, const.ERNIE_45_TURBO_32K],
         }),
+        ("mimo", {
+            "label": {"zh": "小米 MiMo", "en": "MiMo"},
+            "api_key_field": "mimo_api_key",
+            "api_base_key": "mimo_api_base",
+            "api_base_default": "https://api.xiaomimimo.com/v1",
+            "api_base_placeholder": _PLACEHOLDER_V1,
+            "models": [const.MIMO_V2_5_PRO, const.MIMO_V2_5],
+        }),
         ("linkai", {
             "label": "LinkAI",
             "api_key_field": "linkai_api_key",
@@ -1500,14 +1594,15 @@ class ConfigHandler:
     ])
 
     EDITABLE_KEYS = {
+        "cow_lang",
         "model", "bot_type", "use_linkai",
         "open_ai_api_base", "deepseek_api_base", "qianfan_api_base", "claude_api_base", "gemini_api_base",
-        "zhipu_ai_api_base", "moonshot_base_url", "ark_base_url", "custom_api_base",
+        "zhipu_ai_api_base", "moonshot_base_url", "ark_base_url", "custom_api_base", "mimo_api_base",
         "open_ai_api_key", "deepseek_api_key", "qianfan_api_key", "claude_api_key", "gemini_api_key",
         "zhipu_ai_api_key", "dashscope_api_key", "moonshot_api_key",
-        "ark_api_key", "minimax_api_key", "linkai_api_key", "custom_api_key",
+        "ark_api_key", "minimax_api_key", "linkai_api_key", "custom_api_key", "mimo_api_key",
         "agent_max_context_tokens", "agent_max_context_turns", "agent_max_steps",
-        "enable_thinking", "web_password",
+        "enable_thinking", "self_evolution_enabled", "web_password",
     }
 
     @staticmethod
@@ -1562,6 +1657,7 @@ class ConfigHandler:
                 "agent_max_context_turns": local_config.get("agent_max_context_turns", 20),
                 "agent_max_steps": local_config.get("agent_max_steps", 20),
                 "enable_thinking": bool(local_config.get("enable_thinking", False)),
+                "self_evolution_enabled": bool(local_config.get("self_evolution_enabled", False)),
                 "api_bases": api_bases,
                 "api_keys": api_keys_masked,
                 "providers": providers,
@@ -1587,7 +1683,7 @@ class ConfigHandler:
                     continue
                 if key in ("agent_max_context_tokens", "agent_max_context_turns", "agent_max_steps"):
                     value = int(value)
-                if key in ("use_linkai", "enable_thinking"):
+                if key in ("use_linkai", "enable_thinking", "self_evolution_enabled"):
                     value = bool(value)
                 local_config[key] = value
                 applied[key] = value
@@ -1607,6 +1703,15 @@ class ConfigHandler:
                 json.dump(file_cfg, f, indent=4, ensure_ascii=False)
 
             logger.info(f"[WebChannel] Config updated: {list(applied.keys())}")
+
+            # Apply a language change immediately so backend logs, agent
+            # replies and CLI output switch without a restart.
+            if "cow_lang" in applied:
+                try:
+                    i18n.resolve_language(applied["cow_lang"])
+                    logger.info(f"[WebChannel] Language switched to: {i18n.get_language()}")
+                except Exception as lang_err:
+                    logger.warning(f"[WebChannel] Failed to apply language: {lang_err}")
 
             # Reset Bridge so that bot routing reflects the new config.
             # Without this, Bridge keeps its cached bot instance (e.g. LinkAIBot)
@@ -1646,7 +1751,7 @@ class ModelsHandler:
     # Capability -> provider ids drawn from ConfigHandler.PROVIDER_MODELS.
     _ASR_PROVIDERS = ["openai", "dashscope", "zhipu", "linkai"]
     # Web-console white-list. Other vendors stay usable via direct config.
-    _TTS_PROVIDERS = ["openai", "minimax", "dashscope", "linkai"]
+    _TTS_PROVIDERS = ["openai", "minimax", "dashscope", "mimo", "linkai"]
 
     # TTS engine catalog (speech models, not voice timbres). Entries are
     # either a bare code or {value, hint?} when a friendly label helps.
@@ -1661,6 +1766,10 @@ class ModelsHandler:
         "dashscope": [
             {"value": "qwen3-tts-flash", "hint": "覆盖普通话、方言与主流外语"},
         ],
+        # 小米 MiMo TTS 系列，通过 chat completions 接口合成
+        "mimo": [
+            {"value": "mimo-v2.5-tts", "hint": "预置音色 · 支持唱歌模式"},
+        ],
         # Aggregating gateway: a single endpoint multiplexes several
         # underlying TTS engines, selected via the `model` field.
         # Each engine exposes its own voice catalog (see _TTS_PROVIDER_VOICES).
@@ -1668,6 +1777,28 @@ class ModelsHandler:
             {"value": "tts-1",  "hint": "OpenAI · 多语种通用"},
             {"value": "doubao", "hint": "字节豆包 · 中文音色丰富"},
             {"value": "baidu",  "hint": "百度 · 中文主播音色"},
+        ],
+    }
+
+    # ASR engine catalog per provider. The first entry of each list is the
+    # runtime default (mirrors DEFAULT_ASR_MODEL in voice/*). Users can still
+    # pick "custom" in the UI to send any other model id.
+    _ASR_PROVIDER_MODELS = {
+        "openai": [
+            {"value": "gpt-4o-mini-transcribe", "hint": "默认 · 速度快"},
+            {"value": "gpt-4o-transcribe",      "hint": "更高准确率"},
+            {"value": "whisper-1",              "hint": "经典 Whisper"},
+        ],
+        "dashscope": [
+            {"value": "qwen3-asr-flash", "hint": "覆盖普通话、方言与主流外语"},
+        ],
+        "zhipu": [
+            {"value": "glm-asr-2512", "hint": "智谱语音识别"},
+        ],
+        # LinkAI gateway pins whisper-1 for ASR and ignores any other id,
+        # so expose only that to avoid misleading the user.
+        "linkai": [
+            {"value": "whisper-1", "hint": "网关固定使用"},
         ],
     }
 
@@ -1779,6 +1910,18 @@ class ModelsHandler:
             {"value": "Peter",    "hint": "天津话 · 李彼得"},
             {"value": "Marcus",   "hint": "陕西话 · 秦川"},
             {"value": "Roy",      "hint": "闽南语 · 阿杰"},
+        ],
+        # 小米 MiMo 预置音色列表（mimo-v2.5-tts），文档：
+        # https://platform.xiaomimimo.com/docs/zh-CN/usage-guide/speech-synthesis-v2.5
+        "mimo": [
+            {"value": "冰糖",   "hint": "中文 · 女声 · 冰糖"},
+            {"value": "茉莉",   "hint": "中文 · 女声 · 茉莉"},
+            {"value": "苏打",   "hint": "中文 · 男声 · 苏打"},
+            {"value": "白桦",   "hint": "中文 · 男声 · 白桦"},
+            {"value": "Mia",   "hint": "英文 · 女声 · Mia"},
+            {"value": "Chloe", "hint": "英文 · 女声 · Chloe"},
+            {"value": "Milo",  "hint": "英文 · 男声 · Milo"},
+            {"value": "Dean",  "hint": "英文 · 男声 · Dean"},
         ],
         # Aggregating gateway: voices are scoped per engine model. The
         # frontend picks the correct list based on the selected model so
@@ -1903,8 +2046,8 @@ class ModelsHandler:
         ],
         "doubao":    [const.DOUBAO_SEED_2_PRO],
         "moonshot":  [const.KIMI_K2_6],
-        "dashscope": [const.QWEN36_PLUS, const.QWEN35_PLUS, const.QWEN3_MAX],
-        "claudeAPI": [const.CLAUDE_4_6_SONNET, const.CLAUDE_4_7_OPUS, const.CLAUDE_4_6_OPUS],
+        "dashscope": [const.QWEN37_PLUS, const.QWEN36_PLUS],
+        "claudeAPI": [const.CLAUDE_4_8_OPUS, const.CLAUDE_4_7_OPUS, const.CLAUDE_4_6_SONNET, const.CLAUDE_4_6_OPUS],
         "gemini":    [const.GEMINI_35_FLASH, const.GEMINI_31_FLASH_LITE_PRE, const.GEMINI_31_PRO_PRE, const.GEMINI_3_FLASH_PRE],
         "qianfan":   [const.ERNIE_45_TURBO_VL],
         # Zhipu's bot hard-codes the call to glm-5v-turbo regardless of what
@@ -1916,13 +2059,15 @@ class ModelsHandler:
         # (see models/minimax/minimax_bot.py::call_vision); the M2.x chat
         # family is text-only.
         "minimax":   [const.MINIMAX_TEXT_01],
+        # MiMo 原生全模态模型：v2.5-pro / v2.5 支持图像/音频/视频输入
+        "mimo":      [const.MIMO_V2_5_PRO, const.MIMO_V2_5],
         # LinkAI proxies the underlying vendor; surface a curated set of
         # multimodal models. Order: gpt-4.1-mini → gpt-5.4-mini as the
         # cross-vendor baselines, then each vendor's recommended default.
         "linkai":    [
             const.GPT_41_MINI,
             const.GPT_54_MINI,
-            const.QWEN36_PLUS,
+            const.QWEN37_PLUS,
             const.DOUBAO_SEED_2_PRO,
             const.KIMI_K2_6,
             const.CLAUDE_4_6_SONNET,
@@ -2039,12 +2184,13 @@ class ModelsHandler:
     _VISION_AUTO_ORDER = [
         ("moonshot",  "moonshot_api_key",  const.KIMI_K2_6),
         ("doubao",    "ark_api_key",       const.DOUBAO_SEED_2_PRO),
-        ("dashscope", "dashscope_api_key", const.QWEN36_PLUS),
+        ("dashscope", "dashscope_api_key", const.QWEN37_PLUS),
         ("claudeAPI", "claude_api_key",    const.CLAUDE_4_6_SONNET),
         ("gemini",    "gemini_api_key",    const.GEMINI_35_FLASH),
         ("qianfan",   "qianfan_api_key",   const.ERNIE_45_TURBO_VL),
         ("zhipu",     "zhipu_ai_api_key",  const.GLM_5V_TURBO),
         ("minimax",   "minimax_api_key",   const.MINIMAX_TEXT_01),
+        ("mimo",      "mimo_api_key",      const.MIMO_V2_5_PRO),
     ]
 
     @classmethod
@@ -2176,8 +2322,9 @@ class ModelsHandler:
             "editable": True,
             "current_provider": explicit,
             "suggested_provider": suggested,
-            "current_model": "",
+            "current_model": (local_config.get("voice_to_text_model") or "") if explicit else "",
             "providers": cls._ASR_PROVIDERS,
+            "provider_models": cls._ASR_PROVIDER_MODELS,
         }
 
     @classmethod
@@ -2549,7 +2696,7 @@ class ModelsHandler:
         if capability == "vision":
             return self._set_vision(provider_id, model)
         if capability == "asr":
-            return self._set_simple("voice_to_text", provider_id)
+            return self._set_asr(provider_id, model)
         if capability == "tts":
             return self._set_tts(provider_id, model, (data.get("voice") or "").strip())
         if capability == "embedding":
@@ -2708,6 +2855,30 @@ class ModelsHandler:
         if key in ("voice_to_text", "text_to_voice"):
             self._refresh_voice_routing()
         return json.dumps({"status": "success", key: value})
+
+    def _set_asr(self, provider_id: str, model: str) -> str:
+        local_config = conf()
+        file_cfg = self._read_file_config()
+        local_config["voice_to_text"] = provider_id
+        file_cfg["voice_to_text"] = provider_id
+        # Only overwrite the model when one is supplied. An empty model means
+        # "keep whatever is configured" so switching provider from the console
+        # never wipes a user's hand-set voice_to_text_model (runtime falls back
+        # to the engine default via `or DEFAULT_ASR_MODEL` regardless).
+        if model:
+            local_config["voice_to_text_model"] = model
+            file_cfg["voice_to_text_model"] = model
+        self._write_file_config(file_cfg)
+        logger.info(
+            f"[ModelsHandler] asr updated: provider={provider_id!r} "
+            f"model={model!r}"
+        )
+        self._refresh_voice_routing()
+        return json.dumps({
+            "status": "success",
+            "provider": provider_id,
+            "model": local_config.get("voice_to_text_model", ""),
+        })
 
     def _set_tts(self, provider_id: str, model: str, voice: str = "") -> str:
         local_config = conf()
@@ -2869,6 +3040,18 @@ class ChannelsHandler:
                 {"key": "wechatcomapp_port", "label": "Port", "type": "number", "default": 9898},
             ],
         }),
+        ("wechat_kf", {
+            "label": {"zh": "微信客服", "en": "WeChat Customer Service"},
+            "icon": "fa-headset",
+            "color": "emerald",
+            "fields": [
+                {"key": "wechat_kf_corp_id", "label": "Corp ID", "type": "text"},
+                {"key": "wechat_kf_secret", "label": "Secret", "type": "secret"},
+                {"key": "wechat_kf_token", "label": "Token", "type": "secret"},
+                {"key": "wechat_kf_aes_key", "label": "AES Key", "type": "secret"},
+                {"key": "wechat_kf_port", "label": "Port", "type": "number", "default": 9888},
+            ],
+        }),
         ("wechatmp", {
             "label": {"zh": "公众号", "en": "WeChat MP"},
             "icon": "fa-comment-dots",
@@ -2879,6 +3062,31 @@ class ChannelsHandler:
                 {"key": "wechatmp_token", "label": "Token", "type": "secret"},
                 {"key": "wechatmp_aes_key", "label": "AES Key", "type": "secret"},
                 {"key": "wechatmp_port", "label": "Port", "type": "number", "default": 8080},
+            ],
+        }),
+        ("telegram", {
+            "label": {"zh": "Telegram", "en": "Telegram"},
+            "icon": "fa-paper-plane",
+            "color": "sky",
+            "fields": [
+                {"key": "telegram_token", "label": "Bot Token", "type": "secret"},
+            ],
+        }),
+        ("slack", {
+            "label": {"zh": "Slack", "en": "Slack"},
+            "icon": "fa-hashtag",
+            "color": "purple",
+            "fields": [
+                {"key": "slack_bot_token", "label": "Bot Token (xoxb-)", "type": "secret"},
+                {"key": "slack_app_token", "label": "App Token (xapp-)", "type": "secret"},
+            ],
+        }),
+        ("discord", {
+            "label": {"zh": "Discord", "en": "Discord"},
+            "icon": "fa-discord",
+            "color": "indigo",
+            "fields": [
+                {"key": "discord_token", "label": "Bot Token", "type": "secret"},
             ],
         }),
     ])
@@ -3769,6 +3977,40 @@ class HistoryHandler:
             return json.dumps({"status": "success", **result}, ensure_ascii=False)
         except Exception as e:
             logger.error(f"[WebChannel] History API error: {e}")
+            return json.dumps({"status": "error", "message": str(e)})
+
+
+class MessageDeleteHandler:
+    def POST(self):
+        _require_auth()
+        web.header('Content-Type', 'application/json; charset=utf-8')
+        web.header('Access-Control-Allow-Origin', '*')
+        try:
+            data = json.loads(web.data())
+            session_id = data.get('session_id', '').strip()
+            user_seq = data.get('user_seq')
+            delete_user = data.get('delete_user', True)
+            cascade = data.get('cascade', False)
+            
+            if not session_id or user_seq is None:
+                return json.dumps({"status": "error", "message": "session_id and user_seq required"})
+            
+            # 1. Delete from database
+            from agent.memory import get_conversation_store
+            store = get_conversation_store()
+            deleted = store.delete_message_pair(session_id, int(user_seq), delete_user=delete_user, cascade=cascade)
+
+            # 2. Sync agent's in-memory context so its next turn sees the
+            # same history as the DB. Handled by the agent_bridge helper.
+            try:
+                from bridge import Bridge
+                Bridge().get_agent_bridge().sync_session_messages_from_store(session_id)
+            except Exception as sync_err:
+                logger.warning(f"[WebChannel] Failed to sync agent memory: {sync_err}")
+
+            return json.dumps({"status": "success", "deleted": deleted}, ensure_ascii=False)
+        except Exception as e:
+            logger.error(f"[WebChannel] Message delete error: {e}")
             return json.dumps({"status": "error", "message": str(e)})
 
 

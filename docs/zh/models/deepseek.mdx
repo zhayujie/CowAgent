@@ -1,0 +1,72 @@
+---
+title: DeepSeek
+description: DeepSeek 模型配置（文本对话 + 思考模式）
+---
+
+DeepSeek 是当前 Agent 模式默认推荐的厂商之一，主打高性价比的文本对话和任务规划能力。
+
+## 文本对话
+
+```json
+{
+  "model": "deepseek-v4-flash",
+  "deepseek_api_key": "YOUR_API_KEY"
+}
+```
+
+| 参数 | 说明 |
+| --- | --- |
+| `model` | 支持 `deepseek-v4-flash`（默认）、`deepseek-v4-pro` |
+| `deepseek_api_key` | 在 [DeepSeek 平台](https://platform.deepseek.com/api_keys) 创建 |
+| `deepseek_api_base` | 可选，默认为 `https://api.deepseek.com/v1`，可修改为第三方代理地址 |
+
+### 模型选择
+
+| 模型 | 适用场景 |
+| --- | --- |
+| `deepseek-v4-flash` | 默认推荐，速度快、成本低 |
+| `deepseek-v4-pro` | 更智能，复杂任务效果更强 |
+
+## 思考模式
+
+V4 系列（`deepseek-v4-flash` / `deepseek-v4-pro`）支持显式的「思考模式」：模型在输出最终回答前，先输出一段思维链（`reasoning_content`），从而提升答案质量。
+
+### 开关
+
+通过全局配置 `enable_thinking` 控制，也可在 web控制台 - 配置页面中进行切换：
+
+```json
+{
+  "enable_thinking": true
+}
+```
+
+- `true`：所有渠道下模型都会先思考再作答。Web 控制台会展示思考过程，IM 渠道（微信 / 企微 / 钉钉 / 飞书）虽不展示但同样获得更好答案。
+- `false`：关闭思考，响应更快，首字延迟更低。
+
+### 推理强度
+
+思考模式下可通过 `reasoning_effort` 控制推理强度：
+
+```json
+{
+  "enable_thinking": true,
+  "reasoning_effort": "high"
+}
+```
+
+| 取值 | 适用场景 |
+| --- | --- |
+| `high`（默认） | 日常 Agent 任务，思考与速度的平衡 |
+| `max` | 复杂编码、长链路规划、严格约束的任务，推理更深但耗时与输出 token 更多 |
+
+`reasoning_effort` 仅在 `enable_thinking` 为 `true` 时生效；模型不支持思考模式时该字段自动忽略。
+
+### 行为说明
+
+- **采样参数**：思考模式下 `temperature`、`top_p`、`presence_penalty`、`frequency_penalty` 会被服务端忽略（不会报错），CowAgent 会自动跳过传入。
+- **多轮工具调用**：当历史中包含工具调用时，DeepSeek 要求所有 assistant 消息必须回传 `reasoning_content`。CowAgent 会自动处理回传逻辑，跨轮次切换思考开关也不会出错。
+
+<Tip>
+  默认使用 `deepseek-v4-flash`；复杂任务可使用 `deepseek-v4-pro`；需要深度推理可开启 `enable_thinking`。
+</Tip>

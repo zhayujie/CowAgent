@@ -26,12 +26,12 @@ class Keyword(Plugin):
             config_path = os.path.join(curdir, "config.json")
             conf = None
             if not os.path.exists(config_path):
-                logger.debug(f"[keyword]不存在配置文件{config_path}")
+                logger.debug(f"[keyword] config file not found: {config_path}")
                 conf = {"keyword": {}}
                 with open(config_path, "w", encoding="utf-8") as f:
                     json.dump(conf, f, indent=4)
             else:
-                logger.debug(f"[keyword]加载配置文件{config_path}")
+                logger.debug(f"[keyword] loading config file: {config_path}")
                 with open(config_path, "r", encoding="utf-8") as f:
                     conf = json.load(f)
             # 加载关键词

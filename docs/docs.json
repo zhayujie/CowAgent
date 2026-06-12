@@ -33,23 +33,36 @@
       "github": "https://github.com/zhayujie/CowAgent"
     }
   },
+  "redirects": [
+    {
+      "source": "/en/:slug*",
+      "destination": "/:slug*",
+      "permanent": true
+    }
+  ],
   "navigation": {
     "languages": [
       {
-        "language": "zh",
+        "language": "en",
         "default": true,
         "navbar": {
           "links": [
-            { "label": "官网", "href": "https://cowagent.ai/?lang=zh" },
-            { "label": "GitHub", "href": "https://github.com/zhayujie/CowAgent" }
+            {
+              "label": "Website",
+              "href": "https://cowagent.ai/"
+            },
+            {
+              "label": "GitHub",
+              "href": "https://github.com/zhayujie/CowAgent"
+            }
           ]
         },
         "tabs": [
           {
-            "tab": "项目介绍",
+            "tab": "Introduction",
             "groups": [
               {
-                "group": "概览",
+                "group": "Overview",
                 "pages": [
                   "intro/index",
                   "intro/architecture",
@@ -59,10 +72,10 @@
             ]
           },
           {
-            "tab": "快速开始",
+            "tab": "Get Started",
             "groups": [
               {
-                "group": "安装部署",
+                "group": "Installation",
                 "pages": [
                   "guide/quick-start",
                   "guide/manual-install",
@@ -72,22 +85,23 @@
             ]
           },
           {
-            "tab": "模型",
+            "tab": "Models",
             "groups": [
               {
-                "group": "模型配置",
+                "group": "Model Configuration",
                 "pages": [
                   "models/index",
                   "models/deepseek",
-                  "models/minimax",
                   "models/claude",
                   "models/gemini",
                   "models/openai",
+                  "models/minimax",
                   "models/glm",
                   "models/qwen",
                   "models/doubao",
                   "models/kimi",
                   "models/qianfan",
+                  "models/mimo",
                   "models/linkai",
                   "models/coding-plan",
                   "models/custom"
@@ -96,16 +110,16 @@
             ]
           },
           {
-            "tab": "工具",
+            "tab": "Tools",
             "groups": [
               {
-                "group": "工具系统",
+                "group": "Tools System",
                 "pages": [
                   "tools/index"
                 ]
               },
               {
-                "group": "内置工具",
+                "group": "Built-in Tools",
                 "pages": [
                   "tools/read",
                   "tools/write",
@@ -120,7 +134,7 @@
                 ]
               },
               {
-                "group": "可选工具",
+                "group": "Optional Tools",
                 "pages": [
                   "tools/web-search",
                   "tools/vision",
@@ -128,7 +142,7 @@
                 ]
               },
               {
-                "group": "MCP 工具",
+                "group": "MCP Tools",
                 "pages": [
                   "tools/mcp"
                 ]
@@ -136,10 +150,10 @@
             ]
           },
           {
-            "tab": "技能",
+            "tab": "Skills",
             "groups": [
               {
-                "group": "技能系统",
+                "group": "Skills System",
                 "pages": [
                   "skills/index",
                   "skills/install",
@@ -148,7 +162,7 @@
                 ]
               },
               {
-                "group": "内置技能",
+                "group": "Built-in Skills",
                 "pages": [
                   "skills/skill-creator",
                   "skills/knowledge-wiki",
@@ -158,23 +172,24 @@
             ]
           },
           {
-            "tab": "记忆",
+            "tab": "Memory",
             "groups": [
               {
-                "group": "记忆系统",
+                "group": "Memory System",
                 "pages": [
                   "memory/index",
                   "memory/context",
-                  "memory/deep-dream"
+                  "memory/deep-dream",
+                  "memory/self-evolution"
                 ]
               }
             ]
           },
           {
-            "tab": "知识",
+            "tab": "Knowledge",
             "groups": [
               {
-                "group": "知识库",
+                "group": "Knowledge Base",
                 "pages": [
                   "knowledge/index"
                 ]
@@ -182,29 +197,33 @@
             ]
           },
           {
-            "tab": "通道",
+            "tab": "Channels",
             "groups": [
               {
-                "group": "接入渠道",
+                "group": "Platforms",
                 "pages": [
                   "channels/index",
-                  "channels/weixin",
                   "channels/web",
+                  "channels/telegram",
+                  "channels/slack",
+                  "channels/discord",
+                  "channels/weixin",
                   "channels/feishu",
                   "channels/dingtalk",
                   "channels/wecom-bot",
                   "channels/qq",
                   "channels/wecom",
+                  "channels/wechat-kf",
                   "channels/wechatmp"
                 ]
               }
             ]
           },
           {
-            "tab": "命令",
+            "tab": "CLI",
             "groups": [
               {
-                "group": "命令系统",
+                "group": "Command System",
                 "pages": [
                   "cli/index",
                   "cli/process",
@@ -216,12 +235,14 @@
             ]
           },
           {
-            "tab": "版本",
+            "tab": "Releases",
             "groups": [
               {
-                "group": "发布记录",
+                "group": "Release Notes",
                 "pages": [
                   "releases/overview",
+                  "releases/v2.1.1",
+                  "releases/v2.1.0",
                   "releases/v2.0.9",
                   "releases/v2.0.8",
                   "releases/v2.0.7",
@@ -239,201 +260,215 @@
         ]
       },
       {
-        "language": "en",
+        "language": "zh",
         "navbar": {
           "links": [
-            { "label": "Website", "href": "https://cowagent.ai/" },
-            { "label": "GitHub", "href": "https://github.com/zhayujie/CowAgent" }
+            {
+              "label": "官网",
+              "href": "https://cowagent.ai/?lang=zh"
+            },
+            {
+              "label": "GitHub",
+              "href": "https://github.com/zhayujie/CowAgent"
+            }
           ]
         },
         "tabs": [
           {
-            "tab": "Introduction",
+            "tab": "项目介绍",
             "groups": [
               {
-                "group": "Overview",
+                "group": "概览",
                 "pages": [
-                  "en/intro/index",
-                  "en/intro/architecture",
-                  "en/intro/features"
+                  "zh/intro/index",
+                  "zh/intro/architecture",
+                  "zh/intro/features"
                 ]
               }
             ]
           },
           {
-            "tab": "Get Started",
+            "tab": "快速开始",
             "groups": [
               {
-                "group": "Installation",
+                "group": "安装部署",
                 "pages": [
-                  "en/guide/quick-start",
-                  "en/guide/manual-install",
-                  "en/guide/upgrade"
+                  "zh/guide/quick-start",
+                  "zh/guide/manual-install",
+                  "zh/guide/upgrade"
                 ]
               }
             ]
           },
           {
-            "tab": "Models",
+            "tab": "模型",
             "groups": [
               {
-                "group": "Model Configuration",
+                "group": "模型配置",
                 "pages": [
-                  "en/models/index",
-                  "en/models/deepseek",
-                  "en/models/minimax",
-                  "en/models/claude",
-                  "en/models/gemini",
-                  "en/models/openai",
-                  "en/models/glm",
-                  "en/models/qwen",
-                  "en/models/doubao",
-                  "en/models/kimi",
-                  "en/models/qianfan",
-                  "en/models/linkai",
-                  "en/models/coding-plan",
-                  "en/models/custom"
+                  "zh/models/index",
+                  "zh/models/deepseek",
+                  "zh/models/minimax",
+                  "zh/models/claude",
+                  "zh/models/gemini",
+                  "zh/models/openai",
+                  "zh/models/glm",
+                  "zh/models/qwen",
+                  "zh/models/doubao",
+                  "zh/models/kimi",
+                  "zh/models/qianfan",
+                  "zh/models/mimo",
+                  "zh/models/linkai",
+                  "zh/models/coding-plan",
+                  "zh/models/custom"
                 ]
               }
             ]
           },
           {
-            "tab": "Tools",
+            "tab": "工具",
             "groups": [
               {
-                "group": "Tools System",
+                "group": "工具系统",
                 "pages": [
-                  "en/tools/index"
+                  "zh/tools/index"
                 ]
               },
               {
-                "group": "Built-in Tools",
+                "group": "内置工具",
                 "pages": [
-                  "en/tools/read",
-                  "en/tools/write",
-                  "en/tools/edit",
-                  "en/tools/ls",
-                  "en/tools/bash",
-                  "en/tools/send",
-                  "en/tools/memory",
-                  "en/tools/env-config",
-                  "en/tools/web-fetch",
-                  "en/tools/scheduler"
+                  "zh/tools/read",
+                  "zh/tools/write",
+                  "zh/tools/edit",
+                  "zh/tools/ls",
+                  "zh/tools/bash",
+                  "zh/tools/send",
+                  "zh/tools/memory",
+                  "zh/tools/env-config",
+                  "zh/tools/web-fetch",
+                  "zh/tools/scheduler"
                 ]
               },
               {
-                "group": "Optional Tools",
+                "group": "可选工具",
                 "pages": [
-                  "en/tools/web-search",
-                  "en/tools/vision",
-                  "en/tools/browser"
+                  "zh/tools/web-search",
+                  "zh/tools/vision",
+                  "zh/tools/browser"
                 ]
               },
               {
-                "group": "MCP Tools",
+                "group": "MCP 工具",
                 "pages": [
-                  "en/tools/mcp"
+                  "zh/tools/mcp"
                 ]
               }
             ]
           },
           {
-            "tab": "Skills",
+            "tab": "技能",
             "groups": [
               {
-                "group": "Skills System",
+                "group": "技能系统",
                 "pages": [
-                  "en/skills/index",
-                  "en/skills/install",
-                  "en/skills/create",
-                  "en/skills/hub"
+                  "zh/skills/index",
+                  "zh/skills/install",
+                  "zh/skills/create",
+                  "zh/skills/hub"
                 ]
               },
               {
-                "group": "Built-in Skills",
+                "group": "内置技能",
                 "pages": [
-                  "en/skills/skill-creator",
-                  "en/skills/knowledge-wiki",
-                  "en/skills/image-generation"
+                  "zh/skills/skill-creator",
+                  "zh/skills/knowledge-wiki",
+                  "zh/skills/image-generation"
                 ]
               }
             ]
           },
           {
-            "tab": "Memory",
+            "tab": "记忆",
             "groups": [
               {
-                "group": "Memory System",
+                "group": "记忆系统",
                 "pages": [
-                  "en/memory/index",
-                  "en/memory/context",
-                  "en/memory/deep-dream"
+                  "zh/memory/index",
+                  "zh/memory/context",
+                  "zh/memory/deep-dream",
+                  "zh/memory/self-evolution"
                 ]
               }
             ]
           },
           {
-            "tab": "Knowledge",
+            "tab": "知识",
             "groups": [
               {
-                "group": "Knowledge Base",
+                "group": "知识库",
                 "pages": [
-                  "en/knowledge/index"
+                  "zh/knowledge/index"
                 ]
               }
             ]
           },
           {
-            "tab": "Channels",
+            "tab": "通道",
             "groups": [
               {
-                "group": "Platforms",
+                "group": "接入渠道",
                 "pages": [
-                  "en/channels/index",
-                  "en/channels/weixin",
-                  "en/channels/web",
-                  "en/channels/feishu",
-                  "en/channels/dingtalk",
-                  "en/channels/wecom-bot",
-                  "en/channels/qq",
-                  "en/channels/wecom",
-                  "en/channels/wechatmp"
+                  "zh/channels/index",
+                  "zh/channels/weixin",
+                  "zh/channels/web",
+                  "zh/channels/feishu",
+                  "zh/channels/dingtalk",
+                  "zh/channels/wecom-bot",
+                  "zh/channels/qq",
+                  "zh/channels/wecom",
+                  "zh/channels/wechat-kf",
+                  "zh/channels/wechatmp",
+                  "zh/channels/telegram",
+                  "zh/channels/slack",
+                  "zh/channels/discord"
                 ]
               }
             ]
           },
           {
-            "tab": "CLI",
+            "tab": "命令",
             "groups": [
               {
-                "group": "Command System",
+                "group": "命令系统",
                 "pages": [
-                  "en/cli/index",
-                  "en/cli/process",
-                  "en/cli/skill",
-                  "en/cli/memory-knowledge",
-                  "en/cli/general"
+                  "zh/cli/index",
+                  "zh/cli/process",
+                  "zh/cli/skill",
+                  "zh/cli/memory-knowledge",
+                  "zh/cli/general"
                 ]
               }
             ]
           },
           {
-            "tab": "Releases",
+            "tab": "版本",
             "groups": [
               {
-                "group": "Release Notes",
+                "group": "发布记录",
                 "pages": [
-                  "en/releases/overview",
-                  "en/releases/v2.0.9",
-                  "en/releases/v2.0.8",
-                  "en/releases/v2.0.7",
-                  "en/releases/v2.0.6",
-                  "en/releases/v2.0.5",
-                  "en/releases/v2.0.4",
-                  "en/releases/v2.0.3",
-                  "en/releases/v2.0.2",
-                  "en/releases/v2.0.1",
-                  "en/releases/v2.0.0"
+                  "zh/releases/overview",
+                  "zh/releases/v2.1.1",
+                  "zh/releases/v2.1.0",
+                  "zh/releases/v2.0.9",
+                  "zh/releases/v2.0.8",
+                  "zh/releases/v2.0.7",
+                  "zh/releases/v2.0.6",
+                  "zh/releases/v2.0.5",
+                  "zh/releases/v2.0.4",
+                  "zh/releases/v2.0.3",
+                  "zh/releases/v2.0.2",
+                  "zh/releases/v2.0.1",
+                  "zh/releases/v2.0.0"
                 ]
               }
             ]
@@ -444,8 +479,14 @@
         "language": "ja",
         "navbar": {
           "links": [
-            { "label": "ウェブサイト", "href": "https://cowagent.ai/" },
-            { "label": "GitHub", "href": "https://github.com/zhayujie/CowAgent" }
+            {
+              "label": "ウェブサイト",
+              "href": "https://cowagent.ai/"
+            },
+            {
+              "label": "GitHub",
+              "href": "https://github.com/zhayujie/CowAgent"
+            }
           ]
         },
         "tabs": [
@@ -492,6 +533,7 @@
                   "ja/models/doubao",
                   "ja/models/kimi",
                   "ja/models/qianfan",
+                  "ja/models/mimo",
                   "ja/models/linkai",
                   "ja/models/coding-plan",
                   "ja/models/custom"
@@ -569,7 +611,8 @@
                 "pages": [
                   "ja/memory/index",
                   "ja/memory/context",
-                  "ja/memory/deep-dream"
+                  "ja/memory/deep-dream",
+                  "ja/memory/self-evolution"
                 ]
               }
             ]
@@ -599,7 +642,11 @@
                   "ja/channels/wecom-bot",
                   "ja/channels/qq",
                   "ja/channels/wecom",
-                  "ja/channels/wechatmp"
+                  "ja/channels/wechat-kf",
+                  "ja/channels/wechatmp",
+                  "ja/channels/telegram",
+                  "ja/channels/slack",
+                  "ja/channels/discord"
                 ]
               }
             ]
@@ -626,6 +673,8 @@
                 "group": "リリースノート",
                 "pages": [
                   "ja/releases/overview",
+                  "ja/releases/v2.1.1",
+                  "ja/releases/v2.1.0",
                   "ja/releases/v2.0.9",
                   "ja/releases/v2.0.8",
                   "ja/releases/v2.0.7",

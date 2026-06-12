@@ -524,6 +524,14 @@ class AgentInitializer:
                         logger.debug("[AgentInitializer] WebSearch skipped - no search provider configured")
                         continue
 
+                # Skip evolution_undo when self-evolution is disabled: with no
+                # evolution there is nothing to roll back, so the tool is dead weight.
+                if tool_name == "evolution_undo":
+                    from agent.evolution.config import get_evolution_config
+                    if not get_evolution_config().enabled:
+                        logger.debug("[AgentInitializer] evolution_undo skipped - self-evolution disabled")
+                        continue
+
                 # Special handling for EnvConfig tool
                 if tool_name == "env_config":
                     from agent.tools import EnvConfig
@@ -643,16 +651,25 @@ class AgentInitializer:
             except Exception:
                 timezone_name = "UTC"
             
-            # Chinese weekday mapping
-            weekday_map = {
-                'Monday': '星期一', 'Tuesday': '星期二', 'Wednesday': '星期三',
-                'Thursday': '星期四', 'Friday': '星期五', 'Saturday': '星期六', 'Sunday': '星期日'
-            }
-            weekday_zh = weekday_map.get(now.strftime("%A"), now.strftime("%A"))
-            
+            # Weekday: English name in en, Chinese mapping otherwise
+            weekday_en = now.strftime("%A")
+            try:
+                from common import i18n
+                is_en = i18n.get_language() == "en"
+            except Exception:
+                is_en = False
+            if is_en:
+                weekday = weekday_en
+            else:
+                weekday_map = {
+                    'Monday': '星期一', 'Tuesday': '星期二', 'Wednesday': '星期三',
+                    'Thursday': '星期四', 'Friday': '星期五', 'Saturday': '星期六', 'Sunday': '星期日'
+                }
+                weekday = weekday_map.get(weekday_en, weekday_en)
+
             return {
                 'time': now.strftime("%Y-%m-%d %H:%M:%S"),
-                'weekday': weekday_zh,
+                'weekday': weekday,
                 'timezone': timezone_name
             }
         

@@ -1,0 +1,61 @@
+---
+title: v2.1.1
+description: CowAgent 2.1.1 - 自己進化、Web コンソールのメッセージ管理とマルチセッション並行、クロスプラットフォーム対応の MCP 強化、新モデルと改善
+---
+
+🌐 [English](https://docs.cowagent.ai/releases/v2.1.1) | [中文](https://docs.cowagent.ai/zh/releases/v2.1.1)
+
+## 🧬 自己進化
+
+CowAgent に **自己進化（Self-Evolution）** が加わりました。Agent は単発のタスクをこなすだけでなく、日々の協働を通じて成長し続けます：
+
+- **アイドル後の自動レビュー**：会話がアイドルになると、Agent はバックグラウンドでその会話をレビューし、使用中に表面化した Skill の問題を修正し、再利用可能な新しい Skill を作成し、未完了のタスクを引き継ぎ、重要な情報を記憶とナレッジベースに記録します
+- **静かに実行、必要なときだけ通知**：実際に変更があったときのみ調整内容を一言で伝え、変更がなければ何も通知しません
+- **安全で取り消し可能**：レビューのたびに事前にバックアップを取り、いつでも取り消せます。組み込み Skill は保護され、すべての読み書きはワークスペース内に限定されます
+
+新規インストールではデフォルトで有効です。既存ユーザーは Web コンソールの **設定 → Agent 設定** からワンクリックで有効化できます。
+
+<img src="https://cdn.jsdelivr.net/gh/zhayujie/cowagent-assets@main/screenshots/en/web-console-evolution-demo.png" alt="自己進化の会話例" />
+
+ドキュメント：[自己進化](https://docs.cowagent.ai/ja/memory/self-evolution)
+
+## 💬 Web コンソールの強化
+
+Web コンソールのチャット体験がさらに強化され、主要なチャット製品に近い操作感になりました：
+
+- **メッセージ管理**：ユーザーと Bot のメッセージを編集・削除・再生成できます。コードブロックに言語ラベルとワンクリックコピーボタンを追加。Thanks [@core-power](https://github.com/core-power) (#2865)
+- **マルチセッション並行**：複数のセッションを同時に実行しても互いに干渉せず、セッションに戻るとライブストリーミングが自動的に再開されます
+- **細部の改善**：チャット画面のどこにでもファイルをドラッグ＆ドロップ可能。アクティブなセッションを削除すると隣接セッションへ自動で切り替わります
+
+## 🧩 クロスプラットフォーム対応の MCP 強化
+
+- **Windows 互換性の修正**：Windows で `stdio` 通信が動作しない問題を修正し、サーバーのタイムアウトを `mcp.json` で設定できるようにしました
+- **並行呼び出し**：`sse` と `streamable-http` トランスポートがセッション間の並行呼び出しに対応し、複数ツールの応答が高速化されました
+
+Thanks [@xliu123321](https://github.com/xliu123321) (#2859)
+
+ドキュメント：[MCP ツール](https://docs.cowagent.ai/ja/tools/mcp)
+
+## 🤖 新モデルと改善
+
+- **MiniMax-M3**：追加してデフォルトモデルに設定（M2.7 シリーズはオプションとして継続）。Thanks [@octo-patch](https://github.com/octo-patch) (#2855)
+- **Qwen3.7-plus**：マルチモーダル対話に対応
+- **ASR モデルの選択**：Web コンソールで ASR（音声認識）モデルを選択して永続化できるようになりました。Thanks [@nightwhite](https://github.com/nightwhite) (#2857)
+- **インストールメニューの簡素化**：ワンライナーインストールスクリプトのモデルメニューを簡素化し、Xiaomi MiMo オプションを追加
+
+ドキュメント：[モデル概要](https://docs.cowagent.ai/ja/models)
+
+## 🛠 改善と修正
+
+- **Python 3.13 対応**：Python 3.13 環境でのインストールと依存関係の互換性を修正
+- **国際化**：チャネル一覧を UI の言語順に表示。`auto` モードでの言語自動フォールバックを改善
+- **より確実なキャンセル**：ストリーミング応答を中断できない場合がある問題を修正
+- **CLI**：`cow status` に現在のプロジェクトパスを表示
+- **デプロイのセキュリティ強化**：認証ファイルのブロック範囲を `~/.cow/.env` に限定し、他のディレクトリに影響しないように修正（Thanks [@orbisai0security](https://github.com/orbisai0security) #2863）。WeChat 公式アカウントは `wechatmp_token` が空の場合に Webhook リクエストを拒否します
+- **グループタスクボードプラグイン**：グループタスクボードプラグインのソースを追加。Thanks [@Wyh-max-star](https://github.com/Wyh-max-star) (#2853)
+
+## 📦 アップグレード
+
+ソースコードでデプロイしている場合は `cow update` でワンクリックアップグレードするか、最新コードを取得して手動で再起動してください。詳細は [アップグレードガイド](https://docs.cowagent.ai/ja/guide/upgrade) を参照してください。
+
+**リリース日**：2026.06.09 | [Full Changelog](https://github.com/zhayujie/CowAgent/compare/2.1.0...2.1.1)

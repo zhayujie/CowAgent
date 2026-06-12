@@ -1,69 +1,60 @@
 ---
-title: 工具概览
-description: CowAgent 内置工具系统
+title: Tools Overview
+description: CowAgent built-in tools system
 ---
 
-工具是 Agent 访问操作系统资源的核心能力。Agent 会根据任务需求智能选择和调用工具，完成文件操作、命令执行、联网搜索、定时任务等各类操作。工具实现在项目的 `agent/tools/` 目录下。
+Tools are the core capability for Agent to access operating system resources. The Agent intelligently selects and invokes tools based on task requirements, performing file operations, command execution, web search, scheduled tasks, and more. Tools are implemented in the `agent/tools/` directory.
 
-## 内置工具
+## Built-in Tools
 
-以下工具默认可用，无需额外配置：
+The following tools are available by default with no extra configuration:
 
 <CardGroup cols={2}>
-  <Card title="read - 文件读取" icon="file" href="/tools/read">
-    读取文件内容，支持文本、图片、PDF
+  <Card title="read - File Read" icon="file" href="/tools/read">
+    Read file content, supports text, images, PDF
   </Card>
-  <Card title="write - 文件写入" icon="pen" href="/tools/write">
-    创建或覆盖写入文件
+  <Card title="write - File Write" icon="pen" href="/tools/write">
+    Create or overwrite files
   </Card>
-  <Card title="edit - 文件编辑" icon="pen-to-square" href="/tools/edit">
-    通过精确文本替换编辑文件
+  <Card title="edit - File Edit" icon="pen-to-square" href="/tools/edit">
+    Edit files via precise text replacement
   </Card>
-  <Card title="ls - 目录列表" icon="folder-open" href="/tools/ls">
-    列出目录内容
+  <Card title="ls - Directory List" icon="folder-open" href="/tools/ls">
+    List directory contents
   </Card>
-  <Card title="bash - 终端" icon="terminal" href="/tools/bash">
-    执行系统命令
+  <Card title="bash - Terminal" icon="terminal" href="/tools/bash">
+    Execute system commands
   </Card>
-  <Card title="send - 文件发送" icon="paper-plane" href="/tools/send">
-    向用户发送文件或图片
+  <Card title="send - File Send" icon="paper-plane" href="/tools/send">
+    Send files or images to user
   </Card>
-  <Card title="memory - 记忆" icon="brain" href="/tools/memory">
-    搜索和读取长期记忆
-  </Card>
-  <Card title="env_config - 环境变量" icon="key" href="/tools/env-config">
-    管理 API Key 等秘钥配置
-  </Card>
-  <Card title="web_fetch - 网页获取" icon="globe" href="/tools/web-fetch">
-    获取网页或文档内容
-  </Card>
-  <Card title="scheduler - 定时任务" icon="clock" href="/tools/scheduler">
-    创建和管理定时任务
+  <Card title="memory - Memory" icon="brain" href="/tools/memory">
+    Search and read long-term memory
   </Card>
 </CardGroup>
 
-## 可选工具
+## Optional Tools
 
-以下工具需要安装额外依赖或配置 API Key 后启用：
+The following tools require additional dependencies or API key configuration:
 
 <CardGroup cols={2}>
-  <Card title="web_search - 联网搜索" icon="magnifying-glass" href="/tools/web-search">
-    搜索互联网获取实时信息
+  <Card title="env_config - Environment" icon="key" href="/tools/env-config">
+    Manage API keys and secrets
   </Card>
-  <Card title="vision - 图片理解" icon="eye" href="/tools/vision">
-    分析图片内容（识别、描述、OCR 文字提取等）
+  <Card title="scheduler - Scheduler" icon="clock" href="/tools/scheduler">
+    Create and manage scheduled tasks
   </Card>
-  <Card title="browser - 浏览器" icon="window" href="/tools/browser">
-    控制浏览器访问和操作网页
+  <Card title="web_search - Web Search" icon="magnifying-glass" href="/tools/web-search">
+    Search the internet for real-time information
   </Card>
 </CardGroup>
 
-## MCP 工具
+## MCP Tools
 
-通过 [Model Context Protocol](https://modelcontextprotocol.io) 接入社区生态中的各种MCP工具，配置一次 `mcp.json` 即用即得：
+Integrate thousands of community tools (maps, GitHub, Notion, etc.) via the [Model Context Protocol](https://modelcontextprotocol.io). Configure `mcp.json` once, ready to use:
 
 <CardGroup cols={1}>
-  <Card title="MCP - 外部工具生态" icon="plug" href="/tools/mcp">
-    支持 stdio / SSE 标准协议，热更新，零代码接入
+  <Card title="MCP - External Tool Ecosystem" icon="plug" href="/tools/mcp">
+    Supports standard stdio / SSE transports. Hot-reload, zero code changes.
   </Card>
 </CardGroup>

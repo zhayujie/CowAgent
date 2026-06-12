@@ -1,0 +1,36 @@
+---
+title: env_config - 环境变量
+description: 管理 API Key 等秘钥配置
+---
+
+管理工作空间 `.env` 文件中的环境变量（API Key 等秘钥），支持通过对话安全地添加和更新。内置安全保护和脱敏策略。
+
+## 依赖
+
+| 依赖 | 安装命令 |
+| --- | --- |
+| `python-dotenv` ≥ 1.0.0 | `pip install python-dotenv>=1.0.0` |
+
+安装扩展依赖时已包含：`pip3 install -r requirements-optional.txt`
+
+## 参数
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `action` | string | 是 | 操作类型：`get`、`set`、`list`、`delete` |
+| `key` | string | 否 | 环境变量名称 |
+| `value` | string | 否 | 环境变量值（仅 `set` 时需要） |
+
+## 使用方式
+
+直接告诉 Agent 需要配置的秘钥，Agent 会自动调用该工具：
+
+- "帮我配置 BOCHA_API_KEY"
+- "设置 OPENAI_API_KEY 为 sk-xxx"
+- "查看已配置的环境变量"
+
+配置的秘钥会自动注入到 `bash` 工具的执行环境中。
+
+<Frame>
+  <img src="https://cdn.link-ai.tech/doc/20260202234939.png" width="800" />
+</Frame>

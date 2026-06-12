@@ -1,61 +1,61 @@
 ---
-title: scheduler - 定时任务
-description: 创建和管理定时任务
+title: scheduler - Scheduler
+description: Create and manage scheduled tasks
 ---
 
-创建和管理动态定时任务，支持灵活的调度方式和执行模式。
+Create and manage dynamic scheduled tasks with flexible scheduling and execution modes.
 
-## 依赖
+## Dependencies
 
-| 依赖 | 安装命令 |
+| Dependency | Install Command |
 | --- | --- |
 | `croniter` ≥ 2.0.0 | `pip install croniter>=2.0.0` |
 
-安装核心依赖时已包含：`pip3 install -r requirements.txt`
+Included in core dependencies: `pip3 install -r requirements.txt`
 
-## 调度方式
+## Scheduling Modes
 
-| 方式 | 说明 |
+| Mode | Description |
 | --- | --- |
-| 一次性任务 | 在指定时间执行一次 |
-| 固定间隔 | 按固定时间间隔重复执行 |
-| Cron 表达式 | 使用 Cron 语法定义复杂调度规则 |
+| One-time | Execute once at a specified time |
+| Fixed interval | Repeat at fixed time intervals |
+| Cron expression | Define complex schedules using Cron syntax |
 
-## 执行模式
+## Execution Modes
 
-- **固定消息发送**：到达触发时间时发送预设消息
-- **Agent 动态任务**：到达触发时间时由 Agent 智能执行任务
+- **Fixed message**: Send a preset message when triggered
+- **Agent dynamic task**: Agent intelligently executes the task when triggered
 
-## 使用方式
+## Usage
 
-通过自然语言即可创建和管理定时任务：
+Create and manage scheduled tasks with natural language:
 
-- "每天早上 9 点给我发天气预报"
-- "每隔 2 小时检查一下服务器状态"
-- "明天下午 3 点提醒我开会"
-- "查看所有定时任务"
+- "Send me a weather report every morning at 9 AM"
+- "Check server status every 2 hours"
+- "Remind me about the meeting tomorrow at 3 PM"
+- "Show all scheduled tasks"
 
 <Frame>
   <img src="https://cdn.link-ai.tech/doc/20260202195402.png" width="800" />
 </Frame>
 
-## 结果进入会话上下文
+## Results injected into the conversation
 
-定时任务在隔离 session 中执行（内部规划与 tool 调用不污染用户会话），但**最终输出**会作为一对消息回写到接收者的真实会话，用户可以直接追问"刚才那条第二点展开说说"。
+Scheduled tasks run inside an isolated session (so internal planning and tool calls do not pollute the user's chat), but the **final output** is written back to the user's real session as a message pair. You can directly follow up — e.g. "expand on point 2 from earlier".
 
-**默认策略**
+**Default policy**
 
-- Agent 动态任务的输出进入上下文
-- 固定消息类任务默认不进入上下文（可通过配置打开）
-- 每个会话最多保留最近 **3 对** scheduler 消息，更早的自动清理；普通用户消息不受影响
+- Output of Agent dynamic tasks is injected into the conversation
+- Fixed-message tasks are not injected by default (configurable)
+- Each session keeps the most recent **3 pairs** of scheduler messages; older pairs are pruned automatically. Regular user messages are unaffected
 
-**配置项**
+**Configuration**
 
-| 配置项 | 默认值 | 说明 |
+| Key | Default | Description |
 | --- | --- | --- |
-| `scheduler_inject_to_session` | `true` | 总开关 |
-| `scheduler_inject_max_per_session` | `3` | 每会话保留 scheduler 消息对数上限 |
-| `scheduler_inject_send_message` | `false` | 是否同时注入固定消息类任务 |
+| `scheduler_inject_to_session` | `true` | Master switch |
+| `scheduler_inject_max_per_session` | `3` | Max scheduler message pairs kept per session |
+| `scheduler_inject_send_message` | `false` | Whether to also inject fixed-message tasks |
 
 ```json
 {
@@ -65,16 +65,16 @@ description: 创建和管理定时任务
 }
 ```
 
-## 任务执行时的上下文
+## Context inside scheduled task execution
 
-定时任务的隔离 session 会保留最近几次执行的对话历史，便于做"对比上次"、"延续之前结论"等操作；但为了避免高频任务（如每 5 分钟监控）prompt 越积越长，会按公式自动裁剪：
+The isolated session for scheduled tasks retains a few recent runs of conversation history, so you can naturally do "compare with last time" or "continue from previous conclusion". To prevent prompts from growing unbounded for high-frequency tasks (e.g. a 5-minute monitor), history is auto-trimmed:
 
 ```
 scheduler_keep_turns = max(1, agent_max_context_turns / 5)
 ```
 
-`agent_max_context_turns` 默认为 `20`，所以定时任务每次执行默认带最近 **4 轮**历史。需要更长记忆可调大 `agent_max_context_turns`。
+`agent_max_context_turns` defaults to `20`, so each scheduled run keeps the most recent **4 turns** of history by default. Increase `agent_max_context_turns` if you need longer memory.
 
 <Note>
-群聊场景（飞书 / 企微群机器人 / 钉钉等）下用户的真实 session_id 形如 `user_id:group_id`，与 receiver 不同。创建任务时会自动记录正确的 session_id；老的 `tasks.json` 缺该字段时回落到 receiver，行为与历史版本一致。
+For group-chat scenarios (Feishu / WeCom group bots / DingTalk, etc.), the user's real `session_id` looks like `user_id:group_id` — different from `receiver`. Scheduler records the correct `session_id` when a task is created. For older `tasks.json` entries missing this field, the runtime falls back to `receiver`, matching legacy behavior.
 </Note>

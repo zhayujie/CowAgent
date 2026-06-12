@@ -15,7 +15,7 @@ import threading
 from typing import Optional, Dict, Any, List, Callable
 
 from common.log import logger
-from common.utils import expand_path
+from common.utils import expand_path, is_cloud_deployment
 
 
 _DEFAULT_USER_DATA_DIR = "~/.cow/browser_profile"
@@ -435,6 +435,20 @@ class BrowserService:
         launch_args = ["--disable-dev-shm-usage"]
         if self._headless:
             launch_args.append("--no-sandbox")
+
+        if is_cloud_deployment():
+            launch_args.extend([
+                "--disable-gpu",
+                "--disable-software-rasterizer",
+                "--disable-extensions",
+                "--disable-background-networking",
+                "--disable-background-timer-throttling",
+                "--disable-renderer-backgrounding",
+                "--disable-features=site-per-process,TranslateUI,IsolateOrigins",
+                "--no-zygote",
+                "--js-flags=--max-old-space-size=384",
+                "--memory-pressure-off",
+            ])
 
         extra_args = self._config.get("launch_args", [])
         if extra_args:

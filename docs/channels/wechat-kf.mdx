@@ -1,0 +1,130 @@
+---
+title: WeChat Customer Service
+description: Integrate CowAgent into WeChat Customer Service
+---
+
+By binding a WeCom custom enterprise app to a WeChat Customer Service account, CowAgent can take over inbound inquiries from external WeChat users and serve them through links or QR codes embedded in WeChat Mini Programs, Official Accounts, Video Channels, and Video Channel stores.
+
+<Note>
+  WeChat Customer Service only supports Docker deployment or server Python deployment. A publicly reachable callback URL is required; local run mode is not supported.
+</Note>
+
+## 1. Prerequisites
+
+Required resources:
+
+1. A server with a public IP
+2. A registered and verified WeCom account
+3. WeChat Customer Service capability enabled
+
+<Note>
+  It is recommended to create a **dedicated** WeCom custom app for Customer Service rather than reusing the existing `wechatcom_app` one — otherwise the two channels will compete for the same callback URL.
+</Note>
+
+## 2. Create a WeCom Custom App
+
+1. In the [WeCom Admin Console](https://work.weixin.qq.com/wework_admin/frame#apps), go to **Application Management → Create Application**:
+
+<img src="https://cdn.link-ai.tech/doc/20260228103156.png" width="480"/>
+
+2. Click **My Enterprise** and find the **Corp ID** at the bottom of the page (it goes into `wechat_kf_corp_id`):
+
+<img src="https://cdn.link-ai.tech/doc/wechatcom-hosting-companyid.png" width="600"/>
+
+3. Open the app you just created and click **"View"** next to Secret. The Secret will be pushed to the admin's phone via the WeCom app, where it can be viewed:
+
+<img src="https://cdn.link-ai.tech/doc/wechatcom-hosting-agent-secret.png" width="600"/>
+
+4. Open the app's **Receive Messages → Set API Reception** page, click **"Random Generate"** to generate the **Token** and **EncodingAESKey**, and save them:
+
+<img src="https://img-1317903499.cos.ap-guangzhou.myqcloud.com/docs/wechatcom-hosting-token-aeskey.jpg" width="600"/>
+
+<Note>
+  Saving the API reception configuration will fail at this point because the program has not started yet. Come back to save it after the project is running.
+</Note>
+
+## 3. Configuration and Run
+
+Fill in the 4 fields collected from the previous step (Corp ID / Secret / Token / EncodingAESKey):
+
+<Tabs>
+  <Tab title="Web Console">
+    Start the Cow project and open the Web Console. Go to the **Channels** menu, click **Connect**, choose **WeChat Customer Service**, fill in Corp ID / Secret / Token / AES Key (port defaults to 9888, configurable), and click Connect.
+
+    <img src="https://cdn.link-ai.tech/doc/cow-weixinkefu-web-control.png" width="800"/>
+  </Tab>
+  <Tab title="Config File">
+    Add the following configuration to `config.json` (each parameter maps to a field shown in the screenshots above):
+
+    ```json
+    {
+      "channel_type": "wechat_kf",
+      "wechat_kf_corp_id": "YOUR_CORP_ID",
+      "wechat_kf_secret": "YOUR_SECRET",
+      "wechat_kf_token": "YOUR_TOKEN",
+      "wechat_kf_aes_key": "YOUR_AES_KEY",
+      "wechat_kf_port": 9888
+    }
+    ```
+
+    | Parameter | Description |
+    | --- | --- |
+    | `wechat_kf_corp_id` | Corp ID |
+    | `wechat_kf_secret` | Secret of the WeCom custom app bound to Customer Service |
+    | `wechat_kf_token` | Token from the API reception config |
+    | `wechat_kf_aes_key` | EncodingAESKey from the API reception config |
+    | `wechat_kf_port` | Listening port, default 9888 |
+  </Tab>
+</Tabs>
+
+After connecting, start the program (the Web Console method restarts the channel automatically). When the log shows `Listening on http://0.0.0.0:9888/wxkf/`, the program is running successfully. You need to open this port externally (e.g., allow it in the cloud server security group).
+
+Then go back to **Receive Messages → Set API Reception** in the WeCom console and set the callback URL to `http://<your-host>:9888/wxkf/`, then click Save. After saving successfully, you also need to add the server IP to **Enterprise Trusted IPs**, otherwise messages cannot be sent or received:
+
+<img src="https://cdn.link-ai.tech/doc/wechat-com_config.png" width="600"/>
+
+<img src="https://cdn.link-ai.tech/doc/20260228103224.png" width="520"/>
+
+<Warning>
+  If URL verification fails or the configuration is unsuccessful:
+  1. Ensure the server firewall is disabled and the security group allows the listening port (default 9888)
+  2. Carefully check that Token, Secret, EncodingAESKey and other parameters are consistent, and the URL format is correct
+  3. Verified WeCom accounts must use a filed domain matching the entity
+</Warning>
+
+## 4. Bind a WeChat Customer Service Account
+
+In the WeCom Admin Console, go to **WeChat Customer Service**, create a customer service account, and bind it to the custom app you created above:
+
+<img src="https://img-1317903499.cos.ap-guangzhou.myqcloud.com/docs/wxcustomer-hosting-step1.jpg" width="600"/>
+
+<img src="https://img-1317903499.cos.ap-guangzhou.myqcloud.com/docs/wxcustomer-hosting-step2.jpg" width="600"/>
+
+<img src="https://img-1317903499.cos.ap-guangzhou.myqcloud.com/docs/wxcustomer-hosting-step3.jpg" width="600"/>
+
+After binding, go to **WeChat Customer Service → Account Details**, and under **"Access Link"**:
+
+- Click **"Copy Link"** to get an access link like `https://work.weixin.qq.com/kfid/kfcd83e5896b9ba07be`
+- Click **"Generate QR Code"** to get the corresponding QR code
+
+Distribute the link or QR code to your WeChat customers:
+
+<img src="https://cdn.link-ai.tech/doc/wechat-customer-service_use.png" width="600"/>
+
+## 5. Usage
+
+After WeChat users enter the customer service conversation via the link or QR code, they can chat with the AI across multiple turns, with support for text, image, and voice messages:
+
+<img src="https://img-1317903499.cos.ap-guangzhou.myqcloud.com/docs/wxcustomer-hosting-chat-demo.jpg" width="900"/>
+
+Beyond that, leveraging the official WeChat ecosystem, WeChat Customer Service can also be embedded into Official Accounts, Mini Programs, Video Channels and more. See the **WeChat Customer Service → Access Scenarios** section in the [WeCom Admin Console](https://work.weixin.qq.com/wework_admin/frame#/app/servicer) for details:
+
+<img src="https://img-1317903499.cos.ap-guangzhou.myqcloud.com/docs/wxcustomer-hosting-interface-demo.png" width="800"/>
+
+## FAQ
+
+Make sure the following dependencies are installed:
+
+```bash
+pip install websocket-client pycryptodome
+```

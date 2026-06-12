@@ -17,11 +17,14 @@ Provider resolution:
 """
 
 import base64
+import ipaddress
 import os
+import socket
 import subprocess
 import tempfile
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlparse
 
 import requests
 
@@ -31,8 +34,8 @@ from common.log import logger
 from config import conf
 
 DEFAULT_MODEL = const.GPT_41_MINI
-DEFAULT_TIMEOUT = 60
-MAX_TOKENS = 1000
+DEFAULT_TIMEOUT = 180
+MAX_TOKENS = 4000
 COMPRESS_THRESHOLD = 1_048_576  # 1 MB
 
 SUPPORTED_EXTENSIONS = {
@@ -51,12 +54,13 @@ _MAIN_MODEL_PROVIDER_NAME = "MainModel"
 _DISCOVERABLE_MODELS = [
     ("moonshot_api_key", const.MOONSHOT, const.KIMI_K2_6, "Moonshot"),
     ("ark_api_key", const.DOUBAO, const.DOUBAO_SEED_2_PRO, "Doubao"),
-    ("dashscope_api_key", const.QWEN_DASHSCOPE, const.QWEN36_PLUS, "DashScope"),
+    ("dashscope_api_key", const.QWEN_DASHSCOPE, const.QWEN37_PLUS, "DashScope"),
     ("claude_api_key", const.CLAUDEAPI, const.CLAUDE_4_6_SONNET, "Claude"),
     ("gemini_api_key", const.GEMINI, const.GEMINI_35_FLASH, "Gemini"),
     ("qianfan_api_key", const.QIANFAN, const.ERNIE_45_TURBO_VL, "Qianfan"),
     ("zhipu_ai_api_key", const.ZHIPU_AI, const.GLM_4_7, "ZhipuAI"),
     ("minimax_api_key", const.MiniMax, const.MINIMAX_M2_7, "MiniMax"),
+    ("mimo_api_key", const.MIMO, const.MIMO_V2_5_PRO, "MiMo"),
 ]
 
 # Model name prefix → discoverable provider display_name.
@@ -73,6 +77,7 @@ _MODEL_PREFIX_TO_PROVIDER = [
     ("glm-", "ZhipuAI"),
     ("minimax-", "MiniMax"),
     ("abab", "MiniMax"),
+    ("mimo-", "MiMo"),
 ]
 
 # Model prefixes that natively belong to OpenAI / LinkAI (raw HTTP providers).
@@ -92,6 +97,7 @@ _PROVIDER_ID_TO_DISPLAY = {
     "qianfan": "Qianfan",
     "zhipu": "ZhipuAI",
     "minimax": "MiniMax",
+    "mimo": "MiMo",
 }
 
 
@@ -158,7 +164,7 @@ class Vision(BaseTool):
                 "Error: No model available for Vision.\n"
                 "The main model does not support vision and no other API keys are configured.\n"
                 "Options:\n"
-                "  1. Switch to a multimodal model (e.g. ernie-4.5-turbo-vl, qwen3.6-plus, claude-sonnet-4-6, gemini-2.0-flash)\n"
+                "  1. Switch to a multimodal model (e.g. ernie-4.5-turbo-vl, qwen3.7-plus, claude-sonnet-4-6, gemini-2.0-flash)\n"
                 "  2. Configure OPENAI_API_KEY: env_config(action=\"set\", key=\"OPENAI_API_KEY\", value=\"your-key\")\n"
                 "  3. Configure LINKAI_API_KEY: env_config(action=\"set\", key=\"LINKAI_API_KEY\", value=\"your-key\")"
             )
@@ -651,6 +657,40 @@ class Vision(BaseTool):
             return api_base
         return api_base.rstrip("/") + "/v1"
 
+    @staticmethod
+    def _validate_url_safe(url: str) -> None:
+        """Reject URLs that target private/loopback/link-local addresses (SSRF guard).
+
+        Resolves the hostname to its IP address(es) and blocks any that fall
+        into non-public ranges.  Also rejects URLs with no host, non-HTTP(S)
+        schemes, or hosts that fail DNS resolution.
+
+        Raises:
+            ValueError: if the URL targets a disallowed address.
+        """
+        parsed = urlparse(url)
+        if parsed.scheme not in ("http", "https"):
+            raise ValueError(f"Unsupported URL scheme: {parsed.scheme}")
+
+        hostname = parsed.hostname
+        if not hostname:
+            raise ValueError("URL has no hostname")
+
+        try:
+            # Resolve all addresses for the hostname.
+            addr_infos = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
+        except socket.gaierror:
+            raise ValueError(f"Cannot resolve hostname: {hostname}")
+
+        for family, _, _, _, sockaddr in addr_infos:
+            ip_str = sockaddr[0]
+            ip = ipaddress.ip_address(ip_str)
+            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+                raise ValueError(
+                    f"URL resolves to a non-public address ({ip_str}), "
+                    f"request blocked for security"
+                )
+
     def _build_image_content(self, image: str) -> dict:
         """
         Build the image_url content block.
@@ -658,6 +698,7 @@ class Vision(BaseTool):
         so every bot backend can consume them without extra downloads.
         """
         if image.startswith(("http://", "https://")):
+            self._validate_url_safe(image)
             return self._download_to_data_url(image)
 
         if not os.path.isfile(image):

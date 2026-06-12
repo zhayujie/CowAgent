@@ -1,0 +1,93 @@
+---
+title: Discord
+description: 将 CowAgent 接入 Discord Bot
+---
+
+> 通过 Discord Bot 的 **Gateway 长连接** 接入 CowAgent，支持私聊（DM）与服务器频道（@机器人 / 回复机器人触发）。Gateway 基于 WebSocket 长连接，无需公网 IP 与回调地址，开箱即用。
+
+## 一、接入步骤
+
+### 步骤一：创建 Discord 应用与 Bot
+
+1. 打开 [Discord 开发者后台](https://discord.com/developers/applications)，点击 **New Application**，填写名称（如 `CowAgent`）并创建。
+2. 左侧菜单进入 **Bot** 页面，点击 **Reset Token** 生成 Bot Token，复制并妥善保存（仅显示一次）。
+
+<Tip>
+  这个 Token 等同于 Bot 的密码，请勿泄露。若意外泄漏，在 Bot 页面再次点击 **Reset Token** 重置即可。
+</Tip>
+
+### 步骤二：开启 Message Content Intent
+
+私聊与频道读取文本均依赖该权限。
+
+1. 在 **Bot** 页面下方找到 **Privileged Gateway Intents**。
+2. 打开 **Message Content Intent** 开关并保存。
+
+<Note>
+  未开启该开关时，机器人收到的消息内容会为空，导致无响应。
+</Note>
+
+### 步骤三：邀请 Bot 进入服务器
+
+1. 左侧菜单进入 **OAuth2 → URL Generator**。
+2. **Scopes** 勾选 `bot`。
+3. **Bot Permissions** 至少勾选：`Send Messages`、`Read Message History`、`Attach Files`、`View Channels`。
+4. 复制底部生成的授权链接，在浏览器打开，选择目标服务器完成授权。
+
+<Note>
+  仅需私聊（DM）可跳过此步，但仍需先在任意共同服务器中与机器人建立 DM 通道，或由用户主动私聊机器人。
+</Note>
+
+### 步骤四：接入 CowAgent
+
+<Tabs>
+  <Tab title="Web 控制台（推荐）">
+    打开 Web 控制台（本地链接：http://127.0.0.1:9899 ），选择 **通道** 菜单，点击 **接入通道**，选择 **Discord**，填入 Bot Token，点击接入即可。
+  </Tab>
+  <Tab title="配置文件">
+    在 `config.json` 中添加以下配置后启动：
+
+    ```json
+    {
+      "channel_type": "discord",
+      "discord_token": "your-discord-bot-token",
+      "discord_group_trigger": "mention_or_reply"
+    }
+    ```
+
+    | 参数 | 说明 | 默认值 |
+    | --- | --- | --- |
+    | `discord_token` | 开发者后台 Bot 页面生成的 Bot Token | - |
+    | `discord_group_trigger` | 频道触发方式：`mention_or_reply`（@或回复机器人）/ `mention_only`（仅@） / `all`（所有消息） | `mention_or_reply` |
+  </Tab>
+</Tabs>
+
+启动 Cow 后，日志中出现以下输出即表示接入成功：
+
+```
+[Discord] Bot logged in as CowAgent#1234 (id=123456789)
+[Discord] ✅ Discord bot ready, listening for messages
+```
+
+## 二、功能说明
+
+| 功能 | 支持情况 |
+| --- | --- |
+| 私聊（DM） | ✅ |
+| 服务器频道（@机器人 / 回复机器人） | ✅ |
+| 文本消息 | ✅ 收发 |
+| 图片消息 | ✅ 收发 |
+| 文件消息 | ✅ 收发（PDF / Word / Excel 等） |
+
+<Note>
+  Discord 单条消息上限为 2000 字符，超长回复会自动按换行拆分为多条发送。
+</Note>
+
+## 三、使用
+
+完成接入后：
+
+- **私聊（DM）**：在服务器成员列表中找到你的机器人，点击头像直接发消息对话。
+- **频道**：在已邀请机器人的频道中，使用 `@你的机器人 你好` 或 **回复机器人的某条消息** 触发对话。
+
+发送图片或文件时，可以在附件的输入框中 **添加文字说明**（描述/问题）一并发送，机器人会结合附件回答。也支持先发附件再发问题，两条消息会自动合并提问。

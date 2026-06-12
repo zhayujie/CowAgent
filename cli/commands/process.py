@@ -8,9 +8,26 @@ from typing import Optional
 
 import click
 
-from cli.utils import get_project_root
+from cli.utils import get_project_root, load_config_json
 
 _IS_WIN = sys.platform == "win32"
+
+
+def _is_terminal_only() -> bool:
+    """Whether terminal is the only configured channel.
+
+    Terminal needs an interactive stdin/tty, which is incompatible with the
+    background daemon mode (stdout/stdin detached). When terminal is the only
+    channel, `start` must run in the foreground so it can own the tty.
+    """
+    channel = load_config_json().get("channel_type", "")
+    if isinstance(channel, str):
+        names = [c.strip() for c in channel.split(",") if c.strip()]
+    elif isinstance(channel, (list, tuple)):
+        names = [str(c).strip() for c in channel if str(c).strip()]
+    else:
+        names = []
+    return names == ["terminal"]
 
 
 def _get_pid_file():
@@ -102,6 +119,12 @@ def start(foreground, no_logs):
         sys.exit(1)
 
     python = sys.executable
+
+    # Terminal-only setups need an interactive tty; force foreground so the
+    # terminal channel can read stdin instead of fighting the shell over the tty.
+    if not foreground and _is_terminal_only():
+        foreground = True
+        click.echo("Detected terminal-only channel, starting in foreground...")
 
     if foreground:
         click.echo("Starting CowAgent in foreground...")
@@ -252,7 +275,14 @@ def update(ctx):
 def status():
     """Show CowAgent running status."""
     from cli import __version__
-    from cli.utils import load_config_json
+    from cli.utils import load_config_json, get_cli_language, get_project_root
+
+    # get_cli_language() calls ensure_sys_path(), which adds the project root
+    # to sys.path. Import `common` only AFTER that, otherwise it fails with
+    # ModuleNotFoundError when `cow` runs from outside the project dir.
+    get_cli_language()  # resolve cow_lang so i18n.t reflects config
+    from common import i18n
+    _t = i18n.t
 
     pid = _read_pid()
     if pid:
@@ -260,17 +290,24 @@ def status():
     else:
         click.echo(click.style("● CowAgent is not running", fg="red"))
 
-    click.echo(f"  版本: v{__version__}")
+    click.echo(_t(f"  版本: v{__version__}", f"  Version: v{__version__}"))
+
+    # Project path bound to this `cow` CLI — disambiguates which checkout the
+    # command actually controls when the user has multiple clones.
+    project_root = get_project_root()
+    click.echo(_t(f"  路径: {project_root}", f"  Path: {project_root}"))
 
     cfg = load_config_json()
     if cfg:
         channel = cfg.get("channel_type", "unknown")
         if isinstance(channel, list):
             channel = ", ".join(channel)
-        click.echo(f"  通道: {channel}")
-        click.echo(f"  模型: {cfg.get('model', 'unknown')}")
+        click.echo(_t(f"  通道: {channel}", f"  Channel: {channel}"))
+        click.echo(_t(f"  模型: {cfg.get('model', 'unknown')}", f"  Model: {cfg.get('model', 'unknown')}"))
         mode = "Chat" if cfg.get("agent") is False else "Agent"
-        click.echo(f"  模式: {mode}")
+        click.echo(_t(f"  模式: {mode}", f"  Mode: {mode}"))
+        lang_label = "中文" if i18n.get_language() == "zh" else "English"
+        click.echo(_t(f"  语言: {lang_label}", f"  Language: {lang_label}"))
 
 
 @click.command()

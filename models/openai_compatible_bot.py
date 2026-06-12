@@ -415,7 +415,7 @@ class OpenAICompatibleBot:
             }
             resp = requests.post(
                 f"{api_base}/chat/completions",
-                headers=headers, json=payload, timeout=60,
+                headers=headers, json=payload, timeout=180,
             )
             if resp.status_code != 200:
                 body = resp.text[:500]

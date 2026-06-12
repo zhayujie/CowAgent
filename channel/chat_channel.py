@@ -10,6 +10,7 @@ from bridge.reply import *
 from channel.channel import Channel
 from common.dequeue import Dequeue
 from common import memory
+from common.i18n import t as _t
 from plugins import *
 
 try:
@@ -265,7 +266,7 @@ class ChatChannel(Channel):
                 if reply.type in self.NOT_SUPPORT_REPLYTYPE:
                     logger.error("[chat_channel]reply type not support: " + str(reply.type))
                     reply.type = ReplyType.ERROR
-                    reply.content = "不支持发送的消息类型: " + str(reply.type)
+                    reply.content = _t("不支持发送的消息类型: ", "Unsupported message type: ") + str(reply.type)
 
                 if reply.type == ReplyType.TEXT:
                     reply_text = reply.content
@@ -476,9 +477,9 @@ class ChatChannel(Channel):
 
             cancelled = get_cancel_registry().cancel_session(session_id)
             text = (
-                "🛑 已中止"
+                _t("🛑 已中止", "🛑 Cancelled")
                 if cancelled > 0
-                else "当前没有可中止的任务。"
+                else _t("当前没有可中止的任务。", "Nothing to cancel.")
             )
             logger.info(
                 f"[chat_channel] /cancel fast-path: session={session_id}, cancelled={cancelled}"

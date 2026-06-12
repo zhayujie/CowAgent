@@ -103,14 +103,21 @@ class Query:
                 task_running = True
                 waiting_until = request_time + 4
                 while time.time() < waiting_until:
-                    if from_user in channel.running:
-                        time.sleep(0.1)
-                    else:
+                    if from_user not in channel.running:
                         task_running = False
                         break
+                    # Task still running, but if it has already produced cached
+                    # segments (e.g. multi-turn thinking output), return them now
+                    # instead of forcing the user to wait for the whole task. The
+                    # remaining segments are fetched by the user's next message.
+                    if channel.cache_dict.get(from_user):
+                        break
+                    time.sleep(0.1)
 
                 reply_text = ""
-                if task_running:
+                # Only fall back to retry / "thinking" hint when the task is still
+                # running AND there is nothing cached to send yet.
+                if task_running and not channel.cache_dict.get(from_user):
                     if request_cnt < 3:
                         # waiting for timeout (the POST request will be closed by Wechat official server)
                         time.sleep(2)
@@ -131,8 +138,22 @@ class Query:
 
                 # Only one request can access to the cached data
                 try:
-                    (reply_type, reply_content) = channel.cache_dict[from_user].pop(0)
-                    if not channel.cache_dict[from_user]:  # If popping the message makes the list empty, delete the user entry from cache
+                    # WeChat passive reply allows only a single reply per request.
+                    # To avoid forcing the user to send an extra message for every
+                    # segment of multi-turn agent output, drain all consecutive
+                    # cached text segments at once and merge them into one reply.
+                    # Media (voice/image) can only be returned one at a time, so it
+                    # stops the merge and is returned on its own.
+                    cached = channel.cache_dict[from_user]
+                    if cached[0][0] == "text":
+                        reply_type = "text"
+                        merged_parts = []
+                        while cached and cached[0][0] == "text":
+                            merged_parts.append(cached.pop(0)[1])
+                        reply_content = "\n\n".join(merged_parts)
+                    else:
+                        (reply_type, reply_content) = cached.pop(0)
+                    if not channel.cache_dict[from_user]:  # If draining empties the list, delete the user entry from cache
                         del channel.cache_dict[from_user]
                 except IndexError:
                     return "success"

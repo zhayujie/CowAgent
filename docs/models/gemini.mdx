@@ -1,15 +1,15 @@
 ---
 title: Gemini
-description: Google Gemini 模型配置（文本对话 + 图像理解 + 图像生成）
+description: Google Gemini model configuration (Text Chat + Image Understanding + Image Generation)
 ---
 
-Google Gemini 支持文本对话、图像理解和图像生成（Nano Banana 系列），一个 `gemini_api_key` 即可启用全部能力。
+Google Gemini supports text chat, image understanding, and image generation (Nano Banana series). A single `gemini_api_key` enables all capabilities.
 
 <Tip>
-  通过 Web 控制台的「模型管理」页面可一站式配置以下全部能力，无需手动改配置文件。
+  All capabilities below can be configured in one place via the "Model Management" page in the Web Console, with no need to manually edit the configuration file.
 </Tip>
 
-## 文本对话
+## Text Chat
 
 ```json
 {
@@ -18,17 +18,17 @@ Google Gemini 支持文本对话、图像理解和图像生成（Nano Banana 系
 }
 ```
 
-| 参数 | 说明 |
+| Parameter | Description |
 | --- | --- |
-| `model` | 推荐 `gemini-3.5-flash`，亦支持 `gemini-3.1-pro-preview`、`gemini-3.1-flash-lite-preview`、`gemini-3-flash-preview`、`gemini-3-pro-preview` 等，参考 [官方文档](https://ai.google.dev/gemini-api/docs/models) |
-| `gemini_api_key` | 在 [Google AI Studio](https://aistudio.google.com/app/apikey) 创建 |
-| `gemini_api_base` | 可选，默认为 `https://generativelanguage.googleapis.com`，可改为第三方代理 |
+| `model` | Recommended: `gemini-3.5-flash`; also supports `gemini-3.1-pro-preview`, `gemini-3.1-flash-lite-preview`, `gemini-3-flash-preview`, `gemini-3-pro-preview`, etc. See [official docs](https://ai.google.dev/gemini-api/docs/models) |
+| `gemini_api_key` | Create one in [Google AI Studio](https://aistudio.google.com/app/apikey) |
+| `gemini_api_base` | Optional, defaults to `https://generativelanguage.googleapis.com`. Can be changed to a third-party proxy |
 
-## 图像理解
+## Image Understanding
 
-Gemini 全系列模型均原生支持视觉，配置 `gemini_api_key` 后 Agent 的 Vision 工具会自动使用主模型识别图像，无需额外配置。
+All Gemini models natively support vision. Once `gemini_api_key` is configured, the Agent's Vision tool automatically uses the main model to recognize images, with no extra setup required.
 
-如需手动指定 Vision 模型：
+To manually specify a Vision model:
 
 ```json
 {
@@ -40,7 +40,7 @@ Gemini 全系列模型均原生支持视觉，配置 `gemini_api_key` 后 Agent 
 }
 ```
 
-## 图像生成
+## Image Generation
 
 ```json
 {
@@ -52,7 +52,7 @@ Gemini 全系列模型均原生支持视觉，配置 `gemini_api_key` 后 Agent 
 }
 ```
 
-| 模型 ID | 别名 |
+| Model ID | Alias |
 | --- | --- |
 | `gemini-3.1-flash-image-preview` | Nano Banana 2 |
 | `gemini-3-pro-image-preview` | Nano Banana Pro |

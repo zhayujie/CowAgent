@@ -1,0 +1,51 @@
+---
+title: v2.0.4
+description: CowAgent 2.0.4 - 新增个人微信通道、新模型支持、日文文档、脚本重构及多项修复
+---
+
+## 🔌 新增个人微信通道
+
+新增个人微信（`weixin`）通道，微信扫描二维码即可将 CowAgent 接入个人微信，支持以下功能：
+
+- **消息收发**：支持文本、图片、文件、视频消息的接收与回复，支持语音消息接收和识别
+- **扫码登录**：终端显示二维码，微信扫码确认即可登录，二维码过期自动刷新
+- **凭证持久化**：登录凭证自动保存至 `~/.weixin_cow_credentials.json`，重启无需重新扫码
+- **Session 自动重连**：Session 过期后自动清除旧凭证并重新发起扫码登录
+- **Web 控制台接入**：支持在 Web 控制台中添加微信通道，扫码登录流程同步展示
+- **Docker 和脚本支持**：`run.sh` 和 `docker-compose.yml` 均已适配微信通道
+
+接入文档：[微信接入](https://docs.cowagent.ai/channels/weixin)。
+
+相关提交：[ce89869](https://github.com/zhayujie/CowAgent/commit/ce89869)
+
+## 🤖 新增模型
+
+- **MiniMax-M2.7**：新增 MiniMax-M2.7 模型支持
+- **GLM-5-Turbo**：新增智谱 glm-5-turbo 模型支持
+
+相关提交：[9192f6f](https://github.com/zhayujie/CowAgent/commit/9192f6f)
+
+## 🔧 脚本重构
+
+- **run.sh 重构**：提取公共逻辑，精简脚本代码([49d8707](https://github.com/zhayujie/CowAgent/commit/49d8707))
+- **可执行权限**：修复 `run.sh` 文件权限问题 ([652156e](https://github.com/zhayujie/CowAgent/commit/652156e))
+- **PID 获取**：修复 `run.sh` 中进程 PID 获取错误的问题 ([9febb07](https://github.com/zhayujie/CowAgent/commit/9febb07))
+
+## 🌍 文档更新
+
+新增完整的日文文档，覆盖入门指南、通道接入、模型配置等主要章节。Thanks [@Ikko Ashimine](https://github.com/ikoamu)
+
+相关提交：[5487c0b](https://github.com/zhayujie/CowAgent/commit/5487c0b)
+
+## 🐛 问题修复
+
+- **企微机器人兼容**：修复旧版 `websocket-client` 的兼容性问题，新增统一的 WebSocket 兼容层 ([bc7f627](https://github.com/zhayujie/CowAgent/commit/bc7f627))
+- **消息自动修复**：增强消息协议的容错能力，自动修复格式异常的消息序列 ([b8b57e3](https://github.com/zhayujie/CowAgent/commit/b8b57e3))
+- **飞书编码**：修复飞书通道消息和日志的编码问题 ([7d0e156](https://github.com/zhayujie/CowAgent/commit/7d0e156))
+- **飞书配置**：移除 `run.sh` 中对 `feishu_bot_name` 的冗余依赖 ([1b5be1b](https://github.com/zhayujie/CowAgent/commit/1b5be1b))
+
+## 📦 升级方式
+
+源码部署可执行 `./run.sh update` 一键升级，或手动拉取代码后重启。详见 [更新升级文档](https://docs.cowagent.ai/guide/upgrade)。
+
+**发布日期**：2026.03.22 | [Full Changelog](https://github.com/zhayujie/CowAgent/compare/2.0.3...master)

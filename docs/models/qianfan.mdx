@@ -1,48 +1,42 @@
 ---
-title: 百度千帆
-description: 百度千帆 ERNIE 模型配置（文本对话 + 图像理解）
+title: ERNIE
+description: ERNIE model configuration (Baidu Qianfan)
 ---
 
-百度千帆提供 ERNIE 系列模型，支持文本对话与图像理解。
-
-<Tip>
-  通过 Web 控制台的「模型管理」页面可一站式配置以下全部能力，无需手动改配置文件。
-</Tip>
-
-## 文本对话
+Option 1: Native integration (recommended):
 
 ```json
 {
   "model": "ernie-5.1",
-  "qianfan_api_key": "YOUR_API_KEY",
+  "qianfan_api_key": "",
   "qianfan_api_base": "https://qianfan.baidubce.com/v2"
 }
 ```
 
-| 参数 | 说明 |
+| Parameter | Description |
 | --- | --- |
-| `model` | 默认推荐使用 `ernie-5.1`；也可使用 `ernie-5.0`、`ernie-x1.1`、`ernie-4.5-turbo-128k`、`ernie-4.5-turbo-32k` |
-| `qianfan_api_key` | 千帆 API Key，格式通常以 `bce-v3/` 开头 |
-| `qianfan_api_base` | 可选，默认为 `https://qianfan.baidubce.com/v2` |
+| `model` | Default recommendation: `ernie-5.1`; also supports `ernie-5.0`, `ernie-x1.1`, `ernie-4.5-turbo-128k`, `ernie-4.5-turbo-32k` |
+| `qianfan_api_key` | Qianfan API key, usually starting with `bce-v3/` |
+| `qianfan_api_base` | Optional, defaults to `https://qianfan.baidubce.com/v2` |
 
-### 模型选择
+## Model Selection
 
-| 模型 | 适用场景 |
+| Model | Use Case |
 | --- | --- |
-| `ernie-5.1` | 默认推荐，文心新一代旗舰模型，综合能力最强 |
-| `ernie-5.0` | 上一代旗舰模型，综合能力优异 |
-| `ernie-x1.1` | 深度思考推理模型，幻觉更低、指令遵循与工具调用更强 |
-| `ernie-4.5-turbo-128k` | 长上下文和通用对话 |
-| `ernie-4.5-turbo-32k` | 通用对话，成本和上下文更均衡 |
+| `ernie-5.1` | Default recommendation; latest ERNIE flagship with the strongest overall capability |
+| `ernie-5.0` | Previous-generation flagship with excellent overall capability |
+| `ernie-x1.1` | Deep-thinking reasoning model with lower hallucination and stronger instruction following / tool calling |
+| `ernie-4.5-turbo-128k` | Long-context and general chat |
+| `ernie-4.5-turbo-32k` | General chat with a balanced context window and cost |
 
-## 图像理解
+## Vision tool
 
-配置 `qianfan_api_key` 后，Agent 的 Vision 工具可以自动使用千帆视觉模型：
+Once `qianfan_api_key` is configured, Agent mode can auto-discover Qianfan for the Vision tool:
 
-- 当主模型本身是多模态时（如 `ernie-5.1`、`ernie-5.0`、`ernie-x1.1`、`ernie-4.5-turbo-vl`），直接由主模型识别图像，无需额外配置
-- 当主模型是纯文本时（如 `ernie-4.5-turbo-128k`），Vision 工具会自动 fallback 到 `ernie-4.5-turbo-vl`
+- When the main model itself is multimodal (e.g. `ernie-5.1`, `ernie-5.0`, `ernie-x1.1`, `ernie-4.5-turbo-vl`), images are handled directly by the main model with no extra setup.
+- When the main model is text-only (e.g. `ernie-4.5-turbo-128k`), the Vision tool automatically falls back to `ernie-4.5-turbo-vl`.
 
-如需手动指定 Vision 模型，可在配置文件中显式配置：
+To force a specific Vision model, set it explicitly in `config.json`:
 
 ```json
 {
@@ -54,6 +48,17 @@ description: 百度千帆 ERNIE 模型配置（文本对话 + 图像理解）
 }
 ```
 
+Option 2: OpenAI-compatible configuration:
+
+```json
+{
+  "model": "ernie-5.1",
+  "bot_type": "openai",
+  "open_ai_api_key": "",
+  "open_ai_api_base": "https://qianfan.baidubce.com/v2"
+}
+```
+
 <Tip>
-  新配置推荐使用 `qianfan_api_key`。旧的 `wenxin`、`wenxin-4`、`baidu_wenxin_api_key`、`baidu_wenxin_secret_key` 配置仍保持兼容。
+  Prefer `qianfan_api_key` for new configurations. Existing `wenxin`, `wenxin-4`, `baidu_wenxin_api_key`, and `baidu_wenxin_secret_key` configurations remain supported.
 </Tip>

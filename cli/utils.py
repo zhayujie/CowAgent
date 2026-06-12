@@ -40,6 +40,22 @@ def load_config_json() -> dict:
         return {}
 
 
+def get_cli_language() -> str:
+    """Resolve the CLI UI language using the shared i18n detector.
+
+    Reads the `cow_lang` field from config.json (defaults to "auto") and runs
+    the same detection used by the running app, so CLI output matches.
+    """
+    ensure_sys_path()
+    try:
+        from common import i18n
+
+        configured = load_config_json().get("cow_lang", "auto")
+        return i18n.resolve_language(configured)
+    except Exception:
+        return "en"
+
+
 def load_skills_config() -> dict:
     """Load skills_config.json from the custom skills directory."""
     path = os.path.join(get_skills_dir(), "skills_config.json")

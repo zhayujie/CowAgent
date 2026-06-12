@@ -1,0 +1,98 @@
+---
+title: 企微自建应用
+description: 将 CowAgent 接入企业微信自建应用
+---
+
+通过企业微信自建应用接入 CowAgent，支持企业内部人员单聊使用。
+
+<Note>
+  企业微信只能使用 Docker 部署或服务器 Python 部署，不支持本地运行模式。
+</Note>
+
+## 一、准备
+
+需要的资源：
+
+1. 一台服务器（有公网 IP）
+2. 注册一个企业微信（个人也可注册，但无法认证）
+3. 认证企业微信还需要对应主体备案的域名
+
+## 二、创建企业微信应用
+
+1. 在 [企业微信管理后台](https://work.weixin.qq.com/wework_admin/frame#profile) 点击 **我的企业**，在最下方获取 **企业ID**（后续填写到 `wechatcom_corp_id` 字段中）。
+
+2. 切换到 **应用管理**，点击创建应用：
+
+<img src="https://cdn.link-ai.tech/doc/20260228103156.png" width="480"/>
+
+3. 进入应用创建页面，记录 `AgentId` 和 `Secret`：
+
+<img src="https://cdn.link-ai.tech/doc/20260228103218.png" width="580"/>
+
+4. 点击 **设置API接收**，配置应用接口：
+
+<img src="https://cdn.link-ai.tech/doc/20260228103211.png" width="520"/>
+
+- URL 格式为 `http://ip:port/wxcomapp`（认证企业需使用备案域名）
+- 随机获取 `Token` 和 `EncodingAESKey` 并保存
+
+<Note>
+  此时保存 API 接收配置会失败，因为程序还未启动，等项目运行后再回来保存。
+</Note>
+
+## 三、配置和运行
+
+在 `config.json` 中添加以下配置（各参数与企业微信后台的对应关系见上方截图）：
+
+```json
+{
+  "channel_type": "wechatcom_app",
+  "single_chat_prefix": [""],
+  "wechatcom_corp_id": "YOUR_CORP_ID",
+  "wechatcomapp_token": "YOUR_TOKEN",
+  "wechatcomapp_secret": "YOUR_SECRET",
+  "wechatcomapp_agent_id": "YOUR_AGENT_ID",
+  "wechatcomapp_aes_key": "YOUR_AES_KEY",
+  "wechatcomapp_port": 9898
+}
+```
+
+| 参数 | 说明 |
+| --- | --- |
+| `wechatcom_corp_id` | 企业 ID |
+| `wechatcomapp_token` | API 接收配置中的 Token |
+| `wechatcomapp_secret` | 应用的 Secret |
+| `wechatcomapp_agent_id` | 应用的 AgentId |
+| `wechatcomapp_aes_key` | API 接收配置中的 EncodingAESKey |
+| `wechatcomapp_port` | 监听端口，默认 9898 |
+
+配置完成后启动程序。当后台日志显示 `http://0.0.0.0:9898/` 时说明程序运行成功，需要将该端口对外开放（如在云服务器安全组中放行）。
+
+程序启动后，回到企业微信后台保存 **消息服务器配置**，保存成功后还需将服务器 IP 添加到 **企业可信IP** 中，否则无法收发消息：
+
+<img src="https://cdn.link-ai.tech/doc/20260228103224.png" width="520"/>
+
+<Warning>
+  如遇到 URL 配置回调不通过或配置失败：
+  1. 确保服务器防火墙关闭且安全组放行监听端口
+  2. 仔细检查 Token、Secret Key 等参数配置是否一致，URL 格式是否正确
+  3. 认证企业微信需要配置与主体一致的备案域名
+</Warning>
+
+## 四、使用
+
+在企业微信中搜索刚创建的应用名称，即可直接对话：
+
+<img src="https://cdn.link-ai.tech/doc/20260228103228.png" width="720"/>
+
+如需让外部个人微信用户使用，可在 **我的企业 → 微信插件** 中分享邀请关注二维码，个人微信扫码关注后即可与应用对话：
+
+<img src="https://cdn.link-ai.tech/doc/20260228103232.png" width="520"/>
+
+## 常见问题
+
+需要确保已安装以下依赖：
+
+```bash
+pip install websocket-client pycryptodome
+```

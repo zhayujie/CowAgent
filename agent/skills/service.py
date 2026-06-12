@@ -34,6 +34,27 @@ class SkillService:
         """
         self.manager = skill_manager
 
+    def _safe_skill_dir(self, name: str) -> str:
+        """Derive and validate the skill directory path.
+
+        Ensures the resolved path stays within the custom_dir root,
+        preventing path traversal via names like ``../escaped``.
+
+        :raises ValueError: if the name would escape the skills root.
+        """
+        if not name or not name.strip():
+            raise ValueError("skill name is required")
+        # Reject obvious traversal components.
+        if ".." in name or name.startswith("/") or name.startswith("\\"):
+            raise ValueError(f"invalid skill name (path traversal detected): {name!r}")
+        skill_dir = os.path.realpath(os.path.join(self.manager.custom_dir, name))
+        root = os.path.realpath(self.manager.custom_dir)
+        if not skill_dir.startswith(root + os.sep) and skill_dir != root:
+            raise ValueError(
+                f"skill name {name!r} resolves outside the skills directory"
+            )
+        return skill_dir
+
     # ------------------------------------------------------------------
     # query
     # ------------------------------------------------------------------
@@ -107,7 +128,7 @@ class SkillService:
         if not files:
             raise ValueError("skill files list is empty")
 
-        skill_dir = os.path.join(self.manager.custom_dir, name)
+        skill_dir = self._safe_skill_dir(name)
 
         tmp_dir = skill_dir + ".tmp"
         if os.path.exists(tmp_dir):
@@ -146,7 +167,7 @@ class SkillService:
             raise ValueError("package url is required")
 
         url = files[0]["url"]
-        skill_dir = os.path.join(self.manager.custom_dir, name)
+        skill_dir = self._safe_skill_dir(name)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             zip_path = os.path.join(tmp_dir, "package.zip")
@@ -217,7 +238,7 @@ class SkillService:
         if not name:
             raise ValueError("skill name is required")
 
-        skill_dir = os.path.join(self.manager.custom_dir, name)
+        skill_dir = self._safe_skill_dir(name)
         if os.path.exists(skill_dir):
             shutil.rmtree(skill_dir)
             logger.info(f"[SkillService] delete: removed directory {skill_dir}")

@@ -47,11 +47,30 @@
          This runs synchronously in <head> so the correct class is on <html>
          before any CSS or body rendering occurs. -->
     <script>
+    // Map an arbitrary locale string (zh-CN, en-US, fr ...) to 'zh' / 'en',
+    // or '' when unrecognized so callers can fall through to the next source.
+    window.__cowNormalizeLang__ = function(raw) {
+        if (!raw) return '';
+        var v = String(raw).trim().toLowerCase();
+        if (v === 'auto') return '';
+        if (v.indexOf('zh') === 0) return 'zh';
+        if (v.indexOf('en') === 0) return 'en';
+        return '';
+    };
+    // Resolve the console language by priority:
+    //   user choice (localStorage) -> backend-detected -> browser -> 'zh'.
+    window.__cowResolveLang__ = function() {
+        return window.__cowNormalizeLang__(localStorage.getItem('cow_lang'))
+            || window.__cowNormalizeLang__(window.__COW_DEFAULT_LANG__)
+            || window.__cowNormalizeLang__(navigator.language || (navigator.languages && navigator.languages[0]))
+            || 'zh';
+    };
     (function() {
+        // Backend-resolved default language (from cow_lang config / auto-detect).
+        window.__COW_DEFAULT_LANG__ = '{{COW_DEFAULT_LANG}}';
         var theme = localStorage.getItem('cow_theme') || 'dark';
         if (theme === 'dark') document.documentElement.classList.add('dark');
-        var lang = localStorage.getItem('cow_lang') || 'zh';
-        document.documentElement.setAttribute('lang', lang);
+        document.documentElement.setAttribute('lang', window.__cowResolveLang__());
     })();
     </script>
 </head>
@@ -266,7 +285,7 @@
                 </button>
 
                 <!-- Docs Link -->
-                <a href="https://docs.cowagent.ai" target="_blank" rel="noopener noreferrer"
+                <a id="docs-link" href="https://docs.cowagent.ai" target="_blank" rel="noopener noreferrer"
                    class="p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10
                           cursor-pointer transition-colors duration-150" title="Documentation">
                     <i class="fas fa-book text-base"></i>
@@ -601,6 +620,18 @@
                                                             after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full"></div>
                                             </label>
                                         </div>
+                                        <div class="flex items-center justify-between">
+                                            <label class="flex items-center gap-1.5 text-sm font-medium text-slate-600 dark:text-slate-400">
+                                                <span data-i18n="config_self_evolution">Self-Evolution</span>
+                                                <span class="cfg-tip" data-tip-key="config_self_evolution_hint"><i class="fas fa-circle-question"></i></span>
+                                            </label>
+                                            <label class="relative inline-flex items-center cursor-pointer">
+                                                <input id="cfg-self-evolution" type="checkbox" class="sr-only peer">
+                                                <div class="w-9 h-5 bg-slate-200 dark:bg-slate-700 peer-checked:bg-primary-400 rounded-full
+                                                            after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white
+                                                            after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full"></div>
+                                            </label>
+                                        </div>
                                         <div class="flex items-center justify-end gap-3 pt-1">
                                             <span id="cfg-agent-status" class="text-xs text-primary-500 opacity-0 transition-opacity duration-300"></span>
                                             <button id="cfg-agent-save"
@@ -636,6 +667,31 @@
                                                     class="px-4 py-2 rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-sm font-medium
                                                            cursor-pointer transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
                                                     onclick="savePasswordConfig()" data-i18n="config_save">保存</button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Language Config Card -->
+                                <div class="bg-white dark:bg-[#1A1A1A] rounded-xl border border-slate-200 dark:border-white/10 p-6">
+                                    <div class="flex items-center gap-3 mb-5">
+                                        <div class="w-9 h-9 rounded-lg bg-sky-50 dark:bg-sky-900/30 flex items-center justify-center">
+                                            <i class="fas fa-language text-sky-500 text-sm"></i>
+                                        </div>
+                                        <h3 class="font-semibold text-slate-800 dark:text-slate-100" data-i18n="config_language">语言</h3>
+                                    </div>
+                                    <div class="space-y-4">
+                                        <div>
+                                            <label class="flex items-center gap-1.5 text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">
+                                                <span data-i18n="config_language">语言</span>
+                                                <span class="cfg-tip" data-tip-key="config_language_hint"><i class="fas fa-circle-question"></i></span>
+                                            </label>
+                                            <div id="cfg-lang-select" class="cfg-dropdown" tabindex="0">
+                                                <div class="cfg-dropdown-selected">
+                                                    <span class="cfg-dropdown-text">--</span>
+                                                    <i class="fas fa-chevron-down cfg-dropdown-arrow"></i>
+                                                </div>
+                                                <div class="cfg-dropdown-menu"></div>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -716,7 +772,7 @@
                                         </button>
                                         <button id="memory-tab-dreams" onclick="switchMemoryTab('dreams')"
                                                 class="memory-tab px-3 py-1.5 rounded-md text-xs font-medium cursor-pointer transition-colors duration-150">
-                                            <i class="fas fa-moon mr-1.5"></i><span data-i18n="memory_tab_dreams">梦境日记</span>
+                                            <i class="fas fa-seedling mr-1.5"></i><span data-i18n="memory_tab_dreams">自主进化</span>
                                         </button>
                                     </div>
                                 </div>

@@ -1,0 +1,118 @@
+---
+title: Slack
+description: 将 CowAgent 接入 Slack App
+---
+
+> 通过 Slack App 的 **Socket Mode** 接入 CowAgent，支持私聊（DM）与频道（@机器人 / 线程内回复触发）。Socket Mode 基于长连接，无需公网 IP 与回调地址，开箱即用。
+
+## 一、接入步骤
+
+### 步骤一：创建 Slack App
+
+1. 打开 [Slack API 应用管理页](https://api.slack.com/apps)，点击 **Create New App** → **From scratch**。
+2. 填写 **App Name**（如 `CowAgent`），选择要安装的 **Workspace**，点击创建。
+
+### 步骤二：开启 Socket Mode 并获取 App Token
+
+1. 左侧菜单进入 **Settings → Socket Mode**，打开 **Enable Socket Mode**。
+2. 系统会提示生成一个 **App-Level Token**，作用域勾选 `connections:write`，生成后保存这串以 `xapp-` 开头的 Token。
+
+<Tip>
+  Socket Mode 通过 WebSocket 长连接接收事件，无需在公网暴露回调 URL，适合本地或内网部署。
+</Tip>
+
+### 步骤三：配置 Bot 权限并安装
+
+1. 进入 **Features → OAuth & Permissions**，在 **Bot Token Scopes** 中点击 **Add an OAuth Scope**，逐项添加以下权限：
+
+   ```
+   app_mentions:read
+   channels:history
+   chat:write
+   commands
+   files:read
+   files:write
+   groups:history
+   im:history
+   mpim:history
+   users:read
+   ```
+
+   <Note>
+     `files:read` / `files:write` 用于图片、文件的收发；若仅需文本对话可省略。
+   </Note>
+
+2. 进入 **Features → Event Subscriptions**，打开 **Enable Events**，在 **Subscribe to bot events** 中点击 **Add Bot User Event** 添加以下事件：
+
+   ```
+   app_mention
+   message.im
+   message.channels
+   ```
+
+   <Note>
+     如需在私有频道使用，再添加 `message.groups`。
+   </Note>
+3. 进入 **Features → App Home**，在 **Show Tabs** 区域勾选 **Messages Tab**，并勾选下方的 **Allow users to send Slash commands and messages from the messages tab**（允许用户从消息标签页发送消息），否则私聊输入框会被关闭、无法给机器人发消息。
+4. 回到 **OAuth & Permissions**，点击 **Install to Workspace** 完成安装，安装后获取以 `xoxb-` 开头的 **Bot User OAuth Token**。
+
+<Tip>
+  若 Slack 客户端仍提示「向此应用发送消息的功能已关闭」，请确认已完成上一步的 App Home 设置，并刷新或重启 Slack 客户端（必要时把 App 从对话列表移除后重新打开）。
+</Tip>
+
+### 步骤四：接入 CowAgent
+
+<Tabs>
+  <Tab title="Web 控制台（推荐）">
+    打开 Web 控制台（本地链接：http://127.0.0.1:9899 ），选择 **通道** 菜单，点击 **接入通道**，选择 **Slack**，分别填入 Bot Token（`xoxb-`）和 App Token（`xapp-`），点击接入即可。
+  </Tab>
+  <Tab title="配置文件">
+    在 `config.json` 中添加以下配置后启动：
+
+    ```json
+    {
+      "channel_type": "slack",
+      "slack_bot_token": "xoxb-xxxxxxxxxxxx",
+      "slack_app_token": "xapp-xxxxxxxxxxxx",
+      "slack_group_trigger": "mention_or_reply"
+    }
+    ```
+
+    | 参数 | 说明 | 默认值 |
+    | --- | --- | --- |
+    | `slack_bot_token` | Bot User OAuth Token，形如 `xoxb-...` | - |
+    | `slack_app_token` | App-Level Token（开启 Socket Mode 后生成），形如 `xapp-...` | - |
+    | `slack_group_trigger` | 频道触发方式：`mention_or_reply`（@或线程内回复）/ `mention_only`（仅@） / `all`（所有消息） | `mention_or_reply` |
+  </Tab>
+</Tabs>
+
+启动 Cow 后，日志中出现以下输出即表示接入成功：
+
+```
+[Slack] Bot logged in as user_id=U0XXXXXXX, team=Txxxxxxxx
+[Slack] ✅ Slack bot ready, listening for events
+```
+
+## 二、功能说明
+
+| 功能 | 支持情况 |
+| --- | --- |
+| 私聊（DM） | ✅ |
+| 频道（@机器人 / 线程内回复） | ✅ |
+| 文本消息 | ✅ 收发 |
+| 图片消息 | ✅ 收发 |
+| 文件消息 | ✅ 收发（PDF / Word / Excel 等） |
+| 线程回复 | ✅ 回复发送至触发消息所在线程 |
+
+<Note>
+  Slack 通过线程（Thread）组织对话。机器人会把回复发送到触发消息所在的线程，频道内更整洁。
+</Note>
+
+## 三、使用
+
+完成接入后：
+
+- **私聊（DM）**：在 Slack 左侧 **Apps** 中找到你的 App，直接发消息对话。
+- **频道**：把 App 邀请进频道（`/invite @你的App`），使用 `@你的App 你好` 触发对话；后续在同一线程内直接回复即可继续对话。
+
+发送图片或文件时，可以在附件的输入框中 **添加文字说明**（描述/问题）一并发送，机器人会结合附件回答。也支持先发附件再发问题，两条消息会自动合并提问。

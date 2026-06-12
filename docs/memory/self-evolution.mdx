@@ -1,0 +1,90 @@
+---
+title: Self-Evolution
+description: Self-Evolution — review a conversation after it goes idle to consolidate memory, improve skills, and follow up on unfinished tasks
+---
+
+## Overview
+
+### Introduction
+
+Self-Evolution lets the Agent do more than finish one task at a time; it keeps improving as it works with you. After a conversation winds down, it quietly reviews what just happened: it saves anything worth remembering into long-term memory, fixes problems that surfaced in a skill, and picks up tasks that were left unfinished. Over time the Agent learns your preferences, repeats fewer mistakes, and gets better at wrapping things up on its own. All of this runs in the background, and it only tells you when it actually did something.
+
+> Self-Evolution complements [Deep Dream](/memory/deep-dream). Deep Dream organizes memory itself, while Self-Evolution goes a step further to improve skills and push unfinished tasks forward, sharpening the Agent's abilities through everyday use.
+
+<Frame>
+  <img src="https://cdn.jsdelivr.net/gh/zhayujie/cowagent-assets@main/screenshots/en/web-console-evolution-demo.png" alt="Self-Evolution in a conversation" />
+</Frame>
+
+### Three Goals
+
+Self-Evolution focuses on three things:
+
+| Goal | Description |
+| --- | --- |
+| **Consolidate memory** | Record important preferences, decisions, and facts from the conversation, filling in what the main chat may have missed |
+| **Improve skills** | ① When a skill shows a problem in use (such as a wrong setting or a missing step), fix the skill file directly; ② when a reusable workflow emerges, turn it into a new skill so it can be reused next time |
+| **Follow up on unfinished tasks** | Spot the to-dos left in a conversation and finish them when possible |
+
+Once a review is done, if it actually changed something, the Agent tells you in a single line what it just learned and what it adjusted, so you can decide whether to roll it back.
+
+## Usage
+
+### When It Triggers
+
+Self-Evolution does not run on a fixed schedule. It only kicks in **after a conversation naturally ends and goes idle**, so it never interrupts an ongoing exchange. Two conditions must both hold:
+
+- **The conversation is idle**: more time has passed since the last interaction than the configured idle window (10 minutes by default)
+- **There is enough to review**: enough turns have accumulated since the last evolution, or the context is close to its capacity
+
+Only when both are met does a review begin. This makes sure there is something worth reviewing while keeping it from bothering you mid-conversation.
+
+### Configuration
+
+You can toggle Self-Evolution in the Web console under **Settings → Agent Config** (below "Deep Thinking"), or adjust it in the config file:
+
+| Parameter | Description | Default |
+| --- | --- | --- |
+| `self_evolution_enabled` | Whether Self-Evolution is enabled (on by default for new installs) | `false` |
+| `self_evolution_idle_minutes` | How long the conversation must be idle before it triggers (minutes) | `10` |
+| `self_evolution_min_turns` | Minimum conversation turns required to trigger | `6` |
+
+<Frame>
+  <img src="https://cdn.jsdelivr.net/gh/zhayujie/cowagent-assets@main/screenshots/en/web-console-evolution-config.png" alt="Enable Self-Evolution in the Web console" />
+</Frame>
+
+<Tip>
+  The Web console only exposes the on/off toggle. To change the idle window or the turn threshold, edit the config file. Changes take effect immediately, with no restart needed.
+</Tip>
+
+### Evolution Records
+
+Each review is recorded by date in `memory/evolution/YYYY-MM-DD.md`, viewable in the Web console under the **Memory → Self-Evolution** tab. That tab gathers both self-evolution records and dream diaries in one place, so you can look back on how the Agent has grown.
+
+<Frame>
+  <img src="https://cdn.jsdelivr.net/gh/zhayujie/cowagent-assets@main/screenshots/en/web-console-evolution-logs.png" alt="Self-Evolution records list" />
+</Frame>
+
+### Rolling Back
+
+If you disagree with a change from a review, just tell the Agent in chat to undo the last change. It restores the affected files from the backup taken before the review. Every review keeps its own backup, so they never interfere with each other.
+
+## Design
+
+Self-Evolution reuses what the system already has, which keeps it lightweight:
+
+- **Isolated execution**: each review runs as a separate, short-lived task. It uses the same model as the main chat but with a restricted toolset (it can only read context and edit memory and skill files). It does not pollute the main chat's context or affect its performance.
+- **Backup-based undo**: the relevant files are snapshotted before a review and restored from that snapshot on undo, so every change is traceable and reversible.
+- **Change detection**: after a review, the system compares file snapshots to see whether anything actually changed, and uses that to decide whether to notify you. This is how it guarantees, at the engineering level, that no work means no message.
+
+### Restraint and Safety
+
+Self-Evolution is built to act when needed and stay out of the way otherwise:
+
+| Mechanism | Description |
+| --- | --- |
+| **No work, no notification** | If a review produces no real change, it stays silent and sends nothing |
+| **Triggers only when idle** | It runs only after the conversation is idle, never interrupting an active one |
+| **Reversible changes** | A backup is taken before every review, so you can undo a result you do not like |
+| **Built-in skills protected** | The skills shipped with the product are protected and never modified |
+| **Workspace-scoped** | All reads and writes stay inside the workspace and never touch other system files |
+| **Runs in the background** | Reviews run in the background and do not block normal replies |

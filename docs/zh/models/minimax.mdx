@@ -1,0 +1,71 @@
+---
+title: MiniMax
+description: MiniMax 模型配置（文本 / 图像理解 / 图像生成 / 语音合成）
+---
+
+MiniMax 支持文本对话、图像理解、图像生成与语音合成，一份 `minimax_api_key` 即可启用全部能力。
+
+<Tip>
+  通过 Web 控制台的「模型管理」页面可一站式配置以下全部能力，无需手动改配置文件。
+</Tip>
+
+## 文本对话
+
+```json
+{
+  "model": "MiniMax-M3",
+  "minimax_api_key": "YOUR_API_KEY"
+}
+```
+
+| 参数 | 说明 |
+| --- | --- |
+| `model` | 可填 `MiniMax-M3`、`MiniMax-M2.7`、`MiniMax-M2.7-highspeed` 等 |
+| `minimax_api_key` | 在 [MiniMax 控制台](https://platform.minimaxi.com/user-center/basic-information/interface-key) 创建 |
+
+## 图像理解
+
+MiniMax 的 M2.x 系列 chat 模型本身不支持视觉，视觉调用统一路由到 `MiniMax-Text-01`。配置 `minimax_api_key` 后 Agent 的 Vision 工具会自动使用该模型，无需在配置文件中显式指定。
+
+## 图像生成
+
+```json
+{
+  "skills": {
+    "image-generation": {
+      "model": "image-01"
+    }
+  }
+}
+```
+
+可选模型：`image-01`。
+
+## 语音合成
+
+```json
+{
+  "text_to_voice": "minimax",
+  "text_to_voice_model": "speech-2.8-hd",
+  "tts_voice_id": "female-shaonv"
+}
+```
+
+| 参数 | 说明 |
+| --- | --- |
+| `text_to_voice_model` | `speech-2.8-hd`（情绪渲染、自然听感）、`speech-2.8-turbo`（极速）、`speech-2.6-hd`、`speech-2.6-turbo` |
+| `tts_voice_id` | 音色 ID，支持中文 / 粤语 / 英 / 日 / 韩，共 70+ 种 |
+
+常用音色示例：
+
+| 音色 ID | 说明 |
+| --- | --- |
+| `female-shaonv` | 中文 · 少女（女） |
+| `female-yujie` | 中文 · 御姐（女） |
+| `female-tianmei` | 中文 · 甜美女性（女） |
+| `male-qn-jingying` | 中文 · 精英青年（男） |
+| `male-qn-badao` | 中文 · 霸道青年（男） |
+| `Cantonese_GentleLady` | 粤语 · 温柔女声 |
+| `English_Graceful_Lady` | 英文 · Graceful Lady |
+
+完整音色（中文 / 粤语 / 英 / 日 / 韩共 70+ 种）可参考 [系统音色列表](https://platform.minimaxi.com/docs/faq/system-voice-id)，也可在 Web 控制台的「模型管理 → 语音合成」下拉框中可视化选择。

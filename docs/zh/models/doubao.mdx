@@ -1,0 +1,66 @@
+---
+title: 豆包 Doubao
+description: 豆包（火山方舟）模型配置（文本 / 图像理解 / 图像生成 / 向量）
+---
+
+豆包（火山方舟）支持文本对话、图像理解、图像生成（Seedream）和向量能力，一份 `ark_api_key` 即可启用全部能力。
+
+<Tip>
+  通过 Web 控制台的「模型管理」页面可一站式配置以下全部能力，无需手动改配置文件。
+</Tip>
+
+## 文本对话
+
+```json
+{
+  "model": "doubao-seed-2-0-pro-260215",
+  "ark_api_key": "YOUR_API_KEY"
+}
+```
+
+| 参数 | 说明 |
+| --- | --- |
+| `model` | 可填 `doubao-seed-2-0-pro-260215`、`doubao-seed-2-0-code-preview-260215`、`doubao-seed-2-0-lite-260215` 等 |
+| `ark_api_key` | 在 [火山方舟控制台](https://console.volcengine.com/ark/region:ark+cn-beijing/apikey) 创建 |
+| `ark_base_url` | 可选，默认为 `https://ark.cn-beijing.volces.com/api/v3` |
+
+## 图像理解
+
+配置 `ark_api_key` 后 Agent 的 Vision 工具会自动使用 `doubao-seed-2-0-pro-260215` 识别图像，无需额外配置。
+
+如需手动指定 Vision 模型：
+
+```json
+{
+  "tools": {
+    "vision": {
+      "model": "doubao-seed-2-0-pro-260215"
+    }
+  }
+}
+```
+
+## 图像生成
+
+```json
+{
+  "skills": {
+    "image-generation": {
+      "model": "seedream-5.0-lite"
+    }
+  }
+}
+```
+
+可选模型：`seedream-5.0-lite`、`seedream-4.5`。
+
+## 向量
+
+```json
+{
+  "embedding_provider": "doubao",
+  "embedding_model": "doubao-embedding-vision-251215"
+}
+```
+
+默认模型 `doubao-embedding-vision-251215`（多模态 embedding），可在配置文件中通过 `embedding_dimensions` 指定 1024 或 2048 维。修改 embedding 后需执行 `/memory rebuild-index` 命令重建索引。

@@ -1,35 +1,35 @@
 ---
-title: env_config - 环境变量
-description: 管理 API Key 等秘钥配置
+title: env_config - Environment
+description: Manage API keys and secrets
 ---
 
-管理工作空间 `.env` 文件中的环境变量（API Key 等秘钥），支持通过对话安全地添加和更新。内置安全保护和脱敏策略。
+Manage environment variables (API keys and secrets) in the workspace `.env` file, with secure conversational updates. Built-in security protection and desensitization.
 
-## 依赖
+## Dependencies
 
-| 依赖 | 安装命令 |
+| Dependency | Install Command |
 | --- | --- |
 | `python-dotenv` ≥ 1.0.0 | `pip install python-dotenv>=1.0.0` |
 
-安装扩展依赖时已包含：`pip3 install -r requirements-optional.txt`
+Included when installing optional dependencies: `pip3 install -r requirements-optional.txt`
 
-## 参数
+## Parameters
 
-| 参数 | 类型 | 必填 | 说明 |
+| Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
-| `action` | string | 是 | 操作类型：`get`、`set`、`list`、`delete` |
-| `key` | string | 否 | 环境变量名称 |
-| `value` | string | 否 | 环境变量值（仅 `set` 时需要） |
+| `action` | string | Yes | Operation type: `get`, `set`, `list`, `delete` |
+| `key` | string | No | Environment variable name |
+| `value` | string | No | Environment variable value (only for `set`) |
 
-## 使用方式
+## Usage
 
-直接告诉 Agent 需要配置的秘钥，Agent 会自动调用该工具：
+Tell the Agent what key you need to configure, and it will automatically invoke this tool:
 
-- "帮我配置 BOCHA_API_KEY"
-- "设置 OPENAI_API_KEY 为 sk-xxx"
-- "查看已配置的环境变量"
+- "Configure my BOCHA_API_KEY"
+- "Set OPENAI_API_KEY to sk-xxx"
+- "Show configured environment variables"
 
-配置的秘钥会自动注入到 `bash` 工具的执行环境中。
+Configured keys are automatically injected into the `bash` tool's execution environment.
 
 <Frame>
   <img src="https://cdn.link-ai.tech/doc/20260202234939.png" width="800" />

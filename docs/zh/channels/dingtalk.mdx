@@ -1,0 +1,56 @@
+---
+title: 钉钉
+description: 将 CowAgent 接入钉钉应用
+---
+
+通过钉钉开放平台创建智能机器人应用，将 CowAgent 接入钉钉。
+
+## 一、创建应用
+
+1. 进入 [钉钉开发者后台](https://open-dev.dingtalk.com/fe/app#/corp/app)，登录后点击 **创建应用**，填写应用相关信息：
+
+<img src="https://img-1317903499.cos.ap-guangzhou.myqcloud.com/docs/dingtalk-create-app.png" width="800"/>
+
+2. 点击添加应用能力，选择 **机器人** 能力，点击 **添加**：
+
+<img src="https://img-1317903499.cos.ap-guangzhou.myqcloud.com/docs/dingtalk-add-bot.png" width="800"/>
+
+3. 配置机器人信息后点击 **发布**。发布后，点击 "**点击调试**"，会自动创建测试群聊，可在客户端查看：
+
+<img src="https://img-1317903499.cos.ap-guangzhou.myqcloud.com/docs/dingtalk-config-bot.png" width="600"/>
+
+4. 点击 **版本管理与发布**，创建新版本发布：
+
+<img src="https://img-1317903499.cos.ap-guangzhou.myqcloud.com/docs/dingtalk-publish-bot.png" width="700"/>
+
+## 二、项目配置
+
+1. 点击 **凭证与基础信息**，获取 `Client ID` 和 `Client Secret`：
+
+<img src="https://img-1317903499.cos.ap-guangzhou.myqcloud.com/docs/dingtalk-get-secret.png" width="700"/>
+
+2. 将以下配置加入项目根目录的 `config.json` 文件：
+
+```json
+{
+  "channel_type": "dingtalk",
+  "dingtalk_client_id": "YOUR_CLIENT_ID",
+  "dingtalk_client_secret": "YOUR_CLIENT_SECRET"
+}
+```
+
+3. 安装依赖：
+
+```bash
+pip3 install dingtalk_stream
+```
+
+4. 启动项目后，在钉钉开发者后台点击 **事件订阅**，点击 **已完成接入，验证连接通道**，显示 **连接接入成功** 即表示配置完成：
+
+<img src="https://img-1317903499.cos.ap-guangzhou.myqcloud.com/docs/dingtalk-event-sub.png" width="700"/>
+
+## 三、使用
+
+与机器人私聊或将机器人拉入企业群中均可开启对话：
+
+<img src="https://img-1317903499.cos.ap-guangzhou.myqcloud.com/docs/dingtalk-hosting-demo.png" width="650"/>

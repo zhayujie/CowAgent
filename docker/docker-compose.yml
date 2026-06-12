@@ -8,6 +8,7 @@ services:
     ports:
       - "9899:9899"
     environment:
+      COW_LANG: 'auto'
       CHANNEL_TYPE: 'weixin'
       MODEL: 'deepseek-v4-flash'
       DEEPSEEK_API_KEY: ''

@@ -1,35 +1,35 @@
 ---
-title: 钉钉
-description: 将 CowAgent 接入钉钉应用
+title: DingTalk
+description: Integrate CowAgent into DingTalk application
 ---
 
-通过钉钉开放平台创建智能机器人应用，将 CowAgent 接入钉钉。
+Integrate CowAgent into DingTalk by creating an intelligent robot app on the DingTalk Open Platform.
 
-## 一、创建应用
+## 1. Create App
 
-1. 进入 [钉钉开发者后台](https://open-dev.dingtalk.com/fe/app#/corp/app)，登录后点击 **创建应用**，填写应用相关信息：
+1. Go to [DingTalk Developer Console](https://open-dev.dingtalk.com/fe/app#/corp/app), log in and click **Create App**, fill in the app information:
 
 <img src="https://img-1317903499.cos.ap-guangzhou.myqcloud.com/docs/dingtalk-create-app.png" width="800"/>
 
-2. 点击添加应用能力，选择 **机器人** 能力，点击 **添加**：
+2. Click **Add App Capability**, select **Robot** capability and click **Add**:
 
 <img src="https://img-1317903499.cos.ap-guangzhou.myqcloud.com/docs/dingtalk-add-bot.png" width="800"/>
 
-3. 配置机器人信息后点击 **发布**。发布后，点击 "**点击调试**"，会自动创建测试群聊，可在客户端查看：
+3. Configure the robot information and click **Publish**. After publishing, click "**Debug**" to automatically create a test group chat, which can be viewed in the client:
 
 <img src="https://img-1317903499.cos.ap-guangzhou.myqcloud.com/docs/dingtalk-config-bot.png" width="600"/>
 
-4. 点击 **版本管理与发布**，创建新版本发布：
+4. Click **Version Management & Release**, create a new version and publish:
 
 <img src="https://img-1317903499.cos.ap-guangzhou.myqcloud.com/docs/dingtalk-publish-bot.png" width="700"/>
 
-## 二、项目配置
+## 2. Project Configuration
 
-1. 点击 **凭证与基础信息**，获取 `Client ID` 和 `Client Secret`：
+1. Click **Credentials & Basic Info**, get the `Client ID` and `Client Secret`:
 
 <img src="https://img-1317903499.cos.ap-guangzhou.myqcloud.com/docs/dingtalk-get-secret.png" width="700"/>
 
-2. 将以下配置加入项目根目录的 `config.json` 文件：
+2. Add the following configuration to `config.json` in the project root:
 
 ```json
 {
@@ -39,18 +39,20 @@ description: 将 CowAgent 接入钉钉应用
 }
 ```
 
-3. 安装依赖：
+3. Install the dependency:
 
 ```bash
 pip3 install dingtalk_stream
 ```
 
-4. 启动项目后，在钉钉开发者后台点击 **事件订阅**，点击 **已完成接入，验证连接通道**，显示 **连接接入成功** 即表示配置完成：
+<img src="https://img-1317903499.cos.ap-guangzhou.myqcloud.com/docs/dingtalk-app-config.png" width="700"/>
+
+4. After starting the project, go to the DingTalk Developer Console, click **Event Subscription**, then click **Connection verified, verify channel**. When "**Connection successful**" is displayed, the configuration is complete:
 
 <img src="https://img-1317903499.cos.ap-guangzhou.myqcloud.com/docs/dingtalk-event-sub.png" width="700"/>
 
-## 三、使用
+## 3. Usage
 
-与机器人私聊或将机器人拉入企业群中均可开启对话：
+Chat privately with the robot or add it to an enterprise group to start a conversation:
 
 <img src="https://img-1317903499.cos.ap-guangzhou.myqcloud.com/docs/dingtalk-hosting-demo.png" width="650"/>

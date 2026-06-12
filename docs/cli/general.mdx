@@ -1,17 +1,17 @@
 ---
-title: 常用命令
-description: 查看状态、管理配置和上下文等常用命令
+title: General Commands
+description: View status, manage config, and control context with commonly used commands
 ---
 
-以下命令支持在对话中使用 `/` 前缀，也支持在终端中使用 `cow` 前缀（部分命令仅对话可用）。
+The following commands can be used in chat with the `/` prefix or in the terminal with the `cow` prefix (some are chat-only).
 
 <Tip>
-  在 Web 控制台中输入 `/` 会自动弹出命令提示，支持键盘上下选择和 Tab 补全。
+  In the Web console, typing `/` brings up an autocomplete menu with keyboard navigation and Tab completion.
 </Tip>
 
 ## help
 
-显示所有可用命令的帮助信息。
+Show help information for all available commands.
 
 ```text
 /help
@@ -19,29 +19,15 @@ description: 查看状态、管理配置和上下文等常用命令
 
 ## status
 
-查看当前会话和服务的运行状态，包括进程信息、模型配置、会话消息数量和已加载技能数量。
+View current session and service status, including process info, model configuration, message count, and loaded skills.
 
 ```text
 /status
 ```
 
-输出示例：
-
-```
-🐮 CowAgent Status
-
-Process: PID 12345 | Running 2h 15m
-Version: 2.0.4
-Channel: web
-Model:   MiniMax-M2.5
-Mode:    agent
-
-Session: 12 messages | 8 skills loaded
-```
-
 ## cancel
 
-中止当前会话正在运行的 Agent 任务。在 Agent 执行长时间任务（例如多轮工具调用、长流式输出）时，可随时发送 `/cancel`，Agent 会在下一次工具执行前停止。Web 端、微信、企业微信、飞书等各通道均可使用。
+Abort the agent task currently running in this session. When the agent is busy with a long task (e.g. multi-turn tool calls or a long streaming response), send `/cancel` and the agent will stop before the next tool execution. Available across all channels — Web, WeChat, WeCom, Feishu, etc.
 
 ```text
 /cancel
@@ -49,67 +35,67 @@ Session: 12 messages | 8 skills loaded
 
 ## config
 
-查看或修改运行时配置。修改后立即生效，无需重启服务。
+View or modify runtime configuration. Changes take effect immediately without restarting.
 
-**查看所有可配置项：**
+**View all configurable items:**
 
 ```text
 /config
 ```
 
-**查看单个配置项：**
+**View a single item:**
 
 ```text
 /config model
 ```
 
-**修改配置项：**
+**Modify a config item:**
 
 ```text
 /config model deepseek-v4-flash
 ```
 
-**支持修改的配置项：**
+**Configurable items:**
 
-| 配置项 | 说明 | 示例值 |
+| Item | Description | Example |
 | --- | --- | --- |
-| `model` | AI 模型名称 | `deepseek-v4-flash` |
-| `agent_max_context_tokens` | 最大上下文 tokens | `40000` |
-| `agent_max_context_turns` | 最大上下文记忆轮次 | `30` |
-| `agent_max_steps` | 单次任务最大决策步数 | `15` |
-| `enable_thinking` | 是否启用深度思考模式 | `true` / `false` |
+| `model` | AI model name | `deepseek-v4-flash` |
+| `agent_max_context_tokens` | Max context tokens | `40000` |
+| `agent_max_context_turns` | Max context memory turns | `30` |
+| `agent_max_steps` | Max decision steps per task | `15` |
+| `enable_thinking` | Enable deep thinking mode | `true` / `false` |
 
 <Note>
-  修改 `model` 时，系统会自动匹配对应的模型调用方式。配置会写入 `config.json` 并持久保存。
+  When changing `model`, the system automatically matches the corresponding model API. Configuration is persisted to `config.json`.
 </Note>
 
 ## context
 
-查看当前会话的上下文信息，包括消息数量、内容长度等统计。
+View current session context statistics, including message count and content length.
 
 ```text
 /context
 ```
 
-**清空当前会话上下文：**
+**Clear current session context:**
 
 ```text
 /context clear
 ```
 
 <Tip>
-  清空上下文后，Agent 会"忘记"之前的对话内容，适用于切换话题或释放上下文空间。
+  Clearing context makes the Agent "forget" previous conversation, useful for switching topics or freeing context space.
 </Tip>
 
 ## logs
 
-查看最近的服务日志，默认显示最近 20 行，最多 50 行。
+View recent service logs. Shows the last 20 lines by default, up to 50.
 
 ```text
 /logs
 ```
 
-**指定行数：**
+**Specify line count:**
 
 ```text
 /logs 50
@@ -117,7 +103,7 @@ Session: 12 messages | 8 skills loaded
 
 ## version
 
-显示当前 CowAgent 版本号。
+Show the current CowAgent version.
 
 ```text
 /version

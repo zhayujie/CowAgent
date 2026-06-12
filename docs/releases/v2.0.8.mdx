@@ -1,63 +1,68 @@
 ---
 title: v2.0.8
-description: CowAgent 2.0.8 - 飞书渠道全面升级（语音、流式打字机、一键扫码接入）、DeepSeek V4 / 百度千帆支持、定时任务工具优化
+description: CowAgent 2.0.8 - Major Feishu channel upgrade (voice, streaming typewriter, one-click QR app creation), DeepSeek V4 / ERNIE 5.0 support, scheduler memory enhancements and multiple fixes
 ---
 
-## 🪶 飞书渠道全面升级
+## 🪶 Major Feishu Channel Upgrade
 
-### 1. 一键扫码创建飞书应用
+### 1. One-click QR-scan App Creation
 
-不再需要手动到飞书开放平台建应用、填权限和事件订阅。Web 控制台和命令行启动时若未配置 `feishu_app_id`，会自动展示扫码入口，飞书扫码授权后自动创建机器人并回填配置，开箱即用。
+No more manual app setup, permission scopes and event subscriptions in the Feishu Open Platform. When `feishu_app_id` is not configured, both the Web Console and CLI startup flow now show a QR-scan entry — scan with Feishu, authorize, and the bot is created and config is filled back automatically. Out-of-the-box.
 
-相关文档：[飞书渠道](https://docs.cowagent.ai/channels/feishu)
+Documentation: [Feishu Channel](https://docs.cowagent.ai/en/channels/feishu)
 
-### 2. 语音消息收发
+### 2. Voice Messages
 
-支持接收用户发送的飞书语音消息并自动转文本，回复也可走 TTS 以语音形式发出。同时优化了中文短语音的识别准确度。
+Receive Feishu voice messages with automatic speech-to-text, and reply in voice via TTS. Recognition accuracy for short Chinese voice messages has been improved.
 
-### 3. 流式打字机回复
+### 3. Streaming Typewriter Replies
 
-接入飞书 CardKit 流式卡片，**默认开启**，体验对齐 Web 端：
+Integrated with Feishu CardKit streaming cards, **enabled by default**, matching the Web Console experience:
 
-- 多轮 Agent 场景下中间过场消息与最终回复分卡呈现
-- 针对 DeepSeek 等高频输出模型做了专门优化，速度与 Web 端持平
-- 不支持时自动回退为普通文本回复，无需手动配置
-- 要求飞书客户端 ≥ 7.20
+- Multi-turn agent flows render intermediate updates and the final reply on separate cards
+- Tuned for high-throughput models like DeepSeek to keep pace with the Web Console
+- Falls back to plain text replies automatically when not supported, no manual config needed
+- Requires Feishu client ≥ 7.20
 
-飞书语音消息收发与流式打字机的基础能力来自社区贡献 #2791 Thanks @yangluxin613
+The voice and streaming building blocks come from a community contribution #2791. Thanks [@yangluxin613](https://github.com/yangluxin613)
 
-## 🤖 新模型支持
+## 🤖 New Model Support
 
-- **DeepSeek V4 系列**：新增 `deepseek-v4-pro` / `deepseek-v4-flash`，并将默认模型切换为 `deepseek-v4-flash`
-- **思考模型开关统一**：DeepSeek V4、Qwen3 等思考模型的开关行为对齐到 `enable_thinking`
-- **百度千帆模型接入**：新增百度千帆厂商，支持 `ernie-5.0`、`ernie-4.5-turbo-128k` 等模型，并支持图像识别工具，相关文档查看 [百度千帆](https://docs.cowagent.ai/models/qianfan)。#2790 Thanks @jimmyzhuu
-- **新增有道翻译**：`translate` 模块新增有道翻译支持 #2797 Thanks @Zmjjeff7
+- **DeepSeek V4 series**: Added `deepseek-v4-pro` / `deepseek-v4-flash`, with `deepseek-v4-flash` set as the new default
+- **Unified thinking-mode toggle**: DeepSeek V4, Qwen3 and other thinking-capable models now share the same `enable_thinking` switch
+- **ERNIE first-class integration**: New `qianfan` provider supporting `ernie-5.0` (default recommendation), `ernie-x1.1`, `ernie-4.5-turbo-128k`, `ernie-4.5-turbo-32k`. Dedicated `qianfan_api_key` / `qianfan_api_base` settings keep OpenAI config clean; legacy `wenxin` / `wenxin-4` paths are fully preserved. #2790 Thanks [@jimmyzhuu](https://github.com/jimmyzhuu)
 
-## 🛠 OpenAI 客户端重构
+  Documentation: [ERNIE](https://docs.cowagent.ai/en/models/qianfan)
 
-- **去 SDK 依赖**：OpenAI Bot 改为原生 HTTP 实现，启动更轻、依赖冲突更少
-- **Web 控制台提示**：模型配置 API Base 输入框加入版本路径占位提示
+## 🌐 Translation Provider
 
-## ⏰ 定时任务记忆增强
+- **Youdao translator**: Added a Youdao provider to the `translate/` module using the v3 SHA-256 signing scheme, with automatic ISO 639-1 language-code mapping (`zh`, `zh-TW`, etc.) #2797 Thanks [@Zmjjeff7](https://github.com/Zmjjeff7)
 
-- **任务结果可被追问**：定时任务的执行结果自动注入到接收方的会话历史中，下一轮对话可直接追问，无需重新交代上下文 Thanks @huangrichao2020
-- **不污染长期记忆**：注入的调度对话不会被纳入每日梦境记忆汇总，避免高频任务把记忆刷满
-- **避免越跑越慢**：调度任务自己的上下文长度自动控制在合理范围内，长期反复执行也不会越积越大、拖慢响应
+## 🛠 OpenAI Client Refactor
 
-## 🔧 工具与安全
+- **Drop SDK dependency**: The OpenAI bot is reimplemented on a native HTTP client — leaner startup, fewer dependency conflicts
+- **Web Console hint**: API base inputs in the model config UI now include version-path placeholder hints
 
-- **图像识别模型**：让 `tools.vision.model` 配置真正生效，未配置时自动 fallback #2792 Thanks CNXudiandian
-- **Bash 安全确认**：仅对工作区外的破坏性删除做二次确认，工作区内常规操作不再打扰
+## ⏰ Scheduler Memory Enhancements
 
-## 🐛 其他修复
+- **Follow-up on task results**: Scheduled task results are automatically injected into the receiver's session history — the next turn can ask follow-up questions without re-stating context. Thanks [@huangrichao2020](https://github.com/huangrichao2020)
+- **No long-term memory pollution**: Scheduler-injected pairs are excluded from the daily memory flush so high-frequency tasks don't drown the memory store
+- **Bounded scheduler context**: The scheduler's own session context is automatically capped, so long-running periodic tasks don't accumulate state and slow down replies
 
-- 修复 Deep Dream 在多实例场景下重复触发
-- 修复 DeepSeek 多轮对话中部分历史轮次缺失 `reasoning_content`
+## 🔧 Tools and Safety
 
-## 📦 升级方式
+- **Vision model selection**: `tools.vision.model` config now actually takes effect, with automatic fallback when unconfigured #2792
+- **Bash safety prompt**: The destructive-deletion confirm prompt is now scoped to paths outside the workspace — routine in-workspace operations are no longer interrupted
 
-源码部署可执行 `cow update` 或 `./run.sh update` 一键升级，或手动拉取代码后重启。详见 [更新升级文档](https://docs.cowagent.ai/guide/upgrade)。
+## 🐛 Other Fixes
 
-> ⚠️ 飞书一键创建应用依赖 `lark-oapi>=1.5.5`，`cow update` 会自动拉取；手动部署请确保依赖已更新。
+- Fixed Deep Dream firing duplicate runs in multi-instance setups
+- Fixed missing `reasoning_content` on some history turns in DeepSeek multi-turn conversations
 
-**发布日期**：2026.05.06 | [Full Changelog](https://github.com/zhayujie/CowAgent/compare/2.0.7...2.0.8)
+## 📦 Upgrade
+
+Source-code deployments can run `cow update` or `./run.sh update` for a one-click upgrade, or pull the latest code and restart manually. See [Upgrade Guide](https://docs.cowagent.ai/en/guide/upgrade) for details.
+
+> ⚠️ One-click Feishu app creation requires `lark-oapi>=1.5.5`. `cow update` pulls it automatically; manual deployments must update dependencies.
+
+**Release Date**: 2026.05.05 | [Full Changelog](https://github.com/zhayujie/CowAgent/compare/2.0.7...2.0.8)

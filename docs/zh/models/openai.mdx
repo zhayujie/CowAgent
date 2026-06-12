@@ -1,0 +1,103 @@
+---
+title: OpenAI
+description: OpenAI 模型配置（文本 / 视觉 / 图像 / 语音 / 向量）
+---
+
+OpenAI 是覆盖最完整的厂商，可同时承担文本对话、视觉理解、图像生成、语音识别（ASR）、语音合成（TTS）和向量（Embedding）能力。一份 `open_ai_api_key` 即可让 Agent 用到全部能力。
+
+<Tip>
+  通过 Web 控制台的「模型管理」页面可一站式配置以下全部能力，无需手动改配置文件。
+</Tip>
+
+
+## 文本对话
+
+```json
+{
+  "model": "gpt-5.5",
+  "open_ai_api_key": "YOUR_API_KEY",
+  "open_ai_api_base": "https://api.openai.com/v1"
+}
+```
+
+| 参数 | 说明 |
+| --- | --- |
+| `model` | 与 OpenAI 接口的 [model 参数](https://platform.openai.com/docs/models) 一致，支持 `gpt-5.5`、`gpt-5.4`、`gpt-5.4-mini`、`gpt-5.4-nano`、`gpt-5` 系列、`gpt-4.1`、o 系列等；Agent 模式默认 `gpt-5.5`，追求性价比可改为 `gpt-5.4` |
+| `open_ai_api_key` | 在 [OpenAI 平台](https://platform.openai.com/api-keys) 创建 |
+| `open_ai_api_base` | 可选，修改可接入第三方代理 |
+| `bot_type` | 使用 OpenAI 官方模型时无需填写；通过兼容协议接入厂商模型时需设为 `openai` |
+
+## 图像理解
+
+`gpt-5.5`、`gpt-5.4`、`gpt-4o`、`gpt-4.1` 等 OpenAI 模型均原生支持视觉，配置 `open_ai_api_key` 后 Agent 的 Vision 工具会自动使用主模型识别图像。若主模型不支持视觉或希望显式指定，可在配置文件中配置：
+
+```json
+{
+  "tools": {
+    "vision": {
+      "model": "gpt-5.4-mini"
+    }
+  }
+}
+```
+
+支持的 Vision 模型：`gpt-5.5`、`gpt-5.4`、`gpt-5.4-mini`、`gpt-5.4-nano`、`gpt-5`、`gpt-4.1`、`gpt-4.1-mini`、`gpt-4o`。
+
+## 图像生成
+
+在配置文件中指定图像生成模型，Agent 调用图像生成技能时会自动路由到 OpenAI：
+
+```json
+{
+  "skills": {
+    "image-generation": {
+      "model": "gpt-image-2"
+    }
+  }
+}
+```
+
+支持的图像生成模型：`gpt-image-2`、`gpt-image-1`。
+
+## 语音识别
+
+```json
+{
+  "voice_to_text": "openai",
+  "voice_to_text_model": "gpt-4o-mini-transcribe"
+}
+```
+
+| 参数 | 说明 |
+| --- | --- |
+| `voice_to_text` | 设为 `openai` 启用 OpenAI 语音识别 |
+| `voice_to_text_model` | 可选，默认 `gpt-4o-mini-transcribe`；也可填 `gpt-4o-transcribe`、`whisper-1` |
+
+凭证自动复用 `open_ai_api_key`。
+
+## 语音合成
+
+```json
+{
+  "text_to_voice": "openai",
+  "text_to_voice_model": "tts-1",
+  "tts_voice_id": "alloy"
+}
+```
+
+| 参数 | 说明 |
+| --- | --- |
+| `text_to_voice_model` | `tts-1`、`tts-1-hd`、`gpt-4o-mini-tts` |
+| `tts_voice_id` | 音色：`alloy`、`echo`、`fable`、`onyx`、`nova`、`shimmer`、`ash`、`ballad`、`coral`、`sage`、`verse` |
+
+## 向量
+
+```json
+{
+  "embedding_provider": "openai",
+  "embedding_model": "text-embedding-3-small"
+}
+```
+
+可选模型：`text-embedding-3-small`、`text-embedding-3-large`、`text-embedding-ada-002`。修改 embedding 后需执行 `/memory rebuild-index` 命令重建索引。
+

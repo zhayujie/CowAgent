@@ -1,33 +1,33 @@
 ---
 title: MiniMax
-description: MiniMax 模型配置（文本 / 图像理解 / 图像生成 / 语音合成）
+description: MiniMax model configuration (Text / Image Understanding / Image Generation / Text-to-Speech)
 ---
 
-MiniMax 支持文本对话、图像理解、图像生成与语音合成，一份 `minimax_api_key` 即可启用全部能力。
+MiniMax supports text chat, image understanding, image generation, and text-to-speech. A single `minimax_api_key` enables all capabilities.
 
 <Tip>
-  通过 Web 控制台的「模型管理」页面可一站式配置以下全部能力，无需手动改配置文件。
+  All capabilities below can be configured in one place via the "Model Management" page in the Web Console, with no need to manually edit the configuration file.
 </Tip>
 
-## 文本对话
+## Text Chat
 
 ```json
 {
-  "model": "MiniMax-M2.7",
+  "model": "MiniMax-M3",
   "minimax_api_key": "YOUR_API_KEY"
 }
 ```
 
-| 参数 | 说明 |
+| Parameter | Description |
 | --- | --- |
-| `model` | 可填 `MiniMax-M2.7`、`MiniMax-M2.7-highspeed`、`MiniMax-M2.5`、`MiniMax-M2.1`、`MiniMax-M2.1-lightning`、`MiniMax-M2` 等 |
-| `minimax_api_key` | 在 [MiniMax 控制台](https://platform.minimaxi.com/user-center/basic-information/interface-key) 创建 |
+| `model` | Can be `MiniMax-M3`, `MiniMax-M2.7`, `MiniMax-M2.7-highspeed`, etc. |
+| `minimax_api_key` | Create one in the [MiniMax Console](https://platform.minimaxi.com/user-center/basic-information/interface-key) |
 
-## 图像理解
+## Image Understanding
 
-MiniMax 的 M2.x 系列 chat 模型本身不支持视觉，视觉调用统一路由到 `MiniMax-Text-01`。配置 `minimax_api_key` 后 Agent 的 Vision 工具会自动使用该模型，无需在配置文件中显式指定。
+MiniMax's M2.x chat models do not support vision natively; vision calls are uniformly routed to `MiniMax-Text-01`. Once `minimax_api_key` is configured, the Agent's Vision tool automatically uses this model, with no need to specify it explicitly in the configuration file.
 
-## 图像生成
+## Image Generation
 
 ```json
 {
@@ -39,9 +39,9 @@ MiniMax 的 M2.x 系列 chat 模型本身不支持视觉，视觉调用统一路
 }
 ```
 
-可选模型：`image-01`。
+Available models: `image-01`.
 
-## 语音合成
+## Text-to-Speech (TTS)
 
 ```json
 {
@@ -51,21 +51,21 @@ MiniMax 的 M2.x 系列 chat 模型本身不支持视觉，视觉调用统一路
 }
 ```
 
-| 参数 | 说明 |
+| Parameter | Description |
 | --- | --- |
-| `text_to_voice_model` | `speech-2.8-hd`（情绪渲染、自然听感）、`speech-2.8-turbo`（极速）、`speech-2.6-hd`、`speech-2.6-turbo` |
-| `tts_voice_id` | 音色 ID，支持中文 / 粤语 / 英 / 日 / 韩，共 70+ 种 |
+| `text_to_voice_model` | `speech-2.8-hd` (emotional rendering, natural sound), `speech-2.8-turbo` (ultra-fast), `speech-2.6-hd`, `speech-2.6-turbo` |
+| `tts_voice_id` | Voice ID; supports Chinese / Cantonese / English / Japanese / Korean — 70+ voices in total |
 
-常用音色示例：
+Common voice examples:
 
-| 音色 ID | 说明 |
+| Voice ID | Description |
 | --- | --- |
-| `female-shaonv` | 中文 · 少女（女） |
-| `female-yujie` | 中文 · 御姐（女） |
-| `female-tianmei` | 中文 · 甜美女性（女） |
-| `male-qn-jingying` | 中文 · 精英青年（男） |
-| `male-qn-badao` | 中文 · 霸道青年（男） |
-| `Cantonese_GentleLady` | 粤语 · 温柔女声 |
-| `English_Graceful_Lady` | 英文 · Graceful Lady |
+| `female-shaonv` | Chinese · Young Girl (Female) |
+| `female-yujie` | Chinese · Mature Lady (Female) |
+| `female-tianmei` | Chinese · Sweet Female (Female) |
+| `male-qn-jingying` | Chinese · Elite Youth (Male) |
+| `male-qn-badao` | Chinese · Dominant Youth (Male) |
+| `Cantonese_GentleLady` | Cantonese · Gentle Female Voice |
+| `English_Graceful_Lady` | English · Graceful Lady |
 
-完整音色（中文 / 粤语 / 英 / 日 / 韩共 70+ 种）可参考 [系统音色列表](https://platform.minimaxi.com/docs/faq/system-voice-id)，也可在 Web 控制台的「模型管理 → 语音合成」下拉框中可视化选择。
+For the full voice list (70+ voices across Chinese / Cantonese / English / Japanese / Korean), see the [system voice list](https://platform.minimaxi.com/docs/faq/system-voice-id), or select visually in the Web Console under "Model Management → Text-to-Speech".

@@ -63,6 +63,10 @@ class Bridge(object):
             if model_type and model_type.startswith("deepseek"):
                 self.btype["chat"] = const.DEEPSEEK
 
+            # 小米 MiMo 系列模型，全部以 mimo- 开头
+            if model_type and model_type.startswith("mimo-"):
+                self.btype["chat"] = const.MIMO
+
             if model_type and isinstance(model_type, str):
                 lowered_model_type = model_type.lower()
                 if lowered_model_type == const.QIANFAN or lowered_model_type.startswith("ernie"):

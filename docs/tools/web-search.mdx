@@ -1,26 +1,26 @@
 ---
-title: web_search - 联网搜索
-description: 搜索互联网获取实时信息，支持多个搜索厂商
+title: web_search - Web Search
+description: Search the internet for real-time information, with support for multiple search providers
 ---
 
-搜索互联网获取实时信息、新闻、研究等内容。支持博查、百度千帆、智谱、LinkAI 四个后端，配置任意一家即可使用。
+Search the internet for real-time information, news, research, and more. Supports four backends — Bocha, ERNIE, GLM, and LinkAI — and works once any one of them is configured.
 
 <Tip>
-  推荐通过 [Web 控制台](/channels/web) 的「模型管理 → 搜索」面板可视化配置厂商与策略，无需手动编辑配置文件。
+  It is recommended to configure providers and routing strategy visually from the "Model Management → Search" panel in the [Web console](/channels/web), without manually editing the configuration file.
 </Tip>
 
-## 厂商
+## Providers
 
-| 厂商 | 凭证 | 申请入口 |
+| Provider | Credential | Apply |
 | --- | --- | --- |
-| 博查 Bocha | `tools.web_search.bocha_api_key` | [博查开放平台](https://open.bochaai.com/) |
-| 百度千帆 | 复用 `qianfan_api_key` | [千帆控制台](https://cloud.baidu.com/doc/qianfan/s/2mh4su4uy) |
-| 智谱 Zhipu | 复用 `zhipu_ai_api_key` | [智谱开放平台](https://docs.bigmodel.cn/cn/guide/tools/web-search) |
-| LinkAI | 复用 `linkai_api_key` | [LinkAI 控制台](https://link-ai.tech/console/interface) |
+| Bocha | `tools.web_search.bocha_api_key` | [Bocha Open Platform](https://open.bochaai.com/) |
+| ERNIE | Reuses `qianfan_api_key` | [Qianfan Console](https://cloud.baidu.com/doc/qianfan/s/2mh4su4uy) |
+| Zhipu | Reuses `zhipu_ai_api_key` | [Zhipu Open Platform](https://docs.bigmodel.cn/cn/guide/tools/web-search) |
+| LinkAI | Reuses `linkai_api_key` | [LinkAI Console](https://link-ai.tech/console/interface) |
 
-除博查需要单独的 `bocha_api_key` 外，其他三家直接复用对应模型的 API Key，配好模型即同时获得搜索能力。
+Except for Bocha which requires a dedicated `bocha_api_key`, the other three reuse the corresponding model's API key — configuring the model automatically grants search capability.
 
-## 路由策略
+## Routing Strategy
 
 ```json
 {
@@ -33,19 +33,19 @@ description: 搜索互联网获取实时信息，支持多个搜索厂商
 }
 ```
 
-- `auto`（默认）：由 Agent 在已配置的厂商中智能选择，并可在一次任务中多次调用、切换不同厂商以获取更全面的结果；未指定时按 `bocha → qianfan → zhipu → linkai` 顺序兜底。
-- `fixed`：固定使用 `provider` 指定的厂商；该厂商凭证缺失时自动回落到 auto 顺序。
+- `auto` (default): the Agent intelligently picks among configured providers and may call multiple providers in a single task to gather more comprehensive results; when none is specified, falls back through `bocha → qianfan → zhipu → linkai`.
+- `fixed`: always use the provider specified in `provider`; falls back to the auto order if that provider's credentials are missing.
 
-## 工具参数
+## Tool Parameters
 
-| 参数 | 类型 | 必填 | 说明 |
+| Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
-| `query` | string | 是 | 搜索关键词 |
-| `count` | integer | 否 | 返回结果数量（1–50，默认 10） |
-| `freshness` | string | 否 | 时间范围：`noLimit`（默认）、`oneDay`、`oneWeek`、`oneMonth`、`oneYear`，或日期范围如 `2025-01-01..2025-02-01` |
-| `summary` | boolean | 否 | 是否返回页面摘要（默认 false） |
-| `provider` | string | 否 | `auto` 策略下配置了多个厂商时可见，用于单次切换厂商 |
+| `query` | string | Yes | Search keywords |
+| `count` | integer | No | Number of results (1–50, default 10) |
+| `freshness` | string | No | Time range: `noLimit` (default), `oneDay`, `oneWeek`, `oneMonth`, `oneYear`, or date range like `2025-01-01..2025-02-01` |
+| `summary` | boolean | No | Whether to return page summaries (default false) |
+| `provider` | string | No | Available when multiple providers are configured under the `auto` strategy; used to switch provider for a single call |
 
 <Note>
-  四家凭证均未配置时，该工具不会注册到 Agent。
+  If none of the four credentials are configured, this tool is not registered with the Agent.
 </Note>

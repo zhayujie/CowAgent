@@ -1,0 +1,118 @@
+---
+title: Slack
+description: Integrate CowAgent with a Slack App
+---
+
+> Integrate CowAgent into Slack via a Slack App in **Socket Mode**. Supports direct messages (DM) and channels (triggered by @mention or replying within a thread). Socket Mode uses a persistent WebSocket connection — no public IP or callback URL required, works out of the box.
+
+## 1. Setup
+
+### Step 1: Create a Slack App
+
+1. Open the [Slack API apps page](https://api.slack.com/apps), click **Create New App** → **From scratch**.
+2. Enter an **App Name** (e.g. `CowAgent`), pick the **Workspace** to install into, and create it.
+
+### Step 2: Enable Socket Mode and get the App Token
+
+1. In the left sidebar go to **Settings → Socket Mode** and turn on **Enable Socket Mode**.
+2. You will be prompted to generate an **App-Level Token** with the `connections:write` scope. Save this token starting with `xapp-`.
+
+<Tip>
+  Socket Mode receives events over a WebSocket connection, so you don't need to expose a public callback URL — ideal for local or intranet deployments.
+</Tip>
+
+### Step 3: Configure bot scopes and install
+
+1. Go to **Features → OAuth & Permissions**, click **Add an OAuth Scope** under **Bot Token Scopes**, and add the following scopes one by one:
+
+   ```
+   app_mentions:read
+   channels:history
+   chat:write
+   commands
+   files:read
+   files:write
+   groups:history
+   im:history
+   mpim:history
+   users:read
+   ```
+
+   <Note>
+     `files:read` / `files:write` are used for sending/receiving images and files; omit them if you only need text conversations.
+   </Note>
+
+2. Go to **Features → Event Subscriptions**, turn on **Enable Events**, and under **Subscribe to bot events** click **Add Bot User Event** to add:
+
+   ```
+   app_mention
+   message.im
+   message.channels
+   ```
+
+   <Note>
+     Add `message.groups` if you need to use the bot in private channels.
+   </Note>
+3. Go to **Features → App Home**, enable **Messages Tab** under **Show Tabs**, and check **Allow users to send Slash commands and messages from the messages tab**. Otherwise the DM input box is disabled and users cannot message the bot.
+4. Back in **OAuth & Permissions**, click **Install to Workspace**. After installing, copy the **Bot User OAuth Token** starting with `xoxb-`.
+
+<Tip>
+  If the Slack client still shows "Sending messages to this app has been turned off", make sure you completed the App Home step above, then refresh or restart the Slack client (remove the app from your conversations and reopen it if needed).
+</Tip>
+
+### Step 4: Connect to CowAgent
+
+<Tabs>
+  <Tab title="Web Console (Recommended)">
+    Open the Web Console (default `http://127.0.0.1:9899`), go to **Channels**, click **Add Channel**, choose **Slack**, paste the Bot Token (`xoxb-`) and App Token (`xapp-`), and click connect.
+  </Tab>
+  <Tab title="Config File">
+    Add the following to `config.json` and start Cow:
+
+    ```json
+    {
+      "channel_type": "slack",
+      "slack_bot_token": "xoxb-xxxxxxxxxxxx",
+      "slack_app_token": "xapp-xxxxxxxxxxxx",
+      "slack_group_trigger": "mention_or_reply"
+    }
+    ```
+
+    | Key | Description | Default |
+    | --- | --- | --- |
+    | `slack_bot_token` | Bot User OAuth Token, like `xoxb-...` | - |
+    | `slack_app_token` | App-Level Token (generated after enabling Socket Mode), like `xapp-...` | - |
+    | `slack_group_trigger` | Channel trigger: `mention_or_reply` (@ or reply in thread) / `mention_only` (@ only) / `all` (all messages) | `mention_or_reply` |
+  </Tab>
+</Tabs>
+
+The integration is ready when you see logs like:
+
+```
+[Slack] Bot logged in as user_id=U0XXXXXXX, team=Txxxxxxxx
+[Slack] ✅ Slack bot ready, listening for events
+```
+
+## 2. Capabilities
+
+| Feature | Support |
+| --- | --- |
+| Direct message (DM) | ✅ |
+| Channel (@bot / reply in thread) | ✅ |
+| Text messages | ✅ send / receive |
+| Image messages | ✅ send / receive |
+| File messages | ✅ send / receive (PDF / Word / Excel, etc.) |
+| Thread replies | ✅ replies are posted to the thread of the triggering message |
+
+<Note>
+  Slack organizes conversations into threads. The bot posts replies into the thread of the triggering message, keeping channels tidy.
+</Note>
+
+## 3. Usage
+
+Once connected:
+
+- **Direct message (DM)**: find your App under **Apps** in the Slack sidebar and message it directly.
+- **Channel**: invite the App into a channel (`/invite @your-app`), then trigger it with `@your-app hello`; continue the conversation by replying within the same thread.
+
+When sending an image or file, you can **add a text caption** (description / question) in the attachment input — the bot will answer based on both. Sending an attachment first and then a follow-up question also works; the two messages are merged automatically.

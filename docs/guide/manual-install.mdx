@@ -1,11 +1,11 @@
 ---
-title: 手动安装
-description: 手动部署 CowAgent（源码 / Docker）
+title: Manual Install
+description: Deploy CowAgent manually (source code / Docker)
 ---
 
-## 源码部署
+## Source Code Deployment
 
-### 1. 克隆项目代码
+### 1. Clone the project
 
 ```bash
 git clone https://github.com/zhayujie/CowAgent
@@ -13,167 +13,136 @@ cd CowAgent/
 ```
 
 <Tip>
-  若遇到网络问题可使用国内仓库地址：https://gitee.com/zhayujie/CowAgent
+  For network issues, use the mirror: https://gitee.com/zhayujie/CowAgent
 </Tip>
 
-### 2. 安装依赖
+### 2. Install dependencies
 
-核心依赖（必选）：
+Core dependencies (required):
 
 ```bash
 pip3 install -r requirements.txt
 ```
 
-扩展依赖（可选，建议安装）：
+Optional dependencies (recommended):
 
 ```bash
 pip3 install -r requirements-optional.txt
 ```
 
-> 国内网络可使用镜像源加速：`pip3 install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple`
+### 3. Install Cow CLI
 
-### 3. 安装 Cow CLI
-
-安装命令行工具，用于管理服务和技能：
+Install the command-line tool for managing services and skills:
 
 ```bash
 pip3 install -e .
 ```
 
-安装后即可使用 `cow` 命令：
+Then use the `cow` command:
 
 ```bash
 cow help
 ```
 
 <Note>
-  此步骤为推荐操作。安装后可以使用 `cow start`、`cow stop`、`cow update` 等命令管理服务，也可以使用 `cow skill` 管理技能。如果不安装 CLI，可以使用 `./run.sh` 或 `python3 app.py` 运行。
+  This step is recommended. After installation you can use `cow start`, `cow stop`, `cow update` to manage the service, and `cow skill` to manage skills. Without the CLI, you can use `./run.sh` or `python3 app.py` to run.
 </Note>
 
-### 3.1 安装浏览器工具（可选）
+### 4. Configure
 
-如需使用浏览器工具（控制浏览器访问网页、填写表单等），运行：
-
-```bash
-cow install-browser
-```
-
-该命令会自动安装 Playwright 和 Chromium 浏览器。详细说明参考 [浏览器工具文档](/tools/browser)。
-
-<Note>
-  浏览器工具依赖较重（~300MB），如不需要可跳过，不影响其他功能正常使用。
-</Note>
-
-### 4. 配置
-
-复制配置文件模板并编辑：
+Copy the config template and edit:
 
 ```bash
 cp config-template.json config.json
 ```
 
-在 `config.json` 中填写模型 API Key 和通道类型等配置，详细说明参考各 [模型文档](/models/minimax)。
+Fill in model API keys, channel type, and other settings in `config.json`. See the [model docs](/models/index) for details.
 
-### 5. 运行
+### 5. Run
 
-**使用 Cow CLI 运行（推荐）：**
+**Using Cow CLI (recommended):**
 
 ```bash
 cow start
 ```
 
-**或者本地前台运行：**
+**Or run locally in foreground:**
 
 ```bash
 python3 app.py
 ```
 
-运行后默认启动 Web 控制台，访问 `http://localhost:9899` 开始对话和管理Agent。
+By default, the Web console starts. Access `http://localhost:9899` to chat.
 
-**服务器后台运行（不使用 CLI 时）：**
+**Background run on server (without CLI):**
 
 ```bash
 nohup python3 app.py & tail -f nohup.out
 ```
 
 <Tip>
-  **服务器公网访问 Web 控制台**：默认 `web_host` 仅监听 `127.0.0.1`（本机访问），需公网访问时请在 `config.json` 中将 `web_host` 设为 `0.0.0.0`，同时强烈建议设置 `web_password` 启用鉴权。此外还需在防火墙/安全组中放行 `9899` 端口，建议仅对指定 IP 开放以保证安全。
+  **Deploying on a server?** By default `web_host` only listens on `127.0.0.1` (local access). Set `web_host` to `0.0.0.0` in `config.json` to make the console reachable from outside, and set `web_password` to protect it. Don't forget to open port `9899` in your firewall or security group — ideally restricted to specific IPs.
 </Tip>
 
-## Docker 部署
+## Docker Deployment
 
-使用 Docker 部署无需下载源码和安装依赖。Agent模式下更推荐使用源码部署以获得更多系统访问能力。
+Docker deployment does not require cloning source code or installing dependencies. For Agent mode, source deployment is recommended for broader system access.
 
 <Note>
-  需要安装 [Docker](https://docs.docker.com/engine/install/) 和 docker-compose。
+  Requires [Docker](https://docs.docker.com/engine/install/) and docker-compose.
 </Note>
 
-**1. 下载配置文件**
+**1. Download config**
 
 ```bash
 curl -O https://cdn.link-ai.tech/code/cow/docker-compose.yml
 ```
 
-打开 `docker-compose.yml` 填写所需配置。
+Edit `docker-compose.yml` with your configuration.
 
-**2. 启动容器**
+**2. Start container**
 
 ```bash
 sudo docker compose up -d
 ```
 
-**3. 查看日志**
+**3. View logs**
 
 ```bash
 sudo docker logs -f chatgpt-on-wechat
 ```
 
 <Tip>
-  **Docker 公网访问 Web 控制台**：在 `docker-compose.yml` 中将 `WEB_HOST` 设为 `0.0.0.0`（容器内默认绑定 `127.0.0.1` 无法从宿主机外访问），同时强烈建议设置 `WEB_PASSWORD` 启用鉴权。此外需确保 `9899` 端口正确映射到宿主机，并在防火墙/安全组放行该端口。
+  **Running in Docker?** Set `WEB_HOST` to `0.0.0.0` in `docker-compose.yml` so the console is reachable from outside the container, and set `WEB_PASSWORD` to protect it. Make sure port `9899` is mapped to the host and open in your firewall or security group.
 </Tip>
 
-## 核心配置项
+## Core Configuration
 
-<Tabs>
-  <Tab title="源码部署（config.json）">
-    ```json
-    {
-      "channel_type": "web",
-      "model": "deepseek-v4-flash",
-      "deepseek_api_key": "",
-      "agent": true,
-      "agent_workspace": "~/cow",
-      "agent_max_context_tokens": 40000,
-      "agent_max_context_turns": 30,
-      "agent_max_steps": 15
-    }
-    ```
-  </Tab>
-  <Tab title="Docker 部署（docker-compose.yml）">
-    ```yaml
-    environment:
-      CHANNEL_TYPE: 'web'
-      MODEL: 'deepseek-v4-flash'
-      DEEPSEEK_API_KEY: 'your-api-key'
-      DEEPSEEK_API_BASE: 'https://api.deepseek.com/v1'
-      AGENT: 'True'
-      AGENT_MAX_CONTEXT_TOKENS: 40000
-      AGENT_MAX_CONTEXT_TURNS: 30
-      AGENT_MAX_STEPS: 15
-    ```
-  </Tab>
-</Tabs>
+```json
+{
+  "channel_type": "web",
+  "model": "deepseek-v4-flash",
+  "deepseek_api_key": "",
+  "agent": true,
+  "agent_workspace": "~/cow",
+  "agent_max_context_tokens": 40000,
+  "agent_max_context_turns": 30,
+  "agent_max_steps": 15,
+  "cow_lang": "auto"
+}
+```
 
-| 参数 | 环境变量 | 说明 | 默认值 |
-| --- | --- | --- | --- |
-| `channel_type` | `CHANNEL_TYPE` | 接入渠道类型 | `web` |
-| `model` | `MODEL` | 模型名称 | `deepseek-v4-flash` |
-| `agent` | `AGENT` | 是否启用 Agent 模式 | `true` |
-| `agent_workspace` | - | Agent 工作空间路径 | `~/cow` |
-| `agent_max_context_tokens` | `AGENT_MAX_CONTEXT_TOKENS` | 最大上下文 tokens | `40000` |
-| `agent_max_context_turns` | `AGENT_MAX_CONTEXT_TURNS` | 最大上下文记忆轮次 | `30` |
-| `agent_max_steps` | `AGENT_MAX_STEPS` | 单次任务最大决策步数 | `15` |
+| Parameter | Description | Default |
+| --- | --- | --- |
+| `channel_type` | Channel type | `web` |
+| `model` | Model name | `deepseek-v4-flash` |
+| `agent` | Enable Agent mode | `true` |
+| `agent_workspace` | Agent workspace path | `~/cow` |
+| `agent_max_context_tokens` | Max context tokens | `40000` |
+| `agent_max_context_turns` | Max context turns | `30` |
+| `agent_max_steps` | Max decision steps per task | `15` |
+| `cow_lang` | Language for the UI, command text and system prompts; `auto` to detect, or set `zh` / `en` | `auto` |
 
 <Tip>
-  全部配置项可在项目 [`config.py`](https://github.com/zhayujie/CowAgent/blob/master/config.py) 文件中查看。Docker 部署时，配置项名称需转为大写环境变量格式。
+  Full configuration options are in the project [`config.py`](https://github.com/zhayujie/CowAgent/blob/master/config.py).
 </Tip>

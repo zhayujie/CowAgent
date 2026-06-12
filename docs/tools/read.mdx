@@ -1,24 +1,24 @@
 ---
-title: read - 文件读取
-description: 读取文件内容
+title: read - File Read
+description: Read file content
 ---
 
-读取文件内容。支持文本文件、PDF 文件、图片（返回元数据）等格式。
+Read file content. Supports text files, PDF files, images (returns metadata), and more.
 
-## 依赖
+## Dependencies
 
-无额外依赖，默认可用。
+No extra dependencies, available by default.
 
-## 参数
+## Parameters
 
-| 参数 | 类型 | 必填 | 说明 |
+| Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
-| `path` | string | 是 | 文件路径，相对路径基于工作空间目录 |
-| `offset` | integer | 否 | 起始行号（1-indexed），负值表示从末尾读取 |
-| `limit` | integer | 否 | 读取行数 |
+| `path` | string | Yes | File path, relative paths are based on workspace directory |
+| `offset` | integer | No | Start line number (1-indexed), negative values read from the end |
+| `limit` | integer | No | Number of lines to read |
 
-## 使用场景
+## Use Cases
 
-- 查看配置文件、日志文件
-- 读取代码文件进行分析
-- 检查图片/视频的文件信息
+- View configuration files, log files
+- Read code files for analysis
+- Check image/video file info

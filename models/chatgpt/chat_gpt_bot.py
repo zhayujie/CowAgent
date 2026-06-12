@@ -14,6 +14,7 @@ from models.openai.openai_compat import (
 from models.openai.openai_http_client import OpenAIHTTPClient, OpenAIHTTPError
 import requests
 from common import const
+from common.i18n import t as _t
 from models.bot import Bot
 from models.openai_compatible_bot import OpenAICompatibleBot
 from models.chatgpt.chat_gpt_session import ChatGPTSession
@@ -94,13 +95,13 @@ class ChatGPTBot(Bot, OpenAIImage, OpenAICompatibleBot):
             clear_memory_commands = conf().get("clear_memory_commands", ["#清除记忆"])
             if query in clear_memory_commands:
                 self.sessions.clear_session(session_id)
-                reply = Reply(ReplyType.INFO, "记忆已清除")
+                reply = Reply(ReplyType.INFO, _t("记忆已清除", "Memory cleared"))
             elif query == "#清除所有":
                 self.sessions.clear_all_session()
-                reply = Reply(ReplyType.INFO, "所有人记忆已清除")
+                reply = Reply(ReplyType.INFO, _t("所有人记忆已清除", "All memories cleared"))
             elif query == "#更新配置":
                 load_config()
-                reply = Reply(ReplyType.INFO, "配置已更新")
+                reply = Reply(ReplyType.INFO, _t("配置已更新", "Config updated"))
             if reply:
                 return reply
             session = self.sessions.session_query(query, session_id)
@@ -148,7 +149,7 @@ class ChatGPTBot(Bot, OpenAIImage, OpenAICompatibleBot):
             reply = self.reply_image(context)
             return reply
         else:
-            reply = Reply(ReplyType.ERROR, "Bot不支持处理{}类型的消息".format(context.type))
+            reply = Reply(ReplyType.ERROR, _t("Bot不支持处理{}类型的消息", "Bot does not support message type {}").format(context.type))
             return reply
 
     def reply_image(self, context):
@@ -165,7 +166,7 @@ class ChatGPTBot(Bot, OpenAIImage, OpenAICompatibleBot):
             # Check if file exists
             if not os.path.exists(image_path):
                 logger.error(f"[CHATGPT] Image file not found: {image_path}")
-                return Reply(ReplyType.ERROR, "图片文件不存在")
+                return Reply(ReplyType.ERROR, _t("图片文件不存在", "Image file not found"))
             
             # Read and encode image
             with open(image_path, "rb") as f:
@@ -232,7 +233,7 @@ class ChatGPTBot(Bot, OpenAIImage, OpenAICompatibleBot):
             logger.error(f"[CHATGPT] Image processing error: {e}")
             import traceback
             logger.error(traceback.format_exc())
-            return Reply(ReplyType.ERROR, f"图片识别失败: {str(e)}")
+            return Reply(ReplyType.ERROR, _t("图片识别失败: ", "Image recognition failed: ") + str(e))
 
     def reply_text(self, session: ChatGPTSession, api_key=None, args=None, retry_count=0) -> dict:
         """
@@ -277,25 +278,25 @@ class ChatGPTBot(Bot, OpenAIImage, OpenAICompatibleBot):
     def _handle_reply_error(self, e, session, api_key, args, retry_count):
         """Map exception to user-facing reply with retry/backoff (mirrors SDK behavior)."""
         need_retry = retry_count < 2
-        result = {"completion_tokens": 0, "content": "我现在有点累了，等会再来吧"}
+        result = {"completion_tokens": 0, "content": _t("我现在有点累了，等会再来吧", "I'm a bit tired right now. Please try again later.")}
         if isinstance(e, RateLimitError):
             logger.warn("[CHATGPT] RateLimitError: {}".format(e))
-            result["content"] = "提问太快啦，请休息一下再问我吧"
+            result["content"] = _t("提问太快啦，请休息一下再问我吧", "You're asking too fast. Please take a short break and try again.")
             if need_retry:
                 time.sleep(20)
         elif isinstance(e, Timeout):
             logger.warn("[CHATGPT] Timeout: {}".format(e))
-            result["content"] = "我没有收到你的消息"
+            result["content"] = _t("我没有收到你的消息", "I didn't receive your message")
             if need_retry:
                 time.sleep(5)
         elif isinstance(e, APIConnectionError):
             logger.warn("[CHATGPT] APIConnectionError: {}".format(e))
-            result["content"] = "我连接不到你的网络"
+            result["content"] = _t("我连接不到你的网络", "I can't reach your network")
             if need_retry:
                 time.sleep(5)
         elif isinstance(e, APIError):
             logger.warn("[CHATGPT] Bad Gateway: {}".format(e))
-            result["content"] = "请再问我一次"
+            result["content"] = _t("请再问我一次", "Please ask me again")
             if need_retry:
                 time.sleep(10)
         else:
@@ -358,7 +359,7 @@ class AzureChatGPTBot(ChatGPTBot):
                 status = ""
                 while (status != "succeeded"):
                     if retry_count > 3:
-                        return False, "图片生成失败"
+                        return False, _t("图片生成失败", "Image generation failed")
                     response = requests.get(operation_location, headers=headers)
                     status = response.json()['status']
                     retry_count += 1
@@ -366,7 +367,7 @@ class AzureChatGPTBot(ChatGPTBot):
                 return True, image_url
             except Exception as e:
                 logger.error("create image error: {}".format(e))
-                return False, "图片生成失败"
+                return False, _t("图片生成失败", "Image generation failed")
         elif text_to_image_model == "dall-e-3":
             api_version = conf().get("azure_api_version", "2024-02-15-preview")
             endpoint = conf().get("azure_openai_dalle_api_base","open_ai_api_base")
@@ -389,7 +390,7 @@ class AzureChatGPTBot(ChatGPTBot):
                 else:
                     error_message = "响应中没有图像 URL"
                     logger.error(error_message)
-                    return False, "图片生成失败"
+                    return False, _t("图片生成失败", "Image generation failed")
 
             except requests.exceptions.RequestException as e:
                 # 捕获所有请求相关的异常
@@ -405,9 +406,9 @@ class AzureChatGPTBot(ChatGPTBot):
                 # 捕获所有其他异常
                 error_message = f"生成图像时发生错误: {e}"
                 logger.error(error_message)
-                return False, "图片生成失败"
+                return False, _t("图片生成失败", "Image generation failed")
         else:
-            return False, "图片生成失败，未配置text_to_image参数"
+            return False, _t("图片生成失败，未配置text_to_image参数", "Image generation failed: text_to_image is not configured")
 
 
 class _AzureChatHTTPClient(OpenAIHTTPClient):

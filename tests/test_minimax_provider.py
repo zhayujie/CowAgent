@@ -1,7 +1,7 @@
 # encoding:utf-8
 """
 Unit tests for MiniMax provider additions:
-  - MiniMax-M2.7-highspeed constant in const.py
+  - MiniMax-M3 / M2.7 / M2.7-highspeed constants in const.py
   - Default model update in MinimaxBot
   - MinimaxVoice TTS provider
 """
@@ -16,7 +16,12 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 
 class TestMinimaxConst(unittest.TestCase):
-    """Test that MiniMax-M2.7-highspeed is properly registered in const.py."""
+    """Test that MiniMax M3 / M2.7 constants are properly registered in const.py."""
+
+    def test_m3_constant_defined(self):
+        from common import const
+        self.assertTrue(hasattr(const, "MINIMAX_M3"))
+        self.assertEqual(const.MINIMAX_M3, "MiniMax-M3")
 
     def test_m2_7_highspeed_constant_defined(self):
         from common import const
@@ -26,6 +31,10 @@ class TestMinimaxConst(unittest.TestCase):
     def test_m2_7_constant_defined(self):
         from common import const
         self.assertEqual(const.MINIMAX_M2_7, "MiniMax-M2.7")
+
+    def test_m3_in_model_list(self):
+        from common import const
+        self.assertIn("MiniMax-M3", const.MODEL_LIST)
 
     def test_m2_7_highspeed_in_model_list(self):
         from common import const
@@ -41,9 +50,9 @@ class TestMinimaxConst(unittest.TestCase):
 
 
 class TestMinimaxBotDefaultModel(unittest.TestCase):
-    """Test that MinimaxBot defaults to MiniMax-M2.7."""
+    """Test that MinimaxBot defaults to MiniMax-M3."""
 
-    def test_default_model_is_m2_7(self):
+    def test_default_model_is_m3(self):
         # Patch conf() to return empty config
         mock_conf = MagicMock()
         mock_conf.get = MagicMock(side_effect=lambda key, default=None: default)
@@ -57,18 +66,18 @@ class TestMinimaxBotDefaultModel(unittest.TestCase):
                 with patch("models.minimax.minimax_bot.conf", return_value=mock_conf):
                     bot = minimax_bot.MinimaxBot.__new__(minimax_bot.MinimaxBot)
                     bot.args = {
-                        "model": mock_conf.get("model") or "MiniMax-M2.7",
+                        "model": mock_conf.get("model") or "MiniMax-M3",
                     }
-                    self.assertEqual(bot.args["model"], "MiniMax-M2.7")
+                    self.assertEqual(bot.args["model"], "MiniMax-M3")
 
     def test_default_model_string(self):
-        """Verify the fallback string literal in minimax_bot.py is MiniMax-M2.7."""
+        """Verify the fallback string literal in minimax_bot.py is MiniMax-M3."""
         import ast
         bot_path = os.path.join(os.path.dirname(__file__), "..", "models", "minimax", "minimax_bot.py")
         with open(bot_path) as f:
             source = f.read()
-        # Verify MiniMax-M2.7 is in the source (not M2.1)
-        self.assertIn("MiniMax-M2.7", source)
+        # Verify MiniMax-M3 is in the source (not the older default)
+        self.assertIn("MiniMax-M3", source)
         self.assertNotIn('"MiniMax-M2.1"', source)
 
 

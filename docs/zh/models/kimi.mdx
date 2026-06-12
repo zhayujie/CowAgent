@@ -1,0 +1,41 @@
+---
+title: Kimi
+description: Kimi（Moonshot）模型配置（文本对话 + 图像理解）
+---
+
+Kimi 由 Moonshot 提供，支持文本对话与图像理解，`kimi-k2.x` 系列原生支持视觉。
+
+<Tip>
+  通过 Web 控制台的「模型管理」页面可一站式配置以下全部能力，无需手动改配置文件。
+</Tip>
+
+## 文本对话
+
+```json
+{
+  "model": "kimi-k2.6",
+  "moonshot_api_key": "YOUR_API_KEY"
+}
+```
+
+| 参数 | 说明 |
+| --- | --- |
+| `model` | 可填 `kimi-k2.6`、`kimi-k2.5`、`kimi-k2`、`moonshot-v1-8k`、`moonshot-v1-32k`、`moonshot-v1-128k` |
+| `moonshot_api_key` | 在 [Moonshot 控制台](https://platform.moonshot.cn/console/api-keys) 创建 |
+| `moonshot_base_url` | 可选，默认为 `https://api.moonshot.cn/v1` |
+
+## 图像理解
+
+配置 `moonshot_api_key` 后 Agent 的 Vision 工具会自动使用 `kimi-k2.6` 识别图像，无需额外配置。
+
+如需手动指定 Vision 模型：
+
+```json
+{
+  "tools": {
+    "vision": {
+      "model": "kimi-k2.6"
+    }
+  }
+}
+```

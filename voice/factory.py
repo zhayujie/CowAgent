@@ -66,4 +66,8 @@ def create_voice(voice_type):
         from voice.zhipuai.zhipuai_voice import ZhipuAIVoice
 
         return ZhipuAIVoice()
+    elif voice_type == "mimo":
+        from voice.mimo.mimo_voice import MimoVoice
+
+        return MimoVoice()
     raise RuntimeError
