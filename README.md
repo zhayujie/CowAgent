@@ -115,9 +115,11 @@ CowAgent supports all mainstream LLM providers. **Chat, vision, image generation
 | [ERNIE](https://docs.cowagent.ai/models/qianfan) | ernie-5.1 | ✅ | ✅ | | | | |
 | [MiMo](https://docs.cowagent.ai/models/mimo) | mimo-v2.5 / pro | ✅ | ✅ | | | ✅ | |
 | [LinkAI](https://docs.cowagent.ai/models/linkai) | One key for 100+ models | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| [Atlas Cloud](https://www.atlascloud.ai/?utm_source=github&utm_medium=link&utm_campaign=chatgpt-on-wechat) | deepseek-v4-pro, and more | ✅ | ✅ | | | | |
 | [Custom](https://docs.cowagent.ai/models/custom) | Local models / third-party proxy | ✅ | | | | | |
 
 > For details on each provider, see the [Models overview](https://docs.cowagent.ai/models/index).
+> Set `bot_type` to `atlas` (and fill `atlas_api_key`) to use [Atlas Cloud](https://www.atlascloud.ai/?utm_source=github&utm_medium=link&utm_campaign=chatgpt-on-wechat) — one OpenAI-compatible key for DeepSeek, Qwen, GLM, Kimi, MiniMax and more. Reasoning models such as `deepseek-ai/deepseek-v4-pro` need enough `max_tokens` (>= 512).
 
 <br/>
 

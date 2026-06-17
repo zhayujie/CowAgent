@@ -115,9 +115,11 @@ CowAgent は主要な LLM プロバイダーすべてに対応しています。
 | [ERNIE](https://docs.cowagent.ai/ja/models/qianfan) | ernie-5.1 | ✅ | ✅ | | | | |
 | [MiMo](https://docs.cowagent.ai/ja/models/mimo) | mimo-v2.5-pro / v2.5 | ✅ | ✅ | | | ✅ | |
 | [LinkAI](https://docs.cowagent.ai/ja/models/linkai) | 1 つの Key で 100+ モデルに接続 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| [Atlas Cloud](https://www.atlascloud.ai/?utm_source=github&utm_medium=link&utm_campaign=chatgpt-on-wechat) | deepseek-v4-pro など | ✅ | ✅ | | | | |
 | [カスタム](https://docs.cowagent.ai/ja/models/custom) | ローカルモデル / サードパーティプロキシ | ✅ | | | | | |
 
 > Web コンソールでの設定が推奨されており、ファイルを手動編集する必要はありません。手動設定については各プロバイダーのドキュメントおよび [モデル概要](https://docs.cowagent.ai/ja/models/index) を参照してください。
+> `bot_type` を `atlas` に設定し（`atlas_api_key` を入力）すると、[Atlas Cloud](https://www.atlascloud.ai/?utm_source=github&utm_medium=link&utm_campaign=chatgpt-on-wechat) を利用できます —— OpenAI 互換の単一 Key で DeepSeek、Qwen、GLM、Kimi、MiniMax などに接続。`deepseek-ai/deepseek-v4-pro` などの推論モデルには十分な `max_tokens`（≥ 512）を指定してください。
 
 <br/>
 
