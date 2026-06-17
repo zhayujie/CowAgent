@@ -15,6 +15,14 @@
   [English] | [<a href="docs/zh/README.md">中文</a>] | [<a href="docs/ja/README.md">日本語</a>]
 </p>
 
+<p align="center">
+  <a href="https://www.atlascloud.ai/?utm_source=github&utm_medium=link&utm_campaign=chatgpt-on-wechat">
+    <img src="docs/images/atlas-cloud-logo.png" alt="Atlas Cloud" width="140">
+  </a>
+</p>
+
+> 🎁 Sponsored by **[Atlas Cloud](https://www.atlascloud.ai/?utm_source=github&utm_medium=link&utm_campaign=chatgpt-on-wechat)** — a full-modal, OpenAI-compatible AI inference platform. Plug it into CowAgent as a drop-in `atlas` provider to reach DeepSeek, Qwen, GLM, Kimi, MiniMax and more through a single API. Budget-friendly [coding plan](https://www.atlascloud.ai/console/coding-plan) available.
+
 **CowAgent** is an open-source super AI assistant that proactively plans tasks, controls your computer and external services, creates and runs Skills, builds a personal knowledge base and long-term memory, and grows alongside you through self-evolution — a reference implementation of Agent Harness engineering.
 
 CowAgent is lightweight, easy to deploy, and built to extend. Plug in any major LLM provider and run it 24/7 on a personal computer or server, across the web and all major IM platforms.
@@ -115,9 +123,11 @@ CowAgent supports all mainstream LLM providers. **Chat, vision, image generation
 | [ERNIE](https://docs.cowagent.ai/models/qianfan) | ernie-5.1 | ✅ | ✅ | | | | |
 | [MiMo](https://docs.cowagent.ai/models/mimo) | mimo-v2.5 / pro | ✅ | ✅ | | | ✅ | |
 | [LinkAI](https://docs.cowagent.ai/models/linkai) | One key for 100+ models | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| [Atlas Cloud](https://www.atlascloud.ai/?utm_source=github&utm_medium=link&utm_campaign=chatgpt-on-wechat) | deepseek-v4-pro, and more | ✅ | ✅ | | | | |
 | [Custom](https://docs.cowagent.ai/models/custom) | Local models / third-party proxy | ✅ | | | | | |
 
 > For details on each provider, see the [Models overview](https://docs.cowagent.ai/models/index).
+> Set `bot_type` to `atlas` (and fill `atlas_api_key`) to use [Atlas Cloud](https://www.atlascloud.ai/?utm_source=github&utm_medium=link&utm_campaign=chatgpt-on-wechat) — one OpenAI-compatible key for DeepSeek, Qwen, GLM, Kimi, MiniMax and more. Reasoning models such as `deepseek-ai/deepseek-v4-pro` need enough `max_tokens` (>= 512).
 
 <br/>
 

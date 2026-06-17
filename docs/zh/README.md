@@ -15,6 +15,14 @@
   [<a href="../../README.md">English</a>] | [中文] | [<a href="../ja/README.md">日本語</a>]
 </p>
 
+<p align="center">
+  <a href="https://www.atlascloud.ai/?utm_source=github&utm_medium=link&utm_campaign=chatgpt-on-wechat">
+    <img src="../images/atlas-cloud-logo.png" alt="Atlas Cloud" width="140">
+  </a>
+</p>
+
+> 🎁 由 **[Atlas Cloud](https://www.atlascloud.ai/?utm_source=github&utm_medium=link&utm_campaign=chatgpt-on-wechat)** 赞助支持 —— 一个全模态、OpenAI 兼容的 AI 推理平台。将它作为 `atlas` 厂商接入 CowAgent，即可用同一套 API 调用 DeepSeek、Qwen、GLM、Kimi、MiniMax 等模型。提供高性价比的 [coding plan](https://www.atlascloud.ai/console/coding-plan)。
+
 **CowAgent** 是一个开源的超级 AI 助理，能够主动思考和规划任务、操作计算机和外部资源、创造和执行 Skills、构建知识库与长期记忆、通过自主进化与你一同成长，是 Agent Harness 工程的最佳实践之一。
 
 CowAgent 轻量、易部署、可扩展，自由接入主流大模型，覆盖微信、飞书、钉钉、企微、QQ、Telegram、Slack、网页等多渠道，7×24 运行于个人电脑或服务器中。
@@ -115,9 +123,11 @@ CowAgent 支持国内外主流厂商的大语言模型。**文本对话、图像
 | [百度ERNIE](https://docs.cowagent.ai/zh/models/qianfan) | ernie-5.1 | ✅ | ✅ | | | | |
 | [小米 MiMo](https://docs.cowagent.ai/zh/models/mimo) | mimo-v2.5-pro / v2.5 | ✅ | ✅ | | | ✅ | |
 | [LinkAI](https://docs.cowagent.ai/zh/models/linkai) | 一个 Key 接入 100+ 模型 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| [Atlas Cloud](https://www.atlascloud.ai/?utm_source=github&utm_medium=link&utm_campaign=chatgpt-on-wechat) | deepseek-v4-pro 等 | ✅ | ✅ | | | | |
 | [自定义](https://docs.cowagent.ai/zh/models/custom) | 本地模型 / 三方代理 | ✅ | | | | | |
 
 > 推荐通过 Web 控制台在线配置，无需手动编辑文件。手动配置请参考各厂商文档，详见 [模型概览](https://docs.cowagent.ai/zh/models)。
+> 将 `bot_type` 设为 `atlas`（并填写 `atlas_api_key`）即可使用 [Atlas Cloud](https://www.atlascloud.ai/?utm_source=github&utm_medium=link&utm_campaign=chatgpt-on-wechat) —— 一套 OpenAI 兼容的 Key 接入 DeepSeek、Qwen、GLM、Kimi、MiniMax 等模型。`deepseek-ai/deepseek-v4-pro` 等推理模型需给足 `max_tokens`（≥ 512）。
 
 <br/>
 

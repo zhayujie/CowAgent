@@ -243,6 +243,9 @@ available_setting = {
     "Minimax_base_url": "",
     "deepseek_api_key": "",
     "deepseek_api_base": "https://api.deepseek.com/v1",
+    # Atlas Cloud — OpenAI-compatible multi-model platform (set bot_type to "atlas")
+    "atlas_api_key": "",
+    "atlas_api_base": "https://api.atlascloud.ai/v1",
     # Xiaomi MiMo LLM
     "mimo_api_key": "",
     "mimo_api_base": "https://api.xiaomimimo.com/v1",
