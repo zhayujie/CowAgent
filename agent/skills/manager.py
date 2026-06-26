@@ -88,6 +88,7 @@ class SkillManager:
         - Existing skills: preserve their persisted enabled state.
         - Skills that no longer exist on disk are removed.
         - name/description/source are always refreshed from the latest scan.
+        - Purification data (usage_stats, version_history) is preserved across refreshes.
         """
         saved = self._load_skills_config()
         merged: Dict[str, dict] = {}
@@ -112,6 +113,13 @@ class SkillManager:
             display_name = prev.get("display_name")
             if display_name:
                 entry_dict["display_name"] = display_name
+            
+            # Preserve purification data across refreshes
+            if "usage_stats" in prev:
+                entry_dict["usage_stats"] = prev["usage_stats"]
+            if "version_history" in prev:
+                entry_dict["version_history"] = prev["version_history"]
+            
             merged[name] = entry_dict
 
         self.skills_config = merged
@@ -359,3 +367,111 @@ class SkillManager:
             if entry.skill.name == skill_key:
                 return entry
         return None
+
+    # ------------------------------------------------------------------
+    # Purification: Usage Tracking + Auto-Cleanup
+    # ------------------------------------------------------------------
+    def record_usage(self, skill_name: str):
+        """Record a skill usage event (called when skill is invoked)."""
+        from agent.skills.purification import record_skill_usage
+        self.skills_config = record_skill_usage(self.skills_config, skill_name)
+        self._save_skills_config()
+
+    def cleanup_unused_skills(self, days_threshold: int = 90) -> int:
+        """Auto-disable skills unused for N days. Returns count of disabled skills."""
+        from agent.skills.purification import find_unused_skills
+        unused = find_unused_skills(self.skills_config, days_threshold)
+        disabled_count = 0
+        for name, stats in unused:
+            if self.is_skill_enabled(name):
+                self.set_skill_enabled(name, enabled=False)
+                disabled_count += 1
+                logger.info(
+                    f"[SkillManager] Auto-disabled unused skill '{name}' "
+                    f"(last used: {stats.get('last_used', 'unknown')})"
+                )
+        return disabled_count
+
+    # ------------------------------------------------------------------
+    # Purification: Version History + Regression
+    # ------------------------------------------------------------------
+    def record_version(
+        self,
+        skill_name: str,
+        backup_id: Optional[str],
+        change_summary: str,
+    ):
+        """Record a new version for a skill after evolution modifies it."""
+        from agent.skills.purification import record_skill_version
+        entry = self.get_skill(skill_name)
+        content = entry.skill.content if entry else ""
+        self.skills_config = record_skill_version(
+            self.skills_config, skill_name, backup_id, change_summary, content
+        )
+        self._save_skills_config()
+
+    def mark_regression(self, skill_name: str) -> int:
+        """Mark a regression on the latest version. Returns current regression count."""
+        from agent.skills.purification import mark_skill_regression
+        self.skills_config, current_count = mark_skill_regression(
+            self.skills_config, skill_name
+        )
+        self._save_skills_config()
+        return current_count
+
+    def auto_rollback_if_needed(self, skill_name: str, workspace_dir: str) -> bool:
+        """Perform rollback for a skill that has reached the regression threshold.
+        
+        Note: This method should be called AFTER mark_regression has determined
+        that the threshold is reached. It does NOT call mark_regression again.
+        
+        Returns True if rolled back successfully.
+        """
+        # Get the backup_id from the latest version history
+        skill_config = self.skills_config.get(skill_name, {})
+        version_history = skill_config.get("version_history", [])
+        
+        if not version_history:
+            logger.warning(f"[SkillManager] No version history for '{skill_name}', cannot rollback")
+            return False
+        
+        backup_id = version_history[-1].get("evolution_backup_id")
+        if not backup_id:
+            logger.warning(f"[SkillManager] No backup_id in version history for '{skill_name}'")
+            return False
+        
+        try:
+            from agent.evolution.backup import restore_backup
+            from pathlib import Path
+            if restore_backup(Path(workspace_dir), backup_id):
+                logger.warning(
+                    f"[SkillManager] Auto-rolled back skill '{skill_name}' "
+                    f"to backup {backup_id} due to repeated regressions"
+                )
+                # Remove the regressed version from history
+                if version_history and version_history[-1].get("evolution_backup_id") == backup_id:
+                    version_history.pop()
+                    self._save_skills_config()
+                return True
+        except Exception as e:
+            logger.error(f"[SkillManager] Auto-rollback failed for '{skill_name}': {e}")
+        return False
+
+    # ------------------------------------------------------------------
+    # Purification: Conflict Detection
+    # ------------------------------------------------------------------
+    def detect_conflicts(self, new_skill_name: str, new_description: str) -> list:
+        """Detect semantic conflicts between a new skill and existing ones."""
+        from agent.skills.purification import detect_skill_conflicts
+        return detect_skill_conflicts(
+            self.skills_config, new_skill_name, new_description, self.skills
+        )
+
+    # ------------------------------------------------------------------
+    # Purification: Quality Reporting
+    # ------------------------------------------------------------------
+    def get_quality_report(self, workspace_dir: str, days: int = 30) -> dict:
+        """Generate evolution quality report for the past N days."""
+        from agent.skills.purification import generate_quality_report
+        from pathlib import Path
+        return generate_quality_report(Path(workspace_dir), days)
