@@ -264,6 +264,13 @@ available_setting = {
     "self_evolution_enabled": False,        # switch to enable/disable self-evolution
     "self_evolution_idle_minutes": 10,      # idle time before a session is reviewed
     "self_evolution_min_turns": 6,          # min user turns (or context pressure) to trigger
+    "purification_enabled": True,           # switch to enable/disable skill purification
+    "purification_unused_days": 90,         # days threshold for auto-disabling unused skills
+    "purification_regression_threshold": 5, # regressions needed before auto-rollback
+    "purification_llm_rate_limit": 10,      # max LLM calls per minute for regression detection
+    "purification_cleanup_interval_hours": 24,  # hours between cleanup runs
+    "purification_tracking_retention_days": 30, # days to keep tracking files
+    "purification_backups_to_keep": 10,     # number of backups to retain
     "skill": {},  # Per-skill runtime config; nested keys flatten to SKILL_<NAME>_<KEY> env vars at startup
     "mcp_servers": [],  # MCP server list; each entry supports type "stdio" (local process) or "sse" (remote URL)
 }
@@ -297,7 +304,11 @@ class Config(dict):
         try:
             return self[key]
         except KeyError as e:
-            return default
+            # Key is in available_setting but not in config.json, return the default from available_setting
+            # unless caller provided an explicit default
+            if default is not None:
+                return default
+            return available_setting[key]
         except Exception as e:
             raise e
 
