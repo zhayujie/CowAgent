@@ -115,9 +115,11 @@ CowAgent 支持国内外主流厂商的大语言模型。**文本对话、图像
 | [百度ERNIE](https://docs.cowagent.ai/zh/models/qianfan) | ernie-5.1 | ✅ | ✅ | | | | |
 | [小米 MiMo](https://docs.cowagent.ai/zh/models/mimo) | mimo-v2.5-pro / v2.5 | ✅ | ✅ | | | ✅ | |
 | [LinkAI](https://docs.cowagent.ai/zh/models/linkai) | 一个 Key 接入 100+ 模型 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| [Atlas Cloud](https://www.atlascloud.ai/?utm_source=github&utm_medium=link&utm_campaign=chatgpt-on-wechat) | deepseek-v4-pro 等 | ✅ | ✅ | | | | |
 | [自定义](https://docs.cowagent.ai/zh/models/custom) | 本地模型 / 三方代理 | ✅ | | | | | |
 
 > 推荐通过 Web 控制台在线配置，无需手动编辑文件。手动配置请参考各厂商文档，详见 [模型概览](https://docs.cowagent.ai/zh/models)。
+> 将 `bot_type` 设为 `atlas`（并填写 `atlas_api_key`）即可使用 [Atlas Cloud](https://www.atlascloud.ai/?utm_source=github&utm_medium=link&utm_campaign=chatgpt-on-wechat) —— 一套 OpenAI 兼容的 Key 接入 DeepSeek、Qwen、GLM、Kimi、MiniMax 等模型。`deepseek-ai/deepseek-v4-pro` 等推理模型需给足 `max_tokens`（≥ 512）。
 
 <br/>
 

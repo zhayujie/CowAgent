@@ -81,4 +81,9 @@ def create_bot(bot_type):
         from models.doubao.doubao_bot import DoubaoBot
         return DoubaoBot()
 
+    elif bot_type == const.ATLAS:
+        # Atlas Cloud — OpenAI-compatible multi-model inference platform
+        from models.atlas.atlas_bot import AtlasBot
+        return AtlasBot()
+
     raise RuntimeError

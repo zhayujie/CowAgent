@@ -18,6 +18,7 @@ DEEPSEEK = "deepseek"
 MIMO = "mimo"  # Xiaomi MiMo
 CUSTOM = "custom"  # custom OpenAI-compatible API, bot_type won't auto-switch on model change
 MODELSCOPE = "modelscope"
+ATLAS = "atlas"  # Atlas Cloud — OpenAI-compatible multi-model inference platform
 
 # Model list
 # Claude (Anthropic)
@@ -161,6 +162,15 @@ DOUBAO_SEED_2_PRO = "doubao-seed-2-0-pro-260215"
 DOUBAO_SEED_2_LITE = "doubao-seed-2-0-lite-260215"
 DOUBAO_SEED_2_MINI = "doubao-seed-2-0-mini-260215"
 
+# Atlas Cloud (OpenAI-compatible). Model ids keep the vendor prefix used by the
+# Atlas API, e.g. "deepseek-ai/deepseek-v4-pro". Full list: https://www.atlascloud.ai/models
+ATLAS_DEEPSEEK_V4_PRO = "deepseek-ai/deepseek-v4-pro"      # Atlas default — reasoning + tool calls
+ATLAS_DEEPSEEK_V4_FLASH = "deepseek-ai/deepseek-v4-flash"  # faster / cheaper reasoning variant
+ATLAS_QWEN3_MAX = "qwen/qwen3-max-2026-01-23"
+ATLAS_GLM_5 = "zai-org/glm-5"
+ATLAS_KIMI_K2_6 = "moonshotai/kimi-k2.6"
+ATLAS_MINIMAX_M2_5 = "minimaxai/minimax-m2.5"
+
 # ModelScope
 QWEN3_235B_A22B_INSTRUCT_2507 = "Qwen/Qwen3-235B-A22B-Instruct-2507"
 QWEN3_5_27B = "Qwen/Qwen3.5-27B"
@@ -235,6 +245,10 @@ MODEL_LIST = [
 
               # ModelScope
               MODELSCOPE,
+
+              # Atlas Cloud (OpenAI-compatible)
+              ATLAS_DEEPSEEK_V4_PRO, ATLAS_DEEPSEEK_V4_FLASH, ATLAS_QWEN3_MAX, ATLAS_GLM_5,
+              ATLAS_KIMI_K2_6, ATLAS_MINIMAX_M2_5,
 
               # LinkAI
               LINKAI_35, LINKAI_4_TURBO, LINKAI_4o,
