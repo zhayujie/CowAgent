@@ -348,6 +348,93 @@ def _sync_builtin_skills():
         logger.warning(f"[App] Builtin skills sync failed: {e}")
 
 
+def _start_purification_scheduler():
+    """Start a background thread that periodically runs skill purification.
+    
+    Runs every 24 hours (configurable) to:
+    1. Auto-disable skills unused for 90+ days
+    2. Clean up old tracking files and backups
+    3. Log purification results
+    
+    This is a lightweight daemon thread — failures are isolated and never
+    disrupt the main application.
+    """
+    def _purification_loop():
+        import time as _time
+        from pathlib import Path
+        
+        # Initial delay: wait 5 minutes after startup before first run
+        _time.sleep(300)
+        
+        while True:
+            try:
+                from bridge.bridge import Bridge
+                bridge = Bridge()
+                agent_bridge = bridge.get_agent_bridge()
+                
+                if not agent_bridge or not hasattr(agent_bridge, 'default_agent'):
+                    # Sleep for configured interval (default 24h)
+                    interval_hours = conf().get("purification_cleanup_interval_hours", 24)
+                    _time.sleep(interval_hours * 3600)
+                    continue
+                
+                agent = agent_bridge.default_agent
+                if not agent or not hasattr(agent, 'skill_manager') or not agent.skill_manager:
+                    interval_hours = conf().get("purification_cleanup_interval_hours", 24)
+                    _time.sleep(interval_hours * 3600)
+                    continue
+                
+                # 1. Run cleanup: disable skills unused for 90+ days
+                days_threshold = conf().get("purification_unused_days", 90)
+                disabled = agent.skill_manager.cleanup_unused_skills(days_threshold)
+                if disabled > 0:
+                    logger.info(
+                        f"[Purification] Auto-disabled {disabled} unused skill(s) "
+                        f"(threshold: {days_threshold} days)"
+                    )
+                
+                # 2. Run file cleanup: old tracking files and backups
+                workspace_dir = getattr(agent, 'workspace_dir', None)
+                if workspace_dir:
+                    from agent.skills.purification import run_periodic_cleanup
+                    # Pass skills_config to protect referenced backups
+                    skills_config = agent.skill_manager.get_skills_config() if hasattr(agent.skill_manager, 'get_skills_config') else None
+                    cleanup_stats = run_periodic_cleanup(Path(workspace_dir), skills_config=skills_config)
+                    if cleanup_stats.get("tracking_files_deleted", 0) > 0 or cleanup_stats.get("backups_deleted", 0) > 0:
+                        logger.info(
+                            f"[Purification] File cleanup: "
+                            f"{cleanup_stats.get('tracking_files_deleted', 0)} tracking files, "
+                            f"{cleanup_stats.get('backups_deleted', 0)} backups deleted"
+                        )
+                
+                # 3. Log quality report if available
+                if workspace_dir:
+                    report = agent.skill_manager.get_quality_report(workspace_dir, days=30)
+                    if report.get("total_evolutions", 0) > 0:
+                        logger.info(
+                            f"[Purification] Quality report (30d): "
+                            f"evolutions={report['total_evolutions']}, "
+                            f"success_rate={report['success_rate']:.1%}, "
+                            f"patches={report['skill_patches']}, "
+                            f"creates={report['skill_creates']}, "
+                            f"undos={report['undo_count']}, "
+                            f"retries={report['retry_count']}"
+                        )
+                
+            except Exception as e:
+                logger.debug(f"[Purification] Scheduled run failed (non-fatal): {e}")
+            
+            # Sleep for configured interval (default 24h)
+            interval_hours = conf().get("purification_cleanup_interval_hours", 24)
+            _time.sleep(interval_hours * 3600)
+    
+    t = threading.Thread(
+        target=_purification_loop, daemon=True, name="purification-scheduler"
+    )
+    t.start()
+    logger.info("[Purification] Background scheduler started (cleanup + quality monitoring)")
+
+
 def run():
     global _channel_mgr
     try:
@@ -389,6 +476,10 @@ def run():
             threading.Thread(target=_warmup_scheduler, daemon=True).start()
         else:
             _warmup_scheduler()
+
+        # Start skill purification scheduler (runs every 24h)
+        if conf().get("purification_enabled", True):
+            _start_purification_scheduler()
 
         logger.info(f"[App] Starting channels: {channel_names}")
 

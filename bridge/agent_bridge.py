@@ -533,6 +533,83 @@ class AgentBridge:
             except Exception:
                 pass
 
+            # Purification: Detect regression signals asynchronously (after response)
+            # This avoids blocking user requests with LLM calls
+            if hasattr(agent, 'skill_manager') and agent.skill_manager:
+                import threading
+                
+                # Capture variables before starting async thread to avoid closure issues
+                # The main thread may modify context/query after the async thread starts
+                _query = query
+                _agent = agent
+                _channel_type = context.get("channel_type") if context else None
+                _receiver = context.get("receiver") if context else None
+                
+                def _async_regression_detection():
+                    try:
+                        from agent.skills.purification import detect_regression_signal
+                        # Get recent conversation context for LLM judgment
+                        context_messages = None
+                        if hasattr(_agent, 'messages'):
+                            with _agent.messages_lock:
+                                context_messages = list(_agent.messages[-6:])  # last 3 turns
+                        
+                        if detect_regression_signal(_query, context_messages):
+                            # Check if a skill was recently used in this session
+                            last_skill = getattr(_agent, '_last_used_skill', None)
+                            if last_skill:
+                                logger.info(f"[Purification] Regression signal detected for skill '{last_skill}'")
+                                # Mark regression (but don't auto-rollback yet)
+                                regression_count = _agent.skill_manager.mark_regression(last_skill)
+                                
+                                # Only rollback after configured threshold (default 5)
+                                from config import conf as _conf
+                                rollback_threshold = _conf().get("purification_regression_threshold", 5)
+                                if regression_count >= rollback_threshold:
+                                    workspace_dir = getattr(_agent, 'workspace_dir', None)
+                                    if workspace_dir:
+                                        # Get the backup_id from version history before rollback
+                                        # Use get_skills_config() for a snapshot copy to avoid
+                                        # race conditions with main thread's _save_skills_config()
+                                        skills_snapshot = _agent.skill_manager.get_skills_config()
+                                        skill_config = skills_snapshot.get(last_skill, {})
+                                        version_history = skill_config.get("version_history", [])
+                                        backup_id = None
+                                        if version_history:
+                                            backup_id = version_history[-1].get("evolution_backup_id")
+                                        
+                                        rolled_back = _agent.skill_manager.auto_rollback_if_needed(
+                                            last_skill, workspace_dir
+                                        )
+                                        if rolled_back:
+                                            logger.warning(
+                                                f"[Purification] Auto-rolled back skill '{last_skill}' "
+                                                f"due to {regression_count} repeated regressions"
+                                            )
+                                            # Update quality tracking with the correct backup_id
+                                            if backup_id:
+                                                from agent.skills.purification import update_evolution_feedback
+                                                from pathlib import Path
+                                                update_evolution_feedback(
+                                                    Path(workspace_dir),
+                                                    backup_id=backup_id,
+                                                    feedback_type="retry"
+                                                )
+                                            
+                                            # Notify user about the rollback
+                                            try:
+                                                if _channel_type and _receiver:
+                                                    self._notify_skill_rollback(
+                                                        _channel_type, _receiver, last_skill, regression_count
+                                                    )
+                                            except Exception as notify_err:
+                                                logger.debug(f"[Purification] Failed to notify user: {notify_err}")
+                    except Exception as e:
+                        logger.debug(f"[Purification] Regression detection failed (non-fatal): {e}")
+                
+                # Run asynchronously to avoid blocking user response
+                threading.Thread(target=_async_regression_detection, daemon=True).start()
+
             try:
                 # Use agent's run_stream method with event handler
                 response = agent.run_stream(
@@ -1167,3 +1244,56 @@ class AgentBridge:
                 logger.info("[AgentBridge] web_search tool removed (API key no longer available)")
         except Exception as e:
             logger.debug(f"[AgentBridge] Failed to refresh conditional tools: {e}")
+
+    def _notify_skill_rollback(self, channel_type: str, receiver: str, skill_name: str, regression_count: int):
+        """
+        Notify user about automatic skill rollback via the channel system.
+        
+        Args:
+            channel_type: The channel type (web, feishu, dingtalk, etc.)
+            receiver: The receiver ID (user ID or group ID)
+            skill_name: Name of the skill that was rolled back
+            regression_count: Number of regressions that triggered the rollback
+        """
+        try:
+            notification = (
+                f"⚠️ 技能自动回滚通知\n\n"
+                f"技能 '{skill_name}' 已被自动回滚到上一个版本。\n"
+                f"原因：检测到 {regression_count} 次连续退化信号。\n\n"
+                f"如果您认为这是误判，请反馈给我们以改进检测算法。"
+            )
+            
+            # Use the same pattern as evolution._notify_user
+            from bridge.context import Context, ContextType
+            from bridge.reply import Reply, ReplyType
+            from channel.channel_factory import create_channel
+            
+            context = Context(ContextType.TEXT, notification)
+            context["receiver"] = receiver
+            context["isgroup"] = False
+            context["session_id"] = receiver
+            
+            # Channels that reply to an original message need msg=None for a fresh push
+            if channel_type in ("feishu", "dingtalk", "wecom_bot", "qq"):
+                context["msg"] = None
+            if channel_type == "feishu":
+                context["receive_id_type"] = "open_id"
+            
+            channel = create_channel(channel_type)
+            if not channel:
+                logger.warning(f"[Purification] Failed to create channel: {channel_type}")
+                return
+            
+            # Web is request-response: a background push needs a synthetic request_id
+            # plus a request->session mapping so the channel can route the message
+            if channel_type == "web":
+                import uuid
+                request_id = f"purification_{uuid.uuid4().hex[:8]}"
+                context["request_id"] = request_id
+                if hasattr(channel, "request_to_session"):
+                    channel.request_to_session[request_id] = receiver
+            
+            channel.send(Reply(ReplyType.TEXT, notification), context)
+            logger.info(f"[Purification] Notified user about skill rollback: {skill_name}")
+        except Exception as e:
+            logger.warning(f"[Purification] Failed to send rollback notification: {e}")
