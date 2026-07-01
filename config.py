@@ -307,6 +307,12 @@ class Config(dict):
             self.user_datas[user] = {}
         return self.user_datas[user]
 
+    # SECURITY NOTE: pickle.load() can execute arbitrary code during
+    # deserialization. This is safe as long as user_datas.pkl is trusted
+    # (local app data directory, written only by this process). For a future
+    # hardening pass, consider migrating to JSON (json.load/json.dump) if the
+    # data structures are JSON-serializable, or adding an HMAC signature to
+    # detect tampering of the pickle file.
     def load_user_datas(self):
         try:
             with open(os.path.join(get_appdata_dir(), "user_datas.pkl"), "rb") as f:
@@ -320,6 +326,8 @@ class Config(dict):
 
     def save_user_datas(self):
         try:
+            # SECURITY: pickle.dump output should only be loaded by this same
+            # process. See note on load_user_datas() above.
             with open(os.path.join(get_appdata_dir(), "user_datas.pkl"), "wb") as f:
                 pickle.dump(self.user_datas, f)
                 logger.info("[Config] User datas saved.")
@@ -415,11 +423,16 @@ def load_config():
         if name in available_setting:
             logger.info("[INIT] override config by environ args: {}={}".format(name, value))
             try:
-                config[name] = eval(value)
-            except Exception:
-                if value == "false":
+                # SECURITY: Use ast.literal_eval instead of eval().
+                # ast.literal_eval only parses Python literals (strings, numbers,
+                # tuples, lists, dicts, booleans, None) and CANNOT execute
+                # arbitrary code, preventing environment-variable injection.
+                import ast
+                config[name] = ast.literal_eval(value)
+            except (ValueError, SyntaxError):
+                if value.lower() == "false":
                     config[name] = False
-                elif value == "true":
+                elif value.lower() == "true":
                     config[name] = True
                 else:
                     config[name] = value
