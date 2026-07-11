@@ -207,7 +207,7 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
                 auto-paginates above this.
         """
         self.model = model
-        self.api_key = api_key
+        self._api_key = api_key
         self.api_base = api_base or "https://api.openai.com/v1"
         self.extra_headers = extra_headers or {}
         self.supports_dim_param = supports_dim_param
@@ -216,7 +216,7 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         self.query_instruction = query_instruction or ""
         self.max_batch_size = max(1, int(max_batch_size or 1))
 
-        if not self.api_key or self.api_key in ["", "YOUR API KEY", "YOUR_API_KEY"]:
+        if not self._api_key or self._api_key in ["", "YOUR API KEY", "YOUR_API_KEY"]:
             raise ValueError("Embedding API key is not configured")
 
         if dimensions is not None and dimensions > 0:
@@ -232,7 +232,7 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         url = f"{self.api_base}/embeddings"
         headers = {
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {self.api_key}",
+            "Authorization": f"Bearer {self._api_key}",
             **self.extra_headers,
         }
         data = {
@@ -331,10 +331,10 @@ class DoubaoEmbeddingProvider(EmbeddingProvider):
         dimensions: Optional[int] = None,
     ):
         self.model = model
-        self.api_key = api_key
+        self._api_key = api_key
         self.api_base = api_base or "https://ark.cn-beijing.volces.com/api/v3"
         self.extra_headers = extra_headers or {}
-        if not self.api_key or self.api_key in ["", "YOUR API KEY", "YOUR_API_KEY"]:
+        if not self._api_key or self._api_key in ["", "YOUR API KEY", "YOUR_API_KEY"]:
             raise ValueError("Doubao embedding API key (ark_api_key) is not configured")
 
         if dimensions in (1024, 2048):
@@ -355,7 +355,7 @@ class DoubaoEmbeddingProvider(EmbeddingProvider):
         url = f"{self.api_base}/embeddings/multimodal"
         headers = {
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {self.api_key}",
+            "Authorization": f"Bearer {self._api_key}",
             **self.extra_headers,
         }
         payload = {
