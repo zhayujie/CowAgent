@@ -1161,6 +1161,11 @@ class FeiShuChanel(ChatChannel):
         # Check if it's a local file path (file:// protocol)
         if img_url.startswith("file://"):
             local_path = img_url[7:]  # Remove "file://" prefix
+            local_path = os.path.realpath(local_path)
+            base_dir = os.path.realpath(os.getcwd())
+            if not local_path.startswith(base_dir + os.sep):
+                logger.error(f"[FeiShu] path traversal attempt blocked: {local_path}")
+                return None
             logger.info(f"[FeiShu] uploading local file: {local_path}")
 
             if not os.path.exists(local_path):
@@ -1185,8 +1190,7 @@ class FeiShuChanel(ChatChannel):
 
         # Original logic for HTTP URLs
         response = requests.get(img_url)
-        suffix = utils.get_path_suffix(img_url)
-        temp_name = str(uuid.uuid4()) + "." + suffix
+        temp_name = str(uuid.uuid4())
         if response.status_code == 200:
             # 将图片内容保存为临时文件
             with open(temp_name, "wb") as file:
@@ -1260,7 +1264,11 @@ class FeiShuChanel(ChatChannel):
         try:
             # For file:// URLs (local files), upload directly
             if video_url.startswith("file://"):
-                local_path = video_url[7:]  # Remove file:// prefix
+                local_path = os.path.realpath(video_url[7:])
+                base_dir = os.path.realpath(os.getcwd())
+                if not local_path.startswith(base_dir + os.sep):
+                    logger.error(f"[FeiShu] path traversal attempt blocked: {local_path}")
+                    return None
                 if not os.path.exists(local_path):
                     logger.error(f"[FeiShu] local video file not found: {local_path}")
                     return None
@@ -1275,7 +1283,7 @@ class FeiShuChanel(ChatChannel):
                 # Save to temp file
                 import uuid
                 file_name = os.path.basename(video_url) or "video.mp4"
-                temp_file = str(uuid.uuid4()) + "_" + file_name
+                temp_file = str(uuid.uuid4())
 
                 with open(temp_file, "wb") as file:
                     file.write(response.content)
@@ -1409,7 +1417,11 @@ class FeiShuChanel(ChatChannel):
 
         # Check if it's a local file path (file:// protocol)
         if file_url.startswith("file://"):
-            local_path = file_url[7:]  # Remove "file://" prefix
+            local_path = os.path.realpath(file_url[7:])
+            base_dir = os.path.realpath(os.getcwd())
+            if not local_path.startswith(base_dir + os.sep):
+                logger.error(f"[FeiShu] path traversal attempt blocked: {local_path}")
+                return None
             logger.info(f"[FeiShu] uploading local file: {local_path}")
 
             if not os.path.exists(local_path):
@@ -1469,7 +1481,7 @@ class FeiShuChanel(ChatChannel):
             # Save to temp file
             import uuid
             file_name = os.path.basename(file_url)
-            temp_name = str(uuid.uuid4()) + "_" + file_name
+            temp_name = str(uuid.uuid4())
 
             with open(temp_name, "wb") as file:
                 file.write(response.content)
