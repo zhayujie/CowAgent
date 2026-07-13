@@ -44,12 +44,13 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
             extra_headers: Optional extra headers to include in API requests
         """
         self.model = model
-        self.api_key = api_key
+        # Name-mangled to prevent repr/attribute access from leaking the key to callers
+        self.__api_key = api_key
         self.api_base = api_base or "https://api.openai.com/v1"
         self.extra_headers = extra_headers or {}
 
         # Validate API key
-        if not self.api_key or self.api_key in ["", "YOUR API KEY", "YOUR_API_KEY"]:
+        if not self.__api_key or self.__api_key in ["", "YOUR API KEY", "YOUR_API_KEY"]:
             raise ValueError("OpenAI API key is not configured. Please set 'open_ai_api_key' in config.json")
 
         # Set dimensions based on model
@@ -62,7 +63,7 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         url = f"{self.api_base}/embeddings"
         headers = {
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {self.api_key}",
+            "Authorization": f"Bearer {self.__api_key}",
             **self.extra_headers,
         }
         data = {
@@ -84,7 +85,7 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
             elif e.response.status_code == 429:
                 raise ValueError(f"OpenAI API rate limit exceeded. Please try again later.")
             else:
-                raise ValueError(f"OpenAI API request failed: {e.response.status_code} - {e.response.text}")
+                raise ValueError(f"OpenAI API request failed with status {e.response.status_code}. Check API provider logs for details.")
 
     def embed(self, text: str) -> List[float]:
         """Generate embedding for text"""
