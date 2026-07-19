@@ -257,6 +257,12 @@ available_setting = {
     "mcp_oauth_redirect_base": "",  # Base URL for MCP OAuth callback (e.g. http://your-ip:9899); empty uses local web console
     "agent": True,  # whether to enable Agent mode
     "agent_workspace": "~/cow",  # agent workspace path, used to store skills, memory, etc.
+    # Optional native multi-agent registry. When empty or omitted, CowAgent
+    # synthesizes one "default" agent from agent_workspace and behaves exactly
+    # as before. Each configured workspace is a complete CowAgent workspace.
+    "agents": [],
+    "default_agent_id": "default",
+    "agent_bindings": [],
     "agent_max_context_tokens": 50000,  # max context tokens in Agent mode
     "agent_max_context_turns": 20,  # max context memory turns in Agent mode
     "agent_max_steps": 20,  # max decision steps per run in Agent mode
