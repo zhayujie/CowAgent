@@ -18,7 +18,9 @@ class WechatComAppMessage(ChatMessage):
             self.content = msg.content
         elif msg.type == "voice":
             self.ctype = ContextType.VOICE
-            self.content = TmpDir().path() + msg.media_id + "." + msg.format  # content直接存临时目录路径
+            self.content = TmpDir(
+                "wechatcom_app", (msg.source,)
+            ).path() + msg.media_id + "." + msg.format  # content直接存临时目录路径
 
             def download_voice():
                 # 如果响应状态码是200，则将响应内容写入本地文件
@@ -32,7 +34,9 @@ class WechatComAppMessage(ChatMessage):
             self._prepare_fn = download_voice
         elif msg.type == "image":
             self.ctype = ContextType.IMAGE
-            self.content = TmpDir().path() + msg.media_id + ".png"  # content直接存临时目录路径
+            self.content = TmpDir(
+                "wechatcom_app", (msg.source,)
+            ).path() + msg.media_id + ".png"  # content直接存临时目录路径
 
             def download_image():
                 # 如果响应状态码是200，则将响应内容写入本地文件

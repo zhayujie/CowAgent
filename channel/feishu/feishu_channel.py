@@ -500,25 +500,35 @@ class FeiShuChanel(ChatChannel):
         # so reaching here means the bot was indeed mentioned.
         return True
 
-    def _get_scheduler_task_store(self):
+    @staticmethod
+    def _resolve_scheduler_agent_id(*conversation_ids):
+        from agent.routing import get_agent_router
+
+        return get_agent_router().resolve(
+            channel_type="feishu", conversation_ids=conversation_ids
+        )
+
+    def _get_scheduler_task_store(self, agent_id: str = None):
         """Reuse the live scheduler store, with a path-compatible fallback."""
         from agent.tools.scheduler.integration import get_task_store
 
-        task_store = get_task_store()
+        task_store = get_task_store(agent_id=agent_id)
         if task_store is not None:
             return task_store
 
         from agent.tools.scheduler.task_store import TaskStore
+        from agent.registry import get_agent_registry
 
-        workspace_root = utils.expand_path(conf().get("agent_workspace", "~/cow"))
+        workspace_root = get_agent_registry().get(agent_id).workspace
         return TaskStore(os.path.join(workspace_root, "scheduler", "tasks.json"))
 
     def _send_scheduler_card(self, feishu_msg, is_group: bool, receive_id_type: str) -> bool:
         """Reply to ``/tasks`` with tasks scoped to the current chat."""
-        task_store = self._get_scheduler_task_store()
+        agent_id = self._resolve_scheduler_agent_id(feishu_msg.other_user_id)
+        task_store = self._get_scheduler_task_store(agent_id)
         receivers = {feishu_msg.other_user_id}
         tasks = tasks_for_receivers(task_store.list_tasks(), receivers)
-        card = build_scheduler_card(tasks)
+        card = build_scheduler_card(tasks, agent_id=agent_id)
         headers = {
             "Authorization": "Bearer " + feishu_msg.access_token,
             "Content-Type": "application/json",
@@ -580,10 +590,19 @@ class FeiShuChanel(ChatChannel):
             if target_receiver and target_receiver in callback_receivers
             else set()
         )
+        agent_id = self._resolve_scheduler_agent_id(target_receiver)
+        if value.get("agent_id") and value.get("agent_id") != agent_id:
+            return {
+                "toast": {
+                    "type": "error",
+                    "content": "Agent route changed; refresh the task card",
+                }
+            }
         response = handle_scheduler_action(
             value,
-            self._get_scheduler_task_store(),
+            self._get_scheduler_task_store(agent_id),
             allowed_receivers,
+            agent_id=agent_id,
         )
         logger.info(
             "[FeiShu] scheduler card action handled, "

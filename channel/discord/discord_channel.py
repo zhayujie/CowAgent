@@ -273,7 +273,17 @@ class DiscordChannel(ChatChannel):
         """Fast-path: /cancel calls cancel_session directly without going through agent."""
         try:
             from agent.protocol import get_cancel_registry
-            cancelled = get_cancel_registry().cancel_session(session_id)
+            from bridge.bridge import Bridge
+            agent_bridge = Bridge().get_agent_bridge()
+            receiver = str(message.channel.id)
+            agent_id = agent_bridge.agent_router.resolve(
+                channel_type=self.channel_type,
+                conversation_ids=(session_id, receiver),
+            )
+            scoped_session_id = agent_bridge._cancel_key(
+                agent_id, session_id, agent_bridge.agent_registry.default_agent_id
+            )
+            cancelled = get_cancel_registry().cancel_session(scoped_session_id)
             text = "Current task cancelled." if cancelled else "No running task to cancel."
             await message.channel.send(text)
             logger.info(f"[Discord] /cancel session={session_id}, cancelled={cancelled}")
@@ -294,7 +304,11 @@ class DiscordChannel(ChatChannel):
             att = attachments[0]
             content_type = (att.content_type or "").lower()
             name = att.filename or str(att.id)
-            path = await self._download_attachment(att, name)
+            path = await self._download_attachment(
+                att,
+                name,
+                conversation_ids=(str(message.channel.id), str(message.author.id)),
+            )
             if not path:
                 return (None, None, "")
             is_image = content_type.startswith("image/") or name.lower().endswith(
@@ -309,10 +323,10 @@ class DiscordChannel(ChatChannel):
 
         return (None, None, "")
 
-    async def _download_attachment(self, attachment, name: str):
+    async def _download_attachment(self, attachment, name: str, conversation_ids=()):
         """Download a discord attachment into the local tmp dir; return path or None."""
         try:
-            tmp_dir = DiscordMessage.get_tmp_dir()
+            tmp_dir = DiscordMessage.get_tmp_dir(conversation_ids)
             safe_name = re.sub(r"[^\w.\-]", "_", name)
             # Prefix with attachment id to avoid name collisions
             local_path = os.path.join(tmp_dir, f"{attachment.id}_{safe_name}")

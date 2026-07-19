@@ -27,8 +27,14 @@ class ChatService:
         """
         self.agent_bridge = agent_bridge
 
-    def run(self, query: str, session_id: str, send_chunk_fn: Callable[[dict], None],
-            channel_type: str = ""):
+    def run(
+        self,
+        query: str,
+        session_id: str,
+        send_chunk_fn: Callable[[dict], None],
+        channel_type: str = "",
+        agent_id: str = None,
+    ):
         """
         Run the agent for *query* and stream results back via *send_chunk_fn*.
 
@@ -39,8 +45,12 @@ class ChatService:
         :param session_id: session identifier for agent isolation
         :param send_chunk_fn: callable(chunk_data: dict) to send a streaming chunk
         :param channel_type: source channel (e.g. "web", "feishu") for persistence
+        :param agent_id: selected agent profile; defaults to the configured default
         """
-        agent = self.agent_bridge.get_agent(session_id=session_id)
+        resolved_agent_id = self.agent_bridge._resolve_agent_id(agent_id)
+        agent = self.agent_bridge.get_agent(
+            session_id=session_id, agent_id=resolved_agent_id
+        )
         if agent is None:
             raise RuntimeError("Failed to initialise agent for the session")
 
@@ -48,11 +58,14 @@ class ChatService:
         if hasattr(agent, 'model'):
             agent.model.channel_type = channel_type or ""
             agent.model.session_id = session_id or ""
+            agent.model.agent_id = resolved_agent_id
 
         # Build a context so context-aware tools (e.g. scheduler) can resolve the
         # receiver/session. This streaming path bypasses agent_bridge.agent_reply,
         # so the attach step that normally happens there must be done here too.
-        context = self._build_context(query, session_id, channel_type)
+        context = self._build_context(
+            query, session_id, channel_type, resolved_agent_id
+        )
         self._attach_context_aware_tools(agent, context)
 
         # Mark this session as mid-run so the self-evolution idle scan does not
@@ -166,7 +179,10 @@ class ChatService:
                     state.segment_id += 1
 
         # Run the agent with our event callback ---------------------------
-        logger.info(f"[ChatService] Starting agent run: session={session_id}, query={query[:80]}")
+        logger.info(
+            f"[ChatService] Starting agent run: agent={resolved_agent_id}, "
+            f"session={session_id}, query={query[:80]}"
+        )
 
         from config import conf
         max_context_turns = conf().get("agent_max_context_turns", 20)
@@ -185,7 +201,29 @@ class ChatService:
         # IM channels key on session_id (no per-turn request_id here).
         from agent.protocol import get_cancel_registry
         registry = get_cancel_registry()
-        cancel_event = registry.register(session_id, session_id=session_id) if session_id else None
+        cancel_key = (
+            self.agent_bridge._cancel_key(
+                resolved_agent_id,
+                session_id,
+                self.agent_bridge.agent_registry.default_agent_id,
+            )
+            if session_id
+            else None
+        )
+        scoped_session_id = (
+            self.agent_bridge._cancel_key(
+                resolved_agent_id,
+                session_id,
+                self.agent_bridge.agent_registry.default_agent_id,
+            )
+            if session_id
+            else None
+        )
+        cancel_event = (
+            registry.register(cancel_key, session_id=scoped_session_id)
+            if cancel_key
+            else None
+        )
 
         executor = AgentStreamExecutor(
             agent=agent,
@@ -214,7 +252,7 @@ class ChatService:
             # Release cancel token to keep the registry bounded.
             if session_id:
                 try:
-                    registry.unregister(session_id)
+                    registry.unregister(cancel_key)
                 except Exception:
                     pass
 
@@ -272,7 +310,12 @@ class ChatService:
         # Persist new messages to SQLite so they survive restarts and
         # can be queried via the HISTORY interface.
         if new_messages:
-            self._persist_messages(session_id, list(new_messages), channel_type)
+            self._persist_messages(
+                session_id,
+                list(new_messages),
+                channel_type,
+                workspace_root=agent.workspace_dir,
+            )
 
         # Store executor reference for files_to_send access
         agent.stream_executor = executor
@@ -285,12 +328,17 @@ class ChatService:
         # be noted here, otherwise idle scans never see any signal to evolve.
         self._note_evolution_turn(agent, context)
 
-        logger.info(f"[ChatService] Agent run completed: session={session_id}")
+        logger.info(
+            f"[ChatService] Agent run completed: agent={resolved_agent_id}, "
+            f"session={session_id}"
+        )
 
 
 
     @staticmethod
-    def _build_context(query: str, session_id: str, channel_type: str):
+    def _build_context(
+        query: str, session_id: str, channel_type: str, agent_id: str = "default"
+    ):
         """Build a Context for tool resolution on the streaming chat path.
 
         receiver falls back to session_id; the scheduler's delivery keys on
@@ -304,11 +352,11 @@ class ChatService:
         ctx["receiver"] = session_id
         ctx["isgroup"] = False
         ctx["channel_type"] = channel_type or ""
+        ctx["agent_id"] = agent_id
         return ctx
 
-    @staticmethod
-    def _attach_context_aware_tools(agent, context):
-        """Attach the current context to tools that need it (scheduler)."""
+    def _attach_context_aware_tools(self, agent, context):
+        """Attach the current context to tools that need turn metadata."""
         try:
             if not (context and getattr(agent, "tools", None)):
                 return
@@ -316,7 +364,9 @@ class ChatService:
                 if tool.name == "scheduler":
                     from agent.tools.scheduler.integration import attach_scheduler_to_tool
                     attach_scheduler_to_tool(tool, context)
-                    break
+                elif tool.name == "agent_delegate":
+                    from agent.tools.agent_delegate.agent_delegate import attach_agent_delegate_to_tool
+                    attach_agent_delegate_to_tool(tool, self.agent_bridge, context)
         except Exception as e:
             logger.warning(f"[ChatService] Failed to attach context to scheduler: {e}")
 
@@ -343,7 +393,12 @@ class ChatService:
             pass
 
     @staticmethod
-    def _persist_messages(session_id: str, new_messages: list, channel_type: str = ""):
+    def _persist_messages(
+        session_id: str,
+        new_messages: list,
+        channel_type: str = "",
+        workspace_root: str = None,
+    ):
         try:
             from config import conf
             if not conf().get("conversation_persistence", True):
@@ -352,7 +407,7 @@ class ChatService:
             pass
         try:
             from agent.memory import get_conversation_store
-            get_conversation_store().append_messages(
+            get_conversation_store(workspace_root).append_messages(
                 session_id, new_messages, channel_type=channel_type
             )
         except Exception as e:

@@ -30,19 +30,40 @@ def _normalize_mcp_configs(raw) -> list:
 
 class ToolManager:
     """
-    Tool manager for managing tools.
+    Tool manager for one Agent workspace.
+
+    Built-in tool classes are cheap to register per workspace. MCP clients,
+    live tool instances, reload signatures, and embedding vectors must not be
+    shared across Agent homes.
     """
     _instance = None
+    _instances = {}
+    _instance_lock = threading.Lock()
 
-    def __new__(cls):
-        """Singleton pattern to ensure only one instance of ToolManager exists."""
-        if cls._instance is None:
-            cls._instance = super(ToolManager, cls).__new__(cls)
-            cls._instance.tool_classes = {}  # Store tool classes instead of instances
-            cls._instance._initialized = False
-        return cls._instance
+    def __new__(cls, workspace_root: str = None):
+        """Return the manager owned by ``workspace_root``.
 
-    def __init__(self):
+        No-argument callers keep legacy behavior by resolving the configured
+        single-Agent workspace.
+        """
+        import os
+
+        if workspace_root is None:
+            workspace_root = conf().get("agent_workspace", "~/cow")
+        key = os.path.realpath(os.path.expanduser(str(workspace_root)))
+        with cls._instance_lock:
+            instance = cls._instances.get(key)
+            if instance is None:
+                instance = super(ToolManager, cls).__new__(cls)
+                instance.workspace_root = key
+                instance.tool_classes = {}
+                instance._initialized = False
+                cls._instances[key] = instance
+            if cls._instance is None:
+                cls._instance = instance
+            return instance
+
+    def __init__(self, workspace_root: str = None):
         # Initialize only once
         if not hasattr(self, 'tool_classes'):
             self.tool_classes = {}  # Dictionary to store tool classes
@@ -87,6 +108,21 @@ class ToolManager:
             # injection at the caller.
             self._embedding_provider_initialized = False
             self._embedding_provider = None
+
+    @classmethod
+    def shutdown_workspace(cls, workspace_root: str) -> bool:
+        """Stop and forget the MCP runtime owned by one workspace."""
+        import os
+
+        key = os.path.realpath(os.path.expanduser(str(workspace_root)))
+        with cls._instance_lock:
+            manager = cls._instances.pop(key, None)
+            if manager is cls._instance:
+                cls._instance = next(iter(cls._instances.values()), None)
+        if manager is None:
+            return False
+        manager.shutdown_mcp()
+        return True
 
     def load_tools(self, tools_dir: str = "", config_dict=None):
         """
@@ -261,8 +297,7 @@ class ToolManager:
 
     def _mcp_json_path(self) -> str:
         import os
-        workspace = os.path.expanduser(conf().get("agent_workspace", "~/cow"))
-        return os.path.join(workspace, "mcp.json")
+        return os.path.join(self.workspace_root, "mcp.json")
 
     def _read_mcp_json_signature(self):
         """
@@ -448,7 +483,7 @@ class ToolManager:
             from agent.tools.mcp.mcp_client import McpClient, McpClientRegistry, set_reload_callback
             from agent.tools.mcp.mcp_tool import McpTool
 
-            registry = McpClientRegistry()
+            registry = McpClientRegistry(self.workspace_root)
             self._mcp_registry = registry
             # Let the OAuth web callback bring a server online once authorized.
             set_reload_callback(self.reload_mcp_server)
@@ -516,7 +551,10 @@ class ToolManager:
         with self._mcp_lock:
             cfg = self._mcp_active_configs.get(server_name)
         if not cfg:
-            logger.warning(f"[MCP] reload requested for unknown server '{server_name}'")
+            logger.debug(
+                f"[MCP] Workspace {self.workspace_root} has no server "
+                f"named '{server_name}'"
+            )
             return
         logger.info(f"[MCP] Reloading server '{server_name}' after authorization")
         self._teardown_mcp_server(server_name)
@@ -736,5 +774,8 @@ class ToolManager:
 
     def shutdown_mcp(self):
         """Shut down all MCP server clients."""
+        from agent.tools.mcp.mcp_client import remove_reload_callback
+
+        remove_reload_callback(self.reload_mcp_server)
         if self._mcp_registry:
             self._mcp_registry.shutdown_all()

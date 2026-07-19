@@ -1,0 +1,123 @@
+---
+title: 多 Agent
+description: 在一个 CowAgent 进程中运行多个相互隔离的 Agent 工作区
+---
+
+CowAgent 可以在一个进程中运行多个 Agent。每个 Agent 都是完整工作区，目录结构和能力与原有单 Agent 完全一致。
+
+## 每个 Agent 一个工作区
+
+工作区就是 Agent 的 home：
+
+```text
+<workspace>/
+├── AGENT.md
+├── USER.md
+├── RULE.md
+├── MEMORY.md
+├── BOOTSTRAP.md
+├── memory/
+├── skills/
+├── knowledge/
+├── output/
+└── scheduler/
+```
+
+人格、用户上下文、规则、长期记忆、会话、技能、知识库、定时任务和输出文件都留在这个工作区中。每个 Agent 拥有自己的 `memory/long-term/index.db`，不会把多个 Agent 写进同一个 Memory 数据库。
+
+## 配置 Agent
+
+在 `config.json` 中加入 Agent registry：
+
+```json
+{
+  "default_agent_id": "main",
+  "agents": [
+    {
+      "id": "main",
+      "name": "主 Agent",
+      "workspace": "~/cow-main",
+      "enabled": true
+    },
+    {
+      "id": "research",
+      "name": "研究 Agent",
+      "workspace": "~/cow-research",
+      "enabled": true
+    }
+  ],
+  "agent_bindings": [
+    {
+      "channel_type": "feishu",
+      "conversation_id": "oc_example_chat_id",
+      "agent_id": "research"
+    },
+    {
+      "channel_type": "telegram",
+      "agent_id": "main"
+    }
+  ]
+}
+```
+
+Agent ID 长度为 1–64，只能使用字母、数字、下划线和连字符。工作区路径不能重复，也不能互相嵌套；默认 Agent 必须处于启用状态。
+
+`agent_bindings` 按以下顺序路由消息：
+
+1. 通道和会话均精确匹配；
+2. 未填写 `conversation_id` 的通道默认绑定；
+3. `default_agent_id`。
+
+绑定目标不存在或被停用时，会记录警告并回退到默认 Agent。
+
+<Note>
+  原有单 Agent 配置不需要修改。没有 `agents` 时，CowAgent 继续使用 `agent_workspace`，并在运行时生成兼容的 `default` profile。
+</Note>
+
+## 在 Web 控制台管理
+
+打开 **管理 → Agents**，可以：
+
+- 用标准模板创建完整工作区；
+- 克隆已有 Agent 工作区；
+- 切换 Web 对话当前使用的 Agent；
+- 设置默认 Agent，或在不删除文件的情况下归档；
+- 编辑 `AGENT.md`、`USER.md`、`RULE.md`、`MEMORY.md` 和 `BOOTSTRAP.md`；
+- 编辑通道绑定。
+
+核心文件保存带 revision 检查。文件在编辑期间被其他进程修改时，接口会返回冲突，不会覆盖较新的内容。Memory、Skills、Knowledge、Sessions、History 和 Scheduler 页面都跟随页首当前选择的 Agent。
+
+## Agent 间委派
+
+至少有两个启用的 Agent 时，CowAgent 会提供 `agent_delegate` 工具。Agent 可以先查询可用同伴，再把一个边界清晰的任务交给指定 Agent。目标 Agent 在自己的工作区和 relay session 中执行，结果返回给发起者，不会自行推送到用户通道。
+
+可选策略配置：
+
+```json
+{
+  "agent_delegation": {
+    "enabled": true,
+    "allowed_targets": {
+      "main": ["research"],
+      "research": ["main"]
+    },
+    "max_depth": 3,
+    "timeout_seconds": 120,
+    "max_message_chars": 8000
+  }
+}
+```
+
+未配置 `allowed_targets` 时，Agent 可以委派给任意其他已启用 Agent。一旦配置该映射，未列出的源 Agent 默认没有可用目标；`"*"` 表示允许该源 Agent 使用全部已启用同伴。系统会拒绝停用目标、循环委派、超深链路、超长消息和超时任务。
+
+## 备份与恢复
+
+`cow backup` 会收录 Agent registry、通道绑定和所有已配置工作区。恢复时，当前配置中已有的同名 Agent 会沿用本机工作区；新安装默认恢复到 `~/cow-agents/<agent-id>`。
+
+也可以显式指定统一根目录：
+
+```bash
+cow restore cow-backup.zip --workspace /srv/cow-agents
+```
+
+恢复多 Agent 归档时，命令会在该根目录下按 Agent ID 创建子目录。归档校验和覆盖规则见[备份与恢复](/zh/cli/backup)。

@@ -24,25 +24,38 @@ _STREAMABLE_HTTP_ALIASES = {"streamable-http", "streamable_http", "streamablehtt
 # Optional callback invoked after an OAuth authorization completes, so the
 # tool manager can bring the newly-authorized server online. Signature:
 # reload_fn(server_name: str) -> None. Installed by the tool manager.
-_reload_callback = None
+_reload_callbacks = []
+_reload_callbacks_lock = threading.Lock()
 
 
 def set_reload_callback(fn) -> None:
     """Register a callback fired after a server's OAuth flow succeeds."""
-    global _reload_callback
-    _reload_callback = fn
+    with _reload_callbacks_lock:
+        if fn not in _reload_callbacks:
+            _reload_callbacks.append(fn)
+
+
+def remove_reload_callback(fn) -> None:
+    """Unregister a workspace manager that has shut down."""
+    with _reload_callbacks_lock:
+        try:
+            _reload_callbacks.remove(fn)
+        except ValueError:
+            pass
 
 
 def notify_server_authorized(server_name: str) -> None:
     """Called by the web callback once tokens are stored for a server."""
-    fn = _reload_callback
-    if fn is None:
+    with _reload_callbacks_lock:
+        callbacks = list(_reload_callbacks)
+    if not callbacks:
         logger.debug(f"[MCP:{server_name}] Authorized but no reload callback registered")
         return
-    try:
-        fn(server_name)
-    except Exception as e:
-        logger.warning(f"[MCP:{server_name}] reload callback failed: {e}")
+    for fn in callbacks:
+        try:
+            fn(server_name)
+        except Exception as e:
+            logger.warning(f"[MCP:{server_name}] reload callback failed: {e}")
 
 
 def _oauth_redirect_uri() -> str:
@@ -690,19 +703,24 @@ class McpClient:
 
 
 class McpClientRegistry:
-    """Global singleton managing the lifecycle of all MCP Server clients."""
+    """Workspace-keyed registry managing MCP Server client lifecycles."""
 
     _instance = None
+    _instances = {}
     _instance_lock = threading.Lock()
 
-    def __new__(cls):
+    def __new__(cls, namespace: str = "default"):
+        namespace = str(namespace or "default")
         with cls._instance_lock:
-            if cls._instance is None:
+            if namespace not in cls._instances:
                 obj = super().__new__(cls)
                 obj._clients: dict[str, McpClient] = {}
                 obj._registry_lock = threading.Lock()
-                cls._instance = obj
-        return cls._instance
+                obj.namespace = namespace
+                cls._instances[namespace] = obj
+            if cls._instance is None:
+                cls._instance = cls._instances[namespace]
+        return cls._instances[namespace]
 
     def start_all(self, configs: list) -> None:
         """Initialize McpClient for each config entry; skip failures with a warning."""

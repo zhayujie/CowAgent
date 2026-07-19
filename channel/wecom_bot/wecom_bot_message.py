@@ -6,8 +6,7 @@ import requests
 from bridge.context import ContextType
 from channel.chat_message import ChatMessage
 from common.log import logger
-from common.utils import expand_path
-from config import conf
+from common.tmp_dir import get_agent_tmp_dir
 from Crypto.Cipher import AES
 
 
@@ -76,12 +75,9 @@ def _decrypt_media(url: str, aeskey: str) -> bytes:
     return decrypted[:-pad_len]
 
 
-def _get_tmp_dir() -> str:
+def _get_tmp_dir(conversation_ids=()) -> str:
     """Return the workspace tmp directory (absolute path), creating it if needed."""
-    ws_root = expand_path(conf().get("agent_workspace", "~/cow"))
-    tmp_dir = os.path.join(ws_root, "tmp")
-    os.makedirs(tmp_dir, exist_ok=True)
-    return tmp_dir
+    return get_agent_tmp_dir("wecom_bot", conversation_ids)
 
 
 class WecomBotMessage(ChatMessage):
@@ -100,6 +96,9 @@ class WecomBotMessage(ChatMessage):
         from_userid = msg_body.get("from", {}).get("userid", "")
         chat_id = msg_body.get("chatid", "")
         bot_id = msg_body.get("aibotid", "")
+        tmp_dir = None
+        if msg_type in ("image", "mixed", "file", "video"):
+            tmp_dir = _get_tmp_dir((chat_id, from_userid))
 
         if msg_type == "text":
             self.ctype = ContextType.TEXT
@@ -117,7 +116,6 @@ class WecomBotMessage(ChatMessage):
             image_info = msg_body.get("image", {})
             image_url = image_info.get("url", "")
             aeskey = image_info.get("aeskey", "") or self._default_aeskey
-            tmp_dir = _get_tmp_dir()
             image_path = os.path.join(tmp_dir, f"wecom_{self.msg_id}.png")
 
             try:
@@ -137,8 +135,6 @@ class WecomBotMessage(ChatMessage):
             text_parts = []
             image_paths = []
             mixed_items = msg_body.get("mixed", {}).get("msg_item", [])
-            tmp_dir = _get_tmp_dir()
-
             for idx, item in enumerate(mixed_items):
                 item_type = item.get("msgtype")
                 if item_type == "text":
@@ -170,7 +166,6 @@ class WecomBotMessage(ChatMessage):
             file_info = msg_body.get("file", {})
             file_url = file_info.get("url", "")
             aeskey = file_info.get("aeskey", "") or self._default_aeskey
-            tmp_dir = _get_tmp_dir()
             base_path = os.path.join(tmp_dir, f"wecom_{self.msg_id}")
             self.content = base_path
 
@@ -192,7 +187,6 @@ class WecomBotMessage(ChatMessage):
             video_info = msg_body.get("video", {})
             video_url = video_info.get("url", "")
             aeskey = video_info.get("aeskey", "") or self._default_aeskey
-            tmp_dir = _get_tmp_dir()
             self.content = os.path.join(tmp_dir, f"wecom_{self.msg_id}.mp4")
 
             def _download_video():

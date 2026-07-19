@@ -17,6 +17,7 @@ The archive contains:
 - `config.json`
 - Agent persona and user files such as `AGENT.md`, `USER.md`, and `MEMORY.md`
 - Daily memory, session history, knowledge, custom skills, and scheduled tasks in the configured workspace
+- The Agent registry, channel bindings, and every configured Agent workspace when multi-Agent mode is configured
 - Legacy `user_datas.pkl`, when present
 
 Transient `tmp/` data, caches, Git metadata, and symbolic links are skipped. The
@@ -42,6 +43,10 @@ Use `--workspace` to migrate workspace files to a different location:
 ```bash
 cow restore cow-backup.zip --workspace ~/cow-restored
 ```
+
+For a multi-Agent archive, `--workspace` is a root directory. CowAgent restores
+each workspace under `<root>/<agent-id>`. Without the option, existing Agent IDs
+reuse their current local workspace; new Agents use `~/cow-agents/<agent-id>`.
 
 Restore validates the archive format and paths before writing anything. It
 overwrites matching files but does not delete unrelated files already present

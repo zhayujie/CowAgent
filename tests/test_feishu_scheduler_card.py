@@ -65,6 +65,19 @@ def test_scheduler_card_has_explicit_idempotent_actions():
     ]
 
 
+def test_scheduler_card_preserves_agent_owner_in_actions():
+    card = build_scheduler_card(
+        [_task("task-1", "chat-1")], agent_id="research"
+    )
+    action_row = next(
+        element
+        for element in card["body"]["elements"]
+        if element.get("tag") == "column_set"
+    )
+    values = [column["elements"][0]["value"] for column in action_row["columns"]]
+    assert {value["agent_id"] for value in values} == {"research"}
+
+
 def test_tasks_are_scoped_to_callback_chat_or_operator():
     tasks = [
         _task("group", "chat-1"),

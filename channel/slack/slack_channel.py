@@ -287,7 +287,16 @@ class SlackChannel(ChatChannel):
         """Fast-path: /cancel calls cancel_session directly without going through agent."""
         try:
             from agent.protocol import get_cancel_registry
-            cancelled = get_cancel_registry().cancel_session(session_id)
+            from bridge.bridge import Bridge
+            agent_bridge = Bridge().get_agent_bridge()
+            agent_id = agent_bridge.agent_router.resolve(
+                channel_type=self.channel_type,
+                conversation_ids=(session_id, channel_id),
+            )
+            scoped_session_id = agent_bridge._cancel_key(
+                agent_id, session_id, agent_bridge.agent_registry.default_agent_id
+            )
+            cancelled = get_cancel_registry().cancel_session(scoped_session_id)
             text = "Current task cancelled." if cancelled else "No running task to cancel."
             thread_ts = event.get("thread_ts") or event.get("ts")
             self._client.chat_postMessage(channel=channel_id, text=text, thread_ts=thread_ts)
@@ -312,7 +321,11 @@ class SlackChannel(ChatChannel):
             name = f.get("name") or f.get("id") or "file"
             if not url:
                 return (None, None, "")
-            path = self._download_file(url, name)
+            path = self._download_file(
+                url,
+                name,
+                conversation_ids=(event.get("channel", ""), event.get("user", "")),
+            )
             if not path:
                 return (None, None, "")
             if mimetype.startswith("image/"):
@@ -324,13 +337,13 @@ class SlackChannel(ChatChannel):
 
         return (None, None, "")
 
-    def _download_file(self, url: str, name: str):
+    def _download_file(self, url: str, name: str, conversation_ids=()):
         """Download a Slack private file (requires bot token auth) to local tmp dir."""
         try:
             headers = {"Authorization": f"Bearer {self.bot_token}"}
             resp = requests.get(url, headers=headers, timeout=60, stream=True)
             resp.raise_for_status()
-            tmp_dir = SlackMessage.get_tmp_dir()
+            tmp_dir = SlackMessage.get_tmp_dir(conversation_ids)
             # Sanitize the name and keep it unique-ish via the url tail
             safe_name = re.sub(r"[^\w.\-]", "_", name)
             local_path = os.path.join(tmp_dir, safe_name)

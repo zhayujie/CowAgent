@@ -949,7 +949,7 @@ class CowCliPlugin(Plugin):
             from bridge.bridge import Bridge
             bridge = Bridge()
             agent_bridge = bridge.get_agent_bridge()
-            for agent in [agent_bridge.default_agent] + list(agent_bridge.agents.values()):
+            for _agent_id, _session_id, agent in agent_bridge.iter_agent_instances():
                 if agent and hasattr(agent, 'skill_manager') and agent.skill_manager:
                     agent.skill_manager.refresh_skills()
                     break

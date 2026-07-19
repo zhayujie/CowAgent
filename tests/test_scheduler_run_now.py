@@ -75,3 +75,16 @@ def test_scheduler_tool_does_not_expose_manual_execution():
     actions = SchedulerTool.params["properties"]["action"]["enum"]
 
     assert "run" not in actions
+
+
+def test_scheduler_stop_wakes_sleeping_loop_immediately(tmp_path):
+    store = TaskStore(str(tmp_path / "tasks.json"))
+    service = SchedulerService(store, lambda _task_data: True)
+    service.start()
+    started_at = time.monotonic()
+
+    service.stop()
+
+    assert time.monotonic() - started_at < 0.5
+    assert service.thread is not None
+    assert not service.thread.is_alive()
