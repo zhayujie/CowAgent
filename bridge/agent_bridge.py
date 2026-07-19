@@ -570,17 +570,21 @@ class AgentBridge:
                 filtered_tools = [tool for tool in agent.tools if tool.name != "scheduler"]
                 agent.tools = filtered_tools
                 logger.info(f"[AgentBridge] Scheduled task execution: excluded scheduler tool ({len(filtered_tools)}/{len(original_tools)} tools)")
-            else:
-                # Attach context to scheduler tool if present
-                if context and agent.tools:
-                    for tool in agent.tools:
-                        if tool.name == "scheduler":
-                            try:
-                                from agent.tools.scheduler.integration import attach_scheduler_to_tool
-                                attach_scheduler_to_tool(tool, context)
-                            except Exception as e:
-                                logger.warning(f"[AgentBridge] Failed to attach context to scheduler: {e}")
-                            break
+
+            if context and agent.tools:
+                for tool in agent.tools:
+                    if tool.name == "scheduler" and not context.get("is_scheduled_task"):
+                        try:
+                            from agent.tools.scheduler.integration import attach_scheduler_to_tool
+                            attach_scheduler_to_tool(tool, context)
+                        except Exception as e:
+                            logger.warning(f"[AgentBridge] Failed to attach context to scheduler: {e}")
+                    elif tool.name == "agent_delegate":
+                        try:
+                            from agent.tools.agent_delegate.agent_delegate import attach_agent_delegate_to_tool
+                            attach_agent_delegate_to_tool(tool, self, context)
+                        except Exception as e:
+                            logger.warning(f"[AgentBridge] Failed to attach delegation context: {e}")
             
             # Pass context metadata to model for downstream API requests
             if context and hasattr(agent, 'model'):
@@ -683,7 +687,10 @@ class AgentBridge:
             # scheduler-injected / scheduled-task sessions so internal runs do
             # not count as user activity.
             if session_id and not session_id.startswith("scheduler_") and not (
-                context and context.get("is_scheduled_task")
+                context and (
+                    context.get("is_scheduled_task")
+                    or context.get("is_delegated_task")
+                )
             ):
                 try:
                     from agent.evolution.trigger import note_user_turn

@@ -355,9 +355,8 @@ class ChatService:
         ctx["agent_id"] = agent_id
         return ctx
 
-    @staticmethod
-    def _attach_context_aware_tools(agent, context):
-        """Attach the current context to tools that need it (scheduler)."""
+    def _attach_context_aware_tools(self, agent, context):
+        """Attach the current context to tools that need turn metadata."""
         try:
             if not (context and getattr(agent, "tools", None)):
                 return
@@ -365,7 +364,9 @@ class ChatService:
                 if tool.name == "scheduler":
                     from agent.tools.scheduler.integration import attach_scheduler_to_tool
                     attach_scheduler_to_tool(tool, context)
-                    break
+                elif tool.name == "agent_delegate":
+                    from agent.tools.agent_delegate.agent_delegate import attach_agent_delegate_to_tool
+                    attach_agent_delegate_to_tool(tool, self.agent_bridge, context)
         except Exception as e:
             logger.warning(f"[ChatService] Failed to attach context to scheduler: {e}")
 

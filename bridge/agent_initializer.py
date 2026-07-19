@@ -371,6 +371,22 @@ class AgentInitializer:
                         logger.debug("[AgentInitializer] evolution_undo skipped - self-evolution disabled")
                         continue
 
+                if tool_name == "agent_delegate":
+                    delegation = conf().get("agent_delegation", {})
+                    enabled = delegation is not False and (
+                        not isinstance(delegation, dict)
+                        or delegation.get("enabled", True)
+                    )
+                    enabled_agents = self.agent_bridge.agent_registry.list(
+                        include_disabled=False
+                    )
+                    if not enabled or len(enabled_agents) < 2:
+                        logger.debug(
+                            "[AgentInitializer] agent_delegate skipped - "
+                            "requires at least two enabled Agents"
+                        )
+                        continue
+
                 # Special handling for EnvConfig tool
                 if tool_name == "env_config":
                     from agent.tools import EnvConfig
