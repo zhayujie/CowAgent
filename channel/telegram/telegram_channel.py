@@ -259,7 +259,16 @@ class TelegramChannel(ChatChannel):
         try:
             from agent.protocol import get_cancel_registry
             session_id = self._compute_session_id(update)
-            cancelled = get_cancel_registry().cancel_session(session_id)
+            from bridge.bridge import Bridge
+            agent_bridge = Bridge().get_agent_bridge()
+            agent_id = agent_bridge.agent_router.resolve(
+                channel_type=self.channel_type,
+                conversation_ids=(session_id, str(update.effective_chat.id)),
+            )
+            scoped_session_id = agent_bridge._cancel_key(
+                agent_id, session_id, agent_bridge.agent_registry.default_agent_id
+            )
+            cancelled = get_cancel_registry().cancel_session(scoped_session_id)
             text = "Current task cancelled." if cancelled else "No running task to cancel."
             await update.effective_message.reply_text(text)
             logger.info(f"[Telegram] /cancel session={session_id}, cancelled={cancelled}")

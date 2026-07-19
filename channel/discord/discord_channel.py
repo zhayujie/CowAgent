@@ -273,7 +273,17 @@ class DiscordChannel(ChatChannel):
         """Fast-path: /cancel calls cancel_session directly without going through agent."""
         try:
             from agent.protocol import get_cancel_registry
-            cancelled = get_cancel_registry().cancel_session(session_id)
+            from bridge.bridge import Bridge
+            agent_bridge = Bridge().get_agent_bridge()
+            receiver = str(message.channel.id)
+            agent_id = agent_bridge.agent_router.resolve(
+                channel_type=self.channel_type,
+                conversation_ids=(session_id, receiver),
+            )
+            scoped_session_id = agent_bridge._cancel_key(
+                agent_id, session_id, agent_bridge.agent_registry.default_agent_id
+            )
+            cancelled = get_cancel_registry().cancel_session(scoped_session_id)
             text = "Current task cancelled." if cancelled else "No running task to cancel."
             await message.channel.send(text)
             logger.info(f"[Discord] /cancel session={session_id}, cancelled={cancelled}")

@@ -134,9 +134,9 @@ def _cancel_reply_text(cancelled: int, lang: str) -> str:
     return "Nothing to cancel." if en else "当前没有可中止的任务。"
 
 
-def _get_upload_dir() -> str:
-    from common.utils import expand_path
-    ws_root = expand_path(conf().get("agent_workspace", "~/cow"))
+def _get_upload_dir(agent_id: str = None) -> str:
+    from agent.registry import get_agent_registry
+    ws_root = get_agent_registry().get(agent_id).workspace
     tmp_dir = os.path.join(ws_root, "tmp")
     os.makedirs(tmp_dir, exist_ok=True)
     return tmp_dir
@@ -293,6 +293,7 @@ class WebChannel(ChatChannel):
         self.msg_id_counter = 0
         self.session_queues = {}  # session_id -> Queue (fallback polling)
         self.request_to_session = {}  # request_id -> session_id
+        self.request_to_agent = {}  # request_id -> agent_id
         self.sse_queues = {}  # request_id -> Queue (SSE streaming)
         # request_id -> last-active timestamp. Refreshed while the SSE
         # generator is being consumed (client still connected). The janitor
@@ -311,7 +312,19 @@ class WebChannel(ChatChannel):
         """生成唯一的请求ID"""
         return str(uuid.uuid4())
 
-    def _fetch_latest_pair_seqs(self, session_id: str):
+    @staticmethod
+    def _session_queue_key(session_id: str, agent_id: str = None) -> str:
+        from agent.registry import get_agent_registry
+        registry = get_agent_registry()
+        resolved = registry.get(agent_id).id
+        if resolved == registry.default_agent_id:
+            return session_id
+        return f"{resolved}::{session_id}"
+
+    def has_session_queue(self, session_id: str, agent_id: str = None) -> bool:
+        return self._session_queue_key(session_id, agent_id) in self.session_queues
+
+    def _fetch_latest_pair_seqs(self, session_id: str, agent_id: str = None):
         """Query the conversation store for the latest user/bot message seqs.
 
         Returned as ``{"user_seq": int|None, "bot_seq": int|None}``; used to
@@ -320,8 +333,12 @@ class WebChannel(ChatChannel):
         page refresh.
         """
         try:
+            from agent.registry import get_agent_registry
             from agent.memory import get_conversation_store
-            return get_conversation_store().get_latest_pair_seqs(session_id)
+            profile = get_agent_registry().get(agent_id)
+            return get_conversation_store(profile.workspace).get_latest_pair_seqs(
+                session_id
+            )
         except Exception as e:
             logger.debug(f"[WebChannel] _fetch_latest_pair_seqs failed: {e}")
             return {"user_seq": None, "bot_seq": None}
@@ -344,6 +361,8 @@ class WebChannel(ChatChannel):
             if not session_id:
                 logger.error(f"No session_id found for request {request_id}")
                 return
+            agent_id = context.get("agent_id") or self.request_to_agent.get(request_id)
+            session_queue_key = self._session_queue_key(session_id, agent_id)
 
             # SSE mode: push events to SSE queue
             if request_id in self.sse_queues:
@@ -366,7 +385,9 @@ class WebChannel(ChatChannel):
                 if reply.type in (ReplyType.IMAGE_URL, ReplyType.FILE) and content.startswith("file://"):
                     text_content = getattr(reply, 'text_content', '')
                     if text_content:
-                        seqs = self._fetch_latest_pair_seqs(session_id)
+                        seqs = self._fetch_latest_pair_seqs(
+                            session_id, context.get("agent_id")
+                        )
                         self.sse_queues[request_id].put({
                             "type": "done",
                             "content": text_content,
@@ -385,7 +406,9 @@ class WebChannel(ChatChannel):
                     logger.debug(f"SSE skipped http media reply for request {request_id}")
                     return
 
-                seqs = self._fetch_latest_pair_seqs(session_id)
+                seqs = self._fetch_latest_pair_seqs(
+                    session_id, context.get("agent_id")
+                )
                 self.sse_queues[request_id].put({
                     "type": "done",
                     "content": content,
@@ -404,7 +427,7 @@ class WebChannel(ChatChannel):
                 return
 
             # Fallback: polling mode
-            if session_id in self.session_queues:
+            if session_queue_key in self.session_queues:
                 content = reply.content if reply.content is not None else ""
                 # Skip file:// IMAGE_URL/FILE replies originating from an SSE-enabled
                 # request: they were already pushed via the `file_to_send` event during
@@ -433,7 +456,7 @@ class WebChannel(ChatChannel):
                     "timestamp": time.time(),
                     "request_id": request_id
                 }
-                self.session_queues[session_id].put(response_data)
+                self.session_queues[session_queue_key].put(response_data)
                 logger.debug(f"Response sent to poll queue for session {session_id}, request {request_id}")
             else:
                 logger.warning(f"No response queue found for session {session_id}, response dropped")
@@ -668,7 +691,7 @@ class WebChannel(ChatChannel):
                 return
             threading.Thread(
                 target=self._synthesize_tts_async,
-                args=(request_id, session_id, text),
+                args=(request_id, session_id, text, context.get("agent_id")),
                 daemon=True,
             ).start()
         except Exception as e:
@@ -679,6 +702,7 @@ class WebChannel(ChatChannel):
         request_id: str,
         session_id: str,
         text: str,
+        agent_id: str = None,
     ) -> None:
         try:
             from bridge.bridge import Bridge
@@ -689,14 +713,18 @@ class WebChannel(ChatChannel):
                     f"reply={reply}"
                 )
                 return
-            url = self._publish_tts_audio(reply.content)
+            url = self._publish_tts_audio(reply.content, agent_id)
             if not url:
                 logger.warning(f"[WebChannel] TTS publish failed for request {request_id}")
                 return
             payload = {"audio": {"url": url, "kind": "tts"}}
             try:
                 from agent.memory import get_conversation_store
-                get_conversation_store().attach_extras_to_last_assistant(session_id, payload)
+                from agent.registry import get_agent_registry
+                profile = get_agent_registry().get(agent_id)
+                get_conversation_store(
+                    profile.workspace
+                ).attach_extras_to_last_assistant(session_id, payload)
             except Exception as e:
                 logger.debug(f"[WebChannel] tts persist skipped: {e}")
             q = self.sse_queues.get(request_id)
@@ -718,21 +746,22 @@ class WebChannel(ChatChannel):
             logger.warning(f"[WebChannel] TTS synthesis failed: {e}")
 
     @staticmethod
-    def _publish_tts_audio(src_path: str) -> str:
+    def _publish_tts_audio(src_path: str, agent_id: str = None) -> str:
         """Move a TTS file into uploads/ and return its public URL."""
         try:
             if not src_path or not os.path.isfile(src_path):
                 logger.warning(f"[WebChannel] publish_tts_audio missing source: {src_path!r}")
                 return ""
             ext = os.path.splitext(src_path)[1].lower() or ".mp3"
-            upload_dir = _get_upload_dir()
+            upload_dir = _get_upload_dir(agent_id)
             os.makedirs(upload_dir, exist_ok=True)
             ts = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
             dst_name = f"voice_reply_{ts}_{random.randint(0, 9999)}{ext}"
             dst_path = os.path.join(upload_dir, dst_name)
             shutil.move(src_path, dst_path)
             logger.debug(f"[WebChannel] publish_tts_audio moved {src_path} -> {dst_path}")
-            return f"/uploads/{dst_name}"
+            suffix = f"?agent_id={agent_id}" if agent_id else ""
+            return f"/uploads/{dst_name}{suffix}"
         except Exception as e:
             logger.warning(f"[WebChannel] publish_tts_audio failed: {e}")
             return ""
@@ -788,7 +817,7 @@ class WebChannel(ChatChannel):
 
             is_directory_upload = bool(directory_files) or bool(directory_rel_paths) or bool(relative_path) or bool(upload_id)
 
-            upload_dir = _get_upload_dir()
+            upload_dir = _get_upload_dir(_request_agent_id(params))
             if is_directory_upload:
                 if not upload_id:
                     return json.dumps({"status": "error", "message": "Missing upload_id for directory upload"})
@@ -885,6 +914,13 @@ class WebChannel(ChatChannel):
             data = web.data()
             json_data = json.loads(data)
             session_id = json_data.get('session_id', f'session_{int(time.time())}')
+            from bridge.bridge import Bridge
+            agent_bridge = Bridge().get_agent_bridge()
+            resolved_agent_id = agent_bridge.agent_router.resolve(
+                channel_type="web",
+                conversation_ids=(session_id,),
+                explicit_agent_id=json_data.get("agent_id"),
+            )
             prompt = json_data.get('message', '')
             use_sse = json_data.get('stream', True)
             attachments = json_data.get('attachments', [])
@@ -899,7 +935,12 @@ class WebChannel(ChatChannel):
             stripped_prompt = (prompt or "").strip().lower()
             if stripped_prompt == "/cancel":
                 from agent.protocol import get_cancel_registry
-                cancelled = get_cancel_registry().cancel_session(session_id)
+                scoped_session_id = agent_bridge._cancel_key(
+                    resolved_agent_id,
+                    session_id,
+                    agent_bridge.agent_registry.default_agent_id,
+                )
+                cancelled = get_cancel_registry().cancel_session(scoped_session_id)
                 lang = (json_data.get('lang') or 'zh').lower()
                 msg_text = _cancel_reply_text(cancelled, lang)
                 logger.info(
@@ -934,9 +975,13 @@ class WebChannel(ChatChannel):
 
             request_id = self._generate_request_id()
             self.request_to_session[request_id] = session_id
+            self.request_to_agent[request_id] = resolved_agent_id
 
-            if session_id not in self.session_queues:
-                self.session_queues[session_id] = Queue()
+            session_queue_key = self._session_queue_key(
+                session_id, resolved_agent_id
+            )
+            if session_queue_key not in self.session_queues:
+                self.session_queues[session_queue_key] = Queue()
 
             if use_sse:
                 self.sse_queues[request_id] = Queue()
@@ -961,6 +1006,7 @@ class WebChannel(ChatChannel):
             context["session_id"] = session_id
             context["receiver"] = session_id
             context["request_id"] = request_id
+            context["agent_id"] = resolved_agent_id
             if is_voice_input:
                 # Web channel runs its own TTS post-pipeline via
                 # _maybe_dispatch_auto_tts; don't set desire_rtype here or
@@ -987,6 +1033,7 @@ class WebChannel(ChatChannel):
         self.sse_queues.pop(request_id, None)
         self.sse_last_active.pop(request_id, None)
         self.request_to_session.pop(request_id, None)
+        self.request_to_agent.pop(request_id, None)
 
     def _start_sse_janitor(self):
         """Start a background thread that reclaims orphaned SSE queues.
@@ -1125,6 +1172,15 @@ class WebChannel(ChatChannel):
             request_id = (json_data.get("request_id") or "").strip()
             session_id = (json_data.get("session_id") or "").strip()
             lang = (json_data.get("lang") or "zh").lower()
+            from bridge.bridge import Bridge
+            agent_bridge = Bridge().get_agent_bridge()
+            agent_id = self.request_to_agent.get(request_id)
+            if not agent_id:
+                agent_id = agent_bridge.agent_router.resolve(
+                    channel_type="web",
+                    conversation_ids=(session_id,),
+                    explicit_agent_id=json_data.get("agent_id"),
+                )
 
             registry = get_cancel_registry()
             cancelled = 0
@@ -1134,7 +1190,12 @@ class WebChannel(ChatChannel):
                     cancelled = 1
 
             if cancelled == 0 and session_id:
-                cancelled = registry.cancel_session(session_id)
+                scoped_session_id = agent_bridge._cancel_key(
+                    agent_id,
+                    session_id,
+                    agent_bridge.agent_registry.default_agent_id,
+                )
+                cancelled = registry.cancel_session(scoped_session_id)
 
             if request_id and request_id in self.sse_queues:
                 self.sse_queues[request_id].put({
@@ -1165,14 +1226,22 @@ class WebChannel(ChatChannel):
             data = web.data()
             json_data = json.loads(data)
             session_id = json_data.get('session_id')
+            from bridge.bridge import Bridge
+            agent_bridge = Bridge().get_agent_bridge()
+            agent_id = agent_bridge.agent_router.resolve(
+                channel_type="web",
+                conversation_ids=(session_id,),
+                explicit_agent_id=json_data.get("agent_id"),
+            )
+            session_queue_key = self._session_queue_key(session_id, agent_id)
 
-            if not session_id or session_id not in self.session_queues:
+            if not session_id or session_queue_key not in self.session_queues:
                 return json.dumps({"status": "error", "message": "Invalid session ID"})
 
             # 尝试从队列获取响应，不等待
             try:
                 # 使用peek而不是get，这样如果前端没有成功处理，下次还能获取到
-                response = self.session_queues[session_id].get(block=False)
+                response = self.session_queues[session_queue_key].get(block=False)
 
                 # 返回响应，包含请求ID以区分不同请求
                 return json.dumps({
@@ -1313,6 +1382,8 @@ class WebChannel(ChatChannel):
             '/api/scheduler/toggle', 'SchedulerToggleHandler',
             '/api/scheduler/update', 'SchedulerUpdateHandler',
             '/api/scheduler/delete', 'SchedulerDeleteHandler',
+            '/api/agents', 'AgentsHandler',
+            '/api/agents/([^/]+)/files/([^/]+)', 'AgentCoreFileHandler',
             '/api/sessions', 'SessionsHandler',
             '/api/sessions/(.*)/generate_title', 'SessionTitleHandler',
             '/api/sessions/(.*)/clear_context', 'SessionClearContextHandler',
@@ -1505,6 +1576,7 @@ class VoiceAsrHandler:
         saved_path = None
         try:
             params = _raw_web_input()
+            agent_id = _request_agent_id(params)
             file_obj = params.get("file")
             if file_obj is None:
                 return json.dumps({"status": "error", "message": "no audio file"})
@@ -1514,7 +1586,7 @@ class VoiceAsrHandler:
             if ext not in (".webm", ".ogg", ".opus", ".mp4", ".m4a", ".mp3", ".wav"):
                 ext = ".webm"
 
-            upload_dir = _get_upload_dir()
+            upload_dir = _get_upload_dir(agent_id)
             os.makedirs(upload_dir, exist_ok=True)
             ts = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
             saved_name = f"voice_input_{ts}_{random.randint(0, 9999)}{ext}"
@@ -1522,7 +1594,8 @@ class VoiceAsrHandler:
             with open(saved_path, "wb") as f:
                 f.write(file_obj.file.read() if hasattr(file_obj, "file") else file_obj.value)
 
-            audio_url = f"/uploads/{saved_name}"
+            suffix = f"?agent_id={agent_id}" if agent_id else ""
+            audio_url = f"/uploads/{saved_name}{suffix}"
 
             from bridge.bridge import Bridge
             reply = Bridge().fetch_voice_to_text(saved_path)
@@ -1560,6 +1633,7 @@ class VoiceTtsHandler:
             data = json.loads(web.data() or b"{}")
             text = (data.get("text") or "").strip()
             session_id = (data.get("session_id") or "").strip()
+            agent_id = data.get("agent_id")
             if not text:
                 return json.dumps({"status": "error", "message": "empty text"})
             # `@singleton` makes WebChannel a factory function — go via instance.
@@ -1573,14 +1647,16 @@ class VoiceTtsHandler:
                 msg = getattr(reply, "content", "") or "tts failed"
                 return json.dumps({"status": "error", "message": str(msg)})
 
-            url = channel._publish_tts_audio(reply.content)
+            url = channel._publish_tts_audio(reply.content, agent_id)
             if not url:
                 return json.dumps({"status": "error", "message": "publish failed"})
 
             if session_id:
                 try:
                     from agent.memory import get_conversation_store
-                    get_conversation_store().attach_extras_to_last_assistant(
+                    from agent.registry import get_agent_registry
+                    profile = get_agent_registry().get(agent_id)
+                    get_conversation_store(profile.workspace).attach_extras_to_last_assistant(
                         session_id, {"audio": {"url": url, "kind": "tts"}},
                     )
                 except Exception as e:
@@ -1596,7 +1672,8 @@ class UploadsHandler:
     def GET(self, file_name):
         _require_auth()
         try:
-            upload_dir = _get_upload_dir()
+            params = web.input(agent_id='')
+            upload_dir = _get_upload_dir(_request_agent_id(params))
             full_path = os.path.normpath(os.path.join(upload_dir, file_name))
             if not os.path.abspath(full_path).startswith(os.path.abspath(upload_dir)):
                 raise web.notfound()
@@ -4391,10 +4468,17 @@ class FeishuRegisterHandler:
             return json.dumps({"status": "error", "message": str(e)})
 
 
-def _get_workspace_root():
-    """Resolve the agent workspace directory."""
-    from common.utils import expand_path
-    return expand_path(conf().get("agent_workspace", "~/cow"))
+def _get_workspace_root(agent_id: str = None):
+    """Resolve one complete agent workspace, defaulting to legacy config."""
+    from agent.registry import get_agent_registry
+    return get_agent_registry().get(agent_id).workspace
+
+
+def _request_agent_id(source) -> str:
+    value = getattr(source, "agent_id", None)
+    if value is None and isinstance(source, dict):
+        value = source.get("agent_id")
+    return value or None
 
 
 class ToolsHandler:
@@ -4440,7 +4524,8 @@ class SkillsHandler:
             from agent.skills.service import SkillService
             from agent.skills.manager import SkillManager
             from common import i18n
-            workspace_root = _get_workspace_root()
+            params = web.input(agent_id='')
+            workspace_root = _get_workspace_root(_request_agent_id(params))
             manager = SkillManager(custom_dir=os.path.join(workspace_root, "skills"))
             service = SkillService(manager)
             skills = service.query()
@@ -4466,7 +4551,7 @@ class SkillsHandler:
             name = body.get("name")
             if not action or not name:
                 return json.dumps({"status": "error", "message": "action and name are required"})
-            workspace_root = _get_workspace_root()
+            workspace_root = _get_workspace_root(_request_agent_id(body))
             manager = SkillManager(custom_dir=os.path.join(workspace_root, "skills"))
             service = SkillService(manager)
             if action == "open":
@@ -4487,8 +4572,10 @@ class MemoryHandler:
         web.header('Content-Type', 'application/json; charset=utf-8')
         try:
             from agent.memory.service import MemoryService
-            params = web.input(page='1', page_size='20', category='memory')
-            workspace_root = _get_workspace_root()
+            params = web.input(
+                page='1', page_size='20', category='memory', agent_id=''
+            )
+            workspace_root = _get_workspace_root(_request_agent_id(params))
             service = MemoryService(workspace_root)
             result = service.list_files(
                 page=int(params.page), page_size=int(params.page_size),
@@ -4506,10 +4593,10 @@ class MemoryContentHandler:
         web.header('Content-Type', 'application/json; charset=utf-8')
         try:
             from agent.memory.service import MemoryService
-            params = web.input(filename='', category='memory')
+            params = web.input(filename='', category='memory', agent_id='')
             if not params.filename:
                 return json.dumps({"status": "error", "message": "filename required"})
-            workspace_root = _get_workspace_root()
+            workspace_root = _get_workspace_root(_request_agent_id(params))
             service = MemoryService(workspace_root)
             result = service.get_content(params.filename, category=params.category)
             return json.dumps({"status": "success", **result}, ensure_ascii=False)
@@ -4528,7 +4615,8 @@ class SchedulerHandler:
         web.header('Content-Type', 'application/json; charset=utf-8')
         try:
             from agent.tools.scheduler.task_store import TaskStore
-            workspace_root = _get_workspace_root()
+            params = web.input(agent_id='')
+            workspace_root = _get_workspace_root(_request_agent_id(params))
             store_path = os.path.join(workspace_root, "scheduler", "tasks.json")
             store = TaskStore(store_path)
             tasks = store.list_tasks()
@@ -4544,12 +4632,13 @@ class SchedulerRunHandler:
         web.header('Content-Type', 'application/json; charset=utf-8')
         try:
             body = json.loads(web.data())
+            agent_id = _request_agent_id(body)
             task_id = body.get("task_id")
             if not task_id:
                 return json.dumps({"status": "error", "message": "task_id required"})
 
             from agent.tools.scheduler.integration import get_scheduler_service
-            service = get_scheduler_service()
+            service = get_scheduler_service(agent_id=agent_id)
             if service is None:
                 return json.dumps({
                     "status": "error",
@@ -4577,7 +4666,7 @@ class SchedulerToggleHandler:
             if not task_id:
                 return json.dumps({"status": "error", "message": "task_id required"})
             from agent.tools.scheduler.task_store import TaskStore
-            workspace_root = _get_workspace_root()
+            workspace_root = _get_workspace_root(_request_agent_id(body))
             store_path = os.path.join(workspace_root, "scheduler", "tasks.json")
             store = TaskStore(store_path)
             store.enable_task(task_id, enabled)
@@ -4601,7 +4690,7 @@ class SchedulerUpdateHandler:
             from agent.tools.scheduler.task_store import TaskStore
             from agent.tools.scheduler.scheduler_service import SchedulerService
             from datetime import datetime
-            workspace_root = _get_workspace_root()
+            workspace_root = _get_workspace_root(_request_agent_id(body))
             store_path = os.path.join(workspace_root, "scheduler", "tasks.json")
             store = TaskStore(store_path)
             
@@ -4713,7 +4802,7 @@ class SchedulerDeleteHandler:
                 return json.dumps({"status": "error", "message": "task_id required"})
             
             from agent.tools.scheduler.task_store import TaskStore
-            workspace_root = _get_workspace_root()
+            workspace_root = _get_workspace_root(_request_agent_id(body))
             store_path = os.path.join(workspace_root, "scheduler", "tasks.json")
             store = TaskStore(store_path)
             store.delete_task(task_id)
@@ -4723,14 +4812,138 @@ class SchedulerDeleteHandler:
             return json.dumps({"status": "error", "message": str(e)})
 
 
+def _agent_admin_service():
+    from agent.admin import AgentAdminService
+    return AgentAdminService(os.path.join(get_data_root(), "config.json"))
+
+
+def _reload_agent_runtime(service) -> None:
+    from agent.registry import set_agent_registry
+    from agent.routing import AgentRouter, set_agent_router
+
+    settings = service._load()
+    registry = service._registry(settings)
+    router = AgentRouter.from_config(settings, registry)
+    set_agent_registry(registry)
+    set_agent_router(router)
+    conf()["agents"] = [profile.to_dict() for profile in registry.list()]
+    conf()["default_agent_id"] = registry.default_agent_id
+    conf()["agent_bindings"] = list(settings.get("agent_bindings") or [])
+
+    from bridge.bridge import Bridge
+    bridge = Bridge()
+    agent_bridge = getattr(bridge, "_agent_bridge", None)
+    if agent_bridge is None:
+        return
+    agent_bridge.clear_all_sessions()
+    agent_bridge.agent_registry = registry
+    agent_bridge.agent_router = router
+    from agent.tools.scheduler.integration import init_scheduler, reset_scheduler_services
+    reset_scheduler_services()
+    agent_bridge.scheduler_agent_ids.clear()
+    for profile in registry.list(include_disabled=False):
+        if init_scheduler(agent_bridge, profile.workspace, profile.id):
+            agent_bridge.scheduler_agent_ids.add(profile.id)
+    agent_bridge.scheduler_initialized = bool(agent_bridge.scheduler_agent_ids)
+
+
+class AgentsHandler:
+    def GET(self):
+        _require_auth()
+        web.header('Content-Type', 'application/json; charset=utf-8')
+        try:
+            return json.dumps(
+                {"status": "success", **_agent_admin_service().snapshot()},
+                ensure_ascii=False,
+            )
+        except Exception as e:
+            logger.error(f"[WebChannel] Agents API error: {e}")
+            return json.dumps({"status": "error", "message": str(e)})
+
+    def POST(self):
+        _require_auth()
+        web.header('Content-Type', 'application/json; charset=utf-8')
+        try:
+            body = json.loads(web.data())
+            action = body.get("action")
+            service = _agent_admin_service()
+            if action == "create":
+                result = service.create_agent(
+                    agent_id=body.get("id", ""),
+                    name=body.get("name", ""),
+                    workspace=body.get("workspace", ""),
+                    clone_from=body.get("clone_from") or None,
+                )
+            elif action == "update":
+                result = service.update_agent(
+                    body.get("id", ""),
+                    name=body.get("name"),
+                    enabled=body.get("enabled"),
+                    make_default=bool(body.get("make_default", False)),
+                )
+            elif action == "archive":
+                result = service.archive_agent(body.get("id", ""))
+            elif action == "replace_bindings":
+                result = service.replace_bindings(body.get("bindings") or [])
+            else:
+                return json.dumps({
+                    "status": "error", "message": f"unknown action: {action}"
+                })
+            _reload_agent_runtime(service)
+            return json.dumps({"status": "success", "result": result}, ensure_ascii=False)
+        except Exception as e:
+            logger.error(f"[WebChannel] Agents POST error: {e}")
+            return json.dumps({"status": "error", "message": str(e)})
+
+
+class AgentCoreFileHandler:
+    def GET(self, agent_id: str, filename: str):
+        _require_auth()
+        web.header('Content-Type', 'application/json; charset=utf-8')
+        try:
+            result = _agent_admin_service().read_core_file(agent_id, filename)
+            return json.dumps({"status": "success", **result}, ensure_ascii=False)
+        except Exception as e:
+            return json.dumps({"status": "error", "message": str(e)})
+
+    def PUT(self, agent_id: str, filename: str):
+        _require_auth()
+        web.header('Content-Type', 'application/json; charset=utf-8')
+        try:
+            body = json.loads(web.data())
+            result = _agent_admin_service().write_core_file(
+                agent_id,
+                filename,
+                body.get("content"),
+                body.get("revision", ""),
+            )
+            try:
+                from bridge.bridge import Bridge
+                agent_bridge = getattr(Bridge(), "_agent_bridge", None)
+                if agent_bridge is not None:
+                    agent_bridge.clear_agent(agent_id)
+            except Exception as e:
+                logger.warning(
+                    f"[WebChannel] Failed to evict edited agent={agent_id}: {e}"
+                )
+            return json.dumps({"status": "success", **result}, ensure_ascii=False)
+        except Exception as e:
+            from agent.admin import StaleAgentFileError
+            if isinstance(e, StaleAgentFileError):
+                web.ctx.status = "409 Conflict"
+            return json.dumps({"status": "error", "message": str(e)})
+
+
 class SessionsHandler:
     def GET(self):
         _require_auth()
         web.header('Content-Type', 'application/json; charset=utf-8')
         try:
-            params = web.input(page='1', page_size='50')
+            params = web.input(page='1', page_size='50', agent_id='')
             from agent.memory import get_conversation_store
-            store = get_conversation_store()
+            store = get_conversation_store(
+                _get_workspace_root(_request_agent_id(params))
+            )
             result = store.list_sessions(
                 channel_type="web",
                 page=int(params.page),
@@ -4750,23 +4963,25 @@ class SessionDetailHandler:
         try:
             if not session_id:
                 return json.dumps({"status": "error", "message": "session_id required"})
+            params = web.input(agent_id='')
+            agent_id = _request_agent_id(params)
 
             from agent.memory import get_conversation_store
-            store = get_conversation_store()
+            store = get_conversation_store(_get_workspace_root(agent_id))
             store.clear_session(session_id)
 
             # Also remove the Agent instance from AgentBridge if exists
             try:
                 from bridge.bridge import Bridge
                 ab = Bridge().get_agent_bridge()
-                if session_id in ab.agents:
-                    del ab.agents[session_id]
-                    logger.info(f"[WebChannel] Removed agent instance for session {session_id}")
+                ab.clear_session(session_id, agent_id=agent_id)
             except Exception:
                 pass
 
             channel = WebChannel()
-            channel.session_queues.pop(session_id, None)
+            channel.session_queues.pop(
+                channel._session_queue_key(session_id, agent_id), None
+            )
 
             logger.info(f"[WebChannel] Session deleted: {session_id}")
             return json.dumps({"status": "success"})
@@ -4781,12 +4996,13 @@ class SessionDetailHandler:
             if not session_id:
                 return json.dumps({"status": "error", "message": "session_id required"})
             body = json.loads(web.data())
+            agent_id = _request_agent_id(body)
             title = body.get("title", "").strip()
             if not title:
                 return json.dumps({"status": "error", "message": "title required"})
 
             from agent.memory import get_conversation_store
-            store = get_conversation_store()
+            store = get_conversation_store(_get_workspace_root(agent_id))
             found = store.rename_session(session_id, title)
             if not found:
                 return json.dumps({"status": "error", "message": "session not found"})
@@ -4805,6 +5021,7 @@ class SessionTitleHandler:
                 return json.dumps({"status": "error", "message": "session_id required"})
 
             body = json.loads(web.data())
+            agent_id = _request_agent_id(body)
             user_message = body.get("user_message", "")
             assistant_reply = body.get("assistant_reply", "")
             if not user_message:
@@ -4813,7 +5030,7 @@ class SessionTitleHandler:
             title = _generate_session_title(user_message, assistant_reply)
 
             from agent.memory import get_conversation_store
-            store = get_conversation_store()
+            store = get_conversation_store(_get_workspace_root(agent_id))
             updated = store.rename_session(session_id, title)
             logger.info(f"[WebChannel] Session title set: sid={session_id}, title='{title}', db_updated={updated}")
 
@@ -4830,9 +5047,13 @@ class SessionClearContextHandler:
         try:
             if not session_id:
                 return json.dumps({"status": "error", "message": "session_id required"})
+            params = web.input(agent_id='')
+            raw_body = web.data()
+            body = json.loads(raw_body) if raw_body else {}
+            agent_id = _request_agent_id(body) or _request_agent_id(params)
 
             from agent.memory import get_conversation_store
-            store = get_conversation_store()
+            store = get_conversation_store(_get_workspace_root(agent_id))
             new_seq = store.clear_context(session_id)
 
             # Delete the agent instance so a fresh one is created on the next message
@@ -4840,9 +5061,7 @@ class SessionClearContextHandler:
                 from bridge.bridge import Bridge
                 bridge = Bridge()
                 ab = bridge.get_agent_bridge()
-                if session_id in ab.agents:
-                    del ab.agents[session_id]
-                    logger.info(f"[WebChannel] Cleared agent instance for session {session_id}")
+                ab.clear_session(session_id, agent_id=agent_id)
             except Exception:
                 pass
 
@@ -4858,13 +5077,15 @@ class HistoryHandler:
         web.header('Content-Type', 'application/json; charset=utf-8')
         web.header('Access-Control-Allow-Origin', '*')
         try:
-            params = web.input(session_id='', page='1', page_size='20')
+            params = web.input(session_id='', page='1', page_size='20', agent_id='')
             session_id = params.session_id.strip()
             if not session_id:
                 return json.dumps({"status": "error", "message": "session_id required"})
 
             from agent.memory import get_conversation_store
-            store = get_conversation_store()
+            store = get_conversation_store(
+                _get_workspace_root(_request_agent_id(params))
+            )
             result = store.load_history_page(
                 session_id=session_id,
                 page=int(params.page),
@@ -4883,6 +5104,7 @@ class MessageDeleteHandler:
         web.header('Access-Control-Allow-Origin', '*')
         try:
             data = json.loads(web.data())
+            agent_id = _request_agent_id(data)
             session_id = data.get('session_id', '').strip()
             user_seq = data.get('user_seq')
             delete_user = data.get('delete_user', True)
@@ -4893,14 +5115,16 @@ class MessageDeleteHandler:
             
             # 1. Delete from database
             from agent.memory import get_conversation_store
-            store = get_conversation_store()
+            store = get_conversation_store(_get_workspace_root(agent_id))
             deleted = store.delete_message_pair(session_id, int(user_seq), delete_user=delete_user, cascade=cascade)
 
             # 2. Sync agent's in-memory context so its next turn sees the
             # same history as the DB. Handled by the agent_bridge helper.
             try:
                 from bridge.bridge import Bridge
-                Bridge().get_agent_bridge().sync_session_messages_from_store(session_id)
+                Bridge().get_agent_bridge().sync_session_messages_from_store(
+                    session_id, agent_id=agent_id
+                )
             except Exception as sync_err:
                 logger.warning(f"[WebChannel] Failed to sync agent memory: {sync_err}")
 
@@ -5012,7 +5236,8 @@ class KnowledgeListHandler:
         web.header('Content-Type', 'application/json; charset=utf-8')
         try:
             from agent.knowledge.service import KnowledgeService
-            svc = KnowledgeService(_get_workspace_root())
+            params = web.input(agent_id='')
+            svc = KnowledgeService(_get_workspace_root(_request_agent_id(params)))
             result = svc.list_tree()
             return json.dumps({"status": "success", **result}, ensure_ascii=False)
         except Exception as e:
@@ -5026,8 +5251,8 @@ class KnowledgeReadHandler:
         web.header('Content-Type', 'application/json; charset=utf-8')
         try:
             from agent.knowledge.service import KnowledgeService
-            params = web.input(path='')
-            svc = KnowledgeService(_get_workspace_root())
+            params = web.input(path='', agent_id='')
+            svc = KnowledgeService(_get_workspace_root(_request_agent_id(params)))
             result = svc.read_file(params.path)
             return json.dumps({"status": "success", **result}, ensure_ascii=False)
         except (ValueError, FileNotFoundError) as e:
@@ -5043,7 +5268,8 @@ class KnowledgeGraphHandler:
         web.header('Content-Type', 'application/json; charset=utf-8')
         try:
             from agent.knowledge.service import KnowledgeService
-            svc = KnowledgeService(_get_workspace_root())
+            params = web.input(agent_id='')
+            svc = KnowledgeService(_get_workspace_root(_request_agent_id(params)))
             return json.dumps(svc.build_graph(), ensure_ascii=False)
         except Exception as e:
             logger.error(f"[WebChannel] Knowledge graph error: {e}")
@@ -5059,7 +5285,9 @@ class KnowledgeActionHandler:
             action = body.get("action", "")
             payload = body.get("payload") or {}
             from agent.knowledge.service import KnowledgeService
-            result = KnowledgeService(_get_workspace_root()).dispatch(action, payload)
+            result = KnowledgeService(
+                _get_workspace_root(_request_agent_id(body))
+            ).dispatch(action, payload)
             return json.dumps({
                 "status": "success" if result["code"] < 300 else "error",
                 **result,
@@ -5084,6 +5312,7 @@ class KnowledgeImportHandler:
                     "payload": None,
                 })
             params = _raw_web_input()
+            agent_id = _request_agent_id(params)
             target_category = params.get("target_category", "")
             conflict_strategy = params.get("conflict_strategy", "skip")
             uploaded = _ensure_list(params.get("files"))
@@ -5120,7 +5349,7 @@ class KnowledgeImportHandler:
                     "content": content,
                 })
 
-            result = KnowledgeService(_get_workspace_root()).dispatch("import_documents", {
+            result = KnowledgeService(_get_workspace_root(agent_id)).dispatch("import_documents", {
                 "target_category": target_category,
                 "conflict_strategy": conflict_strategy,
                 "files": files,
