@@ -4759,9 +4759,7 @@ class SessionDetailHandler:
             try:
                 from bridge.bridge import Bridge
                 ab = Bridge().get_agent_bridge()
-                if session_id in ab.agents:
-                    del ab.agents[session_id]
-                    logger.info(f"[WebChannel] Removed agent instance for session {session_id}")
+                ab.clear_session(session_id)
             except Exception:
                 pass
 
@@ -4840,9 +4838,7 @@ class SessionClearContextHandler:
                 from bridge.bridge import Bridge
                 bridge = Bridge()
                 ab = bridge.get_agent_bridge()
-                if session_id in ab.agents:
-                    del ab.agents[session_id]
-                    logger.info(f"[WebChannel] Cleared agent instance for session {session_id}")
+                ab.clear_session(session_id)
             except Exception:
                 pass
 
