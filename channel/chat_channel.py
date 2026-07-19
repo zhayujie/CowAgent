@@ -446,6 +446,17 @@ class ChatChannel(Channel):
 
     def produce(self, context: Context):
         session_id = context["session_id"]
+        try:
+            from bridge.bridge import Bridge
+            agent_bridge = Bridge().get_agent_bridge()
+            agent_id = agent_bridge.route_context(context)
+            queue_key = agent_bridge._cancel_key(
+                agent_id, session_id, agent_bridge.agent_registry.default_agent_id
+            )
+        except Exception as e:
+            logger.warning(f"[chat_channel] Agent route failed, using default: {e}")
+            agent_id = None
+            queue_key = session_id
 
         # Fast path: /cancel must not enter the queue.
         if context.type == ContextType.TEXT and context.content:
@@ -455,15 +466,15 @@ class ChatChannel(Channel):
                 return
 
         with self.lock:
-            if session_id not in self.sessions:
-                self.sessions[session_id] = [
+            if queue_key not in self.sessions:
+                self.sessions[queue_key] = [
                     Dequeue(),
                     threading.BoundedSemaphore(conf().get("concurrency_in_session", 1)),
                 ]
             if context.type == ContextType.TEXT and context.content.startswith("#"):
-                self.sessions[session_id][0].putleft(context)  # 优先处理管理命令
+                self.sessions[queue_key][0].putleft(context)  # 优先处理管理命令
             else:
-                self.sessions[session_id][0].put(context)
+                self.sessions[queue_key][0].put(context)
 
     def _handle_cancel_command(self, context: Context, session_id: str) -> None:
         """Cancel any in-flight agent run for *session_id* and reply inline.
@@ -475,7 +486,13 @@ class ChatChannel(Channel):
             from agent.protocol import get_cancel_registry
             from bridge.reply import Reply, ReplyType
 
-            cancelled = get_cancel_registry().cancel_session(session_id)
+            from bridge.bridge import Bridge
+            agent_bridge = Bridge().get_agent_bridge()
+            agent_id = agent_bridge.route_context(context)
+            scoped_session_id = agent_bridge._cancel_key(
+                agent_id, session_id, agent_bridge.agent_registry.default_agent_id
+            )
+            cancelled = get_cancel_registry().cancel_session(scoped_session_id)
             text = (
                 _t("🛑 已中止", "🛑 Cancelled")
                 if cancelled > 0
