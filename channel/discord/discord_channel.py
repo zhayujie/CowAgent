@@ -304,7 +304,11 @@ class DiscordChannel(ChatChannel):
             att = attachments[0]
             content_type = (att.content_type or "").lower()
             name = att.filename or str(att.id)
-            path = await self._download_attachment(att, name)
+            path = await self._download_attachment(
+                att,
+                name,
+                conversation_ids=(str(message.channel.id), str(message.author.id)),
+            )
             if not path:
                 return (None, None, "")
             is_image = content_type.startswith("image/") or name.lower().endswith(
@@ -319,10 +323,10 @@ class DiscordChannel(ChatChannel):
 
         return (None, None, "")
 
-    async def _download_attachment(self, attachment, name: str):
+    async def _download_attachment(self, attachment, name: str, conversation_ids=()):
         """Download a discord attachment into the local tmp dir; return path or None."""
         try:
-            tmp_dir = DiscordMessage.get_tmp_dir()
+            tmp_dir = DiscordMessage.get_tmp_dir(conversation_ids)
             safe_name = re.sub(r"[^\w.\-]", "_", name)
             # Prefix with attachment id to avoid name collisions
             local_path = os.path.join(tmp_dir, f"{attachment.id}_{safe_name}")

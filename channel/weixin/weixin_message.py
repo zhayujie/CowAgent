@@ -11,8 +11,7 @@ from bridge.context import ContextType
 from channel.chat_message import ChatMessage
 from channel.weixin.weixin_api import download_media_from_cdn, CDN_BASE_URL
 from common.log import logger
-from common.utils import expand_path
-from config import conf
+from common.tmp_dir import get_agent_tmp_dir
 
 
 # MessageItemType constants from the Weixin protocol
@@ -23,11 +22,8 @@ ITEM_FILE = 4
 ITEM_VIDEO = 5
 
 
-def _get_tmp_dir() -> str:
-    ws_root = expand_path(conf().get("agent_workspace", "~/cow"))
-    tmp_dir = os.path.join(ws_root, "tmp")
-    os.makedirs(tmp_dir, exist_ok=True)
-    return tmp_dir
+def _get_tmp_dir(conversation_ids=()) -> str:
+    return get_agent_tmp_dir("weixin", conversation_ids)
 
 
 class WeixinMessage(ChatMessage):
@@ -53,6 +49,7 @@ class WeixinMessage(ChatMessage):
         self.other_user_nickname = from_user_id
         self.actual_user_id = from_user_id
         self.actual_user_nickname = from_user_id
+        tmp_dir = _get_tmp_dir((from_user_id,))
 
         item_list = msg.get("item_list", [])
 
@@ -132,7 +129,7 @@ class WeixinMessage(ChatMessage):
 
         elif media_type == ITEM_VIDEO:
             self.ctype = ContextType.FILE
-            save_path = os.path.join(_get_tmp_dir(), f"wx_{self.msg_id}.mp4")
+            save_path = os.path.join(tmp_dir, f"wx_{self.msg_id}.mp4")
             self.content = save_path
 
             def _download():
@@ -144,7 +141,7 @@ class WeixinMessage(ChatMessage):
         elif media_type == ITEM_FILE:
             self.ctype = ContextType.FILE
             file_name = item.get("file_item", {}).get("file_name", f"wx_{self.msg_id}")
-            save_path = os.path.join(_get_tmp_dir(), file_name)
+            save_path = os.path.join(tmp_dir, file_name)
             self.content = save_path
 
             def _download():
@@ -155,7 +152,7 @@ class WeixinMessage(ChatMessage):
 
         elif media_type == ITEM_VOICE:
             self.ctype = ContextType.VOICE
-            save_path = os.path.join(_get_tmp_dir(), f"wx_{self.msg_id}.silk")
+            save_path = os.path.join(tmp_dir, f"wx_{self.msg_id}.silk")
             self.content = save_path
 
             def _download():
@@ -187,13 +184,13 @@ class WeixinMessage(ChatMessage):
         if media_type == ITEM_FILE:
             original_name = info.get("file_name", "")
             if original_name:
-                save_path = os.path.join(_get_tmp_dir(), original_name)
+                save_path = os.path.join(tmp_dir, original_name)
             else:
-                save_path = os.path.join(_get_tmp_dir(), f"wx_{self.msg_id}.bin")
+                save_path = os.path.join(tmp_dir, f"wx_{self.msg_id}.bin")
         else:
             ext_map = {ITEM_IMAGE: ".jpg", ITEM_VIDEO: ".mp4", ITEM_VOICE: ".silk"}
             ext = ext_map.get(media_type, "")
-            save_path = os.path.join(_get_tmp_dir(), f"wx_{self.msg_id}{ext}")
+            save_path = os.path.join(tmp_dir, f"wx_{self.msg_id}{ext}")
 
         try:
             download_media_from_cdn(cdn_base_url, encrypt_param, aes_key, save_path)

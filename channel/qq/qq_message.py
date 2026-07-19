@@ -4,16 +4,12 @@ import requests
 from bridge.context import ContextType
 from channel.chat_message import ChatMessage
 from common.log import logger
-from common.utils import expand_path
-from config import conf
+from common.tmp_dir import get_agent_tmp_dir
 
 
-def _get_tmp_dir() -> str:
+def _get_tmp_dir(conversation_ids=()) -> str:
     """Return the workspace tmp directory (absolute path), creating it if needed."""
-    ws_root = expand_path(conf().get("agent_workspace", "~/cow"))
-    tmp_dir = os.path.join(ws_root, "tmp")
-    os.makedirs(tmp_dir, exist_ok=True)
-    return tmp_dir
+    return get_agent_tmp_dir("qq", conversation_ids)
 
 
 class QQMessage(ChatMessage):
@@ -29,6 +25,10 @@ class QQMessage(ChatMessage):
         author = event_data.get("author", {})
         from_user_id = author.get("member_openid", "") or author.get("id", "")
         group_openid = event_data.get("group_openid", "")
+        conversation_ids = (
+            group_openid or event_data.get("channel_id", ""),
+            from_user_id or author.get("user_openid", ""),
+        )
 
         content = event_data.get("content", "").strip()
 
@@ -45,7 +45,7 @@ class QQMessage(ChatMessage):
             img_url = img_attachment.get("url", "")
             if img_url and not img_url.startswith("http"):
                 img_url = "https://" + img_url
-            tmp_dir = _get_tmp_dir()
+            tmp_dir = _get_tmp_dir(conversation_ids)
             image_path = os.path.join(tmp_dir, f"qq_{self.msg_id}.png")
             try:
                 resp = requests.get(img_url, timeout=30)
@@ -62,7 +62,7 @@ class QQMessage(ChatMessage):
         elif has_image and content:
             self.ctype = ContextType.TEXT
             image_paths = []
-            tmp_dir = _get_tmp_dir()
+            tmp_dir = _get_tmp_dir(conversation_ids)
             for idx, att in enumerate(attachments):
                 if not att.get("content_type", "").startswith("image/"):
                     continue

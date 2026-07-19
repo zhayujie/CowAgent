@@ -58,6 +58,16 @@ def _normalise_workspace(value: Any) -> str:
     return str(Path(expand_path(value.strip())).resolve(strict=False))
 
 
+def _workspaces_overlap(left: str, right: str) -> bool:
+    left_path = Path(left)
+    right_path = Path(right)
+    return (
+        left_path == right_path
+        or left_path in right_path.parents
+        or right_path in left_path.parents
+    )
+
+
 def _profile_from_mapping(raw: Mapping[str, Any]) -> AgentProfile:
     agent_id = raw.get("id")
     if not isinstance(agent_id, str) or not _AGENT_ID_RE.fullmatch(agent_id):
@@ -99,18 +109,16 @@ class AgentRegistry:
         self._profiles: Dict[str, AgentProfile] = {}
         self._default_agent_id = default_agent_id
 
-        workspaces: Dict[str, str] = {}
         for profile in profiles:
             if profile.id in self._profiles:
                 raise AgentRegistryError(f"duplicate agent id: {profile.id}")
-            owner = workspaces.get(profile.workspace)
-            if owner is not None:
-                raise AgentRegistryError(
-                    f"agents '{owner}' and '{profile.id}' share workspace "
-                    f"'{profile.workspace}'"
-                )
+            for owner in self._profiles.values():
+                if _workspaces_overlap(owner.workspace, profile.workspace):
+                    raise AgentRegistryError(
+                        f"agents '{owner.id}' and '{profile.id}' have overlapping "
+                        f"workspaces: '{owner.workspace}' and '{profile.workspace}'"
+                    )
             self._profiles[profile.id] = profile
-            workspaces[profile.workspace] = profile.id
 
         if not self._profiles:
             raise AgentRegistryError("at least one agent profile is required")
@@ -180,10 +188,12 @@ class AgentRegistry:
     def upsert(self, profile: AgentProfile) -> None:
         with self._lock:
             for existing in self._profiles.values():
-                if existing.id != profile.id and existing.workspace == profile.workspace:
+                if existing.id != profile.id and _workspaces_overlap(
+                    existing.workspace, profile.workspace
+                ):
                     raise AgentRegistryError(
-                        f"agents '{existing.id}' and '{profile.id}' share workspace "
-                        f"'{profile.workspace}'"
+                        f"agents '{existing.id}' and '{profile.id}' have overlapping "
+                        f"workspaces: '{existing.workspace}' and '{profile.workspace}'"
                     )
             self._profiles[profile.id] = profile
             self._validate_default(self._default_agent_id)

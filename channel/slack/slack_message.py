@@ -5,12 +5,9 @@ Convert a Slack event payload into cow's unified ChatMessage.
 File downloads are NOT performed here; the channel layer downloads files
 on demand because it needs the bot token for authenticated download URLs.
 """
-import os
-
 from bridge.context import ContextType
 from channel.chat_message import ChatMessage
-from common.utils import expand_path
-from config import conf
+from common.tmp_dir import get_agent_tmp_dir
 
 
 class SlackMessage(ChatMessage):
@@ -52,9 +49,6 @@ class SlackMessage(ChatMessage):
         self.is_at = False
 
     @staticmethod
-    def get_tmp_dir() -> str:
+    def get_tmp_dir(conversation_ids=()) -> str:
         """Local download directory, aligned with other channels (agent_workspace/tmp)."""
-        workspace_root = expand_path(conf().get("agent_workspace", "~/cow"))
-        tmp_dir = os.path.join(workspace_root, "tmp")
-        os.makedirs(tmp_dir, exist_ok=True)
-        return tmp_dir
+        return get_agent_tmp_dir("slack", conversation_ids)

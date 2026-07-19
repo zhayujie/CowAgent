@@ -40,3 +40,4 @@ def test_workspace_scoped_web_services_resolve_selected_agent():
     assert "get_conversation_store(_get_workspace_root(agent_id))" in source
     assert "KnowledgeService(_get_workspace_root(agent_id))" in source
     assert "get_scheduler_service(agent_id=agent_id)" in source
+    assert "for profile in get_agent_registry().list()" in source

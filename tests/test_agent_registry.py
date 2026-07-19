@@ -59,12 +59,26 @@ def test_duplicate_ids_and_workspaces_are_rejected(tmp_path):
             }
         )
 
-    with pytest.raises(AgentRegistryError, match="share workspace"):
+    with pytest.raises(AgentRegistryError, match="overlapping workspaces"):
         AgentRegistry.from_config(
             {
                 "agents": [
                     {"id": "one", "workspace": str(tmp_path / "shared")},
                     {"id": "two", "workspace": str(tmp_path / "shared")},
+                ],
+                "default_agent_id": "one",
+            }
+        )
+
+    with pytest.raises(AgentRegistryError, match="overlapping workspaces"):
+        AgentRegistry.from_config(
+            {
+                "agents": [
+                    {"id": "one", "workspace": str(tmp_path / "parent")},
+                    {
+                        "id": "two",
+                        "workspace": str(tmp_path / "parent" / "nested"),
+                    },
                 ],
                 "default_agent_id": "one",
             }

@@ -1,0 +1,143 @@
+---
+title: Multiple Agents
+description: Run independent Agent workspaces in one CowAgent process
+---
+
+CowAgent can run several Agents in one process. Each Agent is a complete
+workspace, using the same layout and behavior as a single-Agent installation.
+
+## One workspace per Agent
+
+An Agent's workspace is its home:
+
+```text
+<workspace>/
+├── AGENT.md
+├── USER.md
+├── RULE.md
+├── MEMORY.md
+├── BOOTSTRAP.md
+├── memory/
+├── skills/
+├── knowledge/
+├── output/
+└── scheduler/
+```
+
+Persona, user context, rules, memory, conversation sessions, skills, knowledge,
+scheduled tasks, and generated files stay under that workspace. Each Agent has
+its own `memory/long-term/index.db`; CowAgent does not put several Agents into a
+shared memory database.
+
+## Configure Agents
+
+Add an Agent registry to `config.json`:
+
+```json
+{
+  "default_agent_id": "main",
+  "agents": [
+    {
+      "id": "main",
+      "name": "Main",
+      "workspace": "~/cow-main",
+      "enabled": true
+    },
+    {
+      "id": "research",
+      "name": "Research",
+      "workspace": "~/cow-research",
+      "enabled": true
+    }
+  ],
+  "agent_bindings": [
+    {
+      "channel_type": "feishu",
+      "conversation_id": "oc_example_chat_id",
+      "agent_id": "research"
+    },
+    {
+      "channel_type": "telegram",
+      "agent_id": "main"
+    }
+  ]
+}
+```
+
+Agent IDs must contain 1–64 letters, numbers, underscores, or hyphens. Every
+workspace path must be unique and cannot contain another Agent workspace. The
+default Agent must be enabled.
+
+`agent_bindings` resolves messages in this order:
+
+1. an exact channel and conversation match;
+2. a channel-level binding without `conversation_id`;
+3. `default_agent_id`.
+
+An unavailable target logs a warning and falls back to the default Agent.
+
+<Note>
+  Existing installations need no configuration change. When `agents` is
+  absent, CowAgent keeps using `agent_workspace` and creates one compatible
+  `default` profile in memory.
+</Note>
+
+## Manage Agents in the Web console
+
+Open **Management → Agents** to:
+
+- create a complete workspace from the standard templates;
+- clone an existing Agent workspace;
+- choose the active Agent for Web conversations;
+- make an Agent the default, or archive it without deleting its files;
+- edit `AGENT.md`, `USER.md`, `RULE.md`, `MEMORY.md`, and `BOOTSTRAP.md`;
+- edit channel bindings.
+
+Core-file saves use revision checks. If the file changed after the editor
+loaded it, the API returns a conflict instead of overwriting the newer content.
+Memory, Skills, Knowledge, Sessions, History, and Scheduler views follow the
+Agent selected in the header.
+
+## Delegate work between Agents
+
+With at least two enabled Agents, CowAgent adds the `agent_delegate` tool. An
+Agent can list its available peers and send a bounded task to one of them. The
+target works in its own workspace and relay session, then returns a result to
+the caller. The result is not pushed to a user channel by itself.
+
+Optional policy settings:
+
+```json
+{
+  "agent_delegation": {
+    "enabled": true,
+    "allowed_targets": {
+      "main": ["research"],
+      "research": ["main"]
+    },
+    "max_depth": 3,
+    "timeout_seconds": 120,
+    "max_message_chars": 8000
+  }
+}
+```
+
+Without `allowed_targets`, an Agent may delegate to any other enabled Agent.
+Once the map is present, a source not listed in it has no targets. `"*"` allows
+all enabled peers for that source. Delegation rejects disabled targets, cycles,
+over-depth chains, oversized messages, and timed-out runs.
+
+## Back up and restore
+
+`cow backup` includes the registry, bindings, and every configured Agent
+workspace. On restore, an existing Agent ID reuses its current local workspace.
+On a fresh installation, Agents are placed under `~/cow-agents/<agent-id>`.
+
+To choose another root explicitly:
+
+```bash
+cow restore cow-backup.zip --workspace /srv/cow-agents
+```
+
+For a multi-Agent archive, the command creates one subdirectory per Agent under
+that root. See [Backup and Restore](/cli/backup) for archive safety details.

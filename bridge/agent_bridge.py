@@ -82,16 +82,22 @@ class AgentLLMModel(LLMModel):
         ("mimo-", const.MIMO),
     ]
 
-    def __init__(self, bridge: Bridge, bot_type: str = "chat"):
-        super().__init__(model=conf().get("model", const.GPT_41))
+    def __init__(
+        self,
+        bridge: Bridge,
+        model: str = None,
+        bot_type: str = None,
+    ):
+        super().__init__(model=model or conf().get("model", const.GPT_41))
         self.bridge = bridge
-        self.bot_type = bot_type
+        self._model_override = model
+        self._bot_type_override = bot_type
         self._bot = None
         self._bot_model = None
 
     @property
     def model(self):
-        return conf().get("model", const.GPT_41)
+        return self._model_override or conf().get("model", const.GPT_41)
 
     @model.setter
     def model(self, value):
@@ -99,6 +105,9 @@ class AgentLLMModel(LLMModel):
 
     def _resolve_bot_type(self, model_name: str) -> str:
         """Resolve bot type from model name, matching Bridge.__init__ logic."""
+        bot_type_override = getattr(self, "_bot_type_override", None)
+        if bot_type_override:
+            return bot_type_override
         if conf().get("use_linkai", False) and conf().get("linkai_api_key"):
             return const.LINKAI
         # Support custom bot type configuration
@@ -332,17 +341,21 @@ class AgentBridge:
             Agent instance
         """
         # Create LLM model that uses COW's bot infrastructure
-        model = AgentLLMModel(self.bridge)
+        model = AgentLLMModel(
+            self.bridge,
+            model=kwargs.get("model_name"),
+            bot_type=kwargs.get("bot_type"),
+        )
         
         # Default tools if none provided
         if tools is None:
             # Use ToolManager to load all available tools
             from agent.tools import ToolManager
-            tool_manager = ToolManager()
+            workspace_dir = kwargs.get("workspace_dir")
+            tool_manager = ToolManager(workspace_dir)
             tool_manager.load_tools()
             
             tools = []
-            workspace_dir = kwargs.get("workspace_dir")
             for tool_name in tool_manager.tool_classes.keys():
                 try:
                     tool = tool_manager.create_tool(tool_name)
@@ -760,7 +773,7 @@ class AgentBridge:
 
         def _run():
             try:
-                tm = ToolManager()
+                tm = ToolManager(getattr(agent, "workspace_dir", None))
                 tm.refresh_mcp_if_changed()
                 added, removed = tm.sync_mcp_into_agent(agent)
                 if added or removed:

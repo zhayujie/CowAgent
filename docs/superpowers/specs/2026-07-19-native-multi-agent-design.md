@@ -17,6 +17,7 @@ is reused unchanged:
 ├── USER.md
 ├── RULE.md
 ├── MEMORY.md
+├── BOOTSTRAP.md
 ├── memory/
 ├── skills/
 ├── knowledge/
@@ -93,7 +94,8 @@ use the default agent.
 ## Web console
 
 The console can list, create, clone, enable, disable, and select agents. It can
-edit the four core files `AGENT.md`, `USER.md`, `RULE.md`, and `MEMORY.md`.
+edit the five core files `AGENT.md`, `USER.md`, `RULE.md`, `MEMORY.md`, and
+`BOOTSTRAP.md`.
 
 The editor is intentionally not a general filesystem browser. The backend uses
 an allowlist, resolves paths beneath the selected workspace, writes atomically,
@@ -109,7 +111,7 @@ agent.
 Agents communicate through a guarded request-response tool:
 
 ```text
-agent_delegate(target_agent, message, timeout_seconds)
+agent_delegate(action="delegate", agent_id="research", task="...")
 ```
 
 The target runs in its own workspace and a dedicated relay session. Results
@@ -120,12 +122,10 @@ to a user channel automatically.
 
 ## Backup and restore
 
-Backups include the registry, bindings, and selected agent workspaces. Restore
+Backups include the registry, bindings, and every configured Agent workspace. Restore
 validates manifest versions, profile IDs, workspace destinations, and archive
-paths before writing. Restores remain transactional and preserve the existing
-rollback behaviour.
-
-No import tooling is part of this design.
+paths before writing. The restored configuration is published only after the
+workspace files are copied, and the existing rollback behaviour is preserved.
 
 ## Delivery
 
@@ -149,7 +149,7 @@ preserve the zero-configuration single-agent path.
 - Memory, conversation history, scheduled tasks, skills, and knowledge remain
   inside the selected workspace.
 - Channel bindings resolve deterministically and fail safely.
-- The console can create an agent and safely edit its four core Markdown files.
+- The console can create an agent and safely edit its five core Markdown files.
 - Delegation cannot recurse forever or bypass disabled-target checks.
 - Backup and restore preserve all configured agents without writing outside
   approved workspace paths.

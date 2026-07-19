@@ -8,8 +8,7 @@ from bridge.context import ContextType
 from channel.chat_message import ChatMessage
 # -*- coding=utf-8 -*-
 from common.log import logger
-from common.tmp_dir import TmpDir
-from common.utils import expand_path
+from common.tmp_dir import get_agent_tmp_dir
 from config import conf
 
 
@@ -26,6 +25,11 @@ class DingTalkMessage(ChatMessage):
         self.image_content = event.image_content
         self.rich_text_content = event.rich_text_content
         self.robot_code = event.robot_code  # 机器人编码
+        tmp_dir = None
+        if self.message_type in ("picture", "richText"):
+            tmp_dir = get_agent_tmp_dir(
+                "dingtalk", (event.conversation_id, event.sender_id)
+            )
         if event.conversation_type == "1":
             self.is_group = False
         else:
@@ -50,10 +54,6 @@ class DingTalkMessage(ChatMessage):
                 download_url = image_download_handler.get_image_download_url(download_code)
                 
                 # 下载到工作空间 tmp 目录
-                workspace_root = expand_path(conf().get("agent_workspace", "~/cow"))
-                tmp_dir = os.path.join(workspace_root, "tmp")
-                os.makedirs(tmp_dir, exist_ok=True)
-                
                 image_path = download_image_file(download_url, tmp_dir)
                 if image_path:
                     self.content = image_path
@@ -68,10 +68,6 @@ class DingTalkMessage(ChatMessage):
                 self.ctype = ContextType.TEXT
                 
                 # 下载到工作空间 tmp 目录
-                workspace_root = expand_path(conf().get("agent_workspace", "~/cow"))
-                tmp_dir = os.path.join(workspace_root, "tmp")
-                os.makedirs(tmp_dir, exist_ok=True)
-                
                 # 提取富文本中的文本内容
                 text_content = ""
                 if self.rich_text_content:

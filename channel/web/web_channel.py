@@ -1705,10 +1705,13 @@ class FileServeHandler:
             # to allow the whole filesystem.
             file_path = os.path.realpath(file_path)
             serve_root = conf().get("web_file_serve_root", "~") or "~"
-            allowed_roots = [
-                os.path.realpath(os.path.expanduser(serve_root)),
-                os.path.realpath(os.path.expanduser(conf().get("agent_workspace", "~/cow"))),
-            ]
+            from agent.registry import get_agent_registry
+
+            allowed_roots = [os.path.realpath(os.path.expanduser(serve_root))]
+            allowed_roots.extend(
+                os.path.realpath(profile.workspace)
+                for profile in get_agent_registry().list()
+            )
             if os.sep not in allowed_roots and not any(
                 os.path.commonpath([file_path, root]) == root for root in allowed_roots
             ):
@@ -4488,7 +4491,8 @@ class ToolsHandler:
         try:
             from agent.tools.tool_manager import ToolManager
             from common import i18n
-            tm = ToolManager()
+            params = web.input(agent_id='')
+            tm = ToolManager(_get_workspace_root(_request_agent_id(params)))
             if not tm.tool_classes:
                 tm.load_tools()
             tools = []
@@ -4824,15 +4828,26 @@ def _reload_agent_runtime(service) -> None:
     settings = service._load()
     registry = service._registry(settings)
     router = AgentRouter.from_config(settings, registry)
+    from agent.tools import ToolManager
+
+    from bridge.bridge import Bridge
+    bridge = Bridge()
+    agent_bridge = getattr(bridge, "_agent_bridge", None)
+    if agent_bridge is not None:
+        enabled_workspaces = {
+            profile.workspace
+            for profile in registry.list(include_disabled=False)
+        }
+        for profile in agent_bridge.agent_registry.list():
+            if profile.workspace not in enabled_workspaces:
+                ToolManager.shutdown_workspace(profile.workspace)
+
     set_agent_registry(registry)
     set_agent_router(router)
     conf()["agents"] = [profile.to_dict() for profile in registry.list()]
     conf()["default_agent_id"] = registry.default_agent_id
     conf()["agent_bindings"] = list(settings.get("agent_bindings") or [])
 
-    from bridge.bridge import Bridge
-    bridge = Bridge()
-    agent_bridge = getattr(bridge, "_agent_bridge", None)
     if agent_bridge is None:
         return
     agent_bridge.clear_all_sessions()

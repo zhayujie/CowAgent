@@ -2,7 +2,7 @@ import threading
 from types import SimpleNamespace
 
 from agent.registry import AgentRegistry
-from bridge.agent_bridge import AgentBridge
+from bridge.agent_bridge import AgentBridge, AgentLLMModel
 
 
 class _FakeInitializer:
@@ -89,6 +89,34 @@ def test_default_runtime_is_per_agent_workspace(tmp_path):
     assert primary is not research
     assert bridge.get_agent() is primary
     assert bridge.get_agent(agent_id="research") is research
+
+
+def test_agent_llm_model_uses_profile_overrides(monkeypatch):
+    monkeypatch.setattr(
+        "bridge.agent_bridge.conf",
+        lambda: {"model": "global-model", "bot_type": "global-provider"},
+    )
+
+    model = AgentLLMModel(
+        bridge=object(),
+        model="agent-model",
+        bot_type="agent-provider",
+    )
+
+    assert model.model == "agent-model"
+    assert model._resolve_bot_type(model.model) == "agent-provider"
+
+
+def test_agent_llm_model_keeps_legacy_global_fallback(monkeypatch):
+    monkeypatch.setattr(
+        "bridge.agent_bridge.conf",
+        lambda: {"model": "global-model", "bot_type": "global-provider"},
+    )
+
+    model = AgentLLMModel(bridge=object())
+
+    assert model.model == "global-model"
+    assert model._resolve_bot_type(model.model) == "global-provider"
 
 
 def test_clear_session_and_agent_do_not_evict_other_agents(tmp_path):

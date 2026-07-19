@@ -20,7 +20,9 @@ def tasks_for_receivers(tasks: Iterable[dict], receivers: Set[str]) -> List[dict
     return visible
 
 
-def build_scheduler_card(tasks: Iterable[dict]) -> Dict[str, Any]:
+def build_scheduler_card(
+    tasks: Iterable[dict], agent_id: str = None
+) -> Dict[str, Any]:
     """Build a Card 2.0 task list with explicit, idempotent actions."""
     task_list = list(tasks)
     elements: List[Dict[str, Any]] = []
@@ -64,12 +66,22 @@ def build_scheduler_card(tasks: Iterable[dict]) -> Dict[str, Any]:
                                     toggle_action,
                                     task_id,
                                     receiver,
+                                    agent_id,
                                 )
                             ],
                         },
                         {
                             "tag": "column",
-                            "elements": [_button("Delete", "danger", "delete", task_id, receiver)],
+                            "elements": [
+                                _button(
+                                    "Delete",
+                                    "danger",
+                                    "delete",
+                                    task_id,
+                                    receiver,
+                                    agent_id,
+                                )
+                            ],
                         },
                     ],
                 }
@@ -100,7 +112,10 @@ def build_scheduler_card(tasks: Iterable[dict]) -> Dict[str, Any]:
 
 
 def handle_scheduler_action(
-    value: Dict[str, Any], task_store: Any, allowed_receivers: Set[str]
+    value: Dict[str, Any],
+    task_store: Any,
+    allowed_receivers: Set[str],
+    agent_id: str = None,
 ) -> Dict[str, Any]:
     """Apply an owned scheduler action and return a Feishu callback response."""
     if value.get("cowagent") != "scheduler":
@@ -116,7 +131,10 @@ def handle_scheduler_action(
         return _response(
             "info",
             "Task no longer exists",
-            build_scheduler_card(tasks_for_receivers(task_store.list_tasks(), allowed_receivers)),
+            build_scheduler_card(
+                tasks_for_receivers(task_store.list_tasks(), allowed_receivers),
+                agent_id=agent_id,
+            ),
         )
 
     task_receiver = (task.get("action") or {}).get("receiver")
@@ -141,7 +159,9 @@ def handle_scheduler_action(
         return _toast("error", "Task update failed: {}".format(exc))
 
     visible = tasks_for_receivers(task_store.list_tasks(), allowed_receivers)
-    return _response("success", message, build_scheduler_card(visible))
+    return _response(
+        "success", message, build_scheduler_card(visible, agent_id=agent_id)
+    )
 
 
 def _response(toast_type: str, content: str, card: Dict[str, Any]) -> Dict[str, Any]:
@@ -160,17 +180,21 @@ def _button(
     action: str,
     task_id: str,
     receiver: str,
+    agent_id: str = None,
 ) -> Dict[str, Any]:
+    value = {
+        "cowagent": "scheduler",
+        "action": action,
+        "task_id": task_id,
+        "receiver": receiver,
+    }
+    if agent_id:
+        value["agent_id"] = agent_id
     return {
         "tag": "button",
         "text": {"tag": "plain_text", "content": text},
         "type": button_type,
-        "value": {
-            "cowagent": "scheduler",
-            "action": action,
-            "task_id": task_id,
-            "receiver": receiver,
-        },
+        "value": value,
     }
 
 

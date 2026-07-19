@@ -453,7 +453,11 @@ def _execute_tool_call(task: dict, agent_bridge, agent_id: str = None) -> bool:
             return True
 
         from agent.tools.tool_manager import ToolManager
-        tool = ToolManager().create_tool(tool_name)
+        profile = agent_bridge.agent_registry.get(agent_id)
+        tool_manager = ToolManager(profile.workspace)
+        if not tool_manager.tool_classes:
+            tool_manager.load_tools()
+        tool = tool_manager.create_tool(tool_name)
         if not tool:
             logger.error(f"[Scheduler] Task {task['id']}: Tool '{tool_name}' not found")
             return True

@@ -70,7 +70,7 @@ Verification: delegation tests and agent tool regressions.
 
 ## Change 7: Backup and hardening
 
-- Extend the backup manifest with registry, bindings, and selected workspaces.
+- Extend the backup manifest with registry, bindings, and every configured workspace.
 - Preserve archive traversal, destination, and rollback protections.
 - Add single-agent and all-agent backup/restore tests.
 - Update English, Chinese, and Japanese documentation.

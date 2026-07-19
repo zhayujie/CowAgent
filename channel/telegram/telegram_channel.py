@@ -396,10 +396,19 @@ class TelegramChannel(ChatChannel):
         - caption is the optional text accompanying a media message; empty for plain text
         """
         caption = (message.caption or "").strip()
+        sender = getattr(message, "from_user", None)
+        conversation_ids = (
+            str(getattr(message, "chat_id", "") or ""),
+            str(getattr(sender, "id", "") or ""),
+        )
 
         if message.photo:
             largest = message.photo[-1]
-            path = await self._download_file(largest.file_id, suffix=".jpg")
+            path = await self._download_file(
+                largest.file_id,
+                suffix=".jpg",
+                conversation_ids=conversation_ids,
+            )
             return (ContextType.IMAGE, path, caption) if path else (None, None, "")
 
         if message.voice or message.audio:
@@ -407,12 +416,20 @@ class TelegramChannel(ChatChannel):
             suffix = ".ogg" if message.voice else (
                 "." + (audio_obj.mime_type.split("/")[-1] if getattr(audio_obj, "mime_type", "") else "mp3")
             )
-            path = await self._download_file(audio_obj.file_id, suffix=suffix)
+            path = await self._download_file(
+                audio_obj.file_id,
+                suffix=suffix,
+                conversation_ids=conversation_ids,
+            )
             return (ContextType.VOICE, path, caption) if path else (None, None, "")
 
         if message.video or message.video_note:
             video_obj = message.video or message.video_note
-            path = await self._download_file(video_obj.file_id, suffix=".mp4")
+            path = await self._download_file(
+                video_obj.file_id,
+                suffix=".mp4",
+                conversation_ids=conversation_ids,
+            )
             return (ContextType.FILE, path, caption) if path else (None, None, "")
 
         if message.document:
@@ -420,7 +437,12 @@ class TelegramChannel(ChatChannel):
             ext = ""
             if doc.file_name and "." in doc.file_name:
                 ext = "." + doc.file_name.rsplit(".", 1)[-1]
-            path = await self._download_file(doc.file_id, suffix=ext, original_name=doc.file_name)
+            path = await self._download_file(
+                doc.file_id,
+                suffix=ext,
+                original_name=doc.file_name,
+                conversation_ids=conversation_ids,
+            )
             if not path:
                 return (None, None, "")
             # Image-typed documents (user picked "send as file") are treated as images
@@ -434,11 +456,17 @@ class TelegramChannel(ChatChannel):
 
         return (None, None, "")
 
-    async def _download_file(self, file_id: str, suffix: str = "", original_name: str = ""):
+    async def _download_file(
+        self,
+        file_id: str,
+        suffix: str = "",
+        original_name: str = "",
+        conversation_ids=(),
+    ):
         """Download via bot.get_file into the local tmp dir; return path or None on failure."""
         try:
             f = await self._bot.get_file(file_id)
-            tmp_dir = TelegramMessage.get_tmp_dir()
+            tmp_dir = TelegramMessage.get_tmp_dir(conversation_ids)
             base = original_name or f"{file_id}{suffix or ''}"
             # Prefix with file_id to avoid name collisions / weird chars
             safe_name = f"{file_id}_{base}" if original_name else base

@@ -117,7 +117,9 @@ class AgentInitializer:
             skill_manager=skill_manager,
             enable_skills=True,
             max_context_tokens=max_context_tokens,
-            runtime_info=runtime_info  # Pass runtime_info for dynamic time updates
+            runtime_info=runtime_info,  # Pass runtime_info for dynamic time updates
+            model_name=profile.model,
+            bot_type=profile.bot_type,
         )
         
         # Attach memory manager and share LLM model for summarization
@@ -345,7 +347,7 @@ class AgentInitializer:
     
     def _load_tools(self, workspace_root: str, memory_manager, memory_tools: List, session_id: Optional[str] = None):
         """Load all tools"""
-        tool_manager = ToolManager()
+        tool_manager = ToolManager(workspace_root)
         tool_manager.load_tools()
         
         tools = []

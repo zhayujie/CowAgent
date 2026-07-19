@@ -4,10 +4,8 @@ import json
 import os
 import requests
 from common.log import logger
-from common.tmp_dir import TmpDir
+from common.tmp_dir import get_agent_tmp_dir
 from common import utils
-from common.utils import expand_path
-from config import conf
 
 
 class FeishuMessage(ChatMessage):
@@ -21,6 +19,11 @@ class FeishuMessage(ChatMessage):
         self.is_group = is_group
         self.quoted_content = ""
         msg_type = msg.get("message_type")
+        sender_open_id = (sender.get("sender_id") or {}).get("open_id")
+        conversation_ids = (msg.get("chat_id"), sender_open_id)
+        tmp_dir = None
+        if msg_type in ("image", "post", "file", "audio"):
+            tmp_dir = get_agent_tmp_dir("feishu", conversation_ids)
 
         if msg_type == "text":
             self.ctype = ContextType.TEXT
@@ -33,9 +36,6 @@ class FeishuMessage(ChatMessage):
             image_key = content.get("image_key")
             
             # 下载图片到工作空间临时目录
-            workspace_root = expand_path(conf().get("agent_workspace", "~/cow"))
-            tmp_dir = os.path.join(workspace_root, "tmp")
-            os.makedirs(tmp_dir, exist_ok=True)
             image_path = os.path.join(tmp_dir, f"{image_key}.png")
             
             # 下载图片
@@ -99,10 +99,6 @@ class FeishuMessage(ChatMessage):
             
             if image_keys:
                 # 如果包含图片，下载并在文本中引用本地路径
-                workspace_root = expand_path(conf().get("agent_workspace", "~/cow"))
-                tmp_dir = os.path.join(workspace_root, "tmp")
-                os.makedirs(tmp_dir, exist_ok=True)
-                
                 # 保存图片路径映射
                 self.image_paths = {}
                 for image_key in image_keys:
@@ -147,9 +143,6 @@ class FeishuMessage(ChatMessage):
 
             # 落到 agent_workspace/tmp 下（绝对路径），与图片处理一致；
             # 否则相对路径 ./tmp 在 agent 工作区里 read 时会找不到。
-            workspace_root = expand_path(conf().get("agent_workspace", "~/cow"))
-            tmp_dir = os.path.join(workspace_root, "tmp")
-            os.makedirs(tmp_dir, exist_ok=True)
             self.content = os.path.join(
                 tmp_dir, f"{file_key}.{utils.get_path_suffix(file_name)}"
             )
@@ -179,9 +172,6 @@ class FeishuMessage(ChatMessage):
             file_key = content.get("file_key")
 
             # 落到 agent_workspace/tmp 下（绝对路径），保证语音 STT 流程可读到
-            workspace_root = expand_path(conf().get("agent_workspace", "~/cow"))
-            tmp_dir = os.path.join(workspace_root, "tmp")
-            os.makedirs(tmp_dir, exist_ok=True)
             self.content = os.path.join(tmp_dir, f"{file_key}.opus")
             logger.info(f"[FeiShu] audio message: file_key={file_key}, save_path={self.content}")
 

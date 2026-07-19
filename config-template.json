@@ -38,6 +38,12 @@
   "agent_max_context_tokens": 50000,
   "agent_max_context_turns": 20,
   "agent_max_steps": 20,
+  "agent_delegation": {
+    "enabled": true,
+    "max_depth": 3,
+    "timeout_seconds": 120,
+    "max_message_chars": 8000
+  },
   "enable_thinking": false,
   "reasoning_effort": "high",
   "knowledge": true,

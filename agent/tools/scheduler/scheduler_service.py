@@ -2,7 +2,6 @@
 Background scheduler service for executing scheduled tasks
 """
 
-import time
 import threading
 from datetime import datetime, timedelta
 from typing import Callable, Optional
@@ -43,6 +42,7 @@ class SchedulerService:
         self._lock = threading.Lock()
         self._execution_lock = threading.Lock()
         self._active_task_ids = set()
+        self._wake_event = threading.Event()
     
     def start(self):
         """Start the scheduler service"""
@@ -50,21 +50,25 @@ class SchedulerService:
             if self.running:
                 logger.warning("[Scheduler] Service already running")
                 return
-            
+
+            self._wake_event.clear()
             self.running = True
             self.thread = threading.Thread(target=self._run_loop, daemon=True)
             self.thread.start()
     
     def stop(self):
         """Stop the scheduler service"""
+        thread = None
         with self._lock:
             if not self.running:
                 return
-            
+
             self.running = False
-            if self.thread:
-                self.thread.join(timeout=5)
-            logger.info("[Scheduler] Service stopped")
+            self._wake_event.set()
+            thread = self.thread
+        if thread and thread is not threading.current_thread():
+            thread.join(timeout=5)
+        logger.info("[Scheduler] Service stopped")
     
     def _run_loop(self):
         """Main scheduler loop"""
@@ -76,7 +80,8 @@ class SchedulerService:
             except Exception as e:
                 logger.error(f"[Scheduler] Error in scheduler loop: {e}")
 
-            time.sleep(30)
+            self._wake_event.wait(timeout=30)
+            self._wake_event.clear()
     
     def _check_and_execute_tasks(self):
         """Check for due tasks and execute them"""

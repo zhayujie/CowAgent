@@ -1,0 +1,45 @@
+---
+title: マルチ Agent
+description: 1つの CowAgent プロセスで独立した Agent ワークスペースを実行する
+---
+
+CowAgent は1つのプロセスで複数の Agent を実行できます。各 Agent は、従来の単一 Agent と同じ構成を持つ完全なワークスペースです。
+
+## Agent ごとのワークスペース
+
+ワークスペースには `AGENT.md`、`USER.md`、`RULE.md`、`MEMORY.md`、`BOOTSTRAP.md` と、`memory/`、`skills/`、`knowledge/`、`output/`、`scheduler/` が含まれます。
+
+人格、ユーザー情報、ルール、会話、長期記憶、スキル、ナレッジ、定期タスクはすべてそのワークスペースに保存されます。各 Agent は固有の `memory/long-term/index.db` を使用し、Memory データベースを共有しません。
+
+## 設定
+
+`config.json` に Agent registry を追加します。
+
+```json
+{
+  "default_agent_id": "main",
+  "agents": [
+    {"id": "main", "name": "Main", "workspace": "~/cow-main", "enabled": true},
+    {"id": "research", "name": "Research", "workspace": "~/cow-research", "enabled": true}
+  ],
+  "agent_bindings": [
+    {"channel_type": "feishu", "conversation_id": "oc_example", "agent_id": "research"}
+  ]
+}
+```
+
+ルーティングの優先順位は、会話の完全一致、チャンネル既定値、`default_agent_id` です。対象が無効な場合は警告を記録し、既定 Agent に戻ります。`agents` を設定しなければ、従来の `agent_workspace` がそのまま使われます。
+
+Agent ID は英数字、アンダースコア、ハイフンで指定します。ワークスペースは重複または入れ子にできません。
+
+## Web コンソール
+
+**Management → Agents** では、Agent の作成、クローン、選択、既定値の変更、アーカイブ、チャンネル binding の編集ができます。5つのコア Markdown ファイルも revision チェック付きで編集できます。Memory、Skills、Knowledge、Sessions、History、Scheduler はヘッダーで選択した Agent のワークスペースを参照します。
+
+## Agent 間の委任
+
+有効な Agent が2つ以上ある場合、`agent_delegate` ツールが利用できます。委任先は独自のワークスペースと relay session で処理し、結果だけを呼び出し元へ返します。allowlist、タイムアウト、メッセージ長、最大深度、循環検出を `agent_delegation` で設定できます。
+
+## バックアップ
+
+`cow backup` は registry、binding、すべての Agent ワークスペースを保存します。新しい環境への復元先は既定で `~/cow-agents/<agent-id>` です。`--workspace /path/to/root` を指定すると、その下に Agent ID ごとのサブディレクトリを作成します。
