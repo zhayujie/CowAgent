@@ -155,6 +155,11 @@
                     </button>
                     <div class="menu-group-items pl-2">
                         <a class="sidebar-item flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-all duration-150 hover:bg-white/5 hover:text-neutral-200 text-[14px]"
+                           data-view="agents">
+                            <i class="fas fa-people-group item-icon text-xs w-5 text-center"></i>
+                            <span>Agents</span>
+                        </a>
+                        <a class="sidebar-item flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-all duration-150 hover:bg-white/5 hover:text-neutral-200 text-[14px]"
                            data-view="config">
                             <i class="fas fa-sliders item-icon text-xs w-5 text-center"></i>
                             <span data-i18n="menu_config">配置</span>
@@ -269,6 +274,14 @@
                 </div>
 
                 <div class="flex-1"></div>
+
+                <label class="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                    <i class="fas fa-robot"></i>
+                    <select id="agent-selector" onchange="selectActiveAgent(this.value)"
+                            class="max-w-44 px-2 py-1.5 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-[#222] text-sm text-slate-700 dark:text-slate-200">
+                        <option value="default">Default</option>
+                    </select>
+                </label>
 
                 <!-- Language Selector (dropdown) -->
                 <div id="lang-selector" class="relative">
@@ -493,6 +506,70 @@
                                         disabled>
                                     <i class="fas fa-paper-plane text-sm"></i>
                                 </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ====================================================== -->
+                <!-- VIEW: Agents                                            -->
+                <!-- ====================================================== -->
+                <div id="view-agents" class="view">
+                    <div class="flex-1 overflow-y-auto p-6">
+                        <div class="max-w-6xl mx-auto space-y-6">
+                            <div class="flex flex-wrap items-center justify-between gap-3">
+                                <div>
+                                    <h2 class="text-xl font-bold text-slate-800 dark:text-slate-100">Agent Workspaces</h2>
+                                    <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Each Agent owns a complete, independent workspace.</p>
+                                </div>
+                                <button onclick="openAgentCreateForm()" class="px-4 py-2 rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-sm font-medium">
+                                    <i class="fas fa-plus mr-1.5"></i>New Agent
+                                </button>
+                            </div>
+
+                            <div id="agent-create-form" class="hidden bg-white dark:bg-[#1A1A1A] rounded-xl border border-slate-200 dark:border-white/10 p-5">
+                                <div class="grid md:grid-cols-2 gap-4">
+                                    <input id="agent-create-id" placeholder="Agent ID" class="px-3 py-2 rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 text-sm">
+                                    <input id="agent-create-name" placeholder="Display name" class="px-3 py-2 rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 text-sm">
+                                    <input id="agent-create-workspace" placeholder="Workspace path, e.g. ~/cow-research" class="px-3 py-2 rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 text-sm md:col-span-2 font-mono">
+                                    <select id="agent-create-clone" class="px-3 py-2 rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-[#222] text-sm md:col-span-2">
+                                        <option value="">Create from current templates</option>
+                                    </select>
+                                </div>
+                                <div class="flex items-center justify-end gap-3 mt-4">
+                                    <span id="agent-create-status" class="text-xs text-red-500 mr-auto"></span>
+                                    <button onclick="closeAgentCreateForm()" class="px-3 py-2 text-sm text-slate-500">Cancel</button>
+                                    <button onclick="createAgentWorkspace()" class="px-4 py-2 rounded-lg bg-primary-500 text-white text-sm">Create</button>
+                                </div>
+                            </div>
+
+                            <div class="grid lg:grid-cols-[320px_1fr] gap-6">
+                                <div class="bg-white dark:bg-[#1A1A1A] rounded-xl border border-slate-200 dark:border-white/10 overflow-hidden">
+                                    <div class="px-4 py-3 border-b border-slate-100 dark:border-white/5 text-sm font-semibold">Configured Agents</div>
+                                    <div id="agents-list" class="divide-y divide-slate-100 dark:divide-white/5"></div>
+                                </div>
+                                <div class="bg-white dark:bg-[#1A1A1A] rounded-xl border border-slate-200 dark:border-white/10 overflow-hidden">
+                                    <div class="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-slate-100 dark:border-white/5">
+                                        <select id="agent-core-file" onchange="loadAgentCoreFile()" class="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-[#222] text-sm">
+                                            <option>AGENT.md</option><option>USER.md</option><option>RULE.md</option><option>MEMORY.md</option><option>BOOTSTRAP.md</option>
+                                        </select>
+                                        <span id="agent-editor-label" class="text-xs text-slate-400"></span>
+                                        <button onclick="saveAgentCoreFile()" class="ml-auto px-4 py-1.5 rounded-lg bg-primary-500 text-white text-sm">Save</button>
+                                    </div>
+                                    <textarea id="agent-core-editor" spellcheck="false" class="w-full h-[520px] p-4 bg-slate-50 dark:bg-[#151515] text-slate-800 dark:text-slate-200 font-mono text-sm resize-y focus:outline-none" placeholder="Select an Agent to edit its core files"></textarea>
+                                    <div id="agent-editor-status" class="px-4 py-2 text-xs text-slate-500 border-t border-slate-100 dark:border-white/5"></div>
+                                </div>
+                            </div>
+                            <div class="bg-white dark:bg-[#1A1A1A] rounded-xl border border-slate-200 dark:border-white/10 p-5">
+                                <div class="flex items-center justify-between gap-3 mb-3">
+                                    <div>
+                                        <h3 class="font-semibold text-sm">Channel bindings</h3>
+                                        <p class="text-xs text-slate-400 mt-1">JSON list: exact conversation bindings override channel defaults.</p>
+                                    </div>
+                                    <button onclick="saveAgentBindings()" class="px-4 py-1.5 rounded-lg bg-primary-500 text-white text-sm">Save bindings</button>
+                                </div>
+                                <textarea id="agent-bindings-editor" spellcheck="false" class="w-full h-40 p-3 rounded-lg bg-slate-50 dark:bg-[#151515] border border-slate-200 dark:border-white/10 font-mono text-xs focus:outline-none" placeholder='[{"channel_type":"feishu","conversation_id":"chat-id","agent_id":"research"}]'></textarea>
+                                <div id="agent-bindings-status" class="text-xs text-slate-500 mt-2"></div>
                             </div>
                         </div>
                     </div>

@@ -14,7 +14,7 @@ const I18N = {
     zh: {
         console: '控制台',
         nav_chat: '对话', nav_manage: '管理', nav_monitor: '监控',
-        menu_chat: '对话', menu_config: '配置', menu_models: '模型', menu_skills: '技能',
+        menu_chat: '对话', menu_agents: 'Agents', menu_config: '配置', menu_models: '模型', menu_skills: '技能',
         menu_memory: '记忆', menu_knowledge: '知识', menu_channels: '通道', menu_tasks: '定时',
         menu_logs: '日志',
         models_title: '模型管理',
@@ -266,7 +266,7 @@ const I18N = {
 
         console: '控制台',
         nav_chat: '對話', nav_manage: '管理', nav_monitor: '監控',
-        menu_chat: '對話', menu_config: '設定', menu_models: '模型', menu_skills: '技能',
+        menu_chat: '對話', menu_agents: 'Agents', menu_config: '設定', menu_models: '模型', menu_skills: '技能',
         menu_memory: '記憶', menu_knowledge: '知識', menu_channels: '管道', menu_tasks: '定時',
         menu_logs: '日誌',
         models_title: '模型管理',
@@ -517,7 +517,7 @@ const I18N = {
     en: {
         console: 'Console',
         nav_chat: 'Chat', nav_manage: 'Management', nav_monitor: 'Monitor',
-        menu_chat: 'Chat', menu_config: 'Config', menu_models: 'Models', menu_skills: 'Skills',
+        menu_chat: 'Chat', menu_agents: 'Agents', menu_config: 'Config', menu_models: 'Models', menu_skills: 'Skills',
         menu_memory: 'Memory', menu_knowledge: 'Knowledge', menu_channels: 'Channels', menu_tasks: 'Tasks',
         menu_logs: 'Logs',
         models_title: 'Models',
@@ -1048,6 +1048,7 @@ function toggleTheme() {
 // =====================================================================
 const VIEW_META = {
     chat:     { group: 'nav_chat',    page: 'menu_chat' },
+    agents:   { group: 'nav_manage',  page: 'menu_agents' },
     config:   { group: 'nav_manage',  page: 'menu_config' },
     models:   { group: 'nav_manage',  page: 'menu_models' },
     skills:   { group: 'nav_manage',  page: 'menu_skills' },
@@ -1074,6 +1075,7 @@ function navigateTo(viewId) {
     document.getElementById('breadcrumb-page').textContent = t(meta.page);
     document.getElementById('breadcrumb-page').dataset.i18n = meta.page;
     currentView = viewId;
+    if (viewId === 'agents') loadAgentCatalog();
     
     // Clear status messages when navigating away
     document.querySelectorAll('[id$="-status"]').forEach(el => {
@@ -1120,6 +1122,211 @@ window.addEventListener('resize', () => {
         }
     }
 });
+
+// =====================================================================
+// Agent workspaces
+// =====================================================================
+let agentCatalog = [];
+let defaultAgentId = localStorage.getItem('cow_default_agent') || 'default';
+let selectedAdminAgentId = '';
+let selectedCoreRevision = '';
+
+function loadAgentCatalog() {
+    return fetch('/api/agents')
+        .then(r => r.json())
+        .then(data => {
+            if (data.status !== 'success') throw new Error(data.message || 'Failed to load Agents');
+            agentCatalog = data.agents || [];
+            const bindingsEditor = document.getElementById('agent-bindings-editor');
+            if (bindingsEditor && document.activeElement !== bindingsEditor) {
+                bindingsEditor.value = JSON.stringify(data.bindings || [], null, 2);
+            }
+            defaultAgentId = data.default_agent_id || (agentCatalog[0] && agentCatalog[0].id) || 'default';
+            localStorage.setItem('cow_default_agent', defaultAgentId);
+            const enabled = agentCatalog.filter(a => a.enabled);
+            if (!enabled.some(a => a.id === activeAgentId)) {
+                activeAgentId = defaultAgentId;
+                localStorage.setItem('cow_active_agent', activeAgentId);
+            }
+            const selector = document.getElementById('agent-selector');
+            if (selector) {
+                selector.innerHTML = enabled.map(a =>
+                    `<option value="${escapeHtml(a.id)}">${escapeHtml(a.name)} (${escapeHtml(a.id)})</option>`
+                ).join('');
+                selector.value = activeAgentId;
+            }
+            renderAgentsList();
+            const clone = document.getElementById('agent-create-clone');
+            if (clone) {
+                clone.innerHTML = '<option value="">Create from current templates</option>' +
+                    enabled.map(a => `<option value="${escapeHtml(a.id)}">Clone ${escapeHtml(a.name)}</option>`).join('');
+            }
+            if (!selectedAdminAgentId || !agentCatalog.some(a => a.id === selectedAdminAgentId)) {
+                selectedAdminAgentId = activeAgentId;
+            }
+            if (currentView === 'agents') loadAgentCoreFile();
+            return data;
+        })
+        .catch(err => {
+            const status = document.getElementById('agent-editor-status');
+            if (status) status.textContent = err.message;
+        });
+}
+
+function selectActiveAgent(agentId) {
+    if (!agentId || agentId === activeAgentId) return;
+    activeAgentId = agentId;
+    localStorage.setItem('cow_active_agent', activeAgentId);
+    const selector = document.getElementById('agent-selector');
+    if (selector) selector.value = activeAgentId;
+    sessionId = loadOrCreateSessionId();
+    historyPage = 0;
+    historyHasMore = false;
+    historyLoading = false;
+    messagesDiv.innerHTML = '';
+    resetSendBtnSendMode();
+    loadHistory(1);
+    loadSessionList();
+    startPolling();
+    selectedAdminAgentId = agentId;
+    if (typeof tasksLoaded !== 'undefined') tasksLoaded = false;
+    renderAgentsList();
+    if (currentView === 'agents') loadAgentCoreFile();
+}
+
+function renderAgentsList() {
+    const list = document.getElementById('agents-list');
+    if (!list) return;
+    list.innerHTML = agentCatalog.map(agent => {
+        const selected = agent.id === selectedAdminAgentId;
+        const disabled = !agent.enabled;
+        return `<div class="p-4 cursor-pointer ${selected ? 'bg-primary-50 dark:bg-primary-900/10' : ''}" onclick="selectAdminAgent('${agent.id}')">
+            <div class="flex items-center gap-2">
+                <span class="font-medium text-sm text-slate-800 dark:text-slate-100">${escapeHtml(agent.name)}</span>
+                ${agent.id === defaultAgentId ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-primary-100 text-primary-700">default</span>' : ''}
+                ${disabled ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">archived</span>' : ''}
+            </div>
+            <div class="text-xs text-slate-400 mt-1 font-mono truncate" title="${escapeHtml(agent.workspace)}">${escapeHtml(agent.id)} · ${escapeHtml(agent.workspace)}</div>
+            <div class="flex flex-wrap gap-2 mt-3" onclick="event.stopPropagation()">
+                ${agent.enabled ? `<button onclick="selectActiveAgent('${agent.id}')" class="text-xs text-primary-600">Use</button>` : `<button onclick="updateAgentWorkspace('${agent.id}', {enabled:true})" class="text-xs text-primary-600">Enable</button>`}
+                ${agent.enabled && agent.id !== defaultAgentId ? `<button onclick="updateAgentWorkspace('${agent.id}', {make_default:true})" class="text-xs text-slate-500">Make default</button>` : ''}
+                ${agent.id !== defaultAgentId && agent.enabled ? `<button onclick="archiveAgentWorkspace('${agent.id}')" class="text-xs text-red-500">Archive</button>` : ''}
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function selectAdminAgent(agentId) {
+    selectedAdminAgentId = agentId;
+    renderAgentsList();
+    loadAgentCoreFile();
+}
+
+function openAgentCreateForm() {
+    document.getElementById('agent-create-form').classList.remove('hidden');
+}
+
+function closeAgentCreateForm() {
+    document.getElementById('agent-create-form').classList.add('hidden');
+    document.getElementById('agent-create-status').textContent = '';
+}
+
+function createAgentWorkspace() {
+    const payload = {
+        action: 'create',
+        id: document.getElementById('agent-create-id').value.trim(),
+        name: document.getElementById('agent-create-name').value.trim(),
+        workspace: document.getElementById('agent-create-workspace').value.trim(),
+        clone_from: document.getElementById('agent-create-clone').value || null,
+    };
+    const status = document.getElementById('agent-create-status');
+    fetch('/api/agents', {
+        method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)
+    }).then(r => r.json()).then(data => {
+        if (data.status !== 'success') throw new Error(data.message || 'Create failed');
+        closeAgentCreateForm();
+        selectedAdminAgentId = payload.id;
+        return loadAgentCatalog();
+    }).catch(err => { status.textContent = err.message; });
+}
+
+function updateAgentWorkspace(agentId, updates) {
+    return fetch('/api/agents', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({action: 'update', id: agentId, ...updates})
+    }).then(r => r.json()).then(data => {
+        if (data.status !== 'success') throw new Error(data.message || 'Update failed');
+        return loadAgentCatalog();
+    }).catch(err => {
+        document.getElementById('agent-editor-status').textContent = err.message;
+    });
+}
+
+function archiveAgentWorkspace(agentId) {
+    if (!window.confirm(`Archive Agent "${agentId}"? Its workspace will be preserved.`)) return;
+    return fetch('/api/agents', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({action: 'archive', id: agentId})
+    }).then(r => r.json()).then(data => {
+        if (data.status !== 'success') throw new Error(data.message || 'Archive failed');
+        if (activeAgentId === agentId) selectActiveAgent(defaultAgentId);
+        return loadAgentCatalog();
+    }).catch(err => {
+        document.getElementById('agent-editor-status').textContent = err.message;
+    });
+}
+
+function loadAgentCoreFile() {
+    if (!selectedAdminAgentId) return;
+    const filename = document.getElementById('agent-core-file').value;
+    const status = document.getElementById('agent-editor-status');
+    status.textContent = 'Loading…';
+    fetch(`/api/agents/${encodeURIComponent(selectedAdminAgentId)}/files/${encodeURIComponent(filename)}`)
+        .then(r => r.json()).then(data => {
+            if (data.status !== 'success') throw new Error(data.message || 'Load failed');
+            selectedCoreRevision = data.revision;
+            document.getElementById('agent-core-editor').value = data.content || '';
+            document.getElementById('agent-editor-label').textContent = `${selectedAdminAgentId} / ${filename}`;
+            status.textContent = data.exists ? `Revision ${data.revision.slice(0, 12)}` : 'New file';
+        }).catch(err => { status.textContent = err.message; });
+}
+
+function saveAgentCoreFile() {
+    if (!selectedAdminAgentId) return;
+    const filename = document.getElementById('agent-core-file').value;
+    const status = document.getElementById('agent-editor-status');
+    fetch(`/api/agents/${encodeURIComponent(selectedAdminAgentId)}/files/${encodeURIComponent(filename)}`, {
+        method: 'PUT', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({content: document.getElementById('agent-core-editor').value, revision: selectedCoreRevision})
+    }).then(async r => ({ok: r.ok, data: await r.json()})).then(({ok, data}) => {
+        if (!ok || data.status !== 'success') throw new Error(data.message || 'Save failed');
+        selectedCoreRevision = data.revision;
+        status.textContent = `Saved · revision ${data.revision.slice(0, 12)}`;
+    }).catch(err => { status.textContent = err.message; });
+}
+
+function saveAgentBindings() {
+    const editor = document.getElementById('agent-bindings-editor');
+    const status = document.getElementById('agent-bindings-status');
+    let bindings;
+    try {
+        bindings = JSON.parse(editor.value || '[]');
+        if (!Array.isArray(bindings)) throw new Error('Bindings must be a JSON list');
+    } catch (err) {
+        status.textContent = err.message;
+        return;
+    }
+    fetch('/api/agents', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({action: 'replace_bindings', bindings})
+    }).then(r => r.json()).then(data => {
+        if (data.status !== 'success') throw new Error(data.message || 'Save failed');
+        status.textContent = 'Bindings saved';
+        return loadAgentCatalog();
+    }).catch(err => { status.textContent = err.message; });
+}
+
+loadAgentCatalog();
 
 // =====================================================================
 // Markdown Renderer
@@ -1350,10 +1557,14 @@ let isPolling = false;
 let pollGeneration = 0;   // incremented on each restart to cancel stale poll loops
 let loadingContainers = {};
 let activeStreams = {};   // request_id -> EventSource
-let sessionActiveRequest = {};   // session_id -> request_id (in-flight stream per session)
+let sessionActiveRequest = {};   // agent_id + session_id -> request_id
+
+function runtimeSessionKey(sid, agentId = activeAgentId) {
+    return `${agentId || defaultAgentId || 'default'}::${sid}`;
+}
 
 function isCurrentSessionConversationActive() {
-    return !!sessionActiveRequest[sessionId];
+    return !!sessionActiveRequest[runtimeSessionKey(sessionId)];
 }
 
 function updateEditButtonsState() {
@@ -1375,7 +1586,44 @@ let streamBuffers = {};   // request_id -> { items: [event...], timestamp } for 
 let isComposing = false;
 let appConfig = { use_agent: false, title: 'CowAgent', subtitle: '', providers: {}, api_bases: {} };
 
+let activeAgentId = localStorage.getItem('cow_active_agent') || '';
 const SESSION_ID_KEY = 'cow_session_id';
+
+function activeSessionStorageKey() {
+    return activeAgentId && activeAgentId !== defaultAgentId && activeAgentId !== 'default'
+        ? `${SESSION_ID_KEY}:${activeAgentId}`
+        : SESSION_ID_KEY;
+}
+
+// Carry the selected Agent through existing console requests without forcing
+// every feature panel to implement its own routing glue.
+const _nativeFetch = window.fetch.bind(window);
+window.fetch = function(input, init) {
+    init = init ? { ...init } : {};
+    let url = typeof input === 'string' ? input : input.url;
+    if (activeAgentId && typeof url === 'string' && url.startsWith('/')) {
+        const joiner = url.includes('?') ? '&' : '?';
+        url = `${url}${joiner}agent_id=${encodeURIComponent(activeAgentId)}`;
+        if (typeof input !== 'string') input = new Request(url, input);
+        else input = url;
+
+        if (typeof init.body === 'string') {
+            const contentType = new Headers(init.headers || {}).get('Content-Type') || '';
+            if (contentType.includes('application/json')) {
+                try {
+                    const body = JSON.parse(init.body);
+                    if (body && typeof body === 'object' && !Array.isArray(body)) {
+                        body.agent_id = activeAgentId;
+                        init.body = JSON.stringify(body);
+                    }
+                } catch (_) {}
+            }
+        } else if (init.body instanceof FormData && !init.body.has('agent_id')) {
+            init.body.append('agent_id', activeAgentId);
+        }
+    }
+    return _nativeFetch(input, init);
+};
 
 function generateSessionId() {
     return 'session_' + ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
@@ -1386,10 +1634,10 @@ function generateSessionId() {
 // Restore session_id from localStorage so conversation history survives page refresh.
 // A new id is only generated when the user explicitly starts a new chat.
 function loadOrCreateSessionId() {
-    const stored = localStorage.getItem(SESSION_ID_KEY);
+    const stored = localStorage.getItem(activeSessionStorageKey());
     if (stored) return stored;
     const fresh = generateSessionId();
-    localStorage.setItem(SESSION_ID_KEY, fresh);
+    localStorage.setItem(activeSessionStorageKey(), fresh);
     return fresh;
 }
 
@@ -2748,15 +2996,17 @@ function startSSE(requestId, loadingEl, timestamp, titleInfo, replayItems) {
     // every event into a buffer, so returning to the session can rebuild the
     // bubble by replaying the buffer and then resume live rendering.
     const ownerSession = sessionId;
-    const isActive = () => ownerSession === sessionId;
-    sessionActiveRequest[ownerSession] = requestId;
+    const ownerAgent = activeAgentId;
+    const ownerKey = runtimeSessionKey(ownerSession, ownerAgent);
+    const isActive = () => ownerSession === sessionId && ownerAgent === activeAgentId;
+    sessionActiveRequest[ownerKey] = requestId;
     updateEditButtonsState();
     // Per-request event buffer used to rebuild the bubble on re-attach.
     const buffer = streamBuffers[requestId] || { items: [], timestamp };
     streamBuffers[requestId] = buffer;
     const clearOwnerRequest = () => {
-        if (sessionActiveRequest[ownerSession] === requestId) {
-            delete sessionActiveRequest[ownerSession];
+        if (sessionActiveRequest[ownerKey] === requestId) {
+            delete sessionActiveRequest[ownerKey];
             updateEditButtonsState();
         }
         delete streamBuffers[requestId];
@@ -3834,7 +4084,7 @@ function newChat(optimistic = true) {
 
     // Generate a fresh session and persist it so the next page load also starts clean
     sessionId = generateSessionId();
-    localStorage.setItem(SESSION_ID_KEY, sessionId);
+    localStorage.setItem(activeSessionStorageKey(), sessionId);
     resetSendBtnSendMode();  // fresh session has no in-flight reply
     startPolling();  // bump generation so old loop self-cancels, new loop uses fresh sessionId
     messagesDiv.innerHTML = '';
@@ -4191,7 +4441,8 @@ function _onSessionListScroll() {
 // was re-attached. The user's own bubble is already in history (persisted
 // eagerly), so it was rendered by loadHistory before this runs.
 function _reattachStream(sid) {
-    const requestId = sessionActiveRequest[sid];
+    const key = runtimeSessionKey(sid);
+    const requestId = sessionActiveRequest[key];
     if (!requestId) return false;
     const buffer = streamBuffers[requestId];
     if (!buffer) return false;
@@ -4206,7 +4457,7 @@ function _reattachStream(sid) {
         const oldEs = activeStreams[requestId];
         if (oldEs) { try { oldEs.close(); } catch (_) {} delete activeStreams[requestId]; }
         delete streamBuffers[requestId];
-        delete sessionActiveRequest[sid];
+        delete sessionActiveRequest[key];
         resetSendBtnSendMode();
         return false;
     }
@@ -4237,7 +4488,7 @@ function switchSession(newSessionId) {
 
     sessionId = newSessionId;
     updateEditButtonsState();
-    localStorage.setItem(SESSION_ID_KEY, sessionId);
+    localStorage.setItem(activeSessionStorageKey(), sessionId);
 
     historyPage = 0;
     historyHasMore = false;
@@ -4250,7 +4501,7 @@ function switchSession(newSessionId) {
     // Restore the send button to match this session's stream state, and if a
     // reply is still streaming in the background, re-attach to resume showing
     // it live (the user turn itself comes from history above).
-    const pendingReq = sessionActiveRequest[sessionId];
+    const pendingReq = sessionActiveRequest[runtimeSessionKey(sessionId)];
     if (pendingReq) {
         setSendBtnCancelMode(pendingReq);
         _reattachStream(sessionId);
