@@ -281,8 +281,10 @@ class AgentBridge:
     def __init__(self, bridge: Bridge):
         self.bridge = bridge
         from agent.registry import get_agent_registry
+        from agent.routing import get_agent_router
 
         self.agent_registry = get_agent_registry()
+        self.agent_router = get_agent_router(self.agent_registry)
         # Canonical runtime map. A session identifier is only unique inside an
         # agent workspace, so the agent id is part of every live key.
         self._agent_instances: Dict[Tuple[str, str], Agent] = {}
@@ -376,6 +378,10 @@ class AgentBridge:
     
     def _resolve_agent_id(self, agent_id: str = None) -> str:
         return self.agent_registry.get(agent_id).id
+
+    def route_context(self, context: Context) -> str:
+        """Resolve and attach the workspace selected for an inbound context."""
+        return self.agent_router.resolve_context(context)
 
     def get_conversation_store(self, agent_id: str = None):
         """Return the session store owned by one agent workspace."""
@@ -517,10 +523,13 @@ class AgentBridge:
             # Extract session_id from context for user isolation
             if context:
                 session_id = context.kwargs.get("session_id") or context.get("session_id")
-                agent_id = context.kwargs.get("agent_id") or context.get("agent_id")
                 request_id = context.kwargs.get("request_id") or context.get("request_id")
 
-            resolved_agent_id = self._resolve_agent_id(agent_id)
+            resolved_agent_id = (
+                self.route_context(context)
+                if context is not None
+                else self.agent_registry.default_agent_id
+            )
 
             # Register a cancel token. Prefer per-turn request_id (web),
             # fall back to session_id (IM channels). The Event is polled by
@@ -533,7 +542,14 @@ class AgentBridge:
                     token_key,
                     self.agent_registry.default_agent_id,
                 )
-                cancel_event = registry.register(token_key, session_id=session_id)
+                scoped_session_id = self._cancel_key(
+                    resolved_agent_id,
+                    session_id,
+                    self.agent_registry.default_agent_id,
+                )
+                cancel_event = registry.register(
+                    token_key, session_id=scoped_session_id
+                )
 
             # Get agent for this session (will auto-initialize if needed)
             agent = self.get_agent(

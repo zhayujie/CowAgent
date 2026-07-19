@@ -83,7 +83,7 @@ def init_scheduler(agent_bridge, workspace_root: str = None, agent_id: str = Non
                     channel_type = action.get("channel_type", "unknown")
                     receiver = action.get("receiver", "")
 
-                    if not _is_channel_ready(channel_type, receiver):
+                    if not _is_channel_ready(channel_type, receiver, agent_id):
                         logger.warning(
                             f"[Scheduler] Task {task.get('id')}: channel "
                             f"'{channel_type}' not ready for receiver={receiver} "
@@ -125,7 +125,9 @@ def init_scheduler(agent_bridge, workspace_root: str = None, agent_id: str = Non
             return False
 
 
-def _is_channel_ready(channel_type: str, receiver: str) -> bool:
+def _is_channel_ready(
+    channel_type: str, receiver: str, agent_id: str = None
+) -> bool:
     """Best-effort readiness probe for outbound channels.
 
     Returns False when we know the send will drop (e.g. weixin not yet
@@ -148,6 +150,8 @@ def _is_channel_ready(channel_type: str, receiver: str) -> bool:
             return True
 
         if channel_type == "web":
+            if hasattr(channel, "has_session_queue"):
+                return channel.has_session_queue(receiver, agent_id)
             queues = getattr(channel, "session_queues", None)
             if not queues or receiver not in queues:
                 return False

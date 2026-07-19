@@ -210,7 +210,20 @@ class ChatService:
             if session_id
             else None
         )
-        cancel_event = registry.register(cancel_key, session_id=session_id) if cancel_key else None
+        scoped_session_id = (
+            self.agent_bridge._cancel_key(
+                resolved_agent_id,
+                session_id,
+                self.agent_bridge.agent_registry.default_agent_id,
+            )
+            if session_id
+            else None
+        )
+        cancel_event = (
+            registry.register(cancel_key, session_id=scoped_session_id)
+            if cancel_key
+            else None
+        )
 
         executor = AgentStreamExecutor(
             agent=agent,

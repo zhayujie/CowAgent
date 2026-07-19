@@ -293,6 +293,7 @@ class WebChannel(ChatChannel):
         self.msg_id_counter = 0
         self.session_queues = {}  # session_id -> Queue (fallback polling)
         self.request_to_session = {}  # request_id -> session_id
+        self.request_to_agent = {}  # request_id -> agent_id
         self.sse_queues = {}  # request_id -> Queue (SSE streaming)
         # request_id -> last-active timestamp. Refreshed while the SSE
         # generator is being consumed (client still connected). The janitor
@@ -311,7 +312,19 @@ class WebChannel(ChatChannel):
         """生成唯一的请求ID"""
         return str(uuid.uuid4())
 
-    def _fetch_latest_pair_seqs(self, session_id: str):
+    @staticmethod
+    def _session_queue_key(session_id: str, agent_id: str = None) -> str:
+        from agent.registry import get_agent_registry
+        registry = get_agent_registry()
+        resolved = registry.get(agent_id).id
+        if resolved == registry.default_agent_id:
+            return session_id
+        return f"{resolved}::{session_id}"
+
+    def has_session_queue(self, session_id: str, agent_id: str = None) -> bool:
+        return self._session_queue_key(session_id, agent_id) in self.session_queues
+
+    def _fetch_latest_pair_seqs(self, session_id: str, agent_id: str = None):
         """Query the conversation store for the latest user/bot message seqs.
 
         Returned as ``{"user_seq": int|None, "bot_seq": int|None}``; used to
@@ -320,8 +333,12 @@ class WebChannel(ChatChannel):
         page refresh.
         """
         try:
+            from agent.registry import get_agent_registry
             from agent.memory import get_conversation_store
-            return get_conversation_store().get_latest_pair_seqs(session_id)
+            profile = get_agent_registry().get(agent_id)
+            return get_conversation_store(profile.workspace).get_latest_pair_seqs(
+                session_id
+            )
         except Exception as e:
             logger.debug(f"[WebChannel] _fetch_latest_pair_seqs failed: {e}")
             return {"user_seq": None, "bot_seq": None}
@@ -344,6 +361,8 @@ class WebChannel(ChatChannel):
             if not session_id:
                 logger.error(f"No session_id found for request {request_id}")
                 return
+            agent_id = context.get("agent_id") or self.request_to_agent.get(request_id)
+            session_queue_key = self._session_queue_key(session_id, agent_id)
 
             # SSE mode: push events to SSE queue
             if request_id in self.sse_queues:
@@ -366,7 +385,9 @@ class WebChannel(ChatChannel):
                 if reply.type in (ReplyType.IMAGE_URL, ReplyType.FILE) and content.startswith("file://"):
                     text_content = getattr(reply, 'text_content', '')
                     if text_content:
-                        seqs = self._fetch_latest_pair_seqs(session_id)
+                        seqs = self._fetch_latest_pair_seqs(
+                            session_id, context.get("agent_id")
+                        )
                         self.sse_queues[request_id].put({
                             "type": "done",
                             "content": text_content,
@@ -385,7 +406,9 @@ class WebChannel(ChatChannel):
                     logger.debug(f"SSE skipped http media reply for request {request_id}")
                     return
 
-                seqs = self._fetch_latest_pair_seqs(session_id)
+                seqs = self._fetch_latest_pair_seqs(
+                    session_id, context.get("agent_id")
+                )
                 self.sse_queues[request_id].put({
                     "type": "done",
                     "content": content,
@@ -404,7 +427,7 @@ class WebChannel(ChatChannel):
                 return
 
             # Fallback: polling mode
-            if session_id in self.session_queues:
+            if session_queue_key in self.session_queues:
                 content = reply.content if reply.content is not None else ""
                 # Skip file:// IMAGE_URL/FILE replies originating from an SSE-enabled
                 # request: they were already pushed via the `file_to_send` event during
@@ -433,7 +456,7 @@ class WebChannel(ChatChannel):
                     "timestamp": time.time(),
                     "request_id": request_id
                 }
-                self.session_queues[session_id].put(response_data)
+                self.session_queues[session_queue_key].put(response_data)
                 logger.debug(f"Response sent to poll queue for session {session_id}, request {request_id}")
             else:
                 logger.warning(f"No response queue found for session {session_id}, response dropped")
@@ -668,7 +691,7 @@ class WebChannel(ChatChannel):
                 return
             threading.Thread(
                 target=self._synthesize_tts_async,
-                args=(request_id, session_id, text),
+                args=(request_id, session_id, text, context.get("agent_id")),
                 daemon=True,
             ).start()
         except Exception as e:
@@ -679,6 +702,7 @@ class WebChannel(ChatChannel):
         request_id: str,
         session_id: str,
         text: str,
+        agent_id: str = None,
     ) -> None:
         try:
             from bridge.bridge import Bridge
@@ -696,7 +720,11 @@ class WebChannel(ChatChannel):
             payload = {"audio": {"url": url, "kind": "tts"}}
             try:
                 from agent.memory import get_conversation_store
-                get_conversation_store().attach_extras_to_last_assistant(session_id, payload)
+                from agent.registry import get_agent_registry
+                profile = get_agent_registry().get(agent_id)
+                get_conversation_store(
+                    profile.workspace
+                ).attach_extras_to_last_assistant(session_id, payload)
             except Exception as e:
                 logger.debug(f"[WebChannel] tts persist skipped: {e}")
             q = self.sse_queues.get(request_id)
@@ -885,6 +913,13 @@ class WebChannel(ChatChannel):
             data = web.data()
             json_data = json.loads(data)
             session_id = json_data.get('session_id', f'session_{int(time.time())}')
+            from bridge.bridge import Bridge
+            agent_bridge = Bridge().get_agent_bridge()
+            resolved_agent_id = agent_bridge.agent_router.resolve(
+                channel_type="web",
+                conversation_ids=(session_id,),
+                explicit_agent_id=json_data.get("agent_id"),
+            )
             prompt = json_data.get('message', '')
             use_sse = json_data.get('stream', True)
             attachments = json_data.get('attachments', [])
@@ -899,7 +934,12 @@ class WebChannel(ChatChannel):
             stripped_prompt = (prompt or "").strip().lower()
             if stripped_prompt == "/cancel":
                 from agent.protocol import get_cancel_registry
-                cancelled = get_cancel_registry().cancel_session(session_id)
+                scoped_session_id = agent_bridge._cancel_key(
+                    resolved_agent_id,
+                    session_id,
+                    agent_bridge.agent_registry.default_agent_id,
+                )
+                cancelled = get_cancel_registry().cancel_session(scoped_session_id)
                 lang = (json_data.get('lang') or 'zh').lower()
                 msg_text = _cancel_reply_text(cancelled, lang)
                 logger.info(
@@ -934,9 +974,13 @@ class WebChannel(ChatChannel):
 
             request_id = self._generate_request_id()
             self.request_to_session[request_id] = session_id
+            self.request_to_agent[request_id] = resolved_agent_id
 
-            if session_id not in self.session_queues:
-                self.session_queues[session_id] = Queue()
+            session_queue_key = self._session_queue_key(
+                session_id, resolved_agent_id
+            )
+            if session_queue_key not in self.session_queues:
+                self.session_queues[session_queue_key] = Queue()
 
             if use_sse:
                 self.sse_queues[request_id] = Queue()
@@ -961,6 +1005,7 @@ class WebChannel(ChatChannel):
             context["session_id"] = session_id
             context["receiver"] = session_id
             context["request_id"] = request_id
+            context["agent_id"] = resolved_agent_id
             if is_voice_input:
                 # Web channel runs its own TTS post-pipeline via
                 # _maybe_dispatch_auto_tts; don't set desire_rtype here or
@@ -987,6 +1032,7 @@ class WebChannel(ChatChannel):
         self.sse_queues.pop(request_id, None)
         self.sse_last_active.pop(request_id, None)
         self.request_to_session.pop(request_id, None)
+        self.request_to_agent.pop(request_id, None)
 
     def _start_sse_janitor(self):
         """Start a background thread that reclaims orphaned SSE queues.
@@ -1125,6 +1171,15 @@ class WebChannel(ChatChannel):
             request_id = (json_data.get("request_id") or "").strip()
             session_id = (json_data.get("session_id") or "").strip()
             lang = (json_data.get("lang") or "zh").lower()
+            from bridge.bridge import Bridge
+            agent_bridge = Bridge().get_agent_bridge()
+            agent_id = self.request_to_agent.get(request_id)
+            if not agent_id:
+                agent_id = agent_bridge.agent_router.resolve(
+                    channel_type="web",
+                    conversation_ids=(session_id,),
+                    explicit_agent_id=json_data.get("agent_id"),
+                )
 
             registry = get_cancel_registry()
             cancelled = 0
@@ -1134,7 +1189,12 @@ class WebChannel(ChatChannel):
                     cancelled = 1
 
             if cancelled == 0 and session_id:
-                cancelled = registry.cancel_session(session_id)
+                scoped_session_id = agent_bridge._cancel_key(
+                    agent_id,
+                    session_id,
+                    agent_bridge.agent_registry.default_agent_id,
+                )
+                cancelled = registry.cancel_session(scoped_session_id)
 
             if request_id and request_id in self.sse_queues:
                 self.sse_queues[request_id].put({
@@ -1165,14 +1225,22 @@ class WebChannel(ChatChannel):
             data = web.data()
             json_data = json.loads(data)
             session_id = json_data.get('session_id')
+            from bridge.bridge import Bridge
+            agent_bridge = Bridge().get_agent_bridge()
+            agent_id = agent_bridge.agent_router.resolve(
+                channel_type="web",
+                conversation_ids=(session_id,),
+                explicit_agent_id=json_data.get("agent_id"),
+            )
+            session_queue_key = self._session_queue_key(session_id, agent_id)
 
-            if not session_id or session_id not in self.session_queues:
+            if not session_id or session_queue_key not in self.session_queues:
                 return json.dumps({"status": "error", "message": "Invalid session ID"})
 
             # 尝试从队列获取响应，不等待
             try:
                 # 使用peek而不是get，这样如果前端没有成功处理，下次还能获取到
-                response = self.session_queues[session_id].get(block=False)
+                response = self.session_queues[session_queue_key].get(block=False)
 
                 # 返回响应，包含请求ID以区分不同请求
                 return json.dumps({
@@ -1560,6 +1628,7 @@ class VoiceTtsHandler:
             data = json.loads(web.data() or b"{}")
             text = (data.get("text") or "").strip()
             session_id = (data.get("session_id") or "").strip()
+            agent_id = data.get("agent_id")
             if not text:
                 return json.dumps({"status": "error", "message": "empty text"})
             # `@singleton` makes WebChannel a factory function — go via instance.
@@ -1580,7 +1649,9 @@ class VoiceTtsHandler:
             if session_id:
                 try:
                     from agent.memory import get_conversation_store
-                    get_conversation_store().attach_extras_to_last_assistant(
+                    from agent.registry import get_agent_registry
+                    profile = get_agent_registry().get(agent_id)
+                    get_conversation_store(profile.workspace).attach_extras_to_last_assistant(
                         session_id, {"audio": {"url": url, "kind": "tts"}},
                     )
                 except Exception as e:
