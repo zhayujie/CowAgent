@@ -16,6 +16,7 @@ from agent.tools.memory.memory_get import MemoryGetTool
 
 # Import self-evolution tools
 from agent.tools.evolution_undo.evolution_undo import EvolutionUndoTool
+from agent.tools.agent_delegate.agent_delegate import AgentDelegateTool
 
 # Import tools with optional dependencies
 def _import_optional_tools():
@@ -133,6 +134,7 @@ __all__ = [
     'MemorySearchTool',
     'MemoryGetTool',
     'EvolutionUndoTool',
+    'AgentDelegateTool',
     'EnvConfig',
     'SchedulerTool',
     'WebSearch',

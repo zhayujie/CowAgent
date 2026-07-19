@@ -287,7 +287,16 @@ class SlackChannel(ChatChannel):
         """Fast-path: /cancel calls cancel_session directly without going through agent."""
         try:
             from agent.protocol import get_cancel_registry
-            cancelled = get_cancel_registry().cancel_session(session_id)
+            from bridge.bridge import Bridge
+            agent_bridge = Bridge().get_agent_bridge()
+            agent_id = agent_bridge.agent_router.resolve(
+                channel_type=self.channel_type,
+                conversation_ids=(session_id, channel_id),
+            )
+            scoped_session_id = agent_bridge._cancel_key(
+                agent_id, session_id, agent_bridge.agent_registry.default_agent_id
+            )
+            cancelled = get_cancel_registry().cancel_session(scoped_session_id)
             text = "Current task cancelled." if cancelled else "No running task to cancel."
             thread_ts = event.get("thread_ts") or event.get("ts")
             self._client.chat_postMessage(channel=channel_id, text=text, thread_ts=thread_ts)

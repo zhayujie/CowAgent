@@ -3,7 +3,8 @@ Agent Bridge - Integrates Agent system with existing COW bridge
 """
 
 import os
-from typing import Optional, List
+import threading
+from typing import Dict, Iterator, Optional, List, Tuple
 
 from agent.protocol import Agent, LLMModel, LLMRequest, get_cancel_registry
 from bridge.agent_event_handler import AgentEventHandler
@@ -279,10 +280,23 @@ class AgentBridge:
     
     def __init__(self, bridge: Bridge):
         self.bridge = bridge
-        self.agents = {}  # session_id -> Agent instance mapping
-        self.default_agent = None  # For backward compatibility (no session_id)
+        from agent.registry import get_agent_registry
+        from agent.routing import get_agent_router
+
+        self.agent_registry = get_agent_registry()
+        self.agent_router = get_agent_router(self.agent_registry)
+        # Canonical runtime map. A session identifier is only unique inside an
+        # agent workspace, so the agent id is part of every live key.
+        self._agent_instances: Dict[Tuple[str, str], Agent] = {}
+        self._default_agents: Dict[str, Agent] = {}
+        self._agents_lock = threading.RLock()
+        # Backward-compatible view for integrations that inspect sessions of
+        # the configured default agent directly.
+        self.agents: Dict[str, Agent] = {}
+        self.default_agent = None
         self.agent: Optional[Agent] = None
         self.scheduler_initialized = False
+        self.scheduler_agent_ids = set()
         
         # Create helper instances
         self.initializer = AgentInitializer(bridge, self)
@@ -291,8 +305,10 @@ class AgentBridge:
         # for the first user message. init_scheduler is idempotent.
         try:
             from agent.tools.scheduler.integration import init_scheduler
-            if init_scheduler(self):
-                self.scheduler_initialized = True
+            for profile in self.agent_registry.list(include_disabled=False):
+                if init_scheduler(self, profile.workspace, profile.id):
+                    self.scheduler_agent_ids.add(profile.id)
+            self.scheduler_initialized = bool(self.scheduler_agent_ids)
         except Exception as e:
             logger.warning(f"[AgentBridge] Eager scheduler init failed: {e}")
 
@@ -360,39 +376,87 @@ class AgentBridge:
 
         return agent
     
-    def get_agent(self, session_id: str = None) -> Optional[Agent]:
+    def _resolve_agent_id(self, agent_id: str = None) -> str:
+        return self.agent_registry.get(agent_id).id
+
+    def route_context(self, context: Context) -> str:
+        """Resolve and attach the workspace selected for an inbound context."""
+        return self.agent_router.resolve_context(context)
+
+    def get_conversation_store(self, agent_id: str = None):
+        """Return the session store owned by one agent workspace."""
+        profile = self.agent_registry.get(agent_id)
+        from agent.memory import get_conversation_store
+        return get_conversation_store(profile.workspace)
+
+    @staticmethod
+    def _runtime_key(agent_id: str, session_id: str) -> Tuple[str, str]:
+        return agent_id, session_id
+
+    @staticmethod
+    def _cancel_key(agent_id: str, token: str, default_agent_id: str) -> str:
+        """Keep legacy token keys for the default agent, namespace the rest."""
+        return token if agent_id == default_agent_id else f"{agent_id}::{token}"
+
+    def get_agent(self, session_id: str = None, agent_id: str = None) -> Optional[Agent]:
         """
         Get agent instance for the given session
         
         Args:
-            session_id: Session identifier (e.g., user_id). If None, returns default agent.
+            session_id: Session identifier (e.g., user_id). If None, returns
+                the workspace's default runtime instance.
+            agent_id: Agent profile identifier. Omit for the configured default.
         
         Returns:
             Agent instance for this session
         """
-        # If no session_id, use default agent (backward compatibility)
-        if session_id is None:
-            if self.default_agent is None:
-                self._init_default_agent()
-            return self.default_agent
-        
-        # Check if agent exists for this session
-        if session_id not in self.agents:
-            self._init_agent_for_session(session_id)
-        
-        return self.agents[session_id]
-    
-    def _init_default_agent(self):
-        """Initialize default super agent"""
-        agent = self.initializer.initialize_agent(session_id=None)
-        self.default_agent = agent
-    
-    def _init_agent_for_session(self, session_id: str):
-        """Initialize agent for a specific session"""
-        agent = self.initializer.initialize_agent(session_id=session_id)
-        self.agents[session_id] = agent
+        resolved_agent_id = self._resolve_agent_id(agent_id)
+        with self._agents_lock:
+            if session_id is None:
+                agent = self._default_agents.get(resolved_agent_id)
+                if agent is None:
+                    agent = self.initializer.initialize_agent(
+                        session_id=None, agent_id=resolved_agent_id
+                    )
+                    self._default_agents[resolved_agent_id] = agent
+                if resolved_agent_id == self.agent_registry.default_agent_id:
+                    self.default_agent = agent
+                return agent
 
-    def sync_session_messages_from_store(self, session_id: str) -> int:
+            key = self._runtime_key(resolved_agent_id, session_id)
+            agent = self._agent_instances.get(key)
+            if agent is None:
+                agent = self.initializer.initialize_agent(
+                    session_id=session_id, agent_id=resolved_agent_id
+                )
+                self._agent_instances[key] = agent
+                if resolved_agent_id == self.agent_registry.default_agent_id:
+                    self.agents[session_id] = agent
+            return agent
+
+    def get_cached_agent(self, session_id: str, agent_id: str = None) -> Optional[Agent]:
+        """Return an existing session agent without creating one."""
+        resolved_agent_id = self._resolve_agent_id(agent_id)
+        with self._agents_lock:
+            return self._agent_instances.get(
+                self._runtime_key(resolved_agent_id, session_id)
+            )
+
+    def iter_agent_instances(
+        self, include_defaults: bool = True
+    ) -> Iterator[Tuple[str, Optional[str], Agent]]:
+        """Snapshot all live instances as ``(agent_id, session_id, agent)``."""
+        with self._agents_lock:
+            defaults = list(self._default_agents.items()) if include_defaults else []
+            sessions = list(self._agent_instances.items())
+        for agent_id, agent in defaults:
+            yield agent_id, None, agent
+        for (agent_id, session_id), agent in sessions:
+            yield agent_id, session_id, agent
+
+    def sync_session_messages_from_store(
+        self, session_id: str, agent_id: str = None
+    ) -> int:
         """Reload an agent's in-memory ``messages`` list from the persistent
         conversation store.
 
@@ -405,14 +469,15 @@ class AgentBridge:
             Number of messages now held in the agent's memory. Returns -1 if
             the agent does not exist or has no compatible ``messages`` attr.
         """
-        if not session_id or session_id not in self.agents:
+        if not session_id:
             return -1
-        agent = self.agents[session_id]
+        agent = self.get_cached_agent(session_id, agent_id=agent_id)
+        if agent is None:
+            return -1
         if not (hasattr(agent, "messages") and hasattr(agent, "messages_lock")):
             return -1
         try:
-            from agent.memory import get_conversation_store
-            store = get_conversation_store()
+            store = self.get_conversation_store(agent_id)
             # No turn cap here: we want a faithful mirror of what the store
             # has for this session after deletion.
             remaining = store.load_messages(session_id, max_turns=10**6)
@@ -449,14 +514,22 @@ class AgentBridge:
             Reply object
         """
         session_id = None
+        agent_id = None
         agent = None
         request_id = None
         cancel_event = None
+        token_key = None
         try:
             # Extract session_id from context for user isolation
             if context:
                 session_id = context.kwargs.get("session_id") or context.get("session_id")
                 request_id = context.kwargs.get("request_id") or context.get("request_id")
+
+            resolved_agent_id = (
+                self.route_context(context)
+                if context is not None
+                else self.agent_registry.default_agent_id
+            )
 
             # Register a cancel token. Prefer per-turn request_id (web),
             # fall back to session_id (IM channels). The Event is polled by
@@ -464,10 +537,24 @@ class AgentBridge:
             registry = get_cancel_registry()
             token_key = request_id or session_id
             if token_key:
-                cancel_event = registry.register(token_key, session_id=session_id)
+                token_key = self._cancel_key(
+                    resolved_agent_id,
+                    token_key,
+                    self.agent_registry.default_agent_id,
+                )
+                scoped_session_id = self._cancel_key(
+                    resolved_agent_id,
+                    session_id,
+                    self.agent_registry.default_agent_id,
+                )
+                cancel_event = registry.register(
+                    token_key, session_id=scoped_session_id
+                )
 
             # Get agent for this session (will auto-initialize if needed)
-            agent = self.get_agent(session_id=session_id)
+            agent = self.get_agent(
+                session_id=session_id, agent_id=resolved_agent_id
+            )
             if not agent:
                 return Reply(ReplyType.ERROR, "Failed to initialize super agent")
             
@@ -483,25 +570,31 @@ class AgentBridge:
                 filtered_tools = [tool for tool in agent.tools if tool.name != "scheduler"]
                 agent.tools = filtered_tools
                 logger.info(f"[AgentBridge] Scheduled task execution: excluded scheduler tool ({len(filtered_tools)}/{len(original_tools)} tools)")
-            else:
-                # Attach context to scheduler tool if present
-                if context and agent.tools:
-                    for tool in agent.tools:
-                        if tool.name == "scheduler":
-                            try:
-                                from agent.tools.scheduler.integration import attach_scheduler_to_tool
-                                attach_scheduler_to_tool(tool, context)
-                            except Exception as e:
-                                logger.warning(f"[AgentBridge] Failed to attach context to scheduler: {e}")
-                            break
+
+            if context and agent.tools:
+                for tool in agent.tools:
+                    if tool.name == "scheduler" and not context.get("is_scheduled_task"):
+                        try:
+                            from agent.tools.scheduler.integration import attach_scheduler_to_tool
+                            attach_scheduler_to_tool(tool, context)
+                        except Exception as e:
+                            logger.warning(f"[AgentBridge] Failed to attach context to scheduler: {e}")
+                    elif tool.name == "agent_delegate":
+                        try:
+                            from agent.tools.agent_delegate.agent_delegate import attach_agent_delegate_to_tool
+                            attach_agent_delegate_to_tool(tool, self, context)
+                        except Exception as e:
+                            logger.warning(f"[AgentBridge] Failed to attach delegation context: {e}")
             
             # Pass context metadata to model for downstream API requests
             if context and hasattr(agent, 'model'):
                 agent.model.channel_type = context.get("channel_type", "")
                 agent.model.session_id = session_id or ""
+                agent.model.agent_id = resolved_agent_id
 
             # Store session_id on agent so executor can clear DB on fatal errors
             agent._current_session_id = session_id
+            agent._current_agent_id = resolved_agent_id
 
             # Bound the in-memory context for scheduler sessions before each run.
             # Scheduler sessions are stable per-task and append every trigger,
@@ -521,7 +614,7 @@ class AgentBridge:
             # The reply (assistant/tool messages) is appended once the run
             # completes; the final persist skips this already-stored user turn.
             pre_persisted = self._pre_persist_user_message(
-                session_id, query, context, clear_history
+                session_id, query, context, clear_history, resolved_agent_id
             )
 
             # Mark this session as mid-run so the self-evolution idle scan does
@@ -572,14 +665,20 @@ class AgentBridge:
                 if pre_persisted and new_messages and new_messages[0].get("role") == "user":
                     new_messages = new_messages[1:]
                 if new_messages:
-                    self._persist_messages(session_id, list(new_messages), channel_type)
+                    self._persist_messages(
+                        session_id,
+                        list(new_messages),
+                        channel_type,
+                        resolved_agent_id,
+                    )
                 else:
                     with agent.messages_lock:
                         msg_count = len(agent.messages)
                     if msg_count == 0:
                         try:
-                            from agent.memory import get_conversation_store
-                            get_conversation_store().clear_session(session_id)
+                            self.get_conversation_store(
+                                resolved_agent_id
+                            ).clear_session(session_id)
                             logger.info(f"[AgentBridge] Cleared DB for recovered session: {session_id}")
                         except Exception as e:
                             logger.warning(f"[AgentBridge] Failed to clear DB after recovery: {e}")
@@ -588,7 +687,10 @@ class AgentBridge:
             # scheduler-injected / scheduled-task sessions so internal runs do
             # not count as user activity.
             if session_id and not session_id.startswith("scheduler_") and not (
-                context and context.get("is_scheduled_task")
+                context and (
+                    context.get("is_scheduled_task")
+                    or context.get("is_delegated_task")
+                )
             ):
                 try:
                     from agent.evolution.trigger import note_user_turn
@@ -632,15 +734,16 @@ class AgentBridge:
                     with agent.messages_lock:
                         msg_count = len(agent.messages)
                     if msg_count == 0:
-                        from agent.memory import get_conversation_store
-                        get_conversation_store().clear_session(session_id)
+                        self.get_conversation_store(
+                            resolved_agent_id
+                        ).clear_session(session_id)
                         logger.info(f"[AgentBridge] Cleared DB for session after error: {session_id}")
                 except Exception as db_err:
                     logger.warning(f"[AgentBridge] Failed to clear DB after error: {db_err}")
             # Release cancel token on error path too (idempotent).
-            if cancel_event is not None and (request_id or session_id):
+            if cancel_event is not None and token_key:
                 try:
-                    get_cancel_registry().unregister(request_id or session_id)
+                    get_cancel_registry().unregister(token_key)
                 except Exception:
                     pass
             return Reply(ReplyType.ERROR, f"Agent error: {str(e)}")
@@ -797,7 +900,12 @@ class AgentBridge:
                 logger.warning(f"[AgentBridge] Failed to sync API keys: {e}")
     
     def _pre_persist_user_message(
-        self, session_id: str, query: str, context: Context, clear_history: bool
+        self,
+        session_id: str,
+        query: str,
+        context: Context,
+        clear_history: bool,
+        agent_id: str = None,
     ) -> bool:
         """Persist the user's message before the agent runs.
 
@@ -819,8 +927,7 @@ class AgentBridge:
             from config import conf
             if not conf().get("conversation_persistence", True):
                 return False
-            from agent.memory import get_conversation_store
-            store = get_conversation_store()
+            store = self.get_conversation_store(agent_id)
             # clear_history starts a fresh transcript: wipe the store first so
             # the eager user turn becomes seq 0, matching in-memory state.
             if clear_history:
@@ -839,7 +946,11 @@ class AgentBridge:
             return False
 
     def _persist_messages(
-        self, session_id: str, new_messages: list, channel_type: str = ""
+        self,
+        session_id: str,
+        new_messages: list,
+        channel_type: str = "",
+        agent_id: str = None,
     ) -> None:
         """
         Persist new messages to the conversation store after each agent run.
@@ -865,8 +976,7 @@ class AgentBridge:
             messages_to_store = self._strip_thinking_blocks(new_messages)
 
         try:
-            from agent.memory import get_conversation_store
-            get_conversation_store().append_messages(
+            self.get_conversation_store(agent_id).append_messages(
                 session_id, messages_to_store, channel_type=channel_type
             )
         except Exception as e:
@@ -887,6 +997,7 @@ class AgentBridge:
         content: str,
         channel_type: str = "",
         task_description: str = "",
+        agent_id: str = None,
     ) -> None:
         """Add the visible output of a scheduled task to the receiver's session.
 
@@ -926,12 +1037,11 @@ class AgentBridge:
 
         # Persist first so the new pair gets a stable seq, then prune old
         # scheduler pairs in DB, then sync the in-memory agent.messages buffer.
-        self._persist_messages(session_id, messages, channel_type)
+        self._persist_messages(session_id, messages, channel_type, agent_id)
 
         keep_last_n = max(int(conf().get("scheduler_inject_max_per_session", 3) or 0), 0)
         try:
-            from agent.memory import get_conversation_store
-            deleted = get_conversation_store().prune_scheduled_messages(
+            deleted = self.get_conversation_store(agent_id).prune_scheduled_messages(
                 session_id, keep_last_n=keep_last_n
             )
             if deleted:
@@ -945,7 +1055,7 @@ class AgentBridge:
                 f"for session={session_id}: {e}"
             )
 
-        agent = self.agents.get(session_id)
+        agent = self.get_cached_agent(session_id, agent_id=agent_id)
         if agent:
             try:
                 with agent.messages_lock:
@@ -1091,22 +1201,49 @@ class AgentBridge:
                 cleaned.append(new_msg)
         return cleaned
 
-    def clear_session(self, session_id: str):
+    def clear_session(self, session_id: str, agent_id: str = None):
         """
         Clear a specific session's agent and conversation history
         
         Args:
             session_id: Session identifier to clear
         """
-        if session_id in self.agents:
-            logger.info(f"[AgentBridge] Clearing session: {session_id}")
-            del self.agents[session_id]
+        if not session_id:
+            return
+        resolved_agent_id = self._resolve_agent_id(agent_id)
+        key = self._runtime_key(resolved_agent_id, session_id)
+        with self._agents_lock:
+            removed = self._agent_instances.pop(key, None)
+            if resolved_agent_id == self.agent_registry.default_agent_id:
+                self.agents.pop(session_id, None)
+        if removed is not None:
+            logger.info(
+                f"[AgentBridge] Clearing session: agent={resolved_agent_id}, "
+                f"session={session_id}"
+            )
+
+    def clear_agent(self, agent_id: str) -> int:
+        """Evict every live runtime instance for one agent workspace."""
+        resolved_agent_id = self._resolve_agent_id(agent_id)
+        with self._agents_lock:
+            keys = [key for key in self._agent_instances if key[0] == resolved_agent_id]
+            for key in keys:
+                self._agent_instances.pop(key, None)
+            self._default_agents.pop(resolved_agent_id, None)
+            if resolved_agent_id == self.agent_registry.default_agent_id:
+                self.agents.clear()
+                self.default_agent = None
+        return len(keys)
     
     def clear_all_sessions(self):
         """Clear all agent sessions"""
-        logger.info(f"[AgentBridge] Clearing all sessions ({len(self.agents)} total)")
-        self.agents.clear()
-        self.default_agent = None
+        with self._agents_lock:
+            count = len(self._agent_instances)
+            logger.info(f"[AgentBridge] Clearing all sessions ({count} total)")
+            self._agent_instances.clear()
+            self._default_agents.clear()
+            self.agents.clear()
+            self.default_agent = None
     
     def refresh_all_skills(self) -> int:
         """
@@ -1120,24 +1257,18 @@ class AgentBridge:
         from dotenv import load_dotenv
         from config import conf
 
-        # Reload environment variables from .env file
-        workspace_root = expand_path(conf().get("agent_workspace", "~/cow"))
-        env_file = os.path.join(workspace_root, '.env')
-
-        if os.path.exists(env_file):
-            load_dotenv(env_file, override=True)
-            logger.info(f"[AgentBridge] Reloaded environment variables from {env_file}")
-
         refreshed_count = 0
+        loaded_env_files = set()
 
-        # Collect all agent instances to refresh
-        agents_to_refresh = []
-        if self.default_agent:
-            agents_to_refresh.append(("default", self.default_agent))
-        for session_id, agent in self.agents.items():
-            agents_to_refresh.append((session_id, agent))
-
-        for label, agent in agents_to_refresh:
+        for agent_id, session_id, agent in self.iter_agent_instances():
+            workspace_root = getattr(agent, "workspace_dir", None)
+            env_file = os.path.join(workspace_root, ".env") if workspace_root else None
+            if env_file and env_file not in loaded_env_files and os.path.exists(env_file):
+                load_dotenv(env_file, override=True)
+                loaded_env_files.add(env_file)
+                logger.info(
+                    f"[AgentBridge] Reloaded environment variables from {env_file}"
+                )
             # Refresh skills
             if hasattr(agent, 'skill_manager') and agent.skill_manager:
                 agent.skill_manager.refresh_skills()

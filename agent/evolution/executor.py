@@ -303,6 +303,7 @@ def _workspace_changed(workspace_dir, pre: dict) -> bool:
 def run_evolution_for_session(
     agent_bridge,
     session_id: str,
+    agent_id: str = "default",
     channel_type: str = "",
     receiver: str = "",
     user_id: Optional[str] = None,
@@ -329,7 +330,10 @@ def run_evolution_for_session(
         _running_count += 1
 
     try:
-        agent = agent_bridge.agents.get(session_id) or agent_bridge.default_agent
+        if hasattr(agent_bridge, "get_cached_agent"):
+            agent = agent_bridge.get_cached_agent(session_id, agent_id=agent_id)
+        else:
+            agent = agent_bridge.agents.get(session_id) or agent_bridge.default_agent
         if not agent:
             return False
 
@@ -359,8 +363,10 @@ def run_evolution_for_session(
         )
 
         # Resolve workspace + files to snapshot for undo.
-        from agent.memory.config import get_default_memory_config
-        mem_cfg = get_default_memory_config()
+        mem_cfg = getattr(getattr(agent, "memory_manager", None), "config", None)
+        if mem_cfg is None:
+            from agent.memory.config import get_default_memory_config
+            mem_cfg = get_default_memory_config()
         workspace_dir = mem_cfg.get_workspace()
         if user_id:
             memory_file = Path(workspace_dir) / "memory" / "users" / user_id / "MEMORY.md"
@@ -509,12 +515,15 @@ def _inject_evolution_record(
             note += f"\n(backup_id: {backup_id}; to undo, restore this backup)"
         # Reuse the scheduler-output injection path: isolated execution, only a
         # compact record lands in the user session.
-        agent_bridge.remember_scheduled_output(
-            session_id=session_id,
-            content=note,
-            channel_type=channel_type,
-            task_description="self-evolution",
-        )
+        remember_kwargs = {
+            "session_id": session_id,
+            "content": note,
+            "channel_type": channel_type,
+            "task_description": "self-evolution",
+        }
+        if hasattr(agent_bridge, "agent_registry"):
+            remember_kwargs["agent_id"] = agent_id
+        agent_bridge.remember_scheduled_output(**remember_kwargs)
     except Exception as e:
         logger.debug(f"[Evolution] Failed to inject evolution record: {e}")
 
