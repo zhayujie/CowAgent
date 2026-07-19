@@ -94,9 +94,7 @@ class SessionService:
         try:
             from bridge.bridge import Bridge
             ab = Bridge().get_agent_bridge()
-            if session_id in ab.agents:
-                del ab.agents[session_id]
-                logger.info(f"[SessionService] Removed agent instance: {session_id}")
+            ab.clear_session(session_id)
         except Exception:
             pass
 
