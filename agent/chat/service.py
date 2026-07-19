@@ -297,7 +297,12 @@ class ChatService:
         # Persist new messages to SQLite so they survive restarts and
         # can be queried via the HISTORY interface.
         if new_messages:
-            self._persist_messages(session_id, list(new_messages), channel_type)
+            self._persist_messages(
+                session_id,
+                list(new_messages),
+                channel_type,
+                workspace_root=agent.workspace_dir,
+            )
 
         # Store executor reference for files_to_send access
         agent.stream_executor = executor
@@ -374,7 +379,12 @@ class ChatService:
             pass
 
     @staticmethod
-    def _persist_messages(session_id: str, new_messages: list, channel_type: str = ""):
+    def _persist_messages(
+        session_id: str,
+        new_messages: list,
+        channel_type: str = "",
+        workspace_root: str = None,
+    ):
         try:
             from config import conf
             if not conf().get("conversation_persistence", True):
@@ -383,7 +393,7 @@ class ChatService:
             pass
         try:
             from agent.memory import get_conversation_store
-            get_conversation_store().append_messages(
+            get_conversation_store(workspace_root).append_messages(
                 session_id, new_messages, channel_type=channel_type
             )
         except Exception as e:

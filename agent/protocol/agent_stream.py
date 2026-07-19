@@ -1786,7 +1786,8 @@ class AgentStreamExecutor:
             if not session_id:
                 return
             from agent.memory import get_conversation_store
-            store = get_conversation_store()
+            workspace_root = getattr(self.agent, "workspace_dir", None)
+            store = get_conversation_store(workspace_root)
             store.clear_session(session_id)
             logger.info(f"🗑️ Cleared dirty session data from DB: {session_id}")
         except Exception as e:
