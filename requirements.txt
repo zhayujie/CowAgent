@@ -9,6 +9,8 @@ croniter>=2.0.0
 click>=8.0
 qrcode
 json-repair
+# search_files: search() supports a real per-call timeout, stdlib re does not
+regex>=2019.3.12
 
 # wechatcom & wechatmp
 wechatpy
