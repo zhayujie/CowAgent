@@ -378,6 +378,18 @@ class AgentInitializer:
                         tool.cwd = merged_config.get("cwd", getattr(tool, 'cwd', None))
                         if 'memory_manager' in merged_config:
                             tool.memory_manager = merged_config['memory_manager']
+                        # Re-derive config-derived attributes that were set during
+                        # __init__ (before tool.config was populated from user config).
+                        # bash is the only tool with such attributes (default_timeout,
+                        # safety_mode); the general pattern works for any tool.
+                        if hasattr(tool, 'default_timeout'):
+                            tool.default_timeout = merged_config.get(
+                                "timeout", tool.default_timeout
+                            )
+                        if hasattr(tool, 'safety_mode'):
+                            tool.safety_mode = merged_config.get(
+                                "safety_mode", tool.safety_mode
+                            )
                     tools.append(tool)
             except Exception as e:
                 logger.warning(f"[AgentInitializer] Failed to load tool {tool_name}: {e}")
