@@ -701,6 +701,31 @@ class ToolManager:
             if hasattr(self, 'tool_configs') and name in self.tool_configs:
                 tool_instance.config = self.tool_configs[name]
 
+            # Post-init invariant check: verify that config-derived security
+            # attributes (default_timeout, safety_mode) match the applied config.
+            # This fails fast if any future refactor changes initialization order,
+            # preventing silent degradation to less-secure defaults.
+            if name == "bash":
+                cfg = tool_instance.config or {}
+                expected_timeout = cfg.get("timeout", 30)
+                expected_safety = cfg.get("safety_mode", True)
+                if tool_instance.default_timeout != expected_timeout:
+                    logger.warning(
+                        f"[ToolManager] Config drift detected for '{name}': "
+                        f"default_timeout={tool_instance.default_timeout} "
+                        f"!= config.timeout={expected_timeout}. "
+                        f"Re-applying from config."
+                    )
+                    tool_instance.default_timeout = expected_timeout
+                if tool_instance.safety_mode != expected_safety:
+                    logger.warning(
+                        f"[ToolManager] Config drift detected for '{name}': "
+                        f"safety_mode={tool_instance.safety_mode} "
+                        f"!= config.safety_mode={expected_safety}. "
+                        f"Re-applying from config."
+                    )
+                    tool_instance.safety_mode = expected_safety
+
             return tool_instance
 
         # Fall back to MCP tool instances
