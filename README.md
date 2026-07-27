@@ -80,6 +80,12 @@ curl -O https://cdn.link-ai.tech/code/cow/docker-compose.yml
 docker compose up -d
 ```
 
+**Sealos Cloud:**
+
+[![Deploy on Sealos](https://sealos.io/Deploy-on-Sealos.svg)](https://sealos.io/products/app-store/chatgpt-on-wechat)
+
+The template provisions a password-protected HTTPS Web console and a persistent workspace. Set `WEB_PASSWORD` during deployment.
+
 Once started, open `http://localhost:9899` to access the **Web console** — your one-stop hub to chat with the Agent, configure models, connect channels, and install skills.
 
 > Deploying on a server? Set `web_host` to `0.0.0.0` in `config.json` to make the console reachable from outside, and set `web_password` to protect it. Don't forget to open port `9899` in your firewall or security group.
