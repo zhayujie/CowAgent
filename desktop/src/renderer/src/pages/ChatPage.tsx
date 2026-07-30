@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import MessageBubble from '../components/MessageBubble'
 import ChatInput, { type ChatInputHandle } from '../components/ChatInput'
+import ModelSelector from '../components/ModelSelector'
 import { t } from '../i18n'
 import apiClient from '../api/client'
 import type { Attachment, ChatMessage } from '../types'
@@ -307,7 +308,8 @@ const ChatPage: React.FC<ChatPageProps> = ({ baseUrl }) => {
         )}
       </div>
 
-      {/* Jump-to-bottom affordance could go here in a later pass */}
+      {/* Quick model switch selector */}
+      <ModelSelector baseUrl={baseUrl} />
 
       <ChatInput
         onSend={handleSend}
