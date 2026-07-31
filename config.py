@@ -262,6 +262,19 @@ available_setting = {
     "agent_max_steps": 30,  # max decision steps per run in Agent mode
     "enable_thinking": False,  # Enable deep-thinking mode for thinking-capable models
     "reasoning_effort": "high",  # Reasoning depth under thinking mode: "high" or "max"
+    # Security (issue #2998). The agent runs on the owner's machine, so anyone who can
+    # @mention the bot in a group would otherwise reach the owner's files and shell.
+    "security_enabled": True,  # master switch for the security subsystem; False restores pre-2998 behaviour
+    "security_owner_users": [],  # user ids/nicknames treated as the bot owner (full access, incl. in groups)
+    "security_trusted_users": [],  # user ids/nicknames granted shell + workspace access but not owner-only tools
+    "security_group_default_trust": "guest",  # trust level for an unrecognised sender in a group: guest/trusted/owner
+    "security_private_default_trust": "guest",  # trust for an unknown private sender, once an owner list is configured
+    "security_guest_allowed_paths": [],  # extra directories non-owners may read/write, besides the workspace
+    "security_guest_extra_tools": [],  # extra tool names non-owners may call, besides the built-in allowlist
+    "security_protect_sensitive_paths": True,  # block ~/.ssh, keychains, browser cookie stores etc. at every trust level
+    "security_injection_detection": True,  # flag prompt-injection patterns in fetched/read content
+    "security_output_redaction": True,  # strip API keys, tokens and private keys from outgoing replies
+    "security_audit_log": True,  # append security decisions to <workspace>/logs/security_audit.jsonl
     "knowledge": True,  # whether to enable the knowledge base feature
     # Self-evolution: review idle conversations to learn memory/skills. Flat keys.
     "self_evolution_enabled": False,        # switch to enable/disable self-evolution
