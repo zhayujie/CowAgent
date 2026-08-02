@@ -15,6 +15,8 @@ class Send(BaseTool):
     
     name: str = "send"
     description: str = "Send a LOCAL file (image, video, audio, document) to the user. Only for local file paths. Do NOT use this for URLs — URLs should be included directly in your text reply, the system will handle them automatically."
+    requires_approval = True
+    risk_level = "medium"
     
     params: dict = {
         "type": "object",

@@ -6,8 +6,10 @@ Provides streaming output, event system, and complete tool-call loop
 import json
 import re
 import time
+import uuid
 from typing import List, Dict, Any, Optional, Callable, Tuple
 
+from agent.protocol.approval import ApprovalRegistry, ApprovalRequest, get_approval_registry
 from agent.protocol.cancel import AgentCancelledError
 from agent.protocol.models import LLMRequest, LLMModel
 from agent.protocol.message_utils import (
@@ -1431,6 +1433,71 @@ class AgentStreamExecutor:
         required = params.get("required") if isinstance(params, dict) else None
         return list(required) if isinstance(required, list) else []
 
+    def _check_tool_approval(self, tool: BaseTool, tool_id: str,
+                              arguments: dict) -> Optional[Dict[str, Any]]:
+        """Check if the tool requires approval and block until decision.
+
+        Returns a result dict (error/denied) when the tool should NOT proceed,
+        or None when the tool can execute normally.
+
+        The check respects the ``tool_approval_enabled`` config flag — when
+        disabled, this method always returns None (no-op).
+        """
+        from config import conf
+        if not conf().get("tool_approval_enabled", False):
+            return None
+
+        request_id = f"appr_{uuid.uuid4().hex[:16]}"
+        # Build a concise human-readable summary of the tool call
+        args_preview = {}
+        for k, v in arguments.items():
+            v_str = str(v)
+            if len(v_str) > 120:
+                v_str = v_str[:120] + f"...({len(v_str)} chars)"
+            args_preview[k] = v_str
+        summary = f"{tool.name}({', '.join(f'{k}={v}' for k, v in args_preview.items())})"
+
+        request = ApprovalRequest(
+            request_id=request_id,
+            tool_name=tool.name,
+            arguments=arguments,
+            risk_level=getattr(tool, 'risk_level', 'low'),
+            summary=summary,
+        )
+        registry = get_approval_registry()
+        registry.register(request)
+
+        self._emit_event("tool_approval_required", {
+            "request_id": request_id,
+            "tool_name": tool.name,
+            "arguments": arguments,
+            "risk_level": request.risk_level,
+            "summary": summary,
+        })
+
+        # Block until the user decides (or timeout)
+        result = registry.wait_for_decision(request_id, timeout=30.0)
+
+        registry.unregister(request_id)
+
+        if result.approved:
+            logger.info(
+                f"[Approval] Tool '{tool.name}' approved "
+                f"(request_id={request_id}, reason={result.reason!r})"
+            )
+            return None  # Proceed with execution
+
+        reason = result.reason or "rejected by user"
+        logger.info(
+            f"[Approval] Tool '{tool.name}' denied "
+            f"(request_id={request_id}, reason={reason!r})"
+        )
+        return {
+            "status": "error",
+            "result": f"Tool '{tool.name}' was not approved: {reason}",
+            "execution_time": 0,
+        }
+
     def _execute_tool(self, tool_call: Dict) -> Dict[str, Any]:
         """
         Execute tool
@@ -1505,6 +1572,12 @@ class AgentStreamExecutor:
             tool = self.tools.get(tool_name)
             if not tool:
                 raise ValueError(self._build_tool_not_found_message(tool_name))
+
+            # --- Approval check (Human-in-the-loop) ---
+            if getattr(tool, 'requires_approval', False):
+                approval_result = self._check_tool_approval(tool, tool_id, arguments)
+                if approval_result is not None:
+                    return approval_result
 
             # Set tool context
             tool.model = self.model

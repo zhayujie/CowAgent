@@ -42,5 +42,6 @@
   "reasoning_effort": "high",
   "knowledge": true,
   "self_evolution_enabled": true,
-  "mcp_tool_retrieval_enabled": false
+  "mcp_tool_retrieval_enabled": false,
+  "tool_approval_enabled": false
 }

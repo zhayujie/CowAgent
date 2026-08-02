@@ -37,6 +37,11 @@ class BaseTool:
     name: str = "base_tool"
     description: str = "Base tool"
     params: dict = {}  # Store JSON Schema
+
+    # Approval attributes for Human-in-the-loop
+    requires_approval: bool = False  # Whether this tool requires user approval before execution
+    risk_level: str = "low"  # Risk level: "low", "medium", "high"
+
     model: Optional[Any] = None  # LLM model instance, type depends on bot implementation
     progress_callback = None
     cancel_event = None
