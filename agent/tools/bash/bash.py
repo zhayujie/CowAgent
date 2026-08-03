@@ -473,12 +473,35 @@ SAFETY:
 
     def _get_safety_warning(self, command: str) -> str:
         """
-        Get safety warning for absolutely catastrophic commands only.
-        Keep the blocklist minimal so the agent retains maximum freedom.
+        Get safety warning for dangerous commands.
+
+        Delegates to the shared analyzer in agent/security/commands.py so bash
+        and the tool-level policy gate agree on what counts as dangerous, and
+        so the ruleset is maintained in one place. That analyzer also covers
+        the quieter risks this check historically missed - piping a downloaded
+        script into a shell, copying files out to a remote host, installing a
+        cron job - which matter once instructions can arrive from a group chat
+        or from content the agent merely read (issue #2998).
+
+        The local fallback below stays as a safety net for the case where the
+        security package cannot be imported.
 
         :param command: Command to check
         :return: Warning message if dangerous, empty string if safe
         """
+        try:
+            from agent.security.commands import inspect_command
+
+            risk = inspect_command(command)
+            return risk.reason if risk else ""
+        except Exception as e:
+            logger.debug(f"[Bash] Shared command analyzer unavailable, using fallback: {e}")
+
+        return self._fallback_safety_warning(command)
+
+    @staticmethod
+    def _fallback_safety_warning(command: str) -> str:
+        """Minimal built-in blocklist, used only if the security package fails to load."""
         # Tokenize to avoid substring false positives (e.g. `rm -rf /tmp/x`
         # must not match `rm -rf /`).
         tokens = command.lower().split()

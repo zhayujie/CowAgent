@@ -530,20 +530,82 @@ class AgentBridge:
         )
         return count
 
-    def agent_reply(self, query: str, context: Context = None, 
-                   on_event=None, clear_history: bool = False) -> Reply:
+    def agent_reply(self, query: str, context: Context = None,
+                    on_event=None, clear_history: bool = False) -> Reply:
         """
-        Use super agent to reply to a query
-        
+        Use super agent to reply to a query.
+
+        This is the single funnel where an incoming message meets the agent's
+        tools, so it is where the requester's trust level is established
+        (issue #2998). Everything downstream - the tool gate in BaseTool, the
+        security section of the system prompt - reads the context bound here.
+
         Args:
             query: User query
             context: COW context (optional, contains session_id for user isolation)
             on_event: Event callback (optional)
             clear_history: Whether to clear conversation history
-            
+
         Returns:
             Reply object
         """
+        from agent.security import audit, resolve_security_context, security_scope
+
+        security_ctx = resolve_security_context(context)
+        if not security_ctx.is_owner:
+            logger.info(
+                f"[AgentBridge] Restricted run: {security_ctx.describe()} "
+                f"({security_ctx.reason})"
+            )
+            audit.record(
+                "agent_run",
+                ctx=security_ctx,
+                outcome="restricted",
+                category=security_ctx.trust.label,
+                detail={"query": query},
+            )
+
+        # Bound for the whole run. Pool threads are reused, so the scope must
+        # be released on exit - security_scope() handles that with a reset token.
+        with security_scope(security_ctx):
+            reply = self._agent_reply_scoped(query, context, on_event, clear_history)
+            return self._redact_outbound(reply, security_ctx)
+
+    def _redact_outbound(self, reply: Reply, security_ctx) -> Reply:
+        """Strip secrets from a reply before it leaves the machine.
+
+        Skipped for an owner in a private chat: that conversation is already
+        one-to-one with the person who owns the credentials, and redacting it
+        would break legitimate work such as reviewing a config file. A group
+        chat is redacted even for the owner, because every member can read it.
+        """
+        from config import conf
+
+        if reply is None or not isinstance(getattr(reply, "content", None), str):
+            return reply
+        if not conf().get("security_output_redaction", True):
+            return reply
+        if security_ctx.is_owner and not security_ctx.is_group:
+            return reply
+
+        try:
+            from agent.security import audit, redact, known_secret_values
+
+            redacted, count = redact(reply.content, known_secret_values())
+            if count:
+                logger.warning(
+                    f"[AgentBridge] Redacted {count} secret(s) from a reply to "
+                    f"{security_ctx.describe()}"
+                )
+                audit.record_redaction(count, ctx=security_ctx)
+                reply.content = redacted
+        except Exception as e:
+            logger.error(f"[AgentBridge] Outbound redaction failed: {e}")
+        return reply
+
+    def _agent_reply_scoped(self, query: str, context: Context = None,
+                            on_event=None, clear_history: bool = False) -> Reply:
+        """Body of :meth:`agent_reply`, run inside the security scope."""
         session_id = None
         agent_id = None
         agent = None

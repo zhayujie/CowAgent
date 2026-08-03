@@ -91,6 +91,7 @@ def build_agent_system_prompt(
     Build the agent system prompt.
 
     Section order (by importance and logical flow):
+    0. Security - highest-priority rules, stated before any capability
     1. Tooling - core capabilities, introduced first
     2. Skills - right after tools, since skills are read via the read tool
     3. Memory - memory recall and writing guidance
@@ -116,6 +117,15 @@ def build_agent_system_prompt(
         The full system prompt.
     """
     sections = []
+
+    # 0. Security (issue #2998). Emitted before capabilities are introduced, so
+    # the rules governing a tool are read before the tool is. This is global by
+    # construction: every channel and every group goes through this builder, so
+    # there is no configuration in which the agent runs without these rules.
+    # get_full_system_prompt() rebuilds the prompt on every run, which means the
+    # per-requester block below reflects whoever sent *this* message - important
+    # for a shared group session, where one cached agent serves many senders.
+    sections.extend(_build_security_section(language))
 
     # 1. Tooling (most important, goes first)
     if tools:
@@ -174,6 +184,23 @@ def _build_response_language_section(language: str) -> List[str]:
         "默认使用与用户输入相同的语言回复，除非用户明确要求使用其他语言。",
         "",
     ]
+
+
+def _build_security_section(language: str) -> List[str]:
+    """Global security rules plus a description of the current requester.
+
+    Never raises: a failure to build this section must not take down prompt
+    construction, but it must be loud, because the run then proceeds without
+    the advisory layer. The enforcement layer in agent/security/policy.py is
+    unaffected either way.
+    """
+    try:
+        from agent.security import build_security_section, current_security_context
+
+        return build_security_section(language, current_security_context())
+    except Exception as e:
+        logger.error(f"Failed to build the security prompt section: {e}")
+        return []
 
 
 def _build_identity_section(base_persona: Optional[str], language: str) -> List[str]:
