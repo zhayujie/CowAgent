@@ -163,7 +163,7 @@ const BasicSettings: React.FC<BasicSettingsProps> = ({ baseUrl, onLangChange, on
     const nextReasoningEffort = reasoningOptions.some((o) => o.value === reasoningEffort)
       ? reasoningEffort
       : reasoning?.default || reasoningOptions[0]?.value || reasoningEffort
-    const canUseReasoningWithoutThinking = reasoning?.param === 'effort'
+    const canUseReasoningWithoutThinking = reasoning?.param === 'effort' || reasoning?.thinking_only === true
 
     try {
       await apiClient.updateConfig({
@@ -246,7 +246,7 @@ const BasicSettings: React.FC<BasicSettingsProps> = ({ baseUrl, onLangChange, on
     : reasoning?.default || reasoningOptions[0]?.value || ''
   const showReasoningEffort = !!reasoning?.supported
     && reasoningOptions.length > 0
-    && (thinking || reasoning?.param === 'effort')
+    && (thinking || reasoning?.param === 'effort' || reasoning?.thinking_only === true)
   const currentUnconfigured = !!provider && !isConfigured(provider)
   const modelOptions = [
     ...(currentMeta?.models || []).map((m) => ({ value: m, label: m })),

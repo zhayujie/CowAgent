@@ -149,7 +149,16 @@ class AgentLLMModel(LLMModel):
             self._resolve_bot_type(self.model),
             self.model,
         )
-        return capability.get("param") == "effort"
+        return capability.get("param") == "effort" or bool(capability.get("thinking_only"))
+
+    def _is_thinking_only_model(self) -> bool:
+        from models.reasoning_capabilities import get_reasoning_capability
+
+        capability = get_reasoning_capability(
+            self._resolve_bot_type(self.model),
+            self.model,
+        )
+        return bool(capability.get("thinking_only"))
 
     @property
     def bot(self):
@@ -202,6 +211,8 @@ class AgentLLMModel(LLMModel):
                 # quality the thinking pass produces.
                 from config import conf
                 thinking_enabled = bool(conf().get("enable_thinking", False))
+                if self._is_thinking_only_model():
+                    thinking_enabled = True
                 kwargs['thinking'] = (
                     {"type": "enabled"} if thinking_enabled
                     else {"type": "disabled"}
@@ -264,6 +275,8 @@ class AgentLLMModel(LLMModel):
                 # quality the thinking pass produces.
                 from config import conf
                 thinking_enabled = bool(conf().get("enable_thinking", False))
+                if self._is_thinking_only_model():
+                    thinking_enabled = True
                 kwargs['thinking'] = (
                     {"type": "enabled"} if thinking_enabled
                     else {"type": "disabled"}

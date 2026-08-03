@@ -10,6 +10,9 @@ DEEPSEEK_VALUES = ["low", "high", "xhigh", "max"]
 ZHIPU_VALUES = ["low", "medium", "high", "xhigh", "max"]
 CLAUDE_VALUES = ["low", "medium", "high", "xhigh", "max"]
 CLAUDE_MAX_ONLY_VALUES = ["low", "medium", "high", "max"]
+DASHSCOPE_QWEN38_VALUES = ["low", "medium", "xhigh"]
+DASHSCOPE_HIGH_MAX_VALUES = ["high", "max"]
+DASHSCOPE_MAX_ONLY_VALUES = ["max"]
 CLAUDE_XHIGH_MODELS = (
     "claude-fable-5",
     "claude-mythos-5",
@@ -24,19 +27,40 @@ CLAUDE_MAX_ONLY_MODELS = (
     "claude-sonnet-4-6",
     "claude-opus-4-5",
 )
+DASHSCOPE_QWEN38_MODELS = (
+    "qwen3.8-max-preview",
+)
+DASHSCOPE_HIGH_MAX_MODELS = (
+    "glm-5.2",
+    "glm-5.1",
+    "glm-5",
+    "deepseek-v4-pro",
+    "deepseek-v4-flash",
+)
+DASHSCOPE_MAX_ONLY_MODELS = (
+    "kimi/kimi-k3",
+)
 
 
 def _option(value: str) -> dict:
     return {"value": value, "label": value}
 
 
-def _capability(values: list[str], default: str = "high", param: str = "reasoning_effort") -> dict:
-    return {
+def _capability(
+    values: list[str],
+    default: str = "high",
+    param: str = "reasoning_effort",
+    thinking_only: bool = False,
+) -> dict:
+    capability = {
         "supported": True,
         "param": param,
         "default": default,
         "options": [_option(value) for value in values],
     }
+    if thinking_only:
+        capability["thinking_only"] = True
+    return capability
 
 
 def _base_provider_id(provider_id: str) -> str:
@@ -67,6 +91,14 @@ def get_reasoning_capability(provider_id: str, model_name: str = "") -> dict:
         if model.startswith(CLAUDE_MAX_ONLY_MODELS):
             return _capability(CLAUDE_MAX_ONLY_VALUES, default="high", param="effort")
 
+    if base_pid == "dashscope":
+        if model.startswith(DASHSCOPE_QWEN38_MODELS):
+            return _capability(DASHSCOPE_QWEN38_VALUES, default="xhigh", thinking_only=True)
+        if model.startswith(DASHSCOPE_HIGH_MAX_MODELS):
+            return _capability(DASHSCOPE_HIGH_MAX_VALUES, default="high")
+        if model.startswith(DASHSCOPE_MAX_ONLY_MODELS):
+            return _capability(DASHSCOPE_MAX_ONLY_VALUES, default="max")
+
     return {"supported": False, "options": []}
 
 
@@ -76,8 +108,31 @@ def normalize_reasoning_effort(provider_id: str, model_name: str, value: object)
     if not capability.get("supported"):
         return None
 
-    allowed = [item["value"] for item in capability.get("options", [])]
+    base_pid = _base_provider_id(provider_id)
+    model = (model_name or "").strip().lower()
     effort = str(value or "").strip()
+    if base_pid == "dashscope":
+        if model.startswith(DASHSCOPE_QWEN38_MODELS):
+            effort = {
+                "high": "xhigh",
+                "max": "xhigh",
+                "minimal": "low",
+            }.get(effort, effort)
+        elif model.startswith(DASHSCOPE_HIGH_MAX_MODELS):
+            effort = {
+                "low": "high",
+                "medium": "high",
+                "xhigh": "max",
+            }.get(effort, effort)
+        elif model.startswith(DASHSCOPE_MAX_ONLY_MODELS):
+            effort = {
+                "low": "max",
+                "medium": "max",
+                "high": "max",
+                "xhigh": "max",
+            }.get(effort, effort)
+
+    allowed = [item["value"] for item in capability.get("options", [])]
     if effort in allowed:
         return effort
     return capability.get("default")

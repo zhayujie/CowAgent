@@ -67,6 +67,11 @@ class TestModelsHandler(unittest.TestCase):
             [item["value"] for item in result["providers"]["claudeAPI"]["reasoning_by_model"]["claude-sonnet-4-6"]["options"]],
             ["low", "medium", "high", "max"],
         )
+        self.assertEqual(
+            [item["value"] for item in result["providers"]["dashscope"]["reasoning_by_model"]["qwen3.8-max-preview"]["options"]],
+            ["low", "medium", "xhigh"],
+        )
+        self.assertFalse(result["providers"]["dashscope"]["reasoning_by_model"]["qwen3.7-plus"]["supported"])
         self.assertFalse(result["providers"]["openai"]["reasoning"]["supported"])
         self.assertFalse(result["providers"]["gemini"]["reasoning"]["supported"])
 

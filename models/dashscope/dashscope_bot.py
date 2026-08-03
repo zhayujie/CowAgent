@@ -262,12 +262,24 @@ class DashscopeBot(Bot):
                 if kwargs.get("tool_choice"):
                     parameters["tool_choice"] = kwargs["tool_choice"]
             
-            # Add thinking parameters for Qwen3/QwQ models
-            if "qwen3" in model_name.lower() or "qwq" in model_name.lower():
+            # Add thinking parameters for DashScope thinking-capable models.
+            model_lower = model_name.lower()
+            is_qwen38_effort_model = model_lower.startswith("qwen3.8-max-preview")
+            supports_thinking = (
+                "qwen3" in model_lower
+                or "qwq" in model_lower
+                or model_lower.startswith(("glm-", "deepseek-v4-", "kimi/kimi-k3"))
+            )
+            if supports_thinking:
+                if is_qwen38_effort_model:
+                    parameters["preserve_thinking"] = False
                 thinking = kwargs.get("thinking", {"type": "enabled"})
-                if thinking.get("type") == "enabled":
+                if thinking.get("type") == "enabled" or is_qwen38_effort_model:
                     parameters["enable_thinking"] = True
-                    if kwargs.get("thinking_budget"):
+                    reasoning_effort = kwargs.get("reasoning_effort")
+                    if reasoning_effort:
+                        parameters["reasoning_effort"] = reasoning_effort
+                    if kwargs.get("thinking_budget") and not is_qwen38_effort_model:
                         parameters["thinking_budget"] = kwargs["thinking_budget"]
                     if stream:
                         parameters["incremental_output"] = True

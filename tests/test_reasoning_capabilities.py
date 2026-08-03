@@ -59,6 +59,40 @@ def test_older_claude_models_hide_effort_control():
     assert get_reasoning_capability("claudeAPI", "claude-3-5-sonnet-latest") == {"supported": False, "options": []}
 
 
+def test_dashscope_qwen38_max_exposes_native_effort_values():
+    cap = get_reasoning_capability("dashscope", "qwen3.8-max-preview")
+
+    assert cap["supported"] is True
+    assert cap["param"] == "reasoning_effort"
+    assert cap["default"] == "xhigh"
+    assert cap["thinking_only"] is True
+    assert _values(cap) == ["low", "medium", "xhigh"]
+    assert get_reasoning_capability("dashscope", "qwen3.8-max") == {"supported": False, "options": []}
+
+
+def test_dashscope_direct_glm_and_deepseek_expose_high_max_effort_values():
+    glm_cap = get_reasoning_capability("dashscope", "glm-5.2")
+    deepseek_cap = get_reasoning_capability("dashscope", "deepseek-v4-flash")
+
+    assert glm_cap["supported"] is True
+    assert glm_cap["default"] == "high"
+    assert _values(glm_cap) == ["high", "max"]
+    assert deepseek_cap["supported"] is True
+    assert _values(deepseek_cap) == ["high", "max"]
+
+
+def test_dashscope_kimi_k3_only_exposes_max_effort():
+    cap = get_reasoning_capability("dashscope", "kimi/kimi-k3")
+
+    assert cap["supported"] is True
+    assert cap["default"] == "max"
+    assert _values(cap) == ["max"]
+
+
+def test_dashscope_other_qwen_models_hide_effort_control():
+    assert get_reasoning_capability("dashscope", "qwen3.7-plus") == {"supported": False, "options": []}
+
+
 def test_openai_is_hidden_until_responses_api_runtime_support_exists():
     cap = get_reasoning_capability("openai", "gpt-5.4")
 
@@ -86,4 +120,9 @@ def test_normalize_returns_provider_default_for_invalid_value():
     assert normalize_reasoning_effort("zhipu", "glm-5.2", "medium") == "medium"
     assert normalize_reasoning_effort("claudeAPI", "claude-opus-5", "xhigh") == "xhigh"
     assert normalize_reasoning_effort("claudeAPI", "claude-sonnet-4-6", "xhigh") == "high"
+    assert normalize_reasoning_effort("dashscope", "qwen3.8-max", "high") is None
+    assert normalize_reasoning_effort("dashscope", "qwen3.8-max-preview", "minimal") == "low"
+    assert normalize_reasoning_effort("dashscope", "glm-5.2", "low") == "high"
+    assert normalize_reasoning_effort("dashscope", "deepseek-v4-pro", "xhigh") == "max"
+    assert normalize_reasoning_effort("dashscope", "kimi/kimi-k3", "high") == "max"
     assert normalize_reasoning_effort("gemini", "gemini-3.5-flash", "high") is None

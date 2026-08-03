@@ -296,6 +296,7 @@ export interface ReasoningCapability {
   supported: boolean
   param?: string
   default?: string
+  thinking_only?: boolean
   options: ReasoningOption[]
 }
 

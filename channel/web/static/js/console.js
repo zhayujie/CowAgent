@@ -5218,7 +5218,7 @@ function syncReasoningEffortOptions() {
     const reasoning = reasoningByModel[selectedModel] || provider.reasoning || {};
     const options = reasoning.supported ? (reasoning.options || []) : [];
     const thinkingEl = document.getElementById('cfg-enable-thinking');
-    const canUseWithoutThinking = reasoning.param === 'effort';
+    const canUseWithoutThinking = reasoning.param === 'effort' || reasoning.thinking_only === true;
     if (!thinkingEl || (!thinkingEl.checked && !canUseWithoutThinking) || !options.length) {
         wrap.classList.add('hidden');
         return;
