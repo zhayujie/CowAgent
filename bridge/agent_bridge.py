@@ -1039,6 +1039,14 @@ class AgentBridge:
             # The in-memory message list keeps them intact for this run's
             # multi-turn LLM context.
             thinking_enabled = bool(conf().get("enable_thinking", False))
+            if not thinking_enabled:
+                from models.reasoning_capabilities import get_reasoning_capability
+
+                capability = get_reasoning_capability(
+                    AgentLLMModel(None)._resolve_bot_type(conf().get("model", "")),
+                    conf().get("model", ""),
+                )
+                thinking_enabled = bool(capability.get("thinking_only"))
         except Exception:
             thinking_enabled = False
 

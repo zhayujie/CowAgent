@@ -13,6 +13,7 @@ CLAUDE_MAX_ONLY_VALUES = ["low", "medium", "high", "max"]
 DASHSCOPE_QWEN38_VALUES = ["low", "medium", "xhigh"]
 DASHSCOPE_HIGH_MAX_VALUES = ["high", "max"]
 DASHSCOPE_MAX_ONLY_VALUES = ["max"]
+KIMI_K3_VALUES = ["low", "high", "max"]
 CLAUDE_XHIGH_MODELS = (
     "claude-fable-5",
     "claude-mythos-5",
@@ -98,6 +99,9 @@ def get_reasoning_capability(provider_id: str, model_name: str = "") -> dict:
             return _capability(DASHSCOPE_HIGH_MAX_VALUES, default="high")
         if model.startswith(DASHSCOPE_MAX_ONLY_MODELS):
             return _capability(DASHSCOPE_MAX_ONLY_VALUES, default="max")
+
+    if base_pid == "moonshot" and model.startswith("kimi-k3"):
+        return _capability(KIMI_K3_VALUES, default="max", thinking_only=True)
 
     return {"supported": False, "options": []}
 

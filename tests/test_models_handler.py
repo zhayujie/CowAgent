@@ -72,6 +72,12 @@ class TestModelsHandler(unittest.TestCase):
             ["low", "medium", "xhigh"],
         )
         self.assertFalse(result["providers"]["dashscope"]["reasoning_by_model"]["qwen3.7-plus"]["supported"])
+        self.assertEqual(
+            [item["value"] for item in result["providers"]["moonshot"]["reasoning_by_model"]["kimi-k3"]["options"]],
+            ["low", "high", "max"],
+        )
+        self.assertTrue(result["providers"]["moonshot"]["reasoning_by_model"]["kimi-k3"]["thinking_only"])
+        self.assertFalse(result["providers"]["moonshot"]["reasoning_by_model"]["kimi-k2.7-code"]["supported"])
         self.assertFalse(result["providers"]["openai"]["reasoning"]["supported"])
         self.assertFalse(result["providers"]["gemini"]["reasoning"]["supported"])
 

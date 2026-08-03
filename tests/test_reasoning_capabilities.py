@@ -93,6 +93,21 @@ def test_dashscope_other_qwen_models_hide_effort_control():
     assert get_reasoning_capability("dashscope", "qwen3.7-plus") == {"supported": False, "options": []}
 
 
+def test_kimi_k3_exposes_low_high_max_effort_values():
+    cap = get_reasoning_capability("moonshot", "kimi-k3")
+
+    assert cap["supported"] is True
+    assert cap["param"] == "reasoning_effort"
+    assert cap["default"] == "max"
+    assert cap["thinking_only"] is True
+    assert _values(cap) == ["low", "high", "max"]
+
+
+def test_kimi_k2_models_hide_effort_control():
+    assert get_reasoning_capability("moonshot", "kimi-k2.7-code") == {"supported": False, "options": []}
+    assert get_reasoning_capability("moonshot", "kimi-k2.6") == {"supported": False, "options": []}
+
+
 def test_openai_is_hidden_until_responses_api_runtime_support_exists():
     cap = get_reasoning_capability("openai", "gpt-5.4")
 
@@ -125,4 +140,6 @@ def test_normalize_returns_provider_default_for_invalid_value():
     assert normalize_reasoning_effort("dashscope", "glm-5.2", "low") == "high"
     assert normalize_reasoning_effort("dashscope", "deepseek-v4-pro", "xhigh") == "max"
     assert normalize_reasoning_effort("dashscope", "kimi/kimi-k3", "high") == "max"
+    assert normalize_reasoning_effort("moonshot", "kimi-k3", "low") == "low"
+    assert normalize_reasoning_effort("moonshot", "kimi-k3", "medium") == "max"
     assert normalize_reasoning_effort("gemini", "gemini-3.5-flash", "high") is None

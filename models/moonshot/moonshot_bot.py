@@ -55,6 +55,10 @@ class MoonshotBot(Bot):
         """
         return model_name.lower().startswith("kimi-k2.7-code")
 
+    @staticmethod
+    def _is_kimi_k3_model(model_name: str) -> bool:
+        return model_name.lower().startswith("kimi-k3")
+
     @classmethod
     def _model_supports_thinking(cls, model_name: str) -> bool:
         """Return True if the model accepts the ``thinking`` request parameter."""
@@ -285,10 +289,15 @@ class MoonshotBot(Bot):
                 request_body["tools"] = converted_tools
                 request_body["tool_choice"] = "auto"
 
-            # Kimi Coding Plan has built-in reasoning and ignores the thinking param.
-            # For regular Kimi models, only K2/K1.5 series support the thinking param.
-            # Respect the enable_thinking config passed from agent_bridge.
-            if not self._is_kimi_coding_plan and self._model_supports_thinking(model):
+            # Kimi Coding Plan and Kimi K3 are always-thinking models. K3
+            # controls reasoning with top-level reasoning_effort, not thinking.
+            if not self._is_kimi_coding_plan and self._is_kimi_k3_model(model):
+                reasoning_effort = kwargs.get("reasoning_effort")
+                if reasoning_effort:
+                    request_body["reasoning_effort"] = reasoning_effort
+            # For regular Kimi K2/K1.5 models, respect the enable_thinking
+            # config passed from agent_bridge through the thinking parameter.
+            elif not self._is_kimi_coding_plan and self._model_supports_thinking(model):
                 thinking = kwargs.get("thinking", {"type": "enabled"})
                 request_body["thinking"] = thinking
 
@@ -461,6 +470,14 @@ class MoonshotBot(Bot):
             finish_reason = result["choices"][0]["finish_reason"]
 
             response_data = {"role": "assistant", "content": []}
+
+            # Kimi K3 requires reasoning_content to be preserved in multi-turn
+            # conversations when thinking was active for that assistant turn.
+            if message.get("reasoning_content"):
+                response_data["content"].append({
+                    "type": "thinking",
+                    "thinking": message["reasoning_content"]
+                })
 
             # Add text content
             if message.get("content"):

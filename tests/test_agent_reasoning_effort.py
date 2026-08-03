@@ -152,6 +152,19 @@ def test_agent_bridge_forces_dashscope_qwen38_preview_thinking(monkeypatch):
     assert bot.kwargs["reasoning_effort"] == "medium"
 
 
+def test_agent_bridge_forces_kimi_k3_thinking(monkeypatch):
+    from config import conf
+
+    monkeypatch.setitem(conf(), "enable_thinking", False)
+    monkeypatch.setitem(conf(), "reasoning_effort", "low")
+    model, bot = _model_with_bot(monkeypatch, "moonshot", "kimi-k3")
+
+    model.call(_Request())
+
+    assert bot.kwargs["thinking"] == {"type": "enabled"}
+    assert bot.kwargs["reasoning_effort"] == "low"
+
+
 def test_agent_bridge_defaults_invalid_deepseek_value(monkeypatch):
     from config import conf
 
@@ -188,3 +201,35 @@ def test_agent_bridge_omits_effort_when_thinking_disabled(monkeypatch):
 
     assert bot.kwargs["thinking"] == {"type": "disabled"}
     assert "reasoning_effort" not in bot.kwargs
+
+
+def test_agent_bridge_preserves_thinking_blocks_for_thinking_only_models(monkeypatch):
+    from bridge.agent_bridge import AgentBridge
+    from config import conf
+
+    captured = {}
+
+    class _Store:
+        def append_messages(self, session_id, messages, channel_type="", create_if_missing=True):
+            captured["messages"] = messages
+            return True
+
+    bridge = AgentBridge.__new__(AgentBridge)
+    monkeypatch.setattr(bridge, "get_conversation_store", lambda agent_id=None: _Store())
+    monkeypatch.setitem(conf(), "conversation_persistence", True)
+    monkeypatch.setitem(conf(), "enable_thinking", False)
+    monkeypatch.setitem(conf(), "bot_type", "moonshot")
+    monkeypatch.setitem(conf(), "model", "kimi-k3")
+
+    bridge._persist_messages(
+        "session-1",
+        [{
+            "role": "assistant",
+            "content": [
+                {"type": "thinking", "thinking": "keep me"},
+                {"type": "text", "text": "answer"},
+            ],
+        }],
+    )
+
+    assert captured["messages"][0]["content"][0] == {"type": "thinking", "thinking": "keep me"}
