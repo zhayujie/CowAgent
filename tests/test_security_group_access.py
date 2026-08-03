@@ -25,6 +25,7 @@ from channel.chat_message import ChatMessage
 from config import conf
 from agent.security import (
     TrustLevel,
+    current_security_context,
     evaluate_tool_call,
     inspect_command,
     resolve_security_context,
@@ -137,6 +138,116 @@ class TestTrustResolution(SecurityConfigTestCase):
         conf()["security_group_default_trust"] = "trusted"
         ctx = resolve_security_context(make_context(True, "ou_x", "X"))
         self.assertEqual(ctx.trust, TrustLevel.TRUSTED)
+
+
+class TestMissingIdentity(SecurityConfigTestCase):
+    """Case A from the issue #2998 review.
+
+    A request whose sender we *cannot identify at all* (a forwarded message, a
+    callback that omitted the user id, a replayed webhook, or a resolution
+    error) is a different fault from a request made by a known-but-unauthorised
+    person (Case B). It is a structural / incomplete request and must fail
+    closed - it must not be folded into the GUEST branch, because then an
+    unattributable request would be treated as a usable guest, or - on a
+    private channel with no owner list - quietly promoted to OWNER.
+
+    The review asked for two things this class pins down:
+
+    1. the missing-identity branch is distinct from the stranger branch, and
+    2. a regression test asserts the request was refused *because of
+       ``missing_identity``*, not merely "because it was refused".
+    """
+
+    def _resolve(self, is_group, channel="feishu", user_id=""):
+        return resolve_security_context(make_context(is_group, user_id, channel=channel))
+
+    def test_missing_identity_in_group_is_untrusted(self):
+        ctx = self._resolve(is_group=True)
+        self.assertEqual(ctx.trust, TrustLevel.UNTRUSTED)
+        self.assertEqual(ctx.identity_status, "unidentified")
+        self.assertTrue(ctx.reason.startswith("missing_identity"))
+
+    def test_group_message_with_only_a_group_id_is_untrusted(self):
+        # The real group shape: from_user_id is the *group* id, and a group
+        # message with no human sender must not be treated as "known" just
+        # because the group id is present. This is the precise Case A hole.
+        msg = ChatMessage({})
+        msg.is_group = True
+        msg.from_user_id = "oc_group_1"      # the group, not a person
+        msg.actual_user_id = ""              # the human could not be determined
+        msg.from_user_nickname = "Product Team"
+        msg.actual_user_nickname = ""
+        msg.other_user_id = "oc_group_1"
+        msg.other_user_nickname = "Product Team"
+        context = Context(ContextType.TEXT, "hello")
+        context.kwargs = {
+            "isgroup": True, "msg": msg, "channel_type": "feishu", "session_id": "oc_group_1",
+        }
+        ctx = resolve_security_context(context)
+        self.assertEqual(ctx.trust, TrustLevel.UNTRUSTED)
+        self.assertEqual(ctx.identity_status, "unidentified")
+
+    def test_missing_identity_in_private_channel_is_untrusted(self):
+        ctx = self._resolve(is_group=False, channel="wx")
+        self.assertEqual(ctx.trust, TrustLevel.UNTRUSTED)
+        self.assertEqual(ctx.identity_status, "unidentified")
+
+    def test_missing_identity_denies_every_tool(self):
+        # Even conversational tools must not run for an unattributable request.
+        with security_scope(self._resolve(is_group=True)):
+            for tool in ("web_search", "read", "ls", "search_files", "write", "edit",
+                         "send", "vision", "web_fetch", "bash", "terminal",
+                         "env_config", "scheduler", "memory_search"):
+                decision = evaluate_tool_call(tool_name=tool, args={})
+                self.assertFalse(decision.allowed, f"{tool} must be denied when identity is missing")
+                self.assertEqual(
+                    decision.category, "identity.missing",
+                    f"{tool} denial must be tagged identity.missing, not {decision.category!r}",
+                )
+
+    def test_denial_reason_is_machine_distinguishable(self):
+        # The whole point: a caller must tell Case A apart from a real stranger.
+        with security_scope(self._resolve(is_group=True)):
+            missing = evaluate_tool_call("bash", {"command": "ls"})
+        with security_scope(self._resolve(is_group=True, user_id="ou_mallory")):
+            stranger = evaluate_tool_call("bash", {"command": "ls"})
+        self.assertEqual(missing.category, "identity.missing")
+        self.assertEqual(stranger.category, "capability.not_allowlisted")
+        self.assertNotEqual(missing.category, stranger.category)
+
+    def test_identified_stranger_is_guest_not_untrusted(self):
+        # Case B keeps working: a known-but-unauthorised sender is GUEST and can
+        # still hold a conversation - it is not collapsed into the fail-closed
+        # bucket.
+        with security_scope(self._resolve(is_group=True, user_id="ou_mallory")):
+            ctx = current_security_context()
+            self.assertEqual(ctx.trust, TrustLevel.GUEST)
+            self.assertEqual(ctx.identity_status, "identified")
+            decision = evaluate_tool_call("web_search", {"query": "weather"})
+            self.assertTrue(decision.allowed)
+
+    def test_resolution_error_fails_closed(self):
+        # If resolution itself throws, we must not fall back to GUEST (which
+        # would let a malformed request run tools). It must be UNTRUSTED.
+        class _Boom:
+            def get(self, key, default=None):
+                raise RuntimeError("boom")
+
+        ctx = resolve_security_context(_Boom())
+        self.assertEqual(ctx.trust, TrustLevel.UNTRUSTED)
+        self.assertEqual(ctx.identity_status, "unidentified")
+
+    def test_local_invocation_unaffected(self):
+        # No IM requester at all -> operator at the machine, full access.
+        ctx = resolve_security_context(None)
+        self.assertEqual(ctx.trust, TrustLevel.OWNER)
+        self.assertEqual(ctx.identity_status, "local")
+
+    def test_local_channel_with_empty_id_still_owner(self):
+        with security_scope(self._resolve(is_group=False, channel="terminal")):
+            ctx = current_security_context()
+            self.assertEqual(ctx.trust, TrustLevel.OWNER)
+            self.assertEqual(ctx.identity_status, "local")
 
 
 class TestGuestDenials(SecurityConfigTestCase):

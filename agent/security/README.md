@@ -37,27 +37,58 @@ and reduce the number of times layer 3 has to fire; they are not relied upon.
 
 ## How a request is classified
 
-`trust.py` derives a `SecurityContext` from the inbound message:
+`trust.py` derives a `SecurityContext` from the inbound message. The single
+most important distinction is **who is asking** versus **whether we could
+identify anyone at all**:
 
-| Situation | Trust |
-|---|---|
-| Sender is in `security_owner_users`, or an authenticated `#auth` admin | `OWNER` |
-| Sender is in `security_trusted_users` | `TRUSTED` |
-| **Unrecognised sender in a group chat** | **`GUEST`** |
-| Private chat, no owner list configured | `OWNER` (unchanged single-user behaviour) |
-| Private chat, owner list configured, sender unknown | `GUEST` |
-| Desktop / CLI / terminal / web UI | `OWNER` (the operator is at the machine) |
-| `security_enabled = false` | `OWNER` (kill switch, exact pre-change behaviour) |
+| Situation | Trust | `identity_status` |
+|---|---|---|
+| Sender is in `security_owner_users`, or an authenticated `#auth` admin | `OWNER` | `identified` |
+| Sender is in `security_trusted_users` | `TRUSTED` | `identified` |
+| Recognised sender in a group chat who is not the owner | `GUEST` | `identified` |
+| Private chat, no owner list configured | `OWNER` (unchanged single-user behaviour) | `identified` |
+| Private chat, owner list configured, sender known but unknown to us | `GUEST` | `identified` |
+| **Channel request with no identifiable sender** (missing / forged `actual_user_id`, replayed webhook, callback that omitted the user id) | **`UNTRUSTED`** | **`unidentified`** |
+| Desktop / CLI / terminal / web UI | `OWNER` (the operator is at the machine) | `local` |
+| No context at all (CLI, unit test, scheduled task) | `OWNER` | `local` |
+| `security_enabled = false` | `OWNER` (kill switch, exact pre-change behaviour) | `identified` |
+
+### Case A vs Case B — and why they are not one branch
+
+A channel request is *supposed* to carry a sender identity. Two very different
+faults must not be collapsed into the same decision:
+
+- **Case B — identified, not authorised.** We know who sent it; they are simply
+  not the owner. This is a `GUEST` (group) or `GUEST` (private, once an owner
+  list exists). They can still talk to the bot.
+- **Case A — not identified at all.** The request reached us without an
+  attributable human sender. That is a *structural / incomplete* request, not an
+  unauthorised person, and it fails **closed**: `UNTRUSTED`, and *every* tool —
+  including conversational ones like `web_search` — is refused. The denial is
+  tagged `identity.missing`, deliberately distinct from a stranger's
+  `capability.not_allowlisted`, so logs, metrics and any auto-retry / auto-degrade
+  path can tell the two apart. (If the two are indistinguishable downstream,
+  the machine will retry, degrade or escalate the fail-closed case exactly as if
+  it were an ordinary denial — which defeats the point.)
+
+In a group, the human sender is `actual_user_id`; `from_user_id` is the *group*
+id, not a person, and is never used as a human identity. So a group message
+whose `actual_user_id` is missing is correctly `UNTRUSTED` rather than looking
+"known" because the group id happens to be present. A resolution error (an
+exception while reading the message) also fails closed to `UNTRUSTED`, never to
+`GUEST`.
 
 The context lives in a `contextvars.ContextVar`, not a global: messages are
 handled on a shared 8-worker `ThreadPoolExecutor`, and `security_scope()`
 releases the binding with a reset token so a guest context can never leak into
 the next task that lands on the same thread.
 
-**Fail-open when unscoped, fail-closed when scoped.** A run with no context at
-all (CLI, unit test, scheduled task the owner created) is `OWNER`, so nothing
-about a single-user install changes. Every channel-driven run binds a context
-explicitly, and an error while resolving it falls back to `GUEST`.
+**Fail-open when there is genuinely no requester, fail-closed when a requester
+could not be established.** A run with no context at all (CLI, unit test,
+scheduled task the owner created) is `OWNER`, so nothing about a single-user
+install changes. Every channel-driven run binds a context explicitly; a request
+that arrives without an attributable sender, or that fails to resolve, is
+`UNTRUSTED` and refused.
 
 ## What a guest can and cannot do
 

@@ -164,7 +164,19 @@ class BaseTool:
             audit.record_confirmation(self.name, decision.category, **decision.details)
         else:
             audit.record_denial(self.name, decision.category, **decision.details)
-        return ToolResult.fail(decision.message)
+        # The refusal carries a *structured* reason (not just prose) in
+        # ext_data, so any caller that auto-retries, auto-degrades, or
+        # auto-escalates can tell a missing-identity rejection (Case A) apart
+        # from an ordinary unauthorized-user rejection (Case B) without parsing
+        # the message. See the issue #2998 review: the return-to-caller layer
+        # must differentiate, or for the machine the two cases are one case.
+        return ToolResult.fail(
+            decision.message,
+            ext_data={
+                "security_denial_category": decision.category,
+                "security_identity_status": decision.details.get("identity_status", ""),
+            },
+        )
 
     def execute(self, params: dict) -> ToolResult:
         """Specific logic to be implemented by subclasses"""

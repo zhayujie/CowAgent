@@ -57,12 +57,23 @@ class TrustLevel(IntEnum):
     Ordered, so policies can be written as ``trust >= TrustLevel.TRUSTED``.
     """
 
-    #: Content that came back from a tool (web page, file, API response).
-    #: Never a requester - used to mark data that must not be obeyed.
+    #: Two distinct situations share the bottom rung, and both mean "do not
+    #: obey":
+    #:
+    #: 1. A *request* we could not attribute to any identified sender - a
+    #:    forwarded message, a callback that omitted the user id, a replayed
+    #:    webhook, or a resolution error. This is a structural/incomplete
+    #:    request (Case A), not a known-but-unauthorised person, and it fails
+    #:    closed: no tool of any kind may run, and the denial is tagged
+    #:    ``identity.missing`` so it is indistinguishable in logs/metrics from
+    #:    a real stranger's ``capability.not_allowlisted`` refusal.
+    #: 2. Content that came back *from* a tool (web page, file, API response),
+    #:    used to mark data that must not be obeyed as instructions.
     UNTRUSTED = 0
 
-    #: A person we cannot identify as the owner. Typically another member of a
-    #: group chat the bot was invited into.
+    #: A person we *did* identify, but who is not the owner or a trusted user.
+    #: Typically another member of a group chat the bot was invited into.
+    #: This is Case B: the identity is known, only the authority is not.
     GUEST = 10
 
     #: A person the owner explicitly allowlisted.
@@ -107,6 +118,12 @@ class SecurityContext:
     group_name: str = ""
     #: Why this trust level was chosen - surfaced in audit records.
     reason: str = "default"
+    #: "identified" (a known sender, authorised or not), "unidentified" (the
+    #: request could not be attributed to any sender - Case A), or "local"
+    #: (no IM requester at all, e.g. the desktop app or CLI). The policy and
+    #: audit layers branch on this, so a malformed request and a known stranger
+    #: are never collapsed into the same bucket.
+    identity_status: str = "identified"
     #: Workspace the agent is confined to for this run (set by the gate).
     workspace: Optional[str] = None
     extra: dict = field(default_factory=dict)
@@ -138,7 +155,8 @@ _current: contextvars.ContextVar[Optional[SecurityContext]] = contextvars.Contex
 #: access, so this hardening is transparent for single-user setups. Every
 #: channel-driven run goes through resolve_security_context() instead.
 _DEFAULT_CONTEXT = SecurityContext(
-    trust=TrustLevel.OWNER, channel="local", reason="no-request-scope (local invocation)"
+    trust=TrustLevel.OWNER, channel="local", reason="no-request-scope (local invocation)",
+    identity_status="local",
 )
 
 
@@ -230,15 +248,18 @@ def resolve_security_context(context: Any = None) -> SecurityContext:
 
     if context is None:
         return SecurityContext(
-            trust=TrustLevel.OWNER, channel="local", reason="no context (local invocation)"
+            trust=TrustLevel.OWNER, channel="local", reason="no context (local invocation)",
+            identity_status="local",
         )
 
     try:
         return _resolve(context, conf())
     except Exception as e:  # pragma: no cover - defensive
-        logger.error(f"[Security] Failed to resolve trust, falling back to guest: {e}")
+        logger.error(f"[Security] Failed to resolve trust, failing closed: {e}")
         return SecurityContext(
-            trust=TrustLevel.GUEST, reason=f"resolution error, failing closed: {e}"
+            trust=TrustLevel.UNTRUSTED,
+            reason=f"resolution error, failing closed: {e}",
+            identity_status="unidentified",
         )
 
 
@@ -254,8 +275,16 @@ def _resolve(context: Any, config) -> SecurityContext:
     group_name = ""
     if msg is not None:
         # actual_user_id is the real human in a group; from_user_id is the
-        # conversation peer, which for a group message is the group itself.
-        user_id = str(getattr(msg, "actual_user_id", "") or getattr(msg, "from_user_id", "") or "")
+        # conversation peer, which for a group message is the *group itself*,
+        # not a person. The canonical human identity is therefore:
+        #   - in a group:        actual_user_id  (from_user_id is just the group)
+        #   - in a private chat: actual_user_id or from_user_id (the peer)
+        # Treating the group id as a human identity is the precise Case A hole:
+        # a group message with a missing human id would otherwise look "known"
+        # and fall through to GUEST. So we never borrow from_user_id in a group.
+        actual = str(getattr(msg, "actual_user_id", "") or "")
+        from_id = str(getattr(msg, "from_user_id", "") or "")
+        user_id = actual or (from_id if not is_group else "")
         nickname = str(
             getattr(msg, "actual_user_nickname", "") or getattr(msg, "from_user_nickname", "") or ""
         )
@@ -284,24 +313,48 @@ def _resolve(context: Any, config) -> SecurityContext:
     # can still drive the bot from inside a group chat.
     level, reason = _identify((user_id, nickname), owners, trusted)
     if level is not None:
-        return SecurityContext(trust=level, reason=reason, **base)
+        return SecurityContext(trust=level, reason=reason, identity_status="identified", **base)
+
+    # --- Case A vs Case B: is there even a sender to judge? -----------------
+    # A channel request (group or private IM) is *supposed* to carry a sender
+    # identity. If it does not - a forwarded message, a callback that omitted
+    # the user id, a replayed webhook - we have not identified a stranger, we
+    # have identified *nothing*. That is a structural / incomplete request, not
+    # an unauthorized-but-known person, and it must fail closed: no tool of any
+    # kind may run, and the denial is tagged "identity.missing" so it is
+    # distinguishable in logs and metrics from a real stranger's
+    # "capability.not_allowlisted". Folding the two into one GUEST branch is
+    # exactly the hole: an unattributable request would otherwise be treated as
+    # a usable guest, or - on a private channel with no owner list - quietly
+    # promoted all the way to OWNER.
+    is_channel = bool(channel) and channel not in _LOCAL_CHANNELS
+    if is_channel and not user_id:
+        return SecurityContext(
+            trust=TrustLevel.UNTRUSTED,
+            reason="missing_identity: channel request without a sender id (Case A, fail-closed)",
+            identity_status="unidentified",
+            **base,
+        )
 
     if is_group:
-        # The core of issue #2998: an unrecognised sender in a group chat is
-        # not the owner, and must not command the owner's machine.
+        # The core of issue #2998: a *recognised* sender in a group chat who is
+        # not the owner must not command the owner's machine. This is Case B -
+        # identity is known, only the authority is not.
         level = TrustLevel.parse(
             config.get("security_group_default_trust", "guest"), TrustLevel.GUEST
         )
         return SecurityContext(
             trust=level,
             reason="unrecognised sender in group chat (set security_owner_users to claim ownership)",
+            identity_status="identified",
             **base,
         )
 
     # Local surfaces: the operator is at the machine.
     if channel in _LOCAL_CHANNELS:
         return SecurityContext(
-            trust=TrustLevel.OWNER, reason=f"local channel '{channel}'", **base
+            trust=TrustLevel.OWNER, reason=f"local channel '{channel}'",
+            identity_status="local", **base,
         )
 
     # Private IM chat. Without a configured owner list the bot is a
@@ -314,11 +367,13 @@ def _resolve(context: Any, config) -> SecurityContext:
         return SecurityContext(
             trust=level,
             reason="private chat from a sender who is not in the configured owner list",
+            identity_status="identified",
             **base,
         )
 
     return SecurityContext(
         trust=TrustLevel.OWNER,
         reason="private chat, no owner list configured (single-user deployment)",
+        identity_status="identified",
         **base,
     )

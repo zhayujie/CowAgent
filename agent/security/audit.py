@@ -86,6 +86,7 @@ def record(
             "user_id": getattr(ctx, "user_id", ""),
             "nickname": getattr(ctx, "nickname", ""),
             "channel": getattr(ctx, "channel", ""),
+            "identity_status": getattr(ctx, "identity_status", ""),
             "is_group": getattr(ctx, "is_group", False),
             "group": getattr(ctx, "group_name", "") or getattr(ctx, "group_id", ""),
             "session_id": getattr(ctx, "session_id", ""),

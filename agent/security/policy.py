@@ -188,6 +188,22 @@ def evaluate_tool_call(
 
 
 def _check_capability(tool_name: str, ctx: SecurityContext) -> Decision:
+    # Case A - a request we could not attribute to any identified sender. This
+    # is a structural failure (missing / unparseable identity), not an
+    # unauthorized-but-known person, so it fails closed: no tool of any kind
+    # may run, not even a conversational one. The category is "identity.missing"
+    # on purpose - a caller, retry loop, or dashboard must be able to tell this
+    # apart from a real stranger's "capability.not_allowlisted" refusal, because
+    # the two call for different responses (fix the request vs. deny the user).
+    if ctx.trust <= TrustLevel.UNTRUSTED:
+        return Decision.deny(
+            "Error: This request could not be attributed to an identified sender "
+            "(missing or unparseable sender identity), so no action was taken. "
+            "CowAgent does not act on requests it cannot attribute.",
+            "identity.missing",
+            identity_status=getattr(ctx, "identity_status", "unidentified"),
+        )
+
     if ctx.trust >= TrustLevel.OWNER:
         return Decision.allow()
 
