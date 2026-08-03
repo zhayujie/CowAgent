@@ -57,6 +57,7 @@ class MoonshotBot(Bot):
 
     @staticmethod
     def _is_kimi_k3_model(model_name: str) -> bool:
+        """Return True for Kimi K3 models using top-level effort control."""
         return model_name.lower().startswith("kimi-k3")
 
     @classmethod

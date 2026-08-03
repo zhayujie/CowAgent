@@ -108,6 +108,29 @@ def test_kimi_k2_models_hide_effort_control():
     assert get_reasoning_capability("moonshot", "kimi-k2.6") == {"supported": False, "options": []}
 
 
+def test_linkai_exposes_known_passthrough_effort_models():
+    deepseek_cap = get_reasoning_capability("linkai", "deepseek-v4-flash")
+    glm_cap = get_reasoning_capability("linkai", "glm-5.2")
+    kimi_cap = get_reasoning_capability("linkai", "kimi-k3")
+
+    assert deepseek_cap["supported"] is True
+    assert deepseek_cap["default"] == "high"
+    assert _values(deepseek_cap) == ["high", "max"]
+    assert glm_cap["supported"] is True
+    assert glm_cap["default"] == "high"
+    assert _values(glm_cap) == ["low", "medium", "high", "xhigh", "max"]
+    assert kimi_cap["supported"] is True
+    assert kimi_cap["default"] == "max"
+    assert kimi_cap["thinking_only"] is True
+    assert _values(kimi_cap) == ["low", "high", "max"]
+
+
+def test_linkai_hides_unsupported_or_unverified_passthrough_models():
+    assert get_reasoning_capability("linkai", "gpt-5.4") == {"supported": False, "options": []}
+    assert get_reasoning_capability("linkai", "qwen3.8-max-preview") == {"supported": False, "options": []}
+    assert get_reasoning_capability("linkai", "claude-opus-5") == {"supported": False, "options": []}
+
+
 def test_openai_is_hidden_until_responses_api_runtime_support_exists():
     cap = get_reasoning_capability("openai", "gpt-5.4")
 
@@ -142,4 +165,10 @@ def test_normalize_returns_provider_default_for_invalid_value():
     assert normalize_reasoning_effort("dashscope", "kimi/kimi-k3", "high") == "max"
     assert normalize_reasoning_effort("moonshot", "kimi-k3", "low") == "low"
     assert normalize_reasoning_effort("moonshot", "kimi-k3", "medium") == "max"
+    assert normalize_reasoning_effort("linkai", "deepseek-v4-flash", "low") == "high"
+    assert normalize_reasoning_effort("linkai", "deepseek-v4-flash", "xhigh") == "max"
+    assert normalize_reasoning_effort("linkai", "glm-5.2", "medium") == "medium"
+    assert normalize_reasoning_effort("linkai", "glm-5.2", "minimal") == "high"
+    assert normalize_reasoning_effort("linkai", "kimi-k3", "medium") == "max"
+    assert normalize_reasoning_effort("linkai", "gpt-5.4", "high") is None
     assert normalize_reasoning_effort("gemini", "gemini-3.5-flash", "high") is None

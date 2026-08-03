@@ -562,8 +562,22 @@ def _linkai_call_with_tools(self, messages, tools=None, stream=False, **kwargs):
             body["tools"] = tools
             body["tool_choice"] = kwargs.get("tool_choice", "auto")
 
+        model_name = str(body.get("model", "")).lower()
+        reasoning_effort = kwargs.get("reasoning_effort")
+        if reasoning_effort:
+            from models.reasoning_capabilities import get_reasoning_capability
+
+            # LinkAI forwards requests to different upstream vendors. Gate the
+            # passthrough field by verified model capability so OpenAI-like
+            # models do not receive an unknown parameter.
+            capability = get_reasoning_capability("linkai", model_name)
+            if capability.get("supported"):
+                body["reasoning_effort"] = reasoning_effort
+
         thinking = kwargs.get("thinking")
-        if thinking:
+        # Kimi K3 uses top-level reasoning_effort and rejects the generic
+        # thinking object used by older Kimi/DeepSeek-compatible paths.
+        if thinking and not model_name.startswith("kimi-k3"):
             body["thinking"] = thinking
 
         # Prepare headers

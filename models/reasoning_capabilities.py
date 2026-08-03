@@ -53,6 +53,7 @@ def _capability(
     param: str = "reasoning_effort",
     thinking_only: bool = False,
 ) -> dict:
+    """Build the JSON shape shared by Web/Desktop config clients."""
     capability = {
         "supported": True,
         "param": param,
@@ -65,6 +66,7 @@ def _capability(
 
 
 def _base_provider_id(provider_id: str) -> str:
+    """Normalize legacy config ids to the provider ids used in this module."""
     pid = (provider_id or "").strip()
     if pid.startswith("custom:"):
         return "custom"
@@ -87,12 +89,16 @@ def get_reasoning_capability(provider_id: str, model_name: str = "") -> dict:
         return _capability(ZHIPU_VALUES, default="high")
 
     if base_pid == "claude":
+        # Claude uses Anthropic's output_config.effort field, so the UI may
+        # expose it even when the generic thinking toggle is disabled.
         if model.startswith(CLAUDE_XHIGH_MODELS):
             return _capability(CLAUDE_VALUES, default="high", param="effort")
         if model.startswith(CLAUDE_MAX_ONLY_MODELS):
             return _capability(CLAUDE_MAX_ONLY_VALUES, default="high", param="effort")
 
     if base_pid == "dashscope":
+        # DashScope proxies several vendors. Keep capabilities model-scoped so
+        # unsupported Qwen/GLM/Kimi variants do not inherit another enum set.
         if model.startswith(DASHSCOPE_QWEN38_MODELS):
             return _capability(DASHSCOPE_QWEN38_VALUES, default="xhigh", thinking_only=True)
         if model.startswith(DASHSCOPE_HIGH_MAX_MODELS):
@@ -102,6 +108,16 @@ def get_reasoning_capability(provider_id: str, model_name: str = "") -> dict:
 
     if base_pid == "moonshot" and model.startswith("kimi-k3"):
         return _capability(KIMI_K3_VALUES, default="max", thinking_only=True)
+
+    if base_pid == "linkai":
+        # LinkAI is a gateway; only expose passthrough effort for models whose
+        # upstream protocol has been verified here.
+        if model.startswith("deepseek-v4"):
+            return _capability(DASHSCOPE_HIGH_MAX_VALUES, default="high")
+        if model.startswith("glm-"):
+            return _capability(ZHIPU_VALUES, default="high")
+        if model.startswith("kimi-k3"):
+            return _capability(KIMI_K3_VALUES, default="max", thinking_only=True)
 
     return {"supported": False, "options": []}
 
@@ -115,6 +131,9 @@ def normalize_reasoning_effort(provider_id: str, model_name: str, value: object)
     base_pid = _base_provider_id(provider_id)
     model = (model_name or "").strip().lower()
     effort = str(value or "").strip()
+    # Saved config is global. When users switch between providers, map the old
+    # value to the closest supported native enum instead of sending invalid API
+    # parameters or silently changing unrelated provider settings.
     if base_pid == "dashscope":
         if model.startswith(DASHSCOPE_QWEN38_MODELS):
             effort = {
@@ -133,6 +152,23 @@ def normalize_reasoning_effort(provider_id: str, model_name: str, value: object)
                 "low": "max",
                 "medium": "max",
                 "high": "max",
+                "xhigh": "max",
+            }.get(effort, effort)
+    elif base_pid == "linkai":
+        if model.startswith("deepseek-v4"):
+            effort = {
+                "low": "high",
+                "medium": "high",
+                "xhigh": "max",
+            }.get(effort, effort)
+        elif model.startswith("glm-"):
+            effort = {
+                "minimal": "high",
+                "none": "high",
+            }.get(effort, effort)
+        elif model.startswith("kimi-k3"):
+            effort = {
+                "medium": "max",
                 "xhigh": "max",
             }.get(effort, effort)
 

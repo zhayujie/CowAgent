@@ -171,6 +171,8 @@ const BasicSettings: React.FC<BasicSettingsProps> = ({ baseUrl, onLangChange, on
         agent_max_context_turns: maxTurns,
         agent_max_steps: maxSteps,
         enable_thinking: thinking,
+        // Keep the previous global value when ordinary thinking is off, but
+        // normalize for providers whose effort is independent or mandatory.
         reasoning_effort: thinking || canUseReasoningWithoutThinking ? nextReasoningEffort : reasoningEffort,
         self_evolution_enabled: evolution,
       })
@@ -244,6 +246,8 @@ const BasicSettings: React.FC<BasicSettingsProps> = ({ baseUrl, onLangChange, on
   const reasoningValue = reasoningOptions.some((o) => o.value === reasoningEffort)
     ? reasoningEffort
     : reasoning?.default || reasoningOptions[0]?.value || ''
+  // Some providers expose effort as request-level config, and some models are
+  // always-thinking. Those controls stay visible without the generic toggle.
   const showReasoningEffort = !!reasoning?.supported
     && reasoningOptions.length > 0
     && (thinking || reasoning?.param === 'effort' || reasoning?.thinking_only === true)

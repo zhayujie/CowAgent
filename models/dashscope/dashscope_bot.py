@@ -272,6 +272,8 @@ class DashscopeBot(Bot):
             )
             if supports_thinking:
                 if is_qwen38_effort_model:
+                    # qwen3.8 effort models require enable_thinking=True but
+                    # should not expose raw thinking text in the response.
                     parameters["preserve_thinking"] = False
                 thinking = kwargs.get("thinking", {"type": "enabled"})
                 if thinking.get("type") == "enabled" or is_qwen38_effort_model:

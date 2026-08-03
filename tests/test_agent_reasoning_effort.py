@@ -23,10 +23,12 @@ class _Request:
     system = None
 
 
-def _model_with_bot(monkeypatch, bot_type, model_name):
+def _model_with_bot(monkeypatch, bot_type, model_name, use_linkai=False):
     from bridge.agent_bridge import AgentLLMModel
     from config import conf
 
+    monkeypatch.setitem(conf(), "use_linkai", use_linkai)
+    monkeypatch.setitem(conf(), "linkai_api_key", "test-key" if use_linkai else "")
     monkeypatch.setitem(conf(), "bot_type", bot_type)
     monkeypatch.setitem(conf(), "model", model_name)
 
@@ -163,6 +165,47 @@ def test_agent_bridge_forces_kimi_k3_thinking(monkeypatch):
 
     assert bot.kwargs["thinking"] == {"type": "enabled"}
     assert bot.kwargs["reasoning_effort"] == "low"
+
+
+def test_agent_bridge_passes_linkai_deepseek_passthrough_effort(monkeypatch):
+    from config import conf
+
+    monkeypatch.setitem(conf(), "enable_thinking", True)
+    monkeypatch.setitem(conf(), "reasoning_effort", "xhigh")
+    model, bot = _model_with_bot(monkeypatch, "openai", "deepseek-v4-flash", use_linkai=True)
+
+    model.call(_Request())
+
+    assert model._resolve_bot_type("deepseek-v4-flash") == "linkai"
+    assert bot.kwargs["thinking"] == {"type": "enabled"}
+    assert bot.kwargs["reasoning_effort"] == "max"
+
+
+def test_agent_bridge_passes_linkai_glm_passthrough_effort(monkeypatch):
+    from config import conf
+
+    monkeypatch.setitem(conf(), "enable_thinking", True)
+    monkeypatch.setitem(conf(), "reasoning_effort", "medium")
+    model, bot = _model_with_bot(monkeypatch, "openai", "glm-5.2", use_linkai=True)
+
+    model.call(_Request())
+
+    assert model._resolve_bot_type("glm-5.2") == "linkai"
+    assert bot.kwargs["thinking"] == {"type": "enabled"}
+    assert bot.kwargs["reasoning_effort"] == "medium"
+
+
+def test_agent_bridge_omits_linkai_openai_effort_until_runtime_support_exists(monkeypatch):
+    from config import conf
+
+    monkeypatch.setitem(conf(), "enable_thinking", True)
+    monkeypatch.setitem(conf(), "reasoning_effort", "high")
+    model, bot = _model_with_bot(monkeypatch, "openai", "gpt-5.4", use_linkai=True)
+
+    model.call(_Request())
+
+    assert model._resolve_bot_type("gpt-5.4") == "linkai"
+    assert "reasoning_effort" not in bot.kwargs
 
 
 def test_agent_bridge_defaults_invalid_deepseek_value(monkeypatch):

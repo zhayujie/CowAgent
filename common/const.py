@@ -116,7 +116,7 @@ QWEN35_PLUS = "qwen3.5-plus"  # Qwen3.5 Plus - Omni model (MultiModalConversatio
 QWEN36_PLUS = "qwen3.6-plus"  # Qwen3.6 Plus - Omni model (MultiModalConversation)
 QWEN37_PLUS = "qwen3.7-plus"  # Qwen3.7 Plus - Omni model (MultiModalConversation)
 QWEN37_MAX = "qwen3.7-max"  # Qwen3.7 Max - Agent recommended model
-QWEN38_MAX_PREVIEW = "qwen3.8-max-preview"
+QWEN38_MAX_PREVIEW = "qwen3.8-max-preview"  # Qwen3.8 Max Preview - native effort model
 QWQ_PLUS = "qwq-plus"
 
 # MiniMax
