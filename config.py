@@ -272,7 +272,7 @@ available_setting = {
     "agent_max_context_turns": 30,  # max context memory turns in Agent mode
     "agent_max_steps": 30,  # max decision steps per run in Agent mode
     "enable_thinking": False,  # Enable deep-thinking mode for thinking-capable models
-    "reasoning_effort": "high",  # Reasoning depth under thinking mode: "high" or "max"
+    "reasoning_effort": "high",  # Provider-native reasoning depth; allowed values depend on the active provider/model
     "knowledge": True,  # whether to enable the knowledge base feature
     # Self-evolution: review idle conversations to learn memory/skills. Flat keys.
     "self_evolution_enabled": False,        # switch to enable/disable self-evolution

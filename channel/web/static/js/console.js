@@ -139,6 +139,7 @@ const I18N = {
         config_max_turns: '最大记忆轮次', config_max_turns_hint: '一问一答为一轮，超过后会智能压缩处理',
         config_max_steps: '最大执行步数', config_max_steps_hint: '单次对话中 Agent 最多调用工具的次数',
         config_enable_thinking: '深度思考', config_enable_thinking_hint: '是否启用深度思考模式',
+        config_reasoning_effort: '思考强度', config_reasoning_effort_hint: '按当前模型厂商支持的原生枚举发送',
         config_self_evolution: '自主进化', config_self_evolution_hint: '会话空闲后自动复盘，沉淀记忆、优化技能、处理未完成事项',
         evolution_badge: '自主学习',
         config_channel_type: '通道类型',
@@ -410,6 +411,7 @@ const I18N = {
         config_max_turns: '最大記憶輪次', config_max_turns_hint: '一問一答為一輪，超過後會智慧壓縮處理',
         config_max_steps: '最大執行步數', config_max_steps_hint: '單次對話中 Agent 最多呼叫工具的次數',
         config_enable_thinking: '深度思考', config_enable_thinking_hint: '是否啟用深度思考模式',
+        config_reasoning_effort: '思考強度', config_reasoning_effort_hint: '按目前模型廠商支援的原生枚舉傳送',
         config_self_evolution: '自主進化', config_self_evolution_hint: '會話空閒後自動覆盤，沉澱記憶、最佳化技能、處理未完成事項',
         evolution_badge: '自主學習',
         config_channel_type: '管道型別',
@@ -676,6 +678,7 @@ const I18N = {
         config_max_turns: 'Max Memory Turns', config_max_turns_hint: 'One Q&A pair = one turn, auto-compressed when exceeded',
         config_max_steps: 'Max Steps', config_max_steps_hint: 'Max tool calls the Agent can make in a single conversation',
         config_enable_thinking: 'Deep Thinking', config_enable_thinking_hint: 'Enable deep thinking mode',
+        config_reasoning_effort: 'Reasoning Effort', config_reasoning_effort_hint: 'Sent as the active provider\'s native enum value',
         config_self_evolution: 'Self-Evolution', config_self_evolution_hint: 'Auto-review idle conversations to consolidate memory, improve skills, and follow up on unfinished tasks',
         evolution_badge: 'Self-learned',
         config_channel_type: 'Channel Type',
@@ -4924,6 +4927,7 @@ let configApiKeys = {};
 let configCurrentModel = '';
 let cfgProviderValue = '';
 let cfgModelValue = '';
+let cfgReasoningEffortValue = 'high';
 
 // --- Custom dropdown helper ---
 function initDropdown(el, options, selectedValue, onChange, opts) {
@@ -5013,6 +5017,7 @@ function initConfigView(data) {
     configApiBases = data.api_bases || {};
     configApiKeys = data.api_keys || {};
     configCurrentModel = data.model || '';
+    cfgReasoningEffortValue = data.reasoning_effort || 'high';
 
     const providerEl = document.getElementById('cfg-provider');
     const providerOpts = Object.entries(configProviders).map(([pid, p]) => ({ value: pid, label: localizedLabel(p.label) }));
@@ -5031,7 +5036,18 @@ function initConfigView(data) {
     document.getElementById('cfg-max-tokens').value = data.agent_max_context_tokens || 50000;
     document.getElementById('cfg-max-turns').value = data.agent_max_context_turns || 20;
     document.getElementById('cfg-max-steps').value = data.agent_max_steps || 20;
-    document.getElementById('cfg-enable-thinking').checked = data.enable_thinking === true;
+    const thinkingEl = document.getElementById('cfg-enable-thinking');
+    thinkingEl.checked = data.enable_thinking === true;
+    if (!thinkingEl._cfgReasoningBound) {
+        thinkingEl.addEventListener('change', syncReasoningEffortOptions);
+        thinkingEl._cfgReasoningBound = true;
+    }
+    const customModelEl = document.getElementById('cfg-model-custom');
+    if (customModelEl && !customModelEl._cfgReasoningBound) {
+        customModelEl.addEventListener('input', syncReasoningEffortOptions);
+        customModelEl._cfgReasoningBound = true;
+    }
+    syncReasoningEffortOptions();
     document.getElementById('cfg-self-evolution').checked = data.self_evolution_enabled === true;
 
     // Reflect the current UI language (already resolved, may include the user's
@@ -5153,6 +5169,7 @@ function onProviderChange(pid) {
     }
 
     onModelSelectChange(modelOpts[0] ? modelOpts[0].value : '');
+    syncReasoningEffortOptions();
 }
 
 function onModelSelectChange(val) {
@@ -5165,6 +5182,7 @@ function onModelSelectChange(val) {
         customWrap.classList.add('hidden');
         document.getElementById('cfg-model-custom').value = '';
     }
+    syncReasoningEffortOptions();
 }
 
 function syncModelSelection(model) {
@@ -5186,6 +5204,38 @@ function syncModelSelection(model) {
         document.getElementById('cfg-model-custom-wrap').classList.remove('hidden');
         document.getElementById('cfg-model-custom').value = model;
     }
+    syncReasoningEffortOptions();
+}
+
+function syncReasoningEffortOptions() {
+    const wrap = document.getElementById('cfg-reasoning-effort-wrap');
+    const el = document.getElementById('cfg-reasoning-effort');
+    if (!wrap || !el) return;
+
+    const provider = configProviders[cfgProviderValue] || {};
+    const selectedModel = getSelectedModel();
+    const reasoningByModel = provider.reasoning_by_model || {};
+    const reasoning = reasoningByModel[selectedModel] || provider.reasoning || {};
+    const options = reasoning.supported ? (reasoning.options || []) : [];
+    const thinkingEl = document.getElementById('cfg-enable-thinking');
+    if (!thinkingEl || !thinkingEl.checked || !options.length) {
+        wrap.classList.add('hidden');
+        return;
+    }
+
+    wrap.classList.remove('hidden');
+    const values = options.map(opt => opt.value);
+    const selected = values.includes(cfgReasoningEffortValue)
+        ? cfgReasoningEffortValue
+        : (reasoning.default || options[0].value);
+    cfgReasoningEffortValue = selected;
+
+    initDropdown(
+        el,
+        options.map(opt => ({ value: opt.value, label: opt.label || opt.value })),
+        selected,
+        (val) => { cfgReasoningEffortValue = val; }
+    );
 }
 
 function getSelectedModel() {
@@ -5291,6 +5341,7 @@ function saveAgentConfig() {
         agent_max_context_turns: parseInt(document.getElementById('cfg-max-turns').value) || 20,
         agent_max_steps: parseInt(document.getElementById('cfg-max-steps').value) || 20,
         enable_thinking: document.getElementById('cfg-enable-thinking').checked,
+        reasoning_effort: cfgReasoningEffortValue,
         self_evolution_enabled: document.getElementById('cfg-self-evolution').checked,
     };
 

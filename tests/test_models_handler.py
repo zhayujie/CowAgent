@@ -29,6 +29,62 @@ if "web" not in sys.modules:
 
 
 class TestModelsHandler(unittest.TestCase):
+    def test_config_handler_exposes_reasoning_effort_metadata(self):
+        from channel.web.web_channel import ConfigHandler
+        from config import Config
+
+        local_config = Config({
+            "agent": True,
+            "model": "deepseek-v4-flash",
+            "bot_type": "deepseek",
+            "enable_thinking": True,
+            "reasoning_effort": "max",
+        })
+
+        with patch("channel.web.web_channel._require_auth", lambda: None):
+            with patch("channel.web.web_channel.conf", return_value=local_config):
+                result = json.loads(ConfigHandler().GET())
+
+        self.assertEqual(result["reasoning_effort"], "max")
+        self.assertEqual(
+            [item["value"] for item in result["providers"]["deepseek"]["reasoning"]["options"]],
+            ["low", "high", "xhigh", "max"],
+        )
+        self.assertEqual(
+            [item["value"] for item in result["providers"]["deepseek"]["reasoning_by_model"]["deepseek-v4-flash"]["options"]],
+            ["low", "high", "xhigh", "max"],
+        )
+        self.assertFalse(result["providers"]["deepseek"]["reasoning_by_model"]["deepseek-chat"]["supported"])
+        self.assertEqual(
+            [item["value"] for item in result["providers"]["zhipu"]["reasoning"]["options"]],
+            ["low", "medium", "high", "xhigh", "max"],
+        )
+        self.assertFalse(result["providers"]["openai"]["reasoning"]["supported"])
+        self.assertFalse(result["providers"]["gemini"]["reasoning"]["supported"])
+
+    def test_reasoning_effort_is_editable_config_key(self):
+        from channel.web.web_channel import ConfigHandler
+
+        self.assertIn("reasoning_effort", ConfigHandler.EDITABLE_KEYS)
+
+    def test_config_handler_hides_deepseek_effort_for_non_v4_models(self):
+        from channel.web.web_channel import ConfigHandler
+        from config import Config
+
+        local_config = Config({
+            "agent": True,
+            "model": "deepseek-chat",
+            "bot_type": "deepseek",
+            "enable_thinking": True,
+            "reasoning_effort": "max",
+        })
+
+        with patch("channel.web.web_channel._require_auth", lambda: None):
+            with patch("channel.web.web_channel.conf", return_value=local_config):
+                result = json.loads(ConfigHandler().GET())
+
+        self.assertFalse(result["providers"]["deepseek"]["reasoning"]["supported"])
+
     def test_set_asr_capability_persists_provider_and_model(self):
         from channel.web.web_channel import ModelsHandler
 

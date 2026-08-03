@@ -130,6 +130,15 @@ class AgentLLMModel(LLMModel):
                 return btype
         return const.OPENAI
 
+    def _normalized_reasoning_effort(self):
+        from models.reasoning_capabilities import normalize_reasoning_effort
+
+        return normalize_reasoning_effort(
+            self._resolve_bot_type(self.model),
+            self.model,
+            conf().get("reasoning_effort", "high"),
+        )
+
     @property
     def bot(self):
         """Lazy load the bot, re-create when model or bot_type changes"""
@@ -188,8 +197,8 @@ class AgentLLMModel(LLMModel):
                 # Reasoning effort is only meaningful when thinking is on.
                 # Bots that don't understand the kwarg drop it silently.
                 if thinking_enabled:
-                    effort = conf().get("reasoning_effort", "high")
-                    if effort in ("high", "max"):
+                    effort = self._normalized_reasoning_effort()
+                    if effort:
                         kwargs['reasoning_effort'] = effort
 
                 response = self.bot.call_with_tools(**kwargs)
@@ -250,8 +259,8 @@ class AgentLLMModel(LLMModel):
                 # Reasoning effort is only meaningful when thinking is on.
                 # Bots that don't understand the kwarg drop it silently.
                 if thinking_enabled:
-                    effort = conf().get("reasoning_effort", "high")
-                    if effort in ("high", "max"):
+                    effort = self._normalized_reasoning_effort()
+                    if effort:
                         kwargs['reasoning_effort'] = effort
 
                 stream = self.bot.call_with_tools(**kwargs)

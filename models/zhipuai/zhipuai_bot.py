@@ -245,6 +245,9 @@ class ZHIPUAIBot(Bot, ZhipuAIImage):
             thinking = kwargs.get("thinking")
             if thinking:
                 request_params["thinking"] = thinking
+                reasoning_effort = kwargs.get("reasoning_effort")
+                if thinking.get("type") == "enabled" and reasoning_effort:
+                    request_params["reasoning_effort"] = reasoning_effort
             elif "glm-4.7" in request_params["model"]:
                 # Enable thinking by default for GLM-4.7
                 request_params["thinking"] = {"type": "disabled"}

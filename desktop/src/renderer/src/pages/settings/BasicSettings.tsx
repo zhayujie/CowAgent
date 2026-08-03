@@ -37,6 +37,7 @@ const BasicSettings: React.FC<BasicSettingsProps> = ({ baseUrl, onLangChange, on
   const [maxTurns, setMaxTurns] = useState(20)
   const [maxSteps, setMaxSteps] = useState(20)
   const [thinking, setThinking] = useState(false)
+  const [reasoningEffort, setReasoningEffort] = useState('high')
   const [evolution, setEvolution] = useState(false)
   const [agentStatus, setAgentStatus] = useState('')
 
@@ -64,6 +65,7 @@ const BasicSettings: React.FC<BasicSettingsProps> = ({ baseUrl, onLangChange, on
       setMaxTurns(data.agent_max_context_turns ?? 20)
       setMaxSteps(data.agent_max_steps ?? 20)
       setThinking(!!data.enable_thinking)
+      setReasoningEffort(data.reasoning_effort || 'high')
       setEvolution(!!data.self_evolution_enabled)
       // Prefer the real password (desktop only) so it can be edited in place;
       // fall back to the masked value for browser access.
@@ -154,12 +156,21 @@ const BasicSettings: React.FC<BasicSettingsProps> = ({ baseUrl, onLangChange, on
   }
 
   const saveAgentConfig = async () => {
+    const meta = config?.providers?.[provider] as ProviderMeta | undefined
+    const selectedModel = CustomModelPicker ? model : showCustom ? customModel.trim() : model
+    const reasoning = meta?.reasoning_by_model?.[selectedModel] || meta?.reasoning
+    const reasoningOptions = reasoning?.supported ? reasoning.options || [] : []
+    const nextReasoningEffort = reasoningOptions.some((o) => o.value === reasoningEffort)
+      ? reasoningEffort
+      : reasoning?.default || reasoningOptions[0]?.value || reasoningEffort
+
     try {
       await apiClient.updateConfig({
         agent_max_context_tokens: maxTokens,
         agent_max_context_turns: maxTurns,
         agent_max_steps: maxSteps,
         enable_thinking: thinking,
+        reasoning_effort: thinking ? nextReasoningEffort : reasoningEffort,
         self_evolution_enabled: evolution,
       })
       setAgentStatus(t('config_saved'))
@@ -226,6 +237,12 @@ const BasicSettings: React.FC<BasicSettingsProps> = ({ baseUrl, onLangChange, on
       label: localizedLabel(providerMeta(id)?.label) || id,
     }))
   const currentMeta = providerMeta(provider)
+  const selectedModel = CustomModelPicker ? model : showCustom ? customModel.trim() : model
+  const reasoning = currentMeta?.reasoning_by_model?.[selectedModel] || currentMeta?.reasoning
+  const reasoningOptions = reasoning?.supported ? reasoning.options || [] : []
+  const reasoningValue = reasoningOptions.some((o) => o.value === reasoningEffort)
+    ? reasoningEffort
+    : reasoning?.default || reasoningOptions[0]?.value || ''
   const currentUnconfigured = !!provider && !isConfigured(provider)
   const modelOptions = [
     ...(currentMeta?.models || []).map((m) => ({ value: m, label: m })),
@@ -360,6 +377,15 @@ const BasicSettings: React.FC<BasicSettingsProps> = ({ baseUrl, onLangChange, on
             </div>
             <Toggle checked={thinking} onChange={setThinking} />
           </div>
+          {thinking && reasoning?.supported && reasoningOptions.length > 0 && (
+            <Field label={t('config_reasoning_effort')} hint={t('config_reasoning_effort_hint')}>
+              <Dropdown
+                value={reasoningValue}
+                options={reasoningOptions}
+                onChange={setReasoningEffort}
+              />
+            </Field>
+          )}
           <div className="flex items-center justify-between py-1">
             <div>
               <div className="text-sm font-medium text-content">{t('config_evolution')}</div>

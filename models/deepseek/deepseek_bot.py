@@ -12,7 +12,7 @@ Supported models:
 
 Thinking mode notes (for V4 models):
 - Toggle: ``{"thinking": {"type": "enabled" | "disabled"}}`` (default: enabled)
-- Effort: ``reasoning_effort`` ∈ {"high", "max"} (low/medium → high, xhigh → max)
+- Effort: ``reasoning_effort`` ∈ {"low", "high", "xhigh", "max"}
 - In thinking mode, ``temperature``/``top_p``/``presence_penalty``/``frequency_penalty``
   are silently ignored by the server; we drop them locally to avoid confusion.
 - ``reasoning_content`` is returned alongside ``content``. For turns that triggered
