@@ -29,6 +29,8 @@ class Edit(BaseTool):
     
     name: str = "edit"
     description: str = "Edit a file by replacing exact text, or append to end if oldText is empty. For append: use empty oldText. For replace: oldText must match exactly (including whitespace) and must be unique unless replaceAll is true. IMPORTANT: the read tool prefixes each line with `12|` for display only - never include those prefixes in oldText or newText."
+    requires_approval = True
+    risk_level = "high"
     
     params: dict = {
         "type": "object",

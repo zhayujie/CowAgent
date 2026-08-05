@@ -26,6 +26,9 @@ class _Cancelled(Exception):
 class Bash(BaseTool):
     """Tool for executing bash commands"""
 
+    requires_approval = True
+    risk_level = "high"
+
     _IS_WIN = sys.platform == "win32"
     _PROGRESS_MAX_BYTES = 4 * 1024
     _PROGRESS_INTERVAL = 0.5

@@ -20,6 +20,8 @@ class Write(BaseTool):
     
     name: str = "write"
     description: str = "Write content to a file, overwriting the existing file if there is one at the path. Creates parent directories automatically. Prefer the edit tool for modifying an existing file - it only sends the text being changed. Only use write to create new files or for complete rewrites."
+    requires_approval = True
+    risk_level = "high"
     
     params: dict = {
         "type": "object",

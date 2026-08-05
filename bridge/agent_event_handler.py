@@ -48,6 +48,8 @@ class AgentEventHandler:
             self._handle_tool_execution_start(data)
         elif event_type == "tool_execution_end":
             self._handle_tool_execution_end(data)
+        elif event_type == "tool_approval_required":
+            self._handle_tool_approval_required(data)
         elif event_type == "agent_end":
             self._handle_agent_end(data)
 
@@ -85,6 +87,32 @@ class AgentEventHandler:
 
     def _handle_tool_execution_end(self, data):
         pass
+
+    def _handle_tool_approval_required(self, data):
+        """Handle a tool approval request event.
+
+        Logs the request and sends a notification to the channel so the user
+        is aware that a high-risk tool is waiting for their decision.
+        """
+        tool_name = data.get("tool_name", "unknown")
+        risk_level = data.get("risk_level", "low")
+        summary = data.get("summary", "")
+        request_id = data.get("request_id", "")
+
+        logger.info(
+            f"[Approval] Tool '{tool_name}' (risk={risk_level}) "
+            f"requires approval: {summary} "
+            f"[request_id={request_id}]"
+        )
+
+        # Send a notification to the channel so the user sees the request
+        message = (
+            f"⚠️ 需要审批：工具 '{tool_name}'（风险等级：{risk_level}）\n"
+            f"操作内容：{summary}\n"
+            f"审批请求 ID：{request_id}\n"
+            f"请使用 approve 或 reject 命令进行审批（超时 30 秒自动拒绝）"
+        )
+        self._send_to_channel(message)
 
     def _send_to_channel(self, message):
         if self.context and self.context.get("on_event"):
