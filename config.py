@@ -537,6 +537,10 @@ def load_config():
     set_agent_registry(None)
     agent_registry = get_agent_registry()
 
+    # 启动时加载持久化角色绑定到 agent_bindings
+    from channel.role_switch import load_role_bindings_on_startup
+    load_role_bindings_on_startup()
+
     # Resolve the global UI language as early as possible so that every
     # downstream layer (logs, CLI, agent prompts, channel replies) shares it.
     resolved_lang = i18n.resolve_language(config.get("cow_lang", "auto"))
