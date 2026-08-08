@@ -1078,20 +1078,28 @@ class AgentStreamExecutor:
             logger.debug(f"[ToolRetrieval] full injection (retrieval skipped): {e}")
             return all_tools
 
-    def _call_llm_stream(self, retry_on_empty=True, retry_count=0, max_retries=3,
+    def _call_llm_stream(self, retry_on_empty=True, retry_count=0, max_retries=None,
                          _overflow_retry: bool = False) -> Tuple[str, List[Dict]]:
         """
         Call LLM with streaming and automatic retry on errors
-        
+
         Args:
             retry_on_empty: Whether to retry once if empty response is received
             retry_count: Current retry attempt (internal use)
-            max_retries: Maximum number of retries for API errors
+            max_retries: Maximum number of retries for API errors. When None,
+                falls back to the "llm_max_retries" config value (default 3)
             _overflow_retry: Internal flag indicating this is a retry after context overflow
-        
+
         Returns:
             (response_text, tool_calls)
         """
+        if max_retries is None:
+            from config import conf
+            raw = conf().get("llm_max_retries")
+            try:
+                max_retries = max(0, int(raw)) if raw is not None else 3
+            except (TypeError, ValueError):
+                max_retries = 3
         # Validate and fix message history (e.g. orphaned tool_result blocks).
         # Context trimming is done once in run_stream() before the loop starts,
         # NOT here — trimming mid-execution would strip the current run's

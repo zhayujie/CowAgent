@@ -22,6 +22,7 @@ A single turn may include multiple tool calls (controlled by `agent_max_steps`).
 | `agent_max_context_tokens` | Maximum context token budget | `64000` |
 | `agent_max_context_turns` | Maximum conversation turns in context | `30` |
 | `agent_max_steps` | Maximum decision steps per turn (tool call count) | `30` |
+| `llm_max_retries` | Maximum retries for LLM API errors | `3` |
 
 Configurable via `config.json` or the `/config` chat command.
 
