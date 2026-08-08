@@ -19,7 +19,6 @@ remember_scheduled_output, channel_factory) rather than introducing a fork.
 
 from __future__ import annotations
 
-import re
 import threading
 from datetime import datetime
 from pathlib import Path
@@ -38,10 +37,9 @@ from agent.evolution.prompts import (
 from agent.evolution.record import append_session_evolution
 
 # Tools the isolated evolution agent is allowed to use. Everything else is
-# withheld so a review pass can only read context, run workspace scripts, and
-# edit memory/skill files. bash is needed by skill-creator's init script and is
-# confined to the workspace by _BashWorkspaceGuard.
-_ALLOWED_TOOLS = {"read", "write", "edit", "ls", "bash", "memory_search", "memory_get"}
+# withheld so an unattended review can only read context and edit approved
+# workspace artifacts. Skill files are created directly with the write tool.
+_ALLOWED_TOOLS = {"read", "write", "edit", "ls", "memory_search", "memory_get"}
 
 # Cap concurrent evolution passes so a burst of idle sessions can't spawn many
 # background model runs at once. Extra sessions simply wait for the next scan.
@@ -114,6 +112,92 @@ def _select_tools(all_tools: list) -> list:
 _WRITE_TOOLS = {"write", "edit"}
 
 
+class _EvolutionWriteTransaction:
+    """Make writes performed by one unattended evolution pass atomic."""
+
+    _MISSING = object()
+
+    def __init__(self, workspace: Path):
+        self._workspace = workspace.resolve()
+        self._before: dict[Path, object] = {}
+        self._missing_parents: set[Path] = set()
+        self._committed = False
+
+    def record(self, path: Path) -> None:
+        path = path.resolve()
+        if path in self._before:
+            return
+        parent = path.parent
+        while parent != self._workspace:
+            try:
+                parent.relative_to(self._workspace)
+            except ValueError:
+                break
+            if parent.exists():
+                break
+            self._missing_parents.add(parent)
+            parent = parent.parent
+        try:
+            self._before[path] = path.read_bytes() if path.is_file() else self._MISSING
+        except OSError as e:
+            raise PermissionError(f"cannot snapshot '{path}' before evolution write: {e}")
+
+    def commit(self) -> None:
+        self._committed = True
+
+    def rollback(self) -> None:
+        if self._committed:
+            return
+        for path, before in reversed(list(self._before.items())):
+            try:
+                if before is self._MISSING:
+                    if path.is_file() or path.is_symlink():
+                        path.unlink()
+                else:
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_bytes(before)
+            except OSError as e:
+                logger.error(f"[Evolution] Failed to roll back {path}: {e}")
+        for directory in sorted(
+            self._missing_parents, key=lambda p: len(p.parts), reverse=True
+        ):
+            try:
+                directory.rmdir()
+            except OSError:
+                pass
+
+
+def _allowed_evolution_path(
+    workspace: Path, resolved: Path, protected_skills: set
+) -> bool:
+    """Allow only the file types Self-Evolution is designed to maintain."""
+    try:
+        relative = resolved.relative_to(workspace)
+    except ValueError:
+        return False
+    parts = relative.parts
+    if not parts:
+        return False
+    if len(parts) == 1:
+        return parts[0] in {"MEMORY.md", "AGENT.md"}
+    top = parts[0]
+    if top == "memory":
+        return (
+            resolved.suffix.lower() == ".md"
+            and parts[1] not in _MEMORY_IGNORE
+        )
+    if top == "skills":
+        protected = {name.casefold() for name in protected_skills}
+        return (
+            len(parts) >= 3
+            and parts[1].casefold() not in protected
+            and parts[-1].casefold() not in {
+                name.casefold() for name in _WATCH_IGNORE_NAMES
+            }
+        )
+    return top in {"knowledge", "output"} and len(parts) >= 2
+
+
 class _WorkspaceWriteGuard:
     """Wraps a write/edit tool so it can ONLY write inside the workspace.
 
@@ -122,9 +206,14 @@ class _WorkspaceWriteGuard:
     protects built-in skills regardless of what the model attempts.
     """
 
-    def __init__(self, inner, workspace_dir: str):
+    def __init__(
+        self, inner, workspace_dir: str, protected_skills: set,
+        transaction: _EvolutionWriteTransaction,
+    ):
         self._inner = inner
         self._ws = Path(workspace_dir).resolve()
+        self._protected_skills = protected_skills
+        self._transaction = transaction
         # Mirror the attributes the agent runtime reads off a tool.
         self.name = inner.name
         self.description = inner.description
@@ -144,99 +233,41 @@ class _WorkspaceWriteGuard:
             return ToolResult.fail(f"Error: {e}")
 
     def execute(self, args):
-        path = (args.get("path") or "").strip()
-        if path:
-            try:
-                resolved = Path(self._inner._resolve_path(path)).resolve()
-                from agent.tools.base_tool import ToolResult
-                # Confine writes to the workspace. This protects the product's
-                # bundled skills (which live outside the workspace) from ever
-                # being modified, no matter what path the model attempts.
-                if self._ws not in resolved.parents and resolved != self._ws:
-                    return ToolResult.fail(
-                        "Error: evolution may only write inside the workspace; "
-                        f"path '{path}' is outside and was blocked."
-                    )
-            except Exception:
-                pass
-        return self._inner.execute(args)
-
-
-class _BashWorkspaceGuard:
-    """Wraps the bash tool so evolution can only run commands inside the
-    workspace.
-
-    Evolution needs bash for skill-creator's init script, but it runs
-    unattended in the background, so a raw shell is too broad. This guard:
-      - forces the command to execute with cwd = workspace,
-      - rejects commands that reference an absolute path or ``..`` segment
-        pointing OUTSIDE the workspace (the common ways to escape it).
-    It is a coarse textual check, not a sandbox — paired with the model's
-    instruction to only run skill-creator scripts, it keeps writes local.
-    """
-
-    def __init__(self, inner, workspace_dir: str):
-        self._inner = inner
-        self._ws = Path(workspace_dir).resolve()
-        # Pin the shell's working directory to the workspace.
-        try:
-            self._inner.cwd = str(self._ws)
-        except Exception:
-            pass
-        self.name = inner.name
-        self.description = inner.description
-        self.params = inner.params
-
-    def __getattr__(self, item):
-        return getattr(self._inner, item)
-
-    def execute_tool(self, params):
-        try:
-            return self.execute(params)
-        except Exception as e:
-            logger.error(f"[Evolution] guarded bash error: {e}")
-            from agent.tools.base_tool import ToolResult
-            return ToolResult.fail(f"Error: {e}")
-
-    def _escapes_workspace(self, command: str) -> bool:
-        # Absolute paths that are not under the workspace.
-        for tok in re.findall(r'(?:^|\s)(/[^\s\'";|&]+)', command):
-            try:
-                resolved = Path(tok).resolve()
-            except Exception:
-                continue
-            if self._ws != resolved and self._ws not in resolved.parents:
-                return True
-        # Parent-dir traversal that climbs above the workspace.
-        for tok in re.findall(r'[^\s\'";|&]*\.\.[^\s\'";|&]*', command):
-            try:
-                resolved = (self._ws / tok).resolve()
-            except Exception:
-                continue
-            if self._ws != resolved and self._ws not in resolved.parents:
-                return True
-        return False
-
-    def execute(self, args):
         from agent.tools.base_tool import ToolResult
-        command = (args.get("command") or "").strip()
-        if command and self._escapes_workspace(command):
+        path = (args.get("path") or "").strip()
+        if not path:
+            return ToolResult.fail("Error: evolution write path is required.")
+        try:
+            resolved = Path(self._inner._resolve_path(path)).resolve()
+        except Exception as e:
+            return ToolResult.fail(f"Error: invalid evolution write path '{path}': {e}")
+        if not _allowed_evolution_path(
+            self._ws, resolved, self._protected_skills
+        ):
             return ToolResult.fail(
-                "Error: evolution may only run commands inside the workspace; "
-                "this command references a path outside it and was blocked."
+                "Error: evolution may only write approved memory, persona, "
+                "custom-skill, knowledge, or output files; "
+                f"path '{path}' was blocked."
             )
+        try:
+            self._transaction.record(resolved)
+        except Exception as e:
+            return ToolResult.fail(f"Error: {e}")
         return self._inner.execute(args)
 
 
-def _guard_tools(tools: list, workspace_dir: str) -> list:
-    """Wrap write/edit/bash tools with workspace guards; leave others as-is."""
+def _guard_tools(
+    tools: list, workspace_dir: str, protected_skills: set,
+    transaction: _EvolutionWriteTransaction,
+) -> list:
+    """Wrap evolution write tools with path and transaction guards."""
     guarded = []
     for t in tools:
         name = getattr(t, "name", None)
         if name in _WRITE_TOOLS:
-            guarded.append(_WorkspaceWriteGuard(t, workspace_dir))
-        elif name == "bash":
-            guarded.append(_BashWorkspaceGuard(t, workspace_dir))
+            guarded.append(_WorkspaceWriteGuard(
+                t, workspace_dir, protected_skills, transaction
+            ))
         else:
             guarded.append(t)
     return guarded
@@ -300,6 +331,14 @@ def _workspace_changed(workspace_dir, pre: dict) -> bool:
     return _workspace_snapshot(workspace_dir) != pre
 
 
+def _valid_evolution_result(result: str) -> bool:
+    """Reject malformed/no-content summaries before committing file changes."""
+    cleaned = (result or "").replace(SILENT_TOKEN, "").strip()
+    if not cleaned or len(cleaned) > 4000:
+        return False
+    return any(ch.isalnum() for ch in cleaned)
+
+
 def run_evolution_for_session(
     agent_bridge,
     session_id: str,
@@ -329,6 +368,7 @@ def run_evolution_for_session(
             return False
         _running_count += 1
 
+    transaction: Optional[_EvolutionWriteTransaction] = None
     try:
         if hasattr(agent_bridge, "get_cached_agent"):
             agent = agent_bridge.get_cached_agent(session_id, agent_id=agent_id)
@@ -383,6 +423,7 @@ def run_evolution_for_session(
         # built-in skills are excluded from backup because they must never be
         # edited in the first place.
         protected_names = _builtin_skill_names()
+        transaction = _EvolutionWriteTransaction(Path(workspace_dir))
         # Back up both MEMORY.md and today's daily file: evolution now writes to
         # the daily file, but MEMORY.md is cheap to snapshot and keeps undo safe
         # if the model ever edits it.
@@ -423,6 +464,8 @@ def run_evolution_for_session(
         review_tools = _guard_tools(
             _select_tools(list(getattr(agent, "tools", []) or [])),
             str(workspace_dir),
+            protected_names,
+            transaction,
         )
         review_agent = agent_bridge.create_agent(
             system_prompt="",
@@ -477,8 +520,11 @@ def run_evolution_for_session(
         # The model produced a real summary. Strip any stray [SILENT] tokens it
         # left mid-text, then notify.
         result = result.replace(SILENT_TOKEN, "").strip()
-        if not result:
-            logger.info(f"[Evolution] ✗ No change for session={session_id} ([SILENT])")
+        if not _valid_evolution_result(result):
+            logger.info(
+                f"[Evolution] ✗ Invalid/no-content result for session={session_id}; "
+                "rolling back"
+            )
             return False
 
         logger.info(f"[Evolution] ✓ session={session_id} evolved:\n{result}")
@@ -502,12 +548,15 @@ def run_evolution_for_session(
         if channel_type and receiver:
             _notify_user(channel_type, receiver, result)
 
+        transaction.commit()
         return True
 
     except Exception as e:
         logger.warning(f"[Evolution] Run failed for session={session_id}: {e}")
         return False
     finally:
+        if transaction is not None:
+            transaction.rollback()
         with _running_lock:
             _running_count -= 1
 
