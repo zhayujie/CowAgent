@@ -15,9 +15,8 @@ from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
-from agent.memory.conversation_store import new_run_id
+from agent.memory.run_records import open_run, summarize_messages
 from common.log import logger
-from common.runtime_identity import identity_scope
 
 # Nesting depth of the currently running work. 0 is the main Agent. Lives in a
 # ContextVar rather than on the Agent because sub agents run on worker threads,
@@ -145,7 +144,6 @@ def _notify(on_state, index: int, state: Dict[str, Any]) -> None:
 def _run_one(parent, template, task: SubagentTask, index: int, cancel_event,
              on_state=None, on_event=None) -> Dict[str, Any]:
     started = time.time()
-    run_id = new_run_id()
     result: Dict[str, Any] = {"task_index": index, "subagent_type": template.name}
     _notify(on_state, index, {"status": "running", "subagent_type": template.name})
 
@@ -159,23 +157,37 @@ def _run_one(parent, template, task: SubagentTask, index: int, cancel_event,
             except Exception as e:
                 logger.debug(f"[SubAgent] event callback failed: {e}")
 
+    # A run of its own under the parent's agent and session: state written by
+    # the sub agent lands in the right workspace, and its record nests under
+    # the parent's run, which is where the task tree comes from. The parent's
+    # run is in scope here, so record_run picks it up as the parent by itself.
+    run = open_run(
+        task.goal,
+        trigger_type="delegate",
+        model=getattr(getattr(parent, "model", None), "model", "") or "",
+    )
+    result["run_id"] = run.run_id
+
     try:
-        # A fresh run_id under the parent's agent and session: state written by
-        # the sub agent lands in the right workspace, and its trace is
-        # attributable to this spawn rather than to the parent's turn.
-        with identity_scope(run_id=run_id):
+        with run.scope():
             _depth.set(_depth.get() + 1)
             child = _build_child(parent, template, task)
             summary = child.run_stream(
                 task.goal, clear_history=True, cancel_event=cancel_event,
                 on_event=child_events,
             )
-        result["status"] = "cancelled" if cancel_event.is_set() else "completed"
+        cancelled = cancel_event.is_set()
+        result["status"] = "cancelled" if cancelled else "completed"
         result["summary"] = summary or ""
+        run.close(
+            status="cancelled" if cancelled else "done",
+            **summarize_messages(getattr(child, "_last_run_new_messages", [])),
+        )
     except Exception as e:
         logger.warning(f"[SubAgent] task {index} ({template.name}) failed: {e}")
         result["status"] = "failed"
         result["error"] = str(e)
+        run.close(status="failed", error=f"{type(e).__name__}: {e}")
 
     result["duration_seconds"] = round(time.time() - started, 2)
     _notify(on_state, index, result)

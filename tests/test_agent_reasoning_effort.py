@@ -285,7 +285,8 @@ def test_agent_bridge_preserves_thinking_blocks_for_thinking_only_models(monkeyp
     captured = {}
 
     class _Store:
-        def append_messages(self, session_id, messages, channel_type="", create_if_missing=True):
+        def append_messages(self, session_id, messages, channel_type="",
+                            create_if_missing=True, run_id=None):
             captured["messages"] = messages
             return True
 

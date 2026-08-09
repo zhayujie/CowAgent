@@ -666,13 +666,29 @@ class AgentBridge:
                 )
                 self._trim_in_memory_to_turns(agent, scheduler_keep_turns)
 
+            # Open the task record before anything is stored, so the question
+            # and the reply both carry the run they belong to. The scope goes
+            # around run_stream only: persistence happens on either side of it,
+            # and a sub agent spawned inside has to see this run as its parent.
+            from agent.memory.run_records import open_run, summarize_messages
+
+            is_scheduled = bool(context and context.get("is_scheduled_task"))
+            run = open_run(
+                query,
+                trigger_type="schedule" if is_scheduled else "message",
+                channel_type=(context.get("channel_type") or "") if context else "",
+                model=getattr(getattr(agent, "model", None), "model", "") or "",
+                store=self.get_conversation_store(resolved_agent_id),
+            )
+
             # Eagerly persist the user message BEFORE running the agent so the
             # session and the user's bubble are immediately visible — even if
             # the user switches away or refreshes before the reply finishes.
             # The reply (assistant/tool messages) is appended once the run
             # completes; the final persist skips this already-stored user turn.
             pre_persisted = self._pre_persist_user_message(
-                session_id, query, context, clear_history, resolved_agent_id
+                session_id, query, context, clear_history, resolved_agent_id,
+                run_id=run.run_id,
             )
 
             # Mark this session as mid-run so the self-evolution idle scan does
@@ -688,18 +704,22 @@ class AgentBridge:
                 if session_id:
                     steer_inbox = get_steer_registry().register(session_id)
                 # Use agent's run_stream method with event handler
-                response = agent.run_stream(
-                    user_message=query,
-                    on_event=event_handler.handle_event,
-                    clear_history=clear_history,
-                    cancel_event=cancel_event,
-                    steer_inbox=steer_inbox,
-                    # A scheduled task may legitimately have nothing to report
-                    # (e.g. "notify me only if the price drops"). Nobody is
-                    # waiting on this run, so an empty answer stays empty and
-                    # the scheduler sends no message at all.
-                    allow_empty_response=bool(context and context.get("is_scheduled_task")),
-                )
+                with run.scope():
+                    response = agent.run_stream(
+                        user_message=query,
+                        on_event=event_handler.handle_event,
+                        clear_history=clear_history,
+                        cancel_event=cancel_event,
+                        steer_inbox=steer_inbox,
+                        # A scheduled task may legitimately have nothing to
+                        # report (e.g. "notify me only if the price drops").
+                        # Nobody is waiting on this run, so an empty answer
+                        # stays empty and the scheduler sends no message at all.
+                        allow_empty_response=is_scheduled,
+                    )
+            except BaseException as e:
+                run.close(status="failed", error=f"{type(e).__name__}: {e}")
+                raise
             finally:
                 # Clear the mid-run flag so idle scans can review this session.
                 try:
@@ -724,10 +744,19 @@ class AgentBridge:
                 if session_id and steer_inbox is not None:
                     get_steer_registry().unregister(session_id, steer_inbox)
 
+            # A cancel is not an exception here: the loop leaves at a safe point
+            # and returns the partial answer, so the event is the only evidence.
+            run_messages = list(getattr(agent, '_last_run_new_messages', []))
+            run.close(
+                status="cancelled" if (cancel_event is not None and cancel_event.is_set())
+                else "done",
+                **summarize_messages(run_messages),
+            )
+
             # Persist new messages generated during this run
             if session_id:
                 channel_type = (context.get("channel_type") or "") if context else ""
-                new_messages = list(getattr(agent, '_last_run_new_messages', []))
+                new_messages = list(run_messages)
                 # The leading user turn was already persisted eagerly above;
                 # drop it here so it isn't stored twice.
                 if pre_persisted and new_messages and new_messages[0].get("role") == "user":
@@ -739,6 +768,7 @@ class AgentBridge:
                         channel_type,
                         resolved_agent_id,
                         create_if_missing=not pre_persisted,
+                        run_id=run.run_id,
                     )
             
             # Record this user turn for the self-evolution idle trigger. Skip
@@ -972,6 +1002,7 @@ class AgentBridge:
         context: Context,
         clear_history: bool,
         agent_id: str = None,
+        run_id: Optional[str] = None,
     ) -> bool:
         """Persist the user's message before the agent runs.
 
@@ -1003,7 +1034,9 @@ class AgentBridge:
                 "role": "user",
                 "content": [{"type": "text", "text": query}],
             }
-            store.append_messages(session_id, [user_msg], channel_type=channel_type)
+            store.append_messages(
+                session_id, [user_msg], channel_type=channel_type, run_id=run_id
+            )
             return True
         except Exception as e:
             logger.warning(
@@ -1018,6 +1051,7 @@ class AgentBridge:
         channel_type: str = "",
         agent_id: str = None,
         create_if_missing: bool = True,
+        run_id: Optional[str] = None,
     ) -> None:
         """
         Persist new messages to the conversation store after each agent run.
@@ -1060,7 +1094,7 @@ class AgentBridge:
         try:
             stored = self.get_conversation_store(agent_id).append_messages(
                 session_id, messages_to_store, channel_type=channel_type,
-                create_if_missing=create_if_missing
+                create_if_missing=create_if_missing, run_id=run_id
             )
             if not stored and not create_if_missing:
                 logger.info(

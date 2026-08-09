@@ -78,5 +78,150 @@ class TestMessagesCarryTheirRun(unittest.TestCase):
         self.assertEqual([m["content"] for m in history], ["hi", "yo"])
 
 
+class TestTheRunsIndex(unittest.TestCase):
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.store = ConversationStore(self.tmp / "index.db")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_a_run_goes_from_running_to_done(self):
+        self.store.start_run(
+            "r-1-aaaa", agent_id="alpha", session_id="s1",
+            channel_type="web", goal="look something up", model="claude-sonnet-5",
+        )
+        opened = self.store.get_run("r-1-aaaa")
+        self.assertEqual(opened["status"], "running")
+        self.assertIsNone(opened["ended_at"])
+        self.assertEqual(opened["trigger_type"], "message")
+
+        self.store.finish_run("r-1-aaaa", status="done", steps=4, subagents=2)
+        closed = self.store.get_run("r-1-aaaa")
+        self.assertEqual(closed["status"], "done")
+        self.assertEqual((closed["steps"], closed["subagents"]), (4, 2))
+        self.assertIsNotNone(closed["ended_at"])
+
+    def test_an_unknown_status_is_refused(self):
+        """The value set is the state machine. Letting anything through means
+        the list filters silently stop matching."""
+        self.store.start_run("r-1-aaaa")
+        with self.assertRaises(ValueError):
+            self.store.finish_run("r-1-aaaa", status="finished")
+
+    def test_extras_merge_instead_of_overwriting(self):
+        self.store.start_run("r-1-aaaa", extras={"from_open": 1})
+        self.store.finish_run("r-1-aaaa", extras={"from_close": 2})
+        self.assertEqual(
+            self.store.get_run("r-1-aaaa")["extras"], {"from_open": 1, "from_close": 2}
+        )
+
+    def test_listing_top_level_runs_leaves_sub_agents_inside_their_parent(self):
+        self.store.start_run("r-1-aaaa", session_id="s1")
+        self.store.start_run("r-2-bbbb", session_id="s1", parent_run_id="r-1-aaaa")
+        self.store.start_run("r-3-cccc", session_id="s1", parent_run_id="r-1-aaaa")
+        self.store.start_run("r-4-dddd", session_id="s2")
+
+        top = self.store.list_runs(parent_run_id="")
+        self.assertEqual({r["run_id"] for r in top["runs"]}, {"r-1-aaaa", "r-4-dddd"})
+
+        children = self.store.list_runs(parent_run_id="r-1-aaaa")
+        self.assertEqual(
+            sorted(r["run_id"] for r in children["runs"]), ["r-2-bbbb", "r-3-cccc"]
+        )
+        self.assertEqual(self.store.list_runs(session_id="s2")["total"], 1)
+
+    def test_deleting_index_rows_for_a_retention_sweep(self):
+        self.store.start_run("r-1-aaaa")
+        self.store.start_run("r-2-bbbb")
+        self.assertEqual(self.store.delete_runs(["r-1-aaaa", "nope"]), 1)
+        self.assertIsNone(self.store.get_run("r-1-aaaa"))
+        self.assertIsNotNone(self.store.get_run("r-2-bbbb"))
+
+
+class TestOpeningARun(unittest.TestCase):
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.store = ConversationStore(self.tmp / "index.db")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_a_run_inside_another_nests_under_it(self):
+        """Nobody passes a parent down: a sub agent runs inside its parent's
+        scope, so it reads the parent off the ambient identity."""
+        from agent.memory.run_records import open_run
+
+        parent = open_run("parent task", store=self.store)
+        with parent.scope():
+            child = open_run("child task", trigger_type="delegate", store=self.store)
+
+        self.assertEqual(parent.parent_run_id, "")
+        self.assertEqual(child.parent_run_id, parent.run_id)
+        self.assertEqual(
+            self.store.get_run(child.run_id)["trigger_type"], "delegate"
+        )
+
+    def test_a_failure_to_record_does_not_reach_the_caller(self):
+        """A trace that can break the thing it describes is worse than none."""
+        from agent.memory.run_records import record_run
+
+        class Broken:
+            def start_run(self, *a, **kw):
+                raise RuntimeError("disk full")
+
+            def finish_run(self, *a, **kw):
+                raise RuntimeError("still full")
+
+        with record_run("a task", store=Broken()) as run:
+            self.assertTrue(run.run_id)
+
+    def test_the_scope_is_entered_even_when_nothing_could_be_recorded(self):
+        from agent.memory.run_records import record_run
+        from common.runtime_identity import current_identity
+
+        class Broken:
+            def start_run(self, *a, **kw):
+                raise RuntimeError("disk full")
+
+        with record_run("a task", store=Broken()) as run:
+            self.assertEqual(current_identity().run_id, run.run_id)
+
+    def test_an_exception_closes_the_run_as_failed(self):
+        from agent.memory.run_records import record_run
+
+        with self.assertRaises(ValueError):
+            with record_run("a task", store=self.store) as run:
+                run_id = run.run_id
+                raise ValueError("nope")
+
+        closed = self.store.get_run(run_id)
+        self.assertEqual(closed["status"], "failed")
+        self.assertIn("nope", closed["error"])
+
+    def test_steps_and_sub_agents_are_read_off_the_messages(self):
+        from agent.memory.run_records import summarize_messages
+
+        counted = summarize_messages([
+            {"role": "user", "content": "go"},
+            {"role": "assistant", "content": [
+                {"type": "tool_use", "name": "subagent", "input": {"tasks": [{}, {}]}},
+            ]},
+            {"role": "user", "content": [{"type": "tool_result", "content": "ok"}]},
+            {"role": "assistant", "content": [
+                {"type": "tool_use", "name": "read", "input": {}},
+            ]},
+            {"role": "assistant", "content": [{"type": "text", "text": "done"}]},
+        ])
+
+        self.assertEqual(counted, {"steps": 3, "subagents": 2})
+
+    def test_the_goal_is_one_line_not_the_whole_prompt(self):
+        from agent.memory.run_records import open_run
+
+        run = open_run("Look into this\n\nwith lots of\ncontext after", store=self.store)
+        self.assertEqual(self.store.get_run(run.run_id)["goal"], "Look into this")
+
+
 if __name__ == "__main__":
     unittest.main()

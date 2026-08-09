@@ -248,9 +248,24 @@ class ChatService:
             steer_inbox=steer_inbox,
         )
 
+        # This path builds its own executor rather than going through
+        # agent_bridge, so it opens its own task record. The scope covers the
+        # run so a sub agent spawned inside nests under it; the persist below
+        # is handed the id explicitly because it happens after the scope ends.
+        from agent.memory.run_records import open_run, summarize_messages
+
+        run = open_run(
+            query,
+            trigger_type="message",
+            channel_type=channel_type or "",
+            model=getattr(agent.model, "model", "") or "",
+        )
+
         try:
-            response = executor.run_stream(query)
-        except Exception:
+            with run.scope():
+                response = executor.run_stream(query)
+        except Exception as e:
+            run.close(status="failed", error=f"{type(e).__name__}: {e}")
             # If executor cleared messages (context overflow), sync back
             if len(executor.messages) == 0:
                 with agent.messages_lock:
@@ -324,6 +339,12 @@ class ChatService:
                 new_messages = list(executor.messages[original_length:])
             agent.messages = list(executor.messages)
 
+        run.close(
+            status="cancelled" if (cancel_event is not None and cancel_event.is_set())
+            else "done",
+            **summarize_messages(new_messages),
+        )
+
         # Persist new messages to SQLite so they survive restarts and
         # can be queried via the HISTORY interface.
         if new_messages:
@@ -332,6 +353,7 @@ class ChatService:
                 list(new_messages),
                 channel_type,
                 workspace_root=agent.workspace_dir,
+                run_id=run.run_id,
             )
 
         # Store executor reference for files_to_send access
@@ -414,6 +436,7 @@ class ChatService:
         new_messages: list,
         channel_type: str = "",
         workspace_root: str = None,
+        run_id: Optional[str] = None,
     ):
         try:
             from config import conf
@@ -424,7 +447,7 @@ class ChatService:
         try:
             from agent.memory import get_conversation_store
             get_conversation_store(workspace_root).append_messages(
-                session_id, new_messages, channel_type=channel_type
+                session_id, new_messages, channel_type=channel_type, run_id=run_id
             )
         except Exception as e:
             logger.warning(

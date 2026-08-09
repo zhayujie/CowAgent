@@ -147,6 +147,17 @@ def new_run_id() -> str:
     return f"r-{int(time.time() * 1000)}-{secrets.token_hex(2)}"
 
 
+def _run_row_to_dict(row: sqlite3.Row) -> Dict[str, Any]:
+    run = dict(row)
+    raw = run.pop("extras", "") or ""
+    try:
+        loaded = json.loads(raw) if raw else {}
+    except Exception:
+        loaded = {}
+    run["extras"] = loaded if isinstance(loaded, dict) else {}
+    return run
+
+
 def _is_visible_user_message(content: Any) -> bool:
     """
     Return True when a user-role message represents actual user input
@@ -641,6 +652,185 @@ class ConversationStore:
                                     )
                                     break
                     return True
+            finally:
+                conn.close()
+
+    # ------------------------------------------------------------------
+    # Task records
+    #
+    # This table is an index, not the record: the full trace is a file under
+    # users/<user_id>/runs/<run_id>/. Only what a list needs to sort, filter
+    # and page by lives here.
+    # ------------------------------------------------------------------
+
+    def start_run(
+        self,
+        run_id: str,
+        *,
+        parent_run_id: str = "",
+        agent_id: str = "",
+        user_id: str = "",
+        session_id: str = "",
+        channel_type: str = "",
+        trigger_type: str = "message",
+        goal: str = "",
+        model: str = "",
+        extras: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Open a run in the ``running`` state."""
+        now = int(time.time())
+        with self._lock:
+            conn = self._connect()
+            try:
+                with conn:
+                    conn.execute(
+                        """
+                        INSERT OR REPLACE INTO runs (
+                            run_id, parent_run_id, agent_id, user_id, session_id,
+                            channel_type, trigger_type, goal, status, model,
+                            started_at, updated_at, extras
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'running', ?, ?, ?, ?)
+                        """,
+                        (
+                            run_id, parent_run_id, agent_id, user_id, session_id,
+                            channel_type, trigger_type, goal[:500], model, now, now,
+                            json.dumps(extras, ensure_ascii=False) if extras else "",
+                        ),
+                    )
+            finally:
+                conn.close()
+
+    def finish_run(
+        self,
+        run_id: str,
+        *,
+        status: str = "done",
+        steps: int = 0,
+        subagents: int = 0,
+        tokens_in: int = 0,
+        tokens_out: int = 0,
+        cost_micro: int = 0,
+        error: str = "",
+        extras: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Close a run. ``extras`` is merged into whatever is already there."""
+        if status not in RUN_STATUSES:
+            raise ValueError(f"unknown run status: {status}")
+        now = int(time.time())
+        with self._lock:
+            conn = self._connect()
+            try:
+                with conn:
+                    merged = ""
+                    if extras:
+                        row = conn.execute(
+                            "SELECT extras FROM runs WHERE run_id = ?", (run_id,)
+                        ).fetchone()
+                        current = {}
+                        if row and row[0]:
+                            try:
+                                loaded = json.loads(row[0])
+                                if isinstance(loaded, dict):
+                                    current = loaded
+                            except Exception:
+                                pass
+                        current.update(extras)
+                        merged = json.dumps(current, ensure_ascii=False)
+                    conn.execute(
+                        f"""
+                        UPDATE runs SET
+                            status = ?, steps = ?, subagents = ?,
+                            tokens_in = ?, tokens_out = ?, cost_micro = ?,
+                            error = ?, updated_at = ?, ended_at = ?
+                            {", extras = ?" if merged else ""}
+                        WHERE run_id = ?
+                        """,
+                        (
+                            status, steps, subagents, tokens_in, tokens_out,
+                            cost_micro, error[:2000], now, now,
+                            *((merged,) if merged else ()),
+                            run_id,
+                        ),
+                    )
+            finally:
+                conn.close()
+
+    def get_run(self, run_id: str) -> Optional[Dict[str, Any]]:
+        with self._lock:
+            conn = self._connect()
+            try:
+                conn.row_factory = sqlite3.Row
+                row = conn.execute(
+                    "SELECT * FROM runs WHERE run_id = ?", (run_id,)
+                ).fetchone()
+                return _run_row_to_dict(row) if row else None
+            finally:
+                conn.close()
+
+    def list_runs(
+        self,
+        *,
+        session_id: Optional[str] = None,
+        status: Optional[str] = None,
+        parent_run_id: Optional[str] = None,
+        page: int = 1,
+        page_size: int = 50,
+    ) -> Dict[str, Any]:
+        """Most recent first. ``parent_run_id=""`` selects only top-level runs,
+        which is what a task list wants: sub agents show up inside their parent
+        rather than as siblings of it."""
+        page = max(1, page)
+        clauses, params = [], []
+        if session_id is not None:
+            clauses.append("session_id = ?")
+            params.append(session_id)
+        if status is not None:
+            clauses.append("status = ?")
+            params.append(status)
+        if parent_run_id is not None:
+            clauses.append("parent_run_id = ?")
+            params.append(parent_run_id)
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+
+        with self._lock:
+            conn = self._connect()
+            try:
+                conn.row_factory = sqlite3.Row
+                total = conn.execute(
+                    f"SELECT COUNT(*) FROM runs {where}", params
+                ).fetchone()[0]
+                rows = conn.execute(
+                    f"""
+                    SELECT * FROM runs {where}
+                    ORDER BY started_at DESC LIMIT ? OFFSET ?
+                    """,
+                    (*params, page_size, (page - 1) * page_size),
+                ).fetchall()
+            finally:
+                conn.close()
+
+        return {
+            "runs": [_run_row_to_dict(row) for row in rows],
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "has_more": (page - 1) * page_size + page_size < total,
+        }
+
+    def delete_runs(self, run_ids: List[str]) -> int:
+        """Drop index rows. The caller owns the directories: deleting the row
+        first would orphan them with nothing left pointing at them."""
+        if not run_ids:
+            return 0
+        with self._lock:
+            conn = self._connect()
+            try:
+                with conn:
+                    placeholders = ",".join("?" * len(run_ids))
+                    cur = conn.execute(
+                        f"DELETE FROM runs WHERE run_id IN ({placeholders})", run_ids
+                    )
+                    return cur.rowcount
             finally:
                 conn.close()
 

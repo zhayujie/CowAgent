@@ -452,7 +452,16 @@ def run_evolution_for_session(
             f"[Evolution] backup {backup_id} ({_backup_n} files) → running review agent"
         )
         user_msg = build_review_user_message(transcript, protected_skills=list(protected_names))
-        result = review_agent.run_stream(user_msg, clear_history=True)
+        # Recorded like any other run: what the reviewer changed and why is the
+        # first thing anyone asks after an unexpected edit to their workspace.
+        from agent.memory.run_records import record_run
+
+        with record_run(
+            f"Self-evolution review of session {session_id}",
+            trigger_type="evolution",
+            model=getattr(getattr(review_agent, "model", None), "model", "") or "",
+        ):
+            result = review_agent.run_stream(user_msg, clear_history=True)
         result = (result or "").strip()
 
         # These messages are now reviewed; advance the cursor so the next pass
