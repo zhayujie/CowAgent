@@ -137,6 +137,62 @@ class TestSharedDbRecovery(unittest.TestCase):
         self.assertEqual(len(store.load_messages("s2")), 1)
         self.assertEqual(store.list_sessions()["total"], 1)
 
+    def test_opening_a_database_from_before_the_current_schema(self):
+        """Every other case here builds the schema from scratch, so nothing was
+        exercising the upgrade path. Adding an index over a migrated column to
+        the initial DDL broke it: on an existing database the CREATE TABLE is a
+        no-op, the column is not there yet, and one failing statement aborts the
+        rest of the script, so the tables after it were never created and the
+        store would not open at all. Real histories only ever arrive this way.
+        """
+        conn = sqlite3.connect(self.db)
+        conn.executescript(
+            """
+            CREATE TABLE sessions (
+                session_id TEXT PRIMARY KEY,
+                channel_type TEXT NOT NULL DEFAULT '',
+                created_at INTEGER NOT NULL,
+                last_active INTEGER NOT NULL,
+                msg_count INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE TABLE messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT NOT NULL,
+                seq INTEGER NOT NULL,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                UNIQUE (session_id, seq)
+            );
+            """
+        )
+        conn.execute("INSERT INTO sessions VALUES ('s1', 'web', 1, 1, 1)")
+        conn.execute(
+            "INSERT INTO messages (session_id, seq, role, content, created_at) "
+            "VALUES ('s1', 0, 'user', '\"hello\"', 1)"
+        )
+        conn.commit()
+        conn.close()
+
+        store = ConversationStore(self.db)
+
+        self.assertEqual(store.list_sessions()["total"], 1)
+        self.assertEqual(len(store.load_messages("s1")), 1)
+        store.append_messages("s1", [{"role": "assistant", "content": "hi"}])
+        self.assertEqual(len(store.load_messages("s1")), 2)
+
+        with sqlite3.connect(self.db) as raw:
+            columns = {row[1] for row in raw.execute("PRAGMA table_info(messages)")}
+            objects = {
+                row[0]
+                for row in raw.execute("SELECT name FROM sqlite_master")
+            }
+        self.assertIn("run_id", columns)
+        self.assertIn("runs", objects)
+        self.assertIn("idx_messages_run", objects)
+
+        ConversationStore(self.db)  # reopening an upgraded database is a no-op
+
     def test_transient_error_is_not_treated_as_corruption(self):
         """sqlite3.OperationalError subclasses DatabaseError, so "database is
         locked" must not be mistaken for corruption."""

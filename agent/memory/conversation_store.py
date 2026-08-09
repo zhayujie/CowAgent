@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import re
+import secrets
 import sqlite3
 import threading
 import time
@@ -47,6 +48,7 @@ CREATE TABLE IF NOT EXISTS messages (
     content      TEXT    NOT NULL,
     created_at   INTEGER NOT NULL,
     extras       TEXT    NOT NULL DEFAULT '',
+    run_id       TEXT    NOT NULL DEFAULT '',
     UNIQUE (session_id, seq)
 );
 
@@ -55,6 +57,48 @@ CREATE INDEX IF NOT EXISTS idx_messages_session
 
 CREATE INDEX IF NOT EXISTS idx_sessions_last_active
     ON sessions (last_active);
+
+-- Index over the task records, not the records themselves. Listing wants
+-- sorting, filtering and paging, which is SQL's job; a single task's full
+-- trace is a large object that has to be archivable, feedable to
+-- self-evolution and deletable in one go, which is a file's job. So this table
+-- holds no content: the truth lives in users/<user_id>/runs/<run_id>/.
+CREATE TABLE IF NOT EXISTS runs (
+    run_id        TEXT    PRIMARY KEY,
+    parent_run_id TEXT    NOT NULL DEFAULT '',
+    agent_id      TEXT    NOT NULL DEFAULT '',
+    user_id       TEXT    NOT NULL DEFAULT '',
+    session_id    TEXT    NOT NULL DEFAULT '',
+    channel_type  TEXT    NOT NULL DEFAULT '',
+    trigger_type  TEXT    NOT NULL DEFAULT 'message',
+    goal          TEXT    NOT NULL DEFAULT '',
+    status        TEXT    NOT NULL DEFAULT 'running',
+    model         TEXT    NOT NULL DEFAULT '',
+    steps         INTEGER NOT NULL DEFAULT 0,
+    subagents     INTEGER NOT NULL DEFAULT 0,
+    tokens_in     INTEGER NOT NULL DEFAULT 0,
+    tokens_out    INTEGER NOT NULL DEFAULT 0,
+    cost_micro    INTEGER NOT NULL DEFAULT 0,
+    started_at    INTEGER NOT NULL,
+    updated_at    INTEGER NOT NULL,
+    ended_at      INTEGER,
+    error         TEXT    NOT NULL DEFAULT '',
+    extras        TEXT    NOT NULL DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS idx_runs_started ON runs (started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_runs_status  ON runs (status, started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_runs_parent  ON runs (parent_run_id);
+CREATE INDEX IF NOT EXISTS idx_runs_session ON runs (session_id, started_at DESC);
+"""
+
+# Anything naming a column that a migration adds has to run after the
+# migrations, not in _DDL. On an existing database the CREATE TABLE above is a
+# no-op, so the column is not there yet, and one failing statement aborts the
+# rest of the script: the tables after it never get created and the store fails
+# to open at all. Learned the hard way.
+_POST_MIGRATION_DDL = """
+CREATE INDEX IF NOT EXISTS idx_messages_run ON messages (run_id);
 """
 
 # Migration: add channel_type column to existing databases that predate it.
@@ -76,7 +120,31 @@ _MIGRATION_ADD_MSG_EXTRAS = """
 ALTER TABLE messages ADD COLUMN extras TEXT NOT NULL DEFAULT '';
 """
 
+# Ties a stored message to the task it was part of, so a session can jump to a
+# task and a task back to the session it came from.
+_MIGRATION_ADD_MSG_RUN_ID = """
+ALTER TABLE messages ADD COLUMN run_id TEXT NOT NULL DEFAULT '';
+"""
+
 DEFAULT_MAX_AGE_DAYS: int = 30
+
+# Values the run state machine may take. ``waiting`` is unused today and is
+# here so that adding approvals does not mean altering the table.
+RUN_STATUSES = ("running", "waiting", "done", "failed", "cancelled")
+
+# How a run got started. The only way a scheduled task's run can be found
+# later, and what the list groups by.
+RUN_TRIGGERS = ("message", "schedule", "delegate", "evolution")
+
+
+def new_run_id() -> str:
+    """A sortable id: ``r-<unix_ms>-<4 hex>``.
+
+    Sortable so the run directories come out in time order without a query, and
+    so a retention sweep can select old ones by prefix. The suffix only has to
+    separate runs that start in the same millisecond.
+    """
+    return f"r-{int(time.time() * 1000)}-{secrets.token_hex(2)}"
 
 
 def _is_visible_user_message(content: Any) -> bool:
@@ -458,6 +526,7 @@ class ConversationStore:
         messages: List[Dict[str, Any]],
         channel_type: str = "",
         create_if_missing: bool = True,
+        run_id: Optional[str] = None,
     ) -> bool:
         """
         Append new messages to a session's history.
@@ -474,6 +543,9 @@ class ConversationStore:
                           gone. Callers that already stored the user turn use
                           this so a session deleted mid-run is not recreated
                           from the reply alone.
+            run_id: Task these messages belong to. Taken from the ambient
+                          identity when omitted, so the callers that already
+                          run inside a run scope need no argument.
 
         Returns:
             True when the messages were written, False when the session was
@@ -481,6 +553,11 @@ class ConversationStore:
         """
         if not messages:
             return False
+
+        if run_id is None:
+            from common.runtime_identity import current_identity
+
+            run_id = current_identity().run_id or ""
 
         now = int(time.time())
         with self._lock:
@@ -528,10 +605,10 @@ class ConversationStore:
                         conn.execute(
                             """
                             INSERT OR IGNORE INTO messages
-                                (session_id, seq, role, content, created_at, extras)
-                            VALUES (?, ?, ?, ?, ?, ?)
+                                (session_id, seq, role, content, created_at, extras, run_id)
+                            VALUES (?, ?, ?, ?, ?, ?, ?)
                             """,
-                            (session_id, next_seq, role, content, now, extras),
+                            (session_id, next_seq, role, content, now, extras, run_id),
                         )
                         next_seq += 1
 
@@ -1199,6 +1276,8 @@ class ConversationStore:
             conn.executescript(_DDL)
             conn.commit()
             self._migrate(conn)
+            conn.executescript(_POST_MIGRATION_DDL)
+            conn.commit()
         finally:
             conn.close()
         self._schema_identity = self._db_identity()
@@ -1265,6 +1344,13 @@ class ConversationStore:
                 logger.info("[ConversationStore] Migrated: added messages.extras column")
             except Exception as e:
                 logger.warning(f"[ConversationStore] Migration (extras) failed: {e}")
+        if "run_id" not in msg_cols:
+            try:
+                conn.execute(_MIGRATION_ADD_MSG_RUN_ID)
+                conn.commit()
+                logger.info("[ConversationStore] Migrated: added messages.run_id column")
+            except Exception as e:
+                logger.warning(f"[ConversationStore] Migration (run_id) failed: {e}")
 
     def _connect(self) -> sqlite3.Connection:
         with self._lock:

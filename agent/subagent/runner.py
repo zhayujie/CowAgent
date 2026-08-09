@@ -11,11 +11,11 @@ import contextvars
 import copy
 import threading
 import time
-import uuid
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
+from agent.memory.conversation_store import new_run_id
 from common.log import logger
 from common.runtime_identity import identity_scope
 
@@ -145,7 +145,7 @@ def _notify(on_state, index: int, state: Dict[str, Any]) -> None:
 def _run_one(parent, template, task: SubagentTask, index: int, cancel_event,
              on_state=None, on_event=None) -> Dict[str, Any]:
     started = time.time()
-    run_id = uuid.uuid4().hex[:12]
+    run_id = new_run_id()
     result: Dict[str, Any] = {"task_index": index, "subagent_type": template.name}
     _notify(on_state, index, {"status": "running", "subagent_type": template.name})
 
