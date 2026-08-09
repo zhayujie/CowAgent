@@ -52,6 +52,52 @@ def test_omitted_default_falls_back_to_first_enabled_agent(tmp_path):
     assert registry.default_agent_id == "research"
 
 
+def test_an_omitted_workspace_is_derived_from_the_instance_root(tmp_path):
+    """Adding an Agent should cost a name, not a path. The default Agent keeps
+    the instance root because that is where a single-Agent install already has
+    everything: writing an `agents` list around an existing workspace must not
+    relocate it."""
+    root = tmp_path / "cow"
+    registry = AgentRegistry.from_config(
+        {
+            "agent_workspace": str(root),
+            "agents": [{"id": "main", "name": "Main"}, {"id": "sales", "name": "Sales"}],
+        }
+    )
+
+    assert registry.get("main").workspace_path == root.resolve()
+    assert registry.get("sales").workspace_path == (root / "agents" / "sales").resolve()
+
+
+def test_the_explicit_default_is_the_one_that_keeps_the_instance_root(tmp_path):
+    root = tmp_path / "cow"
+    registry = AgentRegistry.from_config(
+        {
+            "agent_workspace": str(root),
+            "default_agent_id": "sales",
+            "agents": [{"id": "main"}, {"id": "sales"}],
+        }
+    )
+
+    assert registry.get("sales").workspace_path == root.resolve()
+    assert registry.get("main").workspace_path == (root / "agents" / "main").resolve()
+
+
+def test_an_explicit_workspace_still_wins_and_an_empty_one_still_fails(tmp_path):
+    registry = AgentRegistry.from_config(
+        {
+            "agent_workspace": str(tmp_path / "cow"),
+            "agents": [{"id": "main"}, {"id": "sales", "workspace": str(tmp_path / "elsewhere")}],
+        }
+    )
+    assert registry.get("sales").workspace_path == (tmp_path / "elsewhere").resolve()
+
+    with pytest.raises(AgentRegistryError, match="non-empty string"):
+        AgentRegistry.from_config(
+            {"agent_workspace": str(tmp_path / "cow"), "agents": [{"id": "main", "workspace": ""}]}
+        )
+
+
 @pytest.mark.parametrize("agent_id", ["", "has space", "/root", "x" * 65])
 def test_invalid_agent_ids_are_rejected(tmp_path, agent_id):
     with pytest.raises(AgentRegistryError, match="agent id"):

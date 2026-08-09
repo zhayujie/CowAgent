@@ -58,7 +58,19 @@ def _normalise_workspace(value: Any) -> str:
     return str(Path(expand_path(value.strip())).resolve(strict=False))
 
 
-def _profile_from_mapping(raw: Mapping[str, Any]) -> AgentProfile:
+def _profile_from_mapping(
+    raw: Mapping[str, Any], default_workspace: Optional[str] = None
+) -> AgentProfile:
+    """Build one profile. ``default_workspace`` fills in an omitted workspace.
+
+    Omitting it is the common case: what a second Agent needs is a persona and
+    a name, and the shared skills, knowledge and credentials it reads live at
+    the instance root either way. Spelling out a path per Agent is only worth
+    it when one of them has to sit somewhere else, such as another disk.
+
+    An empty string stays an error. Absent means "put it wherever you'd put a
+    new one"; empty means the caller tried to say something and failed.
+    """
     agent_id = raw.get("id")
     if not isinstance(agent_id, str) or not _AGENT_ID_RE.fullmatch(agent_id):
         raise AgentRegistryError(
@@ -81,10 +93,14 @@ def _profile_from_mapping(raw: Mapping[str, Any]) -> AgentProfile:
                 f"agent '{agent_id}' {key} must be a non-empty string when set"
             )
 
+    workspace = raw.get("workspace")
+    if workspace is None:
+        workspace = default_workspace
+
     return AgentProfile(
         id=agent_id,
         name=name.strip(),
-        workspace=_normalise_workspace(raw.get("workspace")),
+        workspace=_normalise_workspace(workspace),
         enabled=enabled,
         model=model.strip() if isinstance(model, str) else None,
         bot_type=bot_type.strip() if isinstance(bot_type, str) else None,
@@ -118,35 +134,56 @@ class AgentRegistry:
 
     @classmethod
     def from_config(cls, settings: Mapping[str, Any]) -> "AgentRegistry":
+        instance_root = _normalise_workspace(settings.get("agent_workspace") or "~/cow")
+
         raw_agents = settings.get("agents")
         if raw_agents is None or raw_agents == []:
-            workspace = settings.get("agent_workspace", "~/cow")
-            profile = AgentProfile(
-                id="default",
-                name="Default",
-                workspace=_normalise_workspace(workspace),
-            )
+            profile = AgentProfile(id="default", name="Default", workspace=instance_root)
             return cls([profile], "default")
 
         if not isinstance(raw_agents, list):
             raise AgentRegistryError("agents must be a list")
-        profiles: List[AgentProfile] = []
         for index, raw in enumerate(raw_agents):
             if not isinstance(raw, Mapping):
                 raise AgentRegistryError(f"agents[{index}] must be an object")
-            profiles.append(_profile_from_mapping(raw))
 
-        # An explicit default that does not resolve is a configuration error and
-        # must fail loudly. An absent one falls back to the first agent so that
-        # adding a second workspace does not require a second setting.
+        # Which entry inherits the instance root has to be settled before the
+        # profiles are built, so the default is read off the raw list. An
+        # explicit default that does not resolve is a configuration error and
+        # must fail loudly, in _validate_default. An absent one falls back to
+        # the first agent so that adding a second workspace does not require a
+        # second setting.
         default_agent_id = settings.get("default_agent_id") or ""
         if not isinstance(default_agent_id, str):
             raise AgentRegistryError("default_agent_id must be a string")
-        if not default_agent_id.strip():
+        default_agent_id = default_agent_id.strip()
+        if not default_agent_id:
             default_agent_id = next(
-                (profile.id for profile in profiles if profile.enabled), profiles[0].id
+                (
+                    str(raw.get("id"))
+                    for raw in raw_agents
+                    if raw.get("enabled", True) is True
+                ),
+                str(raw_agents[0].get("id")),
             )
-        return cls(profiles, default_agent_id.strip())
+
+        # The default Agent inherits the instance root, which is where a
+        # single-Agent install already keeps everything: hand-writing an
+        # `agents` list around an existing workspace must not silently relocate
+        # it. Every other Agent lands under `agents/<id>/`.
+        root = Path(instance_root)
+        profiles: List[AgentProfile] = [
+            _profile_from_mapping(
+                raw,
+                default_workspace=(
+                    instance_root
+                    if raw.get("id") == default_agent_id
+                    else str(root / "agents" / str(raw.get("id") or ""))
+                ),
+            )
+            for raw in raw_agents
+        ]
+        return cls(profiles, default_agent_id)
 
     @property
     def default_agent_id(self) -> str:

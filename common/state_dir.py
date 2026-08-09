@@ -8,9 +8,22 @@ Two rules keep later work cheap, and both matter:
    this second rule, inserting the per-user layer means editing every call site
    a second time.
 
-Which paths follow the end user and which follow the Agent is decided here.
-Until tenancy lands ``user_id`` is always None and every path resolves exactly
-where it does today, so this module is a no-op for single-Agent installs.
+State falls into three kinds, and which kind a path is decided here:
+
+- **Shared** (``shared_root``): skills, knowledge, MCP servers, credentials,
+  products. Copying these per Agent costs an update in N places and a version
+  drift; what actually differs between Agents is which ones are switched on,
+  not which ones exist. An Agent that genuinely needs its own copy creates the
+  directory and wins by presence.
+- **Per Agent** (``state_root``): persona, sessions, scheduled tasks, scratch.
+  What makes this Agent a different one from that Agent.
+- **Per end user** (``user_root``): profile, preferences, memory, task records.
+  "Wang likes email over phone calls" is a fact about Wang, not about one
+  Agent, so it sits beside the Agents rather than under one of them.
+
+Everything collapses onto the workspace root on a single-Agent install with no
+end users, so every path resolves exactly where it does today and the layout
+change needs no migration.
 """
 
 from __future__ import annotations
@@ -51,18 +64,34 @@ def state_root(identity: Optional[RuntimeIdentity] = None) -> Path:
     return Path(profile.workspace)
 
 
-def user_root(identity: Optional[RuntimeIdentity] = None) -> Path:
-    """Root of the data owned by one end user of this Agent.
+def shared_root() -> Path:
+    """Root of the assets every Agent draws on.
 
-    Collapses onto the workspace root while ``user_id`` is unset, which is what
-    makes the tenancy migration a change to this function rather than to every
-    caller.
+    Implicitly the default Agent's workspace rather than a configured path of
+    its own: on a single-Agent install that is the workspace root, so nothing
+    moves, and a second Agent reads the skills and credentials that are already
+    there instead of needing its own copies. Add a setting if someone ever
+    wants the shared area somewhere else.
+    """
+    from agent.registry import get_agent_registry
+
+    return Path(get_agent_registry().get(require_enabled=False).workspace)
+
+
+def user_root(identity: Optional[RuntimeIdentity] = None) -> Path:
+    """Root of the data owned by one end user.
+
+    Beside the Agents, not under one of them: a user's preferences are the same
+    fact whichever Agent is talking to them, and one copy per Agent would drift.
+
+    Collapses onto the Agent's own root while ``user_id`` is unset, which is
+    what makes the tenancy migration a change to this function rather than to
+    every caller.
     """
     ident = _resolve(identity)
-    root = state_root(ident)
     if ident.user_id:
-        return root / "users" / ident.user_id
-    return root
+        return shared_root() / "users" / ident.user_id
+    return state_root(ident)
 
 
 def state_path(*parts: str, identity: Optional[RuntimeIdentity] = None) -> Path:
@@ -84,38 +113,64 @@ def _user_base(identity, base) -> Path:
     return Path(base) if base is not None else user_root(identity)
 
 
+def _shared_or_own(identity, base, *parts: str) -> Path:
+    """Shared copy, unless this Agent has one of its own.
+
+    Opting out is by presence rather than by configuration: an Agent that needs
+    a private skill set or its own MCP servers creates the directory, and every
+    other Agent goes on reading the single shared copy. Nothing to configure in
+    the common case, and on a single-Agent install both branches name the same
+    path anyway.
+
+    Writes land on whichever of the two this returns, so an Agent that has not
+    opted out contributes to the shared copy rather than quietly forking it.
+    """
+    own = _agent_base(identity, base).joinpath(*parts)
+    if own.exists():
+        return own
+    return shared_root().joinpath(*parts)
+
+
 # ``base`` lets value objects that already carry a resolved root (MemoryConfig,
 # KnowledgeService) reuse the layout without re-resolving an identity they do
-# not have. It exists so the layout stays defined exactly once.
+# not have. It exists so the layout stays defined exactly once. It names the
+# Agent's own root, not a self-contained one: shared assets still fall back to
+# the shared copy when that root has none, which is what the callers passing it
+# actually want.
 
 
-# --- Agent-scoped: shared by every user this Agent serves --------------------
+# --- Shared: one copy every Agent draws on, unless it opts out ---------------
 
 
 def skills_dir(identity=None, ensure: bool = False, base=None) -> Path:
-    return _ensure(_agent_base(identity, base) / "skills", ensure)
+    return _ensure(_shared_or_own(identity, base, "skills"), ensure)
 
 
 def knowledge_dir(identity=None, ensure: bool = False, base=None) -> Path:
-    return _ensure(_agent_base(identity, base) / "knowledge", ensure)
+    return _ensure(_shared_or_own(identity, base, "knowledge"), ensure)
 
 
 def websites_dir(identity=None, ensure: bool = False, base=None) -> Path:
-    return _ensure(_agent_base(identity, base) / "websites", ensure)
+    return _ensure(_shared_or_own(identity, base, "websites"), ensure)
 
 
 def subagents_dir(identity=None, ensure: bool = False, base=None) -> Path:
-    """Sub agent templates. An Agent asset, like skills: sub agents have no
-    identity of their own, they are a way this Agent gets work done."""
-    return _ensure(_agent_base(identity, base) / "subagents", ensure)
+    """Sub agent templates. Shared like skills: sub agents have no identity of
+    their own, they are a way work gets done."""
+    return _ensure(_shared_or_own(identity, base, "subagents"), ensure)
 
 
 def mcp_config_file(identity=None, base=None) -> Path:
-    return _agent_base(identity, base) / "mcp.json"
+    return _shared_or_own(identity, base, "mcp.json")
 
 
 def env_file(identity=None, base=None) -> Path:
-    return _agent_base(identity, base) / ".env"
+    """Credentials and model keys. Shared, because they belong to the person who
+    runs the instance rather than to one of their Agents."""
+    return _shared_or_own(identity, base, ".env")
+
+
+# --- Per Agent: what makes this Agent a different one -----------------------
 
 
 def scheduler_file(identity=None, base=None) -> Path:
@@ -139,7 +194,17 @@ def memory_dir(identity=None, ensure: bool = False, base=None) -> Path:
 
 
 def memory_index_db(identity=None, ensure: bool = True, base=None) -> Path:
-    index_dir = _ensure(memory_dir(identity, base=base) / "long-term", ensure)
+    """The index, not the content: one database per Agent, isolated per user by
+    the ``user_id`` and ``scope`` columns rather than by path.
+
+    Deliberately not under ``user_root``, unlike the memory files it indexes.
+    It also holds the sessions and runs tables, which are per Agent, and a
+    database per user would make "what do I know about Wang" a fan-out over N
+    files. Filtering has to be applied at the retrieval entry point instead:
+    miss one query and it is a cross-user leak, so there is exactly one place
+    that may build these WHERE clauses.
+    """
+    index_dir = _ensure(_agent_base(identity, base) / "memory" / "long-term", ensure)
     return index_dir / "index.db"
 
 
