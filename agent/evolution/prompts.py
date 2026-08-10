@@ -55,10 +55,8 @@ them. When their signal is clear, act; do not be shy here.
       no existing skill covers and the user is likely to want again. Follow the
       `skill-creator` skill's conventions (read its SKILL.md for the required
       structure), then create `skills/<name>/SKILL.md` by WRITING the file
-      directly with the write tool — this is the simplest reliable path. (bash
-      is available and confined to the workspace if a helper script is truly
-      needed, but a direct write is preferred.) Only create when the workflow is
-      genuinely reusable — not for a one-off task.
+      directly with the write tool — this is the simplest reliable path. Only
+      create when the workflow is genuinely reusable — not for a one-off task.
 
    CRITICAL — fix the SOURCE, do not just remember the symptom: when the root
    cause of a problem lives IN a skill file itself (its instructions, content,

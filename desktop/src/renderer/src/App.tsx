@@ -150,6 +150,7 @@ const App: React.FC = () => {
         status={backend.status}
         error={backend.error}
         slow={backend.slow}
+        reconnecting={backend.reconnecting}
         onRetry={backend.restart}
       />
     )

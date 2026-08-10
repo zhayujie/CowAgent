@@ -58,7 +58,9 @@ export type UpdateStatus =
   | { state: 'error'; message: string }
 
 export interface BackendStatusEvent {
-  status: 'ready' | 'error' | 'starting'
+  // 'lost' means a previously-ready backend stopped answering and the main
+  // process is restarting it.
+  status: 'ready' | 'error' | 'starting' | 'lost'
   port?: number
   error?: string
 }

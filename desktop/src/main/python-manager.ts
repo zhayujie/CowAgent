@@ -31,6 +31,21 @@ const FALLBACK_PORTS = [19876, 29876, 39876, 49876, 55876]
 // is a safety net against a hung probe, not a normal code path.
 const PORT_READY_TIMEOUT_MS = 15_000
 
+// Liveness supervision, active only AFTER the backend has been ready once.
+// Without it a backend that died or wedged hours later went unnoticed: the
+// shell kept reporting 'ready', the window looked fine, and every renderer
+// request failed with a bare "Failed to fetch".
+const HEALTH_PROBE_INTERVAL_MS = 15_000
+const HEALTH_PROBE_TIMEOUT_MS = 4_000
+// A miss must persist this long before we call the backend dead. Waking from
+// sleep loses the first probe (and stretches the interval), which must not be
+// mistaken for a crash.
+const HEALTH_GRACE_MS = 45_000
+// Restarts are bounded so a backend that dies immediately after every launch
+// becomes a reported error with a retry button, not an endless respawn loop.
+const MAX_RECOVERIES = 3
+const RECOVERY_WINDOW_MS = 10 * 60_000
+
 export class PythonBackend extends EventEmitter {
   private process: ChildProcess | null = null
   private backendPath: string
@@ -46,6 +61,17 @@ export class PythonBackend extends EventEmitter {
   // config exception) is only visible in run.log — which the user can't open
   // from the UI, because the UI is exactly what failed to come up.
   private recentLogs: string[] = []
+  // Post-ready liveness supervision. See startHealthMonitor().
+  private healthTimer: ReturnType<typeof setInterval> | null = null
+  private consecutiveHealthMisses = 0
+  private lastHealthyAt = 0
+  // True while we are deliberately tearing the process down (quit or restart),
+  // so neither the exit handler nor an in-flight probe treats it as a crash.
+  private shuttingDown = false
+  // True while a recovery restart is in progress, to keep it single-flight.
+  private recovering = false
+  private recoveryAttempts = 0
+  private recoveryWindowStart = 0
 
   constructor(backendPath: string) {
     super()
@@ -383,11 +409,114 @@ export class PythonBackend extends EventEmitter {
     })
   }
 
+  /** One-shot /api/health probe. Never throws; false means "unreachable". */
+  private probeHealth(): Promise<boolean> {
+    return new Promise((resolve) => {
+      let settled = false
+      const done = (ok: boolean) => {
+        if (settled) return
+        settled = true
+        resolve(ok)
+      }
+      const req = http.get(`http://127.0.0.1:${this.port}/api/health`, (res) => {
+        // Drain the body: an unread response keeps its socket checked out of
+        // the keep-alive pool, so repeated probes would leak sockets.
+        res.resume()
+        done(res.statusCode === 200)
+      })
+      req.on('error', () => done(false))
+      req.setTimeout(HEALTH_PROBE_TIMEOUT_MS, () => {
+        req.destroy()
+        done(false)
+      })
+    })
+  }
+
+  /**
+   * Start watching a backend that has reached 'ready'. The renderer trusts
+   * 'ready' for the rest of the session, so this is the only thing that can
+   * notice a backend which dies or stops answering later on.
+   */
+  private startHealthMonitor(): void {
+    this.stopHealthMonitor()
+    this.lastHealthyAt = Date.now()
+    this.consecutiveHealthMisses = 0
+    this.healthTimer = setInterval(() => {
+      void this.checkHealth()
+    }, HEALTH_PROBE_INTERVAL_MS)
+  }
+
+  private stopHealthMonitor(): void {
+    if (this.healthTimer) {
+      clearInterval(this.healthTimer)
+      this.healthTimer = null
+    }
+  }
+
+  private async checkHealth(): Promise<void> {
+    if (this.shuttingDown || this.recovering) {
+      return
+    }
+    if (await this.probeHealth()) {
+      this.consecutiveHealthMisses = 0
+      this.lastHealthyAt = Date.now()
+      return
+    }
+    this.consecutiveHealthMisses++
+    // Require both repeated misses and real elapsed time: sleep/wake throttles
+    // the interval, so a single lost probe says nothing about the backend.
+    if (this.consecutiveHealthMisses < 2 || Date.now() - this.lastHealthyAt < HEALTH_GRACE_MS) {
+      return
+    }
+    await this.recover()
+  }
+
+  /**
+   * Rebuild a backend that stopped answering. Announces 'lost' first so the
+   * renderer drops its cached "ready" and shows the reconnect screen instead of
+   * failing every request behind an intact-looking UI.
+   */
+  private async recover(): Promise<void> {
+    if (this.recovering) {
+      return
+    }
+    this.recovering = true
+    this.stopHealthMonitor()
+    try {
+      // Announced before the budget check: the backend is gone either way, and
+      // the renderer must leave 'ready' even on the attempt where we give up —
+      // otherwise it would ignore the error we're about to report.
+      this.emit('lost')
+      const now = Date.now()
+      if (now - this.recoveryWindowStart > RECOVERY_WINDOW_MS) {
+        this.recoveryWindowStart = now
+        this.recoveryAttempts = 0
+      }
+      this.recoveryAttempts++
+      if (this.recoveryAttempts > MAX_RECOVERIES) {
+        this.status = 'error'
+        this.emit(
+          'error',
+          this.withLastError('The app stopped responding and could not be restarted'),
+        )
+        return
+      }
+      this.emit(
+        'log',
+        `Backend stopped responding — restarting (attempt ${this.recoveryAttempts}/${MAX_RECOVERIES})`,
+      )
+      await this.restart()
+    } finally {
+      this.recovering = false
+    }
+  }
+
   async start(): Promise<void> {
     if (this.status === 'ready' || this.status === 'starting') {
       return
     }
 
+    this.shuttingDown = false
     this.status = 'starting'
     // Drop the previous run's output so a retry can't report a stale error.
     this.recentLogs = []
@@ -482,7 +611,15 @@ export class PythonBackend extends EventEmitter {
       this.emit('log', `Python process exited with code ${code}`)
       if (!wasReady && code !== 0 && code !== null) {
         this.status = 'error'
-        this.emit('error', this.withLastError(`Backend exited during startup (code ${code})`))
+        this.emit('error', this.withLastError(`The app exited during startup (code ${code})`))
+        return
+      }
+      // Died after serving requests (a late crash, or app.py's own os._exit).
+      // Nothing else would notice, so recover here rather than waiting out the
+      // next health probe.
+      if (wasReady && !this.shuttingDown) {
+        this.stopHealthMonitor()
+        void this.recover()
       }
     })
 
@@ -511,10 +648,15 @@ export class PythonBackend extends EventEmitter {
         // requires auth once a web_password is set, which would make this poll
         // 401 forever and hang startup.
         const req = http.get(`http://127.0.0.1:${this.port}/api/health`, (res) => {
+          // Drain the body so the socket isn't held out of the keep-alive pool.
+          res.resume()
           if (res.statusCode === 200) {
             this.status = 'ready'
             this.emit('log', `Backend ready on port ${this.port}`)
             this.emit('ready', this.port)
+            // From here on the renderer trusts 'ready', so this monitor is the
+            // only thing that can notice the backend going away later.
+            this.startHealthMonitor()
             resolve()
           } else {
             retry()
@@ -539,7 +681,7 @@ export class PythonBackend extends EventEmitter {
           this.status = 'error'
           this.emit(
             'error',
-            this.withLastError(`Backend failed to start within ${Math.round(timeoutMs / 1000)} seconds`),
+            this.withLastError(`The app failed to start within ${Math.round(timeoutMs / 1000)} seconds`),
           )
           resolve()
           return
@@ -552,6 +694,10 @@ export class PythonBackend extends EventEmitter {
   }
 
   stop(): void {
+    // Set before the kill so the exit handler reads this as a deliberate
+    // teardown and doesn't try to "recover" a process we just asked to die.
+    this.shuttingDown = true
+    this.stopHealthMonitor()
     const proc = this.process
     if (proc) {
       proc.kill('SIGTERM')
@@ -569,6 +715,12 @@ export class PythonBackend extends EventEmitter {
   }
 
   async restart(): Promise<void> {
+    // A manual retry from the UI earns a fresh recovery budget; a restart that
+    // the recovery path itself triggered must keep counting toward the limit.
+    if (!this.recovering) {
+      this.recoveryAttempts = 0
+      this.recoveryWindowStart = Date.now()
+    }
     this.stop()
     await new Promise((resolve) => setTimeout(resolve, 2000))
     await this.start()

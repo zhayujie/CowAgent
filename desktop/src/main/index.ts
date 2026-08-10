@@ -195,6 +195,15 @@ async function startBackend() {
     mainWindow?.webContents.send('backend-status', { status: 'starting', port })
   })
 
+  // The backend went away after having served requests. Tell the renderer so it
+  // drops its cached 'ready' — otherwise the window keeps looking healthy while
+  // every request fails, which is how a dead backend used to surface as a bare
+  // "TypeError: Failed to fetch" in the chat.
+  pythonBackend.on('lost', () => {
+    console.warn('[backend] stopped responding')
+    mainWindow?.webContents.send('backend-status', { status: 'lost' })
+  })
+
   pythonBackend.on('error', (error: string) => {
     // Mirror to the main-process stdout too: otherwise backend startup errors
     // are only visible in the renderer devtools, making `npm run dev` hangs

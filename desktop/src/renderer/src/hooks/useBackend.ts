@@ -23,6 +23,9 @@ interface BackendState {
   port: number
   error?: string
   slow?: boolean
+  // True while we're recovering a backend that had already been ready, so the
+  // status screen can say "reconnecting" rather than "starting up".
+  reconnecting?: boolean
 }
 
 export function useBackend() {
@@ -150,6 +153,25 @@ export function useBackend() {
           }
         } else if (data.status === 'starting' && data.port) {
           startPolling(data.port)
+        } else if (data.status === 'lost') {
+          // The main process found a previously-ready backend unreachable and is
+          // restarting it. Release the ready latch: holding it would keep the
+          // whole UI mounted against a backend that answers nothing, which is
+          // how a dead backend used to show up as "Failed to fetch" everywhere.
+          readyRef.current = false
+          pollGeneration++
+          activePort = null
+          if (pollingRef.current) {
+            clearTimeout(pollingRef.current)
+            pollingRef.current = null
+          }
+          setState((prev) => ({
+            ...prev,
+            status: 'connecting',
+            reconnecting: true,
+            error: undefined,
+            slow: false,
+          }))
         } else if (data.status === 'error' && !readyRef.current) {
           // Ignore late "error" from the main process once we've been ready —
           // it usually means the window was backgrounded, not a real failure.

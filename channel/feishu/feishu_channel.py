@@ -16,6 +16,7 @@ import logging
 import os
 import ssl
 import threading
+import time
 # -*- coding=utf-8 -*-
 import uuid
 
@@ -244,6 +245,9 @@ class FeiShuChanel(ChatChannel):
     # 飞书原生支持发送音频（opus 格式，通过文件上传接口）和图片，
     # 所有回复类型均已处理，置为空列表以启用语音和图片回复。
     NOT_SUPPORT_REPLYTYPE = []
+    # Backstop for the offline backlog: a replay this old is discarded even if it
+    # somehow arrives with a create_time after startup.
+    STALE_MSG_MAX_AGE_S = 600
 
     def __init__(self):
         super().__init__()
@@ -255,6 +259,9 @@ class FeiShuChanel(ChatChannel):
         self._ws_client = None
         self._ws_thread = None
         self._bot_open_id = None  # cached bot open_id for @-mention matching
+        # When this channel started serving. Set in startup(); 0 means "unknown",
+        # which lets every message through rather than dropping it silently.
+        self._startup_ts = 0.0
         logger.debug("[FeiShu] app_id={}, app_secret={}, verification_token={}, event_mode={}".format(
             self.feishu_app_id, self.feishu_app_secret, self.feishu_token, self.feishu_event_mode))
         # 无需群校验和前缀
@@ -270,6 +277,11 @@ class FeiShuChanel(ChatChannel):
                 raise Exception("lark_oapi not installed / could not be installed")
 
     def startup(self):
+        # Recorded here, at the very top, rather than once the connection is up:
+        # cold start plus the long-connection handshake can take a minute or two,
+        # and a message the user sends while waiting for the client to come up is
+        # a new message that must be answered — not backlog to discard.
+        self._startup_ts = time.time()
         self.feishu_app_id = conf().get('feishu_app_id')
         self.feishu_app_secret = conf().get('feishu_app_secret')
         self.feishu_token = conf().get('feishu_token')
@@ -649,13 +661,26 @@ class FeiShuChanel(ChatChannel):
             return
         self.receivedMsgs[msg_id] = True
 
-        # Filter out stale messages from before channel startup (offline backlog)
-        import time as _time
+        # Drop the offline backlog Feishu replays after a reconnect, without
+        # dropping slow-but-current messages. The test is where the message sits
+        # relative to THIS startup, not how old it is: an absolute age cutoff also
+        # killed brand-new messages whose delivery merely lagged (Feishu draining
+        # its queue after a reconnect), and left no margin for clock skew.
+        # MAX_AGE is only a backstop for a replay so large it outlives startup.
         create_time_ms = msg.get("create_time")
         if create_time_ms:
-            msg_age_s = _time.time() - int(create_time_ms) / 1000
-            if msg_age_s > 60:
-                logger.warning(f"[FeiShu] stale msg filtered (age={msg_age_s:.0f}s), msg_id={msg_id}")
+            create_time_s = int(create_time_ms) / 1000
+            msg_age_s = time.time() - create_time_s
+            stale_reason = None
+            if self._startup_ts and create_time_s < self._startup_ts:
+                stale_reason = "sent before channel startup"
+            elif msg_age_s > self.STALE_MSG_MAX_AGE_S:
+                stale_reason = f"older than {self.STALE_MSG_MAX_AGE_S}s"
+            if stale_reason:
+                logger.warning(
+                    f"[FeiShu] stale msg filtered ({stale_reason}, age={msg_age_s:.0f}s), "
+                    f"msg_id={msg_id}, chat_id={msg.get('chat_id')}"
+                )
                 return
 
         is_group = False

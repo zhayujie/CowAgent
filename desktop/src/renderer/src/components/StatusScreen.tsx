@@ -5,10 +5,13 @@ interface StatusScreenProps {
   status: 'connecting' | 'error'
   error?: string
   slow?: boolean
+  // Recovering a backend that had already been serving, rather than a cold
+  // start — the copy differs because the user was mid-session.
+  reconnecting?: boolean
   onRetry: () => void
 }
 
-const StatusScreen: React.FC<StatusScreenProps> = ({ status, error, slow, onRetry }) => {
+const StatusScreen: React.FC<StatusScreenProps> = ({ status, error, slow, reconnecting, onRetry }) => {
   const [dataDir, setDataDir] = useState('')
 
   useEffect(() => {
@@ -30,10 +33,14 @@ const StatusScreen: React.FC<StatusScreenProps> = ({ status, error, slow, onRetr
           <>
             <div className="space-y-2">
               <h1 className="text-xl font-bold text-slate-800 dark:text-slate-100">
-                {t('status_starting')}
+                {reconnecting ? t('status_reconnecting') : t('status_starting')}
               </h1>
               <p className="text-sm text-slate-500 dark:text-slate-400">
-                {slow ? t('status_starting_slow') : t('status_starting_desc')}
+                {slow
+                  ? t('status_starting_slow')
+                  : reconnecting
+                    ? t('status_reconnecting_desc')
+                    : t('status_starting_desc')}
               </p>
             </div>
             <div className="flex justify-center gap-1">
