@@ -106,5 +106,8 @@
       "provider": "generic",
       "url": "https://cowagent.ai/update/"
     }
+  },
+  "overrides": {
+    "linkify-it": "5.0.2"
   }
 }
