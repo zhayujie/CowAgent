@@ -106,5 +106,8 @@
       "provider": "generic",
       "url": "https://cowagent.ai/update/"
     }
+  },
+  "overrides": {
+    "js-yaml": "4.3.1"
   }
 }
