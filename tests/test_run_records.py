@@ -162,6 +162,32 @@ class TestOpeningARun(unittest.TestCase):
             self.store.get_run(child.run_id)["trigger_type"], "delegate"
         )
 
+    def test_no_store_means_no_record_not_the_default_one(self):
+        """A caller that knows which database it wants and could not get it must
+        land nowhere, not in whichever one happens to resolve: that is how a test
+        run wrote its fixtures into a live database.
+        """
+        from agent.memory.run_records import open_run
+
+        resolved = []
+
+        def explode():
+            resolved.append(True)
+            raise AssertionError("resolved a store when none was wanted")
+
+        import agent.memory as memory_module
+
+        original = memory_module.get_conversation_store
+        memory_module.get_conversation_store = explode
+        try:
+            run = open_run("a task", store=None)
+        finally:
+            memory_module.get_conversation_store = original
+
+        self.assertTrue(run.run_id)
+        self.assertEqual(resolved, [])
+        run.close()
+
     def test_a_failure_to_record_does_not_reach_the_caller(self):
         """A trace that can break the thing it describes is worse than none."""
         from agent.memory.run_records import record_run

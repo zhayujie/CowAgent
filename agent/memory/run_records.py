@@ -28,6 +28,9 @@ from common.log import logger
 from common.runtime_identity import current_identity, identity_scope
 
 
+_RESOLVE = object()
+
+
 def _goal_from(user_message: str) -> str:
     """One line for the list column. Raw input runs to hundreds of characters
     often enough that showing it verbatim makes a list unreadable."""
@@ -115,21 +118,29 @@ def open_run(
     trigger_type: str = "message",
     channel_type: str = "",
     model: str = "",
-    store=None,
+    store=_RESOLVE,
 ) -> RunRecord:
-    """Write the index row and return the record. Never raises."""
+    """Write the index row and return the record. Never raises.
+
+    Omitting ``store`` resolves one from the ambient identity. Passing None says
+    "do not record this", which is different: a caller that knows which database
+    it wants and could not get it must not silently land in the default one.
+    """
     identity = current_identity()
     run_id = new_run_id()
     parent_run_id = identity.run_id or ""
 
-    if store is None:
+    if store is _RESOLVE:
         try:
             from agent.memory import get_conversation_store
 
             store = get_conversation_store()
         except Exception as e:
             logger.debug(f"[RunRecord] no store for {run_id}: {e}")
-            return RunRecord(run_id, None, parent_run_id)
+            store = None
+
+    if store is None:
+        return RunRecord(run_id, None, parent_run_id)
 
     try:
         store.start_run(

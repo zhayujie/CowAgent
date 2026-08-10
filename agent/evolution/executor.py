@@ -532,12 +532,14 @@ def run_evolution_for_session(
         user_msg = build_review_user_message(transcript, protected_skills=list(protected_names))
         # Recorded like any other run: what the reviewer changed and why is the
         # first thing anyone asks after an unexpected edit to their workspace.
+        from agent.memory import get_conversation_store
         from agent.memory.run_records import record_run
 
         with record_run(
             f"Self-evolution review of session {session_id}",
             trigger_type="evolution",
             model=getattr(getattr(review_agent, "model", None), "model", "") or "",
+            store=get_conversation_store(str(workspace_dir)),
         ):
             result = review_agent.run_stream(user_msg, clear_history=True)
         result = (result or "").strip()

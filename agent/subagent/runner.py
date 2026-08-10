@@ -141,6 +141,23 @@ def _notify(on_state, index: int, state: Dict[str, Any]) -> None:
         logger.debug(f"[SubAgent] state callback failed: {e}")
 
 
+def _store_for(parent):
+    """The parent's own database, named rather than resolved.
+
+    Resolving would land in the right place anyway, since a sub agent runs
+    inside the parent's identity, but naming it keeps a spawn from depending on
+    an ambient value being correct: whoever the parent is, its sub agents are
+    recorded beside it.
+    """
+    try:
+        from agent.memory import get_conversation_store
+
+        return get_conversation_store(getattr(parent, "workspace_dir", None) or None)
+    except Exception as e:
+        logger.debug(f"[SubAgent] no store for the parent: {e}")
+        return None
+
+
 def _run_one(parent, template, task: SubagentTask, index: int, cancel_event,
              on_state=None, on_event=None) -> Dict[str, Any]:
     started = time.time()
@@ -165,6 +182,7 @@ def _run_one(parent, template, task: SubagentTask, index: int, cancel_event,
         task.goal,
         trigger_type="delegate",
         model=getattr(getattr(parent, "model", None), "model", "") or "",
+        store=_store_for(parent),
     )
     result["run_id"] = run.run_id
 
