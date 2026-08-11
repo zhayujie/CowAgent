@@ -191,7 +191,7 @@ def download_image_file(image_url, temp_dir):
                     if image_response.status_code == 200:
                         # 生成文件名（使用 download_code 的 hash，避免特殊字符）
                         import hashlib
-                        file_hash = hashlib.md5(actual_download_code.encode()).hexdigest()[:16]
+                        file_hash = hashlib.sha256(actual_download_code.encode()).hexdigest()[:16]
                         file_name = f"{file_hash}.png"
                         file_path = os.path.join(temp_dir, file_name)
                         
