@@ -38,6 +38,9 @@ PENDING_MEDIA_POLL_S = 0.1
 QR_LOGIN_TIMEOUT_S = 480
 QR_MAX_REFRESHES = 10
 
+# Commands that start a fresh conversation (clear stored context for this session).
+NEW_SESSION_COMMANDS = ("新会话", "新对话", "重置对话", "开新会话", "/reset", "/new")
+
 
 def _load_credentials(cred_path: str) -> dict:
     """Load saved credentials from JSON file."""
@@ -565,6 +568,12 @@ class WeixinChannel(ChatChannel):
             return
 
         if wx_msg.ctype == ContextType.TEXT:
+            # Session control: "新会话" / "/reset" → clear conversation context.
+            stripped = str(wx_msg.content).strip()
+            if stripped in NEW_SESSION_COMMANDS:
+                self._handle_new_session(raw_msg, from_user)
+                return
+
             if has_media:
                 # This message already carries its own media inline; its ref was
                 # attached during parsing, so just release the in-flight marker.
@@ -597,6 +606,37 @@ class WeixinChannel(ChatChannel):
         )
         if context:
             self.produce(context)
+
+    # ── _handle_new_session ─────────────────────────────────────────────
+
+    def _handle_new_session(self, raw_msg: dict, session_id: str) -> None:
+        """Start a fresh conversation for this weixin session.
+
+        Clears the stored conversation context (raw session key, no
+        ``session_`` prefix) and drops the in-memory agent so buffered
+        history is gone too. Long-term memory files are untouched.
+        """
+        cleared = 0
+        try:
+            from agent.memory import get_conversation_store
+            store = get_conversation_store(None)
+            cleared = store.clear_context(session_id)
+            try:
+                from bridge.bridge import Bridge
+                Bridge().get_agent_bridge().clear_session(session_id)
+            except Exception:
+                pass
+            logger.info(f"[Weixin] New session for {session_id}, cleared {cleared} messages")
+        except Exception as e:
+            logger.warning(f"[Weixin] New-session clear failed for {session_id}: {e}")
+
+        receiver = raw_msg.get("other_user_id", "") or session_id
+        context_token = raw_msg.get("context_token", "") or self._context_tokens.get(receiver, "")
+        reply_text = f"✅ 已开启新会话（清空 {cleared} 条上下文）。有大海在，放心聊～"
+        if context_token:
+            self._send_text(reply_text, receiver, context_token)
+        else:
+            logger.warning("[Weixin] New-session reply skipped: no context_token")
 
     # ── _compose_context ───────────────────────────────────────────────
 
