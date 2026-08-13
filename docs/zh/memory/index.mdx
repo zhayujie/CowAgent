@@ -41,6 +41,39 @@ Agent 通过以下机制自动将对话内容持久化为长期记忆：
 
 Agent 会在对话中根据需要自动触发记忆检索，将相关历史信息纳入上下文。检索结果按混合评分排序（默认向量权重 0.7、关键词权重 0.3），日级记忆会随时间衰减（半衰期 30 天），核心记忆不衰减。
 
+### 可选 Milvus 向量后端
+
+SQLite 仍是零额外依赖的默认向量后端；无论选择哪个向量后端，FTS5 关键词检索都继续使用 SQLite。
+
+使用 Milvus Server 或 Zilliz Cloud 时，请在 Python 3.9 及以上环境安装：
+
+```bash
+pip3 install -e ".[milvus]"
+```
+
+使用本地嵌入式 Milvus Lite 时，请在 Python 3.10 及以上环境安装：
+
+```bash
+pip3 install -e ".[milvus-lite]"
+```
+
+然后在 `config.json` 中启用后端。`milvus_uri` 可填写 Milvus Lite 数据库文件、`http://localhost:19530` 形式的 Milvus Server 地址，或 Zilliz Cloud 公网地址：
+
+```json
+{
+  "vector_backend": "milvus",
+  "milvus_uri": "http://localhost:19530",
+  "milvus_db_name": "default",
+  "milvus_collection": "",
+  "milvus_timeout": 10.0,
+  "milvus_consistency_level": "Strong"
+}
+```
+
+Milvus Lite 可将 `milvus_uri` 设为 `/home/user/cow/memory/long-term/milvus.db` 等文件路径；留空时使用 SQLite 索引旁的默认文件。Milvus Server 或 Zilliz Cloud 需要认证时，建议通过环境变量 `MILVUS_TOKEN` 提供令牌；也支持配置项 `milvus_token`，但环境变量可避免凭据落盘。
+
+`milvus_collection` 留空时，CowAgent 会按工作区和 embedding 维度创建独立 collection。手动指定的现有 collection 必须匹配当前维度和 CowAgent schema。已有 SQLite 向量会自动回填；SQLite 始终是权威副本，Milvus 写入失败会进入持久队列重试，远端不可用或未同步完成时搜索自动回退 SQLite。`/memory rebuild-index` 会重新填充两侧索引，但不会删除用户管理的 collection。后端错误日志会脱敏凭据与连接地址。
+
 ## 相关文件
 
 工作空间（默认 `~/cow`）中与记忆相关的文件：
@@ -69,3 +102,9 @@ Agent 会在对话中根据需要自动触发记忆检索，将相关历史信�
 | `agent_workspace` | 工作空间路径，记忆文件存储在此目录下 | `~/cow` |
 | `agent_max_context_tokens` | 最大上下文 token 数，超出时裁剪并总结写入记忆 | `50000` |
 | `agent_max_context_turns` | 最大上下文轮次，超出时裁剪并总结写入记忆 | `20` |
+| `vector_backend` | 向量后端：`sqlite` 或可选的 `milvus` | `sqlite` |
+| `milvus_uri` | Milvus Lite 文件、Milvus Server 地址或 Zilliz Cloud 地址 | 本地 `milvus.db` |
+| `milvus_db_name` | Milvus 数据库名 | `default` |
+| `milvus_collection` | Collection 名；留空时按工作区和维度生成 | 空 |
+| `milvus_timeout` | Milvus 操作超时（秒） | `10.0` |
+| `milvus_consistency_level` | Milvus 一致性级别 | `Strong` |

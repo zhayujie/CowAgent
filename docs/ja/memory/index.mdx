@@ -32,6 +32,41 @@ Agent は以下のメカニズムにより、会話内容を長期記憶に自�
 
 すべての記憶書き込みはバックグラウンドスレッドで非同期に実行され（LLM の要約 + ファイル書き込み）、通常の会話応答をブロックしません。
 
+## メモリ検索
+
+メモリシステムは FTS5 によるキーワード検索と、embedding によるベクトル検索を組み合わせます。SQLite は追加依存関係のないデフォルトのベクトルバックエンドです。どのベクトルバックエンドを選んでも、FTS5 キーワード検索は引き続き SQLite を使用します。
+
+### オプションの Milvus ベクトルバックエンド
+
+Milvus Server または Zilliz Cloud を使う場合は、Python 3.9 以降で次をインストールします。
+
+```bash
+pip3 install -e ".[milvus]"
+```
+
+ローカルの組み込み Milvus Lite を使う場合は、Python 3.10 以降で次をインストールします。
+
+```bash
+pip3 install -e ".[milvus-lite]"
+```
+
+続いて `config.json` でバックエンドを選択します。`milvus_uri` には Milvus Lite のデータベースファイル、`http://localhost:19530` のような Milvus Server URI、または Zilliz Cloud の公開エンドポイントを指定できます。
+
+```json
+{
+  "vector_backend": "milvus",
+  "milvus_uri": "http://localhost:19530",
+  "milvus_db_name": "default",
+  "milvus_collection": "",
+  "milvus_timeout": 10.0,
+  "milvus_consistency_level": "Strong"
+}
+```
+
+Milvus Lite では `milvus_uri` に `/home/user/cow/memory/long-term/milvus.db` などのファイルを指定できます。空の場合は SQLite インデックスの隣に既定のファイルを作成します。認証が必要な Milvus または Zilliz Cloud では、資格情報をファイルに保存しないよう環境変数 `MILVUS_TOKEN` の使用を推奨します。`config.json` の `milvus_token` も利用できます。
+
+`milvus_collection` が空の場合、CowAgent はワークスペースと embedding 次元ごとに collection を作成します。既存 collection を明示する場合は、現在の次元と CowAgent schema が一致している必要があります。既存 SQLite ベクトルは自動的に backfill されます。SQLite は常に正本であり、Milvus への書き込み失敗は永続キューから再試行され、Milvus が利用不能または同期中なら検索は SQLite にフォールバックします。`/memory rebuild-index` はユーザー管理の collection を削除せず、両方のインデックスを再構築します。バックエンドのエラーログでは資格情報と接続 URI が伏せられます。
+
 ## 関連ファイル
 
 ワークスペース（デフォルト `~/cow`）内の記憶関連ファイル：
@@ -60,3 +95,9 @@ Web コンソールの記憶管理ページで、記憶ファイルと夢日記�
 | `agent_workspace` | ワークスペースパス、記憶ファイルはこのディレクトリ配下に保存されます | `~/cow` |
 | `agent_max_context_tokens` | 最大コンテキストトークン数。超過時にトリミングされ、記憶として要約されます | `50000` |
 | `agent_max_context_turns` | 最大コンテキストターン数。超過時にトリミングされ、記憶として要約されます | `20` |
+| `vector_backend` | ベクトルバックエンド：`sqlite` またはオプションの `milvus` | `sqlite` |
+| `milvus_uri` | Milvus Lite ファイル、Milvus Server URI、または Zilliz Cloud エンドポイント | ローカル `milvus.db` |
+| `milvus_db_name` | Milvus データベース名 | `default` |
+| `milvus_collection` | Collection 名。空ならワークスペースと次元から生成 | 空 |
+| `milvus_timeout` | Milvus 操作のタイムアウト（秒） | `10.0` |
+| `milvus_consistency_level` | Milvus の consistency level | `Strong` |

@@ -131,3 +131,112 @@ def test_memory_storage_routes_vector_operations_through_backend(tmp_path):
     assert results[0].path == "memory/shared/custom.md"
     assert results[0].score == 0.75
     storage.close()
+
+
+class FailingVectorBackend(RecordingVectorBackend):
+    def __init__(self):
+        super().__init__()
+        self.fail_writes = True
+        self.fail_deletes = False
+        self.token = "top-secret-token"
+        self.uri = "https://user:password@milvus.example.com"
+
+    def upsert(self, records):
+        if self.fail_writes:
+            raise ConnectionError(
+                "{} at {} is unavailable".format(self.token, self.uri)
+            )
+        super().upsert(records)
+
+    def delete(self, ids=None, metadata_filter=None):
+        if self.fail_deletes:
+            raise ConnectionError("delete failed at {}".format(self.uri))
+        super().delete(ids=ids, metadata_filter=metadata_filter)
+
+
+def test_external_failure_keeps_sqlite_vectors_and_pending_retry(tmp_path, monkeypatch):
+    monkeypatch.setattr("agent.memory.storage.time.sleep", lambda _seconds: None)
+    backend = FailingVectorBackend()
+    storage = MemoryStorage(tmp_path / "index.db", vector_backend=backend)
+    chunk = _chunk("durable", [1.0, 0.0])
+
+    storage.save_chunk(chunk)
+
+    assert storage.get_chunk("durable").embedding == [1.0, 0.0]
+    assert storage.get_stats()["vector_sync_pending"] == 1
+    results = storage.search_vector([1.0, 0.0])
+    assert [result.path for result in results] == [chunk.path]
+    status = storage.get_vector_backend_status()
+    assert status["healthy"] is False
+    assert "top-secret-token" not in status["error"]
+    assert "password" not in status["error"]
+
+    backend.fail_writes = False
+    results = storage.search_vector([1.0, 0.0])
+    assert storage.get_stats()["vector_sync_pending"] == 0
+    assert backend.upserted[0].id == "durable"
+    assert results[0].score == 0.75
+    storage.close()
+
+
+def test_external_delete_failure_is_durable_and_retried(tmp_path, monkeypatch):
+    monkeypatch.setattr("agent.memory.storage.time.sleep", lambda _seconds: None)
+    backend = FailingVectorBackend()
+    backend.fail_writes = False
+    storage = MemoryStorage(tmp_path / "index.db", vector_backend=backend)
+    chunk = _chunk("delete-me", [1.0, 0.0])
+    storage.save_chunk(chunk)
+
+    backend.fail_deletes = True
+    storage.delete_by_path(chunk.path)
+
+    assert storage.get_chunk(chunk.id) is None
+    assert storage.get_stats()["vector_sync_pending"] == 1
+    backend.fail_deletes = False
+    storage.search_vector([1.0, 0.0])
+    assert storage.get_stats()["vector_sync_pending"] == 0
+    assert backend.deleted[-1] == ([chunk.id], None)
+    storage.close()
+
+
+def test_existing_sqlite_vectors_are_backfilled_once(tmp_path):
+    db_path = tmp_path / "index.db"
+    sqlite_storage = MemoryStorage(db_path)
+    sqlite_storage.save_chunk(_chunk("legacy", [0.5, 0.5]))
+    sqlite_storage.close()
+
+    first_backend = RecordingVectorBackend()
+    storage = MemoryStorage(db_path, vector_backend=first_backend)
+    assert [record.id for record in first_backend.upserted] == ["legacy"]
+    storage.close()
+
+    second_backend = RecordingVectorBackend()
+    storage = MemoryStorage(db_path, vector_backend=second_backend)
+    assert second_backend.upserted == []
+    storage.close()
+
+
+class ConcurrentUpdateBackend(RecordingVectorBackend):
+    def __init__(self):
+        super().__init__()
+        self.storage = None
+        self.calls = 0
+
+    def upsert(self, records):
+        self.calls += 1
+        super().upsert(records)
+        if self.calls == 1:
+            self.storage._enqueue_vector_upserts(records)
+            self.storage.conn.commit()
+
+
+def test_vector_queue_does_not_lose_update_during_remote_call(tmp_path):
+    backend = ConcurrentUpdateBackend()
+    storage = MemoryStorage(tmp_path / "index.db", vector_backend=backend)
+    backend.storage = storage
+
+    storage.save_chunk(_chunk("concurrent", [1.0, 0.0]))
+
+    assert backend.calls == 2
+    assert storage.get_stats()["vector_sync_pending"] == 0
+    storage.close()
