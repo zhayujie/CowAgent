@@ -55,7 +55,11 @@ class Agent:
         self.messages = []  # Unified message history for stream mode
         self.messages_lock = threading.Lock()  # Lock for thread-safe message operations
         self.memory_manager = memory_manager  # Memory manager for auto memory flush
-        self.workspace_dir = workspace_dir  # Workspace directory
+        self.workspace_dir = workspace_dir  # Workspace directory (state root, e.g. ~/cow)
+        # Optional per-session project directory that overrides the working
+        # directory (bash cwd, relative file paths) while memory/skills stay
+        # anchored to workspace_dir. None means "use workspace_dir".
+        self.project_dir = None
         self.enable_skills = enable_skills  # Skills enabled flag
         self.runtime_info = runtime_info  # Runtime info for dynamic time update
         self.skip_context_files = skip_context_files
@@ -93,6 +97,55 @@ class Agent:
         # If tool is already an instance, use it directly
         tool.model = self.model
         self.tools.append(tool)
+
+    # Tools whose cwd defines the working directory. Memory and other tools
+    # deliberately keep their own paths and are not retargeted here.
+    _CWD_TOOLS = frozenset(
+        {"read", "write", "edit", "bash", "search_files", "ls", "web_fetch", "send", "browser"}
+    )
+
+    def effective_cwd(self) -> str:
+        """The working directory in force: the project override, else workspace."""
+        return self.project_dir or self.workspace_dir or os.getcwd()
+
+    def apply_project_dir(self, project_dir):
+        """Point the working directory at ``project_dir`` (None resets to workspace).
+
+        Retargets the cwd of file/shell tools so bash, read, write, etc. operate
+        inside the project. Memory, skills and MCP keep pointing at the Agent's
+        workspace because they resolve absolute paths of their own. The system
+        prompt is rebuilt per turn via ``get_full_system_prompt`` and reads
+        ``effective_cwd`` there, so no prompt refresh is needed here.
+        """
+        # Normalize: an empty or workspace-equal value means "no project".
+        if project_dir:
+            project_dir = os.path.realpath(os.path.expanduser(project_dir))
+            if self.workspace_dir and project_dir == os.path.realpath(
+                os.path.expanduser(self.workspace_dir)
+            ):
+                project_dir = None
+        else:
+            project_dir = None
+
+        self.project_dir = project_dir
+        cwd = self.effective_cwd()
+        for tool in self.tools:
+            name = getattr(tool, "name", None)
+            if not (name in self._CWD_TOOLS or hasattr(tool, "cwd")):
+                continue
+            try:
+                # Prefer set_cwd when a tool has one (bash re-renders its
+                # description); otherwise just retarget the attribute.
+                setter = getattr(tool, "set_cwd", None)
+                if callable(setter):
+                    setter(cwd)
+                else:
+                    tool.cwd = cwd
+                if isinstance(getattr(tool, "config", None), dict):
+                    tool.config["cwd"] = cwd
+            except Exception:
+                pass
+        return self.project_dir
 
     def get_skills_prompt(self, skill_filter=None) -> str:
         """
@@ -143,6 +196,7 @@ class Agent:
                 skill_manager=self.skill_manager,
                 memory_manager=self.memory_manager,
                 runtime_info=self.runtime_info,
+                project_dir=self.project_dir,
             )
             if self.extra_system_suffix:
                 full = f"{full}\n\n{self.extra_system_suffix}"

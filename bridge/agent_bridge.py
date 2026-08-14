@@ -534,11 +534,29 @@ class AgentBridge:
                 self._agent_instances[key] = agent
                 if resolved_agent_id == self.agent_registry.default_agent_id:
                     self.agents[session_id] = agent
+            # Point the working directory at the session's project (if any).
+            # Applied on every fetch, so switching projects — or back to the
+            # default — takes effect on the next message without rebuilding the
+            # agent. Memory/skills stay anchored to the workspace regardless.
+            self._apply_session_project(agent, session_id, resolved_agent_id)
             return agent
 
-    def get_cached_agent(
-        self, session_id: str, agent_id: str = None
-    ) -> Optional[Agent]:
+    def _apply_session_project(self, agent, session_id: str, agent_id: str) -> None:
+        """Retarget the agent's working directory to the session's project dir.
+
+        A no-op when the session has no project selected (clears any previous
+        override). Failures are swallowed: a bad project setting must not break
+        the chat, it just falls back to the default workspace.
+        """
+        try:
+            from agent.workspace import project_store
+            project_dir = project_store.get_project_dir(session_id, agent_id)
+            if getattr(agent, "apply_project_dir", None):
+                agent.apply_project_dir(project_dir)
+        except Exception as e:
+            logger.debug(f"[AgentBridge] apply_session_project failed: {e}")
+
+    def get_cached_agent(self, session_id: str, agent_id: str = None) -> Optional[Agent]:
         """Return an existing session agent without creating one."""
         resolved_agent_id = self._resolve_agent_id(agent_id)
         with self._agents_lock:

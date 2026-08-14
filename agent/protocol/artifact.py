@@ -118,6 +118,14 @@ def build_artifact(path: str, workspace_root: Optional[str] = None) -> Optional[
         return None
 
     root = workspace_root or get_workspace_root()
+    # resolve_workspace_path() realpath-resolves the file (following symlinks),
+    # so the root must be resolved the same way or the relpath check below sees
+    # a mismatched prefix (e.g. /var vs /private/var on macOS) and wrongly treats
+    # an in-project file as "outside the workspace".
+    try:
+        root = os.path.realpath(expand_path(root))
+    except Exception:
+        pass
     try:
         abs_path = resolve_workspace_path(path, root)
     except Exception:

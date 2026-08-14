@@ -19,6 +19,7 @@ import type { Attachment, ChatMessage } from '../types'
 import { useChatStore } from '../store/chatStore'
 import { useSessionStore } from '../store/sessionStore'
 import { useUIStore } from '../store/uiStore'
+import { useWorkspaceStore } from '../store/workspaceStore'
 
 interface ChatPageProps {
   baseUrl: string
@@ -58,6 +59,7 @@ const ChatPage: React.FC<ChatPageProps> = ({ baseUrl }) => {
   const ensureSession = useChatStore((s) => s.ensureSession)
   const clearContext = useChatStore((s) => s.clearContext)
   const setSessionsCollapsed = useUIStore((s) => s.setSessionsCollapsed)
+  const wsOnSessionSwitch = useWorkspaceStore((s) => s.onSessionSwitch)
 
   const messages = session?.messages ?? []
   const isStreaming = session?.isStreaming ?? false
@@ -80,6 +82,11 @@ const ChatPage: React.FC<ChatPageProps> = ({ baseUrl }) => {
       loadHistory(activeId, 1)
     }
   }, [activeId, ensureSession, loadHistory])
+
+  // Keep the workspace panel scoped to the active session (project vs default).
+  useEffect(() => {
+    wsOnSessionSwitch(activeId)
+  }, [activeId, wsOnSessionSwitch])
 
   const scrollToBottom = useCallback((smooth = true) => {
     // Defer to the next frame so we read the height *after* the new content has

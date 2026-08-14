@@ -55,6 +55,12 @@
 [data-tooltip=""]:hover::after {
     display: none;
 }
+/* Float-portal elements render their tooltip via the body-level node, so
+   suppress the clipped ::after variant to avoid a double tooltip. */
+[data-tip-float]::after,
+[data-tip-float]::before {
+    display: none !important;
+}
 
 /* Sidebar */
 .sidebar-item.active {
@@ -84,7 +90,9 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 12px 16px;
+    /* Match the chat header height (h-14 = 56px) so both top bars align. */
+    height: 56px;
+    padding: 0 16px;
     border-bottom: 1px solid #e5e7eb;
     flex-shrink: 0;
 }
@@ -1022,15 +1030,44 @@
     overflow-y: hidden;
     transition: border-color 0.2s ease;
 }
+/* Keep the placeholder on one line; ellipsize when the box is too narrow so it
+   never wraps and inflates the single-row height. Actual input can still wrap. */
+#chat-input::placeholder {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
 
 /* Attachment Preview Bar */
+/* The selector is always present, so keep this row as short as the button to
+   avoid wasting vertical space; attachments (when shown) share the same row. */
+
+/* Attachment preview shares the workspace-selector row: it sits to the right of
+   the selector, grows to fill remaining width and scrolls horizontally so chips
+   never wrap onto a new line. */
 .attachment-preview {
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: 8px;
-    padding: 8px 0;
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 0;
+    scrollbar-width: thin;
 }
+.attachment-preview::-webkit-scrollbar { height: 6px; }
+.attachment-preview::-webkit-scrollbar-thumb { background: rgba(148,163,184,0.4); border-radius: 3px; }
 .attachment-preview.hidden { display: none; }
+/* The input box is taller than the selector, so attachments would otherwise
+   touch it. Add breathing room below only when attachments are actually shown. */
+.ws-attach-row:has(.attachment-preview:not(.hidden)) { margin-bottom: 8px; }
+/* Compact chips/thumbnails so adding an attachment doesn't jump the row height.
+   Both stay ~28px tall, matching the selector button, and the remove button
+   sits flush inside the card (no negative offset that would need extra padding). */
+.ws-attach-row .att-thumb { width: 28px; height: 28px; }
+.ws-attach-row .att-chip { padding: 3px 24px 3px 8px; font-size: 11px; }
+.ws-attach-row .att-remove { top: 1px; right: 1px; width: 15px; height: 15px; line-height: 15px; font-size: 10px; }
 
 .attach-menu {
     position: absolute;
@@ -1272,6 +1309,148 @@
     background: rgba(74, 190, 110, 0.1);
     color: #4ABE6E;
 }
+
+/* ============================================================
+   Workspace selector (project picker above the input)
+   ============================================================ */
+.workspace-selector-menu {
+    position: absolute;
+    left: 0;
+    bottom: calc(100% + 6px);
+    width: 320px;
+    max-height: 380px;
+    overflow-y: auto;
+    padding: 6px;
+    border-radius: 12px;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 8px 30px -6px rgba(0, 0, 0, 0.12), 0 2px 8px -2px rgba(0, 0, 0, 0.05);
+    z-index: 60;
+    animation: slashMenuIn 0.15s ease-out;
+}
+.workspace-selector-menu.hidden { display: none; }
+.ws-sel-section-title {
+    padding: 6px 10px 4px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.ws-sel-item {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 8px 10px;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: #334155;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.12s ease, color 0.12s ease;
+    text-align: left;
+}
+.ws-sel-item:hover { background: #EDFDF3; color: #228547; }
+.ws-sel-item i { width: 15px; text-align: center; color: #64748b; flex-shrink: 0; }
+.ws-sel-item:hover i { color: inherit; }
+.ws-sel-item .ws-sel-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.ws-sel-item .ws-sel-path {
+    font-size: 11px;
+    color: #94a3b8;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.ws-sel-item.active { background: #EDFDF3; }
+.ws-sel-item.active .ws-sel-check { color: #228547; margin-left: auto; }
+.ws-sel-divider { height: 1px; margin: 5px 6px; background: #eef2f6; }
+.ws-sel-input-row { display: flex; gap: 6px; padding: 6px; }
+.ws-sel-input-row input {
+    flex: 1;
+    min-width: 0;
+    padding: 6px 9px;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    font-size: 13px;
+    background: #f8fafc;
+    color: #334155;
+    outline: none;
+}
+.ws-sel-input-row input:focus { border-color: #4ABE6E; }
+.ws-sel-input-row button {
+    padding: 6px 12px;
+    border: none;
+    border-radius: 8px;
+    background: #4ABE6E;
+    color: #fff;
+    font-size: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.ws-sel-input-row button:hover { background: #3aa85c; }
+.ws-sel-crumb {
+    padding: 4px 10px 6px;
+    font-size: 11px;
+    color: #64748b;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dark .workspace-selector-menu {
+    background: #1A1A1A;
+    border-color: rgba(255, 255, 255, 0.1);
+    box-shadow: 0 8px 30px -6px rgba(0, 0, 0, 0.35), 0 2px 8px -2px rgba(0, 0, 0, 0.15);
+}
+.dark .ws-sel-item { color: #e2e8f0; }
+.dark .ws-sel-item i { color: #94a3b8; }
+.dark .ws-sel-item:hover,
+.dark .ws-sel-item.active { background: rgba(74, 190, 110, 0.1); color: #4ABE6E; }
+.dark .ws-sel-divider { background: rgba(255,255,255,0.08); }
+.dark .ws-sel-input-row input { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.1); color: #e2e8f0; }
+.dark .ws-sel-crumb { color: #94a3b8; }
+
+/* ---- Folder picker modal (open project) ---- */
+.fp-btn {
+    width: 30px; height: 30px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 8px; border: 1px solid #e2e8f0; background: #f8fafc;
+    color: #64748b; font-size: 13px; cursor: pointer; transition: background .12s ease;
+}
+.fp-btn:hover:not([disabled]) { background: #EDFDF3; color: #228547; border-color: #cdeed8; }
+.fp-btn[disabled] { opacity: 0.4; cursor: default; }
+.dark .fp-btn { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.1); color: #94a3b8; }
+.dark .fp-btn:hover:not([disabled]) { background: rgba(74,190,110,0.12); color: #4ABE6E; }
+
+.fp-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 10px; border-radius: 8px; cursor: pointer;
+    color: #334155; font-size: 14px; transition: background .1s ease;
+}
+.fp-row:hover { background: #f1f5f9; }
+.fp-row.selected { background: #EDFDF3; color: #228547; }
+.fp-row > i:first-child { color: #eab308; width: 16px; text-align: center; flex-shrink: 0; }
+.fp-row.selected > i:first-child { color: #228547; }
+.fp-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fp-into { color: #cbd5e1; font-size: 11px; padding: 4px; border-radius: 6px; flex-shrink: 0; }
+.fp-into:hover { background: rgba(0,0,0,0.06); color: #64748b; }
+.dark .fp-row { color: #e2e8f0; }
+.dark .fp-row:hover { background: rgba(255,255,255,0.06); }
+.dark .fp-row.selected { background: rgba(74,190,110,0.12); color: #4ABE6E; }
+.dark .fp-into:hover { background: rgba(255,255,255,0.1); }
+.fp-empty {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 8px; height: 200px; color: #94a3b8; font-size: 13px;
+}
+.fp-empty i { font-size: 22px; opacity: 0.5; }
 
 /* ============================================================
    Knowledge View
@@ -1993,10 +2172,20 @@
     font-size: 12px;
     color: #94a3b8;
 }
-.workspace-breadcrumb .crumb { cursor: pointer; border-radius: 4px; padding: 1px 4px; }
+.workspace-breadcrumb .crumb { cursor: pointer; border-radius: 4px; padding: 1px 4px; display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
 .workspace-breadcrumb .crumb:hover { background: #f1f5f9; color: #334155; }
 .dark .workspace-breadcrumb .crumb:hover { background: rgba(255, 255, 255, 0.08); color: #e2e8f0; }
 .workspace-breadcrumb .sep { opacity: 0.5; }
+.workspace-breadcrumb .crumb-root {
+    max-width: 240px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    direction: rtl;         /* keep the meaningful tail (project name) visible */
+    text-align: left;
+    font-size: 11px;
+    opacity: 0.9;
+}
 
 .workspace-file-list {
     flex: 1;

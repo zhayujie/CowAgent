@@ -172,6 +172,10 @@ class ChatService:
                     "result": result,
                     "status": status,
                     "elapsed": elapsed_str,
+                    # Same id the matching tool_start carried, so the frontend can
+                    # carry sub agent substeps over from the loading card to this
+                    # resolved one (see collectLoadingSubsteps / carried.get).
+                    "id": tool_call_id,
                 }
 
                 if state.pending_tool_results is not None:

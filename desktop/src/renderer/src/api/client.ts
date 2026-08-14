@@ -19,6 +19,7 @@ import type {
   KnowledgeImportPayload,
   WorkspaceEntry,
   WorkspaceTree,
+  ProjectState,
 } from '../types'
 import { getLang } from '../i18n'
 
@@ -198,16 +199,46 @@ class ApiClient {
   // Workspace browsing / preview
   // ---------------------------------------------------------
 
-  async workspaceTree(path = ''): Promise<WorkspaceTree & ApiResult> {
-    return this.request(`/api/workspace/tree?path=${encodeURIComponent(path)}`)
+  // Workspace endpoints accept an optional session so they resolve against the
+  // session's project dir (when one is open) instead of always ~/cow.
+  private sessionQuery(session?: string): string {
+    return session ? `&session=${encodeURIComponent(session)}` : ''
   }
 
-  async workspaceSearch(query: string, limit = 30): Promise<{ results: WorkspaceEntry[] } & ApiResult> {
-    return this.request(`/api/workspace/search?q=${encodeURIComponent(query)}&limit=${limit}`)
+  async workspaceTree(path = '', session?: string): Promise<WorkspaceTree & ApiResult> {
+    return this.request(`/api/workspace/tree?path=${encodeURIComponent(path)}${this.sessionQuery(session)}`)
   }
 
-  async workspaceResolve(path: string): Promise<{ file: WorkspaceEntry } & ApiResult> {
-    return this.request(`/api/workspace/resolve?path=${encodeURIComponent(path)}`)
+  async workspaceSearch(query: string, limit = 30, session?: string): Promise<{ results: WorkspaceEntry[] } & ApiResult> {
+    return this.request(`/api/workspace/search?q=${encodeURIComponent(query)}&limit=${limit}${this.sessionQuery(session)}`)
+  }
+
+  async workspaceResolve(path: string, session?: string): Promise<{ file: WorkspaceEntry } & ApiResult> {
+    return this.request(`/api/workspace/resolve?path=${encodeURIComponent(path)}${this.sessionQuery(session)}`)
+  }
+
+  // ---------------------------------------------------------
+  // Project workspace (per-session working directory)
+  // ---------------------------------------------------------
+
+  async getProjects(session: string): Promise<ProjectState & ApiResult> {
+    return this.request(`/api/projects?session=${encodeURIComponent(session)}`)
+  }
+
+  /** Bind the session to a project dir, or clear it (projectDir=null → ~/cow). */
+  async selectProject(session: string, projectDir: string | null): Promise<ProjectState & ApiResult> {
+    return this.request('/api/projects/select', {
+      method: 'POST',
+      body: JSON.stringify({ session, project_dir: projectDir }),
+    })
+  }
+
+  /** Create a new project folder under the projects root and select it. */
+  async createProject(session: string, name: string): Promise<ProjectState & ApiResult & { path?: string }> {
+    return this.request('/api/projects/create', {
+      method: 'POST',
+      body: JSON.stringify({ session, name }),
+    })
   }
 
   /** Absolute URL for a `/preview/...` path. The signed token in the path is

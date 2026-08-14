@@ -234,6 +234,14 @@ const I18N = {
         new_chat: '新对话',
         session_history: '历史会话',
         ws_toggle: '工作空间', ws_tab_preview: '预览', ws_tab_files: '文件',
+        ws_default_workspace: '默认空间', ws_sel_title: '选择工作空间',
+        ws_sel_default_hint: '使用默认工作空间（~/cow）', ws_sel_recents: '最近使用',
+        ws_sel_open: '打开项目…', ws_sel_new: '新建项目', ws_sel_new_placeholder: '项目名称',
+        ws_sel_create: '创建', ws_sel_up: '上一级',
+        ws_sel_new_subtitle: '将在 {root} 下创建新项目目录', ws_sel_new_hint: '仅填写项目名称，不含路径分隔符',
+        ws_sel_name_required: '请输入项目名称', ws_sel_name_no_slash: '项目名称不能包含 / 或 \\',
+        ws_sel_open_here: '打开此目录', ws_sel_dblclick_hint: '双击进入子目录，单击选中',
+        ws_sel_no_subdirs: '此目录下没有子文件夹',
         ws_open_external: '在新标签页打开', ws_download: '下载', ws_copy_path: '复制路径',
         ws_close: '关闭', ws_refresh: '刷新', ws_preview: '预览',
         ws_search_placeholder: '搜索文件',
@@ -509,6 +517,14 @@ const I18N = {
         new_chat: '新對話',
         session_history: '歷史會話',
         ws_toggle: '工作空間', ws_tab_preview: '預覽', ws_tab_files: '檔案',
+        ws_default_workspace: '預設空間', ws_sel_title: '選擇工作空間',
+        ws_sel_default_hint: '使用預設工作空間（~/cow）', ws_sel_recents: '最近使用',
+        ws_sel_open: '開啟專案…', ws_sel_new: '新建專案', ws_sel_new_placeholder: '專案名稱',
+        ws_sel_create: '建立', ws_sel_up: '上一層',
+        ws_sel_new_subtitle: '將在 {root} 下建立新專案目錄', ws_sel_new_hint: '僅填寫專案名稱，不含路徑分隔符',
+        ws_sel_name_required: '請輸入專案名稱', ws_sel_name_no_slash: '專案名稱不能包含 / 或 \\',
+        ws_sel_open_here: '開啟此目錄', ws_sel_dblclick_hint: '雙擊進入子目錄，單擊選中',
+        ws_sel_no_subdirs: '此目錄下沒有子資料夾',
         ws_open_external: '在新分頁開啟', ws_download: '下載', ws_copy_path: '複製路徑',
         ws_close: '關閉', ws_refresh: '重新整理', ws_preview: '預覽',
         ws_search_placeholder: '搜尋檔案',
@@ -779,6 +795,14 @@ const I18N = {
         new_chat: 'New Chat',
         session_history: 'History',
         ws_toggle: 'Workspace', ws_tab_preview: 'Preview', ws_tab_files: 'Files',
+        ws_default_workspace: 'Default', ws_sel_title: 'Select workspace',
+        ws_sel_default_hint: 'Use the default workspace (~/cow)', ws_sel_recents: 'Recent',
+        ws_sel_open: 'Open project…', ws_sel_new: 'New project', ws_sel_new_placeholder: 'Project name',
+        ws_sel_create: 'Create', ws_sel_up: 'Up',
+        ws_sel_new_subtitle: 'Creates a new project directory under {root}', ws_sel_new_hint: 'Project name only, no path separators',
+        ws_sel_name_required: 'Please enter a project name', ws_sel_name_no_slash: 'Project name must not contain / or \\',
+        ws_sel_open_here: 'Open this folder', ws_sel_dblclick_hint: 'Double-click to enter, single-click to select',
+        ws_sel_no_subdirs: 'No sub-folders here',
         ws_open_external: 'Open in new tab', ws_download: 'Download', ws_copy_path: 'Copy path',
         ws_close: 'Close', ws_refresh: 'Refresh', ws_preview: 'Preview',
         ws_search_placeholder: 'Search files',
@@ -1058,7 +1082,7 @@ function installCfgTipPortal() {
         }
         _cfgTipPortalEl.textContent = text;
         const rect = target.getBoundingClientRect();
-        // Render once to measure, then position above the target, centered.
+        // Render once to measure, then position relative to the target.
         _cfgTipPortalEl.style.left = '0px';
         _cfgTipPortalEl.style.top = '0px';
         _cfgTipPortalEl.classList.add('show');
@@ -1066,7 +1090,9 @@ function installCfgTipPortal() {
         let left = rect.left + rect.width / 2 - tipRect.width / 2;
         // Clamp horizontally to the viewport with an 8px gutter.
         left = Math.max(8, Math.min(left, window.innerWidth - tipRect.width - 8));
-        const top = rect.top - tipRect.height - 6;
+        // Default above the target; place below when data-tooltip-pos="bottom".
+        const below = target.getAttribute('data-tooltip-pos') === 'bottom';
+        const top = below ? rect.bottom + 6 : rect.top - tipRect.height - 6;
         _cfgTipPortalEl.style.left = left + 'px';
         _cfgTipPortalEl.style.top = top + 'px';
     };
@@ -1074,12 +1100,16 @@ function installCfgTipPortal() {
         if (_cfgTipPortalEl) _cfgTipPortalEl.classList.remove('show');
     };
 
+    // Matches config keys and any element opting into the floating tooltip via
+    // [data-tip-float] (used for dynamic tooltips like the workspace selector,
+    // whose data-tooltip is set at runtime rather than from a translation key).
+    const _tipSel = '[data-tip-key],[data-tip-float]';
     document.addEventListener('mouseover', (e) => {
-        const target = e.target.closest('[data-tip-key]');
+        const target = e.target.closest(_tipSel);
         if (target) showTip(target);
     });
     document.addEventListener('mouseout', (e) => {
-        const target = e.target.closest('[data-tip-key]');
+        const target = e.target.closest(_tipSel);
         if (target) hideTip();
     });
     // Hide on scroll/resize so the tooltip doesn't drift away from its anchor.
@@ -2283,6 +2313,289 @@ document.addEventListener('click', (e) => {
     if (!isAttachMenuVisible()) return;
     if (attachMenu.contains(e.target) || attachBtn.contains(e.target)) return;
     hideAttachMenu();
+});
+
+// =====================================================================
+// Workspace selector (project picker above the input)
+// =====================================================================
+let _wsSelState = { current: null, recents: [], defaultWorkspace: '', projectsRoot: '' };
+
+function _wsSelBtn() { return document.getElementById('workspace-selector-btn'); }
+function _wsSelMenu() { return document.getElementById('workspace-selector-menu'); }
+
+// Minimal self-dismissing toast for selector errors (no global toast exists).
+function _wsToast(msg) {
+    let el = document.getElementById('ws-sel-toast');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'ws-sel-toast';
+        el.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);' +
+            'background:#1e293b;color:#fff;padding:8px 14px;border-radius:8px;font-size:13px;' +
+            'z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,0.2);opacity:0;transition:opacity .2s;';
+        document.body.appendChild(el);
+    }
+    el.textContent = msg;
+    el.style.opacity = '1';
+    clearTimeout(el._t);
+    el._t = setTimeout(() => { el.style.opacity = '0'; }, 2600);
+}
+
+// Refresh the selector state + label for the current session.
+async function refreshWorkspaceSelector() {
+    const label = document.getElementById('workspace-selector-label');
+    try {
+        const res = await fetch(`/api/projects?session=${encodeURIComponent(sessionId)}`);
+        const data = await res.json();
+        if (data.status !== 'success') return;
+        _wsSelState = {
+            current: data.current || null,
+            recents: data.recents || [],
+            defaultWorkspace: data.default_workspace || '',
+            projectsRoot: data.projects_root || '',
+        };
+        _wsSelUpdateLabel();
+    } catch (e) { /* keep last label */ }
+}
+
+// Sync the selector button's label and hover tooltip with the current state.
+// Called after every selection so the tooltip always shows the live full path.
+function _wsSelUpdateLabel() {
+    const label = document.getElementById('workspace-selector-label');
+    if (label) {
+        label.textContent = _wsSelState.current
+            ? _wsSelState.current.name
+            : t('ws_default_workspace');
+    }
+    const btn = _wsSelBtn();
+    if (btn) {
+        const full = _wsSelState.current
+            ? _wsSelState.current.path
+            : _wsSelState.defaultWorkspace;
+        btn.setAttribute('data-tooltip', full || t('ws_sel_title'));
+        btn.setAttribute('data-tooltip-pos', 'top');
+        // Route through the body-level floating tooltip so the full path isn't
+        // clipped/covered by the chat history above the input bar.
+        btn.setAttribute('data-tip-float', '');
+    }
+}
+
+function toggleWorkspaceSelector(event) {
+    if (event) { event.preventDefault(); event.stopPropagation(); }
+    const menu = _wsSelMenu();
+    if (!menu) return;
+    if (!menu.classList.contains('hidden')) {
+        menu.classList.add('hidden');
+        return;
+    }
+    refreshWorkspaceSelector().then(renderWorkspaceSelectorMenu);
+    menu.classList.remove('hidden');
+}
+
+function _wsSelHide() {
+    const menu = _wsSelMenu();
+    if (menu) menu.classList.add('hidden');
+}
+
+function renderWorkspaceSelectorMenu() {
+    const menu = _wsSelMenu();
+    if (!menu) return;
+
+    const parts = [];
+    const isDefault = !_wsSelState.current;
+    parts.push(`<div class="ws-sel-section-title">${escapeHtml(t('ws_sel_title'))}</div>`);
+    // Default workspace: hovering shows the full ~/cow absolute path.
+    parts.push(`
+        <button class="ws-sel-item ${isDefault ? 'active' : ''}" onclick="selectWorkspaceProject(null)"
+                data-tip-float data-tooltip="${escapeHtml(_wsSelState.defaultWorkspace || '')}" data-tooltip-pos="bottom">
+            <i class="fas fa-house"></i>
+            <span class="ws-sel-name">${escapeHtml(t('ws_default_workspace'))}</span>
+            ${isDefault ? '<i class="fas fa-check ws-sel-check"></i>' : ''}
+        </button>`);
+
+    if ((_wsSelState.recents || []).length) {
+        parts.push(`<div class="ws-sel-divider"></div>`);
+        parts.push(`<div class="ws-sel-section-title">${escapeHtml(t('ws_sel_recents'))}</div>`);
+        _wsSelState.recents.forEach(r => {
+            const active = _wsSelState.current && _wsSelState.current.path === r.path;
+            parts.push(`
+                <button class="ws-sel-item ${active ? 'active' : ''}" onclick="selectWorkspaceProject('${_wsAttr(r.path)}')"
+                        data-tip-float data-tooltip="${escapeHtml(r.path)}" data-tooltip-pos="bottom">
+                    <i class="fas fa-folder"></i>
+                    <span class="ws-sel-name">${escapeHtml(r.name)}</span>
+                    ${active ? '<i class="fas fa-check ws-sel-check"></i>' : ''}
+                </button>`);
+        });
+    }
+
+    parts.push(`<div class="ws-sel-divider"></div>`);
+    parts.push(`
+        <button class="ws-sel-item" onclick="wsSelOpenProjectDialog()">
+            <i class="fas fa-folder-open"></i>
+            <span class="ws-sel-name">${escapeHtml(t('ws_sel_open'))}</span>
+        </button>`);
+    parts.push(`
+        <button class="ws-sel-item" onclick="wsSelNewProjectDialog()">
+            <i class="fas fa-folder-plus"></i>
+            <span class="ws-sel-name">${escapeHtml(t('ws_sel_new'))}</span>
+        </button>`);
+
+    menu.innerHTML = parts.join('');
+}
+
+// Escape a path for safe embedding inside a single-quoted inline handler.
+function _wsAttr(p) { return String(p || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'"); }
+
+// ------- Folder picker modal (open an existing project) -------
+let _fpCurrent = '';   // absolute path currently listed
+let _fpBound = false;  // one-time listener binding guard
+
+function wsSelOpenProjectDialog() {
+    _wsSelHide();
+    _fpBindOnce();
+    const overlay = document.getElementById('folder-picker-overlay');
+    document.getElementById('folder-picker-cancel').textContent = t('channels_cancel') || t('ws_sel_up');
+    document.getElementById('folder-picker-open').textContent = t('ws_sel_open_here');
+    document.getElementById('folder-picker-hint').textContent = t('ws_sel_dblclick_hint');
+    overlay.classList.remove('hidden');
+    _fpBrowse('');  // '' => backend starts at ~
+}
+
+function _fpBindOnce() {
+    if (_fpBound) return;
+    _fpBound = true;
+    const overlay = document.getElementById('folder-picker-overlay');
+    const close = () => overlay.classList.add('hidden');
+    document.getElementById('folder-picker-cancel').addEventListener('click', close);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+    document.getElementById('folder-picker-open').addEventListener('click', async () => {
+        if (!_fpCurrent) return;
+        const ok = await _wsSelApply('/api/projects/select', { session: sessionId, project_dir: _fpCurrent });
+        if (ok) close();
+    });
+}
+
+async function _fpBrowse(path) {
+    const list = document.getElementById('folder-picker-list');
+    list.innerHTML = `<div class="fp-empty"><i class="fas fa-spinner fa-spin"></i></div>`;
+    try {
+        const res = await fetch(`/api/projects/browse?path=${encodeURIComponent(path || '')}`);
+        const data = await res.json();
+        if (data.status !== 'success') { list.innerHTML = `<div class="fp-empty">${escapeHtml(data.message || 'error')}</div>`; return; }
+        _fpCurrent = data.path;
+        document.getElementById('folder-picker-path').textContent = data.path;
+        document.getElementById('folder-picker-path').setAttribute('title', data.path);
+        _fpRenderToolbar(data);
+        _fpRenderList(data);
+    } catch (e) {
+        list.innerHTML = `<div class="fp-empty">${escapeHtml(String(e.message || e))}</div>`;
+    }
+}
+
+function _fpRenderToolbar(data) {
+    const bar = document.getElementById('folder-picker-toolbar');
+    const upDisabled = !data.parent;
+    bar.innerHTML = `
+        <button class="fp-btn" ${upDisabled ? 'disabled' : ''} onclick="_fpBrowse('${_wsAttr(data.parent || '')}')" data-tooltip="${escapeHtml(t('ws_sel_up'))}" data-tooltip-pos="bottom">
+            <i class="fas fa-arrow-up"></i>
+        </button>
+        <button class="fp-btn" onclick="_fpBrowse('~')" data-tooltip="~" data-tooltip-pos="bottom">
+            <i class="fas fa-house"></i>
+        </button>`;
+}
+
+function _fpRenderList(data) {
+    const list = document.getElementById('folder-picker-list');
+    const dirs = data.dirs || [];
+    if (!dirs.length) {
+        list.innerHTML = `<div class="fp-empty"><i class="fas fa-folder-open"></i><span>${escapeHtml(t('ws_sel_no_subdirs'))}</span></div>`;
+        return;
+    }
+    list.innerHTML = dirs.map(d => `
+        <div class="fp-row" ondblclick="_fpBrowse('${_wsAttr(d.path)}')" onclick="_fpSelectRow(this,'${_wsAttr(d.path)}')" title="${escapeHtml(d.path)}">
+            <i class="fas fa-folder"></i>
+            <span class="fp-name">${escapeHtml(d.name)}</span>
+            <i class="fas fa-chevron-right fp-into" onclick="event.stopPropagation();_fpBrowse('${_wsAttr(d.path)}')"></i>
+        </div>`).join('');
+}
+
+// Single click selects a child folder as the target (so you can open a folder
+// without navigating into it); double click / chevron navigates inside.
+function _fpSelectRow(el, path) {
+    document.querySelectorAll('#folder-picker-list .fp-row.selected').forEach(r => r.classList.remove('selected'));
+    el.classList.add('selected');
+    _fpCurrent = path;
+    document.getElementById('folder-picker-path').textContent = path;
+}
+
+// Create a new project by name (lands under the projects root), then open it.
+function wsSelNewProjectDialog() {
+    _wsSelHide();
+    openKnowledgeDialog({
+        title: t('ws_sel_new'),
+        subtitle: (t('ws_sel_new_subtitle') || '').replace('{root}', _wsSelState.projectsRoot || ''),
+        label: t('ws_sel_new_placeholder'),
+        hint: t('ws_sel_new_hint'),
+        icon: 'fa-folder-plus',
+        value: '',
+        validate: (v) => {
+            v = (v || '').trim();
+            if (!v) return t('ws_sel_name_required');
+            if (v.includes('/') || v.includes('\\')) return t('ws_sel_name_no_slash');
+            return '';
+        },
+        onSubmit: async (name) => {
+            const ok = await _wsSelApply('/api/projects/create', { session: sessionId, name: name.trim() });
+            return ok ? true : null;
+        },
+    });
+}
+
+// Shared apply path for select/create: POST, update label, then reveal the
+// project in the right-hand file panel so the user sees they are "inside" it.
+async function _wsSelApply(url, body) {
+    try {
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (data.status !== 'success') { _wsToast(data.message || 'failed'); return false; }
+        _wsSelState.current = data.current || null;
+        if (Array.isArray(data.recents)) _wsSelState.recents = data.recents;
+        if (data.default_workspace) _wsSelState.defaultWorkspace = data.default_workspace;
+        _wsSelUpdateLabel();
+        _wsSelRevealFiles();
+        return true;
+    } catch (e) { _wsToast(String(e.message || e)); return false; }
+}
+
+// Open (or refresh) the right-hand file panel on the Files tab so the newly
+// selected project's directory is visible.
+function _wsSelRevealFiles() {
+    try {
+        if (typeof openWorkspacePanel === 'function') {
+            wsAutoOpenSuppressed = false;
+            // Reset to the root of the new workspace before opening.
+            if (typeof wsCurrentDir !== 'undefined') wsCurrentDir = '';
+            openWorkspacePanel('files');
+        }
+        if (typeof refreshWorkspaceTree === 'function') refreshWorkspaceTree();
+    } catch (e) { /* panel not present on this view */ }
+}
+
+// Kept for callers that select without a dialog (default / recents).
+async function selectWorkspaceProject(projectDir) {
+    _wsSelHide();
+    await _wsSelApply('/api/projects/select', { session: sessionId, project_dir: projectDir });
+}
+
+document.addEventListener('click', (e) => {
+    const menu = _wsSelMenu();
+    const btn = _wsSelBtn();
+    if (!menu || menu.classList.contains('hidden')) return;
+    if (menu.contains(e.target) || (btn && btn.contains(e.target))) return;
+    _wsSelHide();
 });
 
 // Drag-and-drop support on entire chat view
@@ -4381,6 +4694,8 @@ function newChat(optimistic = true) {
     // Generate a fresh session and persist it so the next page load also starts clean
     sessionId = generateSessionId();
     localStorage.setItem(SESSION_ID_KEY, sessionId);
+    refreshWorkspaceSelector();  // a fresh session starts on the default workspace
+    if (typeof wsOnSessionSwitch === 'function') wsOnSessionSwitch();
     resetSendBtnSendMode();  // fresh session has no in-flight reply
     startPolling();  // bump generation so old loop self-cancels, new loop uses fresh sessionId
     messagesDiv.innerHTML = '';
@@ -4807,6 +5122,9 @@ function switchSession(newSessionId) {
     sessionId = newSessionId;
     updateEditButtonsState();
     localStorage.setItem(SESSION_ID_KEY, sessionId);
+    refreshWorkspaceSelector();
+    // Reset the file/preview panel so it reflects the new session's root.
+    if (typeof wsOnSessionSwitch === 'function') wsOnSessionSwitch();
 
     historyPage = 0;
     historyHasMore = false;
@@ -9952,6 +10270,7 @@ function initApp() {
     applyI18n();
     _applyInputTooltips();
     _restoreSessionPanel();
+    refreshWorkspaceSelector();
 
     fetch('/api/knowledge/list').then(r => r.json()).then(data => {
         if (data.status === 'success') {

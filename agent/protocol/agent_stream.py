@@ -457,7 +457,17 @@ class AgentStreamExecutor:
 
         from agent.protocol.artifact import safe_build_artifact
 
-        artifact = safe_build_artifact(path)
+        # Anchor artifact detection to the session's working dir. In project mode
+        # this is the project dir, so files written there surface as cards; the
+        # default state_root is used when no project is open.
+        art_root = None
+        try:
+            eff = getattr(self.agent, "effective_cwd", None)
+            if callable(eff):
+                art_root = eff()
+        except Exception:
+            art_root = None
+        artifact = safe_build_artifact(path, art_root)
         if not artifact:
             return
         if artifact["path"] in self._emitted_artifacts:

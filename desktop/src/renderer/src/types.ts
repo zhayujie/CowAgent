@@ -191,6 +191,27 @@ export interface WorkspaceTree {
   truncated: boolean
 }
 
+// ============================================================
+// Project workspace (per-session working directory)
+// ============================================================
+
+/** A project directory the user can point a session at. */
+export interface ProjectRef {
+  path: string
+  name: string
+  /** Unix seconds of last use; present on recents. */
+  ts?: number
+}
+
+/** Project picker state for a session (from /api/projects). */
+export interface ProjectState {
+  /** null when the session uses the default workspace (~/cow). */
+  current: ProjectRef | null
+  default_workspace: string
+  projects_root?: string
+  recents: ProjectRef[]
+}
+
 /** A user-facing file the agent wrote during a turn. */
 export interface Artifact {
   abs_path: string

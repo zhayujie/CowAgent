@@ -281,13 +281,25 @@ def _execute_agent_task(task: dict, agent_bridge, agent_id: str = None) -> bool:
             logger.warning(f"[Scheduler] Task {task['id']}: DingTalk channel does not support scheduled messages (Stream mode limitation). Task will execute but message cannot be sent.")
         
         logger.info(f"[Scheduler] Task {task['id']}: Executing agent task '{task_description}'")
-        
+
+        # Wrap the raw description with an execution directive. The stored
+        # description is often phrased as a rule ("every day at 08:00 send...").
+        # Without this prefix the agent may treat it as a spec to acknowledge
+        # instead of a task to run right now, especially after a mid-run failure.
+        execution_prompt = (
+            "这是一个定时任务的立即执行请求，当前已到执行时刻。"
+            "请直接完成下面描述的任务并产出最终交付内容，"
+            "无需复述、确认或讨论任务规则，不要输出任务指令或调试信息。"
+            "若执行失败，返回简洁明确的失败说明。\n\n"
+            f"任务描述：\n{task_description}"
+        )
+
         # Create a unique session_id for this scheduled task to avoid polluting user's conversation
         # Format: scheduler_<receiver>_<task_id> to ensure isolation
         scheduler_session_id = f"scheduler_{receiver}_{task['id']}"
         
         # Create context for Agent
-        context = Context(ContextType.TEXT, task_description)
+        context = Context(ContextType.TEXT, execution_prompt)
         context["receiver"] = receiver
         context["isgroup"] = is_group
         context["session_id"] = scheduler_session_id
@@ -317,7 +329,7 @@ def _execute_agent_task(task: dict, agent_bridge, agent_id: str = None) -> bool:
         
         try:
             # Don't clear history - scheduler tasks use isolated session_id so they won't pollute user conversations
-            reply = agent_bridge.agent_reply(task_description, context=context, on_event=None, clear_history=False)
+            reply = agent_bridge.agent_reply(execution_prompt, context=context, on_event=None, clear_history=False)
 
             if not (reply and reply.content):
                 # Empty is a valid outcome: the task ran and decided there was

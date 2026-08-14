@@ -436,8 +436,23 @@
                     <!-- Chat Input -->
                     <div class="flex-shrink-0 border-t border-slate-200 dark:border-white/10 bg-white dark:bg-[#1A1A1A] px-4 py-3">
                         <div class="max-w-3xl mx-auto">
-                            <!-- Attachment preview bar -->
-                            <div id="attachment-preview" class="attachment-preview hidden"></div>
+                            <!-- Workspace selector + attachment preview share one row -->
+                            <div class="ws-attach-row flex items-center gap-2 relative">
+                                <button id="workspace-selector-btn" type="button"
+                                        onclick="toggleWorkspaceSelector(event)"
+                                        class="flex-shrink-0 inline-flex items-center gap-1.5 pl-2 pr-2 py-0.5 rounded-lg
+                                               text-xs text-slate-500 dark:text-slate-400
+                                               hover:text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20
+                                               cursor-pointer transition-colors duration-150 max-w-[50%]"
+                                        data-tip-float data-tooltip-pos="top">
+                                    <i class="fas fa-folder-open text-[11px]"></i>
+                                    <span id="workspace-selector-label" class="truncate" data-i18n="ws_default_workspace">默认空间</span>
+                                    <i class="fas fa-chevron-down text-[9px] opacity-60"></i>
+                                </button>
+                                <div id="workspace-selector-menu" class="workspace-selector-menu hidden"></div>
+                                <!-- Attachment preview: grows to the right of the selector, scrolls horizontally -->
+                                <div id="attachment-preview" class="attachment-preview hidden"></div>
+                            </div>
                             <div class="flex items-center gap-2 relative">
                                 <div class="flex items-center flex-shrink-0">
                                     <button id="new-chat-btn" class="w-9 h-10 flex items-center justify-center rounded-lg
@@ -1318,6 +1333,38 @@
                 <button id="confirm-dialog-ok"
                         class="px-4 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white text-sm font-medium
                                cursor-pointer transition-colors duration-150"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Folder Picker Modal (open project) -->
+    <div id="folder-picker-overlay" class="fixed inset-0 bg-black/50 z-[200] hidden flex items-center justify-center">
+        <div class="bg-white dark:bg-[#1A1A1A] rounded-2xl border border-slate-200 dark:border-white/10 shadow-xl
+                    w-full max-w-lg mx-4 overflow-hidden flex flex-col" style="max-height:78vh;">
+            <div class="px-6 pt-6 pb-3">
+                <div class="flex items-center gap-3 mb-4">
+                    <div class="w-10 h-10 rounded-xl bg-primary-50 dark:bg-primary-900/20 flex items-center justify-center flex-shrink-0">
+                        <i class="fas fa-folder-open text-primary-500"></i>
+                    </div>
+                    <div class="min-w-0 flex-1">
+                        <h3 class="font-semibold text-slate-800 dark:text-slate-100 text-base" data-i18n="ws_sel_open">打开项目</h3>
+                        <p id="folder-picker-path" class="text-xs text-slate-500 dark:text-slate-400 mt-0.5 font-mono truncate"></p>
+                    </div>
+                </div>
+                <div id="folder-picker-toolbar" class="flex items-center gap-2 mb-2"></div>
+            </div>
+            <div id="folder-picker-list" class="flex-1 overflow-y-auto px-3 pb-2 min-h-[220px]"></div>
+            <div class="flex items-center justify-between gap-3 px-6 py-4 border-t border-slate-100 dark:border-white/5">
+                <span class="text-xs text-slate-400 dark:text-slate-500" id="folder-picker-hint"></span>
+                <div class="flex items-center gap-3">
+                    <button id="folder-picker-cancel"
+                            class="px-4 py-2 rounded-lg border border-slate-200 dark:border-white/10
+                                   text-slate-600 dark:text-slate-300 text-sm font-medium
+                                   hover:bg-slate-50 dark:hover:bg-white/5 cursor-pointer transition-colors duration-150"></button>
+                    <button id="folder-picker-open"
+                            class="px-4 py-2 rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-sm font-medium
+                                   cursor-pointer transition-colors duration-150"></button>
+                </div>
             </div>
         </div>
     </div>

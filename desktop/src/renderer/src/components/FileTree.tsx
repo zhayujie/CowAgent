@@ -13,7 +13,10 @@ const FileTree: React.FC = () => {
   const preview = useWorkspaceStore((s) => s.preview)
   const current = useWorkspaceStore((s) => s.current)
 
+  const sessionId = useWorkspaceStore((s) => s.sessionId)
+
   const [dir, setDir] = useState('')
+  const [root, setRoot] = useState('')
   const [entries, setEntries] = useState<WorkspaceEntry[]>([])
   const [truncated, setTruncated] = useState(false)
   const [query, setQuery] = useState('')
@@ -25,8 +28,9 @@ const FileTree: React.FC = () => {
     setLoading(true)
     setError(null)
     try {
-      const data = await apiClient.workspaceTree(path)
+      const data = await apiClient.workspaceTree(path, sessionId)
       setDir(data.path || '')
+      setRoot(data.root || '')
       setEntries(data.entries || [])
       setTruncated(!!data.truncated)
       setSearching(false)
@@ -35,7 +39,7 @@ const FileTree: React.FC = () => {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [sessionId])
 
   // Initial load, plus jumps requested elsewhere (e.g. clicking a directory
   // reference in a message). The counter also covers the case where the panel
@@ -59,7 +63,7 @@ const FileTree: React.FC = () => {
       setLoading(true)
       setError(null)
       try {
-        const data = await apiClient.workspaceSearch(query, 60)
+        const data = await apiClient.workspaceSearch(query, 60, sessionId)
         setEntries(data.results || [])
         setTruncated(false)
         setSearching(true)
@@ -108,9 +112,15 @@ const FileTree: React.FC = () => {
         <div className="flex items-center flex-wrap gap-0.5 px-3 pb-2 text-[11px] text-content-tertiary">
           <button
             onClick={() => loadDir('')}
-            className="inline-flex items-center px-1 py-0.5 rounded hover:bg-surface-2 hover:text-content cursor-pointer"
+            title={root}
+            className="inline-flex items-center gap-1 px-1 py-0.5 rounded hover:bg-surface-2 hover:text-content cursor-pointer min-w-0"
           >
-            <Home size={11} />
+            <Home size={11} className="shrink-0" />
+            {/* At the root, show the absolute root path so the user knows which
+                directory (project or ~/cow) the panel is anchored to. */}
+            {crumbs.length === 0 && root && (
+              <span className="truncate max-w-[240px]">{root}</span>
+            )}
           </button>
           {crumbs.map((part, i) => (
             <React.Fragment key={i}>

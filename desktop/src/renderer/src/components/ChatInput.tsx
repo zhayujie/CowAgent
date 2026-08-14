@@ -12,10 +12,13 @@ import {
 } from 'lucide-react'
 import { t } from '../i18n'
 import type { Attachment, WorkspaceEntry } from '../types'
+import { chatDraft } from '../store/draftStore'
 import apiClient from '../api/client'
 import { PaperPlaneIcon } from './icons'
 import { WORKSPACE_DRAG_TYPE } from './FileTree'
 import { iconFor, colorFor } from '../lib/fileKind'
+import WorkspaceSelector from './WorkspaceSelector'
+import Tooltip from './Tooltip'
 
 export type ChatInputHandle = (text: string, attachments: Attachment[]) => void
 
@@ -40,8 +43,11 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
   { onSend, onNewChat, onStop, onClearContext, isStreaming, sessionId },
   ref
 ) {
-  const [text, setText] = useState('')
-  const [attachments, setAttachments] = useState<Attachment[]>([])
+  // Restore the draft saved in `chatDraft` on mount (lazy init: the very first
+  // render must already show it, otherwise the write-through effect below would
+  // overwrite the saved draft with the initial empty state).
+  const [text, setText] = useState(() => chatDraft.text)
+  const [attachments, setAttachments] = useState(() => chatDraft.attachments)
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState('')
   const [dragOver, setDragOver] = useState(false)
@@ -104,6 +110,15 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     autoSize(textareaRef.current)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Write the input through to `chatDraft` on every change so it survives this
+  // component unmounting when the user navigates to another page (chat route
+  // unmounts ChatPage; see store/draftStore.ts). Sending clears the input, which
+  // therefore also clears the saved draft.
+  useEffect(() => {
+    chatDraft.text = text
+    chatDraft.attachments = attachments
+  }, [text, attachments])
 
   // Allow the parent to load a draft (e.g. when editing a past user message).
   useImperativeHandle(ref, () => (draft: string, atts: Attachment[]) => {
@@ -270,7 +285,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     mentionStartRef.current = e.target.selectionStart - match[1].length - 1
     mentionTimerRef.current = setTimeout(async () => {
       try {
-        const res = await apiClient.workspaceSearch(match[1], 12)
+        const res = await apiClient.workspaceSearch(match[1], 12, sessionId)
         if (mentionStartRef.current < 0) return
         setMentionItems(res.results || [])
         setMentionIndex(0)
@@ -509,76 +524,85 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
           </div>
         )}
 
-        {/* Attachment preview */}
-        {attachments.length > 0 && (
-          <div className="flex flex-wrap gap-2 mb-2">
-            {attachments.map((att, i) => (
-              <div key={i} className="relative">
-                {att.file_type === 'image' && att.preview_url ? (
-                  <div className="relative">
-                    <img
-                      src={apiClient.getFileUrl(att.preview_url)}
-                      alt={att.file_name}
-                      className="w-16 h-16 rounded-lg object-cover border border-default"
-                    />
-                    <button
-                      onClick={() => removeAttachment(i)}
-                      className="absolute -top-1 -right-1 w-[18px] h-[18px] rounded-full bg-danger text-white flex items-center justify-center cursor-pointer"
-                    >
-                      <X size={10} />
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-inset border border-default rounded-lg text-xs text-content-secondary max-w-[180px] relative pr-7">
-                    {att.file_type === 'workspace_ref' ? (
-                      att.is_dir ? (
-                        <Folder size={12} className="text-accent" />
+        {/* Workspace selector (always present) + attachment preview share a row.
+            The selector stays left; attachments grow to its right and scroll.
+            No bottom gap by default (selector sits snug above the input); add a
+            little breathing room only when attachments are shown. */}
+        <div className={`flex items-center gap-2 relative ${attachments.length > 0 ? 'mb-2' : 'mb-0.5'}`}>
+          <WorkspaceSelector sessionId={sessionId} />
+          {attachments.length > 0 && (
+            <div className="flex-1 min-w-0 flex items-center gap-2 overflow-x-auto overflow-y-visible">
+              {attachments.map((att, i) => (
+                <div key={i} className="relative shrink-0">
+                  {att.file_type === 'image' && att.preview_url ? (
+                    <div className="relative">
+                      <img
+                        src={apiClient.getFileUrl(att.preview_url)}
+                        alt={att.file_name}
+                        className="w-8 h-8 rounded-lg object-cover border border-default"
+                      />
+                      <button
+                        onClick={() => removeAttachment(i)}
+                        className="absolute top-0 right-0 w-3.5 h-3.5 rounded-full bg-danger text-white flex items-center justify-center cursor-pointer ring-1 ring-surface leading-none"
+                      >
+                        <X size={8} strokeWidth={2.5} />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5 pl-2 pr-1 py-1 bg-inset border border-default rounded-lg text-[11px] text-content-secondary max-w-[160px]">
+                      {att.file_type === 'workspace_ref' ? (
+                        att.is_dir ? (
+                          <Folder size={11} className="text-accent shrink-0" />
+                        ) : (
+                          <AtSign size={11} className="text-accent shrink-0" />
+                        )
                       ) : (
-                        <AtSign size={12} className="text-accent" />
-                      )
-                    ) : (
-                      <FileIcon size={12} />
-                    )}
-                    <span className="truncate" title={att.file_path}>
-                      {att.file_name}
-                    </span>
-                    <button
-                      onClick={() => removeAttachment(i)}
-                      className="absolute -top-1 -right-1 w-[18px] h-[18px] rounded-full bg-danger text-white flex items-center justify-center cursor-pointer"
-                    >
-                      <X size={10} />
-                    </button>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
+                        <FileIcon size={11} className="shrink-0" />
+                      )}
+                      <span className="truncate" title={att.file_path}>
+                        {att.file_name}
+                      </span>
+                      <button
+                        onClick={() => removeAttachment(i)}
+                        className="shrink-0 w-4 h-4 rounded flex items-center justify-center text-content-tertiary hover:text-danger hover:bg-danger-soft cursor-pointer"
+                      >
+                        <X size={11} strokeWidth={2.5} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         <div className="flex items-end gap-2">
           <div className="flex items-center flex-shrink-0 gap-0.5 pb-0.5">
-            <button
-              onClick={onNewChat}
-              className="w-9 h-9 flex items-center justify-center rounded-btn text-content-secondary hover:text-accent hover:bg-accent-soft cursor-pointer transition-colors"
-              title={t('session_new')}
-            >
-              <Plus size={18} />
-            </button>
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploading}
-              className="w-9 h-9 flex items-center justify-center rounded-btn text-content-secondary hover:text-accent hover:bg-accent-soft cursor-pointer transition-colors disabled:opacity-50"
-              title={t('chat_attach')}
-            >
-              {uploading ? <Loader2 size={18} className="animate-spin" /> : <Paperclip size={18} />}
-            </button>
-            <button
-              onClick={onClearContext}
-              className="w-9 h-9 flex items-center justify-center rounded-btn text-content-secondary hover:text-danger hover:bg-danger-soft cursor-pointer transition-colors"
-              title={t('chat_clear_context')}
-            >
-              <Trash2 size={18} />
-            </button>
+            <Tooltip label={t('session_new')}>
+              <button
+                onClick={onNewChat}
+                className="w-9 h-9 flex items-center justify-center rounded-btn text-content-secondary hover:text-accent hover:bg-accent-soft cursor-pointer transition-colors"
+              >
+                <Plus size={18} />
+              </button>
+            </Tooltip>
+            <Tooltip label={t('chat_attach')}>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                className="w-9 h-9 flex items-center justify-center rounded-btn text-content-secondary hover:text-accent hover:bg-accent-soft cursor-pointer transition-colors disabled:opacity-50"
+              >
+                {uploading ? <Loader2 size={18} className="animate-spin" /> : <Paperclip size={18} />}
+              </button>
+            </Tooltip>
+            <Tooltip label={t('chat_clear_context')}>
+              <button
+                onClick={onClearContext}
+                className="w-9 h-9 flex items-center justify-center rounded-btn text-content-secondary hover:text-danger hover:bg-danger-soft cursor-pointer transition-colors"
+              >
+                <Trash2 size={18} />
+              </button>
+            </Tooltip>
           </div>
           <input
             ref={fileInputRef}
@@ -603,22 +627,24 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
           />
 
           {isStreaming ? (
-            <button
-              onClick={onStop}
-              className="flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-btn bg-surface-2 text-content hover:bg-inset cursor-pointer transition-colors"
-              title={t('msg_stop')}
-            >
-              <Square size={15} className="fill-current" />
-            </button>
+            <Tooltip label={t('msg_stop')}>
+              <button
+                onClick={onStop}
+                className="flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-btn bg-surface-2 text-content hover:bg-inset cursor-pointer transition-colors"
+              >
+                <Square size={15} className="fill-current" />
+              </button>
+            </Tooltip>
           ) : (
-            <button
-              onClick={handleSubmit}
-              disabled={!canSend}
-              className="flex-shrink-0 w-[42px] h-[42px] flex items-center justify-center rounded-btn bg-accent text-white hover:bg-accent-hover disabled:bg-surface-2 disabled:text-content-disabled disabled:cursor-not-allowed cursor-pointer transition-none [&_*]:transition-none"
-              title={t('chat_send')}
-            >
-              <PaperPlaneIcon size={15} />
-            </button>
+            <Tooltip label={t('chat_send')}>
+              <button
+                onClick={handleSubmit}
+                disabled={!canSend}
+                className="flex-shrink-0 w-[42px] h-[42px] flex items-center justify-center rounded-btn bg-accent text-white hover:bg-accent-hover disabled:bg-surface-2 disabled:text-content-disabled disabled:cursor-not-allowed cursor-pointer transition-none [&_*]:transition-none"
+              >
+                <PaperPlaneIcon size={15} />
+              </button>
+            </Tooltip>
           )}
         </div>
       </div>

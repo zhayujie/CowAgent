@@ -54,7 +54,10 @@ class SchedulerTool(BaseTool):
             },
             "ai_task": {
                 "type": "string",
-                "description": "AI任务描述 (与message二选一)，用于定时让AI执行的任务"
+                "description": (
+                    "任务描述 (与message二选一)，描述到点时需要 Agent 执行的任务，例如执行什么操作、交付什么内容，"
+                    "无需重复声明调度时间（由 schedule 决定）。"
+                )
             },
             "schedule_type": {
                 "type": "string",

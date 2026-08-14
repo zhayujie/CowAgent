@@ -72,6 +72,14 @@ export class PythonBackend extends EventEmitter {
   private recovering = false
   private recoveryAttempts = 0
   private recoveryWindowStart = 0
+  // Append stream to run.log so the backend's OWN stdout/stderr is persisted by
+  // the shell too. The backend writes run.log itself once its Python logging is
+  // up — but a bootstrap crash (missing DLL, broken onedir after an update,
+  // antivirus block) dies BEFORE that, spilling the real cause only to stderr.
+  // We captured that stderr already, but never wrote it anywhere durable, so the
+  // "open log folder" button showed a stale run.log with no trace of the crash.
+  // Mirroring here closes that gap without touching the Python side.
+  private logStream: fs.WriteStream | null = null
 
   constructor(backendPath: string) {
     super()
@@ -110,6 +118,43 @@ export class PythonBackend extends EventEmitter {
     this.recentLogs.push(line)
     if (this.recentLogs.length > 80) {
       this.recentLogs.shift()
+    }
+  }
+
+  /**
+   * Open an append stream to <dataDir>/run.log so we can persist the backend's
+   * stdout/stderr from the shell side. This is the same file the backend writes
+   * once its Python logging initializes, and the same file the "open log folder"
+   * button reveals — so a bootstrap crash's stderr lands exactly where the user
+   * (and we) already look. Best-effort: any failure just disables mirroring.
+   */
+  private openLogStream(dataDir: string): void {
+    this.closeLogStream()
+    try {
+      fs.mkdirSync(dataDir, { recursive: true })
+      const logPath = path.join(dataDir, 'run.log')
+      // Append (not truncate): the backend appends to this same file, so we must
+      // not clobber its history, and interleaving is fine — both are line-based.
+      this.logStream = fs.createWriteStream(logPath, { flags: 'a' })
+      // A logging error must never crash the app; drop the stream instead.
+      this.logStream.on('error', () => {
+        this.logStream = null
+      })
+      const stamp = new Date().toISOString()
+      this.logStream.write(`\n[SHELL][${stamp}] --- launching backend (stdout/stderr mirrored below) ---\n`)
+    } catch {
+      this.logStream = null
+    }
+  }
+
+  private closeLogStream(): void {
+    if (this.logStream) {
+      try {
+        this.logStream.end()
+      } catch {
+        // ignore
+      }
+      this.logStream = null
     }
   }
 
@@ -527,6 +572,11 @@ export class PythonBackend extends EventEmitter {
     // Packaged app stores writable data in ~/.cow; dev keeps it in the repo.
     const dataDir = bundled ? COW_DATA_DIR : this.backendPath
 
+    // Start mirroring backend output to run.log before we spawn, so even an
+    // instant bootstrap crash (before Python logging is up) leaves its stderr
+    // in the file the user can open from the failure screen.
+    this.openLogStream(dataDir)
+
     // Always launch our OWN backend (re-entrancy is guarded above by the status
     // check, so we never double-spawn for this instance). We don't reuse
     // whatever happens to be on the port: that's how the app previously attached
@@ -593,7 +643,19 @@ export class PythonBackend extends EventEmitter {
     })
 
     const onOutput = (data: Buffer) => {
-      const lines = data.toString().split('\n').filter(Boolean)
+      const text = data.toString()
+      // Persist raw output to run.log first, so nothing is lost even if the
+      // per-line handling below throws. The backend already writes its own
+      // structured lines here once up; this captures the pre-logging bootstrap
+      // output (and anything it prints straight to stdout/stderr) as well.
+      if (this.logStream) {
+        try {
+          this.logStream.write(text)
+        } catch {
+          // ignore — logging must never break startup
+        }
+      }
+      const lines = text.split('\n').filter(Boolean)
       for (const line of lines) {
         this.recordLog(line)
         this.emit('log', line)
@@ -608,6 +670,13 @@ export class PythonBackend extends EventEmitter {
       // (code 0/null, e.g. our own stop()) just marks stopped.
       const wasReady = this.status === 'ready'
       this.status = 'stopped'
+      if (this.logStream) {
+        try {
+          this.logStream.write(`[SHELL][${new Date().toISOString()}] backend process exited with code ${code}\n`)
+        } catch {
+          // ignore
+        }
+      }
       this.emit('log', `Python process exited with code ${code}`)
       if (!wasReady && code !== 0 && code !== null) {
         this.status = 'error'
@@ -698,6 +767,7 @@ export class PythonBackend extends EventEmitter {
     // teardown and doesn't try to "recover" a process we just asked to die.
     this.shuttingDown = true
     this.stopHealthMonitor()
+    this.closeLogStream()
     const proc = this.process
     if (proc) {
       proc.kill('SIGTERM')

@@ -20,6 +20,7 @@ let wsTurnArtifacts = [];
 
 // File manager state
 let wsCurrentDir = '';
+let wsCurrentRoot = '';   // absolute path of the workspace/project root
 let wsSearchMode = false;
 let wsSearchTimer = null;
 
@@ -89,6 +90,15 @@ function wsFormatSize(bytes) {
 }
 
 async function wsApi(path) {
+    // Scope workspace reads to the current session so the file panel / @ picker /
+    // preview follow the session's opened project directory. `sessionId` is the
+    // global from console.js loaded on the same page.
+    try {
+        const sid = (typeof sessionId !== 'undefined') ? sessionId : '';
+        if (sid && path.startsWith('/api/workspace/')) {
+            path += (path.includes('?') ? '&' : '?') + 'session=' + encodeURIComponent(sid);
+        }
+    } catch (e) { /* sessionId not available yet */ }
     const res = await fetch(path);
     const data = await res.json();
     if (data.status !== 'success') throw new Error(data.message || 'Request failed');
@@ -611,6 +621,7 @@ async function loadWorkspaceDir(relPath) {
     try {
         const data = await wsApi(`/api/workspace/tree?path=${encodeURIComponent(relPath || '')}`);
         wsCurrentDir = data.path || '';
+        wsCurrentRoot = data.root || wsCurrentRoot;
         wsSearchMode = false;
         // Browsing leaves search mode; drop the stale query from the box.
         const searchBox = document.getElementById('ws-search-input');
@@ -627,7 +638,14 @@ function renderWorkspaceBreadcrumb(relPath) {
     const bar = document.getElementById('ws-breadcrumb');
     if (!bar) return;
     const parts = (relPath || '').split('/').filter(Boolean);
-    const crumbs = [`<span class="crumb" data-ws-dir=""><i class="fas fa-house"></i></span>`];
+    // At the root, show the root's absolute path beside the house so the user
+    // knows which directory the panel is anchored to. When navigated inside,
+    // the deeper crumbs already convey location, so the house stays icon-only.
+    const atRoot = parts.length === 0;
+    const rootLabel = atRoot && wsCurrentRoot
+        ? ` <span class="crumb-root">${escapeHtml(wsCurrentRoot)}</span>`
+        : '';
+    const crumbs = [`<span class="crumb" data-ws-dir="" data-tooltip="${escapeHtml(wsCurrentRoot || '')}"><i class="fas fa-house"></i>${rootLabel}</span>`];
     let acc = '';
     parts.forEach((p) => {
         acc = acc ? `${acc}/${p}` : p;
@@ -913,6 +931,24 @@ function relocalizeWorkspacePanel() {
     if (wsActiveTab === 'files' && !wsSearchMode
         && document.getElementById('ws-file-list')?.childElementCount) {
         loadWorkspaceDir(wsCurrentDir);
+    }
+}
+
+// Reset the panel when the active session changes. The file tree and preview
+// are scoped to a session's working dir (project or default), so stale state
+// from the previous session must be dropped and, if open, reloaded against the
+// new session's root.
+function wsOnSessionSwitch() {
+    wsCurrentDir = '';
+    wsCurrentRoot = '';
+    wsSearchMode = false;
+    wsCurrentFile = null;
+    wsTurnArtifacts = [];
+    if (!wsPanelOpen) return;
+    if (wsActiveTab === 'files') {
+        loadWorkspaceDir('');
+    } else {
+        wsSetPreviewEmpty(t('ws_preview_empty'));
     }
 }
 

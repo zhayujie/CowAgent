@@ -86,18 +86,37 @@ SAFETY:
         self.default_timeout = self.config.get("timeout", self.DEFAULT_TIMEOUT)
         # Enable safety mode by default (can be disabled in config)
         self.safety_mode = self.config.get("safety_mode", True)
+        # Keep the template with the {cwd} placeholder so the description can be
+        # re-rendered when the working directory changes (e.g. opening a project).
+        self._description_template = self.description
         # Desktop runs on the user's own machine (often non-technical users),
         # so require explicit confirmation for destructive ops outside the workspace.
         if os.environ.get("COW_DESKTOP") == "1":
-            self.description = self.description.replace(
+            self._description_template = self._description_template.replace(
                 "- For destructive commands out of workspace ({cwd}), explain and confirm first",
                 "- For delete or destructive operations on files out of workspace ({cwd}), "
                 "be cautious and confirm with the user before executing, unless the user explicitly requested it",
             )
         # Show the concrete workspace path so the model knows what "the workspace" is
-        self.description = self.description.replace(
-            "{cwd}", self.cwd
-        )
+        self.description = self._description_template.replace("{cwd}", self.cwd)
+
+    def set_cwd(self, cwd: str) -> None:
+        """Retarget the working directory and re-render the description.
+
+        Called when the session opens a project directory so both the execution
+        cwd and the path shown in the tool description follow the project.
+        """
+        if not cwd:
+            return
+        self.cwd = cwd
+        if not os.path.exists(self.cwd):
+            try:
+                os.makedirs(self.cwd, exist_ok=True)
+            except Exception:
+                pass
+        template = getattr(self, "_description_template", None)
+        if template:
+            self.description = template.replace("{cwd}", self.cwd)
 
     def execute(self, args: Dict[str, Any]) -> ToolResult:
         """

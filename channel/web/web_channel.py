@@ -288,8 +288,22 @@ def _get_upload_dir() -> str:
     return str(tmp_dir())
 
 
-def _get_workspace_root() -> str:
-    """Resolve the workspace of the Agent this request is routed to."""
+def _get_workspace_root(session_id: str = None, agent_id: str = None) -> str:
+    """Resolve the working directory for this request.
+
+    When a session has opened a project directory, that project is the working
+    directory the file panel / preview / ``@`` picker operate in. Otherwise it
+    is the Agent's workspace (``state_root``, e.g. ``~/cow``). Memory and skills
+    always stay in ``state_root`` regardless; only the working root moves.
+    """
+    if session_id:
+        try:
+            from agent.workspace import project_store
+            project_dir = project_store.get_project_dir(session_id, agent_id)
+            if project_dir:
+                return project_dir
+        except Exception as e:
+            logger.debug(f"[WebChannel] project_dir resolve failed: {e}")
     from common.state_dir import state_root_str
     return state_root_str()
 
@@ -358,12 +372,25 @@ def _decode_dir_token(token: str) -> str:
 
 
 def _serve_allowed_roots() -> list:
-    """Roots that /api/file and /preview may read from (symlinks resolved)."""
+    """Roots that /api/file and /preview may read from (symlinks resolved).
+
+    Includes the configured serve root, the Agent workspace, and any project
+    directory a session has opened. Project dirs may live outside the serve
+    root (e.g. ``/tmp/foo``), so previewing files in an opened project would
+    otherwise be denied.
+    """
     serve_root = conf().get("web_file_serve_root", "~") or "~"
-    return [
+    roots = [
         os.path.realpath(os.path.expanduser(serve_root)),
         os.path.realpath(_get_workspace_root()),
     ]
+    try:
+        from agent.workspace import project_store
+        for rec in project_store.list_recents():
+            roots.append(os.path.realpath(rec["path"]))
+    except Exception:
+        pass
+    return roots
 
 
 def _is_path_allowed(real_path: str) -> bool:
@@ -432,7 +459,7 @@ def _paths_written_by_step(step: dict) -> list:
     ]
 
 
-def _artifacts_from_steps(steps) -> list:
+def _artifacts_from_steps(steps, session_id: str = None, agent_id: str = None) -> list:
     """
     Rebuild the artifact cards of a persisted assistant message.
 
@@ -440,6 +467,9 @@ def _artifacts_from_steps(steps) -> list:
     Doing this server-side keeps one implementation of the workspace-internal
     filter — and lets absolute paths inside the workspace be recognised, which
     a client mirroring the rules can't do.
+
+    ``session_id`` anchors detection to the session's working dir (the project
+    dir when one is open), matching the live SSE path; otherwise state_root.
     """
     from agent.protocol.artifact import get_workspace_root, safe_build_artifact
 
@@ -451,7 +481,7 @@ def _artifacts_from_steps(steps) -> list:
             continue
         for path in _paths_written_by_step(step):
             if root is None:
-                root = get_workspace_root()
+                root = _get_workspace_root(session_id, agent_id) if session_id else get_workspace_root()
             info = safe_build_artifact(path, root)
             if not info or info["path"] in seen:
                 continue
@@ -1455,8 +1485,12 @@ class WebChannel(ChatChannel):
                         # or picked with @); reference it in place so the agent opens
                         # the original instead of an uploaded copy. Naming the kind
                         # tells the agent whether to `read` it or `ls` into it.
+                        # Resolve relative to the session's working root (project
+                        # dir when opened, else the workspace).
                         is_dir = os.path.isdir(
-                            os.path.join(_get_workspace_root(), fpath)
+                            os.path.join(
+                                _get_workspace_root(session_id, resolved_agent_id), fpath
+                            )
                         )
                         label = (
                             i18n.t('工作空间目录', 'Workspace directory') if is_dir
@@ -1925,6 +1959,10 @@ class WebChannel(ChatChannel):
             '/api/workspace/search', 'WorkspaceSearchHandler',
             '/api/workspace/resolve', 'WorkspaceResolveHandler',
             '/api/workspace/meta', 'WorkspaceMetaHandler',
+            '/api/projects', 'ProjectsHandler',
+            '/api/projects/select', 'ProjectSelectHandler',
+            '/api/projects/create', 'ProjectCreateHandler',
+            '/api/projects/browse', 'ProjectBrowseHandler',
             '/api/voice/asr', 'VoiceAsrHandler',
             '/api/voice/tts', 'VoiceTtsHandler',
             '/poll', 'PollHandler',
@@ -2599,6 +2637,7 @@ class ConfigHandler:
         web.header('Content-Type', 'application/json; charset=utf-8')
         try:
             from agent.subagent import SubagentSettings
+            from agent.evolution.config import get_evolution_config
 
             local_config = conf()
             use_agent = local_config.get("agent", True)
@@ -2681,9 +2720,9 @@ class ConfigHandler:
                 "enable_thinking": bool(local_config.get("enable_thinking", False)),
                 "reasoning_effort": local_config.get("reasoning_effort", "high"),
                 "reasoning_effort_by_model": local_config.get("reasoning_effort_by_model", {}),
-                "self_evolution_enabled": bool(local_config.get("self_evolution_enabled", False)),
                 # Read through the feature's own loader so the default it
                 # applies to an absent setting is the one shown here.
+                "self_evolution_enabled": get_evolution_config().enabled,
                 "subagent_enabled": SubagentSettings.from_config().enabled,
                 "api_bases": api_bases,
                 "api_keys": api_keys_masked,
@@ -5838,7 +5877,7 @@ class HistoryHandler:
                 if msg.get("role") != "assistant":
                     continue
                 _add_subagent_displays(msg.get("steps"))
-                artifacts = _artifacts_from_steps(msg.get("steps"))
+                artifacts = _artifacts_from_steps(msg.get("steps"), session_id)
                 if artifacts:
                     msg["artifacts"] = artifacts
             return json.dumps({"status": "success", **result}, ensure_ascii=False)
@@ -5977,9 +6016,29 @@ class AssetsHandler:
             raise web.notfound()
 
 
-def _workspace_service():
+def _workspace_service(session_id: str = None, agent_id: str = None):
     from agent.workspace.service import WorkspaceService
-    return WorkspaceService(_get_workspace_root())
+    return WorkspaceService(_get_workspace_root(session_id, agent_id))
+
+
+# System assets (memory / knowledge / persona files) always live in state_root,
+# never in a project dir. When a session has a project open, a relative ref to
+# one of these resolves against the project and misses; we fall back to the
+# system directory so preview/@ still work.
+_SYSTEM_ASSET_PREFIXES = ("memory/", "memory\\", "knowledge/", "knowledge\\")
+_SYSTEM_ASSET_FILES = ("MEMORY.md", "AGENT.md", "USER.md", "RULE.md")
+
+
+def _is_system_asset_rel(rel_path: str) -> bool:
+    """True if a relative path points at a state_root-anchored system asset."""
+    p = (rel_path or "").lstrip("./")
+    return p in _SYSTEM_ASSET_FILES or p.startswith(_SYSTEM_ASSET_PREFIXES)
+
+
+def _system_workspace_service():
+    from agent.workspace.service import WorkspaceService
+    from common.state_dir import state_root_str
+    return WorkspaceService(state_root_str())
 
 
 def _decorate_entry(svc, entry: dict) -> dict:
@@ -5998,8 +6057,8 @@ class WorkspaceTreeHandler:
         _require_auth()
         web.header('Content-Type', 'application/json; charset=utf-8')
         try:
-            params = web.input(path='', show_hidden='')
-            svc = _workspace_service()
+            params = web.input(path='', show_hidden='', session='', agent='')
+            svc = _workspace_service(params.session or None, params.agent or None)
             result = svc.list_dir(params.path, show_hidden=params.show_hidden == '1')
             result["entries"] = [_decorate_entry(svc, e) for e in result["entries"]]
             return json.dumps({"status": "success", **result}, ensure_ascii=False)
@@ -6015,12 +6074,12 @@ class WorkspaceSearchHandler:
         _require_auth()
         web.header('Content-Type', 'application/json; charset=utf-8')
         try:
-            params = web.input(q='', limit='30')
+            params = web.input(q='', limit='30', session='', agent='')
             try:
                 limit = max(1, min(100, int(params.limit)))
             except (TypeError, ValueError):
                 limit = 30
-            svc = _workspace_service()
+            svc = _workspace_service(params.session or None, params.agent or None)
             result = svc.search(params.q, limit=limit)
             result["results"] = [_decorate_entry(svc, e) for e in result["results"]]
             return json.dumps({"status": "success", **result}, ensure_ascii=False)
@@ -6042,12 +6101,12 @@ class WorkspaceResolveHandler:
         web.header('Content-Type', 'application/json; charset=utf-8')
         try:
             from agent.protocol.artifact import classify_kind, is_previewable
-            params = web.input(path='')
+            params = web.input(path='', session='', agent='')
             raw_path = (params.path or '').strip()
             if not raw_path:
                 return json.dumps({"status": "error", "message": "path is required"})
 
-            svc = _workspace_service()
+            svc = _workspace_service(params.session or None, params.agent or None)
             if os.path.isabs(os.path.expanduser(raw_path)):
                 abs_path = os.path.realpath(os.path.expanduser(raw_path))
                 if not _is_path_allowed(abs_path):
@@ -6067,7 +6126,15 @@ class WorkspaceResolveHandler:
                     "mtime": os.path.getmtime(abs_path),
                 }
             else:
-                entry = svc.stat_file(raw_path)
+                try:
+                    entry = svc.stat_file(raw_path)
+                except FileNotFoundError:
+                    # Memory/knowledge live in state_root, not the project. Retry
+                    # there so their cards still preview when a project is open.
+                    if _is_system_asset_rel(raw_path):
+                        entry = _system_workspace_service().stat_file(raw_path)
+                    else:
+                        raise
 
             # A directory has nothing to serve; the client browses into it.
             if not entry["is_dir"]:
@@ -6086,9 +6153,164 @@ class WorkspaceMetaHandler:
         _require_auth()
         web.header('Content-Type', 'application/json; charset=utf-8')
         try:
-            return json.dumps({"status": "success", **_workspace_service().meta()}, ensure_ascii=False)
+            params = web.input(session='', agent='')
+            svc = _workspace_service(params.session or None, params.agent or None)
+            return json.dumps({"status": "success", **svc.meta()}, ensure_ascii=False)
         except Exception as e:
             logger.error(f"[WebChannel] Workspace meta error: {e}")
+            return json.dumps({"status": "error", "message": str(e)})
+
+
+def _project_state(session_id: str, agent_id: str = None) -> dict:
+    """Assemble the project picker state: current selection + recents + root."""
+    from agent.workspace import project_store
+    from common.state_dir import state_root_str
+
+    current = project_store.get_project_dir(session_id, agent_id) if session_id else None
+    return {
+        "current": (
+            {"path": current, "name": os.path.basename(current) or current}
+            if current else None
+        ),
+        "default_workspace": state_root_str(),
+        "projects_root": project_store.projects_root(),
+        "recents": project_store.list_recents(),
+    }
+
+
+class ProjectsHandler:
+    """List the project picker state for a session (current + recents)."""
+
+    def GET(self):
+        _require_auth()
+        web.header('Content-Type', 'application/json; charset=utf-8')
+        try:
+            params = web.input(session='', agent='')
+            state = _project_state(params.session or None, params.agent or None)
+            return json.dumps({"status": "success", **state}, ensure_ascii=False)
+        except Exception as e:
+            logger.error(f"[WebChannel] Projects list error: {e}")
+            return json.dumps({"status": "error", "message": str(e)})
+
+
+class ProjectSelectHandler:
+    """Bind a session to a project directory, or clear it (project_dir=null)."""
+
+    def POST(self):
+        _require_auth()
+        web.header('Content-Type', 'application/json; charset=utf-8')
+        try:
+            from agent.workspace import project_store
+            body = json.loads(web.data() or b"{}")
+            session_id = (body.get("session") or body.get("session_id") or "").strip()
+            agent_id = body.get("agent") or body.get("agent_id")
+            if not session_id:
+                return json.dumps({"status": "error", "message": "session is required"})
+            project_dir = body.get("project_dir")
+            applied = project_store.set_project_dir(
+                session_id, project_dir or None, agent_id
+            )
+            # Retarget an already-instantiated session agent immediately, so the
+            # change takes effect on the next message without a fresh get_agent.
+            try:
+                from bridge.bridge import Bridge
+                ab = Bridge().get_agent_bridge()
+                agent = ab.get_cached_agent(session_id, agent_id)
+                if agent is not None and getattr(agent, "apply_project_dir", None):
+                    agent.apply_project_dir(applied)
+            except Exception as e:
+                logger.debug(f"[WebChannel] project apply-to-agent skipped: {e}")
+            state = _project_state(session_id, agent_id)
+            return json.dumps({"status": "success", **state}, ensure_ascii=False)
+        except (ValueError, FileNotFoundError) as e:
+            return json.dumps({"status": "error", "message": str(e)})
+        except Exception as e:
+            logger.error(f"[WebChannel] Project select error: {e}")
+            return json.dumps({"status": "error", "message": str(e)})
+
+
+class ProjectCreateHandler:
+    """Create a new project folder under the projects root and select it."""
+
+    def POST(self):
+        _require_auth()
+        web.header('Content-Type', 'application/json; charset=utf-8')
+        try:
+            from agent.workspace import project_store
+            body = json.loads(web.data() or b"{}")
+            session_id = (body.get("session") or body.get("session_id") or "").strip()
+            agent_id = body.get("agent") or body.get("agent_id")
+            name = (body.get("name") or "").strip()
+            if not name:
+                return json.dumps({"status": "error", "message": "name is required"})
+            path = project_store.create_project(name)
+            if session_id:
+                project_store.set_project_dir(session_id, path, agent_id)
+                try:
+                    from bridge.bridge import Bridge
+                    ab = Bridge().get_agent_bridge()
+                    agent = ab.get_cached_agent(session_id, agent_id)
+                    if agent is not None and getattr(agent, "apply_project_dir", None):
+                        agent.apply_project_dir(path)
+                except Exception as e:
+                    logger.debug(f"[WebChannel] project apply-to-agent skipped: {e}")
+            state = _project_state(session_id or None, agent_id)
+            return json.dumps({"status": "success", "path": path, **state}, ensure_ascii=False)
+        except (ValueError, FileExistsError) as e:
+            return json.dumps({"status": "error", "message": str(e)})
+        except Exception as e:
+            logger.error(f"[WebChannel] Project create error: {e}")
+            return json.dumps({"status": "error", "message": str(e)})
+
+
+class ProjectBrowseHandler:
+    """List sub-directories of a path, for the "open project" folder picker.
+
+    Directories only (files are irrelevant when choosing a project root). The
+    starting point defaults to the projects root; the parent is included so the
+    user can navigate upward.
+    """
+
+    def GET(self):
+        _require_auth()
+        web.header('Content-Type', 'application/json; charset=utf-8')
+        try:
+            from common.utils import expand_path
+            params = web.input(path='')
+            raw = (params.path or '').strip()
+            # Default entry point is the user's home (~), a familiar anchor for
+            # picking a project directory.
+            base = os.path.realpath(expand_path(raw)) if raw else os.path.realpath(os.path.expanduser("~"))
+            if not os.path.isdir(base):
+                base = os.path.realpath(os.path.expanduser("~"))
+
+            dirs = []
+            try:
+                with os.scandir(base) as it:
+                    for entry in it:
+                        if entry.name.startswith("."):
+                            continue
+                        try:
+                            if entry.is_dir(follow_symlinks=False):
+                                dirs.append({
+                                    "name": entry.name,
+                                    "path": os.path.join(base, entry.name),
+                                })
+                        except OSError:
+                            continue
+            except PermissionError:
+                return json.dumps({"status": "error", "message": "permission denied"})
+
+            dirs.sort(key=lambda d: d["name"].lower())
+            parent = os.path.dirname(base)
+            return json.dumps({
+                "status": "success",
+                "path": base,
+                "parent": parent if parent != base else None,
+                "dirs": dirs,
+            }, ensure_ascii=False)
+        except Exception as e:
+            logger.error(f"[WebChannel] Project browse error: {e}")
             return json.dumps({"status": "error", "message": str(e)})
 
 
