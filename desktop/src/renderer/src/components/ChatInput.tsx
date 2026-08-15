@@ -8,7 +8,8 @@ import {
   Loader2,
   Trash2,
   AtSign,
-  Folder
+  Folder,
+  Mic
 } from 'lucide-react'
 import { t } from '../i18n'
 import type { Attachment, WorkspaceEntry } from '../types'
@@ -21,6 +22,12 @@ import WorkspaceSelector from './WorkspaceSelector'
 import Tooltip from './Tooltip'
 
 export type ChatInputHandle = (text: string, attachments: Attachment[]) => void
+
+// Voice input needs MediaRecorder + getUserMedia; hide the mic when absent.
+const micSupported =
+  typeof navigator !== 'undefined' &&
+  !!navigator.mediaDevices?.getUserMedia &&
+  typeof window.MediaRecorder !== 'undefined'
 
 interface SlashCommand {
   cmd: string
@@ -61,6 +68,135 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
   const composingRef = useRef(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Voice input: record via MediaRecorder, transcribe via the configured ASR
+  // provider (same flow as the web console's mic button).
+  const [micState, setMicState] = useState<'idle' | 'recording' | 'busy'>('idle')
+  const [micError, setMicError] = useState('')
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const streamRef = useRef<MediaStream | null>(null)
+  const chunksRef = useRef<Blob[]>([])
+  const micStartedAtRef = useRef(0)
+  const micErrorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const pickMicMimeType = () => {
+    const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4']
+    for (const m of candidates) {
+      if (window.MediaRecorder.isTypeSupported?.(m)) return m
+    }
+    return ''
+  }
+
+  const flashMicError = (msg: string) => {
+    setMicError(msg)
+    if (micErrorTimerRef.current) clearTimeout(micErrorTimerRef.current)
+    micErrorTimerRef.current = setTimeout(() => setMicError(''), 2500)
+  }
+
+  const stopMicStream = () => {
+    streamRef.current?.getTracks().forEach((tr) => tr.stop())
+    streamRef.current = null
+  }
+
+  const uploadRecording = async (blob: Blob) => {
+    setMicState('busy')
+    try {
+      const res = await apiClient.voiceAsr(blob)
+      if (res.status === 'success' && res.text) {
+        const recognized = res.text
+        // Fill the recognized text into the input for the user to review and send.
+        setText((prev) => (prev ? (prev.endsWith(' ') ? prev : prev + ' ') + recognized : recognized))
+        requestAnimationFrame(() => {
+          const el = textareaRef.current
+          if (el) {
+            el.focus()
+            el.selectionStart = el.selectionEnd = el.value.length
+            autoSize(el)
+          }
+        })
+      } else {
+        flashMicError(res.message || t('mic_error'))
+      }
+    } catch (e) {
+      flashMicError(`${t('mic_error')}: ${(e as Error).message}`)
+    } finally {
+      setMicState('idle')
+    }
+  }
+
+  const startRecording = async () => {
+    let stream: MediaStream
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    } catch {
+      flashMicError(t('mic_permission_denied'))
+      return
+    }
+    streamRef.current = stream
+    chunksRef.current = []
+    const mimeType = pickMicMimeType()
+    let recorder: MediaRecorder
+    try {
+      recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream)
+    } catch (e) {
+      stopMicStream()
+      flashMicError(`${t('mic_error')}: ${(e as Error).message}`)
+      return
+    }
+    mediaRecorderRef.current = recorder
+    recorder.ondataavailable = (ev) => {
+      if (ev.data && ev.data.size > 0) chunksRef.current.push(ev.data)
+    }
+    recorder.onstop = () => {
+      stopMicStream()
+      const blob = new Blob(chunksRef.current, { type: recorder.mimeType || 'audio/webm' })
+      // 256 bytes ≈ container header only — treat as an accidental tap.
+      if (blob.size < 256) {
+        setMicState('idle')
+        flashMicError(t('mic_too_short'))
+        return
+      }
+      uploadRecording(blob)
+    }
+    // timeslice=250ms: flush a chunk every 250ms so very short taps aren't lost.
+    recorder.start(250)
+    micStartedAtRef.current = Date.now()
+    setMicState('recording')
+  }
+
+  const stopRecording = () => {
+    const recorder = mediaRecorderRef.current
+    if (!recorder || recorder.state === 'inactive') return
+    // Give the recorder a moment to capture at least one chunk on quick taps.
+    const elapsed = Date.now() - micStartedAtRef.current
+    const minMs = 350
+    if (elapsed < minMs) {
+      setTimeout(() => {
+        if (recorder.state !== 'inactive') recorder.stop()
+      }, minMs - elapsed)
+    } else {
+      recorder.stop()
+    }
+  }
+
+  const toggleMic = () => {
+    if (micState === 'recording') stopRecording()
+    else if (micState === 'idle') startRecording()
+  }
+
+  // Release the mic and timers when the chat page unmounts.
+  useEffect(() => {
+    return () => {
+      const recorder = mediaRecorderRef.current
+      if (recorder && recorder.state !== 'inactive') {
+        recorder.onstop = null
+        recorder.stop()
+      }
+      stopMicStream()
+      if (micErrorTimerRef.current) clearTimeout(micErrorTimerRef.current)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Local actions ('new'/'clear') plus completion commands handled by backend
   // command plugins (cow_cli/godcmd). Commands ending with a space expect an
@@ -468,6 +604,14 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
           </div>
         )}
 
+        {micError && (
+          // Transient error tip above the input's right edge (over the mic),
+          // mirroring the web console's mic tip.
+          <div className="absolute right-0 bottom-full mb-2 px-2 py-1 rounded-md text-xs text-white bg-black/80 dark:bg-white/20 shadow-md pointer-events-none whitespace-nowrap z-10">
+            {micError}
+          </div>
+        )}
+
         {/* Slash command menu */}
         {slashOpen && filtered.length > 0 && (
           <div className="absolute bottom-full left-0 right-0 mb-1.5 max-h-80 overflow-y-auto rounded-xl border border-default bg-elevated shadow-xl z-30 p-1.5">
@@ -612,19 +756,57 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
             onChange={handleFileSelect}
           />
 
-          <textarea
-            ref={textareaRef}
-            id="chat-input"
-            value={text}
-            onChange={handleTextChange}
-            onKeyDown={handleKeyDown}
-            onPaste={handlePaste}
-            onCompositionStart={() => (composingRef.current = true)}
-            onCompositionEnd={() => (composingRef.current = false)}
-            placeholder={t('input_placeholder')}
-            rows={1}
-            className="flex-1 min-w-0 px-4 py-[10px] rounded-xl border border-strong bg-inset text-content placeholder:text-content-tertiary focus:outline-none focus:border-accent text-sm leading-relaxed transition-colors resize-none overflow-y-hidden"
-          />
+          {/* flex items-center mirrors the web console's input wrapper: a plain
+              block div would grow past the textarea (inline-block baseline
+              gap) and throw the overlaid mic button off vertical center. */}
+          <div className="relative flex-1 min-w-0 flex items-center">
+            <textarea
+              ref={textareaRef}
+              id="chat-input"
+              value={text}
+              onChange={handleTextChange}
+              onKeyDown={handleKeyDown}
+              onPaste={handlePaste}
+              onCompositionStart={() => (composingRef.current = true)}
+              onCompositionEnd={() => (composingRef.current = false)}
+              placeholder={t('input_placeholder')}
+              rows={1}
+              // Right padding leaves room for the mic button overlaid inside
+              // the input (same layout as the web console's chat.html).
+              className="w-full pl-4 pr-10 py-[10px] rounded-xl border border-strong bg-inset text-content placeholder:text-content-tertiary focus:outline-none focus:border-accent text-sm leading-relaxed transition-colors resize-none overflow-y-hidden"
+            />
+            {micSupported && (
+              <Tooltip
+                label={
+                  micState === 'recording'
+                    ? t('mic_recording_title')
+                    : micState === 'busy'
+                      ? t('mic_busy_title')
+                      : t('mic_idle_title')
+                }
+              >
+                <button
+                  onClick={toggleMic}
+                  disabled={micState === 'busy'}
+                  className={`absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center rounded-btn cursor-pointer transition-colors disabled:cursor-not-allowed ${
+                    micState === 'recording'
+                      ? 'text-red-500 animate-pulse hover:text-red-600'
+                      : micState === 'busy'
+                        ? 'text-accent'
+                        : 'text-content-tertiary hover:text-accent hover:bg-accent-soft'
+                  }`}
+                >
+                  {micState === 'recording' ? (
+                    <Square size={12} className="fill-current" />
+                  ) : micState === 'busy' ? (
+                    <Loader2 size={16} className="animate-spin" />
+                  ) : (
+                    <Mic size={16} />
+                  )}
+                </button>
+              </Tooltip>
+            )}
+          </div>
 
           {isStreaming ? (
             <Tooltip label={t('msg_stop')}>

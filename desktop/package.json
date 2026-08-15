@@ -79,6 +79,9 @@
       "entitlementsInherit": "build/entitlements.mac.plist",
       "notarize": false,
       "artifactName": "${productName}-${version}-${arch}.${ext}",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Used for voice input in chat: record a short clip and transcribe it via the configured speech recognition provider."
+      },
       "target": [
         "dmg",
         "zip"

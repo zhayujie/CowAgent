@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell, ipcMain, dialog, nativeImage, Notification } from 'electron'
+import { app, BrowserWindow, session, shell, ipcMain, dialog, nativeImage, Notification } from 'electron'
 import path from 'path'
 import fs from 'fs'
 import http from 'http'
@@ -371,6 +371,12 @@ app.whenReady().then(async () => {
       console.warn('[Electron] Dock icon not found in resources/')
     }
   }
+
+  // The chat input's voice recording uses getUserMedia. Approval of media
+  // permission requests isn't guaranteed without an explicit handler across
+  // Electron versions/platforms, so allow them; other permission types keep
+  // the same default allow behavior the app had without a handler.
+  session.defaultSession.setPermissionRequestHandler((_wc, _permission, callback) => callback(true))
 
   setupIPC()
   setupThemeIPC()

@@ -478,7 +478,18 @@ class ApiClient {
 
   async voiceAsr(audio: File | Blob): Promise<{ status: string; text?: string; audio_url?: string; message?: string }> {
     const formData = new FormData()
-    formData.append('file', audio, 'recording.webm')
+    // Match the file suffix to the actual container so the backend picks the
+    // right extension (mirrors the web console's mic upload).
+    const extByMime: Record<string, string> = {
+      'audio/webm': 'webm',
+      'audio/ogg': 'ogg',
+      'audio/mp4': 'm4a',
+      'audio/mpeg': 'mp3',
+    }
+    const mime = (audio.type || '').split(';')[0]
+    const name =
+      audio instanceof File && audio.name ? audio.name : `recording.${extByMime[mime] || 'webm'}`
+    formData.append('file', audio, name)
     return this.postFormData('/api/voice/asr', formData)
   }
 

@@ -3580,21 +3580,31 @@ class ModelsHandler:
                 if key_field and cls._is_real_key(local_config.get(key_field, "")):
                     suggested = pid
                     break
+        # Custom (OpenAI-compatible) vendors are selectable too — same pattern
+        # as _vision_capability: each expanded custom:<id> gets an entry.
+        providers = list(cls._ASR_PROVIDERS)
+        custom_cards = cls._custom_provider_cards(local_config)
+        if custom_cards:
+            providers.extend(c["id"] for c in custom_cards)
         return {
             "editable": True,
             "current_provider": explicit,
             "suggested_provider": suggested,
             "current_model": (local_config.get("voice_to_text_model") or "") if explicit else "",
-            "providers": cls._ASR_PROVIDERS,
+            "providers": providers,
             "provider_models": cls._ASR_PROVIDER_MODELS,
         }
 
     @classmethod
     def _tts_capability(cls, local_config: dict) -> dict:
         explicit = (local_config.get("text_to_voice") or "").strip().lower()
-        # Providers outside the white-list don't drive the picker, but their
-        # underlying runtime config is preserved so bridge still routes them.
-        ui_provider = explicit if explicit in cls._TTS_PROVIDERS else ""
+        # Custom (OpenAI-compatible) vendors are selectable too; accept them
+        # (expanded custom:<id> or legacy flat "custom") as the current
+        # provider so the card shows the saved selection. Other providers
+        # outside the white-list don't drive the picker, but their underlying
+        # runtime config is preserved so bridge still routes them.
+        is_custom_id = explicit.startswith("custom:") or explicit == "custom"
+        ui_provider = explicit if (explicit in cls._TTS_PROVIDERS or is_custom_id) else ""
         suggested = ""
         if not ui_provider:
             for pid in cls._TTS_PROVIDERS:
@@ -3603,13 +3613,17 @@ class ModelsHandler:
                 if key_field and cls._is_real_key(local_config.get(key_field, "")):
                     suggested = pid
                     break
+        providers = list(cls._TTS_PROVIDERS)
+        custom_cards = cls._custom_provider_cards(local_config)
+        if custom_cards:
+            providers.extend(c["id"] for c in custom_cards)
         return {
             "editable": True,
             "current_provider": ui_provider,
             "suggested_provider": suggested,
             "current_model": (local_config.get("text_to_voice_model") or "") if ui_provider else "",
             "current_voice": (local_config.get("tts_voice_id") or "") if ui_provider else "",
-            "providers": cls._TTS_PROVIDERS,
+            "providers": providers,
             "provider_models": cls._TTS_PROVIDER_MODELS,
             "provider_voices": cls._TTS_PROVIDER_VOICES,
             "reply_mode": cls._tts_reply_mode(local_config),

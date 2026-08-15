@@ -192,6 +192,59 @@ class TestModelsHandler(unittest.TestCase):
         self.assertIn("provider_models", cap)
         self.assertIn("dashscope", cap["provider_models"])
 
+    def test_asr_capability_includes_custom_providers(self):
+        from channel.web.web_channel import ModelsHandler
+
+        custom_conf = {"custom_providers": [
+            {"id": "abc12345", "name": "MyVendor", "api_key": "sk-test-1234567890",
+             "api_base": "https://my.vendor/v1"},
+        ]}
+        with patch("models.custom_provider.conf", return_value=custom_conf):
+            cap = ModelsHandler._asr_capability({
+                "voice_to_text": "custom:abc12345",
+                "voice_to_text_model": "fun-asr-large",
+            })
+
+        # The expanded custom:<id> entry is selectable, and a saved custom
+        # provider/model round-trips as the current selection.
+        self.assertIn("custom:abc12345", cap["providers"])
+        for builtin in ("openai", "dashscope", "zhipu", "linkai"):
+            self.assertIn(builtin, cap["providers"])
+        self.assertEqual(cap["current_provider"], "custom:abc12345")
+        self.assertEqual(cap["current_model"], "fun-asr-large")
+
+    def test_tts_capability_includes_custom_providers(self):
+        from channel.web.web_channel import ModelsHandler
+
+        custom_conf = {"custom_providers": [
+            {"id": "abc12345", "name": "MyVendor", "api_key": "sk-test-1234567890",
+             "api_base": "https://my.vendor/v1"},
+        ]}
+        with patch("models.custom_provider.conf", return_value=custom_conf):
+            cap = ModelsHandler._tts_capability({
+                "text_to_voice": "custom:abc12345",
+                "text_to_voice_model": "fun-tts-large",
+                "tts_voice_id": "anna",
+            })
+
+        self.assertIn("custom:abc12345", cap["providers"])
+        self.assertEqual(cap["current_provider"], "custom:abc12345")
+        self.assertEqual(cap["current_model"], "fun-tts-large")
+        self.assertEqual(cap["current_voice"], "anna")
+
+    def test_tts_capability_without_custom_providers_keeps_builtin_list(self):
+        from channel.web.web_channel import ModelsHandler
+
+        with patch("models.custom_provider.conf", return_value={}):
+            cap = ModelsHandler._tts_capability({
+                "text_to_voice": "openai",
+                "text_to_voice_model": "tts-1",
+            })
+
+        self.assertEqual(cap["current_provider"], "openai")
+        self.assertEqual(cap["current_model"], "tts-1")
+        self.assertTrue(all(not p.startswith("custom:") for p in cap["providers"]))
+
 
 if __name__ == "__main__":
     unittest.main()
