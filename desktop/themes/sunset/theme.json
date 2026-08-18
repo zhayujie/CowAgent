@@ -1,0 +1,67 @@
+{
+  "id": "sunset",
+  "name": "Sunset",
+  "specVersion": 1,
+  "preview": {
+    "accent": "#d9643b",
+    "bg": "#fbf6f2",
+    "surface": "#ffffff"
+  },
+  "shape": {
+    "radiusCard": "14px",
+    "radiusBtn": "10px",
+    "radiusSm": "7px"
+  },
+  "light": {
+    "colors": {
+      "accent": "#d9643b",
+      "accentHover": "#c4532c",
+      "accentActive": "#a9441f",
+      "accentSoft": "#fbe8dd",
+      "accentContrast": "#ffffff",
+      "bubbleUserBg": "#d9643b",
+      "bubbleUserText": "#ffffff",
+      "bgBase": "#fbf6f2",
+      "bgSurface": "#ffffff",
+      "bgSurface2": "#f6ece4",
+      "bgElevated": "#ffffff",
+      "bgInset": "#f1e4d9",
+      "textPrimary": "#2b1d15",
+      "textSecondary": "#6b554a",
+      "textTertiary": "#9a8172",
+      "textDisabled": "#c2ada0",
+      "borderDefault": "#ead8ca",
+      "borderStrong": "#d8bfae",
+      "borderSubtle": "#f3e8df",
+      "shadowSm": "rgba(217, 100, 59, 0.06)",
+      "shadowMd": "rgba(217, 100, 59, 0.10)",
+      "shadowLg": "rgba(217, 100, 59, 0.16)"
+    }
+  },
+  "dark": {
+    "colors": {
+      "accent": "#f08a63",
+      "accentHover": "#f39b78",
+      "accentActive": "#e9764c",
+      "accentSoft": "#47251a",
+      "accentContrast": "#2a1006",
+      "bubbleUserBg": "#c9562f",
+      "bubbleUserText": "#ffffff",
+      "bgBase": "#1a1210",
+      "bgSurface": "#201714",
+      "bgSurface2": "#291d19",
+      "bgElevated": "#30241f",
+      "bgInset": "#140d0b",
+      "textPrimary": "#f6ece6",
+      "textSecondary": "#c3a698",
+      "textTertiary": "#8f7568",
+      "textDisabled": "#5c4a41",
+      "borderDefault": "#3a2c26",
+      "borderStrong": "#4c3b33",
+      "borderSubtle": "#2a201c",
+      "shadowSm": "rgba(0, 0, 0, 0.25)",
+      "shadowMd": "rgba(0, 0, 0, 0.35)",
+      "shadowLg": "rgba(0, 0, 0, 0.50)"
+    }
+  }
+}
