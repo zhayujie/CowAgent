@@ -475,10 +475,21 @@ def _install_targz_bytes(content: bytes, name: str, skills_dir: str, result: Ins
         extract_dir = os.path.join(tmp_dir, "extracted")
         os.makedirs(extract_dir)
         with tarfile.open(tar_path, "r:gz") as tf:
+            extraction_root = os.path.realpath(extract_dir)
             for member in tf.getmembers():
                 resolved = os.path.realpath(os.path.join(extract_dir, member.name))
-                if not resolved.startswith(os.path.realpath(extract_dir)):
+                try:
+                    inside_root = (
+                        os.path.commonpath((extraction_root, resolved)) == extraction_root
+                    )
+                except ValueError:
+                    inside_root = False
+                if not inside_root:
                     raise SkillInstallError("Archive contains path traversal, aborting.")
+                if member.issym() or member.islnk():
+                    raise SkillInstallError("Archive contains a link, aborting.")
+                if not (member.isfile() or member.isdir()):
+                    raise SkillInstallError("Archive contains a special file, aborting.")
             tf.extractall(extract_dir)
 
         top_items = [d for d in os.listdir(extract_dir) if not d.startswith(".")]
