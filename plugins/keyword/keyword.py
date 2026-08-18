@@ -3,6 +3,7 @@
 import json
 import os
 import requests
+from urllib.parse import urlparse
 import plugins
 from bridge.context import ContextType
 from bridge.reply import Reply, ReplyType
@@ -53,20 +54,23 @@ class Keyword(Plugin):
         if content in self.keyword:
             logger.info(f"[keyword] 匹配到关键字【{content}】")
             reply_text = self.keyword[content]
+            parsed_url = urlparse(reply_text)
+            is_http_url = parsed_url.scheme in ("http", "https") and bool(parsed_url.netloc)
+            url_path = parsed_url.path.lower()
 
             # 判断匹配内容的类型
-            if (reply_text.startswith("http://") or reply_text.startswith("https://")) and any(reply_text.endswith(ext) for ext in [".jpg", ".webp", ".jpeg", ".png", ".gif", ".img"]):
+            if is_http_url and url_path.endswith((".jpg", ".webp", ".jpeg", ".png", ".gif", ".img")):
             # 如果是以 http:// 或 https:// 开头，且".jpg", ".jpeg", ".png", ".gif", ".img"结尾，则认为是图片 URL。
                 reply = Reply()
                 reply.type = ReplyType.IMAGE_URL
                 reply.content = reply_text
                 
-            elif (reply_text.startswith("http://") or reply_text.startswith("https://")) and any(reply_text.endswith(ext) for ext in [".pdf", ".doc", ".docx", ".xls", "xlsx",".zip", ".rar"]):
+            elif is_http_url and url_path.endswith((".pdf", ".doc", ".docx", ".xls", ".xlsx", ".zip", ".rar")):
             # 如果是以 http:// 或 https:// 开头，且".pdf", ".doc", ".docx", ".xls", "xlsx",".zip", ".rar"结尾，则下载文件到tmp目录并发送给用户
                 file_path = "tmp"
                 if not os.path.exists(file_path):
                     os.makedirs(file_path)
-                file_name = reply_text.split("/")[-1]  # 获取文件名
+                file_name = os.path.basename(parsed_url.path)
                 file_path = os.path.join(file_path, file_name)
                 response = requests.get(reply_text)
                 with open(file_path, "wb") as f:
@@ -75,7 +79,7 @@ class Keyword(Plugin):
                 reply.type = ReplyType.FILE
                 reply.content = file_path
             
-            elif (reply_text.startswith("http://") or reply_text.startswith("https://")) and any(reply_text.endswith(ext) for ext in [".mp4"]):
+            elif is_http_url and url_path.endswith(".mp4"):
             # 如果是以 http:// 或 https:// 开头，且".mp4"结尾，则下载视频到tmp目录并发送给用户
                 reply = Reply()
                 reply.type = ReplyType.VIDEO_URL
