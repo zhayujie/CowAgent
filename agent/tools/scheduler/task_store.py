@@ -11,6 +11,16 @@ from pathlib import Path
 from common.utils import expand_path
 
 
+_store_locks = {}
+_store_locks_guard = threading.Lock()
+
+
+def _lock_for_path(store_path: str):
+    normalized_path = os.path.normcase(os.path.realpath(store_path))
+    with _store_locks_guard:
+        return _store_locks.setdefault(normalized_path, threading.RLock())
+
+
 class TaskStore:
     """
     Manages persistent storage of scheduled tasks
@@ -29,7 +39,7 @@ class TaskStore:
             store_path = os.path.join(home, "cow", "scheduler", "tasks.json")
         
         self.store_path = store_path
-        self.lock = threading.Lock()
+        self.lock = _lock_for_path(store_path)
         self._ensure_store_dir()
     
     def _ensure_store_dir(self):
@@ -98,17 +108,18 @@ class TaskStore:
         Returns:
             True if successful
         """
-        tasks = self.load_tasks()
-        task_id = task.get("id")
-        
-        if not task_id:
-            raise ValueError("Task must have an 'id' field")
-        
-        if task_id in tasks:
-            raise ValueError(f"Task with id '{task_id}' already exists")
-        
-        tasks[task_id] = task
-        self.save_tasks(tasks)
+        with self.lock:
+            tasks = self.load_tasks()
+            task_id = task.get("id")
+
+            if not task_id:
+                raise ValueError("Task must have an 'id' field")
+
+            if task_id in tasks:
+                raise ValueError(f"Task with id '{task_id}' already exists")
+
+            tasks[task_id] = task
+            self.save_tasks(tasks)
         return True
     
     def update_task(self, task_id: str, updates: dict) -> bool:
@@ -122,16 +133,16 @@ class TaskStore:
         Returns:
             True if successful
         """
-        tasks = self.load_tasks()
-        
-        if task_id not in tasks:
-            raise ValueError(f"Task '{task_id}' not found")
-        
-        # Update fields
-        tasks[task_id].update(updates)
-        tasks[task_id]["updated_at"] = datetime.now().isoformat()
-        
-        self.save_tasks(tasks)
+        with self.lock:
+            tasks = self.load_tasks()
+
+            if task_id not in tasks:
+                raise ValueError(f"Task '{task_id}' not found")
+
+            tasks[task_id].update(updates)
+            tasks[task_id]["updated_at"] = datetime.now().isoformat()
+
+            self.save_tasks(tasks)
         return True
     
     def delete_task(self, task_id: str) -> bool:
@@ -144,13 +155,14 @@ class TaskStore:
         Returns:
             True if successful
         """
-        tasks = self.load_tasks()
-        
-        if task_id not in tasks:
-            raise ValueError(f"Task '{task_id}' not found")
-        
-        del tasks[task_id]
-        self.save_tasks(tasks)
+        with self.lock:
+            tasks = self.load_tasks()
+
+            if task_id not in tasks:
+                raise ValueError(f"Task '{task_id}' not found")
+
+            del tasks[task_id]
+            self.save_tasks(tasks)
         return True
     
     def get_task(self, task_id: str) -> Optional[dict]:
