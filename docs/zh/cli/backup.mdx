@@ -17,6 +17,7 @@ cow backup --output /safe/location/cow-backup.zip
 - `config.json`
 - `AGENT.md`、`USER.md`、`MEMORY.md` 等 Agent 人格和用户文件
 - 工作区内的每日记忆、会话历史、知识库、自定义技能和定时任务
+- 配置多 Agent 后的 Agent registry、通道绑定和全部 Agent 工作区
 - 旧版 `user_datas.pkl`（如存在）
 
 临时 `tmp/` 数据、缓存、Git 元数据和符号链接不会写入归档。在操作系统支持的情况下，归档文件权限会限制为仅当前用户可读写。
@@ -39,6 +40,8 @@ cow restore /safe/location/cow-backup.zip
 ```bash
 cow restore cow-backup.zip --workspace ~/cow-restored
 ```
+
+恢复多 Agent 归档时，`--workspace` 表示统一根目录，各工作区会写入 `<根目录>/<agent-id>`。未传该参数时，本机已有的同名 Agent 沿用当前工作区，新 Agent 默认写入 `~/cow-agents/<agent-id>`。
 
 恢复命令会在写入前校验归档格式和所有路径。它会覆盖同名文件，但不会删除目标目录中无关的现有文件。如果检测到当前 CowAgent 数据，会先在所选归档旁创建 `cow-pre-restore-*.zip` 回滚备份。
 
