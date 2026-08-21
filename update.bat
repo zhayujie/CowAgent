@@ -47,13 +47,16 @@ if %DIRTY%==1 (
 echo [4/5] 停止旧服务 (按命令行匹配 app.py + cmd /k 壳, 不影响其他 Python 程序)...
 powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { ($_.Name -eq 'python.exe' -and $_.CommandLine -like '*app.py*') -or ($_.Name -eq 'cmd.exe' -and $_.CommandLine -like '*cmd /k*app.py*') } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force; Write-Host ('   ^> 已停止 PID ' + $_.ProcessId) }"
 
-echo [5/5] 启动新服务 (后台静默, 无窗口)... 
+echo [5/5] 启动双实例 (后台静默, 无窗口)...
+REM 实例 A: 默认数据目录 (项目根, web 端口 9899, 凭证 ~/.weixin_cow_credentials.json)
 powershell -NoProfile -Command "Start-Process -FilePath 'C:\Program Files\Python312\python.exe' -ArgumentList 'app.py' -WorkingDirectory 'C:\Users\Admin\projects\CowAgent' -WindowStyle Hidden"
+REM 实例 B: COW_DATA_DIR 隔离 (cow-agent-2, web 端口 9900, 凭证 cow-agent-2\weixin_credentials.json)
+powershell -NoProfile -Command "$env:COW_DATA_DIR='C:\Users\Admin\cow-agent-2'; Start-Process -FilePath 'C:\Program Files\Python312\python.exe' -ArgumentList 'app.py' -WorkingDirectory 'C:\Users\Admin\projects\CowAgent' -WindowStyle Hidden"
 echo.
 echo   ========================================
-echo    更新完成! 服务已在后台运行.
-echo    日志: run.log
-echo    微信登录自动恢复, 无需重新扫码.
+echo    更新完成! 双实例已在后台运行.
+echo    实例A日志: run.log (端口 9899)
+echo    实例B日志: cow-agent-2\run.log (端口 9900, 首次需扫码)
 echo   ========================================
 exit /b 0
 
