@@ -27,11 +27,13 @@ Supported models (passed via `model` only when the user asks for a specific one)
 
 ## Usage
 
-Run `scripts/generate.py` with a JSON argument. The path is relative to this skill's `base_dir`.
+Run `scripts/generate.py` with a JSON argument. Use the absolute `<base_dir>` path — **do NOT `cd` into the skill directory**, since it is a builtin skill and gets reset on restart (anything written there is lost).
 
 ```bash
 python <base_dir>/scripts/generate.py '<json_args>'
 ```
+
+Images are saved to the workspace (or the open project dir) under `images/`, so they persist and stay reachable to the client.
 
 **Set bash timeout to at least 600 seconds**, as image generation can take 30–200s per provider, and the script may try multiple providers sequentially.
 

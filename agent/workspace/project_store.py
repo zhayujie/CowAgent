@@ -33,6 +33,10 @@ from common.log import logger
 # stays trivial to read and write on every selection.
 MAX_RECENTS = 20
 
+# Sentinel standing for "the default workspace" in the sidebar ordering, so the
+# default space can be dragged among real projects instead of being pinned.
+DEFAULT_SPACE_KEY = "__default__"
+
 
 def _store_file() -> str:
     from common.state_dir import shared_root
@@ -62,15 +66,21 @@ _lock = threading.Lock()
 def _load() -> Dict:
     path = _store_file()
     if not os.path.isfile(path):
-        return {"sessions": {}, "recents": []}
+        return {"sessions": {}, "recents": [], "meta": {}, "order": []}
     try:
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f) or {}
     except Exception as e:
         logger.warning(f"[ProjectStore] Could not read {path}: {e}")
-        return {"sessions": {}, "recents": []}
+        return {"sessions": {}, "recents": [], "meta": {}, "order": []}
     data.setdefault("sessions", {})
     data.setdefault("recents", [])
+    # ``meta``: path -> {"display_name": str}. A rename lives here, never on
+    # disk, so the folder keeps its name and existing bindings stay valid.
+    data.setdefault("meta", {})
+    # ``order``: user-chosen sidebar order of spaces (project paths and the
+    # DEFAULT_SPACE_KEY sentinel). Absent entries fall back to recency order.
+    data.setdefault("order", [])
     return data
 
 
@@ -116,6 +126,43 @@ def get_project_dir(session_id: str, agent_id: Optional[str] = None) -> Optional
     return None
 
 
+def get_project_map(agent_id: Optional[str] = None) -> Dict[str, str]:
+    """Every session -> project binding for one agent, in a single file read.
+
+    Used when the session list needs each conversation's project: asking
+    ``get_project_dir`` per row would re-read and re-parse the store each time.
+    Bindings whose directory is gone are dropped, matching ``get_project_dir``.
+    """
+    prefix = f"{agent_id or 'default'}::"
+    with _lock:
+        data = _load()
+        sessions = dict(data.get("sessions") or {})
+
+    out: Dict[str, str] = {}
+    for key, entry in sessions.items():
+        if not key.startswith(prefix):
+            continue
+        path = entry.get("path") if isinstance(entry, dict) else entry
+        if path and os.path.isdir(path):
+            out[key[len(prefix):]] = path
+    return out
+
+
+def forget_session(session_id: str, agent_id: Optional[str] = None) -> None:
+    """Drop a session's binding (called when the conversation is deleted).
+
+    The recents list is left alone: the project itself still exists and the user
+    will likely open it again.
+    """
+    if not session_id:
+        return
+    key = _session_key(session_id, agent_id)
+    with _lock:
+        data = _load()
+        if data["sessions"].pop(key, None) is not None:
+            _save(data)
+
+
 def set_project_dir(
     session_id: str, project_dir: Optional[str], agent_id: Optional[str] = None
 ) -> Optional[str]:
@@ -153,20 +200,123 @@ def _touch_recent(data: Dict, real_path: str) -> None:
     data["recents"] = recents[:MAX_RECENTS]
 
 
+def _display_name(data: Dict, path: str) -> str:
+    """The user-facing name for a project path: rename override, else basename."""
+    meta = data.get("meta") or {}
+    entry = meta.get(path)
+    if isinstance(entry, dict) and (entry.get("display_name") or "").strip():
+        return entry["display_name"].strip()
+    return os.path.basename(path.rstrip(os.sep)) or path
+
+
+def display_name_for(path: str) -> str:
+    """Public helper: the user-facing name for a project path (rename-aware)."""
+    if not path:
+        return ""
+    with _lock:
+        data = _load()
+    return _display_name(data, os.path.realpath(path))
+
+
 def list_recents() -> List[Dict]:
     """Recently used projects, most recent first, pruning ones now gone."""
     with _lock:
         data = _load()
         recents = data.get("recents", [])
-    out: List[Dict] = []
-    for r in recents:
-        path = r.get("path") if isinstance(r, dict) else r
-        if path and os.path.isdir(path):
-            out.append({
-                "path": path,
-                "name": (r.get("name") if isinstance(r, dict) else None) or os.path.basename(path) or path,
-            })
+        out: List[Dict] = []
+        for r in recents:
+            path = r.get("path") if isinstance(r, dict) else r
+            if path and os.path.isdir(path):
+                out.append({"path": path, "name": _display_name(data, path)})
     return out
+
+
+def rename_project(path: str, display_name: str) -> str:
+    """Give a project a display name without touching its folder on disk.
+
+    Passing an empty name clears the override (falls back to the folder name).
+    Returns the resulting display name.
+    """
+    real = _normalize(path)
+    name = (display_name or "").strip()
+    with _lock:
+        data = _load()
+        meta = data.setdefault("meta", {})
+        if name:
+            meta[real] = {**(meta.get(real) or {}), "display_name": name}
+        else:
+            entry = meta.get(real) or {}
+            entry.pop("display_name", None)
+            if entry:
+                meta[real] = entry
+            else:
+                meta.pop(real, None)
+        _save(data)
+        return _display_name(data, real)
+
+
+def delete_project(path: str, agent_id: Optional[str] = None) -> int:
+    """Forget a project: drop it from recents/meta/order and unbind sessions.
+
+    Nothing on disk is removed — the folder and its files stay. Sessions bound
+    to it revert to the default workspace (their binding is cleared). Returns the
+    number of sessions that were unbound.
+
+    ``agent_id`` scopes which sessions are unbound; None means the default agent.
+    """
+    real = _normalize(path)
+    prefix = f"{agent_id or 'default'}::"
+    with _lock:
+        data = _load()
+
+        unbound = 0
+        for key, entry in list(data.get("sessions", {}).items()):
+            if not key.startswith(prefix):
+                continue
+            bound = entry.get("path") if isinstance(entry, dict) else entry
+            if bound == real:
+                data["sessions"].pop(key, None)
+                unbound += 1
+
+        data["recents"] = [
+            r for r in data.get("recents", [])
+            if (r.get("path") if isinstance(r, dict) else r) != real
+        ]
+        (data.get("meta") or {}).pop(real, None)
+        data["order"] = [k for k in data.get("order", []) if k != real]
+        _save(data)
+    logger.info(f"[ProjectStore] Deleted project record: {real} (unbound {unbound} sessions)")
+    return unbound
+
+
+def get_order() -> List[str]:
+    """User-chosen sidebar order of spaces (paths + DEFAULT_SPACE_KEY)."""
+    with _lock:
+        data = _load()
+        return list(data.get("order") or [])
+
+
+def set_order(order: List[str]) -> List[str]:
+    """Persist the sidebar order of spaces. Unknown/blank entries are dropped."""
+    cleaned: List[str] = []
+    seen = set()
+    for key in order or []:
+        if not isinstance(key, str):
+            continue
+        k = key.strip()
+        if not k or k in seen:
+            continue
+        # Real project paths are normalized; the default sentinel is kept as-is.
+        norm = k if k == DEFAULT_SPACE_KEY else _normalize(k)
+        if norm in seen:
+            continue
+        seen.add(norm)
+        cleaned.append(norm)
+    with _lock:
+        data = _load()
+        data["order"] = cleaned
+        _save(data)
+    return cleaned
 
 
 def create_project(name: str) -> str:

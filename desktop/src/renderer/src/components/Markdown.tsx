@@ -5,6 +5,7 @@ import { t } from '../i18n'
 import apiClient from '../api/client'
 import { workspaceHrefOf } from '../lib/fileKind'
 import { useWorkspaceStore } from '../store/workspaceStore'
+import { useLightboxStore } from './Lightbox'
 
 /**
  * Markdown renderer aligned 1:1 with the web console (markdown-it + highlight.js
@@ -125,8 +126,29 @@ const defaultImage =
 md.renderer.rules.image = function (tokens, idx, options, env, self) {
   const token = tokens[idx]
   const src = token.attrGet('src') || ''
+  const baseDir = (env as { imageBaseDir?: string } | undefined)?.imageBaseDir
   if (/^~\//.test(src) || src.startsWith('/')) {
     token.attrSet('src', apiClient.getServeFileUrl(src))
+  } else if (baseDir && !/^[a-zA-Z][\w+.-]*:/.test(src)) {
+    // Doc-relative image (e.g. knowledge markdown `../images/x.png`): resolve
+    // against the doc's directory (passed via render env) and serve via /api/file.
+    let rel = src
+    try {
+      rel = decodeURIComponent(rel)
+    } catch {
+      /* keep the raw form */
+    }
+    const combined = `${baseDir}/${rel.split('?')[0]}`
+    const segments: string[] = []
+    for (const seg of combined.split('/')) {
+      if (seg === '..') segments.pop()
+      else if (seg !== '.' && seg !== '') segments.push(seg)
+    }
+    // Unix baseDir is absolute, so restore the leading slash split() dropped
+    // (a Windows drive path like C:/x keeps its own prefix). /api/file rejects
+    // non-absolute paths.
+    const resolved = (combined.startsWith('/') ? '/' : '') + segments.join('/')
+    token.attrSet('src', apiClient.getServeFileUrl(resolved))
   }
   return defaultImage(tokens, idx, options, env, self)
 }
@@ -168,17 +190,30 @@ interface MarkdownProps {
    * an "application cannot be opened (-120)" error in Electron.
    */
   onInternalLink?: (href: string) => void
+  /**
+   * Absolute directory of the document the markdown comes from, so image srcs
+   * that are relative to it (`../images/x.png`) resolve to real files. Used by
+   * the knowledge viewer; without it relative srcs are left untouched.
+   */
+  imageBaseDir?: string
 }
 
-const Markdown: React.FC<MarkdownProps> = ({ content, onInternalLink }) => {
+const Markdown: React.FC<MarkdownProps> = ({ content, onInternalLink, imageBaseDir }) => {
   const rootRef = useRef<HTMLDivElement>(null)
 
-  const html = useMemo(() => md.render(content || ''), [content])
+  const html = useMemo(() => md.render(content || '', { imageBaseDir }), [content, imageBaseDir])
 
-  // Delegate clicks: copy buttons on code blocks, and internal doc links.
+  // Delegate clicks: images zoom, copy buttons on code blocks, internal doc links.
   const handleClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
       const target = e.target as HTMLElement
+
+      // Any inline image opens in the lightbox.
+      const img = target.closest('img') as HTMLImageElement | null
+      if (img) {
+        useLightboxStore.getState().open(img.currentSrc || img.src)
+        return
+      }
 
       // Internal knowledge links (relative *.md), when a handler is provided.
       if (onInternalLink) {

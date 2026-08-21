@@ -178,11 +178,17 @@ const ChatPage: React.FC<ChatPageProps> = ({ baseUrl }) => {
   )
 
   const handleNewChat = useCallback(() => {
+    // Inherit the current session's project so a new chat stays in the same
+    // space; fall back to the default workspace when none is bound.
+    const inherited = useSessionStore.getState().currentProject()
     const id = newSession()
     ensureSession(id)
     loadHistory(id, 1)
-    // Auto-expand the session list so the user sees the new/switched session.
+    // Show the fresh chat in the list immediately (under the inherited space),
+    // and expand the session list so the user sees the new session.
+    useSessionStore.getState().addOptimistic(id, inherited)
     setSessionsCollapsed(false)
+    if (inherited) apiClient.selectProject(id, inherited.path).catch(() => {})
   }, [newSession, ensureSession, loadHistory, setSessionsCollapsed])
 
   const handleClearContext = useCallback(async () => {

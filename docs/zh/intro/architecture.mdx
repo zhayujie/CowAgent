@@ -34,9 +34,11 @@ CowAgent 的整体架构由以下核心模块组成：
 5. **记忆与知识更新** — 将重要信息存入长期记忆，将结构化知识整理至知识库
 6. **返回结果** — 将执行结果发送回用户
 
-## 工作空间
+## 工作空间 {#workspace}
 
-Agent 的工作空间默认位于 `~/cow` 目录，用于存储系统提示词、记忆文件、技能文件等：
+### 系统工作空间 {#system-workspace}
+
+Agent 的系统工作空间默认位于 `~/cow` 目录，用于存储系统提示词、记忆文件、技能文件等：
 
 ```
 ~/cow/
@@ -60,6 +62,17 @@ Agent 的工作空间默认位于 `~/cow` 目录，用于存储系统提示词�
 └── .env               # Secret keys for skills
 ```
 
+### 项目工作空间 {#project-workspace}
+
+除默认工作空间外，可为每个会话单独绑定一个**项目目录**，Agent 的文件读写与命令执行都在该目录下进行，从而实现多项目隔离；记忆、技能等仍统一存放在默认工作空间。当使用了多个项目时，Web/桌面端的历史会话会自动按项目分组管理。
+
+### 会话级模型与权限 {#session-settings}
+
+工作空间、模型、权限均可**按会话独立设置**，未设置时跟随全局默认：
+
+- **模型**：不同会话可切换不同模型，便于按任务选型。
+- **权限**：控制 Agent 可操作的范围，分为 **只读**、**工作区可写**、**全部可访问** 三档。可在配置中设置全局默认权限（`agent_permission_mode`），新会话默认沿用，再按需单独调整。权限用于降低误操作风险；如需强隔离，建议在容器中运行。
+
 ## 核心配置
 
 在 `config.json` 中配置 Agent 模式的核心参数：
@@ -71,6 +84,7 @@ Agent 的工作空间默认位于 `~/cow` 目录，用于存储系统提示词�
   "agent_max_context_tokens": 40000,
   "agent_max_context_turns": 30,
   "agent_max_steps": 15,
+  "agent_permission_mode": "workspace-write",
   "enable_thinking": false,
   "cow_lang": "auto"
 }
@@ -79,10 +93,11 @@ Agent 的工作空间默认位于 `~/cow` 目录，用于存储系统提示词�
 | 参数 | 说明 | 默认值 |
 | --- | --- | --- |
 | `agent` | 是否启用 Agent 模式 | `true` |
-| `agent_workspace` | 工作空间路径 | `~/cow` |
+| `agent_workspace` | 系统工作空间路径 | `~/cow` |
 | `agent_max_context_tokens` | 最大上下文 token 数 | `50000` |
 | `agent_max_context_turns` | 最大上下文记忆轮次 | `20` |
 | `agent_max_steps` | 单次任务最大决策步数 | `20` |
+| `agent_permission_mode` | 全局默认权限，新会话沿用：`read-only` / `workspace-write` / `full-access` | `full-access` |
 | `enable_thinking` | 是否启用深度思考模式 | `false` |
 | `knowledge` | 是否启用个人知识库 | `true` |
 | `self_evolution_enabled` | 是否启用自主进化 | `false` |

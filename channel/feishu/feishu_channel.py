@@ -1250,7 +1250,7 @@ class FeiShuChanel(ChatChannel):
                 with lock:
                     progress_state.consume(event)
                     if card_id[0]:
-                        snapshot = progress_state.current_text
+                        snapshot = progress_state.display_text
                         should_push = True
 
                 if should_push:
@@ -1284,7 +1284,8 @@ class FeiShuChanel(ChatChannel):
                 # Finalize the same card with a status header and elapsed footer.
                 with lock:
                     progress_state.consume(event)
-                    final_text = progress_state.current_text
+                    # Full visible text = committed prior turns + last turn.
+                    final_text = progress_state.display_text
                     has_card = card_id[0] is not None
                     init_busy = init_in_flight[0]
                 final_text = resolve_markdown_images(
@@ -1292,7 +1293,9 @@ class FeiShuChanel(ChatChannel):
                     lambda url: upload_public_image_to_feishu(url, access_token),
                 )
                 with lock:
-                    progress_state.current_text = final_text
+                    # Collapse the accumulated text into current_text so the
+                    # final render/push carries the whole flow exactly once.
+                    progress_state.finalize_text(final_text)
                 context["feishu_streamed"] = True
 
                 if not has_card and not init_busy:

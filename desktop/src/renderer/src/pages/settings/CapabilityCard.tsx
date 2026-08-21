@@ -43,7 +43,11 @@ const CapabilityCard: React.FC<CapabilityCardProps> = ({
 }) => {
   const [provider, setProvider] = useState(state.current_provider || '')
   const [model, setModel] = useState(state.current_model || '')
-  const [customModel, setCustomModel] = useState('')
+  // Custom providers render the model as a free-form input; seed it with the
+  // saved model so it isn't blank (placeholder-only) on load.
+  const [customModel, setCustomModel] = useState(
+    (state.current_provider || '').startsWith('custom:') ? state.current_model || '' : ''
+  )
   const [showCustom, setShowCustom] = useState(false)
 
   // Custom providers expose no preset model catalog, so the model must always

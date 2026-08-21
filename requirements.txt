@@ -18,8 +18,8 @@ regex>=2019.3.12
 # wechatcom & wechatmp
 wechatpy
 
-# zhipuai
-zai-sdk
+# zhipuai (>=0.2.3 required for GLM-5.3 reasoning_effort support)
+zai-sdk>=0.2.3
 # tongyi qwen sdk
 dashscope
 

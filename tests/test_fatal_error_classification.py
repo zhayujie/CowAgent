@@ -79,11 +79,16 @@ class TestContextOverflowDetection(unittest.TestCase):
     def test_real_overflow_errors_are_detected(self):
         for raw in [
             "This model's maximum context length is 128000 tokens",
+            # The exact DeepSeek V4 error that started the retry loop.
+            "This model's maximum context length is 1048576 tokens. However, "
+            "you requested 1276733 tokens (892733 in the messages, 384000 in "
+            "the completion). Please reduce the length of the messages or completion.",
             "400 invalid_request_error: prompt is too long: 250000 tokens",
             "[CONTEXT_OVERFLOW] stream aborted",
             "rate_limit_error: request_too_large",
             "context length exceeded",
             "429: too many tokens in request",
+            "input tokens exceed the configured limit",
         ]:
             self.assertTrue(self._check(raw), f"should be overflow: {raw}")
 
@@ -94,6 +99,8 @@ class TestContextOverflowDetection(unittest.TestCase):
             "413 Request Entity Too Large",
             "400 Bad Request: file too large",
             "upload failed: image too large, max 5MB",
+            "400 invalid_request_error: file too large, max size 20MB",
+            "payload too large",
         ]:
             self.assertFalse(self._check(raw), f"must not be overflow: {raw}")
 

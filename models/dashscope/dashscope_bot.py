@@ -27,8 +27,10 @@ dashscope_models = {
 }
 
 # Model name prefixes that require MultiModalConversation API instead of Generation API.
-# Qwen3.5+ series are omni models that only support MultiModalConversation.
-MULTIMODAL_MODEL_PREFIXES = ("qwen3.5-", "qwen3.6-", "qwen3.7-plus")
+# Qwen3.5+ omni / max series only accept the multimodal-generation endpoint;
+# calling the text Generation endpoint returns "url error". qwen3.8-max is one
+# of these — all official examples use MultiModalConversation.call.
+MULTIMODAL_MODEL_PREFIXES = ("qwen3.5-", "qwen3.6-", "qwen3.7-plus", "qwen3.8-")
 
 
 # Qwen对话模型API
@@ -41,10 +43,30 @@ class DashscopeBot(Bot):
         api_key = conf().get("dashscope_api_key")
         if api_key:
             os.environ["DASHSCOPE_API_KEY"] = api_key
+        self._apply_base_url()
 
     @property
     def api_key(self):
         return conf().get("dashscope_api_key")
+
+    @staticmethod
+    def _apply_base_url():
+        """Apply the configured DashScope base URL to the SDK global.
+
+        The DashScope SDK only honors ``dashscope.base_http_api_url`` (there is
+        no per-call base_url arg). ``dashscope_api_base`` is exposed in config /
+        the ``DASHSCOPE_API_BASE`` env var, so we must push it into the SDK here.
+        When unset we leave the SDK default (public endpoint) untouched.
+
+        Note: a custom base URL that points at a Bailian *dedicated deployment*
+        endpoint (``*.maas.aliyuncs.com``) will only accept that deployment's
+        own model id — calling it with a public model name (e.g. ``qwen3.8-max``)
+        returns ``InvalidParameter - url error``. Leave this empty to use public
+        models.
+        """
+        api_base = conf().get("dashscope_api_base")
+        if api_base:
+            dashscope.base_http_api_url = api_base
 
     @staticmethod
     def _is_multimodal_model(model_name: str) -> bool:
@@ -105,6 +127,7 @@ class DashscopeBot(Bot):
         """
         try:
             dashscope.api_key = self.api_key
+            self._apply_base_url()
             model = dashscope_models.get(self.model_name, self.model_name)
             if self._is_multimodal_model(self.model_name):
                 mm_messages = self._prepare_messages_for_multimodal(session.messages)
@@ -161,6 +184,7 @@ class DashscopeBot(Bot):
         """Analyze an image using DashScope MultiModalConversation API."""
         try:
             dashscope.api_key = self.api_key
+            self._apply_base_url()
             vision_model = model or "qwen-vl-max"
 
             # DashScope multimodal format: {"image": url} + {"text": question}
@@ -264,7 +288,10 @@ class DashscopeBot(Bot):
             
             # Add thinking parameters for DashScope thinking-capable models.
             model_lower = model_name.lower()
-            is_qwen38_effort_model = model_lower.startswith("qwen3.8-max-preview")
+            # qwen3.8-max (and its -preview snapshot) always think and are
+            # controlled via reasoning_effort (default xhigh), not enable_thinking
+            # on/off. Treat the whole qwen3.8-max family the same way.
+            is_qwen38_effort_model = model_lower.startswith("qwen3.8-max")
             supports_thinking = (
                 "qwen3" in model_lower
                 or "qwq" in model_lower
@@ -322,6 +349,7 @@ class DashscopeBot(Bot):
         try:
             # Set API key before calling
             dashscope.api_key = self.api_key
+            self._apply_base_url()
             model = dashscope_models.get(model_name, model_name)
 
             if self._is_multimodal_model(model_name):
@@ -393,6 +421,7 @@ class DashscopeBot(Bot):
         try:
             # Set API key before calling
             dashscope.api_key = self.api_key
+            self._apply_base_url()
             model = dashscope_models.get(model_name, model_name)
 
             if self._is_multimodal_model(model_name):

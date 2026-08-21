@@ -206,12 +206,25 @@ jobs:
           VER: ${{ github.event.inputs.version }}
         run: |
           shopt -s nullglob
+          # R2's API sporadically returns 504 / 7009 (Upstream service
+          # unavailable) mid-upload; retry each put with backoff so a transient
+          # failure doesn't abort the release. Re-putting a key is idempotent.
           for f in dist/*.exe dist/*.blockmap; do
             base="$(basename "$f")"
             key="desktop/v${VER}/${base}"
             echo "==> Uploading $base -> r2://${R2_BUCKET}/${key}"
-            npx --yes wrangler@latest r2 object put "${R2_BUCKET}/${key}" \
-              --file "$f" --remote
+            for attempt in 1 2 3 4 5; do
+              if npx --yes wrangler@latest r2 object put "${R2_BUCKET}/${key}" \
+                   --file "$f" --remote; then
+                break
+              fi
+              if [ "$attempt" = 5 ]; then
+                echo "::error::R2 upload failed after 5 attempts: $key"
+                exit 1
+              fi
+              echo "attempt $attempt failed, retrying in $((attempt * 10))s..."
+              sleep $((attempt * 10))
+            done
             echo "==> Download URL: https://cdn.cowagent.ai/${key}"
           done
 

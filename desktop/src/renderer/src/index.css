@@ -453,3 +453,20 @@ body * {
   background: transparent;
   padding: 0;
 }
+
+/* ============================================================
+   Composer toolbar responsiveness.
+   The chip row (workspace / permission / model selectors) is a
+   container-query context: when the composer gets narrow, chips
+   drop their text label and keep just the icon so the row never
+   overflows. Mirrors the web console's @media (max-width:640px).
+   ============================================================ */
+.composer-toolbar {
+  container-type: inline-size;
+  container-name: composer;
+}
+@container composer (max-width: 560px) {
+  .composer-chip-label {
+    display: none;
+  }
+}

@@ -39,7 +39,7 @@ def _bot_with_capture(monkeypatch, model_name):
 
 
 def test_dashscope_qwen38_sends_reasoning_effort_in_parameters(monkeypatch):
-    bot, captured = _bot_with_capture(monkeypatch, "qwen3.8-max-preview")
+    bot, captured = _bot_with_capture(monkeypatch, "qwen3.8-max")
 
     bot.call_with_tools(
         [{"role": "user", "content": "hi"}],
@@ -57,7 +57,7 @@ def test_dashscope_qwen38_sends_reasoning_effort_in_parameters(monkeypatch):
 
 
 def test_dashscope_qwen38_forces_thinking_when_requested_disabled(monkeypatch):
-    bot, captured = _bot_with_capture(monkeypatch, "qwen3.8-max-preview")
+    bot, captured = _bot_with_capture(monkeypatch, "qwen3.8-max")
 
     bot.call_with_tools(
         [{"role": "user", "content": "hi"}],

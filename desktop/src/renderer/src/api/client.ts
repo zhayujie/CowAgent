@@ -10,6 +10,7 @@ import type {
   SchedulerTask,
   Attachment,
   SessionsPage,
+  SessionSettingsState,
   HistoryPage,
   ModelsData,
   ModelsAction,
@@ -83,16 +84,47 @@ class ApiClient {
    * the header, never the cookie.
    */
   private async postFormData<T>(path: string, formData: FormData): Promise<T> {
-    const res = await fetch(`${this.baseUrl}${path}`, {
-      method: 'POST',
-      body: formData,
-      credentials: 'include',
-      headers: this.authToken ? { Authorization: `Bearer ${this.authToken}` } : undefined,
-    })
-    if (!res.ok) {
-      throw new Error(`HTTP ${res.status}: ${res.statusText}`)
+    const url = `${this.baseUrl}${path}`
+    // A plain `fetch` that never reaches the backend throws a bare
+    // `TypeError: Failed to fetch`, which is useless in a bug report. The most
+    // common cause here is a transient connection refusal (the local backend
+    // still booting, or briefly restarting), so retry once after a short delay
+    // and, on a persistent network failure, raise an actionable message that
+    // names the target URL instead of the opaque browser error.
+    let lastErr: unknown
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (attempt > 0) await new Promise((r) => setTimeout(r, 600))
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          body: formData,
+          credentials: 'include',
+          headers: this.authToken ? { Authorization: `Bearer ${this.authToken}` } : undefined,
+        })
+        if (!res.ok) {
+          // The backend returns JSON errors even on failure; surface its message
+          // when present so the user sees the real reason (e.g. file too large).
+          let detail = res.statusText
+          try {
+            const body = await res.clone().json()
+            if (body?.message) detail = body.message
+          } catch {
+            /* non-JSON error body */
+          }
+          throw new Error(`HTTP ${res.status}: ${detail}`)
+        }
+        return res.json()
+      } catch (e) {
+        lastErr = e
+        // Only retry the network-level failure; a real HTTP error is final.
+        const isNetwork = e instanceof TypeError
+        if (!isNetwork) throw e
+      }
     }
-    return res.json()
+    console.error(`[api] upload network failure to ${url}:`, lastErr)
+    throw new Error(
+      `无法连接到本地服务 (${url})，请确认客户端后台正在运行后重试`,
+    )
   }
 
   // ---------------------------------------------------------
@@ -179,7 +211,20 @@ class ApiClient {
     message?: string
   }> {
     const formData = new FormData()
-    formData.append('file', file)
+    // Read the file into memory (a Blob) instead of appending the File directly.
+    // In Electron, `fetch` streaming a File straight from disk intermittently
+    // rejects with a bare "Failed to fetch" (net::ERR while reading the backing
+    // file — moved/locked path, sandbox, special chars in the name), even for
+    // small files. Materializing the bytes first sidesteps that disk-streaming
+    // path; the original name is preserved so the backend keeps the extension.
+    try {
+      const buf = await file.arrayBuffer()
+      formData.append('file', new Blob([buf], { type: file.type }), file.name)
+    } catch {
+      // Reading failed (rare): fall back to the raw File so behavior degrades
+      // gracefully rather than blocking the upload entirely.
+      formData.append('file', file)
+    }
     if (sessionId) formData.append('session_id', sessionId)
     return this.postFormData('/upload', formData)
   }
@@ -241,6 +286,30 @@ class ApiClient {
     })
   }
 
+  /** Persist the user-defined order of project spaces in the sidebar. */
+  async setProjectsOrder(order: string[]): Promise<ApiResult> {
+    return this.request('/api/projects/order', {
+      method: 'POST',
+      body: JSON.stringify({ order }),
+    })
+  }
+
+  /** Rename a project's display label (record only; files on disk untouched). */
+  async renameProject(path: string, name: string): Promise<ApiResult & { name?: string }> {
+    return this.request('/api/projects/manage', {
+      method: 'PUT',
+      body: JSON.stringify({ path, name }),
+    })
+  }
+
+  /** Forget a project record and unbind its sessions (files on disk kept). */
+  async deleteProject(path: string): Promise<ApiResult & { unbound?: number }> {
+    return this.request('/api/projects/manage', {
+      method: 'DELETE',
+      body: JSON.stringify({ path }),
+    })
+  }
+
   /** Absolute URL for a `/preview/...` path. The signed token in the path is
    *  what authorizes it, so no auth token is appended. */
   getPreviewUrl(previewPath: string): string {
@@ -264,6 +333,31 @@ class ApiClient {
     return this.request(`/api/sessions/${encodeURIComponent(sessionId)}`, {
       method: 'PUT',
       body: JSON.stringify({ title }),
+    })
+  }
+
+  /** Pin or unpin a session; pinned sessions sort to the top of their group. */
+  async setSessionPinned(sessionId: string, pinned: boolean): Promise<ApiResult> {
+    return this.request(`/api/sessions/${encodeURIComponent(sessionId)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ pinned }),
+    })
+  }
+
+  /** This session's effective model + permission, with the catalog to switch. */
+  async getSessionSettings(sessionId: string): Promise<{ status: string } & SessionSettingsState> {
+    return this.request(`/api/sessions/${encodeURIComponent(sessionId)}/settings`)
+  }
+
+  /** Set or clear this session's model / permission override. Pass null to a
+   *  field to drop the override and follow the global default. */
+  async updateSessionSettings(
+    sessionId: string,
+    body: { provider?: string | null; model?: string | null; permission?: string | null }
+  ): Promise<{ status: string } & Partial<SessionSettingsState> & { message?: string }> {
+    return this.request(`/api/sessions/${encodeURIComponent(sessionId)}/settings`, {
+      method: 'POST',
+      body: JSON.stringify(body),
     })
   }
 
@@ -408,7 +502,7 @@ class ApiClient {
     return this.request<{ status: string } & KnowledgeList>('/api/knowledge/list')
   }
 
-  async readKnowledge(path: string): Promise<{ status: string; content: string; path: string }> {
+  async readKnowledge(path: string): Promise<{ status: string; content: string; path: string; dir?: string }> {
     return this.request(`/api/knowledge/read?path=${encodeURIComponent(path)}`)
   }
 
@@ -478,7 +572,18 @@ class ApiClient {
 
   async voiceAsr(audio: File | Blob): Promise<{ status: string; text?: string; audio_url?: string; message?: string }> {
     const formData = new FormData()
-    formData.append('file', audio, 'recording.webm')
+    // Match the file suffix to the actual container so the backend picks the
+    // right extension (mirrors the web console's mic upload).
+    const extByMime: Record<string, string> = {
+      'audio/webm': 'webm',
+      'audio/ogg': 'ogg',
+      'audio/mp4': 'm4a',
+      'audio/mpeg': 'mp3',
+    }
+    const mime = (audio.type || '').split(';')[0]
+    const name =
+      audio instanceof File && audio.name ? audio.name : `recording.${extByMime[mime] || 'webm'}`
+    formData.append('file', audio, name)
     return this.postFormData('/api/voice/asr', formData)
   }
 
@@ -495,6 +600,12 @@ class ApiClient {
 
   createLogStream(): EventSource {
     return new EventSource(this.withToken(`${this.baseUrl}/api/logs`))
+  }
+
+  // Full run.log as a downloadable attachment. Carries the token in the query
+  // string like the other file endpoints so it works under web_password.
+  getLogDownloadUrl(): string {
+    return this.withToken(`${this.baseUrl}/api/logs/download`)
   }
 
   async getVersion(): Promise<string> {

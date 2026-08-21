@@ -163,8 +163,28 @@ class MemoryStorage:
           - FTS5-only damage is repaired later from the chunks table.
           - Real corruption quarantines the file so it stays recoverable.
           - Transient failures (locked, disk I/O) are logged and ignored.
+
+        ``PRAGMA integrity_check`` is a full page-by-page scan (FTS5 indexes
+        included). On a large DB sitting on a network filesystem (e.g. an NFS
+        PVC) it can take tens of seconds, and it runs on *every* open — i.e. on
+        every session's agent init — which dominates first-message latency.
+        It is therefore skipped by default: genuine b-tree corruption already
+        surfaces as a DatabaseError when the connection is opened
+        (see ``_init_db`` -> ``_quarantine_and_recreate``), and FTS5 shadow-table
+        damage is caught independently by ``_fts5_shadow_corrupt`` /
+        ``_trigram_shadow_corrupt`` right before use. Set
+        ``memory_integrity_check: true`` in config.json to force the full scan
+        (e.g. for a one-off diagnostic run).
         """
         from common.log import logger
+        try:
+            from config import conf
+            if not conf().get("memory_integrity_check", False):
+                return
+        except Exception:
+            # No config available (tests / standalone) — keep the historical
+            # behaviour of running the check rather than silently skipping it.
+            pass
         try:
             rows = self.conn.execute("PRAGMA integrity_check").fetchall()
             report = "\n".join(str(r[0]) for r in rows).strip()

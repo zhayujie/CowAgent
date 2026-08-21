@@ -121,7 +121,7 @@ def test_agent_bridge_passes_dashscope_qwen38_effort(monkeypatch):
 
     monkeypatch.setitem(conf(), "enable_thinking", True)
     monkeypatch.setitem(conf(), "reasoning_effort", "medium")
-    model, bot = _model_with_bot(monkeypatch, "dashscope", "qwen3.8-max-preview")
+    model, bot = _model_with_bot(monkeypatch, "dashscope", "qwen3.8-max")
 
     model.call(_Request())
 
@@ -129,24 +129,24 @@ def test_agent_bridge_passes_dashscope_qwen38_effort(monkeypatch):
     assert bot.kwargs["reasoning_effort"] == "medium"
 
 
-def test_agent_bridge_maps_dashscope_qwen38_preview_high_to_xhigh(monkeypatch):
+def test_agent_bridge_maps_dashscope_qwen38_high_to_xhigh(monkeypatch):
     from config import conf
 
     monkeypatch.setitem(conf(), "enable_thinking", True)
     monkeypatch.setitem(conf(), "reasoning_effort", "high")
-    model, bot = _model_with_bot(monkeypatch, "dashscope", "qwen3.8-max-preview")
+    model, bot = _model_with_bot(monkeypatch, "dashscope", "qwen3.8-max")
 
     model.call(_Request())
 
     assert bot.kwargs["reasoning_effort"] == "xhigh"
 
 
-def test_agent_bridge_forces_dashscope_qwen38_preview_thinking(monkeypatch):
+def test_agent_bridge_forces_dashscope_qwen38_thinking(monkeypatch):
     from config import conf
 
     monkeypatch.setitem(conf(), "enable_thinking", False)
     monkeypatch.setitem(conf(), "reasoning_effort", "medium")
-    model, bot = _model_with_bot(monkeypatch, "dashscope", "qwen3.8-max-preview")
+    model, bot = _model_with_bot(monkeypatch, "dashscope", "qwen3.8-max")
 
     model.call(_Request())
 

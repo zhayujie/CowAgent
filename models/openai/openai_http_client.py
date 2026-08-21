@@ -40,12 +40,6 @@ _APP_TITLE = "CowAgent"
 _APP_REFERER = "https://github.com/zhayujie/CowAgent"
 
 
-def _client_source() -> str:
-    """Coarse client origin for server-side traceability. The desktop shell
-    injects COW_DESKTOP=1; everything else is the open-source runtime."""
-    return "desktop" if os.environ.get("COW_DESKTOP") == "1" else "open-source"
-
-
 # Optional client-source tag. Only sent to the source-tagged hosts below, so no
 # client identity leaks to a user's own proxy.
 _SOURCE_HEADER = "X-Client-Source"
@@ -83,7 +77,13 @@ def _resolve_attribution_headers(url: str) -> Dict[str, str]:
         if host == suffix or host.endswith("." + suffix):
             resolved = dict(headers)
             if any(host == h or host.endswith("." + h) for h in _SOURCE_TAGGED_HOSTS):
-                resolved[_SOURCE_HEADER] = _client_source()
+                try:
+                    from common.utils import apply_client_source
+                    apply_client_source(resolved)
+                except Exception:
+                    resolved[_SOURCE_HEADER] = (
+                        "desktop" if os.environ.get("COW_DESKTOP") == "1" else "open-source"
+                    )
             return resolved
     return {}
 

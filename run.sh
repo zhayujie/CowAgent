@@ -598,13 +598,13 @@ select_model() {
     select_menu sel "$title" \
         "DeepSeek (deepseek-v4-flash, deepseek-v4-pro, etc.)" \
         "Claude (claude-opus-5, claude-sonnet-5, etc.)" \
-        "Gemini (gemini-3.5-flash, gemini-3.1-pro-preview, etc.)" \
         "OpenAI (gpt-5.6-luna, etc.)" \
+        "Gemini (gemini-3.7-flash, gemini-3.6-flash, etc.)" \
         "MiniMax (MiniMax-M3, etc.)" \
-        "GLM (glm-5.2, etc.)" \
-        "Qwen (qwen3.7-plus, qwen3.7-max, etc.)" \
-        "Doubao (doubao-seed-2.1, etc.)" \
+        "GLM (glm-5.3, etc.)" \
+        "Qwen (qwen3.8-max, qwen3.7-plus, etc.)" \
         "Kimi (kimi-k3, etc.)" \
+        "Doubao (doubao-seed-2.1, etc.)" \
         "MiMo (mimo-v2.5-pro, etc.)" \
         "LinkAI ($(t "一个 Key 接入所有模型" "access all models via one API"))" \
         "$(t "⏭  跳过（稍后在 Web 控制台配置）" "⏭  Skip (configure later in the web console)")"
@@ -630,13 +630,13 @@ configure_model() {
     case "$model_choice" in
         1) read_model_config "DeepSeek" "deepseek-v4-flash" "DEEPSEEK_KEY" ;;
         2) read_model_config "Claude" "claude-opus-5" "CLAUDE_KEY" ;;
-        3) read_model_config "Gemini" "gemini-3.1-pro-preview" "GEMINI_KEY" ;;
-        4) read_model_config "OpenAI" "gpt-5.6-luna" "OPENAI_KEY" ;;
+        3) read_model_config "OpenAI" "gpt-5.6-luna" "OPENAI_KEY" ;;
+        4) read_model_config "Gemini" "gemini-3.7-flash" "GEMINI_KEY" ;;
         5) read_model_config "MiniMax" "MiniMax-M3" "MINIMAX_KEY" ;;
-        6) read_model_config "GLM" "glm-5.2" "ZHIPU_KEY" ;;
-        7) read_model_config "Qwen (DashScope)" "qwen3.7-plus" "DASHSCOPE_KEY" ;;
-        8) read_model_config "Doubao (Volcengine Ark)" "doubao-seed-2-1-pro-260628" "ARK_KEY" ;;
-        9) read_model_config "Kimi (Moonshot)" "kimi-k3" "MOONSHOT_KEY" ;;
+        6) read_model_config "GLM" "glm-5.3" "ZHIPU_KEY" ;;
+        7) read_model_config "Qwen (DashScope)" "qwen3.8-max" "DASHSCOPE_KEY" ;;
+        8) read_model_config "Kimi (Moonshot)" "kimi-k3" "MOONSHOT_KEY" ;;
+        9) read_model_config "Doubao (Volcengine Ark)" "doubao-seed-2-1-pro-260628" "ARK_KEY" ;;
         10) read_model_config "MiMo" "mimo-v2.5-pro" "MIMO_KEY" ;;
         11)
             # Show where to obtain a LinkAI key (zh users -> console page).

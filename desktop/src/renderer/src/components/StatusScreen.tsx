@@ -1,10 +1,18 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { t } from '../i18n'
 import { product } from '@product'
+import type { BackendErrorCode } from '../types'
 
 interface StatusScreenProps {
   status: 'connecting' | 'error'
   error?: string
+  // Why startup failed, when known. Drives the explanation and the advice:
+  // a quarantined executable and a crashed one need completely different
+  // things from the user, and one generic sentence served neither.
+  code?: BackendErrorCode
+  // File the failure is about (typically the missing executable). Shown so the
+  // user can look for exactly that name in their antivirus quarantine list.
+  path?: string
   slow?: boolean
   // Recovering a backend that had already been serving, rather than a cold
   // start — the copy differs because the user was mid-session.
@@ -12,8 +20,20 @@ interface StatusScreenProps {
   onRetry: () => void
 }
 
-const StatusScreen: React.FC<StatusScreenProps> = ({ status, error, slow, reconnecting, onRetry }) => {
+// Per-cause copy. Anything not listed here (or an unknown code from a newer
+// main process) falls back to the generic pair.
+const CAUSE_COPY: Record<BackendErrorCode, { desc: string; hint: string }> = {
+  backend_removed: { desc: 'status_error_removed_desc', hint: 'status_error_removed_hint' },
+  backend_missing: { desc: 'status_error_missing_desc', hint: 'status_error_missing_hint' },
+  backend_blocked: { desc: 'status_error_blocked_desc', hint: 'status_error_blocked_hint' },
+  backend_crashed: { desc: 'status_error_crashed_desc', hint: 'status_error_hint' },
+  backend_timeout: { desc: 'status_error_timeout_desc', hint: 'status_error_hint' },
+  backend_unresponsive: { desc: 'status_error_unresponsive_desc', hint: 'status_error_hint' },
+}
+
+const StatusScreen: React.FC<StatusScreenProps> = ({ status, error, code, path, slow, reconnecting, onRetry }) => {
   const [dataDir, setDataDir] = useState('')
+  const copy = (code && CAUSE_COPY[code]) || { desc: 'status_error_desc', hint: 'status_error_hint' }
 
   useEffect(() => {
     if (status !== 'error') return
@@ -65,9 +85,19 @@ const StatusScreen: React.FC<StatusScreenProps> = ({ status, error, slow, reconn
                 {t('status_error')}
               </h1>
               <p className="text-sm text-slate-500 dark:text-slate-400">
-                {t('status_error_desc')}
+                {t(copy.desc)}
               </p>
             </div>
+
+            {/* The file the failure is about. For a quarantined executable this
+                is the single most useful thing on the screen: it's the name to
+                look for in the antivirus quarantine list. */}
+            {path && (
+              <p className="text-xs text-left break-all text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-white/5 rounded-lg px-3 py-2">
+                <span className="block mb-1 text-slate-400 dark:text-slate-500">{t('status_error_file')}</span>
+                <span className="font-mono">{path}</span>
+              </p>
+            )}
 
             {/* The backend's own error line. Without it a user who can't reach
                 the (unstarted) UI has no way to see why it failed. */}
@@ -96,7 +126,7 @@ const StatusScreen: React.FC<StatusScreenProps> = ({ status, error, slow, reconn
               )}
             </div>
 
-            <p className="text-xs text-slate-400 dark:text-slate-500">{t('status_error_hint')}</p>
+            <p className="text-xs text-slate-400 dark:text-slate-500">{t(copy.hint)}</p>
           </>
         )}
       </div>

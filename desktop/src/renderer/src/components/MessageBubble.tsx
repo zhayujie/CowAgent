@@ -7,6 +7,7 @@ import { useWorkspaceStore } from '../store/workspaceStore'
 import Markdown from './Markdown'
 import MessageSteps, { ThinkingStep } from './MessageSteps'
 import FileCard from './FileCard'
+import { useLightboxStore } from './Lightbox'
 import { product } from '@product'
 
 interface MessageBubbleProps {
@@ -46,6 +47,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onRegenerate, on
   const isUser = message.role === 'user'
   const [copied, setCopied] = useState(false)
   const preview = useWorkspaceStore((s) => s.preview)
+  const openLightbox = useLightboxStore((s) => s.open)
 
   const copy = () => {
     navigator.clipboard.writeText(message.content)
@@ -68,31 +70,43 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onRegenerate, on
       <div className="group flex flex-col items-end px-4 sm:px-6 py-2">
         {message.attachments && message.attachments.length > 0 && (
           <div className="flex flex-wrap gap-2 mb-1.5 justify-end max-w-[75%]">
-            {message.attachments.map((att, i) =>
-              att.file_type === 'image' && att.preview_url ? (
-                <img
-                  key={i}
-                  src={apiClient.getFileUrl(att.preview_url)}
-                  alt={att.file_name}
-                  className="max-w-[180px] max-h-[150px] rounded-xl object-cover border border-default"
-                />
-              ) : att.file_type === 'workspace_ref' ? (
-                <div
-                  key={i}
-                  title={att.file_path}
-                  onClick={() => preview(att.file_path)}
-                  className="flex items-center gap-1.5 px-3 py-2 bg-surface-2 hover:bg-surface-3 rounded-xl text-xs text-content-secondary cursor-pointer transition-colors"
-                >
-                  {att.is_dir ? <Folder size={13} /> : <FileIcon size={13} />}
-                  {att.file_name}
-                </div>
-              ) : (
+            {message.attachments.map((att, i) => {
+              if (att.file_type === 'image' && (att.preview_url || att.file_path)) {
+                // History replay recovers attachments from prompt markers,
+                // which carry only the local file_path — serve it via /api/file.
+                const url = att.preview_url
+                  ? apiClient.getFileUrl(att.preview_url)
+                  : apiClient.getServeFileUrl(att.file_path)
+                return (
+                  <img
+                    key={i}
+                    src={url}
+                    alt={att.file_name}
+                    onClick={() => openLightbox(url)}
+                    className="max-w-[260px] max-h-[220px] rounded-xl object-cover border border-default cursor-zoom-in"
+                  />
+                )
+              }
+              if (att.file_type === 'workspace_ref') {
+                return (
+                  <div
+                    key={i}
+                    title={att.file_path}
+                    onClick={() => preview(att.file_path)}
+                    className="flex items-center gap-1.5 px-3 py-2 bg-surface-2 hover:bg-surface-3 rounded-xl text-xs text-content-secondary cursor-pointer transition-colors"
+                  >
+                    {att.is_dir ? <Folder size={13} /> : <FileIcon size={13} />}
+                    {att.file_name}
+                  </div>
+                )
+              }
+              return (
                 <div key={i} className="flex items-center gap-1.5 px-3 py-2 bg-surface-2 rounded-xl text-xs text-content-secondary">
                   <FileIcon size={13} />
                   {att.file_name}
                 </div>
               )
-            )}
+            })}
           </div>
         )}
         <div className="max-w-[75%] rounded-2xl rounded-br-md px-4 py-2.5 bg-bubble-user text-bubble-user-text">
@@ -168,25 +182,32 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onRegenerate, on
           {/* Media attachments sent via the `send` tool (images / files). */}
           {message.attachments && message.attachments.length > 0 && (
             <div className="flex flex-wrap gap-2 mt-2">
-              {message.attachments.map((att, i) =>
-                att.file_type === 'image' ? (
-                  <img
-                    key={i}
-                    src={apiClient.getFileUrl(att.preview_url || att.file_path)}
-                    alt={att.file_name}
-                    onLoad={() => onMediaLoad?.()}
-                    onClick={() => window.open(apiClient.getFileUrl(att.preview_url || att.file_path), '_blank')}
-                    className="max-w-[320px] w-full rounded-xl border border-default cursor-zoom-in"
-                  />
-                ) : att.file_type === 'video' ? (
-                  <video
-                    key={i}
-                    src={apiClient.getFileUrl(att.preview_url || att.file_path)}
-                    controls
-                    onLoadedData={() => onMediaLoad?.()}
-                    className="max-w-[360px] w-full rounded-xl border border-default"
-                  />
-                ) : (
+              {message.attachments.map((att, i) => {
+                const url = apiClient.getFileUrl(att.preview_url || att.file_path)
+                if (att.file_type === 'image') {
+                  return (
+                    <img
+                      key={i}
+                      src={url}
+                      alt={att.file_name}
+                      onLoad={() => onMediaLoad?.()}
+                      onClick={() => openLightbox(url)}
+                      className="max-w-[320px] w-full rounded-xl border border-default cursor-zoom-in"
+                    />
+                  )
+                }
+                if (att.file_type === 'video') {
+                  return (
+                    <video
+                      key={i}
+                      src={url}
+                      controls
+                      onLoadedData={() => onMediaLoad?.()}
+                      className="max-w-[360px] w-full rounded-xl border border-default"
+                    />
+                  )
+                }
+                return (
                   <button
                     key={i}
                     type="button"
@@ -197,7 +218,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onRegenerate, on
                     {att.file_name}
                   </button>
                 )
-              )}
+              })}
             </div>
           )}
 

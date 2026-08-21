@@ -57,6 +57,19 @@ The chat interface supports multi-session management. All session records are pe
 - **New Session**: Click the "New Chat" button at the top of the session list or the `+` button in the input area to create a new session
 - **Delete Session**: Click the delete button on a session item and confirm to permanently delete the session and all its messages
 - **Clear Context**: Click the clear button in the input area to insert a divider in the current session. Messages above the divider are still displayed but no longer included as context for the model
+- **Workspace / Model / Permission**: Set a workspace, model, and permission mode for the current session below the input box. When you work across several projects, past sessions are grouped by project automatically. See [Architecture - Project Workspace](/intro/architecture#project-workspace)
+
+<Frame caption="Sessions grouped by workspace, with a per-session workspace and model">
+  <img src="https://cdn.jsdelivr.net/gh/zhayujie/cowagent-assets@main/screenshots/en/web-console-workspace-project-demo.png" style={{ maxWidth: "800px" }} />
+</Frame>
+
+#### Permission Modes
+
+Each session can run under its own permission mode, controlling how far the Agent can reach into files and commands: read-only, workspace-write, or full-access. When a tool call is blocked, the hint is clickable so you can adjust the permission on the spot.
+
+<Frame caption="Per-session permission modes: read-only, workspace-write, full-access">
+  <img src="https://cdn.jsdelivr.net/gh/zhayujie/cowagent-assets@main/screenshots/en/web-console-access-mode.png" style={{ maxWidth: "600px" }} />
+</Frame>
 
 ### Model Management
 

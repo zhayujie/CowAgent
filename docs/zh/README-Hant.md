@@ -120,14 +120,14 @@ CowAgent 支援國內外主流廠商的大語言模型。**文字對話、影像
 | 廠商 | 代表模型 | 文字 | 影像理解 | 影像生成 | 語音識別 | 語音合成 | 向量 |
 | --- | --- | :-: | :-: | :-: | :-: | :-: | :-: |
 | [DeepSeek](https://docs.cowagent.ai/zh/models/deepseek) | deepseek-v4-flash / pro | ✅ | | | | | |
-| [MiniMax](https://docs.cowagent.ai/zh/models/minimax) | MiniMax-M3 | ✅ | ✅ | ✅ | | ✅ | |
 | [Claude](https://docs.cowagent.ai/zh/models/claude) | claude-opus-5 / sonnet-5 | ✅ | ✅ | | | | |
-| [Gemini](https://docs.cowagent.ai/zh/models/gemini) | gemini-3.5-flash | ✅ | ✅ | ✅ | | | |
 | [OpenAI](https://docs.cowagent.ai/zh/models/openai) | gpt-5.6 系列 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| [智譜 GLM](https://docs.cowagent.ai/zh/models/glm) | glm-5.2、glm-5v-turbo | ✅ | ✅ | | ✅ | | ✅ |
-| [通義千問](https://docs.cowagent.ai/zh/models/qwen) | qwen3.7-plus | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| [豆包 Doubao](https://docs.cowagent.ai/zh/models/doubao) | doubao-seed-2.1 系列 | ✅ | ✅ | ✅ | | | ✅ |
+| [Gemini](https://docs.cowagent.ai/zh/models/gemini) | gemini-3.7-flash | ✅ | ✅ | ✅ | | | |
+| [MiniMax](https://docs.cowagent.ai/zh/models/minimax) | MiniMax-M3 | ✅ | ✅ | ✅ | | ✅ | |
+| [智譜 GLM](https://docs.cowagent.ai/zh/models/glm) | glm-5.3、glm-5v-turbo | ✅ | ✅ | | ✅ | | ✅ |
+| [通義千問](https://docs.cowagent.ai/zh/models/qwen) | qwen3.8-max | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | [Kimi](https://docs.cowagent.ai/zh/models/kimi) | kimi-k3 | ✅ | ✅ | | | | |
+| [豆包 Doubao](https://docs.cowagent.ai/zh/models/doubao) | doubao-seed-2.1 系列 | ✅ | ✅ | ✅ | | | ✅ |
 | [百度ERNIE](https://docs.cowagent.ai/zh/models/qianfan) | ernie-5.1 | ✅ | ✅ | | | | |
 | [小米 MiMo](https://docs.cowagent.ai/zh/models/mimo) | mimo-v2.5-pro / v2.5 | ✅ | ✅ | | | ✅ | |
 | [LinkAI](https://docs.cowagent.ai/zh/models/linkai) | 一個 Key 接入 100+ 模型 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
@@ -215,6 +215,8 @@ CowAgent 支援國內外主流廠商的大語言模型。**文字對話、影像
 <br/>
 
 ## 🏷 更新日誌
+
+> **2026.08.20：** [v2.1.7](https://github.com/zhayujie/CowAgent/releases/tag/2.1.7) — 多工作空間與會話隔離、會話級權限模式、任務通知、桌面端最佳化、新模型接入
 
 > **2026.08.12：** [v2.1.6](https://github.com/zhayujie/CowAgent/releases/tag/2.1.6) — 子 Agent 並行任務分配、推理強度設定、記憶向量庫可插拔、體驗與安全最佳化
 

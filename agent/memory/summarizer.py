@@ -480,7 +480,6 @@ class MemoryFlushManager:
         if not force and dedup_key == self._last_dream_input_hash:
             logger.info("[DeepDream] Already dreamed today with same daily content, skipping")
             return False
-        self._last_dream_input_hash = dedup_key
 
         logger.info(
             f"[DeepDream] Materials collected: "
@@ -488,35 +487,59 @@ class MemoryFlushManager:
             f"daily={len(daily_content)} chars"
         )
 
-        # Call LLM for distillation
+        # Call LLM for distillation, retrying transient errors (timeout /
+        # connection / rate limit / 5xx) and empty responses so a single
+        # hiccup doesn't lose the night's dream.
         import time as _time
-        t0 = _time.monotonic()
-        try:
-            user_msg = _dream_user_prompt().format(
-                memory_content=memory_content or "(empty)",
-                days=lookback_days,
-                daily_content=daily_content or "(no recent daily records)",
-            )
-            from agent.protocol.models import LLMRequest
-            # No output cap: the prompt already keeps MEMORY.md concise (~50
-            # items), so a hard max_tokens would only risk truncating a large
-            # rewrite. Let the model use its default output budget.
-            request = LLMRequest(
-                messages=[{"role": "user", "content": user_msg}],
-                temperature=0.3,
-                stream=False,
-                system=_dream_system_prompt(),
-            )
-            response = self.llm_model.call(request)
-            raw = self._extract_response_text(response)
-            elapsed = _time.monotonic() - t0
-            if not raw or not raw.strip():
-                logger.warning(f"[DeepDream] LLM returned empty response ({elapsed:.1f}s)")
-                return False
-            logger.info(f"[DeepDream] LLM distillation completed ({elapsed:.1f}s, {len(raw)} chars)")
-        except Exception as e:
-            elapsed = _time.monotonic() - t0
-            logger.warning(f"[DeepDream] LLM call failed ({elapsed:.1f}s): {e}")
+
+        max_attempts = 3
+        retryable_errors = (
+            "timeout", "timed out", "connection", "network", "rate limit",
+            "overloaded", "unavailable", "busy", "retry",
+            "429", "500", "502", "503", "504", "512",
+        )
+        raw = ""
+        for attempt in range(1, max_attempts + 1):
+            t0 = _time.monotonic()
+            try:
+                user_msg = _dream_user_prompt().format(
+                    memory_content=memory_content or "(empty)",
+                    days=lookback_days,
+                    daily_content=daily_content or "(no recent daily records)",
+                )
+                from agent.protocol.models import LLMRequest
+                # No output cap: the prompt already keeps MEMORY.md concise (~50
+                # items), so a hard max_tokens would only risk truncating a
+                # large rewrite. Let the model use its default output budget.
+                request = LLMRequest(
+                    messages=[{"role": "user", "content": user_msg}],
+                    temperature=0.3,
+                    stream=False,
+                    system=_dream_system_prompt(),
+                )
+                raw = self._extract_response_text(self.llm_model.call(request)) or ""
+                elapsed = _time.monotonic() - t0
+                if raw.strip():
+                    logger.info(
+                        f"[DeepDream] LLM distillation completed "
+                        f"(attempt {attempt}/{max_attempts}, {elapsed:.1f}s, {len(raw)} chars)"
+                    )
+                    break
+                logger.warning(
+                    f"[DeepDream] LLM returned empty response "
+                    f"(attempt {attempt}/{max_attempts}, {elapsed:.1f}s)"
+                )
+            except Exception as e:
+                elapsed = _time.monotonic() - t0
+                logger.warning(
+                    f"[DeepDream] LLM call failed "
+                    f"(attempt {attempt}/{max_attempts}, {elapsed:.1f}s): {e}"
+                )
+                if not any(k in str(e).lower() for k in retryable_errors):
+                    break
+            if attempt < max_attempts:
+                _time.sleep(60)
+        if not raw.strip():
             return False
 
         # Parse [MEMORY] and [DREAM] sections
@@ -547,6 +570,9 @@ class MemoryFlushManager:
                 logger.warning(f"[DeepDream] Failed to write dream diary: {e}")
 
         logger.info("[DeepDream] ✅ Deep Dream completed successfully")
+        # Mark as dreamed only after a fully successful run, so a failed
+        # attempt remains retryable the same day.
+        self._last_dream_input_hash = dedup_key
         return True
 
     def _read_main_memory(self, user_id: Optional[str] = None) -> str:

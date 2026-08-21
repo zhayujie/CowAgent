@@ -8,6 +8,9 @@ from typing import Optional
 
 DEEPSEEK_VALUES = ["low", "high", "xhigh", "max"]
 ZHIPU_VALUES = ["low", "medium", "high", "xhigh", "max"]
+# GLM-5.3 always thinks (rejects thinking.type="disabled") and only exposes
+# three effort tiers. See https://docs.bigmodel.cn GLM-5.3 release notes.
+ZHIPU_GLM53_VALUES = ["low", "high", "max"]
 CLAUDE_VALUES = ["low", "medium", "high", "xhigh", "max"]
 CLAUDE_MAX_ONLY_VALUES = ["low", "medium", "high", "max"]
 DASHSCOPE_QWEN38_VALUES = ["low", "medium", "xhigh"]
@@ -29,7 +32,9 @@ CLAUDE_MAX_ONLY_MODELS = (
     "claude-opus-4-5",
 )
 DASHSCOPE_QWEN38_MODELS = (
-    "qwen3.8-max-preview",
+    # qwen3.8-max and its -preview snapshot share the low/medium/xhigh enum
+    # (default xhigh) and always think.
+    "qwen3.8-max",
 )
 DASHSCOPE_HIGH_MAX_MODELS = (
     "glm-5.2",
@@ -38,6 +43,10 @@ DASHSCOPE_HIGH_MAX_MODELS = (
 )
 DASHSCOPE_MAX_ONLY_MODELS = (
     "kimi/kimi-k3",
+)
+# GLM-5.3 is always-thinking regardless of which gateway proxies it.
+ZHIPU_GLM53_MODELS = (
+    "glm-5.3",
 )
 
 
@@ -84,6 +93,8 @@ def get_reasoning_capability(provider_id: str, model_name: str = "") -> dict:
         return _capability(DEEPSEEK_VALUES, default="high")
 
     if base_pid == "zhipu":
+        if model.startswith(ZHIPU_GLM53_MODELS):
+            return _capability(ZHIPU_GLM53_VALUES, default="max", thinking_only=True)
         return _capability(ZHIPU_VALUES, default="high")
 
     if base_pid == "claude":
@@ -103,6 +114,8 @@ def get_reasoning_capability(provider_id: str, model_name: str = "") -> dict:
         # variants only differ in how they map the values internally.
         if model.startswith("deepseek-v4"):
             return _capability(DEEPSEEK_VALUES, default="high")
+        if model.startswith(ZHIPU_GLM53_MODELS):
+            return _capability(ZHIPU_GLM53_VALUES, default="max", thinking_only=True)
         if model.startswith(DASHSCOPE_HIGH_MAX_MODELS):
             return _capability(DASHSCOPE_HIGH_MAX_VALUES, default="high")
         if model.startswith(DASHSCOPE_MAX_ONLY_MODELS):
@@ -116,6 +129,8 @@ def get_reasoning_capability(provider_id: str, model_name: str = "") -> dict:
         # upstream protocol has been verified here.
         if model.startswith("deepseek-v4"):
             return _capability(DEEPSEEK_VALUES, default="high")
+        if model.startswith(ZHIPU_GLM53_MODELS):
+            return _capability(ZHIPU_GLM53_VALUES, default="max", thinking_only=True)
         if model.startswith("glm-"):
             return _capability(ZHIPU_VALUES, default="high")
         if model.startswith("kimi-k3"):

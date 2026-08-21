@@ -70,4 +70,10 @@ def create_voice(voice_type):
         from voice.mimo.mimo_voice import MimoVoice
 
         return MimoVoice()
+    elif voice_type == "custom" or voice_type.startswith("custom:"):
+        # User-created OpenAI-compatible vendors (custom_providers); the id
+        # suffix selects which vendor's credentials/endpoint to use.
+        from voice.custom.custom_voice import CustomVoice
+
+        return CustomVoice(voice_type)
     raise RuntimeError

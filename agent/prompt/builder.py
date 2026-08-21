@@ -44,6 +44,7 @@ class PromptBuilder:
         memory_manager: Any = None,
         runtime_info: Optional[Dict[str, Any]] = None,
         project_dir: Optional[str] = None,
+        permission_mode: Optional[str] = None,
         **kwargs
     ) -> str:
         """
@@ -73,6 +74,7 @@ class PromptBuilder:
             memory_manager=memory_manager,
             runtime_info=runtime_info,
             project_dir=project_dir,
+            permission_mode=permission_mode,
             **kwargs
         )
 
@@ -88,6 +90,7 @@ def build_agent_system_prompt(
     memory_manager: Any = None,
     runtime_info: Optional[Dict[str, Any]] = None,
     project_dir: Optional[str] = None,
+    permission_mode: Optional[str] = None,
     **kwargs
 ) -> str:
     """
@@ -99,6 +102,7 @@ def build_agent_system_prompt(
     3. Memory - memory recall and writing guidance
     3.5 Knowledge - structured knowledge base (injects knowledge/index.md)
     4. Workspace - working environment description
+    4.5 Permissions - what this session may change (omitted for full access)
     5. User identity - user info (optional)
     6. Project context - AGENT.md, USER.md, RULE.md, MEMORY.md, BOOTSTRAP.md
     7. Runtime info - meta info (time, model, etc.)
@@ -145,6 +149,23 @@ def build_agent_system_prompt(
             workspace_dir, language, bool(context_files), project_dir=project_dir
         )
     )
+
+    # 4.5 Permissions. Right after the workspace, because what the model may
+    # change only means something once it knows where it is working. Emits
+    # nothing in full-access mode, leaving the prompt as it has always been.
+    if permission_mode:
+        try:
+            from agent.permission import describe_mode
+
+            sections.extend(
+                describe_mode(
+                    permission_mode,
+                    language,
+                    cwd=project_dir or workspace_dir,
+                )
+            )
+        except Exception as e:
+            logger.debug(f"Permission prompt section skipped: {e}")
 
     # 5. User identity (if present)
     if user_identity:

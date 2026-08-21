@@ -1,0 +1,77 @@
+---
+title: v2.1.7
+description: CowAgent 2.1.7：支持多工作空间与会话隔离，新增会话级权限模式，任务通知和桌面端优化，新模型接入
+---
+
+🌐 [English](https://docs.cowagent.ai/releases/v2.1.7) | [中文](https://docs.cowagent.ai/zh/releases/v2.1.7)
+
+## 🗂 多工作空间与会话隔离
+
+Agent 不再固定在单一目录下工作，可创建多个项目工作空间并按会话隔离使用，Web 控制台和桌面客户端均支持：
+
+- **多工作空间**：可新建或打开任意目录作为项目空间，Agent 的文稿、网页、代码等产物在其中生成与管理。
+- **空间切换**：每个会话可绑定各自的项目空间，多任务运行互不干扰。
+- **模型切换**：可为单个会话切换不同模型，新会话默认使用全局配置的默认模型。
+- **会话分组**：会话列表按所属工作空间分组展示，支持置顶、重排、重命名与删除。
+- **系统资源共用**：记忆、技能、知识库等资源仍保留在系统工作空间（默认为 `~/cow`）。
+
+<img src="https://cdn.jsdelivr.net/gh/zhayujie/cowagent-assets@main/screenshots/zh/web-console-workspace-project-demo.png" width="800" />
+
+相关文档：[工作空间](https://docs.cowagent.ai/zh/intro/architecture#workspace)
+
+## 🔐 权限模式
+
+新增会话级的权限模式，配合多工作空间可以灵活管理 Agent 对资源的操作范围：
+
+- **三档权限**：支持只读（read-only）、工作空间可写（workspace-write）、完全访问（full-access）三种模式，可针对不同会话设置不同权限。
+- **默认权限设置**：支持设置默认权限模式，新会话按该默认值创建。
+- **拒绝提示可点击**：工具调用因权限被拦截时，给出可点击的提示，便于快速调整权限。
+
+<img src="https://cdn.jsdelivr.net/gh/zhayujie/cowagent-assets@main/screenshots/zh/web-console-access-mode.png" width="600" />
+
+## 🖥 桌面客户端
+
+- **语音输入**：对话输入框新增语音输入按钮，自动识别并填入输入框；语音识别与合成支持自定义厂商和模型。Thanks @chimyves (#3052, #3050)
+- **输入草稿保留**：离开对话页再返回时，未发送的文本与附件不再丢失。Thanks @chimyves (#3040)
+- **开机自启**：系统设置中新增开机自启开关，默认为关闭。
+- **启动诊断**：后端启动失败时给出具体的诊断信息，替代此前笼统的报错。
+- **日志下载**：运行日志页面支持下载日志文件，本地上传增加重试与更清晰的错误提示。
+
+下载地址：[CowAgent客户端](https://cowagent.ai/zh/download/)
+
+相关文档：[桌面客户端](https://docs.cowagent.ai/zh/guide/desktop)
+
+## 🔔 任务通知
+
+Web 与桌面端在 Agent 执行结束或失败时弹出通知（含提示音），便于长任务下及时感知进度：
+
+- **跨端通知**：桌面端通过系统通知、Web 端通过浏览器通知提醒，仅未聚焦时提醒，点击可跳回对应会话。
+- **未读角标**：Web 端在标签页隐藏时以未读数角标提示，切回后清除。
+- **可独立开关**：通知总开关与提示音为两个独立开关，默认开启；用户主动取消的任务不再触发失败通知。
+
+Thanks @chimyves (#3056, #3055)
+
+## 🤖 模型更新
+
+- **新增模型**：接入 `glm-5.3`、`qwen3.8-max`、`gemini-3.7-flash`、`gemini-3.6-flash`，并设为对应厂商的默认模型。
+- **配置页合并**：Web 控制台将「模型」页并入「配置」页，分为「基础配置」与「模型配置」两个标签，减少页面跳转。
+- **调用修复**：修复 GLM-5.3 强制思考、DashScope 部分模型的调用路由与接口地址配置问题；会话模型选择器中可正确展示自定义模型。
+
+## 🛠 体验优化与修复
+
+- **图片展示**：修复本地路径图片、知识库文档内相对路径图片无法展示的问题；桌面端点击对话与文档中的图片可放大查看。Thanks @chimyves (#3046)
+- **Windows 目录访问**：修复 Windows 下文件夹选择器无法访问盘符列表的问题。Thanks @CNXudiandian (#3048)
+- **Windows 命令提示**：优化 Windows 下命令行工具的失败恢复引导。Thanks @dajiaohuang (#3065)
+- **IM 回复优化**：IM 通道的 Agent 回复不再夹带思考内容。Thanks @LHMQ878 (#3044)
+- **定时任务修复**：修复跨零点失败后无法恢复排期的问题（Thanks @chimyves #3054），以及定时任务被误确认而非执行的问题。
+- **首次对话提速**：优化记忆系统的初始化流程，不再阻塞会话首条消息，显著缩短初次对话的等待时间。
+- **上下文裁剪**：修复上下文被裁剪时 AI 回复未能持久化的问题。
+- **飞书通道**：流式卡片支持多轮文本累积展示。
+- **Docker**：通过 `COW_DATA_DIR` 挂载在容器升级间持久化 `config.json`。
+
+## 📦 升级方式
+
+- **源码部署**：执行 `cow update` 一键升级，或手动拉取代码后重启。详见 [更新升级文档](https://docs.cowagent.ai/zh/guide/upgrade)。
+- **桌面客户端**：可在客户端内自动检查并一键更新，或前往 [下载页](https://cowagent.ai/zh/download/) 获取最新版本。
+
+**发布日期**：2026.08.20 | [Full Changelog](https://github.com/zhayujie/CowAgent/compare/2.1.6...2.1.7)

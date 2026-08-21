@@ -5,6 +5,8 @@
 export interface ElectronAPI {
   getBackendPort: () => Promise<number | null>
   getBackendStatus: () => Promise<string>
+  /** The last backend failure, queryable so it can't be missed by timing. */
+  getBackendError: () => Promise<BackendFailure | null>
   /** Data dir holding config.json and run.log (~/.cow in packaged builds). */
   getDataDir: () => Promise<string>
   restartBackend: () => Promise<boolean>
@@ -23,6 +25,12 @@ export interface ElectronAPI {
   onMenuAction?: (callback: (action: string) => void) => () => void
   // Current app version string (e.g. "0.0.5").
   getAppVersion?: () => Promise<string>
+  // Launch-at-login toggle (macOS + Windows). get returns the effective state;
+  // set returns the real outcome so the UI can surface refusals/errors.
+  getLoginItemEnabled?: () => Promise<boolean>
+  setLoginItemEnabled?: (
+    enabled: boolean
+  ) => Promise<{ ok: boolean; enabled: boolean; error: string }>
   // Themes (bundled + user themes from ~/.cow/themes), images inlined.
   listThemes?: () => Promise<Record<string, unknown>[]>
   getThemesDir?: () => Promise<string>
@@ -47,7 +55,7 @@ export interface ElectronAPI {
   setAppTitle?: (title: string) => Promise<boolean>
   // Show a native OS notification; clicking it focuses the window and fires
   // onOpenSession with the session id.
-  notify?: (payload: { title?: string; body?: string; sessionId?: string }) => Promise<boolean>
+  notify?: (payload: { title?: string; body?: string; sessionId?: string; silent?: boolean }) => Promise<boolean>
   onOpenSession?: (callback: (sessionId: string) => void) => () => void
   platform: string
   // OS UI language (e.g. "zh-CN"); used to default the language on first run.
@@ -65,12 +73,31 @@ export type UpdateStatus =
   | { state: 'downloaded'; version: string }
   | { state: 'error'; message: string }
 
+/** Why the backend failed. Mirrors BackendErrorCode in main/python-manager.ts. */
+export type BackendErrorCode =
+  | 'backend_removed'
+  | 'backend_missing'
+  | 'backend_blocked'
+  | 'backend_crashed'
+  | 'backend_timeout'
+  | 'backend_unresponsive'
+
+export interface BackendFailure {
+  code: BackendErrorCode
+  message: string
+  path?: string
+}
+
 export interface BackendStatusEvent {
   // 'lost' means a previously-ready backend stopped answering and the main
   // process is restarting it.
   status: 'ready' | 'error' | 'starting' | 'lost'
   port?: number
   error?: string
+  // Present on 'error': lets the UI explain the specific failure and what to
+  // do about it, rather than falling back to one generic sentence.
+  code?: BackendErrorCode
+  path?: string
 }
 
 // ============================================================
@@ -106,6 +133,11 @@ export interface MessageStep {
   display?: string
   /** Work done inside this step, for a tool that drives sub agents. */
   substeps?: SubStep[]
+  /** Set when the tool was refused by the session's permission mode, so the UI
+   * can render an actionable "adjust permissions" hint rather than a plain error. */
+  permission_denied?: boolean
+  /** The mode that refused the call (read-only / workspace-write / full-access). */
+  permission_mode?: string
 }
 
 /** Local UI message model (superset of backend history message). */
@@ -268,6 +300,10 @@ export interface StreamEvent {
   display?: string
   execution_time?: number
   has_tool_calls?: boolean
+  /** `tool_end`: true when the call was refused by the session permission mode. */
+  permission_denied?: boolean
+  /** `tool_end`: the mode that refused the call. */
+  permission_mode?: string
   /** `subagent_step` event fields: which step of which card, and how it went. */
   card_id?: string
   step_id?: string
@@ -303,6 +339,10 @@ export interface SessionItem {
   created_at: number
   last_active: number
   msg_count: number
+  /** User-pinned to the top of its group. */
+  pinned?: boolean
+  /** Bound project workspace, or null/absent for the default workspace. */
+  project?: { path: string; name: string } | null
 }
 
 export interface SessionsPage {
@@ -311,6 +351,36 @@ export interface SessionsPage {
   page: number
   page_size: number
   has_more: boolean
+  /** "project" once more than one distinct workspace is in play, else "time". */
+  group_mode?: 'project' | 'time'
+  /** Number of distinct project spaces across all sessions (decides group_mode). */
+  space_count?: number
+  default_workspace?: string
+  /** User-defined order of project spaces; "__default__" marks the default one. */
+  project_order?: string[]
+}
+
+/** Per-session model + permission overrides (from /api/sessions/{id}/settings). */
+export interface SessionModelProvider {
+  id: string
+  label: string | { zh: string; en: string }
+  models: string[]
+}
+
+export interface SessionSettingsState {
+  model: {
+    model: string
+    provider: string
+    source: 'session' | 'global'
+    global: { model: string; provider: string }
+    providers: SessionModelProvider[]
+  }
+  permission: {
+    mode: 'read-only' | 'workspace-write' | 'full-access'
+    source: 'session' | 'global'
+    global: string
+    modes: string[]
+  }
 }
 
 /** Backend history message (as returned by /api/history). */
@@ -380,6 +450,9 @@ export interface ConfigData {
   agent_max_context_tokens: number
   agent_max_context_turns: number
   agent_max_steps: number
+  /** Global default permission for sessions that have not picked one. */
+  agent_permission_mode?: string
+  permission_modes?: string[]
   enable_thinking?: boolean
   reasoning_effort?: string
   reasoning_effort_by_model?: Record<string, string>

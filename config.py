@@ -272,6 +272,12 @@ available_setting = {
     "agent_max_context_tokens": 64000,  # max context tokens in Agent mode
     "agent_max_context_turns": 30,  # max context memory turns in Agent mode
     "agent_max_steps": 30,  # max decision steps per run in Agent mode
+    # Default permission mode for sessions that have not picked one of their own:
+    # "read-only" | "workspace-write" | "full-access". Kept at full-access so an
+    # existing install behaves exactly as before an upgrade. Only a fresh desktop
+    # client (COW_DESKTOP=1 with no config.json yet) is tightened to the stricter
+    # workspace-write in load_config(); docker/source stay at full-access.
+    "agent_permission_mode": "full-access",
     # In-process sub agents: the Agent hands a self-contained task to a
     # short-lived worker with its own context, and gets back only the result.
     # Set enabled to false to withhold the subagent tool entirely.
@@ -496,6 +502,17 @@ def load_config():
     # only missing namespaces are filled in from the legacy section.
     _merge_legacy_namespace(config, legacy="tool",  canonical="tools")
     _merge_legacy_namespace(config, legacy="skill", canonical="skills")
+
+    # Fresh desktop installs default to the stricter "workspace-write"; every
+    # other case keeps the template's "full-access". A packaged client only
+    # lacks config.json on its very first launch (config_path fell back to the
+    # bundled template) — once the user configures anything (e.g. a model) the
+    # console persists config.json, so an existing install always has it and is
+    # never silently tightened by an upgrade. Non-desktop (docker, source) is
+    # untouched. Placed before the env override so AGENT_PERMISSION_MODE still
+    # wins if explicitly set.
+    if os.environ.get("COW_DESKTOP") == "1" and config_path != user_config_path:
+        config["agent_permission_mode"] = "workspace-write"
 
     # override config with environment variables.
     # Some online deployment platforms (e.g. Railway) deploy project from github directly. So you shouldn't put your secrets like api key in a config file, instead use environment variables to override the default config.

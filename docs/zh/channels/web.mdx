@@ -57,6 +57,19 @@ Web 控制台是 CowAgent 的默认通道，启动后会自动运行，通过浏
 - **新建会话**：点击会话列表顶部的「新对话」按钮或输入区的 `+` 按钮创建新会话
 - **删除会话**：点击会话项的删除按钮，确认后永久删除该会话及其所有消息
 - **清除上下文**：点击输入区的清除按钮，在当前会话中插入一条分隔线，分隔线以上的消息仍然展示但不再作为模型的上下文输入
+- **工作空间 / 模型 / 权限**：在输入框下方可为当前会话单独设置项目工作空间、模型和权限；使用多个项目时，历史会话会自动按项目分组。详见 [项目架构 - 项目工作空间](/zh/intro/architecture#project-workspace)
+
+<Frame caption="会话按工作空间分组，可为当前会话单独设置工作空间与模型">
+  <img src="https://cdn.jsdelivr.net/gh/zhayujie/cowagent-assets@main/screenshots/zh/web-console-workspace-project-demo.png" style={{ maxWidth: "800px" }} />
+</Frame>
+
+#### 权限模式
+
+可为当前会话设置权限模式，控制 Agent 对文件与命令的操作范围：只读（read-only）、工作空间可写（workspace-write）、完全访问（full-access）。工具调用因权限被拦截时会给出可点击的提示，便于就地调整。
+
+<Frame caption="会话级权限模式：只读、工作空间可写、完全访问">
+  <img src="https://cdn.jsdelivr.net/gh/zhayujie/cowagent-assets@main/screenshots/zh/web-console-access-mode.png" style={{ maxWidth: "600px" }} />
+</Frame>
 
 ### 模型管理
 

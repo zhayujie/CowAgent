@@ -34,9 +34,11 @@ When Agent mode is enabled, CowAgent runs as an autonomous agent with the follow
 5. **Update Memory & Knowledge** — Store important information in long-term memory and organize structured knowledge into the knowledge base
 6. **Return Result** — Send execution results back to the user
 
-## Workspace Directory Structure
+## Workspace {#workspace}
 
-The Agent workspace is located at `~/cow` by default and stores system prompts, memory files, and skill files:
+### System Workspace {#system-workspace}
+
+The Agent's system workspace is located at `~/cow` by default and stores system prompts, memory files, and skill files:
 
 ```
 ~/cow/
@@ -60,6 +62,17 @@ Secret keys are stored separately in `~/.cow` directory for security:
 └── .env               # Secret keys for skills
 ```
 
+### Project Workspace {#project-workspace}
+
+Besides the default workspace, each session can be bound to its own **project directory**. The Agent's file reads/writes and command execution happen inside that directory, giving you multi-project isolation; memory, skills, and the like still live in the default workspace. When more than one project is in use, the Web/desktop history list automatically groups sessions by project.
+
+### Per-Session Model & Permission {#session-settings}
+
+Workspace, model, and permission can all be **set per session**, falling back to the global default when unset:
+
+- **Model**: different sessions can switch to different models, making it easy to pick the right one per task.
+- **Permission**: controls what the Agent is allowed to do, in three levels — **read-only**, **workspace-write**, and **full-access**. You can set a global default (`agent_permission_mode`) in the config; new sessions inherit it and can be adjusted individually as needed. Permissions reduce the risk of accidental changes; for strong isolation, run inside a container.
+
 ## Core Configuration
 
 Configure Agent mode parameters in `config.json`:
@@ -71,6 +84,7 @@ Configure Agent mode parameters in `config.json`:
   "agent_max_context_tokens": 50000,
   "agent_max_context_turns": 20,
   "agent_max_steps": 20,
+  "agent_permission_mode": "full-access",
   "enable_thinking": false,
   "cow_lang": "auto"
 }
@@ -83,6 +97,7 @@ Configure Agent mode parameters in `config.json`:
 | `agent_max_context_tokens` | Max context tokens | `50000` |
 | `agent_max_context_turns` | Max context turns | `20` |
 | `agent_max_steps` | Max decision steps per task | `20` |
+| `agent_permission_mode` | Global default permission inherited by new sessions: `read-only` / `workspace-write` / `full-access` | `full-access` |
 | `enable_thinking` | Enable deep-thinking mode | `false` |
 | `knowledge` | Enable personal knowledge base | `true` |
 | `self_evolution_enabled` | Enable Self-Evolution (on by default for new installs) | `false` |

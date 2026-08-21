@@ -61,14 +61,15 @@ def test_older_claude_models_hide_effort_control():
 
 
 def test_dashscope_qwen38_max_exposes_native_effort_values():
-    cap = get_reasoning_capability("dashscope", "qwen3.8-max-preview")
+    # qwen3.8-max and its -preview snapshot share the same native effort enum.
+    for model in ("qwen3.8-max", "qwen3.8-max-preview"):
+        cap = get_reasoning_capability("dashscope", model)
 
-    assert cap["supported"] is True
-    assert cap["param"] == "reasoning_effort"
-    assert cap["default"] == "xhigh"
-    assert cap["thinking_only"] is True
-    assert _values(cap) == ["low", "medium", "xhigh"]
-    assert get_reasoning_capability("dashscope", "qwen3.8-max") == {"supported": False, "options": []}
+        assert cap["supported"] is True, model
+        assert cap["param"] == "reasoning_effort"
+        assert cap["default"] == "xhigh"
+        assert cap["thinking_only"] is True
+        assert _values(cap) == ["low", "medium", "xhigh"]
 
 
 def test_dashscope_glm_exposes_high_max_effort_values():
@@ -164,7 +165,8 @@ def test_normalize_returns_provider_default_for_invalid_value():
     assert normalize_reasoning_effort("zhipu", "glm-5.2", "medium") == "medium"
     assert normalize_reasoning_effort("claudeAPI", "claude-opus-5", "xhigh") == "xhigh"
     assert normalize_reasoning_effort("claudeAPI", "claude-sonnet-4-6", "xhigh") == "high"
-    assert normalize_reasoning_effort("dashscope", "qwen3.8-max", "high") is None
+    assert normalize_reasoning_effort("dashscope", "qwen3.8-max", "high") == "xhigh"
+    assert normalize_reasoning_effort("dashscope", "qwen3.8-max", "minimal") == "low"
     assert normalize_reasoning_effort("dashscope", "qwen3.8-max-preview", "minimal") == "low"
     assert normalize_reasoning_effort("dashscope", "glm-5.2", "low") == "high"
     assert normalize_reasoning_effort("dashscope", "deepseek-v4-pro", "xhigh") == "xhigh"

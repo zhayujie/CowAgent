@@ -128,6 +128,11 @@ def _build_child(parent, template, task: SubagentTask):
         skip_context_files=True,
     )
     child.extra_system_suffix = _build_brief(task, template)
+    # Same working directory and same permission mode as the parent: the tool
+    # copies already point at the parent's cwd, and delegating to a sub agent
+    # must not become a way around the session's permissions.
+    child.project_dir = parent.project_dir
+    child.permission_mode = parent.permission_mode
     return child
 
 

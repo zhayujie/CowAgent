@@ -20,11 +20,29 @@ class FeishuProgressState:
         self.status = "running"
         self.turns = 0
         self.current_text = ""
+        # Committed text of already-finished turns (pre-tool commentary), kept
+        # so the card shows the full multi-turn flow rather than only the last.
+        self._committed_text = ""
         self._reasoning_buffer = ""
         self.reasoning_steps: List[str] = []
         self.tool_steps: List[Dict[str, Any]] = []
         self._tool_index: Dict[str, Dict[str, Any]] = {}
         self.cancelled = False
+
+    @property
+    def display_text(self) -> str:
+        """Full visible text: committed prior turns plus the current buffer."""
+        return self._committed_text + self.current_text
+
+    def finalize_text(self, text: str) -> None:
+        """Collapse the accumulated text into a single final buffer.
+
+        Used once the run ends and the caller has the fully resolved text
+        (e.g. markdown images uploaded), so ``display_text`` returns it as-is
+        without re-prepending the already-included committed history.
+        """
+        self._committed_text = ""
+        self.current_text = text
 
     def consume(self, event: Dict[str, Any]) -> None:
         """Consume one event emitted by ``AgentStreamHandler``."""
@@ -38,8 +56,12 @@ class FeishuProgressState:
                 self.turns = max(self.turns, turn)
             else:
                 self.turns += 1
-            if self.turns > 1:
-                self.current_text = ""
+            # Keep each turn's pre-tool commentary on the card instead of
+            # wiping it: commit the finished turn's text (with a separator) so
+            # the whole "say → run tool → report" flow accumulates in one card.
+            if self.turns > 1 and self.current_text.strip():
+                self._committed_text += self.current_text.rstrip() + "\n\n---\n\n"
+            self.current_text = ""
             return
 
         if event_type == "reasoning_update":
@@ -109,7 +131,7 @@ class FeishuProgressState:
             "error": (i18n.t("出错", "Error"), "red"),
         }.get(self.status, (i18n.t("处理中", "Working"), "blue"))
 
-        main_text = self.current_text or "..."
+        main_text = self.display_text or "..."
         elements: List[Dict[str, Any]] = []
 
         # Only render the Reasoning panel when there is real reasoning content.

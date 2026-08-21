@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
+import { Download } from 'lucide-react'
 import { t } from '../i18n'
 import apiClient from '../api/client'
 
@@ -9,6 +10,7 @@ interface LogsPageProps {
 const LogsPage: React.FC<LogsPageProps> = ({ baseUrl }) => {
   const [logs, setLogs] = useState<string[]>([])
   const [autoScroll, setAutoScroll] = useState(true)
+  const [downloading, setDownloading] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -46,6 +48,32 @@ const LogsPage: React.FC<LogsPageProps> = ({ baseUrl }) => {
     setAutoScroll(scrollHeight - scrollTop - clientHeight < 50)
   }
 
+  const handleDownload = async () => {
+    if (downloading) return
+    setDownloading(true)
+    try {
+      // Fetch as a blob (rather than a bare <a download>) so the auth token in
+      // the query string is honored and the save uses our own file name.
+      const res = await fetch(apiClient.getLogDownloadUrl())
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const ts = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `cowagent-${ts}.log`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      // eslint-disable-next-line no-alert
+      alert(`${t('logs_download_failed')}: ${(e as Error).message}`)
+    } finally {
+      setDownloading(false)
+    }
+  }
+
   const getLogColor = (line: string) => {
     if (line.includes('ERROR') || line.includes('error')) return 'text-red-400'
     if (line.includes('WARNING') || line.includes('warn')) return 'text-amber-400'
@@ -61,6 +89,15 @@ const LogsPage: React.FC<LogsPageProps> = ({ baseUrl }) => {
             <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">{t('logs_title')}</h2>
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{t('logs_desc')}</p>
           </div>
+          <button
+            type="button"
+            onClick={handleDownload}
+            disabled={downloading}
+            className="inline-flex items-center gap-1 rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-2 py-1 text-xs font-medium text-slate-700 dark:text-slate-200 transition-colors hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Download size={13} />
+            {t('logs_download')}
+          </button>
         </div>
 
         {/* Terminal-style log viewer */}

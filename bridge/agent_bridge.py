@@ -105,17 +105,56 @@ class AgentLLMModel(LLMModel):
         self.bot_type = bot_type
         self._bot = None
         self._bot_model = None
+        # Per-session model override (see agent.workspace.session_prefs). None
+        # on both means "follow the global config", which is what every session
+        # does until the user picks a model for that conversation.
+        self._session_model = None
+        self._session_provider = None
 
     @property
     def model(self):
-        return conf().get("model") or const.DEFAULT_MODEL
+        return self._session_model or conf().get("model") or const.DEFAULT_MODEL
 
     @model.setter
     def model(self, value):
         pass
 
+    def set_session_override(self, provider: Optional[str], model: Optional[str]) -> None:
+        """Pin this session to one model/provider, or clear it with None/None.
+
+        The provider matters as much as the model: without it a session that
+        switches from DeepSeek to Claude would keep routing through the globally
+        configured bot type and ask DeepSeek for a Claude model.
+        """
+        provider = (provider or "").strip() or None
+        model = (model or "").strip() or None
+        if provider == self._session_provider and model == self._session_model:
+            return
+        self._session_provider = provider
+        self._session_model = model
+        # Force the lazy bot to be rebuilt for the new routing on the next call.
+        self._bot = None
+        self._bot_model = None
+        self._bot_type = None
+
+    @staticmethod
+    def provider_to_bot_type(provider_id: str) -> str:
+        """Map a UI provider id onto a bot type, as the models console does."""
+        if not provider_id:
+            return ""
+        # Same mapping the models console persists: "openai" routes through the
+        # OpenAI-compatible bot, not the legacy completion one.
+        if provider_id == "openai":
+            return const.CHATGPT
+        return provider_id
+
     def _resolve_bot_type(self, model_name: str) -> str:
         """Resolve bot type from model name, matching Bridge.__init__ logic."""
+        # A session override wins over every global routing switch, including
+        # use_linkai: the user picked this provider for this conversation.
+        if self._session_provider:
+            return self.provider_to_bot_type(self._session_provider)
+
         if conf().get("use_linkai", False) and conf().get("linkai_api_key"):
             return const.LINKAI
         # Support custom bot type configuration
@@ -539,6 +578,9 @@ class AgentBridge:
             # default — takes effect on the next message without rebuilding the
             # agent. Memory/skills stay anchored to the workspace regardless.
             self._apply_session_project(agent, session_id, resolved_agent_id)
+            # Same idea for the session's model and permission mode: both are
+            # per-conversation overrides that fall back to the global config.
+            self.apply_session_prefs(agent, session_id, resolved_agent_id)
             return agent
 
     def _apply_session_project(self, agent, session_id: str, agent_id: str) -> None:
@@ -555,6 +597,28 @@ class AgentBridge:
                 agent.apply_project_dir(project_dir)
         except Exception as e:
             logger.debug(f"[AgentBridge] apply_session_project failed: {e}")
+
+    def apply_session_prefs(self, agent, session_id: str, agent_id: str = None) -> None:
+        """Apply a session's model / permission overrides to its agent.
+
+        Called on every agent fetch and right after the user changes a setting,
+        so a switch takes effect on the next message without rebuilding the
+        agent. An empty override resets the agent to the global config, which is
+        what makes "follow global" work after a session had pinned something.
+        """
+        if agent is None or not session_id:
+            return
+        try:
+            from agent.workspace import session_prefs
+
+            prefs = session_prefs.get_prefs(session_id, agent_id)
+            model = getattr(agent, "model", None)
+            if model is not None and hasattr(model, "set_session_override"):
+                model.set_session_override(prefs.get("provider"), prefs.get("model"))
+            if hasattr(agent, "apply_permission_mode"):
+                agent.apply_permission_mode(prefs.get("permission"))
+        except Exception as e:
+            logger.debug(f"[AgentBridge] apply_session_prefs failed: {e}")
 
     def get_cached_agent(self, session_id: str, agent_id: str = None) -> Optional[Agent]:
         """Return an existing session agent without creating one."""

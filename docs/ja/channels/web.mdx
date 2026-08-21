@@ -57,6 +57,19 @@ Web コンソールは CowAgent のデフォルトチャネルです。起動後
 - **新規セッション**：セッション一覧上部の「新しい会話」ボタンまたは入力エリアの `+` ボタンをクリックして新しいセッションを作成します
 - **セッション削除**：セッション項目の削除ボタンをクリックし、確認後にそのセッションとすべてのメッセージを完全に削除します
 - **コンテキストクリア**：入力エリアのクリアボタンをクリックすると、現在のセッションに区切り線が挿入されます。区切り線より上のメッセージは表示されたままですが、モデルのコンテキスト入力には含まれなくなります
+- **ワークスペース / モデル / 権限**：入力欄の下で、現在のセッションにワークスペース・モデル・権限モードを個別に設定できます。複数のプロジェクトを使う場合、過去のセッションは自動的にプロジェクトごとにグループ化されます。詳しくは [アーキテクチャ - プロジェクトワークスペース](/ja/intro/architecture#project-workspace) を参照してください
+
+<Frame caption="ワークスペースごとにグループ化されたセッション。セッション単位でワークスペースとモデルを設定できます">
+  <img src="https://cdn.jsdelivr.net/gh/zhayujie/cowagent-assets@main/screenshots/en/web-console-workspace-project-demo.png" style={{ maxWidth: "800px" }} />
+</Frame>
+
+#### 権限モード
+
+セッションごとに権限モードを設定し、Agent がファイルやコマンドに触れる範囲を制御できます：読み取り専用（read-only）、ワークスペース書き込み可（workspace-write）、フルアクセス（full-access）。権限でツール呼び出しがブロックされた際は、その場で調整できるクリック可能なヒントが表示されます。
+
+<Frame caption="セッション単位の権限モード：読み取り専用、ワークスペース書き込み可、フルアクセス">
+  <img src="https://cdn.jsdelivr.net/gh/zhayujie/cowagent-assets@main/screenshots/en/web-console-access-mode.png" style={{ maxWidth: "600px" }} />
+</Frame>
 
 ### モデル管理
 

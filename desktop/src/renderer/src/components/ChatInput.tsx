@@ -8,7 +8,8 @@ import {
   Loader2,
   Trash2,
   AtSign,
-  Folder
+  Folder,
+  Mic
 } from 'lucide-react'
 import { t } from '../i18n'
 import type { Attachment, WorkspaceEntry } from '../types'
@@ -18,9 +19,18 @@ import { PaperPlaneIcon } from './icons'
 import { WORKSPACE_DRAG_TYPE } from './FileTree'
 import { iconFor, colorFor } from '../lib/fileKind'
 import WorkspaceSelector from './WorkspaceSelector'
+import PermissionSelector from './PermissionSelector'
+import ModelSelector from './ModelSelector'
 import Tooltip from './Tooltip'
+import { useSessionSettingsStore } from '../store/sessionSettingsStore'
 
 export type ChatInputHandle = (text: string, attachments: Attachment[]) => void
+
+// Voice input needs MediaRecorder + getUserMedia; hide the mic when absent.
+const micSupported =
+  typeof navigator !== 'undefined' &&
+  !!navigator.mediaDevices?.getUserMedia &&
+  typeof window.MediaRecorder !== 'undefined'
 
 interface SlashCommand {
   cmd: string
@@ -62,6 +72,144 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // Voice input: record via MediaRecorder, transcribe via the configured ASR
+  // provider (same flow as the web console's mic button).
+  const [micState, setMicState] = useState<'idle' | 'recording' | 'busy'>('idle')
+  const [micError, setMicError] = useState('')
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const streamRef = useRef<MediaStream | null>(null)
+  const chunksRef = useRef<Blob[]>([])
+  const micStartedAtRef = useRef(0)
+  const micErrorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const pickMicMimeType = () => {
+    const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4']
+    for (const m of candidates) {
+      if (window.MediaRecorder.isTypeSupported?.(m)) return m
+    }
+    return ''
+  }
+
+  const flashMicError = (msg: string) => {
+    setMicError(msg)
+    if (micErrorTimerRef.current) clearTimeout(micErrorTimerRef.current)
+    micErrorTimerRef.current = setTimeout(() => setMicError(''), 2500)
+  }
+
+  const stopMicStream = () => {
+    streamRef.current?.getTracks().forEach((tr) => tr.stop())
+    streamRef.current = null
+  }
+
+  const uploadRecording = async (blob: Blob) => {
+    setMicState('busy')
+    try {
+      const res = await apiClient.voiceAsr(blob)
+      if (res.status === 'success' && res.text) {
+        const recognized = res.text
+        // Fill the recognized text into the input for the user to review and send.
+        setText((prev) => (prev ? (prev.endsWith(' ') ? prev : prev + ' ') + recognized : recognized))
+        requestAnimationFrame(() => {
+          const el = textareaRef.current
+          if (el) {
+            el.focus()
+            el.selectionStart = el.selectionEnd = el.value.length
+            autoSize(el)
+          }
+        })
+      } else {
+        flashMicError(res.message || t('mic_error'))
+      }
+    } catch (e) {
+      flashMicError(`${t('mic_error')}: ${(e as Error).message}`)
+    } finally {
+      setMicState('idle')
+    }
+  }
+
+  const startRecording = async () => {
+    let stream: MediaStream
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    } catch (e) {
+      // Surface the concrete failure name so a denied/missing-device/insecure
+      // context can be told apart instead of always blaming permissions.
+      const err = e as Error
+      flashMicError(`${t('mic_permission_denied')} (${err.name || 'Error'})`)
+      return
+    }
+    streamRef.current = stream
+    chunksRef.current = []
+    const mimeType = pickMicMimeType()
+    let recorder: MediaRecorder
+    try {
+      recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream)
+    } catch (e) {
+      stopMicStream()
+      flashMicError(`${t('mic_error')}: ${(e as Error).message}`)
+      return
+    }
+    mediaRecorderRef.current = recorder
+    recorder.ondataavailable = (ev) => {
+      if (ev.data && ev.data.size > 0) chunksRef.current.push(ev.data)
+    }
+    recorder.onstop = () => {
+      stopMicStream()
+      const blob = new Blob(chunksRef.current, { type: recorder.mimeType || 'audio/webm' })
+      // 256 bytes ≈ container header only — treat as an accidental tap.
+      if (blob.size < 256) {
+        setMicState('idle')
+        flashMicError(t('mic_too_short'))
+        return
+      }
+      uploadRecording(blob)
+    }
+    // timeslice=250ms: flush a chunk every 250ms so very short taps aren't lost.
+    recorder.start(250)
+    micStartedAtRef.current = Date.now()
+    setMicState('recording')
+  }
+
+  const stopRecording = () => {
+    const recorder = mediaRecorderRef.current
+    if (!recorder || recorder.state === 'inactive') return
+    // Give the recorder a moment to capture at least one chunk on quick taps.
+    const elapsed = Date.now() - micStartedAtRef.current
+    const minMs = 350
+    if (elapsed < minMs) {
+      setTimeout(() => {
+        if (recorder.state !== 'inactive') recorder.stop()
+      }, minMs - elapsed)
+    } else {
+      recorder.stop()
+    }
+  }
+
+  const toggleMic = () => {
+    if (micState === 'recording') stopRecording()
+    else if (micState === 'idle') startRecording()
+  }
+
+  // Release the mic and timers when the chat page unmounts.
+  useEffect(() => {
+    return () => {
+      const recorder = mediaRecorderRef.current
+      if (recorder && recorder.state !== 'inactive') {
+        recorder.onstop = null
+        recorder.stop()
+      }
+      stopMicStream()
+      if (micErrorTimerRef.current) clearTimeout(micErrorTimerRef.current)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Per-session model / permission chips follow the active conversation.
+  useEffect(() => {
+    useSessionSettingsStore.getState().refresh(sessionId)
+    useSessionSettingsStore.getState().setOpenMenu(null)
+  }, [sessionId])
+
   // Local actions ('new'/'clear') plus completion commands handled by backend
   // command plugins (cow_cli/godcmd). Commands ending with a space expect an
   // argument, so selecting them keeps focus in the input instead of sending.
@@ -91,16 +239,16 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
   // never shows a scrollbar (matches the web console behavior).
   const autoSize = (el: HTMLTextAreaElement | null) => {
     if (!el) return
-    el.style.height = '42px'
-    const h = Math.min(el.scrollHeight, 180)
+    el.style.height = '48px'
+    const h = Math.min(el.scrollHeight, 200)
     el.style.height = h + 'px'
-    el.style.overflowY = el.scrollHeight > 180 ? 'auto' : 'hidden'
+    el.style.overflowY = el.scrollHeight > 200 ? 'auto' : 'hidden'
   }
 
   const resetHeight = () => {
     const el = textareaRef.current
     if (!el) return
-    el.style.height = '42px'
+    el.style.height = '48px'
     el.style.overflowY = 'hidden'
   }
 
@@ -440,9 +588,11 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
 
   return (
     <div className="flex-shrink-0 border-t border-default bg-surface px-4 py-3">
+      {/* One tall rounded card holds the textarea on top and a toolbar row
+          (chips + actions) at the bottom, matching the web console composer. */}
       <div
-        className={`max-w-3xl mx-auto relative rounded-2xl transition-all ${
-          dragOver ? 'ring-2 ring-accent ring-offset-2 ring-offset-surface' : ''
+        className={`max-w-3xl mx-auto relative rounded-2xl border bg-inset transition-colors ${
+          dragOver ? 'border-accent ring-2 ring-accent/30' : 'border-strong focus-within:border-accent'
         }`}
       >
         {dragOver && (
@@ -524,13 +674,9 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
           </div>
         )}
 
-        {/* Workspace selector (always present) + attachment preview share a row.
-            The selector stays left; attachments grow to its right and scroll.
-            No bottom gap by default (selector sits snug above the input); add a
-            little breathing room only when attachments are shown. */}
-        <div className={`flex items-center gap-2 relative ${attachments.length > 0 ? 'mb-2' : 'mb-0.5'}`}>
-          <WorkspaceSelector sessionId={sessionId} />
-          {attachments.length > 0 && (
+        {/* Attachment previews sit at the top of the card, above the textarea. */}
+        {attachments.length > 0 && (
+          <div className="flex items-center gap-2 relative px-3 pt-2.5">
             <div className="flex-1 min-w-0 flex items-center gap-2 overflow-x-auto overflow-y-visible">
               {attachments.map((att, i) => (
                 <div key={i} className="relative shrink-0">
@@ -573,45 +719,20 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                 </div>
               ))}
             </div>
-          )}
-        </div>
-
-        <div className="flex items-end gap-2">
-          <div className="flex items-center flex-shrink-0 gap-0.5 pb-0.5">
-            <Tooltip label={t('session_new')}>
-              <button
-                onClick={onNewChat}
-                className="w-9 h-9 flex items-center justify-center rounded-btn text-content-secondary hover:text-accent hover:bg-accent-soft cursor-pointer transition-colors"
-              >
-                <Plus size={18} />
-              </button>
-            </Tooltip>
-            <Tooltip label={t('chat_attach')}>
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploading}
-                className="w-9 h-9 flex items-center justify-center rounded-btn text-content-secondary hover:text-accent hover:bg-accent-soft cursor-pointer transition-colors disabled:opacity-50"
-              >
-                {uploading ? <Loader2 size={18} className="animate-spin" /> : <Paperclip size={18} />}
-              </button>
-            </Tooltip>
-            <Tooltip label={t('chat_clear_context')}>
-              <button
-                onClick={onClearContext}
-                className="w-9 h-9 flex items-center justify-center rounded-btn text-content-secondary hover:text-danger hover:bg-danger-soft cursor-pointer transition-colors"
-              >
-                <Trash2 size={18} />
-              </button>
-            </Tooltip>
           </div>
-          <input
-            ref={fileInputRef}
-            type="file"
-            className="hidden"
-            multiple
-            onChange={handleFileSelect}
-          />
+        )}
 
+        <input
+          ref={fileInputRef}
+          type="file"
+          className="hidden"
+          multiple
+          onChange={handleFileSelect}
+        />
+
+        {/* Textarea sits at the top of the card, borderless (the card owns the
+            border) and taller than a single line so the composer reads tall. */}
+        <div className="relative">
           <textarea
             ref={textareaRef}
             id="chat-input"
@@ -623,29 +744,112 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
             onCompositionEnd={() => (composingRef.current = false)}
             placeholder={t('input_placeholder')}
             rows={1}
-            className="flex-1 min-w-0 px-4 py-[10px] rounded-xl border border-strong bg-inset text-content placeholder:text-content-tertiary focus:outline-none focus:border-accent text-sm leading-relaxed transition-colors resize-none overflow-y-hidden"
+            className="w-full px-4 pt-3 pb-0 bg-transparent text-content placeholder:text-content-tertiary focus:outline-none text-sm leading-relaxed resize-none overflow-y-hidden"
           />
-
-          {isStreaming ? (
-            <Tooltip label={t('msg_stop')}>
-              <button
-                onClick={onStop}
-                className="flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-btn bg-surface-2 text-content hover:bg-inset cursor-pointer transition-colors"
-              >
-                <Square size={15} className="fill-current" />
-              </button>
-            </Tooltip>
-          ) : (
-            <Tooltip label={t('chat_send')}>
-              <button
-                onClick={handleSubmit}
-                disabled={!canSend}
-                className="flex-shrink-0 w-[42px] h-[42px] flex items-center justify-center rounded-btn bg-accent text-white hover:bg-accent-hover disabled:bg-surface-2 disabled:text-content-disabled disabled:cursor-not-allowed cursor-pointer transition-none [&_*]:transition-none"
-              >
-                <PaperPlaneIcon size={15} />
-              </button>
-            </Tooltip>
+          {micError && (
+            // Transient error tip above the input, mirroring the web console.
+            <div className="absolute right-3 bottom-full mb-2 px-2 py-1 rounded-md text-xs text-white bg-black/80 dark:bg-white/20 shadow-md pointer-events-none whitespace-nowrap z-10">
+              {micError}
+            </div>
           )}
+        </div>
+
+        {/* Toolbar row inside the card: chips on the left, actions on the right.
+            This is what makes the composer read as one tall card like the web
+            console, instead of a short input with controls floating around it.
+            The middle chip group shrinks/truncates so a narrow composer (right
+            panel open) never overflows the card. */}
+        <div className="composer-toolbar flex items-center gap-1 px-2 pb-1 pt-2 min-w-0">
+          <Tooltip label={t('session_new')}>
+            <button
+              onClick={onNewChat}
+              className="shrink-0 w-8 h-8 flex items-center justify-center rounded-btn text-content-secondary hover:text-accent hover:bg-accent-soft cursor-pointer transition-colors"
+            >
+              <Plus size={17} />
+            </button>
+          </Tooltip>
+          <Tooltip label={t('chat_attach')}>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              className="shrink-0 w-8 h-8 flex items-center justify-center rounded-btn text-content-secondary hover:text-accent hover:bg-accent-soft cursor-pointer transition-colors disabled:opacity-50"
+            >
+              {uploading ? <Loader2 size={17} className="animate-spin" /> : <Paperclip size={17} />}
+            </button>
+          </Tooltip>
+          <Tooltip label={t('chat_clear_context')}>
+            <button
+              onClick={onClearContext}
+              className="shrink-0 w-8 h-8 flex items-center justify-center rounded-btn text-content-secondary hover:text-danger hover:bg-danger-soft cursor-pointer transition-colors"
+            >
+              <Trash2 size={17} />
+            </button>
+          </Tooltip>
+
+          <div className="mx-1 h-4 w-px bg-default shrink-0" />
+
+          {/* Chips share the flexible middle; each may shrink and truncate. */}
+          <div className="flex items-center gap-1 min-w-0 flex-1">
+            <WorkspaceSelector sessionId={sessionId} />
+            <PermissionSelector sessionId={sessionId} />
+          </div>
+
+          <div className="flex items-center gap-1 shrink-0 pl-1">
+            <div className="max-w-[200px] min-w-0">
+              <ModelSelector sessionId={sessionId} />
+            </div>
+            {micSupported && (
+              <Tooltip
+                label={
+                  micState === 'recording'
+                    ? t('mic_recording_title')
+                    : micState === 'busy'
+                      ? t('mic_busy_title')
+                      : t('mic_idle_title')
+                }
+              >
+                <button
+                  onClick={toggleMic}
+                  disabled={micState === 'busy'}
+                  className={`w-8 h-8 flex items-center justify-center rounded-btn cursor-pointer transition-colors disabled:cursor-not-allowed ${
+                    micState === 'recording'
+                      ? 'text-red-500 animate-pulse hover:text-red-600'
+                      : micState === 'busy'
+                        ? 'text-accent'
+                        : 'text-content-tertiary hover:text-accent hover:bg-accent-soft'
+                  }`}
+                >
+                  {micState === 'recording' ? (
+                    <Square size={12} className="fill-current" />
+                  ) : micState === 'busy' ? (
+                    <Loader2 size={16} className="animate-spin" />
+                  ) : (
+                    <Mic size={16} />
+                  )}
+                </button>
+              </Tooltip>
+            )}
+            {isStreaming ? (
+              <Tooltip label={t('msg_stop')}>
+                <button
+                  onClick={onStop}
+                  className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-btn bg-surface-2 text-content hover:bg-inset cursor-pointer transition-colors"
+                >
+                  <Square size={14} className="fill-current" />
+                </button>
+              </Tooltip>
+            ) : (
+              <Tooltip label={t('chat_send')}>
+                <button
+                  onClick={handleSubmit}
+                  disabled={!canSend}
+                  className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-btn bg-accent text-white hover:bg-accent-hover disabled:bg-surface-2 disabled:text-content-disabled disabled:cursor-not-allowed cursor-pointer transition-none [&_*]:transition-none"
+                >
+                  <PaperPlaneIcon size={14} />
+                </button>
+              </Tooltip>
+            )}
+          </div>
         </div>
       </div>
     </div>

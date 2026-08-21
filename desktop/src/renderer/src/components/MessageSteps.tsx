@@ -1,8 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { ChevronRight, Loader2, Check, X, Lightbulb } from 'lucide-react'
+import { ChevronRight, Loader2, Check, X, Lightbulb, Shield } from 'lucide-react'
 import type { MessageStep, SubStep } from '../types'
 import { t } from '../i18n'
 import Markdown from './Markdown'
+import { permLabel } from '../lib/permission'
+import { useSessionSettingsStore } from '../store/sessionSettingsStore'
 
 /**
  * Assistant reasoning / tool steps, styled to match the web console: small,
@@ -147,6 +149,26 @@ const ToolStep: React.FC<{ step: MessageStep }> = ({ step }) => {
           )}
         </div>
       )}
+      {step.permission_denied && <PermissionDeniedHint mode={step.permission_mode} />}
+    </div>
+  )
+}
+
+const PermissionDeniedHint: React.FC<{ mode?: string }> = ({ mode }) => {
+  const label = permLabel(mode)
+  return (
+    <div className="mt-1.5 mb-1 flex items-center gap-2 px-3 py-2 rounded-lg border border-default bg-inset text-[12px] text-content-secondary">
+      <Shield size={13} className="shrink-0 text-content-tertiary" />
+      <span className="flex-1 min-w-0">
+        {t('perm_denied_hint').replace('{name}', label)}
+      </span>
+      <button
+        type="button"
+        onClick={() => useSessionSettingsStore.getState().setOpenMenu('permission')}
+        className="shrink-0 px-2 py-0.5 rounded-md text-[12px] font-medium text-accent-contrast bg-accent hover:bg-accent-hover cursor-pointer transition-colors"
+      >
+        {t('perm_denied_action')}
+      </button>
     </div>
   )
 }

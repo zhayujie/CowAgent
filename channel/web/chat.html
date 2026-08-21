@@ -160,11 +160,6 @@
                             <span data-i18n="menu_config">配置</span>
                         </a>
                         <a class="sidebar-item flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-all duration-150 hover:bg-white/5 hover:text-neutral-200 text-[14px]"
-                           data-view="models">
-                            <i class="fas fa-microchip item-icon text-xs w-5 text-center"></i>
-                            <span data-i18n="menu_models">模型</span>
-                        </a>
-                        <a class="sidebar-item flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-all duration-150 hover:bg-white/5 hover:text-neutral-200 text-[14px]"
                            data-view="skills">
                             <i class="fas fa-bolt item-icon text-xs w-5 text-center"></i>
                             <span data-i18n="menu_skills">技能</span>
@@ -436,45 +431,80 @@
                     <!-- Chat Input -->
                     <div class="flex-shrink-0 border-t border-slate-200 dark:border-white/10 bg-white dark:bg-[#1A1A1A] px-4 py-3">
                         <div class="max-w-3xl mx-auto">
-                            <!-- Workspace selector + attachment preview share one row -->
-                            <div class="ws-attach-row flex items-center gap-2 relative">
-                                <button id="workspace-selector-btn" type="button"
-                                        onclick="toggleWorkspaceSelector(event)"
-                                        class="flex-shrink-0 inline-flex items-center gap-1.5 pl-2 pr-2 py-0.5 rounded-lg
-                                               text-xs text-slate-500 dark:text-slate-400
-                                               hover:text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20
-                                               cursor-pointer transition-colors duration-150 max-w-[50%]"
-                                        data-tip-float data-tooltip-pos="top">
-                                    <i class="fas fa-folder-open text-[11px]"></i>
-                                    <span id="workspace-selector-label" class="truncate" data-i18n="ws_default_workspace">默认空间</span>
-                                    <i class="fas fa-chevron-down text-[9px] opacity-60"></i>
-                                </button>
-                                <div id="workspace-selector-menu" class="workspace-selector-menu hidden"></div>
-                                <!-- Attachment preview: grows to the right of the selector, scrolls horizontally -->
+                            <!-- Composer card: text on top, session controls along the bottom -->
+                            <div id="composer-card" class="composer-card">
+                                <!-- Attachment preview: scrolls horizontally above the text -->
                                 <div id="attachment-preview" class="attachment-preview hidden"></div>
-                            </div>
-                            <div class="flex items-center gap-2 relative">
-                                <div class="flex items-center flex-shrink-0">
-                                    <button id="new-chat-btn" class="w-9 h-10 flex items-center justify-center rounded-lg
-                                                                     text-slate-400 hover:text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20
-                                                                     cursor-pointer transition-colors duration-150"
-                                            onclick="newChat()">
-                                        <i class="fas fa-plus text-base"></i>
-                                    </button>
-                                    <button id="clear-context-btn" class="w-9 h-10 flex items-center justify-center rounded-lg
-                                                                          text-slate-400 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20
-                                                                          cursor-pointer transition-colors duration-150"
-                                            onclick="clearContext()">
-                                        <i class="fas fa-trash-can text-base"></i>
-                                    </button>
-                                    <button id="attach-btn" class="w-9 h-10 flex items-center justify-center rounded-lg
-                                                                   text-slate-400 hover:text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20
-                                                                   cursor-pointer transition-colors duration-150"
-                                            type="button"
-                                            onclick="toggleAttachMenu(event)">
-                                        <i class="fas fa-paperclip text-base"></i>
-                                    </button>
+
+                                <textarea id="chat-input"
+                                          class="composer-textarea"
+                                          rows="1"
+                                          data-i18n-placeholder="input_placeholder"
+                                          placeholder="输入消息，/ 使用指令，@ 引用文件"></textarea>
+
+                                <div class="composer-toolbar">
+                                    <div class="composer-group">
+                                        <button id="new-chat-btn" type="button" class="composer-icon-btn"
+                                                onclick="newChat()">
+                                            <i class="fas fa-plus"></i>
+                                        </button>
+                                        <button id="clear-context-btn" type="button" class="composer-icon-btn composer-icon-btn-warn"
+                                                onclick="clearContext()">
+                                            <i class="fas fa-trash-can"></i>
+                                        </button>
+                                        <button id="attach-btn" type="button" class="composer-icon-btn"
+                                                onclick="toggleAttachMenu(event)">
+                                            <i class="fas fa-paperclip"></i>
+                                        </button>
+
+                                        <span class="composer-divider"></span>
+
+                                        <button id="workspace-selector-btn" type="button" class="composer-chip"
+                                                onclick="toggleWorkspaceSelector(event)"
+                                                data-tip-float data-tooltip-pos="top">
+                                            <i class="fas fa-folder-open"></i>
+                                            <span id="workspace-selector-label" class="composer-chip-label" data-i18n="ws_default_workspace">默认空间</span>
+                                            <i class="fas fa-chevron-down composer-chip-caret"></i>
+                                        </button>
+
+                                        <button id="permission-selector-btn" type="button" class="composer-chip"
+                                                onclick="togglePermissionSelector(event)"
+                                                data-tip-float data-tooltip-pos="top">
+                                            <i id="permission-selector-icon" class="fas fa-shield-halved"></i>
+                                            <span id="permission-selector-label" class="composer-chip-label" data-i18n="perm_full_access">全部可访问</span>
+                                            <i class="fas fa-chevron-down composer-chip-caret"></i>
+                                        </button>
+                                    </div>
+
+                                    <div class="composer-group composer-group-end">
+                                        <button id="model-selector-btn" type="button" class="composer-chip"
+                                                onclick="toggleModelSelector(event)"
+                                                data-tip-float data-tooltip-pos="top">
+                                            <i class="fas fa-microchip"></i>
+                                            <span id="model-selector-label" class="composer-chip-label">—</span>
+                                            <i class="fas fa-chevron-down composer-chip-caret"></i>
+                                        </button>
+                                        <button id="optimize-btn" type="button" class="composer-icon-btn"
+                                                data-tooltip="智能优化输入">
+                                            <i class="fas fa-magic text-[13px]"></i>
+                                        </button>
+                                        <button id="mic-btn" type="button" class="composer-icon-btn text-slate-400"
+                                                data-tooltip="点击录音 / 再按一次结束">
+                                            <i class="fas fa-microphone text-sm"></i>
+                                        </button>
+                                        <button id="steer-btn" type="button"
+                                                class="hidden composer-send-btn composer-steer-btn"
+                                                data-i18n-aria-label="steer_active"
+                                                aria-label="引导当前任务"
+                                                data-tooltip="引导当前任务">
+                                            <i class="fas fa-arrow-turn-up text-sm"></i>
+                                        </button>
+                                        <button id="send-btn" class="composer-send-btn" disabled>
+                                            <i class="fas fa-paper-plane text-sm"></i>
+                                        </button>
+                                    </div>
                                 </div>
+
                                 <input type="file" id="file-input" class="hidden" multiple
                                        accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.json,.xml,.zip,.rar,.7z,.py,.js,.ts,.java,.c,.cpp,.go,.rs,.md">
                                 <input type="file" id="folder-input" class="hidden" multiple webkitdirectory directory>
@@ -490,52 +520,9 @@
                                 </div>
                                 <div id="slash-menu" class="slash-menu hidden"></div>
                                 <div id="mention-menu" class="mention-menu hidden"></div>
-                                <div class="flex-1 min-w-0 relative flex items-center">
-                                    <textarea id="chat-input"
-                                              class="w-full pl-4 pr-[4.5rem] py-[10px] rounded-xl border border-slate-200 dark:border-slate-600
-                                                     bg-slate-50 dark:bg-white/5 text-slate-800 dark:text-slate-100
-                                                     placeholder:text-slate-400 dark:placeholder:text-slate-500
-                                                     focus:outline-none focus:ring-0 focus:border-primary-600
-                                                     text-sm leading-relaxed"
-                                              rows="1"
-                                              data-i18n-placeholder="input_placeholder"
-                                              placeholder="输入消息，/ 使用指令，@ 引用文件"></textarea>
-                                    <button id="optimize-btn" type="button"
-                                            class="absolute right-9 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center rounded-lg
-                                                   text-slate-400 hover:text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20
-                                                   cursor-pointer transition-colors duration-150"
-                                            data-tooltip="智能优化输入">
-                                        <i class="fas fa-magic text-[13px]"></i>
-                                    </button>
-                                    <button id="mic-btn" type="button"
-                                            class="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center rounded-lg
-                                                   text-slate-400 hover:text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20
-                                                   cursor-pointer transition-colors duration-150"
-                                            data-tooltip="点击录音 / 再按一次结束">
-                                        <i class="fas fa-microphone text-sm"></i>
-                                    </button>
-                                </div>
-                                <button id="steer-btn"
-                                        class="hidden flex-shrink-0 w-10 h-10 items-center justify-center rounded-lg
-                                               border border-primary-300 dark:border-primary-700
-                                               text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20
-                                               disabled:text-slate-300 dark:disabled:text-slate-600
-                                               disabled:border-slate-200 dark:disabled:border-slate-700
-                                               disabled:cursor-not-allowed cursor-pointer transition-colors duration-150"
-                                        type="button"
-                                        data-i18n-aria-label="steer_active"
-                                        aria-label="引导当前任务"
-                                        data-tooltip="引导当前任务">
-                                    <i class="fas fa-arrow-turn-up text-sm"></i>
-                                </button>
-                                <button id="send-btn"
-                                        class="flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-lg
-                                               bg-primary-400 text-white hover:bg-primary-500
-                                               disabled:bg-slate-300 dark:disabled:bg-slate-600
-                                               disabled:cursor-not-allowed cursor-pointer transition-colors duration-150"
-                                        disabled>
-                                    <i class="fas fa-paper-plane text-sm"></i>
-                                </button>
+                                <div id="workspace-selector-menu" class="workspace-selector-menu hidden"></div>
+                                <div id="permission-selector-menu" class="composer-menu hidden"></div>
+                                <div id="model-selector-menu" class="composer-menu composer-menu-wide hidden"></div>
                             </div>
                         </div>
                     </div>
@@ -608,6 +595,15 @@
                 <!-- VIEW: Config                                            -->
                 <!-- ====================================================== -->
                 <div id="view-config" class="view">
+                    <!-- Tailwind JIT safelist: models capability-card icon colors
+                         are emitted from JS template strings. Listing them here
+                         (display:none) guarantees the CDN-side compiler picks
+                         them up regardless of render timing. -->
+                    <div class="hidden bg-blue-50 dark:bg-blue-900/30 text-blue-500
+                                       bg-orange-50 dark:bg-orange-900/30 text-orange-500
+                                       bg-purple-50 dark:bg-purple-900/30 text-purple-500
+                                       bg-amber-50 dark:bg-amber-900/30 text-amber-500
+                                       bg-primary-50 dark:bg-primary-900/30 text-primary-500"></div>
                     <div class="flex-1 overflow-y-auto p-6">
                         <div class="max-w-4xl mx-auto">
                             <div class="flex items-center justify-between mb-6">
@@ -616,7 +612,21 @@
                                     <p class="text-sm text-slate-500 dark:text-slate-400 mt-1" data-i18n="config_desc">管理模型和 Agent 配置</p>
                                 </div>
                             </div>
-                            <div class="grid gap-6">
+
+                            <!-- Tabs: 基础配置 / 模型配置 -->
+                            <div class="flex items-center bg-slate-100 dark:bg-white/10 rounded-lg p-0.5 mb-6 w-max">
+                                <button id="config-tab-basic" onclick="switchConfigTab('basic')"
+                                        class="config-tab px-4 py-1.5 rounded-md text-xs font-medium cursor-pointer transition-colors duration-150 active">
+                                    <i class="fas fa-sliders mr-1.5"></i><span data-i18n="settings_tab_basic">基础配置</span>
+                                </button>
+                                <button id="config-tab-models" onclick="switchConfigTab('models')"
+                                        class="config-tab px-4 py-1.5 rounded-md text-xs font-medium cursor-pointer transition-colors duration-150">
+                                    <i class="fas fa-microchip mr-1.5"></i><span data-i18n="settings_tab_models">模型配置</span>
+                                </button>
+                            </div>
+
+                            <!-- Panel: 基础配置 -->
+                            <div id="config-panel-basic" class="grid gap-6">
 
                                 <!-- Model Config Card -->
                                 <div class="bg-white dark:bg-[#1A1A1A] rounded-xl border border-slate-200 dark:border-white/10 p-6">
@@ -626,7 +636,7 @@
                                         </div>
                                         <h3 class="font-semibold text-slate-800 dark:text-slate-100" data-i18n="config_model">模型配置</h3>
                                         <a class="ml-auto text-xs text-slate-500 dark:text-slate-400 hover:text-primary-500 dark:hover:text-primary-400 cursor-pointer transition-colors flex items-center gap-1"
-                                           onclick="navigateTo('models')">
+                                           onclick="switchConfigTab('models')">
                                             <span data-i18n="config_model_advanced">高级配置</span>
                                             <i class="fas fa-arrow-right text-[10px]"></i>
                                         </a>
@@ -666,7 +676,15 @@
                                         </div>
                                         <!-- API Key -->
                                         <div id="cfg-api-key-wrap">
-                                            <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">API Key</label>
+                                            <div class="flex items-center justify-between gap-2 mb-1.5">
+                                                <label class="block text-sm font-medium text-slate-600 dark:text-slate-400">API Key</label>
+                                                <a id="cfg-manage-key" href="https://link-ai.tech/console/models?apikey=1"
+                                                   target="_blank" rel="noopener noreferrer"
+                                                   class="hidden inline-flex items-center gap-1 text-xs text-primary-500 hover:underline">
+                                                    <span data-i18n="models_manage_api_key">管理 API Key</span>
+                                                    <i class="fas fa-arrow-up-right-from-square text-[10px]"></i>
+                                                </a>
+                                            </div>
                                             <div class="relative">
                                                 <input id="cfg-api-key" type="text" autocomplete="off" data-1p-ignore data-lpignore="true"
                                                        class="w-full px-3 py-2 pr-10 rounded-lg border border-slate-200 dark:border-slate-600
@@ -809,6 +827,20 @@
                                     </div>
                                     <div class="space-y-4">
                                         <div>
+                                            <label class="flex items-center gap-1.5 text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">
+                                                <span data-i18n="config_permission">默认权限</span>
+                                                <span class="cfg-tip" data-tip-key="config_permission_hint"><i class="fas fa-circle-question"></i></span>
+                                            </label>
+                                            <div id="cfg-permission" class="cfg-dropdown" tabindex="0">
+                                                <div class="cfg-dropdown-selected">
+                                                    <span class="cfg-dropdown-text">--</span>
+                                                    <i class="fas fa-chevron-down cfg-dropdown-arrow"></i>
+                                                </div>
+                                                <div class="cfg-dropdown-menu"></div>
+                                            </div>
+                                            <p class="text-xs text-slate-400 dark:text-slate-500 mt-1.5" data-i18n="config_permission_desc">新会话默认使用该权限；单个会话可在输入框下方单独调整</p>
+                                        </div>
+                                        <div>
                                             <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5" data-i18n="config_password">访问密码</label>
                                             <input id="cfg-password" type="password" autocomplete="new-password"
                                                    class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600
@@ -828,13 +860,13 @@
                                     </div>
                                 </div>
 
-                                <!-- Language Config Card -->
+                                <!-- System Config Card -->
                                 <div class="bg-white dark:bg-[#1A1A1A] rounded-xl border border-slate-200 dark:border-white/10 p-6">
                                     <div class="flex items-center gap-3 mb-5">
                                         <div class="w-9 h-9 rounded-lg bg-sky-50 dark:bg-sky-900/30 flex items-center justify-center">
-                                            <i class="fas fa-language text-sky-500 text-sm"></i>
+                                            <i class="fas fa-sliders-h text-sky-500 text-sm"></i>
                                         </div>
-                                        <h3 class="font-semibold text-slate-800 dark:text-slate-100" data-i18n="config_language">语言</h3>
+                                        <h3 class="font-semibold text-slate-800 dark:text-slate-100" data-i18n="config_system">系统</h3>
                                     </div>
                                     <div class="space-y-4">
                                         <div>
@@ -850,10 +882,47 @@
                                                 <div class="cfg-dropdown-menu"></div>
                                             </div>
                                         </div>
+                                        <div class="flex items-center justify-between">
+                                            <label class="flex items-center gap-1.5 text-sm font-medium text-slate-600 dark:text-slate-400">
+                                                <span data-i18n="config_task_notify">Task Notifications</span>
+                                                <span class="cfg-tip" data-tip-key="config_task_notify_hint"><i class="fas fa-circle-question"></i></span>
+                                            </label>
+                                            <label class="relative inline-flex items-center cursor-pointer">
+                                                <input id="cfg-task-notify" type="checkbox" class="sr-only peer">
+                                                <div class="w-9 h-5 bg-slate-200 dark:bg-slate-700 peer-checked:bg-primary-400 rounded-full
+                                                            after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white
+                                                            after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full"></div>
+                                            </label>
+                                        </div>
+                                        <div class="flex items-center justify-between">
+                                            <label class="flex items-center gap-1.5 text-sm font-medium text-slate-600 dark:text-slate-400">
+                                                <span data-i18n="config_task_notify_sound">Notification Sound</span>
+                                                <span class="cfg-tip" data-tip-key="config_task_notify_sound_hint"><i class="fas fa-circle-question"></i></span>
+                                            </label>
+                                            <label class="relative inline-flex items-center cursor-pointer">
+                                                <input id="cfg-task-notify-sound" type="checkbox" class="sr-only peer">
+                                                <div class="w-9 h-5 bg-slate-200 dark:bg-slate-700 peer-checked:bg-primary-400 rounded-full
+                                                            after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white
+                                                            after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full"></div>
+                                            </label>
+                                        </div>
+                                        <div id="cfg-task-notify-blocked" class="hidden flex items-start gap-2 text-xs text-amber-600 dark:text-amber-500 bg-amber-50 dark:bg-amber-900/20 rounded-lg px-3 py-2">
+                                            <i class="fas fa-triangle-exclamation mt-0.5"></i>
+                                            <span data-i18n="config_task_notify_blocked">系统通知已被浏览器屏蔽，请点击地址栏左侧图标 → 通知 → 允许后刷新页面</span>
+                                        </div>
                                     </div>
                                 </div>
 
                             </div>
+
+                            <!-- Panel: 模型配置 (advanced vendor / capability management) -->
+                            <div id="config-panel-models" class="hidden">
+                                <div id="models-loading" class="flex items-center gap-2 py-12 justify-center text-slate-400 dark:text-slate-500 text-sm">
+                                    <i class="fas fa-spinner fa-spin text-xs"></i><span>Loading...</span>
+                                </div>
+                                <div id="models-content" class="grid gap-6 hidden"></div>
+                            </div>
+
                         </div>
                     </div>
                 </div>
@@ -1100,41 +1169,6 @@
                                 </div>
                             </div>
 
-                        </div>
-                    </div>
-                </div>
-
-                <!-- ====================================================== -->
-                <!-- VIEW: Models                                            -->
-                <!-- ====================================================== -->
-                <div id="view-models" class="view">
-                    <!-- Tailwind JIT safelist: capability-card icon colors are
-                         emitted from JS template strings. Listing them here
-                         (display:none) guarantees the CDN-side compiler picks
-                         them up regardless of render timing. -->
-                    <div class="hidden bg-blue-50 dark:bg-blue-900/30 text-blue-500
-                                       bg-orange-50 dark:bg-orange-900/30 text-orange-500
-                                       bg-purple-50 dark:bg-purple-900/30 text-purple-500
-                                       bg-amber-50 dark:bg-amber-900/30 text-amber-500
-                                       bg-primary-50 dark:bg-primary-900/30 text-primary-500"></div>
-                    <div class="flex-1 overflow-y-auto p-6">
-                        <div class="max-w-4xl mx-auto">
-                            <div class="flex items-center justify-between mb-6">
-                                <div>
-                                    <h2 class="text-xl font-bold text-slate-800 dark:text-slate-100" data-i18n="models_title">模型管理</h2>
-                                    <p class="text-sm text-slate-500 dark:text-slate-400 mt-1" data-i18n="models_desc">统一管理对话、视觉、语音、向量、图像、搜索能力</p>
-                                </div>
-                                <button id="models-add-vendor-btn" onclick="openVendorModal('')"
-                                        class="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-500 hover:bg-primary-600
-                                               text-white text-sm font-medium cursor-pointer transition-colors duration-150">
-                                    <i class="fas fa-plus text-xs"></i>
-                                    <span data-i18n="models_add_vendor">添加厂商</span>
-                                </button>
-                            </div>
-                            <div id="models-loading" class="flex items-center gap-2 py-12 justify-center text-slate-400 dark:text-slate-500 text-sm">
-                                <i class="fas fa-spinner fa-spin text-xs"></i><span>Loading...</span>
-                            </div>
-                            <div id="models-content" class="grid gap-6 hidden"></div>
                         </div>
                     </div>
                 </div>
@@ -1398,7 +1432,15 @@
 
                 <div class="space-y-4">
                     <div>
-                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">API Key</label>
+                        <div class="flex items-center justify-between gap-2 mb-1.5">
+                            <label class="block text-sm font-medium text-slate-600 dark:text-slate-400">API Key</label>
+                            <a id="vendor-modal-manage-key" href="https://link-ai.tech/console/models?apikey=1"
+                               target="_blank" rel="noopener noreferrer"
+                               class="hidden inline-flex items-center gap-1 text-xs text-primary-500 hover:underline">
+                                <span data-i18n="models_manage_api_key">管理 API Key</span>
+                                <i class="fas fa-arrow-up-right-from-square text-[10px]"></i>
+                            </a>
+                        </div>
                         <input id="vendor-modal-key" type="text" autocomplete="off" data-1p-ignore data-lpignore="true"
                                class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600
                                       bg-slate-50 dark:bg-white/5 text-sm text-slate-800 dark:text-slate-100

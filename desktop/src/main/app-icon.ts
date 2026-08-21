@@ -175,6 +175,21 @@ export function applyCachedAppIcon(): void {
   }
 }
 
+// The runtime icon set via set-app-icon (downloaded and cached), for reuse
+// elsewhere — e.g. as the image on native notifications so they match the
+// current window/Dock icon. Returns null when no custom icon has been applied,
+// so callers can fall back to the bundle icon.
+export function getRuntimeAppIcon(): NativeImage | null {
+  try {
+    const buf = fs.readFileSync(iconCachePath())
+    if (!buf.length || buf.length > MAX_ICON_BYTES) return null
+    const img = nativeImage.createFromBuffer(buf)
+    return img.isEmpty() ? null : img
+  } catch {
+    return null
+  }
+}
+
 // On Windows, existing shortcuts (Desktop + Start Menu) keep the icon/name they
 // were created with at install time. Regenerate a multi-size .ico from the
 // current PNG and rewrite every shortcut that points at this executable so its

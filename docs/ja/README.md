@@ -119,15 +119,15 @@ CowAgent は主要な LLM プロバイダーすべてに対応しています。
 
 | プロバイダー | 代表的なモデル | チャット | 画像認識 | 画像生成 | ASR | TTS | Embedding |
 | --- | --- | :-: | :-: | :-: | :-: | :-: | :-: |
+| [DeepSeek](https://docs.cowagent.ai/ja/models/deepseek) | deepseek-v4-flash / pro | ✅ | | | | | |
 | [Claude](https://docs.cowagent.ai/ja/models/claude) | claude-opus-5 / sonnet-5 | ✅ | ✅ | | | | |
 | [OpenAI](https://docs.cowagent.ai/ja/models/openai) | gpt-5.6 シリーズ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| [Gemini](https://docs.cowagent.ai/ja/models/gemini) | gemini-3.5-flash | ✅ | ✅ | ✅ | | | |
-| [DeepSeek](https://docs.cowagent.ai/ja/models/deepseek) | deepseek-v4-flash / pro | ✅ | | | | | |
-| [Qwen](https://docs.cowagent.ai/ja/models/qwen) | qwen3.7-plus | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| [GLM](https://docs.cowagent.ai/ja/models/glm) | glm-5.2、glm-5v-turbo | ✅ | ✅ | | ✅ | | ✅ |
-| [Doubao](https://docs.cowagent.ai/ja/models/doubao) | doubao-seed-2.1 シリーズ | ✅ | ✅ | ✅ | | | ✅ |
-| [Kimi](https://docs.cowagent.ai/ja/models/kimi) | kimi-k3 | ✅ | ✅ | | | | |
+| [Gemini](https://docs.cowagent.ai/ja/models/gemini) | gemini-3.7-flash | ✅ | ✅ | ✅ | | | |
 | [MiniMax](https://docs.cowagent.ai/ja/models/minimax) | MiniMax-M3 | ✅ | ✅ | ✅ | | ✅ | |
+| [GLM](https://docs.cowagent.ai/ja/models/glm) | glm-5.3、glm-5v-turbo | ✅ | ✅ | | ✅ | | ✅ |
+| [Qwen](https://docs.cowagent.ai/ja/models/qwen) | qwen3.8-max | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| [Kimi](https://docs.cowagent.ai/ja/models/kimi) | kimi-k3 | ✅ | ✅ | | | | |
+| [Doubao](https://docs.cowagent.ai/ja/models/doubao) | doubao-seed-2.1 シリーズ | ✅ | ✅ | ✅ | | | ✅ |
 | [ERNIE](https://docs.cowagent.ai/ja/models/qianfan) | ernie-5.1 | ✅ | ✅ | | | | |
 | [MiMo](https://docs.cowagent.ai/ja/models/mimo) | mimo-v2.5-pro / v2.5 | ✅ | ✅ | | | ✅ | |
 | [LinkAI](https://docs.cowagent.ai/ja/models/linkai) | 1 つの Key で 100+ モデルに接続 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
@@ -214,6 +214,8 @@ CowAgent は主要な LLM プロバイダーすべてに対応しています。
 <br/>
 
 ## 🏷 更新履歴
+
+> **2026.08.20:** [v2.1.7](https://github.com/zhayujie/CowAgent/releases/tag/2.1.7) — セッションごとに分離できる複数ワークスペース、セッション単位の権限モード、タスク通知、デスクトップの改善、新モデルの追加。
 
 > **2026.08.12:** [v2.1.6](https://github.com/zhayujie/CowAgent/releases/tag/2.1.6) — 独立タスクを並行実行するサブ Agent、推論強度の設定、差し替え可能なメモリのベクトルバックエンド、体験とセキュリティの改善。
 

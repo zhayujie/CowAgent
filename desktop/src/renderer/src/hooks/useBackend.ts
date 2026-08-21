@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import type { BackendErrorCode } from '../types'
 
 // Preferred port — MUST match DESKTOP_BACKEND_PORT in main/python-manager.ts.
 // It is only the starting guess for probing: the main process may fall back to
@@ -18,10 +19,22 @@ const GIVE_UP_AFTER_MS = 40_000
 // is about to force-quit sees the app admit something is off.
 const SLOW_START_AFTER_MS = 15_000
 
+// Failures of the installation itself. Nothing about them can improve by
+// waiting, so they skip the polling deadline entirely: the executable is not
+// going to reappear, and 40 seconds of a spinner before saying so is 40
+// seconds the user spends assuming the app is merely slow.
+const UNRECOVERABLE_CODES: ReadonlySet<string> = new Set<BackendErrorCode>([
+  'backend_removed',
+  'backend_missing',
+  'backend_blocked',
+])
+
 interface BackendState {
   status: 'connecting' | 'ready' | 'error'
   port: number
   error?: string
+  code?: BackendErrorCode
+  path?: string
   slow?: boolean
   // True while we're recovering a backend that had already been ready, so the
   // status screen can say "reconnecting" rather than "starting up".
@@ -102,13 +115,33 @@ export function useBackend() {
           return
         }
 
+        // Ask the main process whether it has already given up. This is a pull,
+        // so it works no matter when the failure happened relative to our
+        // subscription, and it lets a broken installation be reported the
+        // moment it's known instead of after the full polling deadline.
+        const failure = !readyRef.current ? await api?.getBackendError?.().catch(() => null) : null
+        if (cancelled || generation !== pollGeneration) return
+        if (failure && UNRECOVERABLE_CODES.has(failure.code)) {
+          activePort = null
+          setState({ status: 'error', port, error: failure.message, code: failure.code, path: failure.path })
+          return
+        }
+
         // Backend already answered before but is briefly unreachable (e.g.
         // window was asleep): keep retrying, never surface an error.
         if (!readyRef.current && Date.now() >= deadline) {
           activePort = null
-          // Keep any error the main process already reported — it is more
-          // specific than the localized fallback StatusScreen would show.
-          setState((prev) => ({ ...prev, status: 'error', port }))
+          // Prefer whatever the main process knows: its diagnosis names the
+          // actual cause, while the localized fallback can only say that
+          // something went wrong.
+          setState((prev) => ({
+            ...prev,
+            status: 'error',
+            port,
+            error: failure?.message ?? prev.error,
+            code: failure?.code ?? prev.code,
+            path: failure?.path ?? prev.path,
+          }))
           return
         }
 
@@ -175,9 +208,9 @@ export function useBackend() {
         } else if (data.status === 'error' && !readyRef.current) {
           // Ignore late "error" from the main process once we've been ready —
           // it usually means the window was backgrounded, not a real failure.
-          // Keep the message: it carries the backend's own error line, which is
-          // the only diagnostic a user has when the UI never came up.
-          setState((prev) => ({ ...prev, status: 'error', error: data.error }))
+          // Keep the message and code: together they are the only diagnostic a
+          // user has when the UI never came up.
+          setState((prev) => ({ ...prev, status: 'error', error: data.error, code: data.code, path: data.path }))
         }
       })
     } else {
@@ -208,7 +241,7 @@ export function useBackend() {
   }, [probeBackend])
 
   const restart = useCallback(async () => {
-    setState((prev) => ({ ...prev, status: 'connecting', error: undefined, slow: false }))
+    setState((prev) => ({ ...prev, status: 'connecting', error: undefined, code: undefined, path: undefined, slow: false }))
     if (window.electronAPI) {
       await window.electronAPI.restartBackend()
     }

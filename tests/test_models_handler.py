@@ -68,7 +68,7 @@ class TestModelsHandler(unittest.TestCase):
             ["low", "medium", "high", "max"],
         )
         self.assertEqual(
-            [item["value"] for item in result["providers"]["dashscope"]["reasoning_by_model"]["qwen3.8-max-preview"]["options"]],
+            [item["value"] for item in result["providers"]["dashscope"]["reasoning_by_model"]["qwen3.8-max"]["options"]],
             ["low", "medium", "xhigh"],
         )
         self.assertFalse(result["providers"]["dashscope"]["reasoning_by_model"]["qwen3.7-plus"]["supported"])
@@ -178,6 +178,68 @@ class TestModelsHandler(unittest.TestCase):
         self.assertEqual(file_config["voice_to_text_model"], "qwen3-asr-flash")
         self.assertEqual(result["model"], "qwen3-asr-flash")
 
+    def test_chat_capability_infers_provider_when_bot_type_empty(self):
+        """A config with an empty bot_type but a recognizable model should
+        resolve to the right provider (mirrors the runtime bridge inference),
+        so onboarding isn't wrongly re-triggered for a working setup."""
+        from channel.web.web_channel import ModelsHandler
+
+        cap = ModelsHandler._chat_capability({
+            "bot_type": "",
+            "use_linkai": False,
+            "model": "deepseek-v4-flash",
+            "deepseek_api_key": "sk-test-placeholder",
+        })
+        self.assertEqual(cap["current_provider"], "deepseek")
+        self.assertEqual(cap["current_model"], "deepseek-v4-flash")
+
+    def test_chat_capability_empty_bot_type_use_linkai_stays_linkai(self):
+        """use_linkai must still win when bot_type is empty (unchanged behavior)."""
+        from channel.web.web_channel import ModelsHandler
+
+        cap = ModelsHandler._chat_capability({
+            "bot_type": "",
+            "use_linkai": True,
+            "model": "deepseek-v4-flash",
+        })
+        self.assertEqual(cap["current_provider"], "linkai")
+
+    def test_chat_capability_unknown_model_stays_empty(self):
+        """An unrecognizable model must not be force-mapped to a provider,
+        so genuinely-unconfigured setups still surface onboarding."""
+        from channel.web.web_channel import ModelsHandler
+
+        cap = ModelsHandler._chat_capability({
+            "bot_type": "",
+            "use_linkai": False,
+            "model": "some-unknown-model",
+        })
+        self.assertEqual(cap["current_provider"], "")
+
+    def test_infer_provider_from_model_is_robust(self):
+        from channel.web.web_channel import ModelsHandler
+
+        cases = {
+            "deepseek-v4-flash": "deepseek",
+            "gemini-3-flash": "gemini",
+            "glm-5": "zhipu",
+            "claude-sonnet-5": "claudeAPI",
+            "kimi-k3": "moonshot",
+            "doubao-seed-2-pro": "doubao",
+            "mimo-v2.5-pro": "mimo",
+            "qwen38-max": "dashscope",
+            "ernie-5": "qianfan",
+            "minimax-m3": "minimax",
+            "gpt-55": "openai",
+            "abab6.5": "minimax",
+            "wenxin": "qianfan",
+        }
+        for model, expected in cases.items():
+            self.assertEqual(ModelsHandler._infer_provider_from_model(model), expected, model)
+        # Bad / empty input never raises and yields "".
+        for bad in ("", "   ", None, 123, "totally-unknown"):
+            self.assertEqual(ModelsHandler._infer_provider_from_model(bad), "")
+
     def test_asr_capability_exposes_provider_models(self):
         from channel.web.web_channel import ModelsHandler
 
@@ -191,6 +253,59 @@ class TestModelsHandler(unittest.TestCase):
         self.assertEqual(cap["current_model"], "qwen3-asr-flash")
         self.assertIn("provider_models", cap)
         self.assertIn("dashscope", cap["provider_models"])
+
+    def test_asr_capability_includes_custom_providers(self):
+        from channel.web.web_channel import ModelsHandler
+
+        custom_conf = {"custom_providers": [
+            {"id": "abc12345", "name": "MyVendor", "api_key": "sk-test-1234567890",
+             "api_base": "https://my.vendor/v1"},
+        ]}
+        with patch("models.custom_provider.conf", return_value=custom_conf):
+            cap = ModelsHandler._asr_capability({
+                "voice_to_text": "custom:abc12345",
+                "voice_to_text_model": "fun-asr-large",
+            })
+
+        # The expanded custom:<id> entry is selectable, and a saved custom
+        # provider/model round-trips as the current selection.
+        self.assertIn("custom:abc12345", cap["providers"])
+        for builtin in ("openai", "dashscope", "zhipu", "linkai"):
+            self.assertIn(builtin, cap["providers"])
+        self.assertEqual(cap["current_provider"], "custom:abc12345")
+        self.assertEqual(cap["current_model"], "fun-asr-large")
+
+    def test_tts_capability_includes_custom_providers(self):
+        from channel.web.web_channel import ModelsHandler
+
+        custom_conf = {"custom_providers": [
+            {"id": "abc12345", "name": "MyVendor", "api_key": "sk-test-1234567890",
+             "api_base": "https://my.vendor/v1"},
+        ]}
+        with patch("models.custom_provider.conf", return_value=custom_conf):
+            cap = ModelsHandler._tts_capability({
+                "text_to_voice": "custom:abc12345",
+                "text_to_voice_model": "fun-tts-large",
+                "tts_voice_id": "anna",
+            })
+
+        self.assertIn("custom:abc12345", cap["providers"])
+        self.assertEqual(cap["current_provider"], "custom:abc12345")
+        self.assertEqual(cap["current_model"], "fun-tts-large")
+        self.assertEqual(cap["current_voice"], "anna")
+
+    def test_tts_capability_without_custom_providers_keeps_builtin_list(self):
+        from channel.web.web_channel import ModelsHandler
+
+        with patch("models.custom_provider.conf", return_value={}):
+            cap = ModelsHandler._tts_capability({
+                "text_to_voice": "openai",
+                "text_to_voice_model": "tts-1",
+            })
+
+        self.assertEqual(cap["current_provider"], "openai")
+        self.assertEqual(cap["current_model"], "tts-1")
+        self.assertTrue(all(not p.startswith("custom:") for p in cap["providers"]))
 
 
 if __name__ == "__main__":

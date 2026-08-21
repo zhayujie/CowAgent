@@ -168,6 +168,9 @@
 .session-list:hover::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.2); }
 .dark .session-list:hover::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); }
 .session-group-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
     padding: 10px 8px 4px;
     font-size: 11px;
     font-weight: 600;
@@ -175,7 +178,112 @@
     letter-spacing: 0.05em;
     color: #9ca3af;
 }
+/* Project / pinned headers carry an icon; date headers stay plain text. */
+.session-group-label i { font-size: 10px; flex-shrink: 0; }
+.session-group-label span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
 .dark .session-group-label { color: #525252; }
+
+/* Collapsible, draggable project group header. Deliberately styled unlike the
+   date headers and session rows: normal-case, larger and darker, so a project
+   reads as a real section title rather than a faint label. */
+.session-group-project {
+    position: relative;
+    cursor: pointer;
+    border-radius: 6px;
+    margin-top: 4px;
+    padding: 6px 8px;
+    transition: background 0.12s ease;
+    user-select: none;
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: 12px;
+    font-weight: 600;
+    color: #9ca3af;
+}
+.dark .session-group-project { color: #8a8a8a; }
+.session-group-project:hover { background: rgba(148, 163, 184, 0.12); }
+.session-group-project.dragging { opacity: 0.5; }
+.session-group-project.drop-target { box-shadow: inset 0 2px 0 0 #4ABE6E; }
+.session-group-caret {
+    transition: transform 0.15s ease;
+    font-size: 9px !important;
+    width: 10px;
+    text-align: center;
+    opacity: 0.6;
+}
+.session-group-caret.collapsed { transform: rotate(-90deg); }
+.session-group-icon { font-size: 11px !important; }
+/* Name takes the remaining width (and truncates), which pushes the count to a
+   consistent right edge across projects and the default space. */
+.session-group-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-transform: none;
+}
+/* Count always sits flush right (margin-left:auto), so it lines up across every
+   project and the default space regardless of name length. */
+.session-group-count {
+    margin-left: auto;
+    flex-shrink: 0;
+    font-size: 11px;
+    font-weight: 500;
+    color: #9ca3af;
+    opacity: 0.8;
+}
+/* Actions overlay the right edge (absolute, out of flow) so they never shift
+   the count's position; they only appear on hover, replacing the count. */
+.session-group-actions {
+    position: absolute;
+    right: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: inline-flex;
+    gap: 2px;
+    opacity: 0;
+    transition: opacity 0.12s ease;
+}
+.session-group-project:hover .session-group-actions { opacity: 1; }
+.session-group-project:hover .session-group-count { visibility: hidden; }
+.session-group-action {
+    border: none;
+    background: transparent;
+    color: #9ca3af;
+    cursor: pointer;
+    padding: 3px 5px;
+    border-radius: 5px;
+    font-size: 10px;
+    line-height: 1;
+}
+.session-group-action:hover { background: rgba(74, 190, 110, 0.16); color: #35A85B; }
+.dark .session-group-action:hover { background: rgba(74, 190, 110, 0.2); color: #6EE7A0; }
+
+.prompt-modal-input {
+    width: 100%;
+    margin: 14px 0 4px;
+    padding: 9px 12px;
+    border: 1px solid #E2E8F0;
+    border-radius: 9px;
+    font-size: 14px;
+    color: #1e293b;
+    background: #fff;
+    outline: none;
+    box-sizing: border-box;
+}
+.prompt-modal-input:focus { border-color: #4ABE6E; }
+.dark .prompt-modal-input {
+    background: #1A1A1A;
+    border-color: rgba(255, 255, 255, 0.12);
+    color: #e2e8f0;
+}
+
 .session-empty {
     padding: 20px 12px;
     text-align: center;
@@ -227,25 +335,33 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    /* Breathing room at rest so the title doesn't run flush to the edge; the
+       gap collapses on hover when the action buttons take that space. */
+    padding-right: 20px;
 }
+.session-item:hover .session-title { padding-right: 0; }
+/* Under a multi-project list, sessions indent so their leading icon lines up
+   with the folder icon of the project header above them. The session icon sits
+   in a centered 16px box, so it needs a touch less left padding than the raw
+   folder-icon offset (24px) to visually align. */
+.session-item-indent { padding-left: 21px; }
 .session-delete {
     flex-shrink: 0;
     width: 22px;
     height: 22px;
-    display: flex;
+    display: none;
     align-items: center;
     justify-content: center;
     border-radius: 5px;
     font-size: 10px;
     color: #9ca3af;
-    opacity: 0;
-    transition: opacity 0.15s, color 0.15s, background 0.15s;
+    transition: color 0.15s, background 0.15s;
     cursor: pointer;
     background: none;
     border: none;
     padding: 0;
 }
-.session-item:hover .session-delete { opacity: 1; }
+.session-item:hover .session-delete { display: flex; }
 .session-delete:hover {
     color: #ef4444;
     background: rgba(239, 68, 68, 0.1);
@@ -259,25 +375,55 @@
     margin-right: -6px;
     width: 22px;
     height: 22px;
-    display: flex;
+    display: none;
     align-items: center;
     justify-content: center;
     border-radius: 6px;
     color: #9ca3af;
     font-size: 11px;
-    opacity: 0;
-    transition: opacity 0.15s, color 0.15s, background 0.15s;
+    transition: color 0.15s, background 0.15s;
     cursor: pointer;
     background: none;
     border: none;
     padding: 0;
 }
-.session-item:hover .session-rename { opacity: 1; }
+.session-item:hover .session-rename { display: flex; }
 .session-rename:hover {
     color: #4ABE6E;
     background: rgba(74, 190, 110, 0.12);
 }
 .dark .session-rename:hover { background: rgba(74, 190, 110, 0.18); }
+
+/* Pin button: same affordance as rename, and the pinned state stays visible
+   after the cursor leaves so the row explains its own position in the list. */
+.session-pin {
+    flex-shrink: 0;
+    margin-right: -6px;
+    width: 22px;
+    height: 22px;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    color: #9ca3af;
+    font-size: 10px;
+    transition: color 0.15s, background 0.15s;
+    cursor: pointer;
+    background: none;
+    border: none;
+    padding: 0;
+}
+.session-item:hover .session-pin { display: flex; }
+.session-pin:hover {
+    color: #4ABE6E;
+    background: rgba(74, 190, 110, 0.12);
+}
+.dark .session-pin:hover { background: rgba(74, 190, 110, 0.18); }
+/* A pinned row already shows a pin as its leading icon, so on hover the button
+   turns into "unpin" and the leading icon is what carries the state. */
+.session-item.pinned .session-icon { color: #4ABE6E; transform: rotate(45deg); }
+.session-item.pinned .session-pin { color: #4ABE6E; }
+.session-item.pinned .session-pin:hover { color: #ef4444; background: rgba(239, 68, 68, 0.1); }
 
 /* Inline title editor */
 .session-title-input {
@@ -1025,11 +1171,6 @@
 }
 
 /* Chat Input */
-#chat-input {
-    resize: none; height: 42px; max-height: 180px;
-    overflow-y: hidden;
-    transition: border-color 0.2s ease;
-}
 /* Keep the placeholder on one line; ellipsize when the box is too narrow so it
    never wraps and inflates the single-row height. Actual input can still wrap. */
 #chat-input::placeholder {
@@ -1039,12 +1180,8 @@
 }
 
 /* Attachment Preview Bar */
-/* The selector is always present, so keep this row as short as the button to
-   avoid wasting vertical space; attachments (when shown) share the same row. */
-
-/* Attachment preview shares the workspace-selector row: it sits to the right of
-   the selector, grows to fill remaining width and scrolls horizontally so chips
-   never wrap onto a new line. */
+/* Attachments sit on their own line at the top of the composer card, growing to
+   the full card width and scrolling horizontally so chips never wrap. */
 .attachment-preview {
     display: flex;
     flex-wrap: nowrap;
@@ -1059,15 +1196,316 @@
 .attachment-preview::-webkit-scrollbar { height: 6px; }
 .attachment-preview::-webkit-scrollbar-thumb { background: rgba(148,163,184,0.4); border-radius: 3px; }
 .attachment-preview.hidden { display: none; }
-/* The input box is taller than the selector, so attachments would otherwise
-   touch it. Add breathing room below only when attachments are actually shown. */
-.ws-attach-row:has(.attachment-preview:not(.hidden)) { margin-bottom: 8px; }
-/* Compact chips/thumbnails so adding an attachment doesn't jump the row height.
-   Both stay ~28px tall, matching the selector button, and the remove button
-   sits flush inside the card (no negative offset that would need extra padding). */
-.ws-attach-row .att-thumb { width: 28px; height: 28px; }
-.ws-attach-row .att-chip { padding: 3px 24px 3px 8px; font-size: 11px; }
-.ws-attach-row .att-remove { top: 1px; right: 1px; width: 15px; height: 15px; line-height: 15px; font-size: 10px; }
+
+/* ==========================================================================
+   Composer card
+   One rounded surface: attachments and text on top, session controls along the
+   bottom edge. The controls that used to sit above the input (workspace) and
+   inside it (optimize / mic) share that bottom row now, which is where working
+   agents put them - the box reads as "what you are about to send, and under
+   what settings".
+   The card is the positioning context for every popover inside it (slash,
+   mention, attach, workspace / permission / model menus), all of which open
+   upward from its top edge.
+   ========================================================================== */
+.composer-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px 10px 8px;
+    border-radius: 18px;
+    border: 1px solid #e2e8f0;
+    background: #f8fafc;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+.composer-card:focus-within {
+    background: #fff;
+    border-color: #4ABE6E;
+    box-shadow: 0 0 0 3px rgba(74, 190, 110, 0.12);
+}
+.dark .composer-card {
+    border-color: rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.04);
+}
+.dark .composer-card:focus-within {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: #4ABE6E;
+    box-shadow: 0 0 0 3px rgba(74, 190, 110, 0.14);
+}
+/* Drag-over highlight reuses the focus treatment. */
+.composer-card.drag-over { border-color: #4ABE6E; background: #fff; }
+
+.composer-textarea {
+    width: 100%;
+    min-height: 52px;
+    max-height: 220px;
+    padding: 2px 4px;
+    border: none;
+    background: transparent;
+    resize: none;
+    outline: none;
+    color: #1e293b;
+    font-size: 14px;
+    line-height: 1.6;
+    overflow-y: hidden;
+}
+.composer-textarea::placeholder { color: #94a3b8; }
+.dark .composer-textarea { color: #f1f5f9; }
+.dark .composer-textarea::placeholder { color: #64748b; }
+
+.composer-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+.composer-group {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    min-width: 0;
+}
+/* The left group owns the leftover width so its chips truncate instead of
+   pushing send off the card; the right group keeps its natural size. */
+.composer-group:first-child { flex: 1 1 auto; }
+.composer-group-end { flex: 0 0 auto; margin-left: auto; gap: 4px; }
+
+.composer-icon-btn {
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: #94a3b8;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background 0.12s ease, color 0.12s ease;
+}
+.composer-icon-btn:hover { background: #EDFDF3; color: #228547; }
+.composer-icon-btn-warn:hover { background: #FEF3C7; color: #B45309; }
+.dark .composer-icon-btn:hover { background: rgba(74, 190, 110, 0.14); color: #6EE7A0; }
+.dark .composer-icon-btn-warn:hover { background: rgba(245, 158, 11, 0.16); color: #FCD34D; }
+
+.composer-divider {
+    width: 1px;
+    height: 16px;
+    margin: 0 4px;
+    flex-shrink: 0;
+    background: #e2e8f0;
+}
+.dark .composer-divider { background: rgba(255, 255, 255, 0.12); }
+
+.composer-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    max-width: 168px;
+    min-width: 0;
+    padding: 4px 8px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    background: transparent;
+    color: #64748b;
+    font-size: 12px;
+    line-height: 1.4;
+    cursor: pointer;
+    transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+.composer-chip:hover { background: #EDFDF3; color: #228547; }
+.composer-chip.open { background: #EDFDF3; color: #228547; border-color: #BBF0CD; }
+.composer-chip > i { font-size: 11px; flex-shrink: 0; }
+.composer-chip-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.composer-chip-caret { font-size: 9px; opacity: 0.55; }
+.dark .composer-chip { color: #94a3b8; }
+.dark .composer-chip:hover,
+.dark .composer-chip.open { background: rgba(74, 190, 110, 0.14); color: #6EE7A0; border-color: transparent; }
+
+/* Permission chip stays neutral like the other composer chips: the icon alone
+   distinguishes the mode, so an unrestricted session no longer shouts in a warm
+   colour. Only workspace-write keeps a subtle brand tint as the "safe default". */
+.composer-chip.perm-read-only { color: #64748b; }
+.composer-chip.perm-workspace-write { color: #64748b; }
+.composer-chip.perm-full-access { color: #64748b; }
+.dark .composer-chip.perm-read-only { color: #94a3b8; }
+.dark .composer-chip.perm-workspace-write { color: #94a3b8; }
+.dark .composer-chip.perm-full-access { color: #94a3b8; }
+
+/* Inline hint shown under a tool card that the permission gate refused.
+   Neutral, not alarming: it explains why nothing happened and offers the fix. */
+.perm-denied-hint {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 6px 0 10px;
+    padding: 8px 12px;
+    border: 1px solid #E2E8F0;
+    border-radius: 10px;
+    background: #F8FAFC;
+    font-size: 13px;
+    color: #475569;
+}
+.perm-denied-hint > i { font-size: 12px; color: #64748b; flex-shrink: 0; }
+.perm-denied-text { flex: 1; min-width: 0; }
+.perm-denied-btn {
+    flex-shrink: 0;
+    padding: 4px 12px;
+    border: none;
+    border-radius: 8px;
+    background: #35A85B;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.12s ease;
+}
+.perm-denied-btn:hover { background: #228547; }
+.dark .perm-denied-hint {
+    border-color: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.04);
+    color: #cbd5e1;
+}
+.dark .perm-denied-hint > i { color: #94a3b8; }
+
+.composer-send-btn {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    border: none;
+    border-radius: 9px;
+    background: #4ABE6E;
+    color: #fff;
+    cursor: pointer;
+    transition: background 0.12s ease, opacity 0.12s ease;
+}
+.composer-send-btn:hover:not(:disabled) { background: #35A55A; }
+.composer-send-btn:disabled { background: #cbd5e1; cursor: not-allowed; }
+.dark .composer-send-btn:disabled { background: #475569; }
+.composer-steer-btn {
+    background: transparent;
+    border: 1px solid #BBF0CD;
+    color: #35A55A;
+}
+.composer-steer-btn:hover:not(:disabled) { background: #EDFDF3; }
+.composer-steer-btn:disabled { background: transparent; border-color: #e2e8f0; color: #cbd5e1; }
+.dark .composer-steer-btn { border-color: rgba(74, 190, 110, 0.4); color: #6EE7A0; }
+.dark .composer-steer-btn:hover:not(:disabled) { background: rgba(74, 190, 110, 0.14); }
+.dark .composer-steer-btn:disabled { border-color: rgba(255,255,255,0.12); color: #475569; }
+
+/* Compact attachment chips/thumbnails so adding one barely grows the card. */
+.composer-card .att-thumb { width: 34px; height: 34px; }
+.composer-card .att-chip { padding: 3px 24px 3px 8px; font-size: 11px; }
+.composer-card .att-remove { top: 1px; right: 1px; width: 15px; height: 15px; line-height: 15px; font-size: 10px; }
+
+/* Narrow viewports: chips keep their icon and drop the text label, so the row
+   still holds workspace / permission / model without wrapping. */
+@media (max-width: 640px) {
+    .composer-chip { max-width: none; padding: 4px 6px; }
+    .composer-chip-label { display: none; }
+    .composer-divider { margin: 0 2px; }
+}
+
+/* ==========================================================================
+   Composer popovers (permission + model), sharing the workspace menu's look
+   ========================================================================== */
+.composer-menu {
+    position: absolute;
+    left: 0;
+    bottom: calc(100% + 6px);
+    width: 300px;
+    max-height: 380px;
+    overflow-y: auto;
+    padding: 6px;
+    border-radius: 12px;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 8px 30px -6px rgba(0, 0, 0, 0.12), 0 2px 8px -2px rgba(0, 0, 0, 0.05);
+    z-index: 60;
+    animation: slashMenuIn 0.15s ease-out;
+}
+.composer-menu.hidden { display: none; }
+.composer-menu-wide { width: 340px; left: auto; right: 0; }
+.dark .composer-menu {
+    background: #1A1A1A;
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+.composer-menu-title {
+    padding: 6px 10px 4px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.composer-menu-divider { height: 1px; margin: 5px 6px; background: #eef2f6; }
+.dark .composer-menu-divider { background: rgba(255, 255, 255, 0.08); }
+
+.composer-menu-item {
+    width: 100%;
+    display: flex;
+    align-items: flex-start;
+    gap: 9px;
+    padding: 8px 10px;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: #334155;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.12s ease, color 0.12s ease;
+    text-align: left;
+}
+.composer-menu-item:hover { background: #EDFDF3; color: #228547; }
+.composer-menu-item.active { background: #EDFDF3; }
+.composer-menu-item > i:first-child {
+    width: 15px;
+    text-align: center;
+    color: #64748b;
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+.composer-menu-item:hover > i:first-child { color: inherit; }
+.composer-menu-body { flex: 1; min-width: 0; }
+.composer-menu-name {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.composer-menu-desc {
+    display: block;
+    margin-top: 2px;
+    font-size: 11px;
+    line-height: 1.45;
+    color: #94a3b8;
+    white-space: normal;
+}
+.composer-menu-check { color: #228547; flex-shrink: 0; margin-top: 2px; }
+.dark .composer-menu-item { color: #cbd5e1; }
+.dark .composer-menu-item:hover,
+.dark .composer-menu-item.active { background: rgba(74, 190, 110, 0.14); color: #6EE7A0; }
+.dark .composer-menu-desc { color: #64748b; }
+.dark .composer-menu-check { color: #6EE7A0; }
+/* A footnote at the bottom of the permission menu, for the one caveat that
+   belongs next to the choice: command interception is best effort. */
+.composer-menu-note {
+    padding: 6px 10px 4px;
+    font-size: 11px;
+    line-height: 1.5;
+    color: #94a3b8;
+}
 
 .attach-menu {
     position: absolute;
@@ -1457,15 +1895,15 @@
    ============================================================ */
 
 /* Tab toggle */
-.knowledge-tab, .memory-tab {
+.knowledge-tab, .memory-tab, .config-tab {
     color: #64748b;
 }
-.knowledge-tab.active, .memory-tab.active {
+.knowledge-tab.active, .memory-tab.active, .config-tab.active {
     background: #fff;
     color: #334155;
     box-shadow: 0 1px 3px rgba(0,0,0,0.08);
 }
-.dark .knowledge-tab.active, .dark .memory-tab.active {
+.dark .knowledge-tab.active, .dark .memory-tab.active, .dark .config-tab.active {
     background: rgba(255,255,255,0.1);
     color: #e2e8f0;
 }

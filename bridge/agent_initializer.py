@@ -17,6 +17,14 @@ from common.utils import expand_path
 # Module-level lock to serialize scheduler init across concurrent sessions
 _scheduler_init_lock = threading.Lock()
 
+# Guards the in-flight memory-sync set below so concurrent session inits for
+# the same workspace don't each dispatch a redundant background sync thread.
+_memory_sync_lock = threading.Lock()
+# Workspaces with a memory sync currently running in the background. A new
+# request for the same workspace is dropped instead of forking another thread,
+# so a burst of messages can't stack up dozens of embedding HTTP calls.
+_memory_sync_inflight: set = set()
+
 
 class AgentInitializer:
     """
@@ -133,6 +141,15 @@ class AgentInitializer:
         agent.agent_id = profile.id
         agent.agent_profile = profile
         agent.workspace_dir = workspace_root
+
+        # Bind the system-prompt model line to the agent's *effective* model so a
+        # per-session override (see AgentLLMModel.set_session_override) shows up
+        # there too. Without this the prompt keeps reporting the global config
+        # model, and the LLM — which reads that line — answers with the wrong
+        # model name even though the actual API call used the session's model.
+        llm = getattr(agent, "model", None)
+        if llm is not None and hasattr(llm, "model"):
+            runtime_info["_get_model"] = lambda: getattr(llm, "model", None) or conf().get("model", "unknown")
 
         # Restore persisted conversation history for this session
         if session_id:
@@ -334,22 +351,50 @@ class AgentInitializer:
         return create_default_embedding_provider()
 
     def _sync_memory(self, memory_manager, session_id: Optional[str] = None):
-        """Sync memory database"""
+        """Bring the memory index up to date with the workspace files.
+
+        Runs entirely on a background daemon thread. sync() re-embeds any file
+        whose hash changed (MEMORY.md / memory/*.md / knowledge/*.md), and each
+        embed_batch is a blocking HTTP call that can take 20-50s from China-side
+        networks. Daily memory files change on nearly every session, so keeping
+        this on the init path made every user's first message wait for that
+        round-trip. The index is only read on the *next* memory search, so a
+        slightly stale index for the current turn is an acceptable trade-off —
+        the same design MCP tool loading already uses.
+
+        Idempotent per workspace: a burst of concurrent session inits dispatches
+        at most one sync thread, so messages can't stack up embedding calls.
+        """
+        workspace_key = None
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_closed():
-                raise RuntimeError("Event loop is closed")
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        
-        try:
-            if loop.is_running():
-                asyncio.create_task(memory_manager.sync())
-            else:
-                loop.run_until_complete(memory_manager.sync())
-        except Exception as e:
-            logger.warning(f"[AgentInitializer] Memory sync failed: {e}")
+            workspace_key = str(memory_manager.config.get_workspace())
+        except Exception:
+            workspace_key = None
+
+        with _memory_sync_lock:
+            if workspace_key is not None and workspace_key in _memory_sync_inflight:
+                return
+            if workspace_key is not None:
+                _memory_sync_inflight.add(workspace_key)
+
+        def _run():
+            try:
+                loop = asyncio.new_event_loop()
+                try:
+                    asyncio.set_event_loop(loop)
+                    loop.run_until_complete(memory_manager.sync())
+                finally:
+                    loop.close()
+            except Exception as e:
+                logger.warning(f"[AgentInitializer] Memory sync failed: {e}")
+            finally:
+                if workspace_key is not None:
+                    with _memory_sync_lock:
+                        _memory_sync_inflight.discard(workspace_key)
+
+        threading.Thread(
+            target=_run, daemon=True, name="memory-sync"
+        ).start()
     
     def _load_tools(self, workspace_root: str, memory_manager, memory_tools: List, session_id: Optional[str] = None):
         """Load all tools"""
@@ -657,7 +702,9 @@ class AgentInitializer:
                     time.sleep(wait_seconds)
 
                     self._flush_all_agents()
-                    last_run_date = datetime.datetime.now().date()
+                    # Record the scheduled date: a run that crosses midnight must
+                    # not mark the new day as already done.
+                    last_run_date = target.date()
                 except Exception as e:
                     logger.warning(f"[DailyFlush] Error in daily flush loop: {e}")
                     time.sleep(3600)

@@ -36,7 +36,8 @@ CREATE TABLE IF NOT EXISTS sessions (
     context_start_seq INTEGER NOT NULL DEFAULT 0,
     created_at        INTEGER NOT NULL,
     last_active       INTEGER NOT NULL,
-    msg_count         INTEGER NOT NULL DEFAULT 0
+    msg_count         INTEGER NOT NULL DEFAULT 0,
+    pinned            INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS messages (
@@ -68,6 +69,11 @@ ALTER TABLE sessions ADD COLUMN title TEXT NOT NULL DEFAULT '';
 
 _MIGRATION_ADD_CONTEXT_START_SEQ = """
 ALTER TABLE sessions ADD COLUMN context_start_seq INTEGER NOT NULL DEFAULT 0;
+"""
+
+# User-pinned conversations, kept at the top of the session list.
+_MIGRATION_ADD_PINNED = """
+ALTER TABLE sessions ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;
 """
 
 # Generic JSON sidecar for per-message attachments (TTS audio URL, future use).
@@ -1083,11 +1089,17 @@ class ConversationStore:
         page_size: int = 50,
     ) -> Dict[str, Any]:
         """
-        List sessions ordered by last_active DESC, with optional channel_type filter.
+        List sessions with pinned ones first, then last_active DESC, with an
+        optional channel_type filter.
+
+        Pinned sessions sort ahead of everything else rather than only ahead of
+        the rows on the same page, so a pin still reaches the top of the list
+        when the conversation is old enough to sit several pages down.
 
         Returns:
             {
-                "sessions": [{session_id, title, created_at, last_active, msg_count}, ...],
+                "sessions": [{session_id, title, created_at, last_active,
+                              msg_count, pinned}, ...],
                 "total": int,
                 "page": int,
                 "page_size": int,
@@ -1105,10 +1117,10 @@ class ConversationStore:
                     ).fetchone()[0]
                     rows = conn.execute(
                         """
-                        SELECT session_id, title, created_at, last_active, msg_count
+                        SELECT session_id, title, created_at, last_active, msg_count, pinned
                         FROM sessions
                         WHERE channel_type = ?
-                        ORDER BY last_active DESC
+                        ORDER BY pinned DESC, last_active DESC
                         LIMIT ? OFFSET ?
                         """,
                         (channel_type, page_size, (page - 1) * page_size),
@@ -1119,9 +1131,9 @@ class ConversationStore:
                     ).fetchone()[0]
                     rows = conn.execute(
                         """
-                        SELECT session_id, title, created_at, last_active, msg_count
+                        SELECT session_id, title, created_at, last_active, msg_count, pinned
                         FROM sessions
-                        ORDER BY last_active DESC
+                        ORDER BY pinned DESC, last_active DESC
                         LIMIT ? OFFSET ?
                         """,
                         (page_size, (page - 1) * page_size),
@@ -1136,6 +1148,7 @@ class ConversationStore:
                 "created_at": r[2],
                 "last_active": r[3],
                 "msg_count": r[4],
+                "pinned": bool(r[5]),
             }
             for r in rows
         ]
@@ -1160,6 +1173,40 @@ class ConversationStore:
                     return cur.rowcount > 0
             finally:
                 conn.close()
+
+    def set_pinned(self, session_id: str, pinned: bool) -> bool:
+        """Pin or unpin a session. Returns True if the session existed."""
+        with self._lock:
+            conn = self._connect()
+            try:
+                with conn:
+                    cur = conn.execute(
+                        "UPDATE sessions SET pinned = ? WHERE session_id = ?",
+                        (1 if pinned else 0, session_id),
+                    )
+                    return cur.rowcount > 0
+            finally:
+                conn.close()
+
+    def list_session_ids(self, channel_type: Optional[str] = None) -> List[str]:
+        """Every session id, optionally filtered by channel.
+
+        One cheap single-column scan, used to work out how many distinct project
+        spaces are actually in play without paging through full session rows.
+        """
+        with self._lock:
+            conn = self._connect()
+            try:
+                if channel_type:
+                    rows = conn.execute(
+                        "SELECT session_id FROM sessions WHERE channel_type = ?",
+                        (channel_type,),
+                    ).fetchall()
+                else:
+                    rows = conn.execute("SELECT session_id FROM sessions").fetchall()
+            finally:
+                conn.close()
+        return [r[0] for r in rows]
 
     def get_stats(self) -> Dict[str, Any]:
         """Return basic stats keyed by channel_type, for monitoring."""
@@ -1253,6 +1300,13 @@ class ConversationStore:
                 logger.info("[ConversationStore] Migrated: added context_start_seq column")
             except Exception as e:
                 logger.warning(f"[ConversationStore] Migration (context_start_seq) failed: {e}")
+        if "pinned" not in cols:
+            try:
+                conn.execute(_MIGRATION_ADD_PINNED)
+                conn.commit()
+                logger.info("[ConversationStore] Migrated: added pinned column")
+            except Exception as e:
+                logger.warning(f"[ConversationStore] Migration (pinned) failed: {e}")
 
         msg_cols = {
             row[1]

@@ -42,6 +42,8 @@ services:
       WEB_HOST: '127.0.0.1'
       WEB_PASSWORD: ''
       AGENT: 'True'
+      # Container is already an isolation boundary, so the agent runs unconfined inside it
+      AGENT_PERMISSION_MODE: 'full-access'
       AGENT_MAX_CONTEXT_TOKENS: 50000
       AGENT_MAX_CONTEXT_TURNS: 20
       AGENT_MAX_STEPS: 20

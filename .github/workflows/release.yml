@@ -350,12 +350,27 @@ jobs:
         run: |
           # Reuse the existing cow-skills bucket under a desktop/ prefix; this
           # is served by the cdn.cowagent.ai custom domain.
+          #
+          # R2's API sporadically returns 504 / 7009 (Upstream service
+          # unavailable) mid-upload, especially on the larger dmg/zip objects.
+          # A single failure would abort the whole release, so retry each put
+          # with backoff; re-putting the same key is idempotent (it overwrites).
           for f in dist/*; do
             base="$(basename "$f")"
             key="desktop/v${VER}/${base}"
             echo "==> Uploading $base -> r2://cow-skills/$key"
-            npx --yes wrangler@latest r2 object put "cow-skills/$key" \
-              --file "$f" --remote
+            for attempt in 1 2 3 4 5; do
+              if npx --yes wrangler@latest r2 object put "cow-skills/$key" \
+                   --file "$f" --remote; then
+                break
+              fi
+              if [ "$attempt" = 5 ]; then
+                echo "::error::R2 upload failed after 5 attempts: $key"
+                exit 1
+              fi
+              echo "attempt $attempt failed, retrying in $((attempt * 10))s..."
+              sleep $((attempt * 10))
+            done
           done
 
       - name: Register release rows in D1

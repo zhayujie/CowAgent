@@ -2,11 +2,12 @@ import { useEffect } from 'react'
 import apiClient from '../api/client'
 import { useChatStore } from '../store/chatStore'
 import { useSessionStore } from '../store/sessionStore'
+import { useUIStore } from '../store/uiStore'
 
 // Poll the active session for messages pushed outside the SSE stream (scheduler
 // reminders, proactive pushes). Mirrors the web console: a live SSE reply is
 // skipped server-side, so /poll only yields these out-of-band messages. Polls
-// faster right after a hit, slower when idle or the window is hidden.
+// faster right after a hit, slower when idle.
 const DELAY_HIT_MS = 5000
 const DELAY_IDLE_MS = 10000
 
@@ -29,10 +30,8 @@ export function usePushPoll(ready: boolean): void {
 
     async function poll() {
       if (cancelled) return
-      if (document.hidden) {
-        schedule(DELAY_IDLE_MS)
-        return
-      }
+      // Keep polling while hidden: push messages are exactly what the OS
+      // notification below should deliver to a background window.
       const sid = useSessionStore.getState().activeId
       if (!sid) {
         schedule(DELAY_IDLE_MS)
@@ -63,6 +62,12 @@ export function usePushPoll(ready: boolean): void {
 }
 
 function notify(sessionId: string, body: string): void {
+  const { taskNotify, taskNotifySound } = useUIStore.getState()
+  if (!taskNotify) return
+  // Omit title when there's no session name so the main process falls back to
+  // app.name rather than a hardcoded product name.
   const title = useSessionStore.getState().sessions.find((s) => s.session_id === sessionId)?.title
-  window.electronAPI?.notify?.({ title: title || 'CowAgent', body, sessionId }).catch(() => {})
+  window.electronAPI
+    ?.notify?.({ title: title || undefined, body, sessionId, silent: !taskNotifySound })
+    .catch(() => {})
 }

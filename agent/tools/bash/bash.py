@@ -40,9 +40,9 @@ class Bash(BaseTool):
     MAX_TIMEOUT = 600
 
     name: str = "bash"
-    description: str = f"""Execute a bash command in the current working directory. Returns stdout and stderr. Output is truncated to last {DEFAULT_MAX_LINES} lines or {DEFAULT_MAX_BYTES // 1024}KB (whichever is hit first). If truncated, full output is saved to a temp file.
+    description: str = f"""Execute a {'command' if _IS_WIN else 'bash command'} in the current working directory. Returns stdout and stderr. Output is truncated to last {DEFAULT_MAX_LINES} lines or {DEFAULT_MAX_BYTES // 1024}KB (whichever is hit first). If truncated, full output is saved to a temp file.
 {'''
-PLATFORM: Windows (cmd.exe). Do NOT use Unix-only commands like head, tail, sed, awk. To search file contents or find files by name, use the search_files tool instead of this command.
+PLATFORM: Windows (cmd.exe), not Bash, WSL, PowerShell, or Windows Terminal. Use cmd.exe syntax: double quotes (single quotes are literal), `>nul 2>&1` instead of `/dev/null`, `&&` instead of `;`, and `findstr /I "pattern"` without grep-style `-i`/`-e` flags. Do not invoke `bash script.sh` or use Unix-only commands such as grep, head, tail, sed, or awk. Use the search_files tool for file/content search and Python for portable scripting.
 ''' if _IS_WIN else ''}
 ENVIRONMENT: All API keys from env_config are auto-injected. Use $VAR_NAME directly.
 
@@ -165,7 +165,13 @@ SAFETY:
         try:
             # Prepare environment with .env file variables
             env = os.environ.copy()
-            
+
+            # Anchor artifact outputs to the workspace/project dir regardless of
+            # any `cd` inside the command, so tools (e.g. image-generation) can
+            # resolve a stable output dir instead of relying on the live cwd.
+            if self.cwd:
+                env["AGENT_WORKSPACE"] = self.cwd
+
             # Load environment variables from ~/.cow/.env if it exists
             env_file = expand_path("~/.cow/.env")
             dotenv_vars = {}
@@ -330,6 +336,9 @@ SAFETY:
             is_error, note = exit_codes.interpret(command, result.returncode)
             if is_error:
                 output_text += f"\n\nCommand exited with code {result.returncode}"
+                hint = self._windows_failure_hint(command)
+                if hint:
+                    output_text += f"\n\n{hint}"
                 return ToolResult.fail({
                     "output": output_text,
                     "exit_code": result.returncode,
@@ -534,6 +543,38 @@ SAFETY:
             return "This command will shut down or restart the system"
 
         return ""
+
+    @classmethod
+    def _windows_failure_hint(cls, command: str) -> str:
+        """Return focused cmd.exe corrections for detected Unix syntax.
+
+        The hint is intentionally absent for ordinary command failures: only a
+        recognized shell mismatch should add another instruction to the model.
+        """
+        if not cls._IS_WIN:
+            return ""
+
+        lower = command.lower()
+        corrections = []
+        if re.search(r"\bfindstr\b[^\r\n]*(?:^|\s)-[a-z]", lower):
+            corrections.append(
+                'findstr uses /I and a quoted search string, for example '
+                'findstr /I "cow agent"; it does not accept grep-style -i/-e flags'
+            )
+        if "/dev/null" in lower:
+            corrections.append("redirect to nul, for example >nul 2>&1, not /dev/null")
+        if re.search(r"(?:^|[&|()]\s*|\s)(?:bash|sh)\s+\S", lower):
+            corrections.append("do not invoke bash/sh; use a cmd.exe command or a Python script")
+        if re.search(r"'[^'\r\n]*'", command):
+            corrections.append("use double quotes because cmd.exe treats single quotes literally")
+        if re.search(r"(?:^|[&|()]\s*|\s)(?:grep|head|tail|sed|awk)\b", lower):
+            corrections.append("use search_files for file/content search instead of Unix text tools")
+        if ";" in command:
+            corrections.append("chain commands with && instead of ;")
+
+        if not corrections:
+            return ""
+        return "[Windows cmd.exe hint: " + "; ".join(corrections) + ".]"
 
     @staticmethod
     def _convert_env_vars_for_windows(command: str, dotenv_vars: dict) -> str:

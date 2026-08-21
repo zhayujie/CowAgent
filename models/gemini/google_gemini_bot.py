@@ -38,9 +38,9 @@ class GoogleGeminiBot(Bot):
 
     @property
     def model(self):
-        model_name = conf().get("model") or "gemini-3.5-flash"
+        model_name = conf().get("model") or "gemini-3.7-flash"
         if model_name == "gemini":
-            model_name = "gemini-3.5-flash"
+            model_name = "gemini-3.7-flash"
         return model_name
 
     @property

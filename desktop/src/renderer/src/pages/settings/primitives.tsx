@@ -23,13 +23,19 @@ export const Card: React.FC<{ icon: React.ReactNode; title: string; subtitle?: s
   </div>
 )
 
-export const Field: React.FC<{ label: string; hint?: string; children: React.ReactNode }> = ({
-  label,
-  hint,
-  children,
-}) => (
+export const Field: React.FC<{
+  label: string
+  hint?: string
+  // Optional trailing element on the label row (right-aligned), e.g. a helper
+  // link. Kept generic so any build can attach an action next to a field.
+  labelAction?: React.ReactNode
+  children: React.ReactNode
+}> = ({ label, hint, labelAction, children }) => (
   <div>
-    <label className="block text-sm font-medium text-content-secondary mb-1.5">{label}</label>
+    <div className="mb-1.5 flex items-center justify-between gap-2">
+      <label className="block text-sm font-medium text-content-secondary">{label}</label>
+      {labelAction}
+    </div>
     {children}
     {hint && <p className="text-xs text-content-tertiary mt-1">{hint}</p>}
   </div>
@@ -145,7 +151,15 @@ export const Dropdown: React.FC<{
             {options.map((o) => (
               <div
                 key={o.value}
-                onClick={() => {
+                // Select on mousedown, not click: the document-level mousedown
+                // listener that closes the menu can otherwise fire first (e.g.
+                // on the very first open, before menuRef is populated) and swallow
+                // the click, which made the first option look unselectable.
+                // preventDefault keeps focus stable; stopPropagation stops the
+                // outside-close handler from also running for this same event.
+                onMouseDown={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
                   onChange(o.value)
                   setOpen(false)
                 }}

@@ -13,6 +13,7 @@ import {
   Pencil,
   Eye as EyeIcon,
   EyeOff,
+  ExternalLink,
 } from 'lucide-react'
 import { t, localizedLabel } from '../../i18n'
 import apiClient from '../../api/client'
@@ -24,6 +25,22 @@ import { product } from '@product'
 
 // Whether the "add custom provider" entry is available. Defaults to true.
 const allowCustomProviders = product.models?.allowCustomProviders !== false
+
+// LinkAI is an aggregation platform, so when the LinkAI provider is selected we
+// point users to its console to create/manage the aggregated key. Only shown
+// for that provider — other vendors manage keys on their own sites.
+const ManageLinkAIKeyLink: React.FC = () => (
+  <button
+    type="button"
+    onClick={() =>
+      window.open('https://link-ai.tech/console/models?apikey=1', '_blank', 'noopener,noreferrer')
+    }
+    className="inline-flex items-center gap-1 text-xs text-accent hover:underline cursor-pointer"
+  >
+    {t('models_manage_api_key')}
+    <ExternalLink size={11} className="shrink-0" />
+  </button>
+)
 
 interface ModelsTabProps {
   baseUrl: string
@@ -156,6 +173,7 @@ const ModelsTab: React.FC<ModelsTabProps> = ({ baseUrl }) => {
         data={data}
         allowAuto
         autoLabel={t('models_asr_auto')}
+        allowCustomModel
         busy={busy === 'asr'}
         status={statusMap.asr}
         onSave={(p, m) => run('asr', { action: 'set_capability', capability: 'asr', provider_id: p, model: m })}
@@ -409,7 +427,10 @@ const VendorModal: React.FC<{
           <Dropdown value={pickId} options={pickOptions} onChange={onPick} />
         </Field>
       )}
-      <Field label="API Key">
+      <Field
+        label="API Key"
+        labelAction={effective?.id === 'linkai' ? <ManageLinkAIKeyLink /> : undefined}
+      >
         <div className="relative">
           <TextInput
             type={keyVisible ? 'text' : 'password'}
@@ -592,6 +613,12 @@ const TtsCard: React.FC<{
 }> = ({ state, data, busy, status, onSaveVoice, onSaveMode, modeStatus, modeBusy }) => {
   const [provider, setProvider] = useState(state.current_provider || '')
   const [model, setModel] = useState(state.current_model || '')
+  // Custom (OpenAI-compatible) vendors have no preset catalog: type the model.
+  // Covers expanded custom:<id> cards and the legacy flat "custom" entry.
+  const isCustomProvider = (id: string) => id.startsWith('custom:') || id === 'custom'
+  const [customModel, setCustomModel] = useState(
+    isCustomProvider(state.current_provider || '') ? state.current_model || '' : ''
+  )
   const [voice, setVoice] = useState(state.current_voice || '')
   const [mode, setMode] = useState<'off' | 'voice_if_voice' | 'always'>(state.reply_mode || 'off')
 
@@ -609,6 +636,14 @@ const TtsCard: React.FC<{
 
   const handleProvider = (id: string) => {
     setProvider(id)
+    if (isCustomProvider(id)) {
+      // Prefill with the saved model when re-selecting the same provider.
+      setCustomModel(id === state.current_provider ? state.current_model || '' : '')
+      setModel('')
+      setVoice('')
+      return
+    }
+    setCustomModel('')
     const first = normEntries(state.provider_models?.[id])[0]
     const fm = first?.value || ''
     setModel(fm)
@@ -618,6 +653,7 @@ const TtsCard: React.FC<{
     setModel(m)
     setVoice(resolveVoices(provider, m, state.provider_voices)[0]?.value || '')
   }
+  const finalModel = isCustomProvider(provider) ? customModel.trim() : model
 
   return (
     <Card icon={<Volume2 size={16} />} title={t('models_cap_tts')} subtitle={t('models_cap_tts_sub')}>
@@ -648,12 +684,22 @@ const TtsCard: React.FC<{
               />
             </Field>
             <Field label={t('models_model')}>
-              <Dropdown
-                value={model}
-                options={modelOptions}
-                placeholder={t('models_select_model')}
-                onChange={handleModel}
-              />
+              {isCustomProvider(provider) ? (
+                // Custom vendors have no preset catalog: type the model directly.
+                <TextInput
+                  className="font-mono"
+                  value={customModel}
+                  onChange={(e) => setCustomModel(e.target.value)}
+                  placeholder={t('config_custom_model_hint')}
+                />
+              ) : (
+                <Dropdown
+                  value={model}
+                  options={modelOptions}
+                  placeholder={t('models_select_model')}
+                  onChange={handleModel}
+                />
+              )}
             </Field>
             {voiceOptions.length > 0 && (
               <Field label={t('models_voice')}>
@@ -666,7 +712,7 @@ const TtsCard: React.FC<{
               </span>
               <button
                 disabled={busy}
-                onClick={() => onSaveVoice(provider, model, voice)}
+                onClick={() => onSaveVoice(provider, finalModel, voice)}
                 className="px-4 py-2 rounded-btn bg-accent text-accent-contrast hover:bg-accent-hover text-sm font-medium cursor-pointer transition-colors disabled:opacity-50 inline-flex items-center gap-2"
               >
                 {busy && <Loader2 size={14} className="animate-spin" />}

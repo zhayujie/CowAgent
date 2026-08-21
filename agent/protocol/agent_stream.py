@@ -61,7 +61,7 @@ _CONTEXT_OVERFLOW_MARKERS = (
     "context length exceeded", "maximum context length", "prompt is too long",
     "context overflow", "context window", "exceeds model context",
     "request_too_large", "request exceeds the maximum size",
-    "too many tokens", "input is too long",
+    "too many tokens", "input is too long", "tokens exceed",
 )
 
 # Structural tool_use/tool_result pairing complaints only.
@@ -520,6 +520,40 @@ class AgentStreamExecutor:
             text = re.sub(r'<think>[\s\S]*$', '', text)
         return text
 
+    @staticmethod
+    def _split_content_blocks(content) -> Tuple[str, str]:
+        """Split a content-blocks list into (visible_text, reasoning_text).
+
+        Some providers (Anthropic-shaped adapters, MiMo sync wrappers) stream
+        ``content`` as a list of blocks instead of a string. Thinking/reasoning
+        blocks must never be treated as the visible reply — that is what leaked
+        CoT into IM channels as an "Agent Reply". A plain string passes through
+        unchanged as visible text.
+        """
+        if isinstance(content, str):
+            return content, ""
+        if not isinstance(content, list):
+            return "", ""
+        text_parts = []
+        reasoning_parts = []
+        for block in content:
+            if not isinstance(block, dict):
+                continue
+            btype = block.get("type")
+            if btype in ("thinking", "reasoning"):
+                thinking_text = (
+                    block.get("thinking")
+                    or block.get("reasoning")
+                    or block.get("text")
+                    or ""
+                )
+                if thinking_text:
+                    reasoning_parts.append(thinking_text)
+                continue
+            if btype in ("text", "text_delta", None):
+                text_parts.append(block.get("text") or "")
+        return "".join(text_parts), "".join(reasoning_parts)
+
     def _hash_args(self, args: dict) -> str:
         """Generate a simple hash for tool arguments"""
         import hashlib
@@ -659,6 +693,9 @@ class AgentStreamExecutor:
         final_response = ""
         turn = 0
 
+        import uuid as _uuid
+        from common.utils import set_agent_run_id, clear_agent_run_id
+        _run_token = set_agent_run_id(_uuid.uuid4().hex)
         cancelled = False
         try:
             while turn < self.max_turns:
@@ -1016,6 +1053,7 @@ class AgentStreamExecutor:
             raise
 
         finally:
+            clear_agent_run_id(_run_token)
             if self.steer_inbox is not None:
                 self.steer_inbox.close()
             final_response = final_response.strip() if final_response else final_response
@@ -1095,7 +1133,7 @@ class AgentStreamExecutor:
             return all_tools
 
     def _call_llm_stream(self, retry_on_empty=True, retry_count=0, max_retries=3,
-                         _overflow_retry: bool = False) -> Tuple[str, List[Dict]]:
+                         _overflow_stage: int = 0) -> Tuple[str, List[Dict]]:
         """
         Call LLM with streaming and automatic retry on errors
 
@@ -1103,7 +1141,8 @@ class AgentStreamExecutor:
             retry_on_empty: Whether to retry once if empty response is received
             retry_count: Current retry attempt (internal use)
             max_retries: Maximum number of retries for API errors
-            _overflow_retry: Internal flag indicating this is a retry after context overflow
+            _overflow_stage: Context-overflow recovery escalation level (internal):
+                0 = first hit, 1 = after aggressive trim, 2 = after hard compaction.
 
         Returns:
             (response_text, tool_calls)
@@ -1234,15 +1273,17 @@ class AgentStreamExecutor:
                     logger.error(f"   Error Type: {error_type}")
                     logger.error(f"   Full chunk: {chunk}")
                     
-                    # Check if this is a context overflow error (keyword-based, works for all models)
-                    # Don't rely on specific status codes as different providers use different codes
+                    # Check if this is a context overflow error. Use the single
+                    # shared classifier (_is_context_overflow) so the markers stay
+                    # in one place and never drift. Deliberately NOT a bare
+                    # "too large": an oversized upload (413 "file too large" /
+                    # "image too large") must NOT be treated as context overflow,
+                    # or we would compact/clear a healthy conversation to "recover"
+                    # from a problem that has nothing to do with context length.
+                    # Don't rely on specific status codes — providers differ.
                     error_msg_lower = error_msg.lower()
-                    is_overflow = any(keyword in error_msg_lower for keyword in [
-                        'context length exceeded', 'maximum context length', 'prompt is too long',
-                        'context overflow', 'context window', 'too large', 'exceeds model context',
-                        'request_too_large', 'request exceeds the maximum size', 'tokens exceed'
-                    ])
-                    
+                    is_overflow = _is_context_overflow(error_msg_lower)
+
                     if is_overflow:
                         # Mark as context overflow for special handling
                         raise Exception(f"[CONTEXT_OVERFLOW] {error_msg} (Status: {status_code})")
@@ -1266,8 +1307,18 @@ class AgentStreamExecutor:
                         if self._is_thinking_enabled():
                             self._emit_event("reasoning_update", {"delta": reasoning_delta})
 
-                    # Handle text content
+                    # Handle text content. Some providers (Anthropic-shaped
+                    # adapters, MiMo sync wrappers) stream a list of content
+                    # blocks instead of a string. Thinking/reasoning blocks
+                    # must never be treated as the visible reply — that is
+                    # what leaked CoT into WeChat as "Agent Reply".
                     content_delta = delta.get("content") or ""
+                    if isinstance(content_delta, list):
+                        content_delta, thinking_text = self._split_content_blocks(content_delta)
+                        if thinking_text:
+                            full_reasoning += thinking_text
+                            if self._is_thinking_enabled():
+                                self._emit_event("reasoning_update", {"delta": thinking_text})
                     if content_delta:
                         # Filter out <think> tags from content
                         filtered_delta = self._filter_think_tags(content_delta)
@@ -1332,19 +1383,25 @@ class AgentStreamExecutor:
                         reason="overflow", max_messages=0
                     )
 
-                # Strategy: try aggressive trimming first, only clear as last resort
-                if is_context_overflow and not _overflow_retry:
-                    trimmed = self._aggressive_trim_for_overflow()
-                    if trimmed:
-                        logger.warning("🔄 Aggressively trimmed context, retrying...")
+                # Smart-compaction recovery — reuse the same strategy as the
+                # proactive _trim_messages (discard the older half + inject an
+                # LLM summary, or compress to text-only when turns are few),
+                # but drive it by the real limit the provider reported so we
+                # shrink toward the exact ceiling instead of hammering the same
+                # oversized request (the loop the user saw on the LinkAI backend).
+                # Message-format errors have no token budget to hit, so they skip
+                # straight to the context reset below.
+                if is_context_overflow and _overflow_stage == 0:
+                    if self._smart_compact_to_budget(error_str):
+                        logger.warning("🔄 Smart-compacted context to fit the reported limit, retrying...")
                         return self._call_llm_stream(
                             retry_on_empty=retry_on_empty,
                             retry_count=retry_count,
                             max_retries=max_retries,
-                            _overflow_retry=True
+                            _overflow_stage=1,
                         )
 
-                # Aggressive trim didn't help, or this is a message format error.
+                # Trimming exhausted, or this is a message format error.
                 # Reset the working context only: the persisted history is
                 # irreplaceable, and it can never reintroduce broken tool pairs
                 # because every load path strips tool_use/tool_result blocks.
@@ -1580,6 +1637,38 @@ class AgentStreamExecutor:
             self._record_tool_result(tool_name, arguments, False)
             return result
 
+        # Permission gate. Resolved per call so switching mode mid-conversation
+        # applies to the very next tool call. A refusal is reported as a normal
+        # tool error: the model reads why, and can either take an allowed route
+        # or tell the user which mode the task needs.
+        denial = self._permission_denial(tool_name, arguments)
+        if denial:
+            logger.info(f"🔐 Permission denied for tool {tool_name}: {denial}")
+            result = {"status": "error", "result": denial, "execution_time": 0}
+            self._emit_event("tool_execution_start", {
+                "tool_call_id": tool_id,
+                "tool_name": tool_name,
+                "arguments": arguments,
+            })
+            # Flag this as a permission refusal (not an ordinary tool error) and
+            # carry the mode that refused, so the UI can render an actionable
+            # "switch permission" hint instead of a generic failure.
+            try:
+                denied_mode = self.agent.effective_permission_mode()
+            except Exception:
+                denied_mode = None
+            self._emit_event("tool_execution_end", {
+                "tool_call_id": tool_id,
+                "tool_name": tool_name,
+                "permission_denied": True,
+                "permission_mode": denied_mode,
+                **result,
+            })
+            # Deliberately not recorded as a tool failure: a refusal is not the
+            # tool misbehaving, and it must not count toward the consecutive
+            # failure limit that aborts the conversation.
+            return result
+
         # Check for consecutive failures (retry protection)
         should_stop, stop_reason, is_critical = self._check_consecutive_failures(tool_name, arguments)
         if should_stop:
@@ -1708,6 +1797,34 @@ class AgentStreamExecutor:
             })
             return error_result
 
+    def _permission_denial(self, tool_name: str, arguments: Dict) -> Optional[str]:
+        """Reason this call is not allowed, or None when it may run.
+
+        Never raises: a broken permission check must not take the conversation
+        down with it, so an error here falls through to the historical
+        unrestricted behavior.
+        """
+        agent = self.agent
+        if agent is None:
+            return None
+        try:
+            from agent.permission import FULL_ACCESS, check_tool_call
+
+            mode = agent.effective_permission_mode()
+            if mode == FULL_ACCESS:
+                return None
+            decision = check_tool_call(
+                mode,
+                tool_name,
+                arguments,
+                cwd=agent.effective_cwd(),
+                write_roots=agent.write_roots(),
+            )
+            return None if decision.allowed else decision.reason
+        except Exception as e:
+            logger.warning(f"[Permission] Check skipped for {tool_name}: {e}")
+            return None
+
     def _build_tool_not_found_message(self, tool_name: str) -> str:
         """Build a helpful error message when a tool is not found.
 
@@ -1827,107 +1944,136 @@ class AgentStreamExecutor:
         if truncated_count > 0:
             logger.info(f"📎 Truncated {truncated_count} historical tool result(s) to {MAX_HISTORY_RESULT_CHARS} chars")
 
-    def _aggressive_trim_for_overflow(self) -> bool:
+    # Parse "... maximum context length is 1048576 tokens. However, you requested
+    # 1276733 tokens (892733 in the messages, 384000 in the completion) ..." so
+    # the retry aims at the real numbers the provider reported rather than a guess.
+    _RE_OVERFLOW_LIMIT = re.compile(r"maximum context length is\s+(\d+)\s*tokens", re.I)
+    _RE_OVERFLOW_COMPLETION = re.compile(r"(\d+)\s+in the completion", re.I)
+
+    def _overflow_input_budget(self, error_str: str) -> int:
         """
-        Aggressively trim context when a real overflow error is returned by the API.
+        Compute the input-token budget to compact toward after an overflow.
 
-        This method goes beyond normal _trim_messages by:
-        1. Truncating all tool results (including current turn) to a small limit
-        2. Keeping only the last 5 complete conversation turns
-        3. Truncating overly long user messages
-
-        Returns:
-            True if messages were trimmed (worth retrying), False if nothing left to trim
+        Prefer the concrete numbers the provider reported in the error
+        ("maximum context length is X ... N in the completion"); fall back to
+        the model window minus our output reserve. A 10% safety margin absorbs
+        the gap between our estimate and the provider's real tokenizer.
         """
-        if not self.messages:
-            return False
+        window = self.agent._get_model_context_window()
+        limit_match = self._RE_OVERFLOW_LIMIT.search(error_str or "")
+        if limit_match:
+            window = int(limit_match.group(1))
 
+        completion = None
+        comp_match = self._RE_OVERFLOW_COMPLETION.search(error_str or "")
+        if comp_match:
+            completion = int(comp_match.group(1))
+        if completion is None:
+            completion = self.agent._get_output_reserve_tokens()
+
+        system_tokens = self.agent._estimate_message_tokens(
+            {"role": "system", "content": self.system_prompt}
+        )
+        budget = int((window - completion - system_tokens) * 0.9)
+        return max(2000, budget)
+
+    def _smart_compact_to_budget(self, error_str: str) -> bool:
+        """
+        Compact the working context toward the provider's reported limit using
+        the SAME smart strategy as the proactive _trim_messages, just repeated
+        until the estimate fits:
+
+          - Many turns (>= COMPRESS_THRESHOLD): discard the older half and flush
+            them to daily memory + inject an LLM summary into the kept turns.
+          - Few turns (< COMPRESS_THRESHOLD): compress every turn to text-only
+            (strip tool chains, keep user query + final reply), never discard.
+
+        Keeps at least the most recent turn so the user's latest request is not
+        lost. Returns True if it reduced the context (worth retrying), else
+        False (nothing left to shrink -> caller resets).
+        """
+        COMPRESS_THRESHOLD = 5
+
+        input_budget = self._overflow_input_budget(error_str)
         original_count = len(self.messages)
 
-        # Step 1: Aggressively truncate ALL tool results to 5K chars
-        AGGRESSIVE_LIMIT = 10000
-        truncated = 0
-        for msg in self.messages:
-            content = msg.get("content", [])
-            if not isinstance(content, list):
-                continue
-            for block in content:
-                if not isinstance(block, dict):
-                    continue
-                # Truncate tool_result blocks
-                if block.get("type") == "tool_result":
-                    result_str = block.get("content", "")
-                    if isinstance(result_str, str) and len(result_str) > AGGRESSIVE_LIMIT:
-                        block["content"] = (
-                            result_str[:AGGRESSIVE_LIMIT]
-                            + f"\n\n[Truncated for context recovery: "
-                            f"{len(result_str)} -> {AGGRESSIVE_LIMIT} chars]"
-                        )
-                        truncated += 1
-                # Truncate tool_use input blocks (e.g. large write content)
-                if block.get("type") == "tool_use" and isinstance(block.get("input"), dict):
-                    input_str = json.dumps(block["input"], ensure_ascii=False)
-                    if len(input_str) > AGGRESSIVE_LIMIT:
-                        # Keep only a summary of the input
-                        for key, val in block["input"].items():
-                            if isinstance(val, str) and len(val) > 1000:
-                                block["input"][key] = (
-                                    val[:1000]
-                                    + f"... [truncated {len(val)} chars]"
-                                )
-                        truncated += 1
-
-        # Step 2: Truncate overly long user text messages (e.g. pasted content)
-        USER_MSG_LIMIT = 10000
-        for msg in self.messages:
-            if msg.get("role") != "user":
-                continue
-            content = msg.get("content", [])
-            if isinstance(content, list):
-                for block in content:
-                    if isinstance(block, dict) and block.get("type") == "text":
-                        text = block.get("text", "")
-                        if len(text) > USER_MSG_LIMIT:
-                            block["text"] = (
-                                text[:USER_MSG_LIMIT]
-                                + f"\n\n[Message truncated for context recovery: "
-                                f"{len(text)} -> {USER_MSG_LIMIT} chars]"
-                            )
-                            truncated += 1
-            elif isinstance(content, str) and len(content) > USER_MSG_LIMIT:
-                msg["content"] = (
-                    content[:USER_MSG_LIMIT]
-                    + f"\n\n[Message truncated for context recovery: "
-                    f"{len(content)} -> {USER_MSG_LIMIT} chars]"
-                )
-                truncated += 1
-
-        # Step 3: Keep only the last 5 complete turns
         turns = self._identify_complete_turns()
-        if len(turns) > 5:
-            kept_turns = turns[-5:]
-            new_messages = []
-            for turn in kept_turns:
-                new_messages.extend(turn["messages"])
-            removed = len(turns) - 5
-            self.messages[:] = new_messages
-            logger.info(
-                f"🔧 Aggressive trim: removed {removed} old turns, "
-                f"truncated {truncated} large blocks, "
-                f"{original_count} -> {len(self.messages)} messages"
-            )
-            return True
+        if not turns:
+            return False
 
-        if truncated > 0:
-            logger.info(
-                f"🔧 Aggressive trim: truncated {truncated} large blocks "
-                f"(no turns removed, only {len(turns)} turn(s) left)"
-            )
-            return True
+        current = sum(self._estimate_turn_tokens(t) for t in turns)
+        logger.warning(
+            f"🔄 Context overflow recovery: compacting toward ~{input_budget} "
+            f"input tokens (currently ~{current} over {len(turns)} turns)"
+        )
 
-        # Nothing left to trim
-        logger.warning("🔧 Aggressive trim: nothing to trim, will clear history")
-        return False
+        # Repeatedly apply the smart strategy until we fit or can't shrink more.
+        # Each iteration removes the older half (with summary) when there are
+        # enough turns, otherwise compresses the survivors to plain text.
+        guard = 0
+        while turns and guard < 32:
+            guard += 1
+            current = sum(self._estimate_turn_tokens(t) for t in turns)
+            if current <= input_budget:
+                break
+
+            if len(turns) >= COMPRESS_THRESHOLD:
+                # Discard older half + summarize, mirroring _trim_messages.
+                removed_count = len(turns) // 2
+                discarded_turns = turns[:removed_count]
+                kept_turns = turns[removed_count:]
+
+                if self.agent.memory_manager:
+                    discarded_messages = []
+                    for turn in discarded_turns:
+                        discarded_messages.extend(turn["messages"])
+                    if discarded_messages:
+                        user_id = getattr(self.agent, "_current_user_id", None)
+                        cb = self._build_context_summary_callback(discarded_turns, kept_turns)
+                        self.agent.memory_manager.flush_memory(
+                            messages=discarded_messages, user_id=user_id,
+                            reason="overflow", max_messages=0,
+                            context_summary_callback=cb,
+                        )
+                turns = kept_turns
+            else:
+                # Few turns: compress all to text-only. If that still doesn't
+                # fit, drop the oldest one but always keep the last turn.
+                compressed = []
+                for t in turns:
+                    c = compress_turn_to_text_only(t)
+                    if c["messages"]:
+                        compressed.append(c)
+                if compressed and sum(self._estimate_turn_tokens(t) for t in compressed) < current:
+                    turns = compressed
+                elif len(turns) > 1:
+                    turns = turns[1:]
+                else:
+                    # A single turn that still overflows even as plain text —
+                    # nothing more this strategy can do.
+                    turns = compressed or turns
+                    break
+
+        new_messages = []
+        for turn in turns:
+            new_messages.extend(turn["messages"])
+
+        if not new_messages or len(new_messages) >= original_count:
+            # Couldn't reduce anything (single oversized turn) -> let caller reset.
+            if not new_messages:
+                logger.warning("🧹 Smart compaction produced no messages, will clear history")
+                return False
+            if len(new_messages) >= original_count:
+                logger.warning("🧹 Smart compaction could not reduce the context, will clear history")
+                return False
+
+        self.messages[:] = new_messages
+        new_tokens = sum(self._estimate_turn_tokens(t) for t in turns)
+        logger.info(
+            f"🔄 Smart compaction: {original_count} -> {len(self.messages)} messages "
+            f"(~{new_tokens} tokens, target ~{input_budget})"
+        )
+        return True
 
     def _build_context_summary_callback(self, discarded_turns: list, kept_turns: list):
         """
@@ -2013,13 +2159,21 @@ class AgentStreamExecutor:
         # Get context window from agent (based on model)
         context_window = self.agent._get_model_context_window()
 
-        # Use configured max_context_tokens if available
+        # The window is shared by prompt + completion. Always keep the input
+        # budget below (window - output reserve) so a full prompt plus the
+        # provider's default completion budget can't overflow the window and
+        # trigger the "maximum context length ... you requested N tokens" 400
+        # (which otherwise loops). This cap applies even when the user
+        # configured a large agent_max_context_tokens.
+        output_reserve = self.agent._get_output_reserve_tokens()
+        input_ceiling = max(1, context_window - output_reserve)
+
+        # Use configured max_context_tokens if available, but never above the
+        # input ceiling that leaves room for the completion.
         if hasattr(self.agent, 'max_context_tokens') and self.agent.max_context_tokens:
-            max_tokens = self.agent.max_context_tokens
+            max_tokens = min(self.agent.max_context_tokens, input_ceiling)
         else:
-            # Reserve 10% for response generation
-            reserve_tokens = int(context_window * 0.1)
-            max_tokens = context_window - reserve_tokens
+            max_tokens = input_ceiling
 
         # Estimate system prompt tokens
         system_tokens = self.agent._estimate_message_tokens({"role": "system", "content": self.system_prompt})

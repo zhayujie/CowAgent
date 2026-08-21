@@ -13,6 +13,7 @@ import { useUIStore } from './store/uiStore'
 import { useSessionStore } from './store/sessionStore'
 import { useWorkspaceStore } from './store/workspaceStore'
 import WorkspacePanel from './components/WorkspacePanel'
+import Lightbox from './components/Lightbox'
 import { initUpdateListener } from './store/updateStore'
 import { useOnboardingStore } from './store/onboardingStore'
 import OnboardingWizard from './components/OnboardingWizard'
@@ -162,6 +163,8 @@ const App: React.FC = () => {
       <StatusScreen
         status={backend.status}
         error={backend.error}
+        code={backend.code}
+        path={backend.path}
         slow={backend.slow}
         reconnecting={backend.reconnecting}
         onRetry={backend.restart}
@@ -190,6 +193,7 @@ const App: React.FC = () => {
   return (
     <div className="flex h-screen overflow-hidden bg-base text-content">
       {onboardingOpen && <OnboardingWizard onDone={handleLangChange} />}
+      <Lightbox />
       <NavRail onLangChange={handleLangChange} />
 
       {showSessions && <SessionList />}

@@ -376,7 +376,12 @@ class ClaudeAPIBot(Bot, OpenAIImage):
         Returns:
             Formatted response compatible with OpenAI format or generator for streaming
         """
-        actual_model = self._model_mapping(conf().get("model"))
+        # A per-session model override arrives as kwargs["model"] (see
+        # AgentLLMModel.call_stream). Prefer it over the global config so
+        # switching the model for one chat actually reaches the API; otherwise
+        # a session pinned to another provider's model would be sent here with
+        # the wrong (global) model name.
+        actual_model = self._model_mapping(kwargs.get("model") or conf().get("model"))
 
         # Extract system prompt from messages if present
         system_prompt = kwargs.get("system", conf().get("character_desc", ""))

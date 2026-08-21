@@ -1177,7 +1177,14 @@ def main():
     aspect_ratio = args.get("aspect_ratio")
     image_url = args.get("image_url")
 
-    output_dir = os.environ.get("IMAGE_OUTPUT_DIR", os.path.join(os.getcwd(), "images"))
+    # Resolve output dir independently of the live cwd (the agent may `cd`
+    # elsewhere, e.g. into this skill's dir, which gets wiped on restart).
+    # Priority: explicit IMAGE_OUTPUT_DIR -> workspace/project dir -> cwd.
+    output_base = os.environ.get("IMAGE_OUTPUT_DIR")
+    if not output_base:
+        workspace = os.environ.get("AGENT_WORKSPACE") or os.getcwd()
+        output_base = os.path.join(workspace, "images")
+    output_dir = output_base
 
     providers = _build_providers(model, provider_id=provider_id)
     if not providers:

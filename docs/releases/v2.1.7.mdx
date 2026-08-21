@@ -1,0 +1,77 @@
+---
+title: v2.1.7
+description: "CowAgent 2.1.7: multiple workspaces isolated per session, session-level permission modes, task notifications and desktop improvements, and new models"
+---
+
+🌐 [English](https://docs.cowagent.ai/releases/v2.1.7) | [中文](https://docs.cowagent.ai/zh/releases/v2.1.7)
+
+## 🗂 Multiple Workspaces
+
+The Agent is no longer tied to a single directory — you can set up several project workspaces and give each session its own. Available in both the Web console and the desktop client:
+
+- **Multiple workspaces**: create or open any directory as a project workspace; the documents, web pages, and code the Agent produces are created and managed there.
+- **Per-session workspace**: each session is bound to its own project workspace, so tasks running side by side stay out of each other's way.
+- **Per-session model**: switch the model for a single session; new sessions start from the global default.
+- **Grouped sessions**: the session list is grouped by workspace, with pinning, reordering, renaming, and deleting.
+- **Shared system resources**: memory, skills, and the knowledge base still live in the system workspace (`~/cow` by default).
+
+<img src="https://cdn.jsdelivr.net/gh/zhayujie/cowagent-assets@main/screenshots/en/web-console-workspace-project-demo.png" width="800" />
+
+Docs: [Workspace](https://docs.cowagent.ai/intro/architecture#workspace)
+
+## 🔐 Permission Modes
+
+Sessions now carry their own permission mode, which works together with workspaces to control how far the Agent can reach:
+
+- **Three levels**: read-only, workspace-write, and full-access, set independently for each session.
+- **Default mode**: pick a default permission mode, and new sessions start with it.
+- **Actionable denials**: when a tool call is blocked, the hint is clickable so you can adjust the permission on the spot.
+
+<img src="https://cdn.jsdelivr.net/gh/zhayujie/cowagent-assets@main/screenshots/en/web-console-access-mode.png" width="600" />
+
+## 🖥 Desktop Client
+
+- **Voice input**: a voice button in the chat input transcribes what you say straight into the box; speech recognition and synthesis also work with custom providers and models. Thanks @chimyves (#3052, #3050)
+- **Drafts kept**: leaving the chat page and coming back no longer loses unsent text and attachments. Thanks @chimyves (#3040)
+- **Launch at login**: a new toggle in system settings, off by default.
+- **Startup diagnostics**: when the backend fails to start, the client reports what actually went wrong instead of a generic error.
+- **Log download**: the run-log page can download the log file, and local uploads gained retries and clearer errors.
+
+Download: [CowAgent Desktop](https://cowagent.ai/download/)
+
+Docs: [Desktop Client](https://docs.cowagent.ai/guide/desktop)
+
+## 🔔 Task Notifications
+
+The Web console and the desktop client both raise a notification (with a sound) when an Agent run finishes or fails, so you can walk away from a long task:
+
+- **Both clients**: OS notifications on the desktop, browser notifications on the Web — only while the window isn't focused. Clicking one takes you back to the session.
+- **Unread badge**: the Web tab shows an unread count while it's hidden, cleared once you switch back.
+- **Separate toggles**: notifications and the sound are two independent switches, both on by default. Cancelling a task yourself no longer triggers a failure notification.
+
+Thanks @chimyves (#3056, #3055)
+
+## 🤖 Model Updates
+
+- **New models**: `glm-5.3`, `qwen3.8-max`, `gemini-3.7-flash`, and `gemini-3.6-flash`, each set as its provider's default.
+- **Merged config page**: the Web console folds the Models page into Config, split into a Basic and a Models tab, so there's less jumping around.
+- **Call fixes**: fixed GLM-5.3's forced thinking, plus routing and base-URL handling for some DashScope models; custom models now show up in the session model picker.
+
+## 🛠 Improvements & Fixes
+
+- **Image display**: fixed local-path images and relative-path images inside knowledge docs not rendering; on the desktop, clicking an image in a chat or a document zooms it in place. Thanks @chimyves (#3046)
+- **Windows drives**: fixed the folder picker not listing drives on Windows. Thanks @CNXudiandian (#3048)
+- **Windows shell guidance**: better recovery guidance when a shell command fails on Windows. Thanks @dajiaohuang (#3065)
+- **Cleaner IM replies**: Agent replies on IM channels no longer carry thinking content. Thanks @LHMQ878 (#3044)
+- **Scheduled tasks**: fixed a task that failed across midnight never getting back on schedule (Thanks @chimyves #3054), and scheduled tasks being acknowledged instead of run.
+- **Faster first message**: streamlined memory system initialization so it no longer blocks a session's first message, noticeably cutting the wait before the initial reply.
+- **Context trimming**: fixed the AI reply not being saved when the context was trimmed.
+- **Feishu channel**: the streaming card now accumulates text across turns.
+- **Docker**: `config.json` survives container upgrades through the `COW_DATA_DIR` mount.
+
+## 📦 How to Upgrade
+
+- **Source deployment**: run `cow update` for a one-click upgrade, or pull the latest code and restart. See the [upgrade guide](https://docs.cowagent.ai/guide/upgrade).
+- **Desktop client**: check for updates and update with one click inside the client, or get the latest version from the [download page](https://cowagent.ai/download/).
+
+**Release date**: 2026.08.20 | [Full Changelog](https://github.com/zhayujie/CowAgent/compare/2.1.6...2.1.7)
