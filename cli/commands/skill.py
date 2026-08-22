@@ -57,7 +57,8 @@ _GIT_SSH_RE = re.compile(
 def _parse_github_url(url: str):
     """Parse a full GitHub URL into (owner, repo, branch, subpath).
 
-    Returns None if the URL doesn't match.
+    Returns None if the URL doesn't match. An omitted branch stays None so
+    GitHub can resolve the repository's default branch.
     Supported formats:
       https://github.com/owner/repo
       https://github.com/owner/repo/tree/branch
@@ -68,7 +69,7 @@ def _parse_github_url(url: str):
     if not m:
         return None
     owner, repo, branch, subpath = m.groups()
-    return owner, repo, branch or "main", subpath
+    return owner, repo, branch, subpath
 
 
 def _parse_gitlab_url(url: str):
@@ -122,16 +123,24 @@ def _clone_repo(git_url: str):
     return tmp_dir, repo_dir
 
 
-def _download_repo_zip(spec: str, branch: str = "main", host: str = "github", timeout: int = 30):
+def _download_repo_zip(
+    spec: str,
+    branch: Optional[str] = None,
+    host: str = "github",
+    timeout: int = 30,
+):
     """Download a GitHub/GitLab repo as zip and extract it.
 
     Returns (tmp_dir, repo_root) where tmp_dir is the temp directory to clean up
-    and repo_root is the extracted repository root path.
+    and repo_root is the extracted repository root path. GitHub's HEAD archive
+    follows the default branch when branch is None.
     """
     if host == "gitlab":
+        branch = branch or "main"
         zip_url = f"https://gitlab.com/{spec}/-/archive/{branch}/{spec.split('/')[-1]}-{branch}.zip"
     else:
-        zip_url = f"https://github.com/{spec}/archive/refs/heads/{branch}.zip"
+        archive_ref = f"refs/heads/{branch}" if branch else "HEAD"
+        zip_url = f"https://github.com/{spec}/archive/{archive_ref}.zip"
     if isinstance(timeout, (list, tuple)):
         req_timeout = timeout
     else:
@@ -160,9 +169,12 @@ def _download_github_dir(owner, repo, branch, subpath, dest_dir):
 
     Recursively fetches all files under the given subpath and writes them
     to dest_dir. Used as a fallback when zip download fails.
-    Costs one API request per directory (60/hr unauthenticated).
+    Costs one API request per directory (60/hr unauthenticated). Omitting ref
+    lets the Contents API follow the repository's default branch.
     """
-    api_url = f"https://api.github.com/repos/{owner}/{repo}/contents/{subpath}?ref={branch}"
+    api_url = f"https://api.github.com/repos/{owner}/{repo}/contents/{subpath}"
+    if branch:
+        api_url = f"{api_url}?ref={branch}"
     resp = requests.get(api_url, timeout=30, headers={"Accept": "application/vnd.github.v3+json"})
     resp.raise_for_status()
     items = resp.json()
@@ -1149,10 +1161,19 @@ def _install_hub(name, result: InstallResult, provider=None):
     raise SkillInstallError("Unexpected response from Skill Hub.")
 
 
-def _install_github(spec, result: InstallResult, subpath=None, skill_name=None, branch="main", source="github", timeout=30):
+def _install_github(
+    spec,
+    result: InstallResult,
+    subpath=None,
+    skill_name=None,
+    branch=None,
+    source="github",
+    timeout=30,
+):
     """Install skill(s) from a GitHub repo.
 
     Strategy: zip download first (no API rate limit), Contents API as fallback.
+    An unpinned input follows the repository's default branch.
     """
     if "#" in spec and not subpath:
         spec, subpath = spec.split("#", 1)
@@ -1163,7 +1184,8 @@ def _install_github(spec, result: InstallResult, subpath=None, skill_name=None, 
     os.makedirs(skills_dir, exist_ok=True)
     owner, repo = spec.split("/", 1)
 
-    result.messages.append(f"Downloading from GitHub: {spec} (branch: {branch})...")
+    branch_label = branch or "default"
+    result.messages.append(f"Downloading from GitHub: {spec} (branch: {branch_label})...")
 
     tmp_dir = None
     repo_root = None
