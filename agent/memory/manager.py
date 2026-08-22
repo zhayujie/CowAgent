@@ -15,6 +15,7 @@ from agent.memory.storage import MemoryStorage, MemoryChunk, SearchResult
 from agent.memory.chunker import TextChunker
 from agent.memory.embedding import EmbeddingProvider, EmbeddingCache
 from agent.memory.summarizer import MemoryFlushManager, create_memory_files_if_needed
+from agent.memory.vector_backend_factory import create_external_vector_backend
 
 
 class MemoryManager:
@@ -39,10 +40,16 @@ class MemoryManager:
             llm_model: LLM model for summarization (optional)
         """
         self.config = config or get_default_memory_config()
+
+        # Embedding provider is owned by the caller (agent_initializer is the
+        # canonical entry point and handles legacy/explicit + state validation).
+        self.embedding_provider = embedding_provider
         
         # Initialize storage
         db_path = self.config.get_db_path()
-        self.storage = MemoryStorage(db_path)
+        dimension = self._effective_embedding_dimension()
+        external_backend = create_external_vector_backend(self.config, dimension)
+        self.storage = MemoryStorage(db_path, vector_backend=external_backend)
         
         # Initialize chunker
         self.chunker = TextChunker(
@@ -50,12 +57,9 @@ class MemoryManager:
             overlap_tokens=self.config.chunk_overlap_tokens
         )
         
-        # Embedding provider is owned by the caller (agent_initializer is the
-        # canonical entry point and handles legacy/explicit + state validation).
         # When None is passed, memory degrades to keyword-only search instead
         # of silently re-initializing a vendor here, which would bypass the
         # caller's state checks and risk corrupting the index.
-        self.embedding_provider = embedding_provider
         if self.embedding_provider is None:
             from common.log import logger
             logger.info(
@@ -443,6 +447,7 @@ class MemoryManager:
     def get_status(self) -> Dict[str, Any]:
         """Get memory status"""
         stats = self.storage.get_stats()
+        vector_status = self.storage.get_vector_backend_status()
         return {
             'chunks': stats['chunks'],
             'files': stats['files'],
@@ -451,8 +456,22 @@ class MemoryManager:
             'embedding_enabled': self.embedding_provider is not None,
             'embedding_provider': self.config.embedding_provider if self.embedding_provider else 'disabled',
             'embedding_model': self.config.embedding_model if self.embedding_provider else 'N/A',
-            'search_mode': 'hybrid (vector + keyword)' if self.embedding_provider else 'keyword only (FTS5)'
+            'search_mode': 'hybrid (vector + keyword)' if self.embedding_provider else 'keyword only (FTS5)',
+            'vector_backend': vector_status['backend'],
+            'vector_backend_healthy': vector_status['healthy'],
+            'vector_sync_pending': vector_status['pending'],
         }
+
+    def configure_vector_backend(self) -> None:
+        """Recreate the optional backend after an embedding-provider change."""
+        backend = create_external_vector_backend(
+            self.config,
+            self._effective_embedding_dimension(),
+        )
+        self.storage.set_external_vector_backend(backend)
+        status = self.storage.get_vector_backend_status()
+        if backend is not None and not status["healthy"]:
+            raise RuntimeError(status["error"] or "Milvus backend is unavailable")
     
     def mark_dirty(self):
         """Mark memory as dirty (needs sync)"""
@@ -468,6 +487,15 @@ class MemoryManager:
         """Generate unique chunk ID"""
         content = f"{path}:{start_line}:{end_line}"
         return hashlib.md5(content.encode('utf-8')).hexdigest()
+
+    def _effective_embedding_dimension(self) -> Optional[int]:
+        if self.embedding_provider is None:
+            return None
+        dimension = getattr(self.embedding_provider, "dimensions", None)
+        if dimension:
+            return int(dimension)
+        configured = getattr(self.config, "embedding_dim", None)
+        return int(configured) if configured else None
     
     @staticmethod
     def _compute_temporal_decay(path: str, half_life_days: float = 30.0) -> float:

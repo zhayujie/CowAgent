@@ -117,6 +117,14 @@ available_setting = {
     "embedding_provider": "",  # explicitly set the provider: openai / linkai / dashscope / doubao / zhipu (aligned with bot_type naming)
     "embedding_model": "",     # leave empty to use the provider's default model
     "embedding_dimensions": 0, # leave empty/0 to use the provider's default dimension (1024 recommended for consistency)
+    # Memory vector backend. SQLite/FTS5 remains the zero-dependency default.
+    "vector_backend": "sqlite",  # sqlite | milvus
+    "milvus_uri": "",  # local .db path (Lite) or http(s) server/cloud endpoint
+    "milvus_token": "",  # prefer the MILVUS_TOKEN environment variable
+    "milvus_db_name": "default",
+    "milvus_collection": "",  # empty = workspace- and dimension-scoped name
+    "milvus_timeout": 10.0,
+    "milvus_consistency_level": "Strong",
     # voice config
     "speech_recognition": True,  # whether to enable speech recognition
     "group_speech_recognition": False,  # whether to enable group speech recognition
@@ -380,18 +388,25 @@ config = Config()
 
 
 def _mask_value(val):
-    """Mask a sensitive string value, keeping first 3 and last 3 chars."""
-    if not isinstance(val, str) or len(val) <= 8:
+    """Remove a sensitive string value from diagnostic output."""
+    if not isinstance(val, str) or not val:
         return val
-    return val[0:3] + "*" * 5 + val[-3:]
+    return "<redacted>"
 
 
 def _mask_sensitive_recursive(obj):
-    """Recursively mask values whose keys contain 'key' or 'secret'."""
+    """Recursively mask values stored under credential-like keys."""
     if isinstance(obj, dict):
         masked = {}
         for k, v in obj.items():
-            if ("key" in k or "secret" in k) and isinstance(v, str):
+            key = str(k).lower()
+            if (
+                key == "milvus_uri"
+                or any(
+                    marker in key
+                    for marker in ("key", "secret", "token", "password")
+                )
+            ) and isinstance(v, str):
                 masked[k] = _mask_value(v)
             else:
                 masked[k] = _mask_sensitive_recursive(v)
@@ -522,7 +537,13 @@ def load_config():
         if name.startswith("_"):
             continue
         if name in available_setting:
-            logger.info("[INIT] override config by environ args: {}={}".format(name, value))
+            safe_value = _mask_sensitive_recursive({name: value})[name]
+            logger.info(
+                "[INIT] override config by environ args: {}={}".format(
+                    name,
+                    safe_value,
+                )
+            )
             try:
                 # SECURITY: Use ast.literal_eval instead of eval().
                 # ast.literal_eval only parses Python literals (strings, numbers,

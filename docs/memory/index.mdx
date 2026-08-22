@@ -41,6 +41,39 @@ The memory system supports hybrid retrieval modes:
 
 The Agent automatically triggers memory retrieval during conversation as needed, incorporating relevant historical information into context. Results are ranked by a combined score (default: 0.7 vector weight + 0.3 keyword weight). Daily memory scores decay over time (30-day half-life), while core memory does not decay.
 
+### Optional Milvus vector backend
+
+SQLite remains the default vector backend and requires no additional service or package. FTS5 keyword retrieval also remains in SQLite regardless of which vector backend is selected.
+
+To use a Milvus server or Zilliz Cloud, install the server extra (Python 3.9 or later):
+
+```bash
+pip3 install -e ".[milvus]"
+```
+
+For an embedded local database, install Milvus Lite (Python 3.10 or later):
+
+```bash
+pip3 install -e ".[milvus-lite]"
+```
+
+Then select the backend in `config.json`. The URI may be a local Milvus Lite database file, a Milvus server endpoint such as `http://localhost:19530`, or a Zilliz Cloud public endpoint:
+
+```json
+{
+  "vector_backend": "milvus",
+  "milvus_uri": "http://localhost:19530",
+  "milvus_db_name": "default",
+  "milvus_collection": "",
+  "milvus_timeout": 10.0,
+  "milvus_consistency_level": "Strong"
+}
+```
+
+For Milvus Lite, set `milvus_uri` to a database file such as `/home/user/cow/memory/long-term/milvus.db`, or leave it empty to use the default file next to the SQLite index. For authenticated Milvus or Zilliz Cloud, set the `MILVUS_TOKEN` environment variable; `milvus_token` is also accepted in `config.json`, but an environment variable avoids storing credentials in a file.
+
+CowAgent creates one dimension-specific collection per workspace when `milvus_collection` is empty. An explicitly named existing collection must use the same embedding dimension and CowAgent schema. Existing SQLite vectors are backfilled automatically. SQLite remains the authoritative copy: Milvus writes are retried from a durable queue, searches fall back to SQLite while Milvus is unavailable or behind, and `/memory rebuild-index` repopulates both indexes without dropping a user-managed collection. Credentials and connection URIs are redacted from backend error logs.
+
 ## Related Files
 
 Files related to memory in the workspace (default `~/cow`):
@@ -69,3 +102,9 @@ The memory management page in the Web console allows browsing memory files and d
 | `agent_workspace` | Workspace path, memory files stored under this directory | `~/cow` |
 | `agent_max_context_tokens` | Max context tokens; when exceeded, content is trimmed and summarized into memory | `50000` |
 | `agent_max_context_turns` | Max context turns; when exceeded, content is trimmed and summarized into memory | `20` |
+| `vector_backend` | Vector backend: `sqlite` or optional `milvus` | `sqlite` |
+| `milvus_uri` | Milvus Lite file, Milvus server URI, or Zilliz Cloud endpoint | local `milvus.db` |
+| `milvus_db_name` | Milvus database name | `default` |
+| `milvus_collection` | Collection name; empty creates a workspace/dimension-scoped name | empty |
+| `milvus_timeout` | Milvus operation timeout in seconds | `10.0` |
+| `milvus_consistency_level` | Milvus consistency level | `Strong` |

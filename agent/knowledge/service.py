@@ -21,7 +21,7 @@ from urllib.parse import quote, unquote
 
 from common.log import logger
 from config import conf
-from agent.memory.config import MemoryConfig
+from agent.memory.config import create_memory_config
 from agent.memory.manager import MemoryManager
 
 
@@ -85,7 +85,7 @@ class KnowledgeService:
             from agent.memory.embedding import create_default_embedding_provider
             embedding_provider = create_default_embedding_provider()
             self._memory_manager = MemoryManager(
-                MemoryConfig(workspace_root=self.workspace_root),
+                create_memory_config(self.workspace_root),
                 embedding_provider=embedding_provider,
             )
         return self._memory_manager

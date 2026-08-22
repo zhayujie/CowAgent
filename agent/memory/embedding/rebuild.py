@@ -61,10 +61,7 @@ def clear_index(db_path, storage=None) -> int:
     if owns_storage:
         storage = MemoryStorage(db_path)
     try:
-        before = storage.conn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0]
-        storage.conn.execute("DELETE FROM chunks")
-        storage.conn.execute("DELETE FROM files")
-        storage.conn.commit()
+        before = storage.clear_memory_index()
         storage.reset_fts5()
     finally:
         if owns_storage:
@@ -100,6 +97,17 @@ def rebuild_in_process(memory_manager) -> RebuildResult:
     except Exception as e:
         logger.error(f"[RebuildIndex] embedding probe failed, aborting rebuild: {e}")
         return RebuildResult(ok=False, error=f"embedding endpoint not reachable: {e}")
+
+    configure_backend = getattr(memory_manager, "configure_vector_backend", None)
+    if configure_backend is not None:
+        try:
+            configure_backend()
+        except Exception as e:
+            logger.error("[RebuildIndex] vector backend preflight failed: %s", e)
+            return RebuildResult(
+                ok=False,
+                error=f"vector backend preflight failed: {e}",
+            )
 
     db_path = memory_manager.config.get_db_path()
     try:
@@ -150,15 +158,15 @@ def rebuild_in_process(memory_manager) -> RebuildResult:
 
 def main() -> int:
     """Standalone CLI entry. Must be run from project root (relative config path)."""
-    from config import conf, load_config
-    from agent.memory import MemoryConfig, MemoryManager
+    from config import load_config
+    from agent.memory import MemoryManager, create_memory_config
 
     load_config()
 
     from common.state_dir import state_root_str
 
     workspace_root = state_root_str()
-    memory_config = MemoryConfig(workspace_root=workspace_root)
+    memory_config = create_memory_config(workspace_root)
 
     logger.info(f"[RebuildIndex] Workspace: {workspace_root}")
     logger.info(f"[RebuildIndex] Index db:  {memory_config.get_db_path()}")

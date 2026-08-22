@@ -7,6 +7,7 @@ conversation history persistence (SQLite).
 
 from agent.memory.config import (
     MemoryConfig,
+    create_memory_config,
     get_default_memory_config,
     register_memory_config,
     reset_memory_configs,
@@ -33,6 +34,7 @@ from agent.memory.vector_backend import (
 __all__ = [
     'MemoryManager',
     'MemoryConfig',
+    'create_memory_config',
     'get_default_memory_config',
     'register_memory_config',
     'reset_memory_configs',

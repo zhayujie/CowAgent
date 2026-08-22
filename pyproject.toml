@@ -12,6 +12,17 @@ dependencies = [
     "requests>=2.28.2",
 ]
 
+[project.optional-dependencies]
+# PyMilvus 2.6.x requires Python >3.8. CowAgent's core Python >=3.7 support is
+# unchanged because these dependencies are installed only when requested.
+milvus = [
+    "pymilvus>=2.6.14,<2.7",
+]
+milvus-lite = [
+    "pymilvus>=2.6.14,<2.7",
+    "milvus-lite>=3,<4",
+]
+
 [project.scripts]
 cow = "cli.cli:main"
 
