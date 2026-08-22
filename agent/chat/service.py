@@ -34,6 +34,7 @@ class ChatService:
         send_chunk_fn: Callable[[dict], None],
         channel_type: str = "",
         agent_id: str = None,
+        request_id: str = None,  # noqa: RUF013
     ):
         """
         Run the agent for *query* and stream results back via *send_chunk_fn*.
@@ -46,6 +47,7 @@ class ChatService:
         :param send_chunk_fn: callable(chunk_data: dict) to send a streaming chunk
         :param channel_type: source channel (e.g. "web", "feishu") for persistence
         :param agent_id: selected agent profile; defaults to the configured default
+        :param request_id: per-request cancellation key; defaults to session scope
         """
         resolved_agent_id = self.agent_bridge._resolve_agent_id(agent_id)
         agent = self.agent_bridge.get_agent(
@@ -243,11 +245,11 @@ class ChatService:
         from agent.protocol.agent_stream import AgentStreamExecutor
 
         # Register a cancel token so /cancel can abort this in-flight run.
-        # IM channels key on session_id (no per-turn request_id here).
+        # API calls can key by request; IM channels remain session scoped.
         from agent.protocol import get_cancel_registry, get_steer_registry
         registry = get_cancel_registry()
         steer_registry = get_steer_registry()
-        cancel_key = (
+        scoped_session_key = (
             self.agent_bridge._cancel_key(
                 resolved_agent_id,
                 session_id,
@@ -256,17 +258,24 @@ class ChatService:
             if session_id
             else None
         )
+        cancel_key = (
+            self.agent_bridge._cancel_key(
+                resolved_agent_id,
+                request_id,
+                self.agent_bridge.agent_registry.default_agent_id,
+            )
+            if request_id
+            else scoped_session_key
+        )
         # Both the token and its session grouping are namespaced: two Agents
         # serving the same session id must not cancel or steer each other.
         cancel_event = (
-            registry.register(cancel_key, session_id=cancel_key)
+            registry.register(cancel_key, session_id=scoped_session_key)
             if cancel_key
             else None
         )
         steer_inbox = (
-            steer_registry.register(cancel_key)
-            if cancel_key
-            else None
+            steer_registry.register(scoped_session_key) if scoped_session_key else None
         )
 
         executor = AgentStreamExecutor(
@@ -283,6 +292,12 @@ class ChatService:
         )
 
         try:
+            if cancel_event is not None and cancel_event.is_set():
+                logger.info(
+                    f"[ChatService] Skipping pre-cancelled run: agent={resolved_agent_id}, "
+                    f"session={session_id}"
+                )
+                return
             response = executor.run_stream(query)
         except Exception:
             # If executor cleared messages (context overflow), sync back
@@ -295,13 +310,13 @@ class ChatService:
             # Clear the mid-run flag so idle scans can review this session again.
             self._mark_run_active(agent, False)
             # Release cancel token to keep the registry bounded.
-            if session_id:
+            if cancel_key:
                 try:
                     registry.unregister(cancel_key)
                 except Exception:
                     pass
-            if cancel_key and steer_inbox is not None:
-                steer_registry.unregister(cancel_key, steer_inbox)
+            if scoped_session_key and steer_inbox is not None:
+                steer_registry.unregister(scoped_session_key, steer_inbox)
 
         # A run that ends without a closing turn_end (e.g. the last turn had no
         # tool calls to flush) must still deliver whatever the send tool uploaded.

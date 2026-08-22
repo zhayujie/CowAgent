@@ -13,6 +13,7 @@ The Web Console is CowAgent's default channel. It runs automatically once starte
   "web_host": "0.0.0.0",
   "web_port": 9899,
   "web_password": "",
+  "external_api_token": "",
   "enable_thinking": false
 }
 ```
@@ -23,6 +24,7 @@ The Web Console is CowAgent's default channel. It runs automatically once starte
 | `web_host` | Web service listen address. Defaults to `127.0.0.1` (local only); set to `0.0.0.0` for public access and configure a password | `""` |
 | `web_port` | Web service listen port | `9899` |
 | `web_password` | Access password. Leave empty to disable password protection; recommended when listening on `0.0.0.0` | `""` |
+| `external_api_token` | Independent Bearer token for the OpenAI-compatible API. Leave empty to disable the API | `""` |
 | `web_session_expire_days` | Login session validity in days | `30` |
 | `web_file_serve_root` | Root directory the web console can directly read/send files from. Defaults to the user home dir and agent workspace only; set to `/` to allow the whole filesystem | `"~"` |
 | `enable_thinking` | Whether to enable deep thinking mode | `false` |
@@ -39,6 +41,86 @@ After starting the project, visit:
 <Note>
   Ensure the server firewall and security group allow the corresponding port.
 </Note>
+
+## OpenAI-Compatible API
+
+Set `external_api_token` to enable `POST /v1/chat/completions`. This token is
+independent from `web_password` and Web Console login sessions.
+
+The first release accepts text messages and uses CowAgent's configured Agent and
+model. The request `model` is required for OpenAI client compatibility and is
+echoed in the response; it does not select a CowAgent model. The latest non-empty
+user message is submitted to the Agent. Set `conversation_id`, or `user` as a
+fallback, to reuse a stable CowAgent session across requests. Requests without
+either field use an isolated session.
+
+Non-streaming request:
+
+```bash
+curl http://localhost:9899/v1/chat/completions \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "cowagent",
+    "conversation_id": "example-conversation",
+    "messages": [{"role": "user", "content": "Summarize this workspace."}]
+  }'
+```
+
+The standard response is returned in `choices[0].message.content`. CowAgent adds
+`reasoning_content` and `tool_trace` to the message when those traces are
+available.
+
+Streaming request:
+
+```bash
+curl -N http://localhost:9899/v1/chat/completions \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "cowagent",
+    "stream": true,
+    "user": "example-user",
+    "messages": [{"role": "user", "content": "Inspect the workspace."}]
+  }'
+```
+
+Streaming content uses standard `chat.completion.chunk` objects and
+`choices[0].delta.content`. Reasoning uses the additive
+`choices[0].delta.reasoning_content` field. Reasoning and tool-process chunks
+also include a top-level `cow_event` object. The stream ends with `data: [DONE]`.
+
+OpenAI Python clients can use the endpoint by setting the base URL:
+
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="http://localhost:9899/v1",
+    api_key="your-external-api-token",
+)
+response = client.chat.completions.create(
+    model="cowagent",
+    messages=[{"role": "user", "content": "Hello from Python."}],
+    extra_body={"conversation_id": "python-example"},
+)
+print(response.choices[0].message.content)
+```
+
+The API returns `400` for invalid requests, `401` for invalid credentials, and
+`503` when `external_api_token` is not configured. Non-streaming Agent failures
+return a structured JSON `500` response.
+
+For streaming requests, CowAgent waits up to 30 seconds for the Agent to produce
+the first event. An Agent failure before the first event returns a structured
+JSON `500` response because the SSE response has not started. If no first event
+arrives within 30 seconds, the API cancels only that request's in-flight Agent and
+returns the same JSON `500` shape with error code `timeout`.
+
+After the SSE response has started, its HTTP status can no longer change.
+A later Agent failure is therefore emitted as a `cow_event.type=error` chunk,
+followed by a terminal chunk with `finish_reason=error` and then
+`data: [DONE]`.
 
 ## Features
 

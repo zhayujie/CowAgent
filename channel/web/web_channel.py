@@ -42,6 +42,7 @@ from agent.permission import (
     global_mode as permission_global_mode,
     normalize_mode as permission_normalize_mode,
 )
+from channel.web.openai_api import OpenAIChatCompletionsHandler
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg"}
 VIDEO_EXTENSIONS = {".mp4", ".webm", ".avi", ".mov", ".mkv"}
@@ -1982,6 +1983,7 @@ class WebChannel(ChatChannel):
             '/stream', 'StreamHandler',
             '/cancel', 'CancelHandler',
             '/chat', 'ChatHandler',
+            '/v1/chat/completions', 'OpenAIChatCompletionsHandler',
             '/config', 'ConfigHandler',
             '/api/models', 'ModelsHandler',
             '/api/channels', 'ChannelsHandler',
