@@ -16,6 +16,7 @@ _scheduler_service = None
 _task_store = None
 _scheduler_services: Dict[str, object] = {}
 _task_stores: Dict[str, object] = {}
+_recipient_stores: Dict[str, object] = {}
 # Module-level lock to guard idempotent initialization across threads
 _init_lock = threading.RLock()
 
@@ -68,9 +69,10 @@ def init_scheduler(agent_bridge, workspace_root: str = None, agent_id: str = Non
 
         try:
             from agent.tools.scheduler.task_store import TaskStore
+            from agent.tools.scheduler.recipient_store import RecipientStore
             from agent.tools.scheduler.scheduler_service import SchedulerService
 
-            from common.state_dir import scheduler_file
+            from common.state_dir import scheduler_file, scheduler_recipients_file
 
             store_path = str(scheduler_file(base=workspace_root))
 
@@ -80,6 +82,13 @@ def init_scheduler(agent_bridge, workspace_root: str = None, agent_id: str = Non
                 task_store = TaskStore(store_path)
                 _task_stores[workspace_root] = task_store
                 logger.debug(f"[Scheduler] Task store initialized: {store_path}")
+
+            recipient_store = _recipient_stores.get(workspace_root)
+            if recipient_store is None:
+                recipient_store = RecipientStore(
+                    str(scheduler_recipients_file(base=workspace_root))
+                )
+                _recipient_stores[workspace_root] = recipient_store
 
             # Create execute callback. Returns True on success, False to ask
             # the scheduler to retry on the next tick (e.g. channel not yet
@@ -190,6 +199,12 @@ def get_scheduler_service(workspace_root: str = None, agent_id: str = None):
     return _scheduler_services.get(workspace_root)
 
 
+def get_recipient_store(workspace_root: str = None, agent_id: str = None):
+    """Get the trusted recipient directory owned by one agent workspace."""
+    workspace_root = _resolve_workspace(workspace_root, agent_id)
+    return _recipient_stores.get(workspace_root)
+
+
 def reset_scheduler_services(stop: bool = True) -> None:
     """Stop and forget all scheduler services, primarily for reloads/tests."""
     global _scheduler_service, _task_store
@@ -202,6 +217,7 @@ def reset_scheduler_services(stop: bool = True) -> None:
                     pass
         _scheduler_services.clear()
         _task_stores.clear()
+        _recipient_stores.clear()
         _scheduler_service = None
         _task_store = None
 
@@ -642,13 +658,28 @@ def attach_scheduler_to_tool(tool, context: Context = None):
         agent_id = context.get("agent_id")
         task_store = get_task_store(agent_id=agent_id)
         scheduler_service = get_scheduler_service(agent_id=agent_id)
+        recipient_store = get_recipient_store(agent_id=agent_id)
         if task_store:
             tool.task_store = task_store
         if scheduler_service:
             tool.scheduler_service = scheduler_service
+        if recipient_store:
+            tool.recipient_store = recipient_store
         tool.current_context = context
         
         channel_type = context.get("channel_type") or conf().get("channel_type", "unknown")
         if not tool.config:
             tool.config = {}
         tool.config["channel_type"] = channel_type
+
+        # Only accepted inbound contexts become cross-channel targets.  Do not
+        # persist ephemeral credentials; the channel keeps enforcing its own
+        # authentication and readiness rules at delivery time.
+        if recipient_store and channel_type != "web":
+            recipient_store.remember(
+                channel_type,
+                context.get("receiver"),
+                name=tool._get_receiver_name(context),
+                is_group=context.get("isgroup", False),
+                session_id=context.get("session_id"),
+            )
