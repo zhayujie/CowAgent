@@ -81,4 +81,8 @@ def create_bot(bot_type):
         from models.doubao.doubao_bot import DoubaoBot
         return DoubaoBot()
 
+    elif bot_type == const.LITELLM:
+        from models.litellm.litellm_bot import LiteLLMBot
+        return LiteLLMBot()
+
     raise RuntimeError

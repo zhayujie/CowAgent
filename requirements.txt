@@ -22,6 +22,9 @@ wechatpy
 zai-sdk>=0.2.3
 # tongyi qwen sdk
 dashscope
+# litellm gateway (bot_type "litellm"): one provider reaching 100+ LLMs.
+# Lazy-imported, so it is only needed when bot_type is set to "litellm".
+litellm>=1.89,<2.0
 
 # feishu
 lark-oapi>=1.5.5

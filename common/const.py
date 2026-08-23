@@ -18,6 +18,7 @@ DEEPSEEK = "deepseek"
 MIMO = "mimo"  # Xiaomi MiMo
 CUSTOM = "custom"  # custom OpenAI-compatible API, bot_type won't auto-switch on model change
 MODELSCOPE = "modelscope"
+LITELLM = "litellm"  # LiteLLM SDK gateway: one provider reaching 100+ LLMs (provider-prefixed model, e.g. anthropic/claude-3-5-sonnet)
 
 # Model list
 # Claude (Anthropic)

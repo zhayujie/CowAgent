@@ -228,6 +228,11 @@ available_setting = {
     "zhipu_ai_api_base": "https://open.bigmodel.cn/api/paas/v4",
     "moonshot_api_key": "",
     "moonshot_base_url": "https://api.moonshot.cn/v1",
+    # LiteLLM gateway config (bot_type "litellm"). Model is provider-prefixed,
+    # e.g. anthropic/claude-3-5-sonnet. api_key/base_url are optional: when blank
+    # LiteLLM falls back to the provider's own env vars, or a LiteLLM proxy URL.
+    "litellm_api_key": "",
+    "litellm_base_url": "",
     # Doubao (Volcano Ark) platform config
     "ark_api_key": "",
     "ark_base_url": "https://ark.cn-beijing.volces.com/api/v3",
@@ -610,6 +615,8 @@ def load_config():
         "zhipu_ai_api_base": "ZHIPU_AI_API_BASE",
         "moonshot_api_key": "MOONSHOT_API_KEY",
         "moonshot_api_base": "MOONSHOT_API_BASE",
+        "litellm_api_key": "LITELLM_API_KEY",
+        "litellm_base_url": "LITELLM_BASE_URL",
         "ark_api_key": "ARK_API_KEY",
         "ark_api_base": "ARK_API_BASE",
         "dashscope_api_key": "DASHSCOPE_API_KEY",
