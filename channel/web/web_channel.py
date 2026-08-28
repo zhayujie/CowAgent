@@ -2524,6 +2524,14 @@ class ConfigHandler:
     _PLACEHOLDER_GEMINI = "https://....."
 
     PROVIDER_MODELS = OrderedDict([
+        ("aimlapi", {
+            "label": "AI/ML API",
+            "api_key_field": "aimlapi_api_key",
+            "api_base_key": "aimlapi_api_base",
+            "api_base_default": "https://api.aimlapi.com/v1",
+            "api_base_placeholder": _PLACEHOLDER_V1,
+            "models": [const.AIMLAPI_GPT_5_5, const.AIMLAPI_CLAUDE_OPUS_5, const.AIMLAPI_GEMINI_3_7_FLASH, const.AIMLAPI_DEEPSEEK_V4_PRO],
+        }),
         ("deepseek", {
             "label": "DeepSeek",
             "api_key_field": "deepseek_api_key",
@@ -2611,14 +2619,6 @@ class ConfigHandler:
             "api_base_default": "https://api.xiaomimimo.com/v1",
             "api_base_placeholder": _PLACEHOLDER_V1,
             "models": [const.MIMO_V2_5_PRO, const.MIMO_V2_5],
-        }),
-        ("aimlapi", {
-            "label": "AI/ML API",
-            "api_key_field": "aimlapi_api_key",
-            "api_base_key": "aimlapi_api_base",
-            "api_base_default": "https://api.aimlapi.com/v1",
-            "api_base_placeholder": _PLACEHOLDER_V1,
-            "models": [const.AIMLAPI_GPT_5_5, const.AIMLAPI_CLAUDE_OPUS_5, const.AIMLAPI_GEMINI_3_7_FLASH, const.AIMLAPI_DEEPSEEK_V4_PRO],
         }),
         ("linkai", {
             "label": "LinkAI",
