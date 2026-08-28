@@ -76,38 +76,3 @@ def test_linkai_unverified_model_omits_reasoning_effort(monkeypatch):
 
     assert body["thinking"] == {"type": "enabled"}
     assert "reasoning_effort" not in body
-
-
-def test_linkai_gpt5_with_tools_omits_reasoning_effort(monkeypatch):
-    """OpenAICompatibleBot.call_with_tools() used to force reasoning_effort
-    to "none" for gpt5-reasoning models called with tools - a real-OpenAI-
-    specific workaround that 400s on gateways whose validator doesn't accept
-    "none" as a reasoning_effort value (verified live against AI/ML API,
-    see tests/test_aimlapi_reasoning_effort.py). LinkAI shares the same base
-    class, so it shares the fix."""
-    from config import conf
-
-    monkeypatch.setitem(conf(), "model", "gpt-5.4")
-    monkeypatch.setitem(conf(), "linkai_api_key", "test-key")
-
-    from models.linkai.link_ai_bot import LinkAIBot
-
-    captured = {}
-    bot = LinkAIBot.__new__(LinkAIBot)
-    monkeypatch.setattr(
-        bot,
-        "_handle_linkai_sync_response",
-        lambda base_url, headers, body: captured.setdefault("body", body),
-    )
-
-    bot.call_with_tools(
-        [{"role": "user", "content": "hi"}],
-        tools=[{"name": "get_time", "description": "get current time", "input_schema": {"type": "object", "properties": {}}}],
-        stream=False,
-        model="gpt-5.4",
-        reasoning_effort="high",
-    )
-
-    body = captured["body"]
-    assert body["tools"]
-    assert "reasoning_effort" not in body

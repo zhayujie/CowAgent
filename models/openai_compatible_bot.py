@@ -136,17 +136,12 @@ class OpenAICompatibleBot:
             if tools:
                 request_params["tools"] = tools
                 request_params["tool_choice"] = kwargs.get("tool_choice", "auto")
-                # GPT-5.x reasoning models reject function tools combined with an
-                # explicit reasoning_effort on /v1/chat/completions. On real
-                # OpenAI this is worked around by forcing reasoning_effort to
-                # "none" - but "none" is not a valid value for every
-                # OpenAI-compatible gateway (e.g. AI/ML API's own request
-                # validator only accepts low/medium/high and 400s on "none"
-                # before the request ever reaches the model). Omitting the key
-                # entirely avoids the invalid combination on both real OpenAI
-                # and any compatible gateway with a stricter enum, and works
-                # (verified live against AI/ML API): the model just uses its
-                # own default reasoning level.
+                # GPT-5.x reasoning models reject function tools combined with
+                # reasoning_effort on /v1/chat/completions unless it is "none".
+                # Force "none" so agent tool calling works without migrating to
+                # the Responses API.
+                if is_gpt5_reasoning:
+                    request_params["reasoning_effort"] = "none"
             
             # Make API call with proper configuration
             api_key = api_config.get('api_key')
