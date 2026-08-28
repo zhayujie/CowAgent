@@ -61,6 +61,7 @@ _ATTRIBUTION_HEADERS_BY_HOST: Dict[str, Dict[str, str]] = {
     },
     "api.aimlapi.com": {
         "X-AIMLAPI-Source": "agent/cowagent",
+        "X-AIMLAPI-Partner-ID": "part_c99oy7joCKaa9ZGinLfYnGCG",
     },
 }
 
