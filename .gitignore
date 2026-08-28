@@ -70,3 +70,6 @@ desktop/resources/.icon-work/
 desktop/resources/bin/
 
 .wrangler/
+
+# Gray rollout state (a.pid/b.pid/pre_head/post_head/update_time) - never commit
+gray_state/
