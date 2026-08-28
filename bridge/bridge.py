@@ -79,6 +79,14 @@ class Bridge(object):
             if model_type and (model_type in ["abab6.5-chat", "abab6.5"] or model_type.lower().startswith("minimax")):
                 self.btype["chat"] = const.MiniMax
 
+            # AI/ML API model ids are always "<vendor>/<model>" (e.g.
+            # "deepseek/deepseek-v4-pro-0813") — checked last among the
+            # prefix rules above so it wins over a bare vendor-prefix match
+            # (e.g. the "deepseek" check) that would otherwise misroute it to
+            # that vendor's own native provider/api key.
+            if model_type and "/" in model_type:
+                self.btype["chat"] = const.AIMLAPI
+
             if conf().get("use_linkai") and conf().get("linkai_api_key"):
                 self.btype["chat"] = const.LINKAI
                 if not conf().get("voice_to_text") or conf().get("voice_to_text") in ["openai"]:

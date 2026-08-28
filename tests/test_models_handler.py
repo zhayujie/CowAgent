@@ -206,6 +206,21 @@ class TestModelsHandler(unittest.TestCase):
         self.assertEqual(cap["current_provider"], "deepseek")
         self.assertEqual(cap["current_model"], "deepseek-v4-flash")
 
+    def test_chat_capability_infers_aimlapi_not_native_deepseek(self):
+        """An AI/ML API model id namespaced "deepseek/..." must resolve to
+        "aimlapi", not the native "deepseek" provider it happens to share a
+        prefix with — the two use different api keys."""
+        from channel.web.web_channel import ModelsHandler
+
+        cap = ModelsHandler._chat_capability({
+            "bot_type": "",
+            "use_linkai": False,
+            "model": "deepseek/deepseek-v4-pro-0813",
+            "aimlapi_api_key": "sk-test-placeholder",
+        })
+        self.assertEqual(cap["current_provider"], "aimlapi")
+        self.assertEqual(cap["current_model"], "deepseek/deepseek-v4-pro-0813")
+
     def test_chat_capability_empty_bot_type_use_linkai_stays_linkai(self):
         """use_linkai must still win when bot_type is empty (unchanged behavior)."""
         from channel.web.web_channel import ModelsHandler
@@ -246,6 +261,8 @@ class TestModelsHandler(unittest.TestCase):
             "gpt-55": "openai",
             "abab6.5": "minimax",
             "wenxin": "qianfan",
+            "openai/gpt-5-5": "aimlapi",
+            "deepseek/deepseek-v4-pro-0813": "aimlapi",  # not native "deepseek" despite the prefix
         }
         for model, expected in cases.items():
             self.assertEqual(ModelsHandler._infer_provider_from_model(model), expected, model)

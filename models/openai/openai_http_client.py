@@ -59,6 +59,9 @@ _ATTRIBUTION_HEADERS_BY_HOST: Dict[str, Dict[str, str]] = {
     "link-ai.tech": {
         "X-Title": _APP_TITLE,
     },
+    "api.aimlapi.com": {
+        "X-AIMLAPI-Source": "agent/cowagent",
+    },
 }
 
 # Hosts that also receive the client-source tag. Resolved per request rather

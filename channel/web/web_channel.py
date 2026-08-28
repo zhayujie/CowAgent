@@ -2612,6 +2612,14 @@ class ConfigHandler:
             "api_base_placeholder": _PLACEHOLDER_V1,
             "models": [const.MIMO_V2_5_PRO, const.MIMO_V2_5],
         }),
+        ("aimlapi", {
+            "label": "AI/ML API",
+            "api_key_field": "aimlapi_api_key",
+            "api_base_key": "aimlapi_api_base",
+            "api_base_default": "https://api.aimlapi.com/v1",
+            "api_base_placeholder": _PLACEHOLDER_V1,
+            "models": [const.AIMLAPI_GPT_5_5, const.AIMLAPI_CLAUDE_OPUS_5, const.AIMLAPI_GEMINI_3_7_FLASH, const.AIMLAPI_DEEPSEEK_V4_PRO],
+        }),
         ("linkai", {
             "label": "LinkAI",
             "api_key_field": "linkai_api_key",
@@ -2635,9 +2643,11 @@ class ConfigHandler:
         "model", "bot_type", "use_linkai",
         "open_ai_api_base", "deepseek_api_base", "qianfan_api_base", "claude_api_base", "gemini_api_base",
         "zhipu_ai_api_base", "moonshot_base_url", "ark_base_url", "custom_api_base", "mimo_api_base",
+        "aimlapi_api_base",
         "open_ai_api_key", "deepseek_api_key", "qianfan_api_key", "claude_api_key", "gemini_api_key",
         "zhipu_ai_api_key", "dashscope_api_key", "moonshot_api_key",
         "ark_api_key", "minimax_api_key", "linkai_api_key", "custom_api_key", "mimo_api_key",
+        "aimlapi_api_key",
         "custom_providers",
         "agent_max_context_tokens", "agent_max_context_turns", "agent_max_steps",
         "enable_thinking", "reasoning_effort", "reasoning_effort_by_model", "self_evolution_enabled", "web_password",
@@ -3453,6 +3463,13 @@ class ModelsHandler:
             }
             if m in exact:
                 return exact[m]
+            # AI/ML API model ids are always "<vendor>/<model>" (e.g.
+            # "deepseek/deepseek-v4-pro-0813") — check before the prefix rules
+            # below, since a bare vendor prefix like "deepseek" would otherwise
+            # misattribute it to that vendor's own native provider. No other
+            # provider registered here uses a slash in its model id.
+            if "/" in m:
+                return "aimlapi"
             # Prefix rules — order matters where prefixes could overlap.
             prefix_rules = (
                 ("deepseek", "deepseek"),
