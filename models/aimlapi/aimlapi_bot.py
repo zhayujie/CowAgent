@@ -11,7 +11,10 @@ class (get_api_config() is all it needs); this module only adds classic
 (non-agent) chat replies.
 """
 
+import time
+
 from models.bot import Bot
+from models.openai.openai_http_client import OpenAIHTTPError
 from models.openai_compatible_bot import OpenAICompatibleBot
 from models.session_manager import SessionManager
 from bridge.context import ContextType
@@ -100,25 +103,26 @@ class AimlapiBot(Bot, OpenAICompatibleBot):
                 "completion_tokens": response["usage"]["completion_tokens"],
                 "content": response["choices"][0]["message"]["content"],
             }
+        except OpenAIHTTPError as e:
+            logger.error(
+                f"[AIMLAPI] chat failed, status_code={e.status_code}, msg={e.message}"
+            )
+            result = {"completion_tokens": 0, "content": "提问太快啦，请休息一下再问我吧"}
+            need_retry = False
+            if e.status_code and e.status_code >= 500:
+                need_retry = retry_count < 2
+            elif e.status_code == 401:
+                result["content"] = "授权失败，请检查API Key是否正确"
+            elif e.status_code == 429:
+                result["content"] = "请求过于频繁，请稍后再试"
+                need_retry = retry_count < 2
+            if need_retry:
+                time.sleep(3)
+                return self._reply_text(session, retry_count + 1)
+            return result
         except Exception as e:
-            from models.openai.openai_http_client import OpenAIHTTPError
-            if isinstance(e, OpenAIHTTPError):
-                logger.error(
-                    f"[AIMLAPI] chat failed, status_code={e.status_code}, msg={e.message}"
-                )
-                result = {"completion_tokens": 0, "content": "提问太快啦，请休息一下再问我吧"}
-                need_retry = False
-                if e.status_code and e.status_code >= 500:
-                    need_retry = retry_count < 2
-                elif e.status_code == 401:
-                    result["content"] = "授权失败，请检查API Key是否正确"
-                elif e.status_code == 429:
-                    result["content"] = "请求过于频繁，请稍后再试"
-                    need_retry = retry_count < 2
-                if need_retry:
-                    return self._reply_text(session, retry_count + 1)
-                return result
             logger.exception(e)
             if retry_count < 2:
+                time.sleep(3)
                 return self._reply_text(session, retry_count + 1)
             return {"completion_tokens": 0, "content": "我现在有点累了，等会再来吧"}

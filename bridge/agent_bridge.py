@@ -165,6 +165,14 @@ class AgentLLMModel(LLMModel):
         if conf().get("bot_type") == "modelscope":
             return const.MODELSCOPE
         lowered_model = model_name.lower()
+        # AI/ML API model ids are "<vendor>/<model>" (e.g.
+        # "deepseek/deepseek-v4-pro-0813") — checked before the prefix map so
+        # it wins over a bare vendor-prefix match (e.g. "deepseek") that would
+        # otherwise misroute it to that vendor's own native provider/api key.
+        # Mirrors the same fix in Bridge.__init__ (bridge/bridge.py) and
+        # ModelsHandler._infer_provider_from_model (channel/web/web_channel.py).
+        if "/" in lowered_model:
+            return const.AIMLAPI
         for prefix, btype in self._MODEL_PREFIX_MAP:
             if lowered_model.startswith(prefix):
                 return btype

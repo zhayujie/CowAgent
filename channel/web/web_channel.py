@@ -3467,7 +3467,10 @@ class ModelsHandler:
             # "deepseek/deepseek-v4-pro-0813") — check before the prefix rules
             # below, since a bare vendor prefix like "deepseek" would otherwise
             # misattribute it to that vendor's own native provider. No other
-            # provider registered here uses a slash in its model id.
+            # provider *registered in PROVIDER_MODELS* uses a slash in its model
+            # id (ModelScope's ids do, e.g. "Qwen/Qwen3-235B-A22B-Instruct-2507",
+            # but "modelscope" isn't a PROVIDER_MODELS key, so it's out of scope
+            # for this function either way).
             if "/" in m:
                 return "aimlapi"
             # Prefix rules — order matters where prefixes could overlap.

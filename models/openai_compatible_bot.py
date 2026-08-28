@@ -41,6 +41,10 @@ class OpenAICompatibleBot:
         if not model_name or not isinstance(model_name, str):
             return False
         name = model_name.lower()
+        # AI/ML API model ids are namespaced "<vendor>/<model>" (e.g.
+        # "openai/gpt-5-5") — strip the namespace so those still match.
+        if "/" in name:
+            name = name.split("/", 1)[1]
         if name.startswith("gpt-5"):
             return True
         if name.startswith(("o1", "o3", "o4")):

@@ -886,6 +886,13 @@ class CowCliPlugin(Plugin):
         if model_name in [const.QWEN_TURBO, const.QWEN_PLUS, const.QWEN_MAX]:
             return const.QWEN_DASHSCOPE
         lowered_model = model_name.lower()
+        # AI/ML API model ids are "<vendor>/<model>" (e.g.
+        # "deepseek/deepseek-v4-pro-0813") — checked before the prefix list so
+        # it wins over a bare vendor-prefix match. Mirrors the same fix in
+        # Bridge.__init__, AgentLLMModel._resolve_bot_type, and
+        # ModelsHandler._infer_provider_from_model.
+        if "/" in lowered_model:
+            return const.AIMLAPI
         for prefix, btype in _PREFIX:
             if lowered_model.startswith(prefix):
                 return btype
