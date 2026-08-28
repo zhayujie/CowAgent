@@ -19,13 +19,13 @@ Vision 工具采用多级自动选择 + 自动兜底策略，无需手动配置�
 | 厂商 | 视觉模型 | 说明 |
 | --- | --- | --- |
 | OpenAI / 兼容协议 | 使用主模型 | 支持所有 OpenAI 协议兼容的多模态模型 |
-| 通义千问 (DashScope) | 使用主模型 | 例如 qwen3.7-plus 等 |
+| 通义千问 (DashScope) | 使用主模型 | 例如 qwen3.8-flash、qwen3.7-plus 等 |
 | Claude | 使用主模型 | Anthropic 原生图像格式 |
 | Gemini | 使用主模型 | inlineData 格式 |
 | 豆包 (Doubao) | 使用主模型 | doubao-seed-2-1 系列原生支持 |
 | Kimi (Moonshot) | 使用主模型 | kimi-k2.6、kimi-k2.5 原生支持 |
 | 百度千帆 (Qianfan) | 使用主模型 | 默认使用多模态主模型 (如 ernie-5.1)，主模型不支持时兜底使用 ernie-4.5-turbo-vl |
-| 智谱 AI | glm-5v-turbo | 固定使用视觉专用模型 |
+| 智谱 AI | 主模型 / glm-5v-turbo | glm-5.3-flash 直接使用；纯文本 chat 模型回落到 glm-5v-turbo |
 | MiniMax | MiniMax-Text-01 | 固定使用视觉专用模型 |
 
 <Note>

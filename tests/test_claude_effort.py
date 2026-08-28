@@ -1,11 +1,8 @@
 # encoding:utf-8
 import os
-import re
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-
-sys.modules.setdefault("regex", re)
 
 
 def test_claude_tool_call_maps_reasoning_effort_to_output_config(monkeypatch):

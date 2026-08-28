@@ -191,6 +191,7 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         needs_client_normalize: bool = False,
         query_instruction: str = "",
         max_batch_size: int = 256,
+        source_tagged: Optional[bool] = None,
     ):
         """
         Args:
@@ -211,8 +212,10 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         self.api_key = api_key
         self.api_base = api_base or "https://api.openai.com/v1"
         self.extra_headers = extra_headers or {}
-        _host = (urlparse(self.api_base).hostname or "").lower()
-        self._source_tagged = _host == "link-ai.tech" or _host.endswith(".link-ai.tech")
+        if source_tagged is None:
+            _host = (urlparse(self.api_base).hostname or "").lower()
+            source_tagged = _host == "link-ai.tech" or _host.endswith(".link-ai.tech")
+        self._source_tagged = source_tagged
         self.supports_dim_param = supports_dim_param
         self.needs_client_truncate = needs_client_truncate
         self.needs_client_normalize = needs_client_normalize
@@ -451,6 +454,7 @@ def create_embedding_provider(
     api_base: Optional[str] = None,
     extra_headers: Optional[dict] = None,
     dimensions: Optional[int] = None,
+    source_tagged: Optional[bool] = None,
 ) -> EmbeddingProvider:
     """
     Factory function to create an embedding provider.
@@ -502,6 +506,7 @@ def create_embedding_provider(
             api_key=api_key,
             api_base=api_base,
             extra_headers=extra_headers,
+            source_tagged=source_tagged,
         )
 
     final_dim = dimensions if (dimensions and dimensions > 0) else meta["default_dimensions"]
@@ -525,4 +530,5 @@ def create_embedding_provider(
         needs_client_normalize=meta["needs_client_normalize"],
         query_instruction=meta["query_instruction"],
         max_batch_size=meta.get("max_batch_size", 256),
+        source_tagged=source_tagged,
     )

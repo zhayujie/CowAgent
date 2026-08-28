@@ -52,7 +52,7 @@ class _ScriptedExecutor(AgentStreamExecutor):
         self.messages.append({"role": "assistant", "content": content})
         if callback:
             callback()
-        return text, tool_calls
+        return text, tool_calls, "stop"
 
     def _execute_tool(self, tool_call):
         self.executed.append(tool_call["name"])

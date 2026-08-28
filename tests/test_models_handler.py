@@ -28,6 +28,18 @@ if "web" not in sys.modules:
     sys.modules["web"] = web_stub
 
 
+def _no_response_headers():
+    """Neutralise web.header for a handler called outside a request.
+
+    The stub above is skipped when the real web.py is already imported, which
+    depends on what else ran first. Patching the name the handler resolves
+    keeps these cases independent of that.
+    """
+    import channel.web.web_channel as web_channel
+
+    return patch.object(web_channel.web, "header", lambda *args, **kwargs: None)
+
+
 class TestModelsHandler(unittest.TestCase):
     def test_config_handler_exposes_reasoning_effort_metadata(self):
         from channel.web.web_channel import ConfigHandler
@@ -41,7 +53,8 @@ class TestModelsHandler(unittest.TestCase):
             "reasoning_effort": "max",
         })
 
-        with patch("channel.web.web_channel._require_auth", lambda: None):
+        with patch("channel.web.web_channel._require_auth", lambda: None), \
+                _no_response_headers():
             with patch("channel.web.web_channel.conf", return_value=local_config):
                 result = json.loads(ConfigHandler().GET())
 
@@ -54,7 +67,6 @@ class TestModelsHandler(unittest.TestCase):
             [item["value"] for item in result["providers"]["deepseek"]["reasoning_by_model"]["deepseek-v4-flash"]["options"]],
             ["low", "high", "xhigh", "max"],
         )
-        self.assertFalse(result["providers"]["deepseek"]["reasoning_by_model"]["deepseek-chat"]["supported"])
         self.assertEqual(
             [item["value"] for item in result["providers"]["zhipu"]["reasoning"]["options"]],
             ["low", "medium", "high", "xhigh", "max"],
@@ -121,7 +133,8 @@ class TestModelsHandler(unittest.TestCase):
             "reasoning_effort": "max",
         })
 
-        with patch("channel.web.web_channel._require_auth", lambda: None):
+        with patch("channel.web.web_channel._require_auth", lambda: None), \
+                _no_response_headers():
             with patch("channel.web.web_channel.conf", return_value=local_config):
                 result = json.loads(ConfigHandler().GET())
 

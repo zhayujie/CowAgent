@@ -147,10 +147,63 @@ def _notify(on_state, index: int, state: Dict[str, Any]) -> None:
         logger.debug(f"[SubAgent] state callback failed: {e}")
 
 
+def _open_run(parent, run_id: str, template) -> Optional[Any]:
+    """Record the start of a spawned run, returning the store to close it with.
+
+    None means the spawn is not being recorded, either because the parent's
+    workspace is unknown — there is no database to attribute it to, and
+    guessing a global one would write another workspace's history — or because
+    the write failed. Bookkeeping never blocks a spawn.
+
+    The parent's run id is read before the caller enters its own identity
+    scope, so it is still the ambient one and becomes this run's parent.
+    """
+    workspace = getattr(parent, "workspace_dir", None)
+    if not workspace:
+        return None
+    try:
+        from agent.memory import get_conversation_store
+        from common.utils import current_agent_run_id
+
+        store = get_conversation_store(workspace)
+        store.create_run(
+            run_id,
+            agent_id=getattr(parent, "_current_agent_id", "") or "",
+            session_id=getattr(parent, "_current_session_id", "") or "",
+            parent_run_id=current_agent_run_id() or "",
+            extras={"subagent_type": template.name},
+        )
+        return store
+    except Exception as e:
+        logger.debug(f"[SubAgent] could not record run {run_id}: {e}")
+        return None
+
+
+# What the runs table calls a finished run, keyed by the status this module
+# reports to its caller.
+_RUN_STATUS = {"completed": "done", "cancelled": "cancelled", "failed": "failed"}
+
+
+def _close_run(store, run_id: str, result: Dict[str, Any]) -> None:
+    """Mark a spawned run finished. Silent on failure, like _open_run."""
+    if store is None:
+        return
+    try:
+        store.finish_run(
+            run_id,
+            status=_RUN_STATUS.get(result.get("status", ""), "done"),
+            error=str(result.get("error", "")),
+        )
+    except Exception as e:
+        logger.debug(f"[SubAgent] could not close run {run_id}: {e}")
+
+
 def _run_one(parent, template, task: SubagentTask, index: int, cancel_event,
              on_state=None, on_event=None) -> Dict[str, Any]:
     started = time.time()
     run_id = uuid.uuid4().hex[:12]
+    # Before identity_scope below, so the parent's run id is still ambient.
+    run_store = _open_run(parent, run_id, template)
     result: Dict[str, Any] = {"task_index": index, "subagent_type": template.name}
     _notify(on_state, index, {"status": "running", "subagent_type": template.name})
 
@@ -183,6 +236,7 @@ def _run_one(parent, template, task: SubagentTask, index: int, cancel_event,
         result["error"] = str(e)
 
     result["duration_seconds"] = round(time.time() - started, 2)
+    _close_run(run_store, run_id, result)
     _notify(on_state, index, result)
     return result
 

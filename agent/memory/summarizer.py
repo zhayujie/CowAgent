@@ -300,9 +300,13 @@ class MemoryFlushManager:
 
             import copy
             snapshot = copy.deepcopy(deduped)
+            import contextvars
+            _ctx = contextvars.copy_context()
             thread = threading.Thread(
-                target=self._flush_worker,
-                args=(snapshot, user_id, reason, max_messages, context_summary_callback),
+                target=lambda: _ctx.run(
+                    self._flush_worker,
+                    snapshot, user_id, reason, max_messages, context_summary_callback,
+                ),
                 daemon=True,
             )
             thread.start()

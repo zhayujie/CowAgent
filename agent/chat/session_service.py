@@ -31,7 +31,8 @@ def _truncate_fallback_title(user_message: str, max_len: int = 30) -> str:
     return first_line
 
 
-def generate_session_title(user_message: str, assistant_reply: str = "") -> str:
+def generate_session_title(user_message: str, assistant_reply: str = "",
+                            session_id: str = "") -> str:
     """
     Generate a short session title by calling the current bot's reply_text.
     Falls back to the first line of the user message if the LLM call fails
@@ -47,7 +48,7 @@ def generate_session_title(user_message: str, assistant_reply: str = "") -> str:
         if assistant_reply:
             prompt_parts.append(f"Assistant: {assistant_reply[:300]}")
 
-        session = Session("__title_gen__", system_prompt="")
+        session = Session(session_id or "__title_gen__", system_prompt="")
         session.messages = [
             {"role": "user", "content": (
                 "Generate a very short title (max 15 characters for Chinese, max 6 words for English) "
@@ -376,7 +377,7 @@ class SessionService:
             raise ValueError("user_message required")
         session_id = self._normalize_sid(session_id)
 
-        title = generate_session_title(user_message, assistant_reply)
+        title = generate_session_title(user_message, assistant_reply, session_id)
 
         store = self._get_store(agent_id)
         updated = store.rename_session(session_id, title)

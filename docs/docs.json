@@ -259,7 +259,8 @@
               {
                 "group": "Multi-Agent System",
                 "pages": [
-                  "multi-agent/subagent"
+                  "multi-agent/subagent",
+                  "multi-agent/delegation"
                 ]
               }
             ]
@@ -503,7 +504,8 @@
               {
                 "group": "多 Agent 系统",
                 "pages": [
-                  "zh/multi-agent/subagent"
+                  "zh/multi-agent/subagent",
+                  "zh/multi-agent/delegation"
                 ]
               }
             ]
@@ -746,7 +748,8 @@
               {
                 "group": "マルチ Agent システム",
                 "pages": [
-                  "ja/multi-agent/subagent"
+                  "ja/multi-agent/subagent",
+                  "ja/multi-agent/delegation"
                 ]
               }
             ]

@@ -1,0 +1,92 @@
+---
+title: Delegation
+description: Hand a task to another configured Agent and collect the answer through a run id
+---
+
+Delegation lets one Agent ask another for help. Unlike a [sub agent](/multi-agent/subagent), the target is not created for the occasion: it is a standing peer with its own workspace, memory, skills, sessions and scheduler. It answers from its own environment, and the answer comes back to the Agent that asked, never to the user.
+
+<Note>
+  The `agent_delegate` tool only appears when at least two Agents are enabled. A single-Agent install never sees it.
+</Note>
+
+## Sub Agent or Peer
+
+| | Sub agent | Delegation |
+| --- | --- | --- |
+| Lifetime | Created for one task, then gone | Standing Agent, configured up front |
+| Workspace | Shares the caller's | Its own |
+| Memory | None of its own | Its own |
+| Identity | Anonymous | Appears in the Agent list, can own channels |
+| Result | Returned inline | Returned inline, or later through a run id |
+
+Use a sub agent to parallelise your own work. Delegate when the task belongs to somebody else — the Agent that owns the codebase, the knowledge base or the customer relationship.
+
+## A Delegation Is a Run
+
+Every delegation returns a `run_id`. That id is the handle to a real, recorded run in the target's workspace, and its parent is the run that asked for it, so a chain of delegations stays walkable from either end.
+
+The handle is what makes waiting optional. Work that takes longer than the caller is willing to wait keeps going in the background, and the caller collects it later instead of asking again:
+
+```
+agent_delegate(agent_id="research", task="...", wait_seconds=0)
+  -> { run_id: "a3ef...", status: "running" }
+
+... the calling Agent does something else, or replies to the user ...
+
+agent_delegate(action="check", run_id="a3ef...")
+  -> { status: "done", content: "..." }
+```
+
+With the default `wait_seconds`, a task that finishes quickly comes back inline in one call and the handle never has to be used.
+
+## Actions
+
+| Action | What it does |
+| --- | --- |
+| `list` | The peers this Agent is allowed to delegate to |
+| `delegate` | Hand over a task. Takes `agent_id`, `task`, and optionally `wait_seconds` |
+| `check` | Read the state of a `run_id`, and its result once finished |
+| `cancel` | Ask a running delegation to stop |
+
+A handle is only readable by the Agent that created it.
+
+## Guards
+
+Delegation is between full Agents, so it is fenced in:
+
+- **Allowlist** — who may ask whom. Unset means any Agent may delegate to any other
+- **Cycles** — an Agent already in the chain cannot be delegated to again
+- **Depth** — how many hops one chain may take
+- **Size** — the largest task text accepted
+- **Time budget** — a delegated run that overruns is cancelled
+
+A cancelled target records its own cancellation. If it answers anyway, the answer is still attached to its run rather than thrown away.
+
+## Configuration
+
+```json
+{
+  "agent_delegation": {
+    "enabled": true,
+    "allowed_targets": {
+      "assistant": ["research", "support"],
+      "research": []
+    },
+    "max_depth": 3,
+    "timeout_seconds": 120,
+    "default_wait_seconds": 30,
+    "max_message_chars": 8000
+  }
+}
+```
+
+| Field | Default | Meaning |
+| --- | --- | --- |
+| `enabled` | `true` | Set to `false`, or the whole block to `false`, to withhold the tool |
+| `allowed_targets` | unset | Maps a source Agent ID to the IDs it may reach; `"*"` allows any. Unset allows every pair |
+| `max_depth` | `3` | Delegation hops in one chain (1-8) |
+| `timeout_seconds` | `120` | Budget for one delegated run (0.01-600) |
+| `default_wait_seconds` | `30` | How long a call waits inline before handing back a run id |
+| `max_message_chars` | `8000` | Size limit for one delegated task |
+
+An Agent listed with an empty array, like `"research"` above, can be delegated to but cannot delegate onward.

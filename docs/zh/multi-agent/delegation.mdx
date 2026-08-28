@@ -1,0 +1,92 @@
+---
+title: 委派
+description: 把任务交给另一个已配置的 Agent，通过 run id 取回结果
+---
+
+委派让一个 Agent 向另一个 Agent 求助。与 [Sub Agent](/zh/multi-agent/subagent) 不同，目标不是为这次任务临时创建的，而是一个常驻的同事：它有自己的工作空间、记忆、技能、会话和定时任务。它在自己的环境里作答，结果回到发起方，不会直接发给用户。
+
+<Note>
+  只有在启用了至少两个 Agent 时，`agent_delegate` 工具才会出现。单 Agent 的部署看不到它。
+</Note>
+
+## Sub Agent 还是同事
+
+| | Sub Agent | 委派 |
+| --- | --- | --- |
+| 生命周期 | 为一个任务创建，用完即弃 | 常驻 Agent，事先配置 |
+| 工作空间 | 与调用方共享 | 独立 |
+| 记忆 | 没有自己的 | 独立 |
+| 身份 | 匿名 | 出现在 Agent 列表中，可绑定通道 |
+| 结果 | 直接返回 | 直接返回，或稍后通过 run id 取回 |
+
+需要把自己的活并行化，用 Sub Agent；任务本就属于别人——拥有那个代码库、那个知识库、那个客户关系的 Agent——才用委派。
+
+## 一次委派就是一个 run
+
+每次委派都会返回一个 `run_id`。它指向目标工作空间中一条真实记录的 run，其父节点是发起委派的那个 run，因此一条委派链从两端都能走通。
+
+有了句柄，等待才变成可选项。超出调用方愿意等待的时长的工作会继续在后台跑，调用方稍后取回结果，而不是重新问一遍：
+
+```
+agent_delegate(agent_id="research", task="...", wait_seconds=0)
+  -> { run_id: "a3ef...", status: "running" }
+
+... 发起方去做别的事，或者先回复用户 ...
+
+agent_delegate(action="check", run_id="a3ef...")
+  -> { status: "done", content: "..." }
+```
+
+使用默认的 `wait_seconds` 时，很快完成的任务会在一次调用内直接返回结果，句柄根本用不上。
+
+## 动作
+
+| 动作 | 作用 |
+| --- | --- |
+| `list` | 当前 Agent 被允许委派的同事 |
+| `delegate` | 交出任务。参数为 `agent_id`、`task`，以及可选的 `wait_seconds` |
+| `check` | 查询某个 `run_id` 的状态，完成后取回结果 |
+| `cancel` | 请求停止一个进行中的委派 |
+
+句柄只有创建它的那个 Agent 能读取。
+
+## 守卫
+
+委派发生在完整的 Agent 之间，因此设有边界：
+
+- **白名单** —— 谁可以找谁。不设置则任意 Agent 之间都可委派
+- **环路** —— 已在链路中的 Agent 不能被再次委派
+- **深度** —— 一条链最多允许多少跳
+- **长度** —— 单次任务文本的上限
+- **时间预算** —— 超出预算的委派会被取消
+
+被取消的目标会自己记录这次取消。如果它仍然给出了答案，答案依然会附到它的 run 上，而不会被丢弃。
+
+## 配置
+
+```json
+{
+  "agent_delegation": {
+    "enabled": true,
+    "allowed_targets": {
+      "assistant": ["research", "support"],
+      "research": []
+    },
+    "max_depth": 3,
+    "timeout_seconds": 120,
+    "default_wait_seconds": 30,
+    "max_message_chars": 8000
+  }
+}
+```
+
+| 字段 | 默认值 | 含义 |
+| --- | --- | --- |
+| `enabled` | `true` | 设为 `false`，或把整个配置块设为 `false`，即可完全不提供该工具 |
+| `allowed_targets` | 未设置 | 源 Agent ID 到其可访问 ID 的映射；`"*"` 表示任意。未设置则允许所有组合 |
+| `max_depth` | `3` | 一条链的委派跳数（1-8） |
+| `timeout_seconds` | `120` | 单次委派 run 的时间预算（0.01-600） |
+| `default_wait_seconds` | `30` | 交回 run id 之前，调用方原地等待的时长 |
+| `max_message_chars` | `8000` | 单次委派任务的长度上限 |
+
+像上面的 `"research"` 那样配成空数组的 Agent，可以被委派，但不能再向外委派。

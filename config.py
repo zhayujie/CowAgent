@@ -288,6 +288,20 @@ available_setting = {
         "max_concurrent": 3,     # parallel sub agents per spawn call (range 1-10)
         "timeout_seconds": 300,  # budget for one spawn call (range 10-3600)
     },
+    # Delegation between configured agents. Unlike a sub agent, the target is a
+    # standing peer that answers in its own workspace, so the call is addressed
+    # by a run id and may outlive the wait. The tool only appears when at least
+    # two agents are enabled. Set to false to withhold it entirely.
+    "agent_delegation": {
+        "enabled": True,
+        # {"<source>": ["<target>", ...]} or "*" for any. Unset means every
+        # agent may delegate to every other one.
+        "allowed_targets": None,
+        "max_depth": 3,               # delegation hops in one chain (range 1-8)
+        "timeout_seconds": 120,       # budget for one delegated run (range 0.01-600)
+        "default_wait_seconds": 30,   # inline wait before handing back a run id
+        "max_message_chars": 8000,    # size limit for one delegated task
+    },
     "enable_thinking": False,  # Enable deep-thinking mode for thinking-capable models
     "reasoning_effort": "high",  # Provider-native reasoning depth; allowed values depend on the active provider/model
     "reasoning_effort_by_model": {},  # Per-model effort intent: {"<provider>:<model>": "<value>"}; overrides the global key per model

@@ -13,20 +13,20 @@ Zhipu AI はテキスト対話、画像理解、音声認識（ASR）、ベク�
 
 ```json
 {
-  "model": "glm-5.3",
+  "model": "glm-5.3-flash",
   "zhipu_ai_api_key": "YOUR_API_KEY"
 }
 ```
 
 | パラメータ | 説明 |
 | --- | --- |
-| `model` | `glm-5.3`、`glm-5.2`、`glm-5.1`、`glm-5-turbo`、`glm-5`、`glm-4.7`、`glm-4-plus`、`glm-4-flash`、`glm-4-air` などを指定可能。詳細は [モデルコード](https://bigmodel.cn/dev/api/normal-model/glm-4) を参照 |
+| `model` | `glm-5.3-flash`（推奨、1M コンテキスト / 128K 最大出力）、`glm-5.3`、`glm-5.2`、`glm-5.1`、`glm-5-turbo`、`glm-5`、`glm-4.7`、`glm-4-plus`、`glm-4-flash`、`glm-4-air` などを指定可能。詳細は [モデルコード](https://bigmodel.cn/dev/api/normal-model/glm-4) を参照 |
 | `zhipu_ai_api_key` | [Zhipu AI コンソール](https://www.bigmodel.cn/usercenter/proj-mgmt/apikeys) で作成 |
 | `zhipu_ai_api_base` | 任意。デフォルトは `https://open.bigmodel.cn/api/paas/v4` |
 
 ## 画像理解
 
-Zhipu の chat 系モデル（`glm-5.2`、`glm-5.1`、`glm-5-turbo` など）はビジョンに対応していないため、ビジョン呼び出しは `glm-5v-turbo` に統一的にルーティングされます。`zhipu_ai_api_key` を設定すると、Agent の Vision ツールは自動的にこのモデルを使用するため、設定ファイルで明示的に指定する必要はありません。
+`glm-5.3-flash` はネイティブにマルチモーダルなので、メインモデルの場合は Agent の Vision ツールがそのまま画像認識に使用します。テキスト専用の chat モデル（`glm-5.2`、`glm-5.1`、`glm-5-turbo` など）はビジョンに対応していないため、その場合は専用の `glm-5v-turbo` モデルに自動的にフォールバックします。`zhipu_ai_api_key` を設定すれば追加の設定は不要です。
 
 ## 音声認識
 

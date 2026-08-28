@@ -19,13 +19,13 @@ If the current provider fails, the tool automatically tries the next one until i
 | Provider | Vision Model | Notes |
 | --- | --- | --- |
 | OpenAI / Compatible | Main model | All OpenAI-protocol-compatible multimodal models |
-| Qwen (DashScope) | Main model | e.g. qwen3.7-plus, etc. |
+| Qwen (DashScope) | Main model | e.g. qwen3.8-flash, qwen3.7-plus, etc. |
 | Claude | Main model | Anthropic native image format |
 | Gemini | Main model | inlineData format |
 | Doubao | Main model | doubao-seed-2-1 series natively supported |
 | Kimi (Moonshot) | Main model | kimi-k2.6, kimi-k2.5 natively supported |
 | ERNIE | Main model | Defaults to the multimodal main model (e.g. `ernie-5.1`); falls back to `ernie-4.5-turbo-vl` when the main model is not multimodal |
-| ZhipuAI | glm-5v-turbo | Always uses the dedicated vision model |
+| ZhipuAI | Main model / glm-5v-turbo | glm-5.3-flash is used directly; text-only chat models fall back to glm-5v-turbo |
 | MiniMax | MiniMax-Text-01 | Always uses the dedicated vision model |
 
 <Note>

@@ -311,6 +311,9 @@ class LinkAIBot(Bot, OpenAICompatibleBot):
             }
             if self.args.get("max_tokens"):
                 body["max_tokens"] = self.args.get("max_tokens")
+            sid = getattr(session, "session_id", "")
+            if sid and sid != "__title_gen__":
+                body["session_id"] = sid
             headers = {"Authorization": "Bearer " + conf().get("linkai_api_key"), "X-Title": "CowAgent"}
             utils.apply_client_source(headers)
             utils.apply_cloud_user(headers)

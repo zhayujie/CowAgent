@@ -7,12 +7,9 @@ with a budget below ``max_tokens`` (``adaptive`` is a 400), and ``display``
 must be set explicitly or the thinking blocks come back empty.
 """
 import os
-import re
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-
-sys.modules.setdefault("regex", re)
 
 
 def _bot_with_capture(monkeypatch, model):

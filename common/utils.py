@@ -2,7 +2,6 @@ import io
 import os
 import re
 import sys
-from contextvars import ContextVar
 from typing import Optional
 from urllib.parse import urlparse
 from common.log import logger
@@ -249,19 +248,44 @@ def _client_os() -> str:
     return p or ""
 
 
-_run_id: "ContextVar[Optional[str]]" = ContextVar("agent_run_id", default=None)
-
-
 def set_agent_run_id(run_id: Optional[str]):
+    """Set the ambient run id. Kept for callers that only need the run id and
+    do not carry a full RuntimeIdentity; it writes the single source of truth,
+    ``RuntimeIdentity.run_id``, so this value and the identity never diverge.
+
+    Returns a token accepted by ``clear_agent_run_id``.
+    """
+    from common.runtime_identity import current_identity, _current
+
     value = str(run_id).strip() if run_id is not None and str(run_id).strip() else None
-    return _run_id.set(value)
+    return _current.set(current_identity().derive(run_id=value))
 
 
 def clear_agent_run_id(token) -> None:
+    from common.runtime_identity import _current
+
     try:
-        _run_id.reset(token)
+        _current.reset(token)
     except Exception:
         pass
+
+
+def current_agent_run_id() -> Optional[str]:
+    """Current run id: the ambient ``RuntimeIdentity`` first, else the value
+    passed to a child process via the COW_AGENT_RUN_ID env var.
+
+    One source of truth: subagents and delegated work set the run id through
+    ``RuntimeIdentity`` (via ``identity_scope``), and this reads the same field
+    so the id carried on state paths matches the one tagged onto outbound
+    requests via the ``X-Agent-Run-Id`` header.
+    """
+    from common.runtime_identity import current_identity
+
+    return (
+        current_identity().run_id
+        or (os.environ.get("COW_AGENT_RUN_ID") or "").strip()
+        or None
+    )
 
 
 def apply_client_source(headers: dict) -> dict:
@@ -273,7 +297,7 @@ def apply_client_source(headers: dict) -> dict:
     version = (os.environ.get("COW_CLIENT_VERSION") or "").strip()
     if version:
         headers["X-Client-Version"] = version
-    run_id = _run_id.get()
+    run_id = current_agent_run_id()
     if run_id:
         headers["X-Agent-Run-Id"] = run_id
     dep = _deployment_id()

@@ -32,9 +32,10 @@ CLAUDE_MAX_ONLY_MODELS = (
     "claude-opus-4-5",
 )
 DASHSCOPE_QWEN38_MODELS = (
-    # qwen3.8-max and its -preview snapshot share the low/medium/xhigh enum
-    # (default xhigh) and always think.
+    # qwen3.8-max/-flash and their -preview snapshots share the low/medium/xhigh
+    # enum (default xhigh) and always think.
     "qwen3.8-max",
+    "qwen3.8-flash",
 )
 DASHSCOPE_HIGH_MAX_MODELS = (
     "glm-5.2",

@@ -2,10 +2,43 @@
 Configuration support for skills.
 """
 
+import json
 import os
 import platform
 from typing import Dict, Optional, List
 from agent.skills.types import SkillEntry
+
+
+# Skills whose anyEnv requirement can also be satisfied by a configured
+# OpenAI-compatible custom provider (exported to this env var at startup).
+# Without this, selecting only a custom vendor (no builtin *_API_KEY) would
+# leave the skill flagged as unconfigured.
+_CUSTOM_PROVIDER_ENV_BY_SKILL = {
+    "image-generation": "SKILL_IMAGE_GENERATION_CUSTOM_PROVIDER",
+}
+
+
+def has_custom_provider(skill_name: str) -> bool:
+    """Whether the skill has a usable custom provider configured via env.
+
+    The provider payload is injected as JSON and is considered usable only
+    when it carries both an api_key and api_base.
+    """
+    env_name = _CUSTOM_PROVIDER_ENV_BY_SKILL.get(skill_name)
+    if not env_name:
+        return False
+    raw = os.environ.get(env_name)
+    if not raw or not raw.strip():
+        return False
+    try:
+        payload = json.loads(raw)
+    except (TypeError, json.JSONDecodeError):
+        return False
+    if not isinstance(payload, dict):
+        return False
+    return bool((payload.get("api_key") or "").strip()) and bool(
+        (payload.get("api_base") or "").strip()
+    )
 
 
 def resolve_runtime_platform() -> str:
@@ -130,10 +163,11 @@ def should_include_skill(
                 if not has_env_var(env_name):
                     return False
 
-        # Check anyEnv (at least one must be present)
+        # Check anyEnv (at least one must be present). A configured custom
+        # provider also satisfies this for skills that support one.
         any_env = metadata.requires.get('anyEnv', [])
         if any_env:
-            if not any(has_env_var(e) for e in any_env):
+            if not any(has_env_var(e) for e in any_env) and not has_custom_provider(entry.skill.name):
                 return False
     
     return True
@@ -174,7 +208,7 @@ def get_missing_requirements(
             missing['env'] = missing_env
 
     any_env = metadata.requires.get('anyEnv', [])
-    if any_env and not any(has_env_var(e) for e in any_env):
+    if any_env and not any(has_env_var(e) for e in any_env) and not has_custom_provider(entry.skill.name):
         missing['anyEnv'] = any_env
 
     return missing

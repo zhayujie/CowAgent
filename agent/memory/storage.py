@@ -164,29 +164,33 @@ class MemoryStorage:
           - Real corruption quarantines the file so it stays recoverable.
           - Transient failures (locked, disk I/O) are logged and ignored.
 
-        ``PRAGMA integrity_check`` is a full page-by-page scan (FTS5 indexes
-        included). On a large DB sitting on a network filesystem (e.g. an NFS
-        PVC) it can take tens of seconds, and it runs on *every* open — i.e. on
-        every session's agent init — which dominates first-message latency.
-        It is therefore skipped by default: genuine b-tree corruption already
-        surfaces as a DatabaseError when the connection is opened
-        (see ``_init_db`` -> ``_quarantine_and_recreate``), and FTS5 shadow-table
-        damage is caught independently by ``_fts5_shadow_corrupt`` /
-        ``_trigram_shadow_corrupt`` right before use. Set
-        ``memory_integrity_check: true`` in config.json to force the full scan
-        (e.g. for a one-off diagnostic run).
+        ``PRAGMA integrity_check`` is a full page-by-page scan that also
+        validates every FTS5 index. On a large DB sitting on a network
+        filesystem (e.g. an NFS PVC) it can take tens of seconds, and it runs
+        on *every* open — i.e. on every session's agent init — which dominates
+        first-message latency. ``quick_check`` is used instead: it finds the
+        same b-tree damage but skips the index validation that costs the time.
+        Opening the connection alone is not enough to catch this — that only
+        trips on damage to the header or the pages it happens to touch, so an
+        interior page zeroed out would otherwise go unnoticed until a read
+        landed on it and failed with no chance to recover. FTS5 shadow-table
+        damage is not covered by ``quick_check``; it is caught independently by
+        ``_fts5_shadow_corrupt`` / ``_trigram_shadow_corrupt`` right before
+        use. Set ``memory_integrity_check: true`` in config.json to run the
+        full scan instead (e.g. for a one-off diagnostic).
         """
         from common.log import logger
+        pragma = "quick_check"
         try:
             from config import conf
-            if not conf().get("memory_integrity_check", False):
-                return
+            if conf().get("memory_integrity_check", False):
+                pragma = "integrity_check"
         except Exception:
             # No config available (tests / standalone) — keep the historical
-            # behaviour of running the check rather than silently skipping it.
-            pass
+            # behaviour of running the full scan.
+            pragma = "integrity_check"
         try:
-            rows = self.conn.execute("PRAGMA integrity_check").fetchall()
+            rows = self.conn.execute(f"PRAGMA {pragma}").fetchall()
             report = "\n".join(str(r[0]) for r in rows).strip()
         except sqlite3.DatabaseError as e:
             if not _is_corruption_error(e):

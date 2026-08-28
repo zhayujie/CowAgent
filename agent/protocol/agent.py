@@ -308,6 +308,18 @@ class Agent:
                 else:
                     return 1000000  # Gemini 1.5: 1M tokens
 
+            # GLM: 5.3 Flash ships a 1M window; older glm-5.x is 200K.
+            elif 'glm' in model_name:
+                if model_name.startswith('glm-5.3-flash'):
+                    return 1000000
+                return 200000
+
+            # Qwen: 3.8 Flash ships a 1M window; keep others conservative.
+            elif 'qwen' in model_name:
+                if model_name.startswith('qwen3.8-flash'):
+                    return 1000000
+                return 128000
+
         # Default conservative value
         return 128000
 

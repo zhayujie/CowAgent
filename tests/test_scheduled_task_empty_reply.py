@@ -43,7 +43,7 @@ def _run_with_silent_model(executor):
     Context trimming is stubbed out: it needs a real Agent for token
     accounting and has no bearing on empty-response handling.
     """
-    with patch.object(executor, "_call_llm_stream", return_value=("", [])), \
+    with patch.object(executor, "_call_llm_stream", return_value=("", [], "stop")), \
             patch.object(executor, "_trim_messages"), \
             patch.object(executor, "_validate_and_fix_messages"):
         return executor.run_stream("check the price")

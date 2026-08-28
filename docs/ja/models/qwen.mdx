@@ -13,19 +13,19 @@ Tongyi Qianwen（DashScope / Bailian）は国内で最も広範な機能をカ�
 
 ```json
 {
-  "model": "qwen3.8-max",
+  "model": "qwen3.8-flash",
   "dashscope_api_key": "YOUR_API_KEY"
 }
 ```
 
 | パラメータ | 説明 |
 | --- | --- |
-| `model` | `qwen3.8-max`、`qwen3.7-plus`、`qwen3.7-max`、`qwen3.6-plus`、`qwen3.5-plus`、`qwen3-max`、`qwen-max`、`qwen-plus`、`qwen-turbo`、`qwq-plus` などを指定可能 |
+| `model` | `qwen3.8-flash`（推奨、1M コンテキスト / 128K 最大出力、マルチモーダル）、`qwen3.8-max`、`qwen3.7-plus`、`qwen3.7-max`、`qwen3.6-plus`、`qwen3.5-plus`、`qwen3-max`、`qwen-max`、`qwen-plus`、`qwen-turbo`、`qwq-plus` などを指定可能 |
 | `dashscope_api_key` | [Bailian コンソール](https://bailian.console.aliyun.com/?tab=model#/api-key) で作成。詳細は [公式ドキュメント](https://bailian.console.aliyun.com/?tab=api#/api) を参照 |
 
 ## 画像理解
 
-`dashscope_api_key` を設定すると、Agent の Vision ツールは自動的に Qwen のビジョンモデルを呼び出して画像を認識します。`qwen3.7-plus` / `qwen3.6-plus` / `qwen3.5-plus` / `qwen3-max` などのモデルはそのままマルチモーダルです。メインモデルがテキスト専用（`qwen-turbo` など）の場合は、自動的に `qwen-vl-max` にフォールバックします。
+`dashscope_api_key` を設定すると、Agent の Vision ツールは自動的に Qwen のビジョンモデルを呼び出して画像を認識します。`qwen3.8-flash` / `qwen3.7-plus` / `qwen3.6-plus` / `qwen3.5-plus` / `qwen3-max` などのモデルはそのままマルチモーダルです。メインモデルがテキスト専用（`qwen-turbo` など）の場合は、自動的に `qwen-vl-max` にフォールバックします。
 
 Vision モデルを手動で指定したい場合：
 
@@ -33,13 +33,13 @@ Vision モデルを手動で指定したい場合：
 {
   "tools": {
     "vision": {
-      "model": "qwen3.7-plus"
+      "model": "qwen3.8-flash"
     }
   }
 }
 ```
 
-サポートするモデル：`qwen3.7-plus`、`qwen3.6-plus`、`qwen3.5-plus`、`qwen3-max`。
+サポートするモデル：`qwen3.8-flash`、`qwen3.7-plus`、`qwen3.6-plus`、`qwen3.5-plus`、`qwen3-max`。
 
 ## 画像生成
 

@@ -13,19 +13,19 @@ description: 通义千问模型配置（文本 / 图像理解 / 图像生成 / �
 
 ```json
 {
-  "model": "qwen3.8-max",
+  "model": "qwen3.8-flash",
   "dashscope_api_key": "YOUR_API_KEY"
 }
 ```
 
 | 参数 | 说明 |
 | --- | --- |
-| `model` | 可填 `qwen3.8-max`、`qwen3.7-plus`、`qwen3.7-max`、`qwen3.6-plus`、`qwen3.5-plus`、`qwen3-max`、`qwen-max`、`qwen-plus`、`qwen-turbo`、`qwq-plus` 等 |
+| `model` | 可填 `qwen3.8-flash`（推荐，1M 上下文 / 128K 最大输出，多模态）、`qwen3.8-max`、`qwen3.7-plus`、`qwen3.7-max`、`qwen3.6-plus`、`qwen3.5-plus`、`qwen3-max`、`qwen-max`、`qwen-plus`、`qwen-turbo`、`qwq-plus` 等 |
 | `dashscope_api_key` | 在 [百炼控制台](https://bailian.console.aliyun.com/?tab=model#/api-key) 创建，参考 [官方文档](https://bailian.console.aliyun.com/?tab=api#/api) |
 
 ## 图像理解
 
-配置 `dashscope_api_key` 后 Agent 的 Vision 工具会自动调用千问的视觉模型识别图像。`qwen3.7-plus` / `qwen3.6-plus` / `qwen3.5-plus` / `qwen3-max` 等模型本身就是多模态；若主模型是纯文本（如 `qwen-turbo`），会自动回落到 `qwen-vl-max`。
+配置 `dashscope_api_key` 后 Agent 的 Vision 工具会自动调用千问的视觉模型识别图像。`qwen3.8-flash` / `qwen3.7-plus` / `qwen3.6-plus` / `qwen3.5-plus` / `qwen3-max` 等模型本身就是多模态；若主模型是纯文本（如 `qwen-turbo`），会自动回落到 `qwen-vl-max`。
 
 如需手动指定 Vision 模型：
 
@@ -33,13 +33,13 @@ description: 通义千问模型配置（文本 / 图像理解 / 图像生成 / �
 {
   "tools": {
     "vision": {
-      "model": "qwen3.7-plus"
+      "model": "qwen3.8-flash"
     }
   }
 }
 ```
 
-支持模型：`qwen3.7-plus`、`qwen3.6-plus`、`qwen3.5-plus`、`qwen3-max`。
+支持模型：`qwen3.8-flash`、`qwen3.7-plus`、`qwen3.6-plus`、`qwen3.5-plus`、`qwen3-max`。
 
 ## 图像生成
 

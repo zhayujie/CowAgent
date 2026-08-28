@@ -172,6 +172,24 @@ SAFETY:
             if self.cwd:
                 env["AGENT_WORKSPACE"] = self.cwd
 
+            # Pass the current run/source identity into child processes
+            try:
+                from common import utils as _cow_utils
+                _attr = {}
+                _cow_utils.apply_client_source(_attr)
+                _header_to_env = {
+                    "X-Agent-Run-Id": "COW_AGENT_RUN_ID",
+                    "X-Client-Source": "COW_CLIENT_SOURCE",
+                    "X-Client-OS": "COW_CLIENT_OS",
+                    "X-Client-Version": "COW_CLIENT_VERSION",
+                    "X-Deployment-Id": "COW_DEPLOYMENT_ID",
+                }
+                for _h, _e in _header_to_env.items():
+                    if _attr.get(_h):
+                        env[_e] = _attr[_h]
+            except Exception:
+                pass
+
             # Load environment variables from ~/.cow/.env if it exists
             env_file = expand_path("~/.cow/.env")
             dotenv_vars = {}

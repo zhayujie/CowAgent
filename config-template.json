@@ -43,6 +43,12 @@
     "enabled": true,
     "max_concurrent": 3
   },
+  "agent_delegation": {
+    "enabled": true,
+    "max_depth": 3,
+    "timeout_seconds": 120,
+    "default_wait_seconds": 30
+  },
   "enable_thinking": false,
   "reasoning_effort": "high",
   "knowledge": true,

@@ -66,6 +66,7 @@ def _init_legacy_provider():
                     model=model,
                     api_key=linkai_api_key,
                     api_base=f"{linkai_api_base}/v1",
+                    source_tagged=True,
                 )
                 embedding_model = f"linkai/{model}"
             except Exception as e:
@@ -131,6 +132,7 @@ def _init_explicit_provider(provider_key: str):
             api_key=api_key,
             api_base=api_base,
             dimensions=dim,
+            source_tagged=True if resolved_provider_key == "linkai" else None,
         )
     except Exception as e:
         logger.error(

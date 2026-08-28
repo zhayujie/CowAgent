@@ -630,10 +630,11 @@ def _ensure_list(value):
     return [value]
 
 
-def _generate_session_title(user_message: str, assistant_reply: str = "") -> str:
+def _generate_session_title(user_message: str, assistant_reply: str = "",
+                            session_id: str = "") -> str:
     """Delegate to the shared SessionService implementation."""
     from agent.chat.session_service import generate_session_title
-    return generate_session_title(user_message, assistant_reply)
+    return generate_session_title(user_message, assistant_reply, session_id)
 
 
 class WebMessage(ChatMessage):
@@ -2503,8 +2504,8 @@ class ConfigHandler:
         const.CLAUDE_OPUS_5, const.CLAUDE_SONNET_5, const.CLAUDE_FABLE_5, const.CLAUDE_4_8_OPUS, const.CLAUDE_4_7_OPUS, const.CLAUDE_4_6_SONNET, const.CLAUDE_4_6_OPUS,
         const.GEMINI_37_FLASH, const.GEMINI_36_FLASH, const.GEMINI_35_FLASH, const.GEMINI_31_FLASH_LITE_PRE, const.GEMINI_31_PRO_PRE, const.GEMINI_3_FLASH_PRE,
         const.GPT_56_LUNA, const.GPT_56_TERRA, const.GPT_56_SOL, const.GPT_55, const.GPT_54, const.GPT_54_MINI, const.GPT_54_NANO, const.GPT_5, const.GPT_41, const.GPT_4o,
-        const.GLM_5_3, const.GLM_5_2, const.GLM_5_1, const.GLM_5_TURBO, const.GLM_5, const.GLM_4_7,
-        const.QWEN38_MAX, const.QWEN37_PLUS, const.QWEN37_MAX, const.QWEN36_PLUS,
+        const.GLM_5_3_FLASH, const.GLM_5_3, const.GLM_5_2, const.GLM_5_1, const.GLM_5_TURBO, const.GLM_5, const.GLM_4_7,
+        const.QWEN38_FLASH, const.QWEN38_MAX, const.QWEN37_PLUS, const.QWEN37_MAX, const.QWEN36_PLUS,
         const.DOUBAO_SEED_2_1_PRO, const.DOUBAO_SEED_2_1_TURBO, const.DOUBAO_SEED_2_CODE,
         const.KIMI_K3, const.KIMI_K2_7_CODE, const.KIMI_K2_7_CODE_HIGHSPEED, const.KIMI_K2_6, const.KIMI_K2_5, const.KIMI_K2,
         const.ERNIE_5_1, const.ERNIE_5, const.ERNIE_X1_1, const.ERNIE_45_TURBO_128K, const.ERNIE_45_TURBO_32K,
@@ -2569,7 +2570,7 @@ class ConfigHandler:
             "api_base_key": "zhipu_ai_api_base",
             "api_base_default": "https://open.bigmodel.cn/api/paas/v4",
             "api_base_placeholder": _PLACEHOLDER_ZHIPU,
-            "models": [const.GLM_5_3, const.GLM_5_2, const.GLM_5_1, const.GLM_5_TURBO, const.GLM_5, const.GLM_4_7],
+            "models": [const.GLM_5_3_FLASH, const.GLM_5_3, const.GLM_5_2, const.GLM_5_1, const.GLM_5_TURBO, const.GLM_5, const.GLM_4_7],
         }),
         ("dashscope", {
             "label": {"zh": "通义千问", "en": "Qwen"},
@@ -2577,7 +2578,7 @@ class ConfigHandler:
             "api_base_key": None,
             "api_base_default": None,
             "api_base_placeholder": "",
-            "models": [const.QWEN38_MAX, const.QWEN37_PLUS, const.QWEN37_MAX, const.QWEN36_PLUS],
+            "models": [const.QWEN38_FLASH, const.QWEN38_MAX, const.QWEN37_PLUS, const.QWEN37_MAX, const.QWEN36_PLUS],
         }),
         ("moonshot", {
             "label": "Kimi",
@@ -3211,18 +3212,18 @@ class ModelsHandler:
         ],
         "doubao":    [const.DOUBAO_SEED_2_1_PRO, const.DOUBAO_SEED_2_1_TURBO, const.DOUBAO_SEED_2_PRO],
         "moonshot":  [const.KIMI_K2_6],
-        "dashscope": [const.QWEN37_PLUS, const.QWEN36_PLUS],
+        "dashscope": [const.QWEN38_FLASH, const.QWEN37_PLUS, const.QWEN36_PLUS],
         # claude-sonnet-5 stays first here (unlike the chat lists): the first
         # entry is the auto-picked vision model, and image understanding does
         # not justify the Opus price.
         "claudeAPI": [const.CLAUDE_SONNET_5, const.CLAUDE_OPUS_5, const.CLAUDE_FABLE_5, const.CLAUDE_4_8_OPUS, const.CLAUDE_4_7_OPUS, const.CLAUDE_4_6_SONNET, const.CLAUDE_4_6_OPUS],
         "gemini":    [const.GEMINI_37_FLASH, const.GEMINI_36_FLASH, const.GEMINI_35_FLASH, const.GEMINI_31_FLASH_LITE_PRE, const.GEMINI_31_PRO_PRE, const.GEMINI_3_FLASH_PRE],
         "qianfan":   [const.ERNIE_45_TURBO_VL],
-        # Zhipu's bot hard-codes the call to glm-5v-turbo regardless of what
-        # name is passed in (see models/zhipuai/zhipuai_bot.py::call_vision),
-        # so listing the chat models here would silently route to the same
-        # endpoint. Surface only the model the runtime can truly dispatch to.
-        "zhipu":     [const.GLM_5V_TURBO],
+        # glm-5.3-flash is natively multimodal and dispatched as-is; the
+        # text-only chat models (glm-5.2, glm-5-turbo, etc.) fall back to the
+        # dedicated glm-5v-turbo vision model (see
+        # models/zhipuai/zhipuai_bot.py::call_vision).
+        "zhipu":     [const.GLM_5_3_FLASH, const.GLM_5V_TURBO],
         # MiniMax's vision endpoint is similarly hard-coded to MiniMax-Text-01
         # (see models/minimax/minimax_bot.py::call_vision); the M2.x chat
         # family is text-only.
@@ -3235,6 +3236,7 @@ class ModelsHandler:
         "linkai":    [
             const.GPT_41_MINI,
             const.GPT_54_MINI,
+            const.QWEN38_FLASH,
             const.QWEN37_PLUS,
             const.DOUBAO_SEED_2_1_PRO,
             const.KIMI_K2_6,
@@ -6165,7 +6167,7 @@ class SessionTitleHandler:
             if not user_message:
                 return json.dumps({"status": "error", "message": "user_message required"})
 
-            title = _generate_session_title(user_message, assistant_reply)
+            title = _generate_session_title(user_message, assistant_reply, session_id)
 
             from agent.memory import get_conversation_store
             store = get_conversation_store()

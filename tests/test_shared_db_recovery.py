@@ -147,7 +147,9 @@ class TestSharedDbRecovery(unittest.TestCase):
 
         class LockedOnce(sqlite3.Connection):
             def execute(self, sql, *args, **kwargs):
-                if sql == "PRAGMA integrity_check" and calls["n"] == 0:
+                # Either check pragma; which one runs is a performance choice,
+                # and this is about how its failure is classified.
+                if sql.startswith("PRAGMA ") and sql.endswith("_check") and calls["n"] == 0:
                     calls["n"] += 1
                     raise sqlite3.OperationalError("database is locked")
                 return super().execute(sql, *args, **kwargs)

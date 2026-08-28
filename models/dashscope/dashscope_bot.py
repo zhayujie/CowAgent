@@ -288,10 +288,10 @@ class DashscopeBot(Bot):
             
             # Add thinking parameters for DashScope thinking-capable models.
             model_lower = model_name.lower()
-            # qwen3.8-max (and its -preview snapshot) always think and are
-            # controlled via reasoning_effort (default xhigh), not enable_thinking
-            # on/off. Treat the whole qwen3.8-max family the same way.
-            is_qwen38_effort_model = model_lower.startswith("qwen3.8-max")
+            # qwen3.8-max / qwen3.8-flash (and their -preview snapshots) always
+            # think and are controlled via reasoning_effort (default xhigh), not
+            # enable_thinking on/off. Treat the whole qwen3.8 family the same way.
+            is_qwen38_effort_model = model_lower.startswith("qwen3.8-")
             supports_thinking = (
                 "qwen3" in model_lower
                 or "qwq" in model_lower

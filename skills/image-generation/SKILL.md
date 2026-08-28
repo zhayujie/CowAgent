@@ -15,7 +15,7 @@ metadata:
 
 # Image Generation
 
-Generate and edit images using AI models. The script automatically picks a backend based on which API keys are configured — **you don't need to specify a model unless the user explicitly names one**.
+Generate and edit images using AI models. The script automatically picks a backend based on which API keys are configured — **you don't need to specify a model unless the user explicitly names one**. Never guess or invent a `model`: when the user doesn't name one, omit `model` entirely so the configured default/provider is used.
 
 Supported models (passed via `model` only when the user asks for a specific one):
 

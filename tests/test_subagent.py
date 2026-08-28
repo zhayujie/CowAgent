@@ -38,6 +38,10 @@ class _FakeParent:
     def __init__(self, tools, workspace_dir):
         self.tools = tools
         self.workspace_dir = workspace_dir
+        # The runner copies both onto the child so a sub agent cannot widen
+        # the session's reach. Unset here, as on a fresh Agent.
+        self.project_dir = None
+        self.permission_mode = None
         self.model = object()
         self.max_steps = 7
         self.max_context_tokens = 1234
@@ -158,7 +162,12 @@ def test_the_repo_ships_a_guide_that_documents_the_real_format():
 
 @pytest.mark.parametrize(
     "language, marker",
-    [("en", "Independent work"), ("zh", "能整块交出去的独立工作")],
+    [
+        # Wording the tool listing does not also carry, or this would still
+        # pass with the rule itself deleted.
+        ("en", "needs research, search or information gathering"),
+        ("zh", "信息采集的独立任务"),
+    ],
 )
 def test_the_prompt_tells_the_agent_when_to_delegate(language, marker):
     """Left to the tool description alone the model competes it against ~30
@@ -192,15 +201,16 @@ def test_the_tool_is_pitched_at_independent_work_not_at_a_step_count(workspace):
     handover of a whole task stopped research being delegated at all; a
     "more than N reads" trigger fires on ordinary work, and every firing costs
     a full model run the user waits through. The criterion is whether the work
-    is independent and self-contained."""
+    is self-contained and substantial enough to be worth handing over."""
     from agent.tools.subagent import SubagentTool
 
     description = SubagentTool(config={"cwd": str(workspace)}).description
     assert "whole task unchanged" not in description
     assert "three searches" not in description
     assert "self-contained" in description
-    assert "independent" in description.lower()
-    assert "normal work, not grounds to delegate" in description
+    assert "substantial research" in description
+    # Ordinary work stays with the caller; that has to be said, not implied.
+    assert "finish yourself directly" in description
 
 
 def test_the_shipped_example_is_inert_until_renamed(workspace):

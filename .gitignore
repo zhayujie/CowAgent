@@ -59,6 +59,7 @@ desktop/build/*
 !desktop/build/build-feishu-vendor.py
 !desktop/build/entitlements.mac.plist
 !desktop/build/notarize-dmg.sh
+!desktop/build/installer.nsh
 
 # Icon authoring scratch dir: intermediate assets used to produce the final
 # icons. Only the finished icons under desktop/resources/ should be committed.

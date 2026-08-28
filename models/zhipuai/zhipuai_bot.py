@@ -15,6 +15,21 @@ from config import conf, load_config
 from zai import ZhipuAiClient
 
 
+# GLM models that natively accept image input on the chat/completions endpoint.
+# glm-5.3-flash is multimodal (image understanding); the dedicated glm-5v-turbo
+# is only needed for text-only chat models (glm-5-turbo, glm-5.2, etc.).
+_VISION_CAPABLE_MODEL_PREFIXES = ("glm-5.3-flash", "glm-5v")
+
+# Fallback vision model for text-only main models that cannot see images.
+_DEFAULT_VISION_MODEL = "glm-5v-turbo"
+
+
+def _is_vision_capable_model(model_name: Optional[str]) -> bool:
+    """Whether the given GLM model can accept image input directly."""
+    name = (model_name or "").strip().lower()
+    return bool(name) and name.startswith(_VISION_CAPABLE_MODEL_PREFIXES)
+
+
 # ZhipuAI对话模型API
 class ZHIPUAIBot(Bot, ZhipuAIImage):
     def __init__(self):
@@ -154,10 +169,14 @@ class ZHIPUAIBot(Bot, ZhipuAIImage):
                     model: Optional[str] = None,
                     max_tokens: int = 1000) -> dict:
         """Analyze an image using ZhipuAI OpenAI-compatible SDK.
-        Always uses glm-5v-turbo — the text models (glm-5-turbo etc.) do not support vision.
+
+        Multimodal chat models (e.g. glm-5.3-flash) accept image input directly,
+        so we honor the requested model when it is vision-capable. Text-only chat
+        models (glm-5-turbo, glm-5.2, etc.) fall back to the dedicated
+        glm-5v-turbo vision model.
         """
         try:
-            vision_model = "glm-5v-turbo"
+            vision_model = model if _is_vision_capable_model(model) else _DEFAULT_VISION_MODEL
             response = self.client.chat.completions.create(
                 model=vision_model,
                 max_tokens=max_tokens,

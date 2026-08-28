@@ -6,7 +6,7 @@ description: CowAgent がサポートするモデルベンダーと機能マト�
 CowAgent は国内外の主要ベンダーの大規模言語モデルをサポートしており、モデル接続の実装はプロジェクトの `models/` ディレクトリにあります。テキスト対話に加えて、一部のベンダーは画像理解、画像生成、音声認識、音声合成、ベクトルなどの機能も提供しており、Agent フローの中で必要に応じて呼び出すことができます。
 
 <Note>
-  Agent モードでは、効果とコストのバランスを考慮して以下のモデルの利用を推奨します：deepseek-v4-flash、MiniMax-M3、claude-opus-5、claude-sonnet-5、gemini-3.5-flash、glm-5.2、qwen3.7-plus、kimi-k3、ernie-5.1。
+  Agent モードでは、効果とコストのバランスを考慮して以下のモデルの利用を推奨します：deepseek-v4-flash、MiniMax-M3、claude-opus-5、claude-sonnet-5、gemini-3.7-flash、glm-5.3-flash、qwen3.8-flash、kimi-k3、ernie-5.1。
 
   同時に [LinkAI](https://link-ai.tech) プラットフォームの API もサポートしており、1 つの Key で複数ベンダーを柔軟に切り替えられ、ナレッジベース、ワークフロー、プラグインなどの機能も付属しています。
 </Note>
@@ -23,8 +23,8 @@ CowAgent は国内外の主要ベンダーの大規模言語モデルをサポ�
 | [OpenAI](/models/openai) | gpt-5.6 シリーズ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | [Gemini](/models/gemini) | gemini-3.7-flash | ✅ | ✅ | ✅ | | | |
 | [MiniMax](/models/minimax) | MiniMax-M3 | ✅ | ✅ | ✅ | | ✅ | |
-| [Zhipu GLM](/models/glm) | glm-5.3、glm-5v-turbo | ✅ | ✅ | | ✅ | | ✅ |
-| [Tongyi Qianwen](/models/qwen) | qwen3.8-max | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| [Zhipu GLM](/models/glm) | glm-5.3-flash、glm-5v-turbo | ✅ | ✅ | | ✅ | | ✅ |
+| [Tongyi Qianwen](/models/qwen) | qwen3.8-flash | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | [Kimi](/models/kimi) | kimi-k3 | ✅ | ✅ | | | | |
 | [Doubao](/models/doubao) | doubao-seed-2.1 シリーズ | ✅ | ✅ | ✅ | | | ✅ |
 | [Baidu Qianfan](/models/qianfan) | ernie-5.1 | ✅ | ✅ | | | | |
