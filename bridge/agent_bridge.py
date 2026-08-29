@@ -127,6 +127,22 @@ class AgentLLMModel(LLMModel):
         self._bot_model = None
         self._bot_type = None
 
+    def catalog_model_meta(self) -> dict:
+        """Model-catalog metadata for the effective provider+model, or {}.
+
+        The provider mirrors ``_resolve_bot_type`` precedence (session
+        override, then use_linkai, then the configured bot type), mapped back
+        onto the UI provider ids the catalog is keyed by."""
+        from models import model_catalog
+        if self._session_provider:
+            provider = self._session_provider
+        elif conf().get("use_linkai", False) and conf().get("linkai_api_key"):
+            provider = "linkai"
+        else:
+            bot_type = conf().get("bot_type") or ""
+            provider = "openai" if bot_type == const.CHATGPT else bot_type
+        return model_catalog.resolve_model_meta(provider, self.model)
+
     @staticmethod
     def provider_to_bot_type(provider_id: str) -> str:
         """Map a UI provider id onto a bot type, as the models console does."""

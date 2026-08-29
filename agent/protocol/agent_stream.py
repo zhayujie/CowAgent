@@ -486,6 +486,20 @@ class AgentStreamExecutor:
         from config import conf
         return bool(conf().get("enable_thinking", False))
 
+    def _catalog_max_output_tokens(self):
+        """max_tokens for the request, from the model's catalog entry.
+
+        Returns None when the model has no catalogued max_output_tokens, in
+        which case the provider default is used (some gateways reject an
+        explicit max_tokens, so it is only sent when configured)."""
+        if self.model is not None and hasattr(self.model, "catalog_model_meta"):
+            try:
+                value = (self.model.catalog_model_meta() or {}).get("max_output_tokens")
+                return int(value) if value else None
+            except Exception:
+                return None
+        return None
+
     def _should_render_thinking_inline(self) -> bool:
         """Whether ``<think>...</think>`` blocks embedded directly in ``content``
         (MiniMax, some third-party proxies) should be surfaced to the channel.
@@ -1226,6 +1240,7 @@ class AgentStreamExecutor:
             temperature=0,
             stream=True,
             tools=tools_schema,
+            max_tokens=self._catalog_max_output_tokens(),
             system=self.system_prompt  # Pass system prompt separately for Claude API
         )
 
@@ -2181,13 +2196,13 @@ class AgentStreamExecutor:
         # budget below (window - output reserve) so a full prompt plus the
         # provider's default completion budget can't overflow the window and
         # trigger the "maximum context length ... you requested N tokens" 400
-        # (which otherwise loops). This cap applies even when the user
-        # configured a large agent_max_context_tokens.
+        # (which otherwise loops). The window follows the effective model:
+        # a session override uses that model, message channels the global one.
         output_reserve = self.agent._get_output_reserve_tokens()
         input_ceiling = max(1, context_window - output_reserve)
 
-        # Use configured max_context_tokens if available, but never above the
-        # input ceiling that leaves room for the completion.
+        # An explicit agent cap (sub agents inherit one so they cannot widen
+        # the session's reach) applies, but never above the input ceiling.
         if hasattr(self.agent, 'max_context_tokens') and self.agent.max_context_tokens:
             max_tokens = min(self.agent.max_context_tokens, input_ceiling)
         else:

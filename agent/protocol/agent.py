@@ -263,7 +263,7 @@ class Agent:
     def _get_model_context_window(self) -> int:
         """
         Get the model's *total* context window size in tokens (input + output).
-        Auto-detect based on model name.
+        Prefer the model's catalog entry; fall back to name-based detection.
 
         This is the hard ceiling the provider enforces on prompt tokens plus
         the completion budget. Trimming must leave room for the completion (see
@@ -272,6 +272,15 @@ class Agent:
 
         :return: Context window size in tokens
         """
+        # An explicit context_window on the model's catalog entry wins over
+        # the name heuristics below — the user knows their model best.
+        if self.model is not None and hasattr(self.model, 'catalog_model_meta'):
+            try:
+                window = (self.model.catalog_model_meta() or {}).get('context_window')
+                if window:
+                    return int(window)
+            except Exception:
+                pass
         if self.model and hasattr(self.model, 'model'):
             model_name = self.model.model.lower()
 
@@ -336,8 +345,17 @@ class Agent:
 
         Scale the reserve with the window so small models keep a modest buffer and
         large ones (V4's 1M) reserve enough for their oversized completion default,
-        while never eating more than ~40% of the window.
+        while never eating more than ~40% of the window. An explicit
+        `max_output_tokens` on the model's catalog entry takes precedence —
+        that exact budget is what the request asks for.
         """
+        if self.model is not None and hasattr(self.model, 'catalog_model_meta'):
+            try:
+                max_output = (self.model.catalog_model_meta() or {}).get('max_output_tokens')
+                if max_output:
+                    return int(max_output)
+            except Exception:
+                pass
         context_window = self._get_model_context_window()
         # ~40% of the window, clamped to a sane floor/ceiling. 400K covers the
         # 384K completion default that large-window agent models request.

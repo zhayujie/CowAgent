@@ -31,6 +31,18 @@ const I18N = {
         models_pick_to_configure: '选择以配置',
         models_clear_credential: '清除凭据',
         models_base_default_hint: '留空将使用官方默认地址',
+        models_catalog: '模型列表',
+        models_catalog_hint: '维护该厂商可用的模型；带「主模型」标签的可切换为对话模型，其他标签用于对应能力位，窗口/最大输出留空则自动推断',
+        models_catalog_add: '添加模型',
+        models_catalog_window: '上下文窗口',
+        models_catalog_output: '最大输出',
+        models_tag_chat: '主模型',
+        models_tag_vision: '图像理解',
+        models_tag_video: '视频理解',
+        models_tag_image: '图像生成',
+        models_tag_embedding: '向量',
+        models_tag_asr: '语音识别',
+        models_tag_tts: '语音合成',
         models_base_default: '默认',
         models_custom_vendor_label: '自定义',
         models_custom_name: '名称',
@@ -144,7 +156,6 @@ const I18N = {
         settings_tab_models: '模型配置',
         config_channel: '通道配置',
         config_agent_enabled: 'Agent 模式',
-        config_max_tokens: '最大上下文 Token', config_max_tokens_hint: '对话中 Agent 能输入的最大 Token 长度，超过后会智能压缩处理',
         config_max_turns: '最大记忆轮次', config_max_turns_hint: '一问一答为一轮，超过后会智能压缩处理',
         config_max_steps: '最大执行步数', config_max_steps_hint: '单次对话中 Agent 最多调用工具的次数',
         config_enable_thinking: '深度思考', config_enable_thinking_hint: '是否启用深度思考模式',
@@ -352,6 +363,18 @@ const I18N = {
         models_pick_to_configure: '選擇以設定',
         models_clear_credential: '清除憑據',
         models_base_default_hint: '留空將使用官方預設地址',
+        models_catalog: '模型列表',
+        models_catalog_hint: '維護該廠商可用的模型；帶「主模型」標籤的可切換為對話模型，其他標籤用於對應能力位，窗口/最大輸出留空則自動推斷',
+        models_catalog_add: '新增模型',
+        models_catalog_window: '上下文窗口',
+        models_catalog_output: '最大輸出',
+        models_tag_chat: '主模型',
+        models_tag_vision: '圖像理解',
+        models_tag_video: '影片理解',
+        models_tag_image: '圖像生成',
+        models_tag_embedding: '向量',
+        models_tag_asr: '語音辨識',
+        models_tag_tts: '語音合成',
         models_base_default: '預設',
         models_custom_vendor_label: '自定義',
         models_custom_name: '名稱',
@@ -465,7 +488,6 @@ const I18N = {
         settings_tab_models: '模型設定',
         config_channel: '管道設定',
         config_agent_enabled: 'Agent 模式',
-        config_max_tokens: '最大上下文 Token', config_max_tokens_hint: '對話中 Agent 能輸入的最大 Token 長度，超過後會智慧壓縮處理',
         config_max_turns: '最大記憶輪次', config_max_turns_hint: '一問一答為一輪，超過後會智慧壓縮處理',
         config_max_steps: '最大執行步數', config_max_steps_hint: '單次對話中 Agent 最多呼叫工具的次數',
         config_enable_thinking: '深度思考', config_enable_thinking_hint: '是否啟用深度思考模式',
@@ -668,6 +690,18 @@ const I18N = {
         models_pick_to_configure: 'pick to configure',
         models_clear_credential: 'Clear credentials',
         models_base_default_hint: 'Leave blank to use the official default base URL',
+        models_catalog: 'Model catalog',
+        models_catalog_hint: 'Manage this provider\'s models. Entries tagged "Main Model" are selectable in conversations; other tags feed the matching capability. Leave the window/max output blank to auto-detect',
+        models_catalog_add: 'Add model',
+        models_catalog_window: 'Context window',
+        models_catalog_output: 'Max output',
+        models_tag_chat: 'Main Model',
+        models_tag_vision: 'Image Understanding',
+        models_tag_video: 'Video Understanding',
+        models_tag_image: 'Image Generation',
+        models_tag_embedding: 'Embedding',
+        models_tag_asr: 'Speech Recognition',
+        models_tag_tts: 'Speech Synthesis',
         models_base_default: 'Default',
         models_custom_vendor_label: 'Custom',
         models_custom_name: 'Name',
@@ -781,7 +815,6 @@ const I18N = {
         settings_tab_models: 'Models',
         config_channel: 'Channel Configuration',
         config_agent_enabled: 'Agent Mode',
-        config_max_tokens: 'Max Context Tokens', config_max_tokens_hint: 'Max tokens the Agent can input per conversation, auto-compressed when exceeded',
         config_max_turns: 'Max Memory Turns', config_max_turns_hint: 'One Q&A pair = one turn, auto-compressed when exceeded',
         config_max_steps: 'Max Steps', config_max_steps_hint: 'Max tool calls the Agent can make in a single conversation',
         config_enable_thinking: 'Deep Thinking', config_enable_thinking_hint: 'Enable deep thinking mode',
@@ -6670,7 +6703,6 @@ function initConfigView(data) {
     onProviderChange(cfgProviderValue);
     syncModelSelection(configCurrentModel);
 
-    document.getElementById('cfg-max-tokens').value = data.agent_max_context_tokens || 50000;
     document.getElementById('cfg-max-turns').value = data.agent_max_context_turns || 20;
     document.getElementById('cfg-max-steps').value = data.agent_max_steps || 20;
     const thinkingEl = document.getElementById('cfg-enable-thinking');
@@ -7007,7 +7039,6 @@ function saveAgentConfig() {
     const effortKey = `${cfgProviderValue}:${getSelectedModel().trim().toLowerCase()}`;
     const mergedEffortByModel = Object.assign({}, configReasoningByModel, { [effortKey]: cfgReasoningEffortValue });
     const updates = {
-        agent_max_context_tokens: parseInt(document.getElementById('cfg-max-tokens').value) || 50000,
         agent_max_context_turns: parseInt(document.getElementById('cfg-max-turns').value) || 20,
         agent_max_steps: parseInt(document.getElementById('cfg-max-steps').value) || 20,
         enable_thinking: document.getElementById('cfg-enable-thinking').checked,
@@ -8728,10 +8759,112 @@ function _persistCapability(capId, provider, model, onAfterSuccess, extras) {
 
 // ---------- Vendor credential modal ------------------------------------
 
+// =====================================================================
+// Model catalog editor — per-provider model list with metadata.
+// A saved catalog replaces the vendor's preset list; entries tagged
+// "chat" show up in the conversation model switcher, the other tags
+// route the model into the matching capability cards.
+// =====================================================================
+
+const CATALOG_TAGS = ['chat', 'vision', 'video', 'image', 'embedding', 'asr', 'tts'];
+
+// Seed the editor rows from a provider's catalog, falling back to its
+// preset models (tagged "chat" by default so they stay chat-selectable).
+function seedCatalogEntries(provider) {
+    if (provider && Array.isArray(provider.catalog) && provider.catalog.length) {
+        return provider.catalog.map(e => ({
+            name: e.name || '',
+            capabilities: Array.isArray(e.capabilities) ? [...e.capabilities] : ['chat'],
+            context_window: e.context_window,
+            max_output_tokens: e.max_output_tokens,
+        }));
+    }
+    const presets = (provider && Array.isArray(provider.models)) ? provider.models : [];
+    return presets.map(m => ({
+        name: typeof m === 'string' ? m : (m && m.value) || '',
+        capabilities: ['chat'],
+    }));
+}
+
+function renderCatalogEditor(container, entries) {
+    const fieldCls = 'w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-white/5 text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-primary-500 font-mono transition-colors';
+    const tagCls = (on) => `px-1.5 py-0.5 rounded text-[11px] cursor-pointer transition-colors ${on ? 'bg-primary-50 dark:bg-primary-900/30 text-primary-500' : 'bg-slate-100 dark:bg-white/5 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'}`;
+    // escapeHtml covers text nodes only; attribute values also need quotes escaped.
+    const escapeAttr = (s) => escapeHtml(s).replace(/"/g, '&quot;');
+    container.innerHTML = entries.map((entry, idx) => `
+        <div class="rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 p-2.5 space-y-2" data-idx="${idx}">
+            <div class="flex items-center gap-2">
+                <input type="text" data-field="name" value="${escapeAttr(entry.name)}" placeholder="model-name"
+                       class="flex-1 min-w-0 ${fieldCls}">
+                <button type="button" data-action="remove"
+                        class="text-slate-400 hover:text-red-500 cursor-pointer p-1">
+                    <i class="fas fa-trash text-xs"></i>
+                </button>
+            </div>
+            <div class="flex flex-wrap gap-1">
+                ${CATALOG_TAGS.map(tag => `
+                    <button type="button" data-action="tag" data-tag="${tag}" class="${tagCls(entry.capabilities.includes(tag))}">${escapeHtml(t('models_tag_' + tag))}</button>`).join('')}
+            </div>
+            <div class="flex gap-2">
+                <input type="number" data-field="context_window" value="${entry.context_window ?? ''}"
+                       placeholder="${escapeHtml(t('models_catalog_window'))}" class="${fieldCls}">
+                <input type="number" data-field="max_output_tokens" value="${entry.max_output_tokens ?? ''}"
+                       placeholder="${escapeHtml(t('models_catalog_output'))}" class="${fieldCls}">
+            </div>
+        </div>`).join('');
+}
+
+// Wire a catalog container + its add button to the caller's live `entries`
+// array. Every mutation re-renders and calls onChange so the modal can mark
+// itself dirty (an untouched editor must not overwrite the saved catalog).
+function mountCatalogEditor(containerId, addBtnId, entries, onChange) {
+    const container = document.getElementById(containerId);
+    const addBtn = document.getElementById(addBtnId);
+    if (!container || !addBtn) return;
+
+    const rerender = () => renderCatalogEditor(container, entries);
+
+    container.oninput = (e) => {
+        const row = e.target.closest('[data-idx]');
+        const field = e.target.dataset.field;
+        if (!row || !field) return;
+        const idx = Number(row.dataset.idx);
+        if (field === 'name') {
+            entries[idx].name = e.target.value;
+        } else {
+            const v = String(e.target.value).trim();
+            entries[idx][field] = v === '' ? undefined : Number(v);
+        }
+        onChange();
+    };
+    container.onclick = (e) => {
+        const btn = e.target.closest('button[data-action]');
+        if (!btn) return;
+        const idx = Number(btn.closest('[data-idx]').dataset.idx);
+        if (btn.dataset.action === 'remove') {
+            entries.splice(idx, 1);
+        } else if (btn.dataset.action === 'tag') {
+            const caps = entries[idx].capabilities;
+            const pos = caps.indexOf(btn.dataset.tag);
+            if (pos >= 0) caps.splice(pos, 1); else caps.push(btn.dataset.tag);
+        } else {
+            return;
+        }
+        rerender();
+        onChange();
+    };
+    addBtn.onclick = () => {
+        entries.push({ name: '', capabilities: ['chat'] });
+        rerender();
+        onChange();
+    };
+    rerender();
+}
+
 let vendorModalState = { providerId: '', onSaved: null };
 
 function openVendorModal(providerId, onSaved) {
-    vendorModalState = { providerId: providerId || '', onSaved: onSaved || null };
+    vendorModalState = { providerId: providerId || '', onSaved: onSaved || null, catalog: [], catalogDirty: false };
 
     const overlay = document.getElementById('vendor-modal-overlay');
     const titleEl = document.getElementById('vendor-modal-title');
@@ -8875,6 +9008,12 @@ function fillVendorModalForProvider(providerId) {
     const clearBtn = document.getElementById('vendor-modal-clear');
     clearBtn.classList.toggle('hidden', !meta.configured);
 
+    // ----- Model catalog -----
+    vendorModalState.catalog = seedCatalogEntries(meta);
+    vendorModalState.catalogDirty = false;
+    mountCatalogEditor('vendor-modal-catalog', 'vendor-modal-catalog-add',
+        vendorModalState.catalog, () => { vendorModalState.catalogDirty = true; });
+
     vendorModalState.providerId = providerId;
 }
 
@@ -8913,7 +9052,11 @@ function saveVendorModal() {
         body: JSON.stringify(payload),
     }).then(r => r.json()).then(data => {
         btn.disabled = false;
-        if (data.status === 'success') {
+        if (data.status !== 'success') {
+            showStatus('vendor-modal-status', 'models_save_failed', true);
+            return;
+        }
+        const finish = () => {
             closeVendorModal();
             const onSaved = vendorModalState.onSaved;
             if (onSaved) {
@@ -8921,9 +9064,24 @@ function saveVendorModal() {
             } else {
                 loadModelsView();
             }
-        } else {
-            showStatus('vendor-modal-status', 'models_save_failed', true);
+        };
+        if (!vendorModalState.catalogDirty) {
+            finish();
+            return;
         }
+        // Save an edited catalog right after the credentials (metadata only).
+        fetch('/api/models', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'save_catalog',
+                provider_id: providerId,
+                models: vendorModalState.catalog.filter(e => e.name && e.name.trim()),
+            }),
+        }).then(r => r.json()).then(cat => {
+            if (cat.status === 'success') finish();
+            else showStatus('vendor-modal-status', 'models_save_failed', true);
+        }).catch(() => showStatus('vendor-modal-status', 'models_save_failed', true));
     }).catch(() => {
         btn.disabled = false;
         showStatus('vendor-modal-status', 'models_save_failed', true);
@@ -8964,7 +9122,7 @@ let customProviderModalState = { editId: '' };
 
 function openCustomProviderModal(providerId) {
     const editing = !!providerId;
-    customProviderModalState = { editId: editing ? providerId : '' };
+    customProviderModalState = { editId: editing ? providerId : '', catalog: [], catalogDirty: false };
 
     const card = editing ? getCustomProviderCards().find(p => p.custom_id === providerId) : null;
 
@@ -8980,6 +9138,12 @@ function openCustomProviderModal(providerId) {
 
     nameInput.value = card ? (card.custom_name || '') : '';
     baseInput.value = card ? (card.api_base || '') : '';
+
+    // ----- Model catalog -----
+    customProviderModalState.catalog = seedCatalogEntries(card);
+    customProviderModalState.catalogDirty = false;
+    mountCatalogEditor('custom-provider-modal-catalog', 'custom-provider-modal-catalog-add',
+        customProviderModalState.catalog, () => { customProviderModalState.catalogDirty = true; });
 
     // Surface the masked key as the value for configured providers so the
     // "already set" state is unambiguous; an untouched masked value means
@@ -9067,12 +9231,37 @@ function saveCustomProviderModal() {
         body: JSON.stringify(payload),
     }).then(r => r.json()).then(data => {
         btn.disabled = false;
-        if (data.status === 'success') {
+        if (data.status !== 'success') {
+            showStatus('custom-provider-modal-status', 'models_save_failed', true);
+            return;
+        }
+        const finish = () => {
             closeCustomProviderModal();
             loadModelsView();
-        } else {
-            showStatus('custom-provider-modal-status', 'models_save_failed', true);
+        };
+        if (!customProviderModalState.catalogDirty) {
+            finish();
+            return;
         }
+        // The backend echoes the provider id on create, so a brand-new
+        // provider can carry its catalog in the same save.
+        const pid = data.id || customProviderModalState.editId;
+        if (!pid) {
+            finish();
+            return;
+        }
+        fetch('/api/models', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'save_catalog',
+                provider_id: 'custom:' + pid,
+                models: customProviderModalState.catalog.filter(e => e.name && e.name.trim()),
+            }),
+        }).then(r => r.json()).then(cat => {
+            if (cat.status === 'success') finish();
+            else showStatus('custom-provider-modal-status', 'models_save_failed', true);
+        }).catch(() => showStatus('custom-provider-modal-status', 'models_save_failed', true));
     }).catch(() => {
         btn.disabled = false;
         showStatus('custom-provider-modal-status', 'models_save_failed', true);
