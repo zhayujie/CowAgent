@@ -29,15 +29,17 @@ from models.openai_compatible_bot import OpenAICompatibleBot
 def add_openai_compatible_support(bot_instance):
     """
     Dynamically add OpenAI-compatible tool calling support to a bot instance.
-    
+
     This allows any bot to gain tool calling capability without modifying its code,
     as long as it uses OpenAI-compatible API format.
-    
+
     Note: Some bots like ZHIPUAIBot have native tool calling support and don't need enhancement.
     """
-    if hasattr(bot_instance, 'call_with_tools'):
+    if hasattr(bot_instance, "call_with_tools"):
         # Bot already has tool calling support (e.g., ZHIPUAIBot)
-        logger.debug(f"[AgentBridge] {type(bot_instance).__name__} already has native tool calling support")
+        logger.debug(
+            f"[AgentBridge] {type(bot_instance).__name__} already has native tool calling support"
+        )
         return bot_instance
 
     # Create a temporary mixin class that combines the bot with OpenAI compatibility
@@ -52,19 +54,20 @@ def add_openai_compatible_support(bot_instance):
             from config import conf
 
             return {
-                'api_key': conf().get("open_ai_api_key"),
-                'api_base': conf().get("open_ai_api_base"),
-                'model': conf().get("model") or const.DEFAULT_MODEL,
-                'default_temperature': conf().get("temperature", 0.9),
-                'default_top_p': conf().get("top_p", 1.0),
-                'default_frequency_penalty': conf().get("frequency_penalty", 0.0),
-                'default_presence_penalty': conf().get("presence_penalty", 0.0),
+                "api_key": conf().get("open_ai_api_key"),
+                "api_base": conf().get("open_ai_api_base"),
+                "model": conf().get("model") or const.DEFAULT_MODEL,
+                "default_temperature": conf().get("temperature", 0.9),
+                "default_top_p": conf().get("top_p", 1.0),
+                "default_frequency_penalty": conf().get("frequency_penalty", 0.0),
+                "default_presence_penalty": conf().get("presence_penalty", 0.0),
             }
 
     # Change the bot's class to the enhanced version
     bot_instance.__class__ = EnhancedBot
     logger.info(
-        f"[AgentBridge] Enhanced {bot_instance.__class__.__bases__[0].__name__} with OpenAI-compatible tool calling")
+        f"[AgentBridge] Enhanced {bot_instance.__class__.__bases__[0].__name__} with OpenAI-compatible tool calling"
+    )
 
     return bot_instance
 
@@ -75,16 +78,24 @@ class AgentLLMModel(LLMModel):
     """
 
     _MODEL_BOT_TYPE_MAP = {
-        "wenxin": const.BAIDU, "wenxin-4": const.BAIDU,
-        "xunfei": const.XUNFEI, const.QWEN: const.QWEN_DASHSCOPE,
+        "wenxin": const.BAIDU,
+        "wenxin-4": const.BAIDU,
+        "xunfei": const.XUNFEI,
+        const.QWEN: const.QWEN_DASHSCOPE,
         const.QIANFAN: const.QIANFAN,
         const.MODELSCOPE: const.MODELSCOPE,
     }
     _MODEL_PREFIX_MAP = [
-        ("qwen", const.QWEN_DASHSCOPE), ("qwq", const.QWEN_DASHSCOPE), ("qvq", const.QWEN_DASHSCOPE),
-        ("gemini", const.GEMINI), ("glm", const.ZHIPU_AI), ("claude", const.CLAUDEAPI),
-        ("moonshot", const.MOONSHOT), ("kimi", const.MOONSHOT),
-        ("doubao", const.DOUBAO), ("deepseek", const.DEEPSEEK),
+        ("qwen", const.QWEN_DASHSCOPE),
+        ("qwq", const.QWEN_DASHSCOPE),
+        ("qvq", const.QWEN_DASHSCOPE),
+        ("gemini", const.GEMINI),
+        ("glm", const.ZHIPU_AI),
+        ("claude", const.CLAUDEAPI),
+        ("moonshot", const.MOONSHOT),
+        ("kimi", const.MOONSHOT),
+        ("doubao", const.DOUBAO),
+        ("deepseek", const.DEEPSEEK),
         ("ernie", const.QIANFAN),
         ("mimo-", const.MIMO),
     ]
@@ -151,7 +162,7 @@ class AgentLLMModel(LLMModel):
         configured_bot_type = conf().get("bot_type")
         if configured_bot_type:
             return configured_bot_type
-       
+
         if not model_name or not isinstance(model_name, str):
             return const.OPENAI
         if model_name in self._MODEL_BOT_TYPE_MAP:
@@ -160,7 +171,12 @@ class AgentLLMModel(LLMModel):
             return const.MiniMax
         if model_name in [const.QWEN_TURBO, const.QWEN_PLUS, const.QWEN_MAX]:
             return const.QWEN_DASHSCOPE
-        if model_name in [const.MOONSHOT, "moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"]:
+        if model_name in [
+            const.MOONSHOT,
+            "moonshot-v1-8k",
+            "moonshot-v1-32k",
+            "moonshot-v1-128k",
+        ]:
             return const.MOONSHOT
         if conf().get("bot_type") == "modelscope":
             return const.MODELSCOPE
@@ -195,9 +211,14 @@ class AgentLLMModel(LLMModel):
     def bot(self):
         """Lazy load the bot, re-create when model or bot_type changes"""
         from models.bot_factory import create_bot
+
         cur_model = self.model
         cur_bot_type = self._resolve_bot_type(cur_model)
-        if self._bot is None or self._bot_model != cur_model or getattr(self, '_bot_type', None) != cur_bot_type:
+        if (
+            self._bot is None
+            or self._bot_model != cur_model
+            or getattr(self, "_bot_type", None) != cur_bot_type
+        ):
             self._bot = create_bot(cur_bot_type)
             self._bot = add_openai_compatible_support(self._bot)
             self._bot_model = cur_model
@@ -211,52 +232,52 @@ class AgentLLMModel(LLMModel):
         try:
             # For non-streaming calls, we'll use the existing reply method
             # This is a simplified implementation
-            if hasattr(self.bot, 'call_with_tools'):
+            if hasattr(self.bot, "call_with_tools"):
                 # Use tool-enabled call if available
                 kwargs = {
-                    'messages': request.messages,
-                    'tools': getattr(request, 'tools', None),
-                    'stream': False,
-                    'model': self.model  # Pass model parameter
+                    "messages": request.messages,
+                    "tools": getattr(request, "tools", None),
+                    "stream": False,
+                    "model": self.model,  # Pass model parameter
                 }
                 # Only pass max_tokens if it's explicitly set
                 if request.max_tokens is not None:
-                    kwargs['max_tokens'] = request.max_tokens
+                    kwargs["max_tokens"] = request.max_tokens
 
                 # Extract system prompt if present
-                system_prompt = getattr(request, 'system', None)
+                system_prompt = getattr(request, "system", None)
                 if system_prompt:
-                    kwargs['system'] = system_prompt
+                    kwargs["system"] = system_prompt
 
                 # Pass context metadata to bot
-                channel_type = getattr(self, 'channel_type', None) or ''
+                channel_type = getattr(self, "channel_type", None) or ""
                 if channel_type:
-                    kwargs['channel_type'] = channel_type
-                session_id = getattr(self, 'session_id', None)
+                    kwargs["channel_type"] = channel_type
+                session_id = getattr(self, "session_id", None)
                 if session_id:
-                    kwargs['session_id'] = session_id
+                    kwargs["session_id"] = session_id
 
                 # Thinking mode is a global toggle independent of the channel.
                 # IM channels (WeChat/WeCom/DingTalk/Feishu) won't render the
                 # reasoning trace, but still benefit from the higher answer
                 # quality the thinking pass produces.
                 from config import conf
+
                 thinking_enabled = bool(conf().get("enable_thinking", False))
                 # Some native-reasoning models reject disabled thinking or use
                 # effort as their only control, so they cannot follow the UI
                 # toggle literally.
                 if self._is_thinking_only_model():
                     thinking_enabled = True
-                kwargs['thinking'] = (
-                    {"type": "enabled"} if thinking_enabled
-                    else {"type": "disabled"}
+                kwargs["thinking"] = (
+                    {"type": "enabled"} if thinking_enabled else {"type": "disabled"}
                 )
                 # Effort only shapes a thinking pass. Thinking-only models keep
                 # receiving it because they force thinking_enabled above.
                 if thinking_enabled:
                     effort = self._normalized_reasoning_effort()
                     if effort:
-                        kwargs['reasoning_effort'] = effort
+                        kwargs["reasoning_effort"] = effort
 
                 response = self.bot.call_with_tools(**kwargs)
                 return self._format_response(response)
@@ -264,84 +285,86 @@ class AgentLLMModel(LLMModel):
                 # Fallback to regular call
                 # This would need to be implemented based on your specific needs
                 raise NotImplementedError("Regular call not implemented yet")
-                
+
         except Exception as e:
             logger.error(f"AgentLLMModel call error: {e}")
             raise
-    
+
     def call_stream(self, request: LLMRequest):
         """
         Call the model with streaming using COW's bot infrastructure
         """
         try:
-            if hasattr(self.bot, 'call_with_tools'):
+            if hasattr(self.bot, "call_with_tools"):
                 # Use tool-enabled streaming call if available
                 # Extract system prompt if present
-                system_prompt = getattr(request, 'system', None)
+                system_prompt = getattr(request, "system", None)
 
                 # Build kwargs for call_with_tools
                 kwargs = {
-                    'messages': request.messages,
-                    'tools': getattr(request, 'tools', None),
-                    'stream': True,
-                    'model': self.model  # Pass model parameter
+                    "messages": request.messages,
+                    "tools": getattr(request, "tools", None),
+                    "stream": True,
+                    "model": self.model,  # Pass model parameter
                 }
 
                 # Only pass max_tokens if explicitly set, let the bot use its default
                 if request.max_tokens is not None:
-                    kwargs['max_tokens'] = request.max_tokens
+                    kwargs["max_tokens"] = request.max_tokens
 
                 # Add system prompt if present
                 if system_prompt:
-                    kwargs['system'] = system_prompt
+                    kwargs["system"] = system_prompt
 
                 # Pass context metadata to bot
-                channel_type = getattr(self, 'channel_type', None) or ''
+                channel_type = getattr(self, "channel_type", None) or ""
                 if channel_type:
-                    kwargs['channel_type'] = channel_type
-                session_id = getattr(self, 'session_id', None)
+                    kwargs["channel_type"] = channel_type
+                session_id = getattr(self, "session_id", None)
                 if session_id:
-                    kwargs['session_id'] = session_id
+                    kwargs["session_id"] = session_id
 
                 # Thinking mode is a global toggle independent of the channel.
                 # IM channels (WeChat/WeCom/DingTalk/Feishu) won't render the
                 # reasoning trace, but still benefit from the higher answer
                 # quality the thinking pass produces.
                 from config import conf
+
                 thinking_enabled = bool(conf().get("enable_thinking", False))
                 # Keep streaming and non-streaming calls on the same provider
                 # contract for always-thinking models.
                 if self._is_thinking_only_model():
                     thinking_enabled = True
-                kwargs['thinking'] = (
-                    {"type": "enabled"} if thinking_enabled
-                    else {"type": "disabled"}
+                kwargs["thinking"] = (
+                    {"type": "enabled"} if thinking_enabled else {"type": "disabled"}
                 )
                 # Effort only shapes a thinking pass. Thinking-only models keep
                 # receiving it because they force thinking_enabled above.
                 if thinking_enabled:
                     effort = self._normalized_reasoning_effort()
                     if effort:
-                        kwargs['reasoning_effort'] = effort
+                        kwargs["reasoning_effort"] = effort
 
                 stream = self.bot.call_with_tools(**kwargs)
-                
+
                 # Convert stream format to our expected format
                 for chunk in stream:
                     yield self._format_stream_chunk(chunk)
             else:
                 bot_type = type(self.bot).__name__
-                raise NotImplementedError(f"Bot {bot_type} does not support call_with_tools. Please add the method.")
-                
+                raise NotImplementedError(
+                    f"Bot {bot_type} does not support call_with_tools. Please add the method."
+                )
+
         except Exception as e:
             logger.error(f"AgentLLMModel call_stream error: {e}", exc_info=True)
             raise
-    
+
     def _format_response(self, response):
         """Format Claude response to our expected format"""
         # This would need to be implemented based on Claude's response format
         return response
-    
+
     def _format_stream_chunk(self, chunk):
         """Format Claude stream chunk to our expected format"""
         # This would need to be implemented based on Claude's stream format
@@ -353,7 +376,7 @@ class AgentBridge:
     Bridge class that integrates super Agent with COW
     Manages multiple agent instances per session for conversation isolation
     """
-    
+
     def __init__(self, bridge: Bridge):
         self.bridge = bridge
         from agent.registry import get_agent_registry
@@ -373,7 +396,7 @@ class AgentBridge:
         self.agent: Optional[Agent] = None
         self.scheduler_initialized = False
         self.scheduler_agent_ids = set()
-        
+
         # Create helper instances
         self.initializer = AgentInitializer(bridge, self)
 
@@ -381,6 +404,7 @@ class AgentBridge:
         # for the first user message. init_scheduler is idempotent.
         try:
             from agent.tools.scheduler.integration import init_scheduler
+
             for profile in self.agent_registry.list(include_disabled=False):
                 if init_scheduler(self, profile.workspace, profile.id):
                     self.scheduler_agent_ids.add(profile.id)
@@ -391,6 +415,7 @@ class AgentBridge:
         # Start the self-evolution idle trigger (idempotent, daemon thread).
         try:
             from agent.evolution.trigger import start_evolution_trigger
+
             start_evolution_trigger(self)
         except Exception as e:
             logger.warning(f"[AgentBridge] Evolution trigger init failed: {e}")
@@ -398,25 +423,26 @@ class AgentBridge:
     def create_agent(self, system_prompt: str, tools: List = None, **kwargs) -> Agent:
         """
         Create the super agent with COW integration
-        
+
         Args:
             system_prompt: System prompt
             tools: List of tools (optional)
             **kwargs: Additional agent parameters
-            
+
         Returns:
             Agent instance
         """
         # Create LLM model that uses COW's bot infrastructure
         model = AgentLLMModel(self.bridge)
-        
+
         # Default tools if none provided
         if tools is None:
             # Use ToolManager to load all available tools
             from agent.tools import ToolManager
+
             tool_manager = ToolManager()
             tool_manager.load_tools()
-            
+
             tools = []
             workspace_dir = kwargs.get("workspace_dir")
             for tool_name in tool_manager.tool_classes.keys():
@@ -427,8 +453,10 @@ class AgentBridge:
                             tool.cwd = workspace_dir
                         tools.append(tool)
                 except Exception as e:
-                    logger.warning(f"[AgentBridge] Failed to load tool {tool_name}: {e}")
-        
+                    logger.warning(
+                        f"[AgentBridge] Failed to load tool {tool_name}: {e}"
+                    )
+
         # Create agent instance
         agent = Agent(
             system_prompt=system_prompt,
@@ -448,13 +476,17 @@ class AgentBridge:
 
         # Log skill loading details
         if agent.skill_manager:
-            logger.debug(f"[AgentBridge] SkillManager initialized with {len(agent.skill_manager.skills)} skills")
+            logger.debug(
+                f"[AgentBridge] SkillManager initialized with {len(agent.skill_manager.skills)} skills"
+            )
 
         return agent
-    
+
     def steer_session(self, session_id: str, instruction: str, agent_id: str = None):
         """Inject an explicit instruction into one active session."""
-        logger.info(f"[AgentBridge] steer new instruction: session={session_id}, content={instruction}")
+        logger.info(
+            f"[AgentBridge] steer new instruction: session={session_id}, content={instruction}"
+        )
         return get_steer_registry().submit(
             self.scoped_session_key(session_id, agent_id), instruction
         )
@@ -479,10 +511,22 @@ class AgentBridge:
         """Resolve and attach the workspace selected for an inbound context."""
         return self.agent_router.resolve_context(context)
 
+    def refresh_router(self) -> None:
+        """Rebuild the router from current config.
+
+        Role switch and admin mutations change conf()["agent_bindings"], which
+        is not reflected in the cached self.agent_router. Call this after such
+        changes so route_context() resolves against the new bindings.
+        """
+        from agent.routing import get_agent_router
+
+        self.agent_router = get_agent_router(self.agent_registry)
+
     def get_conversation_store(self, agent_id: str = None):
         """Return the session store owned by one agent workspace."""
         profile = self.agent_registry.get(agent_id)
         from agent.memory import get_conversation_store
+
         return get_conversation_store(profile.workspace)
 
     def _begin_run(self, session_id: str, agent_id: str, context: Context = None):
@@ -555,15 +599,17 @@ class AgentBridge:
         """Keep legacy token keys for the default agent, namespace the rest."""
         return token if agent_id == default_agent_id else f"{agent_id}::{token}"
 
-    def get_agent(self, session_id: str = None, agent_id: str = None) -> Optional[Agent]:
+    def get_agent(
+        self, session_id: str = None, agent_id: str = None
+    ) -> Optional[Agent]:
         """
         Get agent instance for the given session
-        
+
         Args:
             session_id: Session identifier (e.g., user_id). If None, returns
                 the workspace's default runtime instance.
             agent_id: Agent profile identifier. Omit for the configured default.
-        
+
         Returns:
             Agent instance for this session
         """
@@ -696,27 +742,34 @@ class AgentBridge:
         with agent.messages_lock:
             agent.messages.clear()
             for msg in remaining:
-                agent.messages.append({
-                    "role": msg["role"],
-                    "content": msg["content"],
-                })
+                agent.messages.append(
+                    {
+                        "role": msg["role"],
+                        "content": msg["content"],
+                    }
+                )
             count = len(agent.messages)
         logger.info(
             f"[AgentBridge] Synced agent memory for session={session_id}, messages={count}"
         )
         return count
 
-    def agent_reply(self, query: str, context: Context = None, 
-                   on_event=None, clear_history: bool = False) -> Reply:
+    def agent_reply(
+        self,
+        query: str,
+        context: Context = None,
+        on_event=None,
+        clear_history: bool = False,
+    ) -> Reply:
         """
         Use super agent to reply to a query
-        
+
         Args:
             query: User query
             context: COW context (optional, contains session_id for user isolation)
             on_event: Event callback (optional)
             clear_history: Whether to clear conversation history
-            
+
         Returns:
             Reply object
         """
@@ -735,8 +788,12 @@ class AgentBridge:
         try:
             # Extract session_id from context for user isolation
             if context:
-                session_id = context.kwargs.get("session_id") or context.get("session_id")
-                request_id = context.kwargs.get("request_id") or context.get("request_id")
+                session_id = context.kwargs.get("session_id") or context.get(
+                    "session_id"
+                )
+                request_id = context.kwargs.get("request_id") or context.get(
+                    "request_id"
+                )
 
             resolved_agent_id = (
                 self.route_context(context)
@@ -765,22 +822,24 @@ class AgentBridge:
                 )
 
             # Get agent for this session (will auto-initialize if needed)
-            agent = self.get_agent(
-                session_id=session_id, agent_id=resolved_agent_id
-            )
+            agent = self.get_agent(session_id=session_id, agent_id=resolved_agent_id)
             if not agent:
                 return Reply(ReplyType.ERROR, "Failed to initialize super agent")
-            
+
             # Create event handler for logging and channel communication
-            event_handler = AgentEventHandler(context=context, original_callback=on_event)
-            
+            event_handler = AgentEventHandler(
+                context=context, original_callback=on_event
+            )
+
             # Filter tools based on context
             original_tools = agent.tools
             filtered_tools = original_tools
-            
+
             # If this is a scheduled task execution, exclude scheduler tool to prevent recursion
             if context and context.get("is_scheduled_task"):
-                filtered_tools = [tool for tool in agent.tools if tool.name != "scheduler"]
+                filtered_tools = [
+                    tool for tool in agent.tools if tool.name != "scheduler"
+                ]
                 agent.tools = filtered_tools
                 logger.info(f"[AgentBridge] Scheduled task execution: excluded scheduler tool ({len(filtered_tools)}/{len(original_tools)} tools)")
 
@@ -800,7 +859,7 @@ class AgentBridge:
                             logger.warning(f"[AgentBridge] Failed to attach delegation context: {e}")
             
             # Pass context metadata to model for downstream API requests
-            if context and hasattr(agent, 'model'):
+            if context and hasattr(agent, "model"):
                 agent.model.channel_type = context.get("channel_type", "")
                 agent.model.session_id = session_id or ""
                 agent.model.agent_id = resolved_agent_id
@@ -816,6 +875,7 @@ class AgentBridge:
             # the agent's own context manager handles that path.
             if session_id and session_id.startswith("scheduler_"):
                 from config import conf
+
                 scheduler_keep_turns = max(
                     1, int(conf().get("agent_max_context_turns", 20)) // 5
                 )
@@ -842,6 +902,7 @@ class AgentBridge:
             # idle_minutes.
             try:
                 from agent.evolution.trigger import mark_run_active
+
                 mark_run_active(agent, True)
             except Exception:
                 pass
@@ -860,12 +921,15 @@ class AgentBridge:
                     # (e.g. "notify me only if the price drops"). Nobody is
                     # waiting on this run, so an empty answer stays empty and
                     # the scheduler sends no message at all.
-                    allow_empty_response=bool(context and context.get("is_scheduled_task")),
+                    allow_empty_response=bool(
+                        context and context.get("is_scheduled_task")
+                    ),
                 )
             finally:
                 # Clear the mid-run flag so idle scans can review this session.
                 try:
                     from agent.evolution.trigger import mark_run_active
+
                     mark_run_active(agent, False)
                 except Exception:
                     pass
@@ -895,10 +959,14 @@ class AgentBridge:
             # Persist new messages generated during this run
             if session_id:
                 channel_type = (context.get("channel_type") or "") if context else ""
-                new_messages = list(getattr(agent, '_last_run_new_messages', []))
+                new_messages = list(getattr(agent, "_last_run_new_messages", []))
                 # The leading user turn was already persisted eagerly above;
                 # drop it here so it isn't stored twice.
-                if pre_persisted and new_messages and new_messages[0].get("role") == "user":
+                if (
+                    pre_persisted
+                    and new_messages
+                    and new_messages[0].get("role") == "user"
+                ):
                     new_messages = new_messages[1:]
                 if new_messages:
                     self._persist_messages(
@@ -908,7 +976,7 @@ class AgentBridge:
                         resolved_agent_id,
                         create_if_missing=not pre_persisted,
                     )
-            
+
             # Record this user turn for the self-evolution idle trigger. Skip
             # scheduler-injected / scheduled-task sessions so internal runs do
             # not count as user activity.
@@ -920,12 +988,15 @@ class AgentBridge:
             ):
                 try:
                     from agent.evolution.trigger import note_user_turn
+
                     ch = (context.get("channel_type") or "") if context else ""
                     rcv = (context.get("receiver") or "") if context else ""
                     is_group = bool(context.get("isgroup")) if context else False
                     # Only enable proactive push for single chats (group push is
                     # noisy); group sessions still evolve, just without notify.
-                    note_user_turn(agent, channel_type=ch, receiver=(rcv if not is_group else ""))
+                    note_user_turn(
+                        agent, channel_type=ch, receiver=(rcv if not is_group else "")
+                    )
                 except Exception:
                     pass
 
@@ -936,7 +1007,9 @@ class AgentBridge:
             self._schedule_mcp_hot_reload(agent)
 
             # Check if there are files to send (from send/read tool)
-            if hasattr(agent, 'stream_executor') and hasattr(agent.stream_executor, 'files_to_send'):
+            if hasattr(agent, "stream_executor") and hasattr(
+                agent.stream_executor, "files_to_send"
+            ):
                 files_to_send = agent.stream_executor.files_to_send
                 if files_to_send:
                     logger.info(
@@ -958,9 +1031,9 @@ class AgentBridge:
                     if extras:
                         reply.extra_replies = extras
                     return reply
-            
+
             return Reply(ReplyType.TEXT, response)
-            
+
         except Exception as e:
             logger.error(f"Agent reply error: {e}")
             run_status = "failed"
@@ -1011,19 +1084,19 @@ class AgentBridge:
         # wrap carries the routed identity into the thread; without it this
         # would reload the default Agent's mcp.json and sync its tools into
         # whichever Agent actually served the message.
-        threading.Thread(
-            target=wrap(_run), daemon=True, name="mcp-hot-reload"
-        ).start()
+        threading.Thread(target=wrap(_run), daemon=True, name="mcp-hot-reload").start()
 
-    def _create_file_reply(self, file_info: dict, text_response: str, context: Context = None) -> Reply:
+    def _create_file_reply(
+        self, file_info: dict, text_response: str, context: Context = None
+    ) -> Reply:
         """
         Create a reply for sending files
-        
+
         Args:
             file_info: File metadata from read tool
             text_response: Text response from agent
             context: Context object
-            
+
         Returns:
             Reply object for file sending
         """
@@ -1032,7 +1105,9 @@ class AgentBridge:
         # Remote URLs are passed through as-is; local paths get a file:// prefix
         # so the channel can read them from disk.
         remote_url = file_info.get("url", "")
-        is_remote = bool(remote_url) and remote_url.lower().startswith(("http://", "https://"))
+        is_remote = bool(remote_url) and remote_url.lower().startswith(
+            ("http://", "https://")
+        )
 
         def _to_channel_url(p: str) -> str:
             if is_remote:
@@ -1050,7 +1125,7 @@ class AgentBridge:
             if text_response:
                 reply.text_content = text_response  # Store accompanying text
             return reply
-        
+
         # For all file types (document, video, audio), use FILE type
         if file_type in ["document", "video", "audio"]:
             file_url = _to_channel_url(file_path)
@@ -1061,7 +1136,7 @@ class AgentBridge:
             if text_response:
                 reply.text_content = text_response
             return reply
-        
+
         # For all other file types (tar.gz, zip, etc.), also use FILE type
         file_url = _to_channel_url(file_path)
         logger.info(f"[AgentBridge] Sending generic file: {file_url}")
@@ -1070,7 +1145,7 @@ class AgentBridge:
         if text_response:
             reply.text_content = text_response
         return reply
-    
+
     def _migrate_config_to_env(self, workspace_root: str):
         """
         Sync API keys from config.json to .env file.
@@ -1081,7 +1156,7 @@ class AgentBridge:
         """
         from config import conf
         import os
-        
+
         key_mapping = {
             "open_ai_api_key": "OPENAI_API_KEY",
             "open_ai_api_base": "OPENAI_API_BASE",
@@ -1089,22 +1164,22 @@ class AgentBridge:
             "claude_api_key": "CLAUDE_API_KEY",
             "linkai_api_key": "LINKAI_API_KEY",
         }
-        
+
         env_file = expand_path("~/.cow/.env")
-        
+
         # Read existing env vars (key -> value)
         existing_env_vars = {}
         if os.path.exists(env_file):
             try:
-                with open(env_file, 'r', encoding='utf-8') as f:
+                with open(env_file, "r", encoding="utf-8") as f:
                     for line in f:
                         line = line.strip()
-                        if line and not line.startswith('#') and '=' in line:
-                            key, val = line.split('=', 1)
+                        if line and not line.startswith("#") and "=" in line:
+                            key, val = line.split("=", 1)
                             existing_env_vars[key.strip()] = val.strip()
             except Exception as e:
                 logger.warning(f"[AgentBridge] Failed to read .env file: {e}")
-        
+
         # Sync config.json values into .env (add/update/remove)
         updated = False
         for config_key, env_key in key_mapping.items():
@@ -1131,16 +1206,16 @@ class AgentBridge:
                 env_dir = os.path.dirname(env_file)
                 os.makedirs(env_dir, exist_ok=True)
 
-                with open(env_file, 'w', encoding='utf-8') as f:
-                    f.write('# Environment variables for agent\n')
-                    f.write('# Auto-managed - synced from config.json on startup\n\n')
+                with open(env_file, "w", encoding="utf-8") as f:
+                    f.write("# Environment variables for agent\n")
+                    f.write("# Auto-managed - synced from config.json on startup\n\n")
                     for key, value in sorted(existing_env_vars.items()):
-                        f.write(f'{key}={value}\n')
+                        f.write(f"{key}={value}\n")
 
                 logger.info(f"[AgentBridge] Synced API keys from config.json to .env")
             except Exception as e:
                 logger.warning(f"[AgentBridge] Failed to sync API keys: {e}")
-    
+
     def _pre_persist_user_message(
         self,
         session_id: str,
@@ -1167,6 +1242,7 @@ class AgentBridge:
             return False
         try:
             from config import conf
+
             if not conf().get("conversation_persistence", True):
                 return False
             store = self.get_conversation_store(agent_id)
@@ -1209,6 +1285,7 @@ class AgentBridge:
             return
         try:
             from config import conf
+
             if not conf().get("conversation_persistence", True):
                 return
             # When deep-thinking display is disabled, strip "thinking" content
@@ -1235,8 +1312,10 @@ class AgentBridge:
 
         try:
             stored = self.get_conversation_store(agent_id).append_messages(
-                session_id, messages_to_store, channel_type=channel_type,
-                create_if_missing=create_if_missing
+                session_id,
+                messages_to_store,
+                channel_type=channel_type,
+                create_if_missing=create_if_missing,
             )
             if not stored and not create_if_missing:
                 logger.info(
@@ -1281,6 +1360,7 @@ class AgentBridge:
         from bloating one entry.
         """
         from config import conf
+
         if not conf().get("scheduler_inject_to_session", True):
             return
         if not session_id or not content:
@@ -1303,7 +1383,9 @@ class AgentBridge:
         # scheduler pairs in DB, then sync the in-memory agent.messages buffer.
         self._persist_messages(session_id, messages, channel_type, agent_id)
 
-        keep_last_n = max(int(conf().get("scheduler_inject_max_per_session", 3) or 0), 0)
+        keep_last_n = max(
+            int(conf().get("scheduler_inject_max_per_session", 3) or 0), 0
+        )
         try:
             deleted = self.get_conversation_store(agent_id).prune_scheduled_messages(
                 session_id, keep_last_n=keep_last_n
@@ -1454,7 +1536,8 @@ class AgentBridge:
                 cleaned.append(msg)
                 continue
             filtered_blocks = [
-                b for b in content
+                b
+                for b in content
                 if not (isinstance(b, dict) and b.get("type") == "thinking")
             ]
             if len(filtered_blocks) == len(content):
@@ -1499,7 +1582,7 @@ class AgentBridge:
                 self.agents.clear()
                 self.default_agent = None
         return len(keys)
-    
+
     def clear_all_sessions(self):
         """Clear all agent sessions"""
         with self._agents_lock:
@@ -1509,7 +1592,7 @@ class AgentBridge:
             self._default_agents.clear()
             self.agents.clear()
             self.default_agent = None
-    
+
     def refresh_all_skills(self) -> int:
         """
         Refresh skills and conditional tools in all agent instances after
@@ -1529,15 +1612,21 @@ class AgentBridge:
         # caller happens to be routed to.
         for agent_id, session_id, agent in self.iter_agent_instances():
             workspace_root = getattr(agent, "workspace_dir", None)
-            env_file = str(workspace_env_file(base=workspace_root)) if workspace_root else None
-            if env_file and env_file not in loaded_env_files and os.path.exists(env_file):
+            env_file = (
+                str(workspace_env_file(base=workspace_root)) if workspace_root else None
+            )
+            if (
+                env_file
+                and env_file not in loaded_env_files
+                and os.path.exists(env_file)
+            ):
                 load_dotenv(env_file, override=True)
                 loaded_env_files.add(env_file)
                 logger.info(
                     f"[AgentBridge] Reloaded environment variables from {env_file}"
                 )
             # Refresh skills
-            if hasattr(agent, 'skill_manager') and agent.skill_manager:
+            if hasattr(agent, "skill_manager") and agent.skill_manager:
                 agent.skill_manager.refresh_skills()
 
             # Refresh conditional tools (e.g. web_search depends on API keys)
@@ -1546,7 +1635,9 @@ class AgentBridge:
             refreshed_count += 1
 
         if refreshed_count > 0:
-            logger.info(f"[AgentBridge] Refreshed skills & tools in {refreshed_count} agent instance(s)")
+            logger.info(
+                f"[AgentBridge] Refreshed skills & tools in {refreshed_count} agent instance(s)"
+            )
 
         return refreshed_count
 
@@ -1568,10 +1659,14 @@ class AgentBridge:
                 tool = WebSearch()
                 tool.model = agent.model
                 agent.tools.append(tool)
-                logger.info("[AgentBridge] web_search tool added (API key now available)")
+                logger.info(
+                    "[AgentBridge] web_search tool added (API key now available)"
+                )
             elif not available and has_tool:
                 # API key was removed - remove the tool
                 agent.tools = [t for t in agent.tools if t.name != "web_search"]
-                logger.info("[AgentBridge] web_search tool removed (API key no longer available)")
+                logger.info(
+                    "[AgentBridge] web_search tool removed (API key no longer available)"
+                )
         except Exception as e:
             logger.debug(f"[AgentBridge] Failed to refresh conditional tools: {e}")
