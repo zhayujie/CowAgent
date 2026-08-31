@@ -12,6 +12,7 @@ import type {
   SessionsPage,
   SessionSettingsState,
   HistoryPage,
+  ContextUsage,
   ModelsData,
   ModelsAction,
   KnowledgeList,
@@ -370,6 +371,10 @@ class ApiClient {
 
   async clearContext(sessionId: string): Promise<{ status: string; context_start_seq: number }> {
     return this.request(`/api/sessions/${encodeURIComponent(sessionId)}/clear_context`, { method: 'POST' })
+  }
+
+  async getContextUsage(sessionId: string): Promise<{ status: string } & ContextUsage> {
+    return this.request(`/api/sessions/${encodeURIComponent(sessionId)}/context_usage`)
   }
 
   async getHistory(sessionId: string, page = 1, pageSize = 20): Promise<HistoryPage> {

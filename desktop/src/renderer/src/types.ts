@@ -408,6 +408,28 @@ export interface HistoryPage {
   context_start_seq?: number
 }
 
+/** Heuristic breakdown of what is occupying the session's context window.
+ *  `available` is false when the session has no live agent yet (fresh session,
+ *  or one just cleared) — the other fields are then absent. */
+export interface ContextUsage {
+  available: boolean
+  estimated?: boolean
+  model?: string | null
+  /** Model's total context window (input + output). */
+  window?: number
+  /** Input budget the trimmer targets — the denominator for the chart. */
+  limit?: number
+  /** system + tools + history. May exceed `limit`: tool schemas are not budgeted. */
+  used?: number
+  messages?: number
+  breakdown?: {
+    system: number
+    tools: number
+    history: number
+    free: number
+  }
+}
+
 // ============================================================
 // Config
 // ============================================================

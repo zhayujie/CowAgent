@@ -2006,6 +2006,7 @@ class WebChannel(ChatChannel):
             '/api/sessions/(.*)/generate_title', 'SessionTitleHandler',
             '/api/prompt/optimize', 'PromptOptimizeHandler',
             '/api/sessions/(.*)/clear_context', 'SessionClearContextHandler',
+            '/api/sessions/(.*)/context_usage', 'SessionContextUsageHandler',
             '/api/sessions/(.*)/settings', 'SessionSettingsHandler',
             '/api/sessions/(.*)', 'SessionDetailHandler',
             '/api/history', 'HistoryHandler',
@@ -6239,6 +6240,33 @@ class SessionClearContextHandler:
             return json.dumps({"status": "success", "context_start_seq": new_seq})
         except Exception as e:
             logger.error(f"[WebChannel] Clear context error: {e}")
+            return json.dumps({"status": "error", "message": str(e)})
+
+
+class SessionContextUsageHandler:
+    def GET(self, session_id: str):
+        _require_auth()
+        web.header('Content-Type', 'application/json; charset=utf-8')
+        try:
+            if not session_id:
+                return json.dumps({"status": "error", "message": "session_id required"})
+
+            from bridge.bridge import Bridge
+            bridge = Bridge()
+            ab = bridge.get_agent_bridge()
+            # peek_agent, not get_agent: the latter builds the agent on miss
+            # (MCP + skills), and this endpoint is called on hover.
+            agent = ab.peek_agent(session_id)
+            if agent is None:
+                # No live context yet — a fresh session, or one just cleared
+                # (clear_context drops the instance).
+                return json.dumps({"status": "success", "available": False})
+
+            usage = agent.get_context_usage()
+            usage["status"] = "success"
+            return json.dumps(usage)
+        except Exception as e:
+            logger.error(f"[WebChannel] Context usage error: {e}")
             return json.dumps({"status": "error", "message": str(e)})
 
 

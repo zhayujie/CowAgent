@@ -2119,6 +2119,117 @@
     opacity: 1;
 }
 
+/* Context-usage popover on the clear-context button. A body-level fixed card
+   (like .cfg-tip-floating) that hosts an inline SVG donut, so it renders
+   regardless of the composer's overflow and only shows when data has loaded. */
+.ctx-usage-pop {
+    position: fixed;
+    width: 248px;
+    padding: 12px;
+    border-radius: 12px;
+    font-size: 12px;
+    line-height: 1.4;
+    background: #ffffff;
+    color: #0f172a;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 12px 28px rgba(0,0,0,0.14);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s;
+    z-index: 9999;
+}
+.dark .ctx-usage-pop {
+    background: #1e293b;
+    color: #f1f5f9;
+    border-color: #334155;
+}
+.ctx-usage-pop.show {
+    opacity: 1;
+}
+.ctx-usage-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
+.ctx-usage-title {
+    font-weight: 600;
+}
+.ctx-usage-est {
+    font-size: 10px;
+    color: #64748b;
+}
+.dark .ctx-usage-est {
+    color: #94a3b8;
+}
+.ctx-usage-donut-wrap {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    margin-bottom: 8px;
+}
+.ctx-usage-donut-wrap svg {
+    display: block;
+}
+.ctx-usage-pct {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 14px;
+    font-weight: 600;
+}
+.ctx-usage-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    margin-bottom: 4px;
+}
+.ctx-usage-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+    flex-shrink: 0;
+}
+.ctx-usage-label {
+    flex: 1;
+    color: #475569;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.dark .ctx-usage-label {
+    color: #cbd5e1;
+}
+.ctx-usage-val {
+    font-variant-numeric: tabular-nums;
+    color: #0f172a;
+}
+.dark .ctx-usage-val {
+    color: #f1f5f9;
+}
+.ctx-usage-foot {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid #e2e8f0;
+    font-size: 10px;
+    color: #64748b;
+    font-variant-numeric: tabular-nums;
+}
+.dark .ctx-usage-foot {
+    border-top-color: #334155;
+    color: #94a3b8;
+}
+.ctx-usage-empty {
+    color: #64748b;
+    padding: 8px 0;
+    min-height: 24px;
+}
+.dark .ctx-usage-empty {
+    color: #94a3b8;
+}
+
 /* Example cards: equal height via flex stretch + fixed 2-line description area */
 .example-card {
     display: flex;

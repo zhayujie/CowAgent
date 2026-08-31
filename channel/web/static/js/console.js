@@ -303,6 +303,15 @@ const I18N = {
         context_cleared: '— 以上内容已从上下文中移除 —',
         tip_new_chat: '新建对话',
         tip_clear_context: '清除上下文',
+        ctx_usage_title: '上下文用量',
+        ctx_system: '系统提示词',
+        ctx_tools: '工具定义',
+        ctx_history: '对话历史',
+        ctx_free: '剩余可用',
+        ctx_used_of: '已用 {used} / {limit}',
+        ctx_estimated: '估算值',
+        ctx_empty: '当前会话尚未建立上下文',
+        ctx_error: '无法获取上下文用量',
         tip_attach: '添加附件',
         tip_cancel: '中止',
         tip_cancelled: '已中止',
@@ -626,6 +635,15 @@ const I18N = {
         context_cleared: '— 以上內容已從上下文中移除 —',
         tip_new_chat: '新建對話',
         tip_clear_context: '清除上下文',
+        ctx_usage_title: '上下文用量',
+        ctx_system: '系統提示詞',
+        ctx_tools: '工具定義',
+        ctx_history: '對話歷史',
+        ctx_free: '剩餘可用',
+        ctx_used_of: '已用 {used} / {limit}',
+        ctx_estimated: '估算值',
+        ctx_empty: '目前會話尚未建立上下文',
+        ctx_error: '無法取得上下文用量',
         tip_attach: '新增附件',
         tip_cancel: '中止',
         tip_cancelled: '已中止',
@@ -944,6 +962,15 @@ const I18N = {
         context_cleared: '— Context above has been cleared —',
         tip_new_chat: 'New Chat',
         tip_clear_context: 'Clear Context',
+        ctx_usage_title: 'Context usage',
+        ctx_system: 'System prompt',
+        ctx_tools: 'Tool definitions',
+        ctx_history: 'Conversation',
+        ctx_free: 'Free',
+        ctx_used_of: '{used} / {limit} used',
+        ctx_estimated: 'estimated',
+        ctx_empty: 'No context built for this session yet',
+        ctx_error: 'Could not load context usage',
         tip_attach: 'Add Attachment',
         tip_cancel: 'Cancel',
         tip_cancelled: 'Cancelled',
@@ -1032,6 +1059,7 @@ function applyI18n() {
         el.setAttribute('data-tooltip', t(el.dataset.tipKey));
     });
     installCfgTipPortal();
+    installContextUsagePopover();
     
     // Clear any status messages when language changes
     document.querySelectorAll('[id$="-status"]').forEach(el => {
@@ -1239,6 +1267,141 @@ function installCfgTipPortal() {
     // Hide on scroll/resize so the tooltip doesn't drift away from its anchor.
     window.addEventListener('scroll', hideTip, true);
     window.addEventListener('resize', hideTip);
+}
+
+// =====================================================================
+// Context usage popover (hover on the clear-context button)
+// =====================================================================
+// Body-level floating card that shows a pie of what is occupying the current
+// session's context window, fetched from /api/sessions/{sid}/context_usage on
+// hover. Reuses the portal approach of installCfgTipPortal so the composer's
+// overflow can't clip it; unlike the text tooltips it renders innerHTML (an
+// inline SVG donut).
+let _ctxUsageEl = null;
+let _ctxUsageInstalled = false;
+const _CTX_SLICE_COLORS = {
+    system: '#228547',
+    tools: '#4ABE6E',
+    history: '#f59e0b',
+    free: '#64748b',
+};
+const _CTX_LEGEND = [
+    { key: 'system', labelKey: 'ctx_system' },
+    { key: 'tools', labelKey: 'ctx_tools' },
+    { key: 'history', labelKey: 'ctx_history' },
+    { key: 'free', labelKey: 'ctx_free' },
+];
+function _ctxFmtTokens(n) {
+    if (n < 1000) return String(n);
+    if (n < 10000) return (n / 1000).toFixed(1) + 'k';
+    return Math.round(n / 1000) + 'k';
+}
+function _ctxDonutSvg(slices) {
+    const size = 96, stroke = 12, r = (size - stroke) / 2, c = 2 * Math.PI * r;
+    const total = slices.reduce((s, x) => s + Math.max(0, x.value), 0);
+    const parts = [];
+    let offset = 0;
+    slices.forEach((s) => {
+        const frac = total > 0 ? Math.max(0, s.value) / total : 0;
+        if (frac > 0) {
+            parts.push(
+                '<circle cx="' + size / 2 + '" cy="' + size / 2 + '" r="' + r +
+                '" fill="none" stroke="' + _CTX_SLICE_COLORS[s.key] +
+                '" stroke-width="' + stroke +
+                '" stroke-dasharray="' + (frac * c) + ' ' + c +
+                '" stroke-dashoffset="' + (-offset * c) + '"></circle>'
+            );
+        }
+        offset += frac;
+    });
+    return '<svg width="' + size + '" height="' + size +
+        '" viewBox="0 0 ' + size + ' ' + size + '">' +
+        '<g transform="rotate(-90 ' + size / 2 + ' ' + size / 2 + ')">' +
+        parts.join('') + '</g></svg>';
+}
+function _ctxRenderCard(usage) {
+    if (!usage || usage.status === 'error') {
+        return '<div class="ctx-usage-empty">' + t('ctx_error') + '</div>';
+    }
+    if (!usage.available || !usage.breakdown) {
+        return '<div class="ctx-usage-empty">' + t('ctx_empty') + '</div>';
+    }
+    const b = usage.breakdown;
+    const limit = usage.limit || 0;
+    const used = usage.used || 0;
+    const percent = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0;
+    const slices = _CTX_LEGEND.map((l) => ({ key: l.key, value: b[l.key] || 0 }));
+    const rows = _CTX_LEGEND.map((l) =>
+        '<div class="ctx-usage-row">' +
+        '<span class="ctx-usage-dot" style="background:' + _CTX_SLICE_COLORS[l.key] + '"></span>' +
+        '<span class="ctx-usage-label">' + t(l.labelKey) + '</span>' +
+        '<span class="ctx-usage-val">' + _ctxFmtTokens(b[l.key] || 0) + '</span>' +
+        '</div>'
+    ).join('');
+    const usedLine = t('ctx_used_of')
+        .replace('{used}', _ctxFmtTokens(used))
+        .replace('{limit}', _ctxFmtTokens(limit));
+    return (
+        '<div class="ctx-usage-head">' +
+        '<span class="ctx-usage-title">' + t('ctx_usage_title') + '</span>' +
+        (usage.estimated ? '<span class="ctx-usage-est">' + t('ctx_estimated') + '</span>' : '') +
+        '</div>' +
+        '<div class="ctx-usage-donut-wrap">' + _ctxDonutSvg(slices) +
+        '<span class="ctx-usage-pct">' + percent + '%</span></div>' +
+        '<div class="ctx-usage-legend">' + rows + '</div>' +
+        '<div class="ctx-usage-foot">' + usedLine + '</div>'
+    );
+}
+function installContextUsagePopover() {
+    if (_ctxUsageInstalled) return;
+    _ctxUsageInstalled = true;
+
+    const btn = document.getElementById('clear-context-btn');
+    if (!btn) return;
+
+    _ctxUsageEl = document.createElement('div');
+    _ctxUsageEl.className = 'ctx-usage-pop';
+    document.body.appendChild(_ctxUsageEl);
+
+    let timer = null;
+    let open = false;
+
+    const position = () => {
+        const rect = btn.getBoundingClientRect();
+        const elRect = _ctxUsageEl.getBoundingClientRect();
+        let left = rect.left + rect.width / 2 - elRect.width / 2;
+        left = Math.max(8, Math.min(left, window.innerWidth - elRect.width - 8));
+        _ctxUsageEl.style.left = left + 'px';
+        _ctxUsageEl.style.top = (rect.top - elRect.height - 6) + 'px';
+    };
+
+    btn.addEventListener('mouseenter', () => {
+        clearTimeout(timer);
+        timer = setTimeout(() => {
+            open = true;
+            _ctxUsageEl.innerHTML = '<div class="ctx-usage-empty">…</div>';
+            _ctxUsageEl.classList.add('show');
+            position();
+            fetch('/api/sessions/' + encodeURIComponent(sessionId) + '/context_usage')
+                .then((r) => r.json())
+                .then((data) => {
+                    if (open) {
+                        _ctxUsageEl.innerHTML = _ctxRenderCard(data);
+                        position();
+                    }
+                })
+                .catch(() => {
+                    if (open) _ctxUsageEl.innerHTML = _ctxRenderCard({ status: 'error' });
+                });
+        }, 120);
+    });
+    btn.addEventListener('mouseleave', () => {
+        clearTimeout(timer);
+        open = false;
+        _ctxUsageEl.classList.remove('show');
+    });
+    window.addEventListener('scroll', () => _ctxUsageEl.classList.remove('show'), true);
+    window.addEventListener('resize', () => _ctxUsageEl.classList.remove('show'));
 }
 
 // =====================================================================
@@ -5611,7 +5774,9 @@ function _applyInputTooltips() {
         if (pos) el.setAttribute('data-tooltip-pos', pos);
     };
     set('new-chat-btn', 'tip_new_chat');
-    set('clear-context-btn', 'tip_clear_context');
+    // #clear-context-btn gets a rich hover popover (context-usage chart) instead
+    // of the plain text tooltip, so it must not carry a data-tooltip here —
+    // otherwise both would pop at once.
     set('attach-btn', 'tip_attach');
     set('steer-btn', 'steer_active');
     set('session-toggle-btn', 'session_history', 'bottom');

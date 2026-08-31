@@ -546,6 +546,27 @@ class AgentBridge:
             if token is not None:
                 clear_agent_run_id(token)
 
+    def peek_agent(self, session_id: str, agent_id: str = None) -> Optional[Agent]:
+        """Return the session's live agent, or None if it has not been built.
+
+        The read-only counterpart to `get_agent`, which initializes an agent on
+        miss — spinning up MCP connections and skills. Callers that only want to
+        inspect existing state (the context-usage endpoint hovers on this) must
+        use this instead, and must tolerate None. Deliberately skips
+        `_apply_session_project` / `apply_session_prefs`: both mutate the agent.
+
+        :param session_id: Session identifier
+        :param agent_id: Agent profile identifier. Omit for the configured default.
+        :return: The existing Agent instance, or None.
+        """
+        if not session_id:
+            return None
+        resolved_agent_id = self._resolve_agent_id(agent_id)
+        with self._agents_lock:
+            return self._agent_instances.get(
+                self._runtime_key(resolved_agent_id, session_id)
+            )
+
     @staticmethod
     def _runtime_key(agent_id: str, session_id: str) -> Tuple[str, str]:
         return agent_id, session_id

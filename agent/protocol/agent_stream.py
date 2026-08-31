@@ -136,6 +136,30 @@ def _cut_off_message(cause: str, tool_name: Optional[str]) -> str:
     return message
 
 
+def build_tools_schema(tools: list) -> list:
+    """Build the tool definitions handed to the LLM.
+
+    Prefer get_json_schema() when it yields real properties (lets tools augment
+    schema at runtime), otherwise fall back to the static `tool.params` (MCP
+    tools rely on this).
+    """
+    tools_schema = []
+    for tool in tools or []:
+        input_schema = tool.params
+        try:
+            dynamic = (tool.get_json_schema() or {}).get("parameters") or {}
+            if dynamic.get("properties"):
+                input_schema = dynamic
+        except Exception:
+            pass
+        tools_schema.append({
+            "name": tool.name,
+            "description": tool.description,
+            "input_schema": input_schema,
+        })
+    return tools_schema
+
+
 def _parse_tool_args(args_str: str, finish_reason: Optional[str],
                      tool_name: Optional[str] = None) -> Tuple[dict, Optional[str]]:
     """Parse tool args JSON. Returns (args, error_msg); error_msg is None on success.
@@ -1184,25 +1208,11 @@ class AgentStreamExecutor:
         except Exception as e:
             logger.debug(f"[Agent] MCP sync skipped: {e}")
 
-        # Prepare tool definitions. Prefer get_json_schema() when it yields
-        # real properties (lets tools augment schema at runtime), otherwise
-        # fall back to the static `tool.params` (MCP tools rely on this).
+        # Prepare tool definitions. Kept as None (rather than []) when the agent
+        # has no tools at all, which is what LLMRequest expects.
         tools_schema = None
         if self.tools:
-            tools_schema = []
-            for tool in self._select_tools_for_injection():
-                input_schema = tool.params
-                try:
-                    dynamic = (tool.get_json_schema() or {}).get("parameters") or {}
-                    if dynamic.get("properties"):
-                        input_schema = dynamic
-                except Exception:
-                    pass
-                tools_schema.append({
-                    "name": tool.name,
-                    "description": tool.description,
-                    "input_schema": input_schema,
-                })
+            tools_schema = build_tools_schema(self._select_tools_for_injection())
 
         # Debug: dump the full system prompt and messages sent to the LLM.
         # Gated behind `debug` config to avoid flooding normal logs.

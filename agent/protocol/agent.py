@@ -422,6 +422,68 @@ class Agent:
         # CJK chars: ~1.5 tokens each; ASCII: ~0.25 tokens per char
         return int(non_ascii * 1.5 + ascii_count * 0.25) + 1
 
+    def get_context_usage(self) -> dict:
+        """Break the live context down into what is consuming it.
+
+        Powers the context-usage chart on the UI's clear-context button, so it
+        must stay cheap: it reads the already-assembled prompt and the in-memory
+        message list, and never rebuilds either. Counts are the same heuristic
+        estimates the trimmer budgets against (`_estimate_*`), not real
+        tokenizer output — hence `estimated` in the payload.
+
+        `used` may exceed `limit`: the trimmer budgets the system prompt and
+        history but not the tool schemas, which still occupy the window.
+
+        :return: Usage dict with a `breakdown` of system/tools/history/free.
+        """
+        # The cached prompt is what actually goes out (agent_stream passes
+        # `self.system_prompt` straight to LLMRequest), so counting the cached
+        # value is both correct and free. get_full_system_prompt() would re-read
+        # AGENT.md and refresh skills — far too heavy for a hover.
+        system_tokens = self._estimate_text_tokens(self.system_prompt or "")
+
+        # Approximates the executor's `_select_tools_for_injection()`, which is
+        # only reachable mid-run; availability filtering matches the tool list
+        # described in the prompt (see get_full_system_prompt).
+        try:
+            from agent.protocol.agent_stream import build_tools_schema
+
+            schema = build_tools_schema([t for t in self.tools if is_tool_available(t)])
+            # Guard the estimator's floor of 1 so "no tools" charts as nothing.
+            tools_tokens = (
+                self._estimate_text_tokens(json.dumps(schema, ensure_ascii=False))
+                if schema else 0
+            )
+        except Exception as e:
+            logger.debug(f"[Agent] Tool schema estimate skipped: {e}")
+            tools_tokens = 0
+
+        history_tokens = sum(self._estimate_message_tokens(m) for m in self.messages)
+
+        # Mirrors the budget in AgentStreamExecutor._trim_messages.
+        context_window = self._get_model_context_window()
+        input_ceiling = max(1, context_window - self._get_output_reserve_tokens())
+        limit = min(self.max_context_tokens, input_ceiling) if self.max_context_tokens else input_ceiling
+
+        used = system_tokens + tools_tokens + history_tokens
+        model_name = getattr(self.model, "model", None) if self.model else None
+
+        return {
+            "available": True,
+            "estimated": True,
+            "model": model_name,
+            "window": context_window,
+            "limit": limit,
+            "used": used,
+            "messages": len(self.messages),
+            "breakdown": {
+                "system": system_tokens,
+                "tools": tools_tokens,
+                "history": history_tokens,
+                "free": max(0, limit - used),
+            },
+        }
+
     def _find_tool(self, tool_name: str):
         """Find and return a tool with the specified name"""
         for tool in self.tools:

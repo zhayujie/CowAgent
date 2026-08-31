@@ -22,6 +22,7 @@ import WorkspaceSelector from './WorkspaceSelector'
 import PermissionSelector from './PermissionSelector'
 import ModelSelector from './ModelSelector'
 import Tooltip from './Tooltip'
+import ContextUsagePopover from './ContextUsagePopover'
 import { useSessionSettingsStore } from '../store/sessionSettingsStore'
 
 export type ChatInputHandle = (text: string, attachments: Attachment[]) => void
@@ -777,14 +778,15 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
               {uploading ? <Loader2 size={17} className="animate-spin" /> : <Paperclip size={17} />}
             </button>
           </Tooltip>
-          <Tooltip label={t('chat_clear_context')}>
+          <ContextUsagePopover sessionId={sessionId}>
             <button
               onClick={onClearContext}
+              title={t('chat_clear_context')}
               className="shrink-0 w-8 h-8 flex items-center justify-center rounded-btn text-content-secondary hover:text-danger hover:bg-danger-soft cursor-pointer transition-colors"
             >
               <Trash2 size={17} />
             </button>
-          </Tooltip>
+          </ContextUsagePopover>
 
           <div className="mx-1 h-4 w-px bg-default shrink-0" />
 
