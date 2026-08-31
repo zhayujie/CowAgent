@@ -114,11 +114,12 @@ class AgentInitializer:
             runtime_info=runtime_info,
         )
         
-        # Get cost control parameters
+        # Get cost control parameters. The context budget is derived from the
+        # effective model's context window (see Agent._get_model_context_window),
+        # so only the step limit is user-configured here.
         from config import conf
         max_steps = conf().get("agent_max_steps", 20)
-        max_context_tokens = conf().get("agent_max_context_tokens", 50000)
-        
+
         # Create agent
         agent = self.agent_bridge.create_agent(
             system_prompt=system_prompt,
@@ -128,7 +129,6 @@ class AgentInitializer:
             workspace_dir=workspace_root,
             skill_manager=skill_manager,
             enable_skills=True,
-            max_context_tokens=max_context_tokens,
             runtime_info=runtime_info  # Pass runtime_info for dynamic time updates
         )
         

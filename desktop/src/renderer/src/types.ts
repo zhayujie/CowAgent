@@ -447,7 +447,6 @@ export interface ConfigData {
   bot_type: string
   use_linkai: boolean
   channel_type: string
-  agent_max_context_tokens: number
   agent_max_context_turns: number
   agent_max_steps: number
   /** Global default permission for sessions that have not picked one. */
@@ -478,6 +477,18 @@ export interface ModelOption {
 }
 export type ModelEntry = string | ModelOption
 
+// Capability tags a catalog model carries: which tool positions it appears
+// in. "text" marks a conversational model (main-model / switcher candidate).
+export type ModelCapability = 'text' | 'vision' | 'video' | 'image' | 'embedding' | 'asr' | 'tts'
+
+// One user-managed entry in a provider's model catalog.
+export interface ModelCatalogEntry {
+  name: string
+  capabilities: ModelCapability[]
+  context_window?: number
+  max_output_tokens?: number
+}
+
 export interface ModelProvider {
   id: string
   label: LocalizedLabel
@@ -492,6 +503,9 @@ export interface ModelProvider {
   api_base?: string
   api_base_default?: string
   api_base_placeholder?: string
+  catalog?: ModelCatalogEntry[]
+  /** Preset models pre-typed with their real capabilities (built-in vendors). */
+  seed?: ModelCatalogEntry[]
   models: ModelEntry[]
 }
 
@@ -569,6 +583,7 @@ export type ModelsAction =
   | { action: 'delete_custom_provider'; id: string }
   | { action: 'set_active_custom_provider'; id: string }
   | { action: 'set_capability'; capability: CapabilityKey; provider_id?: string; model?: string; voice?: string; strategy?: string; provider?: string }
+  | { action: 'save_catalog'; provider_id: string; models: ModelCatalogEntry[] }
   | { action: 'set_voice_reply_mode'; mode: 'off' | 'voice_if_voice' | 'always' }
   | { action: 'set_search_credential'; api_key: string }
 

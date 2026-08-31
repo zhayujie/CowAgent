@@ -36,6 +36,7 @@ from config import (
     read_config_template,
     sync_image_generation_custom_provider_env,
 )
+from models import model_catalog
 from models.reasoning_capabilities import provider_reasoning_metadata
 from agent.permission import (
     MODES as PERMISSION_MODES,
@@ -2639,7 +2640,7 @@ class ConfigHandler:
         "zhipu_ai_api_key", "dashscope_api_key", "moonshot_api_key",
         "ark_api_key", "minimax_api_key", "linkai_api_key", "custom_api_key", "mimo_api_key",
         "custom_providers",
-        "agent_max_context_tokens", "agent_max_context_turns", "agent_max_steps",
+        "agent_max_context_turns", "agent_max_steps",
         "enable_thinking", "reasoning_effort", "reasoning_effort_by_model", "self_evolution_enabled", "web_password",
         "agent_permission_mode",
     }
@@ -2739,7 +2740,6 @@ class ConfigHandler:
                 "bot_type": "openai" if local_config.get("bot_type") == "chatGPT" else local_config.get("bot_type", ""),
                 "use_linkai": bool(local_config.get("use_linkai", False)),
                 "channel_type": local_config.get("channel_type", ""),
-                "agent_max_context_tokens": local_config.get("agent_max_context_tokens", 50000),
                 "agent_max_context_turns": local_config.get("agent_max_context_turns", 20),
                 "agent_max_steps": local_config.get("agent_max_steps", 20),
                 "enable_thinking": bool(local_config.get("enable_thinking", False)),
@@ -2786,7 +2786,7 @@ class ConfigHandler:
                     continue
                 if key not in self.EDITABLE_KEYS:
                     continue
-                if key in ("agent_max_context_tokens", "agent_max_context_turns", "agent_max_steps"):
+                if key in ("agent_max_context_turns", "agent_max_steps"):
                     value = int(value)
                 if key in ("use_linkai", "enable_thinking", "self_evolution_enabled"):
                     value = bool(value)
@@ -3327,6 +3327,7 @@ class ModelsHandler:
         _, active_id = parse_custom_bot_type(bot_type)
 
         meta = ConfigHandler.PROVIDER_MODELS.get("custom") or {}
+        catalog_map = model_catalog.get_catalog_map()
         cards = []
         for p in providers:
             pid = p.get("id") or ""
@@ -3334,6 +3335,7 @@ class ModelsHandler:
             raw_key = p.get("api_key") or ""
             raw_base = p.get("api_base") or ""
             configured = cls._is_real_key(raw_key)
+            catalog = catalog_map.get(f"custom:{pid}") or []
             cards.append({
                 "id": f"custom:{pid}",
                 "label": {"zh": name, "en": name},
@@ -3352,7 +3354,9 @@ class ModelsHandler:
                 "api_base": raw_base,
                 "api_base_default": "",
                 "api_base_placeholder": meta.get("api_base_placeholder") or "",
-                "models": [p.get("model")] if p.get("model") else [],
+                "catalog": catalog,
+                "models": ([e["name"] for e in catalog] if catalog
+                           else ([p.get("model")] if p.get("model") else [])),
             })
         return cards
 
@@ -3381,9 +3385,10 @@ class ModelsHandler:
         local_config = conf()
         custom_cards = cls._custom_provider_cards(local_config)
         # Keep the legacy single "custom" card visible alongside the expanded
-        # ones when the flat custom_api_key/base config is active or filled,
-        # so existing single-provider setups never disappear from the UI.
+        # ones when the flat custom_api_key/base config is still active or
+        # filled, so existing single-provider setups never disappear from the UI.
         keep_legacy_custom = cls._legacy_custom_in_use(local_config)
+        catalog_map = model_catalog.get_catalog_map()
         items = []
         for pid, p in ConfigHandler.PROVIDER_MODELS.items():
             if pid == "custom" and custom_cards:
@@ -3397,6 +3402,7 @@ class ModelsHandler:
             raw_key = local_config.get(key_field, "") if key_field else ""
             raw_base = local_config.get(base_field, "") if base_field else ""
             configured = cls._is_real_key(raw_key)
+            catalog = catalog_map.get(pid) or []
             items.append({
                 "id": pid,
                 "label": p["label"],
@@ -3408,7 +3414,12 @@ class ModelsHandler:
                 "api_base": raw_base or (p.get("api_base_default") or ""),
                 "api_base_default": p.get("api_base_default") or "",
                 "api_base_placeholder": p.get("api_base_placeholder") or "",
-                "models": list(p.get("models") or []),
+                "catalog": catalog,
+                # Preset models pre-typed with their real capabilities, used
+                # by the catalog editor as seed rows (before the user saves
+                # an explicit catalog).
+                "seed": [] if pid == "custom" else cls._preset_seed(pid),
+                "models": [e["name"] for e in catalog] if catalog else list(p.get("models") or []),
             })
 
         def _sort_key(it):
@@ -3523,6 +3534,9 @@ class ModelsHandler:
             "current_provider": provider_id,
             "current_model": local_config.get("model", ""),
             "providers": provider_ids,
+            # Chat has no preset model list (vendors' models[] drives the
+            # dropdown); a catalog narrows it to text-tagged entries.
+            "provider_models": cls._apply_catalog({}, "text", custom_cards),
             "use_linkai": bool(local_config.get("use_linkai", False)),
         }
 
@@ -3666,7 +3680,9 @@ class ModelsHandler:
             "fallback_provider": predicted["provider"],
             "fallback_model": predicted["model"],
             "providers": providers,
-            "provider_models": cls._VISION_PROVIDER_MODELS,
+            "provider_models": cls._apply_catalog(
+                cls._VISION_PROVIDER_MODELS, "vision", custom_cards
+            ),
         }
 
     @classmethod
@@ -3696,7 +3712,7 @@ class ModelsHandler:
             "suggested_provider": suggested,
             "current_model": (local_config.get("voice_to_text_model") or "") if explicit else "",
             "providers": providers,
-            "provider_models": cls._ASR_PROVIDER_MODELS,
+            "provider_models": cls._apply_catalog(cls._ASR_PROVIDER_MODELS, "asr", custom_cards),
         }
 
     @classmethod
@@ -3728,7 +3744,7 @@ class ModelsHandler:
             "current_model": (local_config.get("text_to_voice_model") or "") if ui_provider else "",
             "current_voice": (local_config.get("tts_voice_id") or "") if ui_provider else "",
             "providers": providers,
-            "provider_models": cls._TTS_PROVIDER_MODELS,
+            "provider_models": cls._apply_catalog(cls._TTS_PROVIDER_MODELS, "tts", custom_cards),
             "provider_voices": cls._TTS_PROVIDER_VOICES,
             "reply_mode": cls._tts_reply_mode(local_config),
         }
@@ -3785,7 +3801,7 @@ class ModelsHandler:
             "current_model": local_config.get("embedding_model", "") or "",
             "current_dim": int(local_config.get("embedding_dimensions") or 0) or None,
             "providers": providers,
-            "provider_models": cls._EMBEDDING_PROVIDER_MODELS,
+            "provider_models": cls._apply_catalog(cls._EMBEDDING_PROVIDER_MODELS, "embedding", custom_cards),
         }
 
     # Auto-fallback order for image generation. Mirrors the global priority
@@ -3892,7 +3908,7 @@ class ModelsHandler:
             "fallback_provider": predicted["provider"],
             "fallback_model": predicted["model"],
             "providers": providers,
-            "provider_models": cls._IMAGE_PROVIDER_MODELS,
+            "provider_models": cls._apply_catalog(cls._IMAGE_PROVIDER_MODELS, "image", custom_cards),
             "runtime_active": True,
         }
 
@@ -3993,6 +4009,135 @@ class ModelsHandler:
             "search":    cls._search_capability(local_config),
         }
 
+    @classmethod
+    def _apply_catalog(cls, presets: dict, capability, custom_cards=None) -> dict:
+        """Merge per-provider catalog overrides into a capability's model
+        list. A provider with a catalog offers its entries tagged with
+        `capability` ("text" for the main chat model). Providers without a
+        catalog keep the presets."""
+        merged = dict(presets)
+        catalog_map = model_catalog.get_catalog_map()
+        ids = [pid for pid in list(merged.keys()) + list(ConfigHandler.PROVIDER_MODELS.keys())
+               if pid != "custom"]
+        ids += [c["id"] for c in (custom_cards or [])]
+        for pid in dict.fromkeys(ids):  # dedupe, keep order
+            entries = catalog_map.get(pid)
+            if entries:
+                merged[pid] = [
+                    {"value": e["name"]} for e in entries
+                    if capability is None or capability in (e.get("capabilities") or [])
+                ]
+        return merged
+
+    # Researched specs (context window / max output) for built-in preset
+    # models, from the vendors' official docs. Optional "capabilities" unions
+    # extra tags the preset lists don't reflect yet (e.g. native-multimodal
+    # models). Fields left off fall back to auto-detection.
+    _PRESET_MODEL_META = {
+        "deepseek-v4-flash": {"context_window": 1000000, "max_output_tokens": 393216},
+        "deepseek-v4-pro": {"context_window": 1000000, "max_output_tokens": 393216},
+        "glm-5.3-flash": {"context_window": 1000000, "max_output_tokens": 131072},
+        "glm-5.3": {"context_window": 1000000, "max_output_tokens": 131072},
+        "glm-5.2": {"context_window": 1000000, "max_output_tokens": 131072},
+        "glm-5.1": {"context_window": 200000},
+        "glm-5-turbo": {"context_window": 200000},
+        "glm-5": {"context_window": 200000},
+        "glm-4.7": {"context_window": 200000},
+        "glm-5v-turbo": {"capabilities": ["text", "vision"]},
+        "qwen3.8-flash": {"context_window": 1000000},
+        "qwen3.8-max": {"context_window": 1000000},
+        "qwen3.7-plus": {"context_window": 1000000},
+        "qwen3.7-max": {"context_window": 1000000},
+        "qwen3.6-plus": {"context_window": 128000},
+        "kimi-k3": {"capabilities": ["text", "vision"], "context_window": 1048576},
+        "kimi-k2.7-code": {"context_window": 262144},
+        "kimi-k2.7-code-highspeed": {"context_window": 262144},
+        "kimi-k2.6": {"context_window": 262144},
+        "kimi-k2.5": {"context_window": 262144},
+        "doubao-seed-2-1-pro-260628": {"context_window": 256000, "max_output_tokens": 32000},
+        "doubao-seed-2-1-turbo-260628": {"context_window": 256000, "max_output_tokens": 32000},
+        "doubao-seed-2-0-pro-260215": {"context_window": 256000},
+        "doubao-seed-2-0-code-preview-260215": {"context_window": 256000},
+        "ernie-5.1": {"context_window": 128000},
+        "ernie-5.0": {"capabilities": ["text", "vision"], "context_window": 128000},
+        "ernie-x1.1": {"context_window": 64000},
+        "ernie-4.5-turbo-128k": {"context_window": 128000, "max_output_tokens": 16000},
+        "ernie-4.5-turbo-32k": {"context_window": 32000, "max_output_tokens": 16000},
+        "ernie-4.5-turbo-vl": {"capabilities": ["text", "vision"], "context_window": 128000, "max_output_tokens": 16000},
+        "MiniMax-M3": {"capabilities": ["text", "vision"], "context_window": 1000000, "max_output_tokens": 512000},
+        "MiniMax-M2.7": {"capabilities": ["text", "vision"], "context_window": 204800, "max_output_tokens": 196608},
+        "MiniMax-M2.7-highspeed": {"capabilities": ["text", "vision"], "context_window": 204800, "max_output_tokens": 196608},
+        "MiniMax-Text-01": {"context_window": 1000000},
+        "mimo-v2.5-pro": {"context_window": 1000000, "max_output_tokens": 131072},
+        "mimo-v2.5": {"context_window": 1000000, "max_output_tokens": 131072},
+        "gpt-5.6-luna": {"context_window": 1050000, "max_output_tokens": 128000},
+        "gpt-5.6-terra": {"context_window": 1050000, "max_output_tokens": 128000},
+        "gpt-5.6-sol": {"context_window": 1050000, "max_output_tokens": 128000},
+        "gpt-5.5": {"context_window": 1050000, "max_output_tokens": 128000},
+        "gpt-5.4": {"context_window": 1050000, "max_output_tokens": 128000},
+        "gpt-5.4-mini": {"context_window": 1050000, "max_output_tokens": 128000},
+        "gpt-5.4-nano": {"context_window": 1050000, "max_output_tokens": 128000},
+        "gpt-5": {"context_window": 400000, "max_output_tokens": 128000},
+        "gpt-4.1": {"context_window": 1047576, "max_output_tokens": 32768},
+        "gpt-4.1-mini": {"context_window": 1047576, "max_output_tokens": 32768},
+        "gpt-4o": {"context_window": 128000, "max_output_tokens": 16384},
+        "claude-opus-5": {"context_window": 1000000, "max_output_tokens": 128000},
+        "claude-sonnet-5": {"context_window": 1000000, "max_output_tokens": 128000},
+        "claude-fable-5": {"context_window": 1000000, "max_output_tokens": 128000},
+        "claude-opus-4-8": {"context_window": 200000, "max_output_tokens": 64000},
+        "claude-opus-4-7": {"context_window": 200000, "max_output_tokens": 64000},
+        "claude-sonnet-4-6": {"context_window": 200000, "max_output_tokens": 64000},
+        "claude-opus-4-6": {"context_window": 200000, "max_output_tokens": 64000},
+        "gemini-3.7-flash": {"context_window": 1048576, "max_output_tokens": 65536},
+        "gemini-3.6-flash": {"context_window": 1048576, "max_output_tokens": 65536},
+        "gemini-3.5-flash": {"context_window": 1048576, "max_output_tokens": 65536},
+        "gemini-3.1-flash-lite-preview": {"context_window": 1048576, "max_output_tokens": 65536},
+        "gemini-3.1-pro-preview": {"context_window": 1048576, "max_output_tokens": 65536},
+        "gemini-3-flash-preview": {"context_window": 1048576, "max_output_tokens": 65536},
+    }
+
+    @classmethod
+    def _preset_seed(cls, pid: str) -> List[dict]:
+        """Type-tagged catalog entries for a built-in vendor's preset models.
+
+        Membership in the per-capability preset lists IS the type: the chat
+        list -> "text", the vision list -> "vision", etc. Tags merge across
+        lists (gpt-4o -> text+vision, mimo-v2.5 -> text+vision+tts), so the
+        catalog editor seeds each preset with its real capabilities."""
+        merged: "OrderedDict[str, dict]" = OrderedDict()
+
+        def add(name, cap):
+            if not name:
+                return
+            entry = merged.setdefault(name, {"name": name, "capabilities": []})
+            if cap not in entry["capabilities"]:
+                entry["capabilities"].append(cap)
+
+        for m in ConfigHandler.PROVIDER_MODELS.get(pid, {}).get("models") or []:
+            add(m if isinstance(m, str) else m.get("value"), "text")
+        tables = (
+            ("vision", cls._VISION_PROVIDER_MODELS),
+            ("asr", cls._ASR_PROVIDER_MODELS),
+            ("tts", cls._TTS_PROVIDER_MODELS),
+            ("embedding", cls._EMBEDDING_PROVIDER_MODELS),
+            ("image", cls._IMAGE_PROVIDER_MODELS),
+        )
+        for cap, table in tables:
+            for m in table.get(pid) or []:
+                add(m if isinstance(m, str) else m.get("value"), cap)
+        for entry in merged.values():
+            extra = cls._PRESET_MODEL_META.get(entry["name"])
+            if not extra:
+                continue
+            for cap in extra.get("capabilities", []):
+                if cap not in entry["capabilities"]:
+                    entry["capabilities"].append(cap)
+            if extra.get("context_window"):
+                entry["context_window"] = extra["context_window"]
+            if extra.get("max_output_tokens"):
+                entry["max_output_tokens"] = extra["max_output_tokens"]
+        return list(merged.values())
+
     def GET(self):
         _require_auth()
         web.header("Content-Type", "application/json; charset=utf-8")
@@ -4025,6 +4170,8 @@ class ModelsHandler:
                 return self._handle_set_active_custom_provider(data)
             if action == "set_capability":
                 return self._handle_set_capability(data)
+            if action == "save_catalog":
+                return self._handle_save_catalog(data)
             if action == "set_voice_reply_mode":
                 return self._handle_set_voice_reply_mode(data)
             if action == "set_search_credential":
@@ -4296,6 +4443,7 @@ class ModelsHandler:
                 new_bot_type = "custom"  # revert to legacy
 
         self._persist_custom_providers(remaining, new_bot_type)
+        model_catalog.remove_catalog(f"custom:{provider_id}")
         logger.info(f"[ModelsHandler] custom provider id={provider_id} deleted")
         return json.dumps({"status": "success", "id": provider_id})
 
@@ -4314,6 +4462,22 @@ class ModelsHandler:
         self._persist_custom_providers(providers, new_bot_type)
         logger.info(f"[ModelsHandler] active custom provider set to id={provider_id}")
         return json.dumps({"status": "success", "active_id": provider_id})
+
+    def _handle_save_catalog(self, data: dict) -> str:
+        """Replace one provider's model catalog wholesale (empty list -> back
+        to presets). Metadata-only: no bridge reset needed, the budget and
+        max_output_tokens resolution read the catalog per call."""
+        provider_id = (data.get("provider_id") or "").strip()
+        if not provider_id:
+            return json.dumps({"status": "error", "message": "provider_id is required"})
+        if provider_id not in ConfigHandler.PROVIDER_MODELS and not provider_id.startswith("custom:"):
+            return json.dumps({"status": "error", "message": f"unknown provider: {provider_id}"})
+        try:
+            entries = model_catalog.save_catalog(provider_id, data.get("models"))
+        except ValueError as e:
+            return json.dumps({"status": "error", "message": str(e)})
+        logger.info(f"[ModelsHandler] catalog saved: provider={provider_id} models={len(entries)}")
+        return json.dumps({"status": "success", "provider_id": provider_id, "models": entries})
 
     def _handle_set_capability(self, data: dict) -> str:
         capability = (data.get("capability") or "").strip()
@@ -5982,6 +6146,7 @@ def _session_model_catalog() -> List[dict]:
     if local_config.get("use_linkai") and local_config.get("linkai_api_key"):
         active_provider = "linkai"
     active_model = str(local_config.get("model") or "").strip()
+    catalog_map = model_catalog.get_catalog_map()
 
     catalog: List[dict] = []
     for pid, pinfo in ConfigHandler.PROVIDER_MODELS.items():
@@ -5991,7 +6156,15 @@ def _session_model_catalog() -> List[dict]:
         has_key = bool(key_field and str(local_config.get(key_field) or "").strip())
         if not has_key and pid != active_provider:
             continue
-        models = list(pinfo["models"])
+        # A provider catalog replaces the preset list, filtered to entries
+        # tagged "text" — only those belong in the conversation switcher.
+        entries = catalog_map.get(pid)
+        if entries:
+            models = [e["name"] for e in entries if "text" in (e.get("capabilities") or [])]
+        else:
+            models = list(pinfo["models"])
+        if not models:
+            continue
         # The user can pin a custom model name to a built-in provider (via the
         # global config / capability "custom model" field). That model won't be
         # in the preset list, so surface it here for the active provider so the
@@ -6020,10 +6193,14 @@ def _session_model_catalog() -> List[dict]:
             has_key = bool(str(cp.get("api_key") or "").strip())
             if not has_key and not is_active:
                 continue
-            models = []
-            cp_model = str(cp.get("model") or "").strip()
-            if cp_model:
-                models.append(cp_model)
+            entries = catalog_map.get(pid)
+            if entries:
+                models = [e["name"] for e in entries if "text" in (e.get("capabilities") or [])]
+            else:
+                models = []
+                cp_model = str(cp.get("model") or "").strip()
+                if cp_model:
+                    models.append(cp_model)
             if is_active and active_model and active_model not in models:
                 models.insert(0, active_model)
             if not models:

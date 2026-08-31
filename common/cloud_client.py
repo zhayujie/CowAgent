@@ -937,7 +937,6 @@ def _build_config():
         "image_create_prefix": local_conf.get("image_create_prefix"),
         "model": local_conf.get("model"),
         "agent_max_context_turns": local_conf.get("agent_max_context_turns"),
-        "agent_max_context_tokens": local_conf.get("agent_max_context_tokens"),
         "agent_max_steps": local_conf.get("agent_max_steps"),
         # Self-evolution switch reported so the console can reflect state
         "self_evolution_enabled": "Y" if local_conf.get("self_evolution_enabled") else "N",

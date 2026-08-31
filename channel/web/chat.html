@@ -730,16 +730,6 @@
                                     <div class="space-y-4">
                                         <div>
                                             <label class="flex items-center gap-1.5 text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">
-                                                <span data-i18n="config_max_tokens">最大上下文 Token</span>
-                                                <span class="cfg-tip" data-tip-key="config_max_tokens_hint"><i class="fas fa-circle-question"></i></span>
-                                            </label>
-                                            <input id="cfg-max-tokens" type="number" min="1000" max="10000000" step="1000"
-                                                   class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600
-                                                          bg-slate-50 dark:bg-white/5 text-sm text-slate-800 dark:text-slate-100
-                                                          focus:outline-none focus:border-primary-500 font-mono transition-colors">
-                                        </div>
-                                        <div>
-                                            <label class="flex items-center gap-1.5 text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">
                                                 <span data-i18n="config_max_turns">最大记忆轮次</span>
                                                 <span class="cfg-tip" data-tip-key="config_max_turns_hint"><i class="fas fa-circle-question"></i></span>
                                             </label>
@@ -1458,6 +1448,15 @@
                             <i class="fas fa-info-circle mr-1"></i><span data-i18n="models_base_default_hint">留空将使用官方默认地址</span>
                         </p>
                     </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5" data-i18n="models_catalog">模型列表</label>
+                        <p class="text-xs text-slate-400 dark:text-slate-500 mb-2" data-i18n="models_catalog_hint"></p>
+                        <div id="vendor-modal-catalog" class="space-y-2"></div>
+                        <button id="vendor-modal-catalog-add" type="button"
+                                class="mt-2 inline-flex items-center gap-1 text-xs text-primary-500 hover:underline cursor-pointer">
+                            <i class="fas fa-plus text-[10px]"></i><span data-i18n="models_catalog_add">添加模型</span>
+                        </button>
+                    </div>
                 </div>
             </div>
             <div class="flex items-center justify-between gap-3 px-6 py-4 border-t border-slate-100 dark:border-white/5 rounded-b-2xl">
@@ -1518,6 +1517,15 @@
                                class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600
                                       bg-slate-50 dark:bg-white/5 text-sm text-slate-800 dark:text-slate-100
                                       focus:outline-none focus:border-primary-500 font-mono transition-colors">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5" data-i18n="models_catalog">模型列表</label>
+                        <p class="text-xs text-slate-400 dark:text-slate-500 mb-2" data-i18n="models_catalog_hint"></p>
+                        <div id="custom-provider-modal-catalog" class="space-y-2"></div>
+                        <button id="custom-provider-modal-catalog-add" type="button"
+                                class="mt-2 inline-flex items-center gap-1 text-xs text-primary-500 hover:underline cursor-pointer">
+                            <i class="fas fa-plus text-[10px]"></i><span data-i18n="models_catalog_add">添加模型</span>
+                        </button>
                     </div>
                 </div>
             </div>

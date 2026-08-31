@@ -43,16 +43,19 @@ const CapabilityCard: React.FC<CapabilityCardProps> = ({
 }) => {
   const [provider, setProvider] = useState(state.current_provider || '')
   const [model, setModel] = useState(state.current_model || '')
-  // Custom providers render the model as a free-form input; seed it with the
-  // saved model so it isn't blank (placeholder-only) on load.
+  // Custom providers render the model as a free-form input only while they
+  // have no catalog; once the vendor maintains a model catalog, the model is
+  // picked from a dropdown like any built-in vendor.
   const [customModel, setCustomModel] = useState(
     (state.current_provider || '').startsWith('custom:') ? state.current_model || '' : ''
   )
   const [showCustom, setShowCustom] = useState(false)
 
-  // Custom providers expose no preset model catalog, so the model must always
-  // be typed in freely instead of picked from an (empty) dropdown.
+  const providerHasCatalog = (id: string): boolean =>
+    !!data?.providers?.find((x) => x.id === id)?.catalog?.length
   const isCustomProvider = provider.startsWith('custom:')
+  // Free-form input only for custom vendors without a catalog.
+  const useFreeText = isCustomProvider && !providerHasCatalog(provider)
 
   // A provider is configured when it has credentials (a custom provider counts
   // only once it actually carries a name/key, not as an empty placeholder).
@@ -94,8 +97,9 @@ const CapabilityCard: React.FC<CapabilityCardProps> = ({
   const handleProvider = (id: string) => {
     setProvider(id)
     setShowCustom(false)
-    if (id.startsWith('custom:')) {
-      // Prefill with the saved model when re-selecting the same provider.
+    if (id.startsWith('custom:') && !providerHasCatalog(id)) {
+      // Catalog-less custom vendor: prefill the free-form input with the
+      // saved model when re-selecting the same provider.
       const saved = id === state.current_provider ? state.current_model || '' : ''
       setCustomModel(saved)
       setModel('')
@@ -117,7 +121,7 @@ const CapabilityCard: React.FC<CapabilityCardProps> = ({
     }
   }
 
-  const finalModel = showCustom || isCustomProvider ? customModel.trim() : model
+  const finalModel = useFreeText || showCustom ? customModel.trim() : model
   const isAuto = allowAuto && !provider
 
   return (
@@ -138,8 +142,8 @@ const CapabilityCard: React.FC<CapabilityCardProps> = ({
         </Field>
         {!isAuto && (
           <Field label={t('models_model')}>
-            {isCustomProvider ? (
-              // Custom providers have no preset catalog: type the model directly.
+            {useFreeText ? (
+              // Catalog-less custom vendor: type the model directly.
               <TextInput
                 className="font-mono"
                 value={customModel}

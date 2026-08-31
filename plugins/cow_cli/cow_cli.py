@@ -729,7 +729,6 @@ class CowCliPlugin(Plugin):
 
     _CONFIG_WRITABLE = {
         "model",
-        "agent_max_context_tokens",
         "agent_max_context_turns",
         "agent_max_steps",
         "knowledge",
