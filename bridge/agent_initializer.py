@@ -408,11 +408,13 @@ class AgentInitializer:
         memory_tools = []
         
         try:
-            from agent.memory import MemoryManager, MemoryConfig, register_memory_config
+            from agent.memory import (
+                MemoryManager,
+                create_memory_config,
+                register_memory_config,
+            )
             from agent.tools import MemorySearchTool, MemoryGetTool
-            from config import conf
-
-            memory_config = MemoryConfig(workspace_root=workspace_root)
+            memory_config = create_memory_config(workspace_root)
             # Publish per workspace, not process-wide: this runs once per Agent,
             # and a single global slot would leave the last one to initialize
             # owning where every Agent's memory is written.

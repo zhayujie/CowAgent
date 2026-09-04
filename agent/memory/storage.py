@@ -15,7 +15,7 @@ import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 from agent.memory.vector_backend import (
     SQLiteVectorBackend,
@@ -119,15 +119,21 @@ class MemoryStorage:
         self.db_path = db_path
         self.conn: Optional[sqlite3.Connection] = None
         self.vector_backend = vector_backend
+        self._external_vector_backend = vector_backend
+        self._local_vector_backend: Optional[SQLiteVectorBackend] = None
+        self._vector_backend_error: Optional[str] = None
         self.fts5_available = False  # Track FTS5 availability
         # RLock protects concurrent writes from the same process.
         # SQLite WAL mode handles read/write concurrency at the file level,
         # but same-process concurrent writes still need a Python-level lock.
         self._lock = threading.RLock()
         self._init_db()
+        assert self.conn is not None
+        self._local_vector_backend = SQLiteVectorBackend(self.conn)
         if self.vector_backend is None:
-            assert self.conn is not None
-            self.vector_backend = SQLiteVectorBackend(self.conn)
+            self.vector_backend = self._local_vector_backend
+        else:
+            self._init_vector_sync()
     
     def _check_fts5_support(self) -> bool:
         """Check if SQLite has FTS5 support"""
@@ -636,11 +642,14 @@ class MemoryStorage:
         with self._lock:
             try:
                 self.conn.execute(_SQL, params)
-                self.vector_backend.upsert([self._to_vector_record(chunk)])
+                record = self._to_vector_record(chunk)
+                self._local_vector_backend.upsert([record])
+                self._enqueue_vector_upserts([record])
                 self.conn.commit()
             except Exception:
                 self.conn.rollback()
                 raise
+        self._drain_vector_sync_queue()
 
     def save_chunks_batch(self, chunks: List[MemoryChunk]):
         """Save multiple chunks in a batch (insert or update by id).
@@ -686,13 +695,14 @@ class MemoryStorage:
         with self._lock:
             try:
                 self.conn.executemany(_SQL, params_list)
-                self.vector_backend.upsert([
-                    self._to_vector_record(chunk) for chunk in chunks
-                ])
+                records = [self._to_vector_record(chunk) for chunk in chunks]
+                self._local_vector_backend.upsert(records)
+                self._enqueue_vector_upserts(records)
                 self.conn.commit()
             except Exception:
                 self.conn.rollback()
                 raise
+        self._drain_vector_sync_queue()
     
     def get_chunk(self, chunk_id: str) -> Optional[MemoryChunk]:
         """Get a chunk by ID"""
@@ -720,11 +730,24 @@ class MemoryStorage:
         metadata_filter = {"scopes": scopes}
         if user_id:
             metadata_filter["user_id"] = user_id
-        matches = self.vector_backend.search(
-            query_embedding,
-            limit=limit,
-            metadata_filter=metadata_filter,
-        )
+        backend = self._select_search_backend()
+        try:
+            matches = backend.search(
+                query_embedding,
+                limit=limit,
+                metadata_filter=metadata_filter,
+            )
+            if backend is self._external_vector_backend:
+                self._vector_backend_error = None
+        except Exception as exc:
+            if backend is self._local_vector_backend:
+                raise
+            self._record_vector_backend_error(exc)
+            matches = self._local_vector_backend.search(
+                query_embedding,
+                limit=limit,
+                metadata_filter=metadata_filter,
+            )
         return [
             SearchResult(
                 path=match.metadata["path"],
@@ -930,15 +953,356 @@ class MemoryStorage:
 
     def delete_by_path(self, path: str):
         """Delete all chunks and file metadata for a path."""
+        deleted_ids = []
+        sync_entries = []
         with self._lock:
             try:
-                self.vector_backend.delete(metadata_filter={"path": path})
+                deleted_ids = [
+                    row["id"]
+                    for row in self.conn.execute(
+                        "SELECT id FROM chunks WHERE path = ?",
+                        (path,),
+                    ).fetchall()
+                ]
+                self._enqueue_vector_deletes(deleted_ids)
+                if self._external_vector_backend is not None:
+                    for item_id in deleted_ids:
+                        row = self.conn.execute(
+                            "SELECT operation, version FROM _vector_sync_queue "
+                            "WHERE id = ?",
+                            (item_id,),
+                        ).fetchone()
+                        if row is not None:
+                            sync_entries.append(
+                                (item_id, row["operation"], row["version"])
+                            )
                 self.conn.execute("DELETE FROM chunks WHERE path = ?", (path,))
                 self.conn.execute("DELETE FROM files WHERE path = ?", (path,))
                 self.conn.commit()
             except Exception:
                 self.conn.rollback()
                 raise
+
+        backend = self._external_vector_backend
+        if backend is not None:
+            if self._retry_vector_operation(
+                lambda: backend.delete(metadata_filter={"path": path})
+            ):
+                self._clear_vector_sync_entries(sync_entries)
+
+    def clear_memory_index(self) -> int:
+        """Clear derived memory rows while durably scheduling vector deletes."""
+        with self._lock:
+            rows = self.conn.execute("SELECT id FROM chunks").fetchall()
+            ids = [row["id"] for row in rows]
+            try:
+                self._enqueue_vector_deletes(ids)
+                self.conn.execute("DELETE FROM chunks")
+                self.conn.execute("DELETE FROM files")
+                self.conn.commit()
+            except Exception:
+                self.conn.rollback()
+                raise
+        self._drain_vector_sync_queue()
+        return len(ids)
+
+    def set_external_vector_backend(
+        self,
+        backend: Optional[VectorBackend],
+    ) -> None:
+        """Replace the optional search backend without changing SQLite data."""
+        current = self._external_vector_backend
+        if current is backend:
+            return
+        if current is not None:
+            close = getattr(current, "close", None)
+            if close is not None:
+                try:
+                    close()
+                except Exception as exc:
+                    self._record_vector_backend_error(exc)
+        self._external_vector_backend = backend
+        self.vector_backend = backend or self._local_vector_backend
+        self._vector_backend_error = None
+        if backend is not None:
+            self._init_vector_sync()
+
+    def get_vector_backend_status(self) -> Dict[str, Any]:
+        backend = self._external_vector_backend
+        return {
+            "backend": "milvus" if backend is not None else "sqlite",
+            "healthy": self._vector_backend_error is None,
+            "pending": self._pending_vector_sync_count(),
+            "error": self._vector_backend_error,
+        }
+
+    def _init_vector_sync(self) -> None:
+        with self._lock:
+            self.conn.execute("""
+                CREATE TABLE IF NOT EXISTS _vector_sync_queue (
+                    id TEXT PRIMARY KEY,
+                    operation TEXT NOT NULL,
+                    version INTEGER NOT NULL DEFAULT 1,
+                    updated_at INTEGER DEFAULT (strftime('%s', 'now'))
+                )
+            """)
+            columns = {
+                row["name"]
+                for row in self.conn.execute(
+                    "PRAGMA table_info(_vector_sync_queue)"
+                ).fetchall()
+            }
+            if "version" not in columns:
+                self.conn.execute(
+                    "ALTER TABLE _vector_sync_queue "
+                    "ADD COLUMN version INTEGER NOT NULL DEFAULT 1"
+                )
+            self.conn.commit()
+
+        prepared, created = self._prepare_external_vector_backend()
+        meta_key = self._vector_sync_meta_key()
+        with self._lock:
+            backfill_done = self.conn.execute(
+                "SELECT 1 FROM _meta WHERE key = ?",
+                (meta_key,),
+            ).fetchone()
+            if created:
+                self.conn.execute("DELETE FROM _meta WHERE key = ?", (meta_key,))
+                backfill_done = None
+            if not backfill_done:
+                self.conn.execute("""
+                    INSERT INTO _vector_sync_queue(id, operation, updated_at)
+                    SELECT id, 'upsert', strftime('%s', 'now')
+                    FROM chunks
+                    WHERE embedding IS NOT NULL
+                    ON CONFLICT(id) DO UPDATE SET
+                        operation = 'upsert',
+                        version = _vector_sync_queue.version + 1,
+                        updated_at = strftime('%s', 'now')
+                """)
+            self.conn.commit()
+        if prepared:
+            self._drain_vector_sync_queue(prepared=True)
+
+    def _enqueue_vector_upserts(self, records: Sequence[VectorRecord]) -> None:
+        if self._external_vector_backend is None or not records:
+            return
+        self.conn.executemany(
+            """
+            INSERT INTO _vector_sync_queue(id, operation, updated_at)
+            VALUES (?, 'upsert', strftime('%s', 'now'))
+            ON CONFLICT(id) DO UPDATE SET
+                operation = 'upsert',
+                version = _vector_sync_queue.version + 1,
+                updated_at = strftime('%s', 'now')
+            """,
+            [(record.id,) for record in records],
+        )
+
+    def _enqueue_vector_deletes(self, ids: Sequence[str]) -> None:
+        if self._external_vector_backend is None or not ids:
+            return
+        self.conn.executemany(
+            """
+            INSERT INTO _vector_sync_queue(id, operation, updated_at)
+            VALUES (?, 'delete', strftime('%s', 'now'))
+            ON CONFLICT(id) DO UPDATE SET
+                operation = 'delete',
+                version = _vector_sync_queue.version + 1,
+                updated_at = strftime('%s', 'now')
+            """,
+            [(item,) for item in ids],
+        )
+
+    def _clear_vector_sync_entries(self, entries) -> None:
+        if not entries or not self._vector_sync_table_exists():
+            return
+        with self._lock:
+            self.conn.executemany(
+                "DELETE FROM _vector_sync_queue "
+                "WHERE id = ? AND operation = ? AND version = ?",
+                entries,
+            )
+            self.conn.commit()
+            self._mark_vector_sync_complete_if_idle()
+
+    def _drain_vector_sync_queue(self, prepared: bool = False) -> bool:
+        backend = self._external_vector_backend
+        if backend is None:
+            return True
+        if not self._vector_sync_table_exists():
+            return True
+        if not prepared:
+            prepared, _ = self._prepare_external_vector_backend()
+            if not prepared:
+                return False
+
+        while True:
+            with self._lock:
+                queued = self.conn.execute(
+                    "SELECT id, operation, version FROM _vector_sync_queue "
+                    "ORDER BY updated_at, id LIMIT 256"
+                ).fetchall()
+            if not queued:
+                with self._lock:
+                    self._mark_vector_sync_complete_if_idle()
+                self._vector_backend_error = None
+                return True
+
+            upsert_records = []
+            delete_ids = []
+            for item in queued:
+                if item["operation"] == "upsert":
+                    row = self.conn.execute(
+                        "SELECT * FROM chunks WHERE id = ?",
+                        (item["id"],),
+                    ).fetchone()
+                    if row is not None and row["embedding"] is not None:
+                        upsert_records.append(self._row_to_vector_record(row))
+                    else:
+                        delete_ids.append(item["id"])
+                else:
+                    delete_ids.append(item["id"])
+
+            def apply_batch():
+                if upsert_records:
+                    backend.upsert(upsert_records)
+                if delete_ids:
+                    backend.delete(ids=delete_ids)
+
+            if not self._retry_vector_operation(apply_batch):
+                return False
+
+            with self._lock:
+                self.conn.executemany(
+                    "DELETE FROM _vector_sync_queue "
+                    "WHERE id = ? AND operation = ? AND version = ?",
+                    [
+                        (item["id"], item["operation"], item["version"])
+                        for item in queued
+                    ],
+                )
+                self.conn.commit()
+
+    def _prepare_external_vector_backend(self):
+        backend = self._external_vector_backend
+        if backend is None:
+            return True, False
+        prepare = getattr(backend, "prepare", None)
+        if prepare is None:
+            return True, False
+        try:
+            created = bool(prepare())
+        except Exception as exc:
+            self._record_vector_backend_error(exc)
+            return False, False
+        if created and self._vector_sync_table_exists():
+            with self._lock:
+                self.conn.execute("DELETE FROM _meta WHERE key = ?", (
+                    self._vector_sync_meta_key(),
+                ))
+                self.conn.execute("""
+                    INSERT INTO _vector_sync_queue(id, operation, updated_at)
+                    SELECT id, 'upsert', strftime('%s', 'now')
+                    FROM chunks
+                    WHERE embedding IS NOT NULL
+                    ON CONFLICT(id) DO UPDATE SET
+                        operation = 'upsert',
+                        version = _vector_sync_queue.version + 1,
+                        updated_at = strftime('%s', 'now')
+                """)
+                self.conn.commit()
+        return True, created
+
+    def _retry_vector_operation(self, operation) -> bool:
+        last_error = None
+        for attempt in range(3):
+            try:
+                operation()
+                self._vector_backend_error = None
+                return True
+            except (ValueError, TypeError) as exc:
+                last_error = exc
+                break
+            except Exception as exc:
+                last_error = exc
+                if attempt < 2:
+                    time.sleep(0.1 * (2 ** attempt))
+        self._record_vector_backend_error(last_error)
+        return False
+
+    def _select_search_backend(self) -> VectorBackend:
+        backend = self._external_vector_backend
+        if backend is None:
+            return self._local_vector_backend
+        prepared, _ = self._prepare_external_vector_backend()
+        if not prepared or not self._drain_vector_sync_queue(prepared=True):
+            return self._local_vector_backend
+        if self._pending_vector_sync_count():
+            return self._local_vector_backend
+        return backend
+
+    def _record_vector_backend_error(self, error) -> None:
+        if error is None:
+            return
+        message = str(error)
+        backend = self._external_vector_backend
+        for secret in (
+            getattr(backend, "token", ""),
+            getattr(backend, "uri", ""),
+        ):
+            if secret:
+                message = message.replace(str(secret), "<redacted>")
+        message = re.sub(r"(https?://)([^/@\s]+)@", r"\1<redacted>@", message)
+        safe = "{}: {}".format(type(error).__name__, message)
+        if safe == self._vector_backend_error:
+            return
+        self._vector_backend_error = safe
+        from common.log import logger
+        logger.warning(
+            "[MemoryStorage] External vector backend unavailable; "
+            "using SQLite fallback: %s",
+            safe,
+        )
+
+    def _pending_vector_sync_count(self) -> int:
+        if not self._vector_sync_table_exists():
+            return 0
+        row = self.conn.execute(
+            "SELECT COUNT(*) AS cnt FROM _vector_sync_queue"
+        ).fetchone()
+        return int(row["cnt"] if row else 0)
+
+    def _vector_sync_table_exists(self) -> bool:
+        if self.conn is None:
+            return False
+        row = self.conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' "
+            "AND name='_vector_sync_queue'"
+        ).fetchone()
+        return row is not None
+
+    def _vector_sync_meta_key(self) -> str:
+        backend = self._external_vector_backend
+        sync_key = getattr(backend, "sync_key", None)
+        if not sync_key:
+            raw = "{}:{}".format(
+                type(backend).__module__,
+                type(backend).__name__,
+            )
+            sync_key = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:24]
+        return "vector_sync:{}".format(sync_key)
+
+    def _mark_vector_sync_complete_if_idle(self) -> None:
+        if self._external_vector_backend is None:
+            return
+        if self._pending_vector_sync_count():
+            return
+        self.conn.execute(
+            "INSERT OR REPLACE INTO _meta(key, value) VALUES (?, '1')",
+            (self._vector_sync_meta_key(),),
+        )
+        self.conn.commit()
 
     def get_file_hash(self, path: str) -> Optional[str]:
         """Get stored file hash"""
@@ -974,10 +1338,19 @@ class MemoryStorage:
             'chunks': chunks_count,
             'files': files_count,
             'embedded': embedded_count,
+            'vector_sync_pending': self._pending_vector_sync_count(),
         }
     
     def close(self):
         """Close database connection"""
+        backend = self._external_vector_backend
+        if backend is not None:
+            close = getattr(backend, "close", None)
+            if close is not None:
+                try:
+                    close()
+                except Exception as e:
+                    self._record_vector_backend_error(e)
         if self.conn:
             try:
                 self.conn.commit()  # Ensure all changes are committed
@@ -1010,6 +1383,24 @@ class MemoryStorage:
                 "end_line": chunk.end_line,
                 "text": chunk.text,
                 "metadata": chunk.metadata,
+            },
+        )
+
+    def _row_to_vector_record(self, row) -> VectorRecord:
+        return VectorRecord(
+            id=row["id"],
+            embedding=self._decode_embedding(row["embedding"]),
+            metadata={
+                "user_id": row["user_id"],
+                "scope": row["scope"],
+                "source": row["source"],
+                "path": row["path"],
+                "start_line": row["start_line"],
+                "end_line": row["end_line"],
+                "text": row["text"],
+                "metadata": (
+                    json.loads(row["metadata"]) if row["metadata"] else None
+                ),
             },
         )
 

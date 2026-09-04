@@ -47,6 +47,13 @@
   "enable_thinking": false,
   "reasoning_effort": "high",
   "knowledge": true,
+  "vector_backend": "sqlite",
+  "milvus_uri": "",
+  "milvus_token": "",
+  "milvus_db_name": "default",
+  "milvus_collection": "",
+  "milvus_timeout": 10.0,
+  "milvus_consistency_level": "Strong",
   "self_evolution_enabled": true,
   "mcp_tool_retrieval_enabled": false
 }

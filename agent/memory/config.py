@@ -33,6 +33,15 @@ class MemoryConfig:
     embedding_provider: str = "openai"  # "openai" | "local"
     embedding_model: str = "text-embedding-3-small"
     embedding_dim: int = 1536
+
+    # Vector backend config. SQLite remains the zero-dependency default.
+    vector_backend: str = "sqlite"
+    milvus_uri: str = ""
+    milvus_token: str = ""
+    milvus_db_name: str = "default"
+    milvus_collection: str = ""
+    milvus_timeout: float = 10.0
+    milvus_consistency_level: str = "Strong"
     
     # Chunking config
     chunk_max_tokens: int = 500
@@ -72,6 +81,25 @@ class MemoryConfig:
         """Get skills directory"""
         from common import state_dir
         return state_dir.skills_dir(base=self.workspace_root)
+
+
+def create_memory_config(workspace_root: str) -> MemoryConfig:
+    """Build a workspace-scoped memory config from the runtime config file."""
+    from config import conf
+
+    runtime = conf()
+    return MemoryConfig(
+        workspace_root=workspace_root,
+        vector_backend=str(runtime.get("vector_backend") or "sqlite"),
+        milvus_uri=str(runtime.get("milvus_uri") or ""),
+        milvus_token=str(runtime.get("milvus_token") or ""),
+        milvus_db_name=str(runtime.get("milvus_db_name") or "default"),
+        milvus_collection=str(runtime.get("milvus_collection") or ""),
+        milvus_timeout=float(runtime.get("milvus_timeout") or 10.0),
+        milvus_consistency_level=str(
+            runtime.get("milvus_consistency_level") or "Strong"
+        ),
+    )
 
 
 # One config per workspace, not one per process: several Agents share this
