@@ -52,6 +52,10 @@ _ATTRIBUTION_HEADERS_BY_HOST: Dict[str, Dict[str, str]] = {
         "HTTP-Referer": _APP_REFERER,
         "X-Title": _APP_TITLE,
     },
+    "orcarouter.ai": {
+        "HTTP-Referer": _APP_REFERER,
+        "X-Title": _APP_TITLE,
+    },
     "ai-gateway.vercel.sh": {
         "HTTP-Referer": _APP_REFERER,
         "X-Title": _APP_TITLE,
