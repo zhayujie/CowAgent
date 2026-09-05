@@ -177,6 +177,11 @@ def scheduler_file(identity=None, base=None) -> Path:
     return _agent_base(identity, base) / "scheduler" / "tasks.json"
 
 
+def scheduler_recipients_file(identity=None, base=None) -> Path:
+    """Trusted recipients observed on this Agent's inbound channels."""
+    return _agent_base(identity, base) / "scheduler" / "recipients.json"
+
+
 def tmp_dir(identity=None, ensure: bool = True, base=None) -> Path:
     """Transient downloads and synthesized media.
 
