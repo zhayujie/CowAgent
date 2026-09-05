@@ -38,6 +38,7 @@ Fully compatible with the MCP community standard, identical to Claude Desktop / 
 | `type` | Remote | Remote transport type: `sse` or `streamable-http` (defaults to `sse`) |
 | `headers` | No | Extra HTTP headers for remote requests (e.g. `Authorization`); Streamable HTTP only |
 | `scope` | No | OAuth scope, only for remote servers that require OAuth authorization (optional) |
+| `tool_name_prefix` | No | String prepended to this server's tool names in CowAgent, e.g. `parallel_`. Defaults to an empty string. Include any separator in the prefix. Use a unique prefix to avoid collisions with built-in tools or other servers. |
 | `disabled` | No | When `true`, this server is skipped — handy for temporary disabling |
 
 ### Full Example
@@ -79,6 +80,33 @@ The Agent will:
 
 1. Read the existing MCP config and merge the new server entry, preserving existing ones
 2. Hot-reload the new MCP server, so the corresponding tools become available on the next message
+
+## Parallel Search
+
+[Parallel Search MCP](https://docs.parallel.ai/integrations/mcp/search-mcp) provides public web search and page extraction without a Parallel account or API key. Add this entry to `mcpServers` in `~/cow/mcp.json`, keeping any existing servers:
+
+```json
+{
+  "mcpServers": {
+    "parallel-search": {
+      "type": "streamable-http",
+      "url": "https://search.parallel.ai/mcp",
+      "tool_name_prefix": "parallel_",
+      "headers": {
+        "User-Agent": "CowAgent"
+      }
+    }
+  }
+}
+```
+
+Keep `type: "streamable-http"`: a URL alone selects the legacy SSE transport. The prefix exposes `parallel_web_search` and `parallel_web_fetch` without replacing CowAgent's built-in `web_search` and `web_fetch`. Calls still use the original tool names on the server.
+
+The `User-Agent` header identifies CowAgent to the service.
+
+After the next message loads the connection, ask the Agent to use `parallel_web_search` to find a public page, then `parallel_web_fetch` to read it. Once configured, the Agent can select these tools during other tasks too. Queries, requested URLs, and any supplied objectives or context are sent to Parallel. Anonymous access is free but rate limited.
+
+To remove the connection, delete only the `parallel-search` entry and send another message so CowAgent reloads the configuration.
 
 ## Web Authorization (OAuth)
 

@@ -542,11 +542,14 @@ class ToolManager:
                         tool_name = schema.get("name", "")
                         if not tool_name:
                             continue
-                        mcp_tool = McpTool(client, schema, server_name)
+                        mcp_tool = McpTool(
+                            client, schema, server_name,
+                            name_prefix=cfg.get("tool_name_prefix", ""),
+                        )
                         # Atomic dict assignment is GIL-safe; readers iterate
                         # over a list() snapshot to avoid concurrent mutation.
-                        self._mcp_tool_instances[tool_name] = mcp_tool
-                        added.append(tool_name)
+                        self._mcp_tool_instances[mcp_tool.name] = mcp_tool
+                        added.append(mcp_tool.name)
 
                     # Register client into the shared registry only after its
                     # tools are visible, so callers never see a half-loaded server.
