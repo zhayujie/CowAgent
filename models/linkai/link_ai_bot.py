@@ -638,10 +638,10 @@ def _linkai_call_with_tools(self, messages, tools=None, stream=False, **kwargs):
     except Exception as e:
         logger.error(f"[LinkAI] call_with_tools error: {e}")
         if stream:
-            def error_generator():
+            def error_generator(err=str(e)):
                 yield {
                     "error": True,
-                    "message": str(e),
+                    "message": err,
                     "status_code": 500
                 }
             return error_generator()

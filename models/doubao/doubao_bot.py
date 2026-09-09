@@ -265,8 +265,8 @@ class DoubaoBot(Bot):
             import traceback
             logger.error(traceback.format_exc())
 
-            def error_generator():
-                yield {"error": True, "message": str(e), "status_code": 500}
+            def error_generator(err=str(e)):
+                yield {"error": True, "message": err, "status_code": 500}
             return error_generator()
 
     # -------------------- streaming --------------------
