@@ -341,6 +341,90 @@ class TestAnySearchBackend(unittest.TestCase):
         )
         self.assertNotIn("summary", mock_post.call_args[1]["json"])
 
+    def test_search_anysearch_tag_params_passthrough(self):
+        """tag and params are passed through to the AnySearch payload."""
+        with patch.object(web_search_module, "_get_api_key", return_value="test-key-123"), \
+                patch.object(web_search_module.requests, "post",
+                             return_value=_fake_response(200, _anysearch_payload([]))) as mock_post:
+            result = self.tool._search_anysearch("q", 10, tag="finance.quote", search_params={"limit": 5})
+
+        self.assertEqual(result.status, "success")
+        sent = mock_post.call_args[1]["json"]
+        self.assertEqual(sent["tag"], "finance.quote")
+        self.assertEqual(sent["params"], {"limit": 5})
+
+    def test_search_anysearch_config_domain_fallback(self):
+        """anysearch_domain config is used when args.tag is absent."""
+        cfg = {"tools": {"web_search": {"anysearch_domain": "code.doc", "anysearch_anonymous": True}}}
+        with patch.object(web_search_module, "conf", lambda: cfg), \
+                patch.object(web_search_module.requests, "post",
+                             return_value=_fake_response(200, _anysearch_payload([]))) as mock_post:
+            result = self.tool.execute({"query": "q", "count": 10})
+
+        self.assertEqual(result.status, "success")
+        sent = mock_post.call_args[1]["json"]
+        self.assertEqual(sent["tag"], "code.doc")
+
+    def test_search_anysearch_zone_language_passthrough(self):
+        """zone and language from config are passed to the payload."""
+        cfg = {"tools": {"web_search": {"anysearch_zone": "cn", "anysearch_language": "zh-CN", "anysearch_anonymous": True}}}
+        with patch.object(web_search_module, "conf", lambda: cfg), \
+                patch.object(web_search_module.requests, "post",
+                             return_value=_fake_response(200, _anysearch_payload([]))) as mock_post:
+            result = self.tool.execute({"query": "q", "count": 10})
+
+        self.assertEqual(result.status, "success")
+        sent = mock_post.call_args[1]["json"]
+        self.assertEqual(sent["zone"], "cn")
+        self.assertEqual(sent["language"], "zh-CN")
+
+    def test_search_anysearch_ignores_freshness_with_warning(self):
+        """freshness='oneWeek' logs a warning and is not sent in the payload."""
+        with patch.object(web_search_module, "_get_api_key", return_value="test-key-123"), \
+                patch.object(web_search_module, "logger") as mock_logger, \
+                patch.object(web_search_module.requests, "post",
+                             return_value=_fake_response(200, _anysearch_payload([]))) as mock_post:
+            result = self.tool._search_anysearch("q", 10, freshness="oneWeek")
+
+        self.assertEqual(result.status, "success")
+        mock_logger.warning.assert_called_once_with(
+            "[WebSearch] anysearch does not support freshness ('oneWeek'); ignoring"
+        )
+        sent = mock_post.call_args[1]["json"]
+        self.assertNotIn("freshness", sent)
+
+    def test_search_anysearch_ignores_summary_with_warning(self):
+        """summary=True logs a warning; the request payload keeps its plain shape."""
+        with patch.object(web_search_module, "_get_api_key", return_value="test-key-123"), \
+                patch.object(web_search_module, "logger") as mock_logger, \
+                patch.object(web_search_module.requests, "post",
+                             return_value=_fake_response(200, _anysearch_payload([]))) as mock_post:
+            result = self.tool._search_anysearch("q", 10, summary=True)
+
+        self.assertEqual(result.status, "success")
+        mock_logger.warning.assert_called_once_with(
+            "[WebSearch] anysearch does not support summary; ignoring"
+        )
+        self.assertNotIn("summary", mock_post.call_args[1]["json"])
+
+    def test_schema_exposes_vertical_fields_fixed_anysearch(self):
+        """fixed=anysearch exposes tag/params in schema."""
+        cfg = {"tools": {"web_search": {"strategy": "fixed", "provider": "anysearch", "anysearch_anonymous": True}}}
+        with patch.object(web_search_module, "conf", lambda: cfg):
+            schema = self.tool.get_json_schema()
+        props = schema["parameters"]["properties"]
+        self.assertIn("tag", props)
+        self.assertIn("params", props)
+
+    def test_schema_hides_vertical_fields_auto_multi(self):
+        """auto with multiple providers does NOT expose tag/params."""
+        cfg = {"tools": {"web_search": {"strategy": "auto", "bocha_api_key": "k1", "anysearch_api_key": "k2"}}}
+        with patch.object(web_search_module, "conf", lambda: cfg):
+            schema = self.tool.get_json_schema()
+        props = schema["parameters"]["properties"]
+        self.assertNotIn("tag", props)
+        self.assertNotIn("params", props)
+
 
 def _serply_payload(results):
     """Build a Serply /v1/search response body in the documented shape."""
@@ -773,6 +857,244 @@ class TestSearxngBackend(unittest.TestCase):
                 self.assertEqual(result.status, "error")
                 self.assertIn(fragment, result.result)
 
+class TestWebSearchDomains(unittest.TestCase):
+    """Behaviour of WebSearchDomains with a stubbed HTTP layer."""
+
+    def setUp(self):
+        from agent.tools.web_search_domains import WebSearchDomains
+        self.tool = WebSearchDomains()
+
+    def test_domains_list_top_level(self):
+        """Without domain arg, GET /v1/domains returns top-level list."""
+        payload = {"code": 0, "message": "success", "data": {"domains": [{"domain": "finance", "sub_domain_count": 6}]}}
+        with patch("agent.tools.web_search_domains.requests.get",
+                   return_value=_fake_response(200, payload)) as mock_get:
+            result = self.tool.execute({})
+
+        self.assertEqual(result.status, "success")
+        mock_get.assert_called_once()
+        sent_url = mock_get.call_args[0][0]
+        self.assertIn("/v1/domains", sent_url)
+        self.assertIn("finance", result.result["domains"])
+
+    def test_domains_sub_domain_lookup(self):
+        """With domain arg, GET /v1/sub-domains?domain=finance returns sub-domains."""
+        payload = {"code": 0, "message": "success", "data": {"domains": [{"domain": "finance", "sub_domains": [{"sub_domain": "finance.quote"}]}]}}
+        with patch("agent.tools.web_search_domains.requests.get",
+                   return_value=_fake_response(200, payload)) as mock_get:
+            result = self.tool.execute({"domain": "finance"})
+
+        self.assertEqual(result.status, "success")
+        sent_url = mock_get.call_args[0][0]
+        self.assertIn("/v1/sub-domains", sent_url)
+        self.assertIn("domain=finance", sent_url)
+        self.assertIn("finance.quote", result.result["domains"])
+
+    def test_domains_401(self):
+        """401 returns auth error."""
+        with patch("agent.tools.web_search_domains.requests.get",
+                   return_value=_fake_response(401, {})):
+            result = self.tool.execute({})
+        self.assertEqual(result.status, "error")
+        self.assertIn("Invalid AnySearch API key", result.result)
+
+
+class TestWebExtract(unittest.TestCase):
+    """Behaviour of WebExtract with a stubbed HTTP layer.
+
+    Error bodies use the official AnySearch error envelope: ``code`` is -1 on
+    every failure and the machine-readable reason lives in ``error_code``.
+    """
+
+    def setUp(self):
+        from agent.tools.web_extract.web_extract import WebExtract
+        self.tool = WebExtract()
+
+    # ---- success path (方案 B: same text shape as web_fetch) ----
+
+    def test_extract_success_matches_web_fetch_text_shape(self):
+        """Success returns the web_fetch plain-text shape, not a dict."""
+        payload = {"code": 0, "message": "success", "data": {
+            "url": "https://example.com", "title": "Example", "content": "Hello World"}}
+        with patch("agent.tools.web_extract.web_extract.requests.post",
+                   return_value=_fake_response(200, payload)) as mock_post:
+            result = self.tool.execute({"url": "https://example.com"})
+
+        self.assertEqual(result.status, "success")
+        self.assertIsInstance(result.result, str)
+        self.assertEqual(result.result, "Title: Example\n\nContent:\nHello World")
+        self.assertEqual(mock_post.call_args[1]["json"], {"url": "https://example.com"})
+
+    def test_extract_success_appends_truncation_notice(self):
+        """Over-limit content is truncated and the notice is appended."""
+        long_content = "\n".join(f"line {i}" for i in range(2500))  # over the 2000-line cap
+        payload = {"code": 0, "message": "success", "data": {
+            "url": "https://example.com", "title": "Example", "content": long_content}}
+        with patch("agent.tools.web_extract.web_extract.requests.post",
+                   return_value=_fake_response(200, payload)):
+            result = self.tool.execute({"url": "https://example.com"})
+
+        self.assertEqual(result.status, "success")
+        self.assertTrue(result.result.startswith("Title: Example\n\nContent:\nline 0"))
+        self.assertIn("[Content truncated: showing 2000 of 2500 lines]", result.result)
+
+    def test_extract_business_error_on_http_200(self):
+        """HTTP 200 with code=-1 surfaces the API message."""
+        payload = {"code": -1, "error_code": "extract_failed", "message": "upstream exploded"}
+        with patch("agent.tools.web_extract.web_extract.requests.post",
+                   return_value=_fake_response(200, payload)):
+            result = self.tool.execute({"url": "https://example.com"})
+        self.assertEqual(result.status, "error")
+        self.assertIn("upstream exploded", result.result)
+
+    # ---- Authorization header contract ----
+
+    def test_extract_no_key_omits_authorization_header(self):
+        """Anonymous mode: no Authorization header is sent."""
+        payload = {"code": 0, "message": "success", "data": {"title": "T", "content": "ok"}}
+        with patch("agent.tools.web_extract.web_extract._get_anysearch_api_key", return_value=""):
+            with patch("agent.tools.web_extract.web_extract.requests.post",
+                       return_value=_fake_response(200, payload)) as mock_post:
+                self.tool.execute({"url": "https://example.com"})
+        headers = mock_post.call_args[1]["headers"]
+        self.assertNotIn("Authorization", headers)
+
+    def test_extract_key_sends_authorization_header(self):
+        """With a configured key, Authorization: Bearer <key> is sent."""
+        payload = {"code": 0, "message": "success", "data": {"title": "T", "content": "ok"}}
+        with patch("agent.tools.web_extract.web_extract._get_anysearch_api_key", return_value="test-key"):
+            with patch("agent.tools.web_extract.web_extract.requests.post",
+                       return_value=_fake_response(200, payload)) as mock_post:
+                self.tool.execute({"url": "https://example.com"})
+        headers = mock_post.call_args[1]["headers"]
+        self.assertEqual(headers["Authorization"], "Bearer test-key")
+
+    # ---- error_code mapping (official envelope: code=-1 + error_code) ----
+
+    def test_extract_400_invalid_extract_url(self):
+        """400 + error_code invalid_extract_url -> canonical message."""
+        body = {"code": -1, "error_code": "invalid_extract_url", "message": "url scheme not supported"}
+        with patch("agent.tools.web_extract.web_extract.requests.post",
+                   return_value=_fake_response(400, body)):
+            result = self.tool.execute({"url": "https://example.com"})
+        self.assertEqual(result.status, "error")
+        self.assertEqual(result.result, "Error: invalid URL for extraction")
+
+    def test_extract_400_unknown_error_code_surfaces_api_message(self):
+        """400 with any other error_code falls through and keeps the API detail.
+
+        Regression guard for the dead-code bug: when the `error_code` branch
+        misses, the API message must still reach the caller.
+        """
+        body = {"code": -1, "error_code": "bad_request", "message": "field url is required"}
+        with patch("agent.tools.web_extract.web_extract.requests.post",
+                   return_value=_fake_response(400, body)):
+            result = self.tool.execute({"url": "https://example.com"})
+        self.assertEqual(result.status, "error")
+        self.assertIn("field url is required", result.result)
+
+    def test_extract_422_extract_failed(self):
+        """422 + error_code extract_failed -> canonical message."""
+        body = {"code": -1, "error_code": "extract_failed", "message": "page empty"}
+        with patch("agent.tools.web_extract.web_extract.requests.post",
+                   return_value=_fake_response(422, body)):
+            result = self.tool.execute({"url": "https://example.com"})
+        self.assertEqual(result.status, "error")
+        self.assertEqual(result.result, "Error: extraction failed (page empty or blocked)")
+
+    def test_extract_422_unknown_error_code_surfaces_api_message(self):
+        """422 with any other error_code keeps the API detail."""
+        body = {"code": -1, "error_code": "unprocessable", "message": "content-type not html"}
+        with patch("agent.tools.web_extract.web_extract.requests.post",
+                   return_value=_fake_response(422, body)):
+            result = self.tool.execute({"url": "https://example.com"})
+        self.assertEqual(result.status, "error")
+        self.assertIn("content-type not html", result.result)
+
+    def test_extract_401(self):
+        """401 returns auth error."""
+        with patch("agent.tools.web_extract.web_extract.requests.post",
+                   return_value=_fake_response(401, {})):
+            result = self.tool.execute({"url": "https://example.com"})
+        self.assertEqual(result.status, "error")
+        self.assertIn("Invalid AnySearch API key", result.result)
+
+    def test_extract_402_keyed(self):
+        """402 with key returns quota exhausted message."""
+        with patch("agent.tools.web_extract.web_extract._get_anysearch_api_key", return_value="test-key"):
+            with patch("agent.tools.web_extract.web_extract.requests.post",
+                       return_value=_fake_response(402, {})):
+                result = self.tool.execute({"url": "https://example.com"})
+        self.assertEqual(result.status, "error")
+        self.assertIn("quota exhausted", result.result)
+        self.assertNotIn("anonymous", result.result)
+
+    def test_extract_402_anonymous(self):
+        """402 without key points at configuring an API key."""
+        with patch("agent.tools.web_extract.web_extract._get_anysearch_api_key", return_value=""):
+            with patch("agent.tools.web_extract.web_extract.requests.post",
+                       return_value=_fake_response(402, {})):
+                result = self.tool.execute({"url": "https://example.com"})
+        self.assertEqual(result.status, "error")
+        self.assertIn("anonymous quota exhausted", result.result)
+
+    def test_extract_429(self):
+        """429 returns rate limit message."""
+        with patch("agent.tools.web_extract.web_extract.requests.post",
+                   return_value=_fake_response(429, {})):
+            result = self.tool.execute({"url": "https://example.com"})
+        self.assertEqual(result.status, "error")
+        self.assertIn("rate limit", result.result)
+
+    # ---- input validation & network errors ----
+
+    def test_extract_invalid_url(self):
+        """Non-HTTP URL is rejected before any request."""
+        result = self.tool.execute({"url": "ftp://example.com"})
+        self.assertEqual(result.status, "error")
+        self.assertIn("http:// or https://", result.result)
+
+    def test_extract_missing_url(self):
+        """Missing url parameter is rejected before any request."""
+        result = self.tool.execute({})
+        self.assertEqual(result.status, "error")
+        self.assertIn("'url' parameter is required", result.result)
+
+    def test_extract_timeout(self):
+        """Timeout returns a timed-out error."""
+        with patch("agent.tools.web_extract.web_extract.requests.post",
+                   side_effect=__import__("requests").Timeout()):
+            result = self.tool.execute({"url": "https://example.com"})
+        self.assertEqual(result.status, "error")
+        self.assertIn("timed out", result.result)
+
+    def test_extract_connection_error(self):
+        """ConnectionError returns a connect failure."""
+        with patch("agent.tools.web_extract.web_extract.requests.post",
+                   side_effect=__import__("requests").ConnectionError()):
+            result = self.tool.execute({"url": "https://example.com"})
+        self.assertEqual(result.status, "error")
+        self.assertIn("Failed to connect", result.result)
+
+    # ---- availability gate ----
+
+    def test_unavailable_without_key_and_without_anonymous(self):
+        """No key and no anonymous opt-in -> tool is not offered."""
+        with patch("agent.tools.web_extract.web_extract._get_anysearch_api_key", return_value=""):
+            with patch("agent.tools.web_extract.web_extract._anysearch_anonymous_enabled", return_value=False):
+                self.assertFalse(self.tool.is_available())
+
+    def test_available_with_key(self):
+        """A configured key makes the tool available."""
+        with patch("agent.tools.web_extract.web_extract._get_anysearch_api_key", return_value="test-key"):
+            with patch("agent.tools.web_extract.web_extract._anysearch_anonymous_enabled", return_value=False):
+                self.assertTrue(self.tool.is_available())
+
+    def test_available_with_anonymous_opt_in(self):
+        """anysearch_anonymous opt-in makes the tool available without a key."""
+        with patch("agent.tools.web_extract.web_extract._get_anysearch_api_key", return_value=""):
+            with patch("agent.tools.web_extract.web_extract._anysearch_anonymous_enabled", return_value=True):
+                self.assertTrue(self.tool.is_available())
 
 if __name__ == "__main__":
     unittest.main()
