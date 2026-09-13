@@ -203,6 +203,23 @@ class WebSearch(BaseTool):
             "description": self.description,
             "parameters": json.loads(json.dumps(self.params)),  # deep copy
         }
+        # P2-1: expose vertical domain fields only when anysearch is guaranteed
+        # to be the backend (fixed=anysearch or auto with only anysearch configured).
+        expose_vertical = (
+            (_configured_strategy() == "fixed" and _configured_provider() == "anysearch")
+            or (_configured_strategy() == "auto" and configured_providers() == ["anysearch"])
+        )
+        if expose_vertical:
+            schema["parameters"]["properties"]["tag"] = {
+                "type": "string",
+                "description": "Optional vertical domain, format '{domain}.{sub_domain}', "
+                               "e.g. 'finance.quote', 'code.doc'. AnySearch backend only.",
+            }
+            schema["parameters"]["properties"]["params"] = {
+                "type": "object",
+                "description": "Optional per-sub-domain parameters (discoverable via GET /v1/sub-domains). "
+                               "AnySearch backend only.",
+            }
         if _configured_strategy() != "auto":
             return schema
         available = configured_providers()
@@ -305,7 +322,15 @@ class WebSearch(BaseTool):
             if provider == "linkai":
                 return self._search_linkai(query, count, freshness)
             if provider == "anysearch":
-                return self._search_anysearch(query, count, freshness, summary)
+                tag = args.get("tag") or (_tools_web_search_conf().get("anysearch_domain") or "").strip() or None
+                search_params = args.get("params")
+                if not isinstance(search_params, dict):
+                    search_params = None
+                zone = (_tools_web_search_conf().get("anysearch_zone") or "").strip().lower()
+                language = (_tools_web_search_conf().get("anysearch_language") or "").strip()
+                return self._search_anysearch(query, count, freshness, summary,
+                                              tag=tag, search_params=search_params,
+                                              zone=zone, language=language)
             if provider == "serply":
                 return self._search_serply(query, count)
             if provider == "tavily":
@@ -568,7 +593,10 @@ class WebSearch(BaseTool):
             "total": 1, "count": 1, "results": [{"content": str(raw)}],
         })
 
-    def _search_anysearch(self, query: str, count: int, freshness: str = "noLimit", summary: bool = False) -> ToolResult:
+    def _search_anysearch(self, query: str, count: int, freshness: str = "noLimit",
+                              summary: bool = False, tag: str = None,
+                              search_params: dict = None, zone: str = None,
+                              language: str = None) -> ToolResult:
         if freshness and freshness != "noLimit":
             logger.warning(f"[WebSearch] anysearch does not support freshness ({freshness!r}); ignoring")
         if summary:
@@ -584,6 +612,14 @@ class WebSearch(BaseTool):
         # AnySearch accepts 1-10 results; the shared tool schema allows 1-10.
         max_results = max(1, min(int(count or 10), 10))
         payload = {"query": query, "max_results": max_results, "format": "json"}
+        if tag:
+            payload["tag"] = tag
+        if search_params:
+            payload["params"] = search_params
+        if zone in ("cn", "intl"):
+            payload["zone"] = zone
+        if language in ("zh-CN", "en"):
+            payload["language"] = language
 
         logger.debug(f"[WebSearch] anysearch: query='{query}', max_results={max_results}, has_key={bool(api_key)}")
         resp = requests.post(url, headers=headers, json=payload, timeout=DEFAULT_TIMEOUT)

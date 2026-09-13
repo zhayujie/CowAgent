@@ -72,6 +72,24 @@ def _import_optional_tools():
     except Exception as e:
         logger.error(f"[Tools] WebFetch failed to load: {e}")
 
+    # WebSearchDomains Tool
+    try:
+        from agent.tools.web_search_domains import WebSearchDomains
+        tools['WebSearchDomains'] = WebSearchDomains
+    except ImportError as e:
+        logger.error(f"[Tools] WebSearchDomains not loaded - missing dependency: {e}")
+    except Exception as e:
+        logger.error(f"[Tools] WebSearchDomains failed to load: {e}")
+
+    # WebExtract Tool
+    try:
+        from agent.tools.web_extract.web_extract import WebExtract
+        tools['WebExtract'] = WebExtract
+    except ImportError as e:
+        logger.error(f"[Tools] WebExtract not loaded - missing dependency: {e}")
+    except Exception as e:
+        logger.error(f"[Tools] WebExtract failed to load: {e}")
+
     # Vision Tool (conditionally loaded based on API key availability)
     try:
         from agent.tools.vision.vision import Vision
@@ -89,6 +107,8 @@ EnvConfig = _optional_tools.get('EnvConfig')
 SchedulerTool = _optional_tools.get('SchedulerTool')
 WebSearch = _optional_tools.get('WebSearch')
 WebFetch = _optional_tools.get('WebFetch')
+WebSearchDomains = _optional_tools.get('WebSearchDomains')
+WebExtract = _optional_tools.get('WebExtract')
 Vision = _optional_tools.get('Vision')
 GoogleSearch = _optional_tools.get('GoogleSearch')
 FileSave = _optional_tools.get('FileSave')
@@ -145,6 +165,8 @@ __all__ = [
     'SchedulerTool',
     'WebSearch',
     'WebFetch',
+    'WebSearchDomains',
+    'WebExtract',
     'Vision',
     'BrowserTool',
     'McpTool',
