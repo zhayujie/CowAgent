@@ -18,6 +18,7 @@ import threading
 from common import memory, utils
 import base64
 import os
+from urllib.parse import urlparse
 
 
 def _linkai_base_url():
@@ -466,9 +467,10 @@ class LinkAIBot(Bot, OpenAICompatibleBot):
                 if max_send_num and i >= max_send_num:
                     continue
                 i += 1
-                if url.endswith(".mp4"):
+                url_path = urlparse(url).path.lower()
+                if url_path.endswith(".mp4"):
                     reply_type = ReplyType.VIDEO_URL
-                elif url.endswith(file_type):
+                elif url_path.endswith(file_type):
                     reply_type = ReplyType.FILE
                     url = _download_file(url)
                     if not url:
@@ -488,7 +490,7 @@ def _download_file(url: str):
         file_path = "tmp"
         if not os.path.exists(file_path):
             os.makedirs(file_path)
-        file_name = url.split("/")[-1]  # 获取文件名
+        file_name = os.path.basename(urlparse(url).path) or "download"  # 获取文件名
         file_path = os.path.join(file_path, file_name)
         response = requests.get(url)
         with open(file_path, "wb") as f:
