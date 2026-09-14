@@ -288,6 +288,20 @@ const I18N = {
         skill_back: '返回列表',
         skill_load_failed: '读取技能内容失败',
         skill_builtin_readonly: '内置技能不可编辑（重启会覆盖）',
+        mcp_section_title: 'MCP 服务器', mcp_section_hint: '添加、编辑或停用 MCP 服务器。保存后下一条消息生效，无需重启进程。',
+        mcp_add: '添加服务器', mcp_edit: '编辑服务器', mcp_empty: '尚未配置 MCP 服务器',
+        mcp_test: '测试连接', mcp_save: '保存', mcp_cancel: '取消', mcp_delete: '删除',
+        mcp_status_ready: '就绪', mcp_status_pending: '加载中', mcp_status_failed: '失败',
+        mcp_status_needs_auth: '待授权', mcp_status_disabled: '已停用', mcp_status_idle: '未加载',
+        mcp_field_name: '名称', mcp_field_type: '传输方式', mcp_field_command: '命令',
+        mcp_field_args: '参数（每行一个）', mcp_field_env: '环境变量（每行 KEY=value）',
+        mcp_field_url: 'URL', mcp_field_headers: '请求头（每行 KEY=value）', mcp_field_scope: 'OAuth scope',
+        mcp_field_prefix: '工具名前缀', mcp_field_timeout: '超时（秒）', mcp_field_disabled: '停用此服务器',
+        mcp_test_ok: '连接成功', mcp_test_fail: '连接失败', mcp_save_error: '保存失败',
+        mcp_delete_confirm: '确定删除这个 MCP 服务器吗？', mcp_apply_hint: '将在下一条消息生效',
+        skill_install_btn: '安装', skill_install_placeholder: 'Skill Hub 名称或 GitHub URL',
+        skill_install_error: '安装失败', skill_delete: '卸载',
+        skill_delete_confirm: '确定卸载这个技能吗？', skill_delete_error: '卸载失败',
         memory_title: '记忆管理', memory_desc: '查看 Agent 记忆文件和内容',
         memory_tab_files: '记忆文件', memory_tab_dreams: '自主进化',
         memory_loading: '加载记忆文件中...', memory_loading_desc: '记忆文件将显示在此处',
@@ -799,6 +813,20 @@ const I18N = {
         skill_back: '返回列表',
         skill_load_failed: '讀取技能內容失敗',
         skill_builtin_readonly: '內建技能不可編輯（重啟會覆蓋）',
+        mcp_section_title: 'MCP 伺服器', mcp_section_hint: '新增、編輯或停用 MCP 伺服器。儲存後下一則訊息生效，無需重啟行程。',
+        mcp_add: '新增伺服器', mcp_edit: '編輯伺服器', mcp_empty: '尚未設定 MCP 伺服器',
+        mcp_test: '測試連線', mcp_save: '儲存', mcp_cancel: '取消', mcp_delete: '刪除',
+        mcp_status_ready: '就緒', mcp_status_pending: '載入中', mcp_status_failed: '失敗',
+        mcp_status_needs_auth: '待授權', mcp_status_disabled: '已停用', mcp_status_idle: '未載入',
+        mcp_field_name: '名稱', mcp_field_type: '傳輸方式', mcp_field_command: '命令',
+        mcp_field_args: '參數（每行一個）', mcp_field_env: '環境變數（每行 KEY=value）',
+        mcp_field_url: 'URL', mcp_field_headers: '請求頭（每行 KEY=value）', mcp_field_scope: 'OAuth scope',
+        mcp_field_prefix: '工具名前綴', mcp_field_timeout: '逾時（秒）', mcp_field_disabled: '停用此伺服器',
+        mcp_test_ok: '連線成功', mcp_test_fail: '連線失敗', mcp_save_error: '儲存失敗',
+        mcp_delete_confirm: '確定刪除這個 MCP 伺服器嗎？', mcp_apply_hint: '將在下一則訊息生效',
+        skill_install_btn: '安裝', skill_install_placeholder: 'Skill Hub 名稱或 GitHub URL',
+        skill_install_error: '安裝失敗', skill_delete: '解除安裝',
+        skill_delete_confirm: '確定解除安裝這個技能嗎？', skill_delete_error: '解除安裝失敗',
         memory_title: '記憶管理', memory_desc: '檢視 Agent 記憶檔案和內容',
         memory_tab_files: '記憶檔案', memory_tab_dreams: '自主進化',
         memory_loading: '載入記憶檔案中...', memory_loading_desc: '記憶檔案將顯示在此處',
@@ -1305,6 +1333,20 @@ const I18N = {
         skill_back: 'Back to list',
         skill_load_failed: 'Could not read the skill',
         skill_builtin_readonly: 'Built-in skill, read-only (replaced on restart)',
+        mcp_section_title: 'MCP Servers', mcp_section_hint: 'Add, edit, or disable MCP servers. Saved servers apply on the next message; no process restart.',
+        mcp_add: 'Add server', mcp_edit: 'Edit server', mcp_empty: 'No MCP servers configured',
+        mcp_test: 'Test connection', mcp_save: 'Save', mcp_cancel: 'Cancel', mcp_delete: 'Delete',
+        mcp_status_ready: 'Ready', mcp_status_pending: 'Loading', mcp_status_failed: 'Failed',
+        mcp_status_needs_auth: 'Needs auth', mcp_status_disabled: 'Disabled', mcp_status_idle: 'Idle',
+        mcp_field_name: 'Name', mcp_field_type: 'Transport', mcp_field_command: 'Command',
+        mcp_field_args: 'Args (one per line)', mcp_field_env: 'Env (KEY=value per line)',
+        mcp_field_url: 'URL', mcp_field_headers: 'Headers (KEY=value per line)', mcp_field_scope: 'OAuth scope',
+        mcp_field_prefix: 'Tool name prefix', mcp_field_timeout: 'Timeout (seconds)', mcp_field_disabled: 'Disable this server',
+        mcp_test_ok: 'Connected', mcp_test_fail: 'Connection failed', mcp_save_error: 'Save failed',
+        mcp_delete_confirm: 'Delete this MCP server?', mcp_apply_hint: 'Applies on the next message',
+        skill_install_btn: 'Install', skill_install_placeholder: 'Skill Hub name or GitHub URL',
+        skill_install_error: 'Install failed', skill_delete: 'Uninstall',
+        skill_delete_confirm: 'Uninstall this skill?', skill_delete_error: 'Uninstall failed',
         memory_title: 'Memory', memory_desc: 'View agent memory files and contents',
         memory_tab_files: 'Memory Files', memory_tab_dreams: 'Self-Evolution',
         memory_loading: 'Loading memory files...', memory_loading_desc: 'Memory files will be displayed here',
@@ -10079,8 +10121,298 @@ function getToolIcon(name) {
 }
 
 function loadSkillsView() {
+    bindSkillsConfigUi();
     loadToolsSection();
+    loadMcpSection();
     loadSkillsSection();
+}
+
+let mcpServersCache = [];
+let mcpEditorOriginalName = null;
+let skillsConfigUiBound = false;
+
+function bindSkillsConfigUi() {
+    if (skillsConfigUiBound) return;
+    skillsConfigUiBound = true;
+    const addBtn = document.getElementById('mcp-add-btn');
+    if (addBtn) addBtn.addEventListener('click', () => openMcpEditor());
+    const typeSel = document.getElementById('mcp-field-type');
+    if (typeSel) typeSel.addEventListener('change', syncMcpEditorTransport);
+    const cancelBtn = document.getElementById('mcp-editor-cancel');
+    if (cancelBtn) cancelBtn.addEventListener('click', closeMcpEditor);
+    const overlay = document.getElementById('mcp-editor-overlay');
+    if (overlay) overlay.addEventListener('click', (e) => { if (e.target === overlay) closeMcpEditor(); });
+    const testBtn = document.getElementById('mcp-editor-test');
+    if (testBtn) testBtn.addEventListener('click', testMcpEditor);
+    const saveBtn = document.getElementById('mcp-editor-save');
+    if (saveBtn) saveBtn.addEventListener('click', saveMcpEditor);
+    const installBtn = document.getElementById('skill-install-btn');
+    if (installBtn) installBtn.addEventListener('click', installSkillFromInput);
+    const installInput = document.getElementById('skill-install-input');
+    if (installInput) installInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); installSkillFromInput(); }
+    });
+}
+
+function kvToObject(text) {
+    const out = {};
+    String(text || '').split(/\r?\n/).forEach((line) => {
+        const trimmed = line.trim();
+        if (!trimmed) return;
+        const idx = trimmed.indexOf('=');
+        if (idx <= 0) return;
+        out[trimmed.slice(0, idx).trim()] = trimmed.slice(idx + 1);
+    });
+    return out;
+}
+
+function objectToKv(obj) {
+    if (!obj || typeof obj !== 'object') return '';
+    return Object.entries(obj).map(([k, v]) => `${k}=${v}`).join('\n');
+}
+
+function mcpStatusLabel(status) {
+    const key = {
+        ready: 'mcp_status_ready',
+        pending: 'mcp_status_pending',
+        failed: 'mcp_status_failed',
+        needs_auth: 'mcp_status_needs_auth',
+        disabled: 'mcp_status_disabled',
+        idle: 'mcp_status_idle',
+    }[status] || 'mcp_status_idle';
+    return t(key);
+}
+
+function mcpStatusClass(status) {
+    if (status === 'ready') return 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400';
+    if (status === 'failed') return 'bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400';
+    if (status === 'needs_auth') return 'bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400';
+    if (status === 'disabled') return 'bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-slate-400';
+    return 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400';
+}
+
+function loadMcpSection() {
+    const emptyEl = document.getElementById('mcp-empty');
+    const listEl = document.getElementById('mcp-list');
+    const badge = document.getElementById('mcp-count-badge');
+    if (!listEl) return;
+    fetch('/api/mcp/servers').then(r => r.json()).then(data => {
+        if (data.status !== 'success') return;
+        mcpServersCache = data.servers || [];
+        if (badge) {
+            badge.textContent = mcpServersCache.length;
+            badge.classList.toggle('hidden', mcpServersCache.length === 0);
+        }
+        if (!mcpServersCache.length) {
+            if (emptyEl) emptyEl.classList.remove('hidden');
+            listEl.classList.add('hidden');
+            listEl.innerHTML = '';
+            return;
+        }
+        if (emptyEl) emptyEl.classList.add('hidden');
+        listEl.innerHTML = '';
+        mcpServersCache.forEach((server) => listEl.appendChild(renderMcpCard(server)));
+        listEl.classList.remove('hidden');
+    }).catch(() => {
+        if (emptyEl) {
+            emptyEl.classList.remove('hidden');
+            emptyEl.innerHTML = `<span class="text-sm text-slate-400 dark:text-slate-500">${t('mcp_save_error')}</span>`;
+        }
+    });
+}
+
+function renderMcpCard(server) {
+    const card = document.createElement('div');
+    card.className = 'bg-white dark:bg-[#1A1A1A] rounded-xl border border-slate-200 dark:border-white/10 p-4 flex items-start gap-3';
+    const summary = server.type === 'stdio'
+        ? [server.command, ...(server.args || [])].filter(Boolean).join(' ')
+        : (server.url || server.type);
+    card.innerHTML = `
+        <div class="w-9 h-9 rounded-lg bg-primary-50 dark:bg-primary-900/20 flex items-center justify-center flex-shrink-0">
+            <i class="fas fa-plug text-primary-500 text-sm"></i>
+        </div>
+        <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2 mb-1">
+                <span class="font-medium text-sm text-slate-700 dark:text-slate-200 truncate flex-1 font-mono">${escapeHtml(server.name)}</span>
+                <span class="px-1.5 py-0.5 rounded-full text-[10px] ${mcpStatusClass(server.status)}">${escapeHtml(mcpStatusLabel(server.status))}</span>
+                <button type="button" data-mcp-edit class="p-1 rounded text-slate-300 hover:text-slate-500"><i class="fas fa-pen text-[10px]"></i></button>
+                <button type="button" data-mcp-delete class="p-1 rounded text-slate-300 hover:text-red-500"><i class="fas fa-trash text-[10px]"></i></button>
+            </div>
+            <p class="text-xs text-slate-400 dark:text-slate-500 truncate">${escapeHtml(summary || server.type)}</p>
+        </div>`;
+    card.querySelector('[data-mcp-edit]').onclick = () => openMcpEditor(server);
+    card.querySelector('[data-mcp-delete]').onclick = () => deleteMcpServer(server.name);
+    return card;
+}
+
+function syncMcpEditorTransport() {
+    const type = document.getElementById('mcp-field-type').value;
+    const stdio = type === 'stdio';
+    document.getElementById('mcp-stdio-fields').classList.toggle('hidden', !stdio);
+    document.getElementById('mcp-url-fields').classList.toggle('hidden', stdio);
+}
+
+function fillMcpEditor(server) {
+    const s = server || {};
+    document.getElementById('mcp-field-name').value = s.name || '';
+    document.getElementById('mcp-field-name').disabled = !!s.name;
+    document.getElementById('mcp-field-type').value = s.type || (s.url ? 'sse' : 'stdio');
+    document.getElementById('mcp-field-command').value = s.command || '';
+    document.getElementById('mcp-field-args').value = (s.args || []).join('\n');
+    document.getElementById('mcp-field-env').value = objectToKv(s.env);
+    document.getElementById('mcp-field-url').value = s.url || '';
+    document.getElementById('mcp-field-headers').value = objectToKv(s.headers);
+    document.getElementById('mcp-field-scope').value = s.scope || '';
+    document.getElementById('mcp-field-prefix').value = s.tool_name_prefix || '';
+    document.getElementById('mcp-field-timeout').value = s.timeout || '';
+    document.getElementById('mcp-field-disabled').checked = !!s.disabled;
+    const result = document.getElementById('mcp-test-result');
+    result.classList.add('hidden');
+    result.textContent = '';
+    document.getElementById('mcp-editor-title').textContent = s.name ? t('mcp_edit') : t('mcp_add');
+    syncMcpEditorTransport();
+}
+
+function readMcpEditor() {
+    const type = document.getElementById('mcp-field-type').value;
+    const cfg = {
+        name: document.getElementById('mcp-field-name').value.trim(),
+        type,
+        tool_name_prefix: document.getElementById('mcp-field-prefix').value,
+        disabled: document.getElementById('mcp-field-disabled').checked,
+    };
+    const timeout = document.getElementById('mcp-field-timeout').value.trim();
+    if (timeout) cfg.timeout = Number(timeout);
+    if (type === 'stdio') {
+        cfg.command = document.getElementById('mcp-field-command').value.trim();
+        cfg.args = document.getElementById('mcp-field-args').value.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+        cfg.env = kvToObject(document.getElementById('mcp-field-env').value);
+    } else {
+        cfg.url = document.getElementById('mcp-field-url').value.trim();
+        cfg.headers = kvToObject(document.getElementById('mcp-field-headers').value);
+        cfg.scope = document.getElementById('mcp-field-scope').value.trim();
+    }
+    return cfg;
+}
+
+function openMcpEditor(server) {
+    mcpEditorOriginalName = server ? server.name : null;
+    fillMcpEditor(server);
+    document.getElementById('mcp-editor-overlay').classList.remove('hidden');
+}
+
+function closeMcpEditor() {
+    document.getElementById('mcp-editor-overlay').classList.add('hidden');
+    mcpEditorOriginalName = null;
+}
+
+async function persistMcpServers(servers) {
+    const res = await fetch('/api/mcp/servers', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ servers }),
+    });
+    const data = await res.json();
+    if (data.status !== 'success') throw new Error(data.message || t('mcp_save_error'));
+    mcpServersCache = data.servers || servers;
+    loadMcpSection();
+    return data;
+}
+
+async function saveMcpEditor() {
+    try {
+        const cfg = readMcpEditor();
+        const next = mcpServersCache.filter(s => s.name !== mcpEditorOriginalName && s.name !== cfg.name);
+        next.push(cfg);
+        await persistMcpServers(next);
+        closeMcpEditor();
+    } catch (err) {
+        const result = document.getElementById('mcp-test-result');
+        result.classList.remove('hidden');
+        result.textContent = err.message || t('mcp_save_error');
+    }
+}
+
+async function testMcpEditor() {
+    const result = document.getElementById('mcp-test-result');
+    result.classList.remove('hidden');
+    result.textContent = t('mcp_test') + '...';
+    try {
+        const res = await fetch('/api/mcp/servers/test', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ server: readMcpEditor() }),
+        });
+        const data = await res.json();
+        if (data.ok) {
+            const names = (data.tools || []).map(x => x.name).filter(Boolean);
+            result.textContent = t('mcp_test_ok') + (names.length ? (': ' + names.join(', ')) : '');
+        } else {
+            result.textContent = t('mcp_test_fail') + ': ' + (data.error || data.message || '');
+        }
+    } catch (err) {
+        result.textContent = t('mcp_test_fail') + ': ' + (err.message || '');
+    }
+}
+
+function deleteMcpServer(name) {
+    showConfirmDialog({
+        title: t('mcp_delete'),
+        message: t('mcp_delete_confirm'),
+        okText: t('mcp_delete'),
+        onConfirm: async () => {
+            try {
+                await persistMcpServers(mcpServersCache.filter(s => s.name !== name));
+            } catch (err) {
+                alert(err.message || t('mcp_save_error'));
+            }
+        },
+    });
+}
+
+async function installSkillFromInput() {
+    const input = document.getElementById('skill-install-input');
+    const spec = (input && input.value || '').trim();
+    if (!spec) return;
+    const btn = document.getElementById('skill-install-btn');
+    if (btn) btn.disabled = true;
+    try {
+        const res = await fetch('/api/skills', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'install', spec }),
+        });
+        const data = await res.json();
+        if (data.status !== 'success') throw new Error(data.message || t('skill_install_error'));
+        if (input) input.value = '';
+        loadSkillsSection();
+    } catch (err) {
+        alert(err.message || t('skill_install_error'));
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+
+function deleteSkill(name) {
+    showConfirmDialog({
+        title: t('skill_delete'),
+        message: t('skill_delete_confirm'),
+        okText: t('skill_delete'),
+        onConfirm: async () => {
+            try {
+                const res = await fetch('/api/skills', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'delete', name }),
+                });
+                const data = await res.json();
+                if (data.status !== 'success') throw new Error(data.message || t('skill_delete_error'));
+                loadSkillsSection();
+            } catch (err) {
+                alert(err.message || t('skill_delete_error'));
+            }
+        },
+    });
 }
 
 function loadToolsSection() {
@@ -10151,6 +10483,7 @@ function loadSkillsSection() {
             card.dataset.skillDesc = sk.description || '';
             card.dataset.skillDisplayName = sk.display_name || '';
             card.dataset.enabled = sk.enabled ? '1' : '0';
+            card.dataset.deletable = sk.deletable ? '1' : '0';
             renderSkillCard(card, sk);
             listEl.appendChild(card);
         });
@@ -10178,6 +10511,7 @@ function renderSkillCard(card, sk) {
                 >
                     <i class="fas fa-pen text-[10px]"></i>
                 </button>
+                ${sk.deletable ? `<button data-skill-delete class="flex-shrink-0 p-1 -mx-1 -mt-1.5 -mb-1 rounded text-slate-300 dark:text-slate-600 hover:text-red-500 transition-colors" title="${t('skill_delete')}"><i class="fas fa-trash text-[10px]"></i></button>` : ''}
                 <button
                     role="switch"
                     data-skill-switch
@@ -10210,6 +10544,13 @@ function renderSkillCard(card, sk) {
             toggleSkill(sk.name, enabled);
         };
     }
+    const delBtn = card.querySelector('[data-skill-delete]');
+    if (delBtn) {
+        delBtn.onclick = (e) => {
+            e.stopPropagation();
+            deleteSkill(sk.name);
+        };
+    }
 }
 
 function toggleSkill(name, currentlyEnabled) {
@@ -10233,6 +10574,7 @@ function toggleSkill(name, currentlyEnabled) {
                     description: card.dataset.skillDesc || '',
                     display_name: card.dataset.skillDisplayName || '',
                     enabled: !currentlyEnabled,
+                    deletable: card.dataset.deletable === '1',
                 });
             }
         } else {
