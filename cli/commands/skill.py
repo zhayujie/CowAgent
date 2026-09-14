@@ -277,7 +277,7 @@ def _scan_skills_in_dir(directory: str) -> list:
     return found
 
 
-def _batch_install_skills(discovered, spec, skills_dir, source, result: InstallResult, display_name: str = ""):
+def _batch_install_skills(discovered, spec, skills_dir, source, result: InstallResult, display_name: str = "", agent_id: str = None):
     """Install a list of discovered skills into skills_dir."""
     single = len(discovered) == 1
     result.messages.append(f"Found {len(discovered)} skill(s) in {spec}:")
@@ -290,7 +290,7 @@ def _batch_install_skills(discovered, spec, skills_dir, source, result: InstallR
         if os.path.exists(target_dir):
             shutil.rmtree(target_dir)
         shutil.copytree(sdir, target_dir)
-        _register_installed_skill(safe_name, source=source, display_name=display_name if single else "")
+        _register_installed_skill(safe_name, source=source, display_name=display_name if single else "", agent_id=agent_id)
         result.installed.append(safe_name)
         result.messages.append(f"  + {safe_name}")
 
@@ -309,13 +309,13 @@ def _read_file_text(path: str) -> str:
         return ""
 
 
-def _install_local(path: str, result: InstallResult):
+def _install_local(path: str, result: InstallResult, agent_id: str = None):
     """Install skill(s) from a local directory."""
     path = os.path.abspath(os.path.expanduser(path))
     if not os.path.isdir(path):
         raise SkillInstallError(f"'{path}' is not a directory.")
 
-    skills_dir = get_skills_dir()
+    skills_dir = get_skills_dir(agent_id)
     os.makedirs(skills_dir, exist_ok=True)
 
     if os.path.isfile(os.path.join(path, "SKILL.md")):
@@ -327,7 +327,7 @@ def _install_local(path: str, result: InstallResult):
         if os.path.exists(target_dir):
             shutil.rmtree(target_dir)
         shutil.copytree(path, target_dir)
-        _register_installed_skill(skill_name, source="local")
+        _register_installed_skill(skill_name, source="local", agent_id=agent_id)
         result.installed.append(skill_name)
         result.messages.append(f"Installed '{skill_name}' from local path.")
         return
@@ -336,15 +336,15 @@ def _install_local(path: str, result: InstallResult):
     if not discovered:
         raise SkillInstallError(f"No skills found in '{path}'.")
 
-    _batch_install_skills(discovered, path, skills_dir, "local", result)
+    _batch_install_skills(discovered, path, skills_dir, "local", result, agent_id=agent_id)
 
 
-def _register_installed_skill(name: str, source: str = "cowhub", display_name: str = ""):
+def _register_installed_skill(name: str, source: str = "cowhub", display_name: str = "", agent_id: str = None):
     """Register a newly installed skill into skills_config.json.
 
     source values: builtin, cow, github, clawhub, linkai, local, url
     """
-    skills_dir = get_skills_dir()
+    skills_dir = get_skills_dir(agent_id)
     config_path = os.path.join(skills_dir, "skills_config.json")
 
     config = {}
@@ -414,7 +414,7 @@ def _read_skill_description(skill_dir: str) -> str:
         return ""
 
 
-def _install_url(url: str, result: InstallResult):
+def _install_url(url: str, result: InstallResult, agent_id: str = None):
     """Install a skill from a direct SKILL.md URL."""
     result.messages.append(f"Downloading SKILL.md from {url} ...")
     try:
@@ -432,7 +432,7 @@ def _install_url(url: str, result: InstallResult):
     skill_name = skill_name.strip()
     _check_skill_name(skill_name)
 
-    skills_dir = get_skills_dir()
+    skills_dir = get_skills_dir(agent_id)
     os.makedirs(skills_dir, exist_ok=True)
     skill_dir = os.path.join(skills_dir, skill_name)
 
@@ -443,12 +443,12 @@ def _install_url(url: str, result: InstallResult):
     with open(os.path.join(skill_dir, "SKILL.md"), "w", encoding="utf-8") as f:
         f.write(content)
 
-    _register_installed_skill(skill_name, source="url")
+    _register_installed_skill(skill_name, source="url", agent_id=agent_id)
     result.installed.append(skill_name)
     result.messages.append(f"Installed '{skill_name}' from URL.")
 
 
-def _install_archive_url(url: str, result: InstallResult):
+def _install_archive_url(url: str, result: InstallResult, agent_id: str = None):
     """Install skill(s) from a remote zip/tar.gz archive URL."""
     parsed = urlparse(url)
     if parsed.scheme != "https":
@@ -466,19 +466,19 @@ def _install_archive_url(url: str, result: InstallResult):
     except Exception as e:
         raise SkillInstallError(f"Failed to download archive: {e}")
 
-    skills_dir = get_skills_dir()
+    skills_dir = get_skills_dir(agent_id)
     os.makedirs(skills_dir, exist_ok=True)
 
     content_type = resp.headers.get("Content-Type", "")
     lower_url = url.lower()
 
     if lower_url.endswith((".tar.gz", ".tgz")) or "gzip" in content_type:
-        _install_targz_bytes(resp.content, fallback_name, skills_dir, result)
+        _install_targz_bytes(resp.content, fallback_name, skills_dir, result, agent_id=agent_id)
     else:
-        _install_zip_bytes(resp.content, fallback_name, skills_dir, result=result, source_label="url")
+        _install_zip_bytes(resp.content, fallback_name, skills_dir, result=result, source_label="url", agent_id=agent_id)
 
 
-def _install_targz_bytes(content: bytes, name: str, skills_dir: str, result: InstallResult):
+def _install_targz_bytes(content: bytes, name: str, skills_dir: str, result: InstallResult, agent_id: str = None):
     """Extract a tar.gz archive and install skill(s)."""
     with tempfile.TemporaryDirectory() as tmp_dir:
         tar_path = os.path.join(tmp_dir, "package.tar.gz")
@@ -514,7 +514,7 @@ def _install_targz_bytes(content: bytes, name: str, skills_dir: str, result: Ins
         discovered = _scan_skills_in_repo(pkg_root) or _scan_skills_in_dir(pkg_root)
 
         if discovered and len(discovered) > 1:
-            _batch_install_skills(discovered, name, skills_dir, "url", result)
+            _batch_install_skills(discovered, name, skills_dir, "url", result, agent_id=agent_id)
             return
 
         if discovered and len(discovered) == 1:
@@ -526,7 +526,7 @@ def _install_targz_bytes(content: bytes, name: str, skills_dir: str, result: Ins
             if os.path.exists(target):
                 shutil.rmtree(target)
             shutil.copytree(sdir, target)
-            _register_installed_skill(safe_name, source="url")
+            _register_installed_skill(safe_name, source="url", agent_id=agent_id)
             result.installed.append(safe_name)
             result.messages.append(f"Installed '{safe_name}' from URL.")
             return
@@ -535,7 +535,7 @@ def _install_targz_bytes(content: bytes, name: str, skills_dir: str, result: Ins
         if os.path.exists(target):
             shutil.rmtree(target)
         shutil.copytree(pkg_root, target)
-        _register_installed_skill(name, source="url")
+        _register_installed_skill(name, source="url", agent_id=agent_id)
         result.installed.append(name)
         result.messages.append(f"Installed '{name}' from URL.")
 
@@ -853,26 +853,27 @@ def search(query):
 # Core install function — reusable from CLI and chat plugin
 # ------------------------------------------------------------------
 
-def install_skill(name: str) -> InstallResult:
+def install_skill(name: str, agent_id: str = None) -> InstallResult:
     """Core install logic, usable from CLI and chat plugin.
 
     Accepts all formats: Skill Hub name, owner/repo, GitHub/GitLab URL,
     git@ SSH, local path, SKILL.md URL.
+    ``agent_id`` selects which agent's skills directory to write to.
     Returns InstallResult with installed skill names and messages.
     """
     result = InstallResult()
     try:
-        _route_install(name, result)
+        _route_install(name, result, agent_id=agent_id)
     except SkillInstallError as e:
         result.error = str(e)
     return result
 
 
-def _route_install(name: str, result: InstallResult):
+def _route_install(name: str, result: InstallResult, agent_id: str = None):
     """Dispatch to the appropriate installer based on input format."""
     # --- Local path ---
     if name.startswith(("./", "../", "/", "~/")):
-        _install_local(name, result)
+        _install_local(name, result, agent_id=agent_id)
         return
 
     # --- Direct SKILL.md URL ---
@@ -883,35 +884,35 @@ def _route_install(name: str, result: InstallResult):
             owner, repo, branch, subpath = gh
             _install_github(f"{owner}/{repo}", result, subpath=subpath, skill_name=(
                 subpath.rstrip("/").split("/")[-1] if subpath else repo
-            ), branch=branch)
+            ), branch=branch, agent_id=agent_id)
             return
-        _install_url(name, result)
+        _install_url(name, result, agent_id=agent_id)
         return
 
     # --- Zip / tar.gz archive URL ---
     if name.startswith(("http://", "https://")) and re.search(r'\.(zip|tar\.gz|tgz)(\?.*)?$', name, re.IGNORECASE):
-        _install_archive_url(name, result)
+        _install_archive_url(name, result, agent_id=agent_id)
         return
 
     # --- Full GitHub URL ---
     parsed = _parse_github_url(name)
     if parsed:
         owner, repo, branch, subpath = parsed
-        _install_github(f"{owner}/{repo}", result, subpath=subpath, branch=branch)
+        _install_github(f"{owner}/{repo}", result, subpath=subpath, branch=branch, agent_id=agent_id)
         return
 
     # --- Full GitLab URL ---
     gl = _parse_gitlab_url(name)
     if gl:
         owner, repo, branch, subpath = gl
-        _install_gitlab(f"{owner}/{repo}", result, subpath=subpath, branch=branch)
+        _install_gitlab(f"{owner}/{repo}", result, subpath=subpath, branch=branch, agent_id=agent_id)
         return
 
     # --- git@host:owner/repo.git SSH URL ---
     ssh = _parse_git_ssh_url(name)
     if ssh:
         host, owner, repo = ssh
-        _install_git_clone(name, result, display_name=f"{owner}/{repo}")
+        _install_git_clone(name, result, display_name=f"{owner}/{repo}", agent_id=agent_id)
         return
 
     # --- github: prefix ---
@@ -921,17 +922,17 @@ def _route_install(name: str, result: InstallResult):
         if "#" in raw:
             raw, subpath = raw.split("#", 1)
         if re.match(r"^[a-zA-Z0-9_\-]+/[a-zA-Z0-9_.\-]+$", raw):
-            _install_github(raw, result, subpath=subpath)
+            _install_github(raw, result, subpath=subpath, agent_id=agent_id)
         else:
             _check_skill_name(raw)
-            _install_hub(raw, result, provider="github")
+            _install_hub(raw, result, provider="github", agent_id=agent_id)
         return
 
     # --- clawhub: prefix ---
     if name.startswith("clawhub:"):
         skill_name = name[8:]
         _check_skill_name(skill_name)
-        _install_hub(skill_name, result, provider="clawhub")
+        _install_hub(skill_name, result, provider="clawhub", agent_id=agent_id)
         return
 
     # --- linkai: prefix ---
@@ -940,7 +941,7 @@ def _route_install(name: str, result: InstallResult):
         # LinkAI codes can be mixed-case alphanumeric; validate loosely
         if not re.match(r"^[a-zA-Z0-9_\-]{1,128}$", skill_code):
             raise SkillInstallError(f"Invalid LinkAI skill code '{skill_code}'.")
-        _install_hub(skill_code, result, provider="linkai")
+        _install_hub(skill_code, result, provider="linkai", agent_id=agent_id)
         return
 
     # --- owner/repo or owner/repo#subpath shorthand ---
@@ -949,12 +950,12 @@ def _route_install(name: str, result: InstallResult):
         spec = name
         if "#" in spec:
             spec, subpath = spec.split("#", 1)
-        _install_github(spec, result, subpath=subpath)
+        _install_github(spec, result, subpath=subpath, agent_id=agent_id)
         return
 
     # --- Fallback: Skill Hub by name ---
     _check_skill_name(name)
-    _install_hub(name, result)
+    _install_hub(name, result, agent_id=agent_id)
 
 
 # ------------------------------------------------------------------
@@ -995,9 +996,9 @@ def install(name):
         sys.exit(1)
 
 
-def _install_hub(name, result: InstallResult, provider=None):
+def _install_hub(name, result: InstallResult, provider=None, agent_id: str = None):
     """Install a skill from Skill Hub."""
-    skills_dir = get_skills_dir()
+    skills_dir = get_skills_dir(agent_id)
     os.makedirs(skills_dir, exist_ok=True)
 
     result.messages.append(f"Fetching skill info for '{name}'...")
@@ -1039,12 +1040,12 @@ def _install_hub(name, result: InstallResult, provider=None):
                 parsed_url = _parse_github_url(source_url)
                 if parsed_url:
                     owner, repo, branch, subpath = parsed_url
-                    _install_github(f"{owner}/{repo}", result, subpath=subpath, skill_name=name, branch=branch, timeout=gh_timeout)
+                    _install_github(f"{owner}/{repo}", result, subpath=subpath, skill_name=name, branch=branch, timeout=gh_timeout, agent_id=agent_id)
                 else:
                     _check_github_spec(source_url)
-                    _install_github(source_url, result, skill_name=name, timeout=gh_timeout)
+                    _install_github(source_url, result, skill_name=name, timeout=gh_timeout, agent_id=agent_id)
                 if hub_display_name:
-                    _register_installed_skill(name, display_name=hub_display_name)
+                    _register_installed_skill(name, display_name=hub_display_name, agent_id=agent_id)
                 return
             except Exception as e:
                 gh_err = e
@@ -1074,9 +1075,9 @@ def _install_hub(name, result: InstallResult, provider=None):
             expected_checksum = mirror_resp.headers.get("X-Checksum-Sha256")
             _check_checksum(mirror_resp.content, expected_checksum)
             installed_before = len(result.installed)
-            _install_zip_bytes(mirror_resp.content, name, skills_dir, result=result, source_label="cowhub", display_name=hub_display_name)
+            _install_zip_bytes(mirror_resp.content, name, skills_dir, result=result, source_label="cowhub", display_name=hub_display_name, agent_id=agent_id)
             if len(result.installed) == installed_before:
-                _register_installed_skill(name, source="cowhub", display_name=hub_display_name)
+                _register_installed_skill(name, source="cowhub", display_name=hub_display_name, agent_id=agent_id)
                 result.installed.append(name)
                 result.messages.append(f"Installed '{name}' from mirror.")
             return
@@ -1109,9 +1110,9 @@ def _install_hub(name, result: InstallResult, provider=None):
                 if dl_err is None:
                     _check_checksum(dl_resp.content, expected_checksum)
                     installed_before = len(result.installed)
-                    _install_zip_bytes(dl_resp.content, name, skills_dir, result=result, source_label=src_provider, display_name=hub_display_name)
+                    _install_zip_bytes(dl_resp.content, name, skills_dir, result=result, source_label=src_provider, display_name=hub_display_name, agent_id=agent_id)
                     if len(result.installed) == installed_before:
-                        _register_installed_skill(name, source=src_provider, display_name=hub_display_name)
+                        _register_installed_skill(name, source=src_provider, display_name=hub_display_name, agent_id=agent_id)
                         result.installed.append(name)
                         result.messages.append(f"Installed '{name}' from {src_provider}.")
                     return
@@ -1137,9 +1138,9 @@ def _install_hub(name, result: InstallResult, provider=None):
                 expected_checksum = mirror_resp.headers.get("X-Checksum-Sha256")
                 _check_checksum(mirror_resp.content, expected_checksum)
                 installed_before = len(result.installed)
-                _install_zip_bytes(mirror_resp.content, name, skills_dir, result=result, source_label="cowhub", display_name=hub_display_name)
+                _install_zip_bytes(mirror_resp.content, name, skills_dir, result=result, source_label="cowhub", display_name=hub_display_name, agent_id=agent_id)
                 if len(result.installed) == installed_before:
-                    _register_installed_skill(name, source="cowhub", display_name=hub_display_name)
+                    _register_installed_skill(name, source="cowhub", display_name=hub_display_name, agent_id=agent_id)
                     result.installed.append(name)
                     result.messages.append(f"Installed '{name}' from mirror.")
             else:
@@ -1151,12 +1152,12 @@ def _install_hub(name, result: InstallResult, provider=None):
             parsed_url = _parse_github_url(source_url)
             if parsed_url:
                 owner, repo, branch, subpath = parsed_url
-                _install_github(f"{owner}/{repo}", result, subpath=subpath, skill_name=name, branch=branch)
+                _install_github(f"{owner}/{repo}", result, subpath=subpath, skill_name=name, branch=branch, agent_id=agent_id)
             else:
                 _check_github_spec(source_url)
-                _install_github(source_url, result, skill_name=name)
+                _install_github(source_url, result, skill_name=name, agent_id=agent_id)
             if hub_display_name:
-                _register_installed_skill(name, display_name=hub_display_name)
+                _register_installed_skill(name, display_name=hub_display_name, agent_id=agent_id)
             return
 
     elif "application/zip" in content_type:
@@ -1164,9 +1165,9 @@ def _install_hub(name, result: InstallResult, provider=None):
         expected_checksum = resp.headers.get("X-Checksum-Sha256")
         _check_checksum(resp.content, expected_checksum)
         installed_before = len(result.installed)
-        _install_zip_bytes(resp.content, name, skills_dir, result=result, source_label="cowhub")
+        _install_zip_bytes(resp.content, name, skills_dir, result=result, source_label="cowhub", agent_id=agent_id)
         if len(result.installed) == installed_before:
-            _register_installed_skill(name)
+            _register_installed_skill(name, agent_id=agent_id)
             result.installed.append(name)
             result.messages.append(f"Installed '{name}' from Skill Hub.")
         return
@@ -1174,7 +1175,7 @@ def _install_hub(name, result: InstallResult, provider=None):
     raise SkillInstallError("Unexpected response from Skill Hub.")
 
 
-def _install_github(spec, result: InstallResult, subpath=None, skill_name=None, branch=None, source="github", timeout=30):
+def _install_github(spec, result: InstallResult, subpath=None, skill_name=None, branch=None, source="github", timeout=30, agent_id: str = None):
     """Install skill(s) from a GitHub repo.
 
     Strategy: zip download first (no API rate limit), Contents API as fallback.
@@ -1184,7 +1185,7 @@ def _install_github(spec, result: InstallResult, subpath=None, skill_name=None, 
 
     _check_github_spec(spec)
 
-    skills_dir = get_skills_dir()
+    skills_dir = get_skills_dir(agent_id)
     os.makedirs(skills_dir, exist_ok=True)
     owner, repo = spec.split("/", 1)
 
@@ -1203,7 +1204,7 @@ def _install_github(spec, result: InstallResult, subpath=None, skill_name=None, 
 
     if repo_root:
         try:
-            _install_from_repo_root(repo_root, spec, subpath, skill_name, skills_dir, source, result)
+            _install_from_repo_root(repo_root, spec, subpath, skill_name, skills_dir, source, result, agent_id=agent_id)
             return
         except SkillInstallError:
             raise
@@ -1234,14 +1235,14 @@ def _install_github(spec, result: InstallResult, subpath=None, skill_name=None, 
             if os.path.exists(target_dir):
                 shutil.rmtree(target_dir)
             shutil.copytree(api_dest, target_dir)
-        _register_installed_skill(skill_name, source=source)
+        _register_installed_skill(skill_name, source=source, agent_id=agent_id)
         result.installed.append(skill_name)
         result.messages.append(f"Installed '{skill_name}' from GitHub.")
     except Exception as e:
         raise SkillInstallError(f"Contents API also failed: {e}")
 
 
-def _install_from_repo_root(repo_root, spec, subpath, skill_name, skills_dir, source, result: InstallResult):
+def _install_from_repo_root(repo_root, spec, subpath, skill_name, skills_dir, source, result: InstallResult, agent_id: str = None):
     """Install skill(s) from an already-extracted repo root directory."""
     if subpath:
         source_dir = os.path.join(repo_root, subpath.strip("/"))
@@ -1260,14 +1261,14 @@ def _install_from_repo_root(repo_root, spec, subpath, skill_name, skills_dir, so
             if os.path.exists(target_dir):
                 shutil.rmtree(target_dir)
             shutil.copytree(source_dir, target_dir)
-            _register_installed_skill(skill_name, source=source)
+            _register_installed_skill(skill_name, source=source, agent_id=agent_id)
             result.installed.append(skill_name)
             result.messages.append(f"Installed '{skill_name}' from {source}.")
             return
 
         discovered = _scan_skills_in_dir(source_dir)
         if discovered:
-            _batch_install_skills(discovered, spec, skills_dir, source, result)
+            _batch_install_skills(discovered, spec, skills_dir, source, result, agent_id=agent_id)
             return
 
         raise SkillInstallError(f"No SKILL.md found in '{subpath}' or its subdirectories.")
@@ -1284,19 +1285,19 @@ def _install_from_repo_root(repo_root, spec, subpath, skill_name, skills_dir, so
             if os.path.exists(target_dir):
                 shutil.rmtree(target_dir)
             shutil.copytree(repo_root, target_dir)
-            _register_installed_skill(skill_name, source=source)
+            _register_installed_skill(skill_name, source=source, agent_id=agent_id)
             result.installed.append(skill_name)
             result.messages.append(f"Installed '{skill_name}' from {source}.")
             return
 
-        _batch_install_skills(discovered, spec, skills_dir, source, result)
+        _batch_install_skills(discovered, spec, skills_dir, source, result, agent_id=agent_id)
 
 
-def _install_gitlab(spec, result: InstallResult, subpath=None, branch=None):
+def _install_gitlab(spec, result: InstallResult, subpath=None, branch=None, agent_id: str = None):
     """Install skill(s) from a GitLab repo via zip download."""
     _check_github_spec(spec)
 
-    skills_dir = get_skills_dir()
+    skills_dir = get_skills_dir(agent_id)
     os.makedirs(skills_dir, exist_ok=True)
 
     owner, repo = spec.split("/", 1)
@@ -1319,14 +1320,14 @@ def _install_gitlab(spec, result: InstallResult, subpath=None, branch=None):
         raise SkillInstallError(f"Failed to download from GitLab: {e}")
 
     try:
-        _install_from_repo_root(repo_root, spec, subpath, None, skills_dir, "gitlab", result)
+        _install_from_repo_root(repo_root, spec, subpath, None, skills_dir, "gitlab", result, agent_id=agent_id)
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
-def _install_git_clone(git_url: str, result: InstallResult, display_name: str = ""):
+def _install_git_clone(git_url: str, result: InstallResult, display_name: str = "", agent_id: str = None):
     """Install skill(s) from any git URL via shallow clone."""
-    skills_dir = get_skills_dir()
+    skills_dir = get_skills_dir(agent_id)
     os.makedirs(skills_dir, exist_ok=True)
 
     result.messages.append(f"Cloning {display_name or git_url} ...")
@@ -1337,12 +1338,12 @@ def _install_git_clone(git_url: str, result: InstallResult, display_name: str = 
         raise SkillInstallError(str(e))
 
     try:
-        _install_from_repo_root(repo_root, display_name or git_url, None, None, skills_dir, "git", result)
+        _install_from_repo_root(repo_root, display_name or git_url, None, None, skills_dir, "git", result, agent_id=agent_id)
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
-def _install_zip_bytes(content, name, skills_dir, result: InstallResult = None, source_label: str = "zip", display_name: str = ""):
+def _install_zip_bytes(content, name, skills_dir, result: InstallResult = None, source_label: str = "zip", display_name: str = "", agent_id: str = None):
     """Extract a zip archive and install skill(s).
 
     Supports three scenarios:
@@ -1367,7 +1368,7 @@ def _install_zip_bytes(content, name, skills_dir, result: InstallResult = None, 
         discovered = _scan_skills_in_repo(pkg_root) or _scan_skills_in_dir(pkg_root)
 
         if discovered and len(discovered) > 1 and result is not None:
-            _batch_install_skills(discovered, name, skills_dir, source_label, result, display_name=display_name)
+            _batch_install_skills(discovered, name, skills_dir, source_label, result, display_name=display_name, agent_id=agent_id)
             return
 
         if discovered and len(discovered) == 1:
@@ -1379,7 +1380,7 @@ def _install_zip_bytes(content, name, skills_dir, result: InstallResult = None, 
             if os.path.exists(target):
                 shutil.rmtree(target)
             shutil.copytree(sdir, target)
-            _register_installed_skill(safe_name, source=source_label, display_name=display_name)
+            _register_installed_skill(safe_name, source=source_label, display_name=display_name, agent_id=agent_id)
             if result is not None:
                 result.installed.append(safe_name)
                 result.messages.append(f"Installed '{safe_name}' from {source_label}.")

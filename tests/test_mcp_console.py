@@ -1,6 +1,7 @@
 """Web/desktop MCP + skill install console APIs."""
 
 import json
+import threading
 from pathlib import Path
 from unittest.mock import patch
 
@@ -226,6 +227,72 @@ def test_skills_handler_install_and_delete(tmp_path):
     assert installed["installed"] == ["pptx"]
     assert deleted["status"] == "success"
     assert dummy.deleted == ["pptx"]
+
+
+def test_install_skill_for_agent_passes_agent_id_without_patching_global():
+    import cli.commands.skill as skill_cmd
+    from channel.web.web_channel import _install_skill_for_agent
+    from cli.commands.skill import InstallResult
+
+    original = skill_cmd.get_skills_dir
+    fake = InstallResult()
+    fake.installed = ["pptx"]
+    with patch.object(skill_cmd, "install_skill", return_value=fake) as inst:
+        result = _install_skill_for_agent("pptx", agent_id="other")
+
+    assert skill_cmd.get_skills_dir is original
+    inst.assert_called_once_with("pptx", agent_id="other")
+    assert result.installed == ["pptx"]
+
+
+def test_concurrent_install_skill_keeps_agent_dirs_isolated(tmp_path, monkeypatch):
+    import cli.commands.skill as skill_cmd
+
+    src_a = tmp_path / "src-a"
+    src_b = tmp_path / "src-b"
+    for src, name in ((src_a, "alpha"), (src_b, "beta")):
+        src.mkdir()
+        (src / "SKILL.md").write_text(
+            f"---\nname: {name}\n---\n# {name}\n",
+            encoding="utf-8",
+        )
+
+    barrier = threading.Barrier(2)
+    seen = []
+
+    def fake_get_skills_dir(agent_id=None):
+        seen.append(agent_id)
+        barrier.wait(timeout=5)
+        dest = tmp_path / (agent_id or "default") / "skills"
+        dest.mkdir(parents=True, exist_ok=True)
+        return str(dest)
+
+    monkeypatch.setattr(skill_cmd, "get_skills_dir", fake_get_skills_dir)
+
+    errors = []
+
+    def run(spec, agent_id):
+        try:
+            result = skill_cmd.InstallResult()
+            skill_cmd._install_local(str(spec), result, agent_id=agent_id)
+            if result.error:
+                errors.append(result.error)
+        except Exception as exc:
+            errors.append(exc)
+
+    t1 = threading.Thread(target=run, args=(src_a, "agent-a"))
+    t2 = threading.Thread(target=run, args=(src_b, "agent-b"))
+    t1.start()
+    t2.start()
+    t1.join()
+    t2.join()
+
+    assert errors == []
+    assert set(seen) == {"agent-a", "agent-b"}
+    assert (tmp_path / "agent-a" / "skills" / "alpha" / "SKILL.md").exists()
+    assert (tmp_path / "agent-b" / "skills" / "beta" / "SKILL.md").exists()
+    assert not (tmp_path / "agent-a" / "skills" / "beta").exists()
+    assert not (tmp_path / "agent-b" / "skills" / "alpha").exists()
 
 
 def test_skills_handler_refuses_builtin_delete():
