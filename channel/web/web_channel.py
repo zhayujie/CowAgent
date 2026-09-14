@@ -6769,19 +6769,13 @@ def _install_skill_for_agent(spec: str, agent_id: str = None):
     """Install a skill into the console's skills directory.
 
     ``cli.commands.skill.install_skill`` is the real installer (Hub name,
-    GitHub URL, zip, ...). It reads ``get_skills_dir`` from its own module
-    globals, so a one-call patch is enough to keep a multi-agent workspace
-    isolated without threading agent_id through every helper.
+    GitHub URL, zip, ...). Pass ``agent_id`` through so a multi-agent
+    workspace stays isolated without rewriting the module-level
+    ``get_skills_dir``.
     """
     import cli.commands.skill as skill_cmd
 
-    original = skill_cmd.get_skills_dir
-    if agent_id:
-        skill_cmd.get_skills_dir = lambda _aid=None: original(agent_id)
-    try:
-        return skill_cmd.install_skill(spec)
-    finally:
-        skill_cmd.get_skills_dir = original
+    return skill_cmd.install_skill(spec, agent_id=agent_id)
 
 
 def _mcp_workspace(source=None) -> str:
