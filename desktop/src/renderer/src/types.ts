@@ -850,6 +850,43 @@ export interface SkillInfo {
   source?: string
   enabled: boolean
   category?: string
+  ships_with_install?: boolean
+  deletable?: boolean
+}
+
+export type McpTransport = 'stdio' | 'sse' | 'streamable-http'
+export type McpServerStatus = 'pending' | 'ready' | 'failed' | 'needs_auth' | 'disabled' | 'idle' | 'unknown'
+
+export interface McpServerConfig {
+  name: string
+  type?: McpTransport | string
+  command?: string
+  args?: string[]
+  env?: Record<string, string>
+  url?: string
+  headers?: Record<string, string>
+  scope?: string
+  tool_name_prefix?: string
+  disabled?: boolean
+  timeout?: number
+  status?: McpServerStatus | string
+}
+
+export interface McpServersResult {
+  status: string
+  servers: McpServerConfig[]
+  path?: string
+  hint?: string
+  message?: string
+}
+
+export interface McpTestResult {
+  status: string
+  ok: boolean
+  tools: Array<{ name: string; description?: string }>
+  error?: string | null
+  needs_auth?: boolean
+  message?: string
 }
 
 /** Response of GET /api/skills/content: a skill's definition file. */

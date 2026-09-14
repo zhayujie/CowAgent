@@ -336,12 +336,14 @@ class ToolManager:
                 # DEBUG: with N agents this fires N times for the same shared
                 # mcp.json; the real boot is logged once at INFO further below.
                 logger.debug(f"[ToolManager] Loading MCP config from {mcp_json_path}")
-                return _normalize_mcp_configs(raw)
+                from agent.tools.mcp.service import mcp_is_disabled
+                return [cfg for cfg in _normalize_mcp_configs(raw) if not mcp_is_disabled(cfg)]
             except Exception as e:
                 logger.warning(f"[ToolManager] Failed to read {mcp_json_path}: {e}, falling back to config.json")
 
         raw = conf().get("mcp_servers", [])
-        return _normalize_mcp_configs(raw)
+        from agent.tools.mcp.service import mcp_is_disabled
+        return [cfg for cfg in _normalize_mcp_configs(raw) if not mcp_is_disabled(cfg)]
 
     def _load_mcp_tools(self):
         """

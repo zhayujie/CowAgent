@@ -27,8 +27,290 @@ function getToolIcon(name) {
 }
 
 function loadSkillsView() {
+    bindSkillsConfigUi();
     loadToolsSection();
+    loadMcpSection();
     loadSkillsSection();
+}
+
+let mcpServersCache = [];
+let mcpEditorOriginalName = null;
+let skillsConfigUiBound = false;
+
+function bindSkillsConfigUi() {
+    if (skillsConfigUiBound) return;
+    skillsConfigUiBound = true;
+    document.getElementById('mcp-add-btn')?.addEventListener('click', () => openMcpEditor());
+    document.getElementById('mcp-field-type')?.addEventListener('change', syncMcpEditorTransport);
+    document.getElementById('mcp-editor-cancel')?.addEventListener('click', closeMcpEditor);
+    document.getElementById('mcp-editor-overlay')?.addEventListener('click', (e) => {
+        if (e.target.id === 'mcp-editor-overlay') closeMcpEditor();
+    });
+    document.getElementById('mcp-editor-test')?.addEventListener('click', testMcpEditor);
+    document.getElementById('mcp-editor-save')?.addEventListener('click', saveMcpEditor);
+    document.getElementById('skill-install-btn')?.addEventListener('click', installSkillFromInput);
+    document.getElementById('skill-install-input')?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); installSkillFromInput(); }
+    });
+}
+
+function kvToObject(text) {
+    const out = {};
+    String(text || '').split(/\r?\n/).forEach((line) => {
+        const trimmed = line.trim();
+        if (!trimmed) return;
+        const idx = trimmed.indexOf('=');
+        if (idx <= 0) return;
+        out[trimmed.slice(0, idx).trim()] = trimmed.slice(idx + 1);
+    });
+    return out;
+}
+
+function objectToKv(obj) {
+    if (!obj || typeof obj !== 'object') return '';
+    return Object.entries(obj).map(([k, v]) => `${k}=${v}`).join('\n');
+}
+
+function mcpStatusLabel(status) {
+    const key = {
+        ready: 'mcp_status_ready',
+        pending: 'mcp_status_pending',
+        failed: 'mcp_status_failed',
+        needs_auth: 'mcp_status_needs_auth',
+        disabled: 'mcp_status_disabled',
+        idle: 'mcp_status_idle',
+    }[status] || 'mcp_status_idle';
+    return t(key);
+}
+
+function mcpStatusClass(status) {
+    if (status === 'ready') return 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400';
+    if (status === 'failed') return 'bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400';
+    if (status === 'needs_auth') return 'bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400';
+    if (status === 'disabled') return 'bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-slate-400';
+    return 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400';
+}
+
+function loadMcpSection() {
+    const emptyEl = document.getElementById('mcp-empty');
+    const listEl = document.getElementById('mcp-list');
+    const badge = document.getElementById('mcp-count-badge');
+    if (!listEl) return;
+    fetch('/api/mcp/servers').then(r => r.json()).then(data => {
+        if (data.status !== 'success') return;
+        mcpServersCache = data.servers || [];
+        if (badge) {
+            badge.textContent = mcpServersCache.length;
+            badge.classList.toggle('hidden', mcpServersCache.length === 0);
+        }
+        if (!mcpServersCache.length) {
+            emptyEl?.classList.remove('hidden');
+            listEl.classList.add('hidden');
+            listEl.innerHTML = '';
+            return;
+        }
+        emptyEl?.classList.add('hidden');
+        listEl.innerHTML = '';
+        mcpServersCache.forEach(server => listEl.appendChild(renderMcpCard(server)));
+        listEl.classList.remove('hidden');
+    }).catch(() => {
+        emptyEl?.classList.remove('hidden');
+        if (emptyEl) emptyEl.innerHTML = `<span class="text-sm text-slate-400 dark:text-slate-500">${t('mcp_save_error')}</span>`;
+    });
+}
+
+function renderMcpCard(server) {
+    const card = document.createElement('div');
+    card.className = 'bg-white dark:bg-[#1A1A1A] rounded-xl border border-slate-200 dark:border-white/10 p-4 flex items-start gap-3';
+    const summary = server.type === 'stdio'
+        ? [server.command, ...(server.args || [])].filter(Boolean).join(' ')
+        : (server.url || server.type);
+    card.innerHTML = `
+        <div class="w-9 h-9 rounded-lg bg-primary-50 dark:bg-primary-900/20 flex items-center justify-center flex-shrink-0">
+            <i class="fas fa-plug text-primary-500 text-sm"></i>
+        </div>
+        <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2 mb-1">
+                <span class="font-medium text-sm text-slate-700 dark:text-slate-200 truncate flex-1 font-mono">${escapeHtml(server.name)}</span>
+                <span class="px-1.5 py-0.5 rounded-full text-[10px] ${mcpStatusClass(server.status)}">${escapeHtml(mcpStatusLabel(server.status))}</span>
+                <button type="button" data-mcp-edit class="p-1 rounded text-slate-300 hover:text-slate-500"><i class="fas fa-pen text-[10px]"></i></button>
+                <button type="button" data-mcp-delete class="p-1 rounded text-slate-300 hover:text-red-500"><i class="fas fa-trash text-[10px]"></i></button>
+            </div>
+            <p class="text-xs text-slate-400 dark:text-slate-500 truncate">${escapeHtml(summary || server.type)}</p>
+        </div>`;
+    card.querySelector('[data-mcp-edit]').onclick = () => openMcpEditor(server);
+    card.querySelector('[data-mcp-delete]').onclick = () => deleteMcpServer(server.name);
+    return card;
+}
+
+function syncMcpEditorTransport() {
+    const type = document.getElementById('mcp-field-type')?.value;
+    const stdio = type === 'stdio';
+    document.getElementById('mcp-stdio-fields')?.classList.toggle('hidden', !stdio);
+    document.getElementById('mcp-url-fields')?.classList.toggle('hidden', stdio);
+}
+
+function fillMcpEditor(server) {
+    const s = server || {};
+    document.getElementById('mcp-field-name').value = s.name || '';
+    document.getElementById('mcp-field-name').disabled = !!s.name;
+    document.getElementById('mcp-field-type').value = s.type || (s.url ? 'sse' : 'stdio');
+    document.getElementById('mcp-field-command').value = s.command || '';
+    document.getElementById('mcp-field-args').value = (s.args || []).join('\n');
+    document.getElementById('mcp-field-env').value = objectToKv(s.env);
+    document.getElementById('mcp-field-url').value = s.url || '';
+    document.getElementById('mcp-field-headers').value = objectToKv(s.headers);
+    document.getElementById('mcp-field-scope').value = s.scope || '';
+    document.getElementById('mcp-field-prefix').value = s.tool_name_prefix || '';
+    document.getElementById('mcp-field-timeout').value = s.timeout || '';
+    document.getElementById('mcp-field-disabled').checked = !!s.disabled;
+    const result = document.getElementById('mcp-test-result');
+    result.classList.add('hidden');
+    result.textContent = '';
+    document.getElementById('mcp-editor-title').textContent = s.name ? t('mcp_edit') : t('mcp_add');
+    syncMcpEditorTransport();
+}
+
+function readMcpEditor() {
+    const type = document.getElementById('mcp-field-type').value;
+    const cfg = {
+        name: document.getElementById('mcp-field-name').value.trim(),
+        type,
+        tool_name_prefix: document.getElementById('mcp-field-prefix').value,
+        disabled: document.getElementById('mcp-field-disabled').checked,
+    };
+    const timeout = document.getElementById('mcp-field-timeout').value.trim();
+    if (timeout) cfg.timeout = Number(timeout);
+    if (type === 'stdio') {
+        cfg.command = document.getElementById('mcp-field-command').value.trim();
+        cfg.args = document.getElementById('mcp-field-args').value.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+        cfg.env = kvToObject(document.getElementById('mcp-field-env').value);
+    } else {
+        cfg.url = document.getElementById('mcp-field-url').value.trim();
+        cfg.headers = kvToObject(document.getElementById('mcp-field-headers').value);
+        cfg.scope = document.getElementById('mcp-field-scope').value.trim();
+    }
+    return cfg;
+}
+
+function openMcpEditor(server) {
+    mcpEditorOriginalName = server ? server.name : null;
+    fillMcpEditor(server);
+    document.getElementById('mcp-editor-overlay').classList.remove('hidden');
+}
+
+function closeMcpEditor() {
+    document.getElementById('mcp-editor-overlay').classList.add('hidden');
+    mcpEditorOriginalName = null;
+}
+
+async function persistMcpServers(servers) {
+    const res = await fetch('/api/mcp/servers', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ servers }),
+    });
+    const data = await res.json();
+    if (data.status !== 'success') throw new Error(data.message || t('mcp_save_error'));
+    mcpServersCache = data.servers || servers;
+    loadMcpSection();
+    return data;
+}
+
+async function saveMcpEditor() {
+    try {
+        const cfg = readMcpEditor();
+        const next = mcpServersCache.filter(s => s.name !== mcpEditorOriginalName && s.name !== cfg.name);
+        next.push(cfg);
+        await persistMcpServers(next);
+        closeMcpEditor();
+    } catch (err) {
+        const result = document.getElementById('mcp-test-result');
+        result.classList.remove('hidden');
+        result.textContent = err.message || t('mcp_save_error');
+    }
+}
+
+async function testMcpEditor() {
+    const result = document.getElementById('mcp-test-result');
+    result.classList.remove('hidden');
+    result.textContent = t('mcp_test') + '...';
+    try {
+        const res = await fetch('/api/mcp/servers/test', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ server: readMcpEditor() }),
+        });
+        const data = await res.json();
+        if (data.ok) {
+            const names = (data.tools || []).map(x => x.name).filter(Boolean);
+            result.textContent = t('mcp_test_ok') + (names.length ? (': ' + names.join(', ')) : '');
+        } else {
+            result.textContent = t('mcp_test_fail') + ': ' + (data.error || data.message || '');
+        }
+    } catch (err) {
+        result.textContent = t('mcp_test_fail') + ': ' + (err.message || '');
+    }
+}
+
+function deleteMcpServer(name) {
+    showConfirmDialog({
+        title: t('mcp_delete'),
+        message: t('mcp_delete_confirm'),
+        okText: t('mcp_delete'),
+        onConfirm: async () => {
+            try {
+                await persistMcpServers(mcpServersCache.filter(s => s.name !== name));
+            } catch (err) {
+                alert(err.message || t('mcp_save_error'));
+            }
+        },
+    });
+}
+
+async function installSkillFromInput() {
+    const input = document.getElementById('skill-install-input');
+    const spec = (input && input.value || '').trim();
+    if (!spec) return;
+    const btn = document.getElementById('skill-install-btn');
+    if (btn) btn.disabled = true;
+    try {
+        const res = await fetch('/api/skills', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'install', spec }),
+        });
+        const data = await res.json();
+        if (data.status !== 'success') throw new Error(data.message || t('skill_install_error'));
+        if (input) input.value = '';
+        loadSkillsSection();
+    } catch (err) {
+        alert(err.message || t('skill_install_error'));
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+
+function deleteSkill(name) {
+    showConfirmDialog({
+        title: t('skill_delete'),
+        message: t('skill_delete_confirm'),
+        okText: t('skill_delete'),
+        onConfirm: async () => {
+            try {
+                const res = await fetch('/api/skills', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'delete', name }),
+                });
+                const data = await res.json();
+                if (data.status !== 'success') throw new Error(data.message || t('skill_delete_error'));
+                loadSkillsSection();
+            } catch (err) {
+                alert(err.message || t('skill_delete_error'));
+            }
+        },
+    });
 }
 
 function loadToolsSection() {
@@ -99,6 +381,7 @@ function loadSkillsSection() {
             card.dataset.skillDesc = sk.description || '';
             card.dataset.skillDisplayName = sk.display_name || '';
             card.dataset.enabled = sk.enabled ? '1' : '0';
+            card.dataset.deletable = sk.deletable ? '1' : '0';
             renderSkillCard(card, sk);
             listEl.appendChild(card);
         });
@@ -126,6 +409,14 @@ function renderSkillCard(card, sk) {
                 >
                     <i class="fas fa-pen text-[10px]"></i>
                 </button>
+                ${sk.deletable ? `
+                <button
+                    data-skill-delete
+                    class="flex-shrink-0 p-1 -mx-1 -mt-1.5 -mb-1 rounded text-slate-300 dark:text-slate-600 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+                    title="${t('skill_delete')}"
+                >
+                    <i class="fas fa-trash text-[10px]"></i>
+                </button>` : ''}
                 <button
                     role="switch"
                     data-skill-switch
@@ -149,6 +440,13 @@ function renderSkillCard(card, sk) {
         editBtn.onclick = (e) => {
             e.stopPropagation();
             openSkillFile(sk.name, { edit: true });
+        };
+    }
+    const deleteBtn = card.querySelector('[data-skill-delete]');
+    if (deleteBtn) {
+        deleteBtn.onclick = (e) => {
+            e.stopPropagation();
+            deleteSkill(sk.name);
         };
     }
     const sw = card.querySelector('[data-skill-switch]');
@@ -181,6 +479,7 @@ function toggleSkill(name, currentlyEnabled) {
                     description: card.dataset.skillDesc || '',
                     display_name: card.dataset.skillDisplayName || '',
                     enabled: !currentlyEnabled,
+                    deletable: card.dataset.deletable === '1',
                 });
             }
         } else {

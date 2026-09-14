@@ -64,6 +64,16 @@ Fully compatible with the MCP community standard, identical to Claude Desktop / 
 - **fetch**: Generic web page fetcher that returns page text content. No API key required.
 - **github**: Access GitHub repos, issues, PRs, etc. Requires a Personal Access Token.
 
+## Web and Desktop Console
+
+The Skills page in the **web console** and **desktop app** can add, edit, disable, and remove MCP servers without editing `mcp.json` by hand.
+
+- Use **Test connection** to handshake with a server and list its tools before saving.
+- Saving writes the Agent's `mcp.json` in the standard `mcpServers` format.
+- CowAgent hot-reloads the file; the new tools are available on the **next message**. No process restart is required.
+
+stdio, SSE, and streamable HTTP transports are all supported. A disabled server stays in the file but is not booted.
+
 ## Let the Agent Configure It for You
 
 CowAgent ships with `read` / `write` / `edit` tools, so **you can simply send the MCP config to the Agent and ask it to write the file**:
