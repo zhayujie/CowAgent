@@ -531,6 +531,47 @@ class MemoryManager:
         except (ValueError, OverflowError):
             return 1.0
     
+    @staticmethod
+    def _normalize_weights(vector_weight: float, keyword_weight: float) -> tuple:
+        """Clamp fusion weights into a valid (non-negative) pair.
+
+        The weighted average below is renormalized over only the channels that
+        actually returned a chunk, so only the *ratio* between the two weights
+        matters. Negative weights are clamped to 0 and an all-zero pair falls
+        back to equal weighting, so a misconfigured value can never produce a
+        negative or meaningless combined score.
+        """
+        try:
+            v = float(vector_weight)
+            k = float(keyword_weight)
+        except (TypeError, ValueError):
+            return 0.5, 0.5
+        v = v if v > 0 else 0.0
+        k = k if k > 0 else 0.0
+        if v == 0.0 and k == 0.0:
+            return 0.5, 0.5
+        return v, k
+
+    @staticmethod
+    def _rank_normalize(results: List[SearchResult]) -> Dict[tuple, float]:
+        """Rank-normalize one channel's already-sorted results onto (0, 1].
+
+        ``search_vector`` and ``search_keyword`` both return their results in
+        descending relevance order, so the position index is the rank. The top
+        hit maps to 1.0 and each later hit decays linearly to 1/N. This puts
+        raw cosine similarity and the BM25-derived keyword score — which live
+        on incommensurable scales — onto a common scale before fusion.
+
+        :return: {(path, start_line, end_line): normalized_score}
+        """
+        n = len(results)
+        if n == 0:
+            return {}
+        return {
+            (r.path, r.start_line, r.end_line): (n - i) / n
+            for i, r in enumerate(results)
+        }
+
     def _merge_results(
         self,
         vector_results: List[SearchResult],
@@ -538,40 +579,45 @@ class MemoryManager:
         vector_weight: float,
         keyword_weight: float
     ) -> List[SearchResult]:
-        """Merge vector and keyword search results with temporal decay for dated files"""
-        merged_map = {}
-        
-        for result in vector_results:
+        """Merge vector and keyword search results with temporal decay.
+
+        Each channel is rank-normalized to a common (0, 1] scale first, then a
+        chunk is scored by the weighted average over only the channels that
+        actually returned it. A strong single-channel hit is therefore not
+        diluted by a 0.0 from the missing channel, and the two channels' raw
+        scores no longer have to be comparable to be fused fairly.
+        """
+        vector_weight, keyword_weight = self._normalize_weights(vector_weight, keyword_weight)
+        vector_norm = self._rank_normalize(vector_results)
+        keyword_norm = self._rank_normalize(keyword_results)
+
+        # Keep the first (vector-first) result per chunk for reconstruction;
+        # either channel carries the same snippet/source/path metadata.
+        result_map: Dict[tuple, SearchResult] = {}
+        for result in vector_results + keyword_results:
             key = (result.path, result.start_line, result.end_line)
-            merged_map[key] = {
-                'result': result,
-                'vector_score': result.score,
-                'keyword_score': 0.0
-            }
-        
-        for result in keyword_results:
-            key = (result.path, result.start_line, result.end_line)
-            if key in merged_map:
-                merged_map[key]['keyword_score'] = result.score
-            else:
-                merged_map[key] = {
-                    'result': result,
-                    'vector_score': 0.0,
-                    'keyword_score': result.score
-                }
-        
+            result_map.setdefault(key, result)
+
         merged_results = []
-        for entry in merged_map.values():
-            combined_score = (
-                vector_weight * entry['vector_score'] +
-                keyword_weight * entry['keyword_score']
+        for key in set(vector_norm) | set(keyword_norm):
+            result = result_map[key]
+            vec = vector_norm.get(key)
+            kw = keyword_norm.get(key)
+            hit_v = vec is not None
+            hit_k = kw is not None
+            numerator = (
+                vector_weight * (vec if hit_v else 0.0)
+                + keyword_weight * (kw if hit_k else 0.0)
             )
-            
+            denominator = (
+                (vector_weight if hit_v else 0.0)
+                + (keyword_weight if hit_k else 0.0)
+            )
+            combined_score = (numerator / denominator) if denominator > 0 else 0.0
+
             # Apply temporal decay for dated memory files
-            result = entry['result']
-            decay = self._compute_temporal_decay(result.path)
-            combined_score *= decay
-            
+            combined_score *= self._compute_temporal_decay(result.path)
+
             merged_results.append(SearchResult(
                 path=result.path,
                 start_line=result.start_line,
@@ -581,6 +627,6 @@ class MemoryManager:
                 source=result.source,
                 user_id=result.user_id
             ))
-        
+
         merged_results.sort(key=lambda r: r.score, reverse=True)
         return merged_results
