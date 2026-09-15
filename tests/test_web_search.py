@@ -27,13 +27,15 @@ from agent.tools.web_search import WebSearch
 from agent.tools.web_search import web_search as web_search_module
 
 
-def _fake_response(status_code=200, payload=None):
+def _fake_response(status_code=200, payload=None, headers=None):
     """Build a minimal stand-in for a requests Response."""
     resp = MagicMock()
     resp.status_code = status_code
     body = payload if payload is not None else {}
     resp.json = lambda: body
     resp.text = json.dumps(body)
+    # A real dict so .get("X-Request-ID") returns None rather than a MagicMock.
+    resp.headers = headers if headers is not None else {}
     return resp
 
 
@@ -355,7 +357,7 @@ class TestAnySearchBackend(unittest.TestCase):
         self.assertEqual(sent["zone"], "cn")
         self.assertEqual(sent["language"], "zh-CN")
 
-    def test_search_anysearch_drops_invalid_zone_and_language(self):
+    def test_search_anysearch_drops_invalid_zone_but_forwards_language(self):
         with patch.object(web_search_module, "_get_api_key", return_value="test-key-123"), \
                 patch.object(web_search_module, "_tools_web_search_conf",
                              return_value={"anysearch_zone": "eu",
@@ -367,7 +369,292 @@ class TestAnySearchBackend(unittest.TestCase):
         self.assertEqual(result.status, "success")
         sent = mock_post.call_args[1]["json"]
         self.assertNotIn("zone", sent)
-        self.assertNotIn("language", sent)
+        # An unknown zone is still whitelisted out; language is now forwarded.
+        self.assertEqual(sent["language"], "fr")
+
+    def test_search_anysearch_forwards_any_configured_language(self):
+        # Any non-empty language is forwarded; the old zh-CN/en whitelist
+        # silently dropped every other language the user configured.
+        for language in ("ja", "fr", "de", "zh-TW"):
+            with self.subTest(language=language):
+                with patch.object(web_search_module, "_get_api_key", return_value="test-key-123"), \
+                        patch.object(web_search_module, "_tools_web_search_conf",
+                                     return_value={"anysearch_language": language}), \
+                        patch.object(web_search_module.requests, "post",
+                                     return_value=_fake_response(200, _anysearch_payload([]))) as mock_post:
+                    result = self.tool._search_anysearch("q", 10)
+                self.assertEqual(result.status, "success")
+                self.assertEqual(mock_post.call_args[1]["json"]["language"], language)
+
+    def test_search_anysearch_empty_object_body_is_error(self):
+        # HTTP 200 with {} used to read as an empty result set; a missing
+        # 'code' is now a malformed-response error.
+        with patch.object(web_search_module, "_get_api_key", return_value="test-key-123"), \
+                patch.object(web_search_module.requests, "post",
+                             return_value=_fake_response(200, {})):
+            result = self.tool._search_anysearch("q", 10)
+        self.assertEqual(result.status, "error")
+        self.assertIn("malformed", result.result)
+
+    def test_search_anysearch_null_data_is_error(self):
+        # code=0 but data:null is malformed, not an empty result set.
+        with patch.object(web_search_module, "_get_api_key", return_value="test-key-123"), \
+                patch.object(web_search_module.requests, "post",
+                             return_value=_fake_response(200, {"code": 0, "data": None})):
+            result = self.tool._search_anysearch("q", 10)
+        self.assertEqual(result.status, "error")
+        self.assertIn("malformed", result.result)
+
+    def test_search_anysearch_non_object_body_is_error(self):
+        # A JSON array instead of the documented object envelope is malformed.
+        with patch.object(web_search_module, "_get_api_key", return_value="test-key-123"), \
+                patch.object(web_search_module.requests, "post",
+                             return_value=_fake_response(200, ["unexpected"])):
+            result = self.tool._search_anysearch("q", 10)
+        self.assertEqual(result.status, "error")
+        self.assertIn("malformed", result.result)
+
+    def test_search_anysearch_non_json_body_is_error(self):
+        # A 200 whose body is not JSON must not crash or read as empty results.
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.headers = {}
+
+        def _raise():
+            raise ValueError("no json")
+
+        resp.json = _raise
+        with patch.object(web_search_module, "_get_api_key", return_value="test-key-123"), \
+                patch.object(web_search_module.requests, "post", return_value=resp):
+            result = self.tool._search_anysearch("q", 10)
+        self.assertEqual(result.status, "error")
+        self.assertIn("non-JSON", result.result)
+
+    def test_search_anysearch_false_code_is_error(self):
+        # bool is an int subclass; code=false must not pass the code==0 check.
+        with patch.object(web_search_module, "_get_api_key", return_value="test-key-123"), \
+                patch.object(web_search_module.requests, "post",
+                             return_value=_fake_response(200, {"code": False, "data": {"results": []}})):
+            result = self.tool._search_anysearch("q", 10)
+        self.assertEqual(result.status, "error")
+        self.assertIn("malformed", result.result)
+
+    def test_search_anysearch_results_not_list_is_error(self):
+        # data.results must be a list; a dict there is malformed.
+        payload = {"code": 0, "data": {"results": {"unexpected": "shape"}}}
+        with patch.object(web_search_module, "_get_api_key", return_value="test-key-123"), \
+                patch.object(web_search_module.requests, "post",
+                             return_value=_fake_response(200, payload)):
+            result = self.tool._search_anysearch("q", 10)
+        self.assertEqual(result.status, "error")
+        self.assertIn("malformed", result.result)
+
+    def test_search_anysearch_error_preserves_request_id(self):
+        # request_id from the body (401) and from the header (429) is attached
+        # to the failure for support/log correlation.
+        body = {"code": -1, "message": "bad key", "request_id": "req-401"}
+        with patch.object(web_search_module, "_get_api_key", return_value="test-key-123"), \
+                patch.object(web_search_module.requests, "post",
+                             return_value=_fake_response(401, body)):
+            result = self.tool._search_anysearch("q", 10)
+        self.assertEqual(result.status, "error")
+        self.assertIn("req-401", result.result)
+        self.assertEqual(result.ext_data.get("request_id"), "req-401")
+
+        with patch.object(web_search_module, "_get_api_key", return_value="test-key-123"), \
+                patch.object(web_search_module.requests, "post",
+                             return_value=_fake_response(429, {}, headers={"X-Request-ID": "hdr-429"})):
+            result = self.tool._search_anysearch("q", 10)
+        self.assertEqual(result.status, "error")
+        self.assertIn("hdr-429", result.result)
+        self.assertEqual(result.ext_data.get("request_id"), "hdr-429")
+
+    def test_search_anysearch_all_invalid_items_is_error(self):
+        # A non-empty results list with no usable entry is malformed, not an
+        # empty (0-hit) success.
+        payload = {"code": 0, "data": {"results": [None, "x", 5]}}
+        with patch.object(web_search_module, "_get_api_key", return_value="test-key-123"), \
+                patch.object(web_search_module.requests, "post",
+                             return_value=_fake_response(200, payload)):
+            result = self.tool._search_anysearch("q", 10)
+        self.assertEqual(result.status, "error")
+        self.assertIn("no usable results", result.result)
+
+    def test_search_anysearch_skips_invalid_items_keeps_valid(self):
+        # Invalid entries are dropped while valid ones survive.
+        payload = _anysearch_payload(
+            [None, {"title": "T", "url": "https://a.example/1", "snippet": "s"}],
+            total=1,
+        )
+        with patch.object(web_search_module, "_get_api_key", return_value="test-key-123"), \
+                patch.object(web_search_module.requests, "post",
+                             return_value=_fake_response(200, payload)):
+            result = self.tool._search_anysearch("q", 10)
+        self.assertEqual(result.status, "success")
+        self.assertEqual(result.result["count"], 1)
+        self.assertEqual(result.result["results"][0]["url"], "https://a.example/1")
+
+    def test_search_anysearch_item_requires_usable_url(self):
+        # url is the minimum usable field; entries without a non-empty string
+        # url are not real hits.
+        payload = {"code": 0, "data": {"results": [{}, {"url": []}, {"url": "   "}]}}
+        with patch.object(web_search_module, "_get_api_key", return_value="test-key-123"), \
+                patch.object(web_search_module.requests, "post",
+                             return_value=_fake_response(200, payload)):
+            result = self.tool._search_anysearch("q", 10)
+        self.assertEqual(result.status, "error")
+        self.assertIn("no usable results", result.result)
+
+    def test_search_anysearch_coerces_non_string_text_fields(self):
+        # A valid url with wrong-typed title/snippet is kept, with the bad
+        # fields normalized to empty strings instead of leaking their type.
+        payload = _anysearch_payload(
+            [{"url": "https://a.example/1", "title": {}, "snippet": []}],
+        )
+        with patch.object(web_search_module, "_get_api_key", return_value="test-key-123"), \
+                patch.object(web_search_module.requests, "post",
+                             return_value=_fake_response(200, payload)):
+            result = self.tool._search_anysearch("q", 10)
+        self.assertEqual(result.status, "success")
+        self.assertEqual(result.result["results"][0],
+                         {"title": "", "url": "https://a.example/1", "snippet": ""})
+
+    def test_search_anysearch_non_string_content_does_not_crash(self):
+        # A numeric or object content must not raise when sliced for a snippet.
+        for content in (123, {"unexpected": "shape"}, [1, 2, 3]):
+            with self.subTest(content=content):
+                payload = _anysearch_payload([{"url": "https://a.example/1", "content": content}])
+                with patch.object(web_search_module, "_get_api_key", return_value="test-key-123"), \
+                        patch.object(web_search_module.requests, "post",
+                                     return_value=_fake_response(200, payload)):
+                    result = self.tool._search_anysearch("q", 10)
+                self.assertEqual(result.status, "success")
+                self.assertEqual(result.result["results"][0]["snippet"], "")
+
+    def test_search_anysearch_tolerates_non_object_metadata(self):
+        # A string/list/number metadata block must not fail a valid search.
+        for meta in ("oops", [1, 2], 5):
+            with self.subTest(meta=meta):
+                payload = {"code": 0, "data": {"results": [
+                    {"url": "https://a.example/1", "title": "T", "snippet": "s"}], "metadata": meta}}
+                with patch.object(web_search_module, "_get_api_key", return_value="test-key-123"), \
+                        patch.object(web_search_module.requests, "post",
+                                     return_value=_fake_response(200, payload)):
+                    result = self.tool._search_anysearch("q", 10)
+                self.assertEqual(result.status, "success")
+                self.assertEqual(result.result["total"], 1)
+                self.assertNotIn("search_time_ms", result.result)
+
+    def test_search_anysearch_validates_metadata_values(self):
+        # Negative/wrong-typed total_results falls back to the hit count;
+        # search_time_ms is surfaced only when a non-negative number.
+        base = {"url": "https://a.example/1", "title": "T", "snippet": "s"}
+        cases = [
+            ({"total_results": -5}, 1, False, None),
+            ({"total_results": "12"}, 1, False, None),
+            ({"total_results": 42, "search_time_ms": -1}, 42, False, None),
+            ({"total_results": 42, "search_time_ms": "fast"}, 42, False, None),
+            ({"total_results": 42, "search_time_ms": 12.5}, 42, True, 12.5),
+        ]
+        for meta, expected_total, has_time, expected_time in cases:
+            with self.subTest(meta=meta):
+                payload = {"code": 0, "data": {"results": [base], "metadata": meta}}
+                with patch.object(web_search_module, "_get_api_key", return_value="test-key-123"), \
+                        patch.object(web_search_module.requests, "post",
+                                     return_value=_fake_response(200, payload)):
+                    result = self.tool._search_anysearch("q", 10)
+                self.assertEqual(result.status, "success")
+                self.assertEqual(result.result["total"], expected_total)
+                if has_time:
+                    self.assertEqual(result.result["search_time_ms"], expected_time)
+                else:
+                    self.assertNotIn("search_time_ms", result.result)
+
+    def test_search_anysearch_ignores_non_string_request_id(self):
+        # Object/list/number ids are not propagated; only a non-empty string is.
+        payload = {"code": 0, "request_id": {"nested": "id"},
+                   "data": {"results": [{"url": "https://a.example/1", "title": "T", "snippet": "s"}]}}
+        with patch.object(web_search_module, "_get_api_key", return_value="test-key-123"), \
+                patch.object(web_search_module.requests, "post",
+                             return_value=_fake_response(200, payload)):
+            result = self.tool._search_anysearch("q", 10)
+        self.assertEqual(result.status, "success")
+        self.assertNotIn("request_id", result.result)
+
+        # Same guard on the error path: a list id yields no request_id metadata.
+        err = {"code": -1, "message": "bad", "request_id": [1, 2]}
+        with patch.object(web_search_module, "_get_api_key", return_value="test-key-123"), \
+                patch.object(web_search_module.requests, "post",
+                             return_value=_fake_response(200, err)):
+            result = self.tool._search_anysearch("q", 10)
+        self.assertEqual(result.status, "error")
+        self.assertIsNone(result.ext_data)
+
+    def test_search_anysearch_reports_dropped_count(self):
+        # Partial drops keep the good rows and surface how many were dropped.
+        payload = {"code": 0, "data": {"results": [
+            {"url": "https://a.example/1", "title": "T", "snippet": "s"},
+            None,
+            {"title": "no url"},
+        ]}}
+        with patch.object(web_search_module, "_get_api_key", return_value="test-key-123"), \
+                patch.object(web_search_module.requests, "post",
+                             return_value=_fake_response(200, payload)):
+            result = self.tool._search_anysearch("q", 10)
+        self.assertEqual(result.status, "success")
+        self.assertEqual(result.result["count"], 1)
+        self.assertEqual(result.result["dropped_count"], 2)
+
+    def test_search_anysearch_no_dropped_count_when_all_valid(self):
+        # No dropped_count field when nothing was dropped.
+        payload = _anysearch_payload([{"url": "https://a.example/1", "title": "T", "snippet": "s"}])
+        with patch.object(web_search_module, "_get_api_key", return_value="test-key-123"), \
+                patch.object(web_search_module.requests, "post",
+                             return_value=_fake_response(200, payload)):
+            result = self.tool._search_anysearch("q", 10)
+        self.assertEqual(result.status, "success")
+        self.assertNotIn("dropped_count", result.result)
+
+    def test_search_anysearch_omits_non_finite_search_time(self):
+        # NaN and Infinity are not valid latencies and must be omitted.
+        base = {"url": "https://a.example/1", "title": "T", "snippet": "s"}
+        for bad in (float("inf"), float("-inf"), float("nan")):
+            with self.subTest(search_time_ms=bad):
+                payload = {"code": 0, "data": {"results": [base],
+                                               "metadata": {"search_time_ms": bad}}}
+                with patch.object(web_search_module, "_get_api_key", return_value="test-key-123"), \
+                        patch.object(web_search_module.requests, "post",
+                                     return_value=_fake_response(200, payload)):
+                    result = self.tool._search_anysearch("q", 10)
+                self.assertEqual(result.status, "success")
+                self.assertNotIn("search_time_ms", result.result)
+
+    def test_search_anysearch_truncates_to_max_results(self):
+        """上游返回多于 max_results 时，按请求量裁剪并报告 truncated_count。"""
+        many = [
+            {"url": f"https://a.example/{i}", "title": f"T{i}", "snippet": "s"}
+            for i in range(12)
+        ]
+        payload = {"code": 0, "data": {"results": many, "metadata": {}}}
+        with patch.object(web_search_module, "_get_api_key", return_value="test-key-123"), \
+                patch.object(web_search_module.requests, "post",
+                             return_value=_fake_response(200, payload)):
+            result = self.tool._search_anysearch("q", 10)
+        self.assertEqual(result.status, "success")
+        self.assertEqual(result.result["count"], 10)
+        self.assertEqual(len(result.result["results"]), 10)
+        self.assertEqual(result.result["truncated_count"], 2)
+        self.assertNotIn("dropped_count", result.result)
+
+    def test_search_anysearch_keeps_all_when_within_max_results(self):
+        """回 <= max_results 时原样保留，不产生 truncated_count。"""
+        ok = [{"url": f"https://a.example/{i}", "title": "T", "snippet": "s"} for i in range(8)]
+        with patch.object(web_search_module, "_get_api_key", return_value="test-key-123"), \
+                patch.object(web_search_module.requests, "post",
+                             return_value=_fake_response(200, _anysearch_payload(ok))):
+            result = self.tool._search_anysearch("q", 10)
+        self.assertEqual(result.result["count"], 8)
+        self.assertNotIn("truncated_count", result.result)
 
 
 def _serply_payload(results):
