@@ -646,6 +646,8 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
             logger.debug("[DingTalk]receive voice msg: {}".format(cmsg.content))
         elif cmsg.ctype == ContextType.IMAGE:
             logger.debug("[DingTalk]receive image msg: {}".format(cmsg.content))
+        elif cmsg.ctype == ContextType.FILE:
+            logger.debug("[DingTalk]receive file msg: {}".format(cmsg.content))
         elif cmsg.ctype == ContextType.IMAGE_CREATE:
             logger.debug("[DingTalk]receive image create msg: {}".format(cmsg.content))
         elif cmsg.ctype == ContextType.PATPAT:
@@ -662,12 +664,25 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
         # 单聊的 session_id 就是 sender_id
         session_id = cmsg.from_user_id
         
+        if cmsg.ctype is None:
+            return
+
         # 如果是单张图片消息，缓存起来
         if cmsg.ctype == ContextType.IMAGE:
             if hasattr(cmsg, 'image_path') and cmsg.image_path:
                 file_cache.add(session_id, cmsg.image_path, file_type='image')
                 logger.info(f"[DingTalk] Image cached for session {session_id}, waiting for user query...")
             # 单张图片不直接处理，等待用户提问
+            return
+
+        # 文件消息同样先缓存，等下一条文本再交给 agent
+        if cmsg.ctype == ContextType.FILE:
+            file_path = getattr(cmsg, "file_path", None) or cmsg.content
+            if file_path and os.path.isfile(str(file_path)):
+                file_cache.add(session_id, file_path, file_type="file")
+                logger.info(f"[DingTalk] File cached for session {session_id}, waiting for user query...")
+            else:
+                logger.warning(f"[DingTalk] File message dropped (download failed) for session {session_id}")
             return
         
         # 如果是文本消息，检查是否有缓存的文件
@@ -706,6 +721,8 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
             logger.debug("[DingTalk]receive voice msg: {}".format(cmsg.content))
         elif cmsg.ctype == ContextType.IMAGE:
             logger.debug("[DingTalk]receive image msg: {}".format(cmsg.content))
+        elif cmsg.ctype == ContextType.FILE:
+            logger.debug("[DingTalk]receive file msg: {}".format(cmsg.content))
         elif cmsg.ctype == ContextType.IMAGE_CREATE:
             logger.debug("[DingTalk]receive image create msg: {}".format(cmsg.content))
         elif cmsg.ctype == ContextType.PATPAT:
@@ -725,12 +742,25 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
         else:
             session_id = cmsg.from_user_id + "_" + cmsg.other_user_id
         
+        if cmsg.ctype is None:
+            return
+
         # 如果是单张图片消息，缓存起来
         if cmsg.ctype == ContextType.IMAGE:
             if hasattr(cmsg, 'image_path') and cmsg.image_path:
                 file_cache.add(session_id, cmsg.image_path, file_type='image')
                 logger.info(f"[DingTalk] Image cached for session {session_id}, waiting for user query...")
             # 单张图片不直接处理，等待用户提问
+            return
+
+        # 文件消息同样先缓存，等下一条文本再交给 agent
+        if cmsg.ctype == ContextType.FILE:
+            file_path = getattr(cmsg, "file_path", None) or cmsg.content
+            if file_path and os.path.isfile(str(file_path)):
+                file_cache.add(session_id, file_path, file_type="file")
+                logger.info(f"[DingTalk] File cached for session {session_id}, waiting for user query...")
+            else:
+                logger.warning(f"[DingTalk] File message dropped (download failed) for session {session_id}")
             return
         
         # 如果是文本消息，检查是否有缓存的文件
