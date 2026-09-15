@@ -2300,6 +2300,8 @@ class WebChannel(ChatChannel):
             '/api/weixin/qrlogin', 'WeixinQrHandler',
             '/api/feishu/register', 'FeishuRegisterHandler',
             '/api/tools', 'ToolsHandler',
+            '/api/mcp/servers', 'McpServersHandler',
+            '/api/mcp/servers/test', 'McpServerTestHandler',
             '/api/skills', 'SkillsHandler',
             '/api/skills/content', 'SkillContentHandler',
             '/api/memory', 'MemoryHandler',
@@ -6765,6 +6767,25 @@ class ToolsHandler:
             return json.dumps({"status": "error", "message": str(e)})
 
 
+
+def _install_skill_for_agent(spec: str, agent_id: str = None):
+    """Install a skill into the console's skills directory.
+
+    ``cli.commands.skill.install_skill`` is the real installer (Hub name,
+    GitHub URL, zip, ...). Pass ``agent_id`` through so a multi-agent
+    workspace stays isolated without rewriting the module-level
+    ``get_skills_dir``.
+    """
+    import cli.commands.skill as skill_cmd
+
+    return skill_cmd.install_skill(spec, agent_id=agent_id)
+
+
+def _mcp_workspace(source=None) -> str:
+    agent_id = _request_agent_id(source) if source is not None else None
+    return _get_workspace_root(agent_id=agent_id)
+
+
 def _skill_service(agent_id: str = ''):
     """
     A SkillService over the skills the console manages.
@@ -6780,6 +6801,89 @@ def _skill_service(agent_id: str = ''):
     workspace_root = _get_workspace_root(agent_id=agent_id or None)
     custom_dir = str(state_dir.skills_dir(base=workspace_root))
     return SkillService(SkillManager(custom_dir=custom_dir))
+
+
+
+class McpServersHandler:
+    """List and persist MCP servers from the Agent's mcp.json."""
+
+    def GET(self):
+        _require_auth()
+        web.header('Content-Type', 'application/json; charset=utf-8')
+        try:
+            from agent.tools.mcp.service import list_servers_with_status
+            params = web.input(agent_id='')
+            result = list_servers_with_status(_mcp_workspace(params))
+            return json.dumps({
+                "status": "success",
+                "hint": "Saved MCP servers apply on the next message; no process restart is required.",
+                **result,
+            }, ensure_ascii=False)
+        except Exception as e:
+            logger.error(f"[WebChannel] MCP list error: {e}")
+            return json.dumps({"status": "error", "message": str(e)})
+
+    def PUT(self):
+        _require_auth()
+        web.header('Content-Type', 'application/json; charset=utf-8')
+        try:
+            from agent.tools.mcp.service import (
+                McpConfigError,
+                list_servers_with_status,
+                refresh_mcp_managers,
+                save_servers,
+            )
+            body = json.loads(web.data() or b"{}")
+            workspace = _mcp_workspace(body)
+            servers = body.get("servers")
+            if servers is None:
+                return json.dumps({"status": "error", "message": "servers is required"})
+            save_servers(workspace, servers)
+            refresh_mcp_managers()
+            result = list_servers_with_status(workspace)
+            return json.dumps({
+                "status": "success",
+                "hint": "Saved MCP servers apply on the next message; no process restart is required.",
+                **result,
+            }, ensure_ascii=False)
+        except McpConfigError as e:
+            return json.dumps({"status": "error", "message": str(e)})
+        except Exception as e:
+            logger.error(f"[WebChannel] MCP save error: {e}")
+            return json.dumps({"status": "error", "message": str(e)})
+
+
+class McpServerTestHandler:
+    """Dry-run one MCP server config without writing mcp.json."""
+
+    def POST(self):
+        _require_auth()
+        web.header('Content-Type', 'application/json; charset=utf-8')
+        try:
+            from agent.tools.mcp.service import McpConfigError, probe_server
+            body = json.loads(web.data() or b"{}")
+            cfg = body.get("server") if isinstance(body.get("server"), dict) else body
+            result = probe_server(cfg or {})
+            status = "success" if result.get("ok") else "error"
+            return json.dumps({"status": status, **result}, ensure_ascii=False)
+        except McpConfigError as e:
+            return json.dumps({
+                "status": "error",
+                "ok": False,
+                "error": str(e),
+                "tools": [],
+                "needs_auth": False,
+                "message": str(e),
+            })
+        except Exception as e:
+            logger.error(f"[WebChannel] MCP test error: {e}")
+            return json.dumps({
+                "status": "error",
+                "ok": False,
+                "error": str(e),
+                "tools": [],
+                "message": str(e),
+            })
 
 
 class SkillsHandler:
@@ -6809,16 +6913,44 @@ class SkillsHandler:
         _require_auth()
         web.header('Content-Type', 'application/json; charset=utf-8')
         try:
-            body = json.loads(web.data())
-            action = body.get("action")
-            name = body.get("name")
-            if not action or not name:
-                return json.dumps({"status": "error", "message": "action and name are required"})
-            service = _skill_service(_request_agent_id(body))
+            body = json.loads(web.data() or b"{}")
+            action = (body.get("action") or "").strip()
+            name = (body.get("name") or "").strip()
+            if not action:
+                return json.dumps({"status": "error", "message": "action is required"})
+            agent_id = _request_agent_id(body)
+            service = _skill_service(agent_id)
             if action == "open":
+                if not name:
+                    return json.dumps({"status": "error", "message": "action and name are required"})
                 service.open({"name": name})
             elif action == "close":
+                if not name:
+                    return json.dumps({"status": "error", "message": "action and name are required"})
                 service.close({"name": name})
+            elif action == "delete":
+                if not name:
+                    return json.dumps({"status": "error", "message": "action and name are required"})
+                info = next((item for item in service.query() if item.get("name") == name), None)
+                if info and not info.get("deletable", True):
+                    return json.dumps({
+                        "status": "error",
+                        "message": "built-in skills cannot be deleted",
+                    })
+                service.delete({"name": name})
+            elif action == "install":
+                spec = (body.get("spec") or name).strip()
+                if not spec:
+                    return json.dumps({"status": "error", "message": "spec is required"})
+                result = _install_skill_for_agent(spec, agent_id)
+                if result.error:
+                    return json.dumps({"status": "error", "message": result.error})
+                service.manager.refresh_skills()
+                return json.dumps({
+                    "status": "success",
+                    "installed": result.installed,
+                    "messages": result.messages,
+                }, ensure_ascii=False)
             else:
                 return json.dumps({"status": "error", "message": f"unknown action: {action}"})
             return json.dumps({"status": "success"}, ensure_ascii=False)

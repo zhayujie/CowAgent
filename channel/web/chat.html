@@ -1157,11 +1157,40 @@
                                     <div id="tools-list" class="grid gap-3 sm:grid-cols-2 hidden"></div>
                                 </div>
 
+                                <!-- MCP Servers Section -->
+                                <div class="mb-8" id="mcp-section">
+                                    <div class="flex items-center gap-2 mb-3">
+                                        <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500" data-i18n="mcp_section_title">MCP</span>
+                                        <span id="mcp-count-badge" class="hidden px-2 py-0.5 rounded-full text-xs bg-slate-100 dark:bg-white/10 text-slate-500 dark:text-slate-400"></span>
+                                        <button type="button" id="mcp-add-btn"
+                                                class="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-primary-500 bg-primary-50 dark:bg-primary-900/20 hover:bg-primary-100 dark:hover:bg-primary-900/30 transition-colors cursor-pointer">
+                                            <i class="fas fa-plus text-[10px]"></i>
+                                            <span data-i18n="mcp_add">Add server</span>
+                                        </button>
+                                    </div>
+                                    <p class="text-xs text-slate-400 dark:text-slate-500 mb-3" data-i18n="mcp_section_hint">Add, edit, or disable MCP servers. Saved servers apply on the next message.</p>
+                                    <div id="mcp-empty" class="flex items-center gap-2 py-4 text-slate-400 dark:text-slate-500 text-sm">
+                                        <span data-i18n="mcp_empty">No MCP servers configured</span>
+                                    </div>
+                                    <div id="mcp-list" class="grid gap-3 sm:grid-cols-2 hidden"></div>
+                                </div>
+
                                 <!-- Skills Section -->
                                 <div>
                                     <div class="flex items-center gap-2 mb-3">
                                         <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500" data-i18n="skills_section_title">技能</span>
                                         <span id="skills-count-badge" class="hidden px-2 py-0.5 rounded-full text-xs bg-slate-100 dark:bg-white/10 text-slate-500 dark:text-slate-400"></span>
+                                    </div>
+                                    <div class="flex items-center gap-2 mb-3">
+                                        <input id="skill-install-input" type="text"
+                                               class="flex-1 min-w-0 px-3 py-1.5 rounded-lg text-sm bg-white dark:bg-[#1A1A1A] border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-200 placeholder:text-slate-400 focus:outline-none focus:border-primary-400"
+                                               data-i18n-placeholder="skill_install_placeholder"
+                                               placeholder="Skill Hub name or GitHub URL">
+                                        <button type="button" id="skill-install-btn"
+                                                class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-primary-500 hover:bg-primary-600 transition-colors cursor-pointer">
+                                            <i class="fas fa-download text-[10px]"></i>
+                                            <span data-i18n="skill_install_btn">Install</span>
+                                        </button>
                                     </div>
                                     <div id="skills-empty" class="flex flex-col items-center justify-center py-12">
                                         <div class="w-14 h-14 rounded-2xl bg-amber-50 dark:bg-amber-900/20 flex items-center justify-center mb-3">
@@ -1653,6 +1682,81 @@
             <div class="flex justify-end gap-3 px-6 py-4 border-t border-slate-100 dark:border-white/5">
                 <button id="knowledge-dialog-cancel" class="px-4 py-2 rounded-lg border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300 text-sm hover:bg-slate-50 dark:hover:bg-white/5">取消</button>
                 <button id="knowledge-dialog-submit" class="px-4 py-2 rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-sm font-medium disabled:opacity-50">确定</button>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- MCP Server Editor -->
+    <div id="mcp-editor-overlay" class="fixed inset-0 bg-black/50 z-[200] hidden flex items-center justify-center">
+        <div class="bg-white dark:bg-[#1A1A1A] rounded-2xl border border-slate-200 dark:border-white/10 shadow-xl w-full max-w-lg mx-4 overflow-hidden">
+            <div class="p-6 max-h-[85vh] overflow-y-auto">
+                <div class="flex items-center gap-3 mb-4">
+                    <div class="w-10 h-10 rounded-xl bg-primary-50 dark:bg-primary-900/20 flex items-center justify-center flex-shrink-0">
+                        <i class="fas fa-plug text-primary-500"></i>
+                    </div>
+                    <h3 id="mcp-editor-title" class="text-base font-semibold text-slate-800 dark:text-slate-100" data-i18n="mcp_add">Add server</h3>
+                </div>
+                <div class="space-y-3 text-sm">
+                    <label class="block">
+                        <span class="text-xs text-slate-500 dark:text-slate-400" data-i18n="mcp_field_name">Name</span>
+                        <input id="mcp-field-name" class="mt-1 w-full px-3 py-1.5 rounded-lg bg-white dark:bg-[#111111] border border-slate-200 dark:border-white/10">
+                    </label>
+                    <label class="block">
+                        <span class="text-xs text-slate-500 dark:text-slate-400" data-i18n="mcp_field_type">Transport</span>
+                        <select id="mcp-field-type" class="mt-1 w-full px-3 py-1.5 rounded-lg bg-white dark:bg-[#111111] border border-slate-200 dark:border-white/10">
+                            <option value="stdio">stdio</option>
+                            <option value="sse">SSE</option>
+                            <option value="streamable-http">streamable-http</option>
+                        </select>
+                    </label>
+                    <div id="mcp-stdio-fields" class="space-y-3">
+                        <label class="block">
+                            <span class="text-xs text-slate-500 dark:text-slate-400" data-i18n="mcp_field_command">Command</span>
+                            <input id="mcp-field-command" class="mt-1 w-full px-3 py-1.5 rounded-lg bg-white dark:bg-[#111111] border border-slate-200 dark:border-white/10" placeholder="npx / uvx / python">
+                        </label>
+                        <label class="block">
+                            <span class="text-xs text-slate-500 dark:text-slate-400" data-i18n="mcp_field_args">Args (one per line)</span>
+                            <textarea id="mcp-field-args" rows="3" class="mt-1 w-full px-3 py-1.5 rounded-lg bg-white dark:bg-[#111111] border border-slate-200 dark:border-white/10 font-mono text-xs"></textarea>
+                        </label>
+                        <label class="block">
+                            <span class="text-xs text-slate-500 dark:text-slate-400" data-i18n="mcp_field_env">Env (KEY=value per line)</span>
+                            <textarea id="mcp-field-env" rows="3" class="mt-1 w-full px-3 py-1.5 rounded-lg bg-white dark:bg-[#111111] border border-slate-200 dark:border-white/10 font-mono text-xs"></textarea>
+                        </label>
+                    </div>
+                    <div id="mcp-url-fields" class="space-y-3 hidden">
+                        <label class="block">
+                            <span class="text-xs text-slate-500 dark:text-slate-400" data-i18n="mcp_field_url">URL</span>
+                            <input id="mcp-field-url" class="mt-1 w-full px-3 py-1.5 rounded-lg bg-white dark:bg-[#111111] border border-slate-200 dark:border-white/10" placeholder="https://example.com/mcp">
+                        </label>
+                        <label class="block">
+                            <span class="text-xs text-slate-500 dark:text-slate-400" data-i18n="mcp_field_headers">Headers (KEY=value per line)</span>
+                            <textarea id="mcp-field-headers" rows="3" class="mt-1 w-full px-3 py-1.5 rounded-lg bg-white dark:bg-[#111111] border border-slate-200 dark:border-white/10 font-mono text-xs"></textarea>
+                        </label>
+                        <label class="block">
+                            <span class="text-xs text-slate-500 dark:text-slate-400" data-i18n="mcp_field_scope">OAuth scope</span>
+                            <input id="mcp-field-scope" class="mt-1 w-full px-3 py-1.5 rounded-lg bg-white dark:bg-[#111111] border border-slate-200 dark:border-white/10">
+                        </label>
+                    </div>
+                    <label class="block">
+                        <span class="text-xs text-slate-500 dark:text-slate-400" data-i18n="mcp_field_prefix">Tool name prefix</span>
+                        <input id="mcp-field-prefix" class="mt-1 w-full px-3 py-1.5 rounded-lg bg-white dark:bg-[#111111] border border-slate-200 dark:border-white/10" placeholder="myserver_">
+                    </label>
+                    <label class="block">
+                        <span class="text-xs text-slate-500 dark:text-slate-400" data-i18n="mcp_field_timeout">Timeout (seconds)</span>
+                        <input id="mcp-field-timeout" type="number" min="1" class="mt-1 w-full px-3 py-1.5 rounded-lg bg-white dark:bg-[#111111] border border-slate-200 dark:border-white/10">
+                    </label>
+                    <label class="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                        <input id="mcp-field-disabled" type="checkbox" class="rounded">
+                        <span data-i18n="mcp_field_disabled">Disable this server</span>
+                    </label>
+                    <div id="mcp-test-result" class="hidden text-xs rounded-lg px-3 py-2 bg-slate-50 dark:bg-white/5"></div>
+                </div>
+                <div class="flex items-center justify-end gap-2 mt-5">
+                    <button type="button" id="mcp-editor-cancel" class="px-3 py-1.5 rounded-lg text-sm text-slate-500 hover:bg-slate-100 dark:hover:bg-white/10" data-i18n="mcp_cancel">Cancel</button>
+                    <button type="button" id="mcp-editor-test" class="px-3 py-1.5 rounded-lg text-sm text-primary-500 bg-primary-50 dark:bg-primary-900/20" data-i18n="mcp_test">Test connection</button>
+                    <button type="button" id="mcp-editor-save" class="px-3 py-1.5 rounded-lg text-sm text-white bg-primary-500 hover:bg-primary-600" data-i18n="mcp_save">Save</button>
+                </div>
             </div>
         </div>
     </div>

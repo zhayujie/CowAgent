@@ -63,6 +63,16 @@ Docker 部署时，官方 `docker-compose.yml` 已经把宿主机 `./cow` 挂载
 - **fetch**：通用网页抓取，返回页面文本内容，无需 API Key
 - **github**：访问 GitHub 仓库、Issue、PR 等，需要 Personal Access Token
 
+## Web / 桌面控制台
+
+Web 控制台和桌面客户端的「技能」页面可以直接添加、编辑、停用和删除 MCP 服务器，不必再手工改 `mcp.json`。
+
+- 用 **测试连接** 先做握手并列出工具，确认无误再保存。
+- 保存会写入该 Agent 的 `mcp.json`，格式与 Claude / Cursor 的 `mcpServers` 一致。
+- CowAgent 会热加载该文件，**下一条消息**即可使用新工具，无需重启进程。
+
+stdio、SSE、streamable HTTP 都支持。停用的服务器会留在文件里，但不会被拉起。
+
 ## 让 Agent 帮你配置
 
 CowAgent 自带 `read` / `write` / `edit` 工具，**直接把要装的 MCP 配置发给 Agent，让它写到配置文件中：
