@@ -26,10 +26,10 @@ If the current provider fails, the tool automatically tries the next one until i
 | Kimi (Moonshot) | Main model | kimi-k2.6, kimi-k2.5 natively supported |
 | ERNIE | Main model | Defaults to the multimodal main model (e.g. `ernie-5.1`); falls back to `ernie-4.5-turbo-vl` when the main model is not multimodal |
 | ZhipuAI | Main model / glm-5v-turbo | glm-5.3-flash is used directly; text-only chat models fall back to glm-5v-turbo |
-| MiniMax | MiniMax-Text-01 | Always uses the dedicated vision model |
+| MiniMax | MiniMax-M3 | Uses the selected native multimodal model |
 
 <Note>
-  ZhipuAI and MiniMax text models do not support image understanding, so their dedicated vision models are always used automatically.
+  ZhipuAI and MiniMax text-only models do not support image understanding; MiniMax-M3 is selected automatically for native multimodal input.
 </Note>
 
 > When `use_linkai=true`, LinkAI's multimodal model is used by default.

@@ -17,6 +17,9 @@ from common import const
 from agent.protocol.message_utils import drop_orphaned_tool_results_openai
 
 
+NATIVE_VISION_MODELS = frozenset({const.MINIMAX_M3.lower()})
+
+
 # MiniMax对话模型API
 class MinimaxBot(Bot):
     def __init__(self):
@@ -38,6 +41,12 @@ class MinimaxBot(Bot):
     @property
     def api_base(self):
         return conf().get("minimax_api_base", "https://api.minimaxi.com/v1")
+
+    @property
+    def supports_vision(self) -> bool:
+        """Return whether the configured chat model accepts image or video input."""
+        model = str(self.args.get("model") or "").strip().lower()
+        return model in NATIVE_VISION_MODELS
 
     def reply(self, query, context: Context = None) -> Reply:
         # acquire reply content
@@ -180,11 +189,14 @@ class MinimaxBot(Bot):
     def call_vision(self, image_url: str, question: str,
                     model: Optional[str] = None,
                     max_tokens: int = 1000) -> dict:
-        """Analyze an image using MiniMax OpenAI-compatible API.
-        Always uses MiniMax-Text-01 — other MiniMax models do not support vision.
-        """
+        """Analyze an image with a native MiniMax multimodal model."""
         try:
-            vision_model = "MiniMax-Text-01"
+            vision_model = str(model or self.args.get("model") or const.MINIMAX_M3).strip()
+            if vision_model.lower() not in NATIVE_VISION_MODELS:
+                return {
+                    "error": True,
+                    "message": f"MiniMax model '{vision_model}' does not support image or video input",
+                }
             payload = {
                 "model": vision_model,
                 "max_tokens": max_tokens,

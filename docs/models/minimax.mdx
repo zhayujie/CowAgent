@@ -25,7 +25,7 @@ MiniMax supports text chat, image understanding, image generation, and text-to-s
 
 ## Image Understanding
 
-MiniMax's M2.x chat models do not support vision natively; vision calls are uniformly routed to `MiniMax-Text-01`. Once `minimax_api_key` is configured, the Agent's Vision tool automatically uses this model, with no need to specify it explicitly in the configuration file.
+MiniMax-M3 natively accepts text, image, and video input through the OpenAI-compatible chat endpoint. Once `minimax_api_key` is configured, the Agent's Vision tool automatically routes image requests to the selected MiniMax-M3 model, with no need to specify a separate vision model.
 
 ## Image Generation
 

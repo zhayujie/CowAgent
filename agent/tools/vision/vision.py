@@ -58,7 +58,7 @@ _DISCOVERABLE_MODELS = [
     ("gemini_api_key", const.GEMINI, const.GEMINI_38_FLASH, "Gemini"),
     ("qianfan_api_key", const.QIANFAN, const.ERNIE_45_TURBO_VL, "Qianfan"),
     ("zhipu_ai_api_key", const.ZHIPU_AI, const.GLM_4_7, "ZhipuAI"),
-    ("minimax_api_key", const.MiniMax, const.MINIMAX_M2_7, "MiniMax"),
+    ("minimax_api_key", const.MiniMax, const.MINIMAX_M3, "MiniMax"),
     ("mimo_api_key", const.MIMO, const.MIMO_V2_5_PRO, "MiMo"),
     ("deepseek_api_key", const.DEEPSEEK, const.DEEPSEEK_FLASH, "DeepSeek"),
 ]

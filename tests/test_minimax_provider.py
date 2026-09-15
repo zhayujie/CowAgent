@@ -70,6 +70,46 @@ class TestMinimaxBotDefaultModel(unittest.TestCase):
                     }
                     self.assertEqual(bot.args["model"], "MiniMax-M3")
 
+    def test_m3_is_marked_as_native_vision_model(self):
+        from models.minimax.minimax_bot import MinimaxBot
+
+        bot = MinimaxBot.__new__(MinimaxBot)
+        bot.args = {"model": "MiniMax-M3"}
+        self.assertTrue(bot.supports_vision)
+
+    def test_text_model_is_not_marked_as_native_vision_model(self):
+        from models.minimax.minimax_bot import MinimaxBot
+
+        bot = MinimaxBot.__new__(MinimaxBot)
+        bot.args = {"model": "MiniMax-M2.7"}
+        self.assertFalse(bot.supports_vision)
+
+    def test_call_vision_uses_explicit_native_model(self):
+        from models.minimax.minimax_bot import MinimaxBot
+
+        bot = MinimaxBot.__new__(MinimaxBot)
+        bot.args = {"model": "MiniMax-M2.7"}
+
+        response = MagicMock(status_code=200)
+        response.json.return_value = {
+            "choices": [{"message": {"content": "ok"}}],
+            "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+        }
+        with patch.object(MinimaxBot, "api_key", new_callable=PropertyMock, return_value="test-key"):
+            with patch("models.minimax.minimax_bot.requests.post", return_value=response) as post:
+                result = bot.call_vision("https://example.com/image.png", "Describe it", model="MiniMax-M3")
+
+        self.assertEqual(result["model"], "MiniMax-M3")
+        self.assertEqual(post.call_args.kwargs["json"]["model"], "MiniMax-M3")
+
+    def test_call_vision_rejects_text_only_model(self):
+        from models.minimax.minimax_bot import MinimaxBot
+
+        bot = MinimaxBot.__new__(MinimaxBot)
+        bot.args = {"model": "MiniMax-M2.7"}
+        result = bot.call_vision("https://example.com/image.png", "Describe it")
+        self.assertTrue(result["error"])
+
     def test_default_model_string(self):
         """Verify the fallback string literal in minimax_bot.py is MiniMax-M3."""
         import ast
