@@ -23,6 +23,10 @@ from bridge.reply import Reply, ReplyType
 from channel.chat_channel import ChatChannel
 from common import state_dir
 from channel.dingtalk.dingtalk_message import DingTalkMessage
+from channel.dingtalk.dingtalk_stream_card import (
+    DINGTALK_AI_CARD_TITLE,
+    DingTalkCardStreamer,
+)
 from common.expired_dict import ExpiredDict
 from common.log import logger
 from common.singleton import singleton
@@ -695,6 +699,7 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
         if context:
             from agent.team_addressing import stamp_speaker_from_channel
             stamp_speaker_from_channel(self, context, cmsg.content)
+            self._maybe_attach_dingtalk_stream(context)
             self.produce(context)
 
 
@@ -759,8 +764,36 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
         if context:
             from agent.team_addressing import stamp_speaker_from_channel
             stamp_speaker_from_channel(self, context, cmsg.content)
+            self._maybe_attach_dingtalk_stream(context)
             self.produce(context)
 
+
+    def _maybe_attach_dingtalk_stream(self, context: Context):
+        if not context:
+            return context
+        if not conf().get("dingtalk_card_enabled"):
+            return context
+        msg = context.get("msg")
+        if msg is None or getattr(msg, "incoming_message", None) is None:
+            return context
+        context["on_event"] = self._make_dingtalk_stream_callback(context)
+        return context
+
+    def _make_dingtalk_stream_callback(self, context: Context):
+        incoming = context["msg"].incoming_message
+        is_group = bool(context.get("isgroup"))
+        sender_id = getattr(incoming, "sender_staff_id", None)
+        recipients = None if is_group else ([sender_id] if sender_id else None)
+
+        def start_card():
+            return self.ai_markdown_card_start(
+                incoming,
+                title=DINGTALK_AI_CARD_TITLE,
+                recipients=recipients,
+            )
+
+        streamer = DingTalkCardStreamer(start_card=start_card, context=context)
+        return streamer.handle_event
 
     def send(self, reply: Reply, context: Context):
         logger.debug(f"[DingTalk] send() called with reply.type={reply.type}, content_length={len(str(reply.content))}")
@@ -955,6 +988,9 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
 
         # 处理文本消息
         elif reply.type == ReplyType.TEXT:
+            if context.get("dingtalk_streamed"):
+                logger.debug("[DingTalk] streaming already delivered text reply, skipping send()")
+                return
             logger.info(f"[DingTalk] Sending text message, length={len(reply.content)}")
             if conf().get("dingtalk_card_enabled"):
                 logger.info("[Dingtalk] sendMsg={}, receiver={}".format(reply, receiver))
