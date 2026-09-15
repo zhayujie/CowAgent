@@ -188,7 +188,7 @@ class Query:
             nonce = params.nonce
             echostr = params.echostr
             echostr = channel.crypto.check_signature(signature, timestamp, nonce, echostr)
-        except InvalidSignatureException:
+        except (InvalidSignatureException, InvalidCorpIdException):
             raise web.Forbidden()
         return echostr
 
