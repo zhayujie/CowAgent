@@ -319,11 +319,14 @@ def test_document_editor_is_loaded_before_its_users():
     assert (html.index("assets/js/doc-editor.js")
             < html.index("assets/js/views/doc-viewers.js"))
     # A cached copy of the old page would ask for a script that has since been
-    # renamed, so every first-party asset has to carry a version query.
+    # renamed, so every first-party asset has to carry a version query. The
+    # stamp is the asset's own mtime, and render() leaves an asset it cannot
+    # stat unstamped -- so this also fails on a reference to a file that is no
+    # longer there.
     from channel.web import template
-    rendered = template.render("chat.html", cache_bust="probe")
+    rendered = template.render("chat.html")
     unstamped = [ref for ref in re.findall(r'assets/(?:js|css)/[^"\']+', rendered)
-                 if "?v=probe" not in ref]
+                 if not re.search(r"\?v=[0-9a-f]+$", ref)]
     assert not unstamped, unstamped
 
 

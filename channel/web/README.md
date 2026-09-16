@@ -29,10 +29,21 @@ whose behaviour is only predictable when the whole DOM is present at parse
 time.
 
 `template.py` also stamps every `assets/js/**` and `assets/css/**` reference
-with a `?v=` version taken from the request time, so an upgraded console never
-runs against cached old scripts. **Adding a script or stylesheet needs no
-Python change**; the pattern match picks it up.
+with a `?v=` version so an upgraded console never runs against cached old
+scripts. **Adding a script or stylesheet needs no Python change**; the pattern
+match picks it up.
 
+The version is each file's own modification time, not the request time. A
+request-time stamp changed the URL on every request, so all 46 assets (about
+1 MB) were re-downloaded on every reload. Per-file stamps only move when the
+file actually changes, which lets `AssetsHandler` promise `immutable` for
+stamped first-party assets: an unchanged file is never requested again, and a
+changed file gets a new URL and takes effect immediately, so nothing can get
+stuck on an old version.
+
+`assets/vendor/**` is pinned and not stamped. Like the logos and fonts it is
+served with an `ETag`: the browser still asks, but a hit is a `304` with no
+body. The `-old` snapshot works the same way.
 
 Two rules for includes:
 

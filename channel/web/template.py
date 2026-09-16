@@ -22,7 +22,9 @@ _INCLUDE_RE = re.compile(r'<!--#include\s+([^\s>]+?)\s*-->')
 # First-party scripts and stylesheets, which live under assets/js and
 # assets/css. Vendored copies sit in assets/vendor and are deliberately left
 # alone: they are pinned, so a version query would only waste cache entries.
-_ASSET_RE = re.compile(r'assets/((?:js|css)/[A-Za-z0-9_\-./]+\.(?:js|css))')
+_FIRST_PARTY = r'(?:js|css)/[A-Za-z0-9_\-./]+\.(?:js|css)'
+_ASSET_RE = re.compile(r'assets/(%s)' % _FIRST_PARTY)
+_FIRST_PARTY_RE = re.compile(r'%s$' % _FIRST_PARTY)
 
 # An include that resolves back to an ancestor would loop forever. Fragments
 # nest at most two deep today (shell -> view -> shared row), so this is a
@@ -30,6 +32,7 @@ _ASSET_RE = re.compile(r'assets/((?:js|css)/[A-Za-z0-9_\-./]+\.(?:js|css))')
 _MAX_INCLUDE_DEPTH = 8
 
 _WEB_DIR = os.path.dirname(os.path.abspath(__file__))
+_STATIC_DIR = os.path.join(_WEB_DIR, 'static')
 
 # path -> (mtime, text). Keyed on mtime so an edit is picked up on the next
 # request without a restart, while a steady-state page load stays at one stat()
@@ -70,15 +73,56 @@ def _expand(text: str, depth: int) -> str:
     return _INCLUDE_RE.sub(substitute, text)
 
 
-def render(rel_path: str, cache_bust: str = '') -> str:
+def is_versioned(asset_path: str) -> bool:
+    """Whether ``render`` stamps this asset with its own mtime.
+
+    Only first-party scripts and stylesheets are stamped, which is what makes
+    their URLs content-addressed: the file cannot change without the URL
+    changing with it. The asset handler consults this before promising a
+    browser that a response is safe to keep, since nothing else under static/
+    -- vendored bundles, fonts, logos -- carries that guarantee.
+    """
+    return bool(_FIRST_PARTY_RE.match(asset_path))
+
+
+def asset_version(asset_path: str) -> str:
+    """A stamp for one asset, derived from its last modification time.
+
+    Milliseconds rather than seconds so two edits within the same second still
+    produce different stamps, which matters while developing: an edit that did
+    not move the stamp would be served from cache and look like it had no
+    effect. An asset that cannot be stat'd gets no stamp instead of raising,
+    so one stale reference cannot turn the whole console into a 500; the asset
+    tests catch the missing file directly.
+    """
+    full_path = os.path.normpath(os.path.join(_STATIC_DIR, asset_path))
+    if not full_path.startswith(_STATIC_DIR + os.sep):
+        return ''
+    try:
+        return format(int(os.path.getmtime(full_path) * 1000), 'x')
+    except OSError:
+        return ''
+
+
+def render(rel_path: str) -> str:
     """Assemble ``rel_path`` and stamp a version onto its first-party assets.
 
-    ``cache_bust`` guards against a browser running an upgraded console's
-    markup against cached copies of the old scripts. Every first-party asset
-    is stamped, including ones referenced from included fragments, so adding a
+    The stamp guards against a browser running an upgraded console's markup
+    against cached copies of the old scripts. Every first-party asset is
+    stamped, including ones referenced from included fragments, so adding a
     script no longer means remembering to extend a hardcoded list.
+
+    Each asset carries its own mtime rather than one stamp shared by the whole
+    page. A shared wall-clock stamp changed on every request, so all 46 assets
+    were re-downloaded on every reload; per-file stamps hold still until the
+    file behind them actually changes, and then move only for that one file.
     """
     html = _expand(_read(rel_path), 0)
-    if cache_bust:
-        html = _ASSET_RE.sub(rf'assets/\1?v={cache_bust}', html)
-    return html
+
+    def stamp(match):
+        version = asset_version(match.group(1))
+        if not version:
+            return match.group(0)
+        return 'assets/%s?v=%s' % (match.group(1), version)
+
+    return _ASSET_RE.sub(stamp, html)

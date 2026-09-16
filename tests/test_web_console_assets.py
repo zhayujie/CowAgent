@@ -21,7 +21,9 @@ def _page():
 
 
 def _scripts(page):
-    return re.findall(r'<script defer src="assets/(js/[^"?]+)"', page)
+    # The served page stamps each asset with its mtime, so the path is followed
+    # by a ?v= query rather than the closing quote.
+    return re.findall(r'<script defer src="assets/(js/[^"?]+)(?:\?[^"]*)?"', page)
 
 
 def test_every_console_script_is_listed_exactly_once_and_exists():
@@ -45,7 +47,8 @@ def test_every_console_script_is_listed_exactly_once_and_exists():
 
 
 def test_every_stylesheet_is_listed_and_exists():
-    sheets = re.findall(r'<link rel="stylesheet" href="assets/(css/[^"?]+)"', _page())
+    sheets = re.findall(
+        r'<link rel="stylesheet" href="assets/(css/[^"?]+)(?:\?[^"]*)?"', _page())
     absent = [s for s in sheets if not os.path.exists(os.path.join(STATIC, s))]
     assert not absent, absent
     assert sheets == sorted(set(sheets), key=sheets.index), "a sheet is linked twice"
@@ -192,6 +195,45 @@ def test_the_desktop_bundle_ships_everything_the_page_is_assembled_from():
     needed = {"static" if n in ("js", "css") else n for n in needed}
 
     assert not needed - bundled, sorted(needed - bundled)
+
+
+def test_an_assets_version_moves_with_the_file_and_not_with_the_clock():
+    """The stamp used to be the wall clock, so every asset URL changed on every
+    request and the browser re-fetched the whole console on every reload. The
+    property that replaced it: a stamp holds still until its own file changes,
+    which is also what lets the asset handler promise a versioned URL never
+    goes stale."""
+    first = _page()
+    assert first == _page(), "rendering twice must not move any stamp"
+
+    victim = _scripts(first)[0]
+    path = os.path.join(STATIC, victim)
+    before = os.stat(path)
+    try:
+        os.utime(path, (before.st_atime, before.st_mtime + 5))
+        after = _page()
+    finally:
+        os.utime(path, (before.st_atime, before.st_mtime))
+
+    moved = {ref for ref in re.findall(r'assets/(?:js|css)/[^"\']+', first)}
+    moved ^= {ref for ref in re.findall(r'assets/(?:js|css)/[^"\']+', after)}
+    # Exactly one URL differs: the touched file's, in its old and new form.
+    assert len(moved) == 2, sorted(moved)
+    assert all(ref.startswith("assets/" + victim + "?v=") for ref in moved), sorted(moved)
+
+
+def test_only_stamped_assets_are_advertised_as_immutable():
+    """The handler hands out a year-long, revalidation-free cache entry for
+    anything is_versioned() accepts. That is only safe where render() puts an
+    mtime in the URL -- a vendor bundle or the -old snapshot keeps its URL
+    across edits, so promising the same would strand a browser on stale code
+    with no way to ask."""
+    for stamped in ("js/boot.js", "css/console.css", "js/views/chat.js"):
+        assert template.is_versioned(stamped), stamped
+
+    for unstamped in ("vendor/tailwind.js", "legacy/js/console.js",
+                      "logos/openai.svg", "vendor/fonts/inter.woff2"):
+        assert not template.is_versioned(unstamped), unstamped
 
 
 def test_the_split_scripts_do_not_declare_the_same_global_twice():
