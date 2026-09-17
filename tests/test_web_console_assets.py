@@ -21,9 +21,10 @@ def _page():
 
 
 def _scripts(page):
-    # The served page stamps each asset with its mtime, so the path is followed
-    # by a ?v= query rather than the closing quote.
-    return re.findall(r'<script defer src="assets/(js/[^"?]+)(?:\?[^"]*)?"', page)
+    # Asset URLs are absolute so they resolve the same from every routed path,
+    # and each carries a ?v= stamp, so the name sits between /assets/ and the
+    # query rather than between /assets/ and the closing quote.
+    return re.findall(r'<script defer src="/assets/(js/[^"?]+)(?:\?[^"]*)?"', page)
 
 
 def test_every_console_script_is_listed_exactly_once_and_exists():
@@ -48,7 +49,7 @@ def test_every_console_script_is_listed_exactly_once_and_exists():
 
 def test_every_stylesheet_is_listed_and_exists():
     sheets = re.findall(
-        r'<link rel="stylesheet" href="assets/(css/[^"?]+)(?:\?[^"]*)?"', _page())
+        r'<link rel="stylesheet" href="/assets/(css/[^"?]+)(?:\?[^"]*)?"', _page())
     absent = [s for s in sheets if not os.path.exists(os.path.join(STATIC, s))]
     assert not absent, absent
     assert sheets == sorted(set(sheets), key=sheets.index), "a sheet is linked twice"
@@ -148,7 +149,7 @@ def test_the_old_console_flag_is_off_unless_asked_for():
                 os.environ.pop("COW_LEGACY_CONSOLE", None)
             with patch.object(web_channel.web, "header", lambda *a, **k: None):
                 html = web_channel.ChatHandler().GET()
-        assert 'src="assets/js/core/i18n.js' in html, value
+        assert 'src="/assets/js/core/i18n.js' in html, value
         assert "assets/legacy/" not in html, value
 
 
@@ -215,11 +216,11 @@ def test_an_assets_version_moves_with_the_file_and_not_with_the_clock():
     finally:
         os.utime(path, (before.st_atime, before.st_mtime))
 
-    moved = {ref for ref in re.findall(r'assets/(?:js|css)/[^"\']+', first)}
-    moved ^= {ref for ref in re.findall(r'assets/(?:js|css)/[^"\']+', after)}
+    moved = {ref for ref in re.findall(r'/assets/(?:js|css)/[^"\']+', first)}
+    moved ^= {ref for ref in re.findall(r'/assets/(?:js|css)/[^"\']+', after)}
     # Exactly one URL differs: the touched file's, in its old and new form.
     assert len(moved) == 2, sorted(moved)
-    assert all(ref.startswith("assets/" + victim + "?v=") for ref in moved), sorted(moved)
+    assert all(ref.startswith("/assets/" + victim + "?v=") for ref in moved), sorted(moved)
 
 
 def test_only_stamped_assets_are_advertised_as_immutable():

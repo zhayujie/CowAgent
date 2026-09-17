@@ -36,6 +36,7 @@ function switchTasksTab(tab) {
     });
 
     if (!isTasks) loadRunsView();
+    routeNoteTab('tasks', tab);
 }
 
 function refreshTasksView() {

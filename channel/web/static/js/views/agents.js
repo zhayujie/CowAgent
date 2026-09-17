@@ -72,7 +72,7 @@ function agentAvatarHTML(agent, size) {
     // uploaded picture, so the instance's own Agent wears the CowAgent face.
     // Added Agents keep the initial-disc fallback so a team stays distinguishable.
     if (agent && agent.id && agent.id === defaultAgentId) {
-        return `<img class="${cls}" src="assets/logo.jpg" alt="">`;
+        return `<img class="${cls}" src="/assets/logo.jpg" alt="">`;
     }
     const initial = avatarInitial(agent && (agent.name || agent.id));
     return `<span class="${cls} agent-avatar-tone-${avatarTone(agent && agent.id)}">${escapeHtml(initial)}</span>`;

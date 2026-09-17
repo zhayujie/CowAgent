@@ -4,21 +4,21 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CowAgent Console</title>
-    <link rel="icon" href="assets/favicon.ico" type="image/x-icon">
+    <link rel="icon" href="/assets/favicon.ico" type="image/x-icon">
     <!-- Vendored third-party assets (no external CDN dependency).
          See channel/web/static/vendor/README.md for sources & versions. -->
-    <link rel="stylesheet" href="assets/vendor/fontawesome/css/all.min.css">
-    <link rel="stylesheet" href="assets/vendor/fonts/inter/inter.css">
-    <script src="assets/vendor/tailwind/tailwind.min.js"></script>
-    <script src="assets/vendor/markdown-it/markdown-it.min.js"></script>
-    <link id="hljs-light" rel="stylesheet" href="assets/vendor/highlightjs/styles/github.min.css">
-    <link id="hljs-dark" rel="stylesheet" href="assets/vendor/highlightjs/styles/github-dark.min.css" disabled>
-    <script src="assets/vendor/highlightjs/highlight.min.js"></script>
-    <script src="assets/vendor/highlightjs/languages/python.min.js"></script>
-    <script src="assets/vendor/highlightjs/languages/javascript.min.js"></script>
-    <script src="assets/vendor/highlightjs/languages/java.min.js"></script>
-    <script src="assets/vendor/highlightjs/languages/go.min.js"></script>
-    <script src="assets/vendor/highlightjs/languages/bash.min.js"></script>
+    <link rel="stylesheet" href="/assets/vendor/fontawesome/css/all.min.css">
+    <link rel="stylesheet" href="/assets/vendor/fonts/inter/inter.css">
+    <script src="/assets/vendor/tailwind/tailwind.min.js"></script>
+    <script src="/assets/vendor/markdown-it/markdown-it.min.js"></script>
+    <link id="hljs-light" rel="stylesheet" href="/assets/vendor/highlightjs/styles/github.min.css">
+    <link id="hljs-dark" rel="stylesheet" href="/assets/vendor/highlightjs/styles/github-dark.min.css" disabled>
+    <script src="/assets/vendor/highlightjs/highlight.min.js"></script>
+    <script src="/assets/vendor/highlightjs/languages/python.min.js"></script>
+    <script src="/assets/vendor/highlightjs/languages/javascript.min.js"></script>
+    <script src="/assets/vendor/highlightjs/languages/java.min.js"></script>
+    <script src="/assets/vendor/highlightjs/languages/go.min.js"></script>
+    <script src="/assets/vendor/highlightjs/languages/bash.min.js"></script>
     <script>
     tailwind.config = {
         darkMode: 'class',
@@ -45,14 +45,14 @@
     <!-- Split out of a single console.css. The order is load-bearing: later
          sheets override earlier ones, so keep it as-is and see
          channel/web/README.md before inserting anything. -->
-    <link rel="stylesheet" href="assets/css/base.css">
-    <link rel="stylesheet" href="assets/css/sessions.css">
-    <link rel="stylesheet" href="assets/css/components.css">
-    <link rel="stylesheet" href="assets/css/markdown.css">
-    <link rel="stylesheet" href="assets/css/chat.css">
-    <link rel="stylesheet" href="assets/css/workspace.css">
-    <link rel="stylesheet" href="assets/css/knowledge.css">
-    <link rel="stylesheet" href="assets/css/agents.css">
+    <link rel="stylesheet" href="/assets/css/base.css">
+    <link rel="stylesheet" href="/assets/css/sessions.css">
+    <link rel="stylesheet" href="/assets/css/components.css">
+    <link rel="stylesheet" href="/assets/css/markdown.css">
+    <link rel="stylesheet" href="/assets/css/chat.css">
+    <link rel="stylesheet" href="/assets/css/workspace.css">
+    <link rel="stylesheet" href="/assets/css/knowledge.css">
+    <link rel="stylesheet" href="/assets/css/agents.css">
     <!-- Apply theme/lang before first paint to avoid flash of unstyled content.
          This runs synchronously in <head> so the correct class is on <html>
          before any CSS or body rendering occurs. -->
@@ -155,16 +155,20 @@
          adding, removing or moving a line. -->
 
     <!-- doc-editor first: views/doc-viewers.js builds its editors at load time. -->
-    <script defer src="assets/js/doc-editor.js"></script>
+    <script defer src="/assets/js/doc-editor.js"></script>
 
-    <script defer src="assets/js/core/version.js"></script>
-    <script defer src="assets/js/core/i18n.js"></script>
-    <script defer src="assets/js/core/theme.js"></script>
-    <script defer src="assets/js/core/utils.js"></script>
-    <script defer src="assets/js/core/markdown.js"></script>
-    <script defer src="assets/js/core/confirm.js"></script>
-    <script defer src="assets/js/core/notify.js"></script>
-    <script defer src="assets/js/core/nav.js"></script>
+    <script defer src="/assets/js/core/version.js"></script>
+    <script defer src="/assets/js/core/i18n.js"></script>
+    <script defer src="/assets/js/core/theme.js"></script>
+    <script defer src="/assets/js/core/utils.js"></script>
+    <script defer src="/assets/js/core/markdown.js"></script>
+    <script defer src="/assets/js/core/confirm.js"></script>
+    <script defer src="/assets/js/core/notify.js"></script>
+    <script defer src="/assets/js/core/nav.js"></script>
+    <!-- After nav.js, whose navigateTo it drives and whose VIEW_META it
+         validates against. Only registers a hashchange listener at load time;
+         the first route is applied from initApp(), once auth has settled. -->
+    <script defer src="/assets/js/core/router.js"></script>
 
     <!-- Ahead of chat/, not with the other views: chat/state.js computes
          sessionId at load time and activeSessionStorageKey() reads
@@ -172,46 +176,46 @@
          puts that binding in its temporal dead zone, and chat/state.js dies
          on the spot - taking the restored session, and so the visible
          conversation history, with it. -->
-    <script defer src="assets/js/views/agents.js"></script>
+    <script defer src="/assets/js/views/agents.js"></script>
 
-    <script defer src="assets/js/chat/state.js"></script>
-    <script defer src="assets/js/chat/context-usage.js"></script>
-    <script defer src="assets/js/chat/workspace-selector.js"></script>
-    <script defer src="assets/js/chat/session-settings.js"></script>
-    <script defer src="assets/js/chat/composer-input.js"></script>
-    <script defer src="assets/js/chat/message-actions.js"></script>
-    <script defer src="assets/js/chat/send.js"></script>
-    <script defer src="assets/js/chat/scheduler-notify.js"></script>
-    <script defer src="assets/js/chat/render.js"></script>
-    <script defer src="assets/js/chat/new-chat.js"></script>
+    <script defer src="/assets/js/chat/state.js"></script>
+    <script defer src="/assets/js/chat/context-usage.js"></script>
+    <script defer src="/assets/js/chat/workspace-selector.js"></script>
+    <script defer src="/assets/js/chat/session-settings.js"></script>
+    <script defer src="/assets/js/chat/composer-input.js"></script>
+    <script defer src="/assets/js/chat/message-actions.js"></script>
+    <script defer src="/assets/js/chat/send.js"></script>
+    <script defer src="/assets/js/chat/scheduler-notify.js"></script>
+    <script defer src="/assets/js/chat/render.js"></script>
+    <script defer src="/assets/js/chat/new-chat.js"></script>
 
-    <script defer src="assets/js/views/sessions.js"></script>
-    <script defer src="assets/js/views/config.js"></script>
-    <script defer src="assets/js/views/models.js"></script>
-    <script defer src="assets/js/views/models-custom-provider.js"></script>
-    <script defer src="assets/js/views/channels.js"></script>
-    <script defer src="assets/js/views/channels-weixin.js"></script>
-    <script defer src="assets/js/views/channels-wecom.js"></script>
-    <script defer src="assets/js/views/channels-feishu.js"></script>
-    <script defer src="assets/js/views/tasks.js"></script>
-    <script defer src="assets/js/views/tasks-modal.js"></script>
-    <script defer src="assets/js/views/skills.js"></script>
-    <script defer src="assets/js/views/memory.js"></script>
-    <script defer src="assets/js/views/doc-viewers.js"></script>
-    <script defer src="assets/js/views/knowledge.js"></script>
-    <script defer src="assets/js/views/logs.js"></script>
+    <script defer src="/assets/js/views/sessions.js"></script>
+    <script defer src="/assets/js/views/config.js"></script>
+    <script defer src="/assets/js/views/models.js"></script>
+    <script defer src="/assets/js/views/models-custom-provider.js"></script>
+    <script defer src="/assets/js/views/channels.js"></script>
+    <script defer src="/assets/js/views/channels-weixin.js"></script>
+    <script defer src="/assets/js/views/channels-wecom.js"></script>
+    <script defer src="/assets/js/views/channels-feishu.js"></script>
+    <script defer src="/assets/js/views/tasks.js"></script>
+    <script defer src="/assets/js/views/tasks-modal.js"></script>
+    <script defer src="/assets/js/views/skills.js"></script>
+    <script defer src="/assets/js/views/memory.js"></script>
+    <script defer src="/assets/js/views/doc-viewers.js"></script>
+    <script defer src="/assets/js/views/knowledge.js"></script>
+    <script defer src="/assets/js/views/logs.js"></script>
 
     <!-- Last of the core layer rather than first, which is where it sat in
          console.js. It installs a window.fetch wrapper for 401 handling, and
          chat/state.js installs one that appends agent_id; keeping this one
          outermost means the 401 check still sees the URL the caller passed. -->
-    <script defer src="assets/js/core/auth.js"></script>
+    <script defer src="/assets/js/core/auth.js"></script>
 
     <!-- boot before workspace.js, which is where console.js used to sit:
          applyI18n() probes for relocalizeWorkspacePanel with a typeof guard,
          and it has always run before workspace.js defined it. -->
-    <script defer src="assets/js/boot.js"></script>
+    <script defer src="/assets/js/boot.js"></script>
 
-    <script defer src="assets/js/workspace.js"></script>
+    <script defer src="/assets/js/workspace.js"></script>
 </body>
 </html>

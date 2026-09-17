@@ -2257,7 +2257,8 @@ class WebChannel(ChatChannel):
                 logger.debug(f"[WebChannel] Skipped creating static dir (read-only bundle?): {e}")
 
         urls = (
-            '/', 'RootHandler',
+            '/', 'ChatHandler',
+            '/chat', 'RootHandler',
             '/api/health', 'HealthHandler',
             '/auth/login', 'AuthLoginHandler',
             '/auth/check', 'AuthCheckHandler',
@@ -2333,6 +2334,15 @@ class WebChannel(ChatChannel):
             '/api/update/status', 'UpdateStatusHandler',
             '/mcp/oauth/callback', 'McpOAuthCallbackHandler',
             '/assets/(.*)', 'AssetsHandler',
+            # Views inside the single-page console. Each serves the same shell;
+            # the frontend router reads the path and opens the view it names,
+            # so a reload or a shared link lands where it says. Last in the
+            # table on purpose: web.py takes the first match, so no view name
+            # can ever shadow an API route above -- which is also why the
+            # settings view is /settings and not /config, a path the config
+            # API already owns.
+            '/(?:agents|settings|skills|memory|knowledge|channels|tasks|logs)'
+            '(?:/[a-z]+)?/?', 'ChatHandler',
         )
         app = web.application(urls, globals(), autoreload=False)
 
@@ -2393,8 +2403,13 @@ class WebChannel(ChatChannel):
 
 
 class RootHandler:
+    """Where /chat used to live. The console is at / now, so that the address
+    bar reads as paths into one app rather than as a page with state after it.
+    Kept as a redirect because /chat is what older bookmarks, and the startup
+    banner of any running instance, still point at."""
+
     def GET(self):
-        raise web.seeother('/chat')
+        raise web.seeother('/')
 
 
 class HealthHandler:
@@ -2841,6 +2856,12 @@ class ChatHandler:
         # Read per request, not at import: nothing guarantees this module is
         # imported after app.py has parsed its arguments.
         if os.environ.get('COW_LEGACY_CONSOLE') == '1':
+            # The snapshot predates routing: it has no router, and it points at
+            # its scripts relatively, so under a two-segment path like
+            # /settings/models the browser would look for them beside that path
+            # and render nothing. Send it back to the one path it works at.
+            if web.ctx.get('path', '/') != '/':
+                raise web.seeother('/')
             html = _legacy_console_page(str(int(time.time())))
         else:
             # The shell pulls its layout, views and modals in from templates/;

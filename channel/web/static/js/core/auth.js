@@ -169,5 +169,9 @@ function initApp() {
         _setSidebarVersionLabel('CowAgent');
     });
     chatInput.focus();
+    // Last, and only from here: initApp() runs once auth has settled, on all
+    // three paths into the app. Opening the routed view any earlier would
+    // switch views behind the login overlay.
+    routeApply();
 }
 

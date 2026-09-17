@@ -15,6 +15,7 @@ function switchMemoryTab(tab) {
     // The "dreams" tab now surfaces self-evolution logs (merged with dream diaries).
     memoryCategory = tab === 'dreams' ? 'evolution' : 'memory';
     loadMemoryView(1);
+    routeNoteTab('memory', tab);
 }
 
 function loadMemoryView(page) {

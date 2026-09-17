@@ -103,18 +103,24 @@ window.addEventListener('resize', () => {
 // =====================================================================
 // Everything routes through here: the sidebar, the breadcrumb and the
 // navigateTo() calls in generated onclick handlers.
-function navigateTo(viewId) {
+// `tab` is optional and comes from the address bar; a caller that does not
+// name one gets the view's usual landing tab. Returns false when the guard
+// below refused to leave the current view, which is what lets the router put
+// the address bar back after a Back it could not honour.
+function navigateTo(viewId, tab) {
     // An open document editor is about to be replaced by another view, which
     // would drop the edit with nothing on screen to say so.
-    if (!docGuardUnsaved(() => navigateTo(viewId))) return;
+    if (!docGuardUnsaved(() => navigateTo(viewId, tab))) return false;
 
     // Stop log stream when leaving logs view
     if (currentView === 'logs' && viewId !== 'logs') stopLogStream();
 
     _switchToView(viewId);
+    // The address bar follows the view, so a reload lands back here.
+    routeEnterView(viewId);
 
     // Lazy-load view data
-    if (viewId === 'config') { loadConfigView(); switchConfigTab('basic'); }
+    if (viewId === 'config') { loadConfigView(); switchConfigTab(tab || 'basic'); }
     else if (viewId === 'skills') { resetSkillViewer(); loadSkillsView(); }
     else if (viewId === 'memory') {
         memoryEditor.forget();
@@ -128,11 +134,15 @@ function navigateTo(viewId) {
         }
         if (!memoryAgentId) memoryAgentId = activeAgentId || defaultAgentId;
         renderMemoryAgentSelect();
-        switchMemoryTab('files');
+        switchMemoryTab(tab || 'files');
     }
-    else if (viewId === 'knowledge') loadKnowledgeView();
+    // loadKnowledgeView lands on the docs tab itself, so unlike the views
+    // above there is no default to pass -- only a route-named tab to override
+    // it with.
+    else if (viewId === 'knowledge') { loadKnowledgeView(); if (tab) switchKnowledgeTab(tab); }
     else if (viewId === 'channels') loadChannelsView();
-    else if (viewId === 'tasks') { switchTasksTab('tasks'); loadTasksView(); }
+    else if (viewId === 'tasks') { switchTasksTab(tab || 'tasks'); loadTasksView(); }
     else if (viewId === 'logs') startLogStream();
+    return true;
 }
 

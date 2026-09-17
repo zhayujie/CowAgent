@@ -7,7 +7,7 @@ scheduled tasks, logs).
 # Usage
 
 - Set `channel_type` to `web` in `config.json`.
-- The process listens on port 9899; open http://localhost:9899/chat in a browser.
+- The process listens on port 9899; open http://localhost:9899/ in a browser.
 - The port can be changed with `web_port` in the config file.
 - Under Docker, map the port to the host in `docker-compose.yml` if it has to
   be reachable from outside.
@@ -144,6 +144,69 @@ It needs the TypeScript parser in `desktop/node_modules` (present after
 suite. `--stack-size` is required: the default stack cannot walk an AST of this
 size.
 
+## Address-bar routing
+
+The console is the app at `/`, and its views and tabs are paths under it:
+`/agents`, `/settings`, `/settings/models`. A reload lands where the user left
+off, links can be shared, and Back/Forward move between views. `/chat` is the
+old address and stays as a redirect to `/`.
+
+**A route name is not always the view's internal id.** The settings view's id
+is `config`, but its URL is `/settings`, because `/config` is already the
+backend's config API, which both this console and the desktop client call. The
+URL table in `web_channel.py` points these paths at the same shell and the
+frontend router opens the view; the two tables have to agree, and
+`tests/test_web_console_routing.py` compares them.
+
+The view paths come **last** in the URL table: web.py takes the first match, so
+no view name can shadow an API route above it -- and a new API route cannot
+collide with a view name either.
+
+**Asset references in the page must be absolute** (`/assets/js/...`). Path
+routing depends on it: a relative reference under `/settings/models` would
+resolve to `/settings/assets/...` and 404 the whole page. This gives up nothing
+for reverse-proxy subpath mounts (say `https://host/cow/`): the console could
+never be mounted that way, since every API call it makes is already an absolute
+`/api/...` path. Supporting a subpath would mean prefixing all of them, not
+making asset references relative again.
+
+Routing stops at view and tab. Deeper state -- the open session, the file in
+the editor -- deliberately stays out of the URL: it is already restored from
+localStorage, and putting it in the URL would rewrite the address bar on every
+click in the session list.
+
+Three rules shape the history stack:
+
+- **Switching views** pushes an entry, so Back returns to the previous view.
+- **Switching tabs** replaces the current entry instead of adding one, so Back
+  leaves the view rather than walking back through every tab visited inside it.
+- **Re-entering the current view** (clicking the already selected sidebar item)
+  is also a replace; otherwise Back would appear to do nothing after a few
+  clicks.
+
+The address bar is only ever written with `pushState`/`replaceState`, which do
+not fire `popstate`, so a write cannot loop back in as a navigation. Back and
+Forward, which do fire `popstate`, are the single entry point; the
+`_routeApplying` flag suppresses writes while a route is being applied, so no
+duplicate entries are created.
+
+Unsaved edits still block navigation. On Back the address bar has already
+moved; `navigateTo` returns `false` when the guard refuses, and the router puts
+the address bar back with `replaceState` until the user confirms discarding.
+
+`channel/web/tools/check-router.mjs` verifies this behaviour: it stubs
+`location`/`history`/the DOM and drives the router through the scenarios above,
+checking the count and content of history entries. No dependencies, no browser;
+run it after touching the router:
+
+```
+node channel/web/tools/check-router.mjs
+```
+
+The Python tests can only pin the wiring (the tab vocabulary matches the DOM,
+every tab switcher reports to the router, the first route is applied only after
+auth), see `tests/test_web_console_routing.py`.
+
 ### core/ -- infrastructure shared across views
 
 | File | Responsibility |
@@ -156,6 +219,7 @@ size.
 | `core/confirm.js` | Scripted confirm dialog shared by the views |
 | `core/notify.js` | Task completion notifications and notification permission |
 | `core/nav.js` | `navigateTo` view switching and each view's lazy-load hook |
+| `core/router.js` | Address-bar routing: parsing and writing `/view/tab`, Back/Forward; see above |
 | `core/auth.js` | Login screen, logout, the 401 interceptor on `fetch`, the auth gate for background pollers. **Loads last, see below** |
 
 ### chat/ -- the chat view
@@ -212,7 +276,7 @@ The output goes to `static/legacy/` (gitignored; delete it when done). Then:
 python app.py -old
 ```
 
-`/chat` now serves the old page against the same backend, sessions and history, so
+`/` now serves the old page against the same backend, sessions and history, so
 behaviour can be compared directly. Starting without `-old` is unaffected.
 
 To run both versions **at the same time** you could in theory start a second

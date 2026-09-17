@@ -661,5 +661,6 @@ function switchConfigTab(tab) {
     // tab must show up in the basic main-model provider picker without a manual
     // page refresh. loadConfigView re-renders from the fresh provider list.
     if (tab === 'basic') loadConfigView();
+    routeNoteTab('config', tab);
 }
 

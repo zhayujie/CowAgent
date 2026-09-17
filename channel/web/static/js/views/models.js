@@ -43,7 +43,7 @@ const MODELS_CAPABILITY_DEFS = [
 // absent. Vendors whose mark is rendered in pure (or near-pure) black are
 // listed in MODELS_PROVIDER_LOGO_DARK_INVERT — for those, we apply a CSS
 // invert filter in dark mode so the glyph stays visible against #1A1A1A.
-const MODELS_PROVIDER_LOGO_PATH = 'assets/logos';
+const MODELS_PROVIDER_LOGO_PATH = '/assets/logos';
 const MODELS_PROVIDER_LOGO_DARK_INVERT = new Set([
     'openai',     // black wordmark
     'moonshot',   // dark monogram

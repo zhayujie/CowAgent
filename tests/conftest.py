@@ -35,9 +35,10 @@ def console_js():
 
     page = template.render("chat.html")
     parts = []
-    # The served page stamps each asset with its mtime, so the path is followed
-    # by a ?v= query rather than the closing quote.
-    for src in re.findall(r'<script defer src="assets/(js/[^"?]+)(?:\?[^"]*)?"', page):
+    # Asset URLs are absolute so they resolve the same from every routed path,
+    # and each carries a ?v= stamp, so the name sits between /assets/ and the
+    # query rather than between /assets/ and the closing quote.
+    for src in re.findall(r'<script defer src="/assets/(js/[^"?]+)(?:\?[^"]*)?"', page):
         with open(os.path.join(_WEB_DIR, "static", src), encoding="utf-8") as f:
             parts.append(f.read())
     return "\n".join(parts)

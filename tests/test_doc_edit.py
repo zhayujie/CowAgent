@@ -394,7 +394,7 @@ def test_memory_and_skill_editor_wiring():
 
     # Leaving the page, going back to the list or closing the tab all discard an
     # open editor, so each has to ask first.
-    assert "if (!docGuardUnsaved(() => navigateTo(viewId))) return;" in console
+    assert "if (!docGuardUnsaved(() => navigateTo(viewId, tab))) return false;" in console
     assert "if (!memoryEditor.guard(closeMemoryViewer)) return;" in console
     assert "if (!skillEditor.guard(closeSkillViewer)) return;" in console
     assert "if (!memoryEditor.isDirty() && !skillEditor.isDirty()) return;" in console

@@ -563,14 +563,20 @@ messagesDiv.addEventListener('click', (e) => {
     const a = e.target.closest('a');
     if (!a) return;
     const href = a.getAttribute('href') || '';
+    // Links the Agent writes into its answers. /memory/dreams is a real route
+    // now, so letting the click through would work too -- it is still handled
+    // here so it stays a view switch rather than a page load. navigateTo puts
+    // the view and its tab up in one synchronous step, which is what the
+    // timeouts these calls used to be wrapped in were waiting for.
     if (href === '/memory/dreams') {
         e.preventDefault();
-        navigateTo('memory');
-        setTimeout(() => switchMemoryTab('dreams'), 50);
+        navigateTo('memory', 'dreams');
     } else if (href === '/memory/MEMORY.md') {
+        // Not a route: which file the viewer holds is deliberately not in the
+        // URL, so this opens the file on top of the files tab.
         e.preventDefault();
-        navigateTo('memory');
-        setTimeout(() => { switchMemoryTab('files'); openMemoryFile('MEMORY.md', 'memory'); }, 50);
+        navigateTo('memory', 'files');
+        openMemoryFile('MEMORY.md', 'memory');
     }
 });
 const attachmentPreview = document.getElementById('attachment-preview');
