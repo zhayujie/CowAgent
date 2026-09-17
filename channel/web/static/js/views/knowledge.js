@@ -9,6 +9,11 @@ let _knowledgeTreeData = [];
 let _knowledgeRootFiles = [];
 let _knowledgeCurrentFile = null;
 let _knowledgeGraphLoaded = false;
+// Which tab is selected, and whether the base has anything to show in it.
+// Both panels stay hidden behind the empty state until the list says there
+// are pages; starts false so the first load shows only the loading text.
+let _knowledgeTab = 'docs';
+let _knowledgeHasPages = false;
 const KNOWLEDGE_IMPORT_MAX_FILES = 100;
 const KNOWLEDGE_IMPORT_MAX_FILE_SIZE = 10 * 1024 * 1024;
 const KNOWLEDGE_IMPORT_MAX_TOTAL_SIZE = 200 * 1024 * 1024;
@@ -62,7 +67,6 @@ function loadKnowledgeView(targetPath) {
         initKnowledgeImportDropZone();
 
         const emptyEl = document.getElementById('knowledge-empty');
-        const docsPanel = document.getElementById('knowledge-panel-docs');
         const statsEl = document.getElementById('knowledge-stats');
 
         const tree = data.tree || [];
@@ -75,16 +79,17 @@ function loadKnowledgeView(targetPath) {
 
         statsEl.textContent = totalPages + ' pages · ' + sizeStr;
 
-        if (totalPages === 0 && tree.length === 0 && rootFiles.length === 0) {
+        _knowledgeHasPages = !(totalPages === 0 && tree.length === 0 && rootFiles.length === 0);
+        if (!_knowledgeHasPages) {
             emptyEl.querySelector('p').textContent = t('knowledge_empty_hint');
             const guideEl = document.getElementById('knowledge-empty-guide');
             if (guideEl) guideEl.classList.remove('hidden');
-            emptyEl.classList.remove('hidden');
-            docsPanel.classList.add('hidden');
-            return;
         }
-        emptyEl.classList.add('hidden');
-        docsPanel.classList.remove('hidden');
+        // Reveal the panel for the tab that is selected *now*, not the docs
+        // tab: a link to /knowledge/graph switches tabs while this request is
+        // still in flight, and unhiding docs here stacked both panels.
+        _applyKnowledgePanels();
+        if (!_knowledgeHasPages) return;
 
         renderKnowledgeTree(tree, rootFiles);
 
@@ -727,21 +732,27 @@ function knowledgeMobileBack() {
 function switchKnowledgeTab(tab) {
     document.querySelectorAll('.knowledge-tab').forEach(el => el.classList.remove('active'));
     document.getElementById('knowledge-tab-' + tab).classList.add('active');
+    _knowledgeTab = tab;
+    _applyKnowledgePanels();
+    routeNoteTab('knowledge', tab);
+}
 
+// The one place the empty state and the two tab panels are shown or hidden.
+// With no pages the empty state stands alone and both panels stay hidden
+// whichever tab is selected; the tab switcher used to unhide its panel
+// regardless, which put the search box and an empty tree under the "no pages
+// yet" guide. The graph is fetched the first time its panel is actually shown.
+function _applyKnowledgePanels() {
+    const emptyEl = document.getElementById('knowledge-empty');
     const docsPanel = document.getElementById('knowledge-panel-docs');
     const graphPanel = document.getElementById('knowledge-panel-graph');
+    const showDocs = _knowledgeHasPages && _knowledgeTab === 'docs';
+    const showGraph = _knowledgeHasPages && _knowledgeTab === 'graph';
 
-    if (tab === 'docs') {
-        docsPanel.classList.remove('hidden');
-        graphPanel.classList.add('hidden');
-    } else {
-        docsPanel.classList.add('hidden');
-        graphPanel.classList.remove('hidden');
-        if (!_knowledgeGraphLoaded) {
-            loadKnowledgeGraph();
-        }
-    }
-    routeNoteTab('knowledge', tab);
+    emptyEl.classList.toggle('hidden', _knowledgeHasPages);
+    docsPanel.classList.toggle('hidden', !showDocs);
+    graphPanel.classList.toggle('hidden', !showGraph);
+    if (showGraph && !_knowledgeGraphLoaded) loadKnowledgeGraph();
 }
 
 let _d3LoadPromise = null;
