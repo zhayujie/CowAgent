@@ -30,22 +30,22 @@ class AgentInitializer:
     """
     Handles agent initialization including:
     - Workspace setup
-    - Memory system initialization  
+    - Memory system initialization
     - Tool loading
     - System prompt building
     """
-    
+
     def __init__(self, bridge, agent_bridge):
         """
         Initialize agent initializer
-        
+
         Args:
             bridge: COW bridge instance
             agent_bridge: AgentBridge instance (for create_agent method)
         """
         self.bridge = bridge
         self.agent_bridge = agent_bridge
-    
+
     def initialize_agent(
         self,
         session_id: Optional[str] = None,
@@ -54,7 +54,7 @@ class AgentInitializer:
     ) -> Agent:
         """
         Initialize agent for a session
-        
+
         Args:
             session_id: Session ID (None for default agent)
             agent_id: Agent profile identifier. Omit for the configured default.
@@ -62,7 +62,7 @@ class AgentInitializer:
                 ``agent_id``. A conversation belongs to the session rather than
                 to whoever happens to be answering, so a guest reads the host's
                 transcript and roster instead of starting a private one.
-        
+
         Returns:
             Initialized agent instance
         """
@@ -84,39 +84,39 @@ class AgentInitializer:
                     f"[AgentInitializer] Unknown conversation host "
                     f"'{host_agent_id}', falling back to {profile.id}: {e}"
                 )
-        
+
         # Migrate API keys
         self._migrate_config_to_env(workspace_root)
-        
+
         # Load environment variables
         self._load_env_file()
-        
+
         # Initialize workspace
         from agent.prompt import ensure_workspace, load_context_files, PromptBuilder
-        workspace_files = ensure_workspace(workspace_root, create_templates=True)
-        
+        ensure_workspace(workspace_root, create_templates=True)
+
         if session_id is None:
             logger.info(f"[AgentInitializer] Workspace initialized at: {workspace_root}")
-        
+
         # Setup memory system
         memory_manager, memory_tools = self._setup_memory_system(workspace_root, session_id)
-        
+
         # Load tools
         tools = self._load_tools(
             workspace_root, memory_manager, memory_tools, session_id, host_profile.id
         )
-        
+
         # Initialize scheduler if needed
         self._initialize_scheduler(
             tools, session_id, workspace_root=workspace_root, agent_id=profile.id
         )
-        
+
         # Load context files
         context_files = load_context_files(workspace_root)
-        
+
         # Initialize skill manager
         skill_manager = self._initialize_skill_manager(workspace_root, session_id)
-        
+
         # Build system prompt
         prompt_builder = PromptBuilder(workspace_dir=workspace_root, language="zh")
         runtime_info = self._get_runtime_info(workspace_root)
@@ -125,7 +125,7 @@ class AgentInitializer:
         runtime_info["_get_teammates"] = self._teammates_getter(
             session_id, profile.id, host_profile.id
         )
-        
+
         system_prompt = prompt_builder.build(
             tools=tools,
             context_files=context_files,
@@ -133,7 +133,7 @@ class AgentInitializer:
             memory_manager=memory_manager,
             runtime_info=runtime_info,
         )
-        
+
         # Get cost control parameters. The context budget is normally derived
         # from the effective model's context window (see
         # Agent._get_model_context_window). agent_max_context_tokens is an
@@ -161,7 +161,7 @@ class AgentInitializer:
             enable_skills=True,
             runtime_info=runtime_info  # Pass runtime_info for dynamic time updates
         )
-        
+
         # Attach memory manager and share LLM model for summarization
         if memory_manager:
             agent.memory_manager = memory_manager
@@ -404,7 +404,7 @@ class AgentInitializer:
                 filtered.append(reply)
 
         return filtered
-    
+
     def _load_env_file(self):
         """Load environment variables from .env file"""
         env_file = expand_path("~/.cow/.env")
@@ -416,21 +416,20 @@ class AgentInitializer:
                 logger.warning("[AgentInitializer] python-dotenv not installed")
             except Exception as e:
                 logger.warning(f"[AgentInitializer] Failed to load .env file: {e}")
-    
+
     def _setup_memory_system(self, workspace_root: str, session_id: Optional[str] = None):
         """
         Setup memory system
-        
+
         Returns:
             (memory_manager, memory_tools) tuple
         """
         memory_manager = None
         memory_tools = []
-        
+
         try:
             from agent.memory import MemoryManager, MemoryConfig, register_memory_config
             from agent.tools import MemorySearchTool, MemoryGetTool
-            from config import conf
 
             memory_config = MemoryConfig(workspace_root=workspace_root)
             # Publish per workspace, not process-wide: this runs once per Agent,
@@ -449,13 +448,13 @@ class AgentInitializer:
                 MemorySearchTool(memory_manager),
                 MemoryGetTool(memory_manager)
             ]
-            
+
             if session_id is None:
                 logger.info("[AgentInitializer] Memory system initialized")
-        
+
         except Exception as e:
             logger.warning(f"[AgentInitializer] Memory system not available: {e}")
-        
+
         return memory_manager, memory_tools
 
     def _init_embedding_provider(self, memory_config, session_id: Optional[str] = None):
@@ -517,20 +516,20 @@ class AgentInitializer:
         threading.Thread(
             target=_run, daemon=True, name="memory-sync"
         ).start()
-    
+
     def _load_tools(self, workspace_root: str, memory_manager, memory_tools: List, session_id: Optional[str] = None, host_agent_id: Optional[str] = None):
         """Load all tools"""
         from config import conf
 
         tool_manager = ToolManager()
         tool_manager.load_tools()
-        
+
         tools = []
         file_config = {
             "cwd": workspace_root,
             "memory_manager": memory_manager
         } if memory_manager else {"cwd": workspace_root}
-        
+
         for tool_name in tool_manager.tool_classes.keys():
             try:
                 # Skip web_search if no API key is available
@@ -630,12 +629,12 @@ class AgentInitializer:
             tools.extend(memory_tools)
             if session_id is None:
                 logger.info(f"[AgentInitializer] Added {len(memory_tools)} memory tools")
-        
+
         if session_id is None:
             logger.info(f"[AgentInitializer] Loaded {len(tools)} tools: {[t.name for t in tools]}")
-        
+
         return tools
-    
+
     def _initialize_scheduler(
         self,
         tools: List,
@@ -668,21 +667,21 @@ class AgentInitializer:
                                 )
                     except Exception as e:
                         logger.warning(f"[AgentInitializer] Failed to initialize scheduler: {e}")
-        
+
         # Inject scheduler dependencies
         if agent_id in self.agent_bridge.scheduler_agent_ids:
             try:
                 from agent.tools.scheduler.integration import get_task_store, get_scheduler_service
                 from agent.tools import SchedulerTool
                 from config import conf
-                
+
                 task_store = get_task_store(
                     workspace_root=workspace_root, agent_id=agent_id
                 )
                 scheduler_service = get_scheduler_service(
                     workspace_root=workspace_root, agent_id=agent_id
                 )
-                
+
                 for tool in tools:
                     if isinstance(tool, SchedulerTool):
                         tool.task_store = task_store
@@ -700,7 +699,7 @@ class AgentInitializer:
                         tool.config["agent_id"] = agent_id
             except Exception as e:
                 logger.warning(f"[AgentInitializer] Failed to inject scheduler dependencies: {e}")
-    
+
     def _initialize_skill_manager(self, workspace_root: str, session_id: Optional[str] = None):
         """Initialize skill manager"""
         try:
@@ -761,15 +760,15 @@ class AgentInitializer:
                 return []
 
         return resolve
-    
+
     def _get_runtime_info(self, workspace_root: str):
         """Get runtime information with dynamic time support"""
         from config import conf
-        
+
         def get_current_time():
             """Get current time dynamically - called each time system prompt is accessed"""
             now = datetime.datetime.now()
-            
+
             # Get timezone info
             try:
                 offset = -time.timezone if not time.daylight else -time.altzone
@@ -778,7 +777,7 @@ class AgentInitializer:
                 timezone_name = f"UTC{hours:+03d}:{minutes:02d}" if minutes else f"UTC{hours:+03d}"
             except Exception:
                 timezone_name = "UTC"
-            
+
             # Weekday: English name in en, Chinese mapping otherwise
             weekday_en = now.strftime("%A")
             try:
@@ -800,7 +799,7 @@ class AgentInitializer:
                 'weekday': weekday,
                 'timezone': timezone_name
             }
-        
+
         def get_model():
             """Get current model name dynamically from config"""
             return conf().get("model", "unknown")
@@ -811,11 +810,11 @@ class AgentInitializer:
             "channel": ", ".join(conf().get("channel_type")) if isinstance(conf().get("channel_type"), list) else conf().get("channel_type", "unknown"),
             "_get_current_time": get_current_time  # Dynamic time function
         }
-    
+
     def _migrate_config_to_env(self, workspace_root: str):
         """Migrate API keys from config.json to .env file"""
         from config import conf
-        
+
         key_mapping = {
             "open_ai_api_key": "OPENAI_API_KEY",
             "open_ai_api_base": "OPENAI_API_BASE",
@@ -823,9 +822,9 @@ class AgentInitializer:
             "claude_api_key": "CLAUDE_API_KEY",
             "linkai_api_key": "LINKAI_API_KEY",
         }
-        
+
         env_file = expand_path("~/.cow/.env")
-        
+
         # Read existing env vars (key -> value)
         existing_env_vars = {}
         if os.path.exists(env_file):
@@ -838,7 +837,7 @@ class AgentInitializer:
                             existing_env_vars[key.strip()] = val.strip()
             except Exception as e:
                 logger.warning(f"[AgentInitializer] Failed to read .env file: {e}")
-        
+
         # Sync config.json values into .env (add/update/remove)
         updated = False
         for config_key, env_key in key_mapping.items():
@@ -871,7 +870,7 @@ class AgentInitializer:
                     for key, value in sorted(existing_env_vars.items()):
                         f.write(f'{key}={value}\n')
 
-                logger.info(f"[AgentInitializer] Synced API keys from config.json to .env")
+                logger.info("[AgentInitializer] Synced API keys from config.json to .env")
             except Exception as e:
                 logger.warning(f"[AgentInitializer] Failed to sync API keys: {e}")
 

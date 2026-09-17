@@ -5,7 +5,6 @@ Translates agent events (message_update, message_end, tool_execution_end, etc.)
 into the CHAT socket protocol format (content chunks with segment_id, tool_calls chunks).
 """
 
-import time
 from typing import Callable, Optional
 
 from common.log import logger
@@ -341,7 +340,7 @@ class ChatService:
                     f"session={session_id}"
                 )
                 return
-            response = executor.run_stream(model_query)
+            executor.run_stream(model_query)
         except Exception:
             # If executor cleared messages (context overflow), sync back
             if len(executor.messages) == 0:

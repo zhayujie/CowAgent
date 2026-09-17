@@ -25,35 +25,35 @@ def _default_workspace():
 @dataclass
 class MemoryConfig:
     """Configuration for memory storage and search"""
-    
+
     # Storage paths (default: ~/cow)
     workspace_root: str = field(default_factory=_default_workspace)
-    
+
     # Embedding config
     embedding_provider: str = "openai"  # "openai" | "local"
     embedding_model: str = "text-embedding-3-small"
     embedding_dim: int = 1536
-    
+
     # Chunking config
     chunk_max_tokens: int = 500
     chunk_overlap_tokens: int = 50
-    
+
     # Search config
     max_results: int = 10
     min_score: float = 0.1
-    
+
     # Hybrid search weights
     vector_weight: float = 0.7
     keyword_weight: float = 0.3
-    
+
     # Memory sources
     sources: List[str] = field(default_factory=lambda: ["memory", "session"])
-    
+
     # Sync config
     enable_auto_sync: bool = True
     sync_on_search: bool = True
-    
-    
+
+
     def get_workspace(self) -> Path:
         """Get workspace root directory"""
         return Path(self.workspace_root)

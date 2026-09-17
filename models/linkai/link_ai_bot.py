@@ -67,7 +67,7 @@ class LinkAIBot(Bot, OpenAICompatibleBot):
         super().__init__()
         self.sessions = LinkAISessionManager(LinkAISession, model=conf().get("model") or "gpt-3.5-turbo")
         self.args = {}
-    
+
     def get_api_config(self):
         """Get API configuration for OpenAI-compatible base class"""
         return {
@@ -166,7 +166,7 @@ class LinkAIBot(Bot, OpenAICompatibleBot):
                             else:
                                 body["sender_name"] = context.kwargs.get("msg").from_user_nickname
 
-            except Exception as e:
+            except Exception:
                 pass
             file_id = context.kwargs.get("file_id")
             if file_id:
@@ -389,7 +389,7 @@ class LinkAIBot(Bot, OpenAICompatibleBot):
             }
             url = _linkai_base_url() + "/v1/images/generations"
             res = requests.post(url, headers=headers, json=data, timeout=(5, 90))
-            t2 = time.time()
+            time.time()
             image_url = res.json()["data"][0]["url"]
             logger.info("[OPEN_AI] image_url={}".format(image_url))
             return True, image_url
@@ -542,13 +542,13 @@ def _linkai_call_with_tools(self, messages, tools=None, stream=False, **kwargs):
     """
     Call LinkAI API with tool support for agent integration
     LinkAI is fully compatible with OpenAI's tool calling format
-    
+
     Args:
         messages: List of messages
         tools: List of tool definitions (OpenAI format)
         stream: Whether to use streaming
         **kwargs: Additional parameters (max_tokens, temperature, etc.)
-        
+
     Returns:
         Formatted response in OpenAI format or generator for streaming
     """
@@ -556,11 +556,11 @@ def _linkai_call_with_tools(self, messages, tools=None, stream=False, **kwargs):
         # Convert messages from Claude format to OpenAI format
         # This is important because Agent uses Claude format internally
         messages = self._convert_messages_to_openai_format(messages)
-        
+
         # Convert tools from Claude format to OpenAI format
         if tools:
             tools = self._convert_tools_to_openai_format(tools)
-        
+
         # Handle system prompt (OpenAI uses system message, Claude uses separate parameter)
         system_prompt = kwargs.get('system')
         if system_prompt:
@@ -570,9 +570,9 @@ def _linkai_call_with_tools(self, messages, tools=None, stream=False, **kwargs):
             else:
                 # Replace existing system message
                 messages[0] = {"role": "system", "content": system_prompt}
-        
+
         logger.debug(f"[LinkAI] messages: {len(messages)}, tools: {len(tools) if tools else 0}, stream: {stream}")
-        
+
         # Build request parameters (LinkAI uses OpenAI-compatible format)
         raw_ct = conf().get("channel_type", "web")
         if isinstance(raw_ct, list):
@@ -631,12 +631,12 @@ def _linkai_call_with_tools(self, messages, tools=None, stream=False, **kwargs):
         utils.apply_client_source(headers)
         utils.apply_cloud_user(headers)
         base_url = _linkai_base_url()
-        
+
         if stream:
             return self._handle_linkai_stream_response(base_url, headers, body)
         else:
             return self._handle_linkai_sync_response(base_url, headers, body)
-            
+
     except Exception as e:
         error_msg = str(e)
         logger.error(f"[LinkAI] call_with_tools error: {e}")
@@ -664,12 +664,12 @@ def _handle_linkai_sync_response(self, base_url, headers, body):
             headers=headers,
             timeout=conf().get("request_timeout", 180)
         )
-        
+
         if res.status_code == 200:
             response = res.json()
             logger.debug(f"[LinkAI] reply: model={response.get('model')}, "
                         f"tokens={response.get('usage', {}).get('total_tokens', 0)}")
-            
+
             # LinkAI response is already in OpenAI-compatible format
             return response
         else:
@@ -680,7 +680,7 @@ def _handle_linkai_sync_response(self, base_url, headers, body):
                 error_msg = res.text or "Unknown error"
             error_msg = _explain_linkai_error(res.status_code, error_msg)
             raise Exception(f"LinkAI API error: {res.status_code} - {error_msg}")
-            
+
     except Exception as e:
         logger.error(f"[LinkAI] sync response error: {e}")
         raise
@@ -695,7 +695,7 @@ def _handle_linkai_stream_response(self, base_url, headers, body):
             timeout=conf().get("request_timeout", 180),
             stream=True
         )
-        
+
         if res.status_code != 200:
             error_text = res.text
             try:
@@ -711,7 +711,7 @@ def _handle_linkai_stream_response(self, base_url, headers, body):
                 "message": error_msg
             }
             return
-        
+
         # Process streaming response (OpenAI-compatible SSE format)
         for line in res.iter_lines():
             if line:
@@ -747,7 +747,7 @@ def _handle_linkai_stream_response(self, base_url, headers, body):
                     # for Gemini via LinkAI) reach agent_stream and are stored on assistant
                     # messages for the next request. Standard OpenAI fields are unchanged.
                     yield chunk
-                        
+
     except Exception as e:
         logger.error(f"[LinkAI] stream response error: {e}")
         yield {

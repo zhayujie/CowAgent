@@ -4,7 +4,6 @@ rows tagged with the owning ``agent_id`` — so task history JOINs cleanly with
 everything else and needs no side-car store.
 """
 
-from pathlib import Path
 
 import pytest
 

@@ -11,8 +11,7 @@ Memory file layout (under workspace_root):
 
 import os
 from datetime import datetime
-from typing import Dict, List, Optional
-from pathlib import Path
+from typing import List, Optional
 from common.log import logger
 
 
@@ -177,7 +176,7 @@ class MemoryService:
             else:
                 return {"action": action, "code": 400, "message": f"unknown action: {action}", "payload": None}
 
-        except ValueError as e:
+        except ValueError:
             return {"action": action, "code": 403, "message": "invalid filename", "payload": None}
         except FileNotFoundError as e:
             return {"action": action, "code": 404, "message": str(e), "payload": None}
@@ -212,7 +211,7 @@ class MemoryService:
         allowed = os.path.realpath(base_dir)
 
         if resolved != allowed and not resolved.startswith(allowed + os.sep):
-            raise ValueError(f"Invalid filename: path traversal detected")
+            raise ValueError("Invalid filename: path traversal detected")
 
         return resolved
 

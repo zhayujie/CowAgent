@@ -9,19 +9,19 @@ from agent.skills.types import Skill, SkillEntry
 def format_skills_for_prompt(skills: List[Skill]) -> str:
     """
     Format skills for inclusion in a system prompt.
-    
+
     Uses XML format per Agent Skills standard.
     Skills with disable_model_invocation=True are excluded.
-    
+
     :param skills: List of skills to format
     :return: Formatted prompt text
     """
     # Filter out skills that should not be invoked by the model
     visible_skills = [s for s in skills if not s.disable_model_invocation]
-    
+
     if not visible_skills:
         return ""
-    
+
     lines = [
         "",
         "<available_skills>",
@@ -34,16 +34,16 @@ def format_skills_for_prompt(skills: List[Skill]) -> str:
         lines.append(f"    <location>{_escape_xml(skill.file_path)}</location>")
         lines.append(f"    <base_dir>{_escape_xml(skill.base_dir)}</base_dir>")
         lines.append("  </skill>")
-    
+
     lines.append("</available_skills>")
-    
+
     return "\n".join(lines)
 
 
 def format_skill_entries_for_prompt(entries: List[SkillEntry]) -> str:
     """
     Format skill entries for inclusion in a system prompt.
-    
+
     :param entries: List of skill entries to format
     :return: Formatted prompt text
     """

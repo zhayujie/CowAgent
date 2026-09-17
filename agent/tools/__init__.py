@@ -27,7 +27,7 @@ def _import_optional_tools():
     """Import tools that have optional dependencies"""
     from common.log import logger
     tools = {}
-    
+
     # EnvConfig Tool (requires python-dotenv)
     try:
         from agent.tools.env_config.env_config import EnvConfig
@@ -40,7 +40,7 @@ def _import_optional_tools():
         )
     except Exception as e:
         logger.error(f"[Tools] EnvConfig tool failed to load: {e}")
-    
+
     # Scheduler Tool (requires croniter)
     try:
         from agent.tools.scheduler.scheduler_tool import SchedulerTool

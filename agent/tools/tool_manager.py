@@ -2,7 +2,7 @@ import importlib
 import importlib.util
 import threading
 from pathlib import Path
-from typing import Dict, Any, Type
+from typing import Dict
 from agent.tools.base_tool import BaseTool
 from common.log import logger
 from config import conf
@@ -172,7 +172,7 @@ class ToolManager:
                                     if class_name == "McpTool":
                                         logger.debug(f"Skipped tool {class_name} (registered dynamically via mcp_servers config)")
                                         continue
-                                    
+
                                     # Create a temporary instance to get the name
                                     temp_instance = cls()
                                     tool_name = temp_instance.name
@@ -236,7 +236,7 @@ class ToolManager:
                                 if attr_name in ["MemorySearchTool", "MemoryGetTool"]:
                                     logger.debug(f"Skipped tool {attr_name} (requires memory_manager)")
                                     continue
-                                
+
                                 # Create a temporary instance to get the name
                                 temp_instance = cls()
                                 tool_name = temp_instance.name
@@ -279,9 +279,9 @@ class ToolManager:
                 for tool_name in missing_tools:
                     if tool_name == "google_search":
                         logger.warning(
-                            f"[ToolManager] Google Search tool is configured but may need API key.\n"
-                            f"  Get API key from: https://serper.dev\n"
-                            f"  Configure in config.json: tools.google_search.api_key"
+                            "[ToolManager] Google Search tool is configured but may need API key.\n"
+                            "  Get API key from: https://serper.dev\n"
+                            "  Configure in config.json: tools.google_search.api_key"
                         )
                     else:
                         logger.warning(f"[ToolManager] Tool '{tool_name}' is configured but could not be loaded.")

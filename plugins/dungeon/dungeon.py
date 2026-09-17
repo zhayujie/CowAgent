@@ -98,10 +98,10 @@ class Dungeon(Plugin):
 
     def get_help_text(self, **kwargs):
         help_text = "可以和机器人一起玩文字冒险游戏。\n"
-        if kwargs.get("verbose") != True:
+        if not kwargs.get("verbose"):
             return help_text
         trigger_prefix = conf().get("plugin_trigger_prefix", "$")
         help_text = f"{trigger_prefix}开始冒险 " + "背景故事: 开始一个基于{背景故事}的文字冒险，之后你的所有消息会协助完善这个故事。\n" + f"{trigger_prefix}停止冒险: 结束游戏。\n"
-        if kwargs.get("verbose") == True:
+        if kwargs.get("verbose"):
             help_text += f"\n命令例子: '{trigger_prefix}开始冒险 你在树林里冒险，指不定会从哪里蹦出来一些奇怪的东西，你握紧手上的手枪，希望这次冒险能够找到一些值钱的东西，你往树林深处走去。'"
         return help_text

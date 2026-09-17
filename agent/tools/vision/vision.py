@@ -552,7 +552,7 @@ class Vision(BaseTool):
         if bot is None:
             return False
         if hasattr(bot, "supports_vision"):
-            return bool(getattr(bot, "supports_vision"))
+            return bool(bot.supports_vision)
         main_model = self._current_main_model().lower()
         if not main_model:
             return False

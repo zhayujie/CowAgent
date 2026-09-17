@@ -4,7 +4,7 @@ Integration module for scheduler with AgentBridge
 
 import os
 import threading
-from typing import Dict, Optional
+from typing import Dict
 from config import conf
 from common.log import logger
 from common.utils import expand_path
@@ -775,19 +775,19 @@ def _execute_agent_task(
         receiver = action.get("receiver")
         is_group = action.get("is_group", False)
         channel_type = _primary_channel_type(action.get("channel_type"))
-        
+
         if not task_description:
             logger.error(f"[Scheduler] Task {task['id']}: No task_description specified")
             return True  # malformed task, don't loop forever
-        
+
         if not receiver:
             logger.error(f"[Scheduler] Task {task['id']}: No receiver specified")
             return True
-        
+
         # Check for unsupported channels
         if channel_type == "dingtalk":
             logger.warning(f"[Scheduler] Task {task['id']}: DingTalk channel does not support scheduled messages (Stream mode limitation). Task will execute but message cannot be sent.")
-        
+
         logger.info(f"[Scheduler] Task {task['id']}: Executing agent task '{task_description}'")
 
         # Wrap the raw description with an execution directive. The stored
@@ -805,14 +805,14 @@ def _execute_agent_task(
         # Create a unique session_id for this scheduled task to avoid polluting user's conversation
         # Format: scheduler_<receiver>_<task_id> to ensure isolation
         scheduler_session_id = f"scheduler_{receiver}_{task['id']}"
-        
+
         # Create context for Agent
         context = Context(ContextType.TEXT, execution_prompt)
         context["receiver"] = receiver
         context["isgroup"] = is_group
         context["session_id"] = scheduler_session_id
         context["agent_id"] = agent_id
-        
+
         # Channel-specific setup
         if channel_type == "web":
             import uuid
@@ -834,7 +834,7 @@ def _execute_agent_task(
         # Use Agent to execute the task
         # Mark this as a scheduled task execution to prevent recursive task creation
         context["is_scheduled_task"] = True
-        
+
         try:
             # Don't clear history - scheduler tasks use isolated session_id so they won't pollute user conversations
             reply = agent_bridge.agent_reply(execution_prompt, context=context, on_event=None, clear_history=False)
@@ -901,18 +901,18 @@ def _execute_send_message(
         receiver = action.get("receiver")
         is_group = action.get("is_group", False)
         channel_type = _primary_channel_type(action.get("channel_type"))
-        
+
         if not receiver:
             logger.error(f"[Scheduler] Task {task['id']}: No receiver specified")
             return True
-        
+
         # Create context for sending message
         context = Context(ContextType.TEXT, content)
         context["receiver"] = receiver
         context["isgroup"] = is_group
         context["session_id"] = receiver
         context["agent_id"] = agent_id
-        
+
         # Channel-specific context setup
         if channel_type == "web":
             # Web channel needs request_id
@@ -1150,7 +1150,7 @@ def _execute_skill_call(
 def attach_scheduler_to_tool(tool, context: Context = None):
     """
     Attach scheduler components to a SchedulerTool instance
-    
+
     Args:
         tool: SchedulerTool instance
         context: Current context (optional)
@@ -1167,7 +1167,7 @@ def attach_scheduler_to_tool(tool, context: Context = None):
         if recipient_store:
             tool.recipient_store = recipient_store
         tool.current_context = context
-        
+
         channel_type = context.get("channel_type") or conf().get("channel_type", "unknown")
         if not tool.config:
             tool.config = {}

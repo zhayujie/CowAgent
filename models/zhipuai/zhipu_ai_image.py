@@ -10,7 +10,7 @@ class ZhipuAIImage(object):
         # 初始化客户端，支持自定义 API base URL（例如智谱国际版 z.ai）
         api_key = conf().get("zhipu_ai_api_key")
         api_base = conf().get("zhipu_ai_api_base")
-        
+
         if api_base:
             self.client = ZhipuAiClient(api_key=api_key, base_url=api_base)
         else:

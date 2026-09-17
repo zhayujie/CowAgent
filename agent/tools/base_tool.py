@@ -1,7 +1,6 @@
 from enum import Enum
 from typing import Any, Optional
 from common.log import logger
-import copy
 
 
 class ToolStage(Enum):

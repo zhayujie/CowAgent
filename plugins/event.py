@@ -34,7 +34,9 @@ class EventAction(Enum):
 
 
 class EventContext:
-    def __init__(self, event, econtext=dict()):
+    def __init__(self, event, econtext=None):
+        if econtext is None:
+            econtext = dict()
         self.event = event
         self.econtext = econtext
         self.action = EventAction.CONTINUE

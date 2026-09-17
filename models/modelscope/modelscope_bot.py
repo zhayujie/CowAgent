@@ -32,19 +32,19 @@ class ModelScopeBot(Bot):
             self.base_url = self.base_url.rsplit("/chat/completions", 1)[0]
         if self.base_url.endswith("/"):
             self.base_url = self.base_url.rstrip("/")
-        
+
         # Cache context for Agent mode usage
         self._last_context = None
-        
+
         logger.info("[MODELSCOPE] base_url configured as: {}".format(self.base_url))
 
     def reply(self, query, context=None):
         # Cache context for Agent mode usage
         self._last_context = context
-        
+
         if context.type == ContextType.TEXT:
             logger.info("[MODELSCOPE] query={}".format(query))
-            
+
             session_id = context["session_id"]
             reply = None
             clear_memory_commands = conf().get("clear_memory_commands", ["#清除记忆"])
@@ -57,7 +57,7 @@ class ModelScopeBot(Bot):
             elif query == "#更新配置":
                 load_config()
                 reply = Reply(ReplyType.INFO, "配置已更新")
-            
+
             if reply:
                 return reply
             session = self.sessions.session_query(query, session_id)
@@ -67,7 +67,7 @@ class ModelScopeBot(Bot):
             new_args = self.args.copy()
             if model:
                 new_args["model"] = model
-            
+
             model_name = new_args["model"]
 
             # Unified judgment for thinking model
@@ -76,7 +76,7 @@ class ModelScopeBot(Bot):
                 reply_content = self.reply_text_stream(session, args=new_args)
             else:
                 reply_content = self.reply_text(session, args=new_args)
-            
+
             logger.debug(
                 "[MODELSCOPE] new_query={}, session_id={}, reply_cont={}, completion_tokens={}".format(
                     session.messages,
@@ -98,9 +98,9 @@ class ModelScopeBot(Bot):
             else:
                 reply = Reply(ReplyType.ERROR, reply_content["content"])
                 logger.debug("[MODELSCOPE] reply {} used 0 tokens.".format(reply_content))
-            
+
             return reply
-            
+
         elif context.type == ContextType.IMAGE_CREATE:
             ok, retstring = self.create_img(query)
             return Reply(ReplyType.IMAGE_URL, retstring) if ok else Reply(ReplyType.ERROR, retstring)
@@ -113,18 +113,18 @@ class ModelScopeBot(Bot):
                 "Content-Type": "application/json",
                 "Authorization": "Bearer " + self.api_key
             }
-            
+
             body = args.copy() if args else {}
             body["messages"] = self._convert_messages_for_modelscope(session.messages)
             body["stream"] = False
-            
+
             res = requests.post(
                 "{}/chat/completions".format(self.base_url),
                 headers=headers,
                 json=body,
                 timeout=120
             )
-            
+
             if res.status_code == 200:
                 response = res.json()
                 return {
@@ -141,7 +141,7 @@ class ModelScopeBot(Bot):
                         error.get('message') if isinstance(error, dict) else error
                     )
                 )
-                
+
                 result = {"completion_tokens": 0, "content": "提问太快啦，请休息一下再问我吧"}
                 need_retry = False
 
@@ -155,13 +155,13 @@ class ModelScopeBot(Bot):
                     need_retry = retry_count < 2
                 else:
                     need_retry = False
-                
+
                 if need_retry:
                     time.sleep(3)
                     return self.reply_text(session, args, retry_count + 1)
                 else:
                     return result
-                    
+
         except Exception as e:
             logger.exception(e)
             need_retry = retry_count < 2
@@ -177,7 +177,7 @@ class ModelScopeBot(Bot):
                 "Content-Type": "application/json",
                 "Authorization": "Bearer " + self.api_key
             }
-            
+
             body = args.copy() if args else {}
             body["messages"] = self._convert_messages_for_modelscope(session.messages)
             body["stream"] = True
@@ -193,19 +193,19 @@ class ModelScopeBot(Bot):
                 content = ""
                 total_tokens = completion_tokens = 0
                 finish_reason = None
-                
+
                 for line in res.iter_lines():
                     if not line:
                         continue
-                    
+
                     decoded_line = line.decode('utf-8')
                     if not decoded_line.startswith("data: "):
                         continue
-                    
+
                     data_str = decoded_line[6:]
                     if data_str.strip() == "[DONE]":
                         break
-                    
+
                     try:
                         json_data = json.loads(data_str)
 
@@ -220,13 +220,13 @@ class ModelScopeBot(Bot):
                         choice = json_data.get("choices", [{}])[0]
                         if choice.get("finish_reason"):
                             finish_reason = choice["finish_reason"]
-                            
+
                     except json.JSONDecodeError:
                         continue
 
                 if finish_reason is None and content:
                     finish_reason = "stop"
-                
+
                 return {
                     "total_tokens": total_tokens,
                     "completion_tokens": completion_tokens,
@@ -234,7 +234,7 @@ class ModelScopeBot(Bot):
                 }
             else:
                 return {"completion_tokens": 0, "content": "请求失败"}
-                
+
         except Exception as e:
             logger.exception(e)
             return {"completion_tokens": 0, "content": "我现在有点累了，等会再来吧"}
@@ -242,77 +242,77 @@ class ModelScopeBot(Bot):
     def create_img(self, query):
         try:
             logger.info("[ModelScopeImage] image_query={}".format(query))
-            
+
             create_headers = {
                 "Authorization": "Bearer " + self.api_key,
                 "Content-Type": "application/json; charset=utf-8",
                 "X-ModelScope-Async-Mode": "true"
             }
-            
+
             payload = {
                 "model": conf().get("text_to_image"),
                 "prompt": query,
                 "n": 1,
             }
-            
+
             logger.debug("[ModelScopeImage] model={}".format(payload["model"]))
-            
+
             res = requests.post(
                 "{}/images/generations".format(self.base_url),
                 headers=create_headers,
                 data=json.dumps(payload, ensure_ascii=False).encode('utf-8'),
                 timeout=120
             )
-            
+
             logger.debug("[ModelScopeImage] create task status={}".format(res.status_code))
             logger.debug("[ModelScopeImage] create task response={}".format(res.text))
-            
+
             if res.status_code != 200:
                 logger.error("[ModelScopeImage] create task failed: {}".format(res.text))
                 return False, "创建画图任务失败：{}".format(res.status_code)
-            
+
             task_data = res.json()
-            
+
             task_id = task_data.get("task_id")
             if not task_id:
                 logger.error("[ModelScopeImage] No task_id in response: {}".format(task_data))
                 return False, "创建画图任务失败：未返回 task_id"
-            
+
             logger.info("[ModelScopeImage] task_id={}".format(task_id))
-            
+
             max_wait_times = 60
             wait_interval = 5
-            
+
             for i in range(max_wait_times):
                 time.sleep(wait_interval)
-                
+
                 poll_headers = {
                     "Authorization": "Bearer " + self.api_key,
                     "X-ModelScope-Task-Type": "image_generation"
                 }
-                
+
                 poll_url = "{}/tasks/{}".format(self.base_url, task_id)
                 logger.debug("[ModelScopeImage] poll {} URL: {}".format(i+1, poll_url))
                 logger.debug("[ModelScopeImage] poll headers: {}".format(poll_headers))
-                
+
                 task_res = requests.get(
                     poll_url,
                     headers=poll_headers,
                     timeout=30
                 )
-                
+
                 logger.debug("[ModelScopeImage] poll {} status={}".format(i+1, task_res.status_code))
                 logger.debug("[ModelScopeImage] poll response={}".format(task_res.text))
-                
+
                 if task_res.status_code != 200:
                     logger.error("[ModelScopeImage] poll task error: {}".format(task_res.text))
                     continue
-                
+
                 data = task_res.json()
-                
+
                 task_status = data.get("task_status")
                 logger.debug("[ModelScopeImage] task_status={}".format(task_status))
-                
+
                 if task_status == "SUCCEED":
                     output_images = data.get("output_images", [])
                     if output_images and len(output_images) > 0:
@@ -322,7 +322,7 @@ class ModelScopeBot(Bot):
                     else:
                         logger.error("[ModelScopeImage] No output_images in success response: {}".format(data))
                         return False, "画图成功但未返回图片 URL"
-                        
+
                 elif task_status == "FAILED":
                     error_msg = "未知错误"
                     if "errors" in data:
@@ -331,16 +331,16 @@ class ModelScopeBot(Bot):
                         error_msg = data["message"]
                     logger.error("[ModelScopeImage] task failed: {}".format(data))
                     return False, "画图任务失败：{}".format(error_msg)
-                    
+
                 elif task_status == "CANCELED":
                     logger.error("[ModelScopeImage] task canceled: {}".format(data))
                     return False, "画图任务已取消"
-                    
+
                 logger.debug("[ModelScopeImage] waiting for task to complete...")
-            
+
             logger.error("[ModelScopeImage] task timeout after {} seconds".format(max_wait_times * wait_interval))
             return False, "画图超时，请稍后再试"
-            
+
         except Exception as e:
             logger.error("[ModelScopeImage] error: {}".format(format(e)))
             return False, "画图出现问题，请休息一下再问我吧"
@@ -351,13 +351,13 @@ class ModelScopeBot(Bot):
         """Detect whether the message has drawing intention (keyword detection)"""
         if not message:
             return False
-        
+
         message_lower = message.lower()
         image_keywords = ["画", "图片", "图像", "生成图", "photo", "image", "draw", "paint", "generate"]
         if any(keyword in message_lower for keyword in image_keywords):
             logger.info("[MODELSCOPE] Image intent detected by keyword: {}".format(message[:50]))
             return True
-        
+
         return False
 
     def _is_thinking_model(self, model_name):
@@ -382,7 +382,7 @@ class ModelScopeBot(Bot):
         try:
             # Check the IMAGE_CREATE type from the cached context
             context = getattr(self, '_last_context', None)
-            
+
             # If the context type is IMAGE_CREATE, directly call create_img
             if context and hasattr(context, 'type') and context.type == ContextType.IMAGE_CREATE:
                 logger.info("[MODELSCOPE] IMAGE_CREATE context detected, calling create_img directly")
@@ -402,7 +402,7 @@ class ModelScopeBot(Bot):
                             return self._create_error_stream_response(error_content)
                         else:
                             return self._create_error_response(error_content)
-            
+
             # Extract message content
             last_message = ""
             if messages and len(messages) > 0:
@@ -420,15 +420,15 @@ class ModelScopeBot(Bot):
                         last_message = content
                 elif isinstance(last_msg, str):
                     last_message = last_msg
-            
+
             if not isinstance(last_message, str):
                 last_message = str(last_message)
-            
+
             logger.debug("[MODELSCOPE] Extracted message: {}".format(last_message[:100]))
-            
+
             # Keyword detection
             has_image_intent = self._detect_image_intent(last_message)
-            
+
             if has_image_intent:
                 logger.info("[MODELSCOPE] Image intent detected by keyword, calling create_img directly")
                 ok, result = self.create_img(last_message)
@@ -445,24 +445,24 @@ class ModelScopeBot(Bot):
                         return self._create_error_stream_response(error_content)
                     else:
                         return self._create_error_response(error_content)
-            
+
             # No drawing intent, proceed with normal tool call flow
             session_id = kwargs.get('session_id', 'default_session')
             session = self.sessions.session_query("", session_id)
             session.messages = messages
-            
+
             args = self.args.copy()
             args.update(kwargs)
-            
+
             # Unified judgment for thinking model
             model_name = args.get("model", self.args.get("model", ""))
             if self._is_thinking_model(model_name):
                 args["enable_thinking"] = True
-            
+
             if tools:
                 args["tools"] = self._convert_tools_to_openai_format(tools)
                 args["tool_choice"] = "auto"
-            
+
             logger.debug(
                 "[MODELSCOPE] call_with_tools: model={}, tools={}, stream={}, enable_thinking={}".format(
                     args.get('model'),
@@ -471,12 +471,12 @@ class ModelScopeBot(Bot):
                     args.get('enable_thinking')
                 )
             )
-            
+
             if stream:
                 return self._handle_stream_response(session, args)
             else:
                 return self._handle_sync_response(session, args)
-                
+
         except Exception as e:
             logger.error("[MODELSCOPE] call_with_tools error: {}".format(e))
             error_msg = "{}".format(e)
@@ -486,10 +486,10 @@ class ModelScopeBot(Bot):
 
     def _handle_sync_response(self, session, args):
         result = self.reply_text(session, args)
-        
+
         content = result.get("content", "")
         tool_calls = result.get("tool_calls")
-        
+
         if tool_calls:
             for tool_call in tool_calls:
                 tool_name = tool_call.get("function", {}).get("name", "")
@@ -504,7 +504,7 @@ class ModelScopeBot(Bot):
                             result["tool_execution_result"] = {"error": image_url, "success": False}
                     except Exception as e:
                         logger.error("[MODELSCOPE] Sync tool execution error: {}".format(e))
-        
+
         return {
             "choices": [{
                 "message": {
@@ -528,14 +528,14 @@ class ModelScopeBot(Bot):
                 "Content-Type": "application/json",
                 "Authorization": "Bearer " + self.api_key
             }
-            
+
             body = args.copy()
             body["messages"] = self._convert_messages_for_modelscope(session.messages)
             body["stream"] = True
             # Ask for a trailing usage chunk so the agent can surface a real
             # prompt_tokens count for the context indicator.
             body["stream_options"] = {"include_usage": True}
-            
+
             response = requests.post(
                 "{}/chat/completions".format(self.base_url),
                 headers=headers,
@@ -543,47 +543,47 @@ class ModelScopeBot(Bot):
                 stream=True,
                 timeout=120
             )
-            
+
             if response.status_code != 200:
                 yield {"error": True, "message": response.text, "status_code": response.status_code}
                 return
-            
+
             current_tool_calls = {}
             finish_reason = None
             stream_usage = None  # Provider-reported token usage
-            
+
             for line in response.iter_lines():
                 if not line:
                     continue
-                
+
                 line = line.decode("utf-8")
                 if not line.startswith("data: ") or line[6:].strip() == "[DONE]":
                     continue
-                
+
                 try:
                     chunk = json.loads(line[6:])
-                    
+
                     if chunk.get("error"):
                         yield {"error": True, "message": str(chunk["error"]), "status_code": 500}
                         return
-                    
+
                     # The include_usage chunk carries usage with an empty choices
                     # list — capture it before the choices skip below drops it.
                     if isinstance(chunk.get("usage"), dict):
                         stream_usage = chunk["usage"]
-                    
+
                     choices = chunk.get("choices")
                     if not choices or len(choices) == 0:
                         continue
-                    
+
                     choice = choices[0]
                     if not choice:
                         continue
-                    
+
                     delta = choice.get("delta")
                     if not delta:
                         continue
-                    
+
                     if delta.get("reasoning_content"):
                         yield {
                             "choices": [{
@@ -595,17 +595,17 @@ class ModelScopeBot(Bot):
                             }]
                         }
                         continue
-                    
+
                     tool_call_chunks = delta.get("tool_calls")
                     if tool_call_chunks:
                         cleaned_chunks = []
                         for tool_call_chunk in tool_call_chunks:
                             if not tool_call_chunk:
                                 continue
-                            
+
                             index = tool_call_chunk.get("index", 0)
                             func_info = tool_call_chunk.get("function") or {}
-                            
+
                             if index not in current_tool_calls:
                                 current_tool_calls[index] = {
                                     "id": tool_call_chunk.get("id") or "",
@@ -613,13 +613,13 @@ class ModelScopeBot(Bot):
                                     "arguments": ""
                                 }
                                 logger.debug("[MODELSCOPE] tool_call start: {}".format(func_info.get('name')))
-                            
+
                             args_str = func_info.get("arguments")
                             if args_str:
                                 current_tool_calls[index]["arguments"] += (
                                     args_str if isinstance(args_str, str) else str(args_str)
                                 )
-                            
+
                             cleaned_chunk = {
                                 "index": index,
                                 "id": tool_call_chunk.get("id") or "call_{}".format(index),
@@ -630,7 +630,7 @@ class ModelScopeBot(Bot):
                                 }
                             }
                             cleaned_chunks.append(cleaned_chunk)
-                        
+
                         if cleaned_chunks:
                             yield {
                                 "choices": [{
@@ -642,11 +642,11 @@ class ModelScopeBot(Bot):
                                 }]
                             }
                         continue
-                    
+
                     content = delta.get("content")
                     if content:
                         logger.debug("[MODELSCOPE] stream content: {}...".format(content[:50]))
-                    
+
                     yield_chunk = {
                         "choices": [{
                             "index": 0,
@@ -656,42 +656,42 @@ class ModelScopeBot(Bot):
                             }
                         }]
                     }
-                    
+
                     if choice.get("finish_reason"):
                         finish_reason = choice["finish_reason"]
                         yield_chunk["choices"][0]["finish_reason"] = finish_reason
-                    
+
                     yield yield_chunk
-                    
+
                 except json.JSONDecodeError:
                     continue
                 except Exception as e:
                     logger.error("[MODELSCOPE] chunk process error: {}".format(e))
                     continue
-            
+
             logger.debug(
                 "[MODELSCOPE] stream completed: has_tool_calls={}, finish_reason={}".format(
                     len(current_tool_calls) > 0,
                     finish_reason
                 )
             )
-            
+
             if current_tool_calls:
                 logger.debug("[MODELSCOPE] tool_calls collected: {}".format(list(current_tool_calls.values())))
-                
-                for idx, tool_call in current_tool_calls.items():
+
+                for _idx, tool_call in current_tool_calls.items():
                     tool_name = tool_call.get("name", "")
                     tool_args_str = tool_call.get("arguments", "{}")
-                    
+
                     if tool_name in ["create_image", "generate_image"]:
                         try:
                             tool_args = json.loads(tool_args_str) if tool_args_str else {}
                             prompt = tool_args.get("prompt", "")
-                            
+
                             logger.info("[MODELSCOPE] Executing image tool directly: {}".format(prompt[:50]))
-                            
+
                             ok, result = self.create_img(prompt)
-                            
+
                             if ok:
                                 logger.info("[MODELSCOPE] Image generated: {}".format(result))
                                 yield {
@@ -728,7 +728,7 @@ class ModelScopeBot(Bot):
                                     "tool_call_id": tool_call.get("id", "")
                                 }]
                             }
-            
+
             final_chunk = {
                 "choices": [{
                     "index": 0,
@@ -739,7 +739,7 @@ class ModelScopeBot(Bot):
             if stream_usage is not None:
                 final_chunk["usage"] = stream_usage
             yield final_chunk
-            
+
         except Exception as e:
             logger.error("[MODELSCOPE] stream tool call error: {}".format(e))
             error_msg = "{}".format(e)

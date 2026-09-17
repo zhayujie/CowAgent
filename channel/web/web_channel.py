@@ -44,7 +44,10 @@ from agent.permission import (
     global_mode as permission_global_mode,
     normalize_mode as permission_normalize_mode,
 )
-from channel.web.openai_api import OpenAIChatCompletionsHandler
+# Re-exported into this module's globals() on purpose: web.application(urls,
+# globals()) resolves string handler names via the module namespace, so this
+# import is what lets the '/v1/chat/completions' route find its handler class.
+from channel.web.openai_api import OpenAIChatCompletionsHandler  # noqa: F401
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg"}
 VIDEO_EXTENSIONS = {".mp4", ".webm", ".avi", ".mov", ".mkv"}
@@ -1118,7 +1121,8 @@ class WebChannel(ChatChannel):
         def on_event(event: dict):
             if request_id not in self.sse_streams:
                 return
-            publish = lambda item: self._publish_sse_event(request_id, item)
+            def publish(item):
+                return self._publish_sse_event(request_id, item)
             event_type = event.get("type")
             data = event.get("data", {})
 
@@ -1493,7 +1497,7 @@ class WebChannel(ChatChannel):
             params = _raw_web_input()
             file_obj = params.get("file")
             file_objs = params.get("files")
-            session_id = params.get("session_id", "")
+            params.get("session_id", "")
             relative_path = params.get("relative_path", "")
             relative_paths = params.get("relative_paths")
             upload_id = params.get("upload_id", "")
@@ -3187,7 +3191,7 @@ class ConfigHandler:
             if "web_password" in applied:
                 new_password = applied["web_password"]
                 configured_host = file_cfg.get("web_host", "")
-                
+
                 # If password was cleared and there was a password before
                 if not new_password and old_password:
                     # If web_host is not explicitly set, the service auto-binds based on password
@@ -4916,7 +4920,7 @@ class ModelsHandler:
               "make_active": true            # optional, also activate it
             }
         """
-        from models.custom_provider import generate_provider_id, parse_custom_bot_type
+        from models.custom_provider import generate_provider_id
 
         name = (data.get("name") or "").strip()
         if not name:
@@ -5839,7 +5843,7 @@ class ChannelsHandler:
                         display_val = self._mask_secret(str(raw_val))
                     else:
                         display_val = raw_val
-                    
+
                     label_val = f["label"]
                     if is_hant and isinstance(label_val, str):
                         label_val = i18n.to_traditional(label_val)
@@ -5854,7 +5858,7 @@ class ChannelsHandler:
                         "value": display_val,
                         "default": f.get("default", ""),
                     })
-                
+
                 label_val = ch_def["label"]
                 if is_hant and isinstance(label_val, str):
                     label_val = i18n.to_traditional(label_val)
@@ -7165,7 +7169,7 @@ class SchedulerUpdateHandler:
             task_id = body.get("task_id")
             if not task_id:
                 return json.dumps({"status": "error", "message": "task_id required"})
-            
+
             from agent.tools.scheduler.scheduler_service import SchedulerService
             from datetime import datetime
             store = _global_task_store()
@@ -7176,14 +7180,14 @@ class SchedulerUpdateHandler:
             original_task = store.get_task(task_id)
             if not original_task:
                 return json.dumps({"status": "error", "message": f"Task '{task_id}' not found"})
-            
+
             # Build updates dict
             updates = {}
             if "name" in body:
                 updates["name"] = body["name"]
             if "enabled" in body:
                 updates["enabled"] = body["enabled"]
-            
+
             # Update schedule
             if "schedule" in body:
                 updates["schedule"] = body["schedule"]
@@ -7200,10 +7204,10 @@ class SchedulerUpdateHandler:
                 else:
                     # Cannot calculate next run time, schedule config may be invalid
                     return json.dumps({
-                        "status": "error", 
+                        "status": "error",
                         "message": "Cannot calculate next run time. Please check the schedule config (e.g., cron expression format, or whether the one-time task time has already passed)."
                     }, ensure_ascii=False)
-            
+
             # Update action
             if "action" in body:
                 # Get the task's original channel_type
@@ -7282,7 +7286,7 @@ class SchedulerUpdateHandler:
                         # switching the delivery instance here already moves the
                         # task to the new instance's Agent on the next tick.
                 updates["action"] = action
-                
+
                 # If schedule was not updated but action was, ensure next_run_at exists
                 if "schedule" not in body and "next_run_at" not in original_task:
                     merged = dict(original_task)
@@ -7291,7 +7295,7 @@ class SchedulerUpdateHandler:
                     next_run = temp_service._calculate_next_run(merged, datetime.now())
                     if next_run:
                         updates["next_run_at"] = next_run.isoformat()
-            
+
             store.update_task(task_id, updates)
             task = store.get_task(task_id)
             return json.dumps({"status": "success", "task": task}, ensure_ascii=False)
@@ -7309,7 +7313,7 @@ class SchedulerDeleteHandler:
             task_id = body.get("task_id")
             if not task_id:
                 return json.dumps({"status": "error", "message": "task_id required"})
-            
+
             store = _global_task_store()
             if store is None:
                 return json.dumps({"status": "error", "message": "Scheduler store unavailable"})
@@ -8889,10 +8893,10 @@ class MessageDeleteHandler:
             user_seq = data.get('user_seq')
             delete_user = data.get('delete_user', True)
             cascade = data.get('cascade', False)
-            
+
             if not session_id or user_seq is None:
                 return json.dumps({"status": "error", "message": "session_id and user_seq required"})
-            
+
             # 1. Delete from database
             from agent.memory import get_conversation_store
             store = get_conversation_store(_get_workspace_root(agent_id=agent_id))

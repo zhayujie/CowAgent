@@ -17,7 +17,7 @@ class TencentVoice(Voice):
         self.secret_key = None
         self.voice_type = 1003
         self._load_config()
-        
+
     def _load_config(self):
         """
         从本地配置文件加载配置
@@ -33,13 +33,13 @@ class TencentVoice(Voice):
                 logger.error("[Tencent] Missing credentials in config.json")
         except Exception as e:
             logger.error(f"[Tencent] Failed to load config: {e}")
-    
+
     def setup(self, config):
         """
         设置配置信息（保留此方法用于向后兼容）
         """
         pass
-        
+
     def voiceToText(self, voice_file):
         """
         将语音文件转换为文本
@@ -47,17 +47,17 @@ class TencentVoice(Voice):
         try:
             # 实例化认证对象
             cred = credential.Credential(self.secret_id, self.secret_key)
-            
+
             # 实例化客户端
             client = asr_client.AsrClient(cred, "ap-guangzhou")
-            
+
             # 读取音频文件
             with open(voice_file, 'rb') as f:
                 audio_data = f.read()
-            
+
             # 进行base64编码
             base64_audio = base64.b64encode(audio_data).decode('utf-8')
-            
+
             # 构造请求对象
             req = asr_models.SentenceRecognitionRequest()
             req.ProjectId = 0
@@ -67,10 +67,10 @@ class TencentVoice(Voice):
             req.VoiceFormat = "wav"
             req.UsrAudioKey = "voice_recognition"
             req.Data = base64_audio
-            
+
             # 发起请求
             resp = client.SentenceRecognition(req)
-            
+
             # 解析结果
             if resp.Result:
                 logger.info("[Tencent] Voice to text success: {}".format(resp.Result))
@@ -78,7 +78,7 @@ class TencentVoice(Voice):
             else:
                 logger.warning("[Tencent] Voice to text failed")
                 return Reply(ReplyType.ERROR, "腾讯语音识别失败")
-            
+
         except Exception as e:
             logger.error("[Tencent] Voice to text error: {}".format(e))
             return Reply(ReplyType.ERROR, "腾讯语音识别出错：{}".format(str(e)))
@@ -103,7 +103,7 @@ class TencentVoice(Voice):
             req.VoiceType = self.voice_type  # 客服女声
 
             response = client.TextToVoice(req)
-            
+
             if response.Audio:
                 fileName = TmpDir().path() + "reply-" + str(int(time.time())) + "-" + str(hash(text) & 0x7FFFFFFF) + ".mp3"
                 with open(fileName, "wb") as f:

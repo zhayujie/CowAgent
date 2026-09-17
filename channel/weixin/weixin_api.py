@@ -16,7 +16,6 @@ import base64
 import hashlib
 import os
 import random
-import struct
 import time
 import uuid
 
@@ -480,7 +479,7 @@ def download_media_from_cdn(cdn_base_url: str, encrypt_query_param: str,
             try:
                 key_bytes = bytes.fromhex(decoded.decode("ascii"))
             except (ValueError, UnicodeDecodeError):
-                raise ValueError(f"Invalid AES key: 32 bytes but not valid hex")
+                raise ValueError("Invalid AES key: 32 bytes but not valid hex")
         elif len(decoded) == 16:
             key_bytes = decoded
         else:

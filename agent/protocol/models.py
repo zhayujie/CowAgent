@@ -3,14 +3,14 @@ Models module for agent system.
 Provides basic model classes needed by tools and bridge integration.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 
 class LLMRequest:
     """Request model for LLM operations"""
-    
+
     def __init__(self, messages: List[Dict[str, str]] = None, model: Optional[str] = None,
-                 temperature: float = 0.7, max_tokens: Optional[int] = None, 
+                 temperature: float = 0.7, max_tokens: Optional[int] = None,
                  stream: bool = False, tools: Optional[List] = None, **kwargs):
         self.messages = messages or []
         self.model = model
@@ -25,18 +25,18 @@ class LLMRequest:
 
 class LLMModel:
     """Base class for LLM models"""
-    
+
     def __init__(self, model: str = None, **kwargs):
         self.model = model
         self.config = kwargs
-    
+
     def call(self, request: LLMRequest):
         """
         Call the model with a request.
         This is a placeholder implementation.
         """
         raise NotImplementedError("LLMModel.call not implemented in this context")
-    
+
     def call_stream(self, request: LLMRequest):
         """
         Call the model with streaming.

@@ -17,7 +17,7 @@ class SortedDict(dict):
     def __setitem__(self, key, value):
         if key in self:
             super().__setitem__(key, value)
-            for i, (priority, k) in enumerate(self.heap):
+            for i, (_priority, k) in enumerate(self.heap):
                 if k == key:
                     self.heap[i] = (self.sort_func(key, value), key)
                     heapq.heapify(self.heap)
@@ -30,7 +30,7 @@ class SortedDict(dict):
 
     def __delitem__(self, key):
         super().__delitem__(key)
-        for i, (priority, k) in enumerate(self.heap):
+        for i, (_priority, k) in enumerate(self.heap):
             if k == key:
                 del self.heap[i]
                 heapq.heapify(self.heap)

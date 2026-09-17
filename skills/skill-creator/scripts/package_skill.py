@@ -11,7 +11,6 @@ Example:
 """
 
 import sys
-import os
 import zipfile
 from pathlib import Path
 

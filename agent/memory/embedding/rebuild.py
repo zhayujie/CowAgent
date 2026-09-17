@@ -150,7 +150,7 @@ def rebuild_in_process(memory_manager) -> RebuildResult:
 
 def main() -> int:
     """Standalone CLI entry. Must be run from project root (relative config path)."""
-    from config import conf, load_config
+    from config import load_config
     from agent.memory import MemoryConfig, MemoryManager
 
     load_config()

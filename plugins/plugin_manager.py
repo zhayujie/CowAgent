@@ -9,7 +9,7 @@ import sys
 from common.log import logger
 from common.singleton import singleton
 from common.sorted_dict import SortedDict
-from config import conf, remove_plugin_config, write_plugin_config, get_data_root, get_resource_root
+from config import remove_plugin_config, write_plugin_config, get_data_root, get_resource_root
 
 from .event import *
 
@@ -50,13 +50,13 @@ class PluginManager:
             plugincls.desc = kwargs.get("desc")
             plugincls.author = kwargs.get("author")
             plugincls.path = self.current_plugin_path
-            plugincls.version = kwargs.get("version") if kwargs.get("version") != None else "1.0"
-            plugincls.namecn = kwargs.get("namecn") if kwargs.get("namecn") != None else name
-            plugincls.hidden = kwargs.get("hidden") if kwargs.get("hidden") != None else False
+            plugincls.version = kwargs.get("version") if kwargs.get("version") is not None else "1.0"
+            plugincls.namecn = kwargs.get("namecn") if kwargs.get("namecn") is not None else name
+            plugincls.hidden = kwargs.get("hidden") if kwargs.get("hidden") is not None else False
             # enabled 默认 True；示例性插件可在装饰器中显式传 enabled=False，
             # 首次启动写入 plugins.json 时即为关闭状态，避免拦截用户消息。
             plugincls.enabled = kwargs.get("enabled", True)
-            if self.current_plugin_path == None:
+            if self.current_plugin_path is None:
                 raise Exception("Plugin path not set")
             self.plugins[name.upper()] = plugincls
             logger.debug("Plugin %s_v%s registered, path=%s" % (name, plugincls.version, plugincls.path))
@@ -229,7 +229,7 @@ class PluginManager:
         self._load_all_config()
         pconf = self.pconf
         logger.debug("plugins.json config={}".format(pconf))
-        for name, plugin in pconf["plugins"].items():
+        for name, _plugin in pconf["plugins"].items():
             if name.upper() not in self.plugins:
                 logger.error("Plugin %s not found, but found in plugins.json" % name)
         self._apply_desktop_plugin_denylist()

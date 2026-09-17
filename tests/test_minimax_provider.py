@@ -7,9 +7,8 @@ Unit tests for MiniMax provider additions:
 """
 import sys
 import os
-import json
 import unittest
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, patch
 
 # Add project root to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -72,7 +71,6 @@ class TestMinimaxBotDefaultModel(unittest.TestCase):
 
     def test_default_model_string(self):
         """Verify the fallback string literal in minimax_bot.py is MiniMax-M3."""
-        import ast
         bot_path = os.path.join(os.path.dirname(__file__), "..", "models", "minimax", "minimax_bot.py")
         with open(bot_path) as f:
             source = f.read()
@@ -122,7 +120,7 @@ class TestMinimaxVoice(unittest.TestCase):
         audio_hex = bytes([0x49, 0x44, 0x33]).hex()  # "ID3" MP3 magic bytes
         sse_line = f'data: {{"data": {{"audio": "{audio_hex}", "status": 2}}}}\n\n'
         done_line = "data: [DONE]\n\n"
-        fake_body = (sse_line + done_line).encode("utf-8")
+        (sse_line + done_line).encode("utf-8")
 
         mock_response = MagicMock()
         mock_response.raise_for_status = MagicMock()

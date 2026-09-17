@@ -92,5 +92,5 @@ def validate_url_safe(url: str) -> None:
     except socket.gaierror:
         raise ValueError(f"Cannot resolve hostname: {hostname}")
 
-    for family, _, _, _, sockaddr in addr_infos:
+    for _family, _, _, _, sockaddr in addr_infos:
         assert_public_ip(sockaddr[0])

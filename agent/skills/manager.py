@@ -5,9 +5,8 @@ Skill manager for managing skill lifecycle and operations.
 import os
 import json
 from typing import Dict, Iterable, List, Optional
-from pathlib import Path
 from common.log import logger
-from agent.skills.types import Skill, SkillEntry, SkillSnapshot
+from agent.skills.types import SkillEntry, SkillSnapshot
 from agent.skills.loader import SkillLoader
 from agent.skills.formatter import format_skill_entries_for_prompt
 
@@ -200,24 +199,24 @@ class SkillManager:
         :return: copy of skills_config
         """
         return dict(self.skills_config)
-    
+
     def get_skill(self, name: str) -> Optional[SkillEntry]:
         """
         Get a skill by name.
-        
+
         :param name: Skill name
         :return: SkillEntry or None if not found
         """
         return self.skills.get(name)
-    
+
     def list_skills(self) -> List[SkillEntry]:
         """
         Get all loaded skills.
-        
+
         :return: List of all skill entries
         """
         return list(self.skills.values())
-    
+
     @staticmethod
     def _normalize_skill_filter(skill_filter: Optional[List[str]]) -> Optional[List[str]]:
         """Normalize a skill_filter list into a flat list of stripped names."""
@@ -332,7 +331,7 @@ class SkillManager:
 
         logger.debug(f"[SkillManager] Generated prompt length: {len(result)}")
         return result
-    
+
     def build_skill_snapshot(
         self,
         skill_filter: Optional[List[str]] = None,
@@ -340,68 +339,68 @@ class SkillManager:
     ) -> SkillSnapshot:
         """
         Build a snapshot of skills for a specific run.
-        
+
         :param skill_filter: Optional list of skill names to include
         :param version: Optional version number for the snapshot
         :return: SkillSnapshot
         """
         entries = self.filter_skills(skill_filter=skill_filter, include_disabled=False)
         prompt = format_skill_entries_for_prompt(entries)
-        
+
         skills_info = []
         resolved_skills = []
-        
+
         for entry in entries:
             skills_info.append({
                 'name': entry.skill.name,
                 'primary_env': entry.metadata.primary_env if entry.metadata else None,
             })
             resolved_skills.append(entry.skill)
-        
+
         return SkillSnapshot(
             prompt=prompt,
             skills=skills_info,
             resolved_skills=resolved_skills,
             version=version,
         )
-    
+
     def sync_skills_to_workspace(self, target_workspace_dir: str):
         """
         Sync all loaded skills to a target workspace directory.
-        
+
         This is useful for sandbox environments where skills need to be copied.
-        
+
         :param target_workspace_dir: Target workspace directory
         """
         import shutil
-        
+
         target_skills_dir = os.path.join(target_workspace_dir, 'skills')
-        
+
         # Remove existing skills directory
         if os.path.exists(target_skills_dir):
             shutil.rmtree(target_skills_dir)
-        
+
         # Create new skills directory
         os.makedirs(target_skills_dir, exist_ok=True)
-        
+
         # Copy each skill
         for entry in self.skills.values():
             skill_name = entry.skill.name
             source_dir = entry.skill.base_dir
             target_dir = os.path.join(target_skills_dir, skill_name)
-            
+
             try:
                 shutil.copytree(source_dir, target_dir)
                 logger.debug(f"Synced skill '{skill_name}' to {target_dir}")
             except Exception as e:
                 logger.warning(f"Failed to sync skill '{skill_name}': {e}")
-        
+
         logger.info(f"Synced {len(self.skills)} skills to {target_skills_dir}")
-    
+
     def get_skill_by_key(self, skill_key: str) -> Optional[SkillEntry]:
         """
         Get a skill by its skill key (which may differ from name).
-        
+
         :param skill_key: Skill key to look up
         :return: SkillEntry or None
         """

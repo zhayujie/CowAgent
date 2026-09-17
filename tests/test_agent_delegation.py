@@ -417,7 +417,7 @@ def test_delegate_serializes_hands_off_to_the_same_target_session():
 
 
 def _query_for(task, order):
-    for kind, query in order:
+    for _kind, query in order:
         if task in query:
             return query
     raise AssertionError(f"no query recorded for {task}")

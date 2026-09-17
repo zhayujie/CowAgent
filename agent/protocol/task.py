@@ -28,7 +28,7 @@ class TaskStatus(Enum):
 class Task:
     """
     Represents a task to be processed by an agent.
-    
+
     Attributes:
         id: Unique identifier for the task
         content: The primary text content of the task
@@ -59,7 +59,7 @@ class Task:
     def __init__(self, content: str = "", **kwargs):
         """
         Initialize a Task with content and optional keyword arguments.
-        
+
         Args:
             content: The text content of the task
             **kwargs: Additional attributes to set
@@ -79,7 +79,7 @@ class Task:
     def get_text(self) -> str:
         """
         Get the text content of the task.
-        
+
         Returns:
             The text content
         """
@@ -88,7 +88,7 @@ class Task:
     def update_status(self, status: TaskStatus) -> None:
         """
         Update the status of the task.
-        
+
         Args:
             status: The new status
         """

@@ -17,7 +17,7 @@ def install_requirements(file):
 
 def check_dulwich():
     needwait = False
-    for i in range(2):
+    for _i in range(2):
         if needwait:
             time.sleep(3)
             needwait = False

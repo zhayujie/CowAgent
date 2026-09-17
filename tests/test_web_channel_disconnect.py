@@ -111,7 +111,6 @@ def _disconnect_env(monkeypatch, tmp_path):
     """Wire ChannelsHandler's config/read/write helpers to a temp workspace with
     a legacy dingtalk enabled via config.json channel_type."""
     import json as _json
-    import config
     from agent import team
     from channel import channel_instances as ci
 
@@ -166,7 +165,6 @@ def test_disconnecting_bootstrapped_legacy_instance_stays_removed(monkeypatch, t
 
 
 def test_disconnecting_one_of_several_keeps_the_type(monkeypatch, tmp_path):
-    from agent import team
     from channel import channel_instances as ci
 
     cfg, config_path = _disconnect_env(monkeypatch, tmp_path)

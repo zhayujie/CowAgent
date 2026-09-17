@@ -48,11 +48,11 @@ class SchedulerService:
     """
     Background service that executes scheduled tasks
     """
-    
+
     def __init__(self, task_store, execute_callback: Callable):
         """
         Initialize scheduler service
-        
+
         Args:
             task_store: TaskStore instance
             execute_callback: Function to call when executing a task
@@ -68,33 +68,33 @@ class SchedulerService:
         self._lock = threading.Lock()
         self._execution_lock = threading.Lock()
         self._active_task_ids = set()
-    
+
     def start(self):
         """Start the scheduler service"""
         with self._lock:
             if self.running:
                 logger.warning("[Scheduler] Service already running")
                 return
-            
+
             self.running = True
             self.thread = threading.Thread(target=self._run_loop, daemon=True)
             self.thread.start()
-    
+
     def stop(self):
         """Stop the scheduler service"""
         with self._lock:
             if not self.running:
                 return
-            
+
             self.running = False
             if self.thread:
                 self.thread.join(timeout=5)
             logger.info("[Scheduler] Service stopped")
-    
+
     def _run_loop(self):
         """Main scheduler loop"""
         logger.info("[Scheduler] Scheduler loop started")
-        
+
         while self.running:
             try:
                 self._check_and_execute_tasks()
@@ -102,12 +102,12 @@ class SchedulerService:
                 logger.error(f"[Scheduler] Error in scheduler loop: {e}")
 
             time.sleep(30)
-    
+
     def _check_and_execute_tasks(self):
         """Check for due tasks and execute them"""
         now = datetime.now()
         tasks = self.task_store.list_tasks(enabled_only=True)
-        
+
         for task in tasks:
             try:
                 if self._is_task_due(task, now):
@@ -192,15 +192,15 @@ class SchedulerService:
     def _release_task(self, task_id: str) -> None:
         with self._execution_lock:
             self._active_task_ids.discard(task_id)
-    
+
     def _is_task_due(self, task: dict, now: datetime) -> bool:
         """
         Check if a task is due to run
-        
+
         Args:
             task: Task dictionary
             now: Current datetime
-            
+
         Returns:
             True if task should run now
         """
@@ -214,7 +214,7 @@ class SchedulerService:
                 })
                 return False
             return False
-        
+
         try:
             next_run = _parse_naive_local(next_run_str)
 
@@ -254,47 +254,47 @@ class SchedulerService:
                 f"{task.get('id')} (next_run_at={next_run_str!r}): {e}"
             )
             return False
-    
+
     def _calculate_next_run(self, task: dict, from_time: datetime) -> Optional[datetime]:
         """
         Calculate next run time for a task
-        
+
         Args:
             task: Task dictionary
             from_time: Calculate from this time
-            
+
         Returns:
             Next run datetime or None for one-time tasks
         """
         schedule = task.get("schedule", {})
         schedule_type = schedule.get("type")
-        
+
         if schedule_type == "cron":
             # Cron expression
             expression = schedule.get("expression")
             if not expression:
                 return None
-            
+
             try:
                 cron = croniter(expression, from_time)
                 return cron.get_next(datetime)
             except Exception as e:
                 logger.error(f"[Scheduler] Invalid cron expression '{expression}': {e}")
                 return None
-        
+
         elif schedule_type == "interval":
             # Interval in seconds
             seconds = schedule.get("seconds", 0)
             if seconds <= 0:
                 return None
             return from_time + timedelta(seconds=seconds)
-        
+
         elif schedule_type == "once":
             # One-time task at specific time
             run_at_str = schedule.get("run_at")
             if not run_at_str:
                 return None
-            
+
             try:
                 run_at = _parse_naive_local(run_at_str)
                 if run_at > from_time:
@@ -305,9 +305,9 @@ class SchedulerService:
                     f"{run_at_str!r}: {e}"
                 )
             return None
-        
+
         return None
-    
+
     def _execute_task(self, task: dict, trigger: str = "scheduled") -> bool:
         """
         Execute a task.

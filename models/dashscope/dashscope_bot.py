@@ -232,30 +232,30 @@ class DashscopeBot(Bot):
     def call_with_tools(self, messages, tools=None, stream=False, **kwargs):
         """
         Call DashScope API with tool support for agent integration
-        
+
         This method handles:
         1. Format conversion (Claude format → DashScope format)
         2. System prompt injection
         3. API calling with DashScope SDK
         4. Thinking mode support (enable_thinking for Qwen3)
-        
+
         Args:
             messages: List of messages (may be in Claude format from agent)
             tools: List of tool definitions (may be in Claude format from agent)
             stream: Whether to use streaming
             **kwargs: Additional parameters (max_tokens, temperature, system, etc.)
-            
+
         Returns:
             Formatted response or generator for streaming
         """
         try:
             # Convert messages from Claude format to DashScope format
             messages = self._convert_messages_to_dashscope_format(messages)
-            
+
             # Convert tools from Claude format to DashScope format
             if tools:
                 tools = self._convert_tools_to_dashscope_format(tools)
-            
+
             # Handle system prompt
             system_prompt = kwargs.get('system')
             if system_prompt:
@@ -265,27 +265,27 @@ class DashscopeBot(Bot):
                 else:
                     # Replace existing system message
                     messages[0] = {"role": "system", "content": system_prompt}
-            
+
             # Build request parameters
             model_name = kwargs.get("model", self.model_name)
-            
+
             parameters = {
                 "result_format": "message",  # Required for tool calling
                 "temperature": kwargs.get("temperature", conf().get("temperature", 0.85)),
                 "top_p": kwargs.get("top_p", conf().get("top_p", 0.8)),
             }
-            
+
             # Add max_tokens if specified
             if kwargs.get("max_tokens"):
                 parameters["max_tokens"] = kwargs["max_tokens"]
-            
+
             # Add tools if provided
             if tools:
                 parameters["tools"] = tools
                 # Add tool_choice if specified
                 if kwargs.get("tool_choice"):
                     parameters["tool_choice"] = kwargs["tool_choice"]
-            
+
             # Add thinking parameters for DashScope thinking-capable models.
             model_lower = model_name.lower()
             # qwen3.8-max / qwen3.8-flash (and their -preview snapshots) are
@@ -318,18 +318,18 @@ class DashscopeBot(Bot):
                         parameters["incremental_output"] = True
                 else:
                     parameters["enable_thinking"] = False
-            
+
             # Always use incremental_output for streaming (for better token-by-token streaming)
             # This is especially important for tool calling to avoid incomplete responses
             if stream:
                 parameters["incremental_output"] = True
-            
+
             # Make API call with DashScope SDK
             if stream:
                 return self._handle_stream_response(model_name, messages, parameters)
             else:
                 return self._handle_sync_response(model_name, messages, parameters)
-                
+
         except Exception as e:
             error_msg = str(e)
             logger.error(f"[DASHSCOPE] call_with_tools error: {error_msg}")
@@ -347,7 +347,7 @@ class DashscopeBot(Bot):
                     "message": error_msg,
                     "status_code": 500
                 }
-    
+
     def _handle_sync_response(self, model_name, messages, parameters):
         """Handle synchronous DashScope API response"""
         try:
@@ -419,7 +419,7 @@ class DashscopeBot(Bot):
                 "message": str(e),
                 "status_code": 500
             }
-    
+
     def _handle_stream_response(self, model_name, messages, parameters):
         """Handle streaming DashScope API response"""
         try:
@@ -443,7 +443,7 @@ class DashscopeBot(Bot):
                     stream=True,
                     **parameters
                 )
-            
+
             # Stream chunks to caller, converting to OpenAI format
             for response in responses:
                 # Convert to dict first to avoid DashScope proxy object KeyError
@@ -526,7 +526,7 @@ class DashscopeBot(Bot):
                 "message": str(e),
                 "status_code": 500
             }
-    
+
     @staticmethod
     def _response_to_dict(response) -> dict:
         """
@@ -579,13 +579,13 @@ class DashscopeBot(Bot):
     def _convert_tools_to_dashscope_format(self, tools):
         """
         Convert tools from Claude format to DashScope format
-        
+
         Claude format: {name, description, input_schema}
         DashScope format: {type: "function", function: {name, description, parameters}}
         """
         if not tools:
             return None
-        
+
         dashscope_tools = []
         for tool in tools:
             # Check if already in DashScope/OpenAI format
@@ -601,9 +601,9 @@ class DashscopeBot(Bot):
                         "parameters": tool.get("input_schema", {})
                     }
                 })
-        
+
         return dashscope_tools
-    
+
     @staticmethod
     def _prepare_messages_for_multimodal(messages: list) -> list:
         """
@@ -638,24 +638,24 @@ class DashscopeBot(Bot):
     def _convert_messages_to_dashscope_format(self, messages):
         """
         Convert messages from Claude format to DashScope format
-        
+
         Claude uses content blocks with types like 'tool_use', 'tool_result'
         DashScope uses 'tool_calls' in assistant messages and 'tool' role for results
         """
         if not messages:
             return []
-        
+
         dashscope_messages = []
-        
+
         for msg in messages:
             role = msg.get("role")
             content = msg.get("content")
-            
+
             # Handle string content (already in correct format)
             if isinstance(content, str):
                 dashscope_messages.append(msg)
                 continue
-            
+
             # Handle list content (Claude format with content blocks)
             if isinstance(content, list):
                 # Check if this is a tool result message (user role with tool_result blocks)
@@ -668,13 +668,13 @@ class DashscopeBot(Bot):
                                 "content": block.get("content", ""),
                                 "tool_call_id": block.get("tool_use_id")  # DashScope uses 'tool_call_id'
                             })
-                
+
                 # Check if this is an assistant message with tool_use blocks
                 elif role == "assistant":
                     # Separate text content and tool_use blocks
                     text_parts = []
                     tool_calls = []
-                    
+
                     for block in content:
                         if block.get("type") == "text":
                             text_parts.append(block.get("text", ""))
@@ -687,12 +687,12 @@ class DashscopeBot(Bot):
                                     "arguments": json.dumps(block.get("input", {}))
                                 }
                             })
-                    
+
                     # Build DashScope format assistant message
                     dashscope_msg = {
                         "role": "assistant"
                     }
-                    
+
                     # Add content only if there is actual text
                     # DashScope API: when tool_calls exist, content should be None or omitted if empty
                     if text_parts:
@@ -701,10 +701,10 @@ class DashscopeBot(Bot):
                         # If no tool_calls and no text, set empty string (rare case)
                         dashscope_msg["content"] = ""
                     # If there are tool_calls but no text, don't set content field at all
-                    
+
                     if tool_calls:
                         dashscope_msg["tool_calls"] = tool_calls
-                    
+
                     dashscope_messages.append(dashscope_msg)
                 else:
                     # Other list content, keep as is
@@ -712,14 +712,14 @@ class DashscopeBot(Bot):
             else:
                 # Other formats, keep as is
                 dashscope_messages.append(msg)
-        
+
         return dashscope_messages
-    
+
     def _convert_tool_calls_to_openai_format(self, tool_calls):
         """Convert DashScope tool_calls to OpenAI format"""
         if not tool_calls:
             return None
-        
+
         openai_tool_calls = []
         for tool_call in tool_calls:
             # DashScope format is already similar to OpenAI
@@ -735,5 +735,5 @@ class DashscopeBot(Bot):
                         "arguments": tool_call.function.arguments
                     }
                 })
-        
+
         return openai_tool_calls

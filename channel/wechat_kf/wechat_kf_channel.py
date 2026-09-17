@@ -14,7 +14,6 @@ Differences from `channel/wechatcom/` (企微自建应用):
        no native helper, so we call the HTTP endpoint directly.
 """
 import io
-import json
 import os
 import threading
 import time

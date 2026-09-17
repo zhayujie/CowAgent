@@ -6,7 +6,6 @@ from models.openai.openai_compat import (
     RateLimitError,
     Timeout,
     APIConnectionError,
-    APIError,
     wrap_http_error,
 )
 from models.openai.openai_http_client import OpenAIHTTPClient, OpenAIHTTPError
@@ -49,7 +48,7 @@ class OpenAIBot(Bot, OpenAIImage, OpenAICompatibleBot):
             "timeout": conf().get("request_timeout", None),  # 重试超时时间，在这个时间内，将会自动重试
             "stop": ["\n\n\n"],
         }
-    
+
     def get_api_config(self):
         """Get API configuration for OpenAI-compatible base class"""
         return {

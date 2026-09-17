@@ -11,7 +11,7 @@ from typing import Optional, Tuple
 def strip_bom(text: str) -> Tuple[str, str]:
     """
     Remove BOM (Byte Order Mark)
-    
+
     :param text: Original text
     :return: (BOM, text after removing BOM)
     """
@@ -23,7 +23,7 @@ def strip_bom(text: str) -> Tuple[str, str]:
 def detect_line_ending(text: str) -> str:
     """
     Detect line ending type
-    
+
     :param text: Text content
     :return: Line ending type ('\r\n' or '\n')
     """
@@ -35,7 +35,7 @@ def detect_line_ending(text: str) -> str:
 def normalize_to_lf(text: str) -> str:
     """
     Normalize all line endings to LF (\n)
-    
+
     :param text: Original text
     :return: Normalized text
     """
@@ -45,7 +45,7 @@ def normalize_to_lf(text: str) -> str:
 def restore_line_endings(text: str, original_ending: str) -> str:
     """
     Restore original line endings
-    
+
     :param text: LF normalized text
     :param original_ending: Original line ending
     :return: Text with restored line endings
@@ -59,7 +59,7 @@ def normalize_for_fuzzy_match(text: str) -> str:
     """
     Normalize text for fuzzy matching
     Remove excess whitespace but preserve basic structure
-    
+
     :param text: Original text
     :return: Normalized text
     """
@@ -280,14 +280,14 @@ def strip_line_number_prefixes(text: str) -> Optional[str]:
 def generate_diff_string(old_content: str, new_content: str) -> dict:
     """
     Generate unified diff string
-    
+
     :param old_content: Old content
     :param new_content: New content
     :return: Dictionary containing diff and first changed line number
     """
     old_lines = old_content.split('\n')
     new_lines = new_content.split('\n')
-    
+
     # Generate unified diff
     diff_lines = list(difflib.unified_diff(
         old_lines,
@@ -296,7 +296,7 @@ def generate_diff_string(old_content: str, new_content: str) -> dict:
         fromfile='original',
         tofile='modified'
     ))
-    
+
     # Find first changed line number
     first_changed_line = None
     for line in diff_lines:
@@ -306,9 +306,9 @@ def generate_diff_string(old_content: str, new_content: str) -> dict:
             if match:
                 first_changed_line = int(match.group(1))
                 break
-    
+
     diff_string = '\n'.join(diff_lines)
-    
+
     return {
         'diff': diff_string,
         'first_changed_line': first_changed_line

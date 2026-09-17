@@ -17,7 +17,6 @@ import click
 import requests
 
 from cli.utils import (
-    get_project_root,
     get_skills_dir,
     get_builtin_skills_dir,
     load_skills_config,
@@ -806,8 +805,8 @@ def _list_remote(page: int = 1):
         nav_parts.append(f"cow skill list --remote --page {page + 1}")
     if nav_parts:
         click.echo(f"  Navigate: {' | '.join(nav_parts)}")
-    click.echo(f"  Install:  cow skill install <name>")
-    click.echo(f"  Browse:   https://skills.cowagent.ai\n")
+    click.echo("  Install:  cow skill install <name>")
+    click.echo("  Browse:   https://skills.cowagent.ai\n")
 
 
 # ------------------------------------------------------------------
@@ -846,7 +845,7 @@ def search(query):
         status = click.style("installed", fg="green") if name in installed else "—"
         click.echo(f"  {name:<{name_w}} {status:<12} {desc}")
 
-    click.echo(f"\n  Install with: cow skill install <name>\n")
+    click.echo("\n  Install with: cow skill install <name>\n")
 
 
 # ------------------------------------------------------------------
@@ -1458,7 +1457,7 @@ def _set_enabled(name, enabled):
     config_path = os.path.join(skills_dir, "skills_config.json")
 
     if not os.path.exists(config_path):
-        click.echo(f"Error: No skills config found.", err=True)
+        click.echo("Error: No skills config found.", err=True)
         sys.exit(1)
 
     try:

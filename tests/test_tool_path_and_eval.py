@@ -5,7 +5,6 @@ accepted, and browser.evaluate rejected a script with a top-level return that
 the model then resent wrapped in an IIFE.
 """
 
-from types import SimpleNamespace
 
 from agent.tools.browser.browser_service import BrowserService
 from agent.tools.vision.vision import Vision

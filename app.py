@@ -20,7 +20,7 @@ import threading
 # invisible to any code that does ``from app import ...`` (that import builds a
 # second, separate ``app`` module). The registry is a single shared cell every
 # caller sees — see common/channel_registry.py and issue #3120.
-from common.channel_registry import get_channel_manager, set_channel_manager
+from common.channel_registry import set_channel_manager
 
 # Desktop mode: a lighter runtime for the packaged Electron client. Plugins are
 # loaded in a background thread (so command plugins like cow_cli/godcmd work

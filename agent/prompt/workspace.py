@@ -6,7 +6,7 @@ Initializes the workspace, creates template files, and loads context files.
 
 from __future__ import annotations
 import os
-from typing import List, Optional, Dict
+from typing import List, Optional
 from dataclasses import dataclass
 
 from common.log import logger
@@ -47,16 +47,16 @@ def ensure_workspace(workspace_dir: str, create_templates: bool = True) -> Works
     # may create the workspace directory before ensure_workspace is called.
     agent_path = os.path.join(workspace_dir, DEFAULT_AGENT_FILENAME)
     is_new_workspace = not os.path.exists(agent_path)
-    
+
     # Ensure the directory exists
     os.makedirs(workspace_dir, exist_ok=True)
-    
+
     # Define file paths
     user_path = os.path.join(workspace_dir, DEFAULT_USER_FILENAME)
     rule_path = os.path.join(workspace_dir, DEFAULT_RULE_FILENAME)
     memory_path = os.path.join(workspace_dir, DEFAULT_MEMORY_FILENAME)  # MEMORY.md at the root
     memory_dir = os.path.join(workspace_dir, "memory")  # daily memory subdirectory
-    
+
     # Create the memory subdirectory
     os.makedirs(memory_dir, exist_ok=True)
 
@@ -74,7 +74,7 @@ def ensure_workspace(workspace_dir: str, create_templates: bool = True) -> Works
     knowledge_dir = None
     if knowledge_enabled:
         knowledge_dir = str(state_dir.knowledge_dir(base=workspace_dir, ensure=True))
-    
+
     # Create template files if requested
     if create_templates:
         _create_template_if_missing(agent_path, _get_agent_template())
@@ -90,15 +90,15 @@ def ensure_workspace(workspace_dir: str, create_templates: bool = True) -> Works
                 os.path.join(knowledge_dir, "log.md"),
                 _get_knowledge_log_template()
             )
-        
+
         # Only create BOOTSTRAP.md for brand new workspaces;
         # agent deletes it after completing onboarding
         if is_new_workspace:
             bootstrap_path = os.path.join(workspace_dir, DEFAULT_BOOTSTRAP_FILENAME)
             _create_template_if_missing(bootstrap_path, _get_bootstrap_template())
-        
+
         logger.debug(f"[Workspace] Initialized workspace at: {workspace_dir}")
-    
+
     return WorkspaceFiles(
         agent_path=agent_path,
         user_path=user_path,
@@ -128,15 +128,15 @@ def load_context_files(workspace_dir: str, files_to_load: Optional[List[str]] = 
             DEFAULT_MEMORY_FILENAME,     # Long-term memory (frozen snapshot)
             DEFAULT_BOOTSTRAP_FILENAME,  # Only exists when onboarding is incomplete
         ]
-    
+
     context_files = []
-    
+
     for filename in files_to_load:
         filepath = os.path.join(workspace_dir, filename)
-        
+
         if not os.path.exists(filepath):
             continue
-        
+
         # Auto-cleanup: if BOOTSTRAP.md still exists but AGENT.md is already
         # filled in, the agent forgot to delete it — clean up and skip loading
         if filename == DEFAULT_BOOTSTRAP_FILENAME:
@@ -147,11 +147,11 @@ def load_context_files(workspace_dir: str, files_to_load: Optional[List[str]] = 
                 except Exception:
                     pass
                 continue
-        
+
         try:
             with open(filepath, 'r', encoding='utf-8') as f:
                 content = f.read().strip()
-            
+
             # Skip empty files or files that only contain template placeholders
             if not content or _is_template_placeholder(content):
                 continue
@@ -159,17 +159,17 @@ def load_context_files(workspace_dir: str, files_to_load: Optional[List[str]] = 
             # Truncate MEMORY.md to protect context window (frozen snapshot)
             if filename == DEFAULT_MEMORY_FILENAME:
                 content = _truncate_memory_content(content)
-            
+
             context_files.append(ContextFile(
                 path=filename,
                 content=content
             ))
-            
+
             logger.debug(f"[Workspace] Loaded context file: {filename}")
-            
+
         except Exception as e:
             logger.warning(f"[Workspace] Failed to load {filename}: {e}")
-    
+
     return context_files
 
 
@@ -227,16 +227,16 @@ def _is_template_placeholder(content: str) -> bool:
         "*(optional)",
         "*(how the user",
     ]
-    
+
     lines = content.split('\n')
     non_empty_lines = [line.strip() for line in lines if line.strip() and not line.strip().startswith('#')]
-    
+
     # If there's no real content (only headings and placeholders)
     if len(non_empty_lines) <= 3:
         for placeholder in placeholders:
             if any(placeholder in line for line in non_empty_lines):
                 return True
-    
+
     return False
 
 
@@ -244,10 +244,10 @@ def _is_onboarding_done(workspace_dir: str) -> bool:
     """Check if AGENT.md or USER.md has been modified from the original template"""
     agent_path = os.path.join(workspace_dir, DEFAULT_AGENT_FILENAME)
     user_path = os.path.join(workspace_dir, DEFAULT_USER_FILENAME)
-    
+
     agent_template = _get_agent_template().strip()
     user_template = _get_user_template().strip()
-    
+
     for path, template in [(agent_path, agent_template), (user_path, user_template)]:
         if not os.path.exists(path):
             continue
@@ -377,14 +377,14 @@ _USER_TEMPLATE_ZH = """# USER.md - 用户基本信息
 
 ## 联系方式
 
-- **微信**: 
-- **邮箱**: 
-- **其他**: 
+- **微信**:
+- **邮箱**:
+- **其他**:
 
 ## 重要日期
 
-- **生日**: 
-- **纪念日**: 
+- **生日**:
+- **纪念日**:
 
 ---
 
@@ -405,14 +405,14 @@ _USER_TEMPLATE_EN = """# USER.md - User basics
 
 ## Contact
 
-- **WeChat**: 
-- **Email**: 
-- **Other**: 
+- **WeChat**:
+- **Email**:
+- **Other**:
 
 ## Important dates
 
-- **Birthday**: 
-- **Anniversary**: 
+- **Birthday**:
+- **Anniversary**:
 
 ---
 

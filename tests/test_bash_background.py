@@ -6,7 +6,6 @@ Background support exists because the model was otherwise hand-rolling it -
 and races the process startup.
 """
 
-import os
 import sys
 import time
 import unittest

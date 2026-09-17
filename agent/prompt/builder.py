@@ -22,18 +22,18 @@ class ContextFile:
 
 class PromptBuilder:
     """System prompt builder."""
-    
+
     def __init__(self, workspace_dir: str, language: str = "zh"):
         """
         初始化提示词构建器
-        
+
         Args:
             workspace_dir: 工作空间目录
             language: 语言 ("zh" 或 "en")
         """
         self.workspace_dir = workspace_dir
         self.language = language
-    
+
     def build(
         self,
         base_persona: Optional[str] = None,
@@ -49,7 +49,7 @@ class PromptBuilder:
     ) -> str:
         """
         构建完整的系统提示词
-        
+
         Args:
             base_persona: 基础人格描述（会被context_files中的AGENT.md覆盖）
             user_identity: 用户身份信息
@@ -59,7 +59,7 @@ class PromptBuilder:
             memory_manager: 记忆管理器
             runtime_info: 运行时信息
             **kwargs: 其他参数
-            
+
         Returns:
             完整的系统提示词
         """
@@ -344,7 +344,7 @@ def _build_skills_section(skill_manager: Any, tools: Optional[List[Any]], langua
     """Build the skills section."""
     if not skill_manager:
         return []
-    
+
     # Resolve the read tool name
     read_tool_name = "read"
     if tools:
@@ -353,7 +353,7 @@ def _build_skills_section(skill_manager: Any, tools: Optional[List[Any]], langua
             if tool_name.lower() == "read":
                 read_tool_name = tool_name
                 break
-    
+
     if language == "en":
         lines = [
             "## 🧩 Skills (mandatory)",
@@ -386,7 +386,7 @@ def _build_skills_section(skill_manager: Any, tools: Optional[List[Any]], langua
             "",
             "以下是可用技能："
         ]
-    
+
     # Append the skills list (built by skill_manager)
     try:
         skills_prompt = skill_manager.build_skills_prompt()
@@ -400,7 +400,7 @@ def _build_skills_section(skill_manager: Any, tools: Optional[List[Any]], langua
         logger.warning(f"Failed to build skills prompt: {e}")
         import traceback
         logger.debug(f"Skills prompt error traceback: {traceback.format_exc()}")
-    
+
     return lines
 
 
@@ -623,7 +623,7 @@ def _build_user_identity_section(user_identity: Dict[str, str], language: str) -
     """Build the user identity section."""
     if not user_identity:
         return []
-    
+
     is_en = language == "en"
     lines = [
         ("## 👤 User identity" if is_en else "## 👤 用户身份"),
@@ -731,16 +731,16 @@ def _build_workspace_section(
             "**路径使用规则** (非常重要):",
             "",
             f"1. **相对路径的基准目录**: 所有相对路径都是相对于 `{workspace_dir}` 而言的",
-            f"   - ✅ 正确: 访问工作空间内的文件用相对路径，如 `AGENT.md`",
+            "   - ✅ 正确: 访问工作空间内的文件用相对路径，如 `AGENT.md`",
             f"   - ❌ 错误: 用相对路径访问其他目录的文件 (如果它不在 `{workspace_dir}` 内)",
             "",
             "2. **访问其他目录**: 如果要访问工作空间之外的目录（如项目代码、系统文件），**必须使用绝对路径**",
-            f"   - ✅ 正确: 例如 `~/chatgpt-on-wechat`、`/usr/local/`",
-            f"   - ❌ 错误: 假设相对路径会指向其他目录",
+            "   - ✅ 正确: 例如 `~/chatgpt-on-wechat`、`/usr/local/`",
+            "   - ❌ 错误: 假设相对路径会指向其他目录",
             "",
             "3. **路径解析示例**:",
             f"   - 相对路径 `memory/` → 实际路径 `{workspace_dir}/memory/`",
-            f"   - 绝对路径 `~/chatgpt-on-wechat/docs/` → 实际路径 `~/chatgpt-on-wechat/docs/`",
+            "   - 绝对路径 `~/chatgpt-on-wechat/docs/` → 实际路径 `~/chatgpt-on-wechat/docs/`",
             "",
             "4. **不确定时**: 先用 `bash pwd` 确认当前目录，或用 `ls .` 查看当前位置",
             "",
@@ -770,7 +770,7 @@ def _build_workspace_section(
     cloud_website_lines = _build_cloud_website_section(workspace_dir)
     if cloud_website_lines:
         lines.extend(cloud_website_lines)
-    
+
     return lines
 
 
@@ -801,7 +801,7 @@ def _build_project_workspace_section(
             "",
             f"2. **Memory and skills stay in the system directory** `{workspace_dir}`. Never write them into the project. Memory tools handle this for you; if you ever touch these files directly, use **absolute paths** under the system directory.",
             f"   - ✅ absolute `{workspace_dir}/MEMORY.md`",
-            f"   - ❌ relative `MEMORY.md` (that would land in the project, which is wrong)",
+            "   - ❌ relative `MEMORY.md` (that would land in the project, which is wrong)",
             "",
             "3. **Accessing any other directory**: use absolute paths.",
             "",
@@ -824,7 +824,7 @@ def _build_project_workspace_section(
             "",
             f"2. **记忆和技能仍在系统目录** `{workspace_dir}`，不要写入项目目录。记忆操作由记忆工具自动完成；若确需直接访问这些文件，请使用系统目录下的**绝对路径**。",
             f"   - ✅ 绝对路径 `{workspace_dir}/MEMORY.md`",
-            f"   - ❌ 相对路径 `MEMORY.md`（那会落到项目目录里，是错误的）",
+            "   - ❌ 相对路径 `MEMORY.md`（那会落到项目目录里，是错误的）",
             "",
             "3. **访问其他任意目录**：使用绝对路径。",
             "",
@@ -863,13 +863,13 @@ def _build_context_files_section(context_files: List[ContextFile], language: str
     """Build the project context files section."""
     if not context_files:
         return []
-    
+
     # Check whether AGENT.md is present
     has_agent = any(
         f.path.lower().endswith('agent.md') or 'agent.md' in f.path.lower()
         for f in context_files
     )
-    
+
     is_en = language == "en"
     if is_en:
         lines = [
@@ -894,14 +894,14 @@ def _build_context_files_section(context_files: List[ContextFile], language: str
             lines.append("**`AGENT.md` 是你的灵魂文件** 🪞：严格遵循其中定义的人格、语气和设定，做真实的自己，避免僵硬、模板化的回复。")
             lines.append("当用户通过对话透露了对你性格、风格、职责、能力边界的新期望，你应该主动用 `edit` 更新 AGENT.md 以反映这些演变。")
         lines.append("")
-    
+
     # Append the content of each file
     for file in context_files:
         lines.append(f"## {file.path}")
         lines.append("")
         lines.append(file.content)
         lines.append("")
-    
+
     return lines
 
 
@@ -990,7 +990,7 @@ def _build_runtime_section(runtime_info: Dict[str, Any], language: str) -> List[
     """Build the runtime info section - supports dynamic time."""
     if not runtime_info:
         return []
-    
+
     is_en = language == "en"
     time_label = "Current time" if is_en else "当前时间"
     lines = [

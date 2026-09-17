@@ -26,10 +26,10 @@ from agent.tools.utils.syntax_check import review as syntax_review
 
 class Edit(BaseTool):
     """Tool for precise file editing"""
-    
+
     name: str = "edit"
     description: str = "Edit a file by replacing exact text, or append to end if oldText is empty. For append: use empty oldText. For replace: oldText must match exactly (including whitespace) and must be unique unless replaceAll is true. IMPORTANT: the read tool prefixes each line with `12|` for display only - never include those prefixes in oldText or newText."
-    
+
     params: dict = {
         "type": "object",
         "properties": {
@@ -52,16 +52,16 @@ class Edit(BaseTool):
         },
         "required": ["path", "oldText", "newText"]
     }
-    
+
     def __init__(self, config: dict = None):
         self.config = config or {}
         self.cwd = self.config.get("cwd", os.getcwd())
         self.memory_manager = self.config.get("memory_manager", None)
-    
+
     def execute(self, args: Dict[str, Any]) -> ToolResult:
         """
         Execute file edit operation
-        
+
         :param args: Contains file path, old text and new text
         :return: Operation result
         """
@@ -70,10 +70,10 @@ class Edit(BaseTool):
         new_text = args.get("newText", "")
         replace_all = bool(args.get("replaceAll", False))
         replacements_made = 1
-        
+
         if not path:
             return ToolResult.fail("Error: path parameter is required")
-        
+
         # Resolve path
         absolute_path = self._resolve_path(path)
 
@@ -85,27 +85,27 @@ class Edit(BaseTool):
         # Check if file exists
         if not os.path.exists(absolute_path):
             return ToolResult.fail(f"Error: File not found: {path}")
-        
+
         # Check if readable/writable
         if not os.access(absolute_path, os.R_OK | os.W_OK):
             return ToolResult.fail(f"Error: File is not readable/writable: {path}")
-        
+
         try:
             # Read file
             with open(absolute_path, 'r', encoding='utf-8') as f:
                 raw_content = f.read()
-            
+
             # Remove BOM (LLM won't include invisible BOM in oldText)
             bom, content = strip_bom(raw_content)
-            
+
             # Detect original line ending
             original_ending = detect_line_ending(content)
-            
+
             # Normalize to LF
             normalized_content = normalize_to_lf(content)
             normalized_old_text = normalize_to_lf(old_text)
             normalized_new_text = normalize_to_lf(new_text)
-            
+
             # Special case: empty oldText means append to end of file
             if not old_text or not old_text.strip():
                 # Append mode: add newText to the end
@@ -163,7 +163,7 @@ class Edit(BaseTool):
                         )
                     new_content = new_content[:start] + replacement + new_content[end:]
                 replacements_made = len(spans)
-            
+
             # Checked after the fallback above, so a newText whose gutter was
             # already stripped alongside oldText still goes through.
             if looks_like_line_numbered_block(normalized_new_text):
@@ -180,7 +180,7 @@ class Edit(BaseTool):
                     "The replacement produced identical content. "
                     "This might indicate an issue with special characters or the text not existing as expected."
                 )
-            
+
             # Restore original line endings
             final_content = bom + restore_line_endings(new_content, original_ending)
 
@@ -195,7 +195,7 @@ class Edit(BaseTool):
             with open(absolute_path, 'w', encoding='utf-8') as f:
                 f.write(final_content)
             note_write(absolute_path)
-            
+
             # Generate diff
             diff_result = generate_diff_string(base_content, new_content)
 
@@ -215,28 +215,28 @@ class Edit(BaseTool):
             warnings = [w for w in (warning, syntax_warning) if w]
             if warnings:
                 result["warning"] = " ".join(warnings)
-            
+
             # Notify memory manager if file is in memory directory
             if self.memory_manager and "memory/" in path:
                 try:
                     self.memory_manager.mark_dirty()
-                except Exception as e:
+                except Exception:
                     # Don't fail the edit if memory notification fails
                     pass
-            
+
             return ToolResult.success(result)
-            
+
         except UnicodeDecodeError:
             return ToolResult.fail(f"Error: File is not a valid text file (encoding error): {path}")
         except PermissionError:
             return ToolResult.fail(f"Error: Permission denied accessing {path}")
         except Exception as e:
             return ToolResult.fail(f"Error editing file: {str(e)}")
-    
+
     def _resolve_path(self, path: str) -> str:
         """
         Resolve path to absolute path
-        
+
         :param path: Relative or absolute path
         :return: Absolute path
         """

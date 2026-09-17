@@ -12,10 +12,10 @@ from common.utils import expand_path
 
 class Send(BaseTool):
     """Tool for sending files to the user"""
-    
+
     name: str = "send"
     description: str = "Send a LOCAL file (image, video, audio, document) to the user. Only for local file paths. Do NOT use this for URLs — URLs should be included directly in your text reply, the system will handle them automatically."
-    
+
     params: dict = {
         "type": "object",
         "properties": {
@@ -30,51 +30,51 @@ class Send(BaseTool):
         },
         "required": ["path"]
     }
-    
+
     def __init__(self, config: dict = None):
         self.config = config or {}
         self.cwd = self.config.get("cwd", os.getcwd())
-        
+
         # Supported file types
         self.image_extensions = {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg', '.ico'}
         self.video_extensions = {'.mp4', '.avi', '.mov', '.mkv', '.flv', '.wmv', '.webm', '.m4v'}
         self.audio_extensions = {'.mp3', '.wav', '.ogg', '.m4a', '.flac', '.aac', '.wma'}
         self.document_extensions = {'.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.txt', '.md'}
-    
+
     def execute(self, args: Dict[str, Any]) -> ToolResult:
         """
         Execute file send operation
-        
+
         :param args: Contains file path and optional message
         :return: File metadata for channel to send
         """
         path = args.get("path", "").strip()
         message = args.get("message", "")
-        
+
         if not path:
             return ToolResult.fail("Error: path parameter is required")
-        
+
         # Pass through remote URLs directly (no local file check): the client
         # renders the link inline, so no download is needed.
         if path.lower().startswith(("http://", "https://")):
             return self._build_url_result(path, message)
-        
+
         # Resolve path
         absolute_path = self._resolve_path(path)
-        
+
         # Check if file exists
         if not os.path.exists(absolute_path):
             return ToolResult.fail(f"Error: File not found: {path}")
-        
+
         # Check if readable
         if not os.access(absolute_path, os.R_OK):
             return ToolResult.fail(f"Error: File is not readable: {path}")
-        
+
         # Get file info
         file_ext = Path(absolute_path).suffix.lower()
         file_size = os.path.getsize(absolute_path)
         file_name = Path(absolute_path).name
-        
+
         # Determine file type
         if file_ext in self.image_extensions:
             file_type = "image"
@@ -91,7 +91,7 @@ class Send(BaseTool):
         else:
             file_type = "file"
             mime_type = "application/octet-stream"
-        
+
         # Return file_to_send metadata
         result = {
             "type": "file_to_send",
@@ -116,7 +116,7 @@ class Send(BaseTool):
             pass
 
         return ToolResult.success(result)
-    
+
     def _build_url_result(self, url: str, message: str) -> ToolResult:
         """Build a file_to_send result for a remote http(s) URL.
 
@@ -163,7 +163,7 @@ class Send(BaseTool):
         if os.path.isabs(path):
             return path
         return os.path.abspath(os.path.join(self.cwd, path))
-    
+
     def _get_image_mime_type(self, ext: str) -> str:
         """Get MIME type for image"""
         mime_map = {
@@ -173,7 +173,7 @@ class Send(BaseTool):
             '.svg': 'image/svg+xml', '.ico': 'image/x-icon'
         }
         return mime_map.get(ext, 'image/jpeg')
-    
+
     def _get_video_mime_type(self, ext: str) -> str:
         """Get MIME type for video"""
         mime_map = {
@@ -182,7 +182,7 @@ class Send(BaseTool):
             '.webm': 'video/webm', '.flv': 'video/x-flv'
         }
         return mime_map.get(ext, 'video/mp4')
-    
+
     def _get_audio_mime_type(self, ext: str) -> str:
         """Get MIME type for audio"""
         mime_map = {
@@ -191,7 +191,7 @@ class Send(BaseTool):
             '.flac': 'audio/flac', '.aac': 'audio/aac'
         }
         return mime_map.get(ext, 'audio/mpeg')
-    
+
     def _get_document_mime_type(self, ext: str) -> str:
         """Get MIME type for document"""
         mime_map = {
@@ -206,7 +206,7 @@ class Send(BaseTool):
             '.md': 'text/markdown'
         }
         return mime_map.get(ext, 'application/octet-stream')
-    
+
     def _format_size(self, size_bytes: int) -> str:
         """Format file size in human-readable format"""
         for unit in ['B', 'KB', 'MB', 'GB']:

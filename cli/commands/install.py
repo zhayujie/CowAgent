@@ -131,7 +131,7 @@ def _playwright_cli(args: list, env: Optional[dict] = None) -> int:
         # the caller's overrides (PLAYWRIGHT_BROWSERS_PATH / DOWNLOAD_HOST) above,
         # so mirror + pinned browsers dir are honored here too.
         return subprocess.call(cmd, env=get_driver_env())
-    except Exception as e:
+    except Exception:
         # Last resort: try the module main via runpy (works if the frozen build
         # kept playwright.__main__ importable).
         try:

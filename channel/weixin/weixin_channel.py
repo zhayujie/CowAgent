@@ -278,7 +278,7 @@ class WeixinChannel(ChatChannel):
                 print(buf.getvalue())
             except UnicodeEncodeError:
                 # Windows GBK terminals cannot render Unicode block characters
-                print(f"\n  (终端不支持显示二维码，请使用链接扫码)")
+                print("\n  (终端不支持显示二维码，请使用链接扫码)")
                 print(f"  二维码链接: {qrcode_url}\n")
         except ImportError:
             print(f"\n  二维码链接: {qrcode_url}")

@@ -356,7 +356,6 @@ class FeiShuChanel(ChatChannel):
     def stop(self):
         import ctypes
         logger.info("[FeiShu] stop() called")
-        ws_client = self._ws_client
         self._ws_client = None
         ws_thread = self._ws_thread
         self._ws_thread = None
@@ -958,7 +957,7 @@ class FeiShuChanel(ChatChannel):
             res = requests.post(url=url, headers=headers, params=params, json=data, timeout=(5, 10))
         res = res.json()
         if res.get("code") == 0:
-            logger.info(f"[FeiShu] send message success")
+            logger.info("[FeiShu] send message success")
         elif msg_type == "interactive" and reply.type == ReplyType.TEXT:
             logger.warning(
                 "[FeiShu] Markdown card failed, falling back to text, "
@@ -1852,10 +1851,10 @@ class FeiShuChanel(ChatChannel):
     def _get_video_duration(self, file_path: str) -> int:
         """
         获取视频时长（毫秒）
-        
+
         Args:
             file_path: 视频文件路径
-        
+
         Returns:
             视频时长（毫秒），如果获取失败返回0
         """
@@ -1893,7 +1892,7 @@ class FeiShuChanel(ChatChannel):
         Supports:
         - file:// URLs for local files
         - http(s):// URLs (download then upload)
-        
+
         Returns:
             dict with 'file_key' and 'duration' (milliseconds), or None if failed
         """

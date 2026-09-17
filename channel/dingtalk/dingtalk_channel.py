@@ -73,7 +73,7 @@ def _check(func):
             return
         self.receivedMsgs[msgId] = True
         create_time = cmsg.create_time  # 消息时间戳
-        if conf().get("hot_reload") == True and int(create_time) < int(time.time()) - 60:  # 跳过1分钟前的历史消息
+        if conf().get("hot_reload") and int(create_time) < int(time.time()) - 60:  # 跳过1分钟前的历史消息
             logger.debug("[DingTalk] History message {} skipped".format(msgId))
             return
         if cmsg.my_msg and not cmsg.is_group:
@@ -279,18 +279,18 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
                 logger.warning(f"[DingTalk] Error stopping event loop: {e}")
         self._stream_client = None
         logger.info("[DingTalk] stop() completed")
-    
+
     def get_access_token(self):
         """
         获取企业内部应用的 access_token
         文档: https://open.dingtalk.com/document/orgapp/obtain-orgapp-token
         """
         current_time = time.time()
-        
+
         # 如果 token 还没过期，直接返回缓存的 token
         if self._access_token and current_time < self._access_token_expires_at:
             return self._access_token
-        
+
         # 获取新的 access_token
         url = "https://api.dingtalk.com/v1.0/oauth2/accessToken"
         headers = {"Content-Type": "application/json"}
@@ -298,11 +298,11 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
             "appKey": self.dingtalk_client_id,
             "appSecret": self.dingtalk_client_secret
         }
-        
+
         try:
             response = requests.post(url, headers=headers, json=data, timeout=10)
             result = response.json()
-            
+
             if response.status_code == 200 and "accessToken" in result:
                 self._access_token = result["accessToken"]
                 # Token 有效期为 2 小时，提前 5 分钟刷新
@@ -315,7 +315,7 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
         except Exception as e:
             logger.error(f"[DingTalk] Error getting access token: {e}")
             return None
-    
+
     def send_single_message(self, user_id: str, content: str, robot_code: str) -> bool:
         """
         Send message to single user (private chat)
@@ -346,7 +346,7 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
         try:
             response = requests.post(url, headers=headers, json=data, timeout=10)
             result = response.json()
-            
+
             if response.status_code == 200 and result.get("processQueryKey"):
                 logger.info(f"[DingTalk] Single message sent successfully to {user_id}")
                 return True
@@ -356,12 +356,12 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
         except Exception as e:
             logger.error(f"[DingTalk] Error sending single message: {e}")
             return False
-    
+
     def send_group_message(self, conversation_id: str, content: str, robot_code: str = None):
         """
         主动发送群消息
         文档: https://open.dingtalk.com/document/orgapp/the-robot-sends-a-group-message
-        
+
         Args:
             conversation_id: 会话ID (openConversationId)
             content: 消息内容
@@ -371,12 +371,12 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
         if not access_token:
             logger.error("[DingTalk] Cannot send group message: no access token")
             return False
-        
+
         # Validate robot_code
         if not robot_code:
             logger.error("[DingTalk] Cannot send group message: robot_code is required")
             return False
-        
+
         url = "https://api.dingtalk.com/v1.0/robot/groupMessages/send"
         headers = {
             "x-acs-dingtalk-access-token": access_token,
@@ -388,11 +388,11 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
             "openConversationId": conversation_id,
             "robotCode": robot_code
         }
-        
+
         try:
             response = requests.post(url, headers=headers, json=data, timeout=10)
             result = response.json()
-            
+
             if response.status_code == 200:
                 logger.info(f"[DingTalk] Group message sent successfully to {conversation_id}")
                 return True
@@ -402,15 +402,15 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
         except Exception as e:
             logger.error(f"[DingTalk] Error sending group message: {e}")
             return False
-    
+
     def upload_media(self, file_path: str, media_type: str = "image") -> str:
         """
         上传媒体文件到钉钉
-        
+
         Args:
             file_path: 本地文件路径或URL
             media_type: 媒体类型 (image, video, voice, file)
-        
+
         Returns:
             media_id，如果上传失败返回 None
         """
@@ -418,11 +418,11 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
         if not access_token:
             logger.error("[DingTalk] Cannot upload media: no access token")
             return None
-        
+
         # 处理 file:// URL
         if file_path.startswith("file://"):
             file_path = file_path[7:]
-        
+
         # 如果是 HTTP URL，先下载
         if file_path.startswith("http://") or file_path.startswith("https://"):
             try:
@@ -431,24 +431,24 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
                 if response.status_code != 200:
                     logger.error(f"[DingTalk] Failed to download file from URL: {file_path}")
                     return None
-                
+
                 # 保存到临时文件
                 file_name = os.path.basename(file_path) or f"media_{uuid.uuid4()}"
                 temp_file = os.path.join(str(state_dir.tmp_dir()), file_name)
-                
+
                 with open(temp_file, "wb") as f:
                     f.write(response.content)
-                
+
                 file_path = temp_file
                 logger.info(f"[DingTalk] Downloaded file to {file_path}")
             except Exception as e:
                 logger.error(f"[DingTalk] Error downloading file: {e}")
                 return None
-        
+
         if not os.path.exists(file_path):
             logger.error(f"[DingTalk] File not found: {file_path}")
             return None
-        
+
         # 上传到钉钉
         # 钉钉上传媒体文件 API: https://open.dingtalk.com/document/orgapp/upload-media-files
         url = "https://oapi.dingtalk.com/media/upload"
@@ -456,13 +456,13 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
             "access_token": access_token,
             "type": media_type
         }
-        
+
         try:
             with open(file_path, "rb") as f:
                 files = {"media": (os.path.basename(file_path), f)}
                 response = requests.post(url, params=params, files=files, timeout=(5, 60))
                 result = response.json()
-                
+
                 if result.get("errcode") == 0:
                     media_id = result.get("media_id")
                     logger.info(f"[DingTalk] Media uploaded successfully, media_id={media_id}")
@@ -473,17 +473,17 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
         except Exception as e:
             logger.error(f"[DingTalk] Error uploading media: {e}")
             return None
-    
+
     def send_image_with_media_id(self, access_token: str, media_id: str, incoming_message, is_group: bool) -> bool:
         """
         发送图片消息（使用 media_id）
-        
+
         Args:
             access_token: 访问令牌
             media_id: 媒体ID
             incoming_message: 钉钉消息对象
             is_group: 是否为群聊
-        
+
         Returns:
             是否发送成功
         """
@@ -491,17 +491,17 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
             "x-acs-dingtalk-access-token": access_token,
             'Content-Type': 'application/json'
         }
-        
+
         msg_param = {
             "photoURL": media_id  # 钉钉图片消息使用 photoURL 字段
         }
-        
+
         body = {
             "robotCode": incoming_message.robot_code,
             "msgKey": "sampleImageMsg",
             "msgParam": json.dumps(msg_param),
         }
-        
+
         if is_group:
             # 群聊
             url = "https://api.dingtalk.com/v1.0/robot/groupMessages/send"
@@ -510,13 +510,13 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
             # 单聊
             url = "https://api.dingtalk.com/v1.0/robot/oToMessages/batchSend"
             body["userIds"] = [incoming_message.sender_staff_id]
-        
+
         try:
             response = requests.post(url=url, headers=headers, json=body, timeout=10)
-            result = response.json()
-            
+            response.json()
+
             logger.info(f"[DingTalk] Image send result: {response.text}")
-            
+
             if response.status_code == 200:
                 return True
             else:
@@ -529,13 +529,13 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
     def send_image_message(self, receiver: str, media_id: str, is_group: bool, robot_code: str) -> bool:
         """
         发送图片消息
-        
+
         Args:
             receiver: 接收者ID (user_id 或 conversation_id)
             media_id: 媒体ID
             is_group: 是否为群聊
             robot_code: 机器人编码
-        
+
         Returns:
             是否发送成功
         """
@@ -543,11 +543,11 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
         if not access_token:
             logger.error("[DingTalk] Cannot send image: no access token")
             return False
-        
+
         if not robot_code:
             logger.error("[DingTalk] Cannot send image: robot_code is required")
             return False
-        
+
         if is_group:
             # 发送群聊图片
             url = "https://api.dingtalk.com/v1.0/robot/groupMessages/send"
@@ -574,13 +574,13 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
                 "userIds": [receiver],
                 "robotCode": robot_code
             }
-        
+
         try:
             response = requests.post(url, headers=headers, json=data, timeout=10)
             result = response.json()
-            
+
             if response.status_code == 200:
-                logger.info(f"[DingTalk] Image message sent successfully")
+                logger.info("[DingTalk] Image message sent successfully")
                 return True
             else:
                 logger.error(f"[DingTalk] Failed to send image message: {result}")
@@ -588,7 +588,7 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
         except Exception as e:
             logger.error(f"[DingTalk] Error sending image message: {e}")
             return False
-    
+
     def get_image_download_url(self, download_code: str) -> str:
         """
         获取图片下载地址
@@ -598,13 +598,13 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
         # 获取 robot_code
         if not hasattr(self, '_robot_code_cache'):
             self._robot_code_cache = None
-        
+
         robot_code = self._robot_code_cache
-        
+
         if not robot_code:
             logger.error("[DingTalk] robot_code not available for image download")
             return None
-        
+
         # 返回一个特殊的 URL，包含 robot_code 和 download_code
         logger.info(f"[DingTalk] Successfully got image download URL for code: {download_code}")
         return f"dingtalk://download/{robot_code}:{download_code}"
@@ -654,14 +654,14 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
             logger.debug("[DingTalk]receive text msg: {}".format(cmsg.content))
         else:
             logger.debug("[DingTalk]receive other msg: {}".format(cmsg.content))
-        
+
         # 处理文件缓存逻辑
         from channel.file_cache import get_file_cache
         file_cache = get_file_cache()
-        
+
         # 单聊的 session_id 就是 sender_id
         session_id = cmsg.from_user_id
-        
+
         # 如果是单张图片消息，缓存起来
         if cmsg.ctype == ContextType.IMAGE:
             if hasattr(cmsg, 'image_path') and cmsg.image_path:
@@ -669,7 +669,7 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
                 logger.info(f"[DingTalk] Image cached for session {session_id}, waiting for user query...")
             # 单张图片不直接处理，等待用户提问
             return
-        
+
         # 如果是文本消息，检查是否有缓存的文件
         if cmsg.ctype == ContextType.TEXT:
             cached_files = file_cache.get(session_id)
@@ -685,12 +685,12 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
                         file_refs.append(f"[视频: {file_path}]")
                     else:
                         file_refs.append(f"[文件: {file_path}]")
-                
+
                 cmsg.content = cmsg.content + "\n" + "\n".join(file_refs)
                 logger.info(f"[DingTalk] Attached {len(cached_files)} cached file(s) to user query")
                 # 清除缓存
                 file_cache.clear(session_id)
-        
+
         context = self._compose_context(cmsg.ctype, cmsg.content, isgroup=False, msg=cmsg)
         if context:
             from agent.team_addressing import stamp_speaker_from_channel
@@ -714,17 +714,17 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
             logger.debug("[DingTalk]receive text msg: {}".format(cmsg.content))
         else:
             logger.debug("[DingTalk]receive other msg: {}".format(cmsg.content))
-        
+
         # 处理文件缓存逻辑
         from channel.file_cache import get_file_cache
         file_cache = get_file_cache()
-        
+
         # 群聊的 session_id
         if conf().get("group_shared_session", True):
             session_id = cmsg.other_user_id  # conversation_id
         else:
             session_id = cmsg.from_user_id + "_" + cmsg.other_user_id
-        
+
         # 如果是单张图片消息，缓存起来
         if cmsg.ctype == ContextType.IMAGE:
             if hasattr(cmsg, 'image_path') and cmsg.image_path:
@@ -732,7 +732,7 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
                 logger.info(f"[DingTalk] Image cached for session {session_id}, waiting for user query...")
             # 单张图片不直接处理，等待用户提问
             return
-        
+
         # 如果是文本消息，检查是否有缓存的文件
         if cmsg.ctype == ContextType.TEXT:
             cached_files = file_cache.get(session_id)
@@ -748,12 +748,12 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
                         file_refs.append(f"[视频: {file_path}]")
                     else:
                         file_refs.append(f"[文件: {file_path}]")
-                
+
                 cmsg.content = cmsg.content + "\n" + "\n".join(file_refs)
                 logger.info(f"[DingTalk] Attached {len(cached_files)} cached file(s) to user query")
                 # 清除缓存
                 file_cache.clear(session_id)
-        
+
         context = self._compose_context(cmsg.ctype, cmsg.content, isgroup=True, msg=cmsg)
         context['no_need_at'] = True
         if context:
@@ -765,22 +765,22 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
     def send(self, reply: Reply, context: Context):
         logger.debug(f"[DingTalk] send() called with reply.type={reply.type}, content_length={len(str(reply.content))}")
         receiver = context["receiver"]
-        
+
         # Check if msg exists (for scheduled tasks, msg might be None)
         msg = context.kwargs.get('msg')
         if msg is None:
             # 定时任务场景：使用主动发送 API
             is_group = context.get("isgroup", False)
             logger.info(f"[DingTalk] Sending scheduled task message to {receiver} (is_group={is_group})")
-            
+
             # 使用缓存的 robot_code 或配置的值
             robot_code = self._robot_code or self.cfg("dingtalk_robot_code")
             logger.info(f"[DingTalk] Using robot_code: {robot_code}, cached: {self._robot_code}, config: {self.cfg('dingtalk_robot_code')}")
-            
+
             if not robot_code:
-                logger.error(f"[DingTalk] Cannot send scheduled task: robot_code not available. Please send at least one message to the bot first, or configure dingtalk_robot_code in config.json")
+                logger.error("[DingTalk] Cannot send scheduled task: robot_code not available. Please send at least one message to the bot first, or configure dingtalk_robot_code in config.json")
                 return
-            
+
             # 根据是否群聊选择不同的 API
             if is_group:
                 success = self.send_group_message(receiver, reply.content, robot_code)
@@ -788,37 +788,37 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
                 # 单聊场景：尝试从 context 中获取 dingtalk_sender_staff_id
                 sender_staff_id = context.get("dingtalk_sender_staff_id")
                 if not sender_staff_id:
-                    logger.error(f"[DingTalk] Cannot send single chat scheduled message: sender_staff_id not available in context")
+                    logger.error("[DingTalk] Cannot send single chat scheduled message: sender_staff_id not available in context")
                     return
-                
+
                 logger.info(f"[DingTalk] Sending single message to staff_id: {sender_staff_id}")
                 success = self.send_single_message(sender_staff_id, reply.content, robot_code)
-            
+
             if not success:
-                logger.error(f"[DingTalk] Failed to send scheduled task message")
+                logger.error("[DingTalk] Failed to send scheduled task message")
             return
-        
+
         # 从正常消息中提取并缓存 robot_code
         if hasattr(msg, 'robot_code'):
             robot_code = msg.robot_code
             if robot_code and robot_code != self._robot_code:
                 self._robot_code = robot_code
                 logger.debug(f"[DingTalk] Cached robot_code: {robot_code}")
-        
+
         isgroup = msg.is_group
         incoming_message = msg.incoming_message
         robot_code = self._robot_code or self.cfg("dingtalk_robot_code")
-        
+
         # 处理图片和视频发送
         if reply.type == ReplyType.IMAGE_URL:
             logger.info(f"[DingTalk] Sending image: {reply.content}")
-            
+
             # 如果有附加的文本内容，先发送文本
             if hasattr(reply, 'text_content') and reply.text_content:
                 self.reply_text(reply.text_content, incoming_message)
                 import time
                 time.sleep(0.3)  # 短暂延迟，确保文本先到达
-            
+
             media_id = self.upload_media(reply.content, media_type="image")
             if media_id:
                 # 使用主动发送 API 发送图片
@@ -840,27 +840,27 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
                 logger.error("[DingTalk] Failed to upload image")
                 self.reply_text("抱歉，图片上传失败", incoming_message)
             return
-        
+
         elif reply.type == ReplyType.FILE:
             # 如果有附加的文本内容，先发送文本
             if hasattr(reply, 'text_content') and reply.text_content:
                 self.reply_text(reply.text_content, incoming_message)
                 import time
                 time.sleep(0.3)  # 短暂延迟，确保文本先到达
-            
+
             # 判断是否为视频文件
             file_path = reply.content
             if file_path.startswith("file://"):
                 file_path = file_path[7:]
-            
+
             is_video = file_path.lower().endswith(('.mp4', '.avi', '.mov', '.wmv', '.flv'))
-            
+
             access_token = self.get_access_token()
             if not access_token:
                 logger.error("[DingTalk] Cannot get access token")
                 self.reply_text("抱歉，文件发送失败（无法获取token）", incoming_message)
                 return
-            
+
             if is_video:
                 logger.info(f"[DingTalk] Sending video: {reply.content}")
                 media_id = self.upload_media(reply.content, media_type="video")
@@ -910,7 +910,7 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
                     logger.error("[DingTalk] Failed to upload file")
                     self.reply_text("抱歉，文件上传失败", incoming_message)
             return
-        
+
         # Native sampleAudio. Upload only accepts ogg/amr, so convert TTS mp3/wav to amr.
         elif reply.type == ReplyType.VOICE:
             logger.info(f"[DingTalk] Sending voice: {reply.content}")
@@ -978,18 +978,18 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
             else:
                 self.reply_text(reply.content, incoming_message)
             return
-    
+
     def _send_file_message(self, access_token: str, incoming_message, msg_key: str, msg_param: dict, is_group: bool) -> bool:
         """
         发送文件/视频消息的通用方法
-        
+
         Args:
             access_token: 访问令牌
             incoming_message: 钉钉消息对象
             msg_key: 消息类型 (sampleFile, sampleVideo, sampleAudio)
             msg_param: 消息参数
             is_group: 是否为群聊
-        
+
         Returns:
             是否发送成功
         """
@@ -997,13 +997,13 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
             "x-acs-dingtalk-access-token": access_token,
             'Content-Type': 'application/json'
         }
-        
+
         body = {
             "robotCode": incoming_message.robot_code,
             "msgKey": msg_key,
             "msgParam": json.dumps(msg_param),
         }
-        
+
         if is_group:
             # 群聊
             url = "https://api.dingtalk.com/v1.0/robot/groupMessages/send"
@@ -1012,13 +1012,13 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
             # 单聊
             url = "https://api.dingtalk.com/v1.0/robot/oToMessages/batchSend"
             body["userIds"] = [incoming_message.sender_staff_id]
-        
+
         try:
             response = requests.post(url=url, headers=headers, json=body, timeout=10)
-            result = response.json()
-            
+            response.json()
+
             logger.info(f"[DingTalk] File send result: {response.text}")
-            
+
             if response.status_code == 200:
                 return True
             else:

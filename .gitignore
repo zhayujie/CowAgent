@@ -72,3 +72,6 @@ desktop/resources/bin/
 
 # Obsidian editor workspace (accidental commit vector; never part of the app)
 .obsidian/
+
+# FuXi session state (settings, scheduled-task locks, scratchpad symlinks)
+.fuxi/

@@ -21,7 +21,7 @@ GREP_MAX_LINE_LENGTH = 500  # Max chars per grep match line
 
 class TruncationResult:
     """Truncation result"""
-    
+
     def __init__(
         self,
         content: str,
@@ -47,7 +47,7 @@ class TruncationResult:
         self.first_line_exceeds_limit = first_line_exceeds_limit
         self.max_lines = max_lines
         self.max_bytes = max_bytes
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary"""
         return {
@@ -79,10 +79,10 @@ def truncate_head(content: str, max_lines: Optional[int] = None, max_bytes: Opti
     """
     Truncate content from the head (keep first N lines/bytes).
     Suitable for file reads where you want to see the beginning.
-    
+
     Never returns partial lines. If first line exceeds byte limit,
     returns empty content with first_line_exceeds_limit=True.
-    
+
     :param content: Content to truncate
     :param max_lines: Maximum number of lines (default: 2000)
     :param max_bytes: Maximum number of bytes (default: 50KB)
@@ -92,11 +92,11 @@ def truncate_head(content: str, max_lines: Optional[int] = None, max_bytes: Opti
         max_lines = DEFAULT_MAX_LINES
     if max_bytes is None:
         max_bytes = DEFAULT_MAX_BYTES
-    
+
     total_bytes = len(content.encode('utf-8'))
     lines = content.split('\n')
     total_lines = len(lines)
-    
+
     # Check if no truncation is needed
     if total_lines <= max_lines and total_bytes <= max_bytes:
         return TruncationResult(
@@ -112,7 +112,7 @@ def truncate_head(content: str, max_lines: Optional[int] = None, max_bytes: Opti
             max_lines=max_lines,
             max_bytes=max_bytes
         )
-    
+
     # Check if first line alone exceeds byte limit
     first_line_bytes = len(lines[0].encode('utf-8'))
     if first_line_bytes > max_bytes:
@@ -129,33 +129,33 @@ def truncate_head(content: str, max_lines: Optional[int] = None, max_bytes: Opti
             max_lines=max_lines,
             max_bytes=max_bytes
         )
-    
+
     # Collect complete lines that fit
     output_lines_arr = []
     output_bytes_count = 0
     truncated_by = "lines"
-    
+
     for i, line in enumerate(lines):
         if i >= max_lines:
             break
-        
+
         # Calculate line bytes (add 1 for newline if not first line)
         line_bytes = len(line.encode('utf-8')) + (1 if i > 0 else 0)
-        
+
         if output_bytes_count + line_bytes > max_bytes:
             truncated_by = "bytes"
             break
-        
+
         output_lines_arr.append(line)
         output_bytes_count += line_bytes
-    
+
     # If exited due to line limit
     if len(output_lines_arr) >= max_lines and output_bytes_count <= max_bytes:
         truncated_by = "lines"
-    
+
     output_content = '\n'.join(output_lines_arr)
     final_output_bytes = len(output_content.encode('utf-8'))
-    
+
     return TruncationResult(
         content=output_content,
         truncated=True,
@@ -175,9 +175,9 @@ def truncate_tail(content: str, max_lines: Optional[int] = None, max_bytes: Opti
     """
     Truncate content from tail (keep last N lines/bytes).
     Suitable for bash output where you want to see the ending content (errors, final results).
-    
+
     If the last line of original content exceeds byte limit, may return partial first line.
-    
+
     :param content: Content to truncate
     :param max_lines: Maximum lines (default: 2000)
     :param max_bytes: Maximum bytes (default: 50KB)
@@ -187,11 +187,11 @@ def truncate_tail(content: str, max_lines: Optional[int] = None, max_bytes: Opti
         max_lines = DEFAULT_MAX_LINES
     if max_bytes is None:
         max_bytes = DEFAULT_MAX_BYTES
-    
+
     total_bytes = len(content.encode('utf-8'))
     lines = content.split('\n')
     total_lines = len(lines)
-    
+
     # Check if no truncation is needed
     if total_lines <= max_lines and total_bytes <= max_bytes:
         return TruncationResult(
@@ -207,21 +207,21 @@ def truncate_tail(content: str, max_lines: Optional[int] = None, max_bytes: Opti
             max_lines=max_lines,
             max_bytes=max_bytes
         )
-    
+
     # Work backwards from the end
     output_lines_arr = []
     output_bytes_count = 0
     truncated_by = "lines"
     last_line_partial = False
-    
+
     for i in range(len(lines) - 1, -1, -1):
         if len(output_lines_arr) >= max_lines:
             break
-        
+
         line = lines[i]
         # Calculate line bytes (add newline if not the first added line)
         line_bytes = len(line.encode('utf-8')) + (1 if len(output_lines_arr) > 0 else 0)
-        
+
         if output_bytes_count + line_bytes > max_bytes:
             truncated_by = "bytes"
             # Edge case: if we haven't added any lines yet and this line exceeds maxBytes,
@@ -232,19 +232,19 @@ def truncate_tail(content: str, max_lines: Optional[int] = None, max_bytes: Opti
                 output_bytes_count = len(truncated_line.encode('utf-8'))
                 last_line_partial = True
             break
-        
+
         output_lines_arr.insert(0, line)
         output_bytes_count += line_bytes
-    
+
     # If exited due to line limit. A partially kept line means the byte limit
     # was what actually cut the output, even when it also fills max_lines, so
     # leave truncated_by as "bytes" in that case.
     if not last_line_partial and len(output_lines_arr) >= max_lines and output_bytes_count <= max_bytes:
         truncated_by = "lines"
-    
+
     output_content = '\n'.join(output_lines_arr)
     final_output_bytes = len(output_content.encode('utf-8'))
-    
+
     return TruncationResult(
         content=output_content,
         truncated=True,
@@ -264,7 +264,7 @@ def _truncate_string_to_bytes_from_end(text: str, max_bytes: int) -> str:
     """
     Truncate string to fit byte limit (from end).
     Properly handles multi-byte UTF-8 characters.
-    
+
     :param text: String to truncate
     :param max_bytes: Maximum bytes
     :return: Truncated string
@@ -272,14 +272,14 @@ def _truncate_string_to_bytes_from_end(text: str, max_bytes: int) -> str:
     encoded = text.encode('utf-8')
     if len(encoded) <= max_bytes:
         return text
-    
+
     # Start from end, skip back maxBytes
     start = len(encoded) - max_bytes
-    
+
     # Find valid UTF-8 boundary (character start)
     while start < len(encoded) and (encoded[start] & 0xC0) == 0x80:
         start += 1
-    
+
     return encoded[start:].decode('utf-8', errors='ignore')
 
 
@@ -287,7 +287,7 @@ def truncate_line(line: str, max_chars: int = GREP_MAX_LINE_LENGTH) -> Tuple[str
     """
     Truncate single line to max characters, add [truncated] suffix.
     Used for grep match lines.
-    
+
     :param line: Line to truncate
     :param max_chars: Maximum characters
     :return: (truncated text, whether truncated)

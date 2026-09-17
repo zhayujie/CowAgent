@@ -8,14 +8,14 @@ class WechatComAppClient(WeChatClient):
         super(WechatComAppClient, self).__init__(corp_id, secret, access_token, session, timeout, auto_retry)
         self.fetch_access_token_lock = threading.Lock()
         self._active_refresh()
-        
+
     def _active_refresh(self):
         """启动主动刷新的后台线程"""
         def refresh_loop():
             while True:
                 now = time.time()
                 expires_at = self.session.get(f"{self.corp_id}_expires_at", 0)
-                
+
                 # 提前10分钟刷新(600秒)
                 if expires_at - now < 600:
                     with self.fetch_access_token_lock:
@@ -24,7 +24,7 @@ class WechatComAppClient(WeChatClient):
                             super(WechatComAppClient, self).fetch_access_token()
                 # 每次检查间隔60秒
                 time.sleep(60)
-                
+
         # 启动守护线程
         refresh_thread = threading.Thread(
             target=refresh_loop,
@@ -37,7 +37,7 @@ class WechatComAppClient(WeChatClient):
         with self.fetch_access_token_lock:
             access_token = self.session.get(self.access_token_key)
             expires_at = self.session.get(f"{self.corp_id}_expires_at", 0)
-            
+
             if access_token and expires_at > time.time() + 60:
                 return access_token
             return super().fetch_access_token()

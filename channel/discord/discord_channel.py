@@ -185,7 +185,7 @@ class DiscordChannel(ChatChannel):
 
             # Guild trigger gate (silently drop if not triggered)
             if is_group and not self._should_reply_in_guild(message):
-                logger.debug(f"[Discord] guild message not triggered (need @mention or reply), skip")
+                logger.debug("[Discord] guild message not triggered (need @mention or reply), skip")
                 return
 
             # Parse message type + download attachments if needed.
@@ -277,7 +277,7 @@ class DiscordChannel(ChatChannel):
             from agent.protocol import get_cancel_registry
             from bridge.bridge import Bridge
             agent_bridge = Bridge().get_agent_bridge()
-            receiver = str(message.channel.id)
+            str(message.channel.id)
             agent_id = agent_bridge.agent_router.resolve(
                 explicit_agent_id=getattr(self, "bound_agent_id", "") or None,
             )

@@ -83,10 +83,10 @@ class XunfeiVoice(Voice):
         try:
             # Avoid the same filename under multithreading
             fileName = TmpDir().path() + "reply-" + str(int(time.time())) + "-" + str(hash(text) & 0x7FFFFFFF) + ".mp3"
-            return_file = xunfei_tts(self.APPID,self.APIKey,self.APISecret,self.BusinessArgsTTS,text,fileName)
+            xunfei_tts(self.APPID,self.APIKey,self.APISecret,self.BusinessArgsTTS,text,fileName)
             logger.info("[Xunfei] textToVoice text={} voice file name={}".format(text, fileName))
             reply = Reply(ReplyType.VOICE, fileName)
-        except Exception as e:
+        except Exception:
             logger.error("[Xunfei] textToVoice error={}".format(fileName))
             reply = Reply(ReplyType.ERROR, "抱歉，讯飞语音合成失败")
         return reply

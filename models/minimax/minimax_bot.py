@@ -290,7 +290,7 @@ class MinimaxBot(Bot):
             logger.error(f"[MINIMAX] call_with_tools error: {e}")
             import traceback
             logger.error(traceback.format_exc())
-            
+
             def error_generator():
                 yield {"error": True, "message": error_msg, "status_code": 500}
             return error_generator()
@@ -332,7 +332,7 @@ class MinimaxBot(Bot):
                                 elif block.get("type") == "tool_result":
                                     tool_call_id = block.get("tool_use_id") or ""
                                     if not tool_call_id:
-                                        logger.warning(f"[MINIMAX] tool_result missing tool_use_id")
+                                        logger.warning("[MINIMAX] tool_result missing tool_use_id")
                                     result_content = block.get("content", "")
                                     if not isinstance(result_content, str):
                                         result_content = json.dumps(result_content, ensure_ascii=False)
@@ -569,9 +569,9 @@ class MinimaxBot(Bot):
                     error_msg = error_data.get("message", "Unknown error")
                     error_type = error_data.get("type", "")
                     http_code = error_data.get("http_code", "")
-                    
+
                     logger.error(f"[MINIMAX] API error: {error_msg} (type: {error_type}, code: {http_code})")
-                    
+
                     yield {
                         "error": True,
                         "message": error_msg,
@@ -649,7 +649,7 @@ class MinimaxBot(Bot):
                                 "name": tool_call_chunk.get("function", {}).get("name", ""),
                                 "input": ""
                             }
-                        
+
                         # Accumulate tool call arguments
                         if "function" in tool_call_chunk and "arguments" in tool_call_chunk["function"]:
                             current_tool_calls[index]["input"] += tool_call_chunk["function"]["arguments"]
@@ -670,12 +670,12 @@ class MinimaxBot(Bot):
 
             # Log complete reasoning_details for debugging
             if current_reasoning:
-                logger.debug(f"[MINIMAX] ===== Complete Reasoning Details =====")
+                logger.debug("[MINIMAX] ===== Complete Reasoning Details =====")
                 for i, reasoning in enumerate(current_reasoning):
                     reasoning_text = reasoning.get("text", "")
                     logger.debug(f"[MINIMAX] Reasoning {i+1} (length={len(reasoning_text)}):")
                     logger.debug(f"[MINIMAX] {reasoning_text}")
-                logger.debug(f"[MINIMAX] ===== End Reasoning Details =====")
+                logger.debug("[MINIMAX] ===== End Reasoning Details =====")
 
             # Yield final chunk with finish_reason (+ usage when reported)
             final_chunk = {

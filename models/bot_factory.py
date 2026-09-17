@@ -74,7 +74,7 @@ def create_bot(bot_type, credential_bot_type=None):
     elif bot_type == const.MOONSHOT:
         from models.moonshot.moonshot_bot import MoonshotBot
         return MoonshotBot()
-    
+
     elif bot_type == const.MiniMax:
         from models.minimax.minimax_bot import MinimaxBot
         return MinimaxBot()

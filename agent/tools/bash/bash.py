@@ -121,7 +121,7 @@ SAFETY:
     def execute(self, args: Dict[str, Any]) -> ToolResult:
         """
         Execute a bash command
-        
+
         :param args: Dictionary containing the command and optional timeout
         :return: Command output or error
         """
@@ -209,7 +209,7 @@ SAFETY:
                 logger.debug(f"[Bash] Process UID: {os.getuid()}")
             else:
                 logger.debug(f"[Bash] Process User: {os.environ.get('USERNAME', os.environ.get('USER', 'unknown'))}")
-            
+
             # Temp script written for long `python -c` commands (Windows only),
             # cleaned up after execution.
             temp_script_path = None
@@ -252,14 +252,14 @@ SAFETY:
                         os.remove(temp_script_path)
                     except OSError:
                         pass
-            
+
             logger.debug(f"[Bash] Exit code: {result.returncode}")
             logger.debug(f"[Bash] Stdout length: {len(result.stdout)}")
             logger.debug(f"[Bash] Stderr length: {len(result.stderr)}")
-            
+
             # Workaround for exit code 126 with no output
             if result.returncode == 126 and not result.stdout and not result.stderr:
-                logger.warning(f"[Bash] Exit 126 with no output - trying alternative execution method")
+                logger.warning("[Bash] Exit 126 with no output - trying alternative execution method")
                 # Try using argument list instead of shell=True
                 import shlex
                 try:
@@ -281,7 +281,7 @@ SAFETY:
                             stderr=decode_output(raw.stderr),
                         )
                         logger.debug(f"[Bash] Retry exit code: {retry_result.returncode}, stdout: {len(retry_result.stdout)}, stderr: {len(retry_result.stderr)}")
-                        
+
                         # If retry succeeded, use retry result
                         if retry_result.returncode == 0 or retry_result.stdout or retry_result.stderr:
                             result = retry_result
@@ -295,7 +295,7 @@ SAFETY:
                                     stdout='{"error": "图片无法解析", "reason": "该图片格式可能不受支持，或图片文件存在问题", "suggestion": "请尝试其他图片"}',
                                     stderr=''
                                 )
-                                logger.info(f"[Bash] Converted exit 126 to user-friendly image error message for vision skill")
+                                logger.info("[Bash] Converted exit 126 to user-friendly image error message for vision skill")
                 except Exception as retry_err:
                     logger.warning(f"[Bash] Retry failed: {retry_err}")
 

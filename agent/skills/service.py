@@ -10,9 +10,8 @@ import os
 import shutil
 import zipfile
 import tempfile
-from typing import Dict, List, Optional
+from typing import List, Optional
 from common.log import logger
-from agent.skills.types import Skill, SkillEntry
 from agent.skills.manager import SkillManager
 
 try:

@@ -17,7 +17,7 @@ class WeChatMPMessage(ChatMessage):
             self.ctype = ContextType.TEXT
             self.content = msg.content
         elif msg.type == "voice":
-            if msg.recognition == None:
+            if msg.recognition is None:
                 self.ctype = ContextType.VOICE
                 self.content = TmpDir().path() + msg.media_id + "." + msg.format  # content直接存临时目录路径
 

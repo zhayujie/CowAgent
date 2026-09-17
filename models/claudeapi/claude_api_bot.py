@@ -1,6 +1,5 @@
 # encoding:utf-8
 
-import base64
 import json
 import re
 import time
@@ -378,7 +377,7 @@ class ClaudeAPIBot(Bot, OpenAIImage):
             tools: List of tool definitions
             stream: Whether to use streaming
             **kwargs: Additional parameters
-            
+
         Returns:
             Formatted response compatible with OpenAI format or generator for streaming
         """
@@ -679,7 +678,7 @@ class ClaudeAPIBot(Bot, OpenAIImage):
                                 md_usage = event.get("usage", {}) or {}
                                 if md_usage.get("output_tokens"):
                                     usage_output_tokens = md_usage.get("output_tokens")
-                                
+
                                 # Message complete - yield tool calls if any
                                 if tool_uses_map:
                                     for idx in sorted(tool_uses_map.keys()):
@@ -705,7 +704,7 @@ class ClaudeAPIBot(Bot, OpenAIImage):
                                                 "finish_reason": stop_reason
                                             }]
                                         }
-                            
+
                             elif event_type == "message_stop":
                                 # Final event - log completion
                                 logger.debug(f"[Claude] Stream completed with stop_reason: {stop_reason}")

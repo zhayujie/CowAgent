@@ -1,6 +1,6 @@
 # encoding:utf-8
 
-import requests, json
+import json
 from models.bot import Bot
 from models.session_manager import SessionManager
 from models.chatgpt.chat_gpt_session import ChatGPTSession
@@ -11,7 +11,6 @@ from config import conf
 from common import const
 import time
 import _thread as thread
-import datetime
 from datetime import datetime
 from wsgiref.handlers import format_date_time
 from urllib.parse import urlencode
@@ -19,7 +18,6 @@ import base64
 import ssl
 import hashlib
 import hmac
-import json
 from time import mktime
 from urllib.parse import urlparse
 import websocket
@@ -86,7 +84,7 @@ class XunFeiBot(Bot):
 
                     reply_map[request_id] += data_item.reply
                     depth += 1
-                except Exception as e:
+                except Exception:
                     depth += 1
                     continue
             t2 = time.time()

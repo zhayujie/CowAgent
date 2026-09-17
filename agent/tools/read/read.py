@@ -79,10 +79,10 @@ def number_lines(text: str, start_line: int) -> str:
 
 class Read(BaseTool):
     """Tool for reading file contents"""
-    
+
     name: str = "read"
     description: str = f"Read or inspect file contents. For text/PDF/Word/Excel/PPT files, returns content (truncated to {DEFAULT_MAX_LINES} lines or {DEFAULT_MAX_BYTES // 1024}KB). Each line is prefixed with its line number as `12|content` - these prefixes are display aids for locating lines and are NOT part of the file, so strip them whenever you reuse the content (in edit's oldText/newText, when writing it elsewhere, or when quoting it to the user). For images/videos/audio, returns metadata only (file info, size, type). Use offset/limit for large text files."
-    
+
     params: dict = {
         "type": "object",
         "properties": {
@@ -105,11 +105,11 @@ class Read(BaseTool):
         },
         "required": ["path"]
     }
-    
+
     def __init__(self, config: dict = None):
         self.config = config or {}
         self.cwd = self.config.get("cwd", os.getcwd())
-        
+
         # File type categories
         self.image_extensions = {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg', '.ico'}
         self.video_extensions = {'.mp4', '.avi', '.mov', '.mkv', '.flv', '.wmv', '.webm', '.m4v'}
@@ -128,11 +128,11 @@ class Read(BaseTool):
             '.sql', '.r', '.m', '.swift', '.kt', '.scala', '.clj', '.erl', '.ex',
             '.dockerfile', '.makefile', '.cmake', '.gradle', '.properties', '.ini', '.conf', '.cfg',
         }
-    
+
     def execute(self, args: Dict[str, Any]) -> ToolResult:
         """
         Execute file read operation
-        
+
         :param args: Contains file path and optional offset/limit parameters
         :return: File content or error message
         """
@@ -145,15 +145,15 @@ class Read(BaseTool):
 
         if not path:
             return ToolResult.fail("Error: path parameter is required")
-        
+
         # Resolve path
         absolute_path = self._resolve_path(path)
-        
+
         # Security check: block credential files and their aliases.
         # See issue #2913 (/proc/self/environ bypass) and #2863 (scope).
         if self._is_credential_path(absolute_path):
             return ToolResult.fail(DENIED_MESSAGE)
-        
+
         # Check if file exists. Both misses below name the tool that answers
         # the question instead - otherwise the model tends to guess at nearby
         # paths and burn turns on more failed reads.
@@ -174,19 +174,19 @@ class Read(BaseTool):
                 f"Error: {path} is a directory, not a file. "
                 f"Use the ls tool to list what is inside it."
             )
-        
+
         # Check if readable
         if not os.access(absolute_path, os.R_OK):
             return ToolResult.fail(f"Error: File is not readable: {path}")
-        
+
         # Check file type
         file_ext = Path(absolute_path).suffix.lower()
         file_size = os.path.getsize(absolute_path)
-        
+
         # Check if image - return metadata for sending
         if file_ext in self.image_extensions:
             return self._read_image(absolute_path, file_ext)
-        
+
         # Check if video/audio/binary/archive - return metadata only
         if file_ext in self.video_extensions:
             return self._return_file_metadata(absolute_path, "video", file_size)
@@ -194,7 +194,7 @@ class Read(BaseTool):
             return self._return_file_metadata(absolute_path, "audio", file_size)
         if file_ext in self.binary_extensions or file_ext in self.archive_extensions:
             return self._return_file_metadata(absolute_path, "binary", file_size)
-        
+
         # Check if PDF
         if file_ext in self.pdf_extensions:
             return self._read_pdf(absolute_path, path, offset, limit, pages)
@@ -205,11 +205,11 @@ class Read(BaseTool):
 
         # Read text file (with truncation for large files)
         return self._read_text(absolute_path, path, offset, limit)
-    
+
     def _resolve_path(self, path: str) -> str:
         """
         Resolve path to absolute path
-        
+
         :param path: Relative or absolute path
         :return: Absolute path
         """
@@ -315,7 +315,7 @@ class Read(BaseTool):
     def _return_file_metadata(self, absolute_path: str, file_type: str, file_size: int) -> ToolResult:
         """
         Return file metadata for non-readable files (video, audio, binary, etc.)
-        
+
         :param absolute_path: Absolute path to the file
         :param file_type: Type of file (video, audio, binary, etc.)
         :param file_size: File size in bytes
@@ -323,7 +323,7 @@ class Read(BaseTool):
         """
         file_name = Path(absolute_path).name
         file_ext = Path(absolute_path).suffix.lower()
-        
+
         # Determine MIME type
         mime_types = {
             # Video
@@ -337,7 +337,7 @@ class Read(BaseTool):
             '.gz': 'application/gzip', '.rar': 'application/x-rar-compressed',
         }
         mime_type = mime_types.get(file_ext, 'application/octet-stream')
-        
+
         result = {
             "type": f"{file_type}_metadata",
             "file_type": file_type,
@@ -348,13 +348,13 @@ class Read(BaseTool):
             "size_formatted": format_size(file_size),
             "message": f"{file_type.capitalize()} 文件: {file_name} ({format_size(file_size)})\n提示: 如果需要发送此文件，请使用 send 工具。"
         }
-        
+
         return ToolResult.success(result)
-    
+
     def _read_image(self, absolute_path: str, file_ext: str) -> ToolResult:
         """
         Read image file - always return metadata only (images should be sent, not read into context)
-        
+
         :param absolute_path: Absolute path to the image file
         :param file_ext: File extension
         :return: Result containing image metadata for sending
@@ -362,7 +362,7 @@ class Read(BaseTool):
         try:
             # Get file size
             file_size = os.path.getsize(absolute_path)
-            
+
             # Determine MIME type
             mime_type_map = {
                 '.jpg': 'image/jpeg',
@@ -372,7 +372,7 @@ class Read(BaseTool):
                 '.webp': 'image/webp'
             }
             mime_type = mime_type_map.get(file_ext, 'image/jpeg')
-            
+
             # Return metadata for images (NOT file_to_send - use send tool to actually send)
             result = {
                 "type": "image_metadata",
@@ -383,16 +383,16 @@ class Read(BaseTool):
                 "size_formatted": format_size(file_size),
                 "message": f"图片文件: {Path(absolute_path).name} ({format_size(file_size)})\n提示: 如果需要发送此图片，请使用 send 工具。"
             }
-            
+
             return ToolResult.success(result)
-            
+
         except Exception as e:
             return ToolResult.fail(f"Error reading image file: {str(e)}")
-    
+
     def _read_text(self, absolute_path: str, display_path: str, offset: int = None, limit: int = None) -> ToolResult:
         """
         Read text file
-        
+
         :param absolute_path: Absolute path to the file
         :param display_path: Path to display
         :param offset: Starting line number (1-indexed)
@@ -403,7 +403,7 @@ class Read(BaseTool):
             # Check file size first
             file_size = os.path.getsize(absolute_path)
             MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
-            
+
             if file_size > MAX_FILE_SIZE:
                 # File too large, return metadata only
                 return ToolResult.success({
@@ -414,7 +414,7 @@ class Read(BaseTool):
                     "size_formatted": format_size(file_size),
                     "message": f"文件过大 ({format_size(file_size)} > 50MB)，无法读取内容。文件路径: {absolute_path}"
                 })
-            
+
             # Read file (utf-8-sig strips BOM automatically on Windows)
             # Note: Truncation is unified via truncate_head (DEFAULT_MAX_LINES / DEFAULT_MAX_BYTES)
             # so that offset/limit can paginate the entire file correctly.
@@ -430,12 +430,12 @@ class Read(BaseTool):
             # Record the read so edit/write can warn if the file changes later.
             note_read(absolute_path)
             return ToolResult.success(result)
-            
+
         except UnicodeDecodeError:
             return ToolResult.fail(f"Error: File is not a valid text file (encoding error): {display_path}")
         except Exception as e:
             return ToolResult.fail(f"Error reading file: {str(e)}")
-    
+
     def _read_office(self, absolute_path: str, display_path: str, file_ext: str,
                      offset: int = None, limit: int = None) -> ToolResult:
         """Read Office documents (.docx, .xlsx, .pptx) using python-docx / openpyxl / python-pptx."""
@@ -512,7 +512,7 @@ class Read(BaseTool):
                   limit: int = None, pages: str = None) -> ToolResult:
         """
         Read PDF file content
-        
+
         :param absolute_path: Absolute path to the file
         :param display_path: Path to display
         :param offset: Starting line number (1-indexed)
@@ -527,7 +527,7 @@ class Read(BaseTool):
                 return ToolResult.fail(
                     "Error: pypdf library not installed. Install with: pip install pypdf"
                 )
-            
+
             # Read PDF
             reader = PdfReader(absolute_path)
             total_pages = len(reader.pages)
@@ -573,6 +573,6 @@ class Read(BaseTool):
 
             note_read(absolute_path)
             return ToolResult.success(result)
-            
+
         except Exception as e:
             return ToolResult.fail(f"Error reading PDF file: {str(e)}")

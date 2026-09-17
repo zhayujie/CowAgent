@@ -75,7 +75,6 @@ class HeartbeatWatchdogTest(unittest.TestCase):
     """
 
     def test_missing_acks_force_the_socket_closed(self):
-        from channel.qq import qq_channel
 
         ch = _make_channel()
         ch._connected = True

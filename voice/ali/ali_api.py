@@ -94,7 +94,7 @@ def speech_to_text_aliyun(url, audioContent, appkey, token):
 
     if enableVoiceDetection :
         request = request + '&enable_voice_detection=' + 'true'
-        
+
     host = 'nls-gateway-cn-shanghai.aliyuncs.com'
 
     # 设置HTTPS请求头部

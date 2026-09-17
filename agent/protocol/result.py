@@ -3,9 +3,8 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import List, Dict, Any, Optional
+from typing import Dict, Any, Optional
 
-from agent.protocol.task import Task, TaskStatus
 
 
 class AgentActionType(Enum):
@@ -19,7 +18,7 @@ class AgentActionType(Enum):
 class ToolResult:
     """
     Represents the result of a tool use.
-    
+
     Attributes:
         tool_name: Name of the tool used
         input_params: Parameters passed to the tool
@@ -40,7 +39,7 @@ class ToolResult:
 class AgentAction:
     """
     Represents an action taken by an agent.
-    
+
     Attributes:
         id: Unique identifier for the action
         agent_id: ID of the agent that performed the action

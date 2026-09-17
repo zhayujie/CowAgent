@@ -195,7 +195,7 @@ def _parse_tool_args(args_str: str, finish_reason: Optional[str],
 class AgentStreamExecutor:
     """
     Agent Stream Executor
-    
+
     Handles multi-turn reasoning loop based on tool-call:
     1. LLM generates response (may include tool calls)
     2. Execute tools
@@ -219,7 +219,7 @@ class AgentStreamExecutor:
     ):
         """
         Initialize stream executor
-        
+
         Args:
             agent: Agent instance (for accessing context)
             model: LLM model
@@ -254,10 +254,10 @@ class AgentStreamExecutor:
 
         # Message history - use provided messages or create new list
         self.messages = messages if messages is not None else []
-        
+
         # Tool failure tracking for retry protection
         self.tool_failure_history = []  # List of (tool_name, args_hash, success) tuples
-        
+
         # Track files to send (populated by read tool)
         self.files_to_send = []  # List of file metadata dicts
 
@@ -598,11 +598,11 @@ class AgentStreamExecutor:
         # Sort keys for consistent hashing
         args_str = json.dumps(args, sort_keys=True, ensure_ascii=False)
         return hashlib.md5(args_str.encode()).hexdigest()[:8]
-    
+
     def _check_consecutive_failures(self, tool_name: str, args: dict) -> Tuple[bool, str, bool]:
         """
         Check if tool has failed too many times consecutively or called repeatedly with same args
-        
+
         Returns:
             (should_stop, reason, is_critical)
             - should_stop: Whether to stop tool execution
@@ -610,7 +610,7 @@ class AgentStreamExecutor:
             - is_critical: Whether to abort entire conversation (True for 8+ failures)
         """
         args_hash = self._hash_args(args)
-        
+
         # Count consecutive calls (both success and failure) for same tool + args
         # This catches infinite loops where tool succeeds but LLM keeps calling it
         same_args_calls = 0
@@ -619,11 +619,11 @@ class AgentStreamExecutor:
                 same_args_calls += 1
             else:
                 break  # Different tool or args, stop counting
-        
+
         # Stop at 5 consecutive calls with same args (whether success or failure)
         if same_args_calls >= 5:
             return True, f"工具 '{tool_name}' 使用相同参数已被调用 {same_args_calls} 次，停止执行以防止无限循环。如果需要查看配置，结果已在之前的调用中返回。", False
-        
+
         # Count consecutive failures for same tool + args
         same_args_failures = 0
         for name, ahash, success in reversed(self.tool_failure_history):
@@ -634,10 +634,10 @@ class AgentStreamExecutor:
                     break  # Stop at first success
             else:
                 break  # Different tool or args, stop counting
-        
+
         if same_args_failures >= 3:
             return True, f"工具 '{tool_name}' 使用相同参数连续失败 {same_args_failures} 次，停止执行以防止无限循环", False
-        
+
         # Count consecutive failures for same tool (any args)
         same_tool_failures = 0
         for name, ahash, success in reversed(self.tool_failure_history):
@@ -648,20 +648,20 @@ class AgentStreamExecutor:
                     break  # Stop at first success
             else:
                 break  # Different tool, stop counting
-        
+
         # Hard stop at 8 failures - abort with critical message
         if same_tool_failures >= 8:
             return True, _t(
                 "抱歉，我没能完成这个任务。可能是我理解有误或者当前方法不太合适。\n\n建议你：\n• 换个方式描述需求试试\n• 把任务拆分成更小的步骤\n• 或者换个思路来解决",
                 "Sorry, I couldn't complete this task. I may have misunderstood, or my current approach isn't quite right.\n\nYou could try:\n• Rephrasing your request\n• Breaking the task into smaller steps\n• Taking a different approach",
             ), True
-        
+
         # Warning at 6 failures
         if same_tool_failures >= 6:
             return True, f"工具 '{tool_name}' 连续失败 {same_tool_failures} 次（使用不同参数），停止执行以防止无限循环", False
-        
+
         return False, "", False
-    
+
     def _record_tool_result(self, tool_name: str, args: dict, success: bool):
         """Record tool execution result for failure tracking"""
         args_hash = self._hash_args(args)
@@ -673,10 +673,10 @@ class AgentStreamExecutor:
     def run_stream(self, user_message: str) -> str:
         """
         Execute streaming reasoning loop
-        
+
         Args:
             user_message: User message
-            
+
         Returns:
             Final response text
         """
@@ -698,7 +698,7 @@ class AgentStreamExecutor:
             user_message[:500] + f" …(+{len(user_message) - 500} chars)"
         )
         logger.info(f"🤖 {self.model.model}{thinking_label}{effort_label} | 👤 {_log_msg}")
-        
+
         # Add user message (Claude format - use content blocks for consistency)
         self.messages.append({
             "role": "user",
@@ -804,16 +804,16 @@ class AgentStreamExecutor:
                 if not tool_calls:
                     # 检查是否返回了空响应
                     if not assistant_msg:
-                        logger.warning(f"[Agent] LLM returned empty response after retry (no content and no tool calls)")
-                        logger.info(f"[Agent] This usually happens when LLM thinks the task is complete after tool execution")
-                        
+                        logger.warning("[Agent] LLM returned empty response after retry (no content and no tool calls)")
+                        logger.info("[Agent] This usually happens when LLM thinks the task is complete after tool execution")
+
                         # 如果之前有工具调用，强制要求 LLM 生成文本回复
                         if turn > 1:
-                            logger.info(f"[Agent] Requesting explicit response from LLM...")
-                            
+                            logger.info("[Agent] Requesting explicit response from LLM...")
+
                             # Remember position so we can remove the injected prompt later
                             prompt_insert_idx = len(self.messages)
-                            
+
                             # 添加一条消息，明确要求回复用户
                             self.messages.append({
                                 "role": "user",
@@ -822,11 +822,11 @@ class AgentStreamExecutor:
                                     "text": self._explicit_response_prompt()
                                 }]
                             })
-                            
+
                             # 再调用一次 LLM
                             assistant_msg, tool_calls, stop_reason = self._call_llm_stream(retry_on_empty=False)
                             final_response = assistant_msg
-                            
+
                             # Remove the injected prompt from history so it doesn't
                             # appear as a user message in persisted conversations.
                             # _call_llm_stream may have appended an assistant message
@@ -835,24 +835,24 @@ class AgentStreamExecutor:
                                     and self.messages[prompt_insert_idx].get("role") == "user"):
                                 self.messages.pop(prompt_insert_idx)
                                 logger.debug("[Agent] Removed injected explicit-response prompt from message history")
-                            
+
                             # If LLM responded with tool_calls instead of text, fall through
                             # to the tool execution path below (don't break the loop).
                             if tool_calls:
                                 logger.info(
-                                    f"[Agent] LLM returned tool_calls in explicit-response retry, "
-                                    f"continuing to execute tools instead of breaking"
+                                    "[Agent] LLM returned tool_calls in explicit-response retry, "
+                                    "continuing to execute tools instead of breaking"
                                 )
                             elif not assistant_msg:
                                 # Still empty (no text and no tool_calls): use fallback
-                                logger.warning(f"[Agent] Still empty after explicit request")
+                                logger.warning("[Agent] Still empty after explicit request")
                                 final_response = self._empty_response_fallback()
                         else:
                             # First-turn empty reply, fall back directly
                             final_response = self._empty_response_fallback()
                     else:
                         logger.info(f"💭 {assistant_msg[:150]}{'...' if len(assistant_msg) > 150 else ''}")
-                    
+
                     # If the explicit-response retry produced tool_calls, skip the break
                     # and continue down to the tool execution branch in this same iteration.
                     if not tool_calls:
@@ -924,7 +924,7 @@ class AgentStreamExecutor:
                         else:
                             result = self._execute_tool(tool_call)
                         tool_results.append(result)
-                        
+
                         # Debug: Check if tool is being called repeatedly with same args
                         if turn > 2:
                             # Check last N tool calls for repeats
@@ -937,7 +937,7 @@ class AgentStreamExecutor:
                                     f"⚠️  Tool '{tool_call['name']}' has been called {repeat_count} times "
                                     f"with same arguments. This may indicate a loop."
                                 )
-                        
+
                         # Check if this is a file to send
                         if result.get("status") == "success" and isinstance(result.get("result"), dict):
                             result_data = result.get("result")
@@ -948,13 +948,13 @@ class AgentStreamExecutor:
 
                         # Surface user-facing files written by the agent
                         self._maybe_emit_artifact(tool_call, result)
-                        
+
                         # Check for critical error - abort entire conversation
                         if result.get("status") == "critical_error":
-                            logger.error(f"💥 Fatal error detected, aborting conversation")
+                            logger.error("💥 Fatal error detected, aborting conversation")
                             final_response = result.get('result') or _t("任务执行失败", "Task execution failed")
                             return final_response
-                        
+
                         # Log tool result in compact format
                         status_emoji = "✅" if result.get("status") == "success" else "❌"
                         result_data = result.get('result', '')
@@ -996,13 +996,13 @@ class AgentStreamExecutor:
                             "tool_use_id": tool_call["id"],
                             "content": result_content
                         }
-                        
+
                         # Add is_error field for Claude API (helps model understand failures)
                         if is_error:
                             tool_result_block["is_error"] = True
-                        
+
                         tool_result_blocks.append(tool_result_block)
-                
+
                 finally:
                     # CRITICAL: Always add tool_result to maintain message history integrity
                     # Even if tool execution fails, we must add error results to match tool_use
@@ -1012,19 +1012,19 @@ class AgentStreamExecutor:
                             "role": "user",
                             "content": tool_result_blocks
                         })
-                        
+
                         # Detect potential infinite loop: same tool called multiple times with success
                         # If detected, add a hint to LLM to stop calling tools and provide response
                         if turn >= 3 and len(tool_calls) > 0:
                             tool_name = tool_calls[0]["name"]
                             args_hash = self._hash_args(tool_calls[0]["arguments"])
-                            
+
                             # Count recent successful calls with same tool+args
                             recent_success_count = 0
                             for name, ahash, success in reversed(self.tool_failure_history[-10:]):
                                 if name == tool_name and ahash == args_hash and success:
                                     recent_success_count += 1
-                            
+
                             # If tool was called successfully 3+ times with same args, add hint to stop loop
                             if recent_success_count >= 3:
                                 logger.warning(
@@ -1066,13 +1066,13 @@ class AgentStreamExecutor:
             if turn >= self.max_turns:
                 logger.warning(f"⚠️  Reached max decision step limit: {self.max_turns}")
                 self._drain_and_close_steering()
-                
+
                 # Force model to summarize without tool calls
-                logger.info(f"[Agent] Requesting summary from LLM after reaching max steps...")
-                
+                logger.info("[Agent] Requesting summary from LLM after reaching max steps...")
+
                 # Remember position before injecting the prompt so we can remove it later
                 prompt_insert_idx = len(self.messages)
-                
+
                 # Add a temporary prompt to force summary
                 self.messages.append({
                     "role": "user",
@@ -1081,7 +1081,7 @@ class AgentStreamExecutor:
                         "text": f"你已经执行了{turn}个决策步骤，达到了单次运行的最大步数限制。请总结一下你目前的执行过程和结果，告诉用户当前的进展情况。不要再调用工具，直接用文字回复。"
                     }]
                 })
-                
+
                 # Call LLM one more time to get summary (without retry to avoid loops)
                 try:
                     summary_response, summary_tools, _ = self._call_llm_stream(retry_on_empty=False)
@@ -1464,17 +1464,17 @@ class AgentStreamExecutor:
                         error_msg = chunk.get("message", str(error_data))
                         error_code = ""
                         error_type = ""
-                    
+
                     status_code = chunk.get("status_code", "N/A")
-                    
+
                     # Log error with all available information
-                    logger.error(f"🔴 Stream API Error:")
+                    logger.error("🔴 Stream API Error:")
                     logger.error(f"   Message: {error_msg}")
                     logger.error(f"   Status Code: {status_code}")
                     logger.error(f"   Error Code: {error_code}")
                     logger.error(f"   Error Type: {error_type}")
                     logger.error(f"   Full chunk: {chunk}")
-                    
+
                     # Check if this is a context overflow error. Use the single
                     # shared classifier (_is_context_overflow) so the markers stay
                     # in one place and never drift. Deliberately NOT a bare
@@ -1505,7 +1505,7 @@ class AgentStreamExecutor:
                 if isinstance(chunk, dict) and chunk.get("choices"):
                     choice = chunk["choices"][0]
                     delta = choice.get("delta", {})
-                    
+
                     # Capture finish_reason if present
                     finish_reason = choice.get("finish_reason")
                     if finish_reason:
@@ -1572,7 +1572,7 @@ class AgentStreamExecutor:
         except Exception as e:
             error_str = str(e)
             error_str_lower = error_str.lower()
-            
+
             # Context overflow is non-retryable and needs the working context reset.
             is_context_overflow = _is_context_overflow(error_str_lower)
 
@@ -1580,7 +1580,7 @@ class AgentStreamExecutor:
             # MiniMax's "tool result's tool id(...) not found" (code 2013) is
             # covered by the "tool result" / "tool id" markers.
             is_message_format_error = _is_message_format_error(error_str_lower)
-            
+
             if is_context_overflow or is_message_format_error:
                 error_type = "context overflow" if is_context_overflow else "message format error"
                 logger.error(f"💥 {error_type} detected: {e}")
@@ -1629,17 +1629,17 @@ class AgentStreamExecutor:
                         "抱歉，之前的对话出现了问题。我已重置当前上下文（历史记录仍然保留），请重新发送你的消息。",
                         "Sorry, something went wrong with the earlier conversation. I've reset the current context (your history is kept) — please send your message again.",
                     ))
-            
+
             # Check if error is rate limit (429)
             is_rate_limit = '429' in error_str_lower or 'rate limit' in error_str_lower
-            
+
             # Check if error is retryable (timeout, connection, server busy, etc.)
             is_retryable = any(keyword in error_str_lower for keyword in [
-                'timeout', 'timed out', 'connection', 'network', 
+                'timeout', 'timed out', 'connection', 'network',
                 'rate limit', 'overloaded', 'unavailable', 'busy', 'retry',
                 '429', '500', '502', '503', '504', '512'
             ])
-            
+
             # A fallback link gets a single attempt. Giving every link the
             # primary's full retry budget would multiply the wait by the chain
             # length — three rate-limited links alone would sleep past the web
@@ -1683,12 +1683,12 @@ class AgentStreamExecutor:
                     wait_time = min(30 + (retry_count * 15), RATE_LIMIT_MAX_WAIT)  # 30s..60s
                 else:
                     wait_time = (retry_count + 1) * 2  # 2s, 4s, 6s for other errors
-                
+
                 logger.warning(f"⚠️ LLM API error (attempt {retry_count + 1}/{link_retries}): {e}")
                 logger.info(f"Retrying in {wait_time}s...")
                 time.sleep(wait_time)
                 return self._call_llm_stream(
-                    retry_on_empty=retry_on_empty, 
+                    retry_on_empty=retry_on_empty,
                     retry_count=retry_count + 1,
                     max_retries=max_retries,
                     _overflow_stage=_overflow_stage,
@@ -1834,7 +1834,7 @@ class AgentStreamExecutor:
             })
             # Retry without retry flag to avoid infinite loop
             return self._call_llm_stream(
-                retry_on_empty=False, 
+                retry_on_empty=False,
                 retry_count=retry_count,
                 max_retries=max_retries,
                 _overflow_stage=_overflow_stage,
@@ -1844,7 +1844,7 @@ class AgentStreamExecutor:
 
         # Filter full_content one more time (in case tags were split across chunks)
         full_content = self._filter_think_tags(full_content)
-        
+
         # Add assistant message to history (Claude format uses content blocks)
         assistant_msg = {"role": "assistant", "content": []}
 
@@ -1875,7 +1875,7 @@ class AgentStreamExecutor:
                     "name": tc.get("name", ""),
                     "input": tc.get("arguments", {})
                 })
-        
+
         if gemini_raw_parts:
             assistant_msg["_gemini_raw_parts"] = gemini_raw_parts
 
@@ -2018,7 +2018,7 @@ class AgentStreamExecutor:
         if should_stop:
             logger.error(f"🛑 {stop_reason}")
             self._record_tool_result(tool_name, arguments, False)
-            
+
             if is_critical:
                 # Critical failure - abort entire conversation
                 result = {
@@ -2217,22 +2217,22 @@ class AgentStreamExecutor:
     def _identify_complete_turns(self) -> List[Dict]:
         """
         识别完整的对话轮次
-        
+
         一个完整轮次包括：
         1. 用户消息（text）
         2. AI 回复（可能包含 tool_use）
         3. 工具结果（tool_result，如果有）
         4. 后续 AI 回复（如果有）
-        
+
         Returns:
             List of turns, each turn is a dict with 'messages' list
         """
         return identify_complete_turns(self.messages)
-    
+
     def _estimate_turn_tokens(self, turn: Dict) -> int:
         """估算一个轮次的 tokens"""
         return sum(
-            self.agent._estimate_message_tokens(msg) 
+            self.agent._estimate_message_tokens(msg)
             for msg in turn['messages']
         )
 
@@ -2468,15 +2468,15 @@ class AgentStreamExecutor:
 
         # Step 1: 识别完整轮次
         turns = self._identify_complete_turns()
-        
+
         if not turns:
             return
-        
+
         # Step 2: 轮次限制 - 超出时移除前一半，保留后一半
         if len(turns) > self.max_context_turns:
             removed_count = len(turns) // 2
             keep_count = len(turns) - removed_count
-            
+
             discarded_turns = turns[:removed_count]
             turns = turns[-keep_count:]
 
@@ -2521,21 +2521,21 @@ class AgentStreamExecutor:
 
         # Estimate system prompt tokens
         system_tokens = self.agent._estimate_message_tokens({"role": "system", "content": self.system_prompt})
-        available_tokens = max_tokens - system_tokens
+        max_tokens - system_tokens
 
         # Calculate current tokens
         current_tokens = sum(self._estimate_turn_tokens(turn) for turn in turns)
-        
+
         # If under limit, reconstruct messages and return
         if current_tokens + system_tokens <= max_tokens:
             # Reconstruct message list from turns
             new_messages = []
             for turn in turns:
                 new_messages.extend(turn['messages'])
-            
+
             old_count = len(self.messages)
             self.messages = new_messages
-            
+
             # Log if we removed messages due to turn limit
             if old_count > len(self.messages):
                 logger.info(f"   Rebuilt message list: {old_count} -> {len(self.messages)} messages")
@@ -2620,7 +2620,7 @@ class AgentStreamExecutor:
     def _prepare_messages(self) -> List[Dict[str, Any]]:
         """
         Prepare messages to send to LLM
-        
+
         Note: For Claude API, system prompt should be passed separately via system parameter,
         not as a message. The AgentLLMModel will handle this.
         """

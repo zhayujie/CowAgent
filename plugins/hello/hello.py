@@ -69,7 +69,7 @@ class Hello(Plugin):
             if not self.config or not self.config.get("use_character_desc"):
                 e_context["context"]["generate_breaked_by"] = EventAction.BREAK
             return
-        
+
         if e_context["context"].type == ContextType.EXIT_GROUP:
             if conf().get("group_chat_exit_group"):
                 e_context["context"].type = ContextType.TEXT
@@ -78,7 +78,7 @@ class Hello(Plugin):
                 return
             e_context.action = EventAction.BREAK
             return
-            
+
         if e_context["context"].type == ContextType.PATPAT:
             e_context["context"].type = ContextType.TEXT
             e_context["context"].content = self.patpat_prompt

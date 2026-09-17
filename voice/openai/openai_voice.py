@@ -1,7 +1,6 @@
 """
 google voice service
 """
-import json
 
 from bridge.reply import Reply, ReplyType
 from common.log import logger
@@ -9,7 +8,8 @@ from config import conf
 from voice.voice import Voice
 import requests
 from common import const
-import datetime, random
+import datetime
+import random
 
 class OpenaiVoice(Voice):
     def __init__(self):
@@ -71,7 +71,7 @@ class OpenaiVoice(Voice):
             logger.debug(f"[OPENAI] text_to_Voice file_name={file_name}, input={text}")
             with open(file_name, 'wb') as f:
                 f.write(response.content)
-            logger.info(f"[OPENAI] text_to_Voice success")
+            logger.info("[OPENAI] text_to_Voice success")
             reply = Reply(ReplyType.VOICE, file_name)
         except Exception as e:
             logger.error(e)

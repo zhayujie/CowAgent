@@ -15,13 +15,11 @@
 #  错误码链接：https://www.xfyun.cn/document/error-code （code返回错误码时必看）
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 import websocket
-import datetime
 import hashlib
 import base64
 import hmac
 import json
 from urllib.parse import urlencode
-import time
 import ssl
 from wsgiref.handlers import format_date_time
 from datetime import datetime
@@ -150,7 +148,7 @@ def on_close(ws):
 
 def xunfei_tts(APPID, APIKey, APISecret,BusinessArgsTTS, Text, OutFile):
     global outfile
-    global wsParam 
+    global wsParam
     outfile = OutFile
     wsParam1 = Ws_Param(APPID,APIKey,APISecret,BusinessArgsTTS,Text)
     wsParam = wsParam1
@@ -160,4 +158,4 @@ def xunfei_tts(APPID, APIKey, APISecret,BusinessArgsTTS, Text, OutFile):
     ws.on_open = on_open
     ws.run_forever(sslopt={"cert_reqs": ssl.CERT_NONE})
     return outfile
-     
+

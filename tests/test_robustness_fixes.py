@@ -10,7 +10,6 @@ Unit tests for robustness fixes:
 import io
 import os
 import sys
-import types
 import unittest
 from unittest.mock import MagicMock
 

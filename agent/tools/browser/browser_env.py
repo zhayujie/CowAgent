@@ -22,7 +22,6 @@ import sys
 import shutil
 from typing import Optional, Dict, Any
 
-from common.log import logger
 
 
 # Playwright browser channels we accept for the "system-chrome" mode, in

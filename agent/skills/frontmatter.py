@@ -11,18 +11,18 @@ from agent.skills.types import SkillMetadata, SkillInstallSpec
 def parse_frontmatter(content: str) -> Dict[str, Any]:
     """
     Parse YAML-style frontmatter from markdown content.
-    
+
     Returns a dictionary of frontmatter fields.
     """
     frontmatter = {}
-    
+
     # Match frontmatter block between --- markers
     match = re.match(r'^---\s*\n(.*?)\n---\s*\n', content, re.DOTALL)
     if not match:
         return frontmatter
-    
+
     frontmatter_text = match.group(1)
-    
+
     # Try to use PyYAML for proper YAML parsing
     try:
         import yaml
@@ -36,19 +36,19 @@ def parse_frontmatter(content: str) -> Dict[str, Any]:
     except Exception:
         # If YAML parsing fails, fall back to simple parsing
         pass
-    
+
     # Simple YAML-like parsing (supports key: value format only)
     # This is a fallback for when PyYAML is not available
     for line in frontmatter_text.split('\n'):
         line = line.strip()
         if not line or line.startswith('#'):
             continue
-        
+
         if ':' in line:
             key, value = line.split(':', 1)
             key = key.strip()
             value = value.strip()
-            
+
             # Try to parse as JSON if it looks like JSON
             if value.startswith('{') or value.startswith('['):
                 try:
@@ -61,35 +61,35 @@ def parse_frontmatter(content: str) -> Dict[str, Any]:
             # Parse numbers
             elif value.isdigit():
                 value = int(value)
-            
+
             frontmatter[key] = value
-    
+
     return frontmatter
 
 
 def parse_metadata(frontmatter: Dict[str, Any]) -> Optional[SkillMetadata]:
     """
     Parse skill metadata from frontmatter.
-    
+
     Looks for 'metadata' field containing JSON with skill configuration.
     """
     metadata_raw = frontmatter.get('metadata')
     if not metadata_raw:
         return None
-    
+
     # If it's a string, try to parse as JSON
     if isinstance(metadata_raw, str):
         try:
             metadata_raw = json.loads(metadata_raw)
         except json.JSONDecodeError:
             return None
-    
+
     if not isinstance(metadata_raw, dict):
         return None
-    
+
     # Unwrap nested namespace (e.g. {"openclaw": {...}} or {"cowagent": {...}})
     meta_obj = _unwrap_metadata_namespace(metadata_raw)
-    
+
     # Parse install specs
     install_specs = []
     install_raw = meta_obj.get('install', [])
@@ -97,11 +97,11 @@ def parse_metadata(frontmatter: Dict[str, Any]) -> Optional[SkillMetadata]:
         for spec_raw in install_raw:
             if not isinstance(spec_raw, dict):
                 continue
-            
+
             kind = spec_raw.get('kind', spec_raw.get('type', '')).lower()
             if not kind:
                 continue
-            
+
             spec = SkillInstallSpec(
                 kind=kind,
                 id=spec_raw.get('id'),
@@ -118,14 +118,14 @@ def parse_metadata(frontmatter: Dict[str, Any]) -> Optional[SkillMetadata]:
                 target_dir=spec_raw.get('targetDir'),
             )
             install_specs.append(spec)
-    
+
     # Parse requires
     requires = {}
     requires_raw = meta_obj.get('requires', {})
     if isinstance(requires_raw, dict):
         for key, value in requires_raw.items():
             requires[key] = _normalize_string_list(value)
-    
+
     return SkillMetadata(
         always=meta_obj.get('always', False),
         default_enabled=meta_obj.get('default_enabled', True),
@@ -162,13 +162,13 @@ def _normalize_string_list(value: Any) -> List[str]:
     """Normalize a value to a list of strings."""
     if not value:
         return []
-    
+
     if isinstance(value, list):
         return [str(v).strip() for v in value if v]
-    
+
     if isinstance(value, str):
         return [v.strip() for v in value.split(',') if v.strip()]
-    
+
     return []
 
 
@@ -176,13 +176,13 @@ def parse_boolean_value(value: Optional[str], default: bool = False) -> bool:
     """Parse a boolean value from frontmatter."""
     if value is None:
         return default
-    
+
     if isinstance(value, bool):
         return value
-    
+
     if isinstance(value, str):
         return value.lower() in ('true', '1', 'yes', 'on')
-    
+
     return default
 
 

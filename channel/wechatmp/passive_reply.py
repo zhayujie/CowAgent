@@ -27,13 +27,15 @@ class Query:
             request_time = time.time()
             channel = WechatMPChannel()
             message = web.data()
-            encrypt_func = lambda x: x
+            def encrypt_func(x):
+                return x
             if args.get("encrypt_type") == "aes":
                 logger.debug("[wechatmp] Receive encrypted post data:\n" + message.decode("utf-8"))
                 if not channel.crypto:
                     raise Exception("Crypto not initialized, Please set wechatmp_aes_key in config.json")
                 message = channel.crypto.decrypt_message(message, args.msg_signature, args.timestamp, args.nonce)
-                encrypt_func = lambda x: channel.crypto.encrypt_message(x, args.nonce, args.timestamp)
+                def encrypt_func(x):
+                    return channel.crypto.encrypt_message(x, args.nonce, args.timestamp)
             else:
                 logger.debug("[wechatmp] Receive post data:\n" + message.decode("utf-8"))
             msg = parse_message(message)
@@ -81,7 +83,7 @@ class Query:
                                     请跟我说话吧。"""
                                 )
                         else:
-                            logger.error(f"[wechatmp] unknown error")
+                            logger.error("[wechatmp] unknown error")
                             reply_text = textwrap.dedent(
                                 """\
                                 未知错误，请稍后再试"""

@@ -10,7 +10,6 @@ parent SDK, which is out of scope for a unit test.
 import sys
 import types
 
-import pytest
 
 
 # The remote client module imports an optional runtime SDK that is not present

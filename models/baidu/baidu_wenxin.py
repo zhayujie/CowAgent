@@ -104,9 +104,7 @@ class BaiduWenxinBot(Bot):
                 "content": res_content,
             }
         except Exception as e:
-            need_retry = retry_count < 2
             logger.warn("[BAIDU] Exception: {}".format(e))
-            need_retry = False
             self.sessions.clear_session(session.session_id)
             result = {"total_tokens": 0, "completion_tokens": 0, "content": "出错了: {}".format(e)}
             return result

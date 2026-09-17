@@ -194,7 +194,7 @@ def sanitize_claude_messages(messages: List[Dict]) -> int:
                 isinstance(b, dict) and b.get("type") == "tool_use"
                 and b.get("id") in bad_use for b in content
             ):
-                logger.warning(f"⚠️ Removing assistant msg with unmatched tool_use")
+                logger.warning("⚠️ Removing assistant msg with unmatched tool_use")
                 messages.pop(i)
                 pass_removed += 1
                 continue
@@ -206,7 +206,7 @@ def sanitize_claude_messages(messages: List[Dict]) -> int:
                 )
                 if has_bad:
                     if not _has_block_type(content, "text"):
-                        logger.warning(f"⚠️ Removing user msg with unmatched tool_result")
+                        logger.warning("⚠️ Removing user msg with unmatched tool_result")
                         messages.pop(i)
                         pass_removed += 1
                         continue

@@ -30,10 +30,7 @@ import time
 import uuid
 import re
 from abc import ABC, abstractmethod
-from pathlib import Path
 from urllib.request import urlopen, Request
-from urllib.parse import urlparse
-from urllib.error import URLError
 
 try:
     import requests

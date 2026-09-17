@@ -60,7 +60,6 @@ def _is_pid_alive(pid: int) -> bool:
 def _kill_pid(pid: int, force: bool = False):
     """Terminate a process by PID (cross-platform)."""
     if _IS_WIN:
-        flag = "/F" if force else ""
         cmd = ["taskkill"]
         if force:
             cmd.append("/F")
@@ -347,7 +346,7 @@ def update(ctx):
             "timeout /t 3 /nobreak >nul",
         ]
         if os.path.exists(req_file):
-            lines.append(f'echo Installing dependencies...')
+            lines.append('echo Installing dependencies...')
             lines.append(f'"{python}" -m pip install -r requirements.txt -q')
         lines += [
             "echo Reinstalling cow CLI...",

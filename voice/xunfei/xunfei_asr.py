@@ -1,7 +1,7 @@
 # -*- coding:utf-8 -*-
 #
-#  Author: njnuko 
-#  Email: njnuko@163.com 
+#  Author: njnuko
+#  Email: njnuko@163.com
 #
 #  这个文档是基于官方的demo来改的，固体官方demo文档请参考官网
 #
@@ -16,7 +16,6 @@
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 import websocket
-import datetime
 import hashlib
 import base64
 import hmac
@@ -28,7 +27,6 @@ from wsgiref.handlers import format_date_time
 from datetime import datetime
 from time import mktime
 import _thread as thread
-import os
 import wave
 
 
@@ -161,7 +159,7 @@ def on_open(ws):
                 if status == STATUS_FIRST_FRAME:
                     d = {"common": wsParam.CommonArgs,
                          "business": wsParam.BusinessArgs,
-                         "data": {"status": 0, "format": "audio/L16;rate=16000","audio": str(base64.b64encode(buf), 'utf-8'), "encoding": "raw"}} 
+                         "data": {"status": 0, "format": "audio/L16;rate=16000","audio": str(base64.b64encode(buf), 'utf-8'), "encoding": "raw"}}
                     d = json.dumps(d)
                     ws.send(d)
                     status = STATUS_CONTINUE_FRAME
@@ -206,4 +204,4 @@ def xunfei_asr(APPID,APISecret,APIKey,BusinessArgsASR,AudioFile):
         whole_words += whole_dict[i]
     return whole_words
 
-     
+

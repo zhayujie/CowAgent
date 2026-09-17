@@ -24,7 +24,9 @@ class ContextType(Enum):
 
 
 class Context:
-    def __init__(self, type: ContextType = None, content=None, kwargs=dict()):
+    def __init__(self, type: ContextType = None, content=None, kwargs=None):
+        if kwargs is None:
+            kwargs = dict()
         self.type = type
         self.content = content
         self.kwargs = kwargs

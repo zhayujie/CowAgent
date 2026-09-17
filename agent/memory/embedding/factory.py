@@ -13,7 +13,6 @@ Two paths:
 """
 
 import os
-from typing import Optional
 
 from common.log import logger
 

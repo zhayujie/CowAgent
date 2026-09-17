@@ -1,5 +1,4 @@
 import web
-from wechatpy.crypto import WeChatCrypto
 from wechatpy.exceptions import InvalidSignatureException
 from wechatpy.utils import check_signature
 

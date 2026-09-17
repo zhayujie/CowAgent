@@ -80,16 +80,16 @@ _PHRASE_MAP = {
 
 def to_traditional(text):
     """Convert Simplified Chinese text to Traditional Chinese.
-    
+
     Uses a two-tier approach:
     1. Phrase-level mapping for project-specific terms (e.g., "配置" → "設定")
     2. OpenCC library (opencc-python-reimplemented) if available for high-quality
        context-aware conversion, with fallback to built-in character mapping
-    
+
     This function is designed to work without external dependencies. If OpenCC
     is not installed, it falls back to a curated 450-character mapping table
     plus 30+ technical term mappings that cover common project vocabulary.
-    
+
     For production use with zh-Hant language, installing OpenCC is recommended:
         pip install opencc-python-reimplemented
     """

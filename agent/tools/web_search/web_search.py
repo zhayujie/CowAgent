@@ -71,7 +71,7 @@ PROVIDER_LABELS = {
 
 def _tools_web_search_conf() -> dict:
     """Return the tools.web_search config block (dict-like)."""
-    
+
     tools_cfg = conf().get("tools") or {}
     if not isinstance(tools_cfg, dict):
         return {}

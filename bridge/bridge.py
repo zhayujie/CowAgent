@@ -26,13 +26,13 @@ class Bridge(object):
             self.btype["chat"] = bot_type
         else:
             model_type = conf().get("model") or const.DEFAULT_MODEL
-            
+
             # Ensure model_type is string to prevent AttributeError when using startswith()
             # This handles cases where numeric model names (e.g., "1") are parsed as integers from YAML
             if not isinstance(model_type, str):
                 logger.warning(f"[Bridge] model_type is not a string: {model_type} (type: {type(model_type).__name__}), converting to string")
                 model_type = str(model_type)
-            
+
             if model_type in ["text-davinci-003"]:
                 self.btype["chat"] = const.OPEN_AI
             if conf().get("use_azure_chatgpt", False):
@@ -74,7 +74,7 @@ class Bridge(object):
 
             if model_type in [const.MODELSCOPE]:
                 self.btype["chat"] = const.MODELSCOPE
-            
+
             # MiniMax models
             if model_type and (model_type in ["abab6.5-chat", "abab6.5"] or model_type.lower().startswith("minimax")):
                 self.btype["chat"] = const.MiniMax

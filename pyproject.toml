@@ -17,3 +17,38 @@ cow = "cli.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["cli*"]
+
+[tool.ruff]
+target-version = "py39"
+line-length = 120
+extend-exclude = [
+    "desktop",
+    "docs",
+    ".venv",
+    ".fuxi",
+]
+
+[tool.ruff.lint]
+# F = pyflakes (real bugs: unused imports, undefined names, dead code).
+# These are the violations we gate CI on: a stray F-error usually means a real
+# defect. E/W/B (style, whitespace, bugbear) are enabled for editor feedback but
+# deliberately NOT fatal: the codebase carries thousands of legacy E501 long
+# lines and B904 raise-without-from that would take a separate cleanup pass.
+# F403/F405: star-imports are an intentional re-export pattern across channels
+# and plugins (e.g. channel/chat_channel.py exposes Reply/ReplyType/ContextType
+# for every channel subclass). Flagging them adds noise without catching bugs.
+select = ["E", "F", "W", "B"]
+ignore = [
+    "F403",  # undefined-local-with-import-star (intentional re-export pattern)
+    "F405",  # undefined-local-with-import-star-usage
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Modules that use try/except ImportError as an availability probe import the
+# symbols for the probe and never use them again; keep the marker explicit.
+"agent/tools/browser/browser_service.py" = ["F401"]
+"common/package_manager.py" = ["F401"]
+"voice/xunfei/xunfei_voice.py" = ["F401"]
+# __init__.py re-exports the package's public API on purpose.
+"agent/tools/vision/__init__.py" = ["F401"]
+"plugins/cow_cli/__init__.py" = ["F401"]

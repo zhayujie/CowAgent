@@ -194,14 +194,14 @@ def _is_empty_sentinel(text: str) -> bool:
 class MemoryFlushManager:
     """
     Manages memory flush operations.
-    
+
     Flush is triggered by agent_stream in two scenarios:
     1. Context trim: _trim_messages discards old turns → flush discarded content
     2. Context overflow: API rejects request → emergency flush before clearing
-    
+
     Additionally, create_daily_summary() can be called by scheduler for end-of-day summaries.
     """
-    
+
     def __init__(
         self,
         workspace_dir: Path,
@@ -209,20 +209,20 @@ class MemoryFlushManager:
     ):
         self.workspace_dir = workspace_dir
         self.llm_model = llm_model
-        
+
         self.memory_dir = workspace_dir / "memory"
         self.memory_dir.mkdir(parents=True, exist_ok=True)
-        
+
         self.last_flush_timestamp: Optional[datetime] = None
         self._trim_flushed_hashes: set = set()  # Content hashes of already-flushed messages
         self._last_flushed_content_hash: str = ""  # Content hash at last flush, for daily dedup
         self._last_dream_input_hash: str = ""  # "{date}:{daily_hash}" of last dream, for dedup
         self._last_flush_thread: Optional[threading.Thread] = None
-    
+
     def get_today_memory_file(self, user_id: Optional[str] = None, ensure_exists: bool = False) -> Path:
         """Get today's memory file path: memory/YYYY-MM-DD.md"""
         today = datetime.now().strftime("%Y-%m-%d")
-        
+
         if user_id:
             user_dir = self.memory_dir / "users" / user_id
             if ensure_exists:
@@ -230,13 +230,13 @@ class MemoryFlushManager:
             today_file = user_dir / f"{today}.md"
         else:
             today_file = self.memory_dir / f"{today}.md"
-        
+
         if ensure_exists and not today_file.exists():
             today_file.parent.mkdir(parents=True, exist_ok=True)
             today_file.write_text(f"# Daily Memory: {today}\n\n")
-        
+
         return today_file
-    
+
     def get_main_memory_file(self, user_id: Optional[str] = None) -> Path:
         """Get main memory file path: MEMORY.md (workspace root)"""
         if user_id:
@@ -245,7 +245,7 @@ class MemoryFlushManager:
             return user_dir / "MEMORY.md"
         else:
             return Path(self.workspace_dir) / "MEMORY.md"
-    
+
     def get_status(self) -> dict:
         return {
             'last_flush_time': self.last_flush_timestamp.isoformat() if self.last_flush_timestamp else None,
@@ -254,7 +254,7 @@ class MemoryFlushManager:
         }
 
     # ---- Flush execution (called by agent_stream or scheduler) ----
-    
+
     def flush_from_messages(
         self,
         messages: List[Dict],
@@ -653,7 +653,7 @@ class MemoryFlushManager:
         logger.info(f"[DeepDream] Wrote dream diary to {diary_file}")
 
     # ---- Internal helpers ----
-    
+
     def _summarize_messages(self, messages: List[Dict], max_messages: int = 0) -> str:
         """
         Summarize conversation messages using LLM.
@@ -663,7 +663,7 @@ class MemoryFlushManager:
         conversation_text = self._format_conversation_for_summary(messages, max_messages)
         if not conversation_text.strip():
             return ""
-        
+
         if self.llm_model:
             try:
                 summary = self._call_llm_for_summary(conversation_text)
@@ -743,7 +743,7 @@ class MemoryFlushManager:
     def _call_llm_for_summary(self, conversation_text: str) -> str:
         """Call LLM to generate a concise summary of the conversation."""
         from agent.protocol.models import LLMRequest
-        
+
         request = LLMRequest(
             messages=[{"role": "user", "content": _summarize_user_prompt().format(conversation=conversation_text)}],
             temperature=0,
@@ -751,7 +751,7 @@ class MemoryFlushManager:
             stream=False,
             system=_summarize_system_prompt(),
         )
-        
+
         response = self.llm_model.call(request)
         return self._extract_response_text(response)
 
@@ -806,7 +806,7 @@ class MemoryFlushManager:
             events.append(f"- 用户: {current_user_text}")
 
         return "\n".join(events[:10])
-    
+
     @staticmethod
     def _extract_text_from_content(content) -> str:
         """Extract plain text from message content (string or content blocks)."""
@@ -861,14 +861,14 @@ def create_memory_files_if_needed(workspace_dir: Path, user_id: Optional[str] = 
     """
     Create essential memory files if they don't exist.
     Only creates MEMORY.md; daily files are created lazily on first write.
-    
+
     Args:
         workspace_dir: Workspace directory
         user_id: Optional user ID for user-specific files
     """
     memory_dir = workspace_dir / "memory"
     memory_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Create main MEMORY.md in workspace root (always needed for bootstrap)
     if user_id:
         user_dir = memory_dir / "users" / user_id
@@ -876,7 +876,7 @@ def create_memory_files_if_needed(workspace_dir: Path, user_id: Optional[str] = 
         main_memory = user_dir / "MEMORY.md"
     else:
         main_memory = Path(workspace_dir) / "MEMORY.md"
-    
+
     if not main_memory.exists():
         main_memory.write_text("")
 
@@ -885,17 +885,17 @@ def ensure_daily_memory_file(workspace_dir: Path, user_id: Optional[str] = None)
     """
     Ensure today's daily memory file exists, creating it only when actually needed.
     Called lazily before first write to daily memory.
-    
+
     Args:
         workspace_dir: Workspace directory
         user_id: Optional user ID for user-specific files
-        
+
     Returns:
         Path to today's memory file
     """
     memory_dir = workspace_dir / "memory"
     memory_dir.mkdir(parents=True, exist_ok=True)
-    
+
     today = datetime.now().strftime("%Y-%m-%d")
     if user_id:
         user_dir = memory_dir / "users" / user_id
@@ -903,10 +903,10 @@ def ensure_daily_memory_file(workspace_dir: Path, user_id: Optional[str] = None)
         today_memory = user_dir / f"{today}.md"
     else:
         today_memory = memory_dir / f"{today}.md"
-    
+
     if not today_memory.exists():
         today_memory.write_text(
             f"# Daily Memory: {today}\n\n"
         )
-    
+
     return today_memory

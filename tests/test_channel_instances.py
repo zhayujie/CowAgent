@@ -8,7 +8,6 @@ behavior (so it never regresses) and cover the new persistence helpers.
 
 import os
 
-import pytest
 
 from channel import channel_instances as ci
 

@@ -268,7 +268,6 @@ class TestDragSensitiveNested(unittest.TestCase):
 
     def test_nested_api_key_masked(self):
         from config import drag_sensitive
-        import json
         test_config = {
             "open_ai_api_key": "sk-1234567890abcdef",
             "custom_providers": [

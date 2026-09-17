@@ -1497,7 +1497,7 @@ class ConversationStore:
         # back to the newest scheduler body if none lands after the timestamp
         # (clock skew, or the pair persisted a hair before the run row).
         candidates: List[tuple] = []  # (created_at, text)
-        for i, (seq, role, raw, created_at) in enumerate(rows):
+        for i, (_seq, role, raw, _created_at) in enumerate(rows):
             if role != "user":
                 continue
             if not _message_is_scheduled_marker(raw):

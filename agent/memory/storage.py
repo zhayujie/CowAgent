@@ -110,7 +110,7 @@ class SearchResult:
 
 class MemoryStorage:
     """SQLite-based storage with FTS5 for keyword search"""
-    
+
     def __init__(
         self,
         db_path: Path,
@@ -128,7 +128,7 @@ class MemoryStorage:
         if self.vector_backend is None:
             assert self.conn is not None
             self.vector_backend = SQLiteVectorBackend(self.conn)
-    
+
     def _check_fts5_support(self) -> bool:
         """Check if SQLite has FTS5 support"""
         try:
@@ -291,7 +291,7 @@ class MemoryStorage:
             from common.log import logger
             logger.error(f"[MemoryStorage] Unexpected error during database initialization: {e}")
             raise
-        
+
         # Create chunks table with embeddings
         self.conn.execute("""
             CREATE TABLE IF NOT EXISTS chunks (
@@ -310,23 +310,23 @@ class MemoryStorage:
                 updated_at INTEGER DEFAULT (strftime('%s', 'now'))
             )
         """)
-        
+
         # Create indexes
         self.conn.execute("""
-            CREATE INDEX IF NOT EXISTS idx_chunks_user 
+            CREATE INDEX IF NOT EXISTS idx_chunks_user
             ON chunks(user_id)
         """)
-        
+
         self.conn.execute("""
-            CREATE INDEX IF NOT EXISTS idx_chunks_scope 
+            CREATE INDEX IF NOT EXISTS idx_chunks_scope
             ON chunks(scope)
         """)
-        
+
         self.conn.execute("""
-            CREATE INDEX IF NOT EXISTS idx_chunks_hash 
+            CREATE INDEX IF NOT EXISTS idx_chunks_hash
             ON chunks(path, hash)
         """)
-        
+
         # Create FTS5 virtual table + triggers (only if supported).
         # Self-heal: if the previous process crashed mid-rebuild and left
         # triggers pointing at a missing chunks_fts (or vice versa), wipe
@@ -693,18 +693,18 @@ class MemoryStorage:
             except Exception:
                 self.conn.rollback()
                 raise
-    
+
     def get_chunk(self, chunk_id: str) -> Optional[MemoryChunk]:
         """Get a chunk by ID"""
         row = self.conn.execute("""
             SELECT * FROM chunks WHERE id = ?
         """, (chunk_id,)).fetchone()
-        
+
         if not row:
             return None
-        
+
         return self._row_to_chunk(row)
-    
+
     def search_vector(
         self,
         query_embedding: List[float],
@@ -737,7 +737,7 @@ class MemoryStorage:
             )
             for match in matches
         ]
-    
+
     def search_keyword(
         self,
         query: str,
@@ -790,7 +790,7 @@ class MemoryStorage:
             return self._search_like(query, user_id, scopes, limit)
 
         return []
-    
+
     def _search_fts5(
         self,
         query: str,
@@ -802,16 +802,16 @@ class MemoryStorage:
         fts_query = self._build_fts_query(query)
         if not fts_query:
             return []
-        
+
         scope_placeholders = ','.join('?' * len(scopes))
         params = [fts_query] + scopes
-        
+
         if user_id:
             sql_query = f"""
                 SELECT chunks.*, bm25(chunks_fts) as rank
                 FROM chunks_fts
                 JOIN chunks ON chunks.rowid = chunks_fts.rowid
-                WHERE chunks_fts MATCH ? 
+                WHERE chunks_fts MATCH ?
                 AND chunks.scope IN ({scope_placeholders})
                 AND (chunks.scope = 'shared' OR chunks.user_id = ?)
                 ORDER BY rank
@@ -823,13 +823,13 @@ class MemoryStorage:
                 SELECT chunks.*, bm25(chunks_fts) as rank
                 FROM chunks_fts
                 JOIN chunks ON chunks.rowid = chunks_fts.rowid
-                WHERE chunks_fts MATCH ? 
+                WHERE chunks_fts MATCH ?
                 AND chunks.scope IN ({scope_placeholders})
                 ORDER BY rank
                 LIMIT ?
             """
             params.append(limit)
-        
+
         try:
             rows = self.conn.execute(sql_query, params).fetchall()
             return [
@@ -877,10 +877,10 @@ class MemoryStorage:
         for word in words:
             like_conditions.append("LOWER(text) LIKE ?")
             params.append(f'%{word.lower()}%')
-        
+
         where_clause = ' OR '.join(like_conditions)
         params.extend(scopes)
-        
+
         if user_id:
             sql_query = f"""
                 SELECT * FROM chunks
@@ -898,7 +898,7 @@ class MemoryStorage:
                 LIMIT ?
             """
             params.append(limit)
-        
+
         try:
             rows = self.conn.execute(sql_query, params).fetchall()
             results = []
@@ -975,7 +975,7 @@ class MemoryStorage:
                 VALUES (?, ?, ?, ?, ?, strftime('%s', 'now'))
             """, (path, source, file_hash, mtime, size))
             self.conn.commit()
-    
+
     def get_stats(self) -> Dict[str, int]:
         """Get storage statistics"""
         chunks_count = self.conn.execute("""
@@ -995,7 +995,7 @@ class MemoryStorage:
             'files': files_count,
             'embedded': embedded_count,
         }
-    
+
     def close(self):
         """Close database connection"""
         if self.conn:
@@ -1006,14 +1006,14 @@ class MemoryStorage:
             except Exception as e:
                 from common.log import logger
                 logger.warning("[MemoryStorage] Error closing database connection: %s", e)
-    
+
     def __del__(self):
         """Destructor to ensure connection is closed"""
         try:
             self.close()
         except Exception:
             pass  # Ignore errors during cleanup
-    
+
     # Helper methods
 
     @staticmethod
@@ -1063,12 +1063,12 @@ class MemoryStorage:
             hash=row['hash'],
             metadata=json.loads(row['metadata']) if row['metadata'] else None
         )
-    
+
     @staticmethod
     def _contains_cjk(text: str) -> bool:
         """Check if text contains CJK or related characters (Chinese, Japanese, Korean)."""
         return bool(_RE_CONTAINS_CJK.search(text))
-    
+
     @staticmethod
     def _build_trigram_query(raw_query: str) -> Optional[str]:
         """
@@ -1146,7 +1146,7 @@ class MemoryStorage:
     def _build_fts_query(raw_query: str) -> Optional[str]:
         """
         Build FTS5 query from raw text
-        
+
         Works best for English and word-based languages.
         For CJK characters, LIKE search will be used as fallback.
         """
@@ -1154,12 +1154,12 @@ class MemoryStorage:
         tokens = re.findall(r'[A-Za-z0-9_]+', raw_query)
         if not tokens:
             return None
-        
+
         # Quote tokens for exact matching
         quoted = [f'"{t}"' for t in tokens]
         # Use OR for more flexible matching
         return ' OR '.join(quoted)
-    
+
     @staticmethod
     def _bm25_rank_to_score(rank: float) -> float:
         """Convert SQLite BM25 rank to a [0, 1) relevance score.
@@ -1178,14 +1178,14 @@ class MemoryStorage:
         # min_score thresholds (default 0.1).  Small-corpus ranks close to
         # 0 would otherwise produce score≈0 and be filtered out downstream.
         return 0.3 + 0.69 * (abs(rank) / (1.0 + abs(rank)))
-    
+
     @staticmethod
     def _truncate_text(text: str, max_chars: int) -> str:
         """Truncate text to max characters"""
         if len(text) <= max_chars:
             return text
         return text[:max_chars] + "..."
-    
+
     @staticmethod
     def compute_hash(content: str) -> str:
         """Compute SHA256 hash of content"""
