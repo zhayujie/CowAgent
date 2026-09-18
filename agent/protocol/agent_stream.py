@@ -12,6 +12,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import List, Dict, Any, Optional, Callable, Tuple
 
 from agent.protocol.cancel import AgentCancelledError
+from agent.protocol.checkpoint import CheckpointManager
 from agent.protocol.models import LLMRequest, LLMModel
 from agent.protocol.message_utils import (
     sanitize_claude_messages,
@@ -670,12 +671,38 @@ class AgentStreamExecutor:
         if len(self.tool_failure_history) > 50:
             self.tool_failure_history = self.tool_failure_history[-50:]
 
-    def run_stream(self, user_message: str) -> str:
+    def _save_checkpoint(self, checkpoint_manager, session_id: str, turn: int) -> None:
+        """Persist a message-safe checkpoint without failing the active run."""
+        if checkpoint_manager is None:
+            return
+        try:
+            # Snapshot only after sanitizing so a crash between tool_use and its
+            # result cannot leave an invalid provider message at the tail.
+            self._validate_and_fix_messages()
+            checkpoint_manager.save(session_id, self.messages, turn)
+        except Exception as e:
+            logger.warning(f"[Agent] Failed to save checkpoint at turn {turn}: {e}")
+
+    def _clear_checkpoint(self, checkpoint_manager, session_id: str) -> None:
+        """Best-effort cleanup; the run result must not depend on deletion."""
+        if checkpoint_manager is not None and not checkpoint_manager.clear(session_id):
+            logger.warning(f"[Agent] Failed to remove checkpoint for session {session_id}")
+
+    def run_stream(
+        self,
+        user_message: str,
+        session_id: str = "",
+        checkpoint_dir: Optional[str] = None,
+    ) -> str:
         """
         Execute streaming reasoning loop
         
         Args:
             user_message: User message
+            session_id: Stable identity used to locate a checkpoint. Required
+                when ``checkpoint_dir`` is enabled.
+            checkpoint_dir: Optional directory for atomic per-turn snapshots.
+                When omitted, execution is unchanged and incurs no I/O.
             
         Returns:
             Final response text
@@ -699,16 +726,37 @@ class AgentStreamExecutor:
         )
         logger.info(f"🤖 {self.model.model}{thinking_label}{effort_label} | 👤 {_log_msg}")
         
-        # Add user message (Claude format - use content blocks for consistency)
-        self.messages.append({
-            "role": "user",
-            "content": [
-                {
-                    "type": "text",
-                    "text": user_message
-                }
-            ]
-        })
+        checkpoint_manager = None
+        turn = 0
+        resumed_from_checkpoint = False
+        if checkpoint_dir:
+            if not session_id:
+                raise ValueError(
+                    "session_id is required when checkpoint_dir is enabled"
+                )
+            checkpoint_manager = CheckpointManager(checkpoint_dir)
+            saved_checkpoint = checkpoint_manager.load(session_id)
+            if saved_checkpoint is not None and 0 <= saved_checkpoint[1] < self.max_turns:
+                self.messages, turn = saved_checkpoint
+                resumed_from_checkpoint = True
+            elif saved_checkpoint is not None:
+                logger.warning(
+                    f"[Agent] Ignoring checkpoint at turn {saved_checkpoint[1]}; "
+                    f"current max_turns is {self.max_turns}"
+                )
+
+        # Add a new user message only when this invocation is not resuming the
+        # same run. A checkpoint already contains its originating prompt.
+        if not resumed_from_checkpoint:
+            self.messages.append({
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": user_message
+                    }
+                ]
+            })
 
         # Trim context ONCE before the agent loop starts, not during tool steps.
         # This ensures tool_use/tool_result chains created during the current run
@@ -720,6 +768,11 @@ class AgentStreamExecutor:
         # tool_result was in a discarded turn).
         self._validate_and_fix_messages()
 
+        if resumed_from_checkpoint:
+            logger.info(f"[Agent] Resumed from checkpoint at turn {turn}")
+        elif checkpoint_manager is not None:
+            self._save_checkpoint(checkpoint_manager, session_id, turn)
+
         self._emit_event("agent_start")
 
         # Reset the run-scoped MCP tool-retrieval accumulator. On-demand tool
@@ -729,7 +782,6 @@ class AgentStreamExecutor:
         self._retrieved_mcp_names = set()
 
         final_response = ""
-        turn = 0
 
         # Respect a run id an outer scope already set (a subagent spawn or a
         # delegated task passes one down); only mint a fresh one when this turn
@@ -798,6 +850,7 @@ class AgentStreamExecutor:
                         "stop_reason": stop_reason,
                         "steered": True,
                     })
+                    self._save_checkpoint(checkpoint_manager, session_id, turn)
                     continue
 
                 # No tool calls, end loop
@@ -865,6 +918,7 @@ class AgentStreamExecutor:
                                 "stop_reason": stop_reason,
                                 "steered": True,
                             })
+                            self._save_checkpoint(checkpoint_manager, session_id, turn)
                             continue
                         if not self._close_or_apply_final_steering():
                             self._emit_event("turn_end", {
@@ -873,6 +927,7 @@ class AgentStreamExecutor:
                                 "stop_reason": stop_reason,
                                 "steered": True,
                             })
+                            self._save_checkpoint(checkpoint_manager, session_id, turn)
                             continue
                         logger.debug(f"✅ Done (no tool calls, stop_reason={stop_reason or 'none'})")
                         self._emit_event("turn_end", {
@@ -880,6 +935,7 @@ class AgentStreamExecutor:
                             "has_tool_calls": False,
                             "stop_reason": stop_reason
                         })
+                        self._clear_checkpoint(checkpoint_manager, session_id)
                         break
 
                 # Log tool calls with arguments (truncate long values like base64)
@@ -953,6 +1009,9 @@ class AgentStreamExecutor:
                         if result.get("status") == "critical_error":
                             logger.error(f"💥 Fatal error detected, aborting conversation")
                             final_response = result.get('result') or _t("任务执行失败", "Task execution failed")
+                            # This is a controlled abort, not a crash; avoid a
+                            # stale checkpoint replaying an older turn later.
+                            self._clear_checkpoint(checkpoint_manager, session_id)
                             return final_response
                         
                         # Log tool result in compact format
@@ -1062,6 +1121,7 @@ class AgentStreamExecutor:
                     "tool_count": len(tool_calls),
                     "stop_reason": stop_reason
                 })
+                self._save_checkpoint(checkpoint_manager, session_id, turn)
 
             if turn >= self.max_turns:
                 logger.warning(f"⚠️  Reached max decision step limit: {self.max_turns}")
@@ -1115,6 +1175,7 @@ class AgentStreamExecutor:
             cancelled = True
             logger.info(f"[Agent] 🛑 Cancelled by user (turn {turn})")
             self._handle_cancelled(final_response)
+            self._clear_checkpoint(checkpoint_manager, session_id)
             if not final_response or not final_response.strip():
                 final_response = "_(Cancelled)_"
 
