@@ -17,13 +17,13 @@ description: 搜索互联网获取实时信息，支持多个搜索厂商
 | 百度千帆 | 复用 `qianfan_api_key` | [千帆控制台](https://cloud.baidu.com/doc/qianfan/s/2mh4su4uy) |
 | 智谱 Zhipu | 复用 `zhipu_ai_api_key` | [智谱开放平台](https://docs.bigmodel.cn/cn/guide/tools/web-search) |
 | LinkAI | 复用 `linkai_api_key` | [LinkAI 控制台](https://link-ai.tech/console/interface) |
-| AnySearch | 可选配置项 `tools.web_search.anysearch_api_key`（支持匿名模式） | [AnySearch 控制台](https://anysearch.com/) |
+| AnySearch | 可选配置项 `tools.web_search.anysearch_api_key`，或设置 `anysearch_anonymous: true` 免密钥使用 | [AnySearch 控制台](https://anysearch.com/) |
 | Serply | `tools.web_search.serply_api_key` | [Serply](https://serply.io)（[文档](https://serply.io/docs)） |
 | Tavily | `tools.web_search.tavily_api_key` | [Tavily](https://tavily.com) |
 | SearXNG | `tools.web_search.searxng_url`（自托管实例 URL，无需 API Key） | [SearXNG](https://docs.searxng.org/) |
 | Keenable | 可选配置项 `tools.web_search.keenable_api_key`，或设置 `keenable_anonymous: true` 免密钥使用 | [Keenable](https://keenable.ai) |
 
-博查、AnySearch、Serply、Tavily 需要单独配置专用密钥；智谱、百度千帆、LinkAI 直接复用对应模型的 API Key，配好模型即同时获得搜索能力。SearXNG 为自托管方案，只需配置实例 URL。Keenable 需手动开启：将 `tools.web_search.keenable_anonymous` 设为 `true`（或在控制台「搜索」面板留空密钥保存）后调用公共接口，按 IP 限流（10 次/秒、1000 次/小时）；配置可选的 `keenable_api_key`（或 `KEENABLE_API_KEY`）后限制解除，且无需开启匿名模式。
+博查、Serply、Tavily 需要单独配置专用密钥；智谱、百度千帆、LinkAI 直接复用对应模型的 API Key，配好模型即同时获得搜索能力。SearXNG 为自托管方案，只需配置实例 URL。AnySearch 需手动开启匿名模式：将 `tools.web_search.anysearch_anonymous` 设为 `true`（或在控制台「搜索」面板留空密钥保存）后即可免密钥调用；配置 `tools.web_search.anysearch_api_key`（未配置时回退到环境变量 `ANYSEARCH_API_KEY`）后无需开启匿名模式，额度与权限以 AnySearch 服务端为准。Keenable 需手动开启：将 `tools.web_search.keenable_anonymous` 设为 `true`（或在控制台「搜索」面板留空密钥保存）后调用公共接口，按 IP 限流（10 次/秒、1000 次/小时）；配置可选的 `keenable_api_key`（或 `KEENABLE_API_KEY`）后限制解除，且无需开启匿名模式。
 
 ## 路由策略
 

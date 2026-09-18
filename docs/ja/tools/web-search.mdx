@@ -17,13 +17,13 @@ description: インターネットからリアルタイム情報を検索。複�
 | 百度 Qianfan | `qianfan_api_key` を再利用 | [Qianfan コンソール](https://cloud.baidu.com/doc/qianfan/s/2mh4su4uy) |
 | 智谱 Zhipu | `zhipu_ai_api_key` を再利用 | [Zhipu Open Platform](https://docs.bigmodel.cn/cn/guide/tools/web-search) |
 | LinkAI | `linkai_api_key` を再利用 | [LinkAI コンソール](https://link-ai.tech/console/interface) |
-| AnySearch | オプション設定 `tools.web_search.anysearch_api_key`（匿名モード対応） | [AnySearch Open Platform](https://anysearch.com/) |
+| AnySearch | オプション設定 `tools.web_search.anysearch_api_key`、または `anysearch_anonymous: true` で Key なし利用 | [AnySearch Open Platform](https://anysearch.com/) |
 | Serply | `tools.web_search.serply_api_key` | [Serply](https://serply.io)（[ドキュメント](https://serply.io/docs)） |
 | Tavily | `tools.web_search.tavily_api_key` | [Tavily](https://tavily.com) |
 | SearXNG | `tools.web_search.searxng_url`（セルフホスト型インスタンス URL、API Key 不要） | [SearXNG](https://docs.searxng.org/) |
 | Keenable | オプション設定 `tools.web_search.keenable_api_key`、または `keenable_anonymous: true` で Key なし利用 | [Keenable](https://keenable.ai) |
 
-Bocha、AnySearch、Serply、Tavily については専用キーを別途設定する必要があります。智谱、百度 Qianfan、LinkAI は対応するモデルの API キーをそのまま流用でき、モデルを設定すれば同時に検索機能も利用可能になります。SearXNG はセルフホスト型で、インスタンス URL のみ設定が必要です。Keenable はオプトイン方式です。`tools.web_search.keenable_anonymous` を `true` に設定（またはコンソールの「検索」パネルで Key を空のまま保存）すると、IP 単位のレート制限（10 リクエスト/秒、1000 リクエスト/時）がある公開エンドポイントを呼び出します。任意の `keenable_api_key`（または `KEENABLE_API_KEY`）を設定すると制限が解除され、オプトインは不要です。
+Bocha、Serply、Tavily については専用キーを別途設定する必要があります。智谱、百度 Qianfan、LinkAI は対応するモデルの API キーをそのまま流用でき、モデルを設定すれば同時に検索機能も利用可能になります。SearXNG はセルフホスト型で、インスタンス URL のみ設定が必要です。AnySearch は Key なし利用がオプトイン方式です。`tools.web_search.anysearch_anonymous` を `true` に設定（またはコンソールの「検索」パネルで Key を空のまま保存）すると匿名で呼び出せます。`tools.web_search.anysearch_api_key`（未設定時は環境変数 `ANYSEARCH_API_KEY` にフォールバック）を設定した場合はオプトイン不要で、利用枠と権限は AnySearch サーバー側に従います。Keenable はオプトイン方式です。`tools.web_search.keenable_anonymous` を `true` に設定（またはコンソールの「検索」パネルで Key を空のまま保存）すると、IP 単位のレート制限（10 リクエスト/秒、1000 リクエスト/時）がある公開エンドポイントを呼び出します。任意の `keenable_api_key`（または `KEENABLE_API_KEY`）を設定すると制限が解除され、オプトインは不要です。
 
 ## ルーティング戦略
 

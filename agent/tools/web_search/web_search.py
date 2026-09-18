@@ -34,6 +34,7 @@ Credentials
 """
 
 import json
+import math
 import os
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlencode
@@ -227,7 +228,8 @@ class WebSearch(BaseTool):
         configured) > first configured in PROVIDER_ORDER. Silent fallback
         when the desired one has no key.
 
-        For anysearch: considered "available" even without a key (anonymous).
+        anysearch/keenable only count as configured when they have a key or
+        their explicit anonymous opt-in, so neither is guaranteed to be here.
         """
         available = configured_providers()
         if not available:
@@ -246,7 +248,8 @@ class WebSearch(BaseTool):
             if pinned:
                 logger.warning(f"[WebSearch] pinned provider '{pinned}' unavailable, falling back to auto")
 
-        # anysearch 始终在 available 中，所以会作为末位 fallback
+        # available is already in canonical priority order, so its first entry
+        # is the highest-priority configured provider.
         return available[0]
 
     @staticmethod
@@ -276,8 +279,8 @@ class WebSearch(BaseTool):
 
         requested = args.get("provider")
         provider = self._resolve_provider(requested)
-        # This branch is technically unreachable because anysearch is always available
-        # (anonymous tier). It's kept as a defensive guard for future modifications.
+        # Reachable on a fresh install where nothing is configured and no
+        # anonymous tier was opted into; guards the dispatch below.
         if not provider:
             return ToolResult.fail(
                 "Error: No search provider configured. "
@@ -587,45 +590,136 @@ class WebSearch(BaseTool):
         zone = (_tools_web_search_conf().get("anysearch_zone") or "").strip().lower()
         if zone in ("cn", "intl"):
             payload["zone"] = zone
+        # Forward any configured language; the API validates it. Whitelisting
+        # only zh-CN/en silently dropped every other language the user set.
         language = (_tools_web_search_conf().get("anysearch_language") or "").strip()
-        if language in ("zh-CN", "en"):
+        if language:
             payload["language"] = language
         logger.debug(f"[WebSearch] anysearch: query='{query}', max_results={max_results}, has_key={bool(api_key)}")
         resp = requests.post(url, headers=headers, json=payload, timeout=DEFAULT_TIMEOUT)
 
+        # request_id is echoed in a response header and/or the JSON body.
+        # Capture it up front so every branch - including the error returns
+        # below - can surface it for support and log correlation. Only a
+        # non-empty string counts; an object/list/number id is ignored.
+        def _clean_request_id(value: Any) -> Optional[str]:
+            return value.strip() if isinstance(value, str) and value.strip() else None
+
+        request_id = _clean_request_id(resp.headers.get("X-Request-ID"))
+        if not request_id:
+            try:
+                peek = resp.json()
+                request_id = _clean_request_id(peek.get("request_id")) if isinstance(peek, dict) else None
+            except ValueError:
+                request_id = None
+
+        def _fail(message: str) -> ToolResult:
+            """Fail, attaching request_id when the API provided one."""
+            if request_id:
+                return ToolResult.fail(
+                    f"{message} (request_id: {request_id})",
+                    ext_data={"request_id": request_id},
+                )
+            return ToolResult.fail(message)
+
         if resp.status_code == 401:
             if api_key:
-                return ToolResult.fail("Error: Invalid AnySearch API key.")
-            return ToolResult.fail(
+                return _fail("Error: Invalid AnySearch API key.")
+            return _fail(
                 "Error: AnySearch authentication failed. Try configuring an API key at https://anysearch.com")
         if resp.status_code == 402:
             if api_key:
-                return ToolResult.fail("Error: AnySearch quota exhausted. Check usage at https://anysearch.com")
-            return ToolResult.fail(
+                return _fail("Error: AnySearch quota exhausted. Check usage at https://anysearch.com")
+            return _fail(
                 "Error: AnySearch anonymous quota exhausted. Configure an API key at https://anysearch.com for higher limits.")
         if resp.status_code == 429:
-            return ToolResult.fail("Error: AnySearch API rate limit reached.")
+            return _fail("Error: AnySearch API rate limit reached.")
         if resp.status_code != 200:
-            return ToolResult.fail(f"Error: AnySearch API returned HTTP {resp.status_code}")
+            return _fail(f"Error: AnySearch API returned HTTP {resp.status_code}")
 
-        data = resp.json()
-        # AnySearch signals success with business code 0.
+        # A 200 does not guarantee a well-formed body; validate the documented
+        # envelope instead of degrading a malformed reply to empty results.
+        try:
+            data = resp.json()
+        except ValueError:
+            return _fail("Error: AnySearch API returned a non-JSON response.")
+        if not isinstance(data, dict):
+            return _fail("Error: AnySearch API returned a malformed response (expected a JSON object).")
+        request_id = request_id or _clean_request_id(data.get("request_id"))
+
+        # Success is business code 0. A missing or non-integer code is
+        # malformed; reject bool explicitly since it is an int subclass, so
+        # code=false does not slip through as 0.
         api_code = data.get("code")
-        if api_code not in (0, None):
+        if isinstance(api_code, bool) or not isinstance(api_code, int):
+            return _fail("Error: AnySearch API returned a malformed response (missing or invalid 'code').")
+        if api_code != 0:
             msg = data.get("message") or "Unknown error"
-            return ToolResult.fail(f"Error: AnySearch API error (code={api_code}): {msg}")
+            return _fail(f"Error: AnySearch API error (code={api_code}): {msg}")
 
-        body = data.get("data") or {}
-        results = []
-        for it in body.get("results") or []:
-            results.append({
-                "title": it.get("title", ""),
-                "url": it.get("url", ""),
-                "snippet": it.get("snippet") or (it.get("content") or "")[:200],
-            })
-        total = (body.get("metadata") or {}).get("total_results", len(results))
-        request_id = resp.headers.get("X-Request-ID") or data.get("request_id")
-        meta = body.get("metadata") or {}
+        # data must be an object carrying a results list; data:null or a wrong
+        # type is malformed rather than an empty result set.
+        body = data.get("data")
+        if not isinstance(body, dict):
+            return _fail("Error: AnySearch API returned a malformed response (missing 'data').")
+        raw_results = body.get("results")
+        if not isinstance(raw_results, list):
+            return _fail("Error: AnySearch API returned a malformed response ('data.results' is not a list).")
+
+        # Normalize each entry defensively: an item is usable only if it has
+        # a non-empty string url (the minimum identity of a search hit). Text
+        # fields present but not strings are treated as absent rather than
+        # trusted, so url:[], title:{} or a numeric/object content can neither
+        # leak a wrong type nor crash the snippet slice.
+        def _normalize_item(item: Dict[str, Any]) -> Optional[Dict[str, str]]:
+            url = item.get("url")
+            if not isinstance(url, str) or not url.strip():
+                return None
+            title = item.get("title")
+            snippet = item.get("snippet")
+            if not (isinstance(snippet, str) and snippet):
+                content = item.get("content")
+                snippet = content[:200] if isinstance(content, str) else ""
+            return {
+                "title": title if isinstance(title, str) else "",
+                "url": url,
+                "snippet": snippet,
+            }
+
+        normalized_all = []
+        for it in raw_results:
+            if not isinstance(it, dict):
+                continue
+            normalized = _normalize_item(it)
+            if normalized is not None:
+                normalized_all.append(normalized)
+
+        # A non-empty results list that yields nothing usable is malformed, not
+        # an empty result set; surface it instead of a misleading 0-hit success.
+        if raw_results and not normalized_all:
+            return _fail("Error: AnySearch API returned a malformed response (no usable results).")
+        # Partial drops are tolerated so a few bad rows never sink a good
+        # search, but the loss is reported instead of vanishing silently.
+        invalid_dropped = len(raw_results) - len(normalized_all)
+
+        # The API is documented to honour max_results, but never trust upstream
+        # to stay within it: trim the usable hits down to what was requested so
+        # `count` keeps meaning "rows in this response".
+        results = normalized_all[:max_results]
+        truncated_count = len(normalized_all) - len(results)
+
+        # metadata is optional and best-effort: a wrong-typed block (string,
+        # list, ...) must not fail an otherwise valid search, so treat anything
+        # that is not an object as absent.
+        meta = body.get("metadata")
+        if not isinstance(meta, dict):
+            meta = {}
+
+        # total_results feeds a count shown to the user; ignore negatives and
+        # non-integers (bool included) and fall back to the number of hits.
+        total = meta.get("total_results")
+        if isinstance(total, bool) or not isinstance(total, int) or total < 0:
+            total = len(results)
 
         result = {
             "query": query,
@@ -634,11 +728,21 @@ class WebSearch(BaseTool):
             "count": len(results),
             "results": results,
         }
+        if invalid_dropped:
+            result["dropped_count"] = invalid_dropped
+        if truncated_count:
+            result["truncated_count"] = truncated_count
 
         if request_id:
             result["request_id"] = request_id
-        if meta.get("search_time_ms") is not None:
-            result["search_time_ms"] = meta["search_time_ms"]
+        # Only surface a finite, non-negative numeric latency; drop bool, NaN,
+        # Infinity and bad types.
+        search_time_ms = meta.get("search_time_ms")
+        if (isinstance(search_time_ms, (int, float))
+                and not isinstance(search_time_ms, bool)
+                and math.isfinite(search_time_ms)
+                and search_time_ms >= 0):
+            result["search_time_ms"] = search_time_ms
 
         return ToolResult.success(result)
 
