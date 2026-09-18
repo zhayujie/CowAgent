@@ -210,6 +210,13 @@ class WecomBotMessage(ChatMessage):
             self.other_user_id = chat_id
             self.actual_user_id = from_userid
             self.actual_user_nickname = from_userid
+            # WeCom only pushes a group message once the bot has been addressed in
+            # it, and the "@" was already stripped from the text above. So this is
+            # the same "reached here in a group means we were mentioned" case that
+            # dingtalk / discord / slack / telegram record as is_at. Without it
+            # ChatChannel's group gate finds neither a configured prefix nor an
+            # @-mention and returns None, so the message never reached the agent.
+            self.is_at = True
         else:
             self.other_user_id = from_userid
             self.actual_user_id = from_userid
