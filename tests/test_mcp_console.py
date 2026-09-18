@@ -312,7 +312,7 @@ def test_skills_handler_refuses_builtin_delete():
 
 def test_frontend_contract_exposes_mcp_and_skill_install_surfaces():
     html = _read("channel/web/templates/views/skills.html") + _read("channel/web/templates/modals/mcp-editor.html")
-    js = _read("channel/web/static/js/views/skills.js")
+    js = _read("channel/web/static/js/views/skills.js") + _read("channel/web/static/js/core/i18n.js")
     py = _read("channel/web/web_channel.py") + _read("channel/web/api/skills.py")
     desktop_page = _read("desktop/src/renderer/src/pages/SkillsPage.tsx")
     desktop_api = _read("desktop/src/renderer/src/api/client.ts")

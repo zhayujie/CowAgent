@@ -58,6 +58,7 @@ from channel.web.api.sessions import (  # noqa: F401
 from channel.web.api.skills import (  # noqa: F401
     McpServerTestHandler, McpServersHandler,
     SkillContentHandler, SkillsHandler, ToolsHandler,
+    _install_skill_for_agent,
 )
 from channel.web.api.update import (  # noqa: F401
     UpdateCheckHandler, UpdateStartHandler, UpdateStatusHandler, VersionHandler,
