@@ -14,6 +14,7 @@ import asyncio
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -124,6 +125,43 @@ class TestSyncStampsVersion(unittest.TestCase):
             f.write("# B\n\n其他内容。" * 300)
         asyncio.run(m.sync())
         self.assertEqual(m.storage.get_meta("chunker_version"), "1")
+
+    def test_sync_indexes_shared_knowledge_outside_agent_workspace(self):
+        shared_root = Path(tempfile.mkdtemp())
+        agent_workspace = Path(tempfile.mkdtemp())
+        knowledge_dir = shared_root / "knowledge"
+        knowledge_dir.mkdir()
+        knowledge_file = knowledge_dir / "nested" / "index.md"
+        knowledge_file.parent.mkdir()
+        knowledge_file.write_text(
+            "# Shared knowledge\n\nThe shared path is valid.\n",
+            encoding="utf-8",
+        )
+        manager = self._make(str(agent_workspace))
+
+        try:
+            with patch(
+                "common.state_dir.knowledge_dir", return_value=knowledge_dir
+            ):
+                asyncio.run(manager.sync())
+                asyncio.run(manager.sync())
+
+            expected_path = str(Path("knowledge") / "nested" / "index.md")
+            expected_hash = MemoryStorage.compute_hash(
+                knowledge_file.read_text(encoding="utf-8")
+            )
+            self.assertEqual(manager.storage.get_file_hash(expected_path), expected_hash)
+            self.assertEqual(manager.storage.get_stats()["files"], 1)
+            rows = manager.storage.conn.execute(
+                "SELECT path, source FROM chunks"
+            ).fetchall()
+            self.assertTrue(rows)
+            self.assertEqual(
+                {(row["path"], row["source"]) for row in rows},
+                {(expected_path, "knowledge")},
+            )
+        finally:
+            manager.close()
 
 
 if __name__ == "__main__":

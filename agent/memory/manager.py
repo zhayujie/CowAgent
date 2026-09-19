@@ -333,7 +333,10 @@ class MemoryManager:
             except Exception:
                 continue
             file_hash = MemoryStorage.compute_hash(content)
-            rel_path = str(file_path.relative_to(workspace_dir_path))
+            if source == "knowledge":
+                rel_path = str(Path("knowledge") / file_path.relative_to(knowledge_dir))
+            else:
+                rel_path = str(file_path.relative_to(workspace_dir_path))
             if self.storage.get_file_hash(rel_path) == file_hash:
                 continue
             # Markdown files (memory + knowledge) get structure-aware chunking;
