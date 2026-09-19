@@ -26,6 +26,7 @@ from bridge.reply import Reply, ReplyType
 from channel.chat_channel import ChatChannel, check_prefix
 from channel.wecom_bot.wecom_bot_crypt import WecomBotCrypt
 from channel.wecom_bot.wecom_bot_message import WecomBotMessage
+from common import state_dir
 from common.expired_dict import ExpiredDict
 from common.log import logger
 from common.singleton import singleton
@@ -38,6 +39,19 @@ MEDIA_CHUNK_SIZE = 512 * 1024  # 512KB per chunk (before base64 encoding)
 # Fixed URL path for the callback (webhook) HTTP server. The bot's
 # receive-message URL must point at this path, e.g. http://host:9892/wecombot
 CALLBACK_PATH = "/wecombot"
+
+
+def _media_tmp_path(prefix: str, ext: str = "") -> str:
+    """Path for transient media this channel downloads or synthesizes.
+
+    Transient media belongs in the agent's managed tmp dir -- the convention
+    every other channel follows through ``common.state_dir.tmp_dir()``. A bare
+    ``/tmp/...`` is not portable: on Windows it resolves against the *current
+    drive*, so the same process writes to a different disk depending on where it
+    was launched, and it sits outside the workspace the app manages (and cleans).
+    ``tmp_dir()`` also creates the directory, which ``/tmp`` does not guarantee.
+    """
+    return os.path.join(str(state_dir.tmp_dir()), f"{prefix}_{uuid.uuid4().hex[:8]}{ext}")
 
 
 def _escape_control_chars_inside_json_strings(s: str) -> str:
@@ -908,7 +922,7 @@ class WecomBotChannel(ChatChannel):
                 try:
                     resp = requests.get(local_path, timeout=30)
                     resp.raise_for_status()
-                    tmp_path = f"/tmp/wecom_cb_img_{uuid.uuid4().hex[:8]}"
+                    tmp_path = _media_tmp_path("wecom_cb_img")
                     with open(tmp_path, "wb") as f:
                         f.write(resp.content)
                     temp_files.append(tmp_path)
@@ -1042,7 +1056,7 @@ class WecomBotChannel(ChatChannel):
                     ext = ".gif"
                 else:
                     ext = ".png"
-                tmp_path = f"/tmp/wecom_img_{uuid.uuid4().hex[:8]}{ext}"
+                tmp_path = _media_tmp_path("wecom_img", ext)
                 with open(tmp_path, "wb") as f:
                     f.write(resp.content)
                 logger.info(f"[WecomBot] Image downloaded: size={len(resp.content)}, "
@@ -1114,17 +1128,17 @@ class WecomBotChannel(ChatChannel):
                     return file_path
                 # Extension doesn't match — rename/copy with correct extension
                 correct_ext = ".jpg" if fmt == "JPEG" else ".png"
-                out_path = f"/tmp/wecom_fmt_{uuid.uuid4().hex[:8]}{correct_ext}"
+                out_path = _media_tmp_path("wecom_fmt", correct_ext)
                 img.save(out_path, fmt)
                 logger.info(f"[WecomBot] Image renamed: {file_path} -> {out_path} ({fmt})")
                 return out_path
 
             # Unsupported format (WebP, GIF, BMP, etc.) — convert to PNG
             if img.mode == "RGBA":
-                out_path = f"/tmp/wecom_fmt_{uuid.uuid4().hex[:8]}.png"
+                out_path = _media_tmp_path("wecom_fmt", ".png")
                 img.save(out_path, "PNG")
             else:
-                out_path = f"/tmp/wecom_fmt_{uuid.uuid4().hex[:8]}.jpg"
+                out_path = _media_tmp_path("wecom_fmt", ".jpg")
                 img.convert("RGB").save(out_path, "JPEG", quality=90)
             logger.info(f"[WecomBot] Image converted from {fmt} -> {out_path}")
             return out_path
@@ -1141,7 +1155,7 @@ class WecomBotChannel(ChatChannel):
             if img.mode == "RGBA":
                 img = img.convert("RGB")
 
-            out_path = f"/tmp/wecom_compressed_{uuid.uuid4().hex[:8]}.jpg"
+            out_path = _media_tmp_path("wecom_compressed", ".jpg")
             quality = 85
             while quality >= 30:
                 img.save(out_path, "JPEG", quality=quality, optimize=True)
@@ -1179,7 +1193,7 @@ class WecomBotChannel(ChatChannel):
                 resp = requests.get(local_path, timeout=60)
                 resp.raise_for_status()
                 ext = os.path.splitext(local_path)[1] or ".bin"
-                tmp_path = f"/tmp/wecom_file_{uuid.uuid4().hex[:8]}{ext}"
+                tmp_path = _media_tmp_path("wecom_file", ext)
                 with open(tmp_path, "wb") as f:
                     f.write(resp.content)
                 local_path = tmp_path
@@ -1228,7 +1242,7 @@ class WecomBotChannel(ChatChannel):
                 resp = requests.get(local_path, timeout=60)
                 resp.raise_for_status()
                 ext = os.path.splitext(local_path)[1] or ".mp3"
-                tmp_path = f"/tmp/wecom_voice_{uuid.uuid4().hex[:8]}{ext}"
+                tmp_path = _media_tmp_path("wecom_voice", ext)
                 with open(tmp_path, "wb") as f:
                     f.write(resp.content)
                 local_path = tmp_path
