@@ -206,7 +206,8 @@ def create_backup_archive(
         },
     }
 
-    temp_dir = Path(tempfile.mkdtemp(prefix="cowagent-backup-"))
+    # os.replace requires the staging archive and output to share a filesystem.
+    temp_dir = Path(tempfile.mkdtemp(prefix="cowagent-backup-", dir=str(output.parent)))
     temp_archive = temp_dir / "backup.zip"
     try:
         with zipfile.ZipFile(

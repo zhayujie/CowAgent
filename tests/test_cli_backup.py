@@ -1,6 +1,8 @@
 """Tests for portable CowAgent backup archives."""
 
+import errno
 import json
+import os
 import zipfile
 from pathlib import Path
 
@@ -8,6 +10,7 @@ import pytest
 
 from agent import team
 from agent.registry import AgentRegistry
+from cli.commands import backup
 from cli.commands.backup import create_backup_archive, restore_backup_archive
 
 
@@ -51,6 +54,47 @@ def test_backup_restore_round_trip(tmp_path):
     assert (target_workspace / "knowledge" / "index.md").exists()
     assert not (target_workspace / "tmp" / "scratch.txt").exists()
     assert result["workspace_files"] == 5
+
+
+def test_backup_output_on_another_filesystem(tmp_path, monkeypatch):
+    source_workspace = tmp_path / "workspace"
+    source_workspace.mkdir()
+    (source_workspace / "MEMORY.md").write_bytes(b"portable\n")
+    output_dir = source_workspace / "backups"
+    archive = output_dir / "cow-backup.zip"
+    real_replace = os.replace
+
+    def replace_on_same_filesystem(source, destination):
+        # Treat the output directory as a separate mounted filesystem.
+        if output_dir.resolve() not in Path(source).resolve().parents:
+            raise OSError(errno.EXDEV, "Invalid cross-device link")
+        return real_replace(source, destination)
+
+    monkeypatch.setattr(backup.os, "replace", replace_on_same_filesystem)
+    summary = create_backup_archive(archive, tmp_path / "data", source_workspace)
+
+    assert summary["contents"]["workspace_files"] == 1
+    with zipfile.ZipFile(archive) as bundle:
+        assert set(bundle.namelist()) == {"manifest.json", "workspace/MEMORY.md"}
+        assert bundle.read("workspace/MEMORY.md") == b"portable\n"
+    assert list(output_dir.iterdir()) == [archive]
+
+
+def test_backup_replace_failure_preserves_existing_archive(tmp_path, monkeypatch):
+    output_dir = tmp_path / "backups"
+    output_dir.mkdir()
+    archive = output_dir / "cow-backup.zip"
+    archive.write_bytes(b"previous backup")
+
+    def fail_replace(source, destination):
+        raise PermissionError("destination is locked")
+
+    monkeypatch.setattr(backup.os, "replace", fail_replace)
+    with pytest.raises(PermissionError, match="destination is locked"):
+        create_backup_archive(archive, tmp_path / "data", tmp_path / "workspace")
+
+    assert archive.read_bytes() == b"previous backup"
+    assert list(output_dir.iterdir()) == [archive]
 
 
 def test_restore_merges_without_deleting_unrelated_files(tmp_path):
