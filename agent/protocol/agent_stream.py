@@ -2469,56 +2469,54 @@ class AgentStreamExecutor:
 
         return _on_summary_ready
 
+    def _token_budget_trim(
+        self, turns: List[Dict], budget: int
+    ) -> Tuple[List[Dict], List[Dict]]:
+        """Keep the longest newest-to-oldest suffix of turns that fits *budget*.
+
+        Walks complete turns from newest to oldest, accumulating estimated
+        tokens. Always keeps at least the newest turn so the current exchange
+        is not lost, even if that turn alone exceeds the budget.
+
+        Returns:
+            (kept_turns, discarded_turns) in chronological order.
+        """
+        kept_turns: List[Dict] = []
+        accumulated = 0
+        for turn in reversed(turns):
+            turn_tokens = self._estimate_turn_tokens(turn)
+            if accumulated + turn_tokens > budget and kept_turns:
+                break
+            kept_turns.append(turn)
+            accumulated += turn_tokens
+        kept_turns.reverse()
+        discarded_turns = turns[: len(turns) - len(kept_turns)]
+        return kept_turns, discarded_turns
+
     def _trim_messages(self):
         """
-        智能清理消息历史，保持对话完整性
+        Compact message history with a single token-budget-first pass.
 
-        使用完整轮次作为清理单位，确保：
-        1. 不会在对话中间截断
-        2. 工具调用链（tool_use + tool_result）保持完整
-        3. 每轮对话都是完整的（用户消息 + AI回复 + 工具调用）
+        Walks complete turns newest→oldest and keeps the longest suffix that
+        fits the input window. ``max_context_turns`` is only a safety net after
+        the conversation is already over budget — it must not half-drop (or
+        fire a summary LLM) while the full history still fits.
+
+        Uses complete turns as the unit of cleanup so that:
+        1. History is never cut mid-turn
+        2. Tool-call chains (tool_use + tool_result) stay intact
+        3. Each kept turn is complete (user + assistant + tools)
         """
         if not self.messages or not self.agent:
             return
 
-        # Step 0: Truncate large tool results in historical turns (30K -> 10K)
+        # Truncate large tool results in historical turns before estimating.
         self._truncate_historical_tool_results()
 
-        # Step 1: 识别完整轮次
         turns = self._identify_complete_turns()
-        
         if not turns:
             return
-        
-        # Step 2: 轮次限制 - 超出时移除前一半，保留后一半
-        if len(turns) > self.max_context_turns:
-            removed_count = len(turns) // 2
-            keep_count = len(turns) - removed_count
-            
-            discarded_turns = turns[:removed_count]
-            turns = turns[-keep_count:]
 
-            logger.info(
-                f"💾 Context turns exceeded: {keep_count + removed_count} > {self.max_context_turns}, "
-                f"trimmed to {keep_count} turns (removed {removed_count})"
-            )
-
-            # Flush to daily memory + inject context summary (single async LLM call)
-            if self.agent.memory_manager:
-                discarded_messages = []
-                for turn in discarded_turns:
-                    discarded_messages.extend(turn["messages"])
-                if discarded_messages:
-                    user_id = getattr(self.agent, '_current_user_id', None)
-                    cb = self._build_context_summary_callback(discarded_turns, turns)
-                    self.agent.memory_manager.flush_memory(
-                        messages=discarded_messages, user_id=user_id,
-                        reason="trim", max_messages=0,
-                        context_summary_callback=cb,
-                    )
-
-        # Step 3: Token 限制 - 保留完整轮次
-        # Get context window from agent (based on model)
         context_window = self.agent._get_model_context_window()
 
         # The window is shared by prompt + completion. Always keep the input
@@ -2537,103 +2535,54 @@ class AgentStreamExecutor:
         else:
             max_tokens = input_ceiling
 
-        # Estimate system prompt tokens
-        system_tokens = self.agent._estimate_message_tokens({"role": "system", "content": self.system_prompt})
-        available_tokens = max_tokens - system_tokens
-
-        # Calculate current tokens
-        current_tokens = sum(self._estimate_turn_tokens(turn) for turn in turns)
-        
-        # If under limit, reconstruct messages and return
-        if current_tokens + system_tokens <= max_tokens:
-            # Reconstruct message list from turns
-            new_messages = []
-            for turn in turns:
-                new_messages.extend(turn['messages'])
-            
-            old_count = len(self.messages)
-            self.messages = new_messages
-            
-            # Log if we removed messages due to turn limit
-            if old_count > len(self.messages):
-                logger.info(f"   Rebuilt message list: {old_count} -> {len(self.messages)} messages")
-            return
-
-        # Token limit exceeded — tiered strategy based on turn count:
-        #
-        #   Few turns (<5):  Compress ALL turns to text-only (strip tool chains,
-        #                    keep user query + final reply).  Never discard turns
-        #                    — losing even one is too painful when context is thin.
-        #
-        #   Many turns (>=5): Directly discard the first half of turns.
-        #                     With enough turns the oldest ones are less
-        #                     critical, and keeping the recent half intact
-        #                     (with full tool chains) is more useful.
-
-        COMPRESS_THRESHOLD = 5
-
-        if len(turns) < COMPRESS_THRESHOLD:
-            # --- Few turns: compress ALL turns to text-only, never discard ---
-            compressed_turns = []
-            for t in turns:
-                compressed = compress_turn_to_text_only(t)
-                if compressed["messages"]:
-                    compressed_turns.append(compressed)
-
-            new_messages = []
-            for turn in compressed_turns:
-                new_messages.extend(turn["messages"])
-
-            new_tokens = sum(self._estimate_turn_tokens(t) for t in compressed_turns)
-            old_count = len(self.messages)
-            self.messages = new_messages
-
-            logger.info(
-                f"📦 Context tokens exceeded (turns<{COMPRESS_THRESHOLD}): "
-                f"~{current_tokens + system_tokens} > {max_tokens}, "
-                f"compressed all {len(turns)} turns to plain text "
-                f"({old_count} -> {len(self.messages)} messages, "
-                f"~{current_tokens + system_tokens} -> ~{new_tokens + system_tokens} tokens)"
-            )
-            return
-
-        # --- Many turns (>=5): discard the older half, keep the newer half ---
-        removed_count = len(turns) // 2
-        keep_count = len(turns) - removed_count
-        discarded_turns = turns[:removed_count]
-        kept_turns = turns[-keep_count:]
-        kept_tokens = sum(self._estimate_turn_tokens(t) for t in kept_turns)
-
-        logger.info(
-            f"🔄 Context tokens exceeded: ~{current_tokens + system_tokens} > {max_tokens}, "
-            f"trimmed to {keep_count} turns (removed {removed_count})"
+        system_tokens = self.agent._estimate_message_tokens(
+            {"role": "system", "content": self.system_prompt}
         )
+        budget = max_tokens - system_tokens
 
-        if self.agent.memory_manager:
-            discarded_messages = []
-            for turn in discarded_turns:
-                discarded_messages.extend(turn["messages"])
-            if discarded_messages:
-                user_id = getattr(self.agent, '_current_user_id', None)
-                cb = self._build_context_summary_callback(discarded_turns, kept_turns)
-                self.agent.memory_manager.flush_memory(
-                    messages=discarded_messages, user_id=user_id,
-                    reason="trim", max_messages=0,
-                    context_summary_callback=cb,
-                )
+        kept_turns, discarded_turns = self._token_budget_trim(turns, budget)
+
+        # Safety net: once we already have to discard for budget, also cap
+        # at max_context_turns. Do not apply this while the full conversation
+        # still fits — that was the original unnecessary summary-LLM bug.
+        if discarded_turns and len(kept_turns) > self.max_context_turns:
+            extra = len(kept_turns) - self.max_context_turns
+            discarded_turns = discarded_turns + kept_turns[:extra]
+            kept_turns = kept_turns[extra:]
+
+        if discarded_turns:
+            current_tokens = sum(self._estimate_turn_tokens(t) for t in turns)
+            kept_tokens = sum(self._estimate_turn_tokens(t) for t in kept_turns)
+            logger.info(
+                f"💾 Token-budget trim: {len(turns)} turns "
+                f"(~{current_tokens + system_tokens} tok) -> {len(kept_turns)} turns "
+                f"(~{kept_tokens + system_tokens} tok, budget {max_tokens} tok)"
+            )
+
+            if self.agent.memory_manager:
+                discarded_messages = []
+                for turn in discarded_turns:
+                    discarded_messages.extend(turn["messages"])
+                if discarded_messages:
+                    user_id = getattr(self.agent, "_current_user_id", None)
+                    cb = self._build_context_summary_callback(discarded_turns, kept_turns)
+                    self.agent.memory_manager.flush_memory(
+                        messages=discarded_messages,
+                        user_id=user_id,
+                        reason="trim",
+                        max_messages=0,
+                        context_summary_callback=cb,
+                    )
 
         new_messages = []
         for turn in kept_turns:
-            new_messages.extend(turn['messages'])
-
+            new_messages.extend(turn["messages"])
         old_count = len(self.messages)
         self.messages = new_messages
-
-        logger.info(
-            f"   Removed {removed_count} turns "
-            f"({old_count} -> {len(self.messages)} messages, "
-            f"~{current_tokens + system_tokens} -> ~{kept_tokens + system_tokens} tokens)"
-        )
+        if not discarded_turns and old_count > len(self.messages):
+            logger.info(
+                f"   Rebuilt message list: {old_count} -> {len(self.messages)} messages"
+            )
 
     def _prepare_messages(self) -> List[Dict[str, Any]]:
         """
