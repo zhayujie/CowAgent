@@ -294,7 +294,7 @@ CowAgent 支援國內外主流廠商的大語言模型。**文字對話、影像
 
 ## 🛠️ 開發與貢獻
 
-歡迎各種形式的貢獻：新功能、Bug 修復、效能最佳化、文件完善，或向 [Skill Hub](https://skills.cowagent.ai/submit) 分享你的技能。請先閱讀 [CONTRIBUTING.md](/CONTRIBUTING.md) 瞭解如何開始，然後提交 Issue 討論或直接發起 PR。
+歡迎各種形式的貢獻：新功能、Bug 修復、效能最佳化、文件完善，或向 [Skill Hub](https://skills.cowagent.ai/submit) 分享你的技能。請先閱讀 [CONTRIBUTING.md](../../CONTRIBUTING.md) 瞭解如何開始，然後提交 Issue 討論或直接發起 PR。
 
 歡迎 ⭐ Star 支援專案，並透過 Watch → Custom → Releases 訂閱新版本通知。也歡迎提交 PR、Issue 進行反饋。
 
@@ -306,7 +306,7 @@ CowAgent 支援國內外主流廠商的大語言模型。**文字對話、影像
 
 ## ⚠️ 宣告
 
-1. 本專案遵循 [MIT 開源協議](/LICENSE)，主要用於技術研究和學習。使用時請遵守所在地法律法規及相關政策，因使用本專案所產生的一切後果由使用者自行承擔。
+1. 本專案遵循 [MIT 開源協議](../../LICENSE)，主要用於技術研究和學習。使用時請遵守所在地法律法規及相關政策，因使用本專案所產生的一切後果由使用者自行承擔。
 2. **成本與安全：** Agent 模式 Token 消耗顯著高於普通對話，請根據效果與成本權衡選擇模型；Agent 具備訪問本地作業系統的能力，請謹慎選擇部署環境。
 3. CowAgent 專案專注於開源技術開發，不會參與、授權或發行任何加密貨幣。
 

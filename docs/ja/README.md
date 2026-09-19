@@ -284,7 +284,7 @@ GitHub で [Issue を報告](https://github.com/zhayujie/CowAgent/issues) した
 
 ## 🛠️ 開発とコントリビューション
 
-あらゆる形のコントリビューションを歓迎します —— 新機能、バグ修正、パフォーマンス改善、ドキュメント、あるいは [Skill Hub](https://skills.cowagent.ai/submit) への Skill の共有など。まずは [CONTRIBUTING.md](/CONTRIBUTING.md) をご覧いただき、Issue で相談するか、直接 PR を送ってください。
+あらゆる形のコントリビューションを歓迎します —— 新機能、バグ修正、パフォーマンス改善、ドキュメント、あるいは [Skill Hub](https://skills.cowagent.ai/submit) への Skill の共有など。まずは [CONTRIBUTING.md](../../CONTRIBUTING.md) をご覧いただき、Issue で相談するか、直接 PR を送ってください。
 
 ⭐ Star でプロジェクトを応援し、Watch → Custom → Releases で新バージョンの通知を受け取れます。PR や Issue の提出も歓迎します。
 
@@ -296,7 +296,7 @@ GitHub で [Issue を報告](https://github.com/zhayujie/CowAgent/issues) した
 
 ## ⚠️ 免責事項
 
-1. 本プロジェクトは [MIT License](/LICENSE) に基づき、技術研究と学習を目的としています。利用者は所在地の法令・規制を遵守する必要があり、本プロジェクトの利用に起因するいかなる結果についてもメンテナーは責任を負いません。
+1. 本プロジェクトは [MIT License](../../LICENSE) に基づき、技術研究と学習を目的としています。利用者は所在地の法令・規制を遵守する必要があり、本プロジェクトの利用に起因するいかなる結果についてもメンテナーは責任を負いません。
 2. **コストと安全性：** Agent モードは通常のチャットよりトークン消費が大幅に多いため、品質とコストのバランスを考慮してモデルを選択してください。Agent はローカル OS にアクセスできるため、信頼できる環境にのみデプロイしてください。
 3. CowAgent は純粋なオープンソースプロジェクトであり、暗号通貨の発行・参加・承認は一切行いません。
 

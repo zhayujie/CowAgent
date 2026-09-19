@@ -284,7 +284,7 @@ For enterprise inquiries: sales@simple-future.tech or [scan the QR code](https:/
 
 ## 🛠️ Development & Contributing
 
-All kinds of contributions are welcome — new features, bug fixes, performance improvements, docs, or sharing your own skills on the [Skill Hub](https://skills.cowagent.ai/submit). See [CONTRIBUTING.md](/CONTRIBUTING.md) to get started, then open an Issue to discuss or send a PR directly.
+All kinds of contributions are welcome — new features, bug fixes, performance improvements, docs, or sharing your own skills on the [Skill Hub](https://skills.cowagent.ai/submit). See [CONTRIBUTING.md](CONTRIBUTING.md) to get started, then open an Issue to discuss or send a PR directly.
 
 ⭐ Star the project to show your support, and Watch → Custom → Releases to get notified of new versions. PRs and Issues are always welcome.
 
@@ -296,7 +296,7 @@ All kinds of contributions are welcome — new features, bug fixes, performance 
 
 ## ⚠️ Disclaimer
 
-1. This project is licensed under the [MIT License](/LICENSE) and is intended for technical research and learning. You are responsible for complying with applicable laws and regulations in your jurisdiction; the maintainers assume no liability for any consequences arising from use of this project.
+1. This project is licensed under the [MIT License](LICENSE) and is intended for technical research and learning. You are responsible for complying with applicable laws and regulations in your jurisdiction; the maintainers assume no liability for any consequences arising from use of this project.
 2. **Cost & safety:** Agent mode consumes substantially more tokens than regular chat — pick models that balance quality and cost. The Agent has access to your local operating system, so only deploy it in trusted environments.
 3. CowAgent is a pure open-source project and does not participate in, authorize, or issue any cryptocurrency.
 
