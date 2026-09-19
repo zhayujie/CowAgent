@@ -1469,6 +1469,19 @@ class AgentStreamExecutor:
                             "cancelled": True,
                         })
                         raise AgentCancelledError("cancelled during LLM streaming")
+                    if self.steer_inbox is not None and self.steer_inbox.has_pending():
+                        logger.info("[Agent] steer detected mid-stream, aborting LLM call")
+                        if full_content:
+                            self.messages.append({
+                                "role": "assistant",
+                                "content": [{"type": "text", "text": full_content}],
+                            })
+                        self._emit_event("message_end", {
+                            "content": full_content,
+                            "tool_calls": [],
+                            "steered": True,
+                        })
+                        return full_content, [], "steered"
 
                 # Check for errors
                 if isinstance(chunk, dict) and chunk.get("error"):
@@ -1840,6 +1853,10 @@ class AgentStreamExecutor:
                 "name": tc["name"],
                 "arguments": arguments
             })
+
+        if self.steer_inbox is not None and self.steer_inbox.has_pending():
+            logger.info("[Agent] steer pending after stream, skipping empty retry")
+            return full_content, [], "steered"
 
         # Check for empty response and retry once if enabled
         if retry_on_empty and not full_content and not tool_calls:

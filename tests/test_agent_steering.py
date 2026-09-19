@@ -106,6 +106,62 @@ def test_inbox_bounds_and_atomic_close_gate():
     assert inbox.submit("late").status == SteerStatus.CLOSING
 
 
+def test_inbox_has_pending():
+    inbox = SteerInbox()
+    assert not inbox.has_pending()
+    assert inbox.submit("go").accepted
+    assert inbox.has_pending()
+    assert inbox.drain() == ["go"]
+    assert not inbox.has_pending()
+
+
+def test_steer_aborts_in_flight_llm_stream():
+    inbox = SteerInbox()
+    seen = {"n": 0}
+
+    class _Model:
+        model = "test-model"
+
+        def call_stream(self, request):
+            for i in range(24):
+                seen["n"] += 1
+                if i == 0:
+                    inbox.submit("turn left")
+                yield {"choices": [{"delta": {"content": "x"}}]}
+
+    class _Exec(AgentStreamExecutor):
+        def _is_thinking_enabled(self):
+            return False
+
+        def _trim_messages(self):
+            return None
+
+        def _validate_and_fix_messages(self):
+            return None
+
+        def _catalog_max_output_tokens(self):
+            return 16
+
+        def _filter_think_tags(self, text):
+            return text
+
+    executor = _Exec(
+        agent=SimpleNamespace(),
+        model=_Model(),
+        system_prompt="",
+        tools=[],
+        max_turns=2,
+        messages=[],
+        steer_inbox=inbox,
+    )
+    text, tool_calls, reason = executor._call_llm_stream(retry_on_empty=True)
+    assert reason == "steered"
+    assert tool_calls == []
+    assert seen["n"] == 8
+    assert inbox.has_pending()
+    assert text
+
+
 def test_steer_arriving_during_model_skips_all_proposed_tools():
     inbox = SteerInbox()
     executor = _ScriptedExecutor([

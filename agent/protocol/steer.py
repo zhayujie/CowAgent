@@ -60,6 +60,10 @@ class SteerInbox:
             self._pending.clear()
             return items
 
+    def has_pending(self) -> bool:
+        with self._lock:
+            return bool(self._pending)
+
     def close_if_empty(self) -> bool:
         """Atomically stop accepting when no instruction is pending.
 
