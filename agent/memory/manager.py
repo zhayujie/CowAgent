@@ -17,6 +17,28 @@ from agent.memory.embedding import EmbeddingProvider, EmbeddingCache
 from agent.memory.summarizer import MemoryFlushManager, create_memory_files_if_needed
 
 
+def _index_rel_path(file_path: Path, workspace_dir: Path) -> Optional[Path]:
+    """Path a scanned file is indexed under, or None when no known root matches.
+
+    Scanned files arrive through two roots: the Agent's own workspace, and the
+    shared root that ``common.state_dir._shared_or_own`` falls back to when the
+    Agent has no local ``memory/`` or ``knowledge/`` of its own. Resolving
+    against the workspace alone raises ValueError for the shared copy, and
+    because that happened inside sync()'s file loop it aborted the whole sync —
+    taking down every retrieval that goes through the ``search()`` call in front
+    of it. The shared root is tried as well so a shared file keeps the same
+    index key (``knowledge/note.md``) it would have had inside the workspace.
+    """
+    from common import state_dir
+
+    for base in (Path(workspace_dir), state_dir.shared_root()):
+        try:
+            return file_path.relative_to(base)
+        except ValueError:
+            continue
+    return None
+
+
 class MemoryManager:
     """
     Memory manager with hybrid search capabilities
@@ -333,7 +355,15 @@ class MemoryManager:
             except Exception:
                 continue
             file_hash = MemoryStorage.compute_hash(content)
-            rel_path = str(file_path.relative_to(workspace_dir_path))
+            rel = _index_rel_path(file_path, workspace_dir_path)
+            if rel is None:
+                from common.log import logger
+                logger.warning(
+                    f"[MemoryManager] Skipping {file_path}: it is neither in the "
+                    f"workspace nor in the shared root, so it has no index key"
+                )
+                continue
+            rel_path = str(rel)
             if self.storage.get_file_hash(rel_path) == file_hash:
                 continue
             # Markdown files (memory + knowledge) get structure-aware chunking;
