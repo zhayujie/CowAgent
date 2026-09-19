@@ -32,11 +32,40 @@
                                     <div id="tools-list" class="grid gap-3 sm:grid-cols-2 hidden"></div>
                                 </div>
 
+                                <!-- MCP Servers Section -->
+                                <div class="mb-8" id="mcp-section">
+                                    <div class="flex items-center gap-2 mb-3">
+                                        <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500" data-i18n="mcp_section_title">MCP</span>
+                                        <span id="mcp-count-badge" class="hidden px-2 py-0.5 rounded-full text-xs bg-slate-100 dark:bg-white/10 text-slate-500 dark:text-slate-400"></span>
+                                        <button type="button" id="mcp-add-btn"
+                                                class="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-primary-500 bg-primary-50 dark:bg-primary-900/20 hover:bg-primary-100 dark:hover:bg-primary-900/30 transition-colors cursor-pointer">
+                                            <i class="fas fa-plus text-[10px]"></i>
+                                            <span data-i18n="mcp_add">Add server</span>
+                                        </button>
+                                    </div>
+                                    <p class="text-xs text-slate-400 dark:text-slate-500 mb-3" data-i18n="mcp_section_hint">Add, edit, or disable MCP servers. Saved servers apply on the next message.</p>
+                                    <div id="mcp-empty" class="flex items-center gap-2 py-4 text-slate-400 dark:text-slate-500 text-sm">
+                                        <span data-i18n="mcp_empty">No MCP servers configured</span>
+                                    </div>
+                                    <div id="mcp-list" class="grid gap-3 sm:grid-cols-2 hidden"></div>
+                                </div>
+
                                 <!-- Skills Section -->
                                 <div>
                                     <div class="flex items-center gap-2 mb-3">
                                         <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500" data-i18n="skills_section_title">技能</span>
                                         <span id="skills-count-badge" class="hidden px-2 py-0.5 rounded-full text-xs bg-slate-100 dark:bg-white/10 text-slate-500 dark:text-slate-400"></span>
+                                    </div>
+                                    <div class="flex items-center gap-2 mb-3">
+                                        <input id="skill-install-input" type="text"
+                                               class="flex-1 min-w-0 px-3 py-1.5 rounded-lg text-sm bg-white dark:bg-[#1A1A1A] border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-200 placeholder:text-slate-400 focus:outline-none focus:border-primary-400"
+                                               data-i18n-placeholder="skill_install_placeholder"
+                                               placeholder="Skill Hub name or GitHub URL">
+                                        <button type="button" id="skill-install-btn"
+                                                class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-primary-500 hover:bg-primary-600 transition-colors cursor-pointer">
+                                            <i class="fas fa-download text-[10px]"></i>
+                                            <span data-i18n="skill_install_btn">Install</span>
+                                        </button>
                                     </div>
                                     <div id="skills-empty" class="flex flex-col items-center justify-center py-12">
                                         <div class="w-14 h-14 rounded-2xl bg-amber-50 dark:bg-amber-900/20 flex items-center justify-center mb-3">

@@ -5,6 +5,9 @@ import type {
   SkillInfo,
   SkillContent,
   ToolInfo,
+  McpServerConfig,
+  McpServersResult,
+  McpTestResult,
   MemoryItem,
   MemoryCategory,
   MemoryPage,
@@ -815,6 +818,38 @@ class ApiClient {
     return this.request('/api/skills', {
       method: 'POST',
       body: JSON.stringify({ action, name }),
+    })
+  }
+
+  async installSkill(spec: string): Promise<ApiResult & { installed?: string[]; messages?: string[] }> {
+    return this.request('/api/skills', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'install', spec }),
+    })
+  }
+
+  async deleteSkill(name: string): Promise<ApiResult> {
+    return this.request('/api/skills', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'delete', name }),
+    })
+  }
+
+  async getMcpServers(): Promise<McpServersResult> {
+    return this.request('/api/mcp/servers')
+  }
+
+  async saveMcpServers(servers: McpServerConfig[]): Promise<McpServersResult> {
+    return this.request('/api/mcp/servers', {
+      method: 'PUT',
+      body: JSON.stringify({ servers }),
+    })
+  }
+
+  async testMcpServer(server: McpServerConfig): Promise<McpTestResult> {
+    return this.request('/api/mcp/servers/test', {
+      method: 'POST',
+      body: JSON.stringify({ server }),
     })
   }
 

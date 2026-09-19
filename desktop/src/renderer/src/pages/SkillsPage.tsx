@@ -1,9 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { Loader2, Wrench, Zap, Puzzle, ArrowLeft, Lock, Pencil } from 'lucide-react'
+import { Loader2, Wrench, Zap, Puzzle, ArrowLeft, Lock, Pencil, Plus, Plug, Trash2 } from 'lucide-react'
 import { t } from '../i18n'
 import apiClient from '../api/client'
 import type { ApiResult } from '../api/client'
-import type { ToolInfo, SkillInfo, SkillContent } from '../types'
+import type { ToolInfo, SkillInfo, SkillContent, McpServerConfig } from '../types'
 import { Toggle } from './settings/primitives'
 import Markdown from '../components/Markdown'
 import { DocActions, DocEditor, DocNotice } from '../components/DocEditor'
@@ -80,11 +80,64 @@ const SkillContentView: React.FC<{ content: string }> = ({ content }) => {
     </>
   )
 }
+const emptyMcpForm = (): McpServerConfig => ({
+  name: '',
+  type: 'stdio',
+  command: '',
+  args: [],
+  env: {},
+  url: '',
+  headers: {},
+  scope: '',
+  tool_name_prefix: '',
+  disabled: false,
+})
+
+function kvToObject(text: string): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const line of (text || '').split(/\r?\n/)) {
+    const trimmed = line.trim()
+    if (!trimmed) continue
+    const idx = trimmed.indexOf('=')
+    if (idx <= 0) continue
+    out[trimmed.slice(0, idx).trim()] = trimmed.slice(idx + 1)
+  }
+  return out
+}
+
+function objectToKv(obj?: Record<string, string>): string {
+  if (!obj) return ''
+  return Object.entries(obj)
+    .map(([key, value]) => `${key}=${value}`)
+    .join('\n')
+}
+
+function mcpStatusLabel(status?: string): string {
+  const key: Record<string, string> = {
+    ready: 'mcp_status_ready',
+    pending: 'mcp_status_pending',
+    failed: 'mcp_status_failed',
+    needs_auth: 'mcp_status_needs_auth',
+    disabled: 'mcp_status_disabled',
+    idle: 'mcp_status_idle',
+  }
+  return t(key[status || ''] || 'mcp_status_idle')
+}
 
 const SkillsPage: React.FC<SkillsPageProps> = ({ baseUrl }) => {
   const [tools, setTools] = useState<ToolInfo[]>([])
   const [skills, setSkills] = useState<SkillInfo[]>([])
+  const [servers, setServers] = useState<McpServerConfig[]>([])
   const [loading, setLoading] = useState(true)
+  const [installSpec, setInstallSpec] = useState('')
+  const [installing, setInstalling] = useState(false)
+  const [editor, setEditor] = useState<McpServerConfig | null>(null)
+  const [editorOriginalName, setEditorOriginalName] = useState<string | null>(null)
+  const [argsText, setArgsText] = useState('')
+  const [envText, setEnvText] = useState('')
+  const [headersText, setHeadersText] = useState('')
+  const [testResult, setTestResult] = useState('')
+  const [saving, setSaving] = useState(false)
 
   const doc = skillEditor((s) => s.doc)
   const content = skillEditor((s) => s.content)
@@ -96,9 +149,14 @@ const SkillsPage: React.FC<SkillsPageProps> = ({ baseUrl }) => {
   const loadData = async () => {
     try {
       setLoading(true)
-      const [toolsData, skillsData] = await Promise.all([apiClient.getTools(), apiClient.getSkills()])
+      const [toolsData, skillsData, mcpData] = await Promise.all([
+        apiClient.getTools(),
+        apiClient.getSkills(),
+        apiClient.getMcpServers(),
+      ])
       setTools(toolsData || [])
       setSkills(skillsData || [])
+      setServers(mcpData.servers || [])
     } catch (err) {
       console.error('Failed to load skills:', err)
     } finally {
@@ -113,7 +171,6 @@ const SkillsPage: React.FC<SkillsPageProps> = ({ baseUrl }) => {
   }, [baseUrl])
 
   const toggle = async (skill: SkillInfo, enabled: boolean) => {
-    // Optimistic flip; revert on failure.
     setSkills((prev) => prev.map((s) => (s.name === skill.name ? { ...s, enabled } : s)))
     try {
       const res = await apiClient.toggleSkill(skill.name, enabled ? 'open' : 'close')
@@ -123,9 +180,6 @@ const SkillsPage: React.FC<SkillsPageProps> = ({ baseUrl }) => {
     }
   }
 
-  // The card's pencil opens the viewer and jumps straight into editing,
-  // skipping the read-only view. `startEdit` no-ops for a read-only skill, so
-  // the built-in ones simply open to their content.
   const openSkillForEdit = async (skill: SkillInfo) => {
     await skillEditor
       .getState()
@@ -135,9 +189,118 @@ const SkillsPage: React.FC<SkillsPageProps> = ({ baseUrl }) => {
 
   const closeViewer = async () => {
     if (!(await skillEditor.getState().close())) return
-    // A saved edit can change the name and description in the frontmatter, so
-    // the cards behind this panel may be out of date.
     void loadData()
+  }
+
+  const persistServers = async (next: McpServerConfig[]) => {
+    const res = await apiClient.saveMcpServers(next)
+    if (res.status !== 'success') throw new Error(res.message || t('mcp_save_error'))
+    setServers(res.servers || next)
+  }
+
+  const openEditor = (server?: McpServerConfig) => {
+    const form = server ? { ...emptyMcpForm(), ...server } : emptyMcpForm()
+    setEditor(form)
+    setEditorOriginalName(server?.name || null)
+    setArgsText((server?.args || []).join('\n'))
+    setEnvText(objectToKv(server?.env))
+    setHeadersText(objectToKv(server?.headers))
+    setTestResult('')
+  }
+
+  const readEditor = (): McpServerConfig => {
+    if (!editor) return emptyMcpForm()
+    const type = editor.type || 'stdio'
+    const cfg: McpServerConfig = {
+      ...editor,
+      name: (editor.name || '').trim(),
+      type,
+      tool_name_prefix: editor.tool_name_prefix || '',
+      disabled: !!editor.disabled,
+    }
+    if (type === 'stdio') {
+      cfg.command = (editor.command || '').trim()
+      cfg.args = argsText.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
+      cfg.env = kvToObject(envText)
+      delete cfg.url
+      delete cfg.headers
+      delete cfg.scope
+    } else {
+      cfg.url = (editor.url || '').trim()
+      cfg.headers = kvToObject(headersText)
+      cfg.scope = editor.scope || ''
+      delete cfg.command
+      delete cfg.args
+      delete cfg.env
+    }
+    return cfg
+  }
+
+  const saveEditor = async () => {
+    if (!editor) return
+    setSaving(true)
+    try {
+      const cfg = readEditor()
+      const next = servers.filter((item) => item.name !== editorOriginalName && item.name !== cfg.name)
+      next.push(cfg)
+      await persistServers(next)
+      setEditor(null)
+    } catch (err) {
+      setTestResult(err instanceof Error ? err.message : t('mcp_save_error'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const testEditor = async () => {
+    setTestResult(t('mcp_test') + '...')
+    try {
+      const data = await apiClient.testMcpServer(readEditor())
+      if (data.ok) {
+        const names = (data.tools || []).map((tool) => tool.name).filter(Boolean)
+        setTestResult(t('mcp_test_ok') + (names.length ? `: ${names.join(', ')}` : ''))
+      } else {
+        setTestResult(`${t('mcp_test_fail')}: ${data.error || data.message || ''}`)
+      }
+    } catch (err) {
+      setTestResult(`${t('mcp_test_fail')}: ${err instanceof Error ? err.message : ''}`)
+    }
+  }
+
+  const removeServer = async (name: string) => {
+    if (!window.confirm(t('mcp_delete_confirm'))) return
+    try {
+      await persistServers(servers.filter((item) => item.name !== name))
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : t('mcp_save_error'))
+    }
+  }
+
+  const install = async () => {
+    const spec = installSpec.trim()
+    if (!spec) return
+    setInstalling(true)
+    try {
+      const res = await apiClient.installSkill(spec)
+      if (res.status !== 'success') throw new Error(res.message || t('skill_install_error'))
+      setInstallSpec('')
+      await loadData()
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : t('skill_install_error'))
+    } finally {
+      setInstalling(false)
+    }
+  }
+
+  const uninstall = async (name: string) => {
+    if (!window.confirm(t('skill_delete_confirm'))) return
+    try {
+      const res = await apiClient.deleteSkill(name)
+      if (res.status !== 'success') throw new Error(res.message || t('skill_delete_error'))
+      await loadData()
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : t('skill_delete_error'))
+    }
   }
 
   return (
@@ -163,7 +326,6 @@ const SkillsPage: React.FC<SkillsPageProps> = ({ baseUrl }) => {
       <DocNotice store={skillEditor} />
 
       {doc ? (
-        /* Skill viewer / editor */
         <div className="flex-1 flex flex-col min-h-0 border-t border-default">
           <div className="flex items-center gap-3 px-6 py-3 flex-shrink-0 border-b border-subtle">
             <button
@@ -178,7 +340,7 @@ const SkillsPage: React.FC<SkillsPageProps> = ({ baseUrl }) => {
               {edit?.dirty && (
                 <span className="text-accent" title={t('ws_edit_unsaved')}>
                   {' '}
-                  •
+                  {'\u2022'}
                 </span>
               )}
             </h3>
@@ -239,7 +401,74 @@ const SkillsPage: React.FC<SkillsPageProps> = ({ baseUrl }) => {
                 )}
               </Section>
 
+              <Section
+                title={t('mcp_section_title')}
+                count={servers.length}
+                action={
+                  <button
+                    type="button"
+                    onClick={() => openEditor()}
+                    className="ml-auto inline-flex items-center gap-1 px-2 py-1 rounded-btn text-xs font-medium text-accent bg-accent-soft"
+                  >
+                    <Plus size={12} />
+                    {t('mcp_add')}
+                  </button>
+                }
+              >
+                <p className="text-xs text-content-tertiary mb-3">{t('mcp_section_hint')}</p>
+                {servers.length === 0 ? (
+                  <Empty text={t('mcp_empty')} />
+                ) : (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {servers.map((server) => (
+                      <div key={server.name} className="rounded-card border border-default bg-surface p-4 flex items-start gap-3">
+                        <div className="w-9 h-9 rounded-lg bg-inset-2 flex items-center justify-center flex-shrink-0">
+                          <Plug size={15} className="text-accent" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-sm font-medium text-content font-mono truncate flex-1">{server.name}</span>
+                            <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-inset-2 text-content-tertiary">
+                              {mcpStatusLabel(server.status)}
+                            </span>
+                            <button type="button" title={t('mcp_edit')} onClick={() => openEditor(server)} className="p-1 text-content-tertiary hover:text-content">
+                              <Pencil size={11} />
+                            </button>
+                            <button type="button" title={t('mcp_delete')} onClick={() => void removeServer(server.name)} className="p-1 text-content-tertiary hover:text-red-500">
+                              <Trash2 size={11} />
+                            </button>
+                          </div>
+                          <p className="text-xs text-content-tertiary truncate">
+                            {server.type === 'stdio'
+                              ? [server.command, ...(server.args || [])].filter(Boolean).join(' ')
+                              : server.url || server.type}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </Section>
+
               <Section title={t('skills_section_title')} count={skills.length}>
+                <div id="skill-install" className="flex items-center gap-2 mb-3">
+                  <input
+                    value={installSpec}
+                    onChange={(e) => setInstallSpec(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && void install()}
+                    placeholder={t('skill_install_placeholder')}
+                    className="flex-1 min-w-0 px-3 py-1.5 rounded-btn border border-strong bg-inset text-sm text-content placeholder:text-content-tertiary focus:outline-none focus:border-accent"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void install()}
+                    disabled={installing}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-btn text-xs font-medium text-white bg-accent disabled:opacity-50"
+                  >
+                    {installing && <Loader2 size={12} className="animate-spin" />}
+                    {t('skill_install_btn')}
+                  </button>
+                </div>
                 {skills.length === 0 ? (
                   <Empty text={t('skills_empty')} />
                 ) : (
@@ -263,8 +492,6 @@ const SkillsPage: React.FC<SkillsPageProps> = ({ baseUrl }) => {
                             <span className="text-sm font-medium text-content truncate flex-1">
                               {skill.display_name || skill.name}
                             </span>
-                            {/* The pencil and switch sit inside a card that opens
-                                the skill, so their clicks must not reach it. */}
                             <button
                               type="button"
                               title={t('skill_edit_hint')}
@@ -276,6 +503,19 @@ const SkillsPage: React.FC<SkillsPageProps> = ({ baseUrl }) => {
                             >
                               <Pencil size={11} />
                             </button>
+                            {skill.deletable && (
+                              <button
+                                type="button"
+                                title={t('skill_delete')}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  void uninstall(skill.name)
+                                }}
+                                className="flex-shrink-0 p-1 -mx-1 -mt-1.5 -mb-1 rounded text-content-tertiary hover:text-red-500 transition-colors cursor-pointer"
+                              >
+                                <Trash2 size={11} />
+                              </button>
+                            )}
                             <span onClick={(e) => e.stopPropagation()}>
                               <Toggle checked={skill.enabled} onChange={(v) => toggle(skill, v)} />
                             </span>
@@ -292,17 +532,153 @@ const SkillsPage: React.FC<SkillsPageProps> = ({ baseUrl }) => {
         </div>
       </div>
       )}
+
+      {editor && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4" onMouseDown={() => setEditor(null)}>
+          <div
+            className="w-full max-w-lg bg-surface border border-default rounded-xl shadow-xl p-5 max-h-[85vh] overflow-y-auto"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-base font-semibold text-content mb-4">{editorOriginalName ? t('mcp_edit') : t('mcp_add')}</h3>
+            <div className="space-y-3 text-sm">
+              <label className="block">
+                <span className="text-xs text-content-tertiary">{t('mcp_field_name')}</span>
+                <input
+                  value={editor.name}
+                  disabled={!!editorOriginalName}
+                  onChange={(e) => setEditor({ ...editor, name: e.target.value })}
+                  className="mt-1 w-full px-3 py-2 rounded-btn border border-strong bg-inset text-sm text-content"
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs text-content-tertiary">{t('mcp_field_type')}</span>
+                <select
+                  value={editor.type || 'stdio'}
+                  onChange={(e) => setEditor({ ...editor, type: e.target.value })}
+                  className="mt-1 w-full px-3 py-2 rounded-btn border border-strong bg-inset text-sm text-content"
+                >
+                  <option value="stdio">stdio</option>
+                  <option value="sse">SSE</option>
+                  <option value="streamable-http">streamable-http</option>
+                </select>
+              </label>
+              {(editor.type || 'stdio') === 'stdio' ? (
+                <>
+                  <label className="block">
+                    <span className="text-xs text-content-tertiary">{t('mcp_field_command')}</span>
+                    <input
+                      value={editor.command || ''}
+                      onChange={(e) => setEditor({ ...editor, command: e.target.value })}
+                      className="mt-1 w-full px-3 py-2 rounded-btn border border-strong bg-inset text-sm text-content"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-xs text-content-tertiary">{t('mcp_field_args')}</span>
+                    <textarea
+                      value={argsText}
+                      onChange={(e) => setArgsText(e.target.value)}
+                      rows={3}
+                      className="mt-1 w-full px-3 py-2 rounded-btn border border-strong bg-inset text-xs font-mono text-content"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-xs text-content-tertiary">{t('mcp_field_env')}</span>
+                    <textarea
+                      value={envText}
+                      onChange={(e) => setEnvText(e.target.value)}
+                      rows={3}
+                      className="mt-1 w-full px-3 py-2 rounded-btn border border-strong bg-inset text-xs font-mono text-content"
+                    />
+                  </label>
+                </>
+              ) : (
+                <>
+                  <label className="block">
+                    <span className="text-xs text-content-tertiary">{t('mcp_field_url')}</span>
+                    <input
+                      value={editor.url || ''}
+                      onChange={(e) => setEditor({ ...editor, url: e.target.value })}
+                      className="mt-1 w-full px-3 py-2 rounded-btn border border-strong bg-inset text-sm text-content"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-xs text-content-tertiary">{t('mcp_field_headers')}</span>
+                    <textarea
+                      value={headersText}
+                      onChange={(e) => setHeadersText(e.target.value)}
+                      rows={3}
+                      className="mt-1 w-full px-3 py-2 rounded-btn border border-strong bg-inset text-xs font-mono text-content"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-xs text-content-tertiary">{t('mcp_field_scope')}</span>
+                    <input
+                      value={editor.scope || ''}
+                      onChange={(e) => setEditor({ ...editor, scope: e.target.value })}
+                      className="mt-1 w-full px-3 py-2 rounded-btn border border-strong bg-inset text-sm text-content"
+                    />
+                  </label>
+                </>
+              )}
+              <label className="block">
+                <span className="text-xs text-content-tertiary">{t('mcp_field_prefix')}</span>
+                <input
+                  value={editor.tool_name_prefix || ''}
+                  onChange={(e) => setEditor({ ...editor, tool_name_prefix: e.target.value })}
+                  className="mt-1 w-full px-3 py-2 rounded-btn border border-strong bg-inset text-sm text-content"
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs text-content-tertiary">{t('mcp_field_timeout')}</span>
+                <input
+                  type="number"
+                  min={1}
+                  value={editor.timeout || ''}
+                  onChange={(e) => setEditor({ ...editor, timeout: e.target.value ? Number(e.target.value) : undefined })}
+                  className="mt-1 w-full px-3 py-2 rounded-btn border border-strong bg-inset text-sm text-content"
+                />
+              </label>
+              <label className="flex items-center gap-2 text-xs text-content-tertiary">
+                <input
+                  type="checkbox"
+                  checked={!!editor.disabled}
+                  onChange={(e) => setEditor({ ...editor, disabled: e.target.checked })}
+                />
+                {t('mcp_field_disabled')}
+              </label>
+              {testResult && <p className="text-xs text-content-secondary bg-inset rounded-btn px-3 py-2">{testResult}</p>}
+            </div>
+            <div className="flex items-center justify-end gap-2 mt-5">
+              <button type="button" onClick={() => setEditor(null)} className="px-3 py-1.5 rounded-btn text-sm text-content-secondary">
+                {t('mcp_cancel')}
+              </button>
+              <button type="button" onClick={() => void testEditor()} className="px-3 py-1.5 rounded-btn text-sm text-accent bg-accent-soft">
+                {t('mcp_test')}
+              </button>
+              <button type="button" onClick={() => void saveEditor()} disabled={saving} className="px-3 py-1.5 rounded-btn text-sm text-white bg-accent disabled:opacity-50">
+                {t('mcp_save')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
-const Section: React.FC<{ title: string; count: number; children: React.ReactNode }> = ({ title, count, children }) => (
+const Section: React.FC<{ title: string; count: number; action?: React.ReactNode; children: React.ReactNode }> = ({
+  title,
+  count,
+  action,
+  children,
+}) => (
   <div>
     <div className="flex items-center gap-2 mb-3">
       <span className="text-xs font-semibold uppercase tracking-wider text-content-tertiary">{title}</span>
       {count > 0 && (
         <span className="px-1.5 py-0.5 rounded-full text-xs bg-inset-2 text-content-tertiary min-w-[20px] text-center">{count}</span>
       )}
+      {action}
     </div>
     {children}
   </div>

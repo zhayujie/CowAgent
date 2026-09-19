@@ -1,0 +1,73 @@
+    <!-- MCP Server Editor -->
+    <div id="mcp-editor-overlay" class="fixed inset-0 bg-black/50 z-[200] hidden flex items-center justify-center">
+        <div class="bg-white dark:bg-[#1A1A1A] rounded-2xl border border-slate-200 dark:border-white/10 shadow-xl w-full max-w-lg mx-4 overflow-hidden">
+            <div class="p-6 max-h-[85vh] overflow-y-auto">
+                <div class="flex items-center gap-3 mb-4">
+                    <div class="w-10 h-10 rounded-xl bg-primary-50 dark:bg-primary-900/20 flex items-center justify-center flex-shrink-0">
+                        <i class="fas fa-plug text-primary-500"></i>
+                    </div>
+                    <h3 id="mcp-editor-title" class="text-base font-semibold text-slate-800 dark:text-slate-100" data-i18n="mcp_add">Add server</h3>
+                </div>
+                <div class="space-y-3 text-sm">
+                    <label class="block">
+                        <span class="text-xs text-slate-500 dark:text-slate-400" data-i18n="mcp_field_name">Name</span>
+                        <input id="mcp-field-name" class="mt-1 w-full px-3 py-1.5 rounded-lg bg-white dark:bg-[#111111] border border-slate-200 dark:border-white/10">
+                    </label>
+                    <label class="block">
+                        <span class="text-xs text-slate-500 dark:text-slate-400" data-i18n="mcp_field_type">Transport</span>
+                        <select id="mcp-field-type" class="mt-1 w-full px-3 py-1.5 rounded-lg bg-white dark:bg-[#111111] border border-slate-200 dark:border-white/10">
+                            <option value="stdio">stdio</option>
+                            <option value="sse">SSE</option>
+                            <option value="streamable-http">streamable-http</option>
+                        </select>
+                    </label>
+                    <div id="mcp-stdio-fields" class="space-y-3">
+                        <label class="block">
+                            <span class="text-xs text-slate-500 dark:text-slate-400" data-i18n="mcp_field_command">Command</span>
+                            <input id="mcp-field-command" class="mt-1 w-full px-3 py-1.5 rounded-lg bg-white dark:bg-[#111111] border border-slate-200 dark:border-white/10" placeholder="npx / uvx / python">
+                        </label>
+                        <label class="block">
+                            <span class="text-xs text-slate-500 dark:text-slate-400" data-i18n="mcp_field_args">Args (one per line)</span>
+                            <textarea id="mcp-field-args" rows="3" class="mt-1 w-full px-3 py-1.5 rounded-lg bg-white dark:bg-[#111111] border border-slate-200 dark:border-white/10 font-mono text-xs"></textarea>
+                        </label>
+                        <label class="block">
+                            <span class="text-xs text-slate-500 dark:text-slate-400" data-i18n="mcp_field_env">Env (KEY=value per line)</span>
+                            <textarea id="mcp-field-env" rows="3" class="mt-1 w-full px-3 py-1.5 rounded-lg bg-white dark:bg-[#111111] border border-slate-200 dark:border-white/10 font-mono text-xs"></textarea>
+                        </label>
+                    </div>
+                    <div id="mcp-url-fields" class="space-y-3 hidden">
+                        <label class="block">
+                            <span class="text-xs text-slate-500 dark:text-slate-400" data-i18n="mcp_field_url">URL</span>
+                            <input id="mcp-field-url" class="mt-1 w-full px-3 py-1.5 rounded-lg bg-white dark:bg-[#111111] border border-slate-200 dark:border-white/10" placeholder="https://example.com/mcp">
+                        </label>
+                        <label class="block">
+                            <span class="text-xs text-slate-500 dark:text-slate-400" data-i18n="mcp_field_headers">Headers (KEY=value per line)</span>
+                            <textarea id="mcp-field-headers" rows="3" class="mt-1 w-full px-3 py-1.5 rounded-lg bg-white dark:bg-[#111111] border border-slate-200 dark:border-white/10 font-mono text-xs"></textarea>
+                        </label>
+                        <label class="block">
+                            <span class="text-xs text-slate-500 dark:text-slate-400" data-i18n="mcp_field_scope">OAuth scope</span>
+                            <input id="mcp-field-scope" class="mt-1 w-full px-3 py-1.5 rounded-lg bg-white dark:bg-[#111111] border border-slate-200 dark:border-white/10">
+                        </label>
+                    </div>
+                    <label class="block">
+                        <span class="text-xs text-slate-500 dark:text-slate-400" data-i18n="mcp_field_prefix">Tool name prefix</span>
+                        <input id="mcp-field-prefix" class="mt-1 w-full px-3 py-1.5 rounded-lg bg-white dark:bg-[#111111] border border-slate-200 dark:border-white/10" placeholder="myserver_">
+                    </label>
+                    <label class="block">
+                        <span class="text-xs text-slate-500 dark:text-slate-400" data-i18n="mcp_field_timeout">Timeout (seconds)</span>
+                        <input id="mcp-field-timeout" type="number" min="1" class="mt-1 w-full px-3 py-1.5 rounded-lg bg-white dark:bg-[#111111] border border-slate-200 dark:border-white/10">
+                    </label>
+                    <label class="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                        <input id="mcp-field-disabled" type="checkbox" class="rounded">
+                        <span data-i18n="mcp_field_disabled">Disable this server</span>
+                    </label>
+                    <div id="mcp-test-result" class="hidden text-xs rounded-lg px-3 py-2 bg-slate-50 dark:bg-white/5"></div>
+                </div>
+                <div class="flex items-center justify-end gap-2 mt-5">
+                    <button type="button" id="mcp-editor-cancel" class="px-3 py-1.5 rounded-lg text-sm text-slate-500 hover:bg-slate-100 dark:hover:bg-white/10" data-i18n="mcp_cancel">Cancel</button>
+                    <button type="button" id="mcp-editor-test" class="px-3 py-1.5 rounded-lg text-sm text-primary-500 bg-primary-50 dark:bg-primary-900/20" data-i18n="mcp_test">Test connection</button>
+                    <button type="button" id="mcp-editor-save" class="px-3 py-1.5 rounded-lg text-sm text-white bg-primary-500 hover:bg-primary-600" data-i18n="mcp_save">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
