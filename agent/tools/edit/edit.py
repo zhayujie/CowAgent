@@ -217,7 +217,7 @@ class Edit(BaseTool):
                 result["warning"] = " ".join(warnings)
             
             # Notify memory manager if file is in memory directory
-            if self.memory_manager and "memory/" in path:
+            if self.memory_manager and self._is_memory_path(absolute_path):
                 try:
                     self.memory_manager.mark_dirty()
                 except Exception as e:
@@ -233,6 +233,42 @@ class Edit(BaseTool):
         except Exception as e:
             return ToolResult.fail(f"Error editing file: {str(e)}")
     
+    def _is_memory_path(self, absolute_path: str) -> bool:
+        """Whether a file lives under the workspace's ``memory/`` or
+        ``knowledge/`` tree and should therefore mark the memory index dirty.
+
+        Checked by resolving the path and comparing path segments, rather than
+        the old ``"memory/" in path`` substring test against the raw argument.
+        That test missed ``knowledge/`` entirely (so knowledge writes left the
+        index stale, #3176), broke on Windows separators
+        (``memory\\note.md``), and matched any path merely containing the
+        fragment (e.g. ``src/memory/cache.py``).
+
+        Files inside the workspace are judged relative to it; a path outside
+        the workspace is judged relative to the configured memory root, so an
+        absolute path into the shared ``knowledge/`` still counts.
+        """
+        target = os.path.normpath(absolute_path)
+        for base in (self.cwd, self._memory_root()):
+            if not base:
+                continue
+            base_norm = os.path.normpath(base)
+            try:
+                rel = os.path.relpath(target, base_norm)
+            except ValueError:
+                continue  # different drive on Windows
+            if rel.startswith(".."):
+                continue
+            first = rel.split(os.sep, 1)[0]
+            if first in ("memory", "knowledge"):
+                return True
+        return False
+
+    def _memory_root(self) -> str:
+        """Workspace root recorded on the memory manager, if any."""
+        cfg = getattr(self.memory_manager, "config", None)
+        return getattr(cfg, "workspace_root", None) or ""
+
     def _resolve_path(self, path: str) -> str:
         """
         Resolve path to absolute path
