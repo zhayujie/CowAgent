@@ -3,9 +3,18 @@ Scheduler tool for creating and managing scheduled tasks
 """
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
+
 from croniter import croniter
+from agent.tools.scheduler.time_utils import (
+    display_local,
+    next_cron_occurrence,
+    parse_utc,
+    resolve_timezone,
+    task_timezone,
+    utc_now,
+)
 
 from agent.tools.base_tool import BaseTool, ToolResult
 from bridge.context import Context, ContextType
@@ -83,6 +92,10 @@ class SchedulerTool(BaseTool):
                 "type": "string",
                 "description": "The specific channel instance the recipient belongs to, as returned by list_recipients. Required when a channel type runs more than one instance; the same receiver on two instances is two different targets. Omit for a single-instance channel."
             },
+            "timezone": {
+                "type": "string",
+                "description": "Optional IANA timezone (e.g. Asia/Shanghai) used for cron wall-clock times and naive ISO timestamps"
+            },
             "receiver": {
                 "type": "string",
                 "description": "Trusted target receiver returned by list_recipients. It cannot be an arbitrary user ID."
@@ -154,6 +167,7 @@ class SchedulerTool(BaseTool):
         ai_task = kwargs.get("ai_task")
         schedule_type = kwargs.get("schedule_type")
         schedule_value = kwargs.get("schedule_value")
+        timezone_name = kwargs.get("timezone")
         
         # Validate required fields
         if not name:
@@ -171,7 +185,7 @@ class SchedulerTool(BaseTool):
             return "错误: 缺少调度值 (schedule_value)"
         
         # Validate schedule
-        schedule = self._parse_schedule(schedule_type, schedule_value)
+        schedule = self._parse_schedule(schedule_type, schedule_value, timezone_name)
         if not schedule:
             return f"错误: 无效的调度配置 - type: {schedule_type}, value: {schedule_value}"
         
@@ -292,7 +306,7 @@ class SchedulerTool(BaseTool):
             f"⏰ 调度: {schedule_desc}\n"
             f"👤 接收者: {receiver_desc}\n"
             f"{content_desc}{silent_desc}\n"
-            f"🕐 下次执行: {next_run.strftime('%Y-%m-%d %H:%M:%S') if next_run else '未知'}"
+            f"🕐 下次执行: {next_run.astimezone().strftime('%Y-%m-%d %H:%M:%S') if next_run else '未知'}"
         )
     
     def _list_tasks(self, **kwargs) -> str:
@@ -308,7 +322,7 @@ class SchedulerTool(BaseTool):
             status = "✅" if task.get("enabled", True) else "❌"
             schedule_desc = self._format_schedule_description(task.get("schedule", {}))
             next_run = task.get("next_run_at")
-            next_run_str = datetime.fromisoformat(next_run).strftime('%m-%d %H:%M') if next_run else "未知"
+            next_run_str = display_local(next_run, task_timezone(task)).strftime('%m-%d %H:%M') if next_run else "未知"
             
             lines.append(
                 f"{status} [{task['id']}] {task['name']}\n"
@@ -350,9 +364,10 @@ class SchedulerTool(BaseTool):
         schedule_desc = self._format_schedule_description(task.get("schedule", {}))
         action = task.get("action", {})
         next_run = task.get("next_run_at")
-        next_run_str = datetime.fromisoformat(next_run).strftime('%Y-%m-%d %H:%M:%S') if next_run else "未知"
+        zone = task_timezone(task)
+        next_run_str = display_local(next_run, zone).strftime('%Y-%m-%d %H:%M:%S') if next_run else "未知"
         last_run = task.get("last_run_at")
-        last_run_str = datetime.fromisoformat(last_run).strftime('%Y-%m-%d %H:%M:%S') if last_run else "从未执行"
+        last_run_str = display_local(last_run, zone).strftime('%Y-%m-%d %H:%M:%S') if last_run else "从未执行"
         
         return (
             f"📋 任务详情\n\n"
@@ -364,7 +379,7 @@ class SchedulerTool(BaseTool):
             f"消息: {action.get('content')}\n"
             f"下次执行: {next_run_str}\n"
             f"上次执行: {last_run_str}\n"
-            f"创建时间: {datetime.fromisoformat(task['created_at']).strftime('%Y-%m-%d %H:%M:%S')}"
+            f"创建时间: {display_local(task['created_at']).strftime('%Y-%m-%d %H:%M:%S')}"
         )
     
     def _delete_task(self, **kwargs) -> str:
@@ -406,13 +421,19 @@ class SchedulerTool(BaseTool):
         self.task_store.enable_task(task_id, False)
         return f"✅ 任务 '{task['name']}' ({task_id}) 已禁用"
     
-    def _parse_schedule(self, schedule_type: str, schedule_value: str) -> Optional[dict]:
+    def _parse_schedule(
+        self, schedule_type: str, schedule_value: str, timezone_name: str = None
+    ) -> Optional[dict]:
         """Parse and validate schedule configuration"""
         try:
+            zone = resolve_timezone(timezone_name)
             if schedule_type == "cron":
                 # Validate cron expression
                 croniter(schedule_value)
-                return {"type": "cron", "expression": schedule_value}
+                schedule = {"type": "cron", "expression": schedule_value}
+                if timezone_name:
+                    schedule["timezone"] = timezone_name.strip()
+                return schedule
             
             elif schedule_type == "interval":
                 # Parse interval in seconds
@@ -432,8 +453,7 @@ class SchedulerTool(BaseTool):
                         amount = int(match.group(1))
                         unit = match.group(2)
                         
-                        from datetime import timedelta
-                        now = datetime.now()
+                        now = utc_now()
                         
                         if unit == 's':  # seconds
                             target_time = now + timedelta(seconds=amount)
@@ -446,17 +466,22 @@ class SchedulerTool(BaseTool):
                         else:
                             return None
                         
-                        return {"type": "once", "run_at": target_time.isoformat()}
+                        schedule = {"type": "once", "run_at": target_time.isoformat()}
+                        if timezone_name:
+                            schedule["timezone"] = timezone_name.strip()
+                        return schedule
                     else:
                         logger.error(f"[SchedulerTool] Invalid relative time format: {schedule_value}")
                         return None
                 else:
-                    # Absolute ISO time. Normalize to tz-naive local so it
-                    # stays comparable with the scheduler's datetime.now().
-                    parsed = datetime.fromisoformat(schedule_value)
-                    if parsed.tzinfo is not None:
-                        parsed = parsed.astimezone().replace(tzinfo=None)
-                    return {"type": "once", "run_at": parsed.isoformat()}
+                    # Absolute ISO times are canonicalized to UTC. A naive
+                    # value uses the task timezone, or server-local time for
+                    # backward compatibility when no timezone was supplied.
+                    parsed = parse_utc(schedule_value, zone)
+                    schedule = {"type": "once", "run_at": parsed.isoformat()}
+                    if timezone_name:
+                        schedule["timezone"] = timezone_name.strip()
+                    return schedule
             
         except Exception as e:
             logger.error(f"[SchedulerTool] Invalid schedule: {e}")
@@ -468,21 +493,19 @@ class SchedulerTool(BaseTool):
         """Calculate next run time for a task"""
         schedule = task.get("schedule", {})
         schedule_type = schedule.get("type")
-        now = datetime.now()
+        now = utc_now()
         
         if schedule_type == "cron":
             expression = schedule.get("expression")
-            cron = croniter(expression, now)
-            return cron.get_next(datetime)
+            return next_cron_occurrence(expression, now, task_timezone(task))
         
         elif schedule_type == "interval":
             seconds = schedule.get("seconds", 0)
-            from datetime import timedelta
             return now + timedelta(seconds=seconds)
         
         elif schedule_type == "once":
             run_at_str = schedule.get("run_at")
-            return datetime.fromisoformat(run_at_str)
+            return parse_utc(run_at_str, task_timezone(task))
         
         return None
     
@@ -492,6 +515,7 @@ class SchedulerTool(BaseTool):
         
         if schedule_type == "cron":
             expr = schedule.get("expression", "")
+            zone_name = schedule.get("timezone")
             # Try to provide friendly description
             if expr == "0 9 * * *":
                 return "每天 9:00"
@@ -500,7 +524,7 @@ class SchedulerTool(BaseTool):
             elif expr == "*/30 * * * *":
                 return "每30分钟"
             else:
-                return f"Cron: {expr}"
+                return f"Cron: {expr} ({zone_name})" if zone_name else f"Cron: {expr}"
         
         elif schedule_type == "interval":
             seconds = schedule.get("seconds", 0)
@@ -519,7 +543,7 @@ class SchedulerTool(BaseTool):
         elif schedule_type == "once":
             run_at = schedule.get("run_at", "")
             try:
-                dt = datetime.fromisoformat(run_at)
+                dt = display_local(run_at, resolve_timezone(schedule.get("timezone")))
                 return f"一次性 ({dt.strftime('%Y-%m-%d %H:%M')})"
             except Exception:
                 return "一次性"
