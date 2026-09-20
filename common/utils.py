@@ -288,6 +288,24 @@ def current_agent_run_id() -> Optional[str]:
     )
 
 
+def current_agent_user_id() -> Optional[str]:
+    """Current end user: the ambient ``RuntimeIdentity`` first, else the value
+    passed to a child process via the COW_AGENT_USER_ID env var.
+
+    Mirrors ``current_agent_run_id``: the channel layer resolves the sender onto
+    ``RuntimeIdentity``, and a subprocess that inherits only the environment
+    still sees the same id, so the ``X-Agent-User-Id`` header and the
+    ``COW_AGENT_USER_ID`` env var never disagree.
+    """
+    from common.runtime_identity import current_identity
+
+    return (
+        current_identity().user_id
+        or (os.environ.get("COW_AGENT_USER_ID") or "").strip()
+        or None
+    )
+
+
 def apply_client_source(headers: dict) -> dict:
     """Tag headers with the runtime origin (and deployment id when set)."""
     headers["X-Client-Source"] = get_client_source()
@@ -300,6 +318,9 @@ def apply_client_source(headers: dict) -> dict:
     run_id = current_agent_run_id()
     if run_id:
         headers["X-Agent-Run-Id"] = run_id
+    user_id = current_agent_user_id()
+    if user_id:
+        headers["X-Agent-User-Id"] = user_id
     dep = _deployment_id()
     if dep:
         headers["X-Deployment-Id"] = dep

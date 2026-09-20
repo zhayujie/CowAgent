@@ -17,7 +17,7 @@ from plugins import *
 
 try:
     from voice.audio_convert import any_to_wav
-except Exception as e:
+except Exception:
     pass
 
 handler_pool = ThreadPoolExecutor(max_workers=8)  # 处理消息的线程池
@@ -214,10 +214,25 @@ class ChatChannel(Channel):
         ``produce`` already routed the context, so the agent is read back here
         rather than resolved twice. Without this the bridge would serve the
         bound Agent while workspace paths still resolved to the default one.
+
+        The sender is read from the message rather than the routing fields:
+        ``actual_user_id`` is the human who asked (set when a message was
+        routed on someone's behalf, as in a group), and only falls back to
+        ``from_user_id``. Channels with no end user (web console before login,
+        scheduler boots) leave it None instead of reusing the session id.
         """
+        msg = context.get("msg")
+        sender = ""
+        if msg is not None:
+            sender = (
+                getattr(msg, "actual_user_id", None)
+                or getattr(msg, "from_user_id", None)
+                or ""
+            )
         return RuntimeIdentity(
             agent_id=context.get("agent_id"),
             session_id=context.get("session_id"),
+            user_id=(sender or None),
         )
 
     def _generate_reply(self, context: Context, reply: Reply = Reply()) -> Reply:
@@ -250,7 +265,7 @@ class ChatChannel(Channel):
                     os.remove(file_path)
                     if wav_path != file_path:
                         os.remove(wav_path)
-                except Exception as e:
+                except Exception:
                     pass
                     # logger.warning("[chat_channel]delete temp file error: " + str(e))
 
@@ -460,7 +475,7 @@ class ChatChannel(Channel):
                     self._fail_callback(session_id, exception=worker_exception, **kwargs)
                 else:
                     self._success_callback(session_id, **kwargs)
-            except CancelledError as e:
+            except CancelledError:
                 logger.info("Worker cancelled, session_id = {}".format(session_id))
             except Exception as e:
                 logger.exception("Worker raise exception: {}".format(e))
