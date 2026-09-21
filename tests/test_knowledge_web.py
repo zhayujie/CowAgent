@@ -121,9 +121,16 @@ def test_knowledge_document_editor_contract():
     # Every way out of an open text area asks before dropping what is in it.
     assert "memoryEditor.guard(next) && skillEditor.guard(next) && knowledgeEditor.guard(next)" in js
     for leaving in ("openKnowledgeFile(path, title)", "switchKnowledgeTab(tab)",
-                    "selectKnowledgeAgent(agentId)", "knowledgeMobileBack"):
+                    "selectKnowledgeAgent(agentId)", "knowledgeMobileBack",
+                    # These end in loadKnowledgeView(), which redraws the tree
+                    # and the viewer with it, so they drop an open text area
+                    # just as surely as opening another document does.
+                    "createKnowledgeCategory", "createKnowledgeDocument",
+                    "renameKnowledgeCategory(path)", "deleteKnowledgeCategory(path)",
+                    "deleteKnowledgeDocument(path)", "moveKnowledgeDocument(path)",
+                    "openKnowledgeImportDialog(files)"):
         assert f"knowledgeEditor.guard(() => {leaving})" in js or \
-               f"knowledgeEditor.guard({leaving})" in js
+               f"knowledgeEditor.guard({leaving})" in js, leaving
 
 
 class UploadedFile:

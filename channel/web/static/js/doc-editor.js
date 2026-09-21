@@ -215,8 +215,10 @@ function createDocEditor(cfg) {
         // Assigning `value` leaves the caret at the end of the text, and
         // focusing then scrolls the whole document down to it. Put the caret on
         // the line the reader was looking at instead, so typing lands there and
-        // not a screen away.
-        const lines = content.split('\n');
+        // not a screen away. Counted over the text area's own value: a CRLF
+        // document loses a character per line on the way in, and offsets taken
+        // from `content` would land that many characters too far down.
+        const lines = ta.value.split('\n');
         const line = Math.min(lines.length - 1, Math.round((ratio || 0) * lines.length));
         let offset = 0;
         for (let i = 0; i < line; i++) offset += lines[i].length + 1;
@@ -294,7 +296,7 @@ function createDocEditor(cfg) {
         // Where the text area was left, so saving does not send the reader
         // back to the top of a document they were halfway down.
         const body = cfg.body();
-        const ratio = _docScrollRatio(textarea() || body || document.body);
+        const ratio = body ? _docScrollRatio(textarea() || body) : 0;
         editing = false;
         baseline = '';
         baseMtime = null;

@@ -165,14 +165,19 @@ class KnowledgeService:
             queue["paths"].update(old_paths)
             queue["force"] = queue["force"] or force
             worker = queue["worker"]
-            # A live worker re-reads the queue before it exits, so what was
-            # just added is covered by it.
+            # A worker re-reads the queue before it exits, so what was just
+            # added is covered by the one already on the job.
             if worker is not None and worker.is_alive():
                 return
             worker = threading.Thread(target=self._drain_reindex_queue, args=(key,),
                                       name="knowledge-reindex", daemon=True)
             queue["worker"] = worker
-        worker.start()
+            # Started while holding the lock, so the slot is never occupied by a
+            # thread that has not begun: a second caller would read it as dead
+            # and start a rival sync of the same index, and wait_for_reindex
+            # would try to join it. The worker's first move is to take this same
+            # lock, so it waits out the rest of this block.
+            worker.start()
 
     def _drain_reindex_queue(self, key: str):
         while True:

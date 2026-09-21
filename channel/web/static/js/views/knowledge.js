@@ -488,7 +488,12 @@ function toggleKnowledgeNewMenu(event) {
     }
 }
 
+// Every one of these ends in loadKnowledgeView(), which redraws the tree and
+// with it the viewer, so an open text area does not survive them. Asked here,
+// before the action's own dialog, rather than after the user has already
+// confirmed a deletion that cannot be called off.
 function createKnowledgeCategory() {
+    if (!knowledgeEditor.guard(createKnowledgeCategory)) return;
     openKnowledgeDialog({
         title: currentLang === 'zh' ? '新建分类' : 'New category',
         subtitle: currentLang === 'zh' ? '分类会创建为 knowledge/ 下的目录' : 'Creates a directory under knowledge/',
@@ -500,6 +505,7 @@ function createKnowledgeCategory() {
 }
 
 function createKnowledgeDocument() {
+    if (!knowledgeEditor.guard(createKnowledgeDocument)) return;
     const categories = _knowledgeCategoryPaths(_knowledgeTreeData);
     if (!categories.length) {
         _setKnowledgeStatus(currentLang === 'zh' ? '请先创建分类' : 'Create a category first', true);
@@ -562,6 +568,7 @@ function selectKnowledgeImportFiles() {
 }
 
 function openKnowledgeImportDialog(files) {
+    if (!knowledgeEditor.guard(() => openKnowledgeImportDialog(files))) return;
     const validationError = validateKnowledgeImportFiles(files);
     if (validationError) {
         _setKnowledgeStatus(validationError, true);
@@ -660,6 +667,7 @@ function initKnowledgeImportDropZone() {
 }
 
 function renameKnowledgeCategory(path) {
+    if (!knowledgeEditor.guard(() => renameKnowledgeCategory(path))) return;
     openKnowledgeDialog({
         title: currentLang === 'zh' ? '重命名分类' : 'Rename category',
         subtitle: path,
@@ -672,6 +680,7 @@ function renameKnowledgeCategory(path) {
 }
 
 function deleteKnowledgeCategory(path) {
+    if (!knowledgeEditor.guard(() => deleteKnowledgeCategory(path))) return;
     showConfirmDialog({
         title: '删除分类',
         message: `确认删除“${path}”及其中全部文档？`,
@@ -682,6 +691,7 @@ function deleteKnowledgeCategory(path) {
 }
 
 function deleteKnowledgeDocument(path) {
+    if (!knowledgeEditor.guard(() => deleteKnowledgeDocument(path))) return;
     showConfirmDialog({
         title: '删除文档',
         message: `确认删除“${path}”？`,
@@ -692,6 +702,7 @@ function deleteKnowledgeDocument(path) {
 }
 
 function moveKnowledgeDocument(path) {
+    if (!knowledgeEditor.guard(() => moveKnowledgeDocument(path))) return;
     const currentCategory = path.includes('/') ? path.split('/').slice(0, -1).join('/') : '';
     const choices = _knowledgeCategoryPaths(_knowledgeTreeData).filter(value => value !== currentCategory);
     openKnowledgeDialog({
@@ -822,7 +833,11 @@ function openKnowledgeFile(path, title) {
         if (window.innerWidth < 768) {
             document.getElementById('knowledge-sidebar').classList.add('hidden');
         }
-    }).catch(() => {});
+    }).catch(error => {
+        // The viewer is still showing whatever was open before the click, and
+        // the tree has already moved its highlight: say why it did not follow.
+        _setKnowledgeStatus(currentLang === 'zh' ? '文档加载失败' : 'Failed to load document', true);
+    });
 }
 
 function knowledgeMobileBack() {
