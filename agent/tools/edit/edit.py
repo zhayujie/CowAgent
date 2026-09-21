@@ -230,7 +230,7 @@ class Edit(BaseTool):
             ):
                 try:
                     self.memory_manager.mark_dirty()
-                except Exception as e:
+                except Exception:
                     # Don't fail the edit if memory notification fails
                     pass
             
