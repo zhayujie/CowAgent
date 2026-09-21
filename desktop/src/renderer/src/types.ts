@@ -923,6 +923,20 @@ export interface KnowledgeList {
   enabled: boolean
 }
 
+// What `/api/knowledge/read` answers. `mtime` and `editable` mirror the
+// workspace read endpoint, which is what lets a knowledge page drive the same
+// document editor the memory and skill pages use.
+export interface KnowledgeReadResult {
+  status: string
+  message?: string
+  content: string
+  path: string
+  mtime: number
+  editable: boolean
+  /** Absolute directory of the page, for resolving its relative image srcs. */
+  dir?: string
+}
+
 export interface KnowledgeGraph {
   nodes: Array<{ id: string; label: string; category?: string }>
   links: Array<{ source: string; target: string }>
@@ -933,6 +947,12 @@ export interface KnowledgeGraph {
 export type KnowledgeAction = { agent_id?: string } & (
   | { action: 'create_category'; payload: { path: string } }
   | { action: 'create_document'; payload: { path: string; content: string; overwrite?: boolean } }
+  // `expected_mtime` is the timestamp the editor started from; the backend
+  // refuses the save when the Agent has rewritten the page since.
+  | {
+      action: 'update_document'
+      payload: { path: string; content: string; expected_mtime?: number | null }
+    }
   | { action: 'rename_category'; payload: { path: string; new_path: string } }
   | { action: 'delete_category'; payload: { path: string; confirm?: boolean } }
   | { action: 'delete_documents'; payload: { paths: string[] } }

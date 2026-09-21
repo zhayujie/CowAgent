@@ -442,7 +442,7 @@ def test_desktop_doc_editor_shares_one_implementation():
 
     # Built at module scope: an unsaved edit has to outlive its page being
     # unmounted by a route change, which is also what lets the guard find it.
-    for rel in ("pages/MemoryPage.tsx", "pages/SkillsPage.tsx"):
+    for rel in ("pages/MemoryPage.tsx", "pages/SkillsPage.tsx", "pages/KnowledgePage.tsx"):
         src = _desktop(rel)
         assert re.search(r"^const \w+Editor = createDocEditorStore", src, re.M), rel
 
@@ -487,6 +487,24 @@ def test_desktop_skill_editing_is_addressed_by_name():
     assert "void loadData()" in page
 
 
+def test_desktop_knowledge_editing_saves_through_the_reindexing_endpoint():
+    """A knowledge page is answered from the vector index, so a save that went
+    through the workspace endpoint would leave search quoting the old text."""
+    page = _desktop("pages/KnowledgePage.tsx")
+
+    factory = re.search(r"createDocEditorStore<KnowledgeRef.*?\n\}\)", page, re.S).group(0)
+    assert "action: 'update_document'" in factory
+    assert "workspaceWrite" not in factory
+    assert "expected_mtime: expectedMtime" in factory
+    # That endpoint reports a conflict inside its payload; `code` there is the
+    # HTTP status, which the editor would read as "no conflict".
+    assert "payload.conflict ? 'conflict' : undefined" in factory
+
+    # A saved H1 is the page's title in the tree, and its size feeds the stats
+    # line, so the list has to be re-read once the write lands.
+    assert "state.content !== prev.content) void refresh()" in page
+
+
 def test_desktop_doc_editors_are_guarded_on_the_way_out():
     """Leaving the page unmounts the text area, so every exit has to ask first -
     and ask *before* it commits, or declining cannot call it off."""
@@ -497,6 +515,10 @@ def test_desktop_doc_editors_are_guarded_on_the_way_out():
     assert "memoryEditor.getState().close()" in _desktop("pages/MemoryPage.tsx")
     assert "if (!(await memoryEditor.getState().guard())) return" in _desktop("pages/MemoryPage.tsx")
     assert "skillEditor.getState().close()" in _desktop("pages/SkillsPage.tsx")
+    # On the knowledge page, the Agent picker and the graph tab both replace
+    # what the text area is editing.
+    assert (_desktop("pages/KnowledgePage.tsx")
+            .count("if (!(await knowledgeEditor.getState().guard())) return") == 2)
 
 
 def test_desktop_doc_editor_seeds_declaratively():
@@ -516,5 +538,5 @@ def test_desktop_doc_editor_seeds_declaratively():
     # Every string these pages show must exist in both locales.
     i18n = _desktop("i18n.ts")
     for key in ("doc_edit", "doc_edit_save", "skill_back", "skill_open_hint",
-                "skill_builtin_readonly"):
+                "skill_builtin_readonly", "knowledge_doc_readonly"):
         assert i18n.count(f"{key}:") == 2, key

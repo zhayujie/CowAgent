@@ -106,7 +106,7 @@ const translations: Record<string, Record<string, string>> = {
     knowledge_loading: '加载知识库中...',
     knowledge_graph_empty: '暂无关联图谱',
     knowledge_disabled: '知识库未启用',
-    knowledge_doc_load_error: '文档加载失败',
+    knowledge_doc_readonly: 'index.md 和 log.md 由 Agent 自动维护，不可编辑',
     // knowledge management
     knowledge_new: '新建',
     knowledge_new_category: '新建分类',
@@ -855,7 +855,7 @@ const translations: Record<string, Record<string, string>> = {
     knowledge_loading: 'Loading knowledge base...',
     knowledge_graph_empty: 'No graph available',
     knowledge_disabled: 'Knowledge base is disabled',
-    knowledge_doc_load_error: 'Failed to load document',
+    knowledge_doc_readonly: 'index.md and log.md are maintained by the Agent and cannot be edited',
     // knowledge management
     knowledge_new: 'New',
     knowledge_new_category: 'New category',

@@ -27,6 +27,7 @@ import type {
   KnowledgeGraph,
   KnowledgeAction,
   KnowledgeImportPayload,
+  KnowledgeReadResult,
   WorkspaceEntry,
   WorkspaceReadResult,
   WorkspaceTree,
@@ -893,10 +894,13 @@ class ApiClient {
     return this.request<{ status: string } & KnowledgeList>(this.scoped('/api/knowledge/list', agentId))
   }
 
+  // `mtime` and `editable` are what an editor needs to offer a safe save: the
+  // baseline a stale write is rejected against, and whether the page may be
+  // written back at all (index.md and log.md are the Agent's to maintain).
   async readKnowledge(
     path: string,
     agentId?: string
-  ): Promise<{ status: string; content: string; path: string; dir?: string }> {
+  ): Promise<KnowledgeReadResult> {
     return this.request(this.scoped(`/api/knowledge/read?path=${encodeURIComponent(path)}`, agentId))
   }
 
