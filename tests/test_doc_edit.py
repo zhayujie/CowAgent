@@ -348,7 +348,15 @@ def test_document_editor_contract():
     # A text area normalizes CRLF to LF in its value, so the dirty baseline has
     # to come from the mounted element rather than the response text - otherwise
     # a CRLF document looks edited the moment it opens.
-    assert "baseline = mount(body, data.content).value;" in editor
+    assert "baseline = mount(body, data.content, ratio).value;" in editor
+    # Assigning `value` parks the caret at the end of the text, so focusing the
+    # text area used to scroll a long document to its last line. Both the caret
+    # and the scroll follow how far down the reader already was.
+    assert "const ratio = _docScrollRatio(body);" in editor
+    assert "ta.setSelectionRange(offset, offset);" in editor
+    assert "_docApplyScrollRatio(ta, ratio || 0);" in editor
+    # And the same on the way back, or saving would jump to the top.
+    assert "_docApplyScrollRatio(body, ratio);" in editor
     # The guard clears the editing flag before retrying, so discarding has to
     # retry through exit(); retrying through cancel() would hit its own
     # `if (!editing) return` and leave the text area on screen.
@@ -503,6 +511,27 @@ def test_desktop_knowledge_editing_saves_through_the_reindexing_endpoint():
     # A saved H1 is the page's title in the tree, and its size feeds the stats
     # line, so the list has to be re-read once the write lands.
     assert "state.content !== prev.content) void refresh()" in page
+
+
+def test_desktop_editor_opens_where_the_reader_was():
+    """The text area replaces the rendered document rather than scrolling it,
+    so a reader halfway down a long page would land back at the top - and,
+    because focusing follows the caret, on the web at the very end."""
+    editor = _desktop("components/DocEditor.tsx")
+
+    assert "export function DocView<D>(" in editor
+    assert "el.setSelectionRange(offset, offset)" in editor
+    # Definition, then one restore on each side of the swap, and one hand-off
+    # from each as it is unmounted.
+    assert editor.count("applyScrollRatio(") == 3
+    assert editor.count("scrollMemory.set(") == 2
+
+    # Both halves of the swap have to be wired, or the position has nowhere to
+    # come from on one side of it.
+    for rel in ("pages/MemoryPage.tsx", "pages/SkillsPage.tsx", "pages/KnowledgePage.tsx"):
+        src = _desktop(rel)
+        assert re.search(r"<DocView store=\{\w+Editor\}>", src), rel
+        assert "<DocEditor" in src, rel
 
 
 def test_desktop_doc_editors_are_guarded_on_the_way_out():

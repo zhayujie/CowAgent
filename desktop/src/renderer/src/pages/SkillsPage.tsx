@@ -6,7 +6,7 @@ import type { ApiResult } from '../api/client'
 import type { ToolInfo, SkillInfo, SkillContent } from '../types'
 import { Toggle } from './settings/primitives'
 import Markdown from '../components/Markdown'
-import { DocActions, DocEditor, DocNotice } from '../components/DocEditor'
+import { DocActions, DocEditor, DocNotice, DocView } from '../components/DocEditor'
 import { createDocEditorStore, docRefusal } from '../store/docEditorStore'
 
 interface SkillsPageProps {
@@ -198,7 +198,7 @@ const SkillsPage: React.FC<SkillsPageProps> = ({ baseUrl }) => {
               <DocEditor key={doc.name} store={skillEditor} textareaRef={editorRef} />
             </div>
           ) : (
-            <div className="flex-1 overflow-y-auto">
+            <DocView store={skillEditor}>
               <div className="max-w-3xl mx-auto px-6 py-6">
                 {docLoading ? (
                   <div className="flex items-center text-content-tertiary py-8">
@@ -208,7 +208,7 @@ const SkillsPage: React.FC<SkillsPageProps> = ({ baseUrl }) => {
                   <SkillContentView content={content} />
                 )}
               </div>
-            </div>
+            </DocView>
           )}
         </div>
       ) : (

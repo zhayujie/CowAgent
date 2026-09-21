@@ -6,7 +6,7 @@ import apiClient from '../api/client'
 import type { ApiResult } from '../api/client'
 import type { MemoryItem, MemoryCategory, WorkspaceReadResult } from '../types'
 import Markdown from '../components/Markdown'
-import { DocActions, DocEditor, DocNotice } from '../components/DocEditor'
+import { DocActions, DocEditor, DocNotice, DocView } from '../components/DocEditor'
 import { createDocEditorStore } from '../store/docEditorStore'
 import AgentScopeSelect from '../components/AgentScopeSelect'
 import { useAgentStore, selectMultiAgent } from '../store/agentStore'
@@ -209,7 +209,7 @@ const MemoryPage: React.FC<MemoryPageProps> = ({ baseUrl }) => {
               <DocEditor key={doc.filename} store={memoryEditor} textareaRef={editorRef} />
             </div>
           ) : (
-            <div className="flex-1 overflow-y-auto">
+            <DocView store={memoryEditor}>
               <div className="max-w-3xl mx-auto px-6 py-6">
                 {docLoading ? (
                   <div className="flex items-center text-content-tertiary py-8">
@@ -219,7 +219,7 @@ const MemoryPage: React.FC<MemoryPageProps> = ({ baseUrl }) => {
                   <Markdown content={content} />
                 )}
               </div>
-            </div>
+            </DocView>
           )}
         </div>
       ) : (

@@ -28,6 +28,24 @@ function docUneditableReason(data) {
 }
 
 /**
+ * How far down its scrollable content an element sits, 0 to 1.
+ *
+ * Switching between the rendered document and the text area swaps one element
+ * for the other, so there is no scroll position to carry over - only how far
+ * through the document the reader was. The two have different heights, which
+ * makes this an approximation, but one that lands on the same passage.
+ */
+function _docScrollRatio(el) {
+    const max = el.scrollHeight - el.clientHeight;
+    return max > 0 ? el.scrollTop / max : 0;
+}
+
+function _docApplyScrollRatio(el, ratio) {
+    const max = el.scrollHeight - el.clientHeight;
+    if (max > 0) el.scrollTop = Math.round(ratio * max);
+}
+
+/**
  * Build an editor bound to one page's DOM and API.
  *
  * @param {object} cfg
@@ -127,6 +145,8 @@ function createDocEditor(cfg) {
         const target = doc;
         const body = cfg.body();
         if (!body) return;
+        // Read before the spinner replaces the document, which zeroes it.
+        const ratio = _docScrollRatio(body);
         body.innerHTML = '<div class="py-10 text-center text-slate-400 dark:text-slate-500">'
             + '<i class="fas fa-spinner fa-spin"></i></div>';
 
@@ -155,12 +175,16 @@ function createDocEditor(cfg) {
         // Read the baseline back out of the text area rather than using the
         // response text: a text area normalizes CRLF to LF in its value, so a
         // CRLF file would compare as modified from the moment it loaded.
-        baseline = mount(body, data.content).value;
+        baseline = mount(body, data.content, ratio).value;
         sync();
     }
 
-    /** @returns {HTMLTextAreaElement} the text area now holding the document. */
-    function mount(body, content) {
+    /**
+     * @param {number} [ratio] - where the reader was in the rendered document,
+     *   so the text area opens on the same passage.
+     * @returns {HTMLTextAreaElement} the text area now holding the document.
+     */
+    function mount(body, content, ratio) {
         body.innerHTML = '';
         const ta = document.createElement('textarea');
         ta.className = 'doc-editor';
@@ -188,7 +212,19 @@ function createDocEditor(cfg) {
                 sync();
             }
         });
+        // Assigning `value` leaves the caret at the end of the text, and
+        // focusing then scrolls the whole document down to it. Put the caret on
+        // the line the reader was looking at instead, so typing lands there and
+        // not a screen away.
+        const lines = content.split('\n');
+        const line = Math.min(lines.length - 1, Math.round((ratio || 0) * lines.length));
+        let offset = 0;
+        for (let i = 0; i < line; i++) offset += lines[i].length + 1;
+        ta.setSelectionRange(offset, offset);
         ta.focus();
+        // After focus: focusing scrolls to the caret, which is only roughly
+        // where the reader was.
+        _docApplyScrollRatio(ta, ratio || 0);
         return ta;
     }
 
@@ -255,10 +291,15 @@ function createDocEditor(cfg) {
 
     /** Leave the editor and show the rendered document again. */
     function exit() {
+        // Where the text area was left, so saving does not send the reader
+        // back to the top of a document they were halfway down.
+        const body = cfg.body();
+        const ratio = _docScrollRatio(textarea() || body || document.body);
         editing = false;
         baseline = '';
         baseMtime = null;
         if (doc) cfg.render(doc);
+        if (body) _docApplyScrollRatio(body, ratio);
         sync();
     }
 

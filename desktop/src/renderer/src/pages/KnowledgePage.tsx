@@ -26,7 +26,7 @@ import type {
 } from '../types'
 import Markdown from '../components/Markdown'
 import KnowledgeGraph from '../components/KnowledgeGraph'
-import { DocActions, DocEditor, DocNotice } from '../components/DocEditor'
+import { DocActions, DocEditor, DocNotice, DocView } from '../components/DocEditor'
 import { createDocEditorStore } from '../store/docEditorStore'
 import AgentScopeSelect from '../components/AgentScopeSelect'
 import { useAgentStore, selectMultiAgent } from '../store/agentStore'
@@ -730,7 +730,7 @@ const KnowledgePage: React.FC<KnowledgePageProps> = ({ baseUrl }) => {
                     <DocEditor key={doc.path} store={knowledgeEditor} textareaRef={editorRef} />
                   </div>
                 ) : (
-                  <div className="flex-1 overflow-y-auto">
+                  <DocView store={knowledgeEditor}>
                     <div className="max-w-3xl mx-auto px-6 py-6">
                       {docLoading ? (
                         <div className="flex items-center text-content-tertiary py-8">
@@ -744,7 +744,7 @@ const KnowledgePage: React.FC<KnowledgePageProps> = ({ baseUrl }) => {
                         />
                       )}
                     </div>
-                  </div>
+                  </DocView>
                 )}
               </>
             )}
