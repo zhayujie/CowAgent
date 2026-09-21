@@ -108,6 +108,21 @@
                                                     <i class="fas fa-file-lines text-slate-400 text-sm hidden md:inline"></i>
                                                     <span id="knowledge-viewer-title" class="text-sm font-medium text-slate-700 dark:text-slate-200 truncate"></span>
                                                     <span id="knowledge-viewer-path" class="text-xs text-slate-400 dark:text-slate-500 ml-auto font-mono truncate hidden md:inline"></span>
+                                                    <button id="knowledge-btn-edit" onclick="knowledgeEditor.start()"
+                                                            class="doc-action-btn hidden ml-auto md:ml-0">
+                                                        <i class="fas fa-pen text-xs"></i>
+                                                        <span class="hidden sm:inline" data-i18n="ws_edit">编辑</span>
+                                                    </button>
+                                                    <button id="knowledge-btn-save" onclick="knowledgeEditor.save()"
+                                                            class="doc-action-btn doc-action-btn-primary hidden ml-auto md:ml-0">
+                                                        <i class="fas fa-check text-xs"></i>
+                                                        <span class="hidden sm:inline" data-i18n="ws_edit_save">保存 (Ctrl+S)</span>
+                                                    </button>
+                                                    <button id="knowledge-btn-cancel" onclick="knowledgeEditor.cancel()"
+                                                            class="doc-action-btn hidden">
+                                                        <i class="fas fa-xmark text-xs"></i>
+                                                        <span class="hidden sm:inline" data-i18n="ws_edit_cancel">退出编辑</span>
+                                                    </button>
                                                 </div>
                                                 <div id="knowledge-viewer-body"
                                                      class="p-4 md:p-5 overflow-y-auto flex-1 max-h-[60vh] md:max-h-none text-sm msg-content text-slate-700 dark:text-slate-200"></div>

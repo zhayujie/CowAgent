@@ -408,7 +408,8 @@ def test_memory_and_skill_editor_wiring():
     assert "if (!docGuardUnsaved(() => navigateTo(viewId, tab))) return false;" in console
     assert "if (!memoryEditor.guard(closeMemoryViewer)) return;" in console
     assert "if (!skillEditor.guard(closeSkillViewer)) return;" in console
-    assert "if (!memoryEditor.isDirty() && !skillEditor.isDirty()) return;" in console
+    assert ("if (!memoryEditor.isDirty() && !skillEditor.isDirty() "
+            "&& !knowledgeEditor.isDirty()) return;") in console
 
     # Every string these views show must exist in all three locales.
     for key in ("skill_back", "skill_open_hint", "skill_load_failed",

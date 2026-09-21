@@ -80,6 +80,30 @@ def test_knowledge_frontend_management_contract():
     assert "if (path === 'index.md' || path === 'log.md') return '';" in knowledge_section
 
 
+def test_knowledge_document_editor_contract():
+    from channel.web.core import template
+    html = template.render("chat.html")
+    from conftest import console_js
+    js = console_js()
+
+    assert 'id="knowledge-btn-edit"' in html
+    assert 'id="knowledge-btn-save"' in html
+    assert 'id="knowledge-btn-cancel"' in html
+    # The page's three editors share doc-editor.js, which therefore has to keep
+    # loading before the views that build one at top level.
+    assert html.index("/assets/js/doc-editor.js") < html.index("/assets/js/views/knowledge.js")
+    assert "const knowledgeEditor = createDocEditor(" in js
+    assert "action: 'update_document'" in js
+    assert "expected_mtime: expectedMtime" in js
+    assert "data.payload?.conflict ? 'conflict' : data.code" in js
+    # Every way out of an open text area asks before dropping what is in it.
+    assert "memoryEditor.guard(next) && skillEditor.guard(next) && knowledgeEditor.guard(next)" in js
+    for leaving in ("openKnowledgeFile(path, title)", "switchKnowledgeTab(tab)",
+                    "selectKnowledgeAgent(agentId)", "knowledgeMobileBack"):
+        assert f"knowledgeEditor.guard(() => {leaving})" in js or \
+               f"knowledgeEditor.guard({leaving})" in js
+
+
 class UploadedFile:
     def __init__(self, filename, content):
         self.filename = filename

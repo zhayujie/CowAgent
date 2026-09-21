@@ -4,7 +4,8 @@ import json
 import os
 import re
 from pathlib import Path
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -305,6 +306,53 @@ def test_write_handler_falls_back_to_state_root_for_system_assets(tmp_path):
 
     assert response["status"] == "success"
     assert memory_file.read_text(encoding="utf-8") == "new\n"
+
+
+class _DirtyRecorder:
+    """Minimal stand-in for MemoryManager that records mark_dirty() calls."""
+
+    def __init__(self, workspace_root):
+        self.config = SimpleNamespace(workspace_root=str(workspace_root))
+        self.calls = 0
+
+    def mark_dirty(self):
+        self.calls += 1
+
+
+def _post_edit_under_state_root(tmp_path, rel_path, manager):
+    """Save `rel_path` through the handler, with the index behind a recorder."""
+    from channel.web.api.workspace import WorkspaceWriteHandler
+
+    agent = SimpleNamespace(memory_manager=manager)
+    bridge = MagicMock()
+    bridge.return_value.get_agent_bridge.return_value.get_agent.return_value = agent
+    with patch("channel.web.api.workspace._get_workspace_root", return_value=str(tmp_path)), \
+         patch("common.state_dir.state_root_str", return_value=str(tmp_path)), \
+         patch("bridge.bridge.Bridge", bridge):
+        return _post(WorkspaceWriteHandler, {"path": rel_path, "content": "new\n"})
+
+
+def test_write_handler_marks_an_edited_knowledge_page_for_reindexing(tmp_path):
+    """Knowledge pages feed the same vector index memory files do."""
+    (tmp_path / "knowledge").mkdir()
+    page = _write(tmp_path / "knowledge" / "note.md", "# old\n")
+    manager = _DirtyRecorder(tmp_path)
+
+    response = _post_edit_under_state_root(tmp_path, "knowledge/note.md", manager)
+
+    assert response["status"] == "success"
+    assert page.read_text(encoding="utf-8") == "new\n"
+    assert manager.calls == 1
+
+
+def test_write_handler_leaves_the_index_alone_for_an_unindexed_file(tmp_path):
+    _write(tmp_path / "notes.md", "old\n")
+    manager = _DirtyRecorder(tmp_path)
+
+    response = _post_edit_under_state_root(tmp_path, "notes.md", manager)
+
+    assert response["status"] == "success"
+    assert manager.calls == 0
 
 
 # ----------------------------------------------------------------------

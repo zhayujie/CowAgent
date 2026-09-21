@@ -266,6 +266,37 @@ class KnowledgeService:
         self._sync_index(old_paths, force=True)
         return {"path": rel_path, "created": True, "overwritten": bool(old_paths)}
 
+    def update_document(self, path: str, content: str,
+                        expected_mtime: Optional[float] = None) -> dict:
+        """Rewrite an existing document and reindex it.
+
+        The write goes through :class:`WorkspaceService`, which replaces the
+        file atomically and refuses the save when the Agent rewrote the page
+        while the user was typing (``expected_mtime``).
+
+        The index keys a document by its path, so the edited page keeps
+        answering searches with its pre-edit text unless that key is dropped
+        and the memory manager is told it has work to do — which is what
+        :meth:`_sync_index` does.
+        """
+        from agent.workspace.service import WorkspaceService
+
+        rel_path, full_path = self._resolve_path(path, kind="document", allow_missing=False)
+        self._ensure_not_protected(rel_path)
+        if not full_path.is_file():
+            raise FileNotFoundError(f"file not found: {rel_path}")
+        if not isinstance(content, str):
+            raise ValueError("content is required")
+        result = WorkspaceService(self.knowledge_dir).write_text(
+            rel_path, content, expected_mtime=expected_mtime
+        )
+        # The H1 doubles as the document's title, so index.md is rebuilt before
+        # reindexing to keep the links and the tree in step with the edit.
+        self.rebuild_index_md()
+        self._sync_index([rel_path])
+        return {"path": rel_path, "updated": True,
+                "size": result["size"], "mtime": result["mtime"]}
+
     def import_documents(self, target_category: str, files: Iterable[dict],
                          conflict_strategy: str = "skip") -> dict:
         if not isinstance(files, list):
@@ -511,17 +542,30 @@ class KnowledgeService:
         Read a single knowledge markdown file.
 
         :param rel_path: Relative path within knowledge/, e.g. ``concepts/moe.md``
-        :return: dict with ``content`` and ``path``
+        :return: dict with ``content``, ``path``, and the ``mtime`` /
+                 ``editable`` pair an editor needs to offer a safe save
         :raises ValueError: if path is invalid or escapes knowledge dir
         :raises FileNotFoundError: if file does not exist
         """
+        from agent.workspace.service import MAX_TEXT_BYTES
+
         rel_path, full_path = self._resolve_path(rel_path, kind="document")
         if not full_path.is_file():
             raise FileNotFoundError(f"file not found: {rel_path}")
 
         with open(full_path, "r", encoding="utf-8") as f:
             content = f.read()
-        return {"content": content, "path": rel_path}
+        stat = full_path.stat()
+        return {
+            "content": content,
+            "path": rel_path,
+            "mtime": stat.st_mtime,
+            # index.md is regenerated from the tree and log.md is the Agent's
+            # own journal, so neither is offered for editing. The size bound is
+            # the one update_document would enforce on the way back in.
+            "editable": (rel_path not in self.PROTECTED_FILES
+                         and stat.st_size <= MAX_TEXT_BYTES),
+        }
 
     # ------------------------------------------------------------------
     # graph — nodes and links for visualization
@@ -603,6 +647,8 @@ class KnowledgeService:
         :param payload: action-specific payload
         :return: protocol-compatible response dict
         """
+        from agent.workspace.service import WorkspaceConflictError
+
         payload = payload or {}
         try:
             if action == "list":
@@ -633,6 +679,9 @@ class KnowledgeService:
             elif action == "create_document":
                 result = self.create_document(payload.get("path"), payload.get("content", ""),
                                               payload.get("overwrite", False))
+            elif action == "update_document":
+                result = self.update_document(payload.get("path"), payload.get("content"),
+                                              payload.get("expected_mtime"))
             elif action == "import_documents":
                 result = self.import_documents(
                     payload.get("target_category"),
@@ -643,6 +692,11 @@ class KnowledgeService:
                 return {"action": action, "code": 400, "message": f"unknown action: {action}", "payload": None}
             return {"action": action, "code": 200, "message": "success", "payload": result}
 
+        except WorkspaceConflictError as e:
+            # Flagged apart from the other 409s: the client can resolve this
+            # one by saving again over what the Agent wrote mid-edit.
+            return {"action": action, "code": 409, "message": str(e),
+                    "payload": {"conflict": True}}
         except ValueError as e:
             return {"action": action, "code": 403, "message": str(e), "payload": None}
         except FileNotFoundError as e:

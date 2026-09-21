@@ -56,7 +56,7 @@ function docRenderTitle(id, name, state) {
  * @returns {boolean} true when nothing is at stake and the caller may proceed.
  */
 function docGuardUnsaved(next) {
-    return memoryEditor.guard(next) && skillEditor.guard(next);
+    return memoryEditor.guard(next) && skillEditor.guard(next) && knowledgeEditor.guard(next);
 }
 
 const memoryEditor = createDocEditor({
@@ -102,7 +102,7 @@ function closeMemoryViewer() {
 // Reloading or closing the tab drops an unsaved edit. All the browser allows
 // here is its own generic prompt, which still beats losing the text in silence.
 window.addEventListener('beforeunload', (e) => {
-    if (!memoryEditor.isDirty() && !skillEditor.isDirty()) return;
+    if (!memoryEditor.isDirty() && !skillEditor.isDirty() && !knowledgeEditor.isDirty()) return;
     e.preventDefault();
     e.returnValue = '';
 });

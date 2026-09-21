@@ -333,7 +333,7 @@ auth), see `tests/test_web_console_routing.py`.
 | `views/skills.js` | Built-in tools and installed skills |
 | `views/memory.js` | Memory file list |
 | `views/doc-viewers.js` | Viewer/editor for memory files and skill definitions |
-| `views/knowledge.js` | Knowledge tree, import, relation graph |
+| `views/knowledge.js` | Knowledge tree, import, document editor, relation graph |
 | `views/logs.js` | Live log stream |
 | `boot.js` | Startup: apply theme and language, auth gate, first fetch of config and history |
 
@@ -369,8 +369,9 @@ changing them produces runtime errors:
 `workspace.js` and `doc-editor.js` are unchanged; they were separate files to
 begin with. Their positions are constrained:
 
-- `doc-editor.js` **must load first**, because `views/doc-viewers.js` calls
-  `createDocEditor()` at top level to build `memoryEditor` and `skillEditor`.
+- `doc-editor.js` **must load first**, because `views/doc-viewers.js` and
+  `views/knowledge.js` call `createDocEditor()` at top level to build
+  `memoryEditor`, `skillEditor` and `knowledgeEditor`.
 - `workspace.js` **must load last**; it consumes `t`, `escapeHtml`,
   `renderMarkdown`, `showConfirmDialog`, `_wsToast`, `sessionId`,
   `activeAgentId` and a number of other globals.
