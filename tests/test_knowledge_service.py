@@ -246,6 +246,28 @@ def test_update_document_rewrites_and_reindexes(tmp_path):
     assert "[New](./notes/a.md)" in (tmp_path / "knowledge/index.md").read_text(encoding="utf-8")
 
 
+def test_update_document_survives_an_index_that_will_not_open(tmp_path):
+    """The page is on disk before the index is touched. A broken index - an old
+    SQLite meeting a database from a newer one, a lock held by the Agent - must
+    not report a save that landed as a failure, which would also send the user
+    back to retry against an mtime the save itself moved."""
+    svc, manager = service(tmp_path)
+    (tmp_path / "knowledge/notes").mkdir()
+    page = tmp_path / "knowledge/notes/a.md"
+    page.write_text("# Old\nBody", encoding="utf-8")
+
+    def refuse():
+        raise sqlite3.OperationalError("no such tokenizer: trigram")
+
+    manager.mark_dirty = refuse
+
+    result = svc.dispatch("update_document", {"path": "notes/a.md", "content": "# New\nBody"})
+
+    assert result["code"] == 200
+    assert page.read_text(encoding="utf-8") == "# New\nBody"
+    assert manager.synced == 0
+
+
 def test_update_document_refuses_protected_and_missing_pages(tmp_path):
     svc, manager = service(tmp_path)
     (tmp_path / "knowledge/index.md").write_text("index", encoding="utf-8")

@@ -120,11 +120,20 @@ class KnowledgeService:
         old_paths = sorted(set(old_paths))
         if not old_paths and not force:
             return
-        manager = self._manager()
-        for rel_path in old_paths:
-            manager.storage.delete_by_path(f"knowledge/{rel_path}")
-        manager.mark_dirty()
-        self._run_sync(manager.sync())
+        # Every caller has already written its files by the time this runs, so
+        # an index that will not open - an old SQLite meeting a database from a
+        # newer one, a lock held by another process - must not report a saved
+        # edit as lost. Nothing is stranded either: sync decides what to
+        # re-embed by comparing file hashes, not by what this call managed.
+        try:
+            manager = self._manager()
+            for rel_path in old_paths:
+                manager.storage.delete_by_path(f"knowledge/{rel_path}")
+            manager.mark_dirty()
+            self._run_sync(manager.sync())
+        except Exception as exc:
+            logger.warning(f"[KnowledgeService] Index sync failed, search will catch up "
+                           f"on the next one: {exc}")
 
     @staticmethod
     def _extract_title(md_path: Path, fallback: str) -> str:

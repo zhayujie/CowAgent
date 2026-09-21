@@ -370,73 +370,12 @@ class MemoryStorage:
         self.trigram_fts5_available = False
         if self.fts5_available:
             try:
-                self.conn.execute("""
-                    CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts_trigram USING fts5(
-                        text,
-                        id UNINDEXED,
-                        user_id UNINDEXED,
-                        path UNINDEXED,
-                        source UNINDEXED,
-                        scope UNINDEXED,
-                        content='chunks',
-                        content_rowid='rowid',
-                        tokenize='trigram case_sensitive 0'
-                    )
-                """)
-                # Migrate legacy chunks_trigram_au triggers created by older
-                # versions. They used a bare "UPDATE chunks_fts_trigram SET ..."
-                # that corrupts the trigram index on chunk updates. Drop it so
-                # the CREATE TRIGGER IF NOT EXISTS below installs the fixed
-                # delete+insert version. Dropping a trigger touches no data.
-                self._migrate_legacy_trigram_update_trigger()
-                self.conn.execute("""
-                    CREATE TRIGGER IF NOT EXISTS chunks_trigram_ai
-                    AFTER INSERT ON chunks BEGIN
-                        INSERT INTO chunks_fts_trigram(rowid, text, id, user_id, path, source, scope)
-                        VALUES (new.rowid, new.text, new.id, new.user_id, new.path, new.source, new.scope);
-                    END
-                """)
-                self.conn.execute("""
-                    CREATE TRIGGER IF NOT EXISTS chunks_trigram_ad
-                    AFTER DELETE ON chunks BEGIN
-                        DELETE FROM chunks_fts_trigram WHERE rowid = old.rowid;
-                    END
-                """)
-                # External-content FTS5 requires the delete+insert pattern on
-                # UPDATE: a bare "UPDATE chunks_fts_trigram SET ..." leaves the
-                # old tokens in the index and corrupts the trigram shadow tables
-                # ("database disk image is malformed"). The special 'delete'
-                # command removes the old row's tokens using its previous text.
-                self.conn.execute("""
-                    CREATE TRIGGER IF NOT EXISTS chunks_trigram_au
-                    AFTER UPDATE ON chunks BEGIN
-                        INSERT INTO chunks_fts_trigram(chunks_fts_trigram, rowid, text, id, user_id, path, source, scope)
-                        VALUES ('delete', old.rowid, old.text, old.id, old.user_id, old.path, old.source, old.scope);
-                        INSERT INTO chunks_fts_trigram(rowid, text, id, user_id, path, source, scope)
-                        VALUES (new.rowid, new.text, new.id, new.user_id, new.path, new.source, new.scope);
-                    END
-                """)
-                # One-time backfill for existing rows.
-                # NOTE: COUNT(*) on an FTS5 content table always returns 0, so we
-                # use a persistent flag in _meta instead of counting trigram rows.
-                backfill_done = self.conn.execute(
-                    "SELECT 1 FROM _meta WHERE key = 'trigram_backfill_done'"
-                ).fetchone()
-                chunks_count = self.conn.execute(
-                    "SELECT COUNT(*) as c FROM chunks"
-                ).fetchone()['c']
-                if self._trigram_needs_rebuild or (chunks_count > 0 and not backfill_done):
-                    self.conn.execute(
-                        "INSERT INTO chunks_fts_trigram(chunks_fts_trigram) VALUES('rebuild')"
-                    )
-                    self.conn.execute(
-                        "INSERT OR REPLACE INTO _meta(key, value) VALUES('trigram_backfill_done', '1')"
-                    )
+                self._setup_trigram_index()
                 self.trigram_fts5_available = True
             except Exception:
                 from common.log import logger
                 logger.warning("[MemoryStorage] trigram FTS5 unavailable, CJK search will use LIKE fallback", exc_info=True)
-                self.trigram_fts5_available = False
+                self._disable_trigram_index()
 
         # Create files metadata table
         self.conn.execute("""
@@ -451,6 +390,104 @@ class MemoryStorage:
         """)
 
         self.conn.commit()
+
+    def _setup_trigram_index(self):
+        """Create the trigram FTS5 table and the triggers that feed it.
+
+        Raises when this SQLite build cannot provide the index, leaving the
+        caller to disable it.
+        """
+        self.conn.execute("""
+            CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts_trigram USING fts5(
+                text,
+                id UNINDEXED,
+                user_id UNINDEXED,
+                path UNINDEXED,
+                source UNINDEXED,
+                scope UNINDEXED,
+                content='chunks',
+                content_rowid='rowid',
+                tokenize='trigram case_sensitive 0'
+            )
+        """)
+        # The CREATE above says nothing when the table is already there: SQLite
+        # skips it without loading the module, so a database written by a build
+        # with the trigram tokenizer looks healthy to one without it, right up
+        # until a trigger fires. Touch the table to find out now.
+        self.conn.execute("SELECT 1 FROM chunks_fts_trigram LIMIT 1").fetchone()
+        # Migrate legacy chunks_trigram_au triggers created by older
+        # versions. They used a bare "UPDATE chunks_fts_trigram SET ..."
+        # that corrupts the trigram index on chunk updates. Drop it so
+        # the CREATE TRIGGER IF NOT EXISTS below installs the fixed
+        # delete+insert version. Dropping a trigger touches no data.
+        self._migrate_legacy_trigram_update_trigger()
+        self.conn.execute("""
+            CREATE TRIGGER IF NOT EXISTS chunks_trigram_ai
+            AFTER INSERT ON chunks BEGIN
+                INSERT INTO chunks_fts_trigram(rowid, text, id, user_id, path, source, scope)
+                VALUES (new.rowid, new.text, new.id, new.user_id, new.path, new.source, new.scope);
+            END
+        """)
+        self.conn.execute("""
+            CREATE TRIGGER IF NOT EXISTS chunks_trigram_ad
+            AFTER DELETE ON chunks BEGIN
+                DELETE FROM chunks_fts_trigram WHERE rowid = old.rowid;
+            END
+        """)
+        # External-content FTS5 requires the delete+insert pattern on
+        # UPDATE: a bare "UPDATE chunks_fts_trigram SET ..." leaves the
+        # old tokens in the index and corrupts the trigram shadow tables
+        # ("database disk image is malformed"). The special 'delete'
+        # command removes the old row's tokens using its previous text.
+        self.conn.execute("""
+            CREATE TRIGGER IF NOT EXISTS chunks_trigram_au
+            AFTER UPDATE ON chunks BEGIN
+                INSERT INTO chunks_fts_trigram(chunks_fts_trigram, rowid, text, id, user_id, path, source, scope)
+                VALUES ('delete', old.rowid, old.text, old.id, old.user_id, old.path, old.source, old.scope);
+                INSERT INTO chunks_fts_trigram(rowid, text, id, user_id, path, source, scope)
+                VALUES (new.rowid, new.text, new.id, new.user_id, new.path, new.source, new.scope);
+            END
+        """)
+        # One-time backfill for existing rows.
+        # NOTE: COUNT(*) on an FTS5 content table always returns 0, so we
+        # use a persistent flag in _meta instead of counting trigram rows.
+        backfill_done = self.conn.execute(
+            "SELECT 1 FROM _meta WHERE key = 'trigram_backfill_done'"
+        ).fetchone()
+        chunks_count = self.conn.execute(
+            "SELECT COUNT(*) as c FROM chunks"
+        ).fetchone()['c']
+        if self._trigram_needs_rebuild or (chunks_count > 0 and not backfill_done):
+            self.conn.execute(
+                "INSERT INTO chunks_fts_trigram(chunks_fts_trigram) VALUES('rebuild')"
+            )
+            self.conn.execute(
+                "INSERT OR REPLACE INTO _meta(key, value) VALUES('trigram_backfill_done', '1')"
+            )
+
+    def _disable_trigram_index(self):
+        """Detach a trigram index this build cannot open.
+
+        The table and its triggers live in the database file, so one written by
+        a build that has the trigram tokenizer (SQLite 3.34+) makes *every*
+        insert, update and delete on ``chunks`` fail with "no such tokenizer:
+        trigram" once an older build opens it - the triggers fire on all three.
+        That is the whole memory and knowledge index, not just CJK search.
+
+        Only the triggers are dropped: dropping the table itself runs the
+        module's destructor, which fails for the same reason. The orphan table
+        is harmless while no trigger writes to it, and searches already gate on
+        ``trigram_fts5_available``. Clearing the backfill flag is what makes a
+        later open by a capable build rebuild the index over the writes it
+        missed.
+        """
+        try:
+            for trigger in ("chunks_trigram_ai", "chunks_trigram_ad", "chunks_trigram_au"):
+                self.conn.execute(f"DROP TRIGGER IF EXISTS {trigger}")
+            self.conn.execute("DELETE FROM _meta WHERE key = 'trigram_backfill_done'")
+        except Exception:
+            from common.log import logger
+            logger.warning("[MemoryStorage] Failed to drop trigram triggers", exc_info=True)
 
     def _migrate_legacy_trigram_update_trigger(self):
         """Replace the legacy chunks_trigram_au trigger if present.
