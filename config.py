@@ -345,6 +345,9 @@ available_setting = {
     "deep_dream_enabled": True,             # scheduled deep dream switch; manual /memory dream is unaffected
     "skill": {},  # Per-skill runtime config; nested keys flatten to SKILL_<NAME>_<KEY> env vars at startup
     "mcp_servers": [],  # MCP server list; each entry supports type "stdio" (local process) or "sse" (remote URL)
+    # Executables stdio MCP servers may launch. Empty or omitted = deny all
+    # (fail-closed). Example: ["npx", "node", "python", "python3", "uvx"]
+    "mcp_stdio_command_allowlist": [],
     # On-demand MCP tool retrieval: when many MCP tools are connected, inject
     # only the most query-relevant ones instead of all of them. Built-in tools
     # are always injected in full; degrades to full injection when disabled,

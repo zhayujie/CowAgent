@@ -25,6 +25,8 @@ A few checks run before writing, and report back in the result:
 - **Modified elsewhere**: if the file changed after the Agent last read it, the result carries a warning so another program's changes are not silently overwritten.
 - **Syntax check**: if the content is JSON / YAML / TOML and fails to parse, the write is **refused** and the file is left untouched - these formats are corrupt when half-written, and this also catches truncated model output. Source files (`.py`, for example) only warn, and only when this write introduced a new syntax error.
 - **Credential protection**: `~/.cow/.env`, which holds API keys, cannot be written through this tool. Use the `env_config` tool instead.
+- **MCP config protection**: CowAgent-managed `mcp.json` (`~/cow/mcp.json`, `~/.cow/mcp.json`, and per-agent copies) cannot be written through this tool. Edit that file yourself.
+- **Workspace confinement (optional)**: set `tools.write.restrict_to_workspace` to `true` in `config.json` to refuse writes outside the Agent workspace. Off by default.
 
 ## Use Cases
 

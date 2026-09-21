@@ -9,6 +9,7 @@ from pathlib import Path
 
 from agent.tools.base_tool import BaseTool, ToolResult
 from agent.tools.utils.credentials import is_credential_path
+from agent.tools.utils.mcp_config_path import is_mcp_config_path
 from agent.tools.utils.diff import looks_like_line_numbered_block
 from agent.tools.utils.file_state import note_write, staleness_warning
 from agent.tools.utils.memory_path import feeds_memory_index
@@ -139,6 +140,11 @@ class Write(BaseTool):
         # adds symlink resolution and the /proc environ aliases.
         if real.endswith(os.path.join(".cow", ".env")) or is_credential_path(absolute):
             raise PermissionError("writing to ~/.cow/.env is not allowed")
+
+        # mcp.json is hot-reloaded into stdio MCP subprocesses; the agent must
+        # not be able to rewrite it (issue #3231). Symlink-safe via realpath.
+        if is_mcp_config_path(absolute):
+            raise PermissionError("writing to mcp.json is not allowed")
 
         # Optional workspace confinement. Off by default to preserve existing
         # behavior; enable via config.json tools.write.restrict_to_workspace.

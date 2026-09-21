@@ -25,6 +25,8 @@ description: 创建或覆盖写入文件
 - **文件被外部改动**：若文件在 Agent 读取之后被其他程序修改过，会附带提醒，避免覆盖他人改动。
 - **语法检查**：内容若是 JSON / YAML / TOML 且解析失败，会**拒绝写入**并保持文件原样——这类文件半截即损坏，也能顺带拦下模型输出被截断的情况。源码文件（如 `.py`）只在本次写入引入了新语法错误时给出告警，不阻止写入。
 - **凭证保护**：存放 API Key 的 `~/.cow/.env` 不允许通过本工具写入，请使用 `env_config` 工具。
+- **MCP 配置保护**：CowAgent 管理的 `mcp.json`（`~/cow/mcp.json`、`~/.cow/mcp.json` 以及各 Agent 副本）不允许通过本工具写入，请自行编辑该文件。
+- **工作区限制（可选）**：在 `config.json` 中设置 `tools.write.restrict_to_workspace` 为 `true`，可拒绝写入 Agent 工作区以外的路径。默认关闭。
 
 ## 使用场景
 
