@@ -110,8 +110,12 @@ class KnowledgeActionHandler:
             action = body.get("action", "")
             payload = body.get("payload") or {}
             from agent.knowledge.service import KnowledgeService
+            # Answer once the files are written; the reindex - a full scan,
+            # possibly an embedding call, possibly a wait on the index the
+            # Agent is using - runs behind the response.
             result = KnowledgeService(
-                _get_workspace_root(agent_id=_request_agent_id(body))
+                _get_workspace_root(agent_id=_request_agent_id(body)),
+                reindex_in_background=True,
             ).dispatch(action, payload)
             return json.dumps({
                 "status": "success" if result["code"] < 300 else "error",
@@ -175,7 +179,8 @@ class KnowledgeImportHandler:
                 })
 
             result = KnowledgeService(
-                _get_workspace_root(agent_id=agent_id)
+                _get_workspace_root(agent_id=agent_id),
+                reindex_in_background=True,
             ).dispatch("import_documents", {
                 "target_category": target_category,
                 "conflict_strategy": conflict_strategy,

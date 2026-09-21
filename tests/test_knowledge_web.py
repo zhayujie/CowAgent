@@ -22,6 +22,28 @@ def test_knowledge_action_handler_delegates_to_dispatch(tmp_path):
     assert response["payload"]["created"] is True
 
 
+def test_knowledge_action_handler_reindexes_behind_the_response(tmp_path):
+    """The reindex may wait on an embedding call or on the Agent holding the
+    index. The console's save must not."""
+    from channel.web.api.knowledge import KnowledgeActionHandler
+
+    request = {"action": "update_document", "payload": {"path": "a.md", "content": "x"}}
+    seen = {}
+
+    def dispatch(self, action, payload):
+        seen["background"] = self.reindex_in_background
+        return {"action": action, "code": 200, "message": "success", "payload": {}}
+
+    with patch("channel.web.api.knowledge._require_auth"), \
+         patch("channel.web.api.knowledge.web.header"), \
+         patch("channel.web.api.knowledge.web.data", return_value=json.dumps(request).encode()), \
+         patch("channel.web.api.knowledge._get_workspace_root", return_value=str(tmp_path)), \
+         patch("agent.knowledge.service.KnowledgeService.dispatch", dispatch):
+        KnowledgeActionHandler().POST()
+
+    assert seen["background"] is True
+
+
 def test_knowledge_action_handler_preserves_dispatch_error(tmp_path):
     from channel.web.api.knowledge import KnowledgeActionHandler
 

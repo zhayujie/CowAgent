@@ -1,6 +1,7 @@
 import asyncio
 import os
 import sqlite3
+import threading
 from pathlib import Path
 from unittest.mock import patch
 
@@ -266,6 +267,69 @@ def test_update_document_survives_an_index_that_will_not_open(tmp_path):
     assert result["code"] == 200
     assert page.read_text(encoding="utf-8") == "# New\nBody"
     assert manager.synced == 0
+
+
+class GatedMemoryManager(FakeMemoryManager):
+    """A sync that blocks until the test lets it through, so the test can look
+    at the world while a reindex is in flight."""
+
+    def __init__(self):
+        super().__init__()
+        self.gate = threading.Event()
+        self.started = threading.Event()
+
+    async def sync(self):
+        self.started.set()
+        self.gate.wait(timeout=5)
+        self.synced += 1
+
+
+def test_background_reindex_answers_before_the_index_is_touched(tmp_path):
+    """The reindex is a full scan, possibly an embedding call, possibly a wait
+    on the index the Agent is using. None of that is the save's business."""
+    (tmp_path / "knowledge/notes").mkdir(parents=True)
+    page = tmp_path / "knowledge/notes/a.md"
+    page.write_text("# Old\nBody", encoding="utf-8")
+    manager = GatedMemoryManager()
+    svc = KnowledgeService(str(tmp_path), manager, reindex_in_background=True)
+
+    result = svc.dispatch("update_document", {"path": "notes/a.md", "content": "# New\nBody"})
+
+    # Answered with the file written and index.md rebuilt, sync still pending.
+    assert result["code"] == 200
+    assert page.read_text(encoding="utf-8") == "# New\nBody"
+    assert "[New](./notes/a.md)" in (tmp_path / "knowledge/index.md").read_text(encoding="utf-8")
+    assert manager.started.wait(timeout=5)
+    assert manager.synced == 0
+
+    manager.gate.set()
+    KnowledgeService.wait_for_reindex(timeout=5)
+    assert manager.storage.deleted == ["knowledge/notes/a.md"]
+    assert manager.synced == 1
+
+
+def test_background_reindex_coalesces_a_burst_of_saves(tmp_path):
+    """Ctrl+S three times must not sync three times, nor sync the same index
+    from three threads at once: the paths pile up and the running worker takes
+    them in one pass after the current one."""
+    (tmp_path / "knowledge/notes").mkdir(parents=True)
+    for name in ("a", "b", "c"):
+        (tmp_path / f"knowledge/notes/{name}.md").write_text(f"# {name}", encoding="utf-8")
+    manager = GatedMemoryManager()
+    svc = KnowledgeService(str(tmp_path), manager, reindex_in_background=True)
+
+    svc.dispatch("update_document", {"path": "notes/a.md", "content": "# a2"})
+    assert manager.started.wait(timeout=5)
+    # Two more land while the first sync is blocked.
+    svc.dispatch("update_document", {"path": "notes/b.md", "content": "# b2"})
+    svc.dispatch("update_document", {"path": "notes/c.md", "content": "# c2"})
+
+    manager.gate.set()
+    KnowledgeService.wait_for_reindex(timeout=5)
+    assert sorted(manager.storage.deleted) == [
+        "knowledge/notes/a.md", "knowledge/notes/b.md", "knowledge/notes/c.md",
+    ]
+    assert manager.synced == 2
 
 
 def test_update_document_refuses_protected_and_missing_pages(tmp_path):

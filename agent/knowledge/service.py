@@ -16,7 +16,7 @@ import asyncio
 import shutil
 import threading
 from pathlib import Path
-from typing import Optional, Iterable
+from typing import Dict, Optional, Iterable
 from urllib.parse import quote, unquote
 
 from common.log import logger
@@ -38,7 +38,21 @@ class KnowledgeService:
     MAX_IMPORT_FILE_SIZE = 10 * 1024 * 1024
     MAX_IMPORT_TOTAL_SIZE = 200 * 1024 * 1024
 
-    def __init__(self, workspace_root: str, memory_manager=None):
+    # One reindex queue per knowledge root, shared by every instance in the
+    # process. Two requests must not sync the same index at once, and a burst
+    # of saves needs one sync after the last of them, not one each.
+    _reindex_lock = threading.Lock()
+    _reindex_queues: Dict[str, dict] = {}
+
+    def __init__(self, workspace_root: str, memory_manager=None,
+                 reindex_in_background: bool = False):
+        """
+        :param reindex_in_background: answer a write as soon as the files are
+            on disk and reindex on a worker thread. For request handlers: a
+            save should not wait on the embedding provider or on the Agent
+            holding the index. Left off, a caller that exits right after
+            (the CLI) would take the worker down with it mid-sync.
+        """
         from common import state_dir
 
         self.workspace_root = os.path.abspath(workspace_root)
@@ -46,6 +60,7 @@ class KnowledgeService:
         # own reads the shared one instead of an empty tree.
         self.knowledge_dir = str(state_dir.knowledge_dir(base=self.workspace_root))
         self._memory_manager = memory_manager
+        self.reindex_in_background = reindex_in_background
 
     def _resolve_path(self, rel_path: str, *, kind: Optional[str] = None,
                       allow_missing: bool = True) -> tuple:
@@ -134,6 +149,55 @@ class KnowledgeService:
         except Exception as exc:
             logger.warning(f"[KnowledgeService] Index sync failed, search will catch up "
                            f"on the next one: {exc}")
+
+    def _reindex(self, old_paths: Iterable[str], force: bool = False):
+        """Reindex now, or queue it for the worker when built to answer first."""
+        if not self.reindex_in_background:
+            self._sync_index(old_paths, force)
+            return
+        old_paths = set(old_paths)
+        if not old_paths and not force:
+            return
+        key = str(Path(self.knowledge_dir).resolve())
+        with KnowledgeService._reindex_lock:
+            queue = KnowledgeService._reindex_queues.setdefault(
+                key, {"paths": set(), "force": False, "worker": None})
+            queue["paths"].update(old_paths)
+            queue["force"] = queue["force"] or force
+            worker = queue["worker"]
+            # A live worker re-reads the queue before it exits, so what was
+            # just added is covered by it.
+            if worker is not None and worker.is_alive():
+                return
+            worker = threading.Thread(target=self._drain_reindex_queue, args=(key,),
+                                      name="knowledge-reindex", daemon=True)
+            queue["worker"] = worker
+        worker.start()
+
+    def _drain_reindex_queue(self, key: str):
+        while True:
+            with KnowledgeService._reindex_lock:
+                queue = KnowledgeService._reindex_queues[key]
+                paths, force = queue["paths"], queue["force"]
+                if not paths and not force:
+                    queue["worker"] = None
+                    return
+                queue["paths"], queue["force"] = set(), False
+            # Never raises, so the queue cannot be left with a dead worker
+            # holding its slot.
+            self._sync_index(paths, force)
+
+    @classmethod
+    def wait_for_reindex(cls, timeout: Optional[float] = None):
+        """Block until every queued reindex has run.
+
+        For tests, and for a caller that turned the worker on but is about to
+        exit and wants the index it just changed to be complete.
+        """
+        with cls._reindex_lock:
+            workers = [q["worker"] for q in cls._reindex_queues.values() if q["worker"]]
+        for worker in workers:
+            worker.join(timeout)
 
     @staticmethod
     def _extract_title(md_path: Path, fallback: str) -> str:
@@ -272,7 +336,7 @@ class KnowledgeService:
         full_path.write_text(content or "", encoding="utf-8")
         # Keep index.md in sync before reindexing so it is indexed too.
         self.rebuild_index_md()
-        self._sync_index(old_paths, force=True)
+        self._reindex(old_paths, force=True)
         return {"path": rel_path, "created": True, "overwritten": bool(old_paths)}
 
     def update_document(self, path: str, content: str,
@@ -286,7 +350,9 @@ class KnowledgeService:
         The index keys a document by its path, so the edited page keeps
         answering searches with its pre-edit text unless that key is dropped
         and the memory manager is told it has work to do — which is what
-        :meth:`_sync_index` does.
+        :meth:`_reindex` arranges, inline or on the worker. index.md is
+        rebuilt before answering either way: the tree the client re-reads
+        right after a save takes its titles from there.
         """
         from agent.workspace.service import WorkspaceService
 
@@ -302,7 +368,7 @@ class KnowledgeService:
         # The H1 doubles as the document's title, so index.md is rebuilt before
         # reindexing to keep the links and the tree in step with the edit.
         self.rebuild_index_md()
-        self._sync_index([rel_path])
+        self._reindex([rel_path])
         return {"path": rel_path, "updated": True,
                 "size": result["size"], "mtime": result["mtime"]}
 
@@ -352,7 +418,7 @@ class KnowledgeService:
         if imported:
             # Keep index.md in sync before reindexing so it is indexed too.
             self.rebuild_index_md()
-            self._sync_index(old_paths, force=True)
+            self._reindex(old_paths, force=True)
         return {"results": results, "imported": imported, "skipped": skipped, "failed": failed}
 
     def create_category(self, path: str) -> dict:
@@ -379,7 +445,7 @@ class KnowledgeService:
         except FileExistsError:
             raise FileExistsError(f"target already exists: {new_rel}")
         old_paths = [f"{old_rel}/{p}" for p in old_documents]
-        self._sync_index(old_paths)
+        self._reindex(old_paths)
         return {"old_path": old_rel, "path": new_rel, "moved_documents": len(old_documents)}
 
     def delete_category(self, path: str, confirm: bool = False) -> dict:
@@ -399,7 +465,7 @@ class KnowledgeService:
             shutil.rmtree(full_path)
         except FileNotFoundError:
             return {"path": rel_path, "deleted": False, "reason": "not_found"}
-        self._sync_index(documents)
+        self._reindex(documents)
         return {"path": rel_path, "deleted": True, "deleted_documents": len(documents)}
 
     def delete_documents(self, paths: Iterable[str]) -> dict:
@@ -423,7 +489,7 @@ class KnowledgeService:
             except FileNotFoundError:
                 deleted.append(rel_path)
                 results.append({"path": rel_path, "deleted": False, "reason": "not_found"})
-        self._sync_index(deleted)
+        self._reindex(deleted)
         return {"results": results, "deleted": sum(1 for item in results if item["deleted"])}
 
     def move_documents(self, paths: Iterable[str], target_category: str) -> dict:
@@ -456,7 +522,7 @@ class KnowledgeService:
                                 "target": new_rel})
             except FileNotFoundError:
                 results.append({"path": rel_path, "moved": False, "reason": "not_found"})
-        self._sync_index(moved_old_paths)
+        self._reindex(moved_old_paths)
         return {"results": results, "moved": len(moved_old_paths)}
 
     # ------------------------------------------------------------------
