@@ -133,6 +133,38 @@ class TestWriteBlocksMcpJson(_TempHomeCase):
         self.assertEqual(result.status, "error")
         self._mcp_unchanged()
 
+    @unittest.skipUnless(hasattr(os, "symlink"), "symlink not supported")
+    def test_mcp_json_symlink_to_elsewhere_write_blocked(self):
+        """Write must refuse a managed mcp.json that is itself a symlink."""
+        target = os.path.join(self.tmp, "real_mcp.json")
+        with open(target, "w", encoding="utf-8") as f:
+            f.write(_ORIGINAL)
+        os.remove(self.mcp_path)
+        try:
+            os.symlink(target, self.mcp_path)
+        except (OSError, NotImplementedError):
+            self.skipTest("cannot create symlink in this environment")
+        result = Write(self.config).execute({"path": self.mcp_path, "content": _EVIL})
+        self.assertEqual(result.status, "error")
+        with open(target, encoding="utf-8") as f:
+            self.assertEqual(f.read(), _ORIGINAL)
+
+    @unittest.skipUnless(hasattr(os, "symlink"), "symlink not supported")
+    def test_write_to_mcp_json_symlink_target_blocked(self):
+        """Writing through the realpath of a managed mcp.json is also blocked."""
+        target = os.path.join(self.tmp, "real_mcp.json")
+        with open(target, "w", encoding="utf-8") as f:
+            f.write(_ORIGINAL)
+        os.remove(self.mcp_path)
+        try:
+            os.symlink(target, self.mcp_path)
+        except (OSError, NotImplementedError):
+            self.skipTest("cannot create symlink in this environment")
+        result = Write({"cwd": self.tmp}).execute({"path": target, "content": _EVIL})
+        self.assertEqual(result.status, "error")
+        with open(target, encoding="utf-8") as f:
+            self.assertEqual(f.read(), _ORIGINAL)
+
     def test_ordinary_file_still_writable(self):
         result = Write(self.config).execute({"path": "note.md", "content": "hi"})
         self.assertEqual(result.status, "success")
@@ -169,6 +201,71 @@ class TestEditBlocksMcpJson(_TempHomeCase):
         })
         self.assertEqual(result.status, "error")
         self._mcp_unchanged()
+
+    @unittest.skipUnless(hasattr(os, "symlink"), "symlink not supported")
+    def test_mcp_json_symlink_to_elsewhere_edit_blocked(self):
+        """Edit must refuse a managed mcp.json that is itself a symlink."""
+        target = os.path.join(self.tmp, "real_mcp.json")
+        with open(target, "w", encoding="utf-8") as f:
+            f.write(_ORIGINAL)
+        os.remove(self.mcp_path)
+        try:
+            os.symlink(target, self.mcp_path)
+        except (OSError, NotImplementedError):
+            self.skipTest("cannot create symlink in this environment")
+        result = Edit(self.config).execute({
+            "path": self.mcp_path,
+            "oldText": _ORIGINAL.strip(),
+            "newText": _EVIL,
+        })
+        self.assertEqual(result.status, "error")
+        with open(target, encoding="utf-8") as f:
+            self.assertEqual(f.read(), _ORIGINAL)
+
+
+class TestCustomAgentWorkspaceMcpJson(_TempHomeCase):
+    """ToolManager loads mcp.json from AgentProfile.workspace, which may sit
+    outside ~/cow and agent_workspace. Write/Edit must refuse that file too.
+    """
+
+    def _pin_custom_agent(self):
+        from agent.registry import AgentProfile, AgentRegistry, set_agent_registry
+
+        custom_ws = os.path.join(self.tmp, "custom-agent")
+        os.makedirs(custom_ws)
+        custom_mcp = os.path.join(custom_ws, "mcp.json")
+        with open(custom_mcp, "w", encoding="utf-8") as f:
+            f.write(_ORIGINAL)
+        registry = AgentRegistry(
+            [
+                AgentProfile("primary", "Primary", self.cow),
+                AgentProfile("research", "Research", custom_ws),
+            ],
+            default_agent_id="primary",
+        )
+        set_agent_registry(registry)
+        return custom_mcp
+
+    def tearDown(self):
+        from agent.registry import set_agent_registry
+        set_agent_registry(None)
+        super().tearDown()
+
+    def test_custom_agent_workspace_mcp_json_write_blocked(self):
+        custom_mcp = self._pin_custom_agent()
+        result = Write(self.config).execute({"path": custom_mcp, "content": _EVIL})
+        self.assertEqual(result.status, "error")
+        self._mcp_unchanged(custom_mcp)
+
+    def test_custom_agent_workspace_mcp_json_edit_blocked(self):
+        custom_mcp = self._pin_custom_agent()
+        result = Edit(self.config).execute({
+            "path": custom_mcp,
+            "oldText": _ORIGINAL.strip(),
+            "newText": _EVIL,
+        })
+        self.assertEqual(result.status, "error")
+        self._mcp_unchanged(custom_mcp)
 
 
 class TestStdioAllowlistFailClosed(unittest.TestCase):
