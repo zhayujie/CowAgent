@@ -96,6 +96,23 @@ function fenceChecks(render) {
   const inline = render('use ```mermaid``` in a sentence\n')
   assert(!inline.includes('mermaid-block'), 'inline backticks are not a fence')
 
+  const quoteOpen = render('> ```mermaid\n> graph TD\n>   A-->B\n')
+  assert(!quoteOpen.includes('mermaid-block'), 'unclosed blockquote fence must stay a code block')
+  assert(quoteOpen.includes('A--&gt;B') || quoteOpen.includes('A-->B'), 'unclosed blockquote source should still be shown')
+
+  const quoteClosed = render('> ```mermaid\n> graph TD\n>   A-->B\n> ```\n')
+  assert(quoteClosed.includes('mermaid-block'), 'closed blockquote fence is a diagram')
+
+  const listOpen = render('- ```mermaid\n  graph TD\n  A-->B\n')
+  assert(!listOpen.includes('mermaid-block'), 'unclosed list fence must stay a code block')
+  assert(listOpen.includes('A--&gt;B') || listOpen.includes('A-->B'), 'unclosed list source should still be shown')
+
+  const listClosed = render('- ```mermaid\n  graph TD\n  A-->B\n  ```\n')
+  assert(listClosed.includes('mermaid-block'), 'closed list fence is a diagram')
+
+  const quoteAfterClosed = render('```mermaid\ngraph TD\n  A-->B\n```\n\n> ```mermaid\n> graph LR\n>   C-->D\n')
+  assert(count(quoteAfterClosed, 'mermaid-block') === 1, 'a later unclosed quote fence does not turn into a diagram')
+
   const both = render('```mermaid\ngraph TD\n  A-->B\n```\n\n```mermaid\nsequenceDiagram\n  Alice->>Bob: hi\n```\n')
   assert(count(both, 'mermaid-block') === 2, 'two closed fences are both diagrams')
 }

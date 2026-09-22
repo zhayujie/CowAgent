@@ -46,9 +46,22 @@ function mermaidOpenFenceAtEof(src) {
     return { lang: mermaidFenceLang(open.info), info: open.info };
 }
 
-// True when this fence token is the still-open mermaid tail. Earlier mermaid
-// fences in the same message are complete and may be drawn.
+// markdown-it includes the closing line in token.map only when the author
+// closed the fence. An auto-closed tail (end of the message, a blockquote,
+// or a list) omits that line, so its map is one shorter than a closed fence
+// with the same body. Leave that tail as source.
+function mermaidFenceTokenIsOpen(token) {
+    if (!token || !token.map || token.map.length < 2) return false;
+    const content = String(token.content || '');
+    const bodyLines = content === '' ? 0 : content.replace(/\r?\n$/, '').split('\n').length;
+    const span = token.map[1] - token.map[0];
+    return span < bodyLines + 2;
+}
+
+// True when this fence token is a still-open mermaid tail. Earlier closed
+// mermaid fences in the same message may be drawn.
 function mermaidFenceIsOpenTail(tokens, idx, openMermaid) {
+    if (mermaidFenceTokenIsOpen(tokens && tokens[idx])) return true;
     if (!openMermaid) return false;
     for (let j = idx + 1; j < tokens.length; j++) {
         const token = tokens[j];
