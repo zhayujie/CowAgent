@@ -385,6 +385,51 @@ def test_create_endpoint_writes_the_form_and_its_attachments(tmp_path):
     assert (_custom_dir(service) / "web-search" / "scripts" / "search.sh").is_file()
 
 
+def test_create_endpoint_bundles_a_picked_folder_at_the_paths_it_had(tmp_path):
+    """A skill's resources come as a directory as often as they come as loose
+    files, so the form's attachments travel the way an uploaded folder does:
+    paired ``files`` and ``relative_paths``. Without the pairing every file
+    would land flat beside SKILL.md, and a script's imports would break."""
+    from channel.web.api.skills import SkillCreateHandler
+
+    service = _service(tmp_path)
+    response = _post(SkillCreateHandler, {
+        "name": "Bundler",
+        "description": "ships a folder of scripts",
+        "files": [
+            UploadedFile("run.py", b"import helpers\n"),
+            UploadedFile("helpers.py", b"def go(): pass\n"),
+            UploadedFile("api.md", b"# api\n"),
+        ],
+        "relative_paths": ["scripts/run.py", "scripts/lib/helpers.py", "references/api.md"],
+    }, service)
+
+    assert response["files"] == ["scripts/run.py", "scripts/lib/helpers.py", "references/api.md"]
+    skill_dir = _custom_dir(service) / "bundler"
+    assert (skill_dir / "scripts" / "lib" / "helpers.py").read_bytes() == b"def go(): pass\n"
+    assert (skill_dir / "references" / "api.md").is_file()
+    # The form writes SKILL.md itself, so an attachment cannot shadow it.
+    assert "ships a folder of scripts" in (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+
+
+def test_create_endpoint_cannot_bundle_a_file_outside_the_skill(tmp_path):
+    """The relative paths come from a browser and are attacker-controlled just
+    like the skill name."""
+    from channel.web.api.skills import SkillCreateHandler
+
+    service = _service(tmp_path)
+    response = _post(SkillCreateHandler, {
+        "name": "escapee",
+        "description": "tries to write outside its own directory",
+        "files": [UploadedFile("evil.py", b"pwned")],
+        "relative_paths": ["../../evil.py"],
+    }, service)
+
+    assert response["status"] == "error"
+    assert "path traversal" in response["message"]
+    assert not (_custom_dir(service) / "escapee").exists()
+
+
 def test_create_endpoint_ignores_a_file_field_left_empty(tmp_path):
     """A form submitted with nothing attached still sends the file field, as a
     part with no name. There is nothing to write for it."""
@@ -478,10 +523,13 @@ def test_the_console_offers_both_ways_of_adding_a_skill():
     assert 'onclick="openSkillCreateDialog()"' in html
     assert 'id="skill-create-overlay"' in html
     for field in ("skill-create-name", "skill-create-desc", "skill-create-body",
-                  "skill-create-files", "skill-upload-archive", "skill-upload-folder"):
+                  "skill-create-files", "skill-create-folder",
+                  "skill-upload-archive", "skill-upload-folder"):
         assert f'id="{field}"' in html, field
-    # The folder picker needs the attribute, not just the input.
-    assert 'id="skill-upload-folder" type="file" class="hidden" multiple webkitdirectory' in html
+    # A folder picker needs the attribute, not just the input - for the form's
+    # attachments as much as for an uploaded skill.
+    for field in ("skill-upload-folder", "skill-create-folder"):
+        assert f'id="{field}" type="file" class="hidden" multiple webkitdirectory' in html, field
 
     assert "function openSkillCreateDialog(" in js
     assert "function switchSkillCreateMode(" in js
@@ -490,6 +538,73 @@ def test_the_console_offers_both_ways_of_adding_a_skill():
     # A picked folder is sent as parallel fields, the pairing the handler reads.
     assert "form.append('files', file);" in js
     assert "form.append('relative_paths', relPath);" in js
+    # The form's attachments keep their paths the same way, so a folder picked
+    # there installs as the directory it was picked as.
+    assert "form.append('relative_paths', skillAttachmentPath(file));" in js
+    assert "return file.webkitRelativePath || file.name;" in js
+
+
+def test_a_picked_folder_leaves_out_caches_and_hidden_entries():
+    """A directory on disk carries more than what someone wrote, and the file
+    tree in the skill viewer hides exactly these - so bundling them would add
+    weight the console could not even show."""
+    from conftest import console_js
+
+    js = console_js()
+    candidates = js[js.index("function skillUploadCandidates("):]
+    candidates = candidates[:candidates.index("\n}")]
+
+    assert "__pycache__" in candidates and "node_modules" in candidates
+    assert "startsWith('.')" in candidates
+    # Both folder picks go through it: the form's attachments and the upload tab.
+    assert "skillUploadCandidates(picked)" in js
+    assert "skillUploadCandidates(files)" in js
+
+
+def test_both_kinds_of_attachment_pick_sit_behind_one_button():
+    """A native file dialog browses for files or for a directory, never both, so
+    the choice is made before it opens: one button, the two picks behind it, the
+    way the composer's attach menu offers the same pair."""
+    from pathlib import Path
+
+    from channel.web.core import template
+    from conftest import console_js
+
+    html = template.render("chat.html")
+    js = console_js()
+
+    assert 'onclick="toggleSkillAttachMenu(event)"' in html
+    # Borrows the composer menu's card, positioned by a class of its own.
+    assert 'class="attach-menu skill-attach-menu hidden"' in html
+    assert ".attach-menu.skill-attach-menu {" in (
+        Path(__file__).parents[1] / "channel/web/static/css/workspace.css"
+    ).read_text(encoding="utf-8")
+    # A menu that only closes by picking something would sit over the fields.
+    assert "function initSkillAttachMenu(" in js
+    assert "hideSkillAttachMenu();" in js
+
+    page = (Path(__file__).parents[1]
+            / "desktop/src/renderer/src/pages/SkillsPage.tsx").read_text(encoding="utf-8")
+    assert "setAttachOpen((v) => !v)" in page
+    assert "!attachRef.current.contains(e.target as Node)" in page
+
+
+def test_the_desktop_create_form_bundles_a_folder_the_same_way():
+    """The desktop console posts to the same endpoint, so an attachment picked
+    there has to carry its path too, or the same folder would install flat."""
+    from pathlib import Path
+
+    root = Path(__file__).parents[1] / "desktop/src/renderer/src"
+    page = (root / "pages/SkillsPage.tsx").read_text(encoding="utf-8")
+    client = (root / "api/client.ts").read_text(encoding="utf-8")
+
+    # Both the form's attachments and an uploaded folder send the pairing.
+    assert client.count("formData.append('relative_paths', file.webkitRelativePath || file.name)") == 2
+    # A folder picker needs the attribute React's typings do not carry, and now
+    # there are two of them: the upload tab, and the form's attachments.
+    assert page.count("{...FOLDER_INPUT_PROPS}") == 2
+    assert "function skillUploadCandidates(" in page
+    assert "addAttachments(picked, true)" in page
 
 
 def test_the_name_preview_normalizes_the_way_the_server_does():

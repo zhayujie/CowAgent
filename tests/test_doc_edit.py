@@ -131,6 +131,154 @@ def test_read_content_requires_a_name(tmp_path):
 
 
 # ----------------------------------------------------------------------
+# Skills: the files one is made of
+# ----------------------------------------------------------------------
+def _bundled_skill(root, name="note-taker"):
+    """A skill as an upload installs one: instructions plus its resources."""
+    _skill_dir(root, name)
+    _write(root / name / "scripts" / "run.py", "print(1)\n")
+    _write(root / name / "references" / "api.md", "# api\n")
+    return root / name
+
+
+def test_list_files_reports_the_whole_skill_directory(tmp_path):
+    """A skill is a directory, so `scripts/` and `references/` are as much part
+    of it as its SKILL.md - and are named nowhere in the skill list."""
+    _bundled_skill(tmp_path / "custom")
+    svc = _skills(tmp_path / "builtin", tmp_path / "custom")
+
+    listed = svc.list_files("note-taker")
+
+    # Depth first, in the order a tree draws them, with each directory followed
+    # by what it holds.
+    assert [(f["path"], f["depth"], f["is_dir"]) for f in listed["files"]] == [
+        ("references", 0, True),
+        ("references/api.md", 1, False),
+        ("scripts", 0, True),
+        ("scripts/run.py", 1, False),
+        ("SKILL.md", 0, False),
+    ]
+    assert listed["ships_with_install"] is False
+
+
+def test_list_files_puts_the_skill_md_before_its_sibling_files(tmp_path):
+    """It is the skill's entry point, not just another file in an alphabet."""
+    _skill_dir(tmp_path / "custom", "note-taker")
+    _write(tmp_path / "custom" / "note-taker" / "AGENTS.md", "# read me\n")
+    svc = _skills(tmp_path / "builtin", tmp_path / "custom")
+
+    paths = [f["path"] for f in svc.list_files("note-taker")["files"]]
+
+    assert paths == ["SKILL.md", "AGENTS.md"]
+
+
+def test_list_files_leaves_out_caches_and_hidden_entries(tmp_path):
+    """Neither is part of the skill anyone wrote, or one they meant to edit."""
+    _bundled_skill(tmp_path / "custom")
+    _write(tmp_path / "custom" / "note-taker" / "__pycache__" / "run.pyc", "\x00")
+    _write(tmp_path / "custom" / "note-taker" / ".DS_Store", "\x00")
+    svc = _skills(tmp_path / "builtin", tmp_path / "custom")
+
+    paths = [f["path"] for f in svc.list_files("note-taker")["files"]]
+
+    assert "__pycache__" not in paths
+    assert ".DS_Store" not in paths
+
+
+def test_list_files_says_which_files_can_be_shown_as_text(tmp_path):
+    """A bundled asset belongs in the tree - it is part of the skill - but
+    opening it in a text editor would only show mojibake."""
+    _skill_dir(tmp_path / "custom", "note-taker")
+    _write(tmp_path / "custom" / "note-taker" / "logo.png", "\x89PNG\r\n")
+    svc = _skills(tmp_path / "builtin", tmp_path / "custom")
+
+    listed = {f["path"]: f for f in svc.list_files("note-taker")["files"]}
+
+    assert listed["SKILL.md"]["text"] is True
+    assert listed["logo.png"]["text"] is False
+    assert listed["logo.png"]["kind"] == "image"
+
+
+def test_list_files_stops_before_recursing_through_a_very_deep_tree(tmp_path):
+    """The walk is a recursion, and the directories under a skill are not all
+    of its own making. Past the cap the listing says it is incomplete rather
+    than descending until the stack runs out."""
+    _skill_dir(tmp_path / "custom", "note-taker")
+    deep = tmp_path / "custom" / "note-taker" / ("/".join("d" * 20))
+    _write(deep / "buried.txt", "hi\n")
+    svc = _skills(tmp_path / "builtin", tmp_path / "custom")
+
+    listed = svc.list_files("note-taker")
+
+    assert listed["truncated"] is True
+    assert max(f["depth"] for f in listed["files"]) == svc.MAX_TREE_DEPTH
+    assert not any(f["path"].endswith("buried.txt") for f in listed["files"])
+
+
+def test_list_files_leaves_out_a_symlink(tmp_path):
+    """A link can point anywhere, and reading one is refused for resolving
+    outside the skill. Listing it would only offer a row that cannot open."""
+    _bundled_skill(tmp_path / "custom")
+    link = tmp_path / "custom" / "note-taker" / "elsewhere.md"
+    try:
+        link.symlink_to(tmp_path / "secret.md")
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks need a privilege this platform does not grant")
+    svc = _skills(tmp_path / "builtin", tmp_path / "custom")
+
+    paths = [f["path"] for f in svc.list_files("note-taker")["files"]]
+
+    assert "elsewhere.md" not in paths
+
+
+def test_list_files_rejects_an_unknown_skill(tmp_path):
+    svc = _skills(tmp_path / "builtin", tmp_path / "custom")
+
+    with pytest.raises(FileNotFoundError):
+        svc.list_files("no-such-skill")
+
+
+def test_read_content_reads_a_file_beside_the_skill_md(tmp_path):
+    _bundled_skill(tmp_path / "custom")
+    svc = _skills(tmp_path / "builtin", tmp_path / "custom")
+
+    result = svc.read_content("note-taker", path="scripts/run.py")
+
+    assert result["content"] == "print(1)\n"
+    assert result["filename"] == "scripts/run.py"
+    assert result["editable"] is True
+
+
+def test_read_content_reads_a_bundled_file_of_a_builtin_skill_read_only(tmp_path):
+    _bundled_skill(tmp_path / "builtin", "image-maker")
+    svc = _skills(tmp_path / "builtin", tmp_path / "custom")
+
+    result = svc.read_content("image-maker", path="scripts/run.py")
+
+    assert result["content"] == "print(1)\n"
+    assert result["ships_with_install"] is True
+    assert result["editable"] is False
+
+
+def test_read_content_accepts_a_windows_style_path(tmp_path):
+    """A path typed or pasted with backslashes names the same file."""
+    _bundled_skill(tmp_path / "custom")
+    svc = _skills(tmp_path / "builtin", tmp_path / "custom")
+
+    assert svc.read_content("note-taker", path=r"scripts\run.py")["content"] == "print(1)\n"
+
+
+def test_read_content_rejects_a_missing_file_and_a_directory(tmp_path):
+    _bundled_skill(tmp_path / "custom")
+    svc = _skills(tmp_path / "builtin", tmp_path / "custom")
+
+    with pytest.raises(FileNotFoundError):
+        svc.read_content("note-taker", path="scripts/nope.py")
+    with pytest.raises(ValueError):
+        svc.read_content("note-taker", path="scripts")
+
+
+# ----------------------------------------------------------------------
 # Skills: write
 # ----------------------------------------------------------------------
 def test_write_content_saves_a_workspace_skill(tmp_path):
@@ -189,6 +337,35 @@ def test_write_content_cannot_escape_the_skills_directory(tmp_path):
     assert outside.read_text(encoding="utf-8") == "secret\n"
 
 
+def test_write_content_saves_a_file_beside_the_skill_md(tmp_path):
+    _bundled_skill(tmp_path / "custom")
+    target = tmp_path / "custom" / "note-taker" / "scripts" / "run.py"
+    svc = _skills(tmp_path / "builtin", tmp_path / "custom")
+    loaded = svc.read_content("note-taker", path="scripts/run.py")
+
+    svc.write_content("note-taker", "print(2)\n",
+                      expected_mtime=loaded["mtime"], path="scripts/run.py")
+
+    assert target.read_text(encoding="utf-8") == "print(2)\n"
+    # The SKILL.md beside it is untouched; a path is not a fallback.
+    assert "# note-taker" in (target.parent.parent / "SKILL.md").read_text(encoding="utf-8")
+
+
+def test_a_path_cannot_escape_the_skill_directory(tmp_path):
+    """The per-file path is as attacker-controlled as the skill name, so it gets
+    the same containment check - here the workspace editor's own."""
+    outside = _write(tmp_path / "custom" / "outside.md", "secret\n")
+    _bundled_skill(tmp_path / "custom")
+    svc = _skills(tmp_path / "builtin", tmp_path / "custom")
+
+    for path in ("../outside.md", "scripts/../../outside.md", str(outside)):
+        with pytest.raises((FileNotFoundError, ValueError)):
+            svc.read_content("note-taker", path=path)
+        with pytest.raises((FileNotFoundError, ValueError)):
+            svc.write_content("note-taker", "tampered\n", path=path)
+    assert outside.read_text(encoding="utf-8") == "secret\n"
+
+
 def test_a_workspace_copy_of_a_builtin_skill_is_still_read_only(tmp_path):
     """Startup deletes and re-copies every builtin skill directory into the
     workspace (`_sync_builtin_skills` in app.py). The copy the loader resolves is
@@ -239,9 +416,15 @@ def _handler_module(handler_cls):
 def _get(handler_cls, params):
     module = _handler_module(handler_cls)
 
+    # The keyword arguments a handler passes to web.input() are the defaults for
+    # parameters the request did not send, so it may read one this test never
+    # passed. Merged here rather than making every test name every parameter.
+    def _input(**defaults):
+        return module.web.storage(**dict(defaults, **params))
+
     with patch.object(module, "_require_auth"), \
          patch.object(module.web, "header"), \
-         patch.object(module.web, "input", return_value=module.web.storage(**params)):
+         patch.object(module.web, "input", side_effect=_input):
         return json.loads(handler_cls().GET())
 
 
@@ -274,6 +457,49 @@ def test_skill_content_handler_serves_and_saves(tmp_path):
     assert target.read_text(encoding="utf-8") == "# rewritten\n"
 
 
+def test_skill_content_handler_serves_and_saves_a_bundled_file(tmp_path):
+    """The console can reach the files beside a skill's SKILL.md, which is the
+    only way a skill installed as a folder is editable at all."""
+    from channel.web.api.skills import SkillContentHandler
+
+    _bundled_skill(tmp_path / "skills", "console-editable")
+    target = tmp_path / "skills" / "console-editable" / "scripts" / "run.py"
+
+    with patch("channel.web.api.skills._get_workspace_root", return_value=str(tmp_path)):
+        loaded = _get(SkillContentHandler,
+                      {"name": "console-editable", "path": "scripts/run.py"})
+        assert loaded["status"] == "success"
+        assert loaded["content"] == "print(1)\n"
+
+        saved = _post(SkillContentHandler, {
+            "name": "console-editable",
+            "path": "scripts/run.py",
+            "content": "print(2)\n",
+            "expected_mtime": loaded["mtime"],
+        })
+
+    assert saved["status"] == "success"
+    assert target.read_text(encoding="utf-8") == "print(2)\n"
+
+
+def test_skill_files_handler_lists_what_a_skill_holds(tmp_path):
+    from channel.web.api.skills import SkillFilesHandler
+
+    _bundled_skill(tmp_path / "skills", "console-editable")
+
+    with patch("channel.web.api.skills._get_workspace_root", return_value=str(tmp_path)):
+        listed = _get(SkillFilesHandler, {"name": "console-editable"})
+        missing = _get(SkillFilesHandler, {"name": "no-such-skill"})
+        unnamed = _get(SkillFilesHandler, {"name": ""})
+
+    assert listed["status"] == "success"
+    assert [f["path"] for f in listed["files"]] == [
+        "references", "references/api.md", "scripts", "scripts/run.py", "SKILL.md",
+    ]
+    assert missing["status"] == "error"
+    assert unnamed["status"] == "error"
+
+
 def test_skill_content_handler_reports_a_conflict_code(tmp_path):
     from channel.web.api.skills import SkillContentHandler
 
@@ -289,6 +515,14 @@ def test_skill_content_handler_reports_a_conflict_code(tmp_path):
 
     assert response["code"] == "conflict"
     assert target.read_text(encoding="utf-8") == original
+
+
+def test_the_skill_viewer_routes_are_wired_into_the_url_table():
+    from channel.web import web_channel
+
+    urls = web_channel.URLS
+    assert urls[urls.index('/api/skills/content') + 1] == 'SkillContentHandler'
+    assert urls[urls.index('/api/skills/files') + 1] == 'SkillFilesHandler'
 
 
 def test_skill_content_handler_requires_a_name_and_string_content(tmp_path):
@@ -382,7 +616,8 @@ def test_memory_and_skill_editor_wiring():
     for ident in ("memory-btn-edit", "memory-btn-save", "memory-btn-cancel",
                   "skills-panel-viewer", "skill-viewer-content", "skill-viewer-title",
                   "skill-viewer-readonly", "skill-btn-edit", "skill-btn-save",
-                  "skill-btn-cancel"):
+                  "skill-btn-cancel", "skill-files-panel", "skill-files-tree",
+                  "skill-files-toggle"):
         assert f'id="{ident}"' in html, ident
     assert 'onclick="memoryEditor.start()"' in html
     assert 'onclick="skillEditor.start()"' in html
@@ -399,10 +634,27 @@ def test_memory_and_skill_editor_wiring():
         body = re.search(rf"async function {fn}\(.*?\n\}}", console, re.S).group(0)
         assert "session" not in body, fn
 
-    # Skills are addressed by name: which file a name resolves to is the
-    # loader's business, and a builtin one sits outside the workspace.
-    assert "/api/skills/content?name=" in console
+    # A skill is addressed by name: which directory a name resolves to is the
+    # loader's business, and a builtin one sits outside the workspace. `path`
+    # then names one file inside it, so the files beside a skill's SKILL.md are
+    # reachable at all.
+    assert "name=${encodeURIComponent(name)}" in console
+    assert "`/api/skills/content?${query}`" in console
     assert "fetch('/api/skills/content'" in console
+    assert "`/api/skills/files?name=${encodeURIComponent(name)}`" in console
+
+    # A directory in the tree folds rather than opening anything, and a fold
+    # takes everything below it - nested directories included.
+    assert "function toggleSkillDir(" in console
+    assert "if (path.startsWith(`${dir}/`)) return true;" in console
+    # The size comes from the listing rather than from a second request per row.
+    assert "formatSkillFileSize(file.size)" in console
+
+    # The whole list folds away for a full-width document. The switch has to be
+    # outside the panel it hides, or folding it would take the way back with it.
+    assert 'onclick="toggleSkillFilesPanel()"' in html
+    assert 'id="skill-files-toggle"' in html.split('id="skill-files-panel"')[0]
+    assert "localStorage.setItem(SKILL_FILES_PANEL_KEY" in console
 
     # The reason shown for a read-only skill comes from the server's flag. The
     # workspace copy of a builtin reads back as `custom`, so keying off `source`
@@ -416,12 +668,14 @@ def test_memory_and_skill_editor_wiring():
     assert "if (!docGuardUnsaved(() => navigateTo(viewId, tab))) return false;" in console
     assert "if (!memoryEditor.guard(closeMemoryViewer)) return;" in console
     assert "if (!skillEditor.guard(closeSkillViewer)) return;" in console
+    # Including another file of the same skill taking the text area over.
+    assert "if (!skillEditor.guard(() => selectSkillFile(path))) return;" in console
     assert ("if (!memoryEditor.isDirty() && !skillEditor.isDirty() "
             "&& !knowledgeEditor.isDirty()) return;") in console
 
     # Every string these views show must exist in all three locales.
     for key in ("skill_back", "skill_open_hint", "skill_load_failed",
-                "skill_builtin_readonly"):
+                "skill_builtin_readonly", "skill_files_title", "skill_file_not_text"):
         assert console.count(f"{key}:") == 3, key
 
 
@@ -474,14 +728,35 @@ def test_desktop_memory_editing_stays_in_the_state_root():
 
 
 def test_desktop_skill_editing_is_addressed_by_name():
-    """Which file a skill name resolves to is the loader's business, and a
-    builtin skill's file sits outside the workspace."""
+    """Which directory a skill name resolves to is the loader's business, and a
+    builtin skill sits outside the workspace. `path` then names one file inside
+    it, so the files beside a skill's SKILL.md are reachable at all."""
     page = _desktop("pages/SkillsPage.tsx")
     client = _desktop("api/client.ts")
 
-    assert "/api/skills/content?name=" in client
+    assert "name=${encodeURIComponent(name)}" in client
+    assert "`/api/skills/content?${query}`" in client
     assert "this.request('/api/skills/content'" in client
     assert "expected_mtime: args.expectedMtime ?? null," in client
+    assert "`/api/skills/files?name=${encodeURIComponent(name)}`" in client
+
+    # Switching files goes through `open`, which is what asks about an unsaved
+    # edit before another file's contents take the text area over.
+    assert "await skillEditor.getState().open({ ...doc, path })" in page
+    # The file, not just the skill: two files of one skill have to read as two
+    # documents, or a late response would be dropped as a duplicate.
+    assert "keyOf: (doc) => `${doc.name}/${doc.path || ''}`" in page
+
+    # A directory in the tree folds rather than opening anything, and the folds
+    # belong to the skill whose tree they were made in - so they are held beside
+    # the listing, and cleared with it rather than by unmounting the tree.
+    assert "if (path.startsWith(`${dir}/`)) return true" in page
+    assert "setFoldedDirs(new Set())" in page
+    # The size comes from the listing rather than from a second request per row.
+    assert "formatSkillFileSize(file.size)" in page
+    # The whole list folds away, remembered under the key the web console uses.
+    assert "localStorage.setItem(SKILL_FILES_PANEL_KEY" in page
+    assert "const SKILL_FILES_PANEL_KEY = 'cow_skill_files_panel'" in page
 
     # The reason shown for a read-only skill comes from the server's flag: the
     # workspace copy of a builtin reads back as `custom`, so keying off `source`
@@ -567,5 +842,6 @@ def test_desktop_doc_editor_seeds_declaratively():
     # Every string these pages show must exist in both locales.
     i18n = _desktop("i18n.ts")
     for key in ("doc_edit", "doc_edit_save", "skill_back", "skill_open_hint",
-                "skill_builtin_readonly", "knowledge_doc_readonly"):
+                "skill_builtin_readonly", "knowledge_doc_readonly",
+                "skill_files_title", "skill_file_not_text"):
         assert i18n.count(f"{key}:") == 2, key

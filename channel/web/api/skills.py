@@ -249,14 +249,42 @@ class SkillUploadHandler:
             return json.dumps({"status": "error", "message": str(e)}, ensure_ascii=False)
 
 
+class SkillFilesHandler:
+    """
+    ``GET /api/skills/files`` - the files one skill is made of.
+
+    A skill is a directory: the console needs the tree to show anything beyond
+    its SKILL.md, since the files beside it - ``scripts/``, ``references/``,
+    bundled assets - are installed by an upload but named nowhere in the skill
+    list.
+    """
+
+    def GET(self):
+        _require_auth()
+        web.header('Content-Type', 'application/json; charset=utf-8')
+        try:
+            params = web.input(name='', agent_id='')
+            name = (params.name or '').strip()
+            if not name:
+                return json.dumps({"status": "error", "message": "name is required"})
+            result = _skill_service(_request_agent_id(params)).list_files(name)
+            return json.dumps({"status": "success", **result}, ensure_ascii=False)
+        except (ValueError, FileNotFoundError) as e:
+            return json.dumps({"status": "error", "message": str(e)})
+        except Exception as e:
+            logger.error(f"[WebChannel] Skill files error: {e}")
+            return json.dumps({"status": "error", "message": str(e)})
+
+
 class SkillContentHandler:
     """
-    A skill's definition file, for the console's viewer and editor.
+    One file of a skill, for the console's viewer and editor.
 
-    Addressed by skill name rather than by path, because the loader is what
-    resolves a name to a file: a workspace skill shadows a builtin of the same
-    name, and a builtin sits outside the workspace that the file APIs are
-    confined to.
+    The skill is addressed by name rather than by path, because the loader is
+    what resolves a name to a directory: a workspace skill shadows a builtin of
+    the same name, and a builtin sits outside the workspace that the file APIs
+    are confined to. ``path`` then names a file inside that directory, and
+    defaults to the skill's SKILL.md.
 
     Unlike the skill list, the text is served exactly as stored - no
     simplified-to-traditional conversion. What comes back here is what a save
@@ -268,11 +296,13 @@ class SkillContentHandler:
         _require_auth()
         web.header('Content-Type', 'application/json; charset=utf-8')
         try:
-            params = web.input(name='', agent_id='')
+            params = web.input(name='', path='', agent_id='')
             name = (params.name or '').strip()
             if not name:
                 return json.dumps({"status": "error", "message": "name is required"})
-            result = _skill_service(_request_agent_id(params)).read_content(name)
+            result = _skill_service(_request_agent_id(params)).read_content(
+                name, path=(params.path or '').strip() or None,
+            )
             return json.dumps({"status": "success", **result}, ensure_ascii=False)
         except (ValueError, FileNotFoundError) as e:
             return json.dumps({"status": "error", "message": str(e)})
@@ -297,11 +327,13 @@ class SkillContentHandler:
             try:
                 result = _skill_service(_request_agent_id(body)).write_content(
                     name, content, expected_mtime=body.get("expected_mtime"),
+                    path=(body.get("path") or "").strip() or None,
                 )
             except WorkspaceConflictError as e:
                 return json.dumps({"status": "error", "code": "conflict", "message": str(e)})
 
-            logger.info(f"[WebChannel] Skill saved: {name} ({result['size']} bytes)")
+            logger.info(f"[WebChannel] Skill saved: {name}/{result['path']} "
+                        f"({result['size']} bytes)")
             return json.dumps({"status": "success", **result}, ensure_ascii=False)
         except (ValueError, FileNotFoundError) as e:
             return json.dumps({"status": "error", "message": str(e)})

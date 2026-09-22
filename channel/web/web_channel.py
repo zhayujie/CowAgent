@@ -56,8 +56,8 @@ from channel.web.api.sessions import (  # noqa: F401
     SessionTitleHandler, SessionsHandler,
 )
 from channel.web.api.skills import (  # noqa: F401
-    SkillContentHandler, SkillCreateHandler, SkillUploadHandler, SkillsHandler,
-    ToolsHandler,
+    SkillContentHandler, SkillCreateHandler, SkillFilesHandler,
+    SkillUploadHandler, SkillsHandler, ToolsHandler,
 )
 from channel.web.api.update import (  # noqa: F401
     UpdateCheckHandler, UpdateStartHandler, UpdateStatusHandler, VersionHandler,
@@ -115,6 +115,7 @@ URLS = (
     '/api/tools', 'ToolsHandler',
     '/api/skills', 'SkillsHandler',
     '/api/skills/content', 'SkillContentHandler',
+    '/api/skills/files', 'SkillFilesHandler',
     '/api/skills/create', 'SkillCreateHandler',
     '/api/skills/upload', 'SkillUploadHandler',
     '/api/memory', 'MemoryHandler',

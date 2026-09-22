@@ -24,6 +24,12 @@ except ImportError:
 
 SKILL_FILE = "SKILL.md"
 
+# Left out of the file tree a console shows: build output and caches are not
+# part of the skill anyone wrote. Dot directories - `.git`, `.venv` - need no
+# entry here; the walk skips everything hidden, which is not what anyone meant
+# to edit through a list either.
+_TREE_SKIP_DIRS = {"__pycache__", "node_modules", "venv"}
+
 # A skill's name is also its directory name, the word the CLI addresses it by
 # (``cow skill uninstall <name>``) and the identifier the model sees, so it is
 # held to the hyphen-case convention the skill-creator guide states.
@@ -100,6 +106,12 @@ class SkillService:
     MAX_UPLOAD_FILE_SIZE = 10 * 1024 * 1024
     MAX_UPLOAD_TOTAL_SIZE = 50 * 1024 * 1024
 
+    # How deep a skill's file tree is walked. A skill is instructions plus a few
+    # scripts and resources, so this is far past any real one; it is here
+    # because the walk is a recursion and the directories under a skill are not
+    # all of its own making.
+    MAX_TREE_DEPTH = 12
+
     def __init__(self, skill_manager: SkillManager):
         """
         :param skill_manager: The SkillManager instance to operate on
@@ -167,22 +179,116 @@ class SkillService:
         return result
 
     # ------------------------------------------------------------------
-    # content — read and edit a skill's definition file
+    # content — browse, read and edit the files a skill is made of
     # ------------------------------------------------------------------
-    def read_content(self, name: str) -> dict:
+    def list_files(self, name: str) -> dict:
         """
-        Read a skill's definition file, for viewing or editing in a console.
+        The files a skill directory holds, for a console's file tree.
 
-        Every skill is readable; ``editable`` is what says whether saving would
+        A skill is a directory, not a single document: ``scripts/``,
+        ``references/`` and bundled assets are as much part of it as its
+        SKILL.md, and an upload or a package installs all of them. Listed depth
+        first in the order a tree draws them, so the caller can render the
+        nesting from ``depth`` without rebuilding the hierarchy itself.
+
+        :return: ``{"name", "source", "ships_with_install", "files": [...],
+            "truncated": bool}``, where each file carries ``path`` (relative to
+            the skill directory), ``name``, ``depth``, ``is_dir``, ``kind``,
+            ``text`` - whether it can be shown as text at all - ``size`` and
+            ``mtime``.
+        :raises FileNotFoundError: if no skill of that name is loaded.
+        """
+        from agent.protocol.artifact import classify_kind, is_editable
+
+        skill = self._skill(name)
+        files: List[dict] = []
+        truncated = False
+
+        def walk(directory: str, rel_prefix: str, depth: int) -> None:
+            nonlocal truncated
+            dirs, plain = [], []
+            try:
+                # Closed rather than left to the collector: an open handle on a
+                # directory blocks it from being removed on Windows, which is
+                # where an install replacing this very skill would then fail.
+                with os.scandir(directory) as entries:
+                    for entry in entries:
+                        if entry.name.startswith(".") or entry.name in _TREE_SKIP_DIRS:
+                            continue
+                        # A link is not part of the skill the way a file in it
+                        # is: it can point anywhere, and reading it would be
+                        # refused for resolving outside the skill directory.
+                        # Listing one would only offer a row that cannot open.
+                        if entry.is_symlink():
+                            continue
+                        (dirs if entry.is_dir(follow_symlinks=False) else plain).append(entry)
+            except OSError:
+                return
+
+            dirs.sort(key=lambda e: e.name.lower())
+            # SKILL.md is the skill's entry point, so it leads the files it sits
+            # beside rather than landing wherever the alphabet puts it.
+            plain.sort(key=lambda e: (e.name != SKILL_FILE, e.name.lower()))
+
+            for entry in dirs + plain:
+                if len(files) >= self.MAX_UPLOAD_FILES:
+                    truncated = True
+                    return
+                try:
+                    stat = entry.stat(follow_symlinks=False)
+                except OSError:
+                    continue
+                is_dir = entry.is_dir(follow_symlinks=False)
+                kind = "directory" if is_dir else classify_kind(entry.name)
+                rel = f"{rel_prefix}{entry.name}"
+                files.append({
+                    "path": rel,
+                    "name": entry.name,
+                    "depth": depth,
+                    "is_dir": is_dir,
+                    "kind": kind,
+                    # Whether reading it as text is meaningful at all. An image
+                    # or a PDF is part of the skill and belongs in the tree, but
+                    # opening it in a text editor would only show mojibake.
+                    "text": (not is_dir) and (is_editable(kind) or kind == "file"),
+                    "size": 0 if is_dir else stat.st_size,
+                    "mtime": stat.st_mtime,
+                })
+                if not is_dir:
+                    continue
+                if depth + 1 > self.MAX_TREE_DEPTH:
+                    # Reported as truncated rather than walked: this is a
+                    # recursion, and a skill is never legitimately this deep.
+                    truncated = True
+                    continue
+                walk(entry.path, f"{rel}/", depth + 1)
+
+        walk(skill.base_dir, "", 0)
+        return {
+            "name": skill.name,
+            "source": skill.source,
+            "ships_with_install": self._ships_with_install(skill),
+            "files": files,
+            "truncated": truncated,
+        }
+
+    def read_content(self, name: str, path: Optional[str] = None) -> dict:
+        """
+        Read one of a skill's files, for viewing or editing in a console.
+
+        Every file is readable; ``editable`` is what says whether saving would
         be accepted, and is false for one that ships with the installation.
 
         :param name: skill name as listed by :meth:`query`
+        :param path: a file within the skill directory, as listed by
+            :meth:`list_files`. Defaults to the skill's own SKILL.md.
         :return: the fields of :meth:`WorkspaceService.read_text` plus the skill
             ``name``, its ``source``, the ``filename`` being shown, and
             ``ships_with_install`` to explain a refusal.
-        :raises FileNotFoundError: if no skill of that name is loaded.
+        :raises FileNotFoundError: if no skill of that name is loaded, or the
+            skill holds no such file.
         """
-        skill, svc, rel = self._locate(name)
+        skill, svc, rel = self._locate(name, path)
         shipped = self._ships_with_install(skill)
         result = svc.read_text(rel)
         result["name"] = skill.name
@@ -196,17 +302,19 @@ class SkillService:
         return result
 
     def write_content(self, name: str, content: str,
-                      expected_mtime: Optional[float] = None) -> dict:
+                      expected_mtime: Optional[float] = None,
+                      path: Optional[str] = None) -> dict:
         """
-        Overwrite a skill's definition file.
+        Overwrite one of a skill's files.
 
         :param expected_mtime: the mtime the caller read, forwarded to
             :meth:`WorkspaceService.write_text` so a rewrite that happened
             mid-edit raises rather than being overwritten silently.
+        :param path: a file within the skill directory. Defaults to SKILL.md.
         :raises ValueError: for a skill that ships with the installation, whose
             files do not survive an edit. See :meth:`_ships_with_install`.
         """
-        skill, svc, rel = self._locate(name)
+        skill, svc, rel = self._locate(name, path)
         if self._ships_with_install(skill):
             raise ValueError(f"skill ships with the installation and is read-only: {name}")
 
@@ -214,7 +322,8 @@ class SkillService:
         # The frontmatter holds the name and description the skill list shows,
         # so an edit can change how this skill presents itself.
         self.manager.refresh_skills()
-        logger.info(f"[SkillService] write_content: skill '{name}' saved ({result['size']} bytes)")
+        logger.info(f"[SkillService] write_content: skill '{name}' file '{rel}' "
+                    f"saved ({result['size']} bytes)")
         return result
 
     def _ships_with_install(self, skill) -> bool:
@@ -235,27 +344,42 @@ class SkillService:
                                 os.path.basename(skill.base_dir))
         return os.path.isfile(os.path.join(shadowed, "SKILL.md"))
 
-    def _locate(self, name: str):
-        """
-        Resolve a skill name to ``(skill, service, path within its directory)``.
+    def _skill(self, name: str):
+        """The loaded skill of that name.
 
         Skills are addressed by name because the loader is what knows where a
         name lands: a workspace skill shadows a builtin one of the same name,
-        and a builtin lives outside the workspace entirely. Rooting a
-        :class:`WorkspaceService` at the skill's own directory then keeps both
-        the read and the write inside it, and reuses the containment check, the
-        mtime comparison, the atomic replace and the UTF-8 and size limits that
-        the workspace file editor already enforces.
+        and a builtin lives outside the workspace entirely.
         """
-        from agent.workspace.service import WorkspaceService
-
         if not name or not name.strip():
             raise ValueError("skill name is required")
         entry = self.manager.get_skill(name)
         if entry is None:
             raise FileNotFoundError(f"skill not found: {name}")
-        skill = entry.skill
-        return skill, WorkspaceService(skill.base_dir), os.path.basename(skill.file_path)
+        return entry.skill
+
+    def _locate(self, name: str, path: Optional[str] = None):
+        """
+        Resolve a skill and one of its files to ``(skill, service, rel path)``.
+
+        Rooting a :class:`WorkspaceService` at the skill's own directory keeps
+        both the read and the write inside it, and reuses the containment check,
+        the mtime comparison, the atomic replace and the UTF-8 and size limits
+        that the workspace file editor already enforces. ``path`` is normalised
+        the way an upload's paths are, and is then checked by that service
+        rather than here: a ``..`` left in it resolves outside the skill
+        directory and is refused.
+
+        :param path: a file within the skill directory, or None for its SKILL.md.
+        """
+        from agent.workspace.service import WorkspaceService
+
+        skill = self._skill(name)
+        svc = WorkspaceService(skill.base_dir)
+        rel = _upload_rel_path(path) if path else ""
+        if not rel:
+            rel = os.path.basename(skill.file_path)
+        return skill, svc, rel
 
     # ------------------------------------------------------------------
     # add / install

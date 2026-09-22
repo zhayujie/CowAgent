@@ -121,7 +121,7 @@ Two rules for includes:
 | `views/chat.html` | Chat view: message list, composer card, workspace panel |
 | `views/agents.html` | Agent team: list, detail drawer, create form |
 | `views/config.html` | Settings view with the "basic" and "models" tabs |
-| `views/skills.html` | Skill list and skill definition viewer (the create dialog is `modals/skill-create.html`) |
+| `views/skills.html` | Skill list, and the viewer for one skill: its file tree beside the file on screen (the create dialog is `modals/skill-create.html`) |
 | `views/memory.html` | Memory list and file viewer |
 | `views/knowledge.html` | Knowledge base: documents panel and relation graph panel |
 | `views/channels.html` | Channels view (content injected by JS) |
@@ -129,7 +129,7 @@ Two rules for includes:
 | `views/logs.html` | Log terminal |
 | `modals/team-chat.html` | New multi-agent conversation |
 | `modals/knowledge-dialog.html` | Knowledge create/rename/delete dialog |
-| `modals/skill-create.html` | New skill: the form, and folder / archive upload |
+| `modals/skill-create.html` | New skill: the form (attachments picked as files or as a folder), and folder / archive upload |
 | `modals/confirm-dialog.html` | Static confirm dialog |
 | `modals/rename-dialog.html` | Channel instance rename |
 | `modals/folder-picker.html` | Project folder picker |
@@ -331,9 +331,9 @@ auth), see `tests/test_web_console_routing.py`.
 | `views/channels-feishu.js` | Feishu one-click app registration |
 | `views/tasks.js` | Scheduled tasks and run records |
 | `views/tasks-modal.js` | Scheduled task create/edit dialog |
-| `views/skills.js` | Built-in tools, installed skills, and creating a skill from a form or an upload |
+| `views/skills.js` | Built-in tools, installed skills, the viewer for a skill's files, and creating a skill from a form or an upload |
 | `views/memory.js` | Memory file list |
-| `views/doc-viewers.js` | Viewer/editor for memory files and skill definitions |
+| `views/doc-viewers.js` | Viewer/editor for memory files, and the pieces the skill viewer shares with it |
 | `views/knowledge.js` | Knowledge tree, import, document editor, relation graph |
 | `views/logs.js` | Live log stream |
 | `boot.js` | Startup: apply theme and language, auth gate, first fetch of config and history |
@@ -370,9 +370,9 @@ changing them produces runtime errors:
 `workspace.js` and `doc-editor.js` are unchanged; they were separate files to
 begin with. Their positions are constrained:
 
-- `doc-editor.js` **must load first**, because `views/doc-viewers.js` and
-  `views/knowledge.js` call `createDocEditor()` at top level to build
-  `memoryEditor`, `skillEditor` and `knowledgeEditor`.
+- `doc-editor.js` **must load first**, because `views/doc-viewers.js`,
+  `views/skills.js` and `views/knowledge.js` call `createDocEditor()` at top
+  level to build `memoryEditor`, `skillEditor` and `knowledgeEditor`.
 - `workspace.js` **must load last**; it consumes `t`, `escapeHtml`,
   `renderMarkdown`, `showConfirmDialog`, `_wsToast`, `sessionId`,
   `activeAgentId` and a number of other globals.

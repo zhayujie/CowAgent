@@ -363,8 +363,66 @@ textarea.doc-editor {
 
 .doc-action-btn.doc-btn-busy { opacity: 0.5; pointer-events: none; }
 
+/* Icon-only variant, for a toggle whose state the icon already carries. */
+.doc-action-btn-icon { padding: 6px 9px; }
+.doc-action-btn-on { background: #f1f5f9; color: #334155; }
+.dark .doc-action-btn-on { background: rgba(255, 255, 255, 0.1); color: #e2e8f0; }
+
 /* Unsaved-changes marker beside the file name in a viewer title. */
 .doc-dirty-dot { color: #35A85B; }
+
+/* The attach menu of the skill create dialog: the composer's menu card, hung
+   under the right edge of its button instead of over the composer. Written with
+   both classes so it wins over `.attach-menu` whichever sheet loads last.
+
+   Opening upwards, as it does over the composer: the attachments are the last
+   field of a dialog that scrolls, so a menu dropped below the button would be
+   clipped by the dialog's own overflow. */
+.attach-menu.skill-attach-menu {
+    left: auto;
+    right: 0;
+    min-width: 132px;
+}
+
+/* Skill file tree: the files a skill directory holds beside its SKILL.md.
+   Indentation comes from an inline padding-left per row, so the padding here
+   only sets the other three sides. */
+.skill-file-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    padding: 5px 10px;
+    border: none;
+    background: none;
+    font-size: 12px;
+    color: #64748b;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.15s, color 0.15s;
+}
+.skill-file-row:hover { background: rgba(0, 0, 0, 0.04); color: #334155; }
+.skill-file-row.active { background: #EDFDF3; color: #228547; font-weight: 500; }
+/* A directory folds rather than opens, so it is never the active row. */
+.skill-file-row.skill-file-dir { color: #475569; }
+/* Reserved even where there is nothing to fold, so the names in one directory
+   all start at the same column. */
+.skill-file-caret { flex-shrink: 0; width: 9px; font-size: 9px; opacity: 0.6; text-align: center; }
+.skill-file-icon { flex-shrink: 0; width: 14px; font-size: 12px; opacity: 0.8; }
+.skill-file-dir .skill-file-icon { color: #94a3b8; opacity: 1; }
+/* Tabular figures so the sizes line up as a column rather than jittering. */
+.skill-file-size {
+    flex-shrink: 0;
+    font-size: 10px;
+    color: #94a3b8;
+    font-variant-numeric: tabular-nums;
+}
+.dark .skill-file-size { color: #64748b; }
+.dark .skill-file-row { color: #94a3b8; }
+.dark .skill-file-row:hover { background: rgba(255, 255, 255, 0.06); color: #e2e8f0; }
+.dark .skill-file-row.active { background: rgba(74, 190, 110, 0.1); color: #4ABE6E; }
+.dark .skill-file-row.skill-file-dir { color: #cbd5e1; }
+.dark .skill-file-dir .skill-file-icon { color: #64748b; }
 
 .workspace-empty {
     height: 100%;

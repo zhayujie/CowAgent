@@ -867,6 +867,26 @@ export interface SkillContent extends WorkspaceReadResult {
   ships_with_install: boolean
 }
 
+/**
+ * One entry of GET /api/skills/files: a file or directory inside a skill.
+ *
+ * Listed depth first in the order a tree draws them, so `depth` is all a
+ * renderer needs to show the nesting.
+ */
+export interface SkillFileEntry {
+  /** Relative to the skill's own directory, as the content endpoint takes it. */
+  path: string
+  name: string
+  depth: number
+  is_dir: boolean
+  /** Coarse preview kind: `markdown`, `code`, `image`, `directory`, ... */
+  kind: string
+  /** Whether showing it as text is meaningful; false for a bundled asset. */
+  text: boolean
+  size: number
+  mtime: number
+}
+
 /** Response of POST /api/skills/create: the skill written from the form. */
 export interface SkillCreateResult {
   /** The name it was created under, reduced from the title that was typed. */

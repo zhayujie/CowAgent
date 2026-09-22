@@ -1,8 +1,17 @@
 import React, { useEffect, useRef, useState } from 'react'
 import {
   ArrowLeft,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   FileArchive,
+  FileQuestion,
+  FileText,
+  FileUp,
+  Folder,
   FolderOpen,
+  FolderPlus,
+  FolderTree,
   Loader2,
   Lock,
   Paperclip,
@@ -17,7 +26,7 @@ import {
 import { t, tf } from '../i18n'
 import apiClient from '../api/client'
 import type { ApiResult } from '../api/client'
-import type { ToolInfo, SkillInfo, SkillContent } from '../types'
+import type { ToolInfo, SkillInfo, SkillContent, SkillFileEntry } from '../types'
 import { Toggle } from './settings/primitives'
 import Markdown from '../components/Markdown'
 import { DocActions, DocEditor, DocNotice, DocView } from '../components/DocEditor'
@@ -29,21 +38,31 @@ interface SkillsPageProps {
 
 const SKILL_HUB_URL = 'https://skills.cowagent.ai/'
 
+/** Where the file list's own show/hide state is kept, as in the web console. */
+const SKILL_FILES_PANEL_KEY = 'cow_skill_files_panel'
+
 /**
- * Skills are addressed by name, not by path: which file a name resolves to is
- * the loader's business, and a builtin skill's file sits outside the workspace.
+ * A skill is addressed by name, not by path: which directory a name resolves to
+ * is the loader's business, and a builtin skill sits outside the workspace.
+ * `path` then names one file inside it - a skill is a directory, and the files
+ * beside its SKILL.md are as much part of it.
  */
 interface SkillRef {
   name: string
   label: string
+  /** File within the skill directory; its SKILL.md when empty. */
+  path?: string
 }
 
 /** Created at module scope so an unsaved edit survives a route change. */
 const skillEditor = createDocEditorStore<SkillRef, SkillContent & ApiResult>({
-  keyOf: (doc) => doc.name,
-  read: (doc) => apiClient.readSkill(doc.name),
+  // The file, not just the skill: switching between two files of one skill has
+  // to read as a different document, or a late response would be dropped as a
+  // duplicate of the one on screen.
+  keyOf: (doc) => `${doc.name}/${doc.path || ''}`,
+  read: (doc) => apiClient.readSkill(doc.name, doc.path),
   write: (doc, content, expectedMtime) =>
-    apiClient.writeSkill({ name: doc.name, content, expectedMtime }),
+    apiClient.writeSkill({ name: doc.name, path: doc.path, content, expectedMtime }),
   refusal: (data) => (data.ships_with_install ? t('skill_builtin_readonly') : docRefusal(data)),
 })
 
@@ -75,8 +94,54 @@ function parseSkillFrontmatter(content: string): { fields: Array<[string, string
   return { fields, body: text.slice(match[0].length) }
 }
 
-/** A skill's read-only view: frontmatter as a titled header, body as markdown. */
-const SkillContentView: React.FC<{ content: string }> = ({ content }) => {
+/**
+ * A non-markdown file as a fenced code block, so it renders with the same
+ * highlighting and copy button as code anywhere else in the app.
+ *
+ * The fence is longer than any run of backticks in the file, or a code sample
+ * inside it would end the block early.
+ */
+function skillCodeBlock(path: string, content: string): string {
+  // Only a real extension names a language: left unguarded a `LICENSE` would be
+  // labelled one, and the highlighter asked to find it.
+  const filename = path.split('/').pop() || ''
+  const lang = filename.includes('.') ? (filename.split('.').pop() || '').toLowerCase() : ''
+  // Folded rather than spread into Math.max: a file can hold more runs of
+  // backticks than an argument list takes.
+  const longest = (content.match(/`+/g) || []).reduce((n, run) => Math.max(n, run.length), 2)
+  const fence = '`'.repeat(longest + 1)
+  return `${fence}${lang}\n${content}\n${fence}`
+}
+
+/**
+ * The read-only view of one of a skill's files.
+ *
+ * A markdown file - its SKILL.md above all - reads as prose, with the
+ * frontmatter lifted out into a header: handed to the markdown renderer as-is
+ * the `---` block becomes a giant bold heading and a horizontal rule. Anything
+ * else is a script or a data file, and reads as code.
+ */
+const SkillContentView: React.FC<{
+  content: string
+  /** Which file is open; empty for the skill's own SKILL.md. */
+  path?: string
+  /** How it was listed, when the tree knows it. */
+  file?: SkillFileEntry
+}> = ({ content, path, file }) => {
+  // A bundled asset belongs in the tree - it is part of the skill - but showing
+  // it here would only print mojibake.
+  if (file && !file.text) {
+    return (
+      <div className="py-12 flex flex-col items-center gap-2 text-content-tertiary">
+        <FileQuestion size={22} />
+        <span className="text-sm">{t('skill_file_not_text')}</span>
+      </div>
+    )
+  }
+
+  const isMarkdown = file ? file.kind === 'markdown' : !path || /\.(md|markdown)$/i.test(path)
+  if (!isMarkdown) return <Markdown content={skillCodeBlock(path || '', content)} />
+
   const { fields, body } = parseSkillFrontmatter(content)
   return (
     <>
@@ -95,6 +160,93 @@ const SkillContentView: React.FC<{ content: string }> = ({ content }) => {
   )
 }
 
+/**
+ * The open skill's files, indented by the depth the server listed them at.
+ *
+ * Shown even for a skill that is only its SKILL.md: the panel is what says what
+ * a skill is made of, and "one file, this big" is an answer to that. It only
+ * goes away when the listing could not be fetched at all, where an empty tree
+ * beside the file on screen would just look broken.
+ */
+const SkillFileTree: React.FC<{
+  files: SkillFileEntry[]
+  current: string
+  /** Directories the reader has folded away, by path. Empty means all open. */
+  folded: Set<string>
+  onSelect: (path: string) => void
+  onToggleDir: (path: string) => void
+  /** Fold the whole list away, giving the document the full width. */
+  onCollapse: () => void
+}> = ({ files, current, folded, onSelect, onToggleDir, onCollapse }) => {
+  if (!files.length) return null
+
+  const hiddenByFold = (path: string): boolean => {
+    for (const dir of folded) if (path.startsWith(`${dir}/`)) return true
+    return false
+  }
+
+  return (
+    <div className="w-56 flex-shrink-0 border-r border-subtle overflow-y-auto py-2">
+      <button
+        type="button"
+        onClick={onCollapse}
+        className="w-full flex items-center gap-1.5 px-3 pb-1.5 text-xs font-semibold uppercase tracking-wider text-content-tertiary hover:text-content-secondary transition-colors cursor-pointer"
+      >
+        <span className="flex-1 text-left">{t('skill_files_title')}</span>
+        <ChevronLeft size={11} className="opacity-70" />
+      </button>
+      {files
+        .filter((file) => !hiddenByFold(file.path))
+        .map((file) => {
+          const isFolded = folded.has(file.path)
+          return (
+            <button
+              key={file.path}
+              type="button"
+              title={file.path}
+              onClick={() => (file.is_dir ? onToggleDir(file.path) : onSelect(file.path))}
+              style={{ paddingLeft: 10 + file.depth * 13 }}
+              className={`w-full flex items-center gap-1.5 py-1 pr-2 text-xs text-left transition-colors cursor-pointer ${
+                file.path === current
+                  ? 'bg-accent-soft text-accent font-medium'
+                  : 'text-content-secondary hover:bg-inset'
+              }`}
+            >
+              {/* A caret only where there is something to fold; the others keep
+                  its width so every name in one directory starts at one column. */}
+              {file.is_dir ? (
+                isFolded ? (
+                  <ChevronRight size={11} className="flex-shrink-0 opacity-60" />
+                ) : (
+                  <ChevronDown size={11} className="flex-shrink-0 opacity-60" />
+                )
+              ) : (
+                <span className="w-[11px] flex-shrink-0" />
+              )}
+              {file.is_dir ? (
+                isFolded ? (
+                  <Folder size={14} className="flex-shrink-0 text-content-tertiary" />
+                ) : (
+                  <FolderOpen size={14} className="flex-shrink-0 text-content-tertiary" />
+                )
+              ) : (
+                <FileText size={14} className="flex-shrink-0 opacity-80" />
+              )}
+              <span className="flex-1 min-w-0 truncate">{file.name}</span>
+              {/* Only for files: a directory's own size says nothing about what
+                  the tree shows inside it. */}
+              {!file.is_dir && (
+                <span className="flex-shrink-0 text-[10px] text-content-tertiary tabular-nums">
+                  {formatSkillFileSize(file.size)}
+                </span>
+              )}
+            </button>
+          )
+        })}
+    </div>
+  )
+}
+
 const SkillsPage: React.FC<SkillsPageProps> = ({ baseUrl }) => {
   const [tools, setTools] = useState<ToolInfo[]>([])
   const [skills, setSkills] = useState<SkillInfo[]>([])
@@ -108,6 +260,19 @@ const SkillsPage: React.FC<SkillsPageProps> = ({ baseUrl }) => {
   const readonly = skillEditor((s) => s.readonly)
   const edit = skillEditor((s) => s.edit)
   const editorRef = useRef<HTMLTextAreaElement>(null)
+  const [skillFiles, setSkillFiles] = useState<SkillFileEntry[]>([])
+  /** Directories the reader has folded away, by path. Empty means all open. */
+  const [foldedDirs, setFoldedDirs] = useState<Set<string>>(new Set())
+  // Whether the file list is showing at all. Remembered across sessions:
+  // someone who reads skills on a narrow window should not have to fold it
+  // away again on every visit.
+  const [filesPanelOpen, setFilesPanelOpen] = useState(
+    () => localStorage.getItem(SKILL_FILES_PANEL_KEY) !== '0'
+  )
+  const openSkillName = doc?.name
+  // A skill opens on its SKILL.md, which the tree lists under that name even
+  // though the document was opened without naming a path.
+  const currentPath = doc?.path || 'SKILL.md'
 
   const loadData = async () => {
     try {
@@ -128,6 +293,26 @@ const SkillsPage: React.FC<SkillsPageProps> = ({ baseUrl }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [baseUrl])
 
+  // Keyed on the skill rather than on the open file: moving between two files
+  // of one skill must not refetch the tree they are both listed in. The tree is
+  // a convenience, so a failure leaves it empty rather than reporting itself.
+  useEffect(() => {
+    // The folds belonged to the tree being left behind, not to the next one.
+    setFoldedDirs(new Set())
+    if (!openSkillName) {
+      setSkillFiles([])
+      return
+    }
+    let live = true
+    apiClient
+      .listSkillFiles(openSkillName)
+      .then((files) => live && setSkillFiles(files))
+      .catch(() => live && setSkillFiles([]))
+    return () => {
+      live = false
+    }
+  }, [openSkillName])
+
   const toggle = async (skill: SkillInfo, enabled: boolean) => {
     // Optimistic flip; revert on failure.
     setSkills((prev) => prev.map((s) => (s.name === skill.name ? { ...s, enabled } : s)))
@@ -147,6 +332,27 @@ const SkillsPage: React.FC<SkillsPageProps> = ({ baseUrl }) => {
       .getState()
       .open({ name: skill.name, label: skill.display_name || skill.name })
     await skillEditor.getState().startEdit()
+  }
+
+  const toggleFilesPanel = () => {
+    const open = !filesPanelOpen
+    setFilesPanelOpen(open)
+    localStorage.setItem(SKILL_FILES_PANEL_KEY, open ? '1' : '0')
+  }
+
+  const toggleSkillDir = (path: string) =>
+    setFoldedDirs((prev) => {
+      const next = new Set(prev)
+      if (!next.delete(path)) next.add(path)
+      return next
+    })
+
+  /** Show another of the open skill's files. */
+  const selectSkillFile = async (path: string) => {
+    if (!doc || currentPath === path) return
+    // `open` is what asks about an unsaved edit before the text area is
+    // replaced by another file's contents.
+    await skillEditor.getState().open({ ...doc, path })
   }
 
   const closeViewer = async () => {
@@ -216,8 +422,25 @@ const SkillsPage: React.FC<SkillsPageProps> = ({ baseUrl }) => {
               <ArrowLeft size={14} />
               {t('skill_back')}
             </button>
+            {/* Folding the file list away is the only way back to a full-width
+                document, so the switch cannot live inside the panel it hides. */}
+            {skillFiles.length > 0 && (
+              <button
+                type="button"
+                title={t('skill_files_title')}
+                aria-pressed={filesPanelOpen}
+                onClick={toggleFilesPanel}
+                className={`inline-flex items-center px-2.5 py-1.5 rounded-btn text-sm border border-strong transition-colors cursor-pointer ${
+                  filesPanelOpen
+                    ? 'bg-inset text-content'
+                    : 'text-content-secondary hover:bg-inset'
+                }`}
+              >
+                <FolderTree size={14} />
+              </button>
+            )}
             <h3 className="flex-1 text-sm font-semibold text-content truncate">
-              {doc.label}
+              {doc.path ? `${doc.label}/${doc.path}` : doc.label}
               {edit?.dirty && (
                 <span className="text-accent" title={t('ws_edit_unsaved')}>
                   {' '}
@@ -236,23 +459,43 @@ const SkillsPage: React.FC<SkillsPageProps> = ({ baseUrl }) => {
             )}
             <DocActions store={skillEditor} textareaRef={editorRef} />
           </div>
-          {edit ? (
-            <div className="flex-1 min-h-0 overflow-hidden">
-              <DocEditor key={doc.name} store={skillEditor} textareaRef={editorRef} />
-            </div>
-          ) : (
-            <DocView store={skillEditor}>
-              <div className="max-w-3xl mx-auto px-6 py-6">
-                {docLoading ? (
-                  <div className="flex items-center text-content-tertiary py-8">
-                    <Loader2 size={16} className="animate-spin mr-2" />
-                  </div>
-                ) : (
-                  <SkillContentView content={content} />
-                )}
+          <div className="flex-1 flex min-h-0">
+            {filesPanelOpen && (
+              <SkillFileTree
+                files={skillFiles}
+                current={currentPath}
+                folded={foldedDirs}
+                onSelect={(path) => void selectSkillFile(path)}
+                onToggleDir={toggleSkillDir}
+                onCollapse={toggleFilesPanel}
+              />
+            )}
+            {edit ? (
+              <div className="flex-1 min-h-0 overflow-hidden">
+                <DocEditor
+                  key={`${doc.name}/${doc.path || ''}`}
+                  store={skillEditor}
+                  textareaRef={editorRef}
+                />
               </div>
-            </DocView>
-          )}
+            ) : (
+              <DocView store={skillEditor}>
+                <div className="max-w-3xl mx-auto px-6 py-6">
+                  {docLoading ? (
+                    <div className="flex items-center text-content-tertiary py-8">
+                      <Loader2 size={16} className="animate-spin mr-2" />
+                    </div>
+                  ) : (
+                    <SkillContentView
+                      content={content}
+                      path={currentPath}
+                      file={skillFiles.find((file) => file.path === currentPath)}
+                    />
+                  )}
+                </div>
+              </DocView>
+            )}
+          </div>
         </div>
       ) : (
       <div className="flex-1 overflow-y-auto border-t border-default">
@@ -376,6 +619,34 @@ function formatSkillFileSize(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
+/**
+ * Where an attachment lands inside the skill directory.
+ *
+ * A folder pick carries the path the file sat at under the chosen folder, so
+ * `scripts/` picked as a folder installs as `scripts/`. A loose file has only
+ * its own name, and lands beside SKILL.md.
+ */
+function skillAttachmentPath(file: File): string {
+  return file.webkitRelativePath || file.name
+}
+
+/**
+ * The files of a picked folder that are worth installing.
+ *
+ * A directory on disk carries more than what someone wrote: caches, a
+ * virtualenv, an editor's dotfiles. Bundling those would install megabytes the
+ * skill never uses, and the console's file tree hides them anyway - so the tree
+ * would not even show what had been added.
+ */
+function skillUploadCandidates(files: File[]): File[] {
+  const noise = ['__pycache__', 'node_modules', 'venv']
+  return files.filter((file) =>
+    skillAttachmentPath(file)
+      .split('/')
+      .every((part) => !part.startsWith('.') && !noise.includes(part))
+  )
+}
+
 /** Validate a batch of picked files. Returns an error message, or ''. */
 function validateSkillUploadFiles(files: File[]): string {
   if (!files.length) return t('skill_upload_required')
@@ -413,9 +684,26 @@ const SkillCreateDialog: React.FC<{
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [dragOver, setDragOver] = useState(false)
+  // Two picks behind one button: a native file dialog browses for files or for a
+  // directory, never both, so the choice is made before it opens.
+  const [attachOpen, setAttachOpen] = useState(false)
   const filesRef = useRef<HTMLInputElement>(null)
+  const createFolderRef = useRef<HTMLInputElement>(null)
   const archiveRef = useRef<HTMLInputElement>(null)
   const folderRef = useRef<HTMLInputElement>(null)
+  const attachRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!attachOpen) return
+    const onDown = (e: MouseEvent) => {
+      if (attachRef.current && !attachRef.current.contains(e.target as Node)) setAttachOpen(false)
+    }
+    // Captured rather than bubbled: the dialog stops mousedown from leaving it,
+    // so a bubbling listener would never see a click on the fields behind the
+    // menu - only one on the overlay, which closes the whole dialog anyway.
+    document.addEventListener('mousedown', onDown, true)
+    return () => document.removeEventListener('mousedown', onDown, true)
+  }, [attachOpen])
 
   const slug = skillNameSlug(name)
 
@@ -430,14 +718,28 @@ const SkillCreateDialog: React.FC<{
   }
 
   const pickFolder = (picked: File[]) => {
-    const err = validateSkillUploadFiles(picked)
+    const wanted = skillUploadCandidates(picked)
+    const err = validateSkillUploadFiles(wanted)
     if (err) {
       setError(err)
       return
     }
     setError('')
     setArchive(null)
-    setFolder(picked)
+    setFolder(wanted)
+  }
+
+  /** Add what one of the attachment inputs picked to the list under the field. */
+  const addAttachments = (picked: File[], asFolder: boolean) => {
+    const wanted = asFolder ? skillUploadCandidates(picked) : picked
+    // One path is one attachment: the same file picked twice does not become
+    // two, and two files of that name in different folders stay two.
+    setFiles((prev) => [
+      ...prev,
+      ...wanted.filter(
+        (file) => !prev.some((f) => skillAttachmentPath(f) === skillAttachmentPath(file))
+      ),
+    ])
   }
 
   const submitForm = async () => {
@@ -579,25 +881,61 @@ const SkillCreateDialog: React.FC<{
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="text-sm text-content-secondary">{t('skill_new_files')}</label>
-                  <button
-                    type="button"
-                    onClick={() => filesRef.current?.click()}
-                    className="inline-flex items-center gap-1 text-xs text-accent hover:opacity-80 cursor-pointer"
-                  >
-                    <Paperclip size={11} />
-                    {t('skill_new_files_pick')}
-                  </button>
+                  {/* A skill's resources come as a directory as often as they come as
+                      loose files - `scripts/`, `references/` - and the paths are kept,
+                      so the layout picked here is the one installed. */}
+                  <div ref={attachRef} className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setAttachOpen((v) => !v)}
+                      className="inline-flex items-center gap-1 text-xs text-accent hover:opacity-80 cursor-pointer"
+                    >
+                      <Paperclip size={11} />
+                      {t('skill_new_files_add')}
+                    </button>
+                    {attachOpen && (
+                      // Opening upwards: the attachments are the last field of a
+                      // dialog that scrolls, so a menu below the button would be
+                      // clipped by the dialog's own overflow.
+                      <div className="absolute right-0 bottom-full mb-1.5 w-36 z-30 rounded-xl border border-default bg-elevated shadow-xl p-1">
+                        {[
+                          { icon: FileUp, label: t('skill_new_files_pick'), ref: filesRef },
+                          { icon: FolderPlus, label: t('skill_upload_pick_folder'), ref: createFolderRef },
+                        ].map(({ icon: Icon, label, ref }) => (
+                          <button
+                            key={label}
+                            type="button"
+                            onClick={() => {
+                              setAttachOpen(false)
+                              ref.current?.click()
+                            }}
+                            className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs text-left text-content hover:bg-inset cursor-pointer"
+                          >
+                            <Icon size={12} className="flex-shrink-0 opacity-70" />
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
                 {files.length === 0 ? (
                   <p className="text-xs text-content-tertiary">{t('skill_new_files_hint')}</p>
                 ) : (
-                  <div className="space-y-1.5">
+                  // A picked folder can be dozens of files, so the list scrolls
+                  // rather than pushing the create button off the dialog.
+                  <div className="space-y-1.5 max-h-40 overflow-y-auto">
                     {files.map((file, index) => (
                       <div
-                        key={`${file.name}-${index}`}
+                        key={skillAttachmentPath(file)}
                         className="flex items-center gap-2 px-2.5 py-1.5 rounded-btn border border-default bg-inset"
                       >
-                        <span className="flex-1 min-w-0 text-xs font-mono text-content truncate">{file.name}</span>
+                        <span
+                          title={skillAttachmentPath(file)}
+                          className="flex-1 min-w-0 text-xs font-mono text-content truncate"
+                        >
+                          {skillAttachmentPath(file)}
+                        </span>
                         <span className="text-[11px] text-content-tertiary">{formatSkillFileSize(file.size)}</span>
                         <button
                           type="button"
@@ -618,13 +956,19 @@ const SkillCreateDialog: React.FC<{
                   onChange={(e) => {
                     const picked = Array.from(e.target.files || [])
                     e.target.value = ''
-                    // The same file picked twice is one attachment, not two.
-                    setFiles((prev) => [
-                      ...prev,
-                      ...picked.filter(
-                        (file) => !prev.some((f) => f.name === file.name && f.size === file.size)
-                      ),
-                    ])
+                    addAttachments(picked, false)
+                  }}
+                />
+                <input
+                  ref={createFolderRef}
+                  type="file"
+                  multiple
+                  {...FOLDER_INPUT_PROPS}
+                  className="hidden"
+                  onChange={(e) => {
+                    const picked = Array.from(e.target.files || [])
+                    e.target.value = ''
+                    addAttachments(picked, true)
                   }}
                 />
               </div>

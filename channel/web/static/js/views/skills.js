@@ -198,26 +198,56 @@ function toggleSkill(name, currentlyEnabled) {
 // Skill viewer / editor
 // ---------------------------------------------------------------------
 
+/** The files of the skill the viewer has open, as `/api/skills/files` listed them. */
+let _skillFiles = [];
+/** Directories the reader has folded away, by path. Empty means all open. */
+let _skillFoldedDirs = new Set();
+// Counts the reads the viewer has asked for, so a slow one that lands after the
+// reader has already moved on to another file is dropped instead of replacing
+// what they are looking at now.
+let _skillReadSeq = 0;
+// Whether the file list is showing at all. Remembered across sessions: someone
+// who reads skills on a narrow window should not have to fold it away again on
+// every visit.
+const SKILL_FILES_PANEL_KEY = 'cow_skill_files_panel';
+let _skillFilesPanelOpen = localStorage.getItem(SKILL_FILES_PANEL_KEY) !== '0';
+
 /**
- * Skills are addressed by name, not by path: which file a name resolves to is
- * the loader's business, and a builtin skill lives outside the workspace that
- * the file APIs are confined to.
+ * A skill is addressed by name, not by path: which directory a name resolves to
+ * is the loader's business, and a builtin skill lives outside the workspace
+ * that the file APIs are confined to. `path` then names one file inside that
+ * directory, and defaults to the skill's own SKILL.md.
  */
-async function skillReadContent(name) {
-    const res = await fetch(`/api/skills/content?name=${encodeURIComponent(name)}`);
+async function skillReadContent(name, path) {
+    const query = `name=${encodeURIComponent(name)}`
+        + (path ? `&path=${encodeURIComponent(path)}` : '');
+    const res = await fetch(`/api/skills/content?${query}`);
     const data = await res.json();
     if (data.status !== 'success') throw new Error(data.message || 'read failed');
     return data;
 }
 
-/** Save a skill's definition. Returns the raw response, a conflict included. */
-async function skillWriteContent(name, content, expectedMtime) {
+/** Save one of a skill's files. Returns the raw response, a conflict included. */
+async function skillWriteContent(name, path, content, expectedMtime) {
     const res = await fetch('/api/skills/content', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name, content: content, expected_mtime: expectedMtime }),
+        body: JSON.stringify({
+            name: name, path: path || '', content: content, expected_mtime: expectedMtime,
+        }),
     });
     return res.json();
+}
+
+/** The files a skill is made of. Empty on failure: the tree is not the point. */
+async function skillListFiles(name) {
+    try {
+        const res = await fetch(`/api/skills/files?name=${encodeURIComponent(name)}`);
+        const data = await res.json();
+        return data.status === 'success' ? (data.files || []) : [];
+    } catch (e) {
+        return [];
+    }
 }
 
 /** The i18n key explaining why a skill cannot be edited, or null if it can. */
@@ -257,15 +287,52 @@ function parseSkillFrontmatter(content) {
     return { fields, body: text.slice(match[0].length) };
 }
 
+/** How one of the open skill's files was listed, or null if it is not in the tree. */
+function skillFileEntry(path) {
+    return _skillFiles.find(file => file.path === path) || null;
+}
+
 /**
- * Render a skill's content into the viewer: the frontmatter as a titled header,
- * the remainder as markdown.
+ * Render one of a skill's files into the viewer.
+ *
+ * A markdown file - the SKILL.md above all - is rendered as prose, with its
+ * frontmatter lifted out into a header: fed to the markdown renderer as-is the
+ * `---` block turns into a giant bold heading and a horizontal rule. Anything
+ * else is a script or a data file, and reads as code.
  */
-function skillRenderBody(content) {
+function skillRenderBody(doc) {
     const el = document.getElementById('skill-viewer-content');
     if (!el) return;
-    const { fields, body } = parseSkillFrontmatter(content);
 
+    const entry = skillFileEntry(doc.path);
+    // A bundled asset belongs in the tree - it is part of the skill - but
+    // showing it here would only print mojibake. A text file that merely lost a
+    // byte to the decoder is still shown, with the read-only badge saying why:
+    // partial content beats no content, as it does in the workspace preview.
+    if (entry && !entry.text) {
+        el.innerHTML = `
+            <div class="py-12 flex flex-col items-center gap-2 text-slate-400 dark:text-slate-500">
+                <i class="fas fa-file-circle-question text-xl"></i>
+                <span class="text-sm">${escapeHtml(t('skill_file_not_text'))}</span>
+            </div>`;
+        return;
+    }
+
+    const isMarkdown = entry ? entry.kind === 'markdown'
+                             : /\.(md|markdown)$/i.test(doc.path || '');
+    if (!isMarkdown) {
+        // Only a real extension names a language: left unguarded a `LICENSE`
+        // would be labelled one, and the highlighter asked to find it.
+        const filename = (doc.path || '').split('/').pop();
+        const ext = filename.includes('.') ? filename.split('.').pop().toLowerCase() : '';
+        el.innerHTML = '<div class="msg-content"><pre><code'
+            + (ext ? ` class="language-${escapeHtml(ext)}"` : '') + '>'
+            + `${escapeHtml(doc.content || '')}</code></pre></div>`;
+        applyHighlighting(el);
+        return;
+    }
+
+    const { fields, body } = parseSkillFrontmatter(doc.content);
     let headerHtml = '';
     if (fields.length) {
         const rows = fields.map(([key, value]) => `
@@ -290,39 +357,179 @@ const skillEditor = createDocEditor({
         save: document.getElementById('skill-btn-save'),
         cancel: document.getElementById('skill-btn-cancel'),
     }),
-    read: (doc) => skillReadContent(doc.name),
-    write: (doc, content, mtime) => skillWriteContent(doc.name, content, mtime),
-    render: (doc) => skillRenderBody(doc.content),
+    read: (doc) => skillReadContent(doc.name, doc.path),
+    write: (doc, content, mtime) => skillWriteContent(doc.name, doc.path, content, mtime),
+    render: (doc) => skillRenderBody(doc),
     canEdit: (doc) => !doc.readonlyKey,
     refusal: skillReadonlyReason,
-    onState: (state) => docRenderTitle('skill-viewer-title', skillEditor.current()?.name, state),
+    onState: (state) => docRenderTitle('skill-viewer-title', skillViewerTitle(), state),
 });
 
+/**
+ * Say in the header why the file on screen cannot be edited, or say nothing.
+ *
+ * Per file rather than per skill: the reason a bundled PNG is read-only is not
+ * the reason a builtin's SKILL.md is, and the edit button is hidden either way.
+ */
+function skillShowReadonlyBadge(readonlyKey) {
+    const badge = document.getElementById('skill-viewer-readonly');
+    if (!badge) return;
+    badge.classList.toggle('hidden', !readonlyKey);
+    if (!readonlyKey) return;
+    // Keep data-i18n in step so a language switch re-translates it.
+    badge.dataset.i18n = readonlyKey;
+    badge.textContent = t(readonlyKey);
+    badge.title = t(readonlyKey);
+}
+
+/** What the viewer's header reads: the skill, and which of its files is open. */
+function skillViewerTitle() {
+    const doc = skillEditor.current();
+    if (!doc) return '';
+    return doc.path ? `${doc.name}/${doc.path}` : doc.name;
+}
+
+/**
+ * Open a skill in the viewer: its file tree, and one of its files.
+ *
+ * @param opts.edit - jump straight into editing, as the pencil on a card does.
+ * @param opts.path - which file to show; the skill's SKILL.md by default.
+ */
 function openSkillFile(name, opts) {
     const startEditing = !!(opts && opts.edit);
-    skillReadContent(name).then(data => {
-        const badge = document.getElementById('skill-viewer-readonly');
+    const path = (opts && opts.path) || '';
+    const mine = ++_skillReadSeq;
+    // The tree is fetched alongside the file rather than after it, so opening a
+    // skill is one round trip either way.
+    Promise.all([skillReadContent(name, path), skillListFiles(name)]).then(([data, files]) => {
+        if (mine !== _skillReadSeq) return;
         const readonlyKey = skillReadonlyReason(data);
-        if (badge) {
-            badge.classList.toggle('hidden', !readonlyKey);
-            if (readonlyKey) {
-                // Keep data-i18n in step so a language switch re-translates it.
-                badge.dataset.i18n = readonlyKey;
-                badge.textContent = t(readonlyKey);
-                badge.title = t(readonlyKey);
-            }
-        }
+        skillShowReadonlyBadge(readonlyKey);
         document.getElementById('skills-panel-list').classList.add('hidden');
         document.getElementById('skills-panel-viewer').classList.remove('hidden');
+        _skillFiles = files;
+        // Another skill's tree: the folds belonged to the previous one.
+        _skillFoldedDirs = new Set();
         skillEditor.open({
             name: data.name || name,
+            // As the server resolved it, so the tree's highlight matches the
+            // file on screen even when the caller passed no path at all.
+            path: data.filename || path,
             content: data.content || '',
             readonlyKey: readonlyKey,
         });
+        renderSkillFilesTree();
         // The pencil on a card jumps straight into editing, skipping the
         // read-only view - but only where the skill is actually editable.
         if (startEditing && !readonlyKey) skillEditor.start();
-    }).catch(e => _wsToast(`${t('skill_load_failed')}: ${e.message}`));
+    }).catch(e => {
+        if (mine === _skillReadSeq) _wsToast(`${t('skill_load_failed')}: ${e.message}`);
+    });
+}
+
+/**
+ * Draw the open skill's files, indented by the depth the server listed them at.
+ *
+ * Shown even for a skill that is only its SKILL.md: the panel is what says what
+ * a skill is made of, and "one file, this big" is an answer to that. It only
+ * goes away when the listing could not be fetched at all, where an empty tree
+ * beside the file on screen would just look broken.
+ */
+function renderSkillFilesTree() {
+    const panel = document.getElementById('skill-files-panel');
+    const tree = document.getElementById('skill-files-tree');
+    if (!panel || !tree) return;
+
+    // The switch in the header goes with the panel: with no listing there is
+    // nothing to show, folded away or not.
+    const toggle = document.getElementById('skill-files-toggle');
+    const listed = _skillFiles.length > 0;
+    if (toggle) {
+        toggle.classList.toggle('hidden', !listed);
+        toggle.classList.toggle('doc-action-btn-on', listed && _skillFilesPanelOpen);
+        toggle.setAttribute('aria-pressed', String(_skillFilesPanelOpen));
+    }
+
+    const show = listed && _skillFilesPanelOpen;
+    panel.classList.toggle('hidden', !show);
+    if (!show) {
+        tree.innerHTML = '';
+        return;
+    }
+
+    const current = skillEditor.current()?.path;
+    tree.innerHTML = '';
+    _skillFiles.forEach(file => {
+        if (skillPathIsFolded(file.path)) return;
+        const folded = _skillFoldedDirs.has(file.path);
+        const row = document.createElement('button');
+        row.className = 'skill-file-row' + (file.path === current ? ' active' : '')
+            + (file.is_dir ? ' skill-file-dir' : '');
+        row.style.paddingLeft = `${10 + file.depth * 13}px`;
+        row.title = file.path;
+        // A caret only where there is something to fold; the others keep its
+        // width so every name in one directory still starts at one column.
+        row.innerHTML = (file.is_dir
+            ? `<i class="fas fa-chevron-${folded ? 'right' : 'down'} skill-file-caret"></i>`
+            : '<span class="skill-file-caret"></span>')
+            + `<i class="fas ${file.is_dir ? (folded ? 'fa-folder' : 'fa-folder-open') : 'fa-file-lines'} skill-file-icon"></i>`
+            + `<span class="flex-1 min-w-0 truncate">${escapeHtml(file.name)}</span>`
+            // Only for files: a directory's own size says nothing about what
+            // the tree shows inside it.
+            + (file.is_dir ? ''
+                : `<span class="skill-file-size">${formatSkillFileSize(file.size)}</span>`);
+        // Bound rather than written into an onclick attribute: these names come
+        // off disk and may hold a quote.
+        row.onclick = file.is_dir
+            ? () => toggleSkillDir(file.path)
+            : () => selectSkillFile(file.path);
+        tree.appendChild(row);
+    });
+}
+
+/** Whether a folded directory somewhere above this path hides it. */
+function skillPathIsFolded(path) {
+    for (const dir of _skillFoldedDirs) {
+        if (path.startsWith(`${dir}/`)) return true;
+    }
+    return false;
+}
+
+/** Fold a directory away, or open it again. */
+function toggleSkillDir(path) {
+    if (!_skillFoldedDirs.delete(path)) _skillFoldedDirs.add(path);
+    renderSkillFilesTree();
+}
+
+/** Show or hide the file list, giving the document the full width. */
+function toggleSkillFilesPanel() {
+    _skillFilesPanelOpen = !_skillFilesPanelOpen;
+    localStorage.setItem(SKILL_FILES_PANEL_KEY, _skillFilesPanelOpen ? '1' : '0');
+    renderSkillFilesTree();
+}
+
+/** Show another of the open skill's files. */
+function selectSkillFile(path) {
+    const doc = skillEditor.current();
+    if (!doc || doc.path === path) return;
+    // The text area is about to be replaced by another file's contents.
+    if (!skillEditor.guard(() => selectSkillFile(path))) return;
+
+    const mine = ++_skillReadSeq;
+    skillReadContent(doc.name, path).then(data => {
+        if (mine !== _skillReadSeq) return;
+        const readonlyKey = skillReadonlyReason(data);
+        skillShowReadonlyBadge(readonlyKey);
+        skillEditor.open({
+            name: doc.name,
+            path: data.filename || path,
+            content: data.content || '',
+            readonlyKey: readonlyKey,
+        });
+        renderSkillFilesTree();
+    }).catch(e => {
+        if (mine === _skillReadSeq) _wsToast(`${t('skill_load_failed')}: ${e.message}`);
+    });
 }
 
 function closeSkillViewer() {
@@ -336,6 +543,9 @@ function closeSkillViewer() {
 /** Drop the viewer and show the list, without asking about unsaved edits. */
 function resetSkillViewer() {
     skillEditor.forget();
+    _skillFiles = [];
+    _skillFoldedDirs = new Set();
+    document.getElementById('skill-files-panel')?.classList.add('hidden');
     document.getElementById('skills-panel-viewer')?.classList.add('hidden');
     document.getElementById('skills-panel-list')?.classList.remove('hidden');
 }
@@ -357,17 +567,22 @@ let _skillUploadArchive = null;
 let _skillUploadFolder = [];
 let _skillCreateBusy = false;
 let _skillUploadDropReady = false;
+let _skillAttachMenuReady = false;
 
 function openSkillCreateDialog(mode) {
     resetSkillCreateDialog();
     switchSkillCreateMode(mode || 'form');
     document.getElementById('skill-create-overlay')?.classList.remove('hidden');
     initSkillUploadDropZone();
-    // A folder picker is Chromium/WebKit only; without it the upload tab would
-    // offer a button that does nothing.
-    const folderBtn = document.getElementById('skill-upload-folder-btn');
-    const folderInput = document.getElementById('skill-upload-folder');
-    if (folderBtn) folderBtn.classList.toggle('hidden', !(folderInput && 'webkitdirectory' in folderInput));
+    initSkillAttachMenu();
+    // A folder picker is Chromium/WebKit only; without it the dialog would
+    // offer a button and a menu entry that do nothing.
+    [['skill-upload-folder-btn', 'skill-upload-folder'],
+     ['skill-create-folder-option', 'skill-create-folder']].forEach(([btnId, inputId]) => {
+        const btn = document.getElementById(btnId);
+        const input = document.getElementById(inputId);
+        if (btn) btn.classList.toggle('hidden', !(input && 'webkitdirectory' in input));
+    });
     document.getElementById('skill-create-name')?.focus();
 }
 
@@ -386,6 +601,7 @@ function resetSkillCreateDialog() {
     renderSkillCreateFiles();
     renderSkillNamePreview();
     clearSkillUploadSelection();
+    hideSkillAttachMenu();
     setSkillCreateError('');
 }
 
@@ -463,14 +679,88 @@ function renderSkillNamePreview() {
     el.textContent = `${t('skill_new_name_dir')}: ${slug}`;
 }
 
+/**
+ * Where an attachment lands inside the skill directory.
+ *
+ * A folder pick carries the path the file sat at under the chosen folder, so
+ * `scripts/` picked as a folder installs as `scripts/`. A loose file has only
+ * its own name, and lands beside SKILL.md.
+ */
+function skillAttachmentPath(file) {
+    return file.webkitRelativePath || file.name;
+}
+
+/**
+ * The files of a picked folder that are worth installing.
+ *
+ * A directory on disk carries more than what someone wrote: caches, a virtualenv,
+ * an editor's dotfiles. Bundling those would install megabytes the skill never
+ * uses, and the console's file tree hides them anyway - so the tree would not
+ * even show what had been added.
+ */
+function skillUploadCandidates(files) {
+    const noise = ['__pycache__', 'node_modules', 'venv'];
+    return files.filter(file => skillAttachmentPath(file).split('/')
+        .every(part => !part.startsWith('.') && !noise.includes(part)));
+}
+
+/**
+ * Open or close the menu behind the attachments button.
+ *
+ * Two picks behind one button: a native file dialog browses for files or for a
+ * directory, never both, so the choice is made before it opens.
+ */
+function toggleSkillAttachMenu(event) {
+    // Or the click would reach the document listener that closes it again.
+    event?.stopPropagation();
+    document.getElementById('skill-create-attach-menu')?.classList.toggle('hidden');
+}
+
+function hideSkillAttachMenu() {
+    document.getElementById('skill-create-attach-menu')?.classList.add('hidden');
+}
+
+/** Close the attach menu on a click anywhere else. Bound once. */
+function initSkillAttachMenu() {
+    if (_skillAttachMenuReady) return;
+    const menu = document.getElementById('skill-create-attach-menu');
+    const btn = document.getElementById('skill-create-attach-btn');
+    if (!menu || !btn) return;
+    _skillAttachMenuReady = true;
+    document.addEventListener('click', event => {
+        if (menu.classList.contains('hidden')) return;
+        if (menu.contains(event.target) || btn.contains(event.target)) return;
+        hideSkillAttachMenu();
+    });
+}
+
 function selectSkillCreateFiles() {
-    const input = document.getElementById('skill-create-files');
+    pickSkillCreateAttachments('skill-create-files', false);
+}
+
+function selectSkillCreateFolder() {
+    pickSkillCreateAttachments('skill-create-folder', true);
+}
+
+/**
+ * Add what one of the attachment inputs picked to the list under the field.
+ *
+ * @param asFolder - a folder pick, whose noise is left out and whose paths are
+ *   kept; a loose pick is taken as chosen, dotfile or not.
+ */
+function pickSkillCreateAttachments(inputId, asFolder) {
+    hideSkillAttachMenu();
+    const input = document.getElementById(inputId);
     if (!input) return;
     input.value = '';
     input.onchange = () => {
-        Array.from(input.files || []).forEach(file => {
-            // The same file picked twice is one attachment, not two.
-            if (!_skillCreateFiles.some(f => f.name === file.name && f.size === file.size)) {
+        const picked = Array.from(input.files || []);
+        (asFolder ? skillUploadCandidates(picked) : picked).forEach(file => {
+            // One path is one attachment: the same file picked twice does not
+            // become two, and two files of that name in different folders stay
+            // two.
+            const path = skillAttachmentPath(file);
+            if (!_skillCreateFiles.some(f => skillAttachmentPath(f) === path)) {
                 _skillCreateFiles.push(file);
             }
         });
@@ -492,7 +782,8 @@ function renderSkillCreateFiles() {
     list.innerHTML = _skillCreateFiles.map((file, index) => `
         <div class="flex items-center gap-2 rounded-lg bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 px-2.5 py-1.5">
             <i class="fas fa-file text-slate-400 text-[10px]"></i>
-            <span class="flex-1 min-w-0 text-xs font-mono text-slate-700 dark:text-slate-200 truncate">${escapeHtml(file.name)}</span>
+            <span class="flex-1 min-w-0 text-xs font-mono text-slate-700 dark:text-slate-200 truncate"
+                  title="${escapeHtml(skillAttachmentPath(file))}">${escapeHtml(skillAttachmentPath(file))}</span>
             <span class="text-[11px] text-slate-400">${formatSkillFileSize(file.size)}</span>
             <button type="button" onclick="removeSkillCreateFile(${index})"
                     class="text-slate-400 hover:text-red-500 cursor-pointer">
@@ -540,13 +831,14 @@ function setSkillUploadArchive(file) {
 }
 
 function setSkillUploadFolder(files) {
-    const error = validateSkillUploadFiles(files);
+    const wanted = skillUploadCandidates(files);
+    const error = validateSkillUploadFiles(wanted);
     if (error) {
         setSkillCreateError(error);
         return;
     }
     _skillUploadArchive = null;
-    _skillUploadFolder = files.map(file => ({ file, relPath: file.webkitRelativePath || file.name }));
+    _skillUploadFolder = wanted.map(file => ({ file, relPath: skillAttachmentPath(file) }));
     renderSkillUploadSelection('fa-folder-open', t('skill_upload_folder_files')
         .replace('{root}', _skillUploadFolder[0].relPath.split('/')[0] || '')
         .replace('{count}', _skillUploadFolder.length));
@@ -648,7 +940,13 @@ function submitSkillForm() {
     form.append('name', name);
     form.append('description', description);
     form.append('body', body);
-    _skillCreateFiles.forEach(file => form.append('files', file, file.name));
+    // Paired field by field, the way a picked folder is uploaded: an attachment
+    // that came from a folder keeps the path it sat at, and a file's own name
+    // says nothing about that.
+    _skillCreateFiles.forEach(file => {
+        form.append('files', file);
+        form.append('relative_paths', skillAttachmentPath(file));
+    });
     return postSkillCreate('/api/skills/create', form,
         data => ({ message: `${t('skill_new_created')}: ${data.name}` }));
 }

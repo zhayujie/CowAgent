@@ -4,6 +4,7 @@ import type {
   ChannelAction,
   SkillInfo,
   SkillContent,
+  SkillFileEntry,
   SkillCreateResult,
   SkillUploadResult,
   ToolInfo,
@@ -840,6 +841,10 @@ class ApiClient {
    * Create a skill from the fields a form collects (multipart: the body carries
    * files as well as text). `name` is a title, which the server reduces to the
    * hyphen-case name the directory uses; `files` are bundled beside SKILL.md.
+   *
+   * An attachment picked as part of a folder keeps the path it sat at, sent in a
+   * field of its own the way an uploaded folder's paths are: a skill's resources
+   * come as a `scripts/` directory as often as they come as loose files.
    */
   async createSkill(args: {
     name: string
@@ -853,6 +858,7 @@ class ApiClient {
     formData.append('body', args.body || '')
     for (const file of args.files || []) {
       formData.append('files', await this.fileBytes(file), file.name)
+      formData.append('relative_paths', file.webkitRelativePath || file.name)
     }
     return this.postFormData('/api/skills/create', formData)
   }
@@ -881,17 +887,31 @@ class ApiClient {
   }
 
   /**
-   * Read a skill's definition file.
-   *
-   * Addressed by name rather than by path: which file a name resolves to is the
-   * loader's business, and a builtin skill's file sits outside the workspace.
+   * The files one skill is made of: its SKILL.md, and the `scripts/`,
+   * `references/` and assets installed beside it.
    */
-  async readSkill(name: string): Promise<SkillContent & ApiResult> {
-    return this.request(`/api/skills/content?name=${encodeURIComponent(name)}`)
+  async listSkillFiles(name: string): Promise<SkillFileEntry[]> {
+    const data = await this.request<{ status: string; files: SkillFileEntry[] }>(
+      `/api/skills/files?name=${encodeURIComponent(name)}`
+    )
+    return data.files || []
   }
 
   /**
-   * Save a skill's definition file.
+   * Read one of a skill's files, its SKILL.md by default.
+   *
+   * The skill is addressed by name rather than by path: which directory a name
+   * resolves to is the loader's business, and a builtin skill sits outside the
+   * workspace. `path` then names a file inside that directory.
+   */
+  async readSkill(name: string, path?: string): Promise<SkillContent & ApiResult> {
+    const query = `name=${encodeURIComponent(name)}`
+      + (path ? `&path=${encodeURIComponent(path)}` : '')
+    return this.request(`/api/skills/content?${query}`)
+  }
+
+  /**
+   * Save one of a skill's files.
    *
    * Refuses a skill that ships with the installation, and answers
    * `code === 'conflict'` when the file changed since `expectedMtime` - both
@@ -899,6 +919,7 @@ class ApiClient {
    */
   async writeSkill(args: {
     name: string
+    path?: string
     content: string
     expectedMtime?: number | null
   }): Promise<WorkspaceWriteResult & ApiResult> {
@@ -906,6 +927,7 @@ class ApiClient {
       method: 'POST',
       body: JSON.stringify({
         name: args.name,
+        path: args.path || '',
         content: args.content,
         expected_mtime: args.expectedMtime ?? null,
       }),
