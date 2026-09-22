@@ -518,12 +518,13 @@ async function mountMermaidDiagramsNow() {
 }
 
 // Theme toggles swap the hljs stylesheet in theme.js, then call this so
-// diagrams already on screen pick up the light or dark palette.
+// diagrams pick up the light or dark palette. The epoch bump cancels an
+// in-flight draw before data-mermaid-done is set; that placeholder must be
+// queued again or it stays source text.
 function rerenderMermaidForTheme() {
     if (typeof document === 'undefined') return;
     const theme = mermaidThemeName();
     _mermaidEpoch++;
-    let pending = false;
     document.querySelectorAll('.mermaid-block[data-mermaid-done]').forEach(block => {
         if (block.dataset.mermaidError === '1') return;
         if (block.dataset.mermaidTheme === theme) return;
@@ -535,7 +536,10 @@ function rerenderMermaidForTheme() {
         }
         const pre = block.querySelector('pre');
         if (pre) pre.hidden = false;
-        pending = true;
+    });
+    let pending = false;
+    document.querySelectorAll('.mermaid-block:not([data-mermaid-done])').forEach(block => {
+        if (!block.closest('.sse-streaming')) pending = true;
     });
     if (pending) scheduleMermaidMount(0);
 }

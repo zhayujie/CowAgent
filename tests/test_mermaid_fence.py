@@ -25,9 +25,14 @@ def test_closed_mermaid_fences_become_placeholders_and_open_ones_stay_code():
     )
     assert proc.returncode == 0, proc.stdout + "\n" + proc.stderr
     assert "FENCE OK" in proc.stdout
-    # The drawing pass runs when jsdom is available in this environment.
-    # A machine without it still proves the fence rules above.
-    if "SVG OK" not in proc.stdout:
+    # jsdom lives at the path the smoke script imports. When it is present,
+    # or when this runs in CI, a skipped drawing pass is a failed test.
+    # A machine with neither still proves the fence rules above.
+    jsdom = os.path.isfile("/tmp/mermaid-smoke/node_modules/jsdom/lib/api.js")
+    require_svg = jsdom or os.environ.get("CI") == "true" or os.environ.get("GITHUB_ACTIONS") == "true"
+    if require_svg:
+        assert "SVG OK" in proc.stdout, proc.stdout + "\n" + proc.stderr
+    elif "SVG OK" not in proc.stdout:
         assert "SKIP svg" in proc.stdout
 
 

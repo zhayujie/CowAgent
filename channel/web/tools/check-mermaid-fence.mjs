@@ -6,8 +6,9 @@
  * Loads the real markdown-it bundle, mermaid-fence.js and markdown.js and
  * checks closed fences become placeholders, open fences stay code, and the
  * source is escaped. When jsdom is importable it also draws one diagram with
- * the vendored mermaid.min.js (strict mode, theme swap, parse failure,
- * click http(s) links left inert).
+ * the vendored mermaid.min.js (strict mode, theme swap, a theme toggle
+ * during the first in-flight render, parse failure, click http(s) links
+ * left inert).
  */
 import { readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
@@ -200,8 +201,50 @@ async function svgSuite() {
   assert(streaming.querySelector('svg'), 'drawing starts once streaming settles')
 
   await assertMermaidClickLinksInert(context, window)
+  await assertThemeToggleDuringFirstRenderDraws(context, window)
 
   console.log('SVG OK')
+}
+
+// A theme toggle during the only in-flight render bumps the epoch and drops
+// that draw. The placeholder has no data-mermaid-done yet, and nothing else
+// queues a mount (renderMarkdown's timer is the mount we are inside). The
+// diagram must still become an SVG.
+async function assertThemeToggleDuringFirstRenderDraws(context, window) {
+  const mermaidApi = window.mermaid
+  const originalRender = mermaidApi.render.bind(mermaidApi)
+  const root = window.document.documentElement
+  const wasDark = root.classList.contains('dark')
+  let toggled = false
+  mermaidApi.render = async (id, text) => {
+    if (!toggled && String(text).includes('ThemeRace')) {
+      toggled = true
+      root.classList.remove('dark')
+      context.rerenderMermaidForTheme()
+    }
+    return originalRender(id, text)
+  }
+
+  const host = window.document.createElement('div')
+  host.className = 'msg-content'
+  try {
+    root.classList.add('dark')
+    host.innerHTML = context.renderMarkdown('```mermaid\ngraph TD\n  A["ThemeRace"]-->B\n```\n')
+    window.document.body.appendChild(host)
+    const svg = await waitFor(() => host.querySelector('.mermaid-diagram svg'))
+    assert(svg, 'theme toggle during the first render should still insert an svg')
+  } finally {
+    mermaidApi.render = originalRender
+    root.classList.toggle('dark', wasDark)
+  }
+
+  const block = host.querySelector('.mermaid-block')
+  assert(toggled, 'theme toggle should run inside the in-flight render')
+  assert(block.dataset.mermaidDone === '1', 'recovered diagram should be marked done')
+  assert(block.dataset.mermaidError !== '1', 'theme race must not leave the source as a failed diagram')
+  assert(block.querySelector('pre').hidden === true, 'source should be hidden once the remount draws')
+  assert(block.dataset.mermaidTheme === 'default', 'remount should draw the theme selected by the toggle, got ' + block.dataset.mermaidTheme)
+  assert(host.querySelectorAll('.mermaid-diagram svg').length === 1, 'theme race should leave a single svg')
 }
 
 // securityLevel strict still serializes click "https://..." as <a href> with
