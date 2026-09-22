@@ -61,6 +61,12 @@ def test_mermaid_is_vendored_locally_and_loaded_lazily():
         ROOT, "desktop", "src", "renderer", "src", "components", "Markdown.tsx"))
     desktop_css = _read(os.path.join(ROOT, "desktop", "src", "renderer", "src", "index.css"))
     assert "securityLevel: 'strict'" in desktop_render
+    assert "stripMermaidAnchorHrefs" in markdown
+    assert "stripMermaidAnchorHrefs" in desktop_render
+    assert "removeAttribute('href')" in markdown
+    assert "removeAttribute('href')" in desktop_render
+    assert "removeAttribute('xlink:href')" in markdown
+    assert "removeAttribute('xlink:href')" in desktop_render
     assert "openMermaid" in desktop_md
     assert "streaming" in desktop_md
     assert ".mermaid-diagram" in desktop_css

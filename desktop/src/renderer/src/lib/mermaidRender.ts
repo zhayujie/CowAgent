@@ -2,8 +2,9 @@ import { useEffect, useState, type RefObject } from 'react'
 
 /* Draw closed mermaid fences to SVG. The library is the same IIFE the web
    console lazy-loads from /assets/vendor/mermaid (Vite publicDir is the web
-   static tree). securityLevel strict refuses HTML and click handlers in the
-   diagram source. */
+   static tree). securityLevel strict refuses HTML and javascript click
+   callbacks. A click URL is still emitted as <a href>, so those hrefs are
+   removed after the SVG is inserted. */
 
 interface MermaidApi {
   initialize: (config: Record<string, unknown>) => void
@@ -80,6 +81,21 @@ function fitMermaidSvg(host: Element) {
   svg.style.height = 'auto'
 }
 
+// Mermaid hangs the node transform on the <a>, so the element stays.
+// href / xlink:href are what would navigate this page or the Electron window.
+function stripMermaidAnchorHrefs(host: Element) {
+  if (!host || typeof host.querySelectorAll !== 'function') return
+  const anchors = host.querySelectorAll('a')
+  for (let i = 0; i < anchors.length; i++) {
+    const anchor = anchors[i]
+    anchor.removeAttribute('href')
+    anchor.removeAttribute('xlink:href')
+    if (typeof anchor.removeAttributeNS === 'function') {
+      anchor.removeAttributeNS('http://www.w3.org/1999/xlink', 'href')
+    }
+  }
+}
+
 function markFallback(block: HTMLElement) {
   if (!block.isConnected) return
   const diagram = block.querySelector<HTMLElement>('.mermaid-diagram')
@@ -119,6 +135,7 @@ async function renderBlock(api: MermaidApi, block: HTMLElement, theme: 'dark' | 
     const pre = block.querySelector<HTMLElement>('pre')
     if (!diagram) throw new Error('mermaid host missing')
     diagram.innerHTML = svg
+    stripMermaidAnchorHrefs(diagram)
     fitMermaidSvg(diagram)
     diagram.hidden = false
     if (pre) pre.hidden = true

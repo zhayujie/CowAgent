@@ -327,7 +327,8 @@ function _addCodeBlockHeaders(container) {
 // ---------------------------------------------------------------------
 // Mermaid diagrams. The library is fetched the first time a closed fence
 // is on the page; plain conversations never download it. securityLevel
-// strict refuses HTML and click handlers inside the diagram source.
+// strict refuses HTML and javascript click callbacks. A click URL is still
+// emitted as <a href>, so those hrefs are removed after the SVG is inserted.
 // ---------------------------------------------------------------------
 
 let _mermaidPromise = null;
@@ -404,6 +405,21 @@ function fitMermaidSvg(host) {
     svg.style.height = 'auto';
 }
 
+// Mermaid hangs the node transform on the <a>, so the element stays.
+// href / xlink:href are what would navigate this page or the Electron window.
+function stripMermaidAnchorHrefs(host) {
+    if (!host || typeof host.querySelectorAll !== 'function') return;
+    const anchors = host.querySelectorAll('a');
+    for (let i = 0; i < anchors.length; i++) {
+        const anchor = anchors[i];
+        anchor.removeAttribute('href');
+        anchor.removeAttribute('xlink:href');
+        if (typeof anchor.removeAttributeNS === 'function') {
+            anchor.removeAttributeNS('http://www.w3.org/1999/xlink', 'href');
+        }
+    }
+}
+
 function markMermaidFallback(block) {
     if (!block || !block.isConnected) return;
     const diagram = block.querySelector('.mermaid-diagram');
@@ -450,6 +466,7 @@ async function renderMermaidBlock(api, block) {
         const pre = block.querySelector('pre');
         if (!diagram) throw new Error('mermaid host missing');
         diagram.innerHTML = svg;
+        stripMermaidAnchorHrefs(diagram);
         fitMermaidSvg(diagram);
         diagram.hidden = false;
         if (pre) pre.hidden = true;

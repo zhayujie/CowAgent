@@ -6,7 +6,8 @@
  * Loads the real markdown-it bundle, mermaid-fence.js and markdown.js and
  * checks closed fences become placeholders, open fences stay code, and the
  * source is escaped. When jsdom is importable it also draws one diagram with
- * the vendored mermaid.min.js (strict mode, theme swap, parse failure).
+ * the vendored mermaid.min.js (strict mode, theme swap, parse failure,
+ * click http(s) links left inert).
  */
 import { readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
@@ -198,7 +199,92 @@ async function svgSuite() {
   await context.mountMermaidDiagrams()
   assert(streaming.querySelector('svg'), 'drawing starts once streaming settles')
 
+  await assertMermaidClickLinksInert(context, window)
+
   console.log('SVG OK')
+}
+
+// securityLevel strict still serializes click "https://..." as <a href> with
+// no target. Those anchors must not be able to navigate this document.
+async function assertMermaidClickLinksInert(context, window) {
+  const mermaidApi = window.mermaid
+  const originalRender = mermaidApi.render.bind(mermaidApi)
+  let sawClick = 0
+  mermaidApi.render = async (id, text) => {
+    const result = await originalRender(id, text)
+    if (String(text).includes('https://evil.example/phish')) {
+      sawClick += 1
+      const svg = String(result.svg || '')
+      const injected = svg.replace(
+        /<\/svg>\s*$/i,
+        '<a xlink:href="https://evil.example/xlink" href="https://evil.example/also-href"><text>x</text></a></svg>'
+      )
+      return Object.assign({}, result, { svg: injected })
+    }
+    return result
+  }
+
+  const clickHost = window.document.createElement('div')
+  clickHost.className = 'msg-content'
+  const seqHost = window.document.createElement('div')
+  const beforeUrl = String(window.location.href)
+  try {
+    clickHost.innerHTML = context.renderMarkdown(
+      '```mermaid\n' +
+      'graph TD\n' +
+      '  A-->B\n' +
+      '  B-->C\n' +
+      '  click A "https://evil.example/phish" "open"\n' +
+      '  click B "http://evil.example/other"\n' +
+      '  click C "//evil.example/rel"\n' +
+      '```\n'
+    )
+    seqHost.innerHTML = context.renderMarkdown(
+      '```mermaid\n' +
+      'sequenceDiagram\n' +
+      '  participant Alice\n' +
+      '  Alice->>Bob: hi\n' +
+      '  link Alice: Dashboard @ https://evil.example/seq\n' +
+      '```\n'
+    )
+    window.document.body.appendChild(clickHost)
+    window.document.body.appendChild(seqHost)
+    await context.mountMermaidDiagrams()
+  } finally {
+    mermaidApi.render = originalRender
+  }
+
+  assert(sawClick === 1, 'click diagram should render once, saw ' + sawClick)
+  const clickBlock = clickHost.querySelector('.mermaid-block')
+  assert(clickBlock && clickBlock.dataset.mermaidDone === '1', 'click diagram should mount')
+  assert(clickBlock.dataset.mermaidError !== '1', 'click diagram should not fall back to a code block')
+  const source = clickHost.querySelector('pre code')
+  assert(source && source.textContent.includes('https://evil.example/phish'), 'copy source keeps the click URL')
+  assertClickAnchorsInert(clickHost, window, beforeUrl, 3)
+  assert(clickHost.querySelector('.mermaid-diagram').textContent.includes('A'), 'diagram label text should survive')
+
+  const seqBlock = seqHost.querySelector('.mermaid-block')
+  assert(seqBlock && seqBlock.dataset.mermaidError !== '1', 'sequence link diagram should render')
+  assertClickAnchorsInert(seqHost, window, beforeUrl, 1)
+}
+
+function assertClickAnchorsInert(host, window, beforeUrl, minAnchors) {
+  const diagram = host.querySelector('.mermaid-diagram')
+  assert(diagram && diagram.querySelector('svg'), 'diagram svg missing')
+  const anchors = diagram.querySelectorAll('a')
+  assert(anchors.length >= minAnchors, 'expected click anchors to neutralize, got ' + anchors.length)
+  const xlinkNs = 'http://www.w3.org/1999/xlink'
+  anchors.forEach((anchor) => {
+    const href = anchor.getAttribute('href')
+    const xlink = anchor.getAttribute('xlink:href')
+    const ns = typeof anchor.getAttributeNS === 'function' ? anchor.getAttributeNS(xlinkNs, 'href') : null
+    assert(!href, 'click href would navigate this document: ' + href)
+    assert(!xlink, 'xlink:href would navigate this document: ' + xlink)
+    assert(!ns, 'namespaced xlink href would navigate this document: ' + ns)
+    anchor.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true, view: window }))
+  })
+  assert(String(window.location.href) === beforeUrl, 'mermaid click navigated to ' + window.location.href)
+  assert(!/href\s*=/i.test(diagram.innerHTML), 'diagram markup still has an href: ' + diagram.innerHTML.slice(0, 180))
 }
 
 async function waitFor(read) {
