@@ -293,7 +293,8 @@ auth), see `tests/test_web_console_routing.py`.
 | `core/i18n.js` | Translation table and `t()` / `applyI18n()` / `setLanguage()` |
 | `core/theme.js` | Light/dark theme switch |
 | `core/utils.js` | `escapeHtml`, time formatting, scroll helpers, tool argument summaries |
-| `core/markdown.js` | markdown-it setup; image, video and code block rendering |
+| `core/mermaid-fence.js` | Which mermaid fences are complete enough to draw (same rules as desktop) |
+| `core/markdown.js` | markdown-it setup; image, video, code block and mermaid rendering |
 | `core/confirm.js` | Scripted confirm dialog shared by the views |
 | `core/notify.js` | Task completion notifications and notification permission |
 | `core/nav.js` | `navigateTo` view switching and each view's lazy-load hook |

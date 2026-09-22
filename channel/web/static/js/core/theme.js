@@ -20,6 +20,7 @@ function applyTheme() {
         document.getElementById('hljs-light').disabled = false;
         document.getElementById('hljs-dark').disabled = true;
     }
+    if (typeof rerenderMermaidForTheme === 'function') rerenderMermaidForTheme();
 }
 
 function toggleTheme() {

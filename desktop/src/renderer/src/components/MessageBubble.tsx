@@ -196,7 +196,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onRegenerate, on
           )}
 
           {/* Final answer */}
-          {message.content && <Markdown content={message.content} />}
+          {message.content && <Markdown content={message.content} streaming={!!message.isStreaming} />}
 
           {/* Files the agent wrote this turn — click to open the preview panel. */}
           {message.artifacts && message.artifacts.length > 0 && (
