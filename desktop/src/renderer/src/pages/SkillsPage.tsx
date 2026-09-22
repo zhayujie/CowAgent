@@ -1,6 +1,20 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { Loader2, Wrench, Zap, Puzzle, ArrowLeft, Lock, Pencil } from 'lucide-react'
-import { t } from '../i18n'
+import {
+  ArrowLeft,
+  FileArchive,
+  FolderOpen,
+  Loader2,
+  Lock,
+  Paperclip,
+  Pencil,
+  Plus,
+  Puzzle,
+  UploadCloud,
+  Wrench,
+  X,
+  Zap,
+} from 'lucide-react'
+import { t, tf } from '../i18n'
 import apiClient from '../api/client'
 import type { ApiResult } from '../api/client'
 import type { ToolInfo, SkillInfo, SkillContent } from '../types'
@@ -85,6 +99,8 @@ const SkillsPage: React.FC<SkillsPageProps> = ({ baseUrl }) => {
   const [tools, setTools] = useState<ToolInfo[]>([])
   const [skills, setSkills] = useState<SkillInfo[]>([])
   const [loading, setLoading] = useState(true)
+  const [creating, setCreating] = useState(false)
+  const [status, setStatus] = useState('')
 
   const doc = skillEditor((s) => s.doc)
   const content = skillEditor((s) => s.content)
@@ -148,17 +164,44 @@ const SkillsPage: React.FC<SkillsPageProps> = ({ baseUrl }) => {
           <p className="text-xs text-content-tertiary mt-1">{t('skills_desc')}</p>
         </div>
         {!doc && (
-          <a
-            href={SKILL_HUB_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-btn text-xs font-medium text-accent bg-accent-soft hover:bg-accent-soft transition-colors"
-          >
-            <Puzzle size={12} />
-            {t('skills_hub_btn')}
-          </a>
+          <div className="flex items-center gap-2">
+            {status && (
+              <span className="text-xs max-w-[260px] truncate text-content-tertiary" title={status}>
+                {status}
+              </span>
+            )}
+            <a
+              href={SKILL_HUB_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-btn text-xs font-medium text-accent bg-accent-soft hover:bg-accent-soft transition-colors"
+            >
+              <Puzzle size={12} />
+              {t('skills_hub_btn')}
+            </a>
+            <button
+              type="button"
+              onClick={() => setCreating(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-btn text-xs font-medium text-white bg-accent hover:opacity-90 transition-opacity cursor-pointer"
+            >
+              <Plus size={12} />
+              {t('skill_new_btn')}
+            </button>
+          </div>
         )}
       </div>
+
+      {creating && (
+        <SkillCreateDialog
+          onClose={() => setCreating(false)}
+          onDone={(message) => {
+            setCreating(false)
+            setStatus(message)
+            window.setTimeout(() => setStatus(''), 6000)
+            void loadData()
+          }}
+        />
+      )}
 
       <DocNotice store={skillEditor} />
 
@@ -292,6 +335,432 @@ const SkillsPage: React.FC<SkillsPageProps> = ({ baseUrl }) => {
         </div>
       </div>
       )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Creating a skill: a form, or an uploaded folder / archive
+// ---------------------------------------------------------------------------
+
+// The server's own ceilings, mirrored so a 50 MB folder is refused here rather
+// than after being uploaded. See SkillService.MAX_UPLOAD_*.
+const SKILL_UPLOAD_MAX_FILES = 500
+const SKILL_UPLOAD_MAX_FILE_SIZE = 10 * 1024 * 1024
+const SKILL_UPLOAD_MAX_TOTAL_SIZE = 50 * 1024 * 1024
+
+// `webkitdirectory` is what turns a file input into a folder picker; React's
+// typings do not carry the attribute.
+const FOLDER_INPUT_PROPS = {
+  webkitdirectory: '',
+  directory: '',
+} as unknown as React.InputHTMLAttributes<HTMLInputElement>
+
+/**
+ * The directory name a title reduces to. Mirrors `normalize_skill_name` on the
+ * server, so the preview under the field is what actually gets created.
+ */
+function skillNameSlug(raw: string): string {
+  return (raw || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 64)
+    .replace(/-+$/, '')
+}
+
+function formatSkillFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+}
+
+/** Validate a batch of picked files. Returns an error message, or ''. */
+function validateSkillUploadFiles(files: File[]): string {
+  if (!files.length) return t('skill_upload_required')
+  if (files.length > SKILL_UPLOAD_MAX_FILES) {
+    return tf('skill_upload_too_many', { max: SKILL_UPLOAD_MAX_FILES })
+  }
+  let total = 0
+  for (const file of files) {
+    total += file.size || 0
+    if ((file.size || 0) > SKILL_UPLOAD_MAX_FILE_SIZE) {
+      return tf('skill_upload_file_too_large', {
+        name: file.name,
+        max: SKILL_UPLOAD_MAX_FILE_SIZE / 1024 / 1024,
+      })
+    }
+  }
+  if (total > SKILL_UPLOAD_MAX_TOTAL_SIZE) {
+    return tf('skill_upload_total_too_large', { max: SKILL_UPLOAD_MAX_TOTAL_SIZE / 1024 / 1024 })
+  }
+  return ''
+}
+
+const SkillCreateDialog: React.FC<{
+  onClose: () => void
+  /** Called with the line to show in the header once something was installed. */
+  onDone: (message: string) => void
+}> = ({ onClose, onDone }) => {
+  const [mode, setMode] = useState<'form' | 'upload'>('form')
+  const [name, setName] = useState('')
+  const [description, setDescription] = useState('')
+  const [body, setBody] = useState('')
+  const [files, setFiles] = useState<File[]>([])
+  const [archive, setArchive] = useState<File | null>(null)
+  const [folder, setFolder] = useState<File[]>([])
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [dragOver, setDragOver] = useState(false)
+  const filesRef = useRef<HTMLInputElement>(null)
+  const archiveRef = useRef<HTMLInputElement>(null)
+  const folderRef = useRef<HTMLInputElement>(null)
+
+  const slug = skillNameSlug(name)
+
+  const pickArchive = (file: File) => {
+    if (!/\.(zip|tgz|tar|gz)$/i.test(file.name || '')) {
+      setError(t('skill_upload_bad_archive'))
+      return
+    }
+    setError('')
+    setFolder([])
+    setArchive(file)
+  }
+
+  const pickFolder = (picked: File[]) => {
+    const err = validateSkillUploadFiles(picked)
+    if (err) {
+      setError(err)
+      return
+    }
+    setError('')
+    setArchive(null)
+    setFolder(picked)
+  }
+
+  const submitForm = async () => {
+    if (!slug) return setError(t('skill_new_name_invalid'))
+    // The loader drops a skill with no description, so it is required here too.
+    if (!description.trim()) return setError(t('skill_new_desc_required'))
+    if (files.length) {
+      const err = validateSkillUploadFiles(files)
+      if (err) return setError(err)
+    }
+    setBusy(true)
+    setError('')
+    try {
+      const res = await apiClient.createSkill({ name, description, body, files })
+      if (res.status !== 'success') return setError(res.message || t('skill_new_failed'))
+      onDone(`${t('skill_new_created')}: ${res.name}`)
+    } catch {
+      setError(t('skill_new_failed'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const submitUpload = async () => {
+    if (!archive && !folder.length) return setError(t('skill_upload_required'))
+    setBusy(true)
+    setError('')
+    try {
+      const res = archive
+        ? await apiClient.uploadSkillArchive(archive)
+        : await apiClient.uploadSkillFolder(folder)
+      if (res.status !== 'success') return setError(res.message || t('skill_new_failed'))
+
+      const installed = (res.installed || []).concat(res.replaced || [])
+      const skipped = res.skipped || []
+      if (!installed.length) {
+        // Every skill in the upload was refused: show the first reason, which is
+        // the only actionable part of the answer.
+        return setError(
+          skipped.length ? `${skipped[0].name}: ${skipped[0].reason}` : t('skill_upload_none')
+        )
+      }
+      let message = `${t('skill_upload_installed')}: ${installed.join(', ')}`
+      if (skipped.length) {
+        message += ` · ${t('skill_upload_skipped')}: ${skipped.map((s) => s.name).join(', ')}`
+      }
+      onDone(message)
+    } catch {
+      setError(t('skill_new_failed'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const submit = () => (mode === 'upload' ? void submitUpload() : void submitForm())
+
+  const fieldClass =
+    'w-full px-3 py-2 rounded-btn border border-strong bg-inset text-sm text-content placeholder:text-content-tertiary focus:outline-none focus:border-accent transition-colors'
+
+  return (
+    <div
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4"
+      onMouseDown={() => !busy && onClose()}
+    >
+      <div
+        className="w-full max-w-lg max-h-[90vh] flex flex-col bg-surface border border-default rounded-xl shadow-xl"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <div className="p-5 overflow-y-auto">
+          <h3 className="text-base font-semibold text-content">{t('skill_new_title')}</h3>
+          <p className="text-xs text-content-tertiary mt-1 mb-4">{t('skill_new_subtitle')}</p>
+
+          <div className="flex gap-1 p-1 mb-4 rounded-btn bg-inset">
+            {(['form', 'upload'] as const).map((value) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => {
+                  setMode(value)
+                  setError('')
+                }}
+                className={`flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-btn text-xs font-medium transition-colors cursor-pointer ${
+                  mode === value ? 'bg-surface text-content shadow-sm' : 'text-content-tertiary'
+                }`}
+              >
+                {value === 'form' ? <Pencil size={11} /> : <UploadCloud size={11} />}
+                {t(value === 'form' ? 'skill_new_tab_form' : 'skill_new_tab_upload')}
+              </button>
+            ))}
+          </div>
+
+          {mode === 'form' ? (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm text-content-secondary mb-1.5">{t('skill_new_name')}</label>
+                <input
+                  autoFocus
+                  value={name}
+                  maxLength={64}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="weather-api"
+                  className={fieldClass}
+                />
+                <p
+                  className={`text-xs mt-1.5 break-all ${
+                    name.trim() && !slug ? 'text-danger' : 'text-content-tertiary'
+                  }`}
+                >
+                  {!name.trim()
+                    ? t('skill_new_name_hint')
+                    : !slug
+                      ? t('skill_new_name_invalid')
+                      : slug === name.trim()
+                        ? t('skill_new_name_hint')
+                        : `${t('skill_new_name_dir')}: ${slug}`}
+                </p>
+              </div>
+              <div>
+                <label className="block text-sm text-content-secondary mb-1.5">{t('skill_new_desc')}</label>
+                <textarea
+                  rows={3}
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  className={`${fieldClass} resize-y`}
+                />
+                <p className="text-xs text-content-tertiary mt-1.5">{t('skill_new_desc_hint')}</p>
+              </div>
+              <div>
+                <label className="block text-sm text-content-secondary mb-1.5">{t('skill_new_body')}</label>
+                <textarea
+                  rows={8}
+                  value={body}
+                  onChange={(e) => setBody(e.target.value)}
+                  placeholder={'## Usage\n\n...'}
+                  className={`${fieldClass} font-mono resize-y`}
+                />
+                <p className="text-xs text-content-tertiary mt-1.5">{t('skill_new_body_hint')}</p>
+              </div>
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-sm text-content-secondary">{t('skill_new_files')}</label>
+                  <button
+                    type="button"
+                    onClick={() => filesRef.current?.click()}
+                    className="inline-flex items-center gap-1 text-xs text-accent hover:opacity-80 cursor-pointer"
+                  >
+                    <Paperclip size={11} />
+                    {t('skill_new_files_pick')}
+                  </button>
+                </div>
+                {files.length === 0 ? (
+                  <p className="text-xs text-content-tertiary">{t('skill_new_files_hint')}</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {files.map((file, index) => (
+                      <div
+                        key={`${file.name}-${index}`}
+                        className="flex items-center gap-2 px-2.5 py-1.5 rounded-btn border border-default bg-inset"
+                      >
+                        <span className="flex-1 min-w-0 text-xs font-mono text-content truncate">{file.name}</span>
+                        <span className="text-[11px] text-content-tertiary">{formatSkillFileSize(file.size)}</span>
+                        <button
+                          type="button"
+                          onClick={() => setFiles(files.filter((_, i) => i !== index))}
+                          className="text-content-tertiary hover:text-danger cursor-pointer"
+                        >
+                          <X size={11} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <input
+                  ref={filesRef}
+                  type="file"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => {
+                    const picked = Array.from(e.target.files || [])
+                    e.target.value = ''
+                    // The same file picked twice is one attachment, not two.
+                    setFiles((prev) => [
+                      ...prev,
+                      ...picked.filter(
+                        (file) => !prev.some((f) => f.name === file.name && f.size === file.size)
+                      ),
+                    ])
+                  }}
+                />
+              </div>
+            </div>
+          ) : (
+            <div>
+              <div
+                onDragEnter={(e) => {
+                  if (e.dataTransfer?.types?.includes('Files')) {
+                    e.preventDefault()
+                    setDragOver(true)
+                  }
+                }}
+                onDragOver={(e) => {
+                  if (e.dataTransfer?.types?.includes('Files')) e.preventDefault()
+                }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  setDragOver(false)
+                  // A dropped directory arrives as an entry whose contents this
+                  // handler cannot read, so it points at the folder picker
+                  // rather than uploading an empty archive.
+                  const entry = e.dataTransfer?.items?.[0]?.webkitGetAsEntry?.()
+                  if (entry?.isDirectory) {
+                    setError(t('skill_upload_drop_dir'))
+                    return
+                  }
+                  const file = (e.dataTransfer?.files || [])[0]
+                  if (file) pickArchive(file)
+                }}
+                className={`rounded-xl border-2 border-dashed px-4 py-8 text-center transition-colors ${
+                  dragOver ? 'border-accent bg-accent-soft' : 'border-default'
+                }`}
+              >
+                <UploadCloud size={24} className="mx-auto text-content-tertiary" />
+                <p className="mt-3 text-sm text-content-secondary">{t('skill_upload_drop')}</p>
+                <div className="mt-4 flex items-center justify-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => archiveRef.current?.click()}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-btn border border-strong text-xs text-content-secondary hover:bg-inset cursor-pointer"
+                  >
+                    <FileArchive size={11} />
+                    {t('skill_upload_pick_archive')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => folderRef.current?.click()}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-btn border border-strong text-xs text-content-secondary hover:bg-inset cursor-pointer"
+                  >
+                    <FolderOpen size={11} />
+                    {t('skill_upload_pick_folder')}
+                  </button>
+                </div>
+              </div>
+
+              {(archive || folder.length > 0) && (
+                <div className="mt-3 flex items-center gap-2 px-3 py-2 rounded-btn border border-default bg-inset">
+                  {archive ? (
+                    <FileArchive size={12} className="text-content-tertiary" />
+                  ) : (
+                    <FolderOpen size={12} className="text-content-tertiary" />
+                  )}
+                  <span className="flex-1 min-w-0 text-xs font-mono text-content truncate">
+                    {archive
+                      ? `${archive.name} · ${formatSkillFileSize(archive.size)}`
+                      : tf('skill_upload_folder_files', {
+                          root: (folder[0].webkitRelativePath || folder[0].name).split('/')[0],
+                          count: folder.length,
+                        })}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setArchive(null)
+                      setFolder([])
+                    }}
+                    className="text-content-tertiary hover:text-content cursor-pointer"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              )}
+
+              <p className="mt-3 text-xs text-content-tertiary">{t('skill_upload_hint')}</p>
+
+              <input
+                ref={archiveRef}
+                type="file"
+                accept=".zip,.tgz,.gz,.tar"
+                className="hidden"
+                onChange={(e) => {
+                  const file = (e.target.files || [])[0]
+                  e.target.value = ''
+                  if (file) pickArchive(file)
+                }}
+              />
+              <input
+                ref={folderRef}
+                type="file"
+                multiple
+                {...FOLDER_INPUT_PROPS}
+                className="hidden"
+                onChange={(e) => {
+                  const picked = Array.from(e.target.files || [])
+                  e.target.value = ''
+                  if (picked.length) pickFolder(picked)
+                }}
+              />
+            </div>
+          )}
+
+          {error && <p className="mt-3 text-xs text-danger break-all">{error}</p>}
+        </div>
+
+        <div className="flex justify-end gap-2 px-5 py-4 border-t border-subtle">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onClose}
+            className="px-4 py-2 rounded-btn border border-strong text-sm text-content-secondary hover:bg-inset disabled:opacity-50 cursor-pointer"
+          >
+            {t('cancel')}
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={submit}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-btn bg-accent text-white text-sm font-medium hover:opacity-90 disabled:opacity-50 cursor-pointer"
+          >
+            {busy && <Loader2 size={13} className="animate-spin" />}
+            {t(mode === 'upload' ? 'skill_upload_submit' : 'skill_new_submit')}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

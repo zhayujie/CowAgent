@@ -867,6 +867,26 @@ export interface SkillContent extends WorkspaceReadResult {
   ships_with_install: boolean
 }
 
+/** Response of POST /api/skills/create: the skill written from the form. */
+export interface SkillCreateResult {
+  /** The name it was created under, reduced from the title that was typed. */
+  name: string
+  /** The bundled files, by the path each kept inside the skill directory. */
+  files: string[]
+}
+
+/**
+ * Response of POST /api/skills/upload. One upload can hold several skills - a
+ * folder of them, an archive of a repo - so every skill is reported separately:
+ * one of them being unusable must not lose the rest.
+ */
+export interface SkillUploadResult {
+  installed: string[]
+  /** Skills that replaced an installed one of the same name. */
+  replaced: string[]
+  skipped: Array<{ name: string; reason: string }>
+}
+
 // ============================================================
 // Memory
 // ============================================================

@@ -340,3 +340,376 @@ function resetSkillViewer() {
     document.getElementById('skills-panel-list')?.classList.remove('hidden');
 }
 
+// ---------------------------------------------------------------------
+// Creating a skill: a form, or an uploaded folder / archive
+// ---------------------------------------------------------------------
+
+// The server's own ceilings, mirrored so a 50 MB folder is refused here rather
+// than after being uploaded. See SkillService.MAX_UPLOAD_*.
+const SKILL_UPLOAD_MAX_FILES = 500;
+const SKILL_UPLOAD_MAX_FILE_SIZE = 10 * 1024 * 1024;
+const SKILL_UPLOAD_MAX_TOTAL_SIZE = 50 * 1024 * 1024;
+
+let _skillCreateMode = 'form';
+let _skillCreateFiles = [];
+let _skillUploadArchive = null;
+/** A picked folder, as `{file, relPath}` pairs the upload sends side by side. */
+let _skillUploadFolder = [];
+let _skillCreateBusy = false;
+let _skillUploadDropReady = false;
+
+function openSkillCreateDialog(mode) {
+    resetSkillCreateDialog();
+    switchSkillCreateMode(mode || 'form');
+    document.getElementById('skill-create-overlay')?.classList.remove('hidden');
+    initSkillUploadDropZone();
+    // A folder picker is Chromium/WebKit only; without it the upload tab would
+    // offer a button that does nothing.
+    const folderBtn = document.getElementById('skill-upload-folder-btn');
+    const folderInput = document.getElementById('skill-upload-folder');
+    if (folderBtn) folderBtn.classList.toggle('hidden', !(folderInput && 'webkitdirectory' in folderInput));
+    document.getElementById('skill-create-name')?.focus();
+}
+
+function closeSkillCreateDialog() {
+    if (_skillCreateBusy) return;
+    document.getElementById('skill-create-overlay')?.classList.add('hidden');
+    resetSkillCreateDialog();
+}
+
+function resetSkillCreateDialog() {
+    ['skill-create-name', 'skill-create-desc', 'skill-create-body'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+    });
+    _skillCreateFiles = [];
+    renderSkillCreateFiles();
+    renderSkillNamePreview();
+    clearSkillUploadSelection();
+    setSkillCreateError('');
+}
+
+function switchSkillCreateMode(mode) {
+    _skillCreateMode = mode === 'upload' ? 'upload' : 'form';
+    document.querySelectorAll('[data-skill-create-tab]').forEach(tab => {
+        const active = tab.dataset.skillCreateTab === _skillCreateMode;
+        tab.classList.toggle('bg-white', active);
+        tab.classList.toggle('dark:bg-white/10', active);
+        tab.classList.toggle('shadow-sm', active);
+        tab.classList.toggle('text-slate-700', active);
+        tab.classList.toggle('dark:text-slate-100', active);
+        tab.classList.toggle('text-slate-500', !active);
+        tab.classList.toggle('dark:text-slate-400', !active);
+    });
+    document.getElementById('skill-create-panel-form')?.classList.toggle('hidden', _skillCreateMode !== 'form');
+    document.getElementById('skill-create-panel-upload')?.classList.toggle('hidden', _skillCreateMode !== 'upload');
+
+    const submit = document.getElementById('skill-create-submit');
+    if (submit) {
+        // Kept in step with data-i18n so a language switch re-translates it.
+        const key = _skillCreateMode === 'upload' ? 'skill_upload_submit' : 'skill_new_submit';
+        submit.dataset.i18n = key;
+        submit.textContent = t(key);
+    }
+    setSkillCreateError('');
+}
+
+function setSkillCreateError(message) {
+    const el = document.getElementById('skill-create-error');
+    if (!el) return;
+    el.textContent = message || '';
+    el.classList.toggle('hidden', !message);
+}
+
+function setSkillCreateBusy(busy) {
+    _skillCreateBusy = busy;
+    const submit = document.getElementById('skill-create-submit');
+    if (submit) submit.disabled = busy;
+}
+
+/**
+ * The directory name a title reduces to. Mirrors `normalize_skill_name` on the
+ * server, so the preview under the field is what actually gets created.
+ */
+function skillNameSlug(raw) {
+    return (raw || '').trim().toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 64)
+        .replace(/-+$/, '');
+}
+
+function renderSkillNamePreview() {
+    const el = document.getElementById('skill-create-name-preview');
+    if (!el) return;
+    const typed = (document.getElementById('skill-create-name')?.value || '').trim();
+    const slug = skillNameSlug(typed);
+
+    const hint = (key) => {
+        el.dataset.i18n = key;
+        el.textContent = t(key);
+        el.classList.remove('text-red-500');
+    };
+    if (!typed) return hint('skill_new_name_hint');
+    if (!slug) {
+        hint('skill_new_name_invalid');
+        el.classList.add('text-red-500');
+        return;
+    }
+    if (slug === typed) return hint('skill_new_name_hint');
+    // A composed line, so it must not be re-translated over on a language switch.
+    el.removeAttribute('data-i18n');
+    el.classList.remove('text-red-500');
+    el.textContent = `${t('skill_new_name_dir')}: ${slug}`;
+}
+
+function selectSkillCreateFiles() {
+    const input = document.getElementById('skill-create-files');
+    if (!input) return;
+    input.value = '';
+    input.onchange = () => {
+        Array.from(input.files || []).forEach(file => {
+            // The same file picked twice is one attachment, not two.
+            if (!_skillCreateFiles.some(f => f.name === file.name && f.size === file.size)) {
+                _skillCreateFiles.push(file);
+            }
+        });
+        renderSkillCreateFiles();
+    };
+    input.click();
+}
+
+function removeSkillCreateFile(index) {
+    _skillCreateFiles.splice(index, 1);
+    renderSkillCreateFiles();
+}
+
+function renderSkillCreateFiles() {
+    const list = document.getElementById('skill-create-files-list');
+    const empty = document.getElementById('skill-create-files-empty');
+    if (!list) return;
+    empty?.classList.toggle('hidden', _skillCreateFiles.length > 0);
+    list.innerHTML = _skillCreateFiles.map((file, index) => `
+        <div class="flex items-center gap-2 rounded-lg bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 px-2.5 py-1.5">
+            <i class="fas fa-file text-slate-400 text-[10px]"></i>
+            <span class="flex-1 min-w-0 text-xs font-mono text-slate-700 dark:text-slate-200 truncate">${escapeHtml(file.name)}</span>
+            <span class="text-[11px] text-slate-400">${formatSkillFileSize(file.size)}</span>
+            <button type="button" onclick="removeSkillCreateFile(${index})"
+                    class="text-slate-400 hover:text-red-500 cursor-pointer">
+                <i class="fas fa-xmark text-[10px]"></i>
+            </button>
+        </div>`).join('');
+}
+
+function formatSkillFileSize(bytes) {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function selectSkillUploadArchive() {
+    const input = document.getElementById('skill-upload-archive');
+    if (!input) return;
+    input.value = '';
+    input.onchange = () => {
+        const file = (input.files || [])[0];
+        if (file) setSkillUploadArchive(file);
+    };
+    input.click();
+}
+
+function selectSkillUploadFolder() {
+    const input = document.getElementById('skill-upload-folder');
+    if (!input) return;
+    input.value = '';
+    input.onchange = () => {
+        const files = Array.from(input.files || []);
+        if (files.length) setSkillUploadFolder(files);
+    };
+    input.click();
+}
+
+function setSkillUploadArchive(file) {
+    if (!/\.(zip|tgz|tar|gz)$/i.test(file.name || '')) {
+        setSkillCreateError(t('skill_upload_bad_archive'));
+        return;
+    }
+    _skillUploadArchive = file;
+    _skillUploadFolder = [];
+    renderSkillUploadSelection('fa-file-zipper', `${file.name} · ${formatSkillFileSize(file.size)}`);
+}
+
+function setSkillUploadFolder(files) {
+    const error = validateSkillUploadFiles(files);
+    if (error) {
+        setSkillCreateError(error);
+        return;
+    }
+    _skillUploadArchive = null;
+    _skillUploadFolder = files.map(file => ({ file, relPath: file.webkitRelativePath || file.name }));
+    renderSkillUploadSelection('fa-folder-open', t('skill_upload_folder_files')
+        .replace('{root}', _skillUploadFolder[0].relPath.split('/')[0] || '')
+        .replace('{count}', _skillUploadFolder.length));
+}
+
+function renderSkillUploadSelection(icon, label) {
+    setSkillCreateError('');
+    const summary = document.getElementById('skill-upload-summary');
+    const iconEl = document.getElementById('skill-upload-summary-icon');
+    const nameEl = document.getElementById('skill-upload-summary-name');
+    if (iconEl) iconEl.className = `fas ${icon} text-slate-400 text-xs`;
+    if (nameEl) nameEl.textContent = label;
+    summary?.classList.remove('hidden');
+}
+
+function clearSkillUploadSelection() {
+    _skillUploadArchive = null;
+    _skillUploadFolder = [];
+    document.getElementById('skill-upload-summary')?.classList.add('hidden');
+}
+
+/** Check a batch of picked files against the server's caps. '' when they pass. */
+function validateSkillUploadFiles(files) {
+    if (!files || !files.length) return t('skill_upload_required');
+    if (files.length > SKILL_UPLOAD_MAX_FILES) {
+        return t('skill_upload_too_many').replace('{max}', SKILL_UPLOAD_MAX_FILES);
+    }
+    let total = 0;
+    for (const file of files) {
+        total += file.size || 0;
+        if ((file.size || 0) > SKILL_UPLOAD_MAX_FILE_SIZE) {
+            return t('skill_upload_file_too_large')
+                .replace('{name}', file.name)
+                .replace('{max}', SKILL_UPLOAD_MAX_FILE_SIZE / 1024 / 1024);
+        }
+    }
+    if (total > SKILL_UPLOAD_MAX_TOTAL_SIZE) {
+        return t('skill_upload_total_too_large')
+            .replace('{max}', SKILL_UPLOAD_MAX_TOTAL_SIZE / 1024 / 1024);
+    }
+    return '';
+}
+
+function initSkillUploadDropZone() {
+    if (_skillUploadDropReady) return;
+    const zone = document.getElementById('skill-upload-dropzone');
+    if (!zone) return;
+    _skillUploadDropReady = true;
+    const highlight = (on) => {
+        zone.classList.toggle('border-primary-400', on);
+        zone.classList.toggle('bg-primary-50', on);
+        zone.classList.toggle('dark:bg-primary-900/10', on);
+    };
+    ['dragenter', 'dragover'].forEach(name => {
+        zone.addEventListener(name, event => {
+            if (!event.dataTransfer?.types?.includes('Files')) return;
+            event.preventDefault();
+            highlight(true);
+        });
+    });
+    ['dragleave', 'drop'].forEach(name => {
+        zone.addEventListener(name, event => {
+            highlight(false);
+            if (event.type !== 'drop') return;
+            event.preventDefault();
+            // A dropped directory arrives as an entry whose contents this
+            // handler cannot read, so it points at the folder picker instead of
+            // uploading an empty archive.
+            const entry = event.dataTransfer?.items?.[0]?.webkitGetAsEntry?.();
+            if (entry && entry.isDirectory) {
+                setSkillCreateError(t('skill_upload_drop_dir'));
+                return;
+            }
+            const file = (event.dataTransfer?.files || [])[0];
+            if (file) setSkillUploadArchive(file);
+        });
+    });
+}
+
+function submitSkillCreate() {
+    if (_skillCreateBusy) return;
+    if (_skillCreateMode === 'upload') return submitSkillUpload();
+    return submitSkillForm();
+}
+
+function submitSkillForm() {
+    const name = (document.getElementById('skill-create-name')?.value || '').trim();
+    const description = (document.getElementById('skill-create-desc')?.value || '').trim();
+    const body = document.getElementById('skill-create-body')?.value || '';
+    if (!skillNameSlug(name)) return setSkillCreateError(t('skill_new_name_invalid'));
+    // The loader drops a skill with no description, so it is required here too.
+    if (!description) return setSkillCreateError(t('skill_new_desc_required'));
+    if (_skillCreateFiles.length) {
+        const error = validateSkillUploadFiles(_skillCreateFiles);
+        if (error) return setSkillCreateError(error);
+    }
+
+    const form = new FormData();
+    form.append('name', name);
+    form.append('description', description);
+    form.append('body', body);
+    _skillCreateFiles.forEach(file => form.append('files', file, file.name));
+    return postSkillCreate('/api/skills/create', form,
+        data => ({ message: `${t('skill_new_created')}: ${data.name}` }));
+}
+
+function submitSkillUpload() {
+    const form = new FormData();
+    if (_skillUploadArchive) {
+        form.append('archive', _skillUploadArchive, _skillUploadArchive.name);
+    } else if (_skillUploadFolder.length) {
+        // Paired field by field, the way the chat's directory upload sends a
+        // folder: the file's own name says nothing about where it sat in it.
+        _skillUploadFolder.forEach(({ file, relPath }) => {
+            form.append('files', file);
+            form.append('relative_paths', relPath);
+        });
+    } else {
+        return setSkillCreateError(t('skill_upload_required'));
+    }
+
+    return postSkillCreate('/api/skills/upload', form, data => {
+        const installed = (data.installed || []).concat(data.replaced || []);
+        const skipped = data.skipped || [];
+        if (!installed.length) {
+            // Every skill in the upload was refused: show the first reason,
+            // which is the only actionable part of the answer.
+            return { error: skipped.length ? `${skipped[0].name}: ${skipped[0].reason}` : t('skill_upload_none') };
+        }
+        let message = `${t('skill_upload_installed')}: ${installed.join(', ')}`;
+        if (skipped.length) {
+            message += ` · ${t('skill_upload_skipped')}: ${skipped.map(s => s.name).join(', ')}`;
+        }
+        return { message };
+    });
+}
+
+/**
+ * Send a create or upload request and report the outcome.
+ *
+ * @param describe maps a successful response to `{message}` to toast, or to
+ *   `{error}` when the server accepted the request but installed nothing.
+ */
+async function postSkillCreate(url, formData, describe) {
+    setSkillCreateBusy(true);
+    setSkillCreateError('');
+    let data = null;
+    try {
+        const res = await fetch(url, { method: 'POST', body: formData });
+        data = await res.json();
+    } catch (e) {
+        data = null;
+    } finally {
+        setSkillCreateBusy(false);
+    }
+
+    if (!data) return setSkillCreateError(t('skill_new_failed'));
+    if (data.status !== 'success') return setSkillCreateError(data.message || t('skill_new_failed'));
+
+    const outcome = describe(data);
+    if (outcome.error) return setSkillCreateError(outcome.error);
+    closeSkillCreateDialog();
+    _wsToast(outcome.message);
+    loadSkillsSection();
+}
+

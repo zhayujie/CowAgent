@@ -121,7 +121,7 @@ Two rules for includes:
 | `views/chat.html` | Chat view: message list, composer card, workspace panel |
 | `views/agents.html` | Agent team: list, detail drawer, create form |
 | `views/config.html` | Settings view with the "basic" and "models" tabs |
-| `views/skills.html` | Skill list and skill definition viewer |
+| `views/skills.html` | Skill list and skill definition viewer (the create dialog is `modals/skill-create.html`) |
 | `views/memory.html` | Memory list and file viewer |
 | `views/knowledge.html` | Knowledge base: documents panel and relation graph panel |
 | `views/channels.html` | Channels view (content injected by JS) |
@@ -129,6 +129,7 @@ Two rules for includes:
 | `views/logs.html` | Log terminal |
 | `modals/team-chat.html` | New multi-agent conversation |
 | `modals/knowledge-dialog.html` | Knowledge create/rename/delete dialog |
+| `modals/skill-create.html` | New skill: the form, and folder / archive upload |
 | `modals/confirm-dialog.html` | Static confirm dialog |
 | `modals/rename-dialog.html` | Channel instance rename |
 | `modals/folder-picker.html` | Project folder picker |
@@ -330,7 +331,7 @@ auth), see `tests/test_web_console_routing.py`.
 | `views/channels-feishu.js` | Feishu one-click app registration |
 | `views/tasks.js` | Scheduled tasks and run records |
 | `views/tasks-modal.js` | Scheduled task create/edit dialog |
-| `views/skills.js` | Built-in tools and installed skills |
+| `views/skills.js` | Built-in tools, installed skills, and creating a skill from a form or an upload |
 | `views/memory.js` | Memory file list |
 | `views/doc-viewers.js` | Viewer/editor for memory files and skill definitions |
 | `views/knowledge.js` | Knowledge tree, import, document editor, relation graph |

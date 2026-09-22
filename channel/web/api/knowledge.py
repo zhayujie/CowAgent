@@ -1,8 +1,7 @@
 """The knowledge view's endpoints: /api/knowledge/*.
 
 The document tree, a document's contents, the relation graph, and importing
-new documents. Import is the only route here that takes a file upload, which
-is why the size-capped reader sits in this module.
+new documents.
 """
 
 import json
@@ -13,34 +12,12 @@ from channel.web.core._common import (
     _ensure_list,
     _get_workspace_root,
     _raw_web_input,
+    _read_uploaded_file_bytes_limited,
     _request_agent_id,
     _require_auth,
     _scoped_agent_id,
 )
 from common.log import logger
-
-
-def _read_uploaded_file_bytes_limited(file_obj, max_bytes: int) -> bytes:
-    """Read uploaded content and fail once it exceeds max_bytes."""
-    if isinstance(file_obj, bytes):
-        content = file_obj
-    elif isinstance(file_obj, str):
-        content = file_obj.encode("utf-8")
-    elif hasattr(file_obj, "file") and hasattr(file_obj.file, "read"):
-        content = file_obj.file.read(max_bytes + 1)
-    elif hasattr(file_obj, "read"):
-        content = file_obj.read(max_bytes + 1)
-    elif hasattr(file_obj, "value"):
-        content = file_obj.value
-    else:
-        raise ValueError("Unable to read uploaded file content")
-    if isinstance(content, str):
-        content = content.encode("utf-8")
-    if not isinstance(content, bytes):
-        raise TypeError(f"Unsupported uploaded content type: {type(content).__name__}")
-    if len(content) > max_bytes:
-        raise ValueError("file too large")
-    return content
 
 
 class KnowledgeListHandler:

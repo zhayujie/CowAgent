@@ -1,17 +1,23 @@
 """The skills view's endpoints: /api/tools and /api/skills.
 
 The built-in tools the Agent can call, the skills installed alongside them,
-and the viewer that reads a skill's definition file.
+the viewer that reads a skill's definition file, and the two ways a new skill
+arrives: written from a form, or uploaded as a folder or an archive.
 """
 
 import json
+from typing import List, Optional
 
 import web
 
 from channel.web.core._common import (
+    _ensure_list,
     _get_workspace_root,
+    _raw_web_input,
+    _read_uploaded_file_bytes_limited,
     _request_agent_id,
     _require_auth,
+    _scoped_agent_id,
 )
 from common.log import logger
 
@@ -111,6 +117,136 @@ class SkillsHandler:
         except Exception as e:
             logger.error(f"[WebChannel] Skills POST error: {e}")
             return json.dumps({"status": "error", "message": str(e)})
+
+
+def _oversize_body(limit: int) -> Optional[str]:
+    """An error response when the declared body is already over ``limit``.
+
+    Read from the header before the body is, so an oversized upload is refused
+    instead of being buffered first. A header that is missing or unreadable
+    simply does not trigger this; the per-file caps still apply.
+    """
+    try:
+        length = int(getattr(web.ctx, "env", {}).get("CONTENT_LENGTH") or 0)
+    except (TypeError, ValueError):
+        return None
+    if length > limit:
+        return json.dumps({"status": "error", "message": "upload too large"})
+    return None
+
+
+def _uploaded_files(params, max_bytes: int) -> List[dict]:
+    """The files a multipart request carries, each with the path it keeps.
+
+    A folder pick sends its files under ``files`` and their paths - relative to
+    the folder itself - under ``relative_paths``, the pairing the chat upload
+    already uses. A plain multi-file pick sends no paths, so each file keeps its
+    own name.
+    """
+    uploaded = _ensure_list(params.get("files"))
+    rel_paths = _ensure_list(params.get("relative_paths"))
+    if rel_paths and len(rel_paths) != len(uploaded):
+        raise ValueError("upload payload mismatch: a path per file is required")
+
+    items = []
+    for index, file_obj in enumerate(uploaded):
+        # NOTE: cgi.FieldStorage raises TypeError on a truthy check, so an
+        # uploaded file is always compared against None.
+        if file_obj is None:
+            continue
+        path = rel_paths[index] if rel_paths else getattr(file_obj, "filename", "")
+        # A form submitted with the file input left empty still sends the field,
+        # as a part with no file name. There is nothing to write for it.
+        if not path:
+            continue
+        items.append({
+            "path": path,
+            "content": _read_uploaded_file_bytes_limited(file_obj, max_bytes),
+        })
+    return items
+
+
+class SkillCreateHandler:
+    """
+    ``POST /api/skills/create`` - a skill written from the console's form.
+
+    Multipart rather than JSON, because the form collects a name, a description
+    and the instructions *and* any number of files to bundle beside them.
+    """
+
+    def POST(self):
+        _require_auth()
+        web.header('Content-Type', 'application/json; charset=utf-8')
+        try:
+            from agent.skills.service import SkillService
+
+            oversize = _oversize_body(SkillService.MAX_UPLOAD_TOTAL_SIZE)
+            if oversize:
+                return oversize
+
+            params = _raw_web_input()
+            service = _skill_service(_scoped_agent_id(params))
+            result = service.create({
+                "name": params.get("name", ""),
+                "description": params.get("description", ""),
+                "body": params.get("body", ""),
+                "files": _uploaded_files(params, SkillService.MAX_UPLOAD_FILE_SIZE),
+            })
+            logger.info(f"[WebChannel] Skill created: {result['name']} "
+                        f"({len(result['files'])} bundled file(s))")
+            return json.dumps({"status": "success", **result}, ensure_ascii=False)
+        except ValueError as e:
+            # What the user typed or picked, refused: the name, the missing
+            # description, a file too large. Reported as itself, not as a 500.
+            return json.dumps({"status": "error", "message": str(e)}, ensure_ascii=False)
+        except Exception as e:
+            logger.error(f"[WebChannel] Skill create error: {e}", exc_info=True)
+            return json.dumps({"status": "error", "message": str(e)}, ensure_ascii=False)
+
+
+class SkillUploadHandler:
+    """
+    ``POST /api/skills/upload`` - skills installed from a folder or an archive.
+
+    One upload can hold several skills - a folder of them, an archive of a repo -
+    so the response reports every skill separately: installed, replaced, or
+    skipped with the reason, rather than one status for the batch.
+    """
+
+    def POST(self):
+        _require_auth()
+        web.header('Content-Type', 'application/json; charset=utf-8')
+        try:
+            from agent.skills.service import SkillService
+
+            oversize = _oversize_body(SkillService.MAX_UPLOAD_TOTAL_SIZE)
+            if oversize:
+                return oversize
+
+            params = _raw_web_input()
+            service = _skill_service(_scoped_agent_id(params))
+
+            archive = params.get("archive")
+            if archive is not None and getattr(archive, "filename", ""):
+                payload = {"archive": {
+                    "filename": archive.filename,
+                    # Capped at the whole-upload limit rather than the per-file
+                    # one: an archive is one file holding the entire skill.
+                    "content": _read_uploaded_file_bytes_limited(
+                        archive, SkillService.MAX_UPLOAD_TOTAL_SIZE),
+                }}
+            else:
+                payload = {"files": _uploaded_files(params, SkillService.MAX_UPLOAD_FILE_SIZE)}
+
+            result = service.install_upload(payload)
+            logger.info(f"[WebChannel] Skills uploaded: installed={result['installed']} "
+                        f"replaced={result['replaced']} skipped={len(result['skipped'])}")
+            return json.dumps({"status": "success", **result}, ensure_ascii=False)
+        except ValueError as e:
+            return json.dumps({"status": "error", "message": str(e)}, ensure_ascii=False)
+        except Exception as e:
+            logger.error(f"[WebChannel] Skill upload error: {e}", exc_info=True)
+            return json.dumps({"status": "error", "message": str(e)}, ensure_ascii=False)
 
 
 class SkillContentHandler:

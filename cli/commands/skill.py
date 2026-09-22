@@ -486,25 +486,14 @@ def _install_targz_bytes(content: bytes, name: str, skills_dir: str, result: Ins
             f.write(content)
 
         import tarfile
+        from agent.skills.archive import ArchiveError, extract_tar
         extract_dir = os.path.join(tmp_dir, "extracted")
         os.makedirs(extract_dir)
-        with tarfile.open(tar_path, "r:gz") as tf:
-            extraction_root = os.path.realpath(extract_dir)
-            for member in tf.getmembers():
-                resolved = os.path.realpath(os.path.join(extract_dir, member.name))
-                try:
-                    inside_root = (
-                        os.path.commonpath((extraction_root, resolved)) == extraction_root
-                    )
-                except ValueError:
-                    inside_root = False
-                if not inside_root:
-                    raise SkillInstallError("Archive contains path traversal, aborting.")
-                if member.issym() or member.islnk():
-                    raise SkillInstallError("Archive contains a link, aborting.")
-                if not (member.isfile() or member.isdir()):
-                    raise SkillInstallError("Archive contains a special file, aborting.")
-            tf.extractall(extract_dir)
+        try:
+            with tarfile.open(tar_path, "r:gz") as tf:
+                extract_tar(tf, extract_dir)
+        except ArchiveError as e:
+            raise SkillInstallError(str(e))
 
         top_items = [d for d in os.listdir(extract_dir) if not d.startswith(".")]
         pkg_root = extract_dir
@@ -596,26 +585,15 @@ def _check_github_spec(spec: str):
         raise SkillInstallError(f"Invalid GitHub spec '{spec}'. Expected format: owner/repo")
 
 
-_JUNK_NAMES = {'.DS_Store', 'Thumbs.db', 'desktop.ini'}
-
-
-def _is_junk_entry(filename: str) -> bool:
-    parts = filename.replace('\\', '/').split('/')
-    return any(p in _JUNK_NAMES or p == '__MACOSX' or p.startswith('._.') for p in parts)
-
-
 def _safe_extractall(zf: zipfile.ZipFile, dest: str):
-    """Extract zip while guarding against Zip Slip and filtering junk files."""
-    dest = os.path.realpath(dest)
-    members = []
-    for member in zf.infolist():
-        if _is_junk_entry(member.filename):
-            continue
-        target = os.path.realpath(os.path.join(dest, member.filename))
-        if not target.startswith(dest + os.sep) and target != dest:
-            raise ValueError(f"Unsafe zip entry detected: {member.filename}")
-        members.append(member)
-    zf.extractall(dest, members=members)
+    """Extract a zip, refusing the entries ``agent.skills.archive`` describes.
+
+    The checks live there because the console installs uploaded packages through
+    the same rules, and a guard that exists twice is a guard that ends up
+    applied in one place only.
+    """
+    from agent.skills.archive import extract_zip
+    extract_zip(zf, dest)
 
 
 def _verify_checksum(content: bytes, expected: str):

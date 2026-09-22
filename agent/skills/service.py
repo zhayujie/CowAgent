@@ -6,12 +6,14 @@ called from the cloud control client (LinkAI), the local web console, or any
 other management entry point.
 """
 
+import json
 import os
+import re
 import shutil
-import zipfile
 import tempfile
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 from common.log import logger
+from agent.skills.archive import ArchiveError, extract_archive
 from agent.skills.types import Skill, SkillEntry
 from agent.skills.manager import SkillManager
 
@@ -20,6 +22,68 @@ try:
 except ImportError:
     requests = None
 
+SKILL_FILE = "SKILL.md"
+
+# A skill's name is also its directory name, the word the CLI addresses it by
+# (``cow skill uninstall <name>``) and the identifier the model sees, so it is
+# held to the hyphen-case convention the skill-creator guide states.
+_SKILL_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9\-]{0,63}$")
+
+# A plain YAML scalar cannot start with an indicator character, and cannot carry
+# ``: `` or `` #`` anywhere in it, without changing what it parses to. A
+# description written by a user reaches all of those, so it gets quoted instead.
+_YAML_NEEDS_QUOTING = re.compile(r"""^[\s\-?:,\[\]{}#&*!|>'"%@`]|:\s|\s#|:$|[\n\r]""")
+
+
+def normalize_skill_name(raw: Optional[str]) -> str:
+    """Reduce a title typed into a console into a usable skill name.
+
+    Everything outside ``[a-z0-9]`` collapses to a hyphen, so "Weather API" and
+    "weather_api" both land on ``weather-api``. A title with nothing else in it
+    - a purely Chinese one, say - leaves nothing to name a directory after, and
+    is refused rather than silently turned into something like ``skill-1``; the
+    caller keeps it as the skill's display name instead.
+    """
+    slug = re.sub(r"[^a-z0-9]+", "-", (raw or "").strip().lower()).strip("-")[:64].rstrip("-")
+    if not _SKILL_NAME_RE.match(slug):
+        raise ValueError(
+            f"skill name must contain latin letters or digits: {(raw or '').strip()!r}"
+        )
+    return slug
+
+
+def _yaml_scalar(value: str) -> str:
+    """A frontmatter value, quoted when a plain scalar would not survive YAML."""
+    if not value or _YAML_NEEDS_QUOTING.search(value):
+        # A JSON string is a valid YAML double-quoted scalar, escapes included.
+        return json.dumps(value, ensure_ascii=False)
+    return value
+
+
+def render_skill_md(name: str, description: str, body: str = "") -> str:
+    """Build a SKILL.md from the fields a creation form collects."""
+    front = f"---\nname: {_yaml_scalar(name)}\ndescription: {_yaml_scalar(description)}\n---\n"
+    body = (body or "").strip()
+    if not body:
+        # A skill with no instructions is still a skill: the description alone
+        # triggers it, and the console's editor is where the body gets written.
+        return front
+    return f"{front}\n{body}\n"
+
+
+def _upload_rel_path(path: Optional[str]) -> str:
+    """The path an uploaded file keeps inside the skill directory.
+
+    A browser sends either a bare file name or, for a folder pick, a path
+    relative to the chosen folder. Windows separators are normalised, and a
+    leading drive or slash is dropped, so what is left is always relative -
+    ``_safe_file_path`` then rejects anything that still escapes.
+    """
+    cleaned = (path or "").replace("\\", "/").strip()
+    cleaned = re.sub(r"^[A-Za-z]:", "", cleaned).lstrip("/")
+    parts = [p for p in cleaned.split("/") if p not in ("", ".")]
+    return "/".join(parts)
+
 
 class SkillService:
     """
@@ -27,6 +91,14 @@ class SkillService:
     Wraps SkillManager and provides network-aware operations such as
     downloading skill files from remote URLs.
     """
+
+    # Ceilings on what one create or install may carry. A skill is text plus a
+    # few scripts and assets, so these are generous for the real case while
+    # still bounding what an upload - or a package downloaded from a hub - can
+    # unpack into the workspace.
+    MAX_UPLOAD_FILES = 500
+    MAX_UPLOAD_FILE_SIZE = 10 * 1024 * 1024
+    MAX_UPLOAD_TOTAL_SIZE = 50 * 1024 * 1024
 
     def __init__(self, skill_manager: SkillManager):
         """
@@ -284,15 +356,18 @@ class SkillService:
         skill_dir = self._safe_skill_dir(name)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
-            zip_path = os.path.join(tmp_dir, "package.zip")
-            self._download_file(url, zip_path)
-
-            if not zipfile.is_zipfile(zip_path):
-                raise ValueError(f"downloaded file is not a valid zip archive: {url}")
+            archive_path = os.path.join(tmp_dir, "package")
+            self._download_file(url, archive_path)
 
             extract_dir = os.path.join(tmp_dir, "extracted")
-            with zipfile.ZipFile(zip_path, "r") as zf:
-                zf.extractall(extract_dir)
+            with open(archive_path, "rb") as f:
+                # A downloaded package is untrusted, so it goes through the same
+                # refusals as an uploaded one: path traversal, links, special
+                # files. Reading the format from the bytes also means a
+                # ``.tar.gz`` served under a ``.zip`` name still installs.
+                extract_archive(f.read(), extract_dir,
+                                max_files=self.MAX_UPLOAD_FILES,
+                                max_total_size=self.MAX_UPLOAD_TOTAL_SIZE)
 
             # Determine the actual content root.
             # If the zip has a single top-level directory, use its contents
@@ -311,6 +386,269 @@ class SkillService:
             shutil.copytree(extract_dir, skill_dir)
 
         logger.info(f"[SkillService] add: skill '{name}' installed via package ({url})")
+
+    # ------------------------------------------------------------------
+    # create / install from a console
+    # ------------------------------------------------------------------
+    def create(self, payload: dict) -> dict:
+        """
+        Create a skill from the fields a creation form collects.
+
+        :param payload: ``{"name", "description", "body", "files"}``, where
+            ``body`` is the SKILL.md instructions below the frontmatter and
+            ``files`` are resources to bundle beside it, each
+            ``{"path": str, "content": bytes}``.
+        :return: ``{"name": ..., "files": [paths bundled]}``
+        :raises ValueError: for a name that cannot be used, a missing
+            description, or a skill of that name that already exists.
+        """
+        title = (payload.get("name") or "").strip()
+        name = normalize_skill_name(title)
+        description = (payload.get("description") or "").strip()
+        if not description:
+            # The loader drops a skill whose frontmatter carries no description,
+            # so one created without it would disappear from the very list it
+            # was created in, with nothing on screen to say why.
+            raise ValueError("skill description is required")
+
+        self._reject_shipped_name(name)
+        skill_dir = self._safe_skill_dir(name)
+        if os.path.exists(skill_dir):
+            raise ValueError(f"skill already exists: {name}")
+
+        # Assembled beside the target and moved into place, so a failed write
+        # leaves no half-written skill for the loader to pick up. The dot keeps
+        # it out of the loader's way while it is being written, too: a scan that
+        # lands mid-create skips it the way it skips every hidden directory.
+        tmp_dir = os.path.join(os.path.dirname(skill_dir), f".{name}.tmp")
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        os.makedirs(tmp_dir, exist_ok=True)
+        try:
+            # SKILL.md is what the form itself writes; an attachment of that
+            # name would either lose the fields just filled in or shadow them.
+            bundled = self._write_uploads(tmp_dir, payload.get("files") or [],
+                                          skip=(SKILL_FILE,))
+            with open(os.path.join(tmp_dir, SKILL_FILE), "w",
+                      encoding="utf-8", newline="\n") as f:
+                f.write(render_skill_md(name, description, payload.get("body")))
+            os.rename(tmp_dir, skill_dir)
+        except Exception:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+            raise
+
+        self.manager.refresh_skills()
+        self._set_display_name(name, title)
+        logger.info(f"[SkillService] create: skill '{name}' created "
+                    f"({len(bundled)} bundled file(s))")
+        return {"name": name, "files": bundled}
+
+    def install_upload(self, payload: dict) -> dict:
+        """
+        Install skills from what a browser uploaded: an archive, or a folder.
+
+        :param payload: either ``{"archive": {"filename", "content"}}`` for a
+            zip / tar.gz, or ``{"files": [{"path", "content"}]}`` for a picked
+            folder, whose paths are relative to the folder itself.
+        :return: ``{"installed": [names], "replaced": [names],
+            "skipped": [{"name", "reason"}]}`` - one upload can carry several
+            skills, and one of them being unusable must not lose the rest.
+        :raises ValueError: when the upload holds no skill at all.
+        """
+        archive = payload.get("archive")
+        files = payload.get("files") or []
+
+        installed, replaced, skipped = [], [], []
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            staged = os.path.join(tmp_dir, "staged")
+            os.makedirs(staged)
+
+            if archive is not None:
+                fallback = re.sub(r"\.(zip|tgz|tar\.gz|tar)$", "",
+                                  os.path.basename(archive.get("filename") or ""),
+                                  flags=re.IGNORECASE)
+                content = archive.get("content") or b""
+                try:
+                    extract_archive(content, staged,
+                                    max_files=self.MAX_UPLOAD_FILES,
+                                    max_total_size=self.MAX_UPLOAD_TOTAL_SIZE)
+                except ArchiveError as e:
+                    raise ValueError(str(e))
+            elif files:
+                fallback = ""
+                self._write_uploads(staged, files)
+            else:
+                raise ValueError("no files uploaded")
+
+            discovered = self._discover_skills(staged)
+            if not discovered:
+                raise ValueError(f"no {SKILL_FILE} found in the upload")
+
+            for source_dir in discovered:
+                declared, description = self._read_skill_header(source_dir)
+                # The name to use when the SKILL.md declares none: the directory
+                # it sits in, or - when it sits at the top of the upload - what
+                # the uploaded archive was called.
+                implied = fallback if source_dir == staged else os.path.basename(source_dir)
+                # What to call the skill in a refusal, before a name is resolved.
+                label = declared or implied or SKILL_FILE
+                try:
+                    if not (declared or implied):
+                        raise ValueError(f"{SKILL_FILE} carries no name")
+                    name = normalize_skill_name(declared or implied)
+                    if not description:
+                        raise ValueError(f"{SKILL_FILE} carries no description")
+                    self._reject_shipped_name(name)
+                    target = self._safe_skill_dir(name)
+                    existed = self._install_skill_dir(source_dir, target)
+                    (replaced if existed else installed).append(name)
+                except ValueError as e:
+                    skipped.append({"name": label, "reason": str(e)})
+                    logger.warning(f"[SkillService] install_upload: skipped '{label}': {e}")
+
+        self.manager.refresh_skills()
+        for name in installed + replaced:
+            self._set_display_name(name, self._read_skill_header(
+                self._safe_skill_dir(name))[0])
+        logger.info(f"[SkillService] install_upload: installed={installed} "
+                    f"replaced={replaced} skipped={[s['name'] for s in skipped]}")
+        return {"installed": installed, "replaced": replaced, "skipped": skipped}
+
+    def _install_skill_dir(self, source_dir: str, target: str) -> bool:
+        """
+        Put a staged skill directory in place, over one already installed.
+
+        The copy is made beside the target and only then swapped in, because the
+        skill being replaced may be one the user wrote and edited: deleting it
+        first would mean a copy that fails halfway - a full disk, a locked file -
+        takes the installed skill with it. Both temporary names start with a dot,
+        which is what keeps a scan that lands mid-install from reading either as
+        a skill of its own.
+
+        :return: whether a skill of that name was already installed.
+        """
+        parent, dir_name = os.path.split(target)
+        staging = os.path.join(parent, f".{dir_name}.tmp")
+        backup = os.path.join(parent, f".{dir_name}.old")
+        shutil.rmtree(staging, ignore_errors=True)
+        shutil.rmtree(backup, ignore_errors=True)
+        existed = os.path.exists(target)
+
+        try:
+            shutil.copytree(source_dir, staging)
+            if existed:
+                # Moved aside rather than removed: os.rename cannot replace a
+                # directory on Windows, and this leaves the old skill restorable
+                # for as long as the new one is not in place.
+                os.rename(target, backup)
+            os.rename(staging, target)
+        except Exception:
+            if os.path.exists(backup) and not os.path.exists(target):
+                os.rename(backup, target)
+            shutil.rmtree(staging, ignore_errors=True)
+            raise
+        finally:
+            shutil.rmtree(backup, ignore_errors=True)
+        return existed
+
+    def _write_uploads(self, root: str, items: List[dict],
+                       skip: tuple = ()) -> List[str]:
+        """
+        Write uploaded files under ``root``, keeping their relative paths.
+
+        :param skip: relative paths to leave out, matched case-insensitively.
+        :return: the relative paths written, in the order they arrived.
+        """
+        if len(items) > self.MAX_UPLOAD_FILES:
+            raise ValueError(f"too many files: at most {self.MAX_UPLOAD_FILES} are accepted")
+
+        unwanted = {s.lower() for s in skip}
+        written: List[str] = []
+        total = 0
+        for item in items:
+            rel = _upload_rel_path(item.get("path") or item.get("filename"))
+            if not rel or rel.lower() in unwanted:
+                continue
+            content = item.get("content") or b""
+            if isinstance(content, str):
+                content = content.encode("utf-8")
+            if len(content) > self.MAX_UPLOAD_FILE_SIZE:
+                raise ValueError(f"file too large: {rel}")
+            total += len(content)
+            if total > self.MAX_UPLOAD_TOTAL_SIZE:
+                raise ValueError("upload too large")
+            dest = self._safe_file_path(root, rel)
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            with open(dest, "wb") as f:
+                f.write(content)
+            written.append(rel)
+        return written
+
+    def _discover_skills(self, root: str) -> List[str]:
+        """
+        The skill directories in a staged upload.
+
+        An upload is one skill as often as it is a folder of several, and an
+        archive made from a folder usually nests everything a level deeper than
+        whoever made it expects. So a SKILL.md at the top means the whole upload
+        is one skill, and otherwise every directory holding one is a skill -
+        stopping at the first found down each branch, because the directories
+        below a skill (``scripts/``, ``references/``) are its resources rather
+        than skills of their own. This is the rule the loader itself applies.
+        """
+        if os.path.isfile(os.path.join(root, SKILL_FILE)):
+            return [root]
+
+        found: List[str] = []
+        for current, dirs, entries in os.walk(root):
+            dirs[:] = sorted(d for d in dirs
+                             if not d.startswith(".")
+                             and d not in ("node_modules", "__pycache__", "venv"))
+            if SKILL_FILE in entries:
+                dirs[:] = []
+                found.append(current)
+        return found
+
+    @staticmethod
+    def _read_skill_header(skill_dir: str) -> Tuple[str, str]:
+        """The name and description a skill directory's SKILL.md declares."""
+        from agent.skills.frontmatter import parse_frontmatter
+
+        try:
+            with open(os.path.join(skill_dir, SKILL_FILE), "r", encoding="utf-8") as f:
+                frontmatter = parse_frontmatter(f.read())
+        except (OSError, UnicodeDecodeError):
+            return "", ""
+        name = frontmatter.get("name")
+        description = frontmatter.get("description")
+        return (str(name).strip() if name else "",
+                str(description).strip() if description else "")
+
+    def _reject_shipped_name(self, name: str) -> None:
+        """
+        Refuse a name the installation itself ships.
+
+        Startup copies every builtin skill over the workspace copy of the same
+        name (``_sync_builtin_skills`` in app.py), so a skill written here under
+        a builtin's name would be replaced at the next restart - silently, and
+        after the user had every reason to think it was saved.
+        """
+        if os.path.isfile(os.path.join(self.manager.builtin_dir, name, SKILL_FILE)):
+            raise ValueError(f"'{name}' is the name of a built-in skill; choose another")
+
+    def _set_display_name(self, name: str, title: str) -> None:
+        """
+        Keep the title as typed, where the skill's name had to differ from it.
+
+        The console lists ``display_name`` in preference to the name, so a title
+        like "Weather API 助手" still reads as itself after being reduced to the
+        ascii, hyphen-case name that a directory and the CLI need.
+        """
+        title = (title or "").strip()
+        entry = self.manager.skills_config.get(name)
+        if not entry or not title or title == name:
+            return
+        entry["display_name"] = title
+        self.manager._save_skills_config()
 
     # ------------------------------------------------------------------
     # open / close (enable / disable)

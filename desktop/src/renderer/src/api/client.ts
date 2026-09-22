@@ -4,6 +4,8 @@ import type {
   ChannelAction,
   SkillInfo,
   SkillContent,
+  SkillCreateResult,
+  SkillUploadResult,
   ToolInfo,
   MemoryItem,
   MemoryCategory,
@@ -221,6 +223,21 @@ class ApiClient {
     // for bug reports, but hand the user a plain, non-alarming message.
     console.error(`[api] upload network failure to ${url}:`, lastErr)
     throw new Error(t('upload_network_error'))
+  }
+
+  /** A file's bytes in memory, for a multipart body to carry.
+   *
+   * In Electron, `fetch` streaming a File straight from disk intermittently
+   * rejects with a bare "Failed to fetch" (see `uploadFile`), and a retry of the
+   * same File hits the same backing path. Reading the bytes first sidesteps it;
+   * on failure the File itself is returned so behavior only degrades.
+   */
+  private async fileBytes(file: File): Promise<Blob | File> {
+    try {
+      return new Blob([await file.arrayBuffer()], { type: file.type })
+    } catch {
+      return file
+    }
   }
 
   // ---------------------------------------------------------
@@ -817,6 +834,50 @@ class ApiClient {
       method: 'POST',
       body: JSON.stringify({ action, name }),
     })
+  }
+
+  /**
+   * Create a skill from the fields a form collects (multipart: the body carries
+   * files as well as text). `name` is a title, which the server reduces to the
+   * hyphen-case name the directory uses; `files` are bundled beside SKILL.md.
+   */
+  async createSkill(args: {
+    name: string
+    description: string
+    body?: string
+    files?: File[]
+  }): Promise<SkillCreateResult & ApiResult> {
+    const formData = new FormData()
+    formData.append('name', args.name)
+    formData.append('description', args.description)
+    formData.append('body', args.body || '')
+    for (const file of args.files || []) {
+      formData.append('files', await this.fileBytes(file), file.name)
+    }
+    return this.postFormData('/api/skills/create', formData)
+  }
+
+  /** Install skills from an uploaded archive (.zip / .tar.gz). */
+  async uploadSkillArchive(archive: File): Promise<SkillUploadResult & ApiResult> {
+    const formData = new FormData()
+    formData.append('archive', await this.fileBytes(archive), archive.name)
+    return this.postFormData('/api/skills/upload', formData)
+  }
+
+  /**
+   * Install skills from a picked folder.
+   *
+   * The paths travel in a field of their own, paired with the files by position
+   * the way the chat's directory upload sends one: a file's own name says
+   * nothing about where it sat in the folder.
+   */
+  async uploadSkillFolder(files: File[]): Promise<SkillUploadResult & ApiResult> {
+    const formData = new FormData()
+    for (const file of files) {
+      formData.append('files', await this.fileBytes(file), file.name)
+      formData.append('relative_paths', file.webkitRelativePath || file.name)
+    }
+    return this.postFormData('/api/skills/upload', formData)
   }
 
   /**

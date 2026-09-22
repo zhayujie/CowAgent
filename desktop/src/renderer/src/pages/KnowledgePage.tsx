@@ -15,7 +15,7 @@ import {
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { t, getLang } from '../i18n'
+import { t, tf, getLang } from '../i18n'
 import apiClient from '../api/client'
 import type {
   KnowledgeDir,
@@ -98,13 +98,6 @@ const knowledgeEditor = createDocEditorStore<KnowledgeRef, KnowledgeReadResult>(
   refusal: (data) =>
     PROTECTED_KNOWLEDGE_PAGES.includes(data.path) ? t('knowledge_doc_readonly') : t('ws_edit_too_large'),
 })
-
-// t() with simple {placeholder} interpolation.
-const tf = (key: string, vars: Record<string, string | number>): string => {
-  let out = t(key)
-  for (const [k, v] of Object.entries(vars)) out = out.replace(`{${k}}`, String(v))
-  return out
-}
 
 const formatSize = (bytes: number): string => {
   if (bytes < 1024) return bytes + ' B'
