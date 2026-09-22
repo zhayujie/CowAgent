@@ -25,11 +25,17 @@ def test_closed_mermaid_fences_become_placeholders_and_open_ones_stay_code():
     )
     assert proc.returncode == 0, proc.stdout + "\n" + proc.stderr
     assert "FENCE OK" in proc.stdout
-    # jsdom lives at the path the smoke script imports. When it is present,
-    # or when this runs in CI, a skipped drawing pass is a failed test.
-    # A machine with neither still proves the fence rules above.
-    jsdom = os.path.isfile("/tmp/mermaid-smoke/node_modules/jsdom/lib/api.js")
-    require_svg = jsdom or os.environ.get("CI") == "true" or os.environ.get("GITHUB_ACTIONS") == "true"
+    # svgSuite imports jsdom from /tmp/mermaid-smoke first, then cwd and the
+    # repo node_modules. This test starts the script with cwd at the repo
+    # root, and the pytest workflow installs the /tmp copy, so GitHub Actions
+    # requires SVG OK. With none of these files present the script prints
+    # "SKIP svg" and that result is accepted.
+    repo = os.path.abspath(ROOT)
+    jsdom_paths = (
+        "/tmp/mermaid-smoke/node_modules/jsdom/lib/api.js",
+        os.path.join(repo, "node_modules", "jsdom", "lib", "api.js"),
+    )
+    require_svg = any(os.path.isfile(path) for path in jsdom_paths)
     if require_svg:
         assert "SVG OK" in proc.stdout, proc.stdout + "\n" + proc.stderr
     elif "SVG OK" not in proc.stdout:

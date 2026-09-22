@@ -108,10 +108,18 @@ function fenceSuite() {
 
 async function svgSuite() {
   let JSDOM = null
+  // CI installs jsdom at the first path (.github/workflows/test.yml). A
+  // checkout-local or cwd node_modules is enough for a local drawing pass.
+  const repoRoot = resolve(HERE, '..', '..', '..')
   const candidates = [
     '/tmp/mermaid-smoke/node_modules/jsdom/lib/api.js',
+    resolve(process.cwd(), 'node_modules/jsdom/lib/api.js'),
+    resolve(repoRoot, 'node_modules/jsdom/lib/api.js'),
   ]
+  const tried = new Set()
   for (const candidate of candidates) {
+    if (tried.has(candidate)) continue
+    tried.add(candidate)
     try {
       JSDOM = (await import(candidate)).JSDOM
       break
