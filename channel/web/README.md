@@ -117,7 +117,7 @@ Two rules for includes:
 | `layout/login.html` | Login overlay |
 | `layout/sidebar.html` | Left navigation (`data-view` names the target), the update menu on the version row, mobile overlay |
 | `layout/session-panel.html` | Session history side panel |
-| `layout/header.html` | Top bar: panel toggle, breadcrumb, language/theme switches, logout |
+| `layout/header.html` | Top bar: panel toggle, breadcrumb, theme switch, logout |
 | `views/chat.html` | Chat view: message list, composer card, workspace panel |
 | `views/agents.html` | Agent team: list, detail drawer, create form |
 | `views/config.html` | Settings view with the "basic" and "models" tabs |
@@ -128,6 +128,7 @@ Two rules for includes:
 | `views/tasks.html` | Scheduled tasks and run records |
 | `views/logs.html` | Log terminal |
 | `modals/team-chat.html` | New multi-agent conversation |
+| `modals/team-create.html` | New named team: a name plus the leader-led roster |
 | `modals/knowledge-dialog.html` | Knowledge create/rename/delete dialog |
 | `modals/confirm-dialog.html` | Static confirm dialog |
 | `modals/rename-dialog.html` | Channel instance rename |
@@ -290,7 +291,7 @@ auth), see `tests/test_web_console_routing.py`.
 | File | Responsibility |
 |---|---|
 | `core/version.js` | Version label (filled from the backend's `/VERSION`) and the one-click update menu on the version row |
-| `core/i18n.js` | Translation table and `t()` / `applyI18n()` / `setLanguage()` |
+| `core/i18n.js` | Translation table and `t()` / `applyI18n()` (English-only since zh was retired) |
 | `core/theme.js` | Light/dark theme switch |
 | `core/utils.js` | `escapeHtml`, time formatting, scroll helpers, tool argument summaries |
 | `core/markdown.js` | markdown-it setup; image, video and code block rendering |
@@ -322,6 +323,7 @@ auth), see `tests/test_web_console_routing.py`.
 |---|---|
 | `views/sessions.js` | Session history panel: list, pin, rename, project grouping |
 | `views/agents.js` | Agent list, detail drawer, avatars, core files |
+| `views/teams.js` | Sidebar "Teams" section: named Agent groups — list, create, delete, open |
 | `views/config.js` | Basic settings tab |
 | `views/models.js` | Models tab: vendors, capability cards, fallback chain, model catalog |
 | `views/models-custom-provider.js` | Add/edit dialog for custom OpenAI-compatible providers |
@@ -336,7 +338,7 @@ auth), see `tests/test_web_console_routing.py`.
 | `views/doc-viewers.js` | Viewer/editor for memory files and skill definitions |
 | `views/knowledge.js` | Knowledge tree, import, relation graph |
 | `views/logs.js` | Live log stream |
-| `boot.js` | Startup: apply theme and language, auth gate, first fetch of config and history |
+| `boot.js` | Startup: apply theme and i18n, auth gate, first fetch of config and history |
 
 ### Three load-order constraints that must not move
 
