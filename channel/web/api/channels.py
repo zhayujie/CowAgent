@@ -209,7 +209,6 @@ class ChannelsHandler:
         edit each bot independently. Covers all MULTI_INSTANCE_READY types
         (feishu, dingtalk, qq, telegram, slack, discord), not just feishu.
         """
-        from common import i18n
         from channel.channel_instances import (
             resolve_channel_instances,
             MULTI_INSTANCE_READY,

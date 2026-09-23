@@ -19,8 +19,7 @@ import json
 import threading
 import uuid
 from datetime import datetime
-from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 from common.log import logger
 from common.state_dir import teams_registry_file

@@ -1,7 +1,6 @@
 # encoding:utf-8
 
 import ast
-import copy
 import json
 import logging
 import os
@@ -395,7 +394,7 @@ class Config(dict):
         
         try:
             return self[key]
-        except KeyError as e:
+        except KeyError:
             return default
         except Exception as e:
             raise e
@@ -417,7 +416,7 @@ class Config(dict):
             with open(os.path.join(get_appdata_dir(), "user_datas.pkl"), "rb") as f:
                 self.user_datas = pickle.load(f)
                 logger.debug("[Config] User datas loaded.")
-        except FileNotFoundError as e:
+        except FileNotFoundError:
             logger.debug("[Config] User datas file not found, ignore.")
         except Exception as e:
             logger.warning("[Config] User datas error: {}".format(e))

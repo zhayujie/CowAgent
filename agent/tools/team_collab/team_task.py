@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Optional
+
 from agent.tools.base_tool import BaseTool, ToolResult
 from agent.team_runtime import (
     TeamRuntimeError,

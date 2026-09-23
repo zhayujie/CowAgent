@@ -7,7 +7,6 @@ leader first, leader never dropped by a roster write, uniqueness, and the
 full CRUD round trip.
 """
 
-import pytest
 
 from agent import teams_store
 
