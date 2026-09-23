@@ -851,6 +851,18 @@ export type AgentAction =
   | 'set_knowledge_mode'
   | 'bind_channel_instance'
 
+// A saved named team (GET/POST /api/team-groups): a leader-led Agent group the
+// sidebar's "Teams" section opens as a group conversation. The backend resolves
+// each member to an {id, name} profile view before returning it.
+export interface TeamGroup {
+  id: string
+  name: string
+  leader: string
+  members?: Array<{ id: string; name?: string }>
+  created_at?: string
+  updated_at?: string
+}
+
 // ============================================================
 // Tools / skills
 // ============================================================

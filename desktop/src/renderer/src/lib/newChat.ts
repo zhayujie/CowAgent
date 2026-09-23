@@ -4,6 +4,8 @@ import { useChatStore } from '../store/chatStore'
 import { useUIStore } from '../store/uiStore'
 import { useAgentStore } from '../store/agentStore'
 import { useSessionSettingsStore } from '../store/sessionSettingsStore'
+import { useWorkspaceStore } from '../store/workspaceStore'
+import { useTeamStore, teamSessionOf } from '../store/teamStore'
 
 /**
  * Start a fresh conversation. One code path for every "new chat" entry point
@@ -43,5 +45,39 @@ export async function startTeamChat(ownerId: string, guestIds: string[]): Promis
   if (guests.length) {
     await useSessionSettingsStore.getState().apply(id, { members: guests })
   }
+  return id
+}
+
+/**
+ * Open a named team from the sidebar's "Teams" section. Enters the
+ * conversation that already carries the team when that session still exists;
+ * otherwise starts a fresh group chat owned by the team's leader with the
+ * roster seeded from the team — mirroring the web console's openNamedTeam().
+ * Returns the opened session id, or '' when the team is gone.
+ */
+export async function openNamedTeam(teamId: string): Promise<string> {
+  const teamStore = useTeamStore.getState()
+  const team = teamStore.teams.find((tm) => tm.id === teamId) || (await teamStore.fetchOne(teamId))
+  if (!team) return ''
+
+  // Reattach: the session recorded last time, when it still exists, already
+  // carries the roster — opening it is just switching to it.
+  const saved = teamSessionOf(teamId)
+  if (saved) {
+    const exists = useSessionStore.getState().sessions.some((s) => s.session_id === saved)
+    if (exists) {
+      await useSessionStore.getState().setActive(saved)
+      useTeamStore.getState().rememberSession(teamId, saved)
+      return saved
+    }
+  }
+
+  // Fresh: a new chat re-scopes the workspace panel, closing any open editor.
+  if (!(await useWorkspaceStore.getState().guardUnsavedEdit())) return ''
+  const guests = (team.members || [])
+    .map((m) => m.id)
+    .filter((id) => id && id !== team.leader)
+  const id = await startTeamChat(team.leader, guests)
+  useTeamStore.getState().rememberSession(teamId, id)
   return id
 }

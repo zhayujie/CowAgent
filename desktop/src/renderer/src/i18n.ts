@@ -74,6 +74,22 @@ const translations: Record<string, Record<string, string>> = {
     team_members: 'In this conversation',
     team_invite: 'Add to chat',
     team_remove: 'Remove from this chat',
+
+    // Named teams: saved rosters under the sidebar's "Teams" section, shared
+    // with the web console (which defines these same keys).
+    nav_teams: 'Teams',
+    team_leader_tag: 'Leader',
+    team_create_title: 'New team',
+    team_create_name: 'Team name',
+    team_create_name_ph: 'e.g. Productivity',
+    team_create_hint: 'The first Agent you pick leads the team.',
+    team_create_start: 'Create team',
+    team_create_need_name: 'Give the team a name',
+    team_create_need_leader: 'Pick at least one Agent to lead the team',
+    team_create_failed: 'Could not create the team',
+    team_delete_title: 'Delete team',
+    team_delete_confirm: 'Delete this team? Its conversations stay.',
+    team_delete_ok: 'Delete',
     cancel: 'Cancel',
     // new chat menu (multi-agent)
     new_chat_pick_agent: 'Start a chat with',

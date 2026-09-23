@@ -12,17 +12,22 @@ import {
   Folder,
   House,
   GripVertical,
+  Users,
 } from 'lucide-react'
 import { t, getLang } from '../i18n'
 import { useSessionStore, DEFAULT_SPACE_KEY } from '../store/sessionStore'
 import { useUIStore } from '../store/uiStore'
 import { useWorkspaceStore } from '../store/workspaceStore'
+import { useAgentStore, selectMultiAgent } from '../store/agentStore'
 import { usePlatform } from '../hooks/usePlatform'
-import type { SessionItem } from '../types'
+import type { SessionItem, TeamGroup } from '../types'
 import apiClient from '../api/client'
 import Tooltip from '../components/Tooltip'
 import NewChatMenu from '../components/NewChatMenu'
+import TeamCreateModal from '../components/TeamCreateModal'
 import AgentAvatar from '../components/AgentAvatar'
+import { useTeamStore, teamOfSession } from '../store/teamStore'
+import { openNamedTeam } from '../lib/newChat'
 import { Modal, Btn, TextInput } from '../pages/settings/primitives'
 
 const COLLAPSED_KEY = 'cow_collapsed_projects'
@@ -179,11 +184,27 @@ const SessionList: React.FC = () => {
   const [deleteTarget, setDeleteTarget] = useState<{ path: string; name: string } | null>(null)
   const [deleteSessionTarget, setDeleteSessionTarget] = useState<SessionItem | null>(null)
   const [busy, setBusy] = useState(false)
+  const [teamCreateOpen, setTeamCreateOpen] = useState(false)
+  const [teamDeleteTarget, setTeamDeleteTarget] = useState<TeamGroup | null>(null)
+  const [teamBusy, setTeamBusy] = useState(false)
   const activeRef = useRef<HTMLDivElement>(null)
+
+  // Named teams ride on the sidebar only when the install runs more than one
+  // Agent: a single-Agent client has nobody to team with, and the section
+  // would just be an empty promise.
+  const multiAgent = useAgentStore(selectMultiAgent)
+  const teams = useTeamStore((s) => s.teams)
+  const activeTeamId = teamOfSession(activeId)
 
   useEffect(() => {
     loadSessions(1)
   }, [loadSessions])
+
+  // Best-effort fetch (the client swallows transport errors) whenever the
+  // sidebar mounts, like the web console's loadTeams() on DOMContentLoaded.
+  useEffect(() => {
+    if (multiAgent) void useTeamStore.getState().load()
+  }, [multiAgent])
 
   // getLang() is included so group labels (e.g. the default-space name) rebuild
   // when the user switches language, since buildGroups resolves them via t().
@@ -350,6 +371,55 @@ const SessionList: React.FC = () => {
           if (el.scrollHeight - el.scrollTop - el.clientHeight < 80 && hasMore && !loading) loadMore()
         }}
       >
+        {multiAgent && (
+          <div className="pb-1.5 mb-1 border-b border-default">
+            <div className="flex items-center justify-between pl-1 pr-0.5 pt-1 pb-0.5">
+              <span className="text-[11px] font-medium uppercase tracking-wide text-content-disabled">
+                {t('nav_teams')}
+              </span>
+              <IconBtn onClick={() => setTeamCreateOpen(true)} title={t('team_create_title')}>
+                <Plus size={12} />
+              </IconBtn>
+            </div>
+            {teams.map((team) => {
+              const active = activeTeamId === team.id
+              return (
+                <div
+                  key={team.id}
+                  onClick={() => void openNamedTeam(team.id)}
+                  className={`group relative flex items-center gap-2 pl-2 h-9 rounded-btn cursor-pointer transition-colors ${
+                    active ? 'bg-accent-soft' : 'hover:bg-surface-2'
+                  }`}
+                >
+                  <Users
+                    size={14}
+                    className={`shrink-0 ${active ? 'text-accent' : 'text-content-tertiary'}`}
+                  />
+                  <span
+                    className={`flex-1 min-w-0 truncate text-[13px] pr-5 group-hover:pr-0 ${
+                      active ? 'text-accent font-medium' : 'text-content-secondary'
+                    }`}
+                  >
+                    {team.name}
+                  </span>
+                  <div className="hidden group-hover:flex items-center absolute right-1">
+                    <IconBtn
+                      danger
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setTeamDeleteTarget(team)
+                      }}
+                      title={t('team_delete_title')}
+                    >
+                      <Trash2 size={12} />
+                    </IconBtn>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
         {sessions.length === 0 && !loading && (
           <div className="flex flex-col items-center justify-center h-40 text-center px-4">
             <MessageSquare size={22} className="text-content-disabled mb-2" />
@@ -660,6 +730,36 @@ const SessionList: React.FC = () => {
             deleteSessionTarget?.title || deleteSessionTarget?.session_id || ''
           )}
         </p>
+      </Modal>
+      <TeamCreateModal open={teamCreateOpen} onClose={() => setTeamCreateOpen(false)} />
+
+      <Modal
+        open={!!teamDeleteTarget}
+        title={t('team_delete_title')}
+        onClose={() => setTeamDeleteTarget(null)}
+        footer={
+          <>
+            <Btn onClick={() => setTeamDeleteTarget(null)}>{t('ws_sel_cancel')}</Btn>
+            <Btn
+              variant="danger"
+              disabled={teamBusy}
+              onClick={async () => {
+                if (!teamDeleteTarget) return
+                setTeamBusy(true)
+                try {
+                  await useTeamStore.getState().remove(teamDeleteTarget.id)
+                } finally {
+                  setTeamBusy(false)
+                  setTeamDeleteTarget(null)
+                }
+              }}
+            >
+              {t('team_delete_ok')}
+            </Btn>
+          </>
+        }
+      >
+        <p className="text-sm text-content-secondary">{t('team_delete_confirm')}</p>
       </Modal>
     </div>
   )

@@ -35,6 +35,7 @@ import type {
   ProjectState,
   ChannelsResponse,
   RosterSnapshot,
+  TeamGroup,
 } from '../types'
 import { getLang, t } from '../i18n'
 
@@ -1113,6 +1114,59 @@ class ApiClient {
     return this.request('/api/voice/tts', {
       method: 'POST',
       body: JSON.stringify({ text, session_id: sessionId }),
+    })
+  }
+
+  // ---------------------------------------------------------
+  // Named teams (sidebar "Teams"; shared with the web console)
+  // ---------------------------------------------------------
+
+  // Saved, leader-led Agent groups (agent/teams_store.py). A team is opened
+  // as — or reattached to — a group conversation; the rosters themselves are
+  // persisted by the backend, so the two consoles see the same list. The list
+  // read is best-effort, exactly like the web console's loadTeams(): a
+  // missing endpoint (older backend) just leaves the section empty.
+
+  async listTeamGroups(): Promise<TeamGroup[]> {
+    try {
+      const data = await this.request<{ status: string; teams?: TeamGroup[] }>('/api/team-groups')
+      return data.status === 'success' ? data.teams || [] : []
+    } catch {
+      return []
+    }
+  }
+
+  async getTeamGroup(teamId: string): Promise<TeamGroup | null> {
+    try {
+      const data = await this.request<{ status: string; team?: TeamGroup }>(
+        `/api/team-groups/${encodeURIComponent(teamId)}`
+      )
+      return data.status === 'success' ? data.team || null : null
+    } catch {
+      return null
+    }
+  }
+
+  async createTeamGroup(name: string, leader: string, members: string[]): Promise<TeamGroup> {
+    const data = await this.request<{ status: string; message?: string; team?: TeamGroup }>(
+      '/api/team-groups',
+      {
+        method: 'POST',
+        body: JSON.stringify({ name, leader, members }),
+      }
+    )
+    // The backend answers 200 even on validation failures, so the status
+    // field decides — surfacing its message keeps "name already taken" etc.
+    // readable, like the web console does.
+    if (data.status !== 'success' || !data.team) {
+      throw new Error(data.message || 'Could not create the team')
+    }
+    return data.team
+  }
+
+  async deleteTeamGroup(teamId: string): Promise<ApiResult> {
+    return this.request(`/api/team-groups/${encodeURIComponent(teamId)}`, {
+      method: 'DELETE',
     })
   }
 
