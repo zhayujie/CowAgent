@@ -193,6 +193,8 @@ const I18N = {
         models_clear_confirm_title: 'Clear provider credentials',
         models_clear_confirm_msg: 'Remove this provider\'s API Key and Base URL? Capabilities relying on it will stop working.',
         cancel: 'Cancel',
+        cancel: 'Cancel',
+        delete: 'Delete',
         save: 'Save',
         ok: 'OK',
         knowledge_title: 'Knowledge', knowledge_desc: 'Browse and explore your knowledge base',
