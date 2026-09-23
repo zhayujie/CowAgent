@@ -477,7 +477,7 @@ function openAddChannelPanel() {
 
     if (available.length === 0) {
         panel.innerHTML = `<div class="bg-white dark:bg-[#1A1A1A] rounded-xl border border-slate-200 dark:border-white/10 p-6 text-center">
-            <p class="text-sm text-slate-500 dark:text-slate-400">${currentLang === 'zh' ? '所有通道均已接入' : 'All channels are already connected'}</p>
+            <p class="text-sm text-slate-500 dark:text-slate-400">All channels are already connected</p>
             <button onclick="closeAddChannelPanel()" class="mt-3 text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 cursor-pointer">${t('channels_cancel')}</button>
         </div>`;
         panel.classList.remove('hidden');

@@ -476,7 +476,7 @@ function saveTaskEdit() {
     
     const name = nameInput.value.trim();
     if (!name) {
-        statusEl.textContent = currentLang === 'zh' ? '请输入任务名称' : 'Please enter task name';
+        statusEl.textContent = 'Please enter task name';
         statusEl.style.opacity = '1';
         setTimeout(() => { statusEl.style.opacity = '0'; }, 3000);
         return;
@@ -490,7 +490,7 @@ function saveTaskEdit() {
     if (scheduleType === 'cron') {
         const expr = cronInput.value.trim();
         if (!expr) {
-            statusEl.textContent = currentLang === 'zh' ? '请输入 Cron 表达式' : 'Please enter cron expression';
+            statusEl.textContent = 'Please enter cron expression';
             statusEl.style.opacity = '1';
             setTimeout(() => { statusEl.style.opacity = '0'; }, 3000);
             return;
@@ -498,7 +498,7 @@ function saveTaskEdit() {
         // Basic cron expression format validation: 5 or 6 fields
         const fields = expr.split(/\s+/);
         if (fields.length < 5 || fields.length > 6) {
-            statusEl.textContent = currentLang === 'zh' ? 'Cron 表达式格式错误，应为 5 或 6 个字段（分 时 日 月 周）' : 'Invalid cron expression, expected 5 or 6 fields (min hour day month weekday)';
+            statusEl.textContent = 'Invalid cron expression, expected 5 or 6 fields (min hour day month weekday)';
             statusEl.style.opacity = '1';
             setTimeout(() => { statusEl.style.opacity = '0'; }, 3000);
             return;
@@ -509,7 +509,7 @@ function saveTaskEdit() {
     } else if (scheduleType === 'interval') {
         const seconds = parseInt(intervalInput.value);
         if (!seconds || seconds < 60) {
-            statusEl.textContent = currentLang === 'zh' ? '间隔秒数最小为 60 秒' : 'Interval must be at least 60 seconds';
+            statusEl.textContent = 'Interval must be at least 60 seconds';
             statusEl.style.opacity = '1';
             setTimeout(() => { statusEl.style.opacity = '0'; }, 3000);
             return;
@@ -518,20 +518,20 @@ function saveTaskEdit() {
     } else if (scheduleType === 'once') {
         const time = onceInput.value;
         if (!time) {
-            statusEl.textContent = currentLang === 'zh' ? '请选择执行时间' : 'Please select execution time';
+            statusEl.textContent = 'Please select execution time';
             statusEl.style.opacity = '1';
             setTimeout(() => { statusEl.style.opacity = '0'; }, 3000);
             return;
         }
         const selectedUTC = taskLocalTimeToUTC(time, taskTimezone);
         if (!selectedUTC || isNaN(Date.parse(selectedUTC))) {
-            statusEl.textContent = currentLang === 'zh' ? '执行时间格式错误' : 'Invalid execution time format';
+            statusEl.textContent = 'Invalid execution time format';
             statusEl.style.opacity = '1';
             setTimeout(() => { statusEl.style.opacity = '0'; }, 3000);
             return;
         }
         if (new Date(selectedUTC) <= new Date()) {
-            statusEl.textContent = currentLang === 'zh' ? '执行时间必须在当前时间之后' : 'Execution time must be in the future';
+            statusEl.textContent = 'Execution time must be in the future';
             statusEl.style.opacity = '1';
             setTimeout(() => { statusEl.style.opacity = '0'; }, 3000);
             return;
@@ -551,7 +551,7 @@ function saveTaskEdit() {
     const content = contentInput.value.trim();
 
     if (!content) {
-        statusEl.textContent = currentLang === 'zh' ? '请输入内容' : 'Please enter content';
+        statusEl.textContent = 'Please enter content';
         statusEl.style.opacity = '1';
         setTimeout(() => { statusEl.style.opacity = '0'; }, 3000);
         return;
@@ -611,11 +611,11 @@ function saveTaskEdit() {
             if (res.status === 'success') {
                 onDone();
             } else {
-                showError(res.message || (currentLang === 'zh' ? '创建失败' : 'Create failed'));
+                showError(res.message || 'Create failed');
             }
         }).catch(() => {
             saveBtn.disabled = false;
-            showError(currentLang === 'zh' ? '网络错误' : 'Network error');
+            showError('Network error');
         });
         return;
     }
@@ -699,11 +699,11 @@ function saveTaskEdit() {
         if (res.status === 'success') {
             onDone();
         } else {
-            showError(res.message || (currentLang === 'zh' ? '保存失败' : 'Save failed'));
+            showError(res.message || 'Save failed');
         }
     }).catch(() => {
         saveBtn.disabled = false;
-        showError(currentLang === 'zh' ? '网络错误' : 'Network error');
+        showError('Network error');
     });
 }
 
@@ -715,7 +715,7 @@ function deleteTask() {
     const taskAgentId = currentEditingTask.agent_id || '';  // route delete to the owner's store
     showConfirmDialog({
         title: t('task_delete_confirm_title'),
-        message: (currentLang === 'zh' ? `确定要删除任务「${taskName}」吗？` : `Are you sure to delete task "${taskName}"?`),
+        message: `Are you sure to delete task "${taskName}"?`,
         onConfirm: () => {
             fetch('/api/scheduler/delete', {
                 method: 'POST',

@@ -43,7 +43,7 @@ function loadToolsSection() {
         emptyEl.classList.add('hidden');
         if (tools.length === 0) {
             emptyEl.classList.remove('hidden');
-            emptyEl.innerHTML = `<span class="text-sm text-slate-400 dark:text-slate-500">${currentLang === 'zh' ? '暂无内置工具' : 'No built-in tools'}</span>`;
+            emptyEl.innerHTML = `<span class="text-sm text-slate-400 dark:text-slate-500">No built-in tools</span>`;
             return;
         }
         badge.textContent = tools.length;
@@ -68,7 +68,7 @@ function loadToolsSection() {
         toolsLoaded = true;
     }).catch(() => {
         emptyEl.classList.remove('hidden');
-        emptyEl.innerHTML = `<span class="text-sm text-slate-400 dark:text-slate-500">${currentLang === 'zh' ? '加载失败' : 'Failed to load'}</span>`;
+        emptyEl.innerHTML = `<span class="text-sm text-slate-400 dark:text-slate-500">Failed to load</span>`;
     });
 }
 
@@ -82,7 +82,7 @@ function loadSkillsSection() {
         const skills = data.skills || [];
         if (skills.length === 0) {
             const p = emptyEl.querySelector('p');
-            if (p) p.textContent = currentLang === 'zh' ? '暂无技能' : 'No skills found';
+            if (p) p.textContent = 'No skills found';
             return;
         }
         badge.textContent = skills.length;
@@ -131,7 +131,7 @@ function renderSkillCard(card, sk) {
                     data-skill-switch
                     aria-checked="${enabled}"
                     class="relative inline-flex h-4 w-7 flex-shrink-0 cursor-pointer rounded-full transition-colors duration-200 ease-in-out focus:outline-none ${trackClass}"
-                    title="${enabled ? (currentLang === 'zh' ? '点击禁用' : 'Click to disable') : (currentLang === 'zh' ? '点击启用' : 'Click to enable')}"
+                    title="${enabled ? 'Click to disable' : 'Click to enable'}"
                 >
                     <span class="inline-block h-3 w-3 mt-0.5 rounded-full bg-white shadow transform transition-transform duration-200 ease-in-out ${thumbTranslate}"></span>
                 </button>
@@ -185,12 +185,12 @@ function toggleSkill(name, currentlyEnabled) {
             }
         } else {
             if (card) card.style.opacity = '1';
-            alert(currentLang === 'zh' ? '操作失败，请稍后再试' : 'Operation failed, please try again');
+            alert('Operation failed, please try again');
         }
     })
     .catch(() => {
         if (card) card.style.opacity = '1';
-        alert(currentLang === 'zh' ? '操作失败，请稍后再试' : 'Operation failed, please try again');
+        alert('Operation failed, please try again');
     });
 }
 

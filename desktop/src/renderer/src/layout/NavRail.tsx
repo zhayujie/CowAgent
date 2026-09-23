@@ -15,7 +15,6 @@ import {
   Moon,
   ScrollText,
   MoreHorizontal,
-  Languages,
   Download,
   Loader2,
   Globe,
@@ -29,7 +28,7 @@ import type { LucideIcon } from 'lucide-react'
 import type { Theme } from '../theme/themes'
 // The desktop app's own brand icon (transparent PNG), bundled by Vite.
 import brandLogo from '../assets/logo.png'
-import { t, getLang, setLang, Lang } from '../i18n'
+import { t } from '../i18n'
 import { useUIStore } from '../store/uiStore'
 import { guardDocEditors } from '../store/docEditorStore'
 import { useTheme } from '../hooks/useTheme'
@@ -51,8 +50,8 @@ const SKILL_HUB_URL = 'https://skills.cowagent.ai/'
 // GitHub issues — where users report bugs / request features.
 const FEEDBACK_URL = 'https://github.com/zhayujie/CowAgent/issues'
 
-const websiteUrl = () => (getLang() === 'zh' ? 'https://cowagent.ai/zh' : 'https://cowagent.ai')
-const docsUrl = () => (getLang() === 'zh' ? 'https://docs.cowagent.ai/zh' : 'https://docs.cowagent.ai')
+const websiteUrl = () => 'https://cowagent.ai'
+const docsUrl = () => 'https://docs.cowagent.ai'
 
 const openExternal = (url: string) => {
   window.open(url, '_blank', 'noopener,noreferrer')
@@ -78,11 +77,9 @@ const NAV_ITEMS: NavItem[] = [
 // single-Agent client shows exactly the original menu. Inserted after Chat.
 const AGENTS_ITEM: NavItem = { path: '/agents', labelKey: 'menu_agents', icon: Users }
 
-interface NavRailProps {
-  onLangChange: () => void
-}
-
-const NavRail: React.FC<NavRailProps> = ({ onLangChange }) => {
+// Language switching (and its onLangChange callback) was removed along with
+// the Chinese locales — the desktop app is English-only.
+const NavRail: React.FC = () => {
   const location = useLocation()
   const navigate = useNavigate()
   const { navCollapsed, toggleNav } = useUIStore()
@@ -145,12 +142,6 @@ const NavRail: React.FC<NavRailProps> = ({ onLangChange }) => {
       document.removeEventListener('keydown', onKey)
     }
   }, [menuOpen])
-
-  const toggleLanguage = () => {
-    const next: Lang = getLang() === 'zh' ? 'en' : 'zh'
-    setLang(next)
-    onLangChange()
-  }
 
   // Track a user-initiated check so we can show "up to date" feedback in the
   // menu when the result comes back as not-available (the auto poll stays
@@ -261,7 +252,6 @@ const NavRail: React.FC<NavRailProps> = ({ onLangChange }) => {
             themeId={themeId}
             themes={themes}
             onThemeId={setThemeId}
-            onLanguage={toggleLanguage}
             onCheckUpdate={checkUpdate}
             onOpenLink={(url) => {
               setMenuOpen(false)
@@ -357,10 +347,9 @@ const FooterMenu: React.FC<{
   onThemeId: (id: string) => void
   onLogs: () => void
   onTheme: () => void
-  onLanguage: () => void
   onCheckUpdate: () => void
   onOpenLink: (url: string) => void
-}> = ({ theme, checking, pendingUpdate, upToDate, themeId, themes, onThemeId, onLogs, onTheme, onLanguage, onCheckUpdate, onOpenLink }) => {
+}> = ({ theme, checking, pendingUpdate, upToDate, themeId, themes, onThemeId, onLogs, onTheme, onCheckUpdate, onOpenLink }) => {
   const [themeMenuOpen, setThemeMenuOpen] = useState(false)
   const updateLabel = checking
     ? t('update_checking')
@@ -416,12 +405,6 @@ const FooterMenu: React.FC<{
           {themeId === th.id && <Check size={14} className="flex-shrink-0 text-accent" />}
         </button>
       ))}
-    <MenuItem
-      icon={<Languages size={16} />}
-      label={t('menu_language')}
-      trailing={getLang() === 'zh' ? 'EN' : '中'}
-      onClick={onLanguage}
-    />
     <MenuItem icon={<ScrollText size={16} />} label={t('menu_logs')} onClick={onLogs} />
   </div>
   )

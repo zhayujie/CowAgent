@@ -22,19 +22,15 @@ class ToolsHandler:
         web.header('Content-Type', 'application/json; charset=utf-8')
         try:
             from agent.tools.tool_manager import ToolManager
-            from common import i18n
             tm = ToolManager()
             if not tm.tool_classes:
                 tm.load_tools()
             tools = []
-            lang = i18n.get_language()
             for name, cls in tm.tool_classes.items():
                 try:
                     instance = cls()
                     desc = instance.description
-                    if lang == i18n.ZH_HANT and desc:
-                        desc = i18n.to_traditional(desc)
-                    elif lang == "en" and name == "scheduler":
+                    if name == "scheduler":
                         desc = (
                             "Create, query and manage scheduled tasks (reminders, periodic tasks, etc.).\n\n"
                             "⚠️ IMPORTANT: Only use this tool when delayed or periodic execution is needed."
@@ -73,19 +69,12 @@ class SkillsHandler:
         _require_auth()
         web.header('Content-Type', 'application/json; charset=utf-8')
         try:
-            from common import i18n
             params = web.input(agent_id='')
             # The library page lists everything installed, unnarrowed by the
             # Agent's selection: a skill it has not selected still has to be
             # visible here for the selection to be editable at all.
             service = _skill_service(_request_agent_id(params))
             skills = service.query()
-            if i18n.get_language() == i18n.ZH_HANT:
-                for skill in skills:
-                    if isinstance(skill, dict):
-                        for k, v in list(skill.items()):
-                            if k in ("name", "description", "display_name") and isinstance(v, str):
-                                skill[k] = i18n.to_traditional(v)
             return json.dumps({"status": "success", "skills": skills}, ensure_ascii=False)
         except Exception as e:
             logger.error(f"[WebChannel] Skills API error: {e}")

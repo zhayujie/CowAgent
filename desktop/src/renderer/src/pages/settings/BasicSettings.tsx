@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { Cpu, Bot, ShieldCheck, Settings, Eye, EyeOff, ArrowRight, Loader2 } from 'lucide-react'
-import { t, getLang, setLang, localizedLabel, type Lang } from '../../i18n'
+import { t, localizedLabel } from '../../i18n'
 import apiClient from '../../api/client'
 import { product } from '@product'
 import type { ConfigData, ProviderMeta } from '../../types'
@@ -29,11 +29,10 @@ const toInt = (text: string, fallback: number): number => {
 
 interface BasicSettingsProps {
   baseUrl: string
-  onLangChange?: () => void
   onOpenModels?: () => void
 }
 
-const BasicSettings: React.FC<BasicSettingsProps> = ({ baseUrl, onLangChange, onOpenModels }) => {
+const BasicSettings: React.FC<BasicSettingsProps> = ({ baseUrl, onOpenModels }) => {
   const [config, setConfig] = useState<ConfigData | null>(null)
   const [loading, setLoading] = useState(true)
   // When arriving from the context pie's "Config" action, scroll to and briefly
@@ -395,16 +394,6 @@ const BasicSettings: React.FC<BasicSettingsProps> = ({ baseUrl, onLangChange, on
     setTimeout(() => setPermStatus(''), 2000)
   }
 
-  const changeLanguage = async (lang: Lang) => {
-    setLang(lang)
-    onLangChange?.()
-    try {
-      await apiClient.updateConfig({ cow_lang: lang })
-    } catch {
-      /* non-blocking */
-    }
-  }
-
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20 text-content-tertiary">
@@ -676,19 +665,9 @@ const BasicSettings: React.FC<BasicSettingsProps> = ({ baseUrl, onLangChange, on
         </div>
       </Card>
 
-      {/* System — language + notification preferences (client-side, no save) */}
+      {/* System — notification preferences (client-side, no save) */}
       <Card icon={<Settings size={16} />} title={t('config_system')}>
         <div className="space-y-4">
-          <Field label={t('config_language')} hint={t('config_language_hint')}>
-            <Dropdown
-              value={getLang()}
-              options={[
-                { value: 'zh', label: '简体中文' },
-                { value: 'en', label: 'English' },
-              ]}
-              onChange={(v) => changeLanguage(v as Lang)}
-            />
-          </Field>
           <div className="flex items-center justify-between py-1">
             <div>
               <div className="text-sm font-medium text-content">{t('config_task_notify')}</div>

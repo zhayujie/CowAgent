@@ -410,10 +410,10 @@ def test_memory_and_skill_editor_wiring():
     assert "if (!skillEditor.guard(closeSkillViewer)) return;" in console
     assert "if (!memoryEditor.isDirty() && !skillEditor.isDirty()) return;" in console
 
-    # Every string these views show must exist in all three locales.
+    # Every string these views show must exist in the (English-only) locale.
     for key in ("skill_back", "skill_open_hint", "skill_load_failed",
                 "skill_builtin_readonly"):
-        assert console.count(f"{key}:") == 3, key
+        assert console.count(f"{key}:") == 1, key
 
 
 # ----------------------------------------------------------------------
@@ -512,8 +512,8 @@ def test_desktop_doc_editor_seeds_declaratively():
     assert "if (el) void save(el.value)" in editor
     assert "save(ref.current?.value ?? '')" not in editor
 
-    # Every string these pages show must exist in both locales.
+    # Every string these pages show must exist in the (English-only) locale.
     i18n = _desktop("i18n.ts")
     for key in ("doc_edit", "doc_edit_save", "skill_back", "skill_open_hint",
                 "skill_builtin_readonly"):
-        assert i18n.count(f"{key}:") == 2, key
+        assert i18n.count(f"{key}:") == 1, key

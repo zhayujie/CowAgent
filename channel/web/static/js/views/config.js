@@ -199,17 +199,7 @@ function initConfigView(data) {
     document.getElementById('cfg-subagent').checked = data.subagent_enabled !== false;
     document.getElementById('cfg-self-evolution').checked = data.self_evolution_enabled === true;
 
-    // Reflect the current UI language (already resolved, may include the user's
-    // local choice) on the selector so it stays in sync with the top-right toggle.
-    const langSel = document.getElementById('cfg-lang-select');
-    if (langSel) {
-        initDropdown(
-            langSel,
-            [{ value: 'zh', label: '简体中文' }, { value: 'zh-Hant', label: '繁體中文' }, { value: 'en', label: 'English' }],
-            currentLang,
-            (val) => setLanguage(val)
-        );
-    }
+
 
     // Default permission mode for new conversations. Applied on pick, like the
     // language selector: the card's save button belongs to the password field,

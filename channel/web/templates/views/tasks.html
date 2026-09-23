@@ -6,15 +6,15 @@
                         <div class="max-w-4xl mx-auto">
                             <div class="flex items-center justify-between mb-4">
                                 <div>
-                                    <h2 class="text-xl font-bold text-slate-800 dark:text-slate-100" data-i18n="tasks_title">定时任务</h2>
-                                    <p id="tasks-subtitle" class="text-sm text-slate-500 dark:text-slate-400 mt-1" data-i18n="tasks_desc">查看和管理定时任务</p>
+                                    <h2 class="text-xl font-bold text-slate-800 dark:text-slate-100" data-i18n="tasks_title">Scheduled Tasks</h2>
+                                    <p id="tasks-subtitle" class="text-sm text-slate-500 dark:text-slate-400 mt-1" data-i18n="tasks_desc">View and manage scheduled tasks</p>
                                 </div>
                                 <div class="flex items-center gap-2">
                                     <button id="task-add-btn" onclick="openTaskCreateModal()"
                                             class="px-3 py-2 rounded-lg bg-primary-500 hover:bg-primary-600 text-white
                                                    text-sm font-medium cursor-pointer transition-colors duration-150 flex items-center gap-1.5">
                                         <i class="fas fa-plus text-xs"></i>
-                                        <span data-i18n="task_add_btn">新增任务</span>
+                                        <span data-i18n="task_add_btn">New Task</span>
                                     </button>
                                     <button id="task-refresh-btn" onclick="refreshTasksView()"
                                             class="px-3 py-2 rounded-lg border border-slate-200 dark:border-white/10
@@ -25,17 +25,17 @@
                                 </div>
                             </div>
 
-                            <!-- Tabs: 任务 | 执行记录. The refresh button above drives
+                            <!-- Tabs: tasks | run history. The refresh button above drives
                                  whichever tab is active. -->
                             <div class="flex items-center gap-1 border-b border-slate-200 dark:border-white/10 mb-5">
                                 <button id="tasks-tab-tasks" onclick="switchTasksTab('tasks')"
                                         class="tasks-tab relative px-3 py-2 text-sm font-medium cursor-pointer transition-colors text-primary-500">
-                                    <span class="inline-flex items-center gap-1.5"><i class="fas fa-calendar-days text-xs"></i><span data-i18n="tasks_tab_tasks">任务</span></span>
+                                    <span class="inline-flex items-center gap-1.5"><i class="fas fa-calendar-days text-xs"></i><span data-i18n="tasks_tab_tasks">Tasks</span></span>
                                     <span class="tasks-tab-underline absolute left-0 right-0 -bottom-px h-0.5 bg-primary-500 rounded-full"></span>
                                 </button>
                                 <button id="tasks-tab-records" onclick="switchTasksTab('records')"
                                         class="tasks-tab relative px-3 py-2 text-sm font-medium cursor-pointer transition-colors text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300">
-                                    <span class="inline-flex items-center gap-1.5"><i class="fas fa-clock-rotate-left text-xs"></i><span data-i18n="tasks_tab_records">执行记录</span></span>
+                                    <span class="inline-flex items-center gap-1.5"><i class="fas fa-clock-rotate-left text-xs"></i><span data-i18n="tasks_tab_records">History</span></span>
                                     <span class="tasks-tab-underline absolute left-0 right-0 -bottom-px h-0.5 bg-primary-500 rounded-full hidden"></span>
                                 </button>
                             </div>
@@ -57,11 +57,11 @@
                                     <div class="w-16 h-16 rounded-2xl bg-slate-100 dark:bg-white/10 flex items-center justify-center mb-4">
                                         <i class="fas fa-clock-rotate-left text-slate-400 text-xl"></i>
                                     </div>
-                                    <p class="text-slate-600 dark:text-slate-300 font-medium" data-i18n="records_empty">暂无执行记录</p>
-                                    <p class="text-sm text-slate-400 dark:text-slate-500 mt-1.5 max-w-sm text-center" data-i18n="records_empty_guide">任务执行后，成功与失败的记录都会显示在这里</p>
+                                    <p class="text-slate-600 dark:text-slate-300 font-medium" data-i18n="records_empty">No executions yet</p>
+                                    <p class="text-sm text-slate-400 dark:text-slate-500 mt-1.5 max-w-sm text-center" data-i18n="records_empty_guide">Once tasks run, both successful and failed executions show up here</p>
                                 </div>
                                 <div id="runs-loading" class="hidden items-center justify-center py-20 text-slate-400">
-                                    <i class="fas fa-spinner fa-spin mr-2"></i><span data-i18n="records_loading">加载执行记录中...</span>
+                                    <i class="fas fa-spinner fa-spin mr-2"></i><span data-i18n="records_loading">Loading history...</span>
                                 </div>
                                 <div id="runs-list" class="grid gap-3 hidden"></div>
                             </div>

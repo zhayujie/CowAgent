@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Sparkles, KeyRound, Loader2, ArrowRight, ArrowLeft, ExternalLink } from 'lucide-react'
-import { t, getLang, setLang, type Lang } from '../i18n'
+import { t } from '../i18n'
 import apiClient from '../api/client'
 import type { ModelsData } from '../types'
 import { Field, Dropdown, TextInput, type DropdownOption } from '../pages/settings/primitives'
@@ -27,7 +27,6 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onDone }) => {
   const finish = useOnboardingStore((s) => s.finish)
 
   const [step, setStep] = useState(1)
-  const [lang, setLangState] = useState<Lang>(getLang())
   const [models, setModels] = useState<ModelsData | null>(null)
 
   // Step 2 form state.
@@ -45,14 +44,6 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onDone }) => {
       .getModels()
       .then(setModels)
       .catch(() => setError(t('onboarding_save_failed')))
-  }, [])
-
-  // Persist the auto-detected default language on first show so the pre-selected
-  // option (driven by OS locale) also reaches the backend, even if the user
-  // doesn't tap the language buttons.
-  useEffect(() => {
-    if (!localStorage.getItem('cow_lang')) switchLang(lang)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const providerOptions: DropdownOption[] = useMemo(() => {
@@ -80,15 +71,7 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onDone }) => {
     setModel(first?.value || '')
   }
 
-  const switchLang = (next: Lang) => {
-    setLang(next)
-    setLangState(next)
-    // Mirror the choice to the backend so the agent/logs use the same language
-    // (matches BasicSettings). Non-blocking: the UI already switched locally.
-    apiClient.updateConfig({ cow_lang: next }).catch(() => {})
-  }
-
-  // Step 1 (language) can always advance; step 2 needs a provider, key, model.
+  // Step 1 (welcome) can always advance; step 2 needs a provider, key, model.
   const canNext = step === 1 || (!!provider && !!apiKey.trim() && !!model)
 
   const goNext = async () => {
@@ -159,24 +142,6 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onDone }) => {
               <h1 className="text-2xl font-bold text-content">{t('onboarding_welcome_title')}</h1>
               <p className="text-sm text-content-secondary">{t('onboarding_welcome_desc')}</p>
             </div>
-            <div className="max-w-xs mx-auto text-left">
-              <Field label={t('onboarding_lang_label')}>
-                <div className="grid grid-cols-2 gap-2">
-                  {(['zh', 'en'] as Lang[]).map((l) => (
-                    <button
-                      key={l}
-                      onClick={() => switchLang(l)}
-                      className={`px-4 py-2.5 rounded-btn border text-sm font-medium cursor-pointer transition-colors ${
-                        lang === l
-                          ? 'border-accent bg-accent-soft text-accent'
-                          : 'border-strong text-content-secondary hover:bg-surface-2'
-                      }`}
-                    >
-                      {l === 'zh' ? '简体中文' : 'English'}
-                    </button>
-                  ))}
-                </div>
-              </Field>
             </div>
           </div>
         )}

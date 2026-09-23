@@ -9,25 +9,25 @@
                             <div id="skills-panel-list">
                                 <div class="flex items-center justify-between mb-6">
                                     <div>
-                                        <h2 class="text-xl font-bold text-slate-800 dark:text-slate-100" data-i18n="skills_title">技能管理</h2>
-                                        <p class="text-sm text-slate-500 dark:text-slate-400 mt-1" data-i18n="skills_desc">查看、启用或禁用 Agent 技能</p>
+                                        <h2 class="text-xl font-bold text-slate-800 dark:text-slate-100" data-i18n="skills_title">Skills</h2>
+                                        <p class="text-sm text-slate-500 dark:text-slate-400 mt-1" data-i18n="skills_desc">View, enable, or disable agent tools and skills</p>
                                     </div>
                                     <a href="https://skills.cowagent.ai/" target="_blank"
                                        class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-primary-500 bg-primary-50 dark:bg-primary-900/20 hover:bg-primary-100 dark:hover:bg-primary-900/30 transition-colors">
                                         <i class="fas fa-puzzle-piece text-[10px]"></i>
-                                        <span data-i18n="skills_hub_btn">探索技能广场</span>
+                                        <span data-i18n="skills_hub_btn">Skill Hub</span>
                                     </a>
                                 </div>
 
                                 <!-- Built-in Tools Section -->
                                 <div class="mb-8">
                                     <div class="flex items-center gap-2 mb-3">
-                                        <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500" data-i18n="tools_section_title">内置工具</span>
+                                        <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500" data-i18n="tools_section_title">Built-in Tools</span>
                                         <span id="tools-count-badge" class="hidden px-2 py-0.5 rounded-full text-xs bg-slate-100 dark:bg-white/10 text-slate-500 dark:text-slate-400"></span>
                                     </div>
                                     <div id="tools-empty" class="flex items-center gap-2 py-4 text-slate-400 dark:text-slate-500 text-sm">
                                         <i class="fas fa-spinner fa-spin text-xs"></i>
-                                        <span data-i18n="tools_loading">加载工具中...</span>
+                                        <span data-i18n="tools_loading">Loading tools...</span>
                                     </div>
                                     <div id="tools-list" class="grid gap-3 sm:grid-cols-2 hidden"></div>
                                 </div>
@@ -35,15 +35,15 @@
                                 <!-- Skills Section -->
                                 <div>
                                     <div class="flex items-center gap-2 mb-3">
-                                        <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500" data-i18n="skills_section_title">技能</span>
+                                        <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500" data-i18n="skills_section_title">Skills</span>
                                         <span id="skills-count-badge" class="hidden px-2 py-0.5 rounded-full text-xs bg-slate-100 dark:bg-white/10 text-slate-500 dark:text-slate-400"></span>
                                     </div>
                                     <div id="skills-empty" class="flex flex-col items-center justify-center py-12">
                                         <div class="w-14 h-14 rounded-2xl bg-amber-50 dark:bg-amber-900/20 flex items-center justify-center mb-3">
                                             <i class="fas fa-bolt text-amber-400 text-lg"></i>
                                         </div>
-                                        <p class="text-slate-500 dark:text-slate-400 font-medium" data-i18n="skills_loading">加载技能中...</p>
-                                        <p class="text-sm text-slate-400 dark:text-slate-500 mt-1" data-i18n="skills_loading_desc">技能加载后将显示在此处</p>
+                                        <p class="text-slate-500 dark:text-slate-400 font-medium" data-i18n="skills_loading">Loading skills...</p>
+                                        <p class="text-sm text-slate-400 dark:text-slate-500 mt-1" data-i18n="skills_loading_desc">Skills will be displayed here after loading</p>
                                     </div>
                                     <div id="skills-list" class="grid gap-4 sm:grid-cols-2"></div>
                                 </div>
@@ -57,27 +57,27 @@
                                                    text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10
                                                    border border-slate-200 dark:border-white/10 transition-colors cursor-pointer">
                                         <i class="fas fa-arrow-left text-xs"></i>
-                                        <span data-i18n="skill_back">返回列表</span>
+                                        <span data-i18n="skill_back">Back to list</span>
                                     </button>
                                     <h2 id="skill-viewer-title"
                                         class="flex-1 min-w-0 text-base font-semibold text-slate-800 dark:text-slate-100 font-mono truncate"></h2>
                                     <span id="skill-viewer-readonly"
                                           class="hidden truncate max-w-[40%] px-2 py-0.5 rounded-full text-xs bg-slate-100 dark:bg-white/10 text-slate-500 dark:text-slate-400"
-                                          data-i18n="skill_builtin_readonly">内置技能不可编辑（重启会覆盖）</span>
+                                          data-i18n="skill_builtin_readonly">Built-in skill, read-only (replaced on restart)</span>
                                     <button id="skill-btn-edit" onclick="skillEditor.start()"
                                             class="doc-action-btn hidden">
                                         <i class="fas fa-pen text-xs"></i>
-                                        <span data-i18n="ws_edit">编辑</span>
+                                        <span data-i18n="ws_edit">Edit</span>
                                     </button>
                                     <button id="skill-btn-save" onclick="skillEditor.save()"
                                             class="doc-action-btn doc-action-btn-primary hidden">
                                         <i class="fas fa-check text-xs"></i>
-                                        <span data-i18n="ws_edit_save">保存 (Ctrl+S)</span>
+                                        <span data-i18n="ws_edit_save">Save (Ctrl+S)</span>
                                     </button>
                                     <button id="skill-btn-cancel" onclick="skillEditor.cancel()"
                                             class="doc-action-btn hidden">
                                         <i class="fas fa-xmark text-xs"></i>
-                                        <span data-i18n="ws_edit_cancel">退出编辑</span>
+                                        <span data-i18n="ws_edit_cancel">Leave editor</span>
                                     </button>
                                 </div>
                                 <div class="bg-white dark:bg-[#1A1A1A] rounded-xl border border-slate-200 dark:border-white/10 overflow-hidden">

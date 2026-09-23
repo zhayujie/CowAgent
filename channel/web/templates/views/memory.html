@@ -9,8 +9,8 @@
                             <div id="memory-panel-list">
                                 <div class="flex items-center justify-between mb-6">
                                     <div>
-                                        <h2 class="text-xl font-bold text-slate-800 dark:text-slate-100" data-i18n="memory_title">记忆管理</h2>
-                                        <p class="text-sm text-slate-500 dark:text-slate-400 mt-1" data-i18n="memory_desc">查看 Agent 记忆文件和内容</p>
+                                        <h2 class="text-xl font-bold text-slate-800 dark:text-slate-100" data-i18n="memory_title">Memory</h2>
+                                        <p class="text-sm text-slate-500 dark:text-slate-400 mt-1" data-i18n="memory_desc">View agent memory files and contents</p>
                                     </div>
                                     <div class="flex items-center gap-3">
                                         <div id="memory-agent-select" class="cfg-dropdown cfg-dropdown-avatar cfg-dropdown-sm" tabindex="0" style="width: 160px;">
@@ -24,11 +24,11 @@
                                         <div class="flex items-center bg-slate-100 dark:bg-white/10 rounded-lg p-0.5">
                                             <button id="memory-tab-files" onclick="switchMemoryTab('files')"
                                                     class="memory-tab px-3 py-1.5 rounded-md text-xs font-medium cursor-pointer transition-colors duration-150 active">
-                                                <i class="fas fa-file-lines mr-1.5"></i><span data-i18n="memory_tab_files">记忆文件</span>
+                                                <i class="fas fa-file-lines mr-1.5"></i><span data-i18n="memory_tab_files">Memory Files</span>
                                             </button>
                                             <button id="memory-tab-dreams" onclick="switchMemoryTab('dreams')"
                                                     class="memory-tab px-3 py-1.5 rounded-md text-xs font-medium cursor-pointer transition-colors duration-150">
-                                                <i class="fas fa-seedling mr-1.5"></i><span data-i18n="memory_tab_dreams">自主进化</span>
+                                                <i class="fas fa-seedling mr-1.5"></i><span data-i18n="memory_tab_dreams">Self-Evolution</span>
                                             </button>
                                         </div>
                                     </div>
@@ -37,18 +37,18 @@
                                     <div class="w-16 h-16 rounded-2xl bg-purple-50 dark:bg-purple-900/20 flex items-center justify-center mb-4">
                                         <i class="fas fa-brain text-purple-400 text-xl"></i>
                                     </div>
-                                    <p class="text-slate-500 dark:text-slate-400 font-medium" data-i18n="memory_loading">加载记忆文件中...</p>
-                                    <p class="text-sm text-slate-400 dark:text-slate-500 mt-1" data-i18n="memory_loading_desc">记忆文件将显示在此处</p>
+                                    <p class="text-slate-500 dark:text-slate-400 font-medium" data-i18n="memory_loading">Loading memory files...</p>
+                                    <p class="text-sm text-slate-400 dark:text-slate-500 mt-1" data-i18n="memory_loading_desc">Memory files will be displayed here</p>
                                 </div>
                                 <div id="memory-list" class="hidden">
                                     <div class="bg-white dark:bg-[#1A1A1A] rounded-xl border border-slate-200 dark:border-white/10 overflow-hidden">
                                         <table class="w-full">
                                             <thead>
                                                 <tr class="border-b border-slate-200 dark:border-white/10">
-                                                    <th class="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400" data-i18n="memory_col_name">文件名</th>
-                                                    <th class="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400" data-i18n="memory_col_type">类型</th>
-                                                    <th class="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400" data-i18n="memory_col_size">大小</th>
-                                                    <th class="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400" data-i18n="memory_col_updated">更新时间</th>
+                                                    <th class="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400" data-i18n="memory_col_name">Filename</th>
+                                                    <th class="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400" data-i18n="memory_col_type">Type</th>
+                                                    <th class="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400" data-i18n="memory_col_size">Size</th>
+                                                    <th class="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400" data-i18n="memory_col_updated">Updated</th>
                                                 </tr>
                                             </thead>
                                             <tbody id="memory-table-body"></tbody>
@@ -66,24 +66,24 @@
                                                    text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10
                                                    border border-slate-200 dark:border-white/10 transition-colors cursor-pointer">
                                         <i class="fas fa-arrow-left text-xs"></i>
-                                        <span data-i18n="memory_back">返回列表</span>
+                                        <span data-i18n="memory_back">Back to list</span>
                                     </button>
                                     <h2 id="memory-viewer-title"
                                         class="flex-1 min-w-0 text-base font-semibold text-slate-800 dark:text-slate-100 font-mono truncate"></h2>
                                     <button id="memory-btn-edit" onclick="memoryEditor.start()"
                                             class="doc-action-btn hidden">
                                         <i class="fas fa-pen text-xs"></i>
-                                        <span data-i18n="ws_edit">编辑</span>
+                                        <span data-i18n="ws_edit">Edit</span>
                                     </button>
                                     <button id="memory-btn-save" onclick="memoryEditor.save()"
                                             class="doc-action-btn doc-action-btn-primary hidden">
                                         <i class="fas fa-check text-xs"></i>
-                                        <span data-i18n="ws_edit_save">保存 (Ctrl+S)</span>
+                                        <span data-i18n="ws_edit_save">Save (Ctrl+S)</span>
                                     </button>
                                     <button id="memory-btn-cancel" onclick="memoryEditor.cancel()"
                                             class="doc-action-btn hidden">
                                         <i class="fas fa-xmark text-xs"></i>
-                                        <span data-i18n="ws_edit_cancel">退出编辑</span>
+                                        <span data-i18n="ws_edit_cancel">Leave editor</span>
                                     </button>
                                 </div>
                                 <div class="bg-white dark:bg-[#1A1A1A] rounded-xl border border-slate-200 dark:border-white/10 overflow-hidden">

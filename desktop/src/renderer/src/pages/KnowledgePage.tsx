@@ -732,9 +732,7 @@ const MenuItem: React.FC<{ icon: LucideIcon; label: string; onClick: () => void 
 
 function templateFor(filename: string): string {
   const title = (filename || 'untitled').replace(/\.md$/i, '')
-  return getLang() === 'zh'
-    ? `# ${title}\n\n## 摘要\n\n\n## 关键点\n\n- \n\n## 参考\n\n`
-    : `# ${title}\n\n## Summary\n\n\n## Key points\n\n- \n\n## References\n\n`
+  return `# ${title}\n\n## Summary\n\n\n## Key points\n\n- \n\n## References\n\n`
 }
 
 const KnowledgeDialog: React.FC<{

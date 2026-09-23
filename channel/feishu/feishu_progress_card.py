@@ -123,7 +123,7 @@ class FeishuProgressState:
 
     def build_card(self, streaming: bool, now: Optional[float] = None) -> Dict[str, Any]:
         """Render the current state as a Feishu Card 2.0 object."""
-        # Localized status header text; en/zh/zh-Hant via i18n.t.
+        # Localized status header text; English-only via i18n.t.
         title, template = {
             "running": (i18n.t("处理中", "Working"), "blue"),
             "done": (i18n.t("完成", "Done"), "green"),

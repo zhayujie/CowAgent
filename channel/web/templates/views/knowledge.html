@@ -8,8 +8,8 @@
                             <!-- Header -->
                             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 md:mb-6 md:flex-shrink-0">
                                 <div>
-                                    <h2 class="text-xl font-bold text-slate-800 dark:text-slate-100" data-i18n="knowledge_title">知识库</h2>
-                                    <p class="text-sm text-slate-500 dark:text-slate-400 mt-1" data-i18n="knowledge_shared_hint">知识库默认全员共享，在侧栏「知识」查看和编辑。</p>
+                                    <h2 class="text-xl font-bold text-slate-800 dark:text-slate-100" data-i18n="knowledge_title">Knowledge</h2>
+                                    <p class="text-sm text-slate-500 dark:text-slate-400 mt-1" data-i18n="knowledge_shared_hint">Knowledge is shared by every Agent. Open it from the Knowledge page.</p>
                                 </div>
                                 <div class="flex items-center gap-2">
                                     <span id="knowledge-stats" class="text-xs text-slate-400 dark:text-slate-500 hidden sm:inline"></span>
@@ -25,31 +25,31 @@
                                     <div class="flex items-center bg-slate-100 dark:bg-white/10 rounded-lg p-0.5">
                                         <button id="knowledge-tab-docs" onclick="switchKnowledgeTab('docs')"
                                                 class="knowledge-tab px-3 py-1.5 rounded-md text-xs font-medium cursor-pointer transition-colors duration-150 active">
-                                            <i class="fas fa-folder-tree mr-1.5"></i><span data-i18n="knowledge_tab_docs">文档</span>
+                                            <i class="fas fa-folder-tree mr-1.5"></i><span data-i18n="knowledge_tab_docs">Documents</span>
                                         </button>
                                         <button id="knowledge-tab-graph" onclick="switchKnowledgeTab('graph')"
                                                 class="knowledge-tab px-3 py-1.5 rounded-md text-xs font-medium cursor-pointer transition-colors duration-150">
-                                            <i class="fas fa-diagram-project mr-1.5"></i><span data-i18n="knowledge_tab_graph">图谱</span>
+                                            <i class="fas fa-diagram-project mr-1.5"></i><span data-i18n="knowledge_tab_graph">Graph</span>
                                         </button>
                                     </div>
                                     <div id="knowledge-new-menu" class="relative">
                                         <button onclick="toggleKnowledgeNewMenu(event)"
                                                 class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-xs font-medium cursor-pointer transition-colors">
-                                            <i class="fas fa-plus"></i><span data-i18n="knowledge_new">新建</span><i class="fas fa-chevron-down text-[9px] ml-0.5"></i>
+                                            <i class="fas fa-plus"></i><span data-i18n="knowledge_new">New</span><i class="fas fa-chevron-down text-[9px] ml-0.5"></i>
                                         </button>
                                         <div id="knowledge-new-menu-list"
                                              class="hidden absolute right-0 mt-1.5 w-44 z-50 bg-white dark:bg-[#1A1A1A] border border-slate-200 dark:border-white/10 rounded-lg shadow-lg py-1">
                                             <button onclick="createKnowledgeCategory(); closeKnowledgeNewMenu()"
                                                     class="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 cursor-pointer transition-colors">
-                                                <i class="fas fa-folder-plus w-3.5 text-slate-400"></i><span data-i18n="knowledge_new_category">新建分类</span>
+                                                <i class="fas fa-folder-plus w-3.5 text-slate-400"></i><span data-i18n="knowledge_new_category">New category</span>
                                             </button>
                                             <button onclick="createKnowledgeDocument(); closeKnowledgeNewMenu()"
                                                     class="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 cursor-pointer transition-colors">
-                                                <i class="fas fa-file-circle-plus w-3.5 text-slate-400"></i><span data-i18n="knowledge_new_document">新建文档</span>
+                                                <i class="fas fa-file-circle-plus w-3.5 text-slate-400"></i><span data-i18n="knowledge_new_document">New document</span>
                                             </button>
                                             <button onclick="selectKnowledgeImportFiles(); closeKnowledgeNewMenu()"
                                                     class="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 cursor-pointer transition-colors">
-                                                <i class="fas fa-file-arrow-up w-3.5 text-slate-400"></i><span data-i18n="knowledge_import_documents">导入文档</span>
+                                                <i class="fas fa-file-arrow-up w-3.5 text-slate-400"></i><span data-i18n="knowledge_import_documents">Import documents</span>
                                             </button>
                                         </div>
                                     </div>
@@ -62,15 +62,15 @@
                                 <div class="w-16 h-16 rounded-2xl bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center mb-4">
                                     <i class="fas fa-book text-emerald-400 text-xl"></i>
                                 </div>
-                                <p class="text-slate-500 dark:text-slate-400 font-medium" data-i18n="knowledge_loading">加载知识库中...</p>
-                                <p class="text-sm text-slate-400 dark:text-slate-500 mt-1" data-i18n="knowledge_loading_desc">知识页面将显示在这里</p>
+                                <p class="text-slate-500 dark:text-slate-400 font-medium" data-i18n="knowledge_loading">Loading knowledge base...</p>
+                                <p class="text-sm text-slate-400 dark:text-slate-500 mt-1" data-i18n="knowledge_loading_desc">Knowledge pages will be displayed here</p>
                                 <div id="knowledge-empty-guide" class="hidden mt-6 max-w-sm text-center">
-                                    <p class="text-sm text-slate-500 dark:text-slate-400 mb-4" data-i18n="knowledge_empty_guide">在对话中发送文档、链接或主题给 Agent，它会自动整理到你的知识库中。</p>
+                                    <p class="text-sm text-slate-500 dark:text-slate-400 mb-4" data-i18n="knowledge_empty_guide">Send documents, links or topics to the agent in chat, and it will automatically organize them into your knowledge base.</p>
                                     <button onclick="navigateTo('chat')"
                                             class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-500 hover:bg-primary-600
                                                    text-white text-sm font-medium cursor-pointer transition-colors duration-150">
                                         <i class="fas fa-message text-xs"></i>
-                                        <span data-i18n="knowledge_go_chat">开始对话</span>
+                                        <span data-i18n="knowledge_go_chat">Start a conversation</span>
                                     </button>
                                 </div>
                             </div>
@@ -97,7 +97,7 @@
                                         <div id="knowledge-content-placeholder"
                                              class="flex flex-col items-center justify-center py-20 md:h-full text-slate-400 dark:text-slate-500 bg-white dark:bg-[#1A1A1A] rounded-xl border border-slate-200 dark:border-white/10">
                                             <i class="fas fa-file-lines text-3xl mb-3 opacity-40"></i>
-                                            <p class="text-sm" data-i18n="knowledge_select_hint">选择一个文档查看</p>
+                                            <p class="text-sm" data-i18n="knowledge_select_hint">Select a document to view</p>
                                         </div>
                                         <div id="knowledge-content-viewer" class="hidden md:h-full">
                                             <div class="bg-white dark:bg-[#1A1A1A] rounded-xl border border-slate-200 dark:border-white/10 overflow-hidden flex flex-col md:h-full">

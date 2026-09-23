@@ -290,11 +290,12 @@ class AgentStreamExecutor:
         """
         if self.allow_empty_response:
             return (
-                "请说明刚才工具执行的结果。如果本次无需向用户发送任何内容"
-                "（例如任务只要求在满足特定条件时才通知，而当前条件不满足），"
-                "直接返回空即可，不要输出任何文字。"
+                "Summarize the tool results from the previous step. If nothing needs to be sent to "
+                "the user this time (for example, the task only asks to notify when a certain "
+                "condition is met and that condition is not met), simply return empty without "
+                "outputting any text."
             )
-        return "请向用户说明刚才工具执行的结果或回答用户的问题。"
+        return "Explain the tool results from the previous step to the user, or answer the user's question."
 
     def _empty_response_fallback(self) -> str:
         """Text to return when the model produced no answer at all.

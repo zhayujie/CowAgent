@@ -345,13 +345,13 @@ def test_web_console_editor_contract():
     assert "data.code === 'conflict'" in js
 
     assert ".ws-editor" in css
-    # Every string the editor shows must exist in all three locales.
+    # Every string the editor shows must exist in the (English-only) locale.
     for key in ("ws_edit", "ws_edit_save", "ws_edit_cancel", "ws_edit_saved",
                 "ws_edit_save_failed", "ws_edit_load_failed", "ws_edit_too_large",
                 "ws_edit_unsupported", "ws_edit_encoding", "ws_edit_conflict_title",
                 "ws_edit_conflict_msg", "ws_edit_overwrite", "ws_edit_discard_title",
                 "ws_edit_discard_msg", "ws_edit_discard_ok"):
-        assert console.count(f"{key}:") == 3, key
+        assert console.count(f"{key}:") == 1, key
 
     # An unchanged file must not be rewritten, and Ctrl+S must not be able to
     # race a second write against the first one's mtime.
@@ -434,13 +434,13 @@ def test_desktop_editor_contract():
     assert "?.value ?? ''" not in panel
     assert "saveEdit(ref.current?.value ?? '')" not in editor
 
-    # Every string the editor shows must exist in both locales.
+    # Every string the editor shows must exist in the (English-only) locale.
     for key in ("ws_edit", "ws_edit_save", "ws_edit_cancel", "ws_edit_unsaved",
                 "ws_edit_load_failed", "ws_edit_unsupported", "ws_edit_too_large",
                 "ws_edit_encoding", "ws_edit_discard_title", "ws_edit_discard_msg",
                 "ws_edit_discard_ok", "ws_edit_overwrite",
                 "ws_edit_conflict_title", "ws_edit_conflict_msg"):
-        assert i18n.count(f"{key}:") == 2, key
+        assert i18n.count(f"{key}:") == 1, key
 
 
 def test_desktop_editor_avoids_native_confirm():

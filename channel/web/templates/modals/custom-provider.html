@@ -14,7 +14,7 @@
 
                 <div class="space-y-4">
                     <div>
-                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5" data-i18n="models_custom_name">名称</label>
+                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5" data-i18n="models_custom_name">Name</label>
                         <input id="custom-provider-name" type="text" autocomplete="off" data-1p-ignore data-lpignore="true"
                                class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600
                                       bg-slate-50 dark:bg-white/5 text-sm text-slate-800 dark:text-slate-100
@@ -46,20 +46,20 @@
                         <i id="custom-provider-catalog-caret"
                            class="fas fa-chevron-right text-[10px] text-slate-400 dark:text-slate-500 transition-transform duration-150"></i>
                         <span class="text-sm font-medium text-slate-600 dark:text-slate-400 group-hover:text-primary-500 transition-colors"
-                              data-i18n="models_catalog">模型列表</span>
+                              data-i18n="models_catalog">Model catalog</span>
                         <span class="text-xs text-slate-400 dark:text-slate-500"
-                              data-i18n="models_catalog_advanced">（高级 · 可选）</span>
+                              data-i18n="models_catalog_advanced">(Advanced · optional)</span>
                     </button>
                     <div id="custom-provider-catalog-body" class="hidden mt-3">
                         <p class="text-xs text-slate-400 dark:text-slate-500 mb-3 leading-relaxed"
-                           data-i18n="models_catalog_custom_hint">为自定义厂商添加模型列表，配置后可在对话页面下拉选择对应模型，留空则需要手动输入模型名称</p>
+                           data-i18n="models_catalog_custom_hint">Add a model list for this custom provider so you can pick models from a dropdown on the chat page; leave empty to type the model name manually</p>
                         <div id="custom-provider-catalog-rows" class="space-y-2 max-h-80 overflow-y-auto pr-0.5"></div>
                         <div class="mt-2 flex items-center gap-2">
                             <button type="button" id="custom-provider-catalog-add"
                                     class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium
                                            bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400
                                            hover:bg-primary-100 dark:hover:bg-primary-900/50 cursor-pointer transition-colors">
-                                <i class="fas fa-plus text-[10px]"></i><span data-i18n="models_catalog_add">添加模型</span>
+                                <i class="fas fa-plus text-[10px]"></i><span data-i18n="models_catalog_add">Add model</span>
                             </button>
                         </div>
                     </div>
@@ -69,7 +69,7 @@
                 <button id="custom-provider-modal-delete"
                         class="px-3 py-2 rounded-lg text-sm font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20
                                cursor-pointer transition-colors duration-150 hidden"
-                        data-i18n="models_custom_delete">删除</button>
+                        data-i18n="models_custom_delete">Delete</button>
                 <span id="custom-provider-modal-status"
                       class="flex-1 text-xs text-primary-500 opacity-0 transition-opacity duration-300 text-left"></span>
                 <button id="custom-provider-modal-cancel"
@@ -77,11 +77,11 @@
                                text-slate-600 dark:text-slate-300 text-sm font-medium
                                hover:bg-slate-50 dark:hover:bg-white/5
                                cursor-pointer transition-colors duration-150"
-                        data-i18n="cancel">取消</button>
+                        data-i18n="cancel">Cancel</button>
                 <button id="custom-provider-modal-save"
                         class="px-4 py-2 rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-sm font-medium
                                cursor-pointer transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
-                        data-i18n="save">保存</button>
+                        data-i18n="save">Save</button>
             </div>
         </div>
     </div>

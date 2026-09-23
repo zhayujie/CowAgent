@@ -328,7 +328,7 @@ function startSSE(requestId, loadingEl, timestamp, titleInfo, replayItems) {
                 </div>
                 <div class="flex items-center gap-2 mt-1.5">
                     <span class="text-xs text-slate-400 dark:text-slate-500">${formatTime(timestamp)}</span>
-                    <button class="copy-msg-btn text-xs text-slate-300 dark:text-slate-600 hover:text-slate-500 dark:hover:text-slate-400 transition-colors cursor-pointer" title="${currentLang === 'zh' ? '复制' : 'Copy'}" style="display:none">
+                    <button class="copy-msg-btn text-xs text-slate-300 dark:text-slate-600 hover:text-slate-500 dark:hover:text-slate-400 transition-colors cursor-pointer" title="Copy" style="display:none">
                         <i class="fas fa-copy"></i>
                     </button>
                     <button class="speak-msg-btn text-xs text-slate-300 dark:text-slate-600 hover:text-slate-500 dark:hover:text-slate-400 transition-colors cursor-pointer" title="${t('speak_msg')}" style="display:none;">
@@ -688,7 +688,7 @@ function startSSE(requestId, loadingEl, timestamp, titleInfo, replayItems) {
                 if (!botEl.querySelector('.agent-cancelled-tag')) {
                     const tag = document.createElement('div');
                     tag.className = 'agent-cancelled-tag text-xs text-amber-600 dark:text-amber-400 mt-1';
-                    tag.textContent = (currentLang === 'zh') ? '已中止' : 'Cancelled';
+                    tag.textContent = 'Cancelled';
                     stepsEl.appendChild(tag);
                 }
                 resetSendBtnSendMode();

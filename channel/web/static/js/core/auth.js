@@ -50,16 +50,8 @@ function showLoginScreen() {
 
     const subtitle = document.getElementById('login-subtitle');
     const loginBtn = document.getElementById('login-btn');
-    if (currentLang === 'en') {
-        subtitle.textContent = 'Enter password to access the console';
-        loginBtn.textContent = 'Login';
-    } else if (currentLang === 'zh-Hant') {
-        subtitle.textContent = '請輸入密碼以存取控制台';
-        loginBtn.textContent = '登入';
-    } else {
-        subtitle.textContent = '请输入密码以访问控制台';
-        loginBtn.textContent = '登录';
-    }
+    subtitle.textContent = 'Enter password to access the console';
+    loginBtn.textContent = 'Login';
 
     const form = document.getElementById('login-form');
     const pwdInput = document.getElementById('login-password');
@@ -88,26 +80,14 @@ function showLoginScreen() {
                 openAuthGate();
                 initApp();
             } else {
-                if (currentLang === 'zh-Hant') {
-                    errEl.textContent = '密碼錯誤';
-                } else if (currentLang === 'zh') {
-                    errEl.textContent = '密码错误';
-                } else {
-                    errEl.textContent = 'Wrong password';
-                }
+                errEl.textContent = 'Wrong password';
                 errEl.classList.remove('hidden');
                 pwdInput.value = '';
                 pwdInput.focus();
             }
             btn.disabled = false;
         }).catch(() => {
-            if (currentLang === 'zh-Hant') {
-                errEl.textContent = '網路錯誤，請重試';
-            } else if (currentLang === 'zh') {
-                errEl.textContent = '网络错误，请重试';
-            } else {
-                errEl.textContent = 'Network error, please retry';
-            }
+            errEl.textContent = 'Network error, please retry';
             errEl.classList.remove('hidden');
             btn.disabled = false;
         });

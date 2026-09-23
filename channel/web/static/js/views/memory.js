@@ -34,10 +34,10 @@ function loadMemoryView(page) {
             const emptyTitle = emptyEl.querySelector('p');
             if (memoryCategory === 'evolution') {
                 emptyIcon.className = 'fas fa-seedling text-emerald-400 text-xl';
-                emptyTitle.textContent = currentLang === 'zh' ? '暂无进化记录' : 'No evolution records yet';
+                emptyTitle.textContent = 'No evolution records yet';
             } else {
                 emptyIcon.className = 'fas fa-brain text-purple-400 text-xl';
-                emptyTitle.textContent = currentLang === 'zh' ? '暂无记忆文件' : 'No memory files';
+                emptyTitle.textContent = 'No memory files';
             }
             emptyEl.classList.remove('hidden');
             listEl.classList.add('hidden');

@@ -215,7 +215,7 @@ const App: React.FC = () => {
       {onboardingOpen && <OnboardingWizard onDone={handleLangChange} />}
       <Lightbox />
       <ConfirmDialog />
-      <NavRail onLangChange={handleLangChange} />
+      <NavRail />
 
       {showSessions && <SessionList />}
 
@@ -270,9 +270,9 @@ const App: React.FC = () => {
             <Route path="/channels" element={<ChannelsPage baseUrl={backend.baseUrl} />} />
             <Route path="/agents" element={<AgentsPage baseUrl={backend.baseUrl} />} />
             <Route path="/tasks" element={<TasksPage baseUrl={backend.baseUrl} />} />
-            <Route path="/settings" element={<SettingsPage baseUrl={backend.baseUrl} onLangChange={handleLangChange} />} />
+            <Route path="/settings" element={<SettingsPage baseUrl={backend.baseUrl} />} />
             {/* Legacy /models route now lives as a tab inside settings */}
-            <Route path="/models" element={<SettingsPage baseUrl={backend.baseUrl} onLangChange={handleLangChange} />} />
+            <Route path="/models" element={<SettingsPage baseUrl={backend.baseUrl} />} />
             <Route path="/logs" element={<LogsPage baseUrl={backend.baseUrl} />} />
             {product.routes?.map((r) => (
               <Route key={r.path} path={r.path} element={r.element} />

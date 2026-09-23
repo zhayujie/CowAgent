@@ -112,12 +112,13 @@ def test_cancelled_agent_uses_partial_output_and_stopped_status():
     ) == "partial"
 
 
-def test_card_text_is_localized_in_chinese():
+def test_card_text_is_always_english():
+    """Chinese locales were removed; even an explicit zh config renders English."""
     try:
-        i18n.set_language("zh")
+        i18n.set_language("zh")  # resolves to "en" in the English-only build
         state = FeishuProgressState(started_at=100.0)
         state.consume({"type": "turn_start", "data": {"turn": 1}})
-        state.consume({"type": "reasoning_update", "data": {"delta": "思考"}})
+        state.consume({"type": "reasoning_update", "data": {"delta": "thinking"}})
         state.consume({"type": "message_end", "data": {"tool_calls": [{"name": "read_file"}]}})
         state.consume(
             {
@@ -128,12 +129,12 @@ def test_card_text_is_localized_in_chinese():
 
         card = state.build_card(streaming=True, now=102.0)
 
-        assert card["header"]["title"]["content"] == "处理中"
+        assert card["header"]["title"]["content"] == "Working"
         panels = _panels(card)
-        assert panels[0]["header"]["title"]["content"] == "🤔 思考"
-        assert panels[1]["header"]["title"]["content"] == "🔧 工具 (1)"
-        assert "执行中" in panels[1]["elements"][0]["text"]["content"]
+        assert panels[0]["header"]["title"]["content"] == "🤔 Thinking"
+        assert panels[1]["header"]["title"]["content"] == "🔧 Tools (1)"
+        assert "running" in panels[1]["elements"][0]["text"]["content"]
         footer = card["body"]["elements"][-1]
-        assert footer["content"] == "2.0s · 1 轮"
+        assert footer["content"] == "2.0s · 1 turn"
     finally:
         i18n.set_language("en")

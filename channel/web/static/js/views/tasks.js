@@ -414,7 +414,7 @@ function loadTasksView() {
         const allTasks = data.tasks || [];
         // Backend already sorted by enabled and next_run_at, no need to re-sort on frontend
         if (allTasks.length === 0) {
-            emptyEl.querySelector('p').textContent = currentLang === 'zh' ? '暂无定时任务' : 'No scheduled tasks';
+            emptyEl.querySelector('p').textContent = 'No scheduled tasks';
             emptyEl.classList.remove('hidden');
             listEl.classList.add('hidden');
             tasksLoaded = true;
@@ -473,7 +473,7 @@ function loadTasksView() {
                 </div>
                 <p class="text-xs text-slate-500 dark:text-slate-400 mb-2 line-clamp-2">${escapeHtml(taskContent)}</p>
                 <div class="flex items-center gap-4 text-xs text-slate-400 dark:text-slate-500">
-                    <span><i class="fas fa-clock mr-1"></i>${currentLang === 'zh' ? '下次执行' : 'Next run'}: ${nextRun}</span>
+                    <span><i class="fas fa-clock mr-1"></i>Next run: ${nextRun}</span>
                     <div class="flex-1"></div>
                     <button type="button" class="task-run-now px-2 py-1 rounded-md text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-500/10 transition-colors">
                         <i class="fas fa-play mr-1"></i>${t('task_run_now')}

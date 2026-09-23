@@ -7,12 +7,11 @@ import ModelsTab from './settings/ModelsTab'
 
 interface SettingsPageProps {
   baseUrl: string
-  onLangChange?: () => void
 }
 
 type Tab = 'basic' | 'models'
 
-const SettingsPage: React.FC<SettingsPageProps> = ({ baseUrl, onLangChange }) => {
+const SettingsPage: React.FC<SettingsPageProps> = ({ baseUrl }) => {
   const location = useLocation()
   const modelsTabHidden = product.models?.hideModelsTab === true
   // Allow deep-linking to the models tab via /settings?tab=models.
@@ -53,7 +52,6 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ baseUrl, onLangChange }) =>
         {tab === 'basic' || modelsTabHidden ? (
           <BasicSettings
             baseUrl={baseUrl}
-            onLangChange={onLangChange}
             onOpenModels={modelsTabHidden ? undefined : () => setTab('models')}
           />
         ) : (
