@@ -779,6 +779,9 @@ class ChatService:
                 elif tool.name == "agent_delegate":
                     from agent.tools.agent_delegate.agent_delegate import attach_agent_delegate_to_tool
                     attach_agent_delegate_to_tool(tool, self.agent_bridge, context)
+                elif tool.name in ("team_send", "team_inbox", "team_task"):
+                    from agent.tools.team_collab import attach_team_collab_tools
+                    attach_team_collab_tools(tool, self.agent_bridge, context)
         except Exception as e:
             logger.warning(f"[ChatService] Failed to attach context to scheduler: {e}")
 

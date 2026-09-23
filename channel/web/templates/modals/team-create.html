@@ -1,0 +1,20 @@
+        <!-- Named-team create modal: a persistent group with a leader.
+             Mirrors the group-chat picker (first pick = leader); the created
+             team is listed in the sidebar and opens as a group chat. -->
+        <div id="team-create-modal" class="agent-modal hidden">
+            <div class="agent-modal-card">
+                <h3 class="agent-modal-title" data-i18n="team_create_title">New team</h3>
+                <div class="agent-modal-body">
+                    <p class="agent-field-hint mb-2" data-i18n="team_create_name">Team name</p>
+                    <input id="team-create-name" class="agent-input w-full mb-3"
+                           data-i18n-placeholder="team_create_name_ph" placeholder="e.g. Productivity">
+                    <p class="agent-field-hint mb-3" data-i18n="team_create_hint">The first Agent you pick leads the team.</p>
+                    <div id="team-create-list" class="team-chat-list"></div>
+                </div>
+                <div class="agent-modal-foot">
+                    <span id="team-create-status" class="agent-field-hint text-red-500 mr-auto"></span>
+                    <button onclick="closeTeamCreateModal()" class="agent-btn agent-btn-text" data-i18n="cancel">Cancel</button>
+                    <button onclick="createNamedTeam()" class="agent-btn agent-btn-primary" data-i18n="team_create_start">Create team</button>
+                </div>
+            </div>
+        </div>

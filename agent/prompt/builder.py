@@ -1040,6 +1040,11 @@ def _build_team_section(runtime_info: Dict[str, Any], language: str) -> List[str
             "that is theirs straight over, and do not report their words or "
             "actions without a hand-off.",
             "",
+            "When you have the team tools: team_send leaves a teammate a "
+            "message (they are nudged to read it), team_inbox reads and "
+            "acknowledges yours, and team_task works the shared board — use "
+            "the board for work that outlives one message.",
+            "",
         ]
     return [
         "## 👥 团队会话",
@@ -1058,6 +1063,10 @@ def _build_team_section(runtime_info: Dict[str, Any], language: str) -> List[str
         "作为 agent_id 传入 (不含@符号)，并说明交给了谁、交办了什么。对用户提到同事时只用名字，"
         "回复内容不要带 @id，id 只用于内部。不要替同事回答：该由某位成员回答的问题或执行的任务直接转交，"
         "未经转交不得转述其言行。",
+        "",
+        "如果你有团队协作工具：team_send 给同事留言（对方会被提醒查看），"
+        "team_inbox 查看并确认收到的留言，team_task 操作共享任务板——"
+        "需要跨越多条消息推进的工作放任务板。",
         "",
     ]
 

@@ -5,12 +5,12 @@
                     <div class="agents-list-pane">
                         <div class="agents-list-head">
                             <div class="min-w-0">
-                                <h2 class="text-xl font-bold text-slate-800 dark:text-slate-100" data-i18n="agents_page_title">智能体团队</h2>
-                                <p class="text-sm text-slate-500 dark:text-slate-400 mt-1" data-i18n="agents_page_desc">管理团队中的智能体成员</p>
+                                <h2 class="text-xl font-bold text-slate-800 dark:text-slate-100" data-i18n="agents_page_title">Agent Team</h2>
+                                <p class="text-sm text-slate-500 dark:text-slate-400 mt-1" data-i18n="agents_page_desc">Manage the Agents on your team</p>
                             </div>
                             <button onclick="openAgentCreateForm()"
                                     class="px-4 py-2 rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-sm font-medium whitespace-nowrap shrink-0">
-                                <i class="fas fa-plus mr-1.5"></i><span data-i18n="agents_create">创建智能体</span>
+                                <i class="fas fa-plus mr-1.5"></i><span data-i18n="agents_create">New Agent</span>
                             </button>
                         </div>
                         <div id="agents-grid" class="agents-grid"></div>
@@ -24,9 +24,9 @@
                             <div id="agent-detail-identity" class="agent-detail-identity"></div>
                         </div>
                         <div class="agent-detail-tabs">
-                            <button type="button" class="agent-detail-tab active" data-tab="profile" onclick="selectAgentDetailTab('profile')" data-i18n="agents_tab_profile">概况</button>
-                            <button type="button" class="agent-detail-tab" data-tab="skills" onclick="selectAgentDetailTab('skills')" data-i18n="agents_tab_skills">能力</button>
-                            <button type="button" class="agent-detail-tab" data-tab="files" onclick="selectAgentDetailTab('files')" data-i18n="agents_tab_files">核心文件</button>
+                            <button type="button" class="agent-detail-tab active" data-tab="profile" onclick="selectAgentDetailTab('profile')" data-i18n="agents_tab_profile">Profile</button>
+                            <button type="button" class="agent-detail-tab" data-tab="skills" onclick="selectAgentDetailTab('skills')" data-i18n="agents_tab_skills">Skills</button>
+                            <button type="button" class="agent-detail-tab" data-tab="files" onclick="selectAgentDetailTab('files')" data-i18n="agents_tab_files">Core files</button>
                         </div>
                         <div id="agent-detail-profile" class="agent-detail-pane"></div>
                         <div id="agent-detail-skills" class="agent-detail-pane hidden"></div>
@@ -41,14 +41,14 @@
                                 </div>
                                 <div id="agent-core-mode" class="agent-seg" role="group">
                                     <button type="button" class="agent-seg-btn active" data-mode="edit" onclick="setAgentCoreViewMode('edit')">
-                                        <i class="fas fa-pen mr-1"></i><span data-i18n="agents_core_edit">编辑</span>
+                                        <i class="fas fa-pen mr-1"></i><span data-i18n="agents_core_edit">Edit</span>
                                     </button>
                                     <button type="button" class="agent-seg-btn" data-mode="preview" onclick="setAgentCoreViewMode('preview')">
-                                        <i class="fas fa-eye mr-1"></i><span data-i18n="agents_core_preview">预览</span>
+                                        <i class="fas fa-eye mr-1"></i><span data-i18n="agents_core_preview">Preview</span>
                                     </button>
                                 </div>
                                 <div id="agent-editor-status" class="ml-auto text-xs whitespace-nowrap opacity-0 transition-opacity duration-300"></div>
-                                <button onclick="saveAgentCoreFile()" class="px-3 h-7 rounded-lg bg-primary-500 text-white text-xs font-medium" data-i18n="save">保存</button>
+                                <button onclick="saveAgentCoreFile()" class="px-3 h-7 rounded-lg bg-primary-500 text-white text-xs font-medium" data-i18n="save">Save</button>
                             </div>
                             <div id="agent-editor-label" class="text-xs text-slate-400 dark:text-slate-500 font-mono mb-2.5 truncate"></div>
                             <textarea id="agent-core-editor" spellcheck="false" class="agent-core-editor" placeholder=""></textarea>
@@ -58,14 +58,14 @@
 
                     <div id="agent-create-form" class="agent-modal hidden">
                         <div class="agent-modal-card agent-modal-card-wide">
-                            <h3 class="agent-modal-title" data-i18n="agents_create">创建智能体</h3>
+                            <h3 class="agent-modal-title" data-i18n="agents_create">New Agent</h3>
                             <div class="agent-modal-body">
                                 <div class="agent-field">
-                                    <label class="agent-field-label" data-i18n="agents_name">名称</label>
-                                    <input id="agent-create-name" data-i18n-placeholder="agents_name_placeholder" placeholder="智能体名称" class="agent-input">
+                                    <label class="agent-field-label" data-i18n="agents_name">Name</label>
+                                    <input id="agent-create-name" data-i18n-placeholder="agents_name_placeholder" placeholder="Agent name" class="agent-input">
                                 </div>
                                 <div class="agent-field">
-                                    <label class="agent-field-label" data-i18n="agents_avatar">头像</label>
+                                    <label class="agent-field-label" data-i18n="agents_avatar">Avatar</label>
                                     <div id="agent-create-avatar" class="agent-avatar-picker"></div>
                                 </div>
                                 <div class="agent-field">
@@ -73,18 +73,18 @@
                                         <label class="agent-field-label">ID</label>
                                         <span class="agent-field-tip" data-i18n-tip="agents_id_tip"><i class="fas fa-circle-info"></i></span>
                                     </div>
-                                    <input id="agent-create-id" data-i18n-placeholder="agents_id_placeholder" placeholder="留空则自动生成" class="agent-input font-mono">
+                                    <input id="agent-create-id" data-i18n-placeholder="agents_id_placeholder" placeholder="Auto-generated if left blank" class="agent-input font-mono">
                                 </div>
                                 <div class="agent-field">
                                     <div class="agent-field-label-row">
-                                        <label class="agent-field-label" data-i18n="agents_description">职责</label>
+                                        <label class="agent-field-label" data-i18n="agents_description">Responsibilities</label>
                                         <span class="agent-field-tip" data-i18n-tip="agents_description_hint"><i class="fas fa-circle-info"></i></span>
                                     </div>
-                                    <textarea id="agent-create-description" rows="3" data-i18n-placeholder="agents_description_placeholder" placeholder="该智能体负责哪些工作、在什么场景被使用" class="agent-input agent-textarea"></textarea>
+                                    <textarea id="agent-create-description" rows="3" data-i18n-placeholder="agents_description_placeholder" placeholder="What this Agent handles and when it should be used" class="agent-input agent-textarea"></textarea>
                                 </div>
                                 <div class="agent-field">
                                     <div class="agent-field-label-row">
-                                        <label class="agent-field-label" data-i18n="agents_clone_label">从已有智能体复制</label>
+                                        <label class="agent-field-label" data-i18n="agents_clone_label">Copy from an existing agent</label>
                                         <span class="agent-field-tip" data-i18n-tip="agents_clone_hint"><i class="fas fa-circle-info"></i></span>
                                     </div>
                                     <div id="agent-create-clone" class="cfg-dropdown" tabindex="0">
@@ -97,23 +97,23 @@
                                 </div>
                                 <div class="agent-field">
                                     <div class="agent-field-label-row">
-                                        <label class="agent-field-label" data-i18n="agents_knowledge">知识库</label>
+                                        <label class="agent-field-label" data-i18n="agents_knowledge">Knowledge base</label>
                                         <span class="agent-field-tip" data-i18n-tip="agents_knowledge_hint"><i class="fas fa-circle-info"></i></span>
                                     </div>
                                     <div id="agent-create-knowledge" class="agent-seg" role="group">
                                         <button type="button" class="agent-seg-btn active" data-mode="shared">
-                                            <i class="fas fa-users mr-1"></i><span data-i18n="agents_knowledge_shared">共享</span>
+                                            <i class="fas fa-users mr-1"></i><span data-i18n="agents_knowledge_shared">Shared</span>
                                         </button>
                                         <button type="button" class="agent-seg-btn" data-mode="own">
-                                            <i class="fas fa-box-archive mr-1"></i><span data-i18n="agents_knowledge_own">独立</span>
+                                            <i class="fas fa-box-archive mr-1"></i><span data-i18n="agents_knowledge_own">Own</span>
                                         </button>
                                     </div>
                                 </div>
                             </div>
                             <div class="agent-modal-foot">
                                 <span id="agent-create-status" class="agent-field-hint text-red-500 mr-auto"></span>
-                                <button onclick="closeAgentCreateForm()" class="agent-btn agent-btn-text" data-i18n="cancel">取消</button>
-                                <button onclick="createAgentWorkspace()" class="agent-btn agent-btn-primary" data-i18n="agents_create">创建智能体</button>
+                                <button onclick="closeAgentCreateForm()" class="agent-btn agent-btn-text" data-i18n="cancel">Cancel</button>
+                                <button onclick="createAgentWorkspace()" class="agent-btn agent-btn-primary" data-i18n="agents_create">New Agent</button>
                             </div>
                         </div>
                     </div>

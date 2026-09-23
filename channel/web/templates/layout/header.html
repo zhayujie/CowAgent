@@ -14,48 +14,33 @@
 
                 <!-- Workspace panel toggle (chat view only) -->
                 <button id="workspace-toggle-btn" class="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-white/10 cursor-pointer transition-colors duration-150"
-                        onclick="toggleWorkspacePanel()" data-tooltip="工作空间" data-tooltip-pos="bottom">
+                        onclick="toggleWorkspacePanel()" data-tooltip="Workspace" data-tooltip-pos="bottom">
                     <i class="fas fa-folder-tree text-slate-500 dark:text-slate-400"></i>
                 </button>
 
                 <!-- Message navigator toggle (chat view only; shown once there are questions to jump between) -->
                 <button id="timeline-toggle-btn" class="timeline-empty p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-white/10 cursor-pointer transition-colors duration-150"
-                        data-tooltip="消息导航" data-tooltip-pos="bottom">
+                        data-tooltip="Message navigator" data-tooltip-pos="bottom">
                     <i class="fas fa-list-ul text-slate-500 dark:text-slate-400"></i>
+                </button>
+
+                <!-- Team panel toggle (team conversations only; visibility
+                     is driven by chat/team-panel.js from the session roster) -->
+                <button id="team-toggle-btn" class="hidden p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-white/10 cursor-pointer transition-colors duration-150"
+                        onclick="toggleTeamPanel()" data-tooltip="Team" data-tooltip-pos="bottom">
+                    <i class="fas fa-users text-slate-500 dark:text-slate-400"></i>
                 </button>
 
                 <!-- Breadcrumb (hidden on mobile, and in the chat view where it only repeats "Chat") -->
                 <div id="header-breadcrumb" class="hidden lg:flex items-center gap-2 text-sm min-w-0" style="display: none">
-                    <span id="breadcrumb-group" class="text-slate-400 dark:text-slate-500 truncate" data-i18n="nav_chat">对话</span>
+                    <span id="breadcrumb-group" class="text-slate-400 dark:text-slate-500 truncate" data-i18n="nav_chat">Chat</span>
                     <i class="fas fa-chevron-right text-[10px] text-slate-300 dark:text-slate-600"></i>
-                    <span id="breadcrumb-page" class="font-medium text-slate-700 dark:text-slate-200 truncate" data-i18n="menu_chat">对话</span>
+                    <span id="breadcrumb-page" class="font-medium text-slate-700 dark:text-slate-200 truncate" data-i18n="menu_chat">Chat</span>
                 </div>
 
                 <div class="flex-1"></div>
 
-                <!-- Language Selector (dropdown) -->
-                <div id="lang-selector" class="relative">
-                    <button id="lang-toggle" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium
-                                                     text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10
-                                                     cursor-pointer transition-colors duration-150"
-                            onclick="toggleLangMenu(event)">
-                        <i class="fas fa-globe text-xs"></i>
-                        <span id="lang-label">EN</span>
-                        <i class="fas fa-chevron-down text-[10px] opacity-60"></i>
-                    </button>
-                    <div id="lang-menu" class="hidden absolute right-0 mt-1 min-w-[120px] py-1 rounded-lg z-50
-                                               bg-white dark:bg-slate-800 shadow-lg ring-1 ring-black/5 dark:ring-white/10">
-                        <button class="lang-menu-item w-full text-left px-3 py-1.5 text-sm text-slate-600 dark:text-slate-300
-                                       hover:bg-slate-100 dark:hover:bg-white/10 cursor-pointer" data-lang="zh"
-                                onclick="selectLanguage('zh')">简体中文</button>
-                        <button class="lang-menu-item w-full text-left px-3 py-1.5 text-sm text-slate-600 dark:text-slate-300
-                                       hover:bg-slate-100 dark:hover:bg-white/10 cursor-pointer" data-lang="zh-Hant"
-                                onclick="selectLanguage('zh-Hant')">繁體中文</button>
-                        <button class="lang-menu-item w-full text-left px-3 py-1.5 text-sm text-slate-600 dark:text-slate-300
-                                       hover:bg-slate-100 dark:hover:bg-white/10 cursor-pointer" data-lang="en"
-                                onclick="selectLanguage('en')">English</button>
-                    </div>
-                </div>
+
 
                 <!-- Theme Toggle -->
                 <button id="theme-toggle" class="p-2 rounded-lg text-slate-500 dark:text-slate-400

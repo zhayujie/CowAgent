@@ -3,6 +3,11 @@
                 <!-- ====================================================== -->
                 <div id="view-chat" class="view active">
                   <div id="chat-main" class="chat-main relative">
+                    <!-- Member pill bar: team sessions only (hidden for solo
+                         chats). Renders member pills, the add-member entry
+                         and the parallel/single view toggle. Driven by
+                         chat/team-columns.js. -->
+                    <div id="team-pillbar" class="team-pillbar hidden"></div>
                     <!-- Messages -->
                     <div id="chat-messages" class="flex-1 overflow-y-auto">
                         <!-- Welcome Screen -->
@@ -10,7 +15,7 @@
                             <img src="/assets/logo.jpg" alt="CowAgent" class="w-16 h-16 rounded-2xl mb-6 shadow-lg shadow-primary-500/20">
                             <h1 id="welcome-title" class="text-2xl font-bold text-slate-800 dark:text-slate-100 mb-3">CowAgent</h1>
                             <p id="welcome-subtitle" class="text-slate-500 dark:text-slate-400 text-center max-w-lg mb-10 leading-relaxed"
-                               data-i18n-html="welcome_subtitle">我可以帮你解答问题、管理计算机、创造和执行技能，并通过<br>长期记忆和知识库不断成长</p>
+                               data-i18n-html="welcome_subtitle">I can help you answer questions, manage your computer, create and execute skills, and keep growing through <br> long-term memory and a personal knowledge base.</p>
 
                             <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 w-full max-w-2xl">
                                 <div class="example-card group bg-white dark:bg-[#1A1A1A] border border-slate-200 dark:border-white/10 rounded-xl p-4
@@ -19,9 +24,9 @@
                                         <div class="w-7 h-7 rounded-lg bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center">
                                             <i class="fas fa-folder-open text-blue-500 text-xs"></i>
                                         </div>
-                                        <span class="font-medium text-sm text-slate-700 dark:text-slate-200" data-i18n="example_sys_title">系统管理</span>
+                                        <span class="font-medium text-sm text-slate-700 dark:text-slate-200" data-i18n="example_sys_title">System</span>
                                     </div>
-                                    <p class="text-sm text-slate-500 dark:text-slate-400 leading-relaxed" data-i18n="example_sys_text">查看工作空间里有哪些文件</p>
+                                    <p class="text-sm text-slate-500 dark:text-slate-400 leading-relaxed" data-i18n="example_sys_text">Show me the files in the workspace</p>
                                 </div>
                                 <div class="example-card group bg-white dark:bg-[#1A1A1A] border border-slate-200 dark:border-white/10 rounded-xl p-4
                                             cursor-pointer hover:border-primary-300 dark:hover:border-primary-600 hover:shadow-md transition-all duration-200">
@@ -29,9 +34,9 @@
                                         <div class="w-7 h-7 rounded-lg bg-amber-50 dark:bg-amber-900/30 flex items-center justify-center">
                                             <i class="fas fa-clock text-amber-500 text-xs"></i>
                                         </div>
-                                        <span class="font-medium text-sm text-slate-700 dark:text-slate-200" data-i18n="example_task_title">定时任务</span>
+                                        <span class="font-medium text-sm text-slate-700 dark:text-slate-200" data-i18n="example_task_title">Scheduler</span>
                                     </div>
-                                    <p class="text-sm text-slate-500 dark:text-slate-400 leading-relaxed" data-i18n="example_task_text">1分钟后提醒我检查服务器</p>
+                                    <p class="text-sm text-slate-500 dark:text-slate-400 leading-relaxed" data-i18n="example_task_text">Remind me to check the server in 5 minutes</p>
                                 </div>
                                 <div class="example-card group bg-white dark:bg-[#1A1A1A] border border-slate-200 dark:border-white/10 rounded-xl p-4
                                             cursor-pointer hover:border-primary-300 dark:hover:border-primary-600 hover:shadow-md transition-all duration-200">
@@ -39,9 +44,9 @@
                                         <div class="w-7 h-7 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 flex items-center justify-center">
                                             <i class="fas fa-code text-emerald-500 text-xs"></i>
                                         </div>
-                                        <span class="font-medium text-sm text-slate-700 dark:text-slate-200" data-i18n="example_code_title">编程助手</span>
+                                        <span class="font-medium text-sm text-slate-700 dark:text-slate-200" data-i18n="example_code_title">Coding</span>
                                     </div>
-                                    <p class="text-sm text-slate-500 dark:text-slate-400 leading-relaxed" data-i18n="example_code_text">搜索AI资讯并生成可视化网页报告</p>
+                                    <p class="text-sm text-slate-500 dark:text-slate-400 leading-relaxed" data-i18n="example_code_text">Search today's AI news and generate a visual report webpage</p>
                                 </div>
                                 <div class="example-card group bg-white dark:bg-[#1A1A1A] border border-slate-200 dark:border-white/10 rounded-xl p-4
                                             cursor-pointer hover:border-primary-300 dark:hover:border-primary-600 hover:shadow-md transition-all duration-200">
@@ -49,9 +54,9 @@
                                         <div class="w-7 h-7 rounded-lg bg-violet-50 dark:bg-violet-900/30 flex items-center justify-center">
                                             <i class="fas fa-book text-violet-500 text-xs"></i>
                                         </div>
-                                        <span class="font-medium text-sm text-slate-700 dark:text-slate-200" data-i18n="example_knowledge_title">知识库</span>
+                                        <span class="font-medium text-sm text-slate-700 dark:text-slate-200" data-i18n="example_knowledge_title">Knowledge</span>
                                     </div>
-                                    <p class="text-sm text-slate-500 dark:text-slate-400 leading-relaxed" data-i18n="example_knowledge_text">查看知识库当前文档情况</p>
+                                    <p class="text-sm text-slate-500 dark:text-slate-400 leading-relaxed" data-i18n="example_knowledge_text">Show me the current knowledge base</p>
                                 </div>
                                 <div class="example-card group bg-white dark:bg-[#1A1A1A] border border-slate-200 dark:border-white/10 rounded-xl p-4
                                             cursor-pointer hover:border-primary-300 dark:hover:border-primary-600 hover:shadow-md transition-all duration-200">
@@ -59,9 +64,9 @@
                                         <div class="w-7 h-7 rounded-lg bg-rose-50 dark:bg-rose-900/30 flex items-center justify-center">
                                             <i class="fas fa-puzzle-piece text-rose-500 text-xs"></i>
                                         </div>
-                                        <span class="font-medium text-sm text-slate-700 dark:text-slate-200" data-i18n="example_skill_title">技能系统</span>
+                                        <span class="font-medium text-sm text-slate-700 dark:text-slate-200" data-i18n="example_skill_title">Skills</span>
                                     </div>
-                                    <p class="text-sm text-slate-500 dark:text-slate-400 leading-relaxed" data-i18n="example_skill_text">查看所有支持的工具和技能</p>
+                                    <p class="text-sm text-slate-500 dark:text-slate-400 leading-relaxed" data-i18n="example_skill_text">Show current tools and skills</p>
                                 </div>
                                 <div class="example-card group bg-white dark:bg-[#1A1A1A] border border-slate-200 dark:border-white/10 rounded-xl p-4
                                             cursor-pointer hover:border-primary-300 dark:hover:border-primary-600 hover:shadow-md transition-all duration-200"
@@ -70,9 +75,9 @@
                                         <div class="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
                                             <i class="fas fa-terminal text-slate-500 text-xs"></i>
                                         </div>
-                                        <span class="font-medium text-sm text-slate-700 dark:text-slate-200" data-i18n="example_web_title">指令中心</span>
+                                        <span class="font-medium text-sm text-slate-700 dark:text-slate-200" data-i18n="example_web_title">Commands</span>
                                     </div>
-                                    <p class="text-sm text-slate-500 dark:text-slate-400 leading-relaxed" data-i18n="example_web_text">查看全部命令</p>
+                                    <p class="text-sm text-slate-500 dark:text-slate-400 leading-relaxed" data-i18n="example_web_text">Show all commands</p>
                                 </div>
                             </div>
                         </div>
@@ -103,7 +108,7 @@
                                               class="composer-textarea"
                                               rows="1"
                                               data-i18n-placeholder="input_placeholder"
-                                              placeholder="输入消息，/ 使用指令，@ 引用文件"></textarea>
+                                              placeholder="Type a message, / for commands, @ to reference a file"></textarea>
                                 </div>
 
                                 <div class="composer-toolbar">
@@ -126,7 +131,7 @@
                                                 onclick="toggleWorkspaceSelector(event)"
                                                 data-tip-float data-tooltip-pos="top">
                                             <i class="fas fa-folder-open"></i>
-                                            <span id="workspace-selector-label" class="composer-chip-label" data-i18n="ws_default_workspace">默认空间</span>
+                                            <span id="workspace-selector-label" class="composer-chip-label" data-i18n="ws_default_workspace">Default</span>
                                             <i class="fas fa-chevron-down composer-chip-caret"></i>
                                         </button>
 
@@ -134,7 +139,7 @@
                                                 onclick="togglePermissionSelector(event)"
                                                 data-tip-float data-tooltip-pos="top">
                                             <i id="permission-selector-icon" class="fas fa-shield-halved"></i>
-                                            <span id="permission-selector-label" class="composer-chip-label" data-i18n="perm_full_access">全部可访问</span>
+                                            <span id="permission-selector-label" class="composer-chip-label" data-i18n="perm_full_access">Full access</span>
                                             <i class="fas fa-chevron-down composer-chip-caret"></i>
                                         </button>
                                     </div>
@@ -160,18 +165,18 @@
                                             <div id="composer-agent-menu" class="composer-menu composer-menu-up hidden"></div>
                                         </div>
                                         <button id="optimize-btn" type="button" class="composer-icon-btn"
-                                                data-tooltip="智能优化输入">
+                                                data-tooltip="Optimize prompt">
                                             <i class="fas fa-magic text-[13px]"></i>
                                         </button>
                                         <button id="mic-btn" type="button" class="composer-icon-btn text-slate-400"
-                                                data-tooltip="点击录音 / 再按一次结束">
+                                                data-tooltip="Click to record, click again to stop">
                                             <i class="fas fa-microphone text-sm"></i>
                                         </button>
                                         <button id="steer-btn" type="button"
                                                 class="hidden composer-send-btn composer-steer-btn"
                                                 data-i18n-aria-label="steer_active"
-                                                aria-label="引导当前任务"
-                                                data-tooltip="引导当前任务">
+                                                aria-label="Steer active task"
+                                                data-tooltip="Steer active task">
                                             <i class="fas fa-arrow-turn-up text-sm"></i>
                                         </button>
                                         <button id="send-btn" class="composer-send-btn" disabled>
@@ -186,11 +191,11 @@
                                 <div id="attach-menu" class="attach-menu hidden">
                                     <button id="attach-file-option" type="button" class="attach-menu-item" onclick="triggerFileUpload()">
                                         <i class="fas fa-file-arrow-up"></i>
-                                        <span data-i18n="attach_menu_file">上传文件</span>
+                                        <span data-i18n="attach_menu_file">Upload File</span>
                                     </button>
                                     <button id="attach-folder-option" type="button" class="attach-menu-item" onclick="triggerFolderUpload()">
                                         <i class="fas fa-folder-plus"></i>
-                                        <span data-i18n="attach_menu_folder">上传文件夹</span>
+                                        <span data-i18n="attach_menu_folder">Upload Folder</span>
                                     </button>
                                 </div>
                                 <div id="slash-menu" class="slash-menu hidden"></div>
@@ -213,40 +218,40 @@
                                 <div class="workspace-tabs">
                                     <button class="workspace-tab active" data-ws-tab="preview" onclick="switchWorkspaceTab('preview')">
                                         <i class="fas fa-eye"></i>
-                                        <span data-i18n="ws_tab_preview">预览</span>
+                                        <span data-i18n="ws_tab_preview">Preview</span>
                                     </button>
                                     <button class="workspace-tab" data-ws-tab="files" onclick="switchWorkspaceTab('files')">
                                         <i class="fas fa-folder-tree"></i>
-                                        <span data-i18n="ws_tab_files">文件</span>
+                                        <span data-i18n="ws_tab_files">Files</span>
                                     </button>
                                 </div>
                                 <div class="workspace-header-actions">
                                     <button id="ws-btn-save" class="workspace-icon-btn hidden" onclick="savePreviewEdit()"
-                                            data-i18n-title="ws_edit_save" title="保存 (Ctrl+S)">
+                                            data-i18n-title="ws_edit_save" title="Save (Ctrl+S)">
                                         <i class="fas fa-floppy-disk"></i>
                                     </button>
                                     <button id="ws-btn-edit-cancel" class="workspace-icon-btn hidden" onclick="cancelPreviewEdit()"
-                                            data-i18n-title="ws_edit_cancel" title="退出编辑">
+                                            data-i18n-title="ws_edit_cancel" title="Leave editor">
                                         <i class="fas fa-rotate-left"></i>
                                     </button>
                                     <button id="ws-btn-edit" class="workspace-icon-btn hidden" onclick="startPreviewEdit()"
-                                            data-i18n-title="ws_edit" title="编辑">
+                                            data-i18n-title="agents_core_edit" title="Edit">
                                         <i class="fas fa-pen-to-square"></i>
                                     </button>
                                     <button id="ws-btn-external" class="workspace-icon-btn hidden" onclick="openPreviewExternally()"
-                                            data-i18n-title="ws_open_external" title="在新标签页打开">
+                                            data-i18n-title="ws_open_external" title="Open in new tab">
                                         <i class="fas fa-up-right-from-square"></i>
                                     </button>
                                     <button id="ws-btn-download" class="workspace-icon-btn hidden" onclick="downloadPreviewFile()"
-                                            data-i18n-title="ws_download" title="下载">
+                                            data-i18n-title="ws_download" title="Download">
                                         <i class="fas fa-download"></i>
                                     </button>
                                     <button id="ws-btn-copy" class="workspace-icon-btn hidden" onclick="copyPreviewPath()"
-                                            data-i18n-title="ws_copy_path" title="复制路径">
+                                            data-i18n-title="ws_copy_path" title="Copy path">
                                         <i class="fas fa-link"></i>
                                     </button>
                                     <button class="workspace-icon-btn" onclick="closeWorkspacePanel(true)"
-                                            data-i18n-title="ws_close" title="关闭">
+                                            data-i18n-title="ws_close" title="Close">
                                         <i class="fas fa-xmark"></i>
                                     </button>
                                 </div>
@@ -264,16 +269,60 @@
                                     <div class="workspace-search">
                                         <i class="fas fa-magnifying-glass"></i>
                                         <input id="ws-search-input" type="text" spellcheck="false"
-                                               data-i18n-placeholder="ws_search_placeholder" placeholder="搜索文件">
+                                               data-i18n-placeholder="ws_search_placeholder" placeholder="Search files">
                                     </div>
                                     <button class="workspace-icon-btn" onclick="refreshWorkspaceTree()"
-                                            data-i18n-title="ws_refresh" title="刷新">
+                                            data-i18n-title="team_refresh" title="Refresh">
                                         <i class="fas fa-rotate-right"></i>
                                     </button>
                                 </div>
                                 <div id="ws-breadcrumb" class="workspace-breadcrumb"></div>
                                 <div id="ws-file-list" class="workspace-file-list"></div>
                             </div>
+                        </div>
+                    </aside>
+
+                    <!-- ================================================== -->
+                    <!-- Team panel: mailbox, task board, activity feed     -->
+                    <!-- Only shown for team conversations; the toggle      -->
+                    <!-- button in the header is driven by                  -->
+                    <!-- chat/team-panel.js from the session roster.        -->
+                    <!-- ================================================== -->
+                    <aside id="team-panel" class="team-panel hidden">
+                        <div class="team-panel-header">
+                            <div class="team-panel-heading">
+                                <i class="fas fa-users"></i>
+                                <span class="team-panel-title" data-i18n="team_panel_title">Team collaboration</span>
+                            </div>
+                            <div class="team-panel-actions">
+                                <button class="team-icon-btn" onclick="refreshTeamPanel()"
+                                        data-i18n-title="team_refresh" title="Refresh">
+                                    <i class="fas fa-rotate-right"></i>
+                                </button>
+                                <button class="team-icon-btn" onclick="closeTeamPanel()"
+                                        data-i18n-title="ws_close" title="Close">
+                                    <i class="fas fa-xmark"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div id="team-roster" class="team-roster"></div>
+                        <div class="team-tabs">
+                            <button id="team-tab-mailbox" class="team-tab active" onclick="setTeamPanelTab('mailbox')">
+                                <span data-i18n="team_tab_mailbox">Mailbox</span>
+                                <span id="team-tab-mailbox-badge" class="team-tab-badge hidden"></span>
+                            </button>
+                            <button id="team-tab-tasks" class="team-tab" onclick="setTeamPanelTab('tasks')">
+                                <span data-i18n="team_tab_tasks">Tasks</span>
+                                <span id="team-tab-tasks-badge" class="team-tab-badge team-tab-badge-neutral hidden"></span>
+                            </button>
+                            <button id="team-tab-activity" class="team-tab" onclick="setTeamPanelTab('activity')">
+                                <span data-i18n="team_tab_activity">Activity</span>
+                            </button>
+                        </div>
+                        <div class="team-panel-body">
+                            <div id="team-body-mailbox" class="team-body active"></div>
+                            <div id="team-body-tasks" class="team-body"></div>
+                            <div id="team-body-activity" class="team-body"></div>
                         </div>
                     </aside>
                 </div>

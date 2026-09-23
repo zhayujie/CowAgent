@@ -103,6 +103,7 @@ function _applyInputTooltips() {
     set('session-toggle-btn', 'session_history', 'bottom');
     set('workspace-toggle-btn', 'ws_toggle', 'bottom');
     set('timeline-toggle-btn', 'timeline_nav', 'bottom');
+    set('team-toggle-btn', 'team_toggle', 'bottom');
     // Optimize / mic buttons carry state-dependent tooltips managed in their
     // own setup, but on language switch we reset them to the idle label so the
     // tooltip follows the current locale.
@@ -651,6 +652,12 @@ function switchSession(newSessionId, agentId) {
     localStorage.setItem(activeSessionStorageKey(), sessionId);
     refreshWorkspaceSelector();
     refreshSessionSettings();
+    // Whatever the team panel shows describes the previous conversation;
+    // team-panel.js drops it and re-opens once the new settings arrive.
+    if (typeof teamOnSessionSwitch === 'function') teamOnSessionSwitch();
+    // Same for the member columns: what is on screen belongs to the previous
+    // conversation; the new session's settings re-organize them.
+    if (typeof teamColumnsOnSessionSwitch === 'function') teamColumnsOnSessionSwitch();
     // Reflect the new session's context in the mini pie right away.
     if (typeof _ctxRefresh === 'function') { try { _ctxRefresh({}); } catch (_) {} }
     // Reset the file/preview panel so it reflects the new session's root.

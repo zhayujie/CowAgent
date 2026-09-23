@@ -218,7 +218,6 @@ class ChannelsHandler:
 
         settings = team.resolve(conf())
         local_config = conf()
-        is_hant = i18n.get_language() == i18n.ZH_HANT
         out = []
         for inst in resolve_channel_instances(settings):
             if inst.channel_type not in MULTI_INSTANCE_READY:
@@ -241,11 +240,6 @@ class ChannelsHandler:
                 else:
                     display_val = raw_val
                 label_val = f["label"]
-                if is_hant and isinstance(label_val, str):
-                    label_val = i18n.to_traditional(label_val)
-                elif is_hant and isinstance(label_val, dict):
-                    label_val = label_val.copy()
-                    label_val["zh-Hant"] = i18n.to_traditional(label_val.get("zh", ""))
                 fields_out.append({
                     "key": f["key"],
                     "label": label_val,
@@ -254,11 +248,6 @@ class ChannelsHandler:
                     "default": f.get("default", ""),
                 })
             label_val = ch_def["label"]
-            if is_hant and isinstance(label_val, str):
-                label_val = i18n.to_traditional(label_val)
-            elif is_hant and isinstance(label_val, dict):
-                label_val = label_val.copy()
-                label_val["zh-Hant"] = i18n.to_traditional(label_val.get("zh", ""))
             card = {
                 "name": inst.channel_type,
                 "instance_id": inst.instance_id,
@@ -291,11 +280,9 @@ class ChannelsHandler:
             local_config = conf()
             active_channels = self._active_channel_set()
             channels = []
-            is_hant = i18n.get_language() == i18n.ZH_HANT
-            # The caller may be rendering in a different language than the
-            # global setting; honour it when it sends one.
+            # The caller may request a language; only English is supported now.
             req_lang = web.input().get("lang") or None
-            if req_lang not in (i18n.EN, i18n.ZH, i18n.ZH_HANT):
+            if req_lang != i18n.EN:
                 req_lang = None
             for ch_name, ch_def in self._ordered_channel_defs(req_lang):
                 fields_out = []
@@ -307,11 +294,6 @@ class ChannelsHandler:
                         display_val = raw_val
                     
                     label_val = f["label"]
-                    if is_hant and isinstance(label_val, str):
-                        label_val = i18n.to_traditional(label_val)
-                    elif is_hant and isinstance(label_val, dict):
-                        label_val = label_val.copy()
-                        label_val["zh-Hant"] = i18n.to_traditional(label_val.get("zh", ""))
 
                     fields_out.append({
                         "key": f["key"],
@@ -322,11 +304,6 @@ class ChannelsHandler:
                     })
                 
                 label_val = ch_def["label"]
-                if is_hant and isinstance(label_val, str):
-                    label_val = i18n.to_traditional(label_val)
-                elif is_hant and isinstance(label_val, dict):
-                    label_val = label_val.copy()
-                    label_val["zh-Hant"] = i18n.to_traditional(label_val.get("zh", ""))
 
                 ch_info = {
                     "name": ch_name,

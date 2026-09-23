@@ -732,6 +732,31 @@ class AgentInitializer:
                         )
                         continue
 
+                if tool_name in ("team_send", "team_inbox", "team_task"):
+                    team_collab = conf().get("team_collab", {})
+                    team_enabled = team_collab is not False and (
+                        not isinstance(team_collab, dict)
+                        or team_collab.get("enabled", True)
+                    )
+                    # Same shape as agent_delegate: the tools are pointless in
+                    # a solo chat. Wake turns for a team message run in their
+                    # own session, but agent_reply seeds that session's roster
+                    # from delegation_members before the agent is created, so
+                    # the shared check still passes for the teammate woken up.
+                    team_shared = self._is_shared_conversation(
+                        session_id or "", host_agent_id or ""
+                    )
+                    team_agents = self.agent_bridge.agent_registry.list(
+                        include_disabled=False
+                    )
+                    if not team_enabled or len(team_agents) < 2 or not team_shared:
+                        logger.debug(
+                            "[AgentInitializer] team collaboration tools skipped - "
+                            "needs team_collab enabled and a shared conversation "
+                            "with 2+ Agents"
+                        )
+                        continue
+
                 # Special handling for EnvConfig tool
                 if tool_name == "env_config":
                     from agent.tools import EnvConfig

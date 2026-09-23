@@ -215,6 +215,32 @@ def scheduler_file_global(base=None) -> Path:
     if base is not None:
         return Path(base) / "scheduler" / "tasks.json"
     return shared_root() / "scheduler" / "tasks.json"
+def team_runtime_dir(base=None) -> Path:
+    """The one team runtime store (mailbox, task board, activity) every team
+    conversation reads and writes, keyed by team id below it.
+
+    Shared, not per Agent: a message the leader sends is the same record the
+    teammate reads, so ownership lives on the records (sender/recipient) rather
+    than in the file path. Mirrors ``scheduler_file_global``.
+    """
+    if base is not None:
+        return Path(base) / "team_runtime"
+    return shared_root() / "team_runtime"
+
+
+def teams_registry_file(base=None) -> Path:
+    """Named teams created in the console (a leader plus member Agents).
+
+    Shared across Agents like the scheduler store: a team names existing
+    Agents rather than owning data of its own, so the file sits at the
+    shared root instead of inside any one Agent's workspace.
+    """
+    if base is not None:
+        return Path(base) / "teams.json"
+    return shared_root() / "teams.json"
+
+
+# --- Per Agent: what makes this Agent a different one -----------------------
 
 
 # --- Per Agent: what makes this Agent a different one -----------------------

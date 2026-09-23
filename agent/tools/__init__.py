@@ -18,6 +18,7 @@ from agent.tools.memory.memory_get import MemoryGetTool
 # Import self-evolution tools
 from agent.tools.evolution_undo.evolution_undo import EvolutionUndoTool
 from agent.tools.agent_delegate.agent_delegate import AgentDelegateTool
+from agent.tools.team_collab import TeamInboxTool, TeamSendTool, TeamTaskTool
 
 # Import sub agent tools
 from agent.tools.subagent.subagent import SubagentTool
@@ -141,6 +142,9 @@ __all__ = [
     'EvolutionUndoTool',
     'SubagentTool',
     'AgentDelegateTool',
+    'TeamInboxTool',
+    'TeamSendTool',
+    'TeamTaskTool',
     'EnvConfig',
     'SchedulerTool',
     'WebSearch',

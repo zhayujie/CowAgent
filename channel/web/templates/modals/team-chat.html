@@ -1,21 +1,21 @@
         <!-- Multi-agent new-chat modal: pick who joins, then start -->
         <div id="team-chat-modal" class="agent-modal hidden">
             <div class="agent-modal-card">
-                <h3 class="agent-modal-title" data-i18n="new_team_chat">多智能体对话</h3>
+                <h3 class="agent-modal-title" data-i18n="new_team_chat">Group chat</h3>
                 <div class="agent-modal-body">
-                    <p class="agent-field-hint mb-3" data-i18n="new_team_chat_hint">选择参与本次对话的智能体，第一个为会话的默认智能体。</p>
+                    <p class="agent-field-hint mb-3" data-i18n="new_team_chat_hint">Pick the Agents for this conversation; the first is its main Agent.</p>
                     <div class="team-chat-list-head">
-                        <span class="team-chat-list-label" data-i18n="agents_pick_hint">选择智能体</span>
+                        <span class="team-chat-list-label" data-i18n="agents_pick_hint">Pick Agents</span>
                         <button type="button" class="agent-btn agent-btn-text agent-btn-sm" onclick="openAgentCreateFromModal()">
-                            <i class="fas fa-plus mr-1"></i><span data-i18n="agents_create">创建智能体</span>
+                            <i class="fas fa-plus mr-1"></i><span data-i18n="agents_create">New Agent</span>
                         </button>
                     </div>
                     <div id="team-chat-list" class="team-chat-list"></div>
                 </div>
                 <div class="agent-modal-foot">
                     <span id="team-chat-status" class="agent-field-hint text-red-500 mr-auto"></span>
-                    <button onclick="closeTeamChatModal()" class="agent-btn agent-btn-text" data-i18n="cancel">取消</button>
-                    <button onclick="startTeamChat()" class="agent-btn agent-btn-primary" data-i18n="new_team_chat_start">开始对话</button>
+                    <button onclick="closeTeamChatModal()" class="agent-btn agent-btn-text" data-i18n="cancel">Cancel</button>
+                    <button onclick="startTeamChat()" class="agent-btn agent-btn-primary" data-i18n="new_team_chat_start">Start chat</button>
                 </div>
             </div>
         </div>

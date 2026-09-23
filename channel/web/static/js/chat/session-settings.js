@@ -48,6 +48,11 @@ async function refreshSessionSettings() {
         const data = await res.json();
         if (data.status !== 'success') return;
         _sessCfg = { model: data.model, permission: data.permission, team: data.team };
+        // The team panel button follows this session's roster (hidden for solo
+        // sessions). team-panel.js may not be present on every page shell.
+        if (typeof updateTeamPanelButton === 'function') updateTeamPanelButton();
+        // Same signal drives the member pill bar + columns (chat/team-columns.js).
+        if (typeof updateTeamColumns === 'function') updateTeamColumns();
     } catch (e) {
         // Keep whatever the chips already show rather than blanking them.
         return;

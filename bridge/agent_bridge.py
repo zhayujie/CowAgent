@@ -1617,6 +1617,12 @@ class AgentBridge:
                             attach_agent_delegate_to_tool(tool, self, context)
                         except Exception as e:
                             logger.warning(f"[AgentBridge] Failed to attach delegation context: {e}")
+                    elif tool.name in ("team_send", "team_inbox", "team_task"):
+                        try:
+                            from agent.tools.team_collab import attach_team_collab_tools
+                            attach_team_collab_tools(tool, self, context)
+                        except Exception as e:
+                            logger.warning(f"[AgentBridge] Failed to attach team collab context: {e}")
             
             # Pass context metadata to model for downstream API requests
             if context and hasattr(agent, 'model'):

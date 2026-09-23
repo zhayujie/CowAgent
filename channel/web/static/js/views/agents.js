@@ -1316,6 +1316,8 @@ function setTeamMembers(ids) {
             if (typeof setSessionParticipants === 'function') {
                 setSessionParticipants(sessionId, data.team);
             }
+            // The member pill bar / columns view follows the roster live.
+            if (typeof updateTeamColumns === 'function') updateTeamColumns();
         }
     });
 }

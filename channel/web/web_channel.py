@@ -58,6 +58,10 @@ from channel.web.api.sessions import (  # noqa: F401
 from channel.web.api.skills import (  # noqa: F401
     SkillContentHandler, SkillsHandler, ToolsHandler,
 )
+from channel.web.api.team import TeamStateHandler  # noqa: F401
+from channel.web.api.teams_store import (  # noqa: F401
+    TeamGroupDetailHandler, TeamsStoreHandler,
+)
 from channel.web.api.update import (  # noqa: F401
     UpdateCheckHandler, UpdateStartHandler, UpdateStatusHandler, VersionHandler,
 )
@@ -144,6 +148,9 @@ URLS = (
     '/api/sessions/(.*)/settings', 'SessionSettingsHandler',
     '/api/sessions/(.*)', 'SessionDetailHandler',
     '/api/history/user_messages', 'UserMessagesHandler',
+    '/api/team-groups', 'TeamsStoreHandler',
+    '/api/team-groups/(.*)', 'TeamGroupDetailHandler',
+    '/api/teams/(.*)', 'TeamStateHandler',
     '/api/history', 'HistoryHandler',
     '/api/messages/delete', 'MessageDeleteHandler',
     '/api/logs/download', 'LogsDownloadHandler',

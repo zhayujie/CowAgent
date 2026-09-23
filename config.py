@@ -17,10 +17,10 @@ from common import i18n
 # They merely document the expected format — put real values in config.json.
 available_setting = {
     # global UI language for CLI, startup logs, error messages, agent prompts
-    # and channel replies. Options: "auto" (detect from system locale, default),
-    # "zh" (Chinese) or "en" (English). An explicit value locks the language.
-    # value: auto/en/zh
-    "cow_lang": "auto",
+    # Kept for config-file compatibility. The app ships English-only, so every
+    # value ("auto"/"zh"/"en") resolves to English.
+    # value: en
+    "cow_lang": "en",
     # openai api config
     "open_ai_api_key": "",  # openai api key
     # openai api base; when use_azure_chatgpt is true, set the matching api base
@@ -332,6 +332,19 @@ available_setting = {
         "max_depth": 3,               # delegation hops in one chain (range 1-8)
         "timeout_seconds": 600,       # budget for one delegated run (range 0.01-600)
         "max_message_chars": 8000,    # size limit for one delegated task
+    },
+    # Team collaboration runtime for team conversations: a shared mailbox,
+    # a task board and an activity feed the leader and teammates all read and
+    # write (agent tools + web API). Unlike agent_delegation the exchange is
+    # asynchronous: a message is stored and read on the recipient's next turn,
+    # optionally waking them for it. Set to false to withhold the tools entirely.
+    "team_collab": {
+        "enabled": True,
+        "wake_on_message": True,      # deliver a message by running the recipient's turn
+        "max_wake_depth": 2,          # wake hops in one message chain (range 1-5)
+        "max_message_chars": 8000,    # size limit for one team message
+        "max_mailbox_messages": 200,  # messages kept per team, pruned oldest-first
+        "max_tasks": 200,             # tasks kept per team, pruned oldest-done-first
     },
     "enable_thinking": False,  # Enable deep-thinking mode for thinking-capable models
     "reasoning_effort": "high",  # Provider-native reasoning depth; allowed values depend on the active provider/model

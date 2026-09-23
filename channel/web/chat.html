@@ -51,32 +51,24 @@
     <link rel="stylesheet" href="/assets/css/markdown.css">
     <link rel="stylesheet" href="/assets/css/chat.css">
     <link rel="stylesheet" href="/assets/css/workspace.css">
+    <link rel="stylesheet" href="/assets/css/team.css">
     <link rel="stylesheet" href="/assets/css/knowledge.css">
     <link rel="stylesheet" href="/assets/css/agents.css">
     <!-- Apply theme/lang before first paint to avoid flash of unstyled content.
          This runs synchronously in <head> so the correct class is on <html>
          before any CSS or body rendering occurs. -->
     <script>
-    // Map an arbitrary locale string (zh-CN, en-US, fr ...) to 'zh' / 'zh-Hant' / 'en',
-    // or '' when unrecognized so callers can fall through to the next source.
+    // The console ships English-only. These resolvers remain as hooks because
+    // core/i18n.js still calls __cowResolveLang__; they always resolve to 'en'.
     window.__cowNormalizeLang__ = function(raw) {
         if (!raw) return '';
         var v = String(raw).trim().toLowerCase().replace('_', '-');
         if (v === 'auto') return '';
-        // Handle Traditional Chinese variants first (more specific)
-        if (v === 'zh-hant' || v.indexOf('zh-hant-') === 0 || v === 'zh-tw' || v === 'zh-hk') return 'zh-Hant';
-        // Then Simplified Chinese
-        if (v.indexOf('zh') === 0) return 'zh';
         if (v.indexOf('en') === 0) return 'en';
         return '';
     };
-    // Resolve the console language by priority:
-    //   user choice (localStorage) -> backend-detected -> browser -> 'zh'.
     window.__cowResolveLang__ = function() {
-        return window.__cowNormalizeLang__(localStorage.getItem('cow_lang'))
-            || window.__cowNormalizeLang__(window.__COW_DEFAULT_LANG__)
-            || window.__cowNormalizeLang__(navigator.language || (navigator.languages && navigator.languages[0]))
-            || 'zh';
+        return 'en';
     };
     (function() {
         // Backend-resolved default language (from cow_lang config / auto-detect).
@@ -98,6 +90,7 @@
 <!--#include templates/layout/session-panel.html-->
 
 <!--#include templates/modals/team-chat.html-->
+<!--#include templates/modals/team-create.html-->
 
         <!-- Mobile overlay for session panel (click to close) -->
         <div id="session-panel-overlay" class="session-panel-overlay hidden" onclick="closeSessionPanel()"></div>
@@ -189,8 +182,15 @@
     <script defer src="/assets/js/chat/render.js"></script>
     <script defer src="/assets/js/chat/timeline.js"></script>
     <script defer src="/assets/js/chat/new-chat.js"></script>
+    <!-- Team panel: consumes GET /api/teams/<session_id>. Its
+         updateTeamPanelButton() is called from session-settings.js, and its
+         teamOnSessionSwitch() from views/sessions.js — both at call time, so
+         position here is safe; keep it with the other chat modules. -->
+    <script defer src="/assets/js/chat/team-panel.js"></script>
+    <script defer src="/assets/js/chat/team-columns.js"></script>
 
     <script defer src="/assets/js/views/sessions.js"></script>
+    <script defer src="/assets/js/views/teams.js"></script>
     <script defer src="/assets/js/views/config.js"></script>
     <script defer src="/assets/js/views/models.js"></script>
     <script defer src="/assets/js/views/models-custom-provider.js"></script>
