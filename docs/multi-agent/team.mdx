@@ -71,6 +71,28 @@ In a group chat, each Agent answers with its own configured model, and the bubbl
 Group chats do not use the session-level model selection; each Agent uses its own configured default model, so no model selector appears in a group chat.
 </Note>
 
+## Named Teams
+
+A group chat is assembled per session. When a lineup works well, save it as a **named team**: the roster and its leader are kept in one place, so you can restart the same collaboration with one click instead of re-picking members every time.
+
+### Creating a Team
+
+Click **New team** in the sidebar's "Teams" section of the Web console:
+
+1. Give the team a **name**, for example "Productivity".
+2. **Pick the members**: the first Agent you pick leads the team, the rest join as workers.
+3. Save. The team appears in the sidebar.
+
+<Note>
+A team is a saved lineup, not a set of new Agents — creating one does not duplicate any Agent, and deleting it leaves every member Agent and its sessions untouched.
+</Note>
+
+Click a team in the sidebar to open — or resume — its session: a group chat owned by the leader, with the roster seeded from the team. It renders in the **parallel columns** view, where every member gets its own column you can message directly; the switcher in the toolbar collapses the columns back into a single chat.
+
+Team sessions follow the same collaboration rules as group chats: the leader receives tasks and delegates, and `@` directs the current turn to a specific member.
+
+Teams can also be managed over HTTP for automation: `GET /api/team-groups` lists them, `POST /api/team-groups` creates one, and `GET / PUT / DELETE /api/team-groups/{team_id}` read, update, or remove a team.
+
 ## Channel Integration
 
 A channel of the same type can run multiple instances, and each instance can be bound to a different single Agent or Agent team, appearing as its own separate assistant.
