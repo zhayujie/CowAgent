@@ -142,7 +142,6 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onDone }) => {
               <h1 className="text-2xl font-bold text-content">{t('onboarding_welcome_title')}</h1>
               <p className="text-sm text-content-secondary">{t('onboarding_welcome_desc')}</p>
             </div>
-            </div>
           </div>
         )}
 
