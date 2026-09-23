@@ -18,7 +18,6 @@ import { t, getLang } from '../i18n'
 import { useSessionStore, DEFAULT_SPACE_KEY } from '../store/sessionStore'
 import { useUIStore } from '../store/uiStore'
 import { useWorkspaceStore } from '../store/workspaceStore'
-import { useAgentStore, selectMultiAgent } from '../store/agentStore'
 import { usePlatform } from '../hooks/usePlatform'
 import type { SessionItem, TeamGroup } from '../types'
 import apiClient from '../api/client'
@@ -189,10 +188,9 @@ const SessionList: React.FC = () => {
   const [teamBusy, setTeamBusy] = useState(false)
   const activeRef = useRef<HTMLDivElement>(null)
 
-  // Named teams ride on the sidebar only when the install runs more than one
-  // Agent: a single-Agent client has nobody to team with, and the section
-  // would just be an empty promise.
-  const multiAgent = useAgentStore(selectMultiAgent)
+  // Named teams ride on the sidebar for every install, exactly like the web
+  // console: a single-Agent client still gets the section and can keep a
+  // leader-only team, since the roster is the enabled Agents either way.
   const teams = useTeamStore((s) => s.teams)
   const activeTeamId = teamOfSession(activeId)
 
@@ -203,8 +201,8 @@ const SessionList: React.FC = () => {
   // Best-effort fetch (the client swallows transport errors) whenever the
   // sidebar mounts, like the web console's loadTeams() on DOMContentLoaded.
   useEffect(() => {
-    if (multiAgent) void useTeamStore.getState().load()
-  }, [multiAgent])
+    void useTeamStore.getState().load()
+  }, [])
 
   // getLang() is included so group labels (e.g. the default-space name) rebuild
   // when the user switches language, since buildGroups resolves them via t().
@@ -371,7 +369,6 @@ const SessionList: React.FC = () => {
           if (el.scrollHeight - el.scrollTop - el.clientHeight < 80 && hasMore && !loading) loadMore()
         }}
       >
-        {multiAgent && (
           <div className="pb-1.5 mb-1 border-b border-default">
             <div className="flex items-center justify-between pl-1 pr-0.5 pt-1 pb-0.5">
               <span className="text-[11px] font-medium uppercase tracking-wide text-content-disabled">
@@ -418,7 +415,6 @@ const SessionList: React.FC = () => {
               )
             })}
           </div>
-        )}
 
         {sessions.length === 0 && !loading && (
           <div className="flex flex-col items-center justify-center h-40 text-center px-4">

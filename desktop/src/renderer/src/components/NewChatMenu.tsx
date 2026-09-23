@@ -200,7 +200,7 @@ export const TeamChatModal: React.FC<{
               <AgentAvatar agent={a} size={28} />
               <span className="flex-1 min-w-0 text-sm text-content truncate">{a.name || a.id}</span>
               {rank === 0 && (
-                <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-amber-500/10 text-amber-600 flex-shrink-0">
+                <span className="rounded-full text-[10px] font-medium px-[7px] py-px bg-[#4ABE6E] text-white flex-shrink-0">
                   {t('new_team_chat_owner')}
                 </span>
               )}
