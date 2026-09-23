@@ -1,6 +1,5 @@
 import asyncio
 import os
-import sqlite3
 from pathlib import Path
 from unittest.mock import patch
 
