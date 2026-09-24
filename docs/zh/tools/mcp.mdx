@@ -11,6 +11,18 @@ CowAgent 读取 `~/cow/mcp.json`。文件不存在时不会启用任何 MCP 工�
 
 Docker 部署时，官方 `docker-compose.yml` 已经把宿主机 `./cow` 挂载到容器内 `/home/agent/cow`（即容器用户的 `~/cow`），把 `mcp.json` 放进宿主机 `./cow/` 目录即可生效。
 
+`write` / `edit` 工具不能修改该文件。请自行编辑 `mcp.json`；被改写的配置会热更新并拉起本地子进程。
+
+### stdio 命令白名单
+
+stdio MCP server 会在本地拉起子进程。CowAgent 只会启动 `config.json` 中列出的可执行文件：
+
+```json
+"mcp_stdio_command_allowlist": ["npx", "node", "python", "python3", "uvx"]
+```
+
+`config-template.json` 已包含该列表。键缺失或为空时，**不会启动任何 stdio server**（默认拒绝）。远程 SSE / Streamable HTTP server 不受影响。
+
 ### 标准格式
 
 完全兼容 MCP 社区标准，同 Claude Desktop / Cursor 一致：
@@ -85,22 +97,9 @@ Docker 部署时，官方 `docker-compose.yml` 已经把宿主机 `./cow` 挂载
 - 密钥在 `mcp.json` 中是明文存储，注意不要提交到版本库
 - 配置了 `Authorization` 即视为静态认证，不会触发下方的 OAuth 流程，即使密钥是错的
 
-## 让 Agent 帮你配置
+## 编辑配置文件
 
-CowAgent 自带 `read` / `write` / `edit` 工具，**直接把要装的 MCP 配置发给 Agent，让它写到配置文件中：
-
-例如：
-
-```markdown
-帮我把这个 MCP 加到 ~/cow/mcp.json 里：
-
-{"mcpServers":{"fetch":{"command":"uvx","args":["mcp-server-fetch"]}}}
-```
-
-Agent 会：
-
-1. 访问 MCP 配置文件，合并新 server 配置，保留已有项
-2. 自动重载增量的 MCP Server，下一次对话即可使用相应 Tools
+请直接编辑 `~/cow/mcp.json`（Docker 下为宿主机 `./cow/mcp.json`）。保存后发送下一条消息即可加载变更。Agent 的 `write` / `edit` 工具会拒绝写入该路径。
 
 ## 网页授权（OAuth）
 
@@ -126,7 +125,7 @@ server 首次加载遇到 `401` 时会自动发起授权：本机运行会**自�
 ## 工作方式
 
 - 启动时**异步加载**：`mcp.json` 中配置的所有 server 会在后台异步加载，不阻塞主流程，对话可以立刻使用
-- **热更新**：用户或 Agent 修改 `mcp.json` 后，消息处理完成时会自动重载变更的 server，无需重启 cow
+- **热更新**：你修改 `mcp.json` 后，消息处理完成时会自动重载变更的 server，无需重启 cow。新增 stdio server 的 `command` 不在 `mcp_stdio_command_allowlist` 中时不会被启动
 - **平铺呈现**：每个 MCP server 暴露的多个方法会平铺为独立的工具，LLM 直接选择调用，不需要二次决策
 
 ## 支持的传输协议
@@ -142,9 +141,10 @@ server 首次加载遇到 `401` 时会自动发起授权：本机运行会**自�
 | 现象 | 排查方向 |
 | --- | --- |
 | 启动后 Agent 没有 MCP 工具 | 检查 `~/cow/mcp.json` 是否存在、JSON 格式是否合法 |
-| 某个 server 加载失败 | 查看启动日志中的 `[MCP] Server 'xxx' load failed`，常见为依赖未装、API Key 缺失 |
+| stdio MCP server 全部无法启动 | 在 `config.json` 设置 `mcp_stdio_command_allowlist`（例如 `["npx", "node", "python", "python3", "uvx"]`）。空列表或缺失时拒绝所有 stdio 命令 |
+| 某个 server 加载失败 | 查看启动日志中的 `[MCP] Server 'xxx' load failed`，常见为依赖未装、API Key 缺失，或 command 不在白名单中 |
 | 修改 `mcp.json` 没有生效 | 改动会在**下一条消息**生效；若 server 配置不变（如只改注释），不会触发重启 |
-| Docker 部署 | 确认宿主机 `./cow` 已挂载到容器内 `/home/agent/cow`，`mcp.json` 直接放进宿主机 `./cow/` 目录即可，或者直接对话 Agent 安装 |
+| Docker 部署 | 确认宿主机 `./cow` 已挂载到容器内 `/home/agent/cow`，把 `mcp.json` 放进宿主机 `./cow/` 目录即可 |
 
 ## MCP 市场推荐
 

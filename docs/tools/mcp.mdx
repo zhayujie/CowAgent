@@ -11,6 +11,18 @@ CowAgent reads `~/cow/mcp.json`. If the file does not exist, no MCP tools are lo
 
 For Docker deployments, the official `docker-compose.yml` already mounts the host's `./cow` directory to `/home/agent/cow` inside the container (i.e. the container user's `~/cow`). Just drop `mcp.json` into the host's `./cow/` directory and it will take effect.
 
+The `write` and `edit` tools cannot modify this file. Edit `mcp.json` yourself; a rewritten config would be hot-reloaded into a local subprocess.
+
+### Stdio command allowlist
+
+Stdio MCP servers spawn a local subprocess. CowAgent only launches executables listed in `config.json`:
+
+```json
+"mcp_stdio_command_allowlist": ["npx", "node", "python", "python3", "uvx"]
+```
+
+`config-template.json` includes this list. If the key is missing or empty, **no stdio server is started** (fail-closed). Remote SSE / Streamable HTTP servers are unaffected.
+
 ### Standard Format
 
 Fully compatible with the MCP community standard, identical to Claude Desktop / Cursor:
@@ -86,22 +98,9 @@ For a remote server that authenticates with a static API key, set `type` explici
 - The key is stored as plain text, so keep `mcp.json` out of version control.
 - An `Authorization` header selects static authentication and skips the OAuth flow below, even when the value is wrong.
 
-## Let the Agent Configure It for You
+## Editing the config file
 
-CowAgent ships with `read` / `write` / `edit` tools, so **you can simply send the MCP config to the Agent and ask it to write the file**:
-
-For example:
-
-```markdown
-Add this MCP to ~/cow/mcp.json:
-
-{"mcpServers":{"fetch":{"command":"uvx","args":["mcp-server-fetch"]}}}
-```
-
-The Agent will:
-
-1. Read the existing MCP config and merge the new server entry, preserving existing ones
-2. Hot-reload the new MCP server, so the corresponding tools become available on the next message
+Edit `~/cow/mcp.json` directly (or the host `./cow/mcp.json` in Docker). After you save, send another message so changed servers are picked up. The Agent's `write` / `edit` tools refuse this path on purpose.
 
 ## Web Authorization (OAuth)
 
@@ -127,7 +126,7 @@ When a server returns `401` on its first load, authorization starts automaticall
 ## How It Works
 
 - **Async loading at startup**: All servers configured in `mcp.json` are loaded asynchronously in the background, never blocking the main loop — chat is usable immediately.
-- **Hot reload**: When you or the Agent modifies `mcp.json`, changed servers are automatically reloaded after the current message — no need to restart cow.
+- **Hot reload**: When you modify `mcp.json`, changed servers are automatically reloaded after the current message — no need to restart cow. Newly added stdio servers whose `command` is not in `mcp_stdio_command_allowlist` are not started.
 - **Flat exposure**: Each method exposed by an MCP server appears as an individual tool. The LLM picks one directly without a second-stage decision.
 
 ## Supported Transports
@@ -143,9 +142,10 @@ When a server returns `401` on its first load, authorization starts automaticall
 | Symptom | What to Check |
 | --- | --- |
 | Agent has no MCP tools after startup | Verify that `~/cow/mcp.json` exists and contains valid JSON |
-| A specific server fails to load | Look for `[MCP] Server 'xxx' load failed` in startup logs — usually missing dependencies or API keys |
+| Stdio MCP servers never start | Set `mcp_stdio_command_allowlist` in `config.json` (e.g. `["npx", "node", "python", "python3", "uvx"]`). An empty or missing list denies all stdio commands |
+| A specific server fails to load | Look for `[MCP] Server 'xxx' load failed` in startup logs — usually missing dependencies, API keys, or a command not on the allowlist |
 | Changes to `mcp.json` aren't applied | Changes take effect on **the next message**. If the server config didn't actually change (e.g. only comments edited), no restart is triggered |
-| Docker deployment | Make sure host's `./cow` is mounted to `/home/agent/cow` in the container, then just drop `mcp.json` into host's `./cow/`. Or just ask the Agent to do it |
+| Docker deployment | Make sure host's `./cow` is mounted to `/home/agent/cow` in the container, then drop `mcp.json` into host's `./cow/` |
 
 ## Recommended MCP Marketplaces
 

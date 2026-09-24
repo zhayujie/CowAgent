@@ -1,7 +1,6 @@
 # encoding:utf-8
 
 import ast
-import copy
 import json
 import logging
 import os
@@ -345,6 +344,9 @@ available_setting = {
     "deep_dream_enabled": True,             # scheduled deep dream switch; manual /memory dream is unaffected
     "skill": {},  # Per-skill runtime config; nested keys flatten to SKILL_<NAME>_<KEY> env vars at startup
     "mcp_servers": [],  # MCP server list; each entry supports type "stdio" (local process) or "sse" (remote URL)
+    # Executables stdio MCP servers may launch. Empty or omitted = deny all
+    # (fail-closed). Example: ["npx", "node", "python", "python3", "uvx"]
+    "mcp_stdio_command_allowlist": [],
     # On-demand MCP tool retrieval: when many MCP tools are connected, inject
     # only the most query-relevant ones instead of all of them. Built-in tools
     # are always injected in full; degrades to full injection when disabled,
@@ -382,7 +384,7 @@ class Config(dict):
         
         try:
             return self[key]
-        except KeyError as e:
+        except KeyError:
             return default
         except Exception as e:
             raise e
@@ -404,7 +406,7 @@ class Config(dict):
             with open(os.path.join(get_appdata_dir(), "user_datas.pkl"), "rb") as f:
                 self.user_datas = pickle.load(f)
                 logger.debug("[Config] User datas loaded.")
-        except FileNotFoundError as e:
+        except FileNotFoundError:
             logger.debug("[Config] User datas file not found, ignore.")
         except Exception as e:
             logger.warning("[Config] User datas error: {}".format(e))

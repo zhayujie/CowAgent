@@ -60,6 +60,38 @@ def notify_server_authorized(server_name: str) -> None:
         logger.warning(f"[MCP:{server_name}] reload callback failed: {e}")
 
 
+def stdio_command_allowed(command: str, server_name: str = "") -> bool:
+    """Return whether *command* may be used to spawn a stdio MCP server.
+
+    Fail-closed: an empty or missing ``mcp_stdio_command_allowlist`` denies
+    every command. Set the list in config.json, for example
+    ``["npx", "node", "python", "python3", "uvx"]``.
+    """
+    label = server_name or "?"
+    try:
+        from config import conf
+        allowlist = conf().get("mcp_stdio_command_allowlist")
+    except Exception:
+        allowlist = None
+    if not allowlist:
+        logger.warning(
+            f"[MCP:{label}] mcp_stdio_command_allowlist is empty; "
+            f"refusing to start stdio command {command!r}. Set it in "
+            f'config.json (e.g. ["npx", "node", "python", "python3", "uvx"]).'
+        )
+        return False
+    base = os.path.basename(str(command)).lower()
+    if base.endswith(".exe"):
+        base = base[:-4]
+    if base in {str(c).lower() for c in allowlist}:
+        return True
+    logger.warning(
+        f"[MCP:{label}] command '{command}' not in "
+        f"mcp_stdio_command_allowlist, refusing to start"
+    )
+    return False
+
+
 def _oauth_redirect_uri() -> str:
     """Build the OAuth redirect URI served by the web console callback.
 
@@ -230,7 +262,7 @@ class McpClient:
             logger.warning(f"[MCP:{self.name}] stdio config missing 'command'")
             return False
 
-        if not self._command_allowed(command):
+        if not stdio_command_allowed(command, self.name):
             return False
 
         args = self.config.get("args", [])
@@ -257,30 +289,8 @@ class McpClient:
         return self._handshake()
 
     def _command_allowed(self, command: str) -> bool:
-        """Check the executable against an optional command allowlist.
-
-        Disabled by default (empty allowlist = allow everything) to keep
-        existing mcp.json configs working. Set config.json's
-        ``mcp_stdio_command_allowlist`` (e.g. ["npx", "node", "python", "uvx"])
-        to restrict which executables MCP stdio servers may launch.
-        """
-        try:
-            from config import conf
-            allowlist = conf().get("mcp_stdio_command_allowlist") or []
-        except Exception:
-            allowlist = []
-        if not allowlist:
-            return True
-        base = os.path.basename(str(command)).lower()
-        if base.endswith(".exe"):
-            base = base[:-4]
-        if base in {str(c).lower() for c in allowlist}:
-            return True
-        logger.warning(
-            f"[MCP:{self.name}] command '{command}' not in "
-            f"mcp_stdio_command_allowlist, refusing to start"
-        )
-        return False
+        """Check the executable against ``mcp_stdio_command_allowlist``."""
+        return stdio_command_allowed(command, self.name)
 
     def _build_stdio_env(self, extra_env) -> dict:
         """Build the environment for a stdio MCP subprocess.

@@ -2,10 +2,30 @@ import importlib
 import importlib.util
 import threading
 from pathlib import Path
-from typing import Dict, Any, Type
+from typing import Dict
 from agent.tools.base_tool import BaseTool
 from common.log import logger
 from config import conf
+
+
+def _stdio_hot_reload_allowed(cfg: dict) -> bool:
+    """Refuse to auto-start a stdio server whose command is not allowlisted."""
+    from agent.tools.mcp.mcp_client import stdio_command_allowed
+
+    name = cfg.get("name", "<unnamed>")
+    transport = str(cfg.get("type") or "stdio").lower()
+    if transport != "stdio":
+        return True
+    command = cfg.get("command")
+    if not command:
+        return True
+    if stdio_command_allowed(command, name):
+        return True
+    logger.warning(
+        f"[ToolManager] refusing to auto-start MCP server '{name}' from "
+        f"changed mcp.json: stdio command {command!r} is not allowlisted"
+    )
+    return False
 
 
 def _normalize_mcp_configs(raw) -> list:
@@ -279,9 +299,9 @@ class ToolManager:
                 for tool_name in missing_tools:
                     if tool_name == "google_search":
                         logger.warning(
-                            f"[ToolManager] Google Search tool is configured but may need API key.\n"
-                            f"  Get API key from: https://serper.dev\n"
-                            f"  Configure in config.json: tools.google_search.api_key"
+                            "[ToolManager] Google Search tool is configured but may need API key.\n"
+                            "  Get API key from: https://serper.dev\n"
+                            "  Configure in config.json: tools.google_search.api_key"
                         )
                     else:
                         logger.warning(f"[ToolManager] Tool '{tool_name}' is configured but could not be loaded.")
@@ -439,8 +459,16 @@ class ToolManager:
             for name in removed + changed:
                 self._teardown_mcp_server(name)
 
-            # Spin up newly added + changed servers in the background
-            to_start = [new_by_name[n] for n in added + changed]
+            # Spin up newly added + changed servers in the background.
+            # Unallowlisted stdio commands are refused here so a rewritten
+            # mcp.json cannot silently spawn a new subprocess (issue #3231).
+            to_start = []
+            for n in added + changed:
+                cfg = new_by_name[n]
+                if not _stdio_hot_reload_allowed(cfg):
+                    self._mcp_status[n] = "failed"
+                    continue
+                to_start.append(cfg)
             if to_start:
                 for cfg in to_start:
                     self._mcp_status[cfg.get("name", "<unnamed>")] = "pending"

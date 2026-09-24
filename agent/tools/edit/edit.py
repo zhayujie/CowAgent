@@ -9,6 +9,10 @@ from typing import Dict, Any
 from agent.tools.base_tool import BaseTool, ToolResult
 from common.utils import expand_path
 from agent.tools.utils.credentials import DENIED_MESSAGE, is_credential_path
+from agent.tools.utils.mcp_config_path import (
+    MCP_CONFIG_DENIED_MESSAGE,
+    is_mcp_config_path,
+)
 from agent.tools.utils.diff import (
     strip_bom,
     detect_line_ending,
@@ -82,6 +86,9 @@ class Edit(BaseTool):
         # result carries a diff whose context lines would expose the secrets.
         if is_credential_path(absolute_path):
             return ToolResult.fail(DENIED_MESSAGE)
+
+        if is_mcp_config_path(absolute_path):
+            return ToolResult.fail(MCP_CONFIG_DENIED_MESSAGE)
 
         # Check if file exists
         if not os.path.exists(absolute_path):
@@ -223,7 +230,7 @@ class Edit(BaseTool):
             ):
                 try:
                     self.memory_manager.mark_dirty()
-                except Exception as e:
+                except Exception:
                     # Don't fail the edit if memory notification fails
                     pass
             
