@@ -441,3 +441,35 @@
     border: none;
 }
 
+/* Mermaid diagrams scroll inside the bubble. The SVG keeps its own width so a
+   wide chart does not stretch the column, and its text stays selectable. */
+.msg-content .mermaid-block {
+    max-width: 100%;
+    min-width: 0;
+    overflow-wrap: normal;
+    word-break: normal;
+}
+.msg-content .mermaid-diagram {
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 10px 8px 12px;
+    scrollbar-width: thin;
+}
+.msg-content .mermaid-block pre[hidden],
+.msg-content .mermaid-diagram[hidden] {
+    display: none !important;
+}
+.msg-content .mermaid-diagram svg {
+    display: block;
+    height: auto;
+    max-width: none;
+    margin: 0 auto;
+}
+.msg-content .mermaid-diagram svg,
+.msg-content .mermaid-diagram svg * {
+    /* Mermaid's own stylesheet targets the svg id and can set user-select:none. */
+    user-select: text !important;
+    -webkit-user-select: text !important;
+}
+

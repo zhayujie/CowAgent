@@ -21,6 +21,7 @@ hand; re-download from the official source if upgrading.
 | `highlightjs/styles/github{,-dark}.min.css`         | https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/                                | 11.9.0  |
 | `highlightjs/languages/{python,javascript,java,go,bash}.min.js` | https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/                  | 11.9.0  |
 | `d3/d3.min.js`                                      | https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js (loaded lazily for the knowledge graph view)     | 7.x     |
+| `mermaid/mermaid.min.js`                            | https://cdn.jsdelivr.net/npm/mermaid@11.17.2/dist/mermaid.min.js (IIFE, `globalThis.mermaid`; loaded lazily when a mermaid fence is closed) | 11.17.2 |
 
 Notes:
 

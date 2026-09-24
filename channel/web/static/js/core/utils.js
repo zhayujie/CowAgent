@@ -157,14 +157,20 @@ function _updateScrollToBottomBtn() {
 function applyHighlighting(container) {
     const root = container || document;
     setTimeout(() => {
-        const hljsLib = getHljs();
-        root.querySelectorAll('pre code').forEach(block => {
-            if (!block.classList.contains('hljs')) {
-                hljsLib.highlightElement(block);
-            }
-        });
-        // Add language labels and copy buttons to code blocks
-        _addCodeBlockHeaders(root);
+        try {
+            const hljsLib = getHljs();
+            root.querySelectorAll('pre code').forEach(block => {
+                if (!block.classList.contains('hljs')) {
+                    hljsLib.highlightElement(block);
+                }
+            });
+            // Add language labels and copy buttons to code blocks
+            _addCodeBlockHeaders(root);
+        } finally {
+            // Draw closed mermaid fences after highlight, including ones that
+            // were inserted while .sse-streaming was still set.
+            if (typeof scheduleMermaidMount === 'function') scheduleMermaidMount(0);
+        }
     }, 0);
 }
 

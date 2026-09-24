@@ -4,6 +4,8 @@ import hljs from 'highlight.js'
 import { t } from '../i18n'
 import apiClient from '../api/client'
 import { workspaceHrefOf } from '../lib/fileKind'
+import { mermaidFenceIsOpenTail, mermaidFenceLang, mermaidOpenFenceAtEof } from '../lib/mermaidFence'
+import { useMermaidDiagrams } from '../lib/mermaidRender'
 import { useWorkspaceStore } from '../store/workspaceStore'
 import { useLightboxStore } from './Lightbox'
 
@@ -179,6 +181,26 @@ md.renderer.rules.table_close = function (tokens, idx, options, env, self) {
   return defaultTableClose(tokens, idx, options, env, self) + `</div>`
 }
 
+function escapeHtmlText(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+// Closed mermaid fences keep their source in a <pre> (copy + fallback) and a
+// slot the effect fills with an SVG once the message has stopped streaming.
+function buildMermaidBlockHtml(source: string): string {
+  const label = escapeHtmlText(t('msg_copy'))
+  return (
+    `<div class="mermaid-block code-block-wrapper" data-mermaid-pending="1">` +
+    `<div class="code-block-header">` +
+    `<span class="code-block-lang">mermaid</span>` +
+    `<button type="button" class="code-copy-btn" aria-label="${label}">${label}</button>` +
+    `</div>` +
+    `<pre class="mermaid-source"><code class="language-mermaid">${escapeHtmlText(source)}</code></pre>` +
+    `<div class="mermaid-diagram" hidden></div>` +
+    `</div>`
+  )
+}
+
 // Wrap fenced code blocks so we can render a header (lang + copy button).
 const defaultFence =
   md.renderer.rules.fence ||
@@ -187,6 +209,11 @@ const defaultFence =
   }
 md.renderer.rules.fence = function (tokens, idx, options, env, self) {
   const token = tokens[idx]
+  const lang = mermaidFenceLang(token.info)
+  const openMermaid = !!(env as { openMermaid?: boolean } | undefined)?.openMermaid
+  if (lang === 'mermaid' && !mermaidFenceIsOpenTail(tokens, idx, openMermaid)) {
+    return buildMermaidBlockHtml(token.content || '')
+  }
   const info = token.info ? token.info.trim().split(/\s+/)[0] : ''
   // Ensure the `hljs` class is present so the GitHub theme background/base
   // color applies (markdown-it only adds language-* by default).
@@ -222,12 +249,26 @@ interface MarkdownProps {
    * the knowledge viewer; without it relative srcs are left untouched.
    */
   imageBaseDir?: string
+  /**
+   * While a reply is still streaming, closed mermaid fences stay as source.
+   * The diagram is drawn once the message stops changing, so each token does
+   * not re-run the renderer.
+   */
+  streaming?: boolean
 }
 
-const Markdown: React.FC<MarkdownProps> = ({ content, onInternalLink, imageBaseDir }) => {
+const Markdown: React.FC<MarkdownProps> = ({ content, onInternalLink, imageBaseDir, streaming }) => {
   const rootRef = useRef<HTMLDivElement>(null)
 
-  const html = useMemo(() => md.render(content || '', { imageBaseDir }), [content, imageBaseDir])
+  const html = useMemo(() => {
+    const open = mermaidOpenFenceAtEof(content || '')
+    return md.render(content || '', {
+      imageBaseDir,
+      openMermaid: !!(open && open.lang === 'mermaid'),
+    })
+  }, [content, imageBaseDir])
+
+  useMermaidDiagrams(rootRef, html, !!streaming)
 
   // Delegate clicks: images zoom, copy buttons on code blocks, internal doc links.
   const handleClick = useCallback(

@@ -35,6 +35,20 @@ jobs:
           python -m pip install pytest
           python -m pip install -r requirements.txt
 
+      # tests/test_mermaid_fence.py requires SVG OK when jsdom is importable.
+      # The smoke script loads this path first, then a repo or cwd install.
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install jsdom for mermaid smoke
+        run: |
+          mkdir -p /tmp/mermaid-smoke
+          cd /tmp/mermaid-smoke
+          npm init -y
+          npm install jsdom@24
+
       - name: Run backend test suite
         run: python -m pytest tests/ -q
 
