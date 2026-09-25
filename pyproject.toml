@@ -12,6 +12,11 @@ dependencies = [
     "requests>=2.28.2",
 ]
 
+[project.optional-dependencies]
+rerank = [
+    "sentence-transformers",
+]
+
 [project.scripts]
 cow = "cli.cli:main"
 

@@ -14,6 +14,7 @@ from agent.memory.config import MemoryConfig, get_default_memory_config
 from agent.memory.storage import MemoryStorage, MemoryChunk, SearchResult
 from agent.memory.chunker import TextChunker
 from agent.memory.embedding import EmbeddingProvider, EmbeddingCache
+from agent.memory.reranker import Reranker
 from agent.memory.summarizer import MemoryFlushManager, create_memory_files_if_needed
 
 
@@ -70,15 +71,17 @@ class MemoryManager:
         self,
         config: Optional[MemoryConfig] = None,
         embedding_provider: Optional[EmbeddingProvider] = None,
-        llm_model: Optional[Any] = None
+        llm_model: Optional[Any] = None,
+        reranker: Optional[Reranker] = None
     ):
         """
         Initialize memory manager
-        
+
         Args:
             config: Memory configuration (uses global config if not provided)
             embedding_provider: Custom embedding provider (optional)
             llm_model: LLM model for summarization (optional)
+            reranker: Cross-encoder reranker for precision reordering (optional)
         """
         self.config = config or get_default_memory_config()
         
@@ -107,6 +110,8 @@ class MemoryManager:
         # Cache for query embeddings (avoids redundant API calls within a session)
         self._embedding_cache = EmbeddingCache()
 
+        # Optional cross-encoder reranker; None means un-reranked retrieval
+        self.reranker = reranker
 
         # Initialize memory flush manager
         workspace_dir = self.config.get_workspace()
@@ -210,6 +215,9 @@ class MemoryManager:
             self.config.vector_weight,
             self.config.keyword_weight
         )
+
+        # Precision-reorder with cross-encoder (no-op when no reranker configured)
+        merged = self._rerank(query, merged)
 
         # Filter by min score and limit
         filtered = [r for r in merged if r.score >= min_score]
@@ -605,7 +613,8 @@ class MemoryManager:
             'embedding_enabled': self.embedding_provider is not None,
             'embedding_provider': self.config.embedding_provider if self.embedding_provider else 'disabled',
             'embedding_model': self.config.embedding_model if self.embedding_provider else 'N/A',
-            'search_mode': 'hybrid (vector + keyword)' if self.embedding_provider else 'keyword only (FTS5)'
+            'search_mode': 'hybrid (vector + keyword)' if self.embedding_provider else 'keyword only (FTS5)',
+            'rerank_enabled': self.reranker is not None,
         }
     
     def mark_dirty(self):
@@ -755,3 +764,37 @@ class MemoryManager:
 
         merged_results.sort(key=lambda r: r.score, reverse=True)
         return merged_results
+
+    def _rerank(
+        self,
+        query: str,
+        results: List[SearchResult]
+    ) -> List[SearchResult]:
+        """Precision-reorder merged candidates with a cross-encoder reranker.
+
+        Replaces each candidate's fused score with the cross-encoder's
+        relevance judgement (still subject to temporal decay), then re-sorts.
+        Returns ``results`` unchanged when no reranker is configured, so the
+        optional ``sentence-transformers`` dependency is never required.
+        """
+        if self.reranker is None or not results:
+            return results
+
+        documents = [r.snippet for r in results]
+        scores = self.reranker.rerank(query, documents)
+
+        reranked = []
+        for result, score in zip(results, scores):
+            decayed = score * self._compute_temporal_decay(result.path)
+            reranked.append(SearchResult(
+                path=result.path,
+                start_line=result.start_line,
+                end_line=result.end_line,
+                score=decayed,
+                snippet=result.snippet,
+                source=result.source,
+                user_id=result.user_id
+            ))
+
+        reranked.sort(key=lambda r: r.score, reverse=True)
+        return reranked
