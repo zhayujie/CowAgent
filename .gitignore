@@ -75,3 +75,6 @@ desktop/resources/bin/
 
 # FuXi session state (settings, scheduled-task locks, scratchpad symlinks)
 .fuxi/
+
+# Persistent Agent Mail credentials and npm runtime created by the optional compose overlay.
+docker/cow-data/agent-mail/

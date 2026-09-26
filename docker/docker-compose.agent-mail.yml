@@ -1,0 +1,11 @@
+services:
+  chatgpt-on-wechat:
+    user: root
+    volumes:
+      - ./cow-data/agent-mail/config:/home/agent/.agently-cli
+      - ./cow-data/agent-mail/share:/home/agent/.local/share/agently-cli
+      - ./cow-data/agent-mail/npm-global:/home/agent/.npm-global
+      - ./agent-mail/entrypoint.sh:/docker-entrypoint-init.d/agent-mail-entrypoint.sh:ro
+    entrypoint: ["/bin/bash", "/docker-entrypoint-init.d/agent-mail-entrypoint.sh"]
+    environment:
+      PATH: /home/agent/.npm-global/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin

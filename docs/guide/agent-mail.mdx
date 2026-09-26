@@ -1,0 +1,18 @@
+# Agent Mail with Docker Compose
+
+Agent Mail is an optional Docker Compose overlay. The default `docker/docker-compose.yml` path is unchanged; use this overlay only when you want the Agent Mail CLI installed in the container.
+
+Start CowAgent with the base compose file and the overlay:
+
+```sh
+docker compose -f docker/docker-compose.yml -f docker/docker-compose.agent-mail.yml up -d
+```
+
+On its first start, the overlay installs the pinned Agent Mail CLI and persists its credentials and npm prefix under `./cow-data/agent-mail/` relative to the first compose file. In this checkout, that is `docker/cow-data/agent-mail/`. After the container is running, authenticate and add the skill as the non-root `agent` user:
+
+```sh
+docker compose -f docker/docker-compose.yml -f docker/docker-compose.agent-mail.yml exec -u agent chatgpt-on-wechat agently-cli auth login
+docker compose -f docker/docker-compose.yml -f docker/docker-compose.agent-mail.yml exec -u agent chatgpt-on-wechat npx -y skills add https://agent.qq.com --skill -g -y
+```
+
+The `config`, `share`, and `npm-global` directories below `docker/cow-data/agent-mail/` survive container recreation and image upgrades. Keep these directories private because they contain your Agent Mail credentials.

@@ -96,6 +96,7 @@
                   "guide/quick-start",
                   "guide/desktop",
                   "guide/manual-install",
+                  "guide/agent-mail",
                   "guide/upgrade"
                 ]
               }
