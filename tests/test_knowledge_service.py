@@ -1,6 +1,5 @@
 import asyncio
 import os
-import sqlite3
 from pathlib import Path
 from unittest.mock import patch
 
@@ -296,6 +295,90 @@ def test_import_documents_rejects_large_files_and_batches(tmp_path):
     assert too_many["code"] == 403
     assert "too many files" in too_many["message"]
     assert manager.synced == 0
+
+
+def test_delete_documents_rebuilds_index(tmp_path):
+    svc, manager = service(tmp_path)
+    (tmp_path / "knowledge/notes").mkdir()
+    (tmp_path / "knowledge/notes/a.md").write_text("# A\n", encoding="utf-8")
+    (tmp_path / "knowledge/notes/b.md").write_text("# B\n", encoding="utf-8")
+    svc.dispatch("create_document", {"path": "notes/a.md", "content": "# A\n"})
+
+    index = tmp_path / "knowledge/index.md"
+    svc.rebuild_index_md()
+    assert "[A](./notes/a.md)" in index.read_text(encoding="utf-8")
+
+    svc.dispatch("delete_documents", {"paths": ["notes/a.md"]})
+
+    content = index.read_text(encoding="utf-8")
+    assert "notes/a.md" not in content
+    assert "[B](./notes/b.md)" in content
+
+
+def test_index_summaries_survive_rebuild(tmp_path):
+    svc, _ = service(tmp_path)
+    (tmp_path / "knowledge/notes").mkdir()
+    (tmp_path / "knowledge/notes/a.md").write_text("# A\n", encoding="utf-8")
+    index = tmp_path / "knowledge/index.md"
+    index.write_text(
+        "# 知识库目录\n\n## notes\n"
+        "- [A](./notes/a.md) — what A is about\n",
+        encoding="utf-8",
+    )
+
+    svc.dispatch("create_document", {"path": "notes/b.md", "content": "# B\n"})
+
+    content = index.read_text(encoding="utf-8")
+    assert "[A](./notes/a.md) — what A is about" in content
+    assert "[B](./notes/b.md)" in content
+    # Documents that never had a summary keep the plain one-line form.
+    assert "[B](./notes/b.md) —" not in content
+
+
+def test_encoded_paths_keep_their_summary_across_rebuild(tmp_path):
+    svc, _ = service(tmp_path)
+    (tmp_path / "knowledge/notes").mkdir()
+    (tmp_path / "knowledge/notes/训练记录 07.md").write_text("# 训练记录 07\n", encoding="utf-8")
+    index = tmp_path / "knowledge/index.md"
+    index.write_text(
+        "# 知识库目录\n\n## notes\n"
+        "- [训练记录 07](./notes/%E8%AE%AD%E7%BB%83%E8%AE%B0%E5%BD%95%2007.md) — 每周训练记录\n",
+        encoding="utf-8",
+    )
+
+    svc.rebuild_index_md()
+
+    assert "— 每周训练记录" in index.read_text(encoding="utf-8")
+
+
+def test_rename_and_move_rebuild_index(tmp_path):
+    svc, _ = service(tmp_path)
+    (tmp_path / "knowledge/old").mkdir()
+    (tmp_path / "knowledge/notes").mkdir()
+    (tmp_path / "knowledge/old/a.md").write_text("# A\n", encoding="utf-8")
+    index = tmp_path / "knowledge/index.md"
+
+    svc.dispatch("rename_category", {"path": "old", "new_path": "new"})
+    content = index.read_text(encoding="utf-8")
+    assert "## new" in content and "old/" not in content
+
+    svc.dispatch("move_documents", {"paths": ["new/a.md"], "target_category": "notes"})
+    content = index.read_text(encoding="utf-8")
+    assert "[A](./notes/a.md)" in content
+    assert "new/a.md" not in content
+
+
+def test_missing_document_partial_delete_keeps_index_consistent(tmp_path):
+    svc, manager = service(tmp_path)
+    (tmp_path / "knowledge/a.md").write_text("# A\n", encoding="utf-8")
+    svc.dispatch("create_document", {"path": "a.md", "content": "# A\n"})
+
+    result = svc.dispatch("delete_documents", {"paths": ["a.md", "gone.md"]})
+
+    assert result["payload"]["deleted"] == 1
+    assert "a.md" not in (tmp_path / "knowledge/index.md").read_text(encoding="utf-8")
+    # Both the removed and the already-absent path clear their index rows.
+    assert manager.storage.deleted == ["knowledge/a.md", "knowledge/gone.md"]
 
 
 def test_build_graph_resolves_encoded_and_anchored_links(tmp_path):
