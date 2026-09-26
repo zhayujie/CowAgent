@@ -1,10 +1,8 @@
 # encoding:utf-8
 
 import time
-import json
 
 from models.openai.openai_compat import (
-    error as openai_error,
     RateLimitError,
     Timeout,
     APIError,
@@ -382,13 +380,13 @@ class AzureChatGPTBot(ChatGPTBot):
             headers = {"api-key": api_key, "Content-Type": "application/json"}
             try:
                 body = {"prompt": query, "size": conf().get("image_create_size", "256x256"),"n": 1}
-                submission = requests.post(url, headers=headers, json=body)
+                submission = requests.post(url, headers=headers, json=body, timeout=180)
                 operation_location = submission.headers['operation-location']
                 status = ""
                 while (status != "succeeded"):
                     if retry_count > 3:
                         return False, _t("图片生成失败", "Image generation failed")
-                    response = requests.get(operation_location, headers=headers)
+                    response = requests.get(operation_location, headers=headers, timeout=180)
                     status = response.json()['status']
                     retry_count += 1
                 image_url = response.json()['result']['data'][0]['url']
@@ -407,7 +405,7 @@ class AzureChatGPTBot(ChatGPTBot):
             headers = {"api-key": api_key, "Content-Type": "application/json"}
             try:
                 body = {"prompt": query, "size": conf().get("image_create_size", "1024x1024"), "quality": conf().get("dalle3_image_quality", "standard")}
-                response = requests.post(url, headers=headers, json=body)
+                response = requests.post(url, headers=headers, json=body, timeout=180)
                 response.raise_for_status()  # 检查请求是否成功
                 data = response.json()
 

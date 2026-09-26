@@ -18,7 +18,7 @@ class BaiduUnitBot(Bot):
         )
         print(post_data)
         headers = {"content-type": "application/x-www-form-urlencoded"}
-        response = requests.post(url, data=post_data.encode(), headers=headers)
+        response = requests.post(url, data=post_data.encode(), headers=headers, timeout=180)
         if response:
             reply = Reply(
                 ReplyType.TEXT,
@@ -30,7 +30,7 @@ class BaiduUnitBot(Bot):
         access_key = "YOUR_ACCESS_KEY"
         secret_key = "YOUR_SECRET_KEY"
         host = "https://aip.baidubce.com/oauth/2.0/token?grant_type=client_credentials&client_id=" + access_key + "&client_secret=" + secret_key
-        response = requests.get(host)
+        response = requests.get(host, timeout=180)
         if response:
             print(response.json())
             return response.json()["access_token"]

@@ -1,6 +1,5 @@
 # encoding:utf-8
 
-import base64
 import json
 import re
 import time
@@ -158,7 +157,8 @@ class ClaudeAPIBot(Bot, OpenAIImage):
                 f"{self.api_base}/messages",
                 headers=headers,
                 json=data,
-                proxies=proxies
+                proxies=proxies,
+                timeout=180
             )
 
             if response.status_code != 200:
@@ -347,7 +347,7 @@ class ClaudeAPIBot(Bot, OpenAIImage):
             }
             proxies = {"http": self.proxy, "https": self.proxy} if self.proxy else None
             resp = requests.post(f"{self.api_base}/messages",
-                                 headers=headers, json=data, proxies=proxies)
+                                 headers=headers, json=data, proxies=proxies, timeout=180)
 
             if resp.status_code != 200:
                 return {"error": True, "message": f"HTTP {resp.status_code}: {resp.text[:300]}"}
@@ -492,7 +492,8 @@ class ClaudeAPIBot(Bot, OpenAIImage):
             f"{self.api_base}/messages",
             headers=headers,
             json=request_params,
-            proxies=proxies
+            proxies=proxies,
+            timeout=180
         )
 
         if response.status_code != 200:
@@ -584,7 +585,8 @@ class ClaudeAPIBot(Bot, OpenAIImage):
                 headers=headers,
                 json=request_params,
                 proxies=proxies,
-                stream=True
+                stream=True,
+                timeout=180
             )
 
             if response.status_code != 200:

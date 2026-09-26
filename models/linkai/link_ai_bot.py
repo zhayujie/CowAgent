@@ -493,7 +493,7 @@ def _download_file(url: str):
         # the process CWD, which the packaged desktop app does not control and may
         # not be able to write, and state_dir owns the layout anyway.
         file_path = state_dir.tmp_dir() / file_name
-        response = requests.get(url)
+        response = requests.get(url, timeout=(5, 60))
         file_path.write_bytes(response.content)
         return str(file_path)
     except Exception as e:
