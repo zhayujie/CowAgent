@@ -1063,41 +1063,20 @@ def _build_team_section(runtime_info: Dict[str, Any], language: str) -> List[str
 
 
 def _build_runtime_section(runtime_info: Dict[str, Any], language: str) -> List[str]:
-    """Build the runtime info section - supports dynamic time."""
+    """Build the runtime info section.
+
+    Time is deliberately absent: it is served on demand by the
+    ``get_current_time`` tool so the system prompt stays byte-stable and
+    server-side prefix caching covers it across turns.
+    """
     if not runtime_info:
         return []
-    
+
     is_en = language == "en"
-    time_label = "Current time" if is_en else "当前时间"
     lines = [
         ("## ⚙️ Runtime info" if is_en else "## ⚙️ 运行时信息"),
         "",
     ]
-
-    # Add current time if available
-    # Support dynamic time via callable function
-    if callable(runtime_info.get("_get_current_time")):
-        try:
-            time_info = runtime_info["_get_current_time"]()
-            time_line = f"{time_label}: {time_info['time']} {time_info['weekday']} ({time_info['timezone']})"
-            lines.append(time_line)
-            lines.append("")
-        except Exception as e:
-            logger.warning(f"[PromptBuilder] Failed to get dynamic time: {e}")
-    elif runtime_info.get("current_time"):
-        # Fallback to static time for backward compatibility
-        time_str = runtime_info["current_time"]
-        weekday = runtime_info.get("weekday", "")
-        timezone = runtime_info.get("timezone", "")
-
-        time_line = f"{time_label}: {time_str}"
-        if weekday:
-            time_line += f" {weekday}"
-        if timezone:
-            time_line += f" ({timezone})"
-
-        lines.append(time_line)
-        lines.append("")
 
     # Add other runtime info
     model_label = "model" if is_en else "模型"
