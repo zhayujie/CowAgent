@@ -18,6 +18,7 @@ from channel.web.core._common import (
     _live_channel_manager,
     _read_config_file_for_write,
     _require_auth,
+    _write_config_file_for_write,
 )
 from common.log import logger
 from config import conf, get_data_root, get_weixin_credentials_path
@@ -444,8 +445,7 @@ class ChannelsHandler:
         config_path = os.path.join(get_data_root(), "config.json")
         file_cfg = _read_config_file_for_write()
         file_cfg.update(applied)
-        with open(config_path, "w", encoding="utf-8") as f:
-            json.dump(file_cfg, f, indent=4, ensure_ascii=False)
+        _write_config_file_for_write(config_path, file_cfg)
 
         logger.info(
             f"[WebChannel] Channel '{channel_name}' config saved: {list(applied.keys())}, "
@@ -514,8 +514,7 @@ class ChannelsHandler:
         file_cfg = _read_config_file_for_write()
         file_cfg.update(applied)
         file_cfg["channel_type"] = new_channel_type
-        with open(config_path, "w", encoding="utf-8") as f:
-            json.dump(file_cfg, f, indent=4, ensure_ascii=False)
+        _write_config_file_for_write(config_path, file_cfg)
 
         logger.info(f"[WebChannel] Channel '{channel_name}' connecting, channel_type={new_channel_type}")
 
@@ -575,8 +574,7 @@ class ChannelsHandler:
         config_path = os.path.join(get_data_root(), "config.json")
         file_cfg = _read_config_file_for_write()
         file_cfg["channel_type"] = new_channel_type
-        with open(config_path, "w", encoding="utf-8") as f:
-            json.dump(file_cfg, f, indent=4, ensure_ascii=False)
+        _write_config_file_for_write(config_path, file_cfg)
 
         def _do_stop():
             try:
@@ -811,8 +809,7 @@ class ChannelsHandler:
             config_path = os.path.join(get_data_root(), "config.json")
             file_cfg = _read_config_file_for_write()
             file_cfg["channel_type"] = new_channel_type
-            with open(config_path, "w", encoding="utf-8") as f:
-                json.dump(file_cfg, f, indent=4, ensure_ascii=False)
+            _write_config_file_for_write(config_path, file_cfg)
             logger.info(
                 f"[WebChannel] Pruned legacy channel_type '{channel_name}', "
                 f"channel_type={new_channel_type}"

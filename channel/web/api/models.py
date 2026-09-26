@@ -15,7 +15,11 @@ import os
 
 import web
 
-from channel.web.core._common import _read_config_file_for_write, _require_auth
+from channel.web.core._common import (
+    _read_config_file_for_write,
+    _require_auth,
+    _write_config_file_for_write,
+)
 from channel.web.core.providers import (
     PROVIDER_MODELS,
     is_real_key,
@@ -453,8 +457,7 @@ class ModelsHandler:
 
     @classmethod
     def _write_file_config(cls, data: dict) -> None:
-        with open(cls._config_path(), "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=4, ensure_ascii=False)
+        _write_config_file_for_write(cls._config_path(), data)
 
     @classmethod
     def _custom_provider_cards(cls, local_config: dict) -> List[dict]:
@@ -1691,7 +1694,7 @@ class ModelsHandler:
               "make_active": true            # optional, also activate it
             }
         """
-        from models.custom_provider import generate_provider_id, parse_custom_bot_type
+        from models.custom_provider import generate_provider_id
 
         name = (data.get("name") or "").strip()
         if not name:

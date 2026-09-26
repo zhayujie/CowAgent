@@ -15,7 +15,11 @@ from agent.permission import (
     global_mode as permission_global_mode,
     normalize_mode as permission_normalize_mode,
 )
-from channel.web.core._common import _read_config_file_for_write, _require_auth
+from channel.web.core._common import (
+    _read_config_file_for_write,
+    _require_auth,
+    _write_config_file_for_write,
+)
 from channel.web.core.providers import (
     PROVIDER_MODELS,
     legacy_custom_in_use,
@@ -223,8 +227,7 @@ class ConfigHandler:
                 file_cfg[section] = merged
                 local_config[section] = merged
                 applied[section] = merged
-            with open(config_path, "w", encoding="utf-8") as f:
-                json.dump(file_cfg, f, indent=4, ensure_ascii=False)
+            _write_config_file_for_write(config_path, file_cfg)
 
             logger.info(f"[WebChannel] Config updated: {list(applied.keys())}")
 

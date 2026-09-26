@@ -109,6 +109,36 @@ def _read_config_file_for_write() -> dict:
     return read_config_template()
 
 
+def _write_config_file_for_write(config_path: str, data: dict) -> None:
+    """Write ``data`` to ``config_path`` without truncating the old file first.
+
+    Every console save reads config.json, changes a few keys and writes the whole
+    dict back. Writing straight into ``config_path`` truncates it before the new
+    bytes are there, so anything that fails while serialising -- a value json
+    cannot encode, a full disk, the process being killed -- leaves a half-written
+    file. That is worse here than for a cache: ``load_config`` treats an
+    unparseable user config as corruption, and on the desktop client the self-heal
+    path quarantines the file and replaces it with config-template.json, so every
+    API key, channel credential and custom provider goes with it. A source
+    deployment instead raises and never starts. Building the result beside the
+    file and replacing it means a failed save leaves whatever was there before.
+    """
+    tmp_path = f"{config_path}.tmp"
+    try:
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=4, ensure_ascii=False)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, config_path)
+    except Exception:
+        try:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except OSError:
+            pass
+        raise
+
+
 def _get_web_password() -> str:
     # Coerce to str so non-string values in config.json (e.g. numeric password) won't break comparisons
     pwd = conf().get("web_password", "")
