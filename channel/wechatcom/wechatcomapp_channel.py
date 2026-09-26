@@ -2,6 +2,7 @@
 import io
 import os
 import time
+import uuid
 
 import requests
 import web
@@ -15,13 +16,25 @@ from bridge.reply import Reply, ReplyType
 from channel.chat_channel import ChatChannel
 from channel.wechatcom.wechatcomapp_client import WechatComAppClient
 from channel.wechatcom.wechatcomapp_message import WechatComAppMessage
+from common.i18n import t as _t
 from common.log import logger
 from common.singleton import singleton
+from common.state_dir import tmp_dir
 from common.utils import compress_imgfile, fsize, split_string_by_utf8_length, convert_webp_to_png, remove_markdown_symbol
 from config import conf
 from voice.audio_convert import any_to_amr, split_audio
 
 MAX_UTF8_LEN = 2048
+
+
+def _media_tmp_path(prefix: str, ext: str = "") -> str:
+    """Path for a file reply that has to be fetched before it can be uploaded.
+
+    The convention the other channels follow: transient media sits in the
+    agent's managed tmp dir, not in a bare ``/tmp`` that resolves against a
+    different drive depending on where the process was launched.
+    """
+    return os.path.join(str(tmp_dir()), f"{prefix}_{uuid.uuid4().hex[:8]}{ext}")
 
 
 @singleton
@@ -174,6 +187,64 @@ class WechatComAppChannel(ChatChannel):
                 return
             self.client.message.send_image(self.agent_id, receiver, response["media_id"])
             logger.info("[wechatcom] sendImage, receiver={}".format(receiver))
+        elif reply.type in (ReplyType.FILE, ReplyType.VIDEO, ReplyType.VIDEO_URL):
+            # A file reply keeps the agent's prose beside the attachment, and
+            # nothing else sends it for us: the shared text-before-file handling
+            # in ChatChannel only covers IMAGE_URL.
+            if getattr(reply, "text_content", None):
+                self.client.message.send_text(self.agent_id, receiver, reply.text_content)
+            self._send_file(reply, receiver)
+        else:
+            logger.warning("[wechatcom] unsupported reply type: {}, fallback to text".format(reply.type))
+            self.client.message.send_text(self.agent_id, receiver, str(reply.content))
+
+    def _resolve_media_path(self, path_or_url: str) -> str:
+        """The local file behind a file reply: a ``file://`` path, a URL to
+        fetch, or a plain path. Empty when it cannot be resolved."""
+        path = (path_or_url or "").strip()
+        if path.startswith("file://"):
+            path = path[7:]
+        if path.startswith(("http://", "https://")):
+            try:
+                resp = requests.get(path, timeout=60)
+                resp.raise_for_status()
+                local = _media_tmp_path("wechatcom_file", os.path.splitext(path)[1] or ".bin")
+                with open(local, "wb") as f:
+                    f.write(resp.content)
+                path = local
+            except Exception as e:
+                logger.error("[wechatcom] failed to fetch {}: {}".format(path, e))
+                return ""
+        if not os.path.exists(path):
+            logger.error("[wechatcom] file not found: {}".format(path))
+            return ""
+        return path
+
+    def _send_file(self, reply: Reply, receiver: str):
+        """Upload a file or video reply and hand WeCom the media id."""
+        path = self._resolve_media_path(reply.content)
+        if not path:
+            self.client.message.send_text(
+                self.agent_id, receiver,
+                _t("[文件发送失败：找不到文件]", "[File send failed: file not found]"))
+            return
+        is_video = (reply.type in (ReplyType.VIDEO, ReplyType.VIDEO_URL)
+                    or getattr(reply, "file_type", "") == "video")
+        media_type = "video" if is_video else "file"
+        # The bridge stamps the document's real name on the reply; a cloud
+        # URL's last segment is a random hash and would rename the user's file.
+        name = getattr(reply, "file_name", "") or os.path.basename(path)
+        try:
+            with open(path, "rb") as f:
+                response = self.client.media.upload(media_type, (name, f.read()))
+        except WeChatClientException as e:
+            logger.error("[wechatcom] upload {} failed: {}".format(media_type, e))
+            return
+        if is_video:
+            self.client.message.send_video(self.agent_id, receiver, response["media_id"])
+        else:
+            self.client.message.send_file(self.agent_id, receiver, response["media_id"])
+        logger.info("[wechatcom] send{}={}, receiver={}".format(media_type.capitalize(), path, receiver))
 
 
 class Query:
