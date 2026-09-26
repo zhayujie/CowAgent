@@ -1792,6 +1792,17 @@ class AgentStreamExecutor:
                     "prompt_tokens": int(stream_usage.get("prompt_tokens") or 0),
                     "completion_tokens": int(stream_usage.get("completion_tokens") or 0),
                     "total_tokens": int(stream_usage.get("total_tokens") or 0),
+                    # Server-side prefix cache hits. DeepSeek reports
+                    # prompt_cache_hit_tokens, Claude-compatible endpoints
+                    # cache_read_input_tokens; providers that don't report it
+                    # leave this at 0, which reads as "unknown".
+                    "prompt_cache_hit_tokens": int(
+                        (
+                            stream_usage.get("prompt_cache_hit_tokens")
+                            or stream_usage.get("cache_read_input_tokens")
+                        )
+                        or 0
+                    ),
                     # History estimate at capture time (freshness fingerprint).
                     "_est_history": est_history,
                 }
@@ -1804,6 +1815,7 @@ class AgentStreamExecutor:
             if self.agent.last_usage:
                 real_in = self.agent.last_usage.get("prompt_tokens", 0)
                 real_out = self.agent.last_usage.get("completion_tokens", 0)
+                cache_hit = self.agent.last_usage.get("prompt_cache_hit_tokens", 0)
                 # Rough estimate of what we sent this turn (system + tools +
                 # history), the same numbers the usage chart shows.
                 est_sys = self.agent._estimate_text_tokens(self.system_prompt or "")
@@ -1812,8 +1824,10 @@ class AgentStreamExecutor:
                 )
                 est_in = est_sys + est_hist
                 ratio = (est_in / real_in) if real_in else 0
+                hit_ratio = (cache_hit / real_in) if real_in else 0
                 logger.info(
                     f"[Usage] real input={real_in} output={real_out} | "
+                    f"cache_hit={cache_hit} ({hit_ratio:.0%}) | "
                     f"estimate input~={est_in} (sys~={est_sys} hist~={est_hist}) | "
                     f"est/real={ratio:.2f}"
                 )

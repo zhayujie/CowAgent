@@ -11,6 +11,9 @@ from agent.tools.ls.ls import Ls
 from agent.tools.send.send import Send
 from agent.tools.search_files.search_files import SearchFiles
 
+# Import on-demand time tool (replaces system-prompt time injection)
+from agent.tools.datetime.get_current_time import GetCurrentTimeTool
+
 # Import memory tools
 from agent.tools.memory.memory_search import MemorySearchTool
 from agent.tools.memory.memory_get import MemoryGetTool
@@ -148,6 +151,7 @@ __all__ = [
     'Vision',
     'BrowserTool',
     'McpTool',
+    'GetCurrentTimeTool',
 ]
 
 """
