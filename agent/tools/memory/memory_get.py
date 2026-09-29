@@ -79,6 +79,34 @@ class MemoryGetTool(BaseTool):
         if not path:
             return ToolResult.fail("Error: path parameter is required")
         
+        # Both line arguments come straight from the model, so coerce them the
+        # way bash/search_files coerce an integer argument before using it.
+        # Uncoerced, a string start_line -- a routine way to send a number --
+        # raised TypeError that the blanket except below reported as
+        # "Error reading memory file: '<' not supported between ...".
+        if isinstance(start_line, float) and not start_line.is_integer():
+            return ToolResult.fail(f"Error: start_line must be an integer, got: {start_line!r}")
+        try:
+            start_line = int(start_line)
+        except (TypeError, ValueError):
+            return ToolResult.fail(f"Error: start_line must be an integer, got: {start_line!r}")
+        
+        # num_lines is rejected when it is not a positive count rather than
+        # treated as "read to the end". The old `if num_lines:` branch let a
+        # negative value build an inverted range whose slice is empty, so the
+        # tool answered success with a "Lines: 2-1" header and no body -- a
+        # silent empty read the model has no way to tell from a real one. An
+        # omitted (None) num_lines still means "read the rest".
+        if num_lines is not None:
+            if isinstance(num_lines, float) and not num_lines.is_integer():
+                return ToolResult.fail(f"Error: num_lines must be an integer, got: {num_lines!r}")
+            try:
+                num_lines = int(num_lines)
+            except (TypeError, ValueError):
+                return ToolResult.fail(f"Error: num_lines must be an integer, got: {num_lines!r}")
+            if num_lines <= 0:
+                return ToolResult.fail("Error: num_lines must be a positive integer")
+        
         try:
             workspace_dir = self.memory_manager.config.get_workspace()
             
@@ -114,7 +142,7 @@ class MemoryGetTool(BaseTool):
 
             real_file = os.path.realpath(str(file_path))
             if not any(_contained(real_file, root) for root in allowed_roots):
-                return ToolResult.fail(f"Error: Access denied: path outside workspace")
+                return ToolResult.fail("Error: Access denied: path outside workspace")
             
             if not file_path.exists():
                 return ToolResult.fail(f"Error: File not found: {path}")
