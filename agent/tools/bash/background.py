@@ -89,14 +89,20 @@ def _drain(job: _Job, stream) -> None:
 
 
 def _evict_finished() -> None:
-    """Drop the oldest finished jobs once the registry is full."""
+    """Drop the oldest jobs once the registry is full.
+
+    Finished jobs are dropped first, oldest first, so a late poll still finds
+    the recent ones. Sorting on `running` as well as `started_at` is what keeps
+    that preference *and* the cap: when nothing has finished - a burst of
+    concurrent servers, the case this registry exists for - we fall back to the
+    oldest running jobs. Their processes are deliberately left alive (see the
+    module docstring); only the bookkeeping goes, so the id stops resolving and
+    read()/kill() report it as unknown, naming the jobs that did survive.
+    """
     if len(_jobs) < _MAX_JOBS:
         return
-    finished = sorted(
-        (j for j in _jobs.values() if not j.running),
-        key=lambda j: j.started_at,
-    )
-    for job in finished[: len(_jobs) - _MAX_JOBS + 1]:
+    oldest = sorted(_jobs.values(), key=lambda j: (j.running, j.started_at))
+    for job in oldest[: len(_jobs) - _MAX_JOBS + 1]:
         _cleanup(job)
         _jobs.pop(job.id, None)
 
