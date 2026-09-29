@@ -16,6 +16,7 @@ import re
 import threading
 import time
 import uuid
+from urllib.parse import urlparse
 
 import requests
 import web
@@ -29,6 +30,7 @@ from channel.wecom_bot.wecom_bot_message import WecomBotMessage
 from common import state_dir
 from common.expired_dict import ExpiredDict
 from common.log import logger
+from common.media_download import MAX_FILE_BYTES, MAX_IMAGE_BYTES, download_to_file
 from common.singleton import singleton
 from common.ws_client_compat import websocket_app_run_forever
 from config import conf
@@ -52,6 +54,35 @@ def _media_tmp_path(prefix: str, ext: str = "") -> str:
     ``tmp_dir()`` also creates the directory, which ``/tmp`` does not guarantee.
     """
     return os.path.join(str(state_dir.tmp_dir()), f"{prefix}_{uuid.uuid4().hex[:8]}{ext}")
+
+
+def _image_ext(content_type: str) -> str:
+    if "jpeg" in content_type or "jpg" in content_type:
+        return ".jpg"
+    if "webp" in content_type:
+        return ".webp"
+    if "gif" in content_type:
+        return ".gif"
+    return ".png"
+
+
+def _download_remote_media(url: str, prefix: str, ext, max_bytes: int, read_timeout: int):
+    """Download one reply into managed tmp storage; returns (path, size, content_type).
+
+    ``ext=None`` means an image whose extension comes from the Content-Type.
+    """
+    path = _media_tmp_path(prefix)
+    size, content_type = download_to_file(url, path, max_bytes, timeout=(5, read_timeout))
+    if not size:
+        os.remove(path)
+        raise ValueError("remote media is empty")
+    if ext is None:
+        ext = _image_ext(content_type)
+    elif not re.fullmatch(r"\.[A-Za-z0-9]{1,8}", ext):
+        ext = ".bin"
+    final_path = path + ext
+    os.replace(path, final_path)
+    return final_path, size, content_type
 
 
 def _escape_control_chars_inside_json_strings(s: str) -> str:
@@ -920,11 +951,9 @@ class WecomBotChannel(ChatChannel):
         try:
             if local_path.startswith(("http://", "https://")):
                 try:
-                    resp = requests.get(local_path, timeout=30)
-                    resp.raise_for_status()
-                    tmp_path = _media_tmp_path("wecom_cb_img")
-                    with open(tmp_path, "wb") as f:
-                        f.write(resp.content)
+                    tmp_path, _, _ = _download_remote_media(
+                        local_path, "wecom_cb_img", None, MAX_IMAGE_BYTES, 30
+                    )
                     temp_files.append(tmp_path)
                     local_path = tmp_path
                 except Exception as e:
@@ -1045,21 +1074,10 @@ class WecomBotChannel(ChatChannel):
 
         if local_path.startswith(("http://", "https://")):
             try:
-                resp = requests.get(local_path, timeout=30)
-                resp.raise_for_status()
-                ct = resp.headers.get("Content-Type", "")
-                if "jpeg" in ct or "jpg" in ct:
-                    ext = ".jpg"
-                elif "webp" in ct:
-                    ext = ".webp"
-                elif "gif" in ct:
-                    ext = ".gif"
-                else:
-                    ext = ".png"
-                tmp_path = _media_tmp_path("wecom_img", ext)
-                with open(tmp_path, "wb") as f:
-                    f.write(resp.content)
-                logger.info(f"[WecomBot] Image downloaded: size={len(resp.content)}, "
+                tmp_path, size, ct = _download_remote_media(
+                    local_path, "wecom_img", None, MAX_IMAGE_BYTES, 30
+                )
+                logger.info(f"[WecomBot] Image downloaded: size={size}, "
                             f"content-type={ct}, path={tmp_path}")
                 local_path = tmp_path
             except Exception as e:
@@ -1190,12 +1208,10 @@ class WecomBotChannel(ChatChannel):
 
         if local_path.startswith(("http://", "https://")):
             try:
-                resp = requests.get(local_path, timeout=60)
-                resp.raise_for_status()
-                ext = os.path.splitext(local_path)[1] or ".bin"
-                tmp_path = _media_tmp_path("wecom_file", ext)
-                with open(tmp_path, "wb") as f:
-                    f.write(resp.content)
+                ext = os.path.splitext(urlparse(local_path).path)[1] or ".bin"
+                tmp_path, _, _ = _download_remote_media(
+                    local_path, "wecom_file", ext, MAX_FILE_BYTES, 60
+                )
                 local_path = tmp_path
             except Exception as e:
                 logger.error(f"[WecomBot] Failed to download file for sending: {e}")
@@ -1239,12 +1255,10 @@ class WecomBotChannel(ChatChannel):
 
         if local_path.startswith(("http://", "https://")):
             try:
-                resp = requests.get(local_path, timeout=60)
-                resp.raise_for_status()
-                ext = os.path.splitext(local_path)[1] or ".mp3"
-                tmp_path = _media_tmp_path("wecom_voice", ext)
-                with open(tmp_path, "wb") as f:
-                    f.write(resp.content)
+                ext = os.path.splitext(urlparse(local_path).path)[1] or ".mp3"
+                tmp_path, _, _ = _download_remote_media(
+                    local_path, "wecom_voice", ext, MAX_FILE_BYTES, 60
+                )
                 local_path = tmp_path
             except Exception as e:
                 logger.error(f"[WecomBot] Failed to download voice for sending: {e}")

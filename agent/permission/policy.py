@@ -123,7 +123,7 @@ _ACTION_TOOLS: Dict[str, Tuple[str, frozenset]] = {
 _KNOWN_TOOLS = frozenset({
     "read", "ls", "search_files", "memory_search", "memory_get", "web_search",
     "web_fetch", "vision", "send", "subagent", "bash", "write", "edit",
-    "browser", "scheduler", "env_config", "evolution_undo",
+    "browser", "scheduler", "env_config", "evolution_undo", "time",
 })
 
 # MCP tools arrive with names we have never seen. Rather than guess "safe", read

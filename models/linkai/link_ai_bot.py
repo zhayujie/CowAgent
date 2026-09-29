@@ -15,7 +15,7 @@ from bridge.reply import Reply, ReplyType
 from common.log import logger
 from config import conf, pconf
 import threading
-from common import memory, utils
+from common import memory, state_dir, utils
 import base64
 import os
 from urllib.parse import urlparse
@@ -62,6 +62,8 @@ class LinkAIBot(Bot, OpenAICompatibleBot):
     # authentication failed
     AUTH_FAILED_CODE = 401
     NO_QUOTA_CODE = 406
+    # call_with_tools takes the calling agent's id, sent only alongside client_id.
+    accepts_agent_id = True
 
     def __init__(self):
         super().__init__()
@@ -166,7 +168,7 @@ class LinkAIBot(Bot, OpenAICompatibleBot):
                             else:
                                 body["sender_name"] = context.kwargs.get("msg").from_user_nickname
 
-            except Exception as e:
+            except Exception:
                 pass
             file_id = context.kwargs.get("file_id")
             if file_id:
@@ -389,7 +391,6 @@ class LinkAIBot(Bot, OpenAICompatibleBot):
             }
             url = _linkai_base_url() + "/v1/images/generations"
             res = requests.post(url, headers=headers, json=data, timeout=(5, 90))
-            t2 = time.time()
             image_url = res.json()["data"][0]["url"]
             logger.info("[OPEN_AI] image_url={}".format(image_url))
             return True, image_url
@@ -487,15 +488,14 @@ class LinkAIBot(Bot, OpenAICompatibleBot):
 
 def _download_file(url: str):
     try:
-        file_path = "tmp"
-        if not os.path.exists(file_path):
-            os.makedirs(file_path)
         file_name = os.path.basename(urlparse(url).path) or "download"  # 获取文件名
-        file_path = os.path.join(file_path, file_name)
-        response = requests.get(url)
-        with open(file_path, "wb") as f:
-            f.write(response.content)
-        return file_path
+        # Save under the agent's managed tmp dir. A literal "tmp" resolves against
+        # the process CWD, which the packaged desktop app does not control and may
+        # not be able to write, and state_dir owns the layout anyway.
+        file_path = state_dir.tmp_dir() / file_name
+        response = requests.get(url, timeout=(5, 60))
+        file_path.write_bytes(response.content)
+        return str(file_path)
     except Exception as e:
         logger.warn(e)
 
@@ -601,6 +601,9 @@ def _linkai_call_with_tools(self, messages, tools=None, stream=False, **kwargs):
             client_id = LinkAIClient.fetch_client_id()
             if client_id:
                 body["client_id"] = client_id
+                # Several agents can share one client; this names the one calling.
+                if kwargs.get("agent_id"):
+                    body["agent_id"] = kwargs["agent_id"]
         except Exception:
             pass
 

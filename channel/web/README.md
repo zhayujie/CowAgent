@@ -314,6 +314,7 @@ auth), see `tests/test_web_console_routing.py`.
 | `chat/send.js` | Send, regenerate, SSE streaming with polling fallback |
 | `chat/scheduler-notify.js` | Cross-session notifications from scheduled tasks |
 | `chat/render.js` | Message DOM: user/bot bubbles, steps, voice pills, history rendering |
+| `chat/timeline.js` | Message navigator: header button listing the conversation's questions, click one to jump to it |
 | `chat/new-chat.js` | New conversation and multi-agent conversation |
 
 ### views/ -- the management pages

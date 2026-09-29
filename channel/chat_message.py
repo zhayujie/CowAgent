@@ -33,6 +33,28 @@ _rawmsg: 原始消息对象
 """
 
 
+import os
+import re
+
+
+def safe_filename(name) -> str:
+    """Reduce a server-supplied filename to a single path component.
+
+    Channels hand us a ``file_name`` the sender picked, and every inbound
+    attachment is written to ``tmp_dir()/<file_name>``. A name holding a path
+    separator (``../../etc/x``), a backslash, or an absolute path therefore
+    redirects that write outside the directory the app manages and cleans.
+    Strip it down before it reaches ``os.path.join``; callers fall back to
+    their own generated name when this returns ``""``.
+
+    ``qq_message``/``dingtalk_message`` each carry a private copy of this
+    guard.
+    """
+    name = os.path.basename(str(name or "").replace("\\", "/"))
+    name = re.sub(r"[^\w.\- ]+", "_", name).strip(" .")
+    return name[:180]
+
+
 class ChatMessage(object):
     msg_id = None
     create_time = None

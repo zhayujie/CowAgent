@@ -1,0 +1,69 @@
+---
+title: Agent Mail
+description: Docker デプロイで Agent Mail を導入し、Agent がメールを送受信・管理できるようにする
+---
+
+[Agent Mail](https://agent.qq.com) を使うと、Agent が `agently-cli` コマンドラインツールを通じてメールを操作できます。送信、返信、転送、検索、閲覧、添付ファイルのダウンロード、受信トレイの管理に対応しています。
+
+オプションの Docker Compose オーバーレイとして提供されます。デフォルトの `docker-compose.yml` によるデプロイには影響せず、オーバーレイを有効にした場合にのみコンテナに Node.js と `agently-cli` がインストールされます。
+
+## 1. オーバーレイのダウンロード
+
+`docker-compose.yml` があるディレクトリで以下を実行します：
+
+```bash
+mkdir -p agent-mail
+curl -o docker-compose.agent-mail.yml https://raw.githubusercontent.com/zhayujie/CowAgent/master/docker/docker-compose.agent-mail.yml
+curl -o agent-mail/entrypoint.sh https://raw.githubusercontent.com/zhayujie/CowAgent/master/docker/agent-mail/entrypoint.sh
+echo "COMPOSE_FILE=docker-compose.yml:docker-compose.agent-mail.yml" >> .env
+```
+
+`.env` に書き込んだ `COMPOSE_FILE` により、このディレクトリで以降に実行する `docker compose` コマンド（アップグレード用の `pull` を含む）に自動的にオーバーレイが適用されます。
+
+## 2. コンテナの起動
+
+```bash
+sudo docker compose up -d
+```
+
+初回起動時に Node.js と `agently-cli` が `./agent-mail-data/` にダウンロードされるため、以降の再起動、コンテナの再作成、イメージのアップグレードで再ダウンロードされることはありません。ダウンロードに失敗しても CowAgent は通常どおり起動し、Agent Mail のみ利用できない状態になります。`docker compose logs` で `[agent-mail]` から始まるログを確認し、コンテナを再起動すると再試行されます。
+
+<Tip>
+  ダウンロードが遅い場合は、`docker-compose.agent-mail.yml` の `NODE_MIRROR` と `NPM_CONFIG_REGISTRY` を近くのミラーに変更してください（例：`https://npmmirror.com/mirrors/node`、`https://registry.npmmirror.com`）。
+</Tip>
+
+## 3. メールボックスの認証
+
+```bash
+sudo docker compose exec -u agent chatgpt-on-wechat agently-cli auth login
+```
+
+出力されたリンクをブラウザで開いて認証を完了します。認証が成功するとコマンドは自動的に終了します。
+
+## 4. スキルのインストール
+
+スキルは Agent に `agently-cli` の使い方を教えるものです。チャットで以下を送信します：
+
+```text
+/skill install https://agent.qq.com/.well-known/skills/agently-mail/SKILL.md
+```
+
+またはターミナルで実行します：
+
+```bash
+sudo docker compose exec -u agent chatgpt-on-wechat cow skill install https://agent.qq.com/.well-known/skills/agently-mail/SKILL.md
+```
+
+スキルはワークスペース（`./cow/skills`）にインストールされます。インストール後は、Agent にメールの送信や確認を依頼するだけです。
+
+## データの永続化
+
+| ホストディレクトリ | 内容 |
+| --- | --- |
+| `./agent-mail-data/config` | `agently-cli` の設定とログイン認証情報 |
+| `./agent-mail-data/share` | `agently-cli` のローカルデータ |
+| `./agent-mail-data/npm-global` | Node.js ランタイムと `agently-cli` |
+
+<Warning>
+  `./agent-mail-data/config` にはメールボックスの認証情報が含まれます。外部に公開したり、リポジトリにコミットしたりしないでください。
+</Warning>

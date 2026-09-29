@@ -57,14 +57,27 @@ from channel.file_cache import get_file_cache
 
 
 class FakeResponse:
-    def __init__(self, status_code=200, json_data=None, content=b"data", text=""):
+    def __init__(self, status_code=200, json_data=None, content=b"data", text="", headers=None):
         self.status_code = status_code
         self._json = json_data or {}
         self.content = content
         self.text = text
+        self.headers = headers or {}
+        self.closed = False
 
     def json(self):
         return self._json
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise RuntimeError(f"HTTP {self.status_code}")
+
+    def iter_content(self, chunk_size):
+        for index in range(0, len(self.content), chunk_size):
+            yield self.content[index:index + chunk_size]
+
+    def close(self):
+        self.closed = True
 
 
 class FakeHandler:
@@ -226,6 +239,57 @@ def test_unknown_type_logs_instead_of_missing_image(caplog):
 def test_safe_filename_keeps_basename_only():
     assert _safe_filename(r"..\..\a b.pdf") == "a b.pdf"
     assert _safe_filename("") == ""
+
+
+def test_oversized_dingtalk_download_leaves_no_file(monkeypatch, tmp_path):
+    _stub_dingtalk_download(monkeypatch, tmp_path)
+    from common.media_download import MAX_FILE_BYTES
+
+    response = FakeResponse(content=b"ignored", headers={"Content-Length": str(MAX_FILE_BYTES + 1)})
+    monkeypatch.setattr("channel.dingtalk.dingtalk_message.requests.get", lambda *a, **k: response)
+
+    msg = DingTalkMessage(
+        FakeEvent(message_type="file", extensions={"content": {"downloadCode": "dl-code", "fileName": "report.pdf"}}),
+        FakeHandler(),
+    )
+
+    assert msg.file_path is None
+    assert response.closed
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_interrupted_http_download_preserves_existing_file(monkeypatch, tmp_path):
+    from channel.dingtalk.dingtalk_message import download_image_file
+
+    destination = tmp_path / "photo.png"
+    destination.write_bytes(b"old image")
+
+    class BrokenResponse(FakeResponse):
+        def iter_content(self, chunk_size):
+            yield b"new image"
+            raise OSError("connection lost")
+
+    response = BrokenResponse()
+    monkeypatch.setattr("channel.dingtalk.dingtalk_message.requests.get", lambda *a, **k: response)
+
+    assert download_image_file("https://cdn.example/photo.png", str(tmp_path)) is None
+    assert destination.read_bytes() == b"old image"
+    assert response.closed
+    assert list(tmp_path.iterdir()) == [destination]
+
+
+def test_streamed_size_limit_cleans_up_partial_download(monkeypatch, tmp_path):
+    from channel.dingtalk import dingtalk_message
+
+    monkeypatch.setattr(dingtalk_message, "MAX_FILE_BYTES", 5)
+    response = FakeResponse(content=b"123456")
+    monkeypatch.setattr("channel.dingtalk.dingtalk_message.requests.get", lambda *a, **k: response)
+
+    assert dingtalk_message.download_image_file(
+        "https://cdn.example/photo.png", str(tmp_path)
+    ) is None
+    assert response.closed
+    assert list(tmp_path.iterdir()) == []
 
 
 _MSG_SEQ = 0

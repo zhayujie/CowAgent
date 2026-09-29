@@ -1,17 +1,10 @@
-"""Serve a hand-off that arrived from another process.
-
-The far side ran the delegation tool and picked a teammate hosted here. This
-module turns that request into the same private, delegated turn a local
-hand-off would run — same session key, same guards, same prompt — streams the
-teammate's tool steps back as they happen, and finishes with one result
-record in the shape the delegation tool already returns.
-
-Transport-agnostic: the caller supplies ``send_chunk`` and whatever carried
-the request is none of this module's business.
-"""
+"""Serve an incoming hand-off: a delegated sub-task, a turn the user addressed
+to a local teammate (``mode=speak``, answered as itself), or clearing that
+teammate's context (``mode=clear``)."""
 
 from __future__ import annotations
 
+import hashlib
 import time
 import uuid
 from typing import Callable
@@ -20,33 +13,26 @@ from bridge.context import Context, ContextType
 from bridge.reply import ReplyType
 from common.log import logger
 
-CHUNK_TOOL_STEP = "tool_step"
+CHUNK_EVENT = "event"
 CHUNK_RESULT = "result"
 
 
 def serve_invoke(payload: dict, agent_bridge, send_chunk: Callable[[dict], None]) -> None:
-    """Run one incoming hand-off to completion, reporting through ``send_chunk``.
+    """Run one incoming hand-off, reporting through ``send_chunk``; never raises.
 
-    ``payload`` fields (all optional except ``target_agent_id`` and ``task``):
-
-    - ``request_id``: echoed in every chunk so the caller can correlate.
-    - ``source_agent_id`` / ``source_name``: who is asking.
-    - ``target_agent_id``: the local Agent to run; ``target_aliases`` lists
-      other ids the caller knows that Agent by, which are folded onto the
-      local id wherever they appear.
-    - ``task``, ``root_session_id``, ``trace``, ``depth``, ``members``,
-      ``peers``: the delegated turn's context, mirroring a local hand-off.
-    - ``timeout``: seconds the caller is prepared to wait.
-
-    Never raises: any refusal or failure is reported as a failed result.
+    payload: request_id, mode ("delegate" | "speak" | "clear"), source_agent_id,
+    source_name, target_agent_id, target_aliases, task, root_session_id,
+    trace, depth, members, peers, history (speak only), timeout.
     """
-    from agent.multiagent import get_transport
+    from agent.multiagent import MODE_CLEAR, MODE_SPEAK, get_transport
     from agent.tools.agent_delegate.agent_delegate import (
         TASK_SOURCE,
         AgentDelegateTool,
         DelegationPolicy,
+        _DelegateView,
         _relay_lock,
         delegated_prompt,
+        delegated_result_text,
     )
 
     request_id = str(payload.get("request_id") or "")
@@ -66,15 +52,23 @@ def serve_invoke(payload: dict, agent_bridge, send_chunk: Callable[[dict], None]
             "agent_name": agent_name,
         })
 
+    mode = str(payload.get("mode") or "").strip()
+
     if agent_bridge is None:
         return fail("agent runtime not available")
-    if not addressed_id or not task:
+    if not addressed_id or (not task and mode != MODE_CLEAR):
         return fail("target_agent_id and task are required")
 
     try:
         target = agent_bridge.agent_registry.get_addressed(addressed_id, require_enabled=True)
     except Exception:
         return fail(f"Target Agent '{addressed_id}' is not available")
+
+    if mode == MODE_CLEAR:
+        # Not a turn: no policy, no roster, nothing to stream.
+        return _serve_clear(
+            payload, send_chunk, target=target, request_id=request_id
+        )
 
     try:
         from config import conf
@@ -128,6 +122,19 @@ def serve_invoke(payload: dict, agent_bridge, send_chunk: Callable[[dict], None]
         )
 
     root_session_id = str(payload.get("root_session_id") or uuid.uuid4())
+
+    if mode == MODE_SPEAK:
+        return _serve_speak(
+            payload, agent_bridge, send_chunk, target=target, local=local,
+            members=members, request_id=request_id, task=task,
+            root_session_id=root_session_id,
+        )
+
+    try:
+        timeout = float(payload.get("timeout") or policy.timeout_seconds)
+    except (TypeError, ValueError):
+        timeout = policy.timeout_seconds
+
     session_id = AgentDelegateTool._session_id(source_id, target.id, root_session_id)
     from common.utils import current_agent_run_id
 
@@ -150,21 +157,16 @@ def serve_invoke(payload: dict, agent_bridge, send_chunk: Callable[[dict], None]
     context["parent_run_id"] = current_agent_run_id() or ""
     context["task_source"] = TASK_SOURCE
 
+    # The caller's side brackets and attributes these; here we only decide what
+    # crosses the wire, and it is the same set a local hand-off relays.
+    _forwarded = (*_DelegateView.RELAYED, _DelegateView.START, _DelegateView.END)
+
     def forward(event) -> None:
-        # Only tool steps travel back: prose and reasoning belong to this
-        # teammate's own run, exactly as for a local hand-off.
-        if isinstance(event, dict) and event.get("type") in (
-            "tool_execution_start", "tool_execution_end",
-        ):
+        if isinstance(event, dict) and event.get("type") in _forwarded:
             try:
-                send_chunk({"chunk_type": CHUNK_TOOL_STEP, "request_id": request_id, "event": event})
+                send_chunk({"chunk_type": CHUNK_EVENT, "request_id": request_id, "event": event})
             except Exception as exc:
                 logger.debug(f"[MultiAgent] step forward failed: {exc}")
-
-    try:
-        timeout = float(payload.get("timeout") or policy.timeout_seconds)
-    except (TypeError, ValueError):
-        timeout = policy.timeout_seconds
 
     lock = _relay_lock(session_id)
     if not lock.acquire(timeout=timeout):
@@ -189,8 +191,135 @@ def serve_invoke(payload: dict, agent_bridge, send_chunk: Callable[[dict], None]
         "chunk_type": CHUNK_RESULT,
         "request_id": request_id,
         "status": "done",
-        "content": reply.content if reply is not None else "",
+        "content": delegated_result_text(reply),
         "agent_id": target.id,
         "agent_name": target.name,
         "duration": round(duration, 3),
     })
+
+
+def _serve_speak(
+    payload: dict,
+    agent_bridge,
+    send_chunk: Callable[[dict], None],
+    *,
+    target,
+    local: Callable[[str], str],
+    members: list,
+    request_id: str,
+    task: str,
+    root_session_id: str,
+) -> None:
+    """Answer as ``target`` on its own copy of the conversation, seeded with the
+    handed-over transcript; every chunk is forwarded as an event."""
+    from agent.chat.service import ChatService
+
+    def fail(error: str) -> None:
+        logger.warning(f"[MultiAgent] speaking turn {request_id or '?'} failed: {error}")
+        send_chunk({
+            "chunk_type": CHUNK_RESULT,
+            "request_id": request_id,
+            "status": "failed",
+            "error": error,
+            "agent_id": target.id,
+            "agent_name": target.name,
+        })
+
+    session_id = _speak_session_id(root_session_id)
+    transcript = _attributed_history(payload.get("history"), local, target.id)
+    spoken = []
+
+    def relay(chunk) -> None:
+        if not isinstance(chunk, dict):
+            return
+        if chunk.get("chunk_type") == "content":
+            spoken.append(str(chunk.get("delta") or ""))
+        try:
+            send_chunk({
+                "chunk_type": CHUNK_EVENT,
+                "request_id": request_id,
+                "event": {"type": "chunk", "data": chunk},
+            })
+        except Exception as exc:
+            logger.debug(f"[MultiAgent] chunk forward failed: {exc}")
+
+    started_at = time.monotonic()
+    logger.info(
+        f"[MultiAgent] speaking turn {request_id or '?'}: {target.id} answers in "
+        f"conversation {root_session_id} ({len(transcript)} messages of history)"
+    )
+    try:
+        ChatService(agent_bridge).run(
+            query=task,
+            session_id=session_id,
+            send_chunk_fn=relay,
+            channel_type="agent",
+            agent_id=target.id,
+            request_id=request_id or None,
+            members=members,
+            transcript=transcript,
+        )
+    except Exception as exc:
+        return fail(str(exc))
+
+    send_chunk({
+        "chunk_type": CHUNK_RESULT,
+        "request_id": request_id,
+        "status": "done",
+        "content": "".join(spoken),
+        "agent_id": target.id,
+        "agent_name": target.name,
+        "duration": round(time.monotonic() - started_at, 3),
+    })
+
+
+def _serve_clear(payload: dict, send_chunk: Callable[[dict], None], *, target, request_id: str) -> None:
+    """Clear this Agent's context for a conversation kept elsewhere."""
+    from agent.chat.session_service import SessionService
+
+    root_session_id = str(payload.get("root_session_id") or "")
+    result = {
+        "chunk_type": CHUNK_RESULT,
+        "request_id": request_id,
+        "status": "done",
+        "agent_id": target.id,
+        "agent_name": target.name,
+    }
+    if not root_session_id:
+        send_chunk({**result, "status": "failed", "error": "root_session_id is required"})
+        return
+    try:
+        SessionService().clear_context(
+            _speak_session_id(root_session_id), agent_id=target.id, fanout=False
+        )
+        logger.info(f"[MultiAgent] cleared {target.id}'s context for conversation {root_session_id}")
+    except Exception as exc:
+        send_chunk({**result, "status": "failed", "error": str(exc)})
+        return
+    send_chunk(result)
+
+
+def _speak_session_id(root_session_id: str) -> str:
+    """Local session for a conversation kept elsewhere; stable across turns."""
+    digest = hashlib.sha256(root_session_id.encode("utf-8")).hexdigest()[:16]
+    return f"team_{digest}"
+
+
+def _attributed_history(raw, local: Callable[[str], str], reader_id: str) -> list:
+    """Wire history -> attributed messages, same as the shared-transcript restore."""
+    from bridge.agent_initializer import AgentInitializer
+
+    messages = []
+    for entry in raw or []:
+        if not isinstance(entry, dict):
+            continue
+        role = str(entry.get("role") or "")
+        text = str(entry.get("text") or "")
+        if role not in ("user", "assistant") or not text:
+            continue
+        message = {"role": role, "content": [{"type": "text", "text": text}]}
+        author = local(entry.get("agent_id")) if role == "assistant" else ""
+        if author:
+            message["agent_id"] = author
+        messages.append(message)
+    return AgentInitializer._attribute_history(messages, reader_id)

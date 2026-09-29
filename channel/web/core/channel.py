@@ -366,6 +366,27 @@ class WebChannel(ChatChannel):
                 if delta:
                     publish({"type": "delta", "content": delta})
 
+            elif event_type == "peer_message_start":
+                # A teammate takes over for a stretch of this turn. What follows
+                # is its reply, in the same event types as any other, until the
+                # matching end marker hands the floor back.
+                publish({
+                    "type": "peer_start",
+                    "card_id": data.get("card_id"),
+                    "agent_id": data.get("agent_id"),
+                    "agent_name": data.get("agent_name"),
+                    "source_id": data.get("source_id"),
+                    "source_name": data.get("source_name"),
+                })
+
+            elif event_type == "peer_message_end":
+                publish({
+                    "type": "peer_end",
+                    "card_id": data.get("card_id"),
+                    "agent_id": data.get("agent_id"),
+                    "status": data.get("status", "done"),
+                })
+
             elif event_type == "tool_retrieval":
                 # Additive MCP retrieval diagnostics. Forward only the
                 # allowlisted, already-sanitized fields (query text/vectors are
@@ -540,7 +561,71 @@ class WebChannel(ChatChannel):
                 if payload:
                     publish(payload)
 
+            elif event_type in ("agent_start", "turn_end"):
+                self._mark_stored_point(request_id, advance_only=event_type == "turn_end")
+
         return on_event
+
+    def _mark_stored_point(self, request_id: str, advance_only: bool) -> None:
+        """Record where the stored transcript and the event log line up.
+
+        The run starts after its query is stored, and each step is stored
+        before turn_end is announced, so at either moment the newest stored
+        message and the newest event describe the same point. A step that did
+        not get stored leaves the transcript where it was; the earlier mark
+        then stays, rather than one that would skip the missing step.
+        """
+        with self._sse_streams_lock:
+            state = self.sse_streams.get(request_id)
+        session_id = self.request_to_session.get(request_id)
+        if state is None or not session_id:
+            return
+        try:
+            from agent.registry import get_agent_registry
+            from agent.memory import get_conversation_store
+            profile = get_agent_registry().get(self.request_to_agent.get(request_id))
+            stored_seq = get_conversation_store(profile.workspace).latest_seq(session_id)
+        except Exception as e:
+            logger.debug(f"[WebChannel] stored point skipped for {request_id}: {e}")
+            return
+        if stored_seq is None:
+            return
+        with state.condition:
+            if advance_only and state.stored_seq is not None and stored_seq <= state.stored_seq:
+                return
+            state.stored_seq = stored_seq
+            state.stored_event_seq = state.next_seq - 1
+
+    def resumable_stream(self, session_id: str, agent_id: str = None) -> Optional[dict]:
+        """The unfinished reply a session is streaming, for a page loaded mid-reply.
+
+        Returns ``{"request_id", "stored_seq", "after_seq"}``: render the
+        transcript up to ``stored_seq`` and follow the stream after
+        ``after_seq``. ``stored_seq`` is None before the run has started, when
+        nothing of the reply is stored and the whole stream is to follow.
+        None when nothing is in flight.
+        """
+        try:
+            from agent.registry import get_agent_registry
+            owner = get_agent_registry().get(agent_id).id
+        except Exception:
+            owner = agent_id
+        for request_id, sid in reversed(list(self.request_to_session.items())):
+            if sid != session_id or self.request_to_agent.get(request_id) != owner:
+                continue
+            with self._sse_streams_lock:
+                state = self.sse_streams.get(request_id)
+            if state is None:
+                continue
+            with state.condition:
+                if state.closed or state.main_done or state.stream_complete:
+                    return None
+                return {
+                    "request_id": request_id,
+                    "stored_seq": state.stored_seq,
+                    "after_seq": state.stored_event_seq,
+                }
+        return None
 
     # ------------------------------------------------------------------
     # TTS auto-dispatch
@@ -728,7 +813,6 @@ class WebChannel(ChatChannel):
             params = _raw_web_input()
             file_obj = params.get("file")
             file_objs = params.get("files")
-            session_id = params.get("session_id", "")
             relative_path = params.get("relative_path", "")
             relative_paths = params.get("relative_paths")
             upload_id = params.get("upload_id", "")
@@ -1189,7 +1273,13 @@ class WebChannel(ChatChannel):
         with self._sse_streams_lock:
             state = self.sse_streams.get(request_id)
         if state is None:
-            yield b"data: {\"type\": \"error\", \"message\": \"invalid request_id\"}\n\n"
+            # Logs live in memory only, so a restart forgets every request the
+            # previous process was streaming. The reason lets the client say so
+            # instead of reporting a generic send failure.
+            yield (
+                b"data: {\"type\": \"error\", \"message\": \"invalid request_id\", "
+                b"\"reason\": \"unknown_request\"}\n\n"
+            )
             return
         try:
             cursor = max(0, int(after_seq))

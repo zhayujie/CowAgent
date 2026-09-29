@@ -60,3 +60,5 @@ Web コンソールの記憶管理ページで、記憶ファイルと夢日記�
 | `agent_workspace` | ワークスペースパス、記憶ファイルはこのディレクトリ配下に保存されます | `~/cow` |
 | `agent_max_context_tokens` | 最大コンテキストトークン数。超過時にトリミングされ、記憶として要約されます | `50000` |
 | `agent_max_context_turns` | 最大コンテキストターン数。超過時にトリミングされ、記憶として要約されます | `20` |
+| `rerank_provider` | 記憶検索のリランクサービス。空の場合は無効、`local` はローカルのクロスエンコーダー（`pip install sentence-transformers` が必要） | `""` |
+| `rerank_model` | リランクモデル。空の場合はデフォルトモデルを使用 | `BAAI/bge-reranker-base` |

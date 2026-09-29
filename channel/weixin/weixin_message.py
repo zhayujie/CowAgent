@@ -8,7 +8,7 @@ import os
 import uuid
 
 from bridge.context import ContextType
-from channel.chat_message import ChatMessage
+from channel.chat_message import ChatMessage, safe_filename
 from channel.weixin.weixin_api import download_media_from_cdn, CDN_BASE_URL
 from common.log import logger
 from common import state_dir
@@ -139,7 +139,7 @@ class WeixinMessage(ChatMessage):
 
         elif media_type == ITEM_FILE:
             self.ctype = ContextType.FILE
-            file_name = item.get("file_item", {}).get("file_name", f"wx_{self.msg_id}")
+            file_name = safe_filename(item.get("file_item", {}).get("file_name")) or f"wx_{self.msg_id}"
             save_path = os.path.join(_get_tmp_dir(), file_name)
             self.content = save_path
 
@@ -181,7 +181,9 @@ class WeixinMessage(ChatMessage):
             return ""
 
         if media_type == ITEM_FILE:
-            original_name = info.get("file_name", "")
+            # The sender chose this name; keep it a bare component so the
+            # download cannot land outside the tmp dir.
+            original_name = safe_filename(info.get("file_name", ""))
             if original_name:
                 save_path = os.path.join(_get_tmp_dir(), original_name)
             else:

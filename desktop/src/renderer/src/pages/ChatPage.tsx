@@ -13,6 +13,8 @@ import {
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import MessageBubble from '../components/MessageBubble'
 import ChatInput, { type ChatInputHandle } from '../components/ChatInput'
+import ChatTimeline from '../components/ChatTimeline'
+import { useTimelineStore } from '../store/timelineStore'
 import { TeamChatModal } from '../components/NewChatMenu'
 import { product } from '@product'
 import { t } from '../i18n'
@@ -47,6 +49,30 @@ const SUGGESTIONS: {
   { key: 'example_web', send: '/help', icon: Terminal, iconClass: 'text-content-tertiary', bgClass: 'bg-content-tertiary/10' },
 ]
 
+const useProductSuggestions = product.chat?.useSuggestions ?? (() => null)
+
+function useSuggestionCards() {
+  const custom = useProductSuggestions()
+  if (custom) {
+    return custom.map((s, i) => {
+      const base = SUGGESTIONS[i % SUGGESTIONS.length]
+      return {
+        key: `custom-${i}`,
+        title: s.title,
+        text: s.text,
+        prompt: s.prompt || s.text,
+        icon: s.icon ?? base.icon,
+        iconClass: base.iconClass,
+        bgClass: base.bgClass,
+      }
+    })
+  }
+  return SUGGESTIONS.map(({ key, send, icon, iconClass, bgClass }) => {
+    const text = t(`${key}_text` as Parameters<typeof t>[0])
+    return { key, title: t(`${key}_title` as Parameters<typeof t>[0]), text, prompt: send ?? text, icon, iconClass, bgClass }
+  })
+}
+
 const ChatPage: React.FC<ChatPageProps> = ({ baseUrl }) => {
   const activeId = useSessionStore((s) => s.activeId)
   const loadSessions = useSessionStore((s) => s.loadSessions)
@@ -62,6 +88,7 @@ const ChatPage: React.FC<ChatPageProps> = ({ baseUrl }) => {
   const ensureSession = useChatStore((s) => s.ensureSession)
   const clearContext = useChatStore((s) => s.clearContext)
   const wsOnSessionSwitch = useWorkspaceStore((s) => s.onSessionSwitch)
+  const suggestions = useSuggestionCards()
 
   const messages = session?.messages ?? []
   const isStreaming = session?.isStreaming ?? false
@@ -148,7 +175,9 @@ const ChatPage: React.FC<ChatPageProps> = ({ baseUrl }) => {
   // Snap to the bottom instantly when switching sessions (no top-to-bottom animation).
   // History may load a frame later, so keep snapping instantly until content arrives.
   const lastSessionRef = useRef('')
-  const lastLenRef = useRef(0)
+  // Id of the newest message: it changes when a message is appended, but not
+  // when an older history page is prepended above the reader.
+  const lastIdRef = useRef<string | undefined>(undefined)
   const pendingSnapRef = useRef(false)
   // True while we should keep the view pinned to the bottom (e.g. during
   // streaming). Cleared when the user scrolls up to read earlier messages.
@@ -161,24 +190,28 @@ const ChatPage: React.FC<ChatPageProps> = ({ baseUrl }) => {
     const el = scrollRef.current
     if (!el) return
 
+    const lastId = messages[messages.length - 1]?.id
     if (lastSessionRef.current !== activeId) {
       lastSessionRef.current = activeId
-      lastLenRef.current = messages.length
+      lastIdRef.current = lastId
       pendingSnapRef.current = true
       followBottomRef.current = true
     }
 
     if (pendingSnapRef.current) {
       // Instant snap on switch and on the first content that lands afterwards.
-      lastLenRef.current = messages.length
+      lastIdRef.current = lastId
       scrollToBottom(false)
       if (messages.length > 0) pendingSnapRef.current = false
       return
     }
 
+    const grew = lastId !== lastIdRef.current
+    lastIdRef.current = lastId
+    // A message-navigator jump owns the scroll position until it lands.
+    if (useTimelineStore.getState().jumping) return
+
     const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 160
-    const grew = messages.length !== lastLenRef.current
-    lastLenRef.current = messages.length
     // Follow the bottom when: a new message arrived, the user is already near
     // the bottom, or we're streaming and the user hasn't scrolled up. This
     // keeps long command/streaming output (where length is unchanged but the
@@ -255,7 +288,7 @@ const ChatPage: React.FC<ChatPageProps> = ({ baseUrl }) => {
   // so a scroll triggered on message change fires before the final height is
   // known. Re-scroll once media loads, but only while following the bottom.
   const handleMediaLoad = useCallback(() => {
-    if (followBottomRef.current) scrollToBottom(false)
+    if (followBottomRef.current && !useTimelineStore.getState().jumping) scrollToBottom(false)
   }, [scrollToBottom])
 
   const handleScroll = useCallback(
@@ -265,6 +298,8 @@ const ChatPage: React.FC<ChatPageProps> = ({ baseUrl }) => {
       // pauses auto-follow; returning near the bottom resumes it.
       followBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 160
       const s = useChatStore.getState().sessions[activeId]
+      // A navigator jump loads the pages it needs itself.
+      if (useTimelineStore.getState().jumping) return
       if (el.scrollTop < 40 && s?.historyHasMore && !loadingMore && !isStreaming) {
         setLoadingMore(true)
         const prevHeight = el.scrollHeight
@@ -280,9 +315,16 @@ const ChatPage: React.FC<ChatPageProps> = ({ baseUrl }) => {
   )
 
   const isEmpty = messages.length === 0
+  // A sent question only gets its seq once the turn is persisted, which leaves
+  // the length unchanged, so the navigator keys on the persisted seqs too.
+  const persistedUserSeqs = messages.filter((m) => m.role === 'user' && m.userSeq != null).length
+  const timelineRevision = `${messages.length}:${persistedUserSeqs}`
 
   return (
-    <div className="flex flex-col flex-1 min-h-0">
+    <div className="flex flex-col flex-1 min-h-0 relative">
+      {!isEmpty && (
+        <ChatTimeline sessionId={activeId} scrollRef={scrollRef} revision={timelineRevision} />
+      )}
       <div ref={scrollRef} className="flex-1 overflow-y-auto" onScroll={handleScroll}>
         {loadingMore && (
           <div className="flex items-center justify-center py-3 text-content-tertiary">
@@ -304,33 +346,30 @@ const ChatPage: React.FC<ChatPageProps> = ({ baseUrl }) => {
               {t('welcome_subtitle')}
             </p>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 w-full max-w-2xl">
-              {SUGGESTIONS.map(({ key, send, icon: Icon, iconClass, bgClass }) => (
-                <button
-                  key={key}
-                  onClick={() => {
-                    // Fill the input (don't auto-send) so the user can tweak it first.
-                    const draft = send ?? t(`${key}_text` as Parameters<typeof t>[0])
-                    inputResetRef.current?.(draft, [])
-                  }}
-                  className="group text-left bg-surface border border-default rounded-xl p-3.5 cursor-pointer hover:border-accent hover:shadow-sm transition-all"
-                >
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <span
-                      className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${bgClass}`}
-                    >
-                      <Icon size={15} className={iconClass} />
-                    </span>
-                    <span className="font-medium text-sm text-content">
-                      {t(`${key}_title` as Parameters<typeof t>[0])}
-                    </span>
-                  </div>
-                  <p className="text-xs text-content-tertiary leading-relaxed line-clamp-2">
-                    {t(`${key}_text` as Parameters<typeof t>[0])}
-                  </p>
-                </button>
-              ))}
-            </div>
+            {suggestions.length > 0 && (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 w-full max-w-2xl">
+                {suggestions.map(({ key, title, text, prompt, icon: Icon, iconClass, bgClass }) => (
+                  <button
+                    key={key}
+                    onClick={() => {
+                      // Fill the input (don't auto-send) so the user can tweak it first.
+                      inputResetRef.current?.(prompt, [])
+                    }}
+                    className="group flex flex-col justify-start text-left bg-surface border border-default rounded-xl p-3.5 cursor-pointer hover:border-accent hover:shadow-sm transition-all"
+                  >
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span
+                        className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${bgClass}`}
+                      >
+                        <Icon size={15} className={iconClass} />
+                      </span>
+                      <span className="font-medium text-sm text-content">{title}</span>
+                    </div>
+                    <p className="text-xs text-content-tertiary leading-relaxed line-clamp-2">{text}</p>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         ) : (
           <div className="py-3 max-w-3xl mx-auto">
@@ -348,14 +387,23 @@ const ChatPage: React.FC<ChatPageProps> = ({ baseUrl }) => {
                   />
                 </div>
               ) : (
-                <MessageBubble
+                // Tag user bubbles with their seq so the navigation timeline
+                // can locate and scroll to them on click.
+                <div
                   key={msg.id}
-                  message={msg}
-                  onRegenerate={handleRegenerate}
-                  onEdit={handleEdit}
-                  onDelete={handleDelete}
-                  onMediaLoad={handleMediaLoad}
-                />
+                  data-user-seq={msg.role === 'user' && msg.userSeq != null ? msg.userSeq : undefined}
+                >
+                  <MessageBubble
+                    message={msg}
+                    // A teammate's bubble is part of the asking Agent's turn, not
+                    // a turn of its own: regenerating it would re-run the whole
+                    // turn, which the asking Agent's own bubble already offers.
+                    onRegenerate={msg.extras?.peer ? undefined : handleRegenerate}
+                    onEdit={handleEdit}
+                    onDelete={handleDelete}
+                    onMediaLoad={handleMediaLoad}
+                  />
+                </div>
               )
             )}
             <div ref={bottomRef} />

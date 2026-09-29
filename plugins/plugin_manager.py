@@ -9,7 +9,7 @@ import sys
 from common.log import logger
 from common.singleton import singleton
 from common.sorted_dict import SortedDict
-from config import conf, remove_plugin_config, write_plugin_config, get_data_root, get_resource_root
+from config import remove_plugin_config, write_plugin_config, get_data_root, get_resource_root
 
 from .event import *
 
@@ -64,28 +64,90 @@ class PluginManager:
         return wrapper
 
     def save_config(self):
+        """Persist plugins.json through a sibling file, then swap it in.
+
+        Writing straight into plugins.json truncates it before the new bytes are
+        there, so anything that fails while serialising -- a full disk, an
+        interrupted update -- leaves a half-written store behind. The next start
+        then reads it with json.load, which cannot parse a truncated document,
+        and load_config has no guard around that. See load_config for why a
+        damaged store must not be allowed to abort the load.
+        """
         cfg_path = os.path.join(_plugins_data_dir(), "plugins.json")
-        with open(cfg_path, "w", encoding="utf-8") as f:
-            json.dump(self.pconf, f, indent=4, ensure_ascii=False)
+        temporary = f"{cfg_path}.tmp"
+        try:
+            with open(temporary, "w", encoding="utf-8") as f:
+                json.dump(self.pconf, f, indent=4, ensure_ascii=False)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(temporary, cfg_path)
+        except Exception:
+            try:
+                if os.path.exists(temporary):
+                    os.remove(temporary)
+            except OSError:
+                pass
+            raise
+
+    @staticmethod
+    def _read_plugin_store(path: str):
+        """Return the plugin config stored at ``path``, or None if unusable.
+
+        Both "not there" and "there but damaged" answer None, so the caller can
+        move on to the next copy instead of aborting. json.load is the single
+        step that turns a half-written file into a crash, and the shape check
+        below keeps a file that parsed but lost its "plugins" mapping from
+        raising KeyError one line later.
+        """
+        if not os.path.exists(path):
+            return None
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                stored = json.load(f)
+        except (OSError, ValueError) as e:
+            logger.warning("Unreadable plugin config %s, ignoring it: %s" % (path, e))
+            return None
+        if not isinstance(stored, dict) or not isinstance(stored.get("plugins"), dict):
+            logger.warning("Plugin config %s has no \"plugins\" mapping, ignoring it" % path)
+            return None
+        return stored
 
     def load_config(self):
         logger.debug("Loading plugins config...")
 
-        modified = False
         # Prefer the writable copy (data dir); fall back to the one shipped in
         # the resource dir (first run in a frozen bundle, before any save).
         data_cfg = os.path.join(_plugins_data_dir(), "plugins.json")
         res_cfg = os.path.join(_plugins_resource_dir(), "plugins.json")
         cfg_path = data_cfg if os.path.exists(data_cfg) else res_cfg
-        if os.path.exists(cfg_path):
-            with open(cfg_path, "r", encoding="utf-8") as f:
-                pconf = json.load(f)
-                pconf["plugins"] = SortedDict(lambda k, v: v["priority"], pconf["plugins"], reverse=True)
-        else:
-            modified = True
+
+        # A copy that exists but cannot be parsed is exactly the case this
+        # fallback is for -- a truncated write, an update interrupted partway --
+        # yet an os.path.exists check cannot tell it apart from a healthy file,
+        # so a damaged store used to abort the load instead of falling through.
+        # app.py loads plugins on first start and the desktop client does it on
+        # a daemon thread, so the raise became either a failed start or a
+        # silently dead plugin system with nothing in the log.
+        stored = None
+        source = None
+        for candidate in dict.fromkeys((cfg_path, res_cfg)):
+            stored = self._read_plugin_store(candidate)
+            if stored is not None:
+                source = candidate
+                break
+
+        if stored is None:
+            # Neither copy is usable: a first run, or a file that never made it
+            # to disk. Start from an empty store and write it out below.
             pconf = {"plugins": SortedDict(lambda k, v: v["priority"], reverse=True)}
+        else:
+            stored["plugins"] = SortedDict(lambda k, v: v["priority"], stored["plugins"], reverse=True)
+            pconf = stored
         self.pconf = pconf
-        if modified:
+        # The writable copy is the one that has to end up right: if we only got
+        # here through the shipped default (or through nothing at all), write a
+        # usable file back so the next start does not have to fall back again.
+        if source != data_cfg:
             self.save_config()
         return pconf
 

@@ -47,6 +47,9 @@ class _FakeExecutor:
         self.messages.append({"role": "user", "content": query})
         return ""
 
+    def run_start_index(self):
+        return None
+
 
 def _service():
     agent = SimpleNamespace(

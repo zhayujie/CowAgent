@@ -189,22 +189,19 @@ def _editable_target(raw_path: str, session_id: str = None, agent_id: str = None
     return svc, rel
 
 
-def _mark_index_dirty(abs_path: str, agent_id: str = None) -> None:
-    """Flag the agent's index stale after a console edit to a file it scans.
+def _mark_memory_dirty(agent_id: str = None) -> None:
+    """Flag the agent's memory index stale after a console edit to a memory file.
 
     The index is built from the file contents, so a human edit here must be
     re-embedded the same way an agent's write/edit tool triggers it — otherwise
     semantic search keeps returning the pre-edit text until something else marks
-    the store dirty. Which files those are is decided by the same predicate the
-    tools use, so the console cannot fall behind on, say, knowledge pages.
-    Best-effort: a failure here must not fail the save.
+    the store dirty. Best-effort: a failure here must not fail the save.
     """
     try:
-        from agent.tools.utils.memory_path import feeds_memory_index
         from bridge.bridge import Bridge
         agent = Bridge().get_agent_bridge().get_agent(agent_id=agent_id or None)
         mm = getattr(agent, "memory_manager", None)
-        if mm and feeds_memory_index(abs_path, mm):
+        if mm:
             mm.mark_dirty()
     except Exception as e:
         logger.warning(f"[WebChannel] Failed to mark memory index dirty: {e}")
@@ -253,6 +250,7 @@ class WorkspaceWriteHandler:
         _require_auth()
         web.header('Content-Type', 'application/json; charset=utf-8')
         try:
+            from agent.tools.utils.memory_path import indexes_rel_path
             from agent.workspace.service import WorkspaceConflictError
 
             body = json.loads(web.data() or b'{}')
@@ -270,9 +268,12 @@ class WorkspaceWriteHandler:
             except WorkspaceConflictError as e:
                 return json.dumps({"status": "error", "code": "conflict", "message": str(e)})
 
-            # Memory and knowledge files feed the vector index; re-embed them on
+            # A memory or knowledge file feeds the vector index; re-embed it on
             # edit so search doesn't keep returning the stale pre-edit text.
-            _mark_index_dirty(svc.resolve(rel), agent_id)
+            # Same check the write/edit tools use, so both paths agree on which
+            # files those are.
+            if indexes_rel_path(rel):
+                _mark_memory_dirty(agent_id)
 
             logger.info(f"[WebChannel] Workspace file saved: {result['path']} ({result['size']} bytes)")
             return json.dumps({"status": "success", **result}, ensure_ascii=False)

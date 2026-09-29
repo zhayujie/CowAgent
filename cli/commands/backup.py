@@ -1,5 +1,6 @@
 """Portable local backup and restore commands for CowAgent user data."""
 
+import errno
 import json
 import os
 import re
@@ -237,7 +238,14 @@ def create_backup_archive(
                 for path in files:
                     relative = path.relative_to(source).as_posix()
                     archive.write(str(path), f"{archive_root}/{relative}")
-        os.replace(str(temp_archive), str(output))
+        try:
+            os.replace(str(temp_archive), str(output))
+        except OSError as exc:
+            # os.replace is atomic but cannot cross filesystems; shutil.move
+            # falls back to copy + remove when the staging dir lands elsewhere.
+            if exc.errno != errno.EXDEV:
+                raise
+            shutil.move(str(temp_archive), str(output))
         try:
             os.chmod(str(output), stat.S_IRUSR | stat.S_IWUSR)
         except OSError:

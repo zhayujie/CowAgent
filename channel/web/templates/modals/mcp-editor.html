@@ -1,0 +1,121 @@
+    <!-- MCP Tool Editor -->
+    <div id="mcp-editor-overlay" class="fixed inset-0 bg-black/50 z-[200] hidden flex items-center justify-center">
+        <div class="bg-white dark:bg-[#1A1A1A] rounded-2xl border border-slate-200 dark:border-white/10 shadow-xl
+                    w-full max-w-xl mx-4 max-h-[88vh] flex flex-col overflow-hidden">
+            <div class="flex items-center gap-3 px-6 pt-6 pb-4">
+                <div class="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-900/20 flex items-center justify-center flex-shrink-0">
+                    <i class="fas fa-plug text-amber-500"></i>
+                </div>
+                <h3 id="mcp-editor-title" class="flex-1 min-w-0 text-base font-semibold text-slate-800 dark:text-slate-100" data-i18n="mcp_add_title">添加 MCP 工具</h3>
+                <div class="cap-tabs">
+                    <button type="button" class="cap-tab active" data-mcp-tab="form">
+                        <i class="fas fa-list-ul text-[11px]"></i><span data-i18n="mcp_tab_form">表单</span>
+                    </button>
+                    <button type="button" class="cap-tab" data-mcp-tab="json">
+                        <i class="fas fa-code text-[11px]"></i><span>JSON</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="flex-1 overflow-y-auto px-6 pb-2">
+                <!-- Form mode -->
+                <div id="mcp-pane-form" class="space-y-4">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label class="cap-label" data-i18n="mcp_field_name">名称</label>
+                            <input id="mcp-field-name" type="text" class="cap-input" autocomplete="off" spellcheck="false"
+                                   data-i18n-placeholder="mcp_field_name_ph" placeholder="例如 fetch">
+                        </div>
+                        <div>
+                            <label class="cap-label" data-i18n="mcp_field_type">传输方式</label>
+                            <div id="mcp-field-type" class="cfg-dropdown" tabindex="0">
+                                <div class="cfg-dropdown-selected">
+                                    <span class="cfg-dropdown-text">--</span>
+                                    <i class="fas fa-chevron-down cfg-dropdown-arrow"></i>
+                                </div>
+                                <div class="cfg-dropdown-menu"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="mcp-stdio-fields" class="space-y-4">
+                        <div>
+                            <label class="cap-label" data-i18n="mcp_field_command">命令</label>
+                            <input id="mcp-field-command" type="text" class="cap-input cap-input-mono" autocomplete="off" spellcheck="false" placeholder="npx / uvx / python">
+                        </div>
+                        <div>
+                            <label class="cap-label" data-i18n="mcp_field_args">参数（每行一个）</label>
+                            <textarea id="mcp-field-args" rows="3" class="cap-input cap-input-mono resize-y" spellcheck="false" placeholder="-y&#10;@modelcontextprotocol/server-github"></textarea>
+                        </div>
+                        <div>
+                            <label class="cap-label" data-i18n="mcp_field_env">环境变量（每行 KEY=value）</label>
+                            <textarea id="mcp-field-env" rows="2" class="cap-input cap-input-mono resize-y" spellcheck="false" placeholder="API_KEY=your-key"></textarea>
+                        </div>
+                    </div>
+
+                    <div id="mcp-url-fields" class="space-y-4 hidden">
+                        <div>
+                            <label class="cap-label" data-i18n="mcp_field_url">URL</label>
+                            <input id="mcp-field-url" type="text" class="cap-input cap-input-mono" autocomplete="off" spellcheck="false" placeholder="https://mcp.example.com/mcp">
+                        </div>
+                        <div>
+                            <label class="cap-label" data-i18n="mcp_field_headers">请求头（每行 KEY=value）</label>
+                            <textarea id="mcp-field-headers" rows="2" class="cap-input cap-input-mono resize-y" spellcheck="false" placeholder="Authorization=Bearer YOUR_API_KEY"></textarea>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center justify-between gap-3 pt-1">
+                        <button type="button" id="mcp-advanced-toggle" class="cap-link-btn -ml-2">
+                            <i id="mcp-advanced-icon" class="fas fa-chevron-right text-[10px] transition-transform"></i>
+                            <span data-i18n="mcp_advanced">高级设置</span>
+                        </button>
+                        <label class="flex items-center gap-2 cursor-pointer select-none">
+                            <span class="text-xs text-slate-500 dark:text-slate-400" data-i18n="mcp_field_disabled">暂时停用</span>
+                            <span class="relative inline-flex items-center">
+                                <input type="checkbox" id="mcp-field-disabled" class="sr-only peer">
+                                <span class="w-9 h-5 bg-slate-200 rounded-full peer peer-checked:after:translate-x-4 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary-500 dark:bg-slate-600 dark:peer-checked:bg-primary-500"></span>
+                            </span>
+                        </label>
+                    </div>
+                    <div id="mcp-advanced-fields" class="hidden grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label class="cap-label" data-i18n="mcp_field_prefix">工具名前缀</label>
+                            <input id="mcp-field-prefix" type="text" class="cap-input cap-input-mono" autocomplete="off" spellcheck="false" placeholder="myserver_">
+                        </div>
+                        <div>
+                            <label class="cap-label" data-i18n="mcp_field_timeout">超时（秒）</label>
+                            <input id="mcp-field-timeout" type="number" min="1" class="cap-input" placeholder="30">
+                        </div>
+                        <div id="mcp-scope-field" class="sm:col-span-2 hidden">
+                            <label class="cap-label" data-i18n="mcp_field_scope">OAuth scope</label>
+                            <input id="mcp-field-scope" type="text" class="cap-input cap-input-mono" autocomplete="off" spellcheck="false">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- JSON mode -->
+                <div id="mcp-pane-json" class="hidden">
+                    <p class="text-xs text-slate-500 dark:text-slate-400 mb-2" data-i18n="mcp_json_hint">粘贴 mcpServers 格式的配置，可以一次添加多个</p>
+                    <textarea id="mcp-field-json" rows="16" class="cap-input cap-input-mono resize-y" spellcheck="false"></textarea>
+                </div>
+
+                <div id="mcp-test-result" class="cap-result hidden mt-4"></div>
+            </div>
+
+            <div class="flex items-center gap-2 px-6 py-4 mt-2 border-t border-slate-100 dark:border-white/5">
+                <button type="button" id="mcp-editor-test"
+                        class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-primary-600 dark:text-primary-400
+                               hover:bg-primary-50 dark:hover:bg-primary-900/20 cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-wait">
+                    <i id="mcp-editor-test-icon" class="fas fa-plug-circle-check text-xs"></i>
+                    <span data-i18n="mcp_test">测试连接</span>
+                </button>
+                <div class="flex-1"></div>
+                <button type="button" id="mcp-editor-cancel"
+                        class="px-4 py-2 rounded-lg border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300 text-sm font-medium
+                               hover:bg-slate-50 dark:hover:bg-white/5 cursor-pointer transition-colors" data-i18n="mcp_cancel">取消</button>
+                <button type="button" id="mcp-editor-save"
+                        class="px-4 py-2 rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-sm font-medium
+                               cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed" data-i18n="mcp_save">保存</button>
+            </div>
+        </div>
+    </div>

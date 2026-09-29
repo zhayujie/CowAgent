@@ -6,7 +6,7 @@ import http from 'http'
 import { PythonBackend, BackendError } from './python-manager'
 import { buildAppMenu } from './menu'
 import { createTray, destroyTray, getTray } from './tray'
-import { initUpdater, checkForUpdates, startDownload, quitAndInstall, setUpdateLanguage } from './updater'
+import { initUpdater, checkForUpdates, startDownload, quitAndInstall, setUpdateLanguage, setUpdateFeedQuery } from './updater'
 import { setupThemeIPC, loadAppConfig } from './themes'
 import { setupHttpRelayIPC } from './http-relay'
 import {
@@ -662,6 +662,9 @@ function setupIPC() {
     setUpdateLanguage(lang)
     startDownload()
   })
+  ipcMain.handle('update-feed-query', (_event, params: unknown) => {
+    setUpdateFeedQuery(params)
+  })
   ipcMain.handle('update-install', () => {
     // Let the window actually close so the app can fully quit — otherwise the
     // close-to-tray handler preventDefault()s it, the process stays alive, and
@@ -768,14 +771,17 @@ app.whenReady().then(async () => {
 
   // On macOS the Chromium-layer handler above isn't enough: getUserMedia also
   // needs system-level (TCC) microphone authorization, which only the native
-  // askForMediaAccess prompt can grant. Request it up front so the first mic
-  // click surfaces the system dialog instead of failing with a denied error.
-  if (process.platform === 'darwin') {
-    const micStatus = systemPreferences.getMediaAccessStatus('microphone')
-    if (micStatus === 'not-determined') {
-      systemPreferences.askForMediaAccess('microphone').catch(() => {})
+  // askForMediaAccess prompt can grant. The renderer asks for it right before
+  // the first recording, so the system dialog only appears when mic is used.
+  ipcMain.handle('mic-request-access', async () => {
+    if (process.platform !== 'darwin') return true
+    try {
+      if (systemPreferences.getMediaAccessStatus('microphone') === 'granted') return true
+      return await systemPreferences.askForMediaAccess('microphone')
+    } catch {
+      return false
     }
-  }
+  })
 
   setupIPC()
   setupThemeIPC()
@@ -798,7 +804,11 @@ app.whenReady().then(async () => {
   // Re-apply a previously set icon/title before the page loads.
   applyCachedAppIcon()
   // Undo any damage the last update did to this app's shortcuts.
-  repairWindowsShortcuts()
+  try {
+    repairWindowsShortcuts()
+  } catch (e) {
+    console.warn('[app-icon] shortcut repair failed:', (e as Error).message)
+  }
   await startBackend()
 
   // Wire auto-update: a first silent check a few seconds after launch (so it

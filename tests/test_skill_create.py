@@ -1,10 +1,11 @@
-"""Creating a skill from the console: the form, and folder / archive uploads."""
+"""Creating a skill from the console's form.
 
-import io
+Installing an existing skill from an upload is the add dialog's staged flow,
+covered in test_skill_staging.py.
+"""
+
 import json
 import os
-import tarfile
-import zipfile
 from unittest.mock import patch
 
 import pytest
@@ -28,25 +29,6 @@ def _custom_dir(service):
     from pathlib import Path
 
     return Path(service.manager.custom_dir)
-
-
-def _zip_bytes(entries):
-    """A zip of ``{path: bytes}``, as a browser would upload one."""
-    payload = io.BytesIO()
-    with zipfile.ZipFile(payload, "w") as zf:
-        for path, content in entries.items():
-            zf.writestr(path, content)
-    return payload.getvalue()
-
-
-def _targz_bytes(entries):
-    payload = io.BytesIO()
-    with tarfile.open(fileobj=payload, mode="w:gz") as tf:
-        for path, content in entries.items():
-            info = tarfile.TarInfo(path)
-            info.size = len(content)
-            tf.addfile(info, io.BytesIO(content))
-    return payload.getvalue()
 
 
 # ----------------------------------------------------------------------
@@ -148,109 +130,6 @@ def test_create_leaves_nothing_behind_when_a_bundled_file_is_refused(tmp_path):
     assert not (tmp_path / "evil.py").exists()
 
 
-# ----------------------------------------------------------------------
-# Uploads: a folder, or an archive
-# ----------------------------------------------------------------------
-def test_upload_installs_an_archive_holding_one_skill(tmp_path):
-    service = _service(tmp_path)
-    content = _zip_bytes({
-        "pdf-editor/SKILL.md": SKILL_MD.format(name="pdf-editor", desc="edits PDFs"),
-        "pdf-editor/scripts/rotate.py": "print('rotate')\n",
-    })
-
-    result = service.install_upload({"archive": {"filename": "pdf-editor.zip", "content": content}})
-
-    assert result == {"installed": ["pdf-editor"], "replaced": [], "skipped": []}
-    assert (_custom_dir(service) / "pdf-editor" / "scripts" / "rotate.py").is_file()
-    assert service.manager.get_skill("pdf-editor") is not None
-
-
-def test_upload_reads_a_tar_gz_as_well_as_a_zip(tmp_path):
-    service = _service(tmp_path)
-    content = _targz_bytes({
-        "tarred/SKILL.md": SKILL_MD.format(name="tarred", desc="from a tarball").encode(),
-    })
-
-    result = service.install_upload({"archive": {"filename": "tarred.tar.gz", "content": content}})
-
-    assert result["installed"] == ["tarred"]
-
-
-def test_upload_installs_every_skill_in_a_collection_and_says_why_one_was_left(tmp_path):
-    """One unusable skill in a batch must not cost the upload the rest of them."""
-    service = _service(tmp_path)
-    content = _zip_bytes({
-        "pack/first/SKILL.md": SKILL_MD.format(name="first", desc="does a thing"),
-        "pack/second/SKILL.md": SKILL_MD.format(name="second", desc="does another"),
-        # A skill's own subdirectories are its resources, not skills.
-        "pack/second/references/api.md": "# api\n",
-        "pack/third/SKILL.md": "---\nname: third\n---\n\nNo description.\n",
-    })
-
-    result = service.install_upload({"archive": {"filename": "pack.zip", "content": content}})
-
-    assert sorted(result["installed"]) == ["first", "second"]
-    assert result["skipped"] == [{"name": "third", "reason": "SKILL.md carries no description"}]
-    assert (_custom_dir(service) / "second" / "references" / "api.md").is_file()
-    assert not (_custom_dir(service) / "third").exists()
-
-
-def test_upload_installs_a_picked_folder_from_its_relative_paths(tmp_path):
-    service = _service(tmp_path)
-
-    result = service.install_upload({"files": [
-        {"path": "my-skill/SKILL.md",
-         "content": SKILL_MD.format(name="my-skill", desc="picked as a folder").encode()},
-        {"path": "my-skill/assets/logo.svg", "content": b"<svg/>"},
-    ]})
-
-    assert result["installed"] == ["my-skill"]
-    assert (_custom_dir(service) / "my-skill" / "assets" / "logo.svg").read_bytes() == b"<svg/>"
-
-
-def test_upload_names_a_skill_after_the_archive_when_its_frontmatter_does_not(tmp_path):
-    service = _service(tmp_path)
-    content = _zip_bytes({"SKILL.md": "---\ndescription: unnamed but described\n---\n"})
-
-    result = service.install_upload({"archive": {"filename": "Fallback Name.zip", "content": content}})
-
-    assert result["installed"] == ["fallback-name"]
-
-
-def test_upload_replaces_a_skill_of_the_same_name_and_reports_it(tmp_path):
-    service = _service(tmp_path)
-    service.create({"name": "updatable", "description": "the first version"})
-    content = _zip_bytes({
-        "updatable/SKILL.md": SKILL_MD.format(name="updatable", desc="the second version"),
-    })
-
-    result = service.install_upload({"archive": {"filename": "updatable.zip", "content": content}})
-
-    assert result == {"installed": [], "replaced": ["updatable"], "skipped": []}
-    assert service.manager.get_skill("updatable").skill.description == "the second version"
-
-
-def test_upload_keeps_the_installed_skill_when_replacing_it_fails(tmp_path):
-    """The skill being replaced may be one the user wrote, so a copy that fails
-    halfway - a full disk, a locked file - must not take it with it."""
-    service = _service(tmp_path)
-    service.create({"name": "updatable", "description": "the first version"})
-    content = _zip_bytes({
-        "updatable/SKILL.md": SKILL_MD.format(name="updatable", desc="the second version"),
-    })
-
-    with patch("agent.skills.service.shutil.copytree", side_effect=OSError("disk full")):
-        with pytest.raises(OSError):
-            service.install_upload({
-                "archive": {"filename": "updatable.zip", "content": content},
-            })
-
-    service.manager.refresh_skills()
-    assert service.manager.get_skill("updatable").skill.description == "the first version"
-    # And nothing half-copied left behind for the next install to trip over.
-    assert [p.name for p in _custom_dir(service).iterdir() if p.is_dir()] == ["updatable"]
-
-
 def test_a_skill_being_written_is_hidden_from_the_loader_until_it_is_whole(tmp_path):
     """A scan that lands mid-create must not read the staging directory as a
     skill: the loader skips a hidden directory, so the staging one is hidden."""
@@ -267,89 +146,6 @@ def test_a_skill_being_written_is_hidden_from_the_loader_until_it_is_whole(tmp_p
         service.create({"name": "half-written", "description": "a skill mid-write"})
 
     assert staged == [".half-written.tmp"]
-
-
-def test_upload_refuses_an_archive_that_writes_outside_the_skills_directory(tmp_path):
-    service = _service(tmp_path)
-    content = _zip_bytes({"../escaped/SKILL.md": SKILL_MD.format(name="escaped", desc="d")})
-
-    with pytest.raises(ValueError, match="path traversal"):
-        service.install_upload({"archive": {"filename": "evil.zip", "content": content}})
-
-    assert not (tmp_path / "workspace" / "escaped").exists()
-
-
-def test_upload_installs_a_zip_holding_a_symlink_without_the_link(tmp_path):
-    """A repository zip does hold the odd symlink. ``zipfile`` cannot recreate
-    one - it would write the target path as the file's contents - so the entry is
-    dropped and the skill still installs."""
-    service = _service(tmp_path)
-    payload = io.BytesIO()
-    with zipfile.ZipFile(payload, "w") as zf:
-        zf.writestr("linked/SKILL.md", SKILL_MD.format(name="linked", desc="has a link"))
-        link = zipfile.ZipInfo("linked/passwd")
-        link.external_attr = (0o120777 << 16)
-        zf.writestr(link, "/etc/passwd")
-
-    result = service.install_upload({
-        "archive": {"filename": "linked.zip", "content": payload.getvalue()},
-    })
-
-    assert result["installed"] == ["linked"]
-    assert not (_custom_dir(service) / "linked" / "passwd").exists()
-
-
-def test_upload_refuses_a_tar_that_carries_a_symlink(tmp_path):
-    """Unlike a zip, a tar's links are recreated on extraction, which would make
-    an install a write to wherever the link points."""
-    service = _service(tmp_path)
-    payload = io.BytesIO()
-    with tarfile.open(fileobj=payload, mode="w:gz") as tf:
-        body = SKILL_MD.format(name="linked", desc="has a link").encode()
-        info = tarfile.TarInfo("linked/SKILL.md")
-        info.size = len(body)
-        tf.addfile(info, io.BytesIO(body))
-        link = tarfile.TarInfo("linked/passwd")
-        link.type = tarfile.SYMTYPE
-        link.linkname = "/etc/passwd"
-        tf.addfile(link)
-
-    with pytest.raises(ValueError, match="contains a link"):
-        service.install_upload({
-            "archive": {"filename": "linked.tar.gz", "content": payload.getvalue()},
-        })
-
-
-def test_upload_refuses_something_that_is_not_an_archive(tmp_path):
-    service = _service(tmp_path)
-
-    with pytest.raises(ValueError, match="Unsupported archive format"):
-        service.install_upload({"archive": {"filename": "notes.txt", "content": b"just text"}})
-
-
-def test_upload_says_when_the_upload_holds_no_skill(tmp_path):
-    service = _service(tmp_path)
-    content = _zip_bytes({"docs/readme.md": "# not a skill\n"})
-
-    with pytest.raises(ValueError, match="no SKILL.md"):
-        service.install_upload({"archive": {"filename": "docs.zip", "content": content}})
-
-
-def test_upload_leaves_a_builtin_name_to_the_builtin(tmp_path):
-    service = _service(tmp_path)
-    builtin = tmp_path / "builtin" / "knowledge-wiki"
-    builtin.mkdir(parents=True)
-    (builtin / "SKILL.md").write_text(SKILL_MD.format(name="knowledge-wiki", desc="ships"),
-                                      encoding="utf-8")
-    content = _zip_bytes({
-        "knowledge-wiki/SKILL.md": SKILL_MD.format(name="knowledge-wiki", desc="mine"),
-    })
-
-    result = service.install_upload({"archive": {"filename": "wiki.zip", "content": content}})
-
-    assert result["installed"] == []
-    assert result["skipped"][0]["name"] == "knowledge-wiki"
-    assert "built-in" in result["skipped"][0]["reason"]
 
 
 # ----------------------------------------------------------------------
@@ -455,64 +251,7 @@ def test_create_endpoint_reports_a_refusal_as_a_message(tmp_path):
     assert "description is required" in response["message"]
 
 
-def test_upload_endpoint_installs_an_archive(tmp_path):
-    from channel.web.api.skills import SkillUploadHandler
-
-    service = _service(tmp_path)
-    content = _zip_bytes({"zipped/SKILL.md": SKILL_MD.format(name="zipped", desc="from a zip")})
-    response = _post(SkillUploadHandler, {"archive": UploadedFile("zipped.zip", content)}, service)
-
-    assert response["status"] == "success"
-    assert response["installed"] == ["zipped"]
-
-
-def test_upload_endpoint_pairs_each_file_with_its_path(tmp_path):
-    """A picked folder arrives as parallel ``files`` and ``relative_paths``
-    fields, the pairing the chat upload uses; a mismatch would silently install
-    the wrong tree."""
-    from channel.web.api.skills import SkillUploadHandler
-
-    service = _service(tmp_path)
-    response = _post(SkillUploadHandler, {
-        "files": [
-            UploadedFile("SKILL.md", SKILL_MD.format(name="foldered", desc="picked").encode()),
-            UploadedFile("run.sh", b"echo run"),
-        ],
-        "relative_paths": ["foldered/SKILL.md", "foldered/scripts/run.sh"],
-    }, service)
-
-    assert response["installed"] == ["foldered"]
-    assert (_custom_dir(service) / "foldered" / "scripts" / "run.sh").is_file()
-
-
-def test_upload_endpoint_refuses_a_path_for_every_file_but_one(tmp_path):
-    from channel.web.api.skills import SkillUploadHandler
-
-    response = _post(SkillUploadHandler, {
-        "files": [UploadedFile("SKILL.md", b"---\n"), UploadedFile("run.sh", b"")],
-        "relative_paths": ["only/SKILL.md"],
-    }, _service(tmp_path))
-
-    assert response["status"] == "error"
-    assert "a path per file" in response["message"]
-
-
-def test_upload_endpoint_refuses_an_oversized_body_before_reading_it(tmp_path):
-    from agent.skills.service import SkillService
-    from channel.web.api.skills import SkillUploadHandler
-
-    with patch("channel.web.api.skills._require_auth"), \
-         patch("channel.web.api.skills.web.header"), \
-         patch("channel.web.api.skills.web.ctx") as ctx, \
-         patch("channel.web.api.skills._raw_web_input") as read_body:
-        ctx.env = {"CONTENT_LENGTH": str(SkillService.MAX_UPLOAD_TOTAL_SIZE + 1)}
-        response = json.loads(SkillUploadHandler().POST())
-
-    assert response == {"status": "error", "message": "upload too large"}
-    read_body.assert_not_called()
-
-
-def test_the_console_offers_both_ways_of_adding_a_skill():
+def test_the_console_offers_the_create_form_beside_the_add_dialog():
     from channel.web.core import template
     from conftest import console_js
 
@@ -521,25 +260,22 @@ def test_the_console_offers_both_ways_of_adding_a_skill():
     js = console_js()
 
     assert 'onclick="openSkillCreateDialog()"' in html
+    assert 'id="skill-add-btn"' in html
     assert 'id="skill-create-overlay"' in html
     for field in ("skill-create-name", "skill-create-desc", "skill-create-body",
-                  "skill-create-files", "skill-create-folder",
-                  "skill-upload-archive", "skill-upload-folder"):
+                  "skill-create-files", "skill-create-folder"):
         assert f'id="{field}"' in html, field
-    # A folder picker needs the attribute, not just the input - for the form's
-    # attachments as much as for an uploaded skill.
-    for field in ("skill-upload-folder", "skill-create-folder"):
-        assert f'id="{field}" type="file" class="hidden" multiple webkitdirectory' in html, field
+    # A folder picker needs the attribute, not just the input.
+    assert 'id="skill-create-folder" type="file" class="hidden" multiple webkitdirectory' in html
+    # Uploading an existing skill is the add dialog's, with a preview first; the
+    # create dialog does not offer a second, unpreviewed way in.
+    assert "data-skill-create-tab" not in html
+    assert "switchSkillCreateMode" not in js
 
     assert "function openSkillCreateDialog(" in js
-    assert "function switchSkillCreateMode(" in js
-    assert "fetch('/api/skills/create'" in js or "postSkillCreate('/api/skills/create'" in js
-    assert "postSkillCreate('/api/skills/upload'" in js
-    # A picked folder is sent as parallel fields, the pairing the handler reads.
-    assert "form.append('files', file);" in js
-    assert "form.append('relative_paths', relPath);" in js
-    # The form's attachments keep their paths the same way, so a folder picked
-    # there installs as the directory it was picked as.
+    assert "fetch('/api/skills/create'" in js
+    # The form's attachments keep their paths, so a folder picked there installs
+    # as the directory it was picked as.
     assert "form.append('relative_paths', skillAttachmentPath(file));" in js
     assert "return file.webkitRelativePath || file.name;" in js
 
@@ -556,9 +292,7 @@ def test_a_picked_folder_leaves_out_caches_and_hidden_entries():
 
     assert "__pycache__" in candidates and "node_modules" in candidates
     assert "startsWith('.')" in candidates
-    # Both folder picks go through it: the form's attachments and the upload tab.
     assert "skillUploadCandidates(picked)" in js
-    assert "skillUploadCandidates(files)" in js
 
 
 def test_both_kinds_of_attachment_pick_sit_behind_one_button():
@@ -598,13 +332,13 @@ def test_the_desktop_create_form_bundles_a_folder_the_same_way():
     page = (root / "pages/SkillsPage.tsx").read_text(encoding="utf-8")
     client = (root / "api/client.ts").read_text(encoding="utf-8")
 
-    # Both the form's attachments and an uploaded folder send the pairing.
-    assert client.count("formData.append('relative_paths', file.webkitRelativePath || file.name)") == 2
-    # A folder picker needs the attribute React's typings do not carry, and now
-    # there are two of them: the upload tab, and the form's attachments.
-    assert page.count("{...FOLDER_INPUT_PROPS}") == 2
+    assert "formData.append('relative_paths', file.webkitRelativePath || file.name)" in client
+    # A folder picker needs the attribute React's typings do not carry.
+    assert page.count("{...FOLDER_INPUT_PROPS}") == 1
     assert "function skillUploadCandidates(" in page
     assert "addAttachments(picked, true)" in page
+    # Uploading an existing skill is SkillAddModal's staged flow alone.
+    assert "uploadSkillArchive" not in client and "uploadSkillFolder" not in client
 
 
 def test_the_name_preview_normalizes_the_way_the_server_does():
@@ -620,7 +354,7 @@ def test_the_name_preview_normalizes_the_way_the_server_does():
     assert "slice(0, 64)" in slug
 
 
-def test_both_upload_routes_are_wired_into_the_url_table():
+def test_create_and_upload_routes_are_wired_into_the_url_table():
     from channel.web import web_channel
 
     urls = web_channel.URLS

@@ -51,8 +51,29 @@ const CONFIGURED_FEED = (loadAppConfig()?.updateFeedUrl || '').trim()
 // /legacy/ segment so it gets the win-legacy release instead of the standard.
 const FEED_BASE = 'https://cowagent.ai/update/' + (isLegacyWindows() ? 'legacy/' : '')
 const feedUrlFor = (china: boolean) => {
-  if (CONFIGURED_FEED) return CONFIGURED_FEED
-  return china ? `${FEED_BASE}?lang=zh` : FEED_BASE
+  if (CONFIGURED_FEED) return withFeedQuery(CONFIGURED_FEED)
+  return withFeedQuery(china ? `${FEED_BASE}?lang=zh` : FEED_BASE)
+}
+
+// Extra query parameters the renderer may attach to the feed URL, so a feed
+// server can tailor its answer to this install. Empty unless set, in which
+// case the feed URL is used exactly as above. electron-updater carries the
+// feed URL's query over to the files it resolves from it.
+let feedQuery: Record<string, string> = {}
+const FEED_QUERY_KEY = /^[A-Za-z0-9_-]{1,32}$/
+const FEED_QUERY_MAX_ENTRIES = 8
+const FEED_QUERY_MAX_VALUE = 256
+
+function withFeedQuery(url: string): string {
+  const entries = Object.entries(feedQuery)
+  if (entries.length === 0) return url
+  try {
+    const u = new URL(url)
+    for (const [k, v] of entries) u.searchParams.set(k, v)
+    return u.toString()
+  } catch {
+    return url
+  }
 }
 
 // Which origin the current session prefers, derived from the app UI language
@@ -79,6 +100,23 @@ export function setUpdateLanguage(lang: string | undefined): void {
     preferChina = china
     if (app.isPackaged) applyFeedUrl()
   }
+}
+
+// Replace the extra feed query (see feedQuery). Invalid keys and non-string
+// values are dropped; an empty or invalid input clears it.
+export function setUpdateFeedQuery(params: unknown): void {
+  const next: Record<string, string> = {}
+  if (params && typeof params === 'object' && !Array.isArray(params)) {
+    for (const [k, v] of Object.entries(params as Record<string, unknown>)) {
+      if (Object.keys(next).length >= FEED_QUERY_MAX_ENTRIES) break
+      if (!FEED_QUERY_KEY.test(k) || typeof v !== 'string') continue
+      const value = v.trim()
+      if (value && value.length <= FEED_QUERY_MAX_VALUE) next[k] = value
+    }
+  }
+  if (JSON.stringify(next) === JSON.stringify(feedQuery)) return
+  feedQuery = next
+  if (app.isPackaged) applyFeedUrl()
 }
 
 // Persist update logs to a file so a user hitting a silent "spinner never

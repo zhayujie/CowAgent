@@ -63,6 +63,39 @@ Docker 部署时，官方 `docker-compose.yml` 已经把宿主机 `./cow` 挂载
 - **fetch**：通用网页抓取，返回页面文本内容，无需 API Key
 - **github**：访问 GitHub 仓库、Issue、PR 等，需要 Personal Access Token
 
+### Streamable HTTP + Bearer 密钥
+
+远程 server 若使用固定 API Key 认证，需显式指定 `type`（远程 URL 不指定时会按 `sse` 处理），并在 `headers` 中传入密钥：
+
+```json
+{
+  "mcpServers": {
+    "my-remote-tools": {
+      "type": "streamable-http",
+      "url": "https://mcp.example.com/mcp",
+      "headers": {
+        "Authorization": "Bearer YOUR_API_KEY"
+      }
+    }
+  }
+}
+```
+
+- header 的值按字面量发送，`${API_KEY}` **不会**从环境变量展开
+- 密钥在 `mcp.json` 中是明文存储，注意不要提交到版本库
+- 配置了 `Authorization` 即视为静态认证，不会触发下方的 OAuth 流程，即使密钥是错的
+
+## Web / 桌面控制台
+
+Web 控制台和桌面客户端「能力」页面的 **MCP 工具** 区域可以直接添加、编辑、停用和删除 MCP 服务，不必再手工改 `mcp.json`。
+
+- **表单或 JSON**：可以逐项填写表单，也可以切换到 JSON 标签，直接粘贴 MCP 市场提供的配置，例如 `{"mcpServers":{"fetch":{"command":"uvx","args":["mcp-server-fetch"]}}}`，一次可以粘贴多个。
+- **测试连接** 会握手并列出每个服务提供的工具。点击 **保存** 时也会先做同样的校验；校验未通过时，可以修改配置，或选择 **仍然保存**（适用于保存后才能授权的服务）。
+- 保存会写入该 Agent 的 `mcp.json`，格式与 Claude / Cursor 的 `mcpServers` 一致。
+- CowAgent 会热加载该文件，**下一条消息**即可使用新工具，无需重启进程。
+
+stdio、SSE、streamable HTTP 都支持。停用的服务器会留在文件里，但不会被拉起。
+
 ## 让 Agent 帮你配置
 
 CowAgent 自带 `read` / `write` / `edit` 工具，**直接把要装的 MCP 配置发给 Agent，让它写到配置文件中：

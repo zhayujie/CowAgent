@@ -68,6 +68,9 @@ def _bind_channel_instance(channel_type: str, instance_id: str = "", agent_id: s
             # "follow the default Agent". No restart: this only changes routing.
             channel.bound_agent_id = agent_id
             channel.members = list(inst.members or [])
+            # Kept in step with the record so a rebind does not leave the running
+            # instance pointing at a stale way of reaching its teammates.
+            channel.peers = [dict(p) for p in (inst.peers or [])]
             logger.info(
                 f"[WebChannel] Channel '{target_id}' rebound to "
                 f"'{agent_id or 'default'}' with team {inst.members or []} (no restart)"

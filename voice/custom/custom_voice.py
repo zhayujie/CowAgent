@@ -21,6 +21,7 @@ import requests
 
 from bridge.reply import Reply, ReplyType
 from common.log import logger
+from common.tmp_dir import TmpDir
 from config import conf
 from models.custom_provider import _find_provider_by_id, get_custom_providers, parse_custom_bot_type
 from voice.voice import Voice
@@ -108,7 +109,7 @@ class CustomVoice(Voice):
                     f"resp={response.text[:200]}"
                 )
                 return Reply(ReplyType.ERROR, "遇到了一点小问题，请稍后再问我吧")
-            file_name = "tmp/" + datetime.datetime.now().strftime("%Y%m%d%H%M%S") + str(random.randint(0, 1000)) + ".mp3"
+            file_name = TmpDir().path() + datetime.datetime.now().strftime("%Y%m%d%H%M%S") + str(random.randint(0, 1000)) + ".mp3"
             with open(file_name, "wb") as f:
                 f.write(response.content)
             logger.info("[Custom] textToVoice success")

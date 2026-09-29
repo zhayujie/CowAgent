@@ -7,7 +7,6 @@ import os
 import threading
 from datetime import datetime
 from typing import Dict, List, Optional
-from pathlib import Path
 from common.utils import expand_path
 
 
@@ -67,6 +66,32 @@ class TaskStore:
         """Ensure the storage directory exists"""
         store_dir = os.path.dirname(self.store_path)
         os.makedirs(store_dir, exist_ok=True)
+
+    @staticmethod
+    def _write_atomic(path: str, text: str) -> None:
+        """Write ``text`` to ``path`` through a sibling file, then swap it in.
+
+        Writing straight into ``path`` truncates it first, so anything that
+        fails while serialising -- a value json cannot encode, a full disk --
+        leaves it empty and every stored task is gone on the next load, which
+        swallows the decode error and reports no tasks at all. Building the
+        result beside the file and replacing it means a failed save leaves
+        whatever was there before.
+        """
+        temporary = f"{path}.tmp"
+        try:
+            with open(temporary, "w", encoding="utf-8") as handle:
+                handle.write(text)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, path)
+        except Exception:
+            try:
+                if os.path.exists(temporary):
+                    os.remove(temporary)
+            except OSError:
+                pass
+            raise
     
     def load_tasks(self) -> Dict[str, dict]:
         """
@@ -96,25 +121,32 @@ class TaskStore:
         """
         with self.lock:
             try:
-                # Create backup
+                # Create backup. The store is written as UTF-8 below and read
+                # back as UTF-8 in load_tasks(), so the copy has to go through
+                # the same codec: with the platform default it is decoded
+                # through the wrong one on Windows (cp936 on a zh-CN box), and
+                # the backup ends up either mojibake or -- since the open() for
+                # writing already truncated it -- an empty file where a usable
+                # one used to be.
                 if os.path.exists(self.store_path):
                     backup_path = f"{self.store_path}.bak"
                     try:
-                        with open(self.store_path, 'r') as src:
-                            with open(backup_path, 'w') as dst:
-                                dst.write(src.read())
+                        with open(self.store_path, 'r', encoding='utf-8') as src:
+                            previous = src.read()
+                        self._write_atomic(backup_path, previous)
                     except Exception:
                         pass
-                
+
                 # Save tasks
                 data = {
                     "version": 1,
                     "updated_at": datetime.now().isoformat(),
                     "tasks": tasks
                 }
-                
-                with open(self.store_path, 'w', encoding='utf-8') as f:
-                    json.dump(data, f, ensure_ascii=False, indent=2)
+
+                self._write_atomic(
+                    self.store_path, json.dumps(data, ensure_ascii=False, indent=2)
+                )
             except Exception as e:
                 print(f"Error saving tasks: {e}")
                 raise

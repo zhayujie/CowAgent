@@ -63,6 +63,28 @@ MCP コミュニティ標準に完全準拠しており、Claude Desktop / Curso
 - **fetch**：汎用 Web ページ取得。ページ本文を返す。API Key 不要
 - **github**：GitHub のリポジトリ、Issue、PR などにアクセス。Personal Access Token が必要
 
+### Streamable HTTP + Bearer キー
+
+固定の API Key で認証するリモート server は、`type` を明示し（リモート URL で省略すると `sse` として扱われます）、`headers` にキーを渡します：
+
+```json
+{
+  "mcpServers": {
+    "my-remote-tools": {
+      "type": "streamable-http",
+      "url": "https://mcp.example.com/mcp",
+      "headers": {
+        "Authorization": "Bearer YOUR_API_KEY"
+      }
+    }
+  }
+}
+```
+
+- ヘッダの値はそのまま送信されます。`${API_KEY}` は環境変数から展開**されません**
+- キーは `mcp.json` に平文で保存されるため、バージョン管理に含めないでください
+- `Authorization` を設定すると静的認証として扱われ、値が誤っていても下記の OAuth フローは実行されません
+
 ## Agent に設定を任せる
 
 CowAgent には `read` / `write` / `edit` Tool が組み込まれているため、**MCP の設定をそのまま Agent に渡して、ファイルに書き込んでもらえます**：

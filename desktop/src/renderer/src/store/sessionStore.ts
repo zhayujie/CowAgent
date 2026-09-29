@@ -4,7 +4,7 @@ import { t } from '../i18n'
 import { useWorkspaceStore } from './workspaceStore'
 import { useAgentStore, isMultiAgent, findAgent } from './agentStore'
 import { ownerOf, setOwner, forgetOwner, rememberOwners } from './sessionOwners'
-import type { SessionItem } from '../types'
+import type { AgentBadge, SessionItem, SessionTeam } from '../types'
 
 const ACTIVE_KEY = 'cow_session_id'
 export const DEFAULT_SPACE_KEY = '__default__'
@@ -73,6 +73,14 @@ interface SessionState {
    * space group. No-op if the id is already present.
    */
   addOptimistic: (id: string, project?: { path: string; name: string } | null) => void
+  /**
+   * Record who is in a conversation, so the list can show their faces.
+   *
+   * A list item carries its roster once the conversation is persisted; until the
+   * first message only the client knows a chat was opened as a group, and
+   * without this it reads as an ordinary empty one.
+   */
+  setParticipants: (id: string, team: SessionTeam) => void
   rename: (id: string, title: string) => Promise<void>
   remove: (id: string) => Promise<void>
   togglePin: (id: string) => Promise<void>
@@ -211,6 +219,24 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       }
       return { sessions: [item, ...s.sessions] }
     })
+  },
+
+  setParticipants: (id, team) => {
+    // Same shape and order the API sends: owner first, deduped. Only a real
+    // group gets faces; a conversation back down to its owner drops them again.
+    const roster: AgentBadge[] = []
+    for (const m of [team.owner, ...(team.members || [])]) {
+      if (m?.id && !roster.some((a) => a.id === m.id)) {
+        roster.push({ id: m.id, name: m.name, avatar: m.avatar })
+      }
+    }
+    set((s) => ({
+      sessions: s.sessions.map((sess) =>
+        sess.session_id === id
+          ? { ...sess, participants: roster.length > 1 ? roster : undefined }
+          : sess
+      ),
+    }))
   },
 
   rename: async (id, title) => {

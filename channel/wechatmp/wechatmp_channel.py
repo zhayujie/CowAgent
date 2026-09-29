@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 import asyncio
-import imghdr
 import io
 import os
 import threading
@@ -26,6 +25,45 @@ try:
     from voice.audio_convert import any_to_mp3, split_audio
 except ImportError as e:
     logger.debug("import voice.audio_convert failed, voice features will not be supported: {}".format(e))
+
+# ``imghdr`` left the standard library in Python 3.13 (PEP 594), and this
+# project supports 3.13 (pyproject allows >=3.7, the v2.1.1 release notes
+# advertise "Python 3.13 support", and CI runs the suite on 3.13). Importing it
+# here meant the whole channel could not be loaded -- `channel_factory` imports
+# this module to build `WechatMPChannel` -- so detect the type locally instead.
+# Signatures the WeChat material API accepts, plus webp/`imghdr` parity.
+_IMAGE_SIGNATURES = (
+    (b"\xff\xd8\xff", "jpeg"),
+    (b"\x89PNG\r\n\x1a\n", "png"),
+    (b"GIF87a", "gif"),
+    (b"GIF89a", "gif"),
+    (b"BM", "bmp"),
+)
+
+
+def _sniff_image_type(storage) -> str:
+    """Image type of an open binary stream: "png", "jpeg", "gif", "bmp", "webp".
+
+    Stands in for ``imghdr.what``, including leaving the stream position where
+    it was found so the same object can be handed to the upload call afterwards.
+    ``"png"`` is the last resort rather than ``None``: the callers build
+    ``"<receiver>-<msg_id>.<type>"`` and ``"image/<type>"`` from this value, so
+    an unidentified payload used to raise ``TypeError`` (str + None) before the
+    upload was attempted.
+    """
+    position = storage.tell()
+    try:
+        head = storage.read(16)
+    finally:
+        storage.seek(position)
+    for signature, image_type in _IMAGE_SIGNATURES:
+        if head.startswith(signature):
+            return image_type
+    if head[:4] == b"RIFF" and head[8:12] == b"WEBP":
+        return "webp"
+    logger.debug("[wechatmp] unrecognised image signature {}, uploading as png".format(head))
+    return "png"
+
 
 # If using SSL, uncomment the following lines, and modify the certificate path.
 # from cheroot.server import HTTPServer
@@ -141,11 +179,11 @@ class WechatMPChannel(ChatChannel):
                     with open(local_path, "rb") as f:
                         image_storage.write(f.read())
                 else:
-                    pic_res = requests.get(img_url, stream=True)
+                    pic_res = requests.get(img_url, stream=True, timeout=60)
                     for block in pic_res.iter_content(1024):
                         image_storage.write(block)
                 image_storage.seek(0)
-                image_type = imghdr.what(image_storage)
+                image_type = _sniff_image_type(image_storage)
                 filename = receiver + "-" + str(context["msg"].msg_id) + "." + image_type
                 content_type = "image/" + image_type
                 try:
@@ -160,7 +198,7 @@ class WechatMPChannel(ChatChannel):
             elif reply.type == ReplyType.IMAGE:  # 从文件读取图片
                 image_storage = reply.content
                 image_storage.seek(0)
-                image_type = imghdr.what(image_storage)
+                image_type = _sniff_image_type(image_storage)
                 filename = receiver + "-" + str(context["msg"].msg_id) + "." + image_type
                 content_type = "image/" + image_type
                 try:
@@ -174,7 +212,7 @@ class WechatMPChannel(ChatChannel):
                 self.cache_dict[receiver].append(("image", media_id))
             elif reply.type == ReplyType.VIDEO_URL:  # 从网络下载视频
                 video_url = reply.content
-                video_res = requests.get(video_url, stream=True)
+                video_res = requests.get(video_url, stream=True, timeout=60)
                 video_storage = io.BytesIO()
                 for block in video_res.iter_content(1024):
                     video_storage.write(block)
@@ -271,11 +309,11 @@ class WechatMPChannel(ChatChannel):
                     with open(local_path, "rb") as f:
                         image_storage.write(f.read())
                 else:
-                    pic_res = requests.get(img_url, stream=True)
+                    pic_res = requests.get(img_url, stream=True, timeout=60)
                     for block in pic_res.iter_content(1024):
                         image_storage.write(block)
                 image_storage.seek(0)
-                image_type = imghdr.what(image_storage)
+                image_type = _sniff_image_type(image_storage)
                 filename = receiver + "-" + str(context["msg"].msg_id) + "." + image_type
                 content_type = "image/" + image_type
                 try:
@@ -289,7 +327,7 @@ class WechatMPChannel(ChatChannel):
             elif reply.type == ReplyType.IMAGE:  # 从文件读取图片
                 image_storage = reply.content
                 image_storage.seek(0)
-                image_type = imghdr.what(image_storage)
+                image_type = _sniff_image_type(image_storage)
                 filename = receiver + "-" + str(context["msg"].msg_id) + "." + image_type
                 content_type = "image/" + image_type
                 try:
@@ -302,7 +340,7 @@ class WechatMPChannel(ChatChannel):
                 logger.info("[wechatmp] Do send image to {}".format(receiver))
             elif reply.type == ReplyType.VIDEO_URL:  # 从网络下载视频
                 video_url = reply.content
-                video_res = requests.get(video_url, stream=True)
+                video_res = requests.get(video_url, stream=True, timeout=60)
                 video_storage = io.BytesIO()
                 for block in video_res.iter_content(1024):
                     video_storage.write(block)

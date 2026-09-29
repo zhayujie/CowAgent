@@ -102,6 +102,7 @@ function _applyInputTooltips() {
     set('steer-btn', 'steer_active');
     set('session-toggle-btn', 'session_history', 'bottom');
     set('workspace-toggle-btn', 'ws_toggle', 'bottom');
+    set('timeline-toggle-btn', 'timeline_nav', 'bottom');
     // Optimize / mic buttons carry state-dependent tooltips managed in their
     // own setup, but on language switch we reset them to the idle label so the
     // tooltip follows the current locale.
@@ -126,16 +127,52 @@ function _addOptimisticSessionItem(sid) {
     if (!container) return;
     if (_sessionItems.some(s => s.session_id === sid)) return;
 
+    // This runs from a callback, so a chat opened as a group may already have its
+    // members by now: seed the faces from them rather than waiting for a change
+    // that has already happened.
+    const roster = sid === sessionId && _sessCfg ? _rosterFromTeam(_sessCfg.team) : [];
+
     _sessionItems.unshift({
         session_id: sid,
         title: t('new_chat'),
         last_active: Math.floor(Date.now() / 1000),
         pinned: 0,
+        participants: roster.length ? roster : undefined,
         // The fresh session inherits the workspace the selector currently shows.
         project: _wsSelState.current
             ? { path: _wsSelState.current.path, name: _wsSelState.current.name }
             : null,
     });
+    _renderSessionList();
+}
+
+// The faces a conversation's entry shows, in the same shape and order the API
+// sends: owner first, deduped. Only a real group gets faces, so a conversation
+// down to its owner alone reads as the ordinary chat it is.
+function _rosterFromTeam(team) {
+    const roster = [];
+    if (!team) return roster;
+    [team.owner].concat(team.members || []).forEach(m => {
+        if (m && m.id && !roster.some(a => a.id === m.id)) {
+            roster.push({ id: m.id, name: m.name, avatar: m.avatar || '' });
+        }
+    });
+    return roster.length > 1 ? roster : [];
+}
+
+/**
+ * Record who is in a conversation, so its list entry shows their faces.
+ *
+ * An entry carries its roster once the conversation is in the database; until the
+ * first message only the browser knows a chat was opened as a group, and without
+ * this it reads as an ordinary empty one.
+ */
+function setSessionParticipants(sid, team) {
+    const entry = _sessionItems.find(s => s.session_id === sid);
+    if (!entry) return;
+    const roster = _rosterFromTeam(team);
+    if (roster.length) entry.participants = roster;
+    else delete entry.participants;
     _renderSessionList();
 }
 
@@ -624,6 +661,7 @@ function switchSession(newSessionId, agentId) {
     historyLoading = false;
 
     messagesDiv.innerHTML = '';
+    if (typeof resetTimeline === 'function') resetTimeline();
     loadHistory(1);
     startPolling();
 

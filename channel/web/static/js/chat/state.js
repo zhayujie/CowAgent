@@ -38,6 +38,7 @@ function updateEditButtonsState() {
     });
 }
 let streamBuffers = {};   // request_id -> { items: [event...], timestamp } for re-attach replay
+const resumedRequests = new Set();  // in-flight replies picked up after a page load, at most once each
 let isComposing = false;
 let appConfig = { use_agent: false, title: 'CowAgent', subtitle: '', providers: {}, api_bases: {} };
 
@@ -554,6 +555,8 @@ messagesDiv.addEventListener('click', (e) => {
                     body: JSON.stringify({ session_id: sessionId, user_seq: parseInt(userSeq) })
                 }).then(r => r.json()).then(data => {
                     if (data.status === 'success') console.log(`Deleted ${data.deleted} messages`);
+                    // Drop the removed question from the navigation rail.
+                    if (typeof refreshTimeline === 'function') refreshTimeline();
                 }).catch(err => console.error('Failed to delete:', err));
             }
         });

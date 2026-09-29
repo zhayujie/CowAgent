@@ -80,6 +80,26 @@ def test_backup_output_on_another_filesystem(tmp_path, monkeypatch):
     assert list(output_dir.iterdir()) == [archive]
 
 
+def test_backup_falls_back_to_move_on_cross_device_replace(tmp_path, monkeypatch):
+    source_workspace = tmp_path / "workspace"
+    source_workspace.mkdir()
+    (source_workspace / "MEMORY.md").write_bytes(b"portable\n")
+    output_dir = tmp_path / "backups"
+    output_dir.mkdir()
+    archive = output_dir / "cow-backup.zip"
+    archive.write_bytes(b"previous backup")
+
+    def replace_raising_exdev(source, destination):
+        raise OSError(errno.EXDEV, "Invalid cross-device link")
+
+    monkeypatch.setattr(backup.os, "replace", replace_raising_exdev)
+    create_backup_archive(archive, tmp_path / "data", source_workspace)
+
+    with zipfile.ZipFile(archive) as bundle:
+        assert bundle.read("workspace/MEMORY.md") == b"portable\n"
+    assert list(output_dir.iterdir()) == [archive]
+
+
 def test_backup_replace_failure_preserves_existing_archive(tmp_path, monkeypatch):
     output_dir = tmp_path / "backups"
     output_dir.mkdir()

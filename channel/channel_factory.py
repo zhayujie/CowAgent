@@ -5,7 +5,7 @@ from common import const
 from .channel import Channel
 
 
-def create_channel(channel_type, instance_id="", bound_agent_id="", credentials=None, members=None) -> Channel:
+def create_channel(channel_type, instance_id="", bound_agent_id="", credentials=None, members=None, peers=None) -> Channel:
     """
     create a channel instance
 
@@ -18,9 +18,11 @@ def create_channel(channel_type, instance_id="", bound_agent_id="", credentials=
         When provided, a fresh (non-singleton) instance is built so each
         instance can carry its own credentials.
     :param members: teammate Agent ids the owner may delegate to (team bot).
+    :param peers: connection profiles for teammates in another process, so the
+        owner can delegate to them through the transport.
     :return: channel instance
     """
-    multi_instance = bool(instance_id or credentials or bound_agent_id or members)
+    multi_instance = bool(instance_id or credentials or bound_agent_id or members or peers)
     ch = _build_channel(channel_type, multi_instance)
     ch.channel_type = _normalize_type(channel_type)
     if multi_instance:
@@ -29,6 +31,7 @@ def create_channel(channel_type, instance_id="", bound_agent_id="", credentials=
             bound_agent_id=bound_agent_id,
             credentials=credentials,
             members=members,
+            peers=peers,
         )
     return ch
 

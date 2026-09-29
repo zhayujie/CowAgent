@@ -1,8 +1,12 @@
 # encoding:utf-8
 """
-Unit tests for the Baidu translator retry handling: when every retry of the
-transient error codes (52001/52002) fails, translate() must report the API
-error instead of a bare KeyError on the missing trans_result field.
+Unit tests for the Baidu translator's request handling.
+
+Covers the retry logic (when every attempt hits the transient error codes
+52001/52002, translate() must report the API error instead of a bare KeyError
+on the missing trans_result field) plus the request itself: every attempt is
+bounded, and an HTTP-level failure with a non-JSON body is reported with its
+status rather than as a decode error.
 """
 import os
 import sys
@@ -92,3 +96,35 @@ class TestBaiduTranslatorTranslate(unittest.TestCase):
         self.assertEqual(mock_post.call_count, 3)
         self.assertNotIsInstance(ctx.exception, KeyError)
         self.assertIn("请求超时", str(ctx.exception))
+
+    def test_every_attempt_is_bounded(self):
+        """requests waits forever by default; three attempts would triple that."""
+        translator = _make_translator()
+
+        with self._post_returning(
+            return_value=_response({"error_code": "52001", "error_msg": "请求超时"})
+        ) as mock_post:
+            with self.assertRaises(Exception):
+                translator.translate("hello")
+
+        self.assertEqual(mock_post.call_count, 3)
+        for attempt in mock_post.call_args_list:
+            timeout = attempt.kwargs.get("timeout")
+            self.assertIsInstance(timeout, (int, float))
+            self.assertGreater(timeout, 0)
+
+    def test_non_json_error_body_is_reported_with_its_status(self):
+        """A gateway HTML page must not surface as a bare JSONDecodeError."""
+        translator = _make_translator()
+        response = MagicMock()
+        response.status_code = 502
+        response.text = "<html>Bad Gateway</html>"
+        response.json.side_effect = ValueError("Expecting value: line 1 column 1 (char 0)")
+
+        with self._post_returning(return_value=response):
+            with self.assertRaises(Exception) as ctx:
+                translator.translate("hello")
+
+        self.assertNotIsInstance(ctx.exception, ValueError)
+        self.assertIn("502", str(ctx.exception))
+        self.assertIn("Bad Gateway", str(ctx.exception))

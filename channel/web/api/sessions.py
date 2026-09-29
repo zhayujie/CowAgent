@@ -830,41 +830,6 @@ class PromptOptimizeHandler:
             return json.dumps({"status": "error", "message": str(e)})
 
 
-def _session_participant_ids(session_id: str, agent_id: str) -> list:
-    """Every Agent that holds a transcript for this session.
-
-    A team conversation records its roster on the host's session_prefs, keyed by
-    ``(host_agent_id, session_id)``. The participants are that host plus its
-    members. For a single chat no roster exists, so this is just the requested
-    agent (or the default when none was given). The requested agent is always
-    included and comes first, so callers that key their result off it (the
-    returned context_start_seq) still get the right one.
-    """
-    ordered = []
-
-    def _add(aid):
-        aid = str(aid or "").strip()
-        if aid and aid not in ordered:
-            ordered.append(aid)
-
-    _add(agent_id)
-    try:
-        from agent.workspace import session_prefs
-
-        for (host_id, sid), members in session_prefs.members_index().items():
-            if sid != session_id:
-                continue
-            _add(host_id)
-            for m in members or []:
-                _add(m)
-    except Exception as e:
-        logger.debug(f"[WebChannel] participant lookup skipped: {e}")
-
-    # An empty agent_id means the default agent; keep the [""] fallback so the
-    # single-agent path clears the default's transcript exactly as before.
-    return ordered or [agent_id or ""]
-
-
 class SessionClearContextHandler:
     def POST(self, session_id: str):
         _require_auth()
@@ -877,39 +842,10 @@ class SessionClearContextHandler:
             body = json.loads(raw_body) if raw_body else {}
             agent_id = _request_agent_id(body) or _request_agent_id(params)
 
-            # A team conversation stores one transcript per participating Agent
-            # (host + members), each under its own agent_id in the shared DB and
-            # each with its own live instance keyed by (agent_id, session_id).
-            # Clearing only the requested agent leaves every teammate's history
-            # and cached instance intact, so the next turn still replays the
-            # whole conversation. Clear every participant. A single chat has no
-            # members, so this collapses to the original single-agent path.
-            participant_ids = _session_participant_ids(session_id, agent_id)
+            # The service clears every participant of a team conversation.
+            from agent.chat.session_service import SessionService
 
-            from agent.memory import get_conversation_store
-            new_seq = 0
-            for pid in participant_ids:
-                try:
-                    store = get_conversation_store(_get_workspace_root(agent_id=pid))
-                    seq = store.clear_context(session_id)
-                    if pid == agent_id or (not agent_id and not new_seq):
-                        new_seq = seq
-                except Exception as e:
-                    logger.warning(
-                        f"[WebChannel] Clear context failed for agent '{pid}': {e}"
-                    )
-
-            # Delete each participant's live instance so a fresh one is built on
-            # the next message and restores from the now-cleared boundary.
-            try:
-                from bridge.bridge import Bridge
-                bridge = Bridge()
-                ab = bridge.get_agent_bridge()
-                for pid in participant_ids:
-                    ab.clear_session(session_id, agent_id=pid)
-            except Exception:
-                pass
-
+            new_seq = SessionService().clear_context(session_id, agent_id=agent_id)
             return json.dumps({"status": "success", "context_start_seq": new_seq})
         except Exception as e:
             logger.error(f"[WebChannel] Clear context error: {e}")
@@ -1010,7 +946,7 @@ class HistoryHandler:
         web.header('Content-Type', 'application/json; charset=utf-8')
         web.header('Access-Control-Allow-Origin', '*')
         try:
-            params = web.input(session_id='', page='1', page_size='20', agent_id='')
+            params = web.input(session_id='', page='1', page_size='20', agent_id='', until_seq='')
             session_id = params.session_id.strip()
             if not session_id:
                 return json.dumps({"status": "error", "message": "session_id required"})
@@ -1020,11 +956,34 @@ class HistoryHandler:
             store = get_conversation_store(
                 _get_workspace_root(agent_id=agent_id)
             )
+            until_seq = params.until_seq.strip()
+            page = int(params.page)
+            # A reply still streaming is shown as of its last stored point and
+            # followed live from there, so nothing appears twice or goes missing.
+            live = None
+            if page == 1 and not until_seq:
+                try:
+                    live = WebChannel().resumable_stream(session_id, agent_id)
+                except Exception as e:
+                    logger.debug(f"[WebChannel] resumable stream lookup skipped: {e}")
             result = store.load_history_page(
                 session_id=session_id,
-                page=int(params.page),
+                page=page,
                 page_size=int(params.page_size),
+                until_seq=int(until_seq) if until_seq.lstrip('-').isdigit() else None,
+                max_seq=live["stored_seq"] if live else None,
             )
+            if live:
+                messages = result.get("messages") or []
+                last = messages[-1] if messages else {}
+                running = last.get("role") == "assistant" and last.get("run_state") == "running"
+                # Before the run starts there is nothing stored to line up
+                # with; once it has, only its own unfinished turn is followed.
+                if running or live["stored_seq"] is None:
+                    result["active_request"] = {
+                        "request_id": live["request_id"],
+                        "after_seq": live["after_seq"],
+                    }
             # Same workspace-relative media rewrite the live SSE path applies,
             # so images/videos survive a page reload for non-default agents.
             history_root = None
@@ -1050,6 +1009,36 @@ class HistoryHandler:
             return json.dumps({"status": "success", **result}, ensure_ascii=False)
         except Exception as e:
             logger.error(f"[WebChannel] History API error: {e}")
+            return json.dumps({"status": "error", "message": str(e)})
+
+
+class UserMessagesHandler:
+    """Lightweight index of a session's user messages for the nav timeline.
+
+    Returns only ``{seq, preview, created_at}`` per user turn, so the whole
+    conversation's user-message list can be fetched at once regardless of how
+    many messages there are; the main history stays paginated.
+    """
+
+    def GET(self):
+        _require_auth()
+        web.header('Content-Type', 'application/json; charset=utf-8')
+        web.header('Access-Control-Allow-Origin', '*')
+        try:
+            params = web.input(session_id='', agent_id='')
+            session_id = params.session_id.strip()
+            if not session_id:
+                return json.dumps({"status": "error", "message": "session_id required"})
+
+            agent_id = _request_agent_id(params)
+            from agent.memory import get_conversation_store
+            store = get_conversation_store(
+                _get_workspace_root(agent_id=agent_id)
+            )
+            result = store.list_user_messages(session_id=session_id)
+            return json.dumps({"status": "success", **result}, ensure_ascii=False)
+        except Exception as e:
+            logger.error(f"[WebChannel] User messages API error: {e}")
             return json.dumps({"status": "error", "message": str(e)})
 
 

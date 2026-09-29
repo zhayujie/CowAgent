@@ -366,8 +366,7 @@ detect_python_command() {
             minor_version=$($cmd -c 'import sys; print(sys.version_info[1])' 2>/dev/null)
             
             if [[ "$major_version" == "3" ]]; then
-                # Supported range is 3.7+. On 3.13+ web.py is installed from a
-                # pinned GitHub commit (see requirements.txt), which needs git.
+                # Supported range is 3.7+.
                 if (( minor_version >= 7 )); then
                     PYTHON_CMD=$cmd
                     PYTHON_VERSION="${major_version}.${minor_version}"
@@ -383,14 +382,6 @@ detect_python_command() {
         exit 1
     fi
 
-    # On 3.13+, web.py is pulled from GitHub via pip, which requires git.
-    if [[ "$major_version" == "3" ]] && (( minor_version >= 13 )); then
-        if ! command -v git &> /dev/null; then
-            echo -e "${YELLOW}⚠️  Python $PYTHON_VERSION detected. Installing web.py from GitHub requires git, which was not found.${NC}"
-            echo -e "${YELLOW}    Please install git, or use Python 3.12 where web.py installs directly from PyPI.${NC}"
-        fi
-    fi
-    
     # Export for global use
     export PYTHON_CMD
     export PYTHON_VERSION

@@ -9,7 +9,7 @@ import re
 from wechatpy.enterprise import WeChatClient
 
 from bridge.context import ContextType
-from channel.chat_message import ChatMessage
+from channel.chat_message import ChatMessage, safe_filename
 from common.log import logger
 from common import state_dir
 
@@ -110,8 +110,12 @@ class WechatKfMessage(ChatMessage):
             def download_file():
                 response = client.media.download(media_id)
                 if response.status_code == 200:
-                    filename = _extract_filename(
-                        response.headers.get("Content-Disposition", "")
+                    # The name comes back from the server for the sender's own
+                    # upload, so it can carry a separator ("sub/x.pdf",
+                    # "../../x.txt") and stop being one path component; reduce
+                    # it first, like weixin, slack, discord, qq and dingtalk do.
+                    filename = safe_filename(
+                        _extract_filename(response.headers.get("Content-Disposition", ""))
                     ) or media_id
                     self.content = os.path.join(_get_tmp_dir(), filename)
                     with open(self.content, "wb") as f:

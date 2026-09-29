@@ -28,6 +28,28 @@ def delegated_prompt(source_name: str, source_id: str, task: str) -> str:
     )
 
 
+def delegated_result_text(reply) -> str:
+    """The teammate's answer as text for the delegating Agent.
+
+    A teammate that sent files comes back as a file reply whose ``content``
+    is the first file's URL; its prose rides in ``text_content``. Returning
+    ``content`` alone would hand back a bare link and drop the answer.
+    """
+    if reply is None:
+        return ""
+    if reply.type not in (ReplyType.IMAGE_URL, ReplyType.FILE):
+        return reply.content or ""
+    parts = [getattr(reply, "text_content", "") or ""]
+    for r in [reply] + list(getattr(reply, "extra_replies", None) or []):
+        url = str(r.content or "")
+        if not url:
+            continue
+        # Only a published image renders inline; a local path stays as it was.
+        is_web = url.lower().startswith(("http://", "https://"))
+        parts.append(f"![]({url})" if r.type == ReplyType.IMAGE_URL and is_web else url)
+    return "\n\n".join(p for p in parts if p)
+
+
 def format_delegate_result(
     source_name: str,
     target_name: str,
@@ -60,51 +82,80 @@ class _DelegateView:
     The delegating Agent's context is unaffected: it still receives only the
     teammate's returned result, which is the whole point. This is the other
     audience — the person watching — for whom a teammate that reports nothing
-    until it finishes is indistinguishable from one that hung. So the
-    teammate's tool calls are relayed under this call's card, the same way a
-    sub agent's are, while its prose and reasoning are dropped (those render as
-    the assistant speaking, and a teammate muttering into the main reply reads
-    as the Agent losing the thread).
+    until it finishes is indistinguishable from one that hung.
+
+    So the teammate's turn is relayed as its own turn: the events are passed
+    through untouched, bracketed by a start/end pair naming who is speaking.
+    A client that understands the pair attributes them to the teammate and
+    renders them exactly as it renders any other reply; one that does not
+    still has the delegation result on the call's card, as before. Without
+    that attribution the prose would read as the delegating Agent suddenly
+    talking about someone else's work, which is why it used to be dropped.
     """
 
-    def __init__(self, tool, card_id: str):
+    #: A teammate's turn looks like any other: prose, reasoning, tool calls.
+    RELAYED = (
+        "message_update",
+        "reasoning_update",
+        "tool_execution_start",
+        "tool_execution_progress",
+        "tool_execution_end",
+    )
+
+    #: Emitted around a relayed turn to say who it belongs to.
+    START = "peer_message_start"
+    END = "peer_message_end"
+
+    def __init__(self, tool, card_id: str, source, target_id: str, target_name: str):
         self.tool = tool
         self.card_id = card_id
+        self.source_id = getattr(source, "id", "") or ""
+        self.source_name = getattr(source, "name", "") or self.source_id
+        self.target_id = target_id
+        self.target_name = target_name or target_id
+        self._open = False
 
     def relay(self, event: dict) -> None:
         if not isinstance(event, dict):
             return
         event_type = event.get("type")
         data = event.get("data") or {}
-        if event_type == "tool_execution_start":
-            self.tool.emit_event(
-                "subagent_step",
-                {
-                    "card_id": self.card_id,
-                    "step_id": self._step_id(data),
-                    "phase": "start",
-                    "tool_name": data.get("tool_name", "tool"),
-                    "arguments": data.get("arguments") or {},
-                },
-            )
-        elif event_type == "tool_execution_end":
-            status = data.get("status", "success")
-            step = {
+        # A teammate handing work onward is still just another turn: pass its
+        # markers up untouched so the chain reads as a flat sequence of turns
+        # rather than turns nested inside turns.
+        if event_type in (self.START, self.END):
+            self.tool.emit_event(event_type, data)
+            return
+        if event_type not in self.RELAYED:
+            return
+        self.open()
+        self.tool.emit_event(event_type, data)
+
+    def open(self) -> None:
+        """Announce the teammate's turn, once, when it first has something to say."""
+        if self._open:
+            return
+        self._open = True
+        self.tool.emit_event(
+            self.START,
+            {
                 "card_id": self.card_id,
-                "step_id": self._step_id(data),
-                "phase": "end",
-                "tool_name": data.get("tool_name", "tool"),
-                "status": status,
-                "execution_time": round(data.get("execution_time") or 0, 2),
-            }
-            if status != "success":
-                from agent.tools.subagent.subagent import _error_text
+                "agent_id": self.target_id,
+                "agent_name": self.target_name,
+                "source_id": self.source_id,
+                "source_name": self.source_name,
+            },
+        )
 
-                step["error"] = _error_text(data.get("result"))
-            self.tool.emit_event("subagent_step", step)
-
-    def _step_id(self, data: dict) -> str:
-        return f"{self.card_id}:{data.get('tool_call_id') or uuid.uuid4().hex[:8]}"
+    def close(self, status: str = "done") -> None:
+        """End the teammate's turn, so what follows is the caller speaking again."""
+        if not self._open:
+            return
+        self._open = False
+        self.tool.emit_event(
+            self.END,
+            {"card_id": self.card_id, "agent_id": self.target_id, "status": status},
+        )
 
 
 @dataclass(frozen=True)
@@ -427,11 +478,16 @@ class AgentDelegateTool(BaseTool):
         run_id = uuid.uuid4().hex
         parent_run_id = current_agent_run_id() or ""
 
-        # Relay the teammate's tool steps under this call's card so a watcher
-        # can follow the delegated work live, exactly like a sub agent. The
-        # card is this tool call, since one delegation is one card.
+        # Relay the teammate's turn as it happens so a watcher can follow the
+        # delegated work live. The card is this tool call, since one delegation
+        # is one card.
         card_id = getattr(self, "tool_call_id", None) or run_id
-        view = _DelegateView(self, card_id)
+        speaker = target if target is not None else peer_target
+        view = _DelegateView(
+            self, card_id, source,
+            getattr(speaker, "id", "") or "",
+            getattr(speaker, "name", "") or "",
+        )
 
         if target is None:
             return self._delegate_peer(
@@ -492,6 +548,8 @@ class AgentDelegateTool(BaseTool):
                 f"Delegation to '{target.id}' failed: {exc}", display=display
             )
         finally:
+            # Whatever happened, the teammate is done speaking.
+            view.close()
             lock.release()
         duration = time.monotonic() - started_at
 
@@ -503,7 +561,7 @@ class AgentDelegateTool(BaseTool):
             return ToolResult.fail(
                 f"Delegation to '{target.id}' failed: {reply.content}", display=display
             )
-        content = reply.content if reply is not None else ""
+        content = delegated_result_text(reply)
         display = format_delegate_result(
             source.name, target.name, content, status="done", duration_seconds=duration,
         )
@@ -562,6 +620,9 @@ class AgentDelegateTool(BaseTool):
         except Exception as exc:
             display = format_delegate_result(source.name, target.name, str(exc), status="failed")
             return ToolResult.fail(f"Delegation to '{target.id}' failed: {exc}", display=display)
+        finally:
+            # Whatever happened, the teammate is done speaking.
+            view.close()
         duration = result.duration_seconds or (time.monotonic() - started_at)
 
         if not result.ok:

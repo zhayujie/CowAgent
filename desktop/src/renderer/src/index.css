@@ -491,3 +491,136 @@ body * {
     display: none;
   }
 }
+
+/* ============================================================
+   Message navigator
+   A column of short dashes on the right edge of the conversation,
+   one per question. Hovering it unfolds a card listing every
+   question beside it; picking one glides the view there. The rail
+   sits in the gutter left of the scrollbar, so it never covers a
+   bubble.
+   ============================================================ */
+.chat-timeline {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+  z-index: 9;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  padding: 8px 2px 8px 4px;
+  cursor: pointer;
+  transition: opacity 150ms ease;
+}
+.chat-timeline.is-open {
+  opacity: 0;
+}
+
+.chat-timeline-dash {
+  display: block;
+  width: 10px;
+  height: 2px;
+  margin: 3px 0;
+  border-radius: 2px;
+  background: var(--border-strong);
+  transition: width 150ms ease, background 150ms ease;
+}
+.chat-timeline-dash.is-active {
+  width: 14px;
+  background: var(--accent);
+}
+
+.chat-timeline-panel {
+  position: fixed;
+  z-index: 60;
+  width: 300px;
+  max-width: calc(100vw - 24px);
+  padding: 6px;
+  border-radius: 16px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  box-shadow: 0 12px 32px -8px rgba(15, 23, 42, 0.18), 0 2px 6px rgba(15, 23, 42, 0.05);
+  animation: timeline-panel-in 140ms ease-out;
+}
+.dark .chat-timeline-panel {
+  border-color: var(--border-default);
+  box-shadow: 0 12px 32px -8px rgba(0, 0, 0, 0.6);
+}
+@keyframes timeline-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.chat-timeline-list {
+  max-height: min(420px, 60vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.chat-timeline-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 8px 10px 8px 12px;
+  border-radius: 10px;
+  text-align: left;
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+.chat-timeline-row:hover {
+  background: var(--bg-surface-2);
+  color: var(--text-primary);
+}
+.chat-timeline-row.is-active {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.chat-timeline-row-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.chat-timeline-row-dash {
+  flex: 0 0 auto;
+  width: 10px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--border-strong);
+  transition: width 150ms ease, background 150ms ease;
+}
+.chat-timeline-row:hover .chat-timeline-row-dash {
+  background: var(--text-disabled);
+}
+.chat-timeline-row.is-active .chat-timeline-row-dash {
+  width: 14px;
+  background: var(--accent);
+}
+
+/* Brief ring on the bubble a jump lands on. */
+.timeline-flash {
+  animation: timeline-flash-kf 1.6s ease;
+}
+@keyframes timeline-flash-kf {
+  0%,
+  40% {
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+  100% {
+    box-shadow: 0 0 0 3px transparent;
+  }
+}

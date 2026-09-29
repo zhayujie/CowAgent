@@ -24,10 +24,16 @@ class ContextType(Enum):
 
 
 class Context:
-    def __init__(self, type: ContextType = None, content=None, kwargs=dict()):
+    def __init__(self, type: ContextType = None, content=None, kwargs=None):
         self.type = type
         self.content = content
-        self.kwargs = kwargs
+        # Default to a fresh dict per instance. A literal ``kwargs=dict()``
+        # default is evaluated once, when the function is defined, so every
+        # Context built without an explicit dict shared that one object: a key
+        # a turn wrote through ``context["session_id"]`` (or receiver, agent_id,
+        # msg, on_event ...) was still there on the next Context built the same
+        # way, in an unrelated conversation.
+        self.kwargs = {} if kwargs is None else kwargs
 
     def __contains__(self, key):
         if key == "type":

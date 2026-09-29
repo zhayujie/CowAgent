@@ -16,15 +16,12 @@ import requests
 
 from agent.tools.base_tool import BaseTool, ToolResult
 from agent.tools.utils.truncate import truncate_head, format_size
-from agent.tools.utils.url_safety import validate_url_safe
+from agent.tools.utils.url_safety import validate_url_safe, safe_get
 from common.log import logger
 
 
 DEFAULT_TIMEOUT = 30
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
-# Cap on how many redirects we follow; each hop's target is re-validated
-# against the SSRF guard so a public URL cannot bounce us into an internal one.
-MAX_REDIRECTS = 10
 
 DEFAULT_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
@@ -127,41 +124,19 @@ class WebFetch(BaseTool):
 
     @staticmethod
     def _safe_get(url: str, **kwargs) -> requests.Response:
-        """Issue a GET request while re-validating every redirect hop (SSRF guard).
+        """Issue a GET request through the shared redirect-aware SSRF helper.
 
-        Auto-redirect is disabled and each hop is followed manually so the
-        target of every redirect is re-resolved and checked against the SSRF
-        guard. This prevents a public URL from 3xx-bouncing into a private,
-        loopback, link-local or cloud-metadata address. ``kwargs`` are passed
-        through to ``requests.get`` (e.g. ``stream``).
+        Thin wrapper: it only injects this tool's own headers/timeout.
+        ``agent.tools.utils.url_safety.safe_get`` disables auto-redirect and
+        re-validates every hop, so a public URL cannot 3xx-bounce into a
+        private, loopback, link-local or cloud-metadata address.
 
         Raises:
             ValueError: if any hop resolves to a non-public address.
         """
-        kwargs.pop("allow_redirects", None)
-        current = url
-        for _ in range(MAX_REDIRECTS + 1):
-            response = requests.get(
-                current,
-                headers=DEFAULT_HEADERS,
-                timeout=DEFAULT_TIMEOUT,
-                allow_redirects=False,
-                **kwargs,
-            )
-            if not response.is_redirect and not response.is_permanent_redirect:
-                return response
-
-            location = response.headers.get("Location")
-            if not location:
-                return response
-
-            # Resolve the redirect target relative to the current URL, then
-            # re-validate it before following.
-            current = requests.compat.urljoin(current, location)
-            validate_url_safe(current)
-            response.close()
-
-        raise ValueError(f"Too many redirects (>{MAX_REDIRECTS})")
+        kwargs.setdefault("headers", DEFAULT_HEADERS)
+        kwargs.setdefault("timeout", DEFAULT_TIMEOUT)
+        return safe_get(url, **kwargs)
 
     # ---- Web page fetching ----
 

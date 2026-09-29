@@ -241,6 +241,7 @@ _BROWSER_DEAD_HINTS = (
     "target closed",
     "browser closed",
     "context or browser has been closed",
+    "connection closed while reading from the driver",
 )
 
 
@@ -563,24 +564,37 @@ class BrowserService:
     def _run_loop(self):
         """Event loop running on the dedicated thread. Processes tasks until stopped."""
         logger.info("[Browser] Background thread started")
+        me = threading.current_thread()
+        task_queue = self._task_queue
         try:
             self._launch_browser()
         except Exception as e:
             logger.error(f"[Browser] Failed to launch browser: {e}")
             self._alive = False
             self._ready.set()
-            self._drain_queue(RuntimeError(f"Browser launch failed: {e}"))
+            self._drain_queue(RuntimeError(f"Browser launch failed: {e}"), task_queue)
             return
         self._ready.set()
 
-        while self._alive:
+        # Checking ownership as well as _alive keeps a thread that close() gave
+        # up on from resuming once a replacement thread sets _alive again.
+        while self._alive and self._thread is me:
             try:
-                task = self._task_queue.get(timeout=1.0)
+                task = task_queue.get(timeout=1.0)
             except queue.Empty:
                 continue
             if task is None:
                 break
             fn, args, kwargs, result_slot = task
+            # Keep consuming instead of exiting, so no caller is left waiting on
+            # a queue nobody reads; close() on the next request does the teardown.
+            if self._driver_connection_lost():
+                result_slot["error"] = RuntimeError(
+                    "Browser connection lost; it will be relaunched on the next request."
+                )
+                result_slot["event"].set()
+                self._needs_restart = True
+                continue
             try:
                 result_slot["value"] = fn(*args, **kwargs)
             except Exception as e:
@@ -593,16 +607,39 @@ class BrowserService:
                     )
             finally:
                 result_slot["event"].set()
+            if self._driver_connection_lost():
+                self._needs_restart = True
+                logger.warning("[Browser] Driver connection lost; will relaunch on next request.")
 
-        self._shutdown_browser()
-        self._drain_queue(RuntimeError("Browser thread stopped"))
+        if self._thread is me or self._thread is None:
+            self._shutdown_browser()
+        else:
+            # The handles on self now belong to the replacement thread, and
+            # close() already reclaimed the processes this one started.
+            logger.info("[Browser] Abandoned thread skipped browser shutdown")
+        self._drain_queue(RuntimeError("Browser thread stopped"), task_queue)
         logger.info("[Browser] Background thread exited")
 
-    def _drain_queue(self, error: Exception):
+    def _driver_connection_lost(self) -> bool:
+        """True once the connection to the Playwright driver has dropped.
+
+        From then on any sync API call on this thread never returns and keeps a
+        core busy, so no Playwright call may be made after this turns True.
+        """
+        pw = self._playwright
+        if pw is None:
+            return False
+        try:
+            return pw._impl_obj._connection._transport.on_error_future.done()
+        except Exception:
+            return False
+
+    def _drain_queue(self, error: Exception, task_queue: Optional[queue.Queue] = None):
         """Unblock all callers waiting on the queue with an error."""
+        task_queue = task_queue or self._task_queue
         while True:
             try:
-                task = self._task_queue.get_nowait()
+                task = task_queue.get_nowait()
             except queue.Empty:
                 break
             if task is None:
@@ -868,25 +905,21 @@ class BrowserService:
           and its tabs untouched (do NOT close the context).
         - persistent: close the persistent context (no separate browser handle).
         - fresh: close context, then browser.
+
+        The connection is re-checked before every call: when the driver died
+        while idle, the first close() is what surfaces it, and the next call
+        would never return.
         """
         self._cancel_idle_timer()
 
         if self._launch_mode == "cdp":
             # For external CDP, browser.close() only detaches the Playwright
             # client; the user's Chrome process and its tabs stay alive.
-            try:
-                if self._browser:
-                    self._browser.close()
-            except Exception as e:
-                logger.debug(f"[Browser] cdp disconnect error: {e}")
+            self._close_handle(self._browser, "cdp disconnect")
         elif self._launch_mode == "system-cdp":
             # We own the spawned Chrome: detach the CDP client, then kill the
             # process we started so it doesn't linger.
-            try:
-                if self._browser:
-                    self._browser.close()
-            except Exception as e:
-                logger.debug(f"[Browser] system-cdp disconnect error: {e}")
+            self._close_handle(self._browser, "system-cdp disconnect")
             try:
                 if self._chrome_launcher:
                     self._chrome_launcher.close()
@@ -894,16 +927,11 @@ class BrowserService:
                 logger.debug(f"[Browser] chrome launcher close error: {e}")
             self._chrome_launcher = None
         else:
-            for obj, label in [
-                (self._context, "context"),
-                (self._browser, "browser"),
-            ]:
-                try:
-                    if obj:
-                        obj.close()
-                except Exception as e:
-                    logger.debug(f"[Browser] {label} close error: {e}")
+            self._close_handle(self._context, "context")
+            self._close_handle(self._browser, "browser")
 
+        # stop() only tears down the local transport, so it is safe (and frees
+        # the event loop) even after the connection has dropped.
         try:
             if self._playwright:
                 self._playwright.stop()
@@ -914,6 +942,17 @@ class BrowserService:
         self._browser = None
         self._playwright = None
         logger.info("[Browser] Browser closed")
+
+    def _close_handle(self, obj, label: str) -> None:
+        if not obj:
+            return
+        if self._driver_connection_lost():
+            logger.debug(f"[Browser] {label} skipped: driver connection lost")
+            return
+        try:
+            obj.close()
+        except Exception as e:
+            logger.debug(f"[Browser] {label} close error: {e}")
 
     def _submit(self, fn: Callable, *args, **kwargs):
         """Submit *fn* to the background thread and block until it completes."""
@@ -937,6 +976,8 @@ class BrowserService:
         # Timeout prevents permanent hang if the background thread crashes
         completed = result_slot["event"].wait(timeout=120)
         if not completed:
+            if self._driver_connection_lost():
+                self._needs_restart = True
             raise TimeoutError("Browser operation timed out (120s)")
 
         if "error" in result_slot:

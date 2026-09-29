@@ -8,6 +8,7 @@ import requests
 
 from bridge.reply import Reply, ReplyType
 from common.log import logger
+from common.tmp_dir import TmpDir
 from config import conf
 from voice import audio_convert
 from voice.voice import Voice
@@ -127,10 +128,9 @@ class ZhipuAIVoice(Voice):
             ext = self._sniff_audio_ext(audio_bytes) or "wav"
 
             file_name = (
-                "tmp/" + datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+                TmpDir().path() + datetime.datetime.now().strftime("%Y%m%d%H%M%S")
                 + str(random.randint(0, 1000)) + "." + ext
             )
-            os.makedirs(os.path.dirname(file_name), exist_ok=True)
             with open(file_name, "wb") as f:
                 f.write(audio_bytes)
             logger.info(

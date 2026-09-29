@@ -101,6 +101,21 @@
     margin-bottom: 0.25rem;
 }
 .agent-step:last-child { margin-bottom: 0; }
+/* No answer below the steps: drop the divider that would lead to nothing. */
+.agent-steps:not(:empty):has(+ .answer-content:empty) {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: 0;
+}
+
+/* Status line closing the steps: stopped, interrupted, still running */
+.agent-status-step {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 1px 0;
+}
+.agent-status-step i { font-size: 0.625rem; }
 
 /* Thinking step - collapsible */
 .agent-thinking-step .thinking-header {

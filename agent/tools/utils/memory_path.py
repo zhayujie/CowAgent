@@ -49,6 +49,31 @@ def _shared_knowledge_dir(workspace_root: str) -> str:
         return ""
 
 
+def indexes_rel_path(rel_path: str) -> bool:
+    """Whether a path relative to a scanned root feeds the index.
+
+    The relative form of :func:`feeds_memory_index`, for callers that already
+    hold a path relative to the root it was resolved against -- the console's
+    file editor, which saves workspace-relative paths. Both forms read the same
+    ``INDEXED_DIRS`` / ``INDEXED_FILES``, so an indexed tree is declared once.
+
+    They were separate, and drifted: the console kept matching ``memory/`` and
+    ``MEMORY.md`` while this module added ``knowledge/``, so a knowledge page
+    saved from the console stopped re-embedding while the same write through a
+    tool still did (#3176). A backslash separator is normalized where it is one
+    (Windows); elsewhere it is an ordinary character in a file name.
+    """
+    text = str(rel_path or "")
+    if os.sep == "\\":
+        text = text.replace("\\", "/")
+    parts = [part for part in text.split("/") if part not in ("", ".")]
+    if not parts or parts[0] == os.pardir:
+        return False
+    if len(parts) == 1 and parts[0] in INDEXED_FILES:
+        return True
+    return parts[0] in INDEXED_DIRS
+
+
 def feeds_memory_index(absolute_path: str, memory_manager, cwd: str = "") -> bool:
     """Whether writing ``absolute_path`` should mark the memory index dirty.
 
@@ -68,9 +93,7 @@ def feeds_memory_index(absolute_path: str, memory_manager, cwd: str = "") -> boo
         if not base:
             continue
         rel = _relative(target, base)
-        if not rel:
-            continue
-        if rel in INDEXED_FILES or rel.split(os.sep, 1)[0] in INDEXED_DIRS:
+        if rel and indexes_rel_path(rel):
             return True
 
     shared_knowledge = _shared_knowledge_dir(workspace_root)

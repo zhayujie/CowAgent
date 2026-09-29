@@ -4,6 +4,8 @@ import time
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+import pytest
+
 from bridge.context import Context, ContextType
 from channel.chat_channel import ChatChannel
 from channel.feishu import feishu_channel
@@ -134,3 +136,29 @@ def test_feishu_webhook_routes_message_recall(monkeypatch):
 
     assert json.loads(FeishuController().POST()) == {"success": True}
     handle_recall.assert_called_once_with(event)
+
+
+@pytest.mark.parametrize(
+    ("configured_token", "header"),
+    [
+        ("", {"event_type": "im.message.recalled_v1"}),
+        (None, {"event_type": "im.message.recalled_v1"}),
+        ("verification-token", {"event_type": "im.message.recalled_v1"}),
+        ("verification-token", {"event_type": "im.message.recalled_v1", "token": "wrong"}),
+        ("verification-token", {"event_type": "im.message.recalled_v1", "token": 123}),
+    ],
+)
+def test_feishu_webhook_rejects_invalid_token(monkeypatch, configured_token, header):
+    channel = FeiShuChanel()
+    channel.feishu_token = configured_token
+    handle_recall = MagicMock()
+    monkeypatch.setattr(channel, "_handle_message_recalled_event", handle_recall)
+    request = {"header": header, "event": {"message_id": "om_forged"}}
+    monkeypatch.setattr(
+        feishu_channel.web,
+        "data",
+        lambda: json.dumps(request).encode("utf-8"),
+    )
+
+    assert json.loads(FeishuController().POST()) == {"success": False}
+    handle_recall.assert_not_called()

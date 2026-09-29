@@ -26,10 +26,10 @@ qrcode
 json-repair
 
 # ---- web framework (web channel) ----
-# web.py 0.62 fails to build on Python 3.13+ (cgi removed); use the GitHub fix.
-web.py; python_version < "3.13"
-web.py @ git+https://github.com/webpy/webpy.git ; python_version >= "3.13"
-legacy-cgi; python_version >= "3.13"
+# web.py 0.62 (the last release supporting Python < 3.10) imports the stdlib cgi
+# module removed in 3.13; 0.76 dropped it but requires 3.10+.
+web.py; python_version < "3.10"
+web.py>=0.76; python_version >= "3.10"
 
 # ---- AI model SDKs ----
 zai-sdk

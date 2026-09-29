@@ -81,3 +81,25 @@ def test_group_messages_are_gated_on_the_bot_being_addressed(
     channel._handle_message_event(_event(message_type, mentions, message_id))
 
     assert bool(produced) is answered
+
+
+def test_unsupported_message_types_are_skipped_without_parsing(monkeypatch):
+    # An interactive card posted by another bot in the group used to reach
+    # FeishuMessage and raise NotImplementedError on every occurrence.
+    channel = FeiShuChanel()
+    monkeypatch.setattr(channel, "_bot_open_id", BOT_OPEN_ID)
+    monkeypatch.setattr(channel, "fetch_access_token", lambda: "tenant-token")
+    produced = []
+    monkeypatch.setattr(channel, "produce", produced.append)
+
+    def _fail(*_args, **_kwargs):
+        raise AssertionError("unsupported message types must not be parsed")
+
+    monkeypatch.setattr("channel.feishu.feishu_channel.FeishuMessage.__init__", _fail)
+    event = _event("text", [], "om_interactive-card")
+    event["message"]["message_type"] = "interactive"
+    event["message"]["content"] = json.dumps({"title": "card", "elements": []})
+
+    channel._handle_message_event(event)
+
+    assert produced == []

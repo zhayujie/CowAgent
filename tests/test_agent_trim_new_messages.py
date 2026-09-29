@@ -13,6 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import agent.protocol.agent as agent_mod
 from agent.protocol.agent import Agent
+from agent.protocol.agent_stream import AgentStreamExecutor
 
 
 class _FakeExecutor:
@@ -23,20 +24,27 @@ class _FakeExecutor:
     executor's timeline.
     """
 
-    def __init__(self, *, messages, trim_to=None, **_):
+    run_start_index = AgentStreamExecutor.run_start_index
+
+    def __init__(self, *, messages, trim_to=None, rewrite=None, replies=None, **_):
         self.messages = list(messages)
         self._trim_to = trim_to
+        self._rewrite = rewrite
+        self._replies = replies
+        self.run_user_message = None
 
     def run_stream(self, user_message):
         # 1. append the new user query (before trimming, like the real executor)
-        self.messages.append(
-            {"role": "user", "content": [{"type": "text", "text": user_message}]}
-        )
+        self.run_user_message = {"role": "user", "content": [{"type": "text", "text": user_message}]}
+        self.messages.append(self.run_user_message)
         # 2. trim oldest turns if this run overflows the context window
         if self._trim_to is not None:
             self.messages = self.messages[-self._trim_to:]
+        if self._rewrite is not None:
+            self.messages = self._rewrite(self.messages)
         # 3. append the assistant reply
         reply = "assistant answer"
+        self.messages.extend(self._replies or [])
         self.messages.append(
             {"role": "assistant", "content": [{"type": "text", "text": reply}]}
         )
@@ -110,7 +118,44 @@ def test_new_messages_captured_when_trimmed():
     assert agent._last_run_new_messages[0]["content"][0]["text"] == "hi"
 
 
+def test_new_messages_captured_when_the_run_outgrows_the_trimmed_history():
+    """Trim shrinks the history, then the run's tool calls grow it back past
+    the old length: slicing at the old length would persist half a run.
+
+    A hint the run adds itself is user text too, so it must not be taken for
+    the start of the run either.
+    """
+    history = [
+        {"role": "user", "content": [{"type": "text", "text": "list logs"}]},
+        {"role": "assistant", "content": [{"type": "tool_use", "id": "c1", "name": "ls", "input": {}}]},
+        {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "c1", "content": "a.log"}]},
+        {"role": "assistant", "content": [{"type": "text", "text": "found a.log, delete it?"}]},
+    ]
+    agent = _make_agent(history)
+
+    def as_text(messages):
+        # The previous turn reduced to text, the run's query kept as is.
+        return [history[0], history[3], messages[-1]]
+
+    replies = [
+        {"role": "assistant", "content": [{"type": "tool_use", "id": "c2", "name": "rm", "input": {}}]},
+        {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "c2", "content": "ok"}]},
+        {"role": "user", "content": [{"type": "text", "text": "Please reply to the user now."}]},
+    ]
+
+    def factory(**kw):
+        return _FakeExecutor(messages=kw["messages"], rewrite=as_text, replies=replies)
+
+    _run(agent, factory)
+
+    new = agent._last_run_new_messages
+    assert new[0]["content"][0]["text"] == "hi"
+    assert len(new) == 5
+    assert new[-1]["content"][0]["text"] == "assistant answer"
+
+
 if __name__ == "__main__":
     test_new_messages_captured_without_trim()
     test_new_messages_captured_when_trimmed()
+    test_new_messages_captured_when_the_run_outgrows_the_trimmed_history()
     print("all passed")

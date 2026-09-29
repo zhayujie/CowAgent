@@ -4,14 +4,15 @@ Skill manager for managing skill lifecycle and operations.
 
 import os
 import json
+import threading
 from typing import Dict, Iterable, List, Optional
-from pathlib import Path
 from common.log import logger
-from agent.skills.types import Skill, SkillEntry, SkillSnapshot
+from agent.skills.types import SkillEntry, SkillSnapshot
 from agent.skills.loader import SkillLoader
 from agent.skills.formatter import format_skill_entries_for_prompt
 
 SKILLS_CONFIG_FILE = "skills_config.json"
+SKILLS_CONFIG_TMP_PREFIX = f".{SKILLS_CONFIG_FILE}."
 
 
 def build_skill_manager(
@@ -89,13 +90,18 @@ class SkillManager:
         self.skills: Dict[str, SkillEntry] = {}
 
         # Load skills on initialization
-        self.refresh_skills()
+        self.refresh_skills(use_cache=True)
 
-    def refresh_skills(self):
-        """Reload all skills from builtin and custom directories, then sync config."""
+    def refresh_skills(self, use_cache: bool = False):
+        """Reload all skills from builtin and custom directories, then sync config.
+
+        :param use_cache: Reuse the parse of skill files unchanged on disk since
+            they were last read. Directories are always rescanned.
+        """
         self.skills = self.loader.load_all_skills(
             builtin_dir=self.builtin_dir,
             custom_dir=self.custom_dir,
+            use_cache=use_cache,
         )
         self._sync_skills_config()
         logger.debug(f"SkillManager: Loaded {len(self.skills)} skills")
@@ -103,8 +109,13 @@ class SkillManager:
     # ------------------------------------------------------------------
     # skills_config.json management
     # ------------------------------------------------------------------
-    def _load_skills_config(self) -> Dict[str, dict]:
-        """Load skills_config.json from custom_dir. Returns empty dict if not found."""
+    def _load_skills_config(self) -> Optional[Dict[str, dict]]:
+        """Load skills_config.json from custom_dir.
+
+        Returns an empty dict if the file doesn't exist, and None if it exists
+        but can't be read, so the caller never mistakes it for an empty config
+        and writes the defaults over the user's choices.
+        """
         if not os.path.exists(self._skills_config_path):
             return {}
         try:
@@ -112,18 +123,32 @@ class SkillManager:
                 data = json.load(f)
             if isinstance(data, dict):
                 return data
+            logger.warning(f"[SkillManager] {SKILLS_CONFIG_FILE} is not a JSON object, left as is")
         except Exception as e:
             logger.warning(f"[SkillManager] Failed to load {SKILLS_CONFIG_FILE}: {e}")
-        return {}
+        return None
 
     def _save_skills_config(self):
-        """Persist skills_config to custom_dir/skills_config.json."""
+        """Persist skills_config to custom_dir/skills_config.json.
+
+        Written to a temporary file and renamed into place, so a concurrent
+        reader sees either the old file or the new one, never a partial write.
+        """
         os.makedirs(self.custom_dir, exist_ok=True)
+        tmp_path = os.path.join(
+            self.custom_dir,
+            f"{SKILLS_CONFIG_TMP_PREFIX}{os.getpid()}.{threading.get_ident()}.tmp",
+        )
         try:
-            with open(self._skills_config_path, "w", encoding="utf-8") as f:
+            with open(tmp_path, "w", encoding="utf-8") as f:
                 json.dump(self.skills_config, f, indent=4, ensure_ascii=False)
+            os.replace(tmp_path, self._skills_config_path)
         except Exception as e:
             logger.error(f"[SkillManager] Failed to save {SKILLS_CONFIG_FILE}: {e}")
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
 
     def _sync_skills_config(self):
         """
@@ -134,7 +159,8 @@ class SkillManager:
         - Skills that no longer exist on disk are removed.
         - name/description/source are always refreshed from the latest scan.
         """
-        saved = self._load_skills_config()
+        loaded = self._load_skills_config()
+        saved = loaded if loaded is not None else self.skills_config
         merged: Dict[str, dict] = {}
 
         for name, entry in self.skills.items():
@@ -160,7 +186,10 @@ class SkillManager:
             merged[name] = entry_dict
 
         self.skills_config = merged
-        self._save_skills_config()
+        # Rewritten only when something changed: this runs before every run,
+        # and an unreadable file is left for the user rather than replaced.
+        if loaded is not None and merged != loaded:
+            self._save_skills_config()
 
     def is_skill_enabled(self, name: str) -> bool:
         """

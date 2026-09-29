@@ -305,6 +305,8 @@ _MEMORY_IGNORE = (".evolution_backups", "dreams", "evolution")
 # Files the skill subsystem maintains automatically (the enable/disable index).
 # Not an evolution result, so a rewrite must not count as a change signal.
 _WATCH_IGNORE_NAMES = ("skills_config.json",)
+# Its in-flight replacement, written next to it and renamed over it.
+_WATCH_IGNORE_PREFIXES = (".skills_config.json.",)
 
 
 def _workspace_snapshot(workspace_dir) -> dict:
@@ -325,7 +327,7 @@ def _workspace_snapshot(workspace_dir) -> dict:
         for p in root.rglob("*"):
             if not p.is_file():
                 continue
-            if p.name in _WATCH_IGNORE_NAMES:
+            if p.name in _WATCH_IGNORE_NAMES or p.name.startswith(_WATCH_IGNORE_PREFIXES):
                 continue
             try:
                 st = p.stat()

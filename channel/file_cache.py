@@ -28,16 +28,26 @@ class FileCache:
             file_path: 文件本地路径
             file_type: 文件类型（image, video, file 等）
         """
-        if session_id not in self.cache:
-            self.cache[session_id] = {
+        entry = self.cache.get(session_id)
+        if entry is None:
+            entry = {
                 'files': [],
                 'timestamp': time.time()
             }
-        
+            self.cache[session_id] = entry
+        else:
+            # The window runs from the *most recent* file, not the first one:
+            # a user sending several files in a row is building one batch, and
+            # the earlier files must not expire while the batch is still going.
+            # Refreshing only on creation made the TTL count from the first
+            # file, so a burst spanning more than the TTL lost its tail —
+            # including files that arrived seconds before the question.
+            entry['timestamp'] = time.time()
+
         # 添加文件（去重）
         file_info = {'path': file_path, 'type': file_type}
-        if file_info not in self.cache[session_id]['files']:
-            self.cache[session_id]['files'].append(file_info)
+        if file_info not in entry['files']:
+            entry['files'].append(file_info)
             logger.info(f"[FileCache] Added {file_type} to cache for session {session_id}: {file_path}")
     
     def get(self, session_id: str) -> list:

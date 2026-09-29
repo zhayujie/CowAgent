@@ -230,7 +230,7 @@ def test_trim_keeps_tool_use_and_tool_result_together():
     executor._trim_messages()
 
     kept_turns = identify_complete_turns(executor.messages)
-    assert len(kept_turns) == 1
+    assert len(kept_turns) == 2
     block_types = [
         block.get("type")
         for msg in executor.messages
@@ -241,4 +241,45 @@ def test_trim_keeps_tool_use_and_tool_result_together():
     assert "tool_result" in block_types
     assert executor.messages[-1]["content"][0]["text"] == "a2"
     assert memory_manager.flush_calls
-    assert _user_texts(memory_manager.flush_calls[0]["messages"]) == ["q0", "q1"]
+    assert _user_texts(memory_manager.flush_calls[0]["messages"]) == ["q0"]
+
+
+def test_previous_turn_is_kept_as_text_when_only_the_current_fits():
+    """A previous turn too big for the budget is reduced to text, not dropped.
+
+    System 100 + current 200 fit max_tokens=400, the previous turn's tool
+    chain does not. Without it the Agent would not know what "yes" answers.
+    """
+    messages = [
+        {"role": "user", "content": [{"type": "text", "text": "q0"}]},
+        {"role": "assistant", "content": [{"type": "text", "text": "a0"}]},
+        {"role": "user", "content": [{"type": "text", "text": "delete the old logs?"}]},
+        {"role": "assistant", "content": [{
+            "type": "tool_use", "id": "call_1", "name": "ls", "input": {"path": "logs"},
+        }]},
+        {"role": "user", "content": [{
+            "type": "tool_result", "tool_use_id": "call_1", "content": "a.log b.log",
+        }]},
+        {"role": "assistant", "content": [{"type": "text", "text": "Found 2 logs, delete them?"}]},
+        {"role": "user", "content": [{"type": "text", "text": "yes"}]},
+    ]
+    executor, memory_manager = _make_executor(
+        turn_count=3,
+        max_context_turns=30,
+        tokens_per_message=100,
+        max_tokens=400,
+        messages=messages,
+    )
+
+    executor._trim_messages()
+
+    assert _user_texts(executor.messages) == ["delete the old logs?", "yes"]
+    assert executor.messages[1]["content"][0]["text"] == "Found 2 logs, delete them?"
+    block_types = {
+        block.get("type")
+        for msg in executor.messages
+        for block in (msg.get("content") or [])
+        if isinstance(block, dict)
+    }
+    assert block_types == {"text"}
+    assert _user_texts(memory_manager.flush_calls[0]["messages"]) == ["q0"]

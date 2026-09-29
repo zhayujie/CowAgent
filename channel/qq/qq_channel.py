@@ -447,10 +447,7 @@ class QQChannel(ChatChannel):
         from channel.file_cache import get_file_cache
         file_cache = get_file_cache()
 
-        if is_group:
-            session_id = qq_msg.other_user_id
-        else:
-            session_id = qq_msg.from_user_id
+        session_id = self._compute_session_id(qq_msg, is_group)
 
         if qq_msg.ctype == ContextType.IMAGE:
             if hasattr(qq_msg, "image_path") and qq_msg.image_path:
@@ -508,6 +505,24 @@ class QQChannel(ChatChannel):
     # _compose_context
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _compute_session_id(qq_msg, is_group: bool) -> str:
+        """The conversation key for an inbound message.
+
+        A group shares one session only when ``group_shared_session`` asks for
+        it; otherwise every member gets their own, which is the rule the base
+        ``chat_channel`` and the other group channels (dingtalk, discord,
+        feishu, slack, telegram, wecom_bot) already apply. QQ keyed a group on
+        the group id unconditionally, so the setting -- and its shipped default
+        of False -- was a silent no-op here, and every member of a QQ group
+        shared one conversation.
+        """
+        if not is_group:
+            return qq_msg.from_user_id
+        if conf().get("group_shared_session", True):
+            return qq_msg.other_user_id
+        return f"{qq_msg.from_user_id}:{qq_msg.other_user_id}"
+
     def _compose_context(self, ctype: ContextType, content, **kwargs):
         context = Context(ctype, content)
         context.kwargs = kwargs
@@ -523,10 +538,7 @@ class QQChannel(ChatChannel):
 
         cmsg = context["msg"]
 
-        if cmsg.is_group:
-            context["session_id"] = cmsg.other_user_id
-        else:
-            context["session_id"] = cmsg.from_user_id
+        context["session_id"] = self._compute_session_id(cmsg, cmsg.is_group)
 
         context["receiver"] = cmsg.other_user_id
 

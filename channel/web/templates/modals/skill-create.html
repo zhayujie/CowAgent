@@ -1,4 +1,5 @@
-    <!-- Skill Create Dialog: write one from a form, or upload a folder / archive -->
+    <!-- Skill Create Dialog: write a new skill from a form. Installing one that
+         already exists - from the hub, GitHub, or an upload - is the Add dialog's. -->
     <div id="skill-create-overlay" class="fixed inset-0 bg-black/50 z-[200] hidden flex items-center justify-center">
         <div class="bg-white dark:bg-[#1A1A1A] rounded-2xl border border-slate-200 dark:border-white/10 shadow-xl w-full max-w-lg mx-4 max-h-[90dvh] flex flex-col">
             <div class="p-6 overflow-y-auto">
@@ -8,22 +9,10 @@
                     </div>
                     <div>
                         <h3 class="font-semibold text-slate-800 dark:text-slate-100" data-i18n="skill_new_title">新建技能</h3>
-                        <p class="text-xs text-slate-400 dark:text-slate-500 mt-0.5" data-i18n="skill_new_subtitle">填写表单，或直接上传技能文件夹 / 压缩包</p>
+                        <p class="text-xs text-slate-400 dark:text-slate-500 mt-0.5" data-i18n="skill_new_subtitle">填写名称、描述和说明，生成一个新技能</p>
                     </div>
                 </div>
 
-                <div class="flex gap-1 p-1 mb-5 rounded-lg bg-slate-100 dark:bg-white/5">
-                    <button type="button" data-skill-create-tab="form" onclick="switchSkillCreateMode('form')"
-                            class="flex-1 px-3 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer">
-                        <i class="fas fa-pen-to-square text-[10px] mr-1.5"></i><span data-i18n="skill_new_tab_form">表单创建</span>
-                    </button>
-                    <button type="button" data-skill-create-tab="upload" onclick="switchSkillCreateMode('upload')"
-                            class="flex-1 px-3 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer">
-                        <i class="fas fa-file-arrow-up text-[10px] mr-1.5"></i><span data-i18n="skill_new_tab_upload">上传技能</span>
-                    </button>
-                </div>
-
-                <!-- Mode: form -->
                 <div id="skill-create-panel-form" class="space-y-4">
                     <div>
                         <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1.5" data-i18n="skill_new_name">名称</label>
@@ -67,7 +56,7 @@
                                     <button type="button" id="skill-create-folder-option" onclick="selectSkillCreateFolder()"
                                             class="attach-menu-item">
                                         <i class="fas fa-folder-plus"></i>
-                                        <span data-i18n="skill_upload_pick_folder">选择文件夹</span>
+                                        <span data-i18n="skill_new_files_pick_folder">选择文件夹</span>
                                     </button>
                                 </div>
                             </div>
@@ -79,42 +68,10 @@
                     </div>
                 </div>
 
-                <!-- Mode: upload -->
-                <div id="skill-create-panel-upload" class="hidden">
-                    <div id="skill-upload-dropzone"
-                         class="rounded-xl border-2 border-dashed border-slate-200 dark:border-white/10 px-4 py-8 text-center transition-colors">
-                        <i class="fas fa-cloud-arrow-up text-2xl text-slate-300 dark:text-slate-600"></i>
-                        <p class="mt-3 text-sm text-slate-500 dark:text-slate-400" data-i18n="skill_upload_drop">拖入压缩包，或选择技能来源</p>
-                        <div class="mt-4 flex items-center justify-center gap-2">
-                            <button type="button" onclick="selectSkillUploadArchive()"
-                                    class="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-white/10 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 cursor-pointer">
-                                <i class="fas fa-file-zipper text-[10px] mr-1.5"></i><span data-i18n="skill_upload_pick_archive">选择压缩包</span>
-                            </button>
-                            <button type="button" id="skill-upload-folder-btn" onclick="selectSkillUploadFolder()"
-                                    class="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-white/10 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 cursor-pointer">
-                                <i class="fas fa-folder-open text-[10px] mr-1.5"></i><span data-i18n="skill_upload_pick_folder">选择文件夹</span>
-                            </button>
-                        </div>
-                    </div>
-                    <div id="skill-upload-summary" class="hidden mt-3 rounded-lg bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 px-3 py-2">
-                        <div class="flex items-center gap-2">
-                            <i id="skill-upload-summary-icon" class="fas fa-file-zipper text-slate-400 text-xs"></i>
-                            <span id="skill-upload-summary-name" class="flex-1 min-w-0 text-xs font-mono text-slate-700 dark:text-slate-200 truncate"></span>
-                            <button type="button" onclick="clearSkillUploadSelection()"
-                                    class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer">
-                                <i class="fas fa-xmark text-xs"></i>
-                            </button>
-                        </div>
-                    </div>
-                    <p class="mt-3 text-xs text-slate-400 dark:text-slate-500" data-i18n="skill_upload_hint">支持 .zip / .tar.gz，压缩包内可包含多个技能目录，每个技能需带 SKILL.md</p>
-                </div>
-
                 <p id="skill-create-error" class="mt-3 text-xs text-red-500 hidden"></p>
 
                 <input id="skill-create-files" type="file" class="hidden" multiple>
                 <input id="skill-create-folder" type="file" class="hidden" multiple webkitdirectory directory>
-                <input id="skill-upload-archive" type="file" class="hidden" accept=".zip,.tgz,.gz,.tar,application/zip,application/gzip">
-                <input id="skill-upload-folder" type="file" class="hidden" multiple webkitdirectory directory>
             </div>
             <div class="flex justify-end gap-3 px-6 py-4 border-t border-slate-100 dark:border-white/5">
                 <button type="button" onclick="closeSkillCreateDialog()"

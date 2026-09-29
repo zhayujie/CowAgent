@@ -208,9 +208,12 @@ class AgentRegistry:
                 builtin_id = DEFAULT_AGENT_ALIAS
             builtin_name = settings.get("default_agent_name")
             builtin_name = str(builtin_name).strip() if builtin_name is not None else ""
+            builtin_desc = settings.get("default_agent_description")
+            builtin_desc = str(builtin_desc).strip() if builtin_desc is not None else ""
             profile = AgentProfile(
                 id=builtin_id,
                 name=builtin_name or "CowAgent",
+                description=builtin_desc,
                 workspace=instance_root,
             )
             return cls([profile], builtin_id)

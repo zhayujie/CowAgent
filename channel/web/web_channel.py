@@ -53,11 +53,13 @@ from channel.web.api.sessions import (  # noqa: F401
     HistoryHandler, MessageDeleteHandler, PromptOptimizeHandler,
     SessionClearContextHandler, SessionCompactContextHandler,
     SessionContextUsageHandler, SessionDetailHandler, SessionSettingsHandler,
-    SessionTitleHandler, SessionsHandler,
+    SessionTitleHandler, SessionsHandler, UserMessagesHandler,
 )
 from channel.web.api.skills import (  # noqa: F401
+    McpServerTestHandler, McpServersHandler,
     SkillContentHandler, SkillCreateHandler, SkillFilesHandler,
-    SkillUploadHandler, SkillsHandler, ToolsHandler,
+    SkillsHandler, SkillUploadHandler, ToolsHandler,
+    _install_skill_for_agent,
 )
 from channel.web.api.update import (  # noqa: F401
     UpdateCheckHandler, UpdateStartHandler, UpdateStatusHandler, VersionHandler,
@@ -113,6 +115,8 @@ URLS = (
     '/api/weixin/qrlogin', 'WeixinQrHandler',
     '/api/feishu/register', 'FeishuRegisterHandler',
     '/api/tools', 'ToolsHandler',
+    '/api/mcp/servers', 'McpServersHandler',
+    '/api/mcp/servers/test', 'McpServerTestHandler',
     '/api/skills', 'SkillsHandler',
     '/api/skills/content', 'SkillContentHandler',
     '/api/skills/files', 'SkillFilesHandler',
@@ -147,6 +151,7 @@ URLS = (
     '/api/sessions/(.*)/compact_context', 'SessionCompactContextHandler',
     '/api/sessions/(.*)/settings', 'SessionSettingsHandler',
     '/api/sessions/(.*)', 'SessionDetailHandler',
+    '/api/history/user_messages', 'UserMessagesHandler',
     '/api/history', 'HistoryHandler',
     '/api/messages/delete', 'MessageDeleteHandler',
     '/api/logs/download', 'LogsDownloadHandler',

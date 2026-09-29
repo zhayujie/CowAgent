@@ -1,10 +1,8 @@
 # encoding:utf-8
 
 import time
-import json
 
 from models.openai.openai_compat import (
-    error as openai_error,
     RateLimitError,
     Timeout,
     APIError,
@@ -12,6 +10,7 @@ from models.openai.openai_compat import (
     wrap_http_error,
 )
 from models.openai.openai_http_client import OpenAIHTTPClient, OpenAIHTTPError
+from models.openai import responses_adapter
 import requests
 from common import const
 from common.i18n import t as _t
@@ -101,7 +100,19 @@ class ChatGPTBot(Bot, OpenAIImage, OpenAICompatibleBot):
             'default_top_p': conf().get("top_p", 1.0),
             'default_frequency_penalty': conf().get("frequency_penalty", 0.0),
             'default_presence_penalty': conf().get("presence_penalty", 0.0),
+            'api_type': self._openai_api_type(),
         }
+
+    def _openai_api_type(self) -> str:
+        """``open_ai_api_type`` applies to the OpenAI endpoint only; custom
+        providers keep the default routing."""
+        is_custom, _ = parse_custom_bot_type(self._bot_type)
+        if is_custom:
+            return responses_adapter.API_TYPE_AUTO
+        return responses_adapter.resolve_api_type(conf().get("open_ai_api_type"))
+
+    def _use_responses_for_plain_calls(self) -> bool:
+        return self._openai_api_type() == responses_adapter.API_TYPE_RESPONSES
 
     def _get_http_client(self) -> OpenAIHTTPClient:
         """Override the default HTTP client to reuse our pre-configured one."""
@@ -237,13 +248,22 @@ class ChatGPTBot(Bot, OpenAIImage, OpenAICompatibleBot):
             logger.info(f"[CHATGPT] Calling vision API with model: {model}")
             
             # Call OpenAI-compatible API via HTTP
-            response = self._http_client.chat_completions(
-                api_key=api_key or None,
-                api_base=api_base or None,
-                model=model,
-                messages=messages,
-                max_tokens=1000,
-            )
+            if self._use_responses_for_plain_calls():
+                response = self._responses_as_chat_completion(
+                    model=model,
+                    messages=messages,
+                    api_key=api_key or None,
+                    api_base=api_base or None,
+                    max_tokens=1000,
+                )
+            else:
+                response = self._http_client.chat_completions(
+                    api_key=api_key or None,
+                    api_base=api_base or None,
+                    model=model,
+                    messages=messages,
+                    max_tokens=1000,
+                )
 
             content = response["choices"][0]["message"]["content"]
             logger.info(f"[CHATGPT] Vision API response: {content[:100]}...")
@@ -281,12 +301,22 @@ class ChatGPTBot(Bot, OpenAIImage, OpenAICompatibleBot):
             # - request_timeout / timeout -> per-call timeout
             call_args = dict(args)
             timeout = call_args.pop("request_timeout", None) or call_args.pop("timeout", None)
-            response = self._http_client.chat_completions(
-                api_key=api_key or None,
-                timeout=timeout,
-                messages=session.messages,
-                **call_args,
-            )
+            if self._use_responses_for_plain_calls():
+                # Sampling params are dropped: Responses reasoning models reject them.
+                response = self._responses_as_chat_completion(
+                    model=call_args.get("model"),
+                    messages=session.messages,
+                    api_key=api_key or None,
+                    timeout=timeout,
+                    max_tokens=call_args.get("max_tokens"),
+                )
+            else:
+                response = self._http_client.chat_completions(
+                    api_key=api_key or None,
+                    timeout=timeout,
+                    messages=session.messages,
+                    **call_args,
+                )
             logger.info("[ChatGPT] reply={}, total_tokens={}".format(
                 response["choices"][0]["message"]["content"],
                 response["usage"]["total_tokens"]
@@ -382,13 +412,13 @@ class AzureChatGPTBot(ChatGPTBot):
             headers = {"api-key": api_key, "Content-Type": "application/json"}
             try:
                 body = {"prompt": query, "size": conf().get("image_create_size", "256x256"),"n": 1}
-                submission = requests.post(url, headers=headers, json=body)
+                submission = requests.post(url, headers=headers, json=body, timeout=180)
                 operation_location = submission.headers['operation-location']
                 status = ""
                 while (status != "succeeded"):
                     if retry_count > 3:
                         return False, _t("图片生成失败", "Image generation failed")
-                    response = requests.get(operation_location, headers=headers)
+                    response = requests.get(operation_location, headers=headers, timeout=180)
                     status = response.json()['status']
                     retry_count += 1
                 image_url = response.json()['result']['data'][0]['url']
@@ -407,7 +437,7 @@ class AzureChatGPTBot(ChatGPTBot):
             headers = {"api-key": api_key, "Content-Type": "application/json"}
             try:
                 body = {"prompt": query, "size": conf().get("image_create_size", "1024x1024"), "quality": conf().get("dalle3_image_quality", "standard")}
-                response = requests.post(url, headers=headers, json=body)
+                response = requests.post(url, headers=headers, json=body, timeout=180)
                 response.raise_for_status()  # 检查请求是否成功
                 data = response.json()
 
@@ -444,6 +474,11 @@ class AzureChatGPTBot(ChatGPTBot):
         # Passing the raw endpoint again would override it in call_with_tools().
         config["api_base"] = None
         return config
+
+    def _openai_api_type(self) -> str:
+        # Azure's Responses endpoint has a different URL shape than the
+        # deployment-scoped base built above, so keep the default routing.
+        return responses_adapter.API_TYPE_AUTO
 
 
 class _AzureChatHTTPClient(OpenAIHTTPClient):

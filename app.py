@@ -1,5 +1,6 @@
 # encoding:utf-8
 
+import atexit
 import logging
 import os
 import signal
@@ -20,7 +21,7 @@ import threading
 # invisible to any code that does ``from app import ...`` (that import builds a
 # second, separate ``app`` module). The registry is a single shared cell every
 # caller sees — see common/channel_registry.py and issue #3120.
-from common.channel_registry import get_channel_manager, set_channel_manager
+from common.channel_registry import get_channel_manager, set_channel_manager  # noqa: F401 - re-exported for `from app import get_channel_manager`
 
 # Desktop mode: a lighter runtime for the packaged Electron client. Plugins are
 # loaded in a background thread (so command plugins like cow_cli/godcmd work
@@ -192,6 +193,7 @@ class ChannelManager:
                     "bound_agent_id": entry.agent_id,
                     "credentials": entry.credentials or None,
                     "members": entry.members or None,
+                    "peers": entry.peers or None,
                 },
             )
         return (entry, entry, {})
@@ -494,6 +496,45 @@ def sigterm_handler_wrap(_signo):
     signal.signal(_signo, func)
 
 
+def _register_pid_file():
+    """Record this process in the pid file the ``cow`` CLI reads.
+
+    An instance started directly (``python app.py``, e.g. as a container entry
+    point) otherwise looks stopped to ``cow start`` / ``restart`` /
+    ``self-restart``, which then launch a second instance beside it instead of
+    replacing it. Only an absent or stale file is claimed, so a pid written by
+    the CLI or by another live instance is left alone, and on exit the file is
+    removed only while it still names this process.
+    """
+    if DESKTOP_MODE:
+        return
+    try:
+        from cli.commands.process import _get_pid_file, _read_pid
+    except Exception:
+        return
+    try:
+        pid_file = _get_pid_file()
+        if _read_pid():
+            return
+        with open(pid_file, "w") as f:
+            f.write(str(os.getpid()))
+    except Exception as e:
+        logger.debug(f"[App] pid file not written: {e}")
+        return
+
+    own_pid = os.getpid()
+
+    def _cleanup():
+        try:
+            with open(pid_file, "r") as f:
+                if f.read().strip() == str(own_pid):
+                    os.remove(pid_file)
+        except Exception:
+            pass
+
+    atexit.register(_cleanup)
+
+
 def _warmup_mcp_tools():
     """
     Kick off MCP server loading at process startup so subprocesses
@@ -602,6 +643,13 @@ def _migrate_team_roster():
     except Exception as e:
         # Never a reason not to start: read() still falls back to config.json.
         logger.warning(f"[App] Could not move the roster into its own file: {e}")
+    try:
+        from agent import team
+        from config import conf
+
+        team.adopt_legacy_channels(conf())
+    except Exception as e:
+        logger.warning(f"[App] Could not add legacy channels to the roster: {e}")
 
 
 def _migrate_conversations():
@@ -751,6 +799,7 @@ def run():
             logger.debug(f"[App] using certifi CA bundle: {bundle}")
         # load config
         load_config()
+        _register_pid_file()
         _migrate_team_roster()
         _migrate_conversations()
         _warn_if_legacy_workspace_data_exists()

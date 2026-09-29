@@ -25,6 +25,7 @@ OpenAI offers the most complete coverage and can simultaneously serve text chat,
 | `model` | Same as OpenAI's [model parameter](https://platform.openai.com/docs/models); supports `gpt-5.6-luna`, `gpt-6-astra`, `gpt-5.6-terra`, `gpt-5.6-sol`, `gpt-5.5`, `gpt-5.4`, `gpt-5.4-mini`, `gpt-5.4-nano`, the `gpt-5` series, `gpt-4.1`, etc. Agent mode defaults to `gpt-5.6-luna`; `gpt-6-astra` is the top flagship (most intelligent, higher cost, tool calling goes through the Responses API); use `gpt-5.4` for better cost-efficiency |
 | `open_ai_api_key` | Create one on the [OpenAI Platform](https://platform.openai.com/api-keys) |
 | `open_ai_api_base` | Optional; change it to access a third-party proxy |
+| `open_ai_api_type` | Optional API protocol, defaults to `auto` (only the `gpt-6` series uses the Responses API, others use Chat Completions). If your endpoint no longer serves `/chat/completions`, set it to `responses` to send all requests to `/responses`; `chat` always uses `/chat/completions`. For Docker deployments, set it via the `OPEN_AI_API_TYPE` environment variable |
 | `bot_type` | Not required when using OpenAI's official models; set to `openai` when accessing other providers via the compatible protocol |
 
 ## Image Understanding

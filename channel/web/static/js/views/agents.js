@@ -1311,6 +1311,11 @@ function setTeamMembers(ids) {
             // for this conversation, and whether @ can address an Agent.
             _renderModelChip();
             _renderInputPlaceholder();
+            // Keep the session list's faces in step with the roster we just
+            // changed, which it cannot read from the API until the first message.
+            if (typeof setSessionParticipants === 'function') {
+                setSessionParticipants(sessionId, data.team);
+            }
         }
     });
 }
@@ -1406,6 +1411,4 @@ function selectMemoryAgent(agentId) {
     closeMemoryViewer();
     loadMemoryView(1);
 }
-
-loadAgentCatalog();
 

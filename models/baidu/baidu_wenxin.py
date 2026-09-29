@@ -91,7 +91,7 @@ class BaiduWenxinBot(Bot):
                 'Content-Type': 'application/json'
             }
             payload = {'messages': session.messages, 'system': self.prompt} if self.prompt_enabled else {'messages': session.messages}
-            response = requests.request("POST", url, headers=headers, data=json.dumps(payload))
+            response = requests.request("POST", url, headers=headers, data=json.dumps(payload), timeout=180)
             response_text = json.loads(response.text)
             logger.info(f"[BAIDU] response text={response_text}")
             res_content = response_text["result"]
@@ -104,9 +104,7 @@ class BaiduWenxinBot(Bot):
                 "content": res_content,
             }
         except Exception as e:
-            need_retry = retry_count < 2
             logger.warn("[BAIDU] Exception: {}".format(e))
-            need_retry = False
             self.sessions.clear_session(session.session_id)
             result = {"total_tokens": 0, "completion_tokens": 0, "content": "出错了: {}".format(e)}
             return result
@@ -118,4 +116,4 @@ class BaiduWenxinBot(Bot):
         """
         url = "https://aip.baidubce.com/oauth/2.0/token"
         params = {"grant_type": "client_credentials", "client_id": BAIDU_API_KEY, "client_secret": BAIDU_SECRET_KEY}
-        return str(requests.post(url, params=params).json().get("access_token"))
+        return str(requests.post(url, params=params, timeout=180).json().get("access_token"))

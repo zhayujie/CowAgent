@@ -107,7 +107,8 @@ class DoubaoBot(Bot):
             res = requests.post(
                 f"{self.base_url}/chat/completions",
                 headers=headers,
-                json=body
+                json=body,
+                timeout=120
             )
             if res.status_code == 200:
                 response = res.json()

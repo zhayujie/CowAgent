@@ -948,10 +948,6 @@
     color: rgb(203 213 225) !important;
 }
 
-.agent-cancelled-tag {
-    font-style: italic;
-}
-
 /* =====================================================================
    Drag and Drop Overlay
    ===================================================================== */
@@ -1055,5 +1051,95 @@
 .delete-msg-btn:disabled {
     cursor: not-allowed !important;
     opacity: 0.35 !important;
+}
+
+/* ==========================================================================
+   Message navigator
+   The header button drops a card listing the conversation's questions; the
+   one being read is highlighted, and picking one glides the view to it.
+   ========================================================================== */
+#timeline-toggle-btn.timeline-empty { display: none; }
+#timeline-toggle-btn.is-active { background: rgba(74, 190, 110, 0.12); }
+#timeline-toggle-btn.is-active i { color: #35a85b; }
+
+.chat-timeline-panel {
+    position: fixed;
+    z-index: 60;
+    width: 300px;
+    max-width: calc(100vw - 24px);
+    padding: 6px;
+    border-radius: 16px;
+    background: #ffffff;
+    border: 1px solid rgba(15, 23, 42, 0.06);
+    box-shadow: 0 12px 32px -8px rgba(15, 23, 42, 0.16), 0 2px 6px rgba(15, 23, 42, 0.04);
+    animation: timeline-panel-in 140ms ease-out;
+}
+.chat-timeline-panel.hidden { display: none; }
+.dark .chat-timeline-panel {
+    background: #242424;
+    border-color: rgba(255, 255, 255, 0.08);
+    box-shadow: 0 12px 32px -8px rgba(0, 0, 0, 0.6);
+}
+@keyframes timeline-panel-in {
+    from { opacity: 0; transform: translateY(2px) scale(0.98); }
+    to { opacity: 1; transform: none; }
+}
+
+.chat-timeline-list {
+    max-height: min(420px, 60vh);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+}
+.chat-timeline-list::-webkit-scrollbar { width: 4px; }
+.chat-timeline-list::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.4); border-radius: 2px; }
+
+.chat-timeline-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    width: 100%;
+    padding: 8px 10px 8px 12px;
+    border-radius: 10px;
+    text-align: left;
+    font-size: 13px;
+    line-height: 1.35;
+    color: #64748b;
+    cursor: pointer;
+    transition: background 120ms ease, color 120ms ease;
+}
+.chat-timeline-row:hover { background: #f1f5f9; color: #1e293b; }
+.chat-timeline-row.is-active { color: #35a85b; font-weight: 500; }
+.dark .chat-timeline-row { color: #94a3b8; }
+.dark .chat-timeline-row:hover { background: rgba(255, 255, 255, 0.06); color: #f1f5f9; }
+.dark .chat-timeline-row.is-active { color: #6EE7A0; }
+
+.chat-timeline-row-text {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+.chat-timeline-row-dash {
+    flex: 0 0 auto;
+    width: 10px;
+    height: 2px;
+    border-radius: 2px;
+    background: #cbd5e1;
+    transition: width 150ms ease, background 150ms ease;
+}
+.chat-timeline-row:hover .chat-timeline-row-dash { background: #94a3b8; }
+.chat-timeline-row.is-active .chat-timeline-row-dash { width: 14px; background: #4ABE6E; }
+.dark .chat-timeline-row-dash { background: rgba(255, 255, 255, 0.18); }
+.dark .chat-timeline-row.is-active .chat-timeline-row-dash { background: #4ABE6E; }
+
+/* Brief ring on the bubble a jump lands on. */
+.timeline-flash {
+    animation: timeline-flash-kf 1.6s ease;
+}
+@keyframes timeline-flash-kf {
+    0%, 40% { box-shadow: 0 0 0 3px rgba(74, 190, 110, 0.35); }
+    100% { box-shadow: 0 0 0 3px rgba(74, 190, 110, 0); }
 }
 

@@ -1,11 +1,11 @@
 import os
 import re
-import requests
 
 from bridge.context import ContextType
 from channel.chat_message import ChatMessage
 from common.log import logger
 from common import state_dir
+from common.media_download import MAX_FILE_BYTES, download_to_file
 
 
 def _get_tmp_dir() -> str:
@@ -59,10 +59,7 @@ def _download_attachment(att: dict, msg_id: str, idx: int) -> str:
     # Keep filenames unique per message so two attachments never clobber.
     local_path = os.path.join(tmp_dir, f"qq_{msg_id}_{idx}_{fname}")
     try:
-        resp = requests.get(url, timeout=60)
-        resp.raise_for_status()
-        with open(local_path, "wb") as f:
-            f.write(resp.content)
+        download_to_file(url, local_path, MAX_FILE_BYTES, timeout=60)
         logger.info(f"[QQ] Attachment downloaded: {local_path}")
         return local_path
     except Exception as e:
@@ -222,6 +219,6 @@ class QQMessage(ChatMessage):
 
         origin_note = ""
         if self.origin_ctype == ContextType.VOICE:
-            origin_note = f", origin=VOICE (VOICE->TEXT via official ASR)"
+            origin_note = ", origin=VOICE (VOICE->TEXT via official ASR)"
         logger.debug(f"[QQ] Message parsed: type={event_type}, ctype={self.ctype}{origin_note}, "
                      f"from={self.from_user_id}, content_len={len(self.content)}")

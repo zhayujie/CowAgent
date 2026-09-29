@@ -1,8 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { ChevronRight, Loader2, Check, X, Lightbulb, ListFilter, Layers3, Shield } from 'lucide-react'
-import type { MessageStep, SubStep } from '../types'
+import {
+  ChevronRight, Loader2, Check, X, Lightbulb, ListFilter, Layers3, Shield, Share2, CircleStop, CircleAlert, Hourglass,
+} from 'lucide-react'
+import type { MessageStep, RunState, SubStep } from '../types'
 import { t } from '../i18n'
 import Markdown from './Markdown'
+import { handoffTarget } from '../lib/handoff'
 import { permLabel } from '../lib/permission'
 import { useSessionSettingsStore } from '../store/sessionSettingsStore'
 
@@ -110,26 +113,32 @@ const SubStepRow: React.FC<{ sub: SubStep }> = ({ sub }) => {
 const ToolStep: React.FC<{ step: MessageStep }> = ({ step }) => {
   const substeps = step.substeps || []
   const [expanded, setExpanded] = useState(false)
+  const running = step.status === 'running'
+  const isError = step.is_error || (!!step.status && step.status !== 'success' && !running)
+  // A hand-off's answer is the teammate's own bubble, so this row stays shut:
+  // what it holds that the bubble does not is the task that was handed over.
+  const handoff = isError ? null : handoffTarget(step)
   // A tool that wrote something for a person to read opens itself, and a sub
   // agent's first step is the first sign of life from a call that runs for
   // minutes. Everything else stays shut: its output is a trace. Opening is
   // once and only once, so the reader can shut it again and have it stay shut.
   const opened = useRef(false)
   useEffect(() => {
-    if (opened.current || (!step.display && substeps.length === 0)) return
+    if (opened.current || handoff || (!step.display && substeps.length === 0)) return
     opened.current = true
     setExpanded(true)
-  }, [step.display, substeps.length])
-  const running = step.status === 'running'
-  const isError = step.is_error || (!!step.status && step.status !== 'success' && !running)
+  }, [step.display, substeps.length, handoff])
 
   const icon = running ? (
     <Loader2 size={12} className="text-accent animate-spin" />
   ) : isError ? (
     <X size={12} className="text-danger" />
+  ) : handoff ? (
+    <Share2 size={12} className="text-accent" />
   ) : (
     <Check size={12} className="text-accent" />
   )
+  const label = handoff ? t('handoff_to').replace('{name}', handoff) : step.name
 
   return (
     <div className="text-xs text-content-tertiary mb-1 last:mb-0">
@@ -138,7 +147,7 @@ const ToolStep: React.FC<{ step: MessageStep }> = ({ step }) => {
         onClick={() => setExpanded((v) => !v)}
       >
         <span className="flex-shrink-0">{icon}</span>
-        <span className={`font-medium ${isError ? 'text-danger' : ''}`}>{step.name}</span>
+        <span className={`font-medium ${isError ? 'text-danger' : ''}`}>{label}</span>
         {step.execution_time !== undefined && (
           <span className="opacity-60">{step.execution_time}s</span>
         )}
@@ -243,5 +252,25 @@ const MessageSteps: React.FC<{ steps: MessageStep[] }> = ({ steps }) => {
   )
 }
 
-export { ThinkingStep, RetrievalStep, ToolStep }
+type ReplyStatusKind = 'cancelled' | RunState
+
+const REPLY_STATUS = {
+  cancelled: { Icon: CircleStop, label: 'msg_cancelled' },
+  interrupted: { Icon: CircleAlert, label: 'reply_interrupted' },
+  running: { Icon: Hourglass, label: 'reply_running' },
+} as const
+
+/** Line closing a reply's steps: stopped by the user, cut off before its answer, or still running. */
+const ReplyStatus: React.FC<{ kind: ReplyStatusKind }> = ({ kind }) => {
+  const { Icon, label } = REPLY_STATUS[kind]
+  return (
+    <div className="flex items-center gap-1.5 text-xs text-content-tertiary">
+      <Icon size={12} className="flex-shrink-0" />
+      <span>{t(label)}</span>
+    </div>
+  )
+}
+
+export { ThinkingStep, RetrievalStep, ToolStep, ReplyStatus }
+export type { ReplyStatusKind }
 export default MessageSteps

@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import apiClient from '../api/client'
 import { t } from '../i18n'
-import { sessionOwner } from './sessionStore'
+import { sessionOwner, useSessionStore } from './sessionStore'
 import type { SessionSettingsState } from '../types'
 
 /**
@@ -87,6 +87,9 @@ export const useSessionSettingsStore = create<SessionSettingsStore>((set, get) =
       }
       if (token !== requestSeq) return true
       set({ cfg: { model: data.model, permission: data.permission, team: data.team }, sessionId })
+      // Keep the list's faces in step with the roster we just changed, which it
+      // cannot read from the API until the conversation has a first message.
+      if (data.team) useSessionStore.getState().setParticipants(sessionId, data.team)
       return true
     } catch {
       set({ error: t('session_settings_failed') })

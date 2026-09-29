@@ -6,7 +6,8 @@ System Prompt Builder - 系统提示词构建器
 
 from __future__ import annotations
 import os
-from typing import List, Dict, Optional, Any
+import re
+from typing import List, Dict, Optional, Any, Tuple
 from dataclasses import dataclass
 
 from common.log import logger
@@ -233,6 +234,7 @@ def _build_tooling_section(tools: List[Any], language: str) -> List[str]:
             "memory_search": "search memory",
             "memory_get": "read memory content",
             "env_config": "manage API keys and skill config",
+            "time": "get the current date and time",
             "scheduler": "manage scheduled tasks and reminders",
             "send": "send a local file to the user (local files only; put URLs directly in the reply text)",
             "vision": "analyze images (recognition, description, OCR, etc.)",
@@ -253,6 +255,7 @@ def _build_tooling_section(tools: List[Any], language: str) -> List[str]:
             "memory_search": "搜索记忆",
             "memory_get": "读取记忆内容",
             "env_config": "管理API密钥和技能配置",
+            "time": "获取当前日期和时间",
             "scheduler": "管理定时任务和提醒",
             "send": "发送本地文件给用户（仅限本地文件，URL直接放在回复文本中）",
             "vision": "分析图片内容（识别、描述、OCR文字提取等）",
@@ -265,7 +268,7 @@ def _build_tooling_section(tools: List[Any], language: str) -> List[str]:
         "bash", "terminal",
         "web_search", "web_fetch", "browser",
         "memory_search", "memory_get",
-        "env_config", "scheduler", "send", "vision", "subagent",
+        "env_config", "time", "scheduler", "send", "vision", "subagent",
     ]
 
     # Build name -> summary mapping for available tools
@@ -559,6 +562,40 @@ def _build_memory_section(
     return lines
 
 
+# index.md grows by a line per knowledge page and is re-sent on every turn.
+# Past _INDEX_FULL_CHARS only the entry titles are injected, and past
+# _INDEX_MAX_CHARS the list is cut; the pages stay reachable through read and
+# memory_search, and the prompt says so.
+_INDEX_FULL_CHARS = 8000
+_INDEX_MAX_CHARS = 20000
+_INDEX_ENTRY_RE = re.compile(r"^\s*[-*]\s+\[[^\]]*\]\([^)]*\)")
+
+
+def _compact_knowledge_index(content: str) -> Tuple[str, int, bool]:
+    """Return (index text to inject, entries left out, whether it was compacted)."""
+    if len(content) <= _INDEX_FULL_CHARS:
+        return content, 0, False
+
+    kept: List[str] = []
+    size = 0
+    omitted = 0
+    full = False
+    for line in content.split("\n"):
+        entry = _INDEX_ENTRY_RE.match(line)
+        if entry:
+            line = entry.group(0).strip()
+        elif not line.lstrip().startswith("#"):
+            continue
+        if full or size + len(line) + 1 > _INDEX_MAX_CHARS:
+            full = True
+            if entry:
+                omitted += 1
+            continue
+        kept.append(line)
+        size += len(line) + 1
+    return "\n".join(kept), omitted, True
+
+
 def _build_knowledge_section(
     workspace_dir: str, language: str, project_dir: Optional[str] = None
 ) -> List[str]:
@@ -629,12 +666,22 @@ def _build_knowledge_section(
         ]
 
     if index_content:
+        index_text, omitted, compacted = _compact_knowledge_index(index_content)
         lines.extend([
             ("### Current knowledge index" if language == "en" else "### 当前知识索引"),
             "",
-            index_content,
-            "",
         ])
+        if compacted:
+            if language == "en":
+                more = f", {omitted} more entries are not listed" if omitted else ""
+                note = (f"The index is large, so only titles are listed here{more}. "
+                        f"`read` `{kb}/index.md` for the full index, or use `memory_search`.")
+            else:
+                more = f"，另有 {omitted} 条未列出" if omitted else ""
+                note = (f"索引较大，此处只列出标题{more}。"
+                        f"完整索引请 `read` `{kb}/index.md` 查看，或用 `memory_search` 检索。")
+            lines.extend([note, ""])
+        lines.extend([index_text, ""])
 
     lines.extend([
         ("**How to query**: use `read` to open a knowledge page, or `memory_search` (knowledge is in the vector index)."
@@ -758,16 +805,16 @@ def _build_workspace_section(
             "**路径使用规则** (非常重要):",
             "",
             f"1. **相对路径的基准目录**: 所有相对路径都是相对于 `{workspace_dir}` 而言的",
-            f"   - ✅ 正确: 访问工作空间内的文件用相对路径，如 `AGENT.md`",
+            "   - ✅ 正确: 访问工作空间内的文件用相对路径，如 `AGENT.md`",
             f"   - ❌ 错误: 用相对路径访问其他目录的文件 (如果它不在 `{workspace_dir}` 内)",
             "",
             "2. **访问其他目录**: 如果要访问工作空间之外的目录（如项目代码、系统文件），**必须使用绝对路径**",
-            f"   - ✅ 正确: 例如 `~/chatgpt-on-wechat`、`/usr/local/`",
-            f"   - ❌ 错误: 假设相对路径会指向其他目录",
+            "   - ✅ 正确: 例如 `~/chatgpt-on-wechat`、`/usr/local/`",
+            "   - ❌ 错误: 假设相对路径会指向其他目录",
             "",
             "3. **路径解析示例**:",
             f"   - 相对路径 `memory/` → 实际路径 `{workspace_dir}/memory/`",
-            f"   - 绝对路径 `~/chatgpt-on-wechat/docs/` → 实际路径 `~/chatgpt-on-wechat/docs/`",
+            "   - 绝对路径 `~/chatgpt-on-wechat/docs/` → 实际路径 `~/chatgpt-on-wechat/docs/`",
             "",
             "4. **不确定时**: 先用 `bash pwd` 确认当前目录，或用 `ls .` 查看当前位置",
             "",
@@ -828,7 +875,7 @@ def _build_project_workspace_section(
             "",
             f"2. **Memory and skills stay in the system directory** `{workspace_dir}`. Never write them into the project. Memory tools handle this for you; if you ever touch these files directly, use **absolute paths** under the system directory.",
             f"   - ✅ absolute `{workspace_dir}/MEMORY.md`",
-            f"   - ❌ relative `MEMORY.md` (that would land in the project, which is wrong)",
+            "   - ❌ relative `MEMORY.md` (that would land in the project, which is wrong)",
             "",
             "3. **Accessing any other directory**: use absolute paths.",
             "",
@@ -851,7 +898,7 @@ def _build_project_workspace_section(
             "",
             f"2. **记忆和技能仍在系统目录** `{workspace_dir}`，不要写入项目目录。记忆操作由记忆工具自动完成；若确需直接访问这些文件，请使用系统目录下的**绝对路径**。",
             f"   - ✅ 绝对路径 `{workspace_dir}/MEMORY.md`",
-            f"   - ❌ 相对路径 `MEMORY.md`（那会落到项目目录里，是错误的）",
+            "   - ❌ 相对路径 `MEMORY.md`（那会落到项目目录里，是错误的）",
             "",
             "3. **访问其他任意目录**：使用绝对路径。",
             "",
@@ -990,7 +1037,10 @@ def _build_team_section(runtime_info: Dict[str, Any], language: str) -> List[str
             "Use agent_delegate for work that belongs to a teammate, passing "
             "their id above as agent_id (without the @), and say who you handed "
             "it to and what you asked for. Refer to teammates by name to the "
-            "user, without the @id — the id is internal.",
+            "user and keep the @id out of your reply — the id is internal. "
+            "Never answer in a teammate's place: hand any question or task "
+            "that is theirs straight over, and do not report their words or "
+            "actions without a hand-off.",
             "",
         ]
     return [
@@ -1008,47 +1058,37 @@ def _build_team_section(runtime_info: Dict[str, Any], language: str) -> List[str
         "",
         "该由某位同事做的事，用 agent_delegate 交出去：把那位同事上面的 id "
         "作为 agent_id 传入 (不含@符号)，并说明交给了谁、交办了什么。对用户提到同事时只用名字，"
-        "不要带 @id，id 只用于内部。",
+        "回复内容不要带 @id，id 只用于内部。不要替同事回答：该由某位成员回答的问题或执行的任务直接转交，"
+        "未经转交不得转述其言行。",
         "",
     ]
 
 
 def _build_runtime_section(runtime_info: Dict[str, Any], language: str) -> List[str]:
-    """Build the runtime info section - supports dynamic time."""
+    """Build the runtime info section.
+
+    Only the date goes here: the system prompt heads every request, so a
+    clock in it would change on every turn and void the provider's prefix
+    cache for the whole history. The exact time is served on demand by the
+    ``time`` tool.
+    """
     if not runtime_info:
         return []
-    
+
     is_en = language == "en"
-    time_label = "Current time" if is_en else "当前时间"
     lines = [
         ("## ⚙️ Runtime info" if is_en else "## ⚙️ 运行时信息"),
         "",
     ]
 
-    # Add current time if available
-    # Support dynamic time via callable function
     if callable(runtime_info.get("_get_current_time")):
         try:
             time_info = runtime_info["_get_current_time"]()
-            time_line = f"{time_label}: {time_info['time']} {time_info['weekday']} ({time_info['timezone']})"
-            lines.append(time_line)
+            date_label = "Current date" if is_en else "当前日期"
+            lines.append(f"{date_label}: {time_info['date']} {time_info['weekday']} ({time_info['timezone']})")
             lines.append("")
         except Exception as e:
             logger.warning(f"[PromptBuilder] Failed to get dynamic time: {e}")
-    elif runtime_info.get("current_time"):
-        # Fallback to static time for backward compatibility
-        time_str = runtime_info["current_time"]
-        weekday = runtime_info.get("weekday", "")
-        timezone = runtime_info.get("timezone", "")
-
-        time_line = f"{time_label}: {time_str}"
-        if weekday:
-            time_line += f" {weekday}"
-        if timezone:
-            time_line += f" ({timezone})"
-
-        lines.append(time_line)
-        lines.append("")
 
     # Add other runtime info
     model_label = "model" if is_en else "模型"

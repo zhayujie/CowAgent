@@ -18,6 +18,8 @@ import os
 import socket
 from urllib.parse import urlparse
 
+import requests
+
 
 def _ssrf_protection_enabled() -> bool:
     """Return True only when SSRF protection is explicitly turned on.
@@ -94,3 +96,50 @@ def validate_url_safe(url: str) -> None:
 
     for family, _, _, _, sockaddr in addr_infos:
         assert_public_ip(sockaddr[0])
+
+
+# Cap on how many redirects we follow; every hop's target is re-validated
+# against the SSRF guard so a public URL cannot bounce us into an internal one.
+MAX_REDIRECTS = 10
+
+
+def safe_get(url: str, timeout: float = 30, headers: dict = None,
+             max_redirects: int = MAX_REDIRECTS, **kwargs) -> "requests.Response":
+    """Issue a GET request while re-validating every redirect hop (SSRF guard).
+
+    Auto-redirect is disabled and each hop is followed manually, so the target
+    of every redirect is re-resolved and checked against the SSRF guard before
+    it is requested. This prevents a public URL from 3xx-bouncing into a
+    private, loopback, link-local or cloud-metadata address. Extra ``kwargs``
+    are passed through to ``requests.get`` (e.g. ``stream``).
+
+    Any tool that fetches a model-supplied URL must go through this helper:
+    validating only the original URL leaves the redirect hop unguarded.
+
+    Raises:
+        ValueError: if any hop resolves to a non-public address.
+    """
+    kwargs.pop("allow_redirects", None)
+    current = url
+    for _ in range(max_redirects + 1):
+        response = requests.get(
+            current,
+            headers=headers,
+            timeout=timeout,
+            allow_redirects=False,
+            **kwargs,
+        )
+        if not response.is_redirect and not response.is_permanent_redirect:
+            return response
+
+        location = response.headers.get("Location")
+        if not location:
+            return response
+
+        # Resolve the redirect target relative to the current URL, then
+        # re-validate it before following.
+        current = requests.compat.urljoin(current, location)
+        validate_url_safe(current)
+        response.close()
+
+    raise ValueError(f"Too many redirects (>{max_redirects})")

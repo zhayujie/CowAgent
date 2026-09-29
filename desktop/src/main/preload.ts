@@ -68,6 +68,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Current app version (e.g. "0.0.5"), shown in the NavRail footer.
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
 
+  // Ask for OS-level microphone access (prompts once on macOS; true elsewhere).
+  requestMicAccess: () => ipcRenderer.invoke('mic-request-access') as Promise<boolean>,
+
   // Launch-at-login toggle (macOS + Windows). get returns the effective state;
   // set returns the real outcome so the UI can surface refusals/errors.
   getLoginItemEnabled: () => ipcRenderer.invoke('get-login-item') as Promise<boolean>,
@@ -106,6 +109,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   checkForUpdate: (lang?: string) => ipcRenderer.invoke('update-check', lang),
   downloadUpdate: (lang?: string) => ipcRenderer.invoke('update-download', lang),
   installUpdate: () => ipcRenderer.invoke('update-install'),
+  // Extra query parameters for the update feed URL; pass {} to clear.
+  setUpdateFeedQuery: (params: Record<string, string>) => ipcRenderer.invoke('update-feed-query', params),
   onUpdateStatus: (callback: (status: unknown) => void) => {
     const handler = (_event: unknown, status: unknown) => callback(status)
     ipcRenderer.on('update-status', handler)

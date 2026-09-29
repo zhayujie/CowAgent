@@ -11,6 +11,10 @@ from plugins import *
 
 from .lib.WordsSearch import WordsSearch
 
+# Written to config.json when it is missing or does not carry one, and used as
+# the fallback for a config that is empty or only half-filled in.
+DEFAULT_CONFIG = {"action": "ignore"}
+
 
 @plugins.register(
     name="Banwords",
@@ -27,13 +31,26 @@ class Banwords(Plugin):
             # load config
             conf = super().load_config()
             curdir = os.path.dirname(__file__)
-            if not conf:
-                # 配置不存在则写入默认配置
+            # A config.json that exists but is empty or partial used to reach
+            # conf["action"] as {} and raise KeyError. `activate_plugins` answers
+            # a plugin that fails to initialise by disabling it and *persisting*
+            # enabled=false, so the plugin then stayed off across restarts even
+            # after the file was put right. Fall back to the documented default
+            # and write the repaired config out instead.
+            if not isinstance(conf, dict) or not conf.get("action"):
+                conf = {**DEFAULT_CONFIG, **(conf if isinstance(conf, dict) else {})}
                 config_path = os.path.join(curdir, "config.json")
-                if not os.path.exists(config_path):
-                    conf = {"action": "ignore"}
-                    with open(config_path, "w") as f:
+                try:
+                    with open(config_path, "w", encoding="utf-8") as f:
                         json.dump(conf, f, indent=4)
+                except OSError as e:
+                    # Repairing the file on disk is a convenience; the defaults
+                    # above are enough to run. Raising here would reach
+                    # activate_plugins, which persists enabled=false — the very
+                    # outcome this fallback exists to avoid — so a plugin
+                    # directory that is read-only (packaged builds) or a full
+                    # disk must not take the plugin down.
+                    logger.warning(f"[Banwords] cannot write {config_path}: {e}")
 
             self.searchr = WordsSearch()
             self.action = conf["action"]

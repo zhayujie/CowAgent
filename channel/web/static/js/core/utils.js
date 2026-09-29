@@ -55,6 +55,24 @@ function summarizeToolArgs(args) {
 }
 
 /**
+ * Head the card of a call that handed work to a teammate with who took it.
+ *
+ * The answer arrives as that teammate's own bubble, so the card folds shut when
+ * it finishes rather than repeating it; what it keeps is the task that was
+ * handed over, which is recorded nowhere else. The spinner stays until the call
+ * actually returns. Silent when the card is gone.
+ */
+function markHandoffCard(toolEl, item) {
+    if (!toolEl) return;
+    toolEl.classList.add('agent-handoff-step');
+    const nameEl = toolEl.querySelector('.tool-name');
+    if (nameEl) {
+        const to = item.agent_name || item.agent_id || '';
+        nameEl.textContent = t('handoff_to').replace('{name}', to);
+    }
+}
+
+/**
  * Add or settle one step inside a sub agent's card.
  *
  * Silent when the card is gone: a sub agent cancelled on timeout keeps working

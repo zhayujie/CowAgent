@@ -37,7 +37,7 @@ BLOCKED_TOOLS = frozenset(
 
 READ_ONLY_TOOLS = (
     "read", "ls", "search_files", "web_search", "web_fetch", "vision",
-    "memory_search", "memory_get",
+    "memory_search", "memory_get", "time",
 )
 
 _ALL_TOOLS = "*"

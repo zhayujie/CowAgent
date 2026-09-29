@@ -7,7 +7,6 @@ import string
 import logging
 from typing import Tuple
 
-import bridge.bridge
 import plugins
 from bridge.bridge import Bridge
 from bridge.context import ContextType
@@ -172,6 +171,11 @@ def get_help_text(isadmin, isgroup):
     return help_text
 
 
+# Written to config.json when it is missing or incomplete, and used as the
+# fallback for a config that is empty or only half-filled in.
+DEFAULT_CONFIG = {"password": "", "admin_users": []}
+
+
 @plugins.register(
     name="Godcmd",
     desire_priority=999,
@@ -186,11 +190,24 @@ class Godcmd(Plugin):
 
         config_path = os.path.join(os.path.dirname(__file__), "config.json")
         gconf = super().load_config()
-        if not gconf:
-            if not os.path.exists(config_path):
-                gconf = {"password": "", "admin_users": []}
-                with open(config_path, "w") as f:
+        # A config.json that exists but is empty or half-filled in used to reach
+        # gconf["password"]/["admin_users"] as {} and raise KeyError.
+        # `activate_plugins` answers a plugin that fails to initialise by
+        # disabling it and *persisting* enabled=false, so the command plugin
+        # stayed off across restarts even after the file was put right. Fill in
+        # the documented defaults and write the repaired config out instead.
+        if not isinstance(gconf, dict) or not all(k in gconf for k in DEFAULT_CONFIG):
+            gconf = {**DEFAULT_CONFIG, **(gconf if isinstance(gconf, dict) else {})}
+            try:
+                with open(config_path, "w", encoding="utf-8") as f:
                     json.dump(gconf, f, indent=4)
+            except OSError as e:
+                # Repairing the file on disk is a convenience; the defaults above
+                # are enough to run. Raising here would reach activate_plugins,
+                # which persists enabled=false — the very outcome this fallback
+                # exists to avoid — so a plugin directory that is read-only
+                # (packaged builds) or a full disk must not take the plugin down.
+                logger.warning(f"[Godcmd] cannot write {config_path}: {e}")
         if gconf["password"] == "":
             self.temp_password = "".join(random.sample(string.digits, 4))
             logger.info("[Godcmd] 因未设置口令，本次的临时口令为%s。" % self.temp_password)
@@ -224,7 +241,7 @@ class Godcmd(Plugin):
             if len(content) == 1:
                 reply = Reply()
                 reply.type = ReplyType.ERROR
-                reply.content = f"空指令，输入#help查看指令列表\n"
+                reply.content = "空指令，输入#help查看指令列表\n"
                 e_context["reply"] = reply
                 e_context.action = EventAction.BREAK_PASS
                 return
@@ -292,7 +309,7 @@ class Godcmd(Plugin):
                         user_data = conf().get_user_data(user)
                         user_data.pop("openai_api_key")
                         ok, result = True, "你的OpenAI私有api_key已清除"
-                    except Exception as e:
+                    except Exception:
                         ok, result = False, "你没有设置私有api_key"
                 elif cmd == "set_gpt_model":
                     if len(args) == 1:
@@ -312,7 +329,7 @@ class Godcmd(Plugin):
                         user_data = conf().get_user_data(user)
                         user_data.pop("gpt_model")
                         ok, result = True, "你的GPT模型已重置"
-                    except Exception as e:
+                    except Exception:
                         ok, result = False, "你没有设置私有GPT模型"
                 elif cmd == "reset":
                     if bottype in [const.OPEN_AI, const.OPENAI, const.CHATGPT, const.CHATGPTONAZURE, const.LINKAI, const.BAIDU, const.QIANFAN, const.XUNFEI, const.QWEN, const.QWEN_DASHSCOPE, const.GEMINI, const.ZHIPU_AI, const.CLAUDEAPI]:

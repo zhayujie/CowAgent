@@ -41,6 +41,10 @@ The memory system supports hybrid retrieval modes:
 
 The Agent automatically triggers memory retrieval during conversation as needed, incorporating relevant historical information into context. Results are ranked by rank-normalizing the vector and keyword scores onto a common scale and taking a weighted average (default: 0.7 vector weight + 0.3 keyword weight). Because the top hit is always normalized to 1.0, `min_score` acts as a rank-position cutoff rather than an absolute relevance floor. Daily memory scores decay over time (30-day half-life), while core memory does not decay.
 
+<Tip>
+  For more precise ranking, rerank can optionally be enabled: run `pip install sentence-transformers`, then set `"rerank_provider": "local"` in the config, and results are reordered by a local rerank model (default `BAAI/bge-reranker-base`). It is off by default and has no effect unless configured.
+</Tip>
+
 ## Related Files
 
 Files related to memory in the workspace (default `~/cow`):
@@ -69,3 +73,5 @@ The memory management page in the Web console allows browsing memory files and d
 | `agent_workspace` | Workspace path, memory files stored under this directory | `~/cow` |
 | `agent_max_context_tokens` | Max context tokens; when exceeded, content is trimmed and summarized into memory | `50000` |
 | `agent_max_context_turns` | Max context turns; when exceeded, content is trimmed and summarized into memory | `20` |
+| `rerank_provider` | Rerank service for memory retrieval; empty disables it, `local` uses a local cross-encoder | `""` |
+| `rerank_model` | Rerank model; empty uses the provider's default | `BAAI/bge-reranker-base` |

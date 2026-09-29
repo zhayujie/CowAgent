@@ -11,6 +11,7 @@ import os
 import sys
 import threading
 import unittest
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -75,8 +76,6 @@ class HeartbeatWatchdogTest(unittest.TestCase):
     """
 
     def test_missing_acks_force_the_socket_closed(self):
-        from channel.qq import qq_channel
-
         ch = _make_channel()
         ch._connected = True
         ch._last_seq = 5
@@ -172,6 +171,57 @@ class ApiErrorReportingTest(unittest.TestCase):
         self.assertEqual(url, "")
         self.assertIn("11298", ch._last_api_error)
         self.assertIn("400", ch._last_api_error)
+
+
+class GroupSessionTest(unittest.TestCase):
+    """A QQ group shares one session only when the config asks for it.
+
+    ``group_shared_session`` is documented in ``config.py`` ("When False each
+    user has an independent session in the group") and honoured by every other
+    group-capable channel: the base ``chat_channel``, dingtalk, discord,
+    feishu, slack, telegram and wecom_bot. QQ keyed a group on the group id
+    unconditionally, so the setting did nothing here -- including its shipped
+    default of False.
+    """
+
+    @staticmethod
+    def _msg(from_user_id="member-1", other_user_id="group-9", is_group=True):
+        return SimpleNamespace(
+            from_user_id=from_user_id, other_user_id=other_user_id, is_group=is_group
+        )
+
+    def _id_for(self, is_group, shared):
+        from config import conf
+
+        ch = _make_channel()
+        with patch.dict(conf(), {"group_shared_session": shared}):
+            return ch._compute_session_id(self._msg(is_group=is_group), is_group)
+
+    def test_a_group_is_per_member_when_sharing_is_off(self):
+        self.assertEqual(self._id_for(True, False), "member-1:group-9")
+
+    def test_a_group_is_shared_when_the_config_asks_for_it(self):
+        self.assertEqual(self._id_for(True, True), "group-9")
+
+    def test_a_private_message_ignores_the_setting(self):
+        self.assertEqual(self._id_for(False, True), "member-1")
+        self.assertEqual(self._id_for(False, False), "member-1")
+
+    def test_compose_context_applies_the_same_rule(self):
+        """The context the agent runs on must not disagree with the message key."""
+        from config import conf
+        from bridge.context import ContextType
+
+        ch = _make_channel()
+        ch.channel_type = "qq"
+        with patch.dict(conf(), {"group_shared_session": False}):
+            context = ch._compose_context(
+                ContextType.TEXT, "hi", isgroup=True, msg=self._msg()
+            )
+
+        self.assertEqual(context["session_id"], "member-1:group-9")
+        # The reply still goes to the group, not to the member.
+        self.assertEqual(context["receiver"], "group-9")
 
 
 if __name__ == "__main__":

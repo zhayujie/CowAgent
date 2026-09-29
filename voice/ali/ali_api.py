@@ -47,7 +47,7 @@ def text_to_speech_aliyun(url, text, appkey, token):
         "format": "wav"
     }
 
-    response = requests.post(url, headers=headers, data=json.dumps(data))
+    response = requests.post(url, headers=headers, data=json.dumps(data), timeout=(5, 60))
 
     if response.status_code == 200 and response.headers['Content-Type'] == 'audio/mpeg':
         output_file = TmpDir().path() + "reply-" + str(int(time.time())) + "-" + str(hash(text) & 0x7FFFFFFF) + ".wav"
@@ -104,7 +104,7 @@ def speech_to_text_aliyun(url, audioContent, appkey, token):
         'Content-Length': len(audioContent)
         }
 
-    conn = http.client.HTTPSConnection(host)
+    conn = http.client.HTTPSConnection(host, timeout=60)
     conn.request(method='POST', url=request, body=audioContent, headers=httpHeaders)
 
     response = conn.getresponse()
@@ -211,6 +211,6 @@ class AliyunTokenGenerator:
         url = 'http://nls-meta.cn-shanghai.aliyuncs.com/?' + urllib.parse.urlencode(params)
 
         # 发送请求
-        response = requests.get(url)
+        response = requests.get(url, timeout=(5, 60))
 
         return response.text

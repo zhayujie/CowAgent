@@ -1,5 +1,5 @@
                 <!-- ====================================================== -->
-                <!-- VIEW: Skills                                            -->
+                <!-- VIEW: Capabilities (tools, MCP, skills)                 -->
                 <!-- ====================================================== -->
                 <div id="view-skills" class="view">
                     <div class="flex-1 overflow-y-auto p-6">
@@ -7,53 +7,74 @@
 
                             <!-- Panel: list -->
                             <div id="skills-panel-list">
-                                <div class="flex items-center justify-between mb-6">
-                                    <div>
-                                        <h2 class="text-xl font-bold text-slate-800 dark:text-slate-100" data-i18n="skills_title">技能管理</h2>
-                                        <p class="text-sm text-slate-500 dark:text-slate-400 mt-1" data-i18n="skills_desc">查看、启用或禁用 Agent 技能</p>
-                                    </div>
-                                    <div class="flex items-center gap-2">
-                                        <a href="https://skills.cowagent.ai/" target="_blank"
-                                           class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-primary-500 bg-primary-50 dark:bg-primary-900/20 hover:bg-primary-100 dark:hover:bg-primary-900/30 transition-colors">
-                                            <i class="fas fa-puzzle-piece text-[10px]"></i>
-                                            <span data-i18n="skills_hub_btn">探索技能广场</span>
-                                        </a>
-                                        <button onclick="openSkillCreateDialog()"
-                                                class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-primary-500 hover:bg-primary-600 transition-colors cursor-pointer">
-                                            <i class="fas fa-plus text-[10px]"></i>
-                                            <span data-i18n="skill_new_btn">新建技能</span>
-                                        </button>
-                                    </div>
+                                <div class="mb-8">
+                                    <h2 class="text-xl font-bold text-slate-800 dark:text-slate-100" data-i18n="skills_title">能力</h2>
+                                    <p class="text-sm text-slate-500 dark:text-slate-400 mt-1" data-i18n="skills_desc">管理 Agent 可以调用的内置工具、MCP 工具和技能</p>
                                 </div>
 
                                 <!-- Built-in Tools Section -->
-                                <div class="mb-8">
+                                <section class="mb-10">
                                     <div class="flex items-center gap-2 mb-3">
-                                        <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500" data-i18n="tools_section_title">内置工具</span>
-                                        <span id="tools-count-badge" class="hidden px-2 py-0.5 rounded-full text-xs bg-slate-100 dark:bg-white/10 text-slate-500 dark:text-slate-400"></span>
+                                        <span class="cap-section-title" data-i18n="tools_section_title">内置工具</span>
+                                        <span id="tools-count-badge" class="cap-count hidden"></span>
+                                        <button type="button" id="tools-toggle-btn" class="cap-link-btn ml-auto hidden">
+                                            <span id="tools-toggle-label" data-i18n="tools_show_all">展开全部</span>
+                                            <i id="tools-toggle-icon" class="fas fa-chevron-down text-[10px]"></i>
+                                        </button>
                                     </div>
                                     <div id="tools-empty" class="flex items-center gap-2 py-4 text-slate-400 dark:text-slate-500 text-sm">
                                         <i class="fas fa-spinner fa-spin text-xs"></i>
                                         <span data-i18n="tools_loading">加载工具中...</span>
                                     </div>
                                     <div id="tools-list" class="grid gap-3 sm:grid-cols-2 hidden"></div>
-                                </div>
+                                </section>
+
+                                <!-- MCP Tools Section -->
+                                <section class="mb-10" id="mcp-section">
+                                    <div class="flex items-center gap-2 mb-3">
+                                        <span class="cap-section-title" data-i18n="mcp_section_title">MCP 工具</span>
+                                        <span id="mcp-count-badge" class="cap-count hidden"></span>
+                                        <button type="button" id="mcp-add-btn" class="cap-action-btn ml-auto">
+                                            <i class="fas fa-plus text-[10px]"></i>
+                                            <span data-i18n="mcp_add">添加 MCP</span>
+                                        </button>
+                                    </div>
+                                    <div id="mcp-empty" class="cap-empty">
+                                        <div class="cap-empty-icon"><i class="fas fa-plug"></i></div>
+                                        <p class="text-sm font-medium text-slate-600 dark:text-slate-300" data-i18n="mcp_empty">还没有接入 MCP 工具</p>
+                                        <p class="text-xs text-slate-400 dark:text-slate-500 mt-1" data-i18n="mcp_empty_hint">可以手动填写，也可以直接粘贴 MCP 市场提供的 JSON 配置</p>
+                                    </div>
+                                    <div id="mcp-list" class="grid gap-3 sm:grid-cols-2 hidden"></div>
+                                </section>
 
                                 <!-- Skills Section -->
-                                <div>
+                                <section>
                                     <div class="flex items-center gap-2 mb-3">
-                                        <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500" data-i18n="skills_section_title">技能</span>
-                                        <span id="skills-count-badge" class="hidden px-2 py-0.5 rounded-full text-xs bg-slate-100 dark:bg-white/10 text-slate-500 dark:text-slate-400"></span>
+                                        <span class="cap-section-title" data-i18n="skills_section_title">技能</span>
+                                        <span id="skills-count-badge" class="cap-count hidden"></span>
+                                        <a href="https://skills.cowagent.ai/" target="_blank" rel="noopener noreferrer" class="cap-link-btn ml-auto">
+                                            <i class="fas fa-compass text-[11px]"></i>
+                                            <span data-i18n="skills_hub_btn">探索技能广场</span>
+                                            <i class="fas fa-arrow-up-right-from-square text-[9px] opacity-60"></i>
+                                        </a>
+                                        <button type="button" onclick="openSkillCreateDialog()" class="cap-action-btn">
+                                            <i class="fas fa-pen-to-square text-[10px]"></i>
+                                            <span data-i18n="skill_new_btn">新建技能</span>
+                                        </button>
+                                        <button type="button" id="skill-add-btn" class="cap-action-btn">
+                                            <i class="fas fa-plus text-[10px]"></i>
+                                            <span data-i18n="skill_add">添加技能</span>
+                                        </button>
                                     </div>
                                     <div id="skills-empty" class="flex flex-col items-center justify-center py-12">
-                                        <div class="w-14 h-14 rounded-2xl bg-amber-50 dark:bg-amber-900/20 flex items-center justify-center mb-3">
-                                            <i class="fas fa-bolt text-amber-400 text-lg"></i>
+                                        <div class="w-14 h-14 rounded-2xl bg-primary-50 dark:bg-primary-900/20 flex items-center justify-center mb-3">
+                                            <i class="fas fa-bolt text-primary-500 text-lg"></i>
                                         </div>
                                         <p class="text-slate-500 dark:text-slate-400 font-medium" data-i18n="skills_loading">加载技能中...</p>
                                         <p class="text-sm text-slate-400 dark:text-slate-500 mt-1" data-i18n="skills_loading_desc">技能加载后将显示在此处</p>
                                     </div>
                                     <div id="skills-list" class="grid gap-4 sm:grid-cols-2"></div>
-                                </div>
+                                </section>
                             </div>
 
                             <!-- Panel: skill viewer / editor (replaces list) -->

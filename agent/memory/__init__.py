@@ -23,6 +23,15 @@ from agent.memory.embedding import (
     create_embedding_provider,
 )
 from agent.memory.manager import MemoryManager
+from agent.memory.reranker import (
+    DEFAULT_RERANK_MODEL,
+    Reranker,
+    SentenceTransformerReranker,
+    clear_reranker_cache,
+    create_default_reranker,
+    create_reranker,
+    register_reranker_provider,
+)
 from agent.memory.summarizer import ensure_daily_memory_file
 from agent.memory.vector_backend import (
     SQLiteVectorBackend,
@@ -40,6 +49,13 @@ __all__ = [
     'set_global_memory_config',
     'create_embedding_provider',
     'create_default_embedding_provider',
+    'Reranker',
+    'SentenceTransformerReranker',
+    'create_reranker',
+    'create_default_reranker',
+    'register_reranker_provider',
+    'clear_reranker_cache',
+    'DEFAULT_RERANK_MODEL',
     'VectorBackend',
     'SQLiteVectorBackend',
     'VectorRecord',

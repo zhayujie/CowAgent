@@ -167,7 +167,7 @@ def test_an_imported_document_targets_the_selected_agents_knowledge(console, age
         MAX_IMPORT_FILE_SIZE = _Real.MAX_IMPORT_FILE_SIZE
         MAX_IMPORT_FILES = _Real.MAX_IMPORT_FILES
 
-        def __init__(self, workspace):
+        def __init__(self, workspace, **_options):
             built.append(workspace)
 
         def dispatch(self, action, payload):

@@ -611,6 +611,18 @@ class AgentAdminService:
             except Exception as e:
                 logger.warning(f"[AgentAdmin] session prefs cleanup after delete failed: {e}")
 
+            # The project store keys its bindings the same way and needs the same
+            # sweep: an Agent's own sessions go away with its workspace, so their
+            # ``{id}::*`` entries would linger forever and a new Agent reusing the
+            # id would inherit them. Best-effort too, and separate so one store
+            # failing cannot swallow the other's cleanup.
+            try:
+                from agent.workspace import project_store
+
+                project_store.forget_agent(agent_id)
+            except Exception as e:
+                logger.warning(f"[AgentAdmin] project store cleanup after delete failed: {e}")
+
             return {"id": agent_id, "deleted": True}
 
     def knowledge_mode(self, agent_id: str) -> str:

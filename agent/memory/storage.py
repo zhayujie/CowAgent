@@ -8,11 +8,9 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import re
 import sqlite3
 import threading
-import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -56,6 +54,28 @@ _RE_TRIGRAM_TOKENS = re.compile(f'[{_CJK_RANGES}]+|[A-Za-z0-9_]+')
 # "disk I/O error" and friends must be told apart from actual corruption before
 # any recovery is attempted.
 _CORRUPTION_MARKERS = ("malformed", "corrupt", "file is not a database", "encrypted")
+
+
+# Every session's first message opens this database, so nothing that reads the
+# whole index (the integrity scan, rebuilding a search index) runs on the open
+# path: it runs in the background, once per process, and never moves the file.
+_maintenance_started: set = set()
+_maintenance_running: set = set()
+_maintenance_lock = threading.Lock()
+# Chunk writes and a background index rebuild must not interleave, so every
+# MemoryStorage on the same file shares one write lock.
+_write_locks: Dict[str, threading.RLock] = {}
+
+_FTS_REBUILD_PENDING = "fts_rebuild_pending"
+_TRIGRAM_DONE = "trigram_backfill_done"
+# Rows per transaction when refilling a search index, so the write lock on the
+# shared file (which also holds the conversation history) is released often.
+_REFILL_BATCH = 500
+
+
+def _write_lock_for(key: str) -> threading.RLock:
+    with _maintenance_lock:
+        return _write_locks.setdefault(key, threading.RLock())
 
 
 def _is_corruption_error(exc: BaseException) -> bool:
@@ -123,7 +143,7 @@ class MemoryStorage:
         # RLock protects concurrent writes from the same process.
         # SQLite WAL mode handles read/write concurrency at the file level,
         # but same-process concurrent writes still need a Python-level lock.
-        self._lock = threading.RLock()
+        self._lock = _write_lock_for(str(db_path))
         self._init_db()
         if self.vector_backend is None:
             assert self.conn is not None
@@ -154,31 +174,83 @@ class MemoryStorage:
             raise
         return conn
 
-    def _check_integrity(self):
-        """Verify the database, recovering without destroying user data.
+    def _schedule_maintenance(self, repair_pending: bool):
+        """Start background maintenance: repair flagged search indexes and, once
+        per process, scan the file for damage.
 
-        This file is shared with the conversation history (sessions / messages
-        tables), which is irreplaceable — unlike chunks/files, which are
-        re-derivable from the workspace. So it is never deleted here:
-          - FTS5-only damage is repaired later from the chunks table.
-          - Real corruption quarantines the file so it stays recoverable.
-          - Transient failures (locked, disk I/O) are logged and ignored.
-
-        ``PRAGMA integrity_check`` is a full page-by-page scan that also
-        validates every FTS5 index. On a large DB sitting on a network
-        filesystem (e.g. an NFS PVC) it can take tens of seconds, and it runs
-        on *every* open — i.e. on every session's agent init — which dominates
-        first-message latency. ``quick_check`` is used instead: it finds the
-        same b-tree damage but skips the index validation that costs the time.
-        Opening the connection alone is not enough to catch this — that only
-        trips on damage to the header or the pages it happens to touch, so an
-        interior page zeroed out would otherwise go unnoticed until a read
-        landed on it and failed with no chance to recover. FTS5 shadow-table
-        damage is not covered by ``quick_check``; it is caught independently by
-        ``_fts5_shadow_corrupt`` / ``_trigram_shadow_corrupt`` right before
-        use. Set ``memory_integrity_check: true`` in config.json to run the
-        full scan instead (e.g. for a one-off diagnostic).
+        The scan reads the whole file (minutes for a large one on a network
+        filesystem). This file also holds the conversation history, which
+        cannot be regenerated, so what the scan finds is never repaired by
+        moving the file away:
+          - FTS5 damage is rebuilt in place from the chunks table (the index is
+            derived data).
+          - Any other damage is only logged, for manual repair.
+        Set ``memory_integrity_check: true`` in config.json for the full
+        ``integrity_check`` instead of ``quick_check``.
         """
+        key = str(self.db_path)
+        with _maintenance_lock:
+            scan = key not in _maintenance_started
+            if key in _maintenance_running or not (scan or repair_pending):
+                return
+            _maintenance_started.add(key)
+            _maintenance_running.add(key)
+        threading.Thread(
+            target=self._run_maintenance, args=(key, scan),
+            daemon=True, name="memory-db-maintenance",
+        ).start()
+
+    def _run_maintenance(self, key: str, scan: bool):
+        from common.log import logger
+        conn = None
+        try:
+            conn = self._open_conn()
+            self._repair_search_indexes(conn)
+            if scan:
+                self._scan_integrity(conn, key)
+        except Exception as e:
+            logger.warning(f"[MemoryStorage] Background maintenance of {key} failed: {e}")
+        finally:
+            if conn is not None:
+                conn.close()
+            with _maintenance_lock:
+                _maintenance_running.discard(key)
+
+    def _scan_integrity(self, conn: sqlite3.Connection, key: str):
+        from common.log import logger
+        report = self._integrity_report(conn)
+        if report is None:
+            return
+        fts5_lines, other_lines = _split_fts5_damage(report)
+        if fts5_lines:
+            logger.warning(
+                f"[MemoryStorage] FTS5 index damaged, rebuilding from chunks: "
+                f"{'; '.join(fts5_lines)}"
+            )
+            trigram = any("chunks_fts_trigram" in ln for ln in fts5_lines)
+            unicode = any(
+                "chunks_fts" in ln and "chunks_fts_trigram" not in ln for ln in fts5_lines
+            )
+            if not (trigram or unicode):
+                trigram = unicode = True
+            with conn:
+                if unicode:
+                    conn.execute(
+                        "INSERT OR REPLACE INTO _meta(key, value) VALUES(?, '1')",
+                        (_FTS_REBUILD_PENDING,),
+                    )
+                if trigram:
+                    conn.execute("DELETE FROM _meta WHERE key = ?", (_TRIGRAM_DONE,))
+            self._repair_search_indexes(conn)
+        if other_lines:
+            logger.error(
+                f"[MemoryStorage] Database damage found in {key}, left in place "
+                f"(repair manually, e.g. sqlite3 .recover): {'; '.join(other_lines)}"
+            )
+
+    @staticmethod
+    def _integrity_report(conn: sqlite3.Connection) -> Optional[str]:
+        """Run the check; None when the database is fine or could not be checked."""
         from common.log import logger
         pragma = "quick_check"
         try:
@@ -190,87 +262,103 @@ class MemoryStorage:
             # behaviour of running the full scan.
             pragma = "integrity_check"
         try:
-            rows = self.conn.execute(f"PRAGMA {pragma}").fetchall()
+            rows = conn.execute(f"PRAGMA {pragma}").fetchall()
             report = "\n".join(str(r[0]) for r in rows).strip()
         except sqlite3.DatabaseError as e:
             if not _is_corruption_error(e):
                 logger.warning(f"[MemoryStorage] Integrity check skipped: {e}")
-                return
+                return None
             report = str(e)
+        return None if report == "ok" else report
 
-        if report == "ok":
+    def _repair_search_indexes(self, conn: sqlite3.Connection):
+        """Rebuild whichever search index is flagged or found broken."""
+        if not self.fts5_available:
             return
-
-        fts5_lines, other_lines = _split_fts5_damage(report)
-        if fts5_lines:
-            self._trigram_needs_rebuild = any(
-                "chunks_fts_trigram" in ln for ln in fts5_lines
-            )
-            self._fts5_needs_rebuild = any(
-                "chunks_fts" in ln and "chunks_fts_trigram" not in ln
-                for ln in fts5_lines
-            )
-            logger.warning(
-                f"[MemoryStorage] FTS5 index damaged, will rebuild from chunks: "
-                f"{'; '.join(fts5_lines)}"
-            )
-        if not other_lines:
-            return
-
-        logger.error(
-            f"[MemoryStorage] Database corrupted: {'; '.join(other_lines)}"
-        )
-        self._quarantine_and_recreate()
-
-    def _quarantine_and_recreate(self):
-        """Move an unusable database aside (never delete it) and open a fresh one.
-
-        Conversation history lives in the same file, so the old bytes are kept
-        under a .corrupt-<ts> suffix for manual recovery.
-        """
         from common.log import logger
-        if self.conn is not None:
-            try:
-                self.conn.close()
-            except Exception:
-                pass
-            self.conn = None
+        with self._lock:
+            flags = {
+                row[0] for row in conn.execute(
+                    "SELECT key FROM _meta WHERE key IN (?, ?)",
+                    (_FTS_REBUILD_PENDING, _TRIGRAM_DONE),
+                )
+            }
+            if _FTS_REBUILD_PENDING in flags or self._fts5_shadow_corrupt(conn):
+                logger.warning("[MemoryStorage] Rebuilding FTS5 index from chunks.")
+                self._recreate(conn, self._drop_fts5_objects, self._create_fts5_objects)
+                self._refill_index(conn, "chunks_fts")
+                with conn:
+                    conn.execute("DELETE FROM _meta WHERE key = ?", (_FTS_REBUILD_PENDING,))
+            if self.trigram_fts5_available and _TRIGRAM_DONE not in flags:
+                if conn.execute("SELECT 1 FROM chunks LIMIT 1").fetchone():
+                    logger.info("[MemoryStorage] Rebuilding trigram index from chunks.")
+                    self._recreate(
+                        conn, self._drop_trigram_objects, self._create_trigram_objects
+                    )
+                    self._refill_index(conn, "chunks_fts_trigram")
+                with conn:
+                    conn.execute(
+                        "INSERT OR REPLACE INTO _meta(key, value) VALUES(?, '1')",
+                        (_TRIGRAM_DONE,),
+                    )
 
-        suffix = f".corrupt-{int(time.time())}"
-        for path in (
-            self.db_path,
-            Path(f"{self.db_path}-wal"),
-            Path(f"{self.db_path}-shm"),
-        ):
-            if not path.exists():
-                continue
-            try:
-                os.replace(str(path), f"{path}{suffix}")
-            except OSError as e:
-                logger.error(f"[MemoryStorage] Failed to quarantine {path}: {e}")
+    @staticmethod
+    def _recreate(conn: sqlite3.Connection, drop, create):
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            drop(conn)
+            create(conn)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
 
-        logger.error(
-            f"[MemoryStorage] Corrupt database moved to {self.db_path}{suffix} and "
-            f"replaced by an empty one. Conversation history can be recovered from "
-            f"the quarantined copy."
-        )
-        self.conn = self._open_conn()
+    @staticmethod
+    def _refill_index(conn: sqlite3.Connection, table: str):
+        """Feed every existing chunk into an empty index, a batch at a time.
+
+        Rows written after this starts reach the index through its triggers,
+        so only rows up to the current maximum rowid are fed here."""
+        top = conn.execute("SELECT MAX(rowid) FROM chunks").fetchone()[0]
+        if top is None:
+            return
+        last = conn.execute("SELECT MIN(rowid) FROM chunks").fetchone()[0] - 1
+        while last < top:
+            row = conn.execute(
+                "SELECT rowid FROM chunks WHERE rowid > ? AND rowid <= ? "
+                "ORDER BY rowid LIMIT 1 OFFSET ?",
+                (last, top, _REFILL_BATCH - 1),
+            ).fetchone()
+            end = row[0] if row else top
+            with conn:
+                conn.execute(
+                    f"INSERT INTO {table}(rowid, text, id, user_id, path, source, scope) "
+                    "SELECT rowid, text, id, user_id, path, source, scope FROM chunks "
+                    "WHERE rowid > ? AND rowid <= ?",
+                    (last, end),
+                )
+            last = end
 
     def _init_db(self):
-        """Initialize database with schema"""
-        self._fts5_needs_rebuild = False
-        self._trigram_needs_rebuild = False
+        """Initialize database with schema.
+
+        Runs on every session's first message, so it only issues statements
+        that don't depend on the size of the database; anything that reads the
+        index is left to _schedule_maintenance.
+        """
         try:
             try:
                 self.conn = self._open_conn()
             except sqlite3.DatabaseError as e:
-                # A destroyed header makes the file unopenable, so the integrity
-                # check below can never run; quarantine it and start fresh.
-                if not _is_corruption_error(e):
-                    raise
-                from common.log import logger
-                logger.error(f"[MemoryStorage] Database unreadable: {e}")
-                self._quarantine_and_recreate()
+                # The conversation history lives in this file too, so it stays
+                # where it is for manual repair rather than being moved away.
+                if _is_corruption_error(e):
+                    from common.log import logger
+                    logger.error(
+                        f"[MemoryStorage] Database unreadable, left in place "
+                        f"(repair manually, e.g. sqlite3 .recover): {self.db_path}: {e}"
+                    )
+                raise
 
             # Check FTS5 support
             self.fts5_available = self._check_fts5_support()
@@ -285,13 +373,11 @@ class MemoryStorage:
             if not self.fts5_available:
                 from common.log import logger
                 logger.debug("[MemoryStorage] FTS5 not available, using LIKE-based keyword search")
-
-            self._check_integrity()
         except Exception as e:
             from common.log import logger
             logger.error(f"[MemoryStorage] Unexpected error during database initialization: {e}")
             raise
-        
+
         # Create chunks table with embeddings
         self.conn.execute("""
             CREATE TABLE IF NOT EXISTS chunks (
@@ -310,53 +396,22 @@ class MemoryStorage:
                 updated_at INTEGER DEFAULT (strftime('%s', 'now'))
             )
         """)
-        
+
         # Create indexes
         self.conn.execute("""
             CREATE INDEX IF NOT EXISTS idx_chunks_user 
             ON chunks(user_id)
         """)
-        
+
         self.conn.execute("""
             CREATE INDEX IF NOT EXISTS idx_chunks_scope 
             ON chunks(scope)
         """)
-        
+
         self.conn.execute("""
             CREATE INDEX IF NOT EXISTS idx_chunks_hash 
             ON chunks(path, hash)
         """)
-        
-        # Create FTS5 virtual table + triggers (only if supported).
-        # Self-heal: if the previous process crashed mid-rebuild and left
-        # triggers pointing at a missing chunks_fts (or vice versa), wipe
-        # both sides and recreate cleanly. Otherwise next chunks INSERT
-        # will fail with "no such table: chunks_fts".
-        if self.fts5_available:
-            if self._fts5_state_inconsistent():
-                from common.log import logger
-                logger.warning(
-                    "[MemoryStorage] FTS5 state inconsistent (triggers/table mismatch). "
-                    "Resetting chunks_fts to recover."
-                )
-                self.conn.execute("DROP TRIGGER IF EXISTS chunks_ai")
-                self.conn.execute("DROP TRIGGER IF EXISTS chunks_ad")
-                self.conn.execute("DROP TRIGGER IF EXISTS chunks_au")
-                self.conn.execute("DROP TABLE IF EXISTS chunks_fts")
-                self.conn.commit()
-            self._create_fts5_objects()
-
-            # Probe FTS5 shadow tables. The schema may be intact but the
-            # internal _data/_idx/_docsize blob can still be corrupt — that
-            # surfaces as "database disk image is malformed" on bm25 / MATCH.
-            # We rebuild from the chunks table when that happens; data isn't
-            # lost because chunks (the content table) is the source of truth.
-            if self._fts5_needs_rebuild or self._fts5_shadow_corrupt():
-                from common.log import logger
-                logger.warning(
-                    "[MemoryStorage] FTS5 shadow tables corrupt; rebuilding from chunks."
-                )
-                self._rebuild_fts5_from_chunks()
 
         # Internal key-value store for persistent flags (e.g. backfill tracking)
         self.conn.execute("""
@@ -366,12 +421,49 @@ class MemoryStorage:
             )
         """)
 
+        repair_pending = False
+        # Create FTS5 virtual table + triggers (only if supported).
+        # If the previous process crashed mid-rebuild and left triggers
+        # pointing at a missing chunks_fts (or vice versa), the missing side is
+        # created here so chunk writes keep working, and the index is flagged
+        # to be refilled in the background.
+        if self.fts5_available:
+            if self._fts5_state_inconsistent(self.conn):
+                from common.log import logger
+                logger.warning(
+                    "[MemoryStorage] FTS5 state inconsistent (triggers/table mismatch). "
+                    "Rebuilding chunks_fts in the background."
+                )
+                self.conn.execute(
+                    "INSERT OR REPLACE INTO _meta(key, value) VALUES(?, '1')",
+                    (_FTS_REBUILD_PENDING,),
+                )
+                repair_pending = True
+            self._create_fts5_objects(self.conn)
+
         # Create trigram FTS5 table for CJK / mixed-language search
         self.trigram_fts5_available = False
         if self.fts5_available:
             try:
-                self._setup_trigram_index()
+                if self._migrate_legacy_trigram_update_trigger():
+                    repair_pending = True
+                self._create_trigram_objects(self.conn)
+                # CREATE ... IF NOT EXISTS says nothing when the table is
+                # already there: SQLite skips it without loading the module, so
+                # a database written by a build with the trigram tokenizer looks
+                # healthy to one without it, right up until a trigger fires.
+                # Touch the table to find out now.
+                self.conn.execute("SELECT 1 FROM chunks_fts_trigram LIMIT 1").fetchone()
                 self.trigram_fts5_available = True
+                # An empty chunks table has nothing to backfill; its trigram
+                # index is kept complete by the triggers from here on.
+                if not self.conn.execute(
+                    "SELECT 1 FROM chunks LIMIT 1"
+                ).fetchone():
+                    self.conn.execute(
+                        "INSERT OR IGNORE INTO _meta(key, value) VALUES(?, '1')",
+                        (_TRIGRAM_DONE,),
+                    )
             except Exception:
                 from common.log import logger
                 logger.warning("[MemoryStorage] trigram FTS5 unavailable, CJK search will use LIKE fallback", exc_info=True)
@@ -390,80 +482,7 @@ class MemoryStorage:
         """)
 
         self.conn.commit()
-
-    def _setup_trigram_index(self):
-        """Create the trigram FTS5 table and the triggers that feed it.
-
-        Raises when this SQLite build cannot provide the index, leaving the
-        caller to disable it.
-        """
-        self.conn.execute("""
-            CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts_trigram USING fts5(
-                text,
-                id UNINDEXED,
-                user_id UNINDEXED,
-                path UNINDEXED,
-                source UNINDEXED,
-                scope UNINDEXED,
-                content='chunks',
-                content_rowid='rowid',
-                tokenize='trigram case_sensitive 0'
-            )
-        """)
-        # The CREATE above says nothing when the table is already there: SQLite
-        # skips it without loading the module, so a database written by a build
-        # with the trigram tokenizer looks healthy to one without it, right up
-        # until a trigger fires. Touch the table to find out now.
-        self.conn.execute("SELECT 1 FROM chunks_fts_trigram LIMIT 1").fetchone()
-        # Migrate legacy chunks_trigram_au triggers created by older
-        # versions. They used a bare "UPDATE chunks_fts_trigram SET ..."
-        # that corrupts the trigram index on chunk updates. Drop it so
-        # the CREATE TRIGGER IF NOT EXISTS below installs the fixed
-        # delete+insert version. Dropping a trigger touches no data.
-        self._migrate_legacy_trigram_update_trigger()
-        self.conn.execute("""
-            CREATE TRIGGER IF NOT EXISTS chunks_trigram_ai
-            AFTER INSERT ON chunks BEGIN
-                INSERT INTO chunks_fts_trigram(rowid, text, id, user_id, path, source, scope)
-                VALUES (new.rowid, new.text, new.id, new.user_id, new.path, new.source, new.scope);
-            END
-        """)
-        self.conn.execute("""
-            CREATE TRIGGER IF NOT EXISTS chunks_trigram_ad
-            AFTER DELETE ON chunks BEGIN
-                DELETE FROM chunks_fts_trigram WHERE rowid = old.rowid;
-            END
-        """)
-        # External-content FTS5 requires the delete+insert pattern on
-        # UPDATE: a bare "UPDATE chunks_fts_trigram SET ..." leaves the
-        # old tokens in the index and corrupts the trigram shadow tables
-        # ("database disk image is malformed"). The special 'delete'
-        # command removes the old row's tokens using its previous text.
-        self.conn.execute("""
-            CREATE TRIGGER IF NOT EXISTS chunks_trigram_au
-            AFTER UPDATE ON chunks BEGIN
-                INSERT INTO chunks_fts_trigram(chunks_fts_trigram, rowid, text, id, user_id, path, source, scope)
-                VALUES ('delete', old.rowid, old.text, old.id, old.user_id, old.path, old.source, old.scope);
-                INSERT INTO chunks_fts_trigram(rowid, text, id, user_id, path, source, scope)
-                VALUES (new.rowid, new.text, new.id, new.user_id, new.path, new.source, new.scope);
-            END
-        """)
-        # One-time backfill for existing rows.
-        # NOTE: COUNT(*) on an FTS5 content table always returns 0, so we
-        # use a persistent flag in _meta instead of counting trigram rows.
-        backfill_done = self.conn.execute(
-            "SELECT 1 FROM _meta WHERE key = 'trigram_backfill_done'"
-        ).fetchone()
-        chunks_count = self.conn.execute(
-            "SELECT COUNT(*) as c FROM chunks"
-        ).fetchone()['c']
-        if self._trigram_needs_rebuild or (chunks_count > 0 and not backfill_done):
-            self.conn.execute(
-                "INSERT INTO chunks_fts_trigram(chunks_fts_trigram) VALUES('rebuild')"
-            )
-            self.conn.execute(
-                "INSERT OR REPLACE INTO _meta(key, value) VALUES('trigram_backfill_done', '1')"
-            )
+        self._schedule_maintenance(repair_pending)
 
     def _disable_trigram_index(self):
         """Detach a trigram index this build cannot open.
@@ -484,19 +503,20 @@ class MemoryStorage:
         try:
             for trigger in ("chunks_trigram_ai", "chunks_trigram_ad", "chunks_trigram_au"):
                 self.conn.execute(f"DROP TRIGGER IF EXISTS {trigger}")
-            self.conn.execute("DELETE FROM _meta WHERE key = 'trigram_backfill_done'")
+            self.conn.execute("DELETE FROM _meta WHERE key = ?", (_TRIGRAM_DONE,))
         except Exception:
             from common.log import logger
             logger.warning("[MemoryStorage] Failed to drop trigram triggers", exc_info=True)
 
-    def _migrate_legacy_trigram_update_trigger(self):
+    def _migrate_legacy_trigram_update_trigger(self) -> bool:
         """Replace the legacy chunks_trigram_au trigger if present.
 
         Older versions synced updates with a bare
         "UPDATE chunks_fts_trigram SET ...", which corrupts the external-content
         trigram index on chunk updates. We detect that shape via the stored
         trigger SQL, drop it (dropping a trigger touches no data), and flag a
-        trigram rebuild so any already-damaged index is repaired below.
+        trigram rebuild so any already-damaged index is repaired in the
+        background. Returns True when the rebuild was flagged.
         """
         try:
             row = self.conn.execute(
@@ -504,26 +524,29 @@ class MemoryStorage:
                 "AND name='chunks_trigram_au'"
             ).fetchone()
         except Exception:
-            return
+            return False
         if not row or not row[0]:
-            return
-        if "UPDATE chunks_fts_trigram" in row[0]:
-            from common.log import logger
-            logger.warning(
-                "[MemoryStorage] Replacing legacy chunks_trigram_au trigger and "
-                "rebuilding the trigram index."
-            )
-            self.conn.execute("DROP TRIGGER IF EXISTS chunks_trigram_au")
-            self._trigram_needs_rebuild = True
+            return False
+        if "UPDATE chunks_fts_trigram" not in row[0]:
+            return False
+        from common.log import logger
+        logger.warning(
+            "[MemoryStorage] Replacing legacy chunks_trigram_au trigger; "
+            "rebuilding the trigram index in the background."
+        )
+        self.conn.execute("DROP TRIGGER IF EXISTS chunks_trigram_au")
+        self.conn.execute("DELETE FROM _meta WHERE key = ?", (_TRIGRAM_DONE,))
+        return True
 
-    def _fts5_state_inconsistent(self) -> bool:
+    @staticmethod
+    def _fts5_state_inconsistent(conn: sqlite3.Connection) -> bool:
         """Detect a half-broken FTS5 setup (e.g. trigger exists but table doesn't)."""
         try:
-            row = self.conn.execute(
+            row = conn.execute(
                 "SELECT name FROM sqlite_master WHERE type='table' AND name='chunks_fts'"
             ).fetchone()
             table_exists = row is not None
-            row = self.conn.execute(
+            row = conn.execute(
                 "SELECT COUNT(*) FROM sqlite_master WHERE type='trigger' "
                 "AND name IN ('chunks_ai','chunks_ad','chunks_au')"
             ).fetchone()
@@ -533,12 +556,19 @@ class MemoryStorage:
         # Healthy = both present (3 triggers + table) or both absent.
         return table_exists != (trigger_count > 0)
 
-    def _create_fts5_objects(self):
-        """Create chunks_fts virtual table and the 3 sync triggers.
+    @staticmethod
+    def _drop_fts5_objects(conn: sqlite3.Connection):
+        # Triggers first; otherwise the next chunks write hits
+        # "no such table: chunks_fts".
+        conn.execute("DROP TRIGGER IF EXISTS chunks_ai")
+        conn.execute("DROP TRIGGER IF EXISTS chunks_ad")
+        conn.execute("DROP TRIGGER IF EXISTS chunks_au")
+        conn.execute("DROP TABLE IF EXISTS chunks_fts")
 
-        Idempotent: uses IF NOT EXISTS. Caller must hold self.conn.
-        """
-        self.conn.execute("""
+    @staticmethod
+    def _create_fts5_objects(conn: sqlite3.Connection):
+        """Create chunks_fts virtual table and the 3 sync triggers (idempotent)."""
+        conn.execute("""
             CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
                 text,
                 id UNINDEXED,
@@ -550,23 +580,74 @@ class MemoryStorage:
                 content_rowid='rowid'
             )
         """)
-        self.conn.execute("""
+        conn.execute("""
             CREATE TRIGGER IF NOT EXISTS chunks_ai AFTER INSERT ON chunks BEGIN
                 INSERT INTO chunks_fts(rowid, text, id, user_id, path, source, scope)
                 VALUES (new.rowid, new.text, new.id, new.user_id, new.path, new.source, new.scope);
             END
         """)
-        self.conn.execute("""
+        conn.execute("""
             CREATE TRIGGER IF NOT EXISTS chunks_ad AFTER DELETE ON chunks BEGIN
                 DELETE FROM chunks_fts WHERE rowid = old.rowid;
             END
         """)
-        self.conn.execute("""
+        conn.execute("""
             CREATE TRIGGER IF NOT EXISTS chunks_au AFTER UPDATE ON chunks BEGIN
                 UPDATE chunks_fts SET text = new.text, id = new.id,
                                      user_id = new.user_id, path = new.path,
                                      source = new.source, scope = new.scope
                 WHERE rowid = new.rowid;
+            END
+        """)
+
+    @staticmethod
+    def _drop_trigram_objects(conn: sqlite3.Connection):
+        conn.execute("DROP TRIGGER IF EXISTS chunks_trigram_ai")
+        conn.execute("DROP TRIGGER IF EXISTS chunks_trigram_ad")
+        conn.execute("DROP TRIGGER IF EXISTS chunks_trigram_au")
+        conn.execute("DROP TABLE IF EXISTS chunks_fts_trigram")
+
+    @staticmethod
+    def _create_trigram_objects(conn: sqlite3.Connection):
+        """Create chunks_fts_trigram and its 3 sync triggers (idempotent)."""
+        conn.execute("""
+            CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts_trigram USING fts5(
+                text,
+                id UNINDEXED,
+                user_id UNINDEXED,
+                path UNINDEXED,
+                source UNINDEXED,
+                scope UNINDEXED,
+                content='chunks',
+                content_rowid='rowid',
+                tokenize='trigram case_sensitive 0'
+            )
+        """)
+        conn.execute("""
+            CREATE TRIGGER IF NOT EXISTS chunks_trigram_ai
+            AFTER INSERT ON chunks BEGIN
+                INSERT INTO chunks_fts_trigram(rowid, text, id, user_id, path, source, scope)
+                VALUES (new.rowid, new.text, new.id, new.user_id, new.path, new.source, new.scope);
+            END
+        """)
+        conn.execute("""
+            CREATE TRIGGER IF NOT EXISTS chunks_trigram_ad
+            AFTER DELETE ON chunks BEGIN
+                DELETE FROM chunks_fts_trigram WHERE rowid = old.rowid;
+            END
+        """)
+        # External-content FTS5 requires the delete+insert pattern on
+        # UPDATE: a bare "UPDATE chunks_fts_trigram SET ..." leaves the
+        # old tokens in the index and corrupts the trigram shadow tables
+        # ("database disk image is malformed"). The special 'delete'
+        # command removes the old row's tokens using its previous text.
+        conn.execute("""
+            CREATE TRIGGER IF NOT EXISTS chunks_trigram_au
+            AFTER UPDATE ON chunks BEGIN
+                INSERT INTO chunks_fts_trigram(chunks_fts_trigram, rowid, text, id, user_id, path, source, scope)
+                VALUES ('delete', old.rowid, old.text, old.id, old.user_id, old.path, old.source, old.scope);
+                INSERT INTO chunks_fts_trigram(rowid, text, id, user_id, path, source, scope)
+                VALUES (new.rowid, new.text, new.id, new.user_id, new.path, new.source, new.scope);
             END
         """)
 
@@ -576,28 +657,22 @@ class MemoryStorage:
         Used by rebuild_index to recover from FTS5 shadow-table corruption
         (bm25/ORDER BY rank may raise "database disk image is malformed"
         even when raw MATCH still works).
-
-        Triggers must be dropped first; otherwise the next chunks INSERT/DELETE
-        on the existing connection will hit "no such table: chunks_fts".
         """
         if not self.fts5_available:
             return
-        self.conn.execute("DROP TRIGGER IF EXISTS chunks_ai")
-        self.conn.execute("DROP TRIGGER IF EXISTS chunks_ad")
-        self.conn.execute("DROP TRIGGER IF EXISTS chunks_au")
-        self.conn.execute("DROP TABLE IF EXISTS chunks_fts")
-        self._create_fts5_objects()
-        self.conn.commit()
+        with self._lock:
+            self._recreate(self.conn, self._drop_fts5_objects, self._create_fts5_objects)
 
-    def _fts5_shadow_corrupt(self) -> bool:
-        """Probe whether bm25 over chunks_fts errors out at startup.
+    @staticmethod
+    def _fts5_shadow_corrupt(conn: sqlite3.Connection) -> bool:
+        """Probe whether bm25 over chunks_fts errors out.
 
         Schema (table + triggers) can be intact while the underlying
         FTS5 shadow blobs are malformed — typically because the previous
         process crashed mid-write or wrote with a different SQLite build.
         A cheap MATCH probe surfaces it immediately."""
         try:
-            self.conn.execute(
+            conn.execute(
                 "SELECT bm25(chunks_fts) FROM chunks_fts WHERE chunks_fts MATCH 'a' LIMIT 1"
             ).fetchone()
             return False
@@ -608,22 +683,6 @@ class MemoryStorage:
             # Any other error (e.g. table missing) is handled by the
             # state-inconsistent path; treat as healthy here.
             return False
-
-    def _rebuild_fts5_from_chunks(self):
-        """Drop FTS5, recreate it, then INSERT every row from chunks.
-
-        Safe data-wise: chunks (the content table) is the source of truth.
-        Done in one transaction so a crash leaves either fully old or fully
-        new state, not a partial rebuild.
-        """
-        # Reset schema first; this clears any malformed shadow blobs.
-        self.reset_fts5()
-        # Re-feed content. Triggers handle future writes automatically.
-        self.conn.execute("""
-            INSERT INTO chunks_fts(rowid, text, id, user_id, path, source, scope)
-            SELECT rowid, text, id, user_id, path, source, scope FROM chunks
-        """)
-        self.conn.commit()
 
     def save_chunk(self, chunk: MemoryChunk):
         """Save a memory chunk (insert or update by id).

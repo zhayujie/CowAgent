@@ -56,9 +56,19 @@ class AliVoice(Voice):
         # 清除文本中的非中文、非英文和非基本字符
         text = re.sub(r'[^\u4e00-\u9fa5\u3040-\u30FF\uAC00-\uD7AFa-zA-Z0-9'
                       r'äöüÄÖÜáéíóúÁÉÍÓÚàèìòùÀÈÌÒÙâêîôûÂÊÎÔÛçÇñÑ，。！？,.]', '', text)
-        # 提取有效的token
-        token_id = self.get_valid_token()
-        fileName = text_to_speech_aliyun(self.api_url_text_to_voice, text, self.app_key, token_id)
+        try:
+            # 提取有效的token
+            token_id = self.get_valid_token()
+            fileName = text_to_speech_aliyun(self.api_url_text_to_voice, text, self.app_key, token_id)
+        except Exception as e:
+            # Every other voice provider in this package answers a failure with
+            # an ERROR reply, and this one already has that branch below -- but
+            # it only reached it when the call returned None, so a raise (a token
+            # response carrying no Token field, a connection reset) travelled all
+            # the way to ChatChannel._fail_callback, which logs and sends the user
+            # nothing at all.
+            logger.error("[Ali] textToVoice failed: {}".format(e))
+            return Reply(ReplyType.ERROR, "抱歉，语音合成失败")
         if fileName:
             logger.info("[Ali] textToVoice text={} voice file name={}".format(text, fileName))
             reply = Reply(ReplyType.VOICE, fileName)
@@ -73,11 +83,15 @@ class AliVoice(Voice):
         :param voice_file: 要转换的语音文件。
         :return: 返回一个Reply对象，其中包含转换得到的文本或错误信息。
         """
-        # 提取有效的token
-        token_id = self.get_valid_token()
-        logger.debug("[Ali] voice file name={}".format(voice_file))
-        pcm = get_pcm_from_wav(voice_file)
-        text = speech_to_text_aliyun(self.api_url_voice_to_text, pcm, self.app_key, token_id)
+        try:
+            # 提取有效的token
+            token_id = self.get_valid_token()
+            logger.debug("[Ali] voice file name={}".format(voice_file))
+            pcm = get_pcm_from_wav(voice_file)
+            text = speech_to_text_aliyun(self.api_url_voice_to_text, pcm, self.app_key, token_id)
+        except Exception as e:
+            logger.error("[Ali] voiceToText failed: {}".format(e))
+            return Reply(ReplyType.ERROR, "抱歉，语音识别失败")
         if text:
             logger.info("[Ali] VoicetoText = {}".format(text))
             reply = Reply(ReplyType.TEXT, text)
@@ -95,10 +109,21 @@ class AliVoice(Voice):
         if self.token is None or current_time >= self.token_expire_time:
             get_token = AliyunTokenGenerator(self.access_key_id, self.access_key_secret)
             token_str = get_token.get_token()
-            token_data = json.loads(token_str)
-            self.token = token_data["Token"]["Id"]
-            # 将过期时间减少一小段时间（例如5分钟），以避免在边界条件下的过期
-            self.token_expire_time = token_data["Token"]["ExpireTime"] - 300
+            try:
+                token_data = json.loads(token_str)
+                token = token_data["Token"]
+                self.token = token["Id"]
+                # 将过期时间减少一小段时间（例如5分钟），以避免在边界条件下的过期
+                self.token_expire_time = token["ExpireTime"] - 300
+            except (ValueError, KeyError, TypeError) as e:
+                # A rejected key or an exhausted quota comes back as
+                # {"Message": ..., "Code": ...} with no Token field, and a gateway
+                # error page is not JSON at all. Both reached callers as a bare
+                # KeyError/JSONDecodeError with the response body nowhere in the
+                # message, so there was no way to tell a bad key from an outage.
+                raise RuntimeError(
+                    "unexpected Aliyun token response: {!r}".format(token_str[:200])
+                ) from e
             logger.debug(f"新获取的阿里云token：{self.token}")
         else:
             logger.debug("使用缓存的token")

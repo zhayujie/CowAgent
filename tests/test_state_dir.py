@@ -109,12 +109,24 @@ def test_scaffolding_a_second_agent_does_not_opt_it_out(registry, tmp_path):
     ensure_workspace(str(tmp_path / "alpha"), create_templates=False)
     ensure_workspace(str(tmp_path / "beta"), create_templates=False)
 
-    for name in ("skills", "knowledge", "websites"):
+    for name in ("skills", "knowledge"):
         assert (tmp_path / "alpha" / name).is_dir(), name
         assert not (tmp_path / "beta" / name).exists(), name
 
     with identity_scope(agent_id="beta"):
         assert state_dir.skills_dir() == tmp_path / "alpha" / "skills"
+
+
+def test_published_files_belong_to_the_agent_that_made_them(registry, tmp_path):
+    """Not a shared asset: one Agent must not be able to overwrite what another
+    published, and a serving layer addresses the files by this path."""
+    from agent.prompt import ensure_workspace
+
+    ensure_workspace(str(tmp_path / "beta"), create_templates=False)
+
+    assert (tmp_path / "beta" / "websites").is_dir()
+    with identity_scope(agent_id="beta"):
+        assert state_dir.websites_dir() == tmp_path / "beta" / "websites"
 
 
 def test_an_agent_opts_out_by_having_its_own_copy(registry, tmp_path):

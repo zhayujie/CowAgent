@@ -34,6 +34,8 @@ function _switchToView(viewId) {
     document.getElementById('breadcrumb-group').dataset.i18n = meta.group;
     document.getElementById('breadcrumb-page').textContent = t(meta.page);
     document.getElementById('breadcrumb-page').dataset.i18n = meta.page;
+    const breadcrumb = document.getElementById('header-breadcrumb');
+    if (breadcrumb) breadcrumb.style.display = viewId === 'chat' ? 'none' : '';
     const leavingAgents = currentView === 'agents' && viewId !== 'agents';
     currentView = viewId;
     // The Agent detail is a fixed drawer, so it would otherwise hang over

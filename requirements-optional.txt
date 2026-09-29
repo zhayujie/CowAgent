@@ -21,6 +21,9 @@ python-docx
 openpyxl
 python-pptx
 
-# i18n: Traditional Chinese (zh-Hant) high-quality conversion
+# memory rerank: install on demand for rerank_provider=local (pulls in torch)
+# sentence-transformers
+
+# i18n: zh-Hant high-quality conversion
 # Built-in fallback provides basic conversion without this dependency
 opencc-python-reimplemented

@@ -122,6 +122,30 @@ def test_delegate_runs_target_with_source_attribution_and_private_relay_session(
     assert "delegated result" in result.display
 
 
+def test_delegate_keeps_the_answer_when_the_teammate_sent_a_file():
+    class FileBridge(FakeBridge):
+        def agent_reply(self, query, context=None, on_event=None):
+            reply = Reply(ReplyType.IMAGE_URL, "https://example.com/chart.png")
+            reply.text_content = "Refund rate doubled to 2.63%."
+            return reply
+
+    result = _tool(bridge=FileBridge()).execute({"agent_id": "research", "task": "Check"})
+
+    content = result.result["content"]
+    assert content.startswith("Refund rate doubled to 2.63%.")
+    assert "![](https://example.com/chart.png)" in content
+
+
+def test_delegate_leaves_an_unpublished_file_as_a_plain_path():
+    class LocalFileBridge(FakeBridge):
+        def agent_reply(self, query, context=None, on_event=None):
+            return Reply(ReplyType.IMAGE_URL, "file:///tmp/chart.png")
+
+    result = _tool(bridge=LocalFileBridge()).execute({"agent_id": "research", "task": "Check"})
+
+    assert result.result["content"] == "file:///tmp/chart.png"
+
+
 def test_delegate_rejects_targets_outside_the_conversation_and_lists_the_real_ones(
     _team_members,
 ):
@@ -332,11 +356,12 @@ def test_delegate_reports_a_target_failure_through_the_result():
     assert "target exploded" in result.display
 
 
-def test_delegate_relays_the_teammates_tool_steps_as_subagent_steps():
-    """The teammate's tool calls surface under this call's card, live."""
+def test_delegate_relays_the_teammates_turn_bracketed_by_who_is_speaking():
+    """The teammate's turn surfaces live, attributed, in its own right."""
 
     class ToolingBridge(FakeBridge):
         def agent_reply(self, query, context=None, on_event=None):
+            on_event({"type": "reasoning_update", "data": {"delta": "let me look"}})
             on_event(
                 {
                     "type": "tool_execution_start",
@@ -351,8 +376,9 @@ def test_delegate_relays_the_teammates_tool_steps_as_subagent_steps():
                              "tool_call_id": "t1", "execution_time": 0.5},
                 }
             )
-            # Prose must not leak into the watcher's view.
-            on_event({"type": "message_update", "data": {"delta": "thinking..."}})
+            on_event({"type": "message_update", "data": {"delta": "found it"}})
+            # Bookkeeping the watcher has no use for stays behind.
+            on_event({"type": "turn_end", "data": {}})
             return Reply(ReplyType.TEXT, "found it")
 
     emitted = []
@@ -363,12 +389,87 @@ def test_delegate_relays_the_teammates_tool_steps_as_subagent_steps():
     result = tool.execute({"agent_id": "research", "task": "Look it up"})
 
     assert result.status == "success"
-    steps = [data for etype, data in emitted if etype == "subagent_step"]
-    assert [s["phase"] for s in steps] == ["start", "end"]
-    assert all(s["card_id"] == "card-123" for s in steps)
-    assert steps[0]["tool_name"] == "web_search"
-    # message_update / reasoning were dropped, only tool steps relayed.
-    assert all(etype == "subagent_step" for etype, _ in emitted)
+    # The turn is bracketed, so a client knows whose reply the middle is.
+    assert [etype for etype, _ in emitted] == [
+        "peer_message_start",
+        "reasoning_update",
+        "tool_execution_start",
+        "tool_execution_end",
+        "message_update",
+        "peer_message_end",
+    ]
+    opening = emitted[0][1]
+    assert opening["agent_id"] == "research"
+    assert opening["card_id"] == "card-123"
+    assert opening["source_id"] == "primary"
+    assert emitted[-1][1]["agent_id"] == "research"
+
+
+def test_delegate_closes_the_teammates_turn_when_the_hand_off_fails():
+    """A teammate that dies mid-sentence still gives the floor back."""
+
+    class ExplodingBridge(FakeBridge):
+        def agent_reply(self, query, context=None, on_event=None):
+            on_event({"type": "message_update", "data": {"delta": "starting"}})
+            raise RuntimeError("target exploded")
+
+    emitted = []
+    tool = _tool(bridge=ExplodingBridge())
+    tool.event_callback = lambda etype, data: emitted.append((etype, data))
+
+    result = tool.execute({"agent_id": "research", "task": "Look it up"})
+
+    assert result.status == "error"
+    types = [etype for etype, _ in emitted]
+    assert types[0] == "peer_message_start"
+    assert types[-1] == "peer_message_end"
+
+
+def test_delegate_passes_a_nested_hand_off_straight_through():
+    """A teammate delegating onward reads as another turn, not a nested one."""
+
+    class ForwardingBridge(FakeBridge):
+        def agent_reply(self, query, context=None, on_event=None):
+            on_event({"type": "message_update", "data": {"delta": "asking someone"}})
+            # What the teammate's own delegation emitted, seen from up here.
+            on_event({"type": "peer_message_start", "data": {"agent_id": "writer"}})
+            on_event({"type": "message_update", "data": {"delta": "drafted"}})
+            on_event({"type": "peer_message_end", "data": {"agent_id": "writer"}})
+            return Reply(ReplyType.TEXT, "done")
+
+    emitted = []
+    tool = _tool(bridge=ForwardingBridge())
+    tool.event_callback = lambda etype, data: emitted.append((etype, data))
+
+    tool.execute({"agent_id": "research", "task": "Look it up"})
+
+    # Flat: research opens, writer opens and closes inside it, research closes.
+    assert [etype for etype, _ in emitted] == [
+        "peer_message_start",
+        "message_update",
+        "peer_message_start",
+        "message_update",
+        "peer_message_end",
+        "peer_message_end",
+    ]
+    assert emitted[2][1]["agent_id"] == "writer"
+
+
+def test_delegate_says_nothing_when_the_teammate_never_speaks():
+    """No turn, no brackets: a silent hand-off leaves no empty bubble behind."""
+
+    class SilentBridge(FakeBridge):
+        def agent_reply(self, query, context=None, on_event=None):
+            on_event({"type": "turn_start", "data": {}})
+            return Reply(ReplyType.TEXT, "")
+
+    emitted = []
+    tool = _tool(bridge=SilentBridge())
+    tool.event_callback = lambda etype, data: emitted.append((etype, data))
+
+    tool.execute({"agent_id": "research", "task": "Look it up"})
+
+    assert emitted == []
 
 
 def test_delegate_serializes_hands_off_to_the_same_target_session():

@@ -8,6 +8,7 @@ import requests
 
 from bridge.reply import Reply, ReplyType
 from common.log import logger
+from common.tmp_dir import TmpDir
 from common.utils import apply_client_source, apply_cloud_user
 from config import conf
 from voice import audio_convert
@@ -88,8 +89,7 @@ class LinkAIVoice(Voice):
                     pass
                 logger.error(f"[LinkVoice] textToVoice error, status_code={res.status_code}, msg={msg}")
                 return None
-            tmp_file_name = "tmp/" + datetime.datetime.now().strftime('%Y%m%d%H%M%S') + str(random.randint(0, 1000)) + ".mp3"
-            os.makedirs(os.path.dirname(tmp_file_name), exist_ok=True)
+            tmp_file_name = TmpDir().path() + datetime.datetime.now().strftime('%Y%m%d%H%M%S') + str(random.randint(0, 1000)) + ".mp3"
             with open(tmp_file_name, 'wb') as f:
                 f.write(res.content)
             logger.info(f"[LinkVoice] textToVoice success, input={text}, voice_id={data.get('voice')}")

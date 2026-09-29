@@ -36,6 +36,15 @@ _RESPONSES_ONLY_PREFIXES = ("gpt-6",)
 _MIN_EFFORT_FALLBACK = "low"
 _UNSUPPORTED_EFFORTS = {"none", "minimal"}
 
+# Values of the ``open_ai_api_type`` config key:
+#   auto      - Responses only for models that require it (gpt-6*), else Chat Completions
+#   chat      - always Chat Completions
+#   responses - always Responses (for endpoints that no longer serve /chat/completions)
+API_TYPE_AUTO = "auto"
+API_TYPE_CHAT = "chat"
+API_TYPE_RESPONSES = "responses"
+_API_TYPES = {API_TYPE_AUTO, API_TYPE_CHAT, API_TYPE_RESPONSES}
+
 
 def is_responses_only_model(model_name: str) -> bool:
     """Whether the model must use the Responses API for tool calling."""
@@ -45,12 +54,32 @@ def is_responses_only_model(model_name: str) -> bool:
     return name.startswith(_RESPONSES_ONLY_PREFIXES)
 
 
-def normalize_effort(effort: Optional[str]) -> Optional[str]:
-    """Map a reasoning effort to one Responses-only models accept."""
+def resolve_api_type(api_type: Optional[str]) -> str:
+    """Normalize an ``open_ai_api_type`` value; unknown values fall back to auto."""
+    value = str(api_type or "").strip().lower()
+    return value if value in _API_TYPES else API_TYPE_AUTO
+
+
+def use_responses_api(model_name: str, api_type: Optional[str] = None) -> bool:
+    """Whether a tool-calling request for ``model_name`` should use Responses."""
+    mode = resolve_api_type(api_type)
+    if mode == API_TYPE_RESPONSES:
+        return True
+    if mode == API_TYPE_CHAT:
+        return False
+    return is_responses_only_model(model_name)
+
+
+def normalize_effort(effort: Optional[str], model: Optional[str] = None) -> Optional[str]:
+    """Map a reasoning effort to one the target model accepts on Responses.
+
+    Only Responses-only models (gpt-6*) lack the "none"/"minimal" tiers; other
+    models (e.g. gpt-5.x) receive the value unchanged.
+    """
     if not effort:
         return None
     value = str(effort).strip().lower()
-    if value in _UNSUPPORTED_EFFORTS:
+    if value in _UNSUPPORTED_EFFORTS and (model is None or is_responses_only_model(model)):
         return _MIN_EFFORT_FALLBACK
     return value
 
@@ -207,7 +236,7 @@ def build_responses_payload(
         payload["tool_choice"] = tool_choice or "auto"
     if max_output_tokens:
         payload["max_output_tokens"] = max_output_tokens
-    effort = normalize_effort(reasoning_effort)
+    effort = normalize_effort(reasoning_effort, model)
     if effort:
         payload["reasoning"] = {"effort": effort}
     if response_format and response_format.get("type") == "json_object":

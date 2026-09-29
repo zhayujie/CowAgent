@@ -1,0 +1,120 @@
+    <!-- Add Skill: fetch or upload, review, then install -->
+    <div id="skill-add-overlay" class="fixed inset-0 bg-black/50 z-[200] hidden flex items-center justify-center">
+        <div class="bg-white dark:bg-[#1A1A1A] rounded-2xl border border-slate-200 dark:border-white/10 shadow-xl
+                    w-full max-w-2xl mx-4 max-h-[88vh] flex flex-col overflow-hidden">
+            <div class="flex items-center gap-3 px-6 pt-6 pb-4">
+                <div class="w-10 h-10 rounded-xl bg-primary-50 dark:bg-primary-900/20 flex items-center justify-center flex-shrink-0">
+                    <i class="fas fa-bolt text-primary-500"></i>
+                </div>
+                <div class="flex-1 min-w-0">
+                    <h3 id="skill-add-title" class="text-base font-semibold text-slate-800 dark:text-slate-100" data-i18n="skill_add">添加技能</h3>
+                    <p id="skill-add-subtitle" class="text-xs text-slate-500 dark:text-slate-400 mt-0.5 hidden"></p>
+                </div>
+                <button type="button" id="skill-add-close"
+                        class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100
+                               dark:hover:text-slate-200 dark:hover:bg-white/10 cursor-pointer transition-colors">
+                    <i class="fas fa-xmark"></i>
+                </button>
+            </div>
+
+            <div class="flex-1 overflow-y-auto px-6 pb-2">
+                <!-- Step 1: choose where the skill comes from -->
+                <div id="skill-step-input">
+                    <div class="cap-tabs mb-5">
+                        <button type="button" class="cap-tab active" data-skill-tab="market">
+                            <i class="fas fa-store text-[11px]"></i><span data-i18n="skill_add_tab_market">从市场安装</span>
+                        </button>
+                        <button type="button" class="cap-tab" data-skill-tab="upload">
+                            <i class="fas fa-upload text-[11px]"></i><span data-i18n="skill_add_tab_upload">本地上传</span>
+                        </button>
+                    </div>
+
+                    <div id="skill-pane-market" class="space-y-4">
+                        <div>
+                            <label class="cap-label" data-i18n="skill_source">来源</label>
+                            <div class="grid grid-cols-3 gap-2" id="skill-source-options">
+                                <button type="button" class="skill-source-opt" data-source="hub">
+                                    <i class="fas fa-cube"></i><span>Cow Skill Hub</span>
+                                </button>
+                                <button type="button" class="skill-source-opt" data-source="github">
+                                    <i class="fab fa-github"></i><span>GitHub</span>
+                                </button>
+                                <button type="button" class="skill-source-opt" data-source="clawhub">
+                                    <i class="fas fa-paw"></i><span>ClawHub</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="cap-label" id="skill-value-label" data-i18n="skill_value_hub">技能名称</label>
+                            <input id="skill-value-input" type="text" class="cap-input cap-input-mono" autocomplete="off" spellcheck="false">
+                            <p id="skill-source-hint" class="text-xs text-slate-400 dark:text-slate-500 mt-1.5"></p>
+                        </div>
+                    </div>
+
+                    <div id="skill-pane-upload" class="hidden">
+                        <div id="skill-dropzone" class="cap-dropzone">
+                            <div class="w-11 h-11 rounded-xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 flex items-center justify-center mb-3">
+                                <i id="skill-dropzone-icon" class="fas fa-file-arrow-up text-slate-400"></i>
+                            </div>
+                            <p id="skill-dropzone-text" class="text-sm text-slate-600 dark:text-slate-300">
+                                <span data-i18n="skill_upload_drop">拖拽技能到这里，或</span>
+                                <button type="button" id="skill-pick-file" class="text-primary-500 hover:text-primary-600 font-medium cursor-pointer" data-i18n="skill_upload_pick_file">选择文件</button>
+                                <span class="text-slate-300 dark:text-slate-600">/</span>
+                                <button type="button" id="skill-pick-folder" class="text-primary-500 hover:text-primary-600 font-medium cursor-pointer" data-i18n="skill_upload_pick_folder">选择文件夹</button>
+                            </p>
+                            <p class="text-xs text-slate-400 dark:text-slate-500 mt-1.5" data-i18n="skill_upload_types">支持 .zip / .tar.gz 压缩包、SKILL.md 或整个技能文件夹，最大 50 MB</p>
+                        </div>
+                        <input type="file" id="skill-file-input" class="hidden" accept=".zip,.tar.gz,.tgz,.md">
+                        <input type="file" id="skill-folder-input" class="hidden" webkitdirectory multiple>
+                    </div>
+
+                    <p id="skill-input-error" class="hidden mt-3 text-sm text-red-500"></p>
+                </div>
+
+                <!-- Step 2: review what was fetched -->
+                <div id="skill-step-preview" class="hidden">
+                    <div class="flex items-start gap-2.5 px-3.5 py-3 mb-4 rounded-xl bg-amber-50 dark:bg-amber-900/15 border border-amber-200/70 dark:border-amber-500/20">
+                        <span class="flex items-center h-5 flex-shrink-0"><i class="fas fa-shield-halved text-amber-500 text-[13px]"></i></span>
+                        <p class="text-xs leading-5 text-amber-800 dark:text-amber-200" data-i18n="skill_preview_warning">技能可以包含脚本并由 Agent 执行，请确认来源可信、内容符合预期后再安装。</p>
+                    </div>
+                    <div class="flex items-center gap-2 mb-3">
+                        <span id="skill-preview-count" class="text-sm font-medium text-slate-700 dark:text-slate-200"></span>
+                        <label id="skill-preview-all-wrap" class="ml-auto hidden items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 cursor-pointer select-none">
+                            <input type="checkbox" id="skill-preview-all" class="rounded accent-primary-500" checked>
+                            <span data-i18n="skill_preview_select_all">全选</span>
+                        </label>
+                    </div>
+                    <div id="skill-preview-list" class="space-y-3"></div>
+                    <p id="skill-preview-error" class="hidden mt-3 text-sm text-red-500"></p>
+                </div>
+
+                <!-- Step 3: installed -->
+                <div id="skill-step-done" class="hidden py-6 text-center">
+                    <div class="w-14 h-14 mx-auto mb-4 rounded-2xl bg-primary-50 dark:bg-primary-900/20 flex items-center justify-center">
+                        <i class="fas fa-check text-primary-500 text-xl"></i>
+                    </div>
+                    <p class="text-base font-semibold text-slate-800 dark:text-slate-100" data-i18n="skill_installed_title">安装完成</p>
+                    <p id="skill-done-desc" class="text-sm text-slate-500 dark:text-slate-400 mt-1"></p>
+                    <div id="skill-done-names" class="flex flex-wrap justify-center gap-1.5 mt-4"></div>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-2 px-6 py-4 mt-2 border-t border-slate-100 dark:border-white/5">
+                <button type="button" id="skill-add-back"
+                        class="hidden inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-slate-500 dark:text-slate-400
+                               hover:bg-slate-100 dark:hover:bg-white/5 cursor-pointer transition-colors">
+                    <i class="fas fa-arrow-left text-xs"></i><span data-i18n="skill_back_edit">返回修改</span>
+                </button>
+                <div class="flex-1"></div>
+                <button type="button" id="skill-add-cancel"
+                        class="px-4 py-2 rounded-lg border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300 text-sm font-medium
+                               hover:bg-slate-50 dark:hover:bg-white/5 cursor-pointer transition-colors" data-i18n="mcp_cancel">取消</button>
+                <button type="button" id="skill-add-primary"
+                        class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-sm font-medium
+                               cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                    <i id="skill-add-primary-spin" class="fas fa-spinner fa-spin text-xs hidden"></i>
+                    <span id="skill-add-primary-label"></span>
+                </button>
+            </div>
+        </div>
+    </div>

@@ -2,18 +2,23 @@
    Split out of console.js. These are classic scripts sharing one global
    scope; see channel/web/README.md before changing the load order. */
 
-fetch('/config').then(r => r.json()).then(data => {
-    if (data.status === 'success') {
-        appConfig = data;
-        const title = data.title || 'CowAgent';
-        document.getElementById('welcome-title').textContent = title;
-        initConfigView(data);
-    }
-    loadHistory(1);
-}).catch(() => { loadHistory(1); });
+// Everything below reads protected endpoints, so it waits for the auth gate:
+// fired before login it only collects 401s, and the login path never retries
+// it, which left the chat empty after signing in until the next reload.
+requestAuthGatedStart(loadAgentCatalog);
+requestAuthGatedStart(() => {
+    fetch('/config').then(r => r.json()).then(data => {
+        if (data.status === 'success') {
+            appConfig = data;
+            const title = data.title || 'CowAgent';
+            document.getElementById('welcome-title').textContent = title;
+            initConfigView(data);
+        }
+        loadHistory(1);
+    }).catch(() => { loadHistory(1); });
+});
 
-// Start polling so scheduler/push messages are received. Gated behind auth so a
-// password-protected console doesn't poll (and log 401s) before login.
+// Start polling so scheduler/push messages are received.
 requestAuthGatedStart(startPolling);
 // =====================================================================
 // Initialization

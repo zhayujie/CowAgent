@@ -163,6 +163,33 @@ def forget_session(session_id: str, agent_id: Optional[str] = None) -> None:
             _save(data)
 
 
+def forget_agent(agent_id: str) -> None:
+    """Erase every trace of a deleted Agent from the project store.
+
+    A deleted Agent's sessions go away with its workspace, so the bindings they
+    left behind under ``{agent_id}::*`` can never be read again — they only sit
+    in ``projects.json`` forever, and an Agent later created with the same id
+    inherits them. Same sweep as :func:`session_prefs.forget_agent`, for the
+    sibling store.
+
+    ``recents``/``meta``/``order`` are deliberately left alone: a project is a
+    directory on the user's disk, not something the Agent owned, so it stays
+    reachable from the picker after the Agent is gone.
+    """
+    if not agent_id:
+        return
+    prefix = f"{agent_id}::"
+    with _lock:
+        data = _load()
+        sessions = data.get("sessions") or {}
+        stale = [key for key in sessions if str(key).startswith(prefix)]
+        if not stale:
+            return
+        for key in stale:
+            sessions.pop(key, None)
+        _save(data)
+
+
 def set_project_dir(
     session_id: str, project_dir: Optional[str], agent_id: Optional[str] = None
 ) -> Optional[str]:

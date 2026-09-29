@@ -11,10 +11,9 @@ import os
 import re
 import shutil
 import tempfile
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional
 from common.log import logger
-from agent.skills.archive import ArchiveError, extract_archive
-from agent.skills.types import Skill, SkillEntry
+from agent.skills.archive import extract_archive
 from agent.skills.manager import SkillManager
 
 try:
@@ -175,6 +174,16 @@ class SkillService:
         self.manager.refresh_skills()
         config = self.manager.get_skills_config()
         result = list(config.values())
+        for item in result:
+            if not isinstance(item, dict):
+                continue
+            name = item.get("name")
+            entry = self.manager.get_skill(name) if name else None
+            if entry is not None:
+                item["ships_with_install"] = self._ships_with_install(entry.skill)
+            else:
+                item["ships_with_install"] = item.get("source") == "builtin"
+            item["deletable"] = not item["ships_with_install"]
         logger.info(f"[SkillService] query: {len(result)} skills found")
         return result
 
@@ -512,7 +521,7 @@ class SkillService:
         logger.info(f"[SkillService] add: skill '{name}' installed via package ({url})")
 
     # ------------------------------------------------------------------
-    # create / install from a console
+    # create from a console
     # ------------------------------------------------------------------
     def create(self, payload: dict) -> dict:
         """
@@ -566,114 +575,6 @@ class SkillService:
                     f"({len(bundled)} bundled file(s))")
         return {"name": name, "files": bundled}
 
-    def install_upload(self, payload: dict) -> dict:
-        """
-        Install skills from what a browser uploaded: an archive, or a folder.
-
-        :param payload: either ``{"archive": {"filename", "content"}}`` for a
-            zip / tar.gz, or ``{"files": [{"path", "content"}]}`` for a picked
-            folder, whose paths are relative to the folder itself.
-        :return: ``{"installed": [names], "replaced": [names],
-            "skipped": [{"name", "reason"}]}`` - one upload can carry several
-            skills, and one of them being unusable must not lose the rest.
-        :raises ValueError: when the upload holds no skill at all.
-        """
-        archive = payload.get("archive")
-        files = payload.get("files") or []
-
-        installed, replaced, skipped = [], [], []
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            staged = os.path.join(tmp_dir, "staged")
-            os.makedirs(staged)
-
-            if archive is not None:
-                fallback = re.sub(r"\.(zip|tgz|tar\.gz|tar)$", "",
-                                  os.path.basename(archive.get("filename") or ""),
-                                  flags=re.IGNORECASE)
-                content = archive.get("content") or b""
-                try:
-                    extract_archive(content, staged,
-                                    max_files=self.MAX_UPLOAD_FILES,
-                                    max_total_size=self.MAX_UPLOAD_TOTAL_SIZE)
-                except ArchiveError as e:
-                    raise ValueError(str(e))
-            elif files:
-                fallback = ""
-                self._write_uploads(staged, files)
-            else:
-                raise ValueError("no files uploaded")
-
-            discovered = self._discover_skills(staged)
-            if not discovered:
-                raise ValueError(f"no {SKILL_FILE} found in the upload")
-
-            for source_dir in discovered:
-                declared, description = self._read_skill_header(source_dir)
-                # The name to use when the SKILL.md declares none: the directory
-                # it sits in, or - when it sits at the top of the upload - what
-                # the uploaded archive was called.
-                implied = fallback if source_dir == staged else os.path.basename(source_dir)
-                # What to call the skill in a refusal, before a name is resolved.
-                label = declared or implied or SKILL_FILE
-                try:
-                    if not (declared or implied):
-                        raise ValueError(f"{SKILL_FILE} carries no name")
-                    name = normalize_skill_name(declared or implied)
-                    if not description:
-                        raise ValueError(f"{SKILL_FILE} carries no description")
-                    self._reject_shipped_name(name)
-                    target = self._safe_skill_dir(name)
-                    existed = self._install_skill_dir(source_dir, target)
-                    (replaced if existed else installed).append(name)
-                except ValueError as e:
-                    skipped.append({"name": label, "reason": str(e)})
-                    logger.warning(f"[SkillService] install_upload: skipped '{label}': {e}")
-
-        self.manager.refresh_skills()
-        for name in installed + replaced:
-            self._set_display_name(name, self._read_skill_header(
-                self._safe_skill_dir(name))[0])
-        logger.info(f"[SkillService] install_upload: installed={installed} "
-                    f"replaced={replaced} skipped={[s['name'] for s in skipped]}")
-        return {"installed": installed, "replaced": replaced, "skipped": skipped}
-
-    def _install_skill_dir(self, source_dir: str, target: str) -> bool:
-        """
-        Put a staged skill directory in place, over one already installed.
-
-        The copy is made beside the target and only then swapped in, because the
-        skill being replaced may be one the user wrote and edited: deleting it
-        first would mean a copy that fails halfway - a full disk, a locked file -
-        takes the installed skill with it. Both temporary names start with a dot,
-        which is what keeps a scan that lands mid-install from reading either as
-        a skill of its own.
-
-        :return: whether a skill of that name was already installed.
-        """
-        parent, dir_name = os.path.split(target)
-        staging = os.path.join(parent, f".{dir_name}.tmp")
-        backup = os.path.join(parent, f".{dir_name}.old")
-        shutil.rmtree(staging, ignore_errors=True)
-        shutil.rmtree(backup, ignore_errors=True)
-        existed = os.path.exists(target)
-
-        try:
-            shutil.copytree(source_dir, staging)
-            if existed:
-                # Moved aside rather than removed: os.rename cannot replace a
-                # directory on Windows, and this leaves the old skill restorable
-                # for as long as the new one is not in place.
-                os.rename(target, backup)
-            os.rename(staging, target)
-        except Exception:
-            if os.path.exists(backup) and not os.path.exists(target):
-                os.rename(backup, target)
-            shutil.rmtree(staging, ignore_errors=True)
-            raise
-        finally:
-            shutil.rmtree(backup, ignore_errors=True)
-        return existed
-
     def _write_uploads(self, root: str, items: List[dict],
                        skip: tuple = ()) -> List[str]:
         """
@@ -706,46 +607,6 @@ class SkillService:
                 f.write(content)
             written.append(rel)
         return written
-
-    def _discover_skills(self, root: str) -> List[str]:
-        """
-        The skill directories in a staged upload.
-
-        An upload is one skill as often as it is a folder of several, and an
-        archive made from a folder usually nests everything a level deeper than
-        whoever made it expects. So a SKILL.md at the top means the whole upload
-        is one skill, and otherwise every directory holding one is a skill -
-        stopping at the first found down each branch, because the directories
-        below a skill (``scripts/``, ``references/``) are its resources rather
-        than skills of their own. This is the rule the loader itself applies.
-        """
-        if os.path.isfile(os.path.join(root, SKILL_FILE)):
-            return [root]
-
-        found: List[str] = []
-        for current, dirs, entries in os.walk(root):
-            dirs[:] = sorted(d for d in dirs
-                             if not d.startswith(".")
-                             and d not in ("node_modules", "__pycache__", "venv"))
-            if SKILL_FILE in entries:
-                dirs[:] = []
-                found.append(current)
-        return found
-
-    @staticmethod
-    def _read_skill_header(skill_dir: str) -> Tuple[str, str]:
-        """The name and description a skill directory's SKILL.md declares."""
-        from agent.skills.frontmatter import parse_frontmatter
-
-        try:
-            with open(os.path.join(skill_dir, SKILL_FILE), "r", encoding="utf-8") as f:
-                frontmatter = parse_frontmatter(f.read())
-        except (OSError, UnicodeDecodeError):
-            return "", ""
-        name = frontmatter.get("name")
-        description = frontmatter.get("description")
-        return (str(name).strip() if name else "",
-                str(description).strip() if description else "")
 
     def _reject_shipped_name(self, name: str) -> None:
         """

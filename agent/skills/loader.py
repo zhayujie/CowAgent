@@ -2,12 +2,36 @@
 Skill loader for discovering and loading skills from directories.
 """
 
+import copy
 import os
-from pathlib import Path
-from typing import List, Optional, Dict
+import threading
+import time
+from typing import Optional, Dict
 from common.log import logger
-from agent.skills.types import Skill, SkillEntry, LoadSkillsResult, SkillMetadata
+from agent.skills.types import Skill, SkillEntry, LoadSkillsResult
 from agent.skills.frontmatter import parse_frontmatter, parse_metadata, parse_boolean_value, get_frontmatter_value
+
+
+# Parsed skill files, reused while the file on disk is unchanged. Every run
+# rebuilds the system prompt and so reloads every skill, and on a network
+# filesystem each file read is a round trip. The directory walk itself is never
+# cached, so skills that are added or removed are picked up immediately.
+_parse_cache: Dict[str, tuple] = {}
+_parse_cache_lock = threading.Lock()
+# File metadata can fail to reflect a write: a network filesystem's attribute
+# cache, a tool that restores the old mtime on a platform where ctime is the
+# creation time. Past this age an entry is re-read regardless, so no stale
+# skill outlives it.
+_PARSE_CACHE_TTL = 60.0
+_PARSE_CACHE_MAX_ENTRIES = 4096
+
+
+def _file_signature(path: str) -> Optional[tuple]:
+    try:
+        st = os.stat(path)
+    except OSError:
+        return None
+    return (st.st_mtime_ns, st.st_ctime_ns, st.st_size, st.st_ino)
 
 
 class SkillLoader:
@@ -16,7 +40,9 @@ class SkillLoader:
     def __init__(self):
         pass
     
-    def load_skills_from_dir(self, dir_path: str, source: str) -> LoadSkillsResult:
+    def load_skills_from_dir(
+        self, dir_path: str, source: str, use_cache: bool = False
+    ) -> LoadSkillsResult:
         """
         Load skills from a directory.
 
@@ -26,6 +52,7 @@ class SkillLoader:
 
         :param dir_path: Directory path to scan
         :param source: Source identifier ('builtin' or 'custom')
+        :param use_cache: Reuse the parse of files unchanged since last read
         :return: LoadSkillsResult with skills and diagnostics
         """
         skills = []
@@ -40,7 +67,9 @@ class SkillLoader:
             return LoadSkillsResult(skills=skills, diagnostics=diagnostics)
         
         # Load skills from root-level .md files and subdirectories
-        result = self._load_skills_recursive(dir_path, source, include_root_files=True)
+        result = self._load_skills_recursive(
+            dir_path, source, include_root_files=True, use_cache=use_cache
+        )
         
         return result
     
@@ -48,7 +77,8 @@ class SkillLoader:
         self, 
         dir_path: str, 
         source: str, 
-        include_root_files: bool = False
+        include_root_files: bool = False,
+        use_cache: bool = False,
     ) -> LoadSkillsResult:
         """
         Recursively load skills from a directory.
@@ -78,7 +108,7 @@ class SkillLoader:
         if not include_root_files and 'SKILL.md' in entries:
             skill_md_path = os.path.join(dir_path, 'SKILL.md')
             if os.path.isfile(skill_md_path):
-                skill_result = self._load_skill_from_file(skill_md_path, source)
+                skill_result = self._load_skill_from_file(skill_md_path, source, use_cache)
                 if skill_result.skills:
                     skills.extend(skill_result.skills)
                 diagnostics.extend(skill_result.diagnostics)
@@ -94,7 +124,9 @@ class SkillLoader:
             full_path = os.path.join(dir_path, entry)
             
             if os.path.isdir(full_path):
-                sub_result = self._load_skills_recursive(full_path, source, include_root_files=False)
+                sub_result = self._load_skills_recursive(
+                    full_path, source, include_root_files=False, use_cache=use_cache
+                )
                 skills.extend(sub_result.skills)
                 diagnostics.extend(sub_result.diagnostics)
                 continue
@@ -107,32 +139,61 @@ class SkillLoader:
             if not is_root_md:
                 continue
             
-            skill_result = self._load_skill_from_file(full_path, source)
+            skill_result = self._load_skill_from_file(full_path, source, use_cache)
             if skill_result.skills:
                 skills.extend(skill_result.skills)
             diagnostics.extend(skill_result.diagnostics)
         
         return LoadSkillsResult(skills=skills, diagnostics=diagnostics)
     
-    def _load_skill_from_file(self, file_path: str, source: str) -> LoadSkillsResult:
+    def _load_skill_from_file(
+        self, file_path: str, source: str, use_cache: bool = False
+    ) -> LoadSkillsResult:
         """
         Load a single skill from a markdown file.
         
         :param file_path: Path to the skill markdown file
         :param source: Source identifier
+        :param use_cache: Reuse the parse if the file is unchanged since last read
         :return: LoadSkillsResult
         """
         diagnostics = []
-        
-        try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-        except Exception as e:
-            diagnostics.append(f"Failed to read skill file {file_path}: {e}")
-            return LoadSkillsResult(skills=[], diagnostics=diagnostics)
-        
-        # Parse frontmatter
-        frontmatter = parse_frontmatter(content)
+
+        # Taken before reading: a write landing in between leaves the cached
+        # signature older than the content, which only costs one extra read.
+        signature = _file_signature(file_path)
+        now = time.monotonic()
+        cached = None
+        if use_cache and signature is not None:
+            with _parse_cache_lock:
+                hit = _parse_cache.get(file_path)
+            if (hit is not None and hit[0] == signature
+                    and now - hit[1] < _PARSE_CACHE_TTL):
+                cached = hit
+
+        if cached is not None:
+            content = cached[2]
+            frontmatter = copy.deepcopy(cached[3])
+        else:
+            try:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+            except Exception as e:
+                with _parse_cache_lock:
+                    _parse_cache.pop(file_path, None)
+                diagnostics.append(f"Failed to read skill file {file_path}: {e}")
+                return LoadSkillsResult(skills=[], diagnostics=diagnostics)
+
+            # Parse frontmatter
+            frontmatter = parse_frontmatter(content)
+            if signature is not None:
+                with _parse_cache_lock:
+                    if (file_path not in _parse_cache
+                            and len(_parse_cache) >= _PARSE_CACHE_MAX_ENTRIES):
+                        _parse_cache.clear()
+                    _parse_cache[file_path] = (
+                        signature, now, content, copy.deepcopy(frontmatter)
+                    )
         
         # Get skill name and description
         skill_dir = os.path.dirname(file_path)
@@ -194,7 +255,7 @@ class SkillLoader:
         config_path = os.path.join(skill_dir, "config.json")
         
         if not os.path.exists(config_path):
-            logger.debug(f"[SkillLoader] linkai-agent skipped: no config.json found")
+            logger.debug("[SkillLoader] linkai-agent skipped: no config.json found")
             return ""
         
         try:
@@ -221,6 +282,7 @@ class SkillLoader:
         self,
         builtin_dir: Optional[str] = None,
         custom_dir: Optional[str] = None,
+        use_cache: bool = False,
     ) -> Dict[str, SkillEntry]:
         """
         Load skills from builtin and custom directories.
@@ -233,6 +295,7 @@ class SkillLoader:
 
         :param builtin_dir: Built-in skills directory
         :param custom_dir: Custom skills directory
+        :param use_cache: Reuse the parse of files unchanged since last read
         :return: Dictionary mapping skill name to SkillEntry
         """
         skill_map: Dict[str, SkillEntry] = {}
@@ -240,7 +303,7 @@ class SkillLoader:
 
         # Load builtin skills (lower precedence)
         if builtin_dir and os.path.exists(builtin_dir):
-            result = self.load_skills_from_dir(builtin_dir, source='builtin')
+            result = self.load_skills_from_dir(builtin_dir, source='builtin', use_cache=use_cache)
             all_diagnostics.extend(result.diagnostics)
             for skill in result.skills:
                 entry = self._create_skill_entry(skill)
@@ -248,7 +311,7 @@ class SkillLoader:
 
         # Load custom skills (higher precedence, overrides builtin)
         if custom_dir and os.path.exists(custom_dir):
-            result = self.load_skills_from_dir(custom_dir, source='custom')
+            result = self.load_skills_from_dir(custom_dir, source='custom', use_cache=use_cache)
             all_diagnostics.extend(result.diagnostics)
             for skill in result.skills:
                 entry = self._create_skill_entry(skill)

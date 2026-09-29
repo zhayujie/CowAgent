@@ -9,9 +9,9 @@ from bridge.context import ContextType
 from channel.chat_message import ChatMessage
 # -*- coding=utf-8 -*-
 from common.log import logger
-from common.tmp_dir import TmpDir
 from common import state_dir
-from config import conf
+from common.media_download import MAX_FILE_BYTES, download_to_file
+
 
 def _extract_file_payload(event):
     """Pull downloadCode/fileName out of a ChatbotMessage.
@@ -269,23 +269,13 @@ def download_image_file(image_url, temp_dir, file_name=None, default_ext=".png")
                         logger.error(f"[DingTalk] No downloadUrl in response: {download_data}")
                         return None
                     
-                    # 从 downloadUrl 下载实际图片
-                    image_response = requests.get(download_url, stream=True, timeout=60)
-                    
-                    if image_response.status_code == 200:
-                        # 生成文件名（使用 download_code 的 hash，避免特殊字符）
-                        file_hash = hashlib.md5(actual_download_code.encode()).hexdigest()[:16]
-                        dest_name = _media_filename(file_hash, file_name, default_ext)
-                        file_path = os.path.join(temp_dir, dest_name)
-                        
-                        with open(file_path, 'wb') as file:
-                            file.write(image_response.content)
-                        
-                        logger.info(f"[DingTalk] Downloaded media to {file_path}")
-                        return file_path
-                    else:
-                        logger.error(f"[DingTalk] Failed to download image from URL: {image_response.status_code}")
-                        return None
+                    # 生成文件名（使用 download_code 的 hash，避免特殊字符）
+                    file_hash = hashlib.md5(actual_download_code.encode()).hexdigest()[:16]
+                    dest_name = _media_filename(file_hash, file_name, default_ext)
+                    file_path = os.path.join(temp_dir, dest_name)
+                    download_to_file(download_url, file_path, MAX_FILE_BYTES, timeout=60)
+                    logger.info(f"[DingTalk] Downloaded media to {file_path}")
+                    return file_path
                 else:
                     logger.error(f"[DingTalk] Failed to get download URL: {download_response.status_code}, {download_response.text}")
                     return None
@@ -304,18 +294,12 @@ def download_image_file(image_url, temp_dir, file_name=None, default_ext=".png")
             'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36'
         }
         
+        dest_name = _safe_filename(file_name or image_url.split("/")[-1].split("?")[0])
+        dest_name = dest_name or f"download{default_ext or '.bin'}"
+        file_path = os.path.join(temp_dir, dest_name)
         try:
-            response = requests.get(image_url, headers=headers, stream=True, timeout=60 * 5)
-            if response.status_code == 200:
-                dest_name = _safe_filename(file_name) if file_name else image_url.split("/")[-1].split("?")[0]
-                dest_name = dest_name or f"download{default_ext or '.bin'}"
-                file_path = os.path.join(temp_dir, dest_name)
-                with open(file_path, 'wb') as file:
-                    file.write(response.content)
-                return file_path
-            else:
-                logger.info(f"[Dingtalk] Failed to download image file, {response.content}")
-                return None
+            download_to_file(image_url, file_path, MAX_FILE_BYTES, headers=headers, timeout=60 * 5)
+            return file_path
         except Exception as e:
             logger.error(f"[Dingtalk] Exception downloading image: {e}")
             return None

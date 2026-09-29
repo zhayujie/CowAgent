@@ -5,6 +5,8 @@ Agent Initializer - Handles agent initialization logic
 import os
 import asyncio
 import datetime
+import json
+import re
 import threading
 import time
 from typing import Dict, List, Optional
@@ -24,6 +26,48 @@ _memory_sync_lock = threading.Lock()
 # request for the same workspace is dropped instead of forking another thread,
 # so a burst of messages can't stack up dozens of embedding HTTP calls.
 _memory_sync_inflight: set = set()
+
+# How much of a teammate's delegated reply is replayed in later turns. The
+# whole exchange is already summarised by the Agent that handed the work out,
+# so the reply only has to show who actually said it; a long report would cost
+# more context than that is worth.
+_DELEGATED_REPLY_MAX_CHARS = 1200
+
+# Restored history keeps the tool calls of its most recent turns. A history of
+# replies with no trace of the work behind them teaches the model to answer
+# without doing the work. Older turns stay text-only, and what the kept calls
+# carry is clipped: they show that and how the work was done, while the files
+# and systems they touched remain the source of truth.
+_RESTORE_TOOL_TURNS = 3
+_RESTORE_TOOL_RESULT_MAX_CHARS = 2000
+_RESTORE_TOOL_ARG_MAX_CHARS = 1000
+# The strictest provider's rule for a tool call id. A call recorded under one
+# model may be replayed to another, so its id is rewritten to fit.
+_UNSAFE_TOOL_ID_CHARS = re.compile(r"[^A-Za-z0-9_-]")
+
+# How many of an interrupted turn's tool calls its restored note lists.
+_INTERRUPTED_TOOLS_LISTED = 12
+
+
+def _interruption_note(tool_uses: List[dict]) -> str:
+    """Note closing a restored turn that stopped before its answer."""
+    note = "_(Interrupted: this reply stopped before it finished, and no answer was given.)_"
+    if not tool_uses:
+        return note
+    calls = []
+    for block in tool_uses[-_INTERRUPTED_TOOLS_LISTED:]:
+        args = block.get("input") if isinstance(block.get("input"), dict) else {}
+        shown = ", ".join(
+            f"{key}={str(value)[:80]}" for key, value in list(args.items())[:3]
+            if isinstance(value, (str, int, float, bool))
+        )
+        calls.append(f"- {block.get('name', 'tool')}({shown})")
+    skipped = len(tool_uses) - len(calls)
+    head = f"Tool calls already made ({skipped} earlier ones not listed):" if skipped else "Tool calls already made:"
+    return (
+        note + "\n" + head + "\n" + "\n".join(calls)
+        + "\nThese calls really ran; pick up from where they left off instead of starting over."
+    )
 
 
 class AgentInitializer:
@@ -212,14 +256,11 @@ class AgentInitializer:
         Load persisted conversation messages from SQLite and inject them
         into the agent's in-memory message list.
 
-        Only user text and assistant text are restored. Tool call chains
-        (tool_use / tool_result) are stripped out because:
-        1. They are intermediate process, the value is already in the final
-           assistant text reply.
-        2. They consume massive context tokens (often 80%+ of history).
-        3. Different models have incompatible tool message formats, so
-           restoring tool chains across model switches causes 400 errors.
-        4. Eliminates the entire class of tool_use/tool_result pairing bugs.
+        The most recent turns keep their tool calls, clipped; older turns are
+        reduced to user text and the final assistant text (see
+        _restored_history). A shared conversation is reread before every turn
+        and applies the same rule to the reader's own turns (see
+        _shared_history).
         """
         from config import conf
         if not conf().get("conversation_persistence", True):
@@ -235,28 +276,44 @@ class AgentInitializer:
             )
             max_turns = conf().get("agent_max_context_turns", 20)
             # Restore honours the session's context boundary (cleared history is
-            # never brought back), so we can afford a fairly generous window and
-            # still keep it under the runtime cap. Regular chats restore ~half of
-            # the runtime budget so a dialogue feels continuous after a restart.
+            # never brought back). Regular chats restore about a third of the
+            # runtime budget so a dialogue feels continuous after a restart
+            # without opening on a long run of replayed history. A shared
+            # conversation is reread before every turn, so its window is the
+            # live context each speaker gets and stays at half.
             # Scheduler tasks run on a stable isolated session and can fire many
             # times a day, so they keep a smaller window: enough to see the last
             # few runs for trend / dedup logic while keeping prompt cost bounded.
             if session_id.startswith("scheduler_"):
                 restore_turns = max(1, max_turns // 4)
-            else:
+            elif shared:
                 restore_turns = max(3, max_turns // 2)
+            else:
+                restore_turns = max(3, max_turns // 3)
             saved = store.load_messages(
                 session_id, max_turns=restore_turns, with_authors=shared
             )
             if saved:
-                filtered = self._filter_text_only_messages(saved)
-                if shared:
-                    filtered = self._attribute_history(filtered, reader)
+                # Nothing of a solo session is running while its agent is being
+                # built, so a turn there without an answer was cut off.
+                try:
+                    if shared:
+                        filtered = self._shared_history(saved, reader)
+                    else:
+                        filtered = self._restored_history(saved, cut_off=True)
+                except Exception as e:
+                    logger.warning(
+                        f"[AgentInitializer] Replaying tool calls failed for "
+                        f"session={session_id}, restoring text only: {e}"
+                    )
+                    filtered = self._filter_text_only_messages(saved)
+                    if shared:
+                        filtered = self._attribute_history(filtered, reader)
                 if filtered:
                     with agent.messages_lock:
                         agent.messages = filtered
                     logger.debug(
-                        f"[AgentInitializer] Restored {len(filtered)} text messages "
+                        f"[AgentInitializer] Restored {len(filtered)} messages "
                         f"(from {len(saved)} total, {restore_turns} turns cap) "
                         f"for session={session_id}"
                     )
@@ -268,15 +325,65 @@ class AgentInitializer:
 
     @staticmethod
     def _is_shared_conversation(session_id: str, host_agent_id: str) -> bool:
-        """Whether anyone besides the owner was invited into this conversation."""
+        """Whether anyone besides the owner was invited into this conversation.
+
+        A stored id only counts when it still resolves to a configured Agent,
+        or to a teammate the installed transport can reach. A roster made
+        entirely of deleted Agents, with no such peer, is not a team
+        conversation: treating it as one rereads history from the store on
+        every turn and flattens each turn the reader did not answer to text.
+        """
         if not session_id:
             return False
         try:
             from agent.workspace import session_prefs
 
-            return bool(session_prefs.get_prefs(session_id, host_agent_id).get("members"))
+            members = session_prefs.get_prefs(session_id, host_agent_id).get("members")
+            if not members:
+                return False
+            return AgentInitializer._any_member_exists(members)
         except Exception:
             return False
+
+    @staticmethod
+    def _any_member_exists(members: list) -> bool:
+        """Whether at least one id names a local Agent or a transport peer.
+
+        Local lookup stays ``require_enabled=False`` so a disabled teammate
+        and the reserved ``"default"`` alias still count. ``resolve_teammate``
+        is not used: it looks up with ``require_enabled=True`` and would drop
+        a disabled local teammate. An id this process does not host counts
+        when ``peer`` knows it, the same rule as ``_clean_team_members``.
+        """
+        try:
+            from agent.multiagent import peer as peer_of
+            from agent.registry import get_agent_registry
+
+            registry = get_agent_registry()
+        except Exception:
+            # Cannot judge resolvability; fall back to the roster's own word
+            # rather than turning every team conversation into a solo one.
+            # Both lookups are needed to call an id a ghost, so a failure to
+            # reach either one has to fail open here: _is_shared_conversation
+            # turns anything raised out of this into "not shared", which is
+            # the downgrade this guard exists to avoid.
+            return True
+
+        for member in members:
+            if not isinstance(member, str) or not member.strip():
+                continue
+            try:
+                # "default" is a reserved alias, not a stored id. Disabled is
+                # not deleted: a teammate who is off still makes this a team.
+                registry.get_addressed(member, require_enabled=False)
+                return True
+            except Exception:
+                # Remote-only teammates are real. A single-agent deployment
+                # stores hosted peer ids and has no local profile for them.
+                if peer_of(member) is not None:
+                    return True
+                continue
+        return False
 
     @staticmethod
     def _attribute_history(messages: list, reader_agent_id: str) -> list:
@@ -298,7 +405,10 @@ class AgentInitializer:
                 try:
                     name = registry.get(agent_id, require_enabled=False).name
                 except Exception:
-                    name = agent_id
+                    from agent.multiagent import peer as peer_of
+
+                    found = peer_of(agent_id)
+                    name = found.name if found is not None else agent_id
                 prefixes[agent_id] = f"{name}(@{agent_id})："
             return prefixes[agent_id]
 
@@ -326,6 +436,239 @@ class AgentInitializer:
         return attributed
 
     @staticmethod
+    def _shared_history(messages: list, reader_agent_id: str) -> list:
+        """Rebuild a shared transcript for the Agent about to speak.
+
+        The reader's most recent turns (those every reply of which it wrote)
+        keep their tool calls and results, clipped. Flattened to its final
+        text, the reader's own history shows it announcing work with no trace
+        of doing it, and it goes on to announce the next piece of work without
+        doing that either. Every other turn is reduced to text and attributed.
+        """
+        from agent.protocol.message_utils import identify_complete_turns
+
+        turns = identify_complete_turns(messages)
+
+        def own(turn) -> bool:
+            replies = turn["messages"][1:]
+            return bool(reader_agent_id) and bool(replies) and all(
+                message.get("agent_id") == reader_agent_id for message in replies
+            )
+
+        own_indices = [index for index, turn in enumerate(turns) if own(turn)]
+        recent = set(own_indices[-_RESTORE_TOOL_TURNS:])
+        return AgentInitializer._rebuild_turns(
+            turns,
+            recent,
+            lambda flat: AgentInitializer._attribute_history(
+                AgentInitializer._filter_text_only_messages(flat), reader_agent_id
+            ),
+        )
+
+    @staticmethod
+    def _restored_history(messages: list, cut_off: bool = False) -> list:
+        """Rebuild a solo conversation's stored history for a fresh runtime.
+
+        The most recent turns keep their tool calls and results, clipped (see
+        _restorable_turn); older turns are reduced to user text and the final
+        assistant text.
+
+        With ``cut_off`` a turn that stops short of its answer is closed right
+        after its last answered step, with a note naming the tool calls it
+        made. A recent one then keeps its steps like any other and the work can
+        be picked up where it stopped; an older one flattens to that note. Only
+        for callers that know no turn of the session is still running.
+        """
+        from agent.protocol.message_utils import identify_complete_turns
+
+        turns = identify_complete_turns(messages)
+        if cut_off:
+            turns = [{"messages": AgentInitializer._closed_turn(t["messages"])} for t in turns]
+        recent = set(range(max(0, len(turns) - _RESTORE_TOOL_TURNS), len(turns)))
+        return AgentInitializer._rebuild_turns(
+            turns, recent, AgentInitializer._filter_text_only_messages
+        )
+
+    @staticmethod
+    def _closed_turn(messages: list) -> list:
+        """A turn cut off before its answer, closed after its last answered step."""
+
+        def calls(message) -> list:
+            content = message.get("content")
+            if message.get("role") != "assistant" or not isinstance(content, list):
+                return []
+            return [b for b in content if isinstance(b, dict) and b.get("type") == "tool_use"]
+
+        if not messages or (messages[-1].get("role") == "assistant" and not calls(messages[-1])):
+            return messages
+        kept = list(messages)
+        # A call whose result never came is dropped: nothing says it finished.
+        while len(kept) > 1 and kept[-1].get("role") == "assistant":
+            kept.pop()
+        made = [block for message in kept for block in calls(message)]
+        return kept + [{
+            "role": "assistant",
+            "content": [{"type": "text", "text": _interruption_note(made)}],
+        }]
+
+    @staticmethod
+    def _rebuild_turns(turns: list, recent: set, flatten) -> list:
+        """Keep the tool calls of the turns in *recent*, flatten the rest.
+
+        A recent turn whose tool calls cannot be replayed intact is flattened
+        like any other. Consecutive flattened turns go through *flatten*
+        together so it sees them in order.
+        """
+        from agent.protocol.message_utils import sanitize_claude_messages
+
+        rebuilt: list = []
+        flat: list = []
+        for index, turn in enumerate(turns):
+            kept = (
+                AgentInitializer._restorable_turn(turn["messages"])
+                if index in recent else None
+            )
+            if kept is None:
+                flat.extend(turn["messages"])
+                continue
+            if flat:
+                rebuilt.extend(flatten(flat))
+                flat = []
+            rebuilt.extend(kept)
+        if flat:
+            rebuilt.extend(flatten(flat))
+        sanitize_claude_messages(rebuilt)
+        return rebuilt
+
+    @staticmethod
+    def _restorable_turn(messages: list) -> Optional[list]:
+        """A stored turn, clipped for replay, or None when it cannot be replayed.
+
+        Only text, tool_use and tool_result blocks are kept. A turn is replayed
+        only when it opens with the user's query, closes on an assistant reply,
+        and every tool call is answered in the very next message — anything
+        else (a run cut off mid-call, a partial write) would be rejected by the
+        provider, so the caller falls back to the turn's text.
+        """
+        kept = []
+        for message in messages:
+            role = message.get("role")
+            if role not in ("user", "assistant"):
+                return None
+            content = message.get("content")
+            if isinstance(content, str):
+                if content.strip():
+                    kept.append({"role": role, "content": content})
+                continue
+            if not isinstance(content, list):
+                return None
+            blocks = []
+            for block in content:
+                if not isinstance(block, dict):
+                    continue
+                kind = block.get("type")
+                if kind == "text":
+                    if block.get("text"):
+                        blocks.append({"type": "text", "text": block["text"]})
+                elif kind == "tool_use":
+                    if not block.get("id") or not block.get("name"):
+                        return None
+                    blocks.append({
+                        **block,
+                        "id": _UNSAFE_TOOL_ID_CHARS.sub("_", str(block["id"])),
+                        "input": AgentInitializer._clip_tool_input(block.get("input")),
+                    })
+                elif kind == "tool_result":
+                    if not block.get("tool_use_id"):
+                        return None
+                    blocks.append({
+                        **block,
+                        "tool_use_id": _UNSAFE_TOOL_ID_CHARS.sub("_", str(block["tool_use_id"])),
+                        "content": AgentInitializer._clip_tool_result(block.get("content")),
+                    })
+            if blocks:
+                kept.append({"role": role, "content": blocks})
+
+        if len(kept) < 2 or kept[0]["role"] != "user" or kept[-1]["role"] != "assistant":
+            return None
+
+        def block_ids(message, kind, key):
+            content = message["content"]
+            if not isinstance(content, list):
+                return []
+            return [b[key] for b in content if b.get("type") == kind]
+
+        if block_ids(kept[0], "tool_result", "tool_use_id"):
+            return None
+        for index, message in enumerate(kept):
+            if message["role"] == "user":
+                results = block_ids(message, "tool_result", "tool_use_id")
+                calls = block_ids(kept[index - 1], "tool_use", "id") if index else []
+                if results and set(results) != set(calls):
+                    return None
+                if len(results) != len(set(results)):
+                    return None
+                continue
+            calls = block_ids(message, "tool_use", "id")
+            if not calls:
+                continue
+            if len(calls) != len(set(calls)):
+                return None
+            following = kept[index + 1] if index + 1 < len(kept) else None
+            if following is None or following["role"] != "user":
+                return None
+            if set(block_ids(following, "tool_result", "tool_use_id")) != set(calls):
+                return None
+        return kept
+
+    @staticmethod
+    def _clip_tool_result(content) -> str:
+        """A tool result as plain text, cut to the restore limit."""
+        if isinstance(content, list):
+            parts = []
+            for block in content:
+                if not isinstance(block, dict):
+                    continue
+                if block.get("type") == "text":
+                    parts.append(block.get("text", ""))
+                elif block.get("type") in ("image", "image_url"):
+                    parts.append("[image]")
+            text = "\n".join(p for p in parts if p)
+        elif isinstance(content, str):
+            text = content
+        elif content is None:
+            text = ""
+        else:
+            text = json.dumps(content, ensure_ascii=False)
+        if len(text) > _RESTORE_TOOL_RESULT_MAX_CHARS:
+            text = (
+                text[:_RESTORE_TOOL_RESULT_MAX_CHARS]
+                + f"\n\n[Historical output truncated: {len(text)} -> "
+                f"{_RESTORE_TOOL_RESULT_MAX_CHARS} chars]"
+            )
+        return text
+
+    @staticmethod
+    def _clip_tool_input(value, depth: int = 0):
+        """Tool call arguments with every long string cut to the restore limit.
+
+        The structure is left as it was so the call still parses as arguments.
+        """
+        if value is None and depth == 0:
+            return {}
+        if isinstance(value, str):
+            if len(value) > _RESTORE_TOOL_ARG_MAX_CHARS:
+                return value[:_RESTORE_TOOL_ARG_MAX_CHARS] + f"…[{len(value)} chars]"
+            return value
+        if depth >= 8:
+            return value
+        if isinstance(value, dict):
+            return {k: AgentInitializer._clip_tool_input(v, depth + 1) for k, v in value.items()}
+        if isinstance(value, list):
+            return [AgentInitializer._clip_tool_input(v, depth + 1) for v in value]
+        return value
+
+    @staticmethod
     def _filter_text_only_messages(messages: list) -> list:
         """
         Extract clean user/assistant turn pairs from raw message history.
@@ -334,9 +677,17 @@ class AgentInitializer:
         then keeps only:
         - The first user text in each turn (the actual user input)
         - The last assistant text in each turn (the final answer)
+        - Any teammate turn inside it (see below)
 
         All tool_use, tool_result, intermediate assistant thoughts, and
         internal hint messages injected by the agent loop are discarded.
+
+        Work handed to a teammate is the exception. It arrives as an
+        ``agent_delegate`` result, and dropping it with the rest of the tool
+        chain leaves the teammate's answer looking like something the speaker
+        knew by itself — which is what teaches it to answer in a teammate's
+        place instead of asking. So the reply is lifted back out as a turn of
+        its own, attributed to whoever wrote it.
         """
 
         def _extract_text(content) -> str:
@@ -366,20 +717,67 @@ class AgentInitializer:
             text = _extract_text(content)
             return bool(text)
 
+        def _delegated_turn(block: dict):
+            """The teammate's reply carried by an ``agent_delegate`` result."""
+            raw = block.get("content")
+            if isinstance(raw, list):
+                raw = _extract_text(raw)
+            if not isinstance(raw, str) or not raw.strip():
+                return None
+            try:
+                payload = json.loads(raw)
+            except ValueError:
+                return None
+            if not isinstance(payload, dict):
+                return None
+            author = payload.get("agent_id") or ""
+            said = payload.get("content")
+            if not author or not isinstance(said, str) or not said.strip():
+                return None
+            said = said.strip()
+            if len(said) > _DELEGATED_REPLY_MAX_CHARS:
+                said = said[:_DELEGATED_REPLY_MAX_CHARS] + "…"
+            return said, author, True
+
         # Group into turns: each turn starts with a real user message
         turns = []
         current_turn = None
+        handed_off = set()
         for msg in messages:
             if _is_real_user_msg(msg):
                 if current_turn is not None:
                     turns.append(current_turn)
                 current_turn = {"user": msg, "assistants": []}
-            elif current_turn is not None and msg.get("role") == "assistant":
-                text = _extract_text(msg.get("content"))
+                continue
+            if current_turn is None:
+                continue
+            content = msg.get("content")
+            blocks = content if isinstance(content, list) else []
+            if msg.get("role") == "assistant":
+                for block in blocks:
+                    if (
+                        isinstance(block, dict)
+                        and block.get("type") == "tool_use"
+                        and block.get("name") == "agent_delegate"
+                    ):
+                        handed_off.add(block.get("id"))
+                text = _extract_text(content)
                 if text:
                     current_turn["assistants"].append(
-                        (text, msg.get("agent_id") or "")
+                        (text, msg.get("agent_id") or "", False)
                     )
+                continue
+            # A tool_result rides on a ``user`` message. Only a hand-off is
+            # lifted out of one; every other result stays discarded.
+            for block in blocks:
+                if (
+                    isinstance(block, dict)
+                    and block.get("type") == "tool_result"
+                    and block.get("tool_use_id") in handed_off
+                ):
+                    spoke = _delegated_turn(block)
+                    if spoke:
+                        current_turn["assistants"].append(spoke)
         if current_turn is not None:
             turns.append(current_turn)
 
@@ -393,11 +791,17 @@ class AgentInitializer:
                 "role": "user",
                 "content": [{"type": "text", "text": user_text}]
             })
-            if turn["assistants"]:
-                final_reply, author = turn["assistants"][-1]
+            if not turn["assistants"]:
+                continue
+            # The speaker's intermediate thoughts are still dropped — only its
+            # last text is the answer. A teammate's turn is another voice, so
+            # it is kept where it happened rather than folded into that answer.
+            spoken = [said for said in turn["assistants"][:-1] if said[2]]
+            spoken.append(turn["assistants"][-1])
+            for text, author, _handed_off in spoken:
                 reply = {
                     "role": "assistant",
-                    "content": [{"type": "text", "text": final_reply}],
+                    "content": [{"type": "text", "text": text}],
                 }
                 if author:
                     reply["agent_id"] = author
@@ -441,7 +845,11 @@ class AgentInitializer:
                 memory_config, session_id=session_id
             )
 
-            memory_manager = MemoryManager(memory_config, embedding_provider=embedding_provider)
+            reranker = self._init_reranker()
+
+            memory_manager = MemoryManager(
+                memory_config, embedding_provider=embedding_provider, reranker=reranker
+            )
             self._sync_memory(memory_manager, session_id)
 
             memory_tools = [
@@ -470,6 +878,16 @@ class AgentInitializer:
         """
         from agent.memory import create_default_embedding_provider
         return create_default_embedding_provider()
+
+    def _init_reranker(self):
+        """Return the reranker selected by ``rerank_provider``, or None.
+
+        Off by default. The instance is shared across sessions and loads
+        nothing until the first memory search, so this stays cheap on the
+        session init path.
+        """
+        from agent.memory.reranker import create_default_reranker
+        return create_default_reranker()
 
     def _sync_memory(self, memory_manager, session_id: Optional[str] = None):
         """Bring the memory index up to date with the workspace files.
@@ -553,20 +971,17 @@ class AgentInitializer:
                         not isinstance(delegation, dict)
                         or delegation.get("enabled", True)
                     )
-                    enabled_agents = self.agent_bridge.agent_registry.list(
-                        include_disabled=False
-                    )
                     # Delegation only makes sense once a conversation actually has
-                    # teammates in it. A solo chat - even on an instance with many
-                    # Agents defined - should not carry the tool, so a lone Agent
-                    # never tries to hand work to someone who was not invited.
+                    # teammates in it, so it is the conversation's roster that
+                    # decides — not how many Agents this instance defines, which
+                    # says nothing about teammates reached over the transport.
                     shared = self._is_shared_conversation(
                         session_id or "", host_agent_id or ""
                     )
-                    if not enabled or len(enabled_agents) < 2 or not shared:
+                    if not enabled or not shared:
                         logger.debug(
                             "[AgentInitializer] agent_delegate skipped - "
-                            "needs a shared conversation with 2+ Agents"
+                            "needs a conversation with teammates"
                         )
                         continue
 
@@ -759,42 +1174,8 @@ class AgentInitializer:
     def _get_runtime_info(self, workspace_root: str):
         """Get runtime information with dynamic time support"""
         from config import conf
-        
-        def get_current_time():
-            """Get current time dynamically - called each time system prompt is accessed"""
-            now = datetime.datetime.now()
-            
-            # Get timezone info
-            try:
-                offset = -time.timezone if not time.daylight else -time.altzone
-                hours = offset // 3600
-                minutes = (offset % 3600) // 60
-                timezone_name = f"UTC{hours:+03d}:{minutes:02d}" if minutes else f"UTC{hours:+03d}"
-            except Exception:
-                timezone_name = "UTC"
-            
-            # Weekday: English name in en, Chinese mapping otherwise
-            weekday_en = now.strftime("%A")
-            try:
-                from common import i18n
-                is_en = i18n.get_language() == "en"
-            except Exception:
-                is_en = False
-            if is_en:
-                weekday = weekday_en
-            else:
-                weekday_map = {
-                    'Monday': '星期一', 'Tuesday': '星期二', 'Wednesday': '星期三',
-                    'Thursday': '星期四', 'Friday': '星期五', 'Saturday': '星期六', 'Sunday': '星期日'
-                }
-                weekday = weekday_map.get(weekday_en, weekday_en)
+        from agent.tools.current_time.current_time import current_time_info
 
-            return {
-                'time': now.strftime("%Y-%m-%d %H:%M:%S"),
-                'weekday': weekday,
-                'timezone': timezone_name
-            }
-        
         def get_model():
             """Get current model name dynamically from config"""
             return conf().get("model", "unknown")
@@ -803,7 +1184,7 @@ class AgentInitializer:
             "_get_model": get_model,
             "workspace": workspace_root,
             "channel": ", ".join(conf().get("channel_type")) if isinstance(conf().get("channel_type"), list) else conf().get("channel_type", "unknown"),
-            "_get_current_time": get_current_time  # Dynamic time function
+            "_get_current_time": current_time_info  # Dynamic time function
         }
     
     def _migrate_config_to_env(self, workspace_root: str):

@@ -28,6 +28,7 @@ def roster_from_members(host_agent_id: str, members) -> List[dict]:
     """
     if not members:
         return []
+    from agent.multiagent import peer as peer_of
     from agent.registry import get_agent_registry
 
     registry = get_agent_registry()
@@ -38,14 +39,21 @@ def roster_from_members(host_agent_id: str, members) -> List[dict]:
             continue
         try:
             profile = registry.get_addressed(agent_id, require_enabled=False)
+            entry = {"id": profile.id, "name": profile.name or profile.id}
         except Exception:
-            continue
+            # A teammate that runs elsewhere is still on the team: name it here
+            # so "@name" reaches it like any other. None when nobody knows the
+            # id, which stays dropped as before.
+            found = peer_of(agent_id)
+            if found is None:
+                continue
+            entry = {"id": found.id, "name": found.name or found.id}
         # Keyed on the resolved id, not the input: an alias and the id it
         # resolves to are one teammate and must not both reach the roster.
-        if profile.id in seen:
+        if entry["id"] in seen:
             continue
-        seen.add(profile.id)
-        roster.append({"id": profile.id, "name": profile.name or profile.id})
+        seen.add(entry["id"])
+        roster.append(entry)
     return roster
 
 

@@ -95,10 +95,10 @@ def _make_peer_transport(send):
 
         Outbound ``agent_invoke`` rides this connection with request_id,
         source_agent_id, source_name, target_agent_id, task, root_session_id,
-        trace, depth, members, peers, timeout. The console answers with
-        ``agent_invoke_event`` (request_id, event) for each tool step and one
-        ``agent_invoke_result`` (request_id, status, content, error, agent_id,
-        agent_name, duration).
+        trace, depth, members, peers, timeout, mode, history. The console
+        answers with ``agent_invoke_event`` (request_id, event) per event and
+        one ``agent_invoke_result`` (request_id, status, content, error,
+        agent_id, agent_name, duration).
         """
 
         def __init__(self, send_fn):
@@ -124,7 +124,10 @@ def _make_peer_transport(send):
                 "members": list(request.members),
                 "peers": [p.as_dict() for p in request.peers],
                 "timeout": request.timeout_seconds,
+                "mode": request.mode,
             }
+            if request.history:
+                body["history"] = list(request.history)
             try:
                 self._send(body)
             except Exception as exc:
@@ -507,20 +510,26 @@ class CloudClient(LinkAIClient):
             self._handle_agent_delete(agent_id)
 
     def _handle_agent_update(self, agent_id: str, data: dict):
-        """Apply a rename / model change to a live agent."""
+        """Apply a profile / model change to a live agent."""
         fields = {}
         if data.get("name"):
             fields["name"] = str(data.get("name")).strip()
+        if data.get("description") is not None:
+            fields["description"] = str(data.get("description")).strip()
         if data.get("model"):
             fields["model"] = data.get("model")
         if not fields:
             return
         try:
             from agent.admin import get_agent_admin_service
+            from agent.registry import get_agent_registry
+            current = get_agent_registry().get_addressed(agent_id, require_enabled=False)
+            if all(getattr(current, k, None) == v for k, v in fields.items()):
+                return
             service = get_agent_admin_service()
-            service.update_agent(agent_id, **fields)
-            self._reload_agents(service)
-            logger.info(f"[CloudClient] Agent '{agent_id}' updated: {list(fields)}")
+            service.update_agent(current.id, **fields)
+            self._reload_agents(service, changed_agent_ids=[current.id])
+            logger.info(f"[CloudClient] Agent '{current.id}' updated: {list(fields)}")
         except Exception as e:
             logger.error(f"[CloudClient] Failed to update agent '{agent_id}': {e}", exc_info=True)
 
@@ -532,15 +541,25 @@ class CloudClient(LinkAIClient):
             from agent.admin import get_agent_admin_service
             service = get_agent_admin_service()
             service.delete_agent(agent_id)
-            self._reload_agents(service)
+            self._reload_agents(service, changed_agent_ids=[agent_id])
             logger.info(f"[CloudClient] Agent '{agent_id}' deleted")
         except Exception as e:
             logger.error(f"[CloudClient] Failed to delete agent '{agent_id}': {e}", exc_info=True)
 
     def _handle_agent_create(self, agent_id: str, data: dict):
         """Add a new agent and re-point the live runtime, so it can answer
-        without a restart. A no-op when agent support is unavailable."""
+        without a restart. A no-op when agent support is unavailable.
+
+        The console may send the same registration again, e.g. after a
+        reconnect to make sure an agent it created while this instance was
+        offline exists; an agent that already exists takes it as an update,
+        and its asset modes are left as they are."""
+        if self._agent_exists(agent_id):
+            logger.info(f"[CloudClient] Agent '{agent_id}' already exists, applying as update")
+            self._handle_agent_update(agent_id, data)
+            return
         name = str(data.get("name") or agent_id).strip()
+        description = str(data.get("description") or "").strip()
         model = data.get("model")
         # Asset isolation for the new agent. Values are "own" (a private copy)
         # or "shared" (draw on the shared library); unset keeps the default
@@ -557,6 +576,7 @@ class CloudClient(LinkAIClient):
             service.create_agent(
                 agent_id=agent_id,
                 name=name,
+                description=description or None,
                 knowledge_mode=knowledge_mode,
                 skill_mode=skill_mode,
             )
@@ -571,11 +591,26 @@ class CloudClient(LinkAIClient):
             logger.error(f"[CloudClient] Failed to create agent '{agent_id}': {e}", exc_info=True)
 
     @staticmethod
-    def _reload_agents(service):
-        """Re-point the running runtime at the updated roster."""
+    def _agent_exists(agent_id: str) -> bool:
+        # Addressed lookup, so the reserved default alias names the existing
+        # default agent rather than a new agent to create.
+        try:
+            from agent.registry import get_agent_registry
+            get_agent_registry().get_addressed(agent_id, require_enabled=False)
+            return True
+        except Exception:
+            return False
+
+    @staticmethod
+    def _reload_agents(service, changed_agent_ids=None):
+        """Re-point the running runtime at the updated roster.
+
+        ``changed_agent_ids`` are the agents whose cached runtimes are dropped:
+        a runtime keeps the model it was built with, so an edited agent would
+        otherwise answer on its old model until the process restarts."""
         try:
             from channel.web.api.agents import _reload_agent_runtime
-            _reload_agent_runtime(service)
+            _reload_agent_runtime(service, changed_agent_ids=changed_agent_ids)
         except Exception as e:
             logger.warning(f"[CloudClient] agent runtime reload skipped: {e}")
 
@@ -623,6 +658,21 @@ class CloudClient(LinkAIClient):
                 return [str(m).strip() for m in value if str(m or "").strip()]
         return None
 
+    @staticmethod
+    def _instance_peers(data: dict):
+        """How to reach members that are not in this process, or None to leave
+        the directory as-is.
+
+        Same authoritative-list rule as the members above: ``[]`` clears it, an
+        absent key keeps whatever the record had. Entries are
+        ``{id, name, description}``; anything without an id is dropped later.
+        """
+        for key in ("peers", "peerAgents", "peer_agents"):
+            value = data.get(key)
+            if isinstance(value, list):
+                return [p for p in value if isinstance(p, dict)]
+        return None
+
     def _instance_signature(self, inst):
         """What decides whether a running instance must restart.
 
@@ -644,6 +694,9 @@ class CloudClient(LinkAIClient):
             owner,
             tuple(sorted((inst.credentials or {}).items())),
             tuple(sorted(inst.members or [])),
+            # A teammate that moved to another process, or back, changes how it is
+            # reached even when the roster itself reads the same.
+            tuple(sorted(str(p.get("id") or "") for p in (inst.peers or []))),
         )
 
     @staticmethod
@@ -687,6 +740,7 @@ class CloudClient(LinkAIClient):
             agent_id=self._instance_agent_id(data),
             credentials=self._instance_credentials_from(channel_type, data),
             members=self._instance_members(data),
+            peers=self._instance_peers(data),
             name=(str(data.get("channelName") or "").strip() or None),
         )
         if not self.channel_mgr:
@@ -1107,14 +1161,34 @@ class CloudClient(LinkAIClient):
         :return: response dict
         """
         action = data.get("action", "")
-        payload = data.get("payload")
+        payload = data.get("payload") or {}
         logger.info(f"[CloudClient] on_skill: action={action}")
 
-        svc = self.skill_service
+        agent_id = payload.get("agent_id") or payload.get("agentId")
+        try:
+            svc = self._skill_service_for(agent_id)
+        except KeyError:
+            return self._agent_not_found(action, agent_id)
         if svc is None:
             return {"action": action, "code": 500, "message": "SkillService not available", "payload": None}
 
         return svc.dispatch(action, payload)
+
+    def _skill_service_for(self, agent_id):
+        """A SkillService over the requested agent's skills: its own set when it
+        has one, else the shared set. Falls back to the process-wide service when
+        no agent is requested, so single-agent installs are unaffected."""
+        workspace = self._agent_workspace(agent_id)
+        if workspace is None:
+            return self.skill_service
+        try:
+            from agent.skills.manager import SkillManager
+            from agent.skills.service import SkillService
+            from common.state_dir import skills_dir
+            return SkillService(SkillManager(custom_dir=str(skills_dir(base=workspace))))
+        except Exception as e:
+            logger.error(f"[CloudClient] Failed to build SkillService for agent: {e}")
+            return None
 
     # ------------------------------------------------------------------
     # memory callback
@@ -1270,16 +1344,16 @@ class CloudClient(LinkAIClient):
         # single-agent installs keep working unchanged.
         agent_id = payload.get("agent_id") or payload.get("agentId")
         agent_id = self._resolve_chat_agent_id(agent_id)
-        # Shared conversation: the roster on it and the teammate addressed for
-        # this turn. Both optional; absent keeps the single-agent behaviour.
-        speaker_agent_id = self._resolve_optional_agent_id(
-            payload.get("speaker_agent_id") or payload.get("speakerAgentId")
-        )
         # Teammates hosted elsewhere come with profiles so they can be named on
         # the roster; their ids are kept as sent since only the console resolves them.
         peers = payload.get("peers")
         if isinstance(peers, list) and self._peer_transport is not None:
             self._peer_transport.register_peers(peers)
+        # Shared conversation: the roster on it and the teammate addressed for
+        # this turn. Both optional; absent keeps the single-agent behaviour.
+        speaker_agent_id = self._resolve_member_id(
+            payload.get("speaker_agent_id") or payload.get("speakerAgentId")
+        )
         members = payload.get("members")
         if isinstance(members, list):
             members = [m for m in (self._resolve_member_id(x) for x in members) if m]
@@ -1333,11 +1407,14 @@ class CloudClient(LinkAIClient):
                     send_chunk_fn=self._aliasing_sender(send_chunk_fn), agent_id=agent_id,
                     speaker_agent_id=speaker_agent_id, members=members)
 
+    #: Chunks that name a speaker, so the caller can attribute what follows.
+    _SPEAKER_CHUNKS = ("speaker", "peer_start", "peer_end")
+
     def _aliasing_sender(self, send_chunk_fn):
         """Report the default agent to remote callers by its reserved alias,
         matching how they address it (see AgentRegistry.get_addressed)."""
         def send(chunk):
-            if isinstance(chunk, dict) and chunk.get("chunk_type") == "speaker":
+            if isinstance(chunk, dict) and chunk.get("chunk_type") in self._SPEAKER_CHUNKS:
                 chunk = {**chunk, "agent_id": self._alias_agent_id(chunk.get("agent_id"))}
             send_chunk_fn(chunk)
         return send
@@ -1660,11 +1737,8 @@ def get_deployment_id() -> str:
     return os.environ.get("CLOUD_DEPLOYMENT_ID") or conf().get("cloud_deployment_id", "")
 
 
-def get_website_base_url() -> str:
-    """Return the URL prefix that maps to the workspace websites/ dir.
-
-    Do nothing when in local env.
-    """
+def _deployment_base_url() -> str:
+    """Return the URL prefix the deployment's websites/ dir is served at."""
     deployment_id = get_deployment_id()
     if not deployment_id:
         return ""
@@ -1682,6 +1756,70 @@ def get_website_base_url() -> str:
     return f"https://app.{domain}/{deployment_id}"
 
 
+def _publish_profile(workspace_dir: str = ""):
+    """The Agent whose published files are in play, as (registry, profile).
+
+    Resolved from *workspace_dir* when it names a configured Agent, so callers
+    that hold a workspace path do not need an identity. A path that is not one
+    (a project directory, say) falls back to the Agent this work belongs to.
+    """
+    from agent.registry import get_agent_registry
+    from common.runtime_identity import current_identity
+    from common.utils import expand_path
+
+    registry = get_agent_registry()
+    if workspace_dir:
+        target = os.path.realpath(expand_path(workspace_dir))
+        for profile in registry.list():
+            if os.path.realpath(expand_path(profile.workspace)) == target:
+                return registry, profile
+    return registry, registry.get_or_default(current_identity().agent_id)
+
+
+def get_publish_dir(workspace_dir: str = "", ensure: bool = False) -> str:
+    """Return the directory whose contents the public route serves."""
+    from common import state_dir
+
+    try:
+        _, profile = _publish_profile(workspace_dir)
+        return str(state_dir.websites_dir(base=profile.workspace, ensure=ensure))
+    except Exception:
+        return str(state_dir.websites_dir(base=workspace_dir or None, ensure=ensure))
+
+
+def get_website_base_url(workspace_dir: str = "") -> str:
+    """Return the URL prefix that maps to an Agent's websites/ dir.
+
+    Do nothing when in local env.
+
+    The route serves the default Agent's directory at the root, so every other
+    Agent is addressed by where its own directory sits relative to the instance
+    root. Deriving that from the resolved paths keeps the layout defined in one
+    place (state_dir) rather than spelled out again here.
+    """
+    base = _deployment_base_url()
+    if not base:
+        return ""
+    try:
+        from common import state_dir
+
+        registry, profile = _publish_profile(workspace_dir)
+        if profile.id == registry.default_agent_id:
+            return base
+        relative = os.path.relpath(
+            str(state_dir.websites_dir(base=profile.workspace)),
+            str(state_dir.shared_root()),
+        ).replace(os.sep, "/")
+        if relative.startswith(".."):
+            # A workspace placed outside the instance root is not under the
+            # route, and answering with the default Agent's prefix would hand
+            # out a link to someone else's files.
+            return ""
+        return f"{base}/{relative}"
+    except Exception:
+        return base
+
+
 # Subdir under websites/ used by the send tool
 COW_SEND_WEB_SUBDIR = "cow-send"
 
@@ -1694,13 +1832,10 @@ def copy_send_file(src_path: str, workspace_root: str) -> str:
     import shutil
     import uuid
 
-    from common.utils import expand_path
-
-    base = get_website_base_url()
+    base = get_website_base_url(workspace_root)
     if not base or not src_path or not os.path.isfile(src_path):
         return ""
-    ws = os.path.abspath(expand_path(workspace_root))
-    send_dir = os.path.join(ws, "websites", COW_SEND_WEB_SUBDIR)
+    send_dir = os.path.join(get_publish_dir(workspace_root), COW_SEND_WEB_SUBDIR)
     try:
         os.makedirs(send_dir, exist_ok=True)
     except OSError:
@@ -1718,39 +1853,119 @@ def copy_send_file(src_path: str, workspace_root: str) -> str:
     return f"{base}/{COW_SEND_WEB_SUBDIR}/{dest_name}"
 
 
+def _display_path(path: str) -> str:
+    """Spell an absolute path the short way the Agent is used to seeing."""
+    home = os.path.expanduser("~")
+    if path == home or path.startswith(home + os.sep):
+        path = "~" + path[len(home):]
+    return path.replace(os.sep, "/")
+
+
 def build_website_prompt(workspace_dir: str) -> list:
     """Build system prompt lines for cloud website/file sharing rules.
 
     Returns an empty list when cloud deployment is not configured,
     so callers can safely do ``lines.extend(build_website_prompt(...))``.
+
+    The directory is named absolutely rather than as a bare ``websites/``: each
+    Agent has its own, and a relative path would also resolve into the project
+    directory in a project-mode session, where nothing is served.
     """
-    base_url = get_website_base_url()
+    base_url = get_website_base_url(workspace_dir)
     if not base_url:
         return []
+    pub = _display_path(get_publish_dir(workspace_dir))
 
     return [
         "**文件分享与网页生成规则** (非常重要 — 当前为云部署模式):",
         "",
-        f"云端已为工作空间的 `websites/` 目录配置好公网路由映射，访问地址前缀为: `{base_url}`",
+        f"云端已为工作空间的 `{pub}/` 目录配置好公网路由映射，访问地址前缀为: `{base_url}`",
         "",
-        "1. **网页/网站**: 编写网页、H5页面等前端代码时，**必须**将文件放到 `websites/` 目录中",
-        f"   - 例如: `websites/index.html` → `{base_url}/index.html`",
-        f"   - 例如: `websites/my-app/index.html` → `{base_url}/my-app/index.html`",
+        f"1. **网页/网站**: 编写网页、H5页面等前端代码时，**必须**将文件放到 `{pub}/` 目录中",
+        f"   - 例如: `{pub}/index.html` → `{base_url}/index.html`",
+        f"   - 例如: `{pub}/my-app/index.html` → `{base_url}/my-app/index.html`",
         "",
-        "2. **生成文件分享** (PPT、PDF、图片、音视频等): 当你为用户生成了需要下载或查看的文件时，**可以**将文件保存到 `websites/` 目录中",
-        f"  - 例如: 生成的PPT保存到 `websites/files/report.pptx` → 下载链接为 `{base_url}/files/report.pptx`",
+        f"2. **生成文件分享** (PPT、PDF、图片、音视频等): 当你为用户生成了需要下载或查看的文件时，**可以**将文件保存到 `{pub}/` 目录中",
+        f"  - 例如: 生成的PPT保存到 `{pub}/files/report.pptx` → 下载链接为 `{base_url}/files/report.pptx`",
         "   - 你仍然可以同时使用 `send` 工具发送文件（在微信、飞书、钉钉、web等渠道中有效），但**必须同时在回复文本中提供下载链接**作为兜底，因为部分渠道无法通过 send 接收本地文件",
         "",
         "3. **必须发送链接**: 无论是网页还是文件，生成后**必须将完整的访问/下载链接直接写在回复文本中发送给用户**",
         "",
         "4. **文件名和路径尽量使用英文/拼音/数字等**，不要使用中文，避免链接无法访问",
         "",
-        "5. 建议为每个独立项目在 `websites/` 下创建子目录，保持结构清晰",
+        f"5. 建议为每个独立项目在 `{pub}/` 下创建子目录，保持结构清晰",
         "",
     ]
 
+# Held open for the life of the process; the OS drops the lock when it exits.
+_connection_lock_handle = None
+
+
+def _claim_connection(deployment_id: str) -> bool:
+    """Whether this process may open the console connection for *deployment_id*.
+
+    The console keeps a single connection per client and gives it to whichever
+    process logged in last. A second instance started on the same host (for
+    example from a shell tool, inheriting the environment) would silently take
+    over every request, so only the first process to take a per-deployment lock
+    connects. Where file locking is unavailable the check is skipped rather than
+    blocking the connection.
+    """
+    global _connection_lock_handle
+    if _connection_lock_handle is not None:
+        return True
+    import re
+    import tempfile
+    safe_id = re.sub(r"[^A-Za-z0-9_.-]", "_", str(deployment_id))
+    path = os.path.join(tempfile.gettempdir(), f"cow-console-{safe_id}.lock")
+    try:
+        handle = open(path, "a+")
+    except OSError as e:
+        logger.warning(f"[Console] Connection lock unavailable, continuing without it: {e}")
+        return True
+    try:
+        if os.name == "nt":
+            import msvcrt
+            handle.seek(0)
+            try:
+                msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+            except OSError:
+                handle.close()
+                logger.warning(
+                    "[Console] Another process already holds the console connection "
+                    "for this deployment; not connecting from this one"
+                )
+                return False
+        else:
+            import fcntl
+            try:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                handle.seek(0)
+                holder = handle.read().strip()
+                handle.close()
+                logger.warning(
+                    f"[Console] Another process{f' (pid {holder})' if holder else ''} already "
+                    f"holds the console connection for this deployment; not connecting from this one"
+                )
+                return False
+            handle.seek(0)
+            handle.truncate()
+            handle.write(str(os.getpid()))
+            handle.flush()
+    except Exception as e:
+        handle.close()
+        logger.warning(f"[Console] Connection lock unavailable, continuing without it: {e}")
+        return True
+    _connection_lock_handle = handle
+    return True
+
+
 def start(channel, channel_mgr=None):
-    if not get_deployment_id():
+    deployment_id = get_deployment_id()
+    if not deployment_id:
+        return
+    if not _claim_connection(deployment_id):
         return
 
     global chat_client

@@ -87,9 +87,9 @@ def resolve_family_spec(model_name: str):
             return spec.get("fallback_window", 128000), None
         return spec["window"], spec.get("max_output")
     return None, None
-from agent.protocol.models import LLMRequest, LLMModel
+from agent.protocol.models import LLMModel
 from agent.protocol.agent_stream import AgentStreamExecutor
-from agent.protocol.result import AgentAction, AgentActionType, ToolResult, AgentResult
+from agent.protocol.result import AgentAction, AgentActionType, ToolResult
 from agent.tools.base_tool import BaseTool, ToolStage, is_tool_available
 
 
@@ -293,7 +293,7 @@ class Agent:
             from agent.prompt import load_context_files, PromptBuilder
 
             if self.skill_manager:
-                self.skill_manager.refresh_skills()
+                self.skill_manager.refresh_skills(use_cache=True)
 
             context_files = None
             if self.workspace_dir and not self.skip_context_files:
@@ -732,7 +732,7 @@ class Agent:
 
     def run_stream(self, user_message: str, on_event=None, clear_history: bool = False,
                    skill_filter=None, cancel_event=None, steer_inbox=None,
-                   allow_empty_response: bool = False) -> str:
+                   allow_empty_response: bool = False, on_executor=None) -> str:
         """
         Execute single agent task with streaming (based on tool-call)
 
@@ -760,6 +760,8 @@ class Agent:
             allow_empty_response: If True, an empty answer is returned as-is
                 instead of a fallback message. For runs nobody is waiting on
                 (scheduled tasks), where sending nothing is a valid outcome.
+            on_executor: Optional callback(executor), called once before the
+                run starts, for callers that follow its messages as it goes.
 
         Returns:
             Final response text
@@ -808,6 +810,8 @@ class Agent:
             steer_inbox=steer_inbox,
             allow_empty_response=allow_empty_response,
         )
+        if on_executor is not None:
+            on_executor(executor)
 
         # Execute
         try:
@@ -831,8 +835,11 @@ class Agent:
             # so slicing at original_length yields an empty list and the assistant reply
             # would never be persisted. Instead, locate this run's user query (always the
             # first message of the last turn) by scanning from the tail.
+            run_start = executor.run_start_index()
             trimmed = len(executor.messages) < original_length
-            if trimmed:
+            if run_start is not None:
+                self._last_run_new_messages = list(executor.messages[run_start:])
+            elif trimmed:
                 new_start = original_length  # fallback
                 for idx in range(len(executor.messages) - 1, -1, -1):
                     msg = executor.messages[idx]

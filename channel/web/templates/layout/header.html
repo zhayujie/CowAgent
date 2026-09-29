@@ -18,8 +18,14 @@
                     <i class="fas fa-folder-tree text-slate-500 dark:text-slate-400"></i>
                 </button>
 
-                <!-- Breadcrumb (hidden on mobile) -->
-                <div class="hidden lg:flex items-center gap-2 text-sm min-w-0">
+                <!-- Message navigator toggle (chat view only; shown once there are questions to jump between) -->
+                <button id="timeline-toggle-btn" class="timeline-empty p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-white/10 cursor-pointer transition-colors duration-150"
+                        data-tooltip="消息导航" data-tooltip-pos="bottom">
+                    <i class="fas fa-list-ul text-slate-500 dark:text-slate-400"></i>
+                </button>
+
+                <!-- Breadcrumb (hidden on mobile, and in the chat view where it only repeats "Chat") -->
+                <div id="header-breadcrumb" class="hidden lg:flex items-center gap-2 text-sm min-w-0" style="display: none">
                     <span id="breadcrumb-group" class="text-slate-400 dark:text-slate-500 truncate" data-i18n="nav_chat">对话</span>
                     <i class="fas fa-chevron-right text-[10px] text-slate-300 dark:text-slate-600"></i>
                     <span id="breadcrumb-page" class="font-medium text-slate-700 dark:text-slate-200 truncate" data-i18n="menu_chat">对话</span>

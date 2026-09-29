@@ -353,9 +353,13 @@ class SessionService:
         if not found:
             raise ValueError("session not found")
 
-    def clear_context(self, session_id: str, agent_id: str = None) -> int:
+    def clear_context(self, session_id: str, agent_id: str = None, fanout: bool = True) -> int:
         """
         Set context boundary. Returns the new context_start_seq value.
+
+        A team conversation keeps one transcript per participant, so every
+        participant is cleared; otherwise the rest replay it on the next turn.
+        ``fanout=False`` clears this Agent alone.
         """
         if not session_id:
             raise ValueError("session_id required")
@@ -364,7 +368,74 @@ class SessionService:
         store = self._get_store(agent_id)
         new_seq = store.clear_context(session_id)
         self._remove_agent(session_id, agent_id)
+        if fanout:
+            for member_id in self._teammates(session_id, agent_id):
+                self._clear_teammate(session_id, member_id)
         return new_seq
+
+    def _teammates(self, session_id: str, agent_id: str = None) -> list:
+        """Everyone else holding a transcript of this session."""
+        try:
+            own_id = self._resolve_agent_id(agent_id)
+        except Exception:
+            own_id = ""
+        others = []
+        try:
+            from agent.workspace import session_prefs
+
+            for (host_id, sid), members in session_prefs.members_index().items():
+                if sid != session_id:
+                    continue
+                for member_id in (host_id, *(members or [])):
+                    member_id = str(member_id or "").strip()
+                    if member_id and member_id != own_id and member_id not in others:
+                        others.append(member_id)
+        except Exception as e:
+            logger.debug(f"[SessionService] roster lookup skipped: {e}")
+        return others
+
+    def _clear_teammate(self, session_id: str, member_id: str) -> None:
+        """Clear one teammate's transcript, wherever it is kept."""
+        try:
+            from agent.registry import get_agent_registry
+
+            get_agent_registry().get_addressed(member_id, require_enabled=False)
+        except Exception:
+            self._clear_peer(session_id, member_id)
+            return
+        try:
+            self.clear_context(session_id, agent_id=member_id, fanout=False)
+        except Exception as e:
+            logger.warning(f"[SessionService] Clear failed for agent '{member_id}': {e}")
+
+    def _clear_peer(self, session_id: str, member_id: str) -> None:
+        import uuid
+
+        try:
+            from agent.multiagent import MODE_CLEAR, InvokeRequest, get_transport, peer as peer_of
+
+            transport = get_transport()
+            found = peer_of(member_id)
+            if transport is None or found is None:
+                return
+            own = self._resolve_agent_id()
+            result = transport.invoke(InvokeRequest(
+                request_id=uuid.uuid4().hex,
+                target_id=found.id,
+                task="/clear",
+                source_id=own,
+                source_name=own,
+                root_session_id=session_id,
+                trace=(own,),
+                depth=0,
+                mode=MODE_CLEAR,
+                # A clear is a single write, so the wait stays short.
+                timeout_seconds=15.0,
+            ))
+            if not result.ok:
+                logger.warning(f"[SessionService] Clear refused by '{member_id}': {result.error}")
+        except Exception as e:
+            logger.warning(f"[SessionService] Clear failed for '{member_id}': {e}")
 
     def gen_title(self, session_id: str, user_message: str,
                   assistant_reply: str = "", agent_id: str = None) -> str:

@@ -1,12 +1,12 @@
 import os
 import re
 import base64
-import requests
 
 from bridge.context import ContextType
 from channel.chat_message import ChatMessage
 from common.log import logger
 from common import state_dir
+from common.media_download import MAX_FILE_BYTES, download_bytes
 from Crypto.Cipher import AES
 
 
@@ -57,21 +57,21 @@ def _decrypt_media(url: str, aeskey: str) -> bytes:
     Download and decrypt AES-256-CBC encrypted media from wecom bot.
     Returns decrypted bytes.
     """
-    resp = requests.get(url, timeout=30)
-    resp.raise_for_status()
-    encrypted = resp.content
-
     key = base64.b64decode(aeskey + "=" * (-len(aeskey) % 4))
     if len(key) != 32:
         raise ValueError(f"Invalid AES key length: {len(key)}, expected 32")
+
+    encrypted = download_bytes(url, MAX_FILE_BYTES, timeout=(5, 30))
+    if not encrypted or len(encrypted) % AES.block_size:
+        raise ValueError("Invalid encrypted media length")
 
     iv = key[:16]
     cipher = AES.new(key, AES.MODE_CBC, iv)
     decrypted = cipher.decrypt(encrypted)
 
     pad_len = decrypted[-1]
-    if pad_len > 32:
-        raise ValueError(f"Invalid PKCS7 padding length: {pad_len}")
+    if not 1 <= pad_len <= 32 or decrypted[-pad_len:] != bytes([pad_len]) * pad_len:
+        raise ValueError("Invalid PKCS7 padding")
     return decrypted[:-pad_len]
 
 

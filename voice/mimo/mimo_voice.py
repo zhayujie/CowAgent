@@ -11,13 +11,13 @@ audio 字段指定预置音色（如 冰糖/茉莉/苏打/Mia/Chloe 等），返
 """
 import base64
 import datetime
-import os
 import random
 
 import requests
 
 from bridge.reply import Reply, ReplyType
 from common.log import logger
+from common.tmp_dir import TmpDir
 from config import conf
 from voice.voice import Voice
 
@@ -93,10 +93,9 @@ class MimoVoice(Voice):
                 return Reply(ReplyType.ERROR, "语音合成失败，请稍后再试")
 
             file_name = (
-                "tmp/" + datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+                TmpDir().path() + datetime.datetime.now().strftime("%Y%m%d%H%M%S")
                 + str(random.randint(0, 1000)) + ".wav"
             )
-            os.makedirs(os.path.dirname(file_name), exist_ok=True)
             with open(file_name, "wb") as f:
                 f.write(audio_bytes)
             logger.info(

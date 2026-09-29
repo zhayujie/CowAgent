@@ -17,6 +17,7 @@ from unittest.mock import MagicMock, mock_open, patch
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from bridge.reply import ReplyType
+from common import state_dir
 from voice.custom.custom_voice import CustomVoice
 from voice.factory import create_voice
 
@@ -109,7 +110,10 @@ class TestCustomVoice(unittest.TestCase):
                     reply = voice.textToVoice("你好")
 
         self.assertEqual(reply.type, ReplyType.VOICE)
-        self.assertTrue(reply.content.startswith("tmp/") and reply.content.endswith(".mp3"))
+        # The audio belongs in the routed Agent's tmp dir (common/tmp_dir.py),
+        # not a CWD-relative "./tmp" the desktop app cannot rely on.
+        self.assertTrue(reply.content.endswith(".mp3"))
+        self.assertEqual(os.path.dirname(reply.content), str(state_dir.tmp_dir()))
         mocked_open().write.assert_called_once_with(b"mp3-bytes")
         self.assertEqual(post.call_args[0][0], "https://my.vendor/v1/audio/speech")
         self.assertEqual(

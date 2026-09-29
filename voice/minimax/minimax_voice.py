@@ -7,6 +7,7 @@ import requests
 
 from bridge.reply import Reply, ReplyType
 from common.log import logger
+from common.tmp_dir import TmpDir
 from config import conf
 from voice.voice import Voice
 
@@ -98,7 +99,7 @@ class MinimaxVoice(Voice):
                 return Reply(ReplyType.ERROR, "语音合成失败，未获取到音频数据")
 
             audio_data = b"".join(audio_chunks)
-            file_name = "tmp/" + datetime.datetime.now().strftime("%Y%m%d%H%M%S") + str(random.randint(0, 1000)) + ".mp3"
+            file_name = TmpDir().path() + datetime.datetime.now().strftime("%Y%m%d%H%M%S") + str(random.randint(0, 1000)) + ".mp3"
             with open(file_name, "wb") as f:
                 f.write(audio_data)
 

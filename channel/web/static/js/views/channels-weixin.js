@@ -10,6 +10,10 @@ let _weixinQrPollTimer = null;
 // a multi-instance card is its instance id. Several cards may wait for a scan
 // at once, so each keeps its own timer.
 let _weixinStatusPollTimers = {};
+// Instance card -> QR URL currently on screen. A live channel replaces its code
+// every couple of minutes while it waits for a scan, so the card keeps asking
+// for the current one instead of leaving an expired code up.
+let _weixinShownQr = {};
 
 function stopWeixinStatusPoll(iid) {
     if (iid === undefined) {
@@ -51,6 +55,7 @@ function startWeixinActiveStatusPoll(iid) {
             const wx = findWeixinEntry(data, iid);
             if (!wx || (!isWeixinInstanceCard(iid) && !wx.active)) return;
             if (wx.login_status === 'logged_in') {
+                delete _weixinShownQr[iid];
                 channelsData = data.channels;
                 channelInstancesView = data.instances || [];
                 renderActiveChannels();
@@ -59,10 +64,29 @@ function startWeixinActiveStatusPoll(iid) {
                     ? channelInstancesView.find(i => i.instance_id === iid)
                     : channelsData.find(c => c.name === 'weixin');
                 if (local && wx.login_status) local.login_status = wx.login_status;
+                syncWeixinInstanceQr(iid, wx.login_status);
                 startWeixinActiveStatusPoll(iid);
             }
         }).catch(() => { startWeixinActiveStatusPoll(iid); });
     }, 3000);
+}
+
+function syncWeixinInstanceQr(iid, loginStatus) {
+    if (!isWeixinInstanceCard(iid) || !_weixinShownQr[iid]) return;
+    const panel = document.getElementById(weixinQrPanelId(iid));
+    if (!panel) { delete _weixinShownQr[iid]; return; }
+    fetch(`/api/weixin/qrlogin?instance_id=${encodeURIComponent(iid)}`)
+        .then(r => r.json())
+        .then(data => {
+            if (!_weixinShownQr[iid] || !document.getElementById(weixinQrPanelId(iid))) return;
+            if (data.status !== 'success' || !data.qrcode_url) return;
+            const status = loginStatus === 'scanned' ? 'scanned' : 'waiting';
+            if (data.qrcode_url !== _weixinShownQr[iid].url || status !== _weixinShownQr[iid].status) {
+                _weixinShownQr[iid] = { url: data.qrcode_url, status };
+                renderWeixinQr(data.qr_image || data.qrcode_url, status, iid);
+            }
+        })
+        .catch(() => {});
 }
 
 function showWeixinActiveQr(iid) {
@@ -113,6 +137,9 @@ function startWeixinQrLogin(iid, pendingTries) {
             }
             renderWeixinQr(data.qr_image || data.qrcode_url, 'waiting', iid);
             if (data.source === 'channel') {
+                if (isWeixinInstanceCard(iid)) {
+                    _weixinShownQr[iid] = { url: data.qrcode_url, status: 'waiting' };
+                }
                 startWeixinActiveStatusPoll(iid);
             } else {
                 pollWeixinQrStatus();

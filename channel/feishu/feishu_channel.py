@@ -12,13 +12,14 @@
 """
 
 import json
+import hmac
 import logging
 import os
 import ssl
 import threading
 import time
 # -*- coding=utf-8 -*-
-import uuid
+from urllib.parse import urlparse
 
 import requests
 import web
@@ -42,6 +43,7 @@ from channel.feishu.feishu_scheduler_card import (
 from common import state_dir, utils
 from common.expired_dict import ExpiredDict
 from common.log import logger
+from common.media_download import MAX_FILE_BYTES, MAX_IMAGE_BYTES, download_bytes
 from common.singleton import singleton
 from config import conf
 
@@ -293,8 +295,13 @@ class FeiShuChanel(ChatChannel):
         # When this channel started serving. Set in startup(); 0 means "unknown",
         # which lets every message through rather than dropping it silently.
         self._startup_ts = 0.0
-        logger.debug("[FeiShu] app_id={}, app_secret={}, verification_token={}, event_mode={}".format(
-            self.feishu_app_id, self.feishu_app_secret, self.feishu_token, self.feishu_event_mode))
+        _secret = self.feishu_app_secret or ""
+        _token = self.feishu_token or ""
+        logger.debug("[FeiShu] app_id={}, app_secret_masked={}, verification_token_masked={}, event_mode={}".format(
+            self.feishu_app_id,
+            ("***" + _secret[-4:]) if len(_secret) > 4 else "***",
+            ("***" + _token[-4:]) if len(_token) > 4 else "***",
+            self.feishu_event_mode))
         # 无需群校验和前缀
         conf()["group_name_white_list"] = ["ALL_GROUP"]
         conf()["single_chat_prefix"] = [""]
@@ -363,7 +370,6 @@ class FeiShuChanel(ChatChannel):
     def stop(self):
         import ctypes
         logger.info("[FeiShu] stop() called")
-        ws_client = self._ws_client
         self._ws_client = None
         ws_thread = self._ws_thread
         self._ws_thread = None
@@ -760,6 +766,15 @@ class FeiShuChanel(ChatChannel):
             logger.warning("[FeiShu] message ignore")
             return
 
+        # Types we cannot parse (e.g. interactive cards posted by other bots in a
+        # group) get no reply either way; skip them here instead of raising, so
+        # they do not show up in the log as handler errors.
+        if msg.get("message_type") not in FeishuMessage.SUPPORTED_TYPES:
+            logger.debug(
+                f"[FeiShu] unsupported message type ignored: {msg.get('message_type')}, msg_id={msg_id}"
+            )
+            return
+
         # 构造飞书消息对象
         feishu_msg = FeishuMessage(event, is_group=is_group, access_token=self.fetch_access_token())
         if not feishu_msg:
@@ -986,7 +1001,7 @@ class FeiShuChanel(ChatChannel):
             res = requests.post(url=url, headers=headers, params=params, json=data, timeout=(5, 10))
         res = res.json()
         if res.get("code") == 0:
-            logger.info(f"[FeiShu] send message success")
+            logger.info("[FeiShu] send message success")
         elif msg_type == "interactive" and reply.type == ReplyType.TEXT:
             logger.warning(
                 "[FeiShu] Markdown card failed, falling back to text, "
@@ -1844,26 +1859,33 @@ class FeiShuChanel(ChatChannel):
             headers = {'Authorization': f'Bearer {access_token}'}
 
             with open(local_path, "rb") as file:
-                upload_response = requests.post(upload_url, files={"image": file}, data=data, headers=headers)
+                upload_response = requests.post(
+                    upload_url, files={"image": file}, data=data, headers=headers,
+                    timeout=(5, 15),
+                )
                 logger.info(f"[FeiShu] upload file, res={upload_response.content}")
 
                 response_data = upload_response.json()
                 if response_data.get("code") == 0:
-                    return response_data.get("data").get("image_key")
+                    return (response_data.get("data") or {}).get("image_key")
                 else:
                     logger.error(f"[FeiShu] upload failed: {response_data}")
                     return None
 
-        # Original logic for HTTP URLs
-        response = requests.get(img_url)
-        suffix = utils.get_path_suffix(img_url)
-        temp_name = str(uuid.uuid4()) + "." + suffix
-        if response.status_code == 200:
-            # 将图片内容保存为临时文件
-            with open(temp_name, "wb") as file:
-                file.write(response.content)
+        # HTTP URL: upload the bytes that were just downloaded. Staging them in a
+        # file first wrote into the process CWD -- not where the packaged desktop
+        # build starts, and not necessarily writable there -- and that file was
+        # only removed after a successful upload, so a failed upload left it
+        # behind in the working directory.
+        try:
+            image_bytes = download_bytes(img_url, MAX_IMAGE_BYTES, timeout=(5, 30))
+        except Exception as e:
+            # The caller relies on None here:
+            # `if not reply_content: logger.warning("upload image failed")`.
+            logger.error(f"[FeiShu] download image failed: {e}")
+            return None
 
-        # upload
+        suffix = utils.get_path_suffix(img_url)
         upload_url = "https://open.feishu.cn/open-apis/im/v1/images"
         data = {
             'image_type': 'message'
@@ -1871,11 +1893,19 @@ class FeiShuChanel(ChatChannel):
         headers = {
             'Authorization': f'Bearer {access_token}',
         }
-        with open(temp_name, "rb") as file:
-            upload_response = requests.post(upload_url, files={"image": file}, data=data, headers=headers)
-            logger.info(f"[FeiShu] upload file, res={upload_response.content}")
-            os.remove(temp_name)
-            return upload_response.json().get("data").get("image_key")
+        upload_response = requests.post(
+            upload_url,
+            files={"image": (f"image.{suffix or 'img'}", image_bytes)},
+            data=data,
+            headers=headers,
+            timeout=(5, 15),
+        )
+        logger.info(f"[FeiShu] upload file, res={upload_response.content}")
+        response_data = upload_response.json()
+        if response_data.get("code") == 0:
+            return (response_data.get("data") or {}).get("image_key")
+        logger.error(f"[FeiShu] upload failed: {response_data}")
+        return None
 
     def _get_video_duration(self, file_path: str) -> int:
         """
@@ -1943,10 +1973,14 @@ class FeiShuChanel(ChatChannel):
                     logger.error(f"[FeiShu] download video failed, status={response.status_code}")
                     return None
 
-                # Save to temp file
+                # Stage under the Agent's managed tmp dir. A bare name lands in
+                # the process CWD, which a packaged desktop build does not
+                # control and may not be able to write to. The duration probe
+                # below needs a real file, so this one cannot upload from memory
+                # the way the image and file paths do.
                 import uuid
-                file_name = os.path.basename(video_url) or "video.mp4"
-                temp_file = str(uuid.uuid4()) + "_" + file_name
+                file_name = os.path.basename(urlparse(video_url).path) or "video.mp4"
+                temp_file = str(state_dir.tmp_dir() / f"{uuid.uuid4()}_{file_name}")
 
                 with open(temp_file, "wb") as file:
                     file.write(response.content)
@@ -2130,22 +2164,16 @@ class FeiShuChanel(ChatChannel):
                 logger.error(f"[FeiShu] upload file exception: {e}")
                 return None
 
-        # For HTTP URLs, download first then upload
+        # For HTTP URLs, upload the downloaded bytes directly. Staging them in a
+        # file first wrote into the process CWD, and the cleanup ran inside the
+        # `with open(...)` body, so the handle was still held when os.remove ran
+        # — that raises on Windows, after the file had already been uploaded.
         try:
-            response = requests.get(file_url, timeout=(5, 30))
-            if response.status_code != 200:
-                logger.error(f"[FeiShu] download file failed, status={response.status_code}")
-                return None
+            file_bytes = download_bytes(file_url, MAX_FILE_BYTES, timeout=(5, 30))
 
-            # Save to temp file
-            import uuid
-            file_name = os.path.basename(file_url)
-            temp_name = str(uuid.uuid4()) + "_" + file_name
-
-            with open(temp_name, "wb") as file:
-                file.write(response.content)
-
-            # Upload
+            # Take the name off the URL path: a query string would otherwise end
+            # up in the suffix and drop file_type to 'stream'.
+            file_name = os.path.basename(urlparse(file_url).path) or "file"
             file_ext = os.path.splitext(file_name)[1].lower()
             file_type_map = {
                 '.opus': 'opus', '.mp4': 'mp4', '.pdf': 'pdf',
@@ -2159,18 +2187,20 @@ class FeiShuChanel(ChatChannel):
             data = {'file_type': file_type, 'file_name': file_name}
             headers = {'Authorization': f'Bearer {access_token}'}
 
-            with open(temp_name, "rb") as file:
-                upload_response = requests.post(upload_url, files={"file": file}, data=data, headers=headers)
-                logger.info(f"[FeiShu] upload file, res={upload_response.content}")
+            upload_response = requests.post(
+                upload_url,
+                files={"file": (file_name, file_bytes)},
+                data=data,
+                headers=headers,
+                timeout=(5, 30)
+            )
+            logger.info(f"[FeiShu] upload file, res={upload_response.content}")
 
-                response_data = upload_response.json()
-                os.remove(temp_name)  # Clean up temp file
-
-                if response_data.get("code") == 0:
-                    return response_data.get("data").get("file_key")
-                else:
-                    logger.error(f"[FeiShu] upload file failed: {response_data}")
-                    return None
+            response_data = upload_response.json()
+            if response_data.get("code") == 0:
+                return (response_data.get("data") or {}).get("file_key")
+            logger.error(f"[FeiShu] upload file failed: {response_data}")
+            return None
         except Exception as e:
             logger.error(f"[FeiShu] upload file from URL exception: {e}")
             return None
@@ -2231,6 +2261,22 @@ class FeiShuChanel(ChatChannel):
         return context
 
 
+def _redact_request_tokens(request: dict) -> dict:
+    """Mask the verification token in a webhook payload before logging it.
+
+    Feishu carries the token in header.token (message events), event.token
+    (card callbacks), and the top-level token on url_verification.
+    """
+    safe = dict(request)
+    if isinstance(safe.get("token"), str):
+        safe["token"] = "***"
+    for key in ("header", "event"):
+        value = safe.get(key)
+        if isinstance(value, dict) and isinstance(value.get("token"), str):
+            safe[key] = {**value, "token": "***"}
+    return safe
+
+
 class FeishuController:
     """
     HTTP服务器控制器，用于webhook模式
@@ -2250,7 +2296,7 @@ class FeishuController:
             channel = FeiShuChanel()
 
             request = json.loads(web.data().decode("utf-8"))
-            logger.debug(f"[FeiShu] receive request: {request}")
+            logger.debug(f"[FeiShu] receive request: {_redact_request_tokens(request)}")
 
             # 1.事件订阅回调验证
             if request.get("type") == URL_VERIFICATION:
@@ -2267,7 +2313,12 @@ class FeishuController:
                 or event.get("token")
                 or request.get("token")
             )
-            if callback_token != channel.feishu_token:
+            expected_token = channel.feishu_token
+            if not (
+                isinstance(callback_token, str)
+                and expected_token
+                and hmac.compare_digest(callback_token, expected_token)
+            ):
                 return self.FAILED_MSG
 
             if event_type == self.CARD_ACTION_TYPE and event:

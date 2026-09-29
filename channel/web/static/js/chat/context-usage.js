@@ -285,7 +285,8 @@ function installContextUsagePopover() {
     window.addEventListener('resize', () => { if (_ctxUsageEl.classList.contains('show')) position(); });
 
     // Prime the mini pie once on load so the button reflects state immediately.
-    _ctxRefresh({});
+    // Installed from boot.js's first applyI18n(), before login has settled.
+    requestAuthGatedStart(() => _ctxRefresh({}));
 }
 
 // Module-scope handles set up inside installContextUsagePopover so the action

@@ -46,11 +46,24 @@ def test_file_url_with_query_is_sent_as_file(monkeypatch):
 
 
 def test_downloaded_file_name_excludes_query(monkeypatch, tmp_path):
+    from pathlib import Path
+
+    from agent.registry import AgentProfile, AgentRegistry, set_agent_registry
+    from common import state_dir
     from models.linkai import link_ai_bot
 
     monkeypatch.setattr(
         link_ai_bot.requests, "get", lambda url, **kw: type("R", (), {"content": b"x"})()
     )
-    monkeypatch.chdir(tmp_path)
-    path = link_ai_bot._download_file("https://cdn.example.com/report.pdf?sig=1")
-    assert os.path.basename(path) == "report.pdf"
+    # The download belongs in the agent's managed tmp dir, not a `tmp/` resolved
+    # against the process CWD.
+    set_agent_registry(
+        AgentRegistry([AgentProfile(id="w1", name="W", workspace=str(tmp_path))], "w1")
+    )
+    try:
+        expected_dir = state_dir.tmp_dir()
+        path = link_ai_bot._download_file("https://cdn.example.com/report.pdf?sig=1")
+        assert os.path.basename(path) == "report.pdf"
+        assert Path(path).parent == expected_dir
+    finally:
+        set_agent_registry(None)

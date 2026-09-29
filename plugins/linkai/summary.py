@@ -10,16 +10,24 @@ class LinkSummary:
         pass
 
     def summary_file(self, file_path: str, app_code: str):
-        file_body = {
-            "file": open(file_path, "rb"),
-            "name": file_path.split("/")[-1]
-        }
         body = {
             "app_code": app_code
         }
         url = self.base_url() + "/v1/summary/file"
         logger.info(f"[LinkSum] file summary, app_code={app_code}")
-        res = requests.post(url, headers=self.headers(), files=file_body, data=body, timeout=(5, 300))
+        # os.path.basename, not split("/"): the name is what travels in the
+        # multipart header, and on Windows a path is separated by backslashes,
+        # so the whole local path used to be sent.
+        name = os.path.basename(file_path)
+        # The handle has to stay open for the duration of the request and be
+        # closed afterwards: requests does not own it, so every summary leaked a
+        # descriptor (and kept the file locked on Windows).
+        with open(file_path, "rb") as file:
+            file_body = {
+                "file": (name, file),
+                "name": name,
+            }
+            res = requests.post(url, headers=self.headers(), files=file_body, data=body, timeout=(5, 300))
         return self._parse_summary_res(res)
 
     def summary_url(self, url: str, app_code: str):
@@ -79,7 +87,11 @@ class LinkSummary:
             logger.warn(f"[LinkSum] file size exceeds limit, No processing, file_size={file_size}KB")
             return False
 
-        suffix = file_path.split(".")[-1]
+        # Matched case-insensitively, like the media classifier in
+        # models/linkai/link_ai_bot.py (`urlparse(url).path.lower()`): a
+        # "REPORT.PDF" used to come back from `split(".")[-1]` as "PDF", get
+        # reported as unsupported, and the file was silently skipped.
+        suffix = os.path.splitext(file_path)[1].lstrip(".").lower()
         support_list = ["txt", "csv", "docx", "pdf", "md", "jpg", "jpeg", "png"]
         if suffix not in support_list:
             logger.warn(f"[LinkSum] unsupported file, suffix={suffix}, support_list={support_list}")

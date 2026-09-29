@@ -14,7 +14,6 @@ Differences from `channel/wechatcom/` (企微自建应用):
        no native helper, so we call the HTTP endpoint directly.
 """
 import io
-import json
 import os
 import threading
 import time
@@ -203,7 +202,7 @@ class WechatKfChannel(ChatChannel):
 
         elif reply.type == ReplyType.IMAGE_URL:
             img_url = reply.content
-            pic_res = requests.get(img_url, stream=True)
+            pic_res = requests.get(img_url, stream=True, timeout=60)
             image_storage = io.BytesIO()
             for block in pic_res.iter_content(1024):
                 image_storage.write(block)
@@ -239,7 +238,7 @@ class WechatKfChannel(ChatChannel):
             video_url = reply.content
             try:
                 response = self.client.media.upload(
-                    "video", requests.get(video_url, stream=True).content
+                    "video", requests.get(video_url, stream=True, timeout=60).content
                 )
             except WeChatClientException as e:
                 logger.error("[wechat_kf] upload video failed: {}".format(e))

@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 import plugins
 from bridge.context import ContextType
 from bridge.reply import Reply, ReplyType
+from common import state_dir
 from common.log import logger
 from plugins import *
 
@@ -67,17 +68,44 @@ class Keyword(Plugin):
                 
             elif is_http_url and url_path.endswith((".pdf", ".doc", ".docx", ".xls", ".xlsx", ".zip", ".rar")):
             # 如果是以 http:// 或 https:// 开头，且".pdf", ".doc", ".docx", ".xls", "xlsx",".zip", ".rar"结尾，则下载文件到tmp目录并发送给用户
-                file_path = "tmp"
-                if not os.path.exists(file_path):
-                    os.makedirs(file_path)
                 file_name = os.path.basename(parsed_url.path)
-                file_path = os.path.join(file_path, file_name)
-                response = requests.get(reply_text)
-                with open(file_path, "wb") as f:
-                    f.write(response.content)
-                reply = Reply()
-                reply.type = ReplyType.FILE
-                reply.content = file_path
+                # 下载到 Agent 受管的 tmp 目录。不要自己拼 "tmp"：那是相对进程 CWD
+                # 解析的，打包后的桌面端控制不了 CWD，甚至可能没有写权限——
+                # 原来那句 makedirs 会直接抛错，被外层 except 吞掉后关键词静默不回复。
+                file_path = state_dir.tmp_dir() / file_name
+                # Bound the request. The reply is built on the thread handling
+                # this message, and requests with no timeout waits forever, so a
+                # file host that accepts the connection and then stalls would
+                # hold the turn open with nothing raised and nothing logged.
+                #
+                # Both failure modes are reported to the user rather than left to
+                # the worker: an exception here reaches only
+                # chat_channel._fail_callback, which logs it, so the keyword would
+                # go quiet instead of answering.
+                failure = None
+                try:
+                    response = requests.get(reply_text, timeout=(5, 60))
+                    if response.status_code != 200:
+                        # A gateway's error page is not the document the keyword
+                        # points at. Saving it under `report.pdf` and handing it
+                        # to the user as their file is worse than saying so.
+                        failure = f"HTTP {response.status_code}"
+                except requests.RequestException as e:
+                    # requests puts the whole URL in its error text and a keyword
+                    # URL may carry a token in its query string, so report the
+                    # kind of failure instead of echoing the exception.
+                    failure = e.__class__.__name__
+
+                if failure:
+                    logger.info(f"[keyword] Failed to download {reply_text}: {failure}")
+                    reply = Reply()
+                    reply.type = ReplyType.ERROR
+                    reply.content = f"下载失败：{failure}"
+                else:
+                    file_path.write_bytes(response.content)
+                    reply = Reply()
+                    reply.type = ReplyType.FILE
+                    reply.content = str(file_path)
             
             elif is_http_url and url_path.endswith(".mp4"):
             # 如果是以 http:// 或 https:// 开头，且".mp4"结尾，则下载视频到tmp目录并发送给用户

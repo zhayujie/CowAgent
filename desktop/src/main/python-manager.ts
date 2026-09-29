@@ -176,18 +176,22 @@ export class PythonBackend extends EventEmitter {
     return this.desktopToken
   }
 
-  // Optional runtime-origin tag from the bundled app-config, forwarded to the
-  // backend so it can be attached to outbound requests for stats.
-  private clientSource(): string {
+  // Optional fields of the bundled app-config forwarded to the backend:
+  // clientSource tags outbound requests for stats, appName is the name shown
+  // in command output, and skillHub: false turns off the online skill hub.
+  private appConfigEnv(): Record<string, string> {
     try {
       const cfgPath = this.packaged
         ? path.join(process.resourcesPath, 'app-config.json')
         : path.resolve(__dirname, '../../resources', 'app-config.json')
-      const raw = fs.readFileSync(cfgPath, 'utf8')
-      const val = JSON.parse(raw)?.clientSource
-      return typeof val === 'string' ? val.trim() : ''
+      const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8')) || {}
+      const env: Record<string, string> = {}
+      if (typeof cfg.clientSource === 'string' && cfg.clientSource.trim()) env.COW_CLIENT_SOURCE = cfg.clientSource.trim()
+      if (typeof cfg.appName === 'string' && cfg.appName.trim()) env.COW_APP_NAME = cfg.appName.trim()
+      if (cfg.skillHub === false) env.COW_SKILL_HUB = '0'
+      return env
     } catch {
-      return ''
+      return {}
     }
   }
 
@@ -797,7 +801,7 @@ export class PythonBackend extends EventEmitter {
         COW_WEB_PORT: String(this.port),
         COW_DESKTOP_TOKEN: this.desktopToken,
         ...(bundled ? { COW_DATA_DIR } : {}),
-        ...(this.clientSource() ? { COW_CLIENT_SOURCE: this.clientSource() } : {}),
+        ...this.appConfigEnv(),
         COW_CLIENT_VERSION: app.getVersion(),
       },
       stdio: ['pipe', 'pipe', 'pipe'],

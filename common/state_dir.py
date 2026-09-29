@@ -15,7 +15,7 @@ State falls into three kinds, and which kind a path is decided here:
   drift; what actually differs between Agents is which ones are switched on,
   not which ones exist. An Agent that genuinely needs its own copy creates the
   directory and wins by presence.
-- **Per Agent** (``state_root``): persona, sessions, scratch.
+- **Per Agent** (``state_root``): persona, sessions, scratch, published files.
   What makes this Agent a different one from that Agent. Scheduled tasks are
   shared (each task carries its own ``agent_id``) so re-binding a channel
   instance never has to move a file.
@@ -152,10 +152,6 @@ def knowledge_dir(identity=None, ensure: bool = False, base=None) -> Path:
     return _ensure(_shared_or_own(identity, base, "knowledge"), ensure)
 
 
-def websites_dir(identity=None, ensure: bool = False, base=None) -> Path:
-    return _ensure(_shared_or_own(identity, base, "websites"), ensure)
-
-
 def subagents_dir(identity=None, ensure: bool = False, base=None) -> Path:
     """Sub agent templates. Shared like skills: sub agents have no identity of
     their own, they are a way work gets done."""
@@ -226,6 +222,17 @@ def scheduler_file_global(base=None) -> Path:
 
 def scheduler_file(identity=None, base=None) -> Path:
     return _agent_base(identity, base) / "scheduler" / "tasks.json"
+
+
+def websites_dir(identity=None, ensure: bool = False, base=None) -> Path:
+    """Web pages and files the Agent means to publish.
+
+    Per Agent, unlike the skills and knowledge it draws on: this holds what one
+    Agent produced, so a second Agent must not be able to overwrite it, and the
+    files have to travel with the Agent they belong to. A serving layer in front
+    of the workspace addresses an Agent's files by this path.
+    """
+    return _ensure(_agent_base(identity, base) / "websites", ensure)
 
 
 def tmp_dir(identity=None, ensure: bool = True, base=None) -> Path:

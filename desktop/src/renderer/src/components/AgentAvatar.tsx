@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { product } from '@product'
 import apiClient from '../api/client'
 import type { AgentProfile } from '../types'
 import { useAgentStore, findAgent } from '../store/agentStore'
@@ -66,13 +67,25 @@ const AgentAvatar: React.FC<AgentAvatarProps> = ({ agent, size = 32, className =
   const px = { width: size, height: size }
   const id = agent?.id || ''
 
-  // The default (built-in) Agent has no uploaded avatar; wear the CowAgent
-  // brand logo instead of a bare initial disc, so its face matches the rest of
-  // the app. Use the same round logo.jpg the login/chat screens and web console
+  // The default (built-in) Agent has no uploaded avatar; wear the brand face
+  // instead of a bare initial disc, so its face matches the rest of the app. A
+  // product supplies its own, which it may resolve per account at runtime;
+  // otherwise use the same round logo.jpg the login/chat screens and web console
   // use (not the wide-margin square logo.png), filled edge-to-edge with
   // object-cover so a circle face reads as a clean disc, not an octagon.
+  //
+  // Only when nothing was uploaded: an Agent the user gave a face keeps it,
+  // brand or not, and that includes this one.
   const isDefault = !!agent && !!defaultAgentId && agent.id === defaultAgentId
   if (!hasImage && isDefault) {
+    const Brand = product.slots?.AssistantAvatar
+    if (Brand) {
+      return (
+        <div style={px} className={`${radius} overflow-hidden flex-shrink-0 ${className}`}>
+          <Brand />
+        </div>
+      )
+    }
     return (
       <img
         src="./logo.jpg"

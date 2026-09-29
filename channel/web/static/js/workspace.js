@@ -1120,15 +1120,15 @@ function renderMentionMenu() {
 }
 
 function matchingAgentMentions(query) {
-    // @ addresses a teammate, which only exists once a conversation has more than
-    // its owner. A solo chat keeps @ as the file picker it always was.
+    // @ addresses one Agent in particular, which only means something once a
+    // conversation has more than its owner. A solo chat keeps @ as the file
+    // picker it always was.
     if (typeof sharedConversation !== 'function' || !sharedConversation()) return [];
     const q = String(query || '').toLowerCase();
-    // Only teammates are offered: @ hands the turn to someone else, so the
-    // owner (the one already replying) is filtered out of the picker.
-    const owner = typeof activeAgentId !== 'undefined' ? activeAgentId : '';
-    const roster = (typeof sessionRoster === 'function' ? sessionRoster() : [])
-        .filter(agent => agent.id !== owner);
+    // The owner is offered alongside its teammates: in a group chat it is one
+    // voice among several, and @ is how the user picks it back out after a
+    // teammate has been speaking. sessionRoster() already lists it first.
+    const roster = typeof sessionRoster === 'function' ? sessionRoster() : [];
     return roster
         .filter(agent => !q || agent.id.toLowerCase().includes(q) || String(agent.name).toLowerCase().includes(q))
         .slice(0, 6)

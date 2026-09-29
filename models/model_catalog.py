@@ -182,8 +182,7 @@ def _strip_legacy_config_key() -> None:
         return
     if LEGACY_CATALOG_KEY in data:
         data.pop(LEGACY_CATALOG_KEY, None)
-        with open(cfg_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=4, ensure_ascii=False)
+        _write_json_atomic(cfg_path, data)
 
 
 def _read_store() -> dict:
@@ -216,11 +215,40 @@ def _read_store() -> dict:
     return {"providers": providers}
 
 
+def _write_json_atomic(path: str, data: dict) -> None:
+    """Write ``data`` to ``path`` through a sibling file, then swap it in.
+
+    Both files written from this module are read back with a bare json.load, and
+    a partial one is worse than a missing one. Writing straight into the target
+    truncates it before the new bytes exist, so anything that fails while
+    serialising -- a full disk, an interrupted update -- leaves a document that
+    no longer parses. For the overlay store that reads as "the user has no
+    overrides at all" (``_read_store`` deliberately swallows the decode error so
+    one bad file cannot take the whole models view down), and the next save
+    writes that empty baseline back, which turns a recoverable file into a
+    permanent loss. The config.json side is the file the console also writes: a
+    truncated user config is what ``load_config`` treats as corruption.
+    """
+    temporary = f"{path}.tmp"
+    try:
+        with open(temporary, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=4, ensure_ascii=False)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(temporary, path)
+    except Exception:
+        try:
+            if os.path.exists(temporary):
+                os.remove(temporary)
+        except OSError:
+            pass
+        raise
+
+
 def _write_store(store: dict) -> None:
     path = _store_path()
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(store, f, indent=4, ensure_ascii=False)
+    _write_json_atomic(path, store)
 
 
 # In-memory cache so the budget/request paths (called every LLM turn) don't hit

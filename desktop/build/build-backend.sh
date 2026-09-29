@@ -16,9 +16,7 @@ ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 BUILD_DIR="$SCRIPT_DIR"
 VENV_DIR="$BUILD_DIR/.venv-build"
 
-# Prefer Python 3.11 when available: on 3.13+ web.py must be installed from a
-# GitHub git source (the PyPI build fails), which is flaky on some networks.
-# 3.11 installs web.py straight from PyPI and has the best PyInstaller support.
+# Prefer Python 3.11 when available: it has the best PyInstaller support.
 if [ -z "${PYTHON:-}" ]; then
   for cand in \
     "/Library/Frameworks/Python.framework/Versions/3.11/bin/python3.11" \
@@ -31,8 +29,7 @@ if [ -z "${PYTHON:-}" ]; then
     fi
   done
 fi
-# Prefer Python 3.11: it installs web.py from PyPI (no GitHub clone) and avoids
-# 3.13's removed-cgi compatibility shims. Override with PYTHON=... if needed.
+# Prefer Python 3.11 for PyInstaller support. Override with PYTHON=... if needed.
 pick_python() {
   if [ -n "${PYTHON:-}" ]; then echo "$PYTHON"; return; fi
   for c in python3.11 python3.12 python3.10 python3; do

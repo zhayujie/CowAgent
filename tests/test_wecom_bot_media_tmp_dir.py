@@ -38,7 +38,8 @@ def _channel(uploads):
 
 def _fake_response():
     resp = Mock()
-    resp.content = b"payload"
+    resp.headers = {}
+    resp.iter_content = lambda chunk_size: iter([b"payload"])
     resp.raise_for_status = lambda: None
     return resp
 

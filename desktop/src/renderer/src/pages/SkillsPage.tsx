@@ -1,41 +1,76 @@
 import React, { useEffect, useRef, useState } from 'react'
 import {
+  Loader2,
+  Zap,
   ArrowLeft,
+  Lock,
+  Pencil,
+  Plus,
+  Plug,
+  Trash2,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  FileArchive,
+  Compass,
+  ExternalLink,
+  Terminal,
   FileQuestion,
   FileText,
+  FilePen,
   FileUp,
+  SquarePen,
   Folder,
   FolderOpen,
   FolderPlus,
-  Loader2,
-  Lock,
   Paperclip,
-  Pencil,
-  Plus,
-  Puzzle,
-  UploadCloud,
+  Send,
+  Search,
+  Globe,
+  KeyRound,
+  Clock,
+  Brain,
   Wrench,
   X,
-  Zap,
 } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import { t, tf } from '../i18n'
 import apiClient from '../api/client'
 import type { ApiResult } from '../api/client'
-import type { ToolInfo, SkillInfo, SkillContent, SkillFileEntry } from '../types'
+import type { ToolInfo, SkillInfo, SkillContent, SkillFileEntry, McpServerConfig } from '../types'
 import { Toggle } from './settings/primitives'
 import Markdown from '../components/Markdown'
 import { DocActions, DocEditor, DocNotice, DocView } from '../components/DocEditor'
 import { createDocEditorStore, docRefusal } from '../store/docEditorStore'
+import { askConfirm } from '../store/confirmStore'
+import McpEditorModal from './skills/McpEditorModal'
+import SkillAddModal from './skills/SkillAddModal'
+import { parseSkillFrontmatter } from './skills/frontmatter'
+import { MCP_TRANSPORT_LABELS, mcpTransport } from './skills/mcpConfig'
+import { product } from '@product'
 
 interface SkillsPageProps {
   baseUrl: string
 }
 
 const SKILL_HUB_URL = 'https://skills.cowagent.ai/'
+const TOOLS_COLLAPSED_COUNT = 4
+const MCP_POLL_INTERVAL_MS = 1500
+const MCP_POLL_MAX_MS = 120000
+
+const TOOL_ICONS: Record<string, LucideIcon> = {
+  bash: Terminal,
+  edit: SquarePen,
+  read: FileText,
+  write: FilePen,
+  ls: FolderOpen,
+  send: Send,
+  web_search: Search,
+  browser: Globe,
+  env_config: KeyRound,
+  scheduler: Clock,
+  memory_get: Brain,
+  memory_search: Brain,
+}
 
 /** Where the file list's own show/hide state is kept, as in the web console. */
 const SKILL_FILES_PANEL_KEY = 'cow_skill_files_panel'
@@ -64,91 +99,6 @@ const skillEditor = createDocEditorStore<SkillRef, SkillContent & ApiResult>({
     apiClient.writeSkill({ name: doc.name, path: doc.path, content, expectedMtime }),
   refusal: (data) => (data.ships_with_install ? t('skill_builtin_readonly') : docRefusal(data)),
 })
-
-/** Drop the surrounding quotes a YAML scalar may carry. */
-function yamlScalar(raw: string): string {
-  return raw.trim().replace(/^(['"])(.*)\1$/, '$2')
-}
-
-/**
- * Split a skill's SKILL.md into its YAML frontmatter fields and the markdown
- * body. The `---` header is metadata, not prose: handed to the markdown
- * renderer as-is it becomes a giant bold heading and a horizontal rule. Pull it
- * out so name/description show as a proper header instead.
- *
- * Frontmatter nests: `metadata.cowagent.requires.anyEnv` is a list four levels
- * down. Read line by line with no regard for indentation, each container key
- * showed up as an empty row and the list under it vanished. So this walks the
- * indentation instead: a nested map becomes one row per leaf, keyed by its
- * dotted path; a list or a block scalar (`|`, `>`) becomes one row with its
- * lines joined. Only leaves are rows - a key that merely holds others has
- * nothing to say on its own.
- */
-function parseSkillFrontmatter(content: string): { fields: Array<[string, string]>; body: string } {
-  const text = content || ''
-  const match = text.match(/^---\s*\r?\n([\s\S]*?)\r?\n---\s*\r?\n?/)
-  if (!match) return { fields: [], body: text }
-
-  const lines = match[1].split(/\r?\n/)
-  const fields: Array<[string, string]> = []
-  // The key at each indentation level above the current line.
-  const path: Array<{ indent: number; key: string }> = []
-  // A key whose value is still being collected from the lines below it: the
-  // items of a list, or the lines of a block scalar.
-  let open: { key: string; indent: number; items: string[]; block: boolean } | null = null
-
-  const flush = () => {
-    if (!open) return
-    const joined = open.block ? open.items.join(' ').trim() : open.items.join(', ')
-    fields.push([open.key, joined])
-    open = null
-  }
-
-  for (const raw of lines) {
-    const line = raw.trim()
-    if (!line) continue
-    const indent = raw.length - raw.trimStart().length
-    // Inside a block scalar a `#` line is text, not a comment.
-    if (open && open.block && indent > open.indent) {
-      open.items.push(line)
-      continue
-    }
-    if (line.startsWith('#')) continue
-    // A list's dashes may sit level with their key or under it.
-    if (open && !open.block && indent >= open.indent && line.startsWith('- ')) {
-      open.items.push(yamlScalar(line.slice(2)))
-      continue
-    }
-    // Anything else ends an open value: what follows is the next key, or -
-    // under a key opened as a possible list - the first key of a nested map.
-    flush()
-
-    while (path.length && path[path.length - 1].indent >= indent) path.pop()
-    const idx = line.indexOf(':')
-    if (idx === -1) continue
-    const key = yamlScalar(line.slice(0, idx))
-    if (!key) continue
-    const dotted = [...path.map((p) => p.key), key].join('.')
-    const rest = line.slice(idx + 1).trim()
-
-    if (!rest) {
-      // Either a nested map, or a list that starts on the next line: which one
-      // is decided by the line that follows. Open both readings and let the
-      // next indented line settle it.
-      path.push({ indent, key })
-      open = { key: dotted, indent, items: [], block: false }
-    } else if (/^[|>][-+0-9]*$/.test(rest)) {
-      open = { key: dotted, indent, items: [], block: true }
-    } else {
-      fields.push([dotted, yamlScalar(rest)])
-    }
-  }
-  flush()
-
-  // A container key opened as a possible list but then held a map instead: its
-  // children have their own rows, so drop the empty one it left behind.
-  return { fields: fields.filter(([, value]) => value !== ''), body: text.slice(match[0].length) }
-}
 
 /**
  * A non-markdown file as a fenced code block, so it renders with the same
@@ -344,12 +294,44 @@ const SkillFilesSwitch: React.FC<{ expanded: boolean; onClick: () => void }> = (
   </button>
 )
 
+function mcpStatusLabel(status?: string): string {
+  const key: Record<string, string> = {
+    ready: 'mcp_status_ready',
+    pending: 'mcp_status_pending',
+    failed: 'mcp_status_failed',
+    needs_auth: 'mcp_status_needs_auth',
+    disabled: 'mcp_status_disabled',
+    idle: 'mcp_status_idle',
+  }
+  return t(key[status || ''] || 'mcp_status_idle')
+}
+
+function mcpStatusClass(status?: string): string {
+  if (status === 'ready') return 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+  if (status === 'failed') return 'bg-red-500/10 text-red-500'
+  if (status === 'needs_auth') return 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+  if (status === 'disabled') return 'bg-inset-2 text-content-tertiary'
+  return 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
+}
+
+const cardClass = 'rounded-card border border-default bg-surface p-4 flex items-start gap-3'
+const iconBtnClass = 'flex-shrink-0 p-1 -my-1 rounded text-content-tertiary transition-colors cursor-pointer'
+
 const SkillsPage: React.FC<SkillsPageProps> = ({ baseUrl }) => {
   const [tools, setTools] = useState<ToolInfo[]>([])
   const [skills, setSkills] = useState<SkillInfo[]>([])
+  const [servers, setServers] = useState<McpServerConfig[]>([])
   const [loading, setLoading] = useState(true)
-  const [creating, setCreating] = useState(false)
-  const [status, setStatus] = useState('')
+  const [toolsExpanded, setToolsExpanded] = useState(false)
+  // undefined: closed; null: adding; a config: editing that server.
+  const [editing, setEditing] = useState<McpServerConfig | null | undefined>(undefined)
+  const [addingSkill, setAddingSkill] = useState(false)
+  const [creatingSkill, setCreatingSkill] = useState(false)
+  const [freshSkills, setFreshSkills] = useState<Set<string>>(new Set())
+  const [mcpError, setMcpError] = useState('')
+  const [skillError, setSkillError] = useState('')
+  const [notice, setNotice] = useState('')
+  const noticeTimer = useRef<ReturnType<typeof setTimeout>>()
 
   const doc = skillEditor((s) => s.doc)
   const content = skillEditor((s) => s.content)
@@ -371,12 +353,48 @@ const SkillsPage: React.FC<SkillsPageProps> = ({ baseUrl }) => {
   // though the document was opened without naming a path.
   const currentPath = doc?.path || 'SKILL.md'
 
+  const flash = (text: string) => {
+    setNotice(text)
+    clearTimeout(noticeTimer.current)
+    noticeTimer.current = setTimeout(() => setNotice(''), 2600)
+  }
+
+  useEffect(() => () => clearTimeout(noticeTimer.current), [])
+
+  // Saved servers start in the background, so keep refreshing while any is still loading.
+  const mcpPollDeadline = useRef(0)
+  useEffect(() => {
+    if (!servers.some((s) => s.status === 'pending')) {
+      mcpPollDeadline.current = 0
+      return
+    }
+    if (!mcpPollDeadline.current) mcpPollDeadline.current = Date.now() + MCP_POLL_MAX_MS
+    if (Date.now() > mcpPollDeadline.current) return
+    const timer = setTimeout(() => {
+      apiClient
+        .getMcpServers()
+        .then((data) => setServers(data.servers || []))
+        .catch(() => {})
+    }, MCP_POLL_INTERVAL_MS)
+    return () => clearTimeout(timer)
+  }, [servers])
+
   const loadData = async () => {
     try {
       setLoading(true)
-      const [toolsData, skillsData] = await Promise.all([apiClient.getTools(), apiClient.getSkills()])
+      setMcpError('')
+      const [toolsData, skillsData, mcpData] = await Promise.all([
+        apiClient.getTools(),
+        apiClient.getSkills(),
+        // A broken mcp.json must not take the tools and skills lists down with it.
+        apiClient.getMcpServers().catch((err: Error) => {
+          setMcpError(`${t('mcp_load_failed')}: ${err.message}`)
+          return { servers: [] as McpServerConfig[] }
+        }),
+      ])
       setTools(toolsData || [])
       setSkills(skillsData || [])
+      setServers(mcpData.servers || [])
     } catch (err) {
       console.error('Failed to load skills:', err)
     } finally {
@@ -418,6 +436,7 @@ const SkillsPage: React.FC<SkillsPageProps> = ({ baseUrl }) => {
       if (res.status !== 'success') throw new Error()
     } catch {
       setSkills((prev) => prev.map((s) => (s.name === skill.name ? { ...s, enabled: !enabled } : s)))
+      flash(t('skill_toggle_error'))
     }
   }
 
@@ -459,6 +478,55 @@ const SkillsPage: React.FC<SkillsPageProps> = ({ baseUrl }) => {
     void loadData()
   }
 
+  const persistServers = async (next: McpServerConfig[]) => {
+    const res = await apiClient.saveMcpServers(next)
+    if (res.status !== 'success') throw new Error(res.message || t('mcp_save_error'))
+    mcpPollDeadline.current = 0
+    setServers(res.servers || next)
+  }
+
+  const saveFromEditor = async (next: McpServerConfig[], notice: string) => {
+    await persistServers(next)
+    setEditing(undefined)
+    flash(notice)
+  }
+
+  const removeServer = async (name: string) => {
+    const ok = await askConfirm({ titleKey: 'mcp_delete', msgKey: 'mcp_delete_confirm', okKey: 'mcp_delete' })
+    if (!ok) return
+    setMcpError('')
+    try {
+      await persistServers(servers.filter((item) => item.name !== name))
+    } catch (err) {
+      setMcpError(err instanceof Error ? err.message : t('mcp_save_error'))
+    }
+  }
+
+  const reloadSkills = async () => {
+    setSkills((await apiClient.getSkills()) || [])
+  }
+
+  const onSkillsInstalled = (names: string[]) => {
+    void reloadSkills()
+    setFreshSkills(new Set(names))
+    setTimeout(() => setFreshSkills(new Set()), 2600)
+  }
+
+  const uninstall = async (name: string) => {
+    const ok = await askConfirm({ titleKey: 'skill_delete', msgKey: 'skill_delete_confirm', okKey: 'skill_delete' })
+    if (!ok) return
+    setSkillError('')
+    try {
+      const res = await apiClient.deleteSkill(name)
+      if (res.status !== 'success') throw new Error(res.message || t('skill_delete_error'))
+      await reloadSkills()
+    } catch (err) {
+      setSkillError(`${t('skill_delete_error')}: ${err instanceof Error ? err.message : ''}`)
+    }
+  }
+
+  const visibleTools = toolsExpanded ? tools : tools.slice(0, TOOLS_COLLAPSED_COUNT)
+
   return (
     <div className="flex-1 flex flex-col min-h-0">
       <div className="flex items-center justify-between px-6 pt-5 pb-3 flex-shrink-0">
@@ -466,50 +534,11 @@ const SkillsPage: React.FC<SkillsPageProps> = ({ baseUrl }) => {
           <h2 className="text-xl font-bold text-content">{t('skills_title')}</h2>
           <p className="text-xs text-content-tertiary mt-1">{t('skills_desc')}</p>
         </div>
-        {!doc && (
-          <div className="flex items-center gap-2">
-            {status && (
-              <span className="text-xs max-w-[260px] truncate text-content-tertiary" title={status}>
-                {status}
-              </span>
-            )}
-            <a
-              href={SKILL_HUB_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-btn text-xs font-medium text-accent bg-accent-soft hover:bg-accent-soft transition-colors"
-            >
-              <Puzzle size={12} />
-              {t('skills_hub_btn')}
-            </a>
-            <button
-              type="button"
-              onClick={() => setCreating(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-btn text-xs font-medium text-white bg-accent hover:opacity-90 transition-opacity cursor-pointer"
-            >
-              <Plus size={12} />
-              {t('skill_new_btn')}
-            </button>
-          </div>
-        )}
       </div>
-
-      {creating && (
-        <SkillCreateDialog
-          onClose={() => setCreating(false)}
-          onDone={(message) => {
-            setCreating(false)
-            setStatus(message)
-            window.setTimeout(() => setStatus(''), 6000)
-            void loadData()
-          }}
-        />
-      )}
 
       <DocNotice store={skillEditor} />
 
       {doc ? (
-        /* Skill viewer / editor */
         <div className="flex-1 flex flex-col min-h-0 border-t border-default">
           <div className="flex items-center gap-3 px-6 py-3 flex-shrink-0">
             <button
@@ -524,7 +553,7 @@ const SkillsPage: React.FC<SkillsPageProps> = ({ baseUrl }) => {
               {edit?.dirty && (
                 <span className="text-accent" title={t('ws_edit_unsaved')}>
                   {' '}
-                  •
+                  {'\u2022'}
                 </span>
               )}
             </h3>
@@ -591,35 +620,155 @@ const SkillsPage: React.FC<SkillsPageProps> = ({ baseUrl }) => {
         </div>
       ) : (
       <div className="flex-1 overflow-y-auto border-t border-default">
-        <div className="max-w-4xl mx-auto px-6 py-5">
+        <div className="max-w-4xl mx-auto px-6 py-6">
           {loading ? (
             <div className="flex items-center justify-center py-20 text-content-tertiary">
               <Loader2 size={18} className="animate-spin mr-2" />
               {t('skills_loading')}
             </div>
           ) : (
-            <div className="space-y-8">
-              <Section title={t('tools_section_title')} count={tools.length}>
+            <div className="space-y-10">
+              <Section
+                title={t('tools_section_title')}
+                count={tools.length}
+                action={
+                  tools.length > TOOLS_COLLAPSED_COUNT && (
+                    <LinkBtn onClick={() => setToolsExpanded((v) => !v)}>
+                      {t(toolsExpanded ? 'tools_collapse' : 'tools_show_all')}
+                      <ChevronDown size={12} className={`transition-transform ${toolsExpanded ? 'rotate-180' : ''}`} />
+                    </LinkBtn>
+                  )
+                }
+              >
                 {tools.length === 0 ? (
-                  <Empty text={t('tools_empty')} />
+                  <p className="text-sm text-content-tertiary py-2">{t('tools_empty')}</p>
                 ) : (
                   <div className="grid gap-3 sm:grid-cols-2">
-                    {tools.map((tool) => (
-                      <div key={tool.name} className="rounded-card border border-default bg-surface p-4">
-                        <div className="flex items-center gap-2 mb-1.5">
-                          <Wrench size={13} className="text-content-tertiary flex-shrink-0" />
-                          <span className="text-sm font-medium text-content font-mono truncate">{tool.name}</span>
+                    {visibleTools.map((tool) => {
+                      const Icon = TOOL_ICONS[tool.name] || Wrench
+                      return (
+                        <div key={tool.name} className={cardClass}>
+                          <div className="w-9 h-9 rounded-lg bg-blue-500/10 flex items-center justify-center flex-shrink-0">
+                            <Icon size={15} className="text-blue-500" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <span className="block text-sm font-medium text-content font-mono truncate">{tool.name}</span>
+                            <p className="text-xs text-content-tertiary leading-relaxed mt-1 line-clamp-2">{tool.description || '--'}</p>
+                          </div>
                         </div>
-                        <p className="text-xs text-content-tertiary leading-relaxed line-clamp-2">{tool.description || '--'}</p>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 )}
               </Section>
 
-              <Section title={t('skills_section_title')} count={skills.length}>
+              <Section
+                title={t('mcp_section_title')}
+                count={servers.length}
+                action={
+                  <ActionBtn onClick={() => setEditing(null)}>
+                    <Plus size={12} />
+                    {t('mcp_add')}
+                  </ActionBtn>
+                }
+              >
+                {mcpError && <p className="mb-3 text-sm text-danger">{mcpError}</p>}
+                {servers.length === 0 ? (
+                  !mcpError && (
+                    <EmptyState icon={Plug} title={t('mcp_empty')} hint={t('mcp_empty_hint')} tone="amber" />
+                  )
+                ) : (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {servers.map((server) => {
+                      const type = mcpTransport(server)
+                      const summary =
+                        type === 'stdio'
+                          ? [server.command, ...(server.args || [])].filter(Boolean).join(' ')
+                          : server.url || ''
+                      return (
+                        <div
+                          key={server.name}
+                          onClick={() => setEditing(server)}
+                          className={`${cardClass} cursor-pointer hover:border-strong transition-colors`}
+                        >
+                          <div className="w-9 h-9 rounded-lg bg-amber-500/10 flex items-center justify-center flex-shrink-0">
+                            <Plug size={15} className={server.status === 'disabled' ? 'text-content-tertiary' : 'text-amber-500'} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-sm font-medium text-content font-mono truncate">{server.name}</span>
+                              <span className="flex-shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium bg-inset-2 text-content-tertiary">
+                                {MCP_TRANSPORT_LABELS[type] || type}
+                              </span>
+                              <span className={`flex-shrink-0 px-1.5 py-0.5 rounded-full text-[10px] ${mcpStatusClass(server.status)}`}>
+                                {mcpStatusLabel(server.status)}
+                              </span>
+                              <span className="flex-1" />
+                              <button
+                                type="button"
+                                title={t('mcp_edit')}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setEditing(server)
+                                }}
+                                className={`${iconBtnClass} hover:text-content-secondary`}
+                              >
+                                <Pencil size={11} />
+                              </button>
+                              <button
+                                type="button"
+                                title={t('mcp_delete')}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  void removeServer(server.name)
+                                }}
+                                className={`${iconBtnClass} hover:text-red-500`}
+                              >
+                                <Trash2 size={11} />
+                              </button>
+                            </div>
+                            <p className="text-xs text-content-tertiary font-mono truncate" title={summary}>
+                              {summary || '--'}
+                            </p>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </Section>
+
+              <Section
+                title={t('skills_section_title')}
+                count={skills.length}
+                action={
+                  <>
+                    {!product.skills?.uploadOnly && (
+                      <a
+                        href={SKILL_HUB_URL}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 px-2 py-1.5 rounded-btn text-xs text-content-tertiary hover:text-content-secondary hover:bg-surface-2 transition-colors"
+                      >
+                        <Compass size={12} />
+                        {t('skills_hub_btn')}
+                        <ExternalLink size={10} className="opacity-60" />
+                      </a>
+                    )}
+                    <ActionBtn onClick={() => setCreatingSkill(true)}>
+                      <SquarePen size={12} />
+                      {t('skill_new_btn')}
+                    </ActionBtn>
+                    <ActionBtn onClick={() => setAddingSkill(true)}>
+                      <Plus size={12} />
+                      {t('skill_add')}
+                    </ActionBtn>
+                  </>
+                }
+              >
+                {skillError && <p className="mb-3 text-sm text-danger">{skillError}</p>}
                 {skills.length === 0 ? (
-                  <Empty text={t('skills_empty')} />
+                  <EmptyState icon={Zap} title={t('skills_empty')} hint={t(product.skills?.uploadOnly ? 'skills_empty_hint_upload' : 'skills_empty_hint')} tone="accent" />
                 ) : (
                   <div className="grid gap-3 sm:grid-cols-2">
                     {skills.map((skill) => (
@@ -631,9 +780,13 @@ const SkillsPage: React.FC<SkillsPageProps> = ({ baseUrl }) => {
                             .open({ name: skill.name, label: skill.display_name || skill.name })
                         }
                         title={t('skill_open_hint')}
-                        className="rounded-card border border-default bg-surface p-4 flex items-start gap-3 cursor-pointer hover:border-strong transition-colors"
+                        className={`${cardClass} cursor-pointer transition-all ${
+                          freshSkills.has(skill.name)
+                            ? 'border-accent shadow-[0_0_0_3px_var(--accent-soft)]'
+                            : 'hover:border-strong'
+                        }`}
                       >
-                        <div className="w-9 h-9 rounded-lg bg-inset-2 flex items-center justify-center flex-shrink-0">
+                        <div className="w-9 h-9 rounded-lg bg-accent-soft flex items-center justify-center flex-shrink-0">
                           <Zap size={15} className={skill.enabled ? 'text-accent' : 'text-content-tertiary'} />
                         </div>
                         <div className="flex-1 min-w-0">
@@ -641,8 +794,6 @@ const SkillsPage: React.FC<SkillsPageProps> = ({ baseUrl }) => {
                             <span className="text-sm font-medium text-content truncate flex-1">
                               {skill.display_name || skill.name}
                             </span>
-                            {/* The pencil and switch sit inside a card that opens
-                                the skill, so their clicks must not reach it. */}
                             <button
                               type="button"
                               title={t('skill_edit_hint')}
@@ -650,10 +801,23 @@ const SkillsPage: React.FC<SkillsPageProps> = ({ baseUrl }) => {
                                 e.stopPropagation()
                                 void openSkillForEdit(skill)
                               }}
-                              className="flex-shrink-0 p-1 -mx-1 -mt-1.5 -mb-1 rounded text-content-tertiary hover:text-content-secondary transition-colors cursor-pointer"
+                              className={`${iconBtnClass} hover:text-content-secondary`}
                             >
                               <Pencil size={11} />
                             </button>
+                            {skill.deletable && (
+                              <button
+                                type="button"
+                                title={t('skill_delete')}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  void uninstall(skill.name)
+                                }}
+                                className={`${iconBtnClass} hover:text-red-500`}
+                              >
+                                <Trash2 size={11} />
+                              </button>
+                            )}
                             <span onClick={(e) => e.stopPropagation()}>
                               <Toggle checked={skill.enabled} onChange={(v) => toggle(skill, v)} />
                             </span>
@@ -670,16 +834,42 @@ const SkillsPage: React.FC<SkillsPageProps> = ({ baseUrl }) => {
         </div>
       </div>
       )}
+
+      <McpEditorModal
+        server={editing}
+        existing={servers}
+        onClose={() => setEditing(undefined)}
+        onSave={saveFromEditor}
+      />
+      <SkillAddModal open={addingSkill} onClose={() => setAddingSkill(false)} onInstalled={onSkillsInstalled} />
+      {creatingSkill && (
+        <SkillCreateDialog
+          onClose={() => setCreatingSkill(false)}
+          onCreated={(name) => {
+            setCreatingSkill(false)
+            flash(`${t('skill_new_created')}: ${name}`)
+            onSkillsInstalled([name])
+          }}
+        />
+      )}
+
+      {notice && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[80] px-4 py-2 rounded-btn bg-neutral-900/90 text-white text-sm shadow-lg pointer-events-none">
+          {notice}
+        </div>
+      )}
     </div>
   )
 }
 
 // ---------------------------------------------------------------------------
-// Creating a skill: a form, or an uploaded folder / archive
+// Creating a skill from a form. Installing an existing one - from a market or
+// an upload - is SkillAddModal's, with a preview before install.
 // ---------------------------------------------------------------------------
 
-// The server's own ceilings, mirrored so a 50 MB folder is refused here rather
-// than after being uploaded. See SkillService.MAX_UPLOAD_*.
+// The server's own ceilings for a form's attachments, mirrored so a 50 MB
+// folder is refused here rather than after being uploaded. See
+// SkillService.MAX_UPLOAD_*.
 const SKILL_UPLOAD_MAX_FILES = 500
 const SKILL_UPLOAD_MAX_FILE_SIZE = 10 * 1024 * 1024
 const SKILL_UPLOAD_MAX_TOTAL_SIZE = 50 * 1024 * 1024
@@ -741,7 +931,6 @@ function skillUploadCandidates(files: File[]): File[] {
 
 /** Validate a batch of picked files. Returns an error message, or ''. */
 function validateSkillUploadFiles(files: File[]): string {
-  if (!files.length) return t('skill_upload_required')
   if (files.length > SKILL_UPLOAD_MAX_FILES) {
     return tf('skill_upload_too_many', { max: SKILL_UPLOAD_MAX_FILES })
   }
@@ -763,25 +952,19 @@ function validateSkillUploadFiles(files: File[]): string {
 
 const SkillCreateDialog: React.FC<{
   onClose: () => void
-  /** Called with the line to show in the header once something was installed. */
-  onDone: (message: string) => void
-}> = ({ onClose, onDone }) => {
-  const [mode, setMode] = useState<'form' | 'upload'>('form')
+  /** Called with the directory name the server created the skill under. */
+  onCreated: (name: string) => void
+}> = ({ onClose, onCreated }) => {
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [body, setBody] = useState('')
   const [files, setFiles] = useState<File[]>([])
-  const [archive, setArchive] = useState<File | null>(null)
-  const [folder, setFolder] = useState<File[]>([])
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
-  const [dragOver, setDragOver] = useState(false)
   // Two picks behind one button: a native file dialog browses for files or for a
   // directory, never both, so the choice is made before it opens.
   const [attachOpen, setAttachOpen] = useState(false)
   const filesRef = useRef<HTMLInputElement>(null)
-  const createFolderRef = useRef<HTMLInputElement>(null)
-  const archiveRef = useRef<HTMLInputElement>(null)
   const folderRef = useRef<HTMLInputElement>(null)
   const attachRef = useRef<HTMLDivElement>(null)
 
@@ -799,28 +982,6 @@ const SkillCreateDialog: React.FC<{
 
   const slug = skillNameSlug(name)
 
-  const pickArchive = (file: File) => {
-    if (!/\.(zip|tgz|tar|gz)$/i.test(file.name || '')) {
-      setError(t('skill_upload_bad_archive'))
-      return
-    }
-    setError('')
-    setFolder([])
-    setArchive(file)
-  }
-
-  const pickFolder = (picked: File[]) => {
-    const wanted = skillUploadCandidates(picked)
-    const err = validateSkillUploadFiles(wanted)
-    if (err) {
-      setError(err)
-      return
-    }
-    setError('')
-    setArchive(null)
-    setFolder(wanted)
-  }
-
   /** Add what one of the attachment inputs picked to the list under the field. */
   const addAttachments = (picked: File[], asFolder: boolean) => {
     const wanted = asFolder ? skillUploadCandidates(picked) : picked
@@ -834,7 +995,8 @@ const SkillCreateDialog: React.FC<{
     ])
   }
 
-  const submitForm = async () => {
+  const submit = async () => {
+    if (busy) return
     if (!slug) return setError(t('skill_new_name_invalid'))
     // The loader drops a skill with no description, so it is required here too.
     if (!description.trim()) return setError(t('skill_new_desc_required'))
@@ -847,46 +1009,13 @@ const SkillCreateDialog: React.FC<{
     try {
       const res = await apiClient.createSkill({ name, description, body, files })
       if (res.status !== 'success') return setError(res.message || t('skill_new_failed'))
-      onDone(`${t('skill_new_created')}: ${res.name}`)
+      onCreated(res.name || slug)
     } catch {
       setError(t('skill_new_failed'))
     } finally {
       setBusy(false)
     }
   }
-
-  const submitUpload = async () => {
-    if (!archive && !folder.length) return setError(t('skill_upload_required'))
-    setBusy(true)
-    setError('')
-    try {
-      const res = archive
-        ? await apiClient.uploadSkillArchive(archive)
-        : await apiClient.uploadSkillFolder(folder)
-      if (res.status !== 'success') return setError(res.message || t('skill_new_failed'))
-
-      const installed = (res.installed || []).concat(res.replaced || [])
-      const skipped = res.skipped || []
-      if (!installed.length) {
-        // Every skill in the upload was refused: show the first reason, which is
-        // the only actionable part of the answer.
-        return setError(
-          skipped.length ? `${skipped[0].name}: ${skipped[0].reason}` : t('skill_upload_none')
-        )
-      }
-      let message = `${t('skill_upload_installed')}: ${installed.join(', ')}`
-      if (skipped.length) {
-        message += ` · ${t('skill_upload_skipped')}: ${skipped.map((s) => s.name).join(', ')}`
-      }
-      onDone(message)
-    } catch {
-      setError(t('skill_new_failed'))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const submit = () => (mode === 'upload' ? void submitUpload() : void submitForm())
 
   const fieldClass =
     'w-full px-3 py-2 rounded-btn border border-strong bg-inset text-sm text-content placeholder:text-content-tertiary focus:outline-none focus:border-accent transition-colors'
@@ -901,266 +1030,138 @@ const SkillCreateDialog: React.FC<{
         className="w-full max-w-lg max-h-[90vh] flex flex-col bg-surface border border-default rounded-xl shadow-xl overflow-hidden"
         onMouseDown={(e) => e.stopPropagation()}
       >
-        {/* Title and tabs stay put; only the fields below scroll. */}
+        {/* The title stays put; only the fields below scroll. */}
         <div className="px-5 pt-5 pb-4 flex-shrink-0">
           <h3 className="text-base font-semibold text-content">{t('skill_new_title')}</h3>
-          <p className="text-xs text-content-tertiary mt-1 mb-4">{t('skill_new_subtitle')}</p>
-
-          <div className="flex gap-1 p-1 rounded-btn bg-inset">
-            {(['form', 'upload'] as const).map((value) => (
-              <button
-                key={value}
-                type="button"
-                onClick={() => {
-                  setMode(value)
-                  setError('')
-                }}
-                className={`flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-btn text-xs font-medium transition-colors cursor-pointer ${
-                  mode === value ? 'bg-surface text-content shadow-sm' : 'text-content-tertiary'
-                }`}
-              >
-                {value === 'form' ? <Pencil size={11} /> : <UploadCloud size={11} />}
-                {t(value === 'form' ? 'skill_new_tab_form' : 'skill_new_tab_upload')}
-              </button>
-            ))}
-          </div>
+          <p className="text-xs text-content-tertiary mt-1">{t('skill_new_subtitle')}</p>
         </div>
 
         <div className="px-5 pb-5 min-h-0 overflow-y-auto">
-          {mode === 'form' ? (
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm text-content-secondary mb-1.5">{t('skill_new_name')}</label>
-                <input
-                  autoFocus
-                  value={name}
-                  maxLength={64}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="weather-api"
-                  className={fieldClass}
-                />
-                <p
-                  className={`text-xs mt-1.5 break-all ${
-                    name.trim() && !slug ? 'text-danger' : 'text-content-tertiary'
-                  }`}
-                >
-                  {!name.trim()
-                    ? t('skill_new_name_hint')
-                    : !slug
-                      ? t('skill_new_name_invalid')
-                      : slug === name.trim()
-                        ? t('skill_new_name_hint')
-                        : `${t('skill_new_name_dir')}: ${slug}`}
-                </p>
-              </div>
-              <div>
-                <label className="block text-sm text-content-secondary mb-1.5">{t('skill_new_desc')}</label>
-                <textarea
-                  rows={3}
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  className={`${fieldClass} resize-y`}
-                />
-                <p className="text-xs text-content-tertiary mt-1.5">{t('skill_new_desc_hint')}</p>
-              </div>
-              <div>
-                <label className="block text-sm text-content-secondary mb-1.5">{t('skill_new_body')}</label>
-                <textarea
-                  rows={6}
-                  value={body}
-                  onChange={(e) => setBody(e.target.value)}
-                  placeholder={'## Usage\n\n...'}
-                  className={`${fieldClass} font-mono resize-y`}
-                />
-                <p className="text-xs text-content-tertiary mt-1.5">{t('skill_new_body_hint')}</p>
-              </div>
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-sm text-content-secondary">{t('skill_new_files')}</label>
-                  {/* A skill's resources come as a directory as often as they come as
-                      loose files - `scripts/`, `references/` - and the paths are kept,
-                      so the layout picked here is the one installed. */}
-                  <div ref={attachRef} className="relative">
-                    <button
-                      type="button"
-                      onClick={() => setAttachOpen((v) => !v)}
-                      className="inline-flex items-center gap-1 text-xs text-accent hover:opacity-80 cursor-pointer"
-                    >
-                      <Paperclip size={11} />
-                      {t('skill_new_files_add')}
-                    </button>
-                    {attachOpen && (
-                      // Opening upwards: the attachments are the last field of a
-                      // dialog that scrolls, so a menu below the button would be
-                      // clipped by the dialog's own overflow.
-                      <div className="absolute right-0 bottom-full mb-1.5 w-36 z-30 rounded-xl border border-default bg-elevated shadow-xl p-1">
-                        {[
-                          { icon: FileUp, label: t('skill_new_files_pick'), ref: filesRef },
-                          { icon: FolderPlus, label: t('skill_upload_pick_folder'), ref: createFolderRef },
-                        ].map(({ icon: Icon, label, ref }) => (
-                          <button
-                            key={label}
-                            type="button"
-                            onClick={() => {
-                              setAttachOpen(false)
-                              ref.current?.click()
-                            }}
-                            className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs text-left text-content hover:bg-inset cursor-pointer"
-                          >
-                            <Icon size={12} className="flex-shrink-0 opacity-70" />
-                            {label}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-                {files.length === 0 ? (
-                  <p className="text-xs text-content-tertiary">{t('skill_new_files_hint')}</p>
-                ) : (
-                  // A picked folder can be dozens of files, so the list scrolls
-                  // rather than pushing the create button off the dialog.
-                  <div className="space-y-1.5 max-h-40 overflow-y-auto">
-                    {files.map((file, index) => (
-                      <div
-                        key={skillAttachmentPath(file)}
-                        className="flex items-center gap-2 px-2.5 py-1.5 rounded-btn border border-default bg-inset"
-                      >
-                        <span
-                          title={skillAttachmentPath(file)}
-                          className="flex-1 min-w-0 text-xs font-mono text-content truncate"
-                        >
-                          {skillAttachmentPath(file)}
-                        </span>
-                        <span className="text-[11px] text-content-tertiary">{formatSkillFileSize(file.size)}</span>
-                        <button
-                          type="button"
-                          onClick={() => setFiles(files.filter((_, i) => i !== index))}
-                          className="text-content-tertiary hover:text-danger cursor-pointer"
-                        >
-                          <X size={11} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <input
-                  ref={filesRef}
-                  type="file"
-                  multiple
-                  className="hidden"
-                  onChange={(e) => {
-                    const picked = Array.from(e.target.files || [])
-                    e.target.value = ''
-                    addAttachments(picked, false)
-                  }}
-                />
-                <input
-                  ref={createFolderRef}
-                  type="file"
-                  multiple
-                  {...FOLDER_INPUT_PROPS}
-                  className="hidden"
-                  onChange={(e) => {
-                    const picked = Array.from(e.target.files || [])
-                    e.target.value = ''
-                    addAttachments(picked, true)
-                  }}
-                />
-              </div>
-            </div>
-          ) : (
+          <div className="space-y-4">
             <div>
-              <div
-                onDragEnter={(e) => {
-                  if (e.dataTransfer?.types?.includes('Files')) {
-                    e.preventDefault()
-                    setDragOver(true)
-                  }
-                }}
-                onDragOver={(e) => {
-                  if (e.dataTransfer?.types?.includes('Files')) e.preventDefault()
-                }}
-                onDragLeave={() => setDragOver(false)}
-                onDrop={(e) => {
-                  e.preventDefault()
-                  setDragOver(false)
-                  // A dropped directory arrives as an entry whose contents this
-                  // handler cannot read, so it points at the folder picker
-                  // rather than uploading an empty archive.
-                  const entry = e.dataTransfer?.items?.[0]?.webkitGetAsEntry?.()
-                  if (entry?.isDirectory) {
-                    setError(t('skill_upload_drop_dir'))
-                    return
-                  }
-                  const file = (e.dataTransfer?.files || [])[0]
-                  if (file) pickArchive(file)
-                }}
-                className={`rounded-xl border-2 border-dashed px-4 py-8 text-center transition-colors ${
-                  dragOver ? 'border-accent bg-accent-soft' : 'border-default'
+              <label className="block text-sm text-content-secondary mb-1.5">{t('skill_new_name')}</label>
+              <input
+                autoFocus
+                value={name}
+                maxLength={64}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="weather-api"
+                className={fieldClass}
+              />
+              <p
+                className={`text-xs mt-1.5 break-all ${
+                  name.trim() && !slug ? 'text-danger' : 'text-content-tertiary'
                 }`}
               >
-                <UploadCloud size={24} className="mx-auto text-content-tertiary" />
-                <p className="mt-3 text-sm text-content-secondary">{t('skill_upload_drop')}</p>
-                <div className="mt-4 flex items-center justify-center gap-2">
+                {!name.trim()
+                  ? t('skill_new_name_hint')
+                  : !slug
+                    ? t('skill_new_name_invalid')
+                    : slug === name.trim()
+                      ? t('skill_new_name_hint')
+                      : `${t('skill_new_name_dir')}: ${slug}`}
+              </p>
+            </div>
+            <div>
+              <label className="block text-sm text-content-secondary mb-1.5">{t('skill_new_desc')}</label>
+              <textarea
+                rows={3}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                className={`${fieldClass} resize-y`}
+              />
+              <p className="text-xs text-content-tertiary mt-1.5">{t('skill_new_desc_hint')}</p>
+            </div>
+            <div>
+              <label className="block text-sm text-content-secondary mb-1.5">{t('skill_new_body')}</label>
+              <textarea
+                rows={6}
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
+                placeholder={'## Usage\n\n...'}
+                className={`${fieldClass} font-mono resize-y`}
+              />
+              <p className="text-xs text-content-tertiary mt-1.5">{t('skill_new_body_hint')}</p>
+            </div>
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-sm text-content-secondary">{t('skill_new_files')}</label>
+                {/* A skill's resources come as a directory as often as they come as
+                    loose files - `scripts/`, `references/` - and the paths are kept,
+                    so the layout picked here is the one installed. */}
+                <div ref={attachRef} className="relative">
                   <button
                     type="button"
-                    onClick={() => archiveRef.current?.click()}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-btn border border-strong text-xs text-content-secondary hover:bg-inset cursor-pointer"
+                    onClick={() => setAttachOpen((v) => !v)}
+                    className="inline-flex items-center gap-1 text-xs text-accent hover:opacity-80 cursor-pointer"
                   >
-                    <FileArchive size={11} />
-                    {t('skill_upload_pick_archive')}
+                    <Paperclip size={11} />
+                    {t('skill_new_files_add')}
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => folderRef.current?.click()}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-btn border border-strong text-xs text-content-secondary hover:bg-inset cursor-pointer"
-                  >
-                    <FolderOpen size={11} />
-                    {t('skill_upload_pick_folder')}
-                  </button>
+                  {attachOpen && (
+                    // Opening upwards: the attachments are the last field of a
+                    // dialog that scrolls, so a menu below the button would be
+                    // clipped by the dialog's own overflow.
+                    <div className="absolute right-0 bottom-full mb-1.5 w-36 z-30 rounded-xl border border-default bg-elevated shadow-xl p-1">
+                      {[
+                        { icon: FileUp, label: t('skill_new_files_pick'), ref: filesRef },
+                        { icon: FolderPlus, label: t('skill_new_files_pick_folder'), ref: folderRef },
+                      ].map(({ icon: Icon, label, ref }) => (
+                        <button
+                          key={label}
+                          type="button"
+                          onClick={() => {
+                            setAttachOpen(false)
+                            ref.current?.click()
+                          }}
+                          className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs text-left text-content hover:bg-inset cursor-pointer"
+                        >
+                          <Icon size={12} className="flex-shrink-0 opacity-70" />
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
-
-              {(archive || folder.length > 0) && (
-                <div className="mt-3 flex items-center gap-2 px-3 py-2 rounded-btn border border-default bg-inset">
-                  {archive ? (
-                    <FileArchive size={12} className="text-content-tertiary" />
-                  ) : (
-                    <FolderOpen size={12} className="text-content-tertiary" />
-                  )}
-                  <span className="flex-1 min-w-0 text-xs font-mono text-content truncate">
-                    {archive
-                      ? `${archive.name} · ${formatSkillFileSize(archive.size)}`
-                      : tf('skill_upload_folder_files', {
-                          root: (folder[0].webkitRelativePath || folder[0].name).split('/')[0],
-                          count: folder.length,
-                        })}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setArchive(null)
-                      setFolder([])
-                    }}
-                    className="text-content-tertiary hover:text-content cursor-pointer"
-                  >
-                    <X size={12} />
-                  </button>
+              {files.length === 0 ? (
+                <p className="text-xs text-content-tertiary">{t('skill_new_files_hint')}</p>
+              ) : (
+                // A picked folder can be dozens of files, so the list scrolls
+                // rather than pushing the create button off the dialog.
+                <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                  {files.map((file, index) => (
+                    <div
+                      key={skillAttachmentPath(file)}
+                      className="flex items-center gap-2 px-2.5 py-1.5 rounded-btn border border-default bg-inset"
+                    >
+                      <span
+                        title={skillAttachmentPath(file)}
+                        className="flex-1 min-w-0 text-xs font-mono text-content truncate"
+                      >
+                        {skillAttachmentPath(file)}
+                      </span>
+                      <span className="text-[11px] text-content-tertiary">{formatSkillFileSize(file.size)}</span>
+                      <button
+                        type="button"
+                        onClick={() => setFiles(files.filter((_, i) => i !== index))}
+                        className="text-content-tertiary hover:text-danger cursor-pointer"
+                      >
+                        <X size={11} />
+                      </button>
+                    </div>
+                  ))}
                 </div>
               )}
-
-              <p className="mt-3 text-xs text-content-tertiary">{t('skill_upload_hint')}</p>
-
               <input
-                ref={archiveRef}
+                ref={filesRef}
                 type="file"
-                accept=".zip,.tgz,.gz,.tar"
+                multiple
                 className="hidden"
                 onChange={(e) => {
-                  const file = (e.target.files || [])[0]
+                  const picked = Array.from(e.target.files || [])
                   e.target.value = ''
-                  if (file) pickArchive(file)
+                  addAttachments(picked, false)
                 }}
               />
               <input
@@ -1172,11 +1173,11 @@ const SkillCreateDialog: React.FC<{
                 onChange={(e) => {
                   const picked = Array.from(e.target.files || [])
                   e.target.value = ''
-                  if (picked.length) pickFolder(picked)
+                  addAttachments(picked, true)
                 }}
               />
             </div>
-          )}
+          </div>
 
           {error && <p className="mt-3 text-xs text-danger break-all">{error}</p>}
         </div>
@@ -1193,11 +1194,11 @@ const SkillCreateDialog: React.FC<{
           <button
             type="button"
             disabled={busy}
-            onClick={submit}
+            onClick={() => void submit()}
             className="inline-flex items-center gap-1.5 px-4 py-2 rounded-btn bg-accent text-white text-sm font-medium hover:opacity-90 disabled:opacity-50 cursor-pointer"
           >
             {busy && <Loader2 size={13} className="animate-spin" />}
-            {t(mode === 'upload' ? 'skill_upload_submit' : 'skill_new_submit')}
+            {t('skill_new_submit')}
           </button>
         </div>
       </div>
@@ -1205,20 +1206,61 @@ const SkillCreateDialog: React.FC<{
   )
 }
 
-const Section: React.FC<{ title: string; count: number; children: React.ReactNode }> = ({ title, count, children }) => (
-  <div>
-    <div className="flex items-center gap-2 mb-3">
+const Section: React.FC<{ title: string; count: number; action?: React.ReactNode; children: React.ReactNode }> = ({
+  title,
+  count,
+  action,
+  children,
+}) => (
+  <section>
+    <div className="flex items-center gap-2 mb-3 min-h-[28px]">
       <span className="text-xs font-semibold uppercase tracking-wider text-content-tertiary">{title}</span>
       {count > 0 && (
         <span className="px-1.5 py-0.5 rounded-full text-xs bg-inset-2 text-content-tertiary min-w-[20px] text-center">{count}</span>
       )}
+      <div className="ml-auto flex items-center gap-1">{action}</div>
     </div>
     {children}
-  </div>
+  </section>
 )
 
-const Empty: React.FC<{ text: string }> = ({ text }) => (
-  <p className="text-sm text-content-tertiary py-2">{text}</p>
+const ActionBtn: React.FC<{ onClick: () => void; children: React.ReactNode }> = ({ onClick, children }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-btn text-xs font-medium text-accent bg-accent-soft hover:brightness-95 dark:hover:brightness-110 cursor-pointer transition-all"
+  >
+    {children}
+  </button>
+)
+
+const LinkBtn: React.FC<{ onClick: () => void; children: React.ReactNode }> = ({ onClick, children }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    className="inline-flex items-center gap-1.5 px-2 py-1.5 rounded-btn text-xs text-content-tertiary hover:text-content-secondary hover:bg-surface-2 cursor-pointer transition-colors"
+  >
+    {children}
+  </button>
+)
+
+const EmptyState: React.FC<{ icon: LucideIcon; title: string; hint: string; tone: 'accent' | 'amber' }> = ({
+  icon: Icon,
+  title,
+  hint,
+  tone,
+}) => (
+  <div className="flex flex-col items-center justify-center px-4 py-7 rounded-card border border-dashed border-strong text-center">
+    <div
+      className={`w-10 h-10 mb-2.5 rounded-card flex items-center justify-center ${
+        tone === 'accent' ? 'bg-accent-soft text-accent' : 'bg-amber-500/10 text-amber-500'
+      }`}
+    >
+      <Icon size={17} />
+    </div>
+    <p className="text-sm font-medium text-content-secondary">{title}</p>
+    <p className="text-xs text-content-tertiary mt-1">{hint}</p>
+  </div>
 )
 
 export default SkillsPage

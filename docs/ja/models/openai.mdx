@@ -25,6 +25,7 @@ OpenAI は最も広範な機能をカバーするベンダーで、テキスト�
 | `model` | OpenAI API の [model パラメータ](https://platform.openai.com/docs/models) と同じです。`gpt-5.6-luna`、`gpt-6-astra`、`gpt-5.6-terra`、`gpt-5.6-sol`、`gpt-5.5`、`gpt-5.4`、`gpt-5.4-mini`、`gpt-5.4-nano`、`gpt-5` シリーズ、`gpt-4.1` などをサポート。Agent モードのデフォルトは `gpt-5.6-luna`、`gpt-6-astra` は最強のフラッグシップ（最高の知能・高コスト、ツール呼び出しは Responses API 経由）、コストパフォーマンスを重視する場合は `gpt-5.4` に変更可能 |
 | `open_ai_api_key` | [OpenAI プラットフォーム](https://platform.openai.com/api-keys) で作成 |
 | `open_ai_api_base` | 任意。サードパーティのプロキシに接続するために変更可能 |
+| `open_ai_api_type` | 任意。API プロトコル、デフォルトは `auto`（`gpt-6` シリーズのみ Responses API、それ以外は Chat Completions）。接続先が `/chat/completions` を提供しなくなった場合は `responses` に設定すると、すべてのリクエストが `/responses` 経由になります。`chat` は常に `/chat/completions` を使用します。Docker デプロイでは環境変数 `OPEN_AI_API_TYPE` で設定できます |
 | `bot_type` | OpenAI 公式モデルを使用する場合は不要。互換プロトコルでベンダーモデルに接続する場合は `openai` に設定 |
 
 ## 画像理解

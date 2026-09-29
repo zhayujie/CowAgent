@@ -30,7 +30,7 @@ class ArchiveError(ValueError):
     """An archive was refused, or is not in a format we can read."""
 
 
-def _is_junk_entry(name: str) -> bool:
+def is_junk_entry(name: str) -> bool:
     """Whether an entry is archiver noise rather than part of the skill."""
     parts = name.replace("\\", "/").split("/")
     return any(p in _JUNK_NAMES or p == "__MACOSX" or p.startswith("._.") for p in parts)
@@ -64,7 +64,7 @@ def extract_zip(zf: zipfile.ZipFile, dest: str,
     members = []
     total_size = 0
     for member in zf.infolist():
-        if _is_junk_entry(member.filename):
+        if is_junk_entry(member.filename):
             continue
         _check_within(root, member.filename)
         # A zip records the unix mode in the top half of external_attr, which is
@@ -91,7 +91,7 @@ def extract_tar(tf: tarfile.TarFile, dest: str,
     members = []
     total_size = 0
     for member in tf.getmembers():
-        if _is_junk_entry(member.name):
+        if is_junk_entry(member.name):
             continue
         _check_within(root, member.name)
         if member.issym() or member.islnk():

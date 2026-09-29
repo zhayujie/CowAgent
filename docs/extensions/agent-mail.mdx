@@ -1,0 +1,69 @@
+---
+title: Agent Mail
+description: Let the agent send, read, and manage emails through Agent Mail in the Docker deployment
+---
+
+[Agent Mail](https://agent.qq.com) lets the agent handle emails through the `agently-cli` command-line tool: sending, replying, forwarding, searching, reading emails, downloading attachments, and managing the inbox.
+
+It is provided as an optional Docker Compose overlay. The default `docker-compose.yml` deployment is unchanged; the overlay only installs Node.js and `agently-cli` into the container when you choose to enable it.
+
+## 1. Download the overlay
+
+Run the following in the directory that contains `docker-compose.yml`:
+
+```bash
+mkdir -p agent-mail
+curl -o docker-compose.agent-mail.yml https://raw.githubusercontent.com/zhayujie/CowAgent/master/docker/docker-compose.agent-mail.yml
+curl -o agent-mail/entrypoint.sh https://raw.githubusercontent.com/zhayujie/CowAgent/master/docker/agent-mail/entrypoint.sh
+echo "COMPOSE_FILE=docker-compose.yml:docker-compose.agent-mail.yml" >> .env
+```
+
+The `COMPOSE_FILE` entry in `.env` makes every later `docker compose` command in this directory (including `pull` for upgrades) apply the overlay automatically.
+
+## 2. Start the container
+
+```bash
+sudo docker compose up -d
+```
+
+On the first start, Node.js and `agently-cli` are downloaded into `./agent-mail-data/`, so later restarts, container recreation, and image upgrades do not download them again. If the download fails, CowAgent still starts normally without Agent Mail; check the `[agent-mail]` lines in `docker compose logs` and restart to retry.
+
+<Tip>
+  If downloads are slow, change `NODE_MIRROR` and `NPM_CONFIG_REGISTRY` in `docker-compose.agent-mail.yml` to a closer mirror, for example `https://npmmirror.com/mirrors/node` and `https://registry.npmmirror.com`.
+</Tip>
+
+## 3. Authorize the mailbox
+
+```bash
+sudo docker compose exec -u agent chatgpt-on-wechat agently-cli auth login
+```
+
+Open the printed link in a browser to complete authorization. The command exits automatically once authorization succeeds.
+
+## 4. Install the skill
+
+The skill teaches the agent how to use `agently-cli`. Send this in chat:
+
+```text
+/skill install https://agent.qq.com/.well-known/skills/agently-mail/SKILL.md
+```
+
+Or run it in the terminal:
+
+```bash
+sudo docker compose exec -u agent chatgpt-on-wechat cow skill install https://agent.qq.com/.well-known/skills/agently-mail/SKILL.md
+```
+
+The skill is installed into the workspace (`./cow/skills`). Once it is installed, just ask the agent to send or check emails.
+
+## Data persistence
+
+| Host directory | Contents |
+| --- | --- |
+| `./agent-mail-data/config` | `agently-cli` configuration and login credentials |
+| `./agent-mail-data/share` | `agently-cli` local data |
+| `./agent-mail-data/npm-global` | Node.js runtime and `agently-cli` |
+
+<Warning>
+  `./agent-mail-data/config` contains your mailbox credentials. Keep it private and do not commit or share it.
+</Warning>

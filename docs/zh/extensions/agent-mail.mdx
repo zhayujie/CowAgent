@@ -1,0 +1,69 @@
+---
+title: Agent Mail
+description: 在 Docker 部署中接入 Agent Mail，让 Agent 收发和管理邮件
+---
+
+[Agent Mail](https://agent.qq.com) 让 Agent 通过 `agently-cli` 命令行工具操作邮件，包括发送、回复、转发、搜索、读取、下载附件和管理收件箱。
+
+它以可选的 Docker Compose 叠加配置（overlay）提供。默认的 `docker-compose.yml` 部署方式不受影响，只有启用叠加配置时才会在容器中安装 Node.js 和 `agently-cli`。
+
+## 1. 下载叠加配置
+
+在 `docker-compose.yml` 所在目录下执行：
+
+```bash
+mkdir -p agent-mail
+curl -o docker-compose.agent-mail.yml https://raw.githubusercontent.com/zhayujie/CowAgent/master/docker/docker-compose.agent-mail.yml
+curl -o agent-mail/entrypoint.sh https://raw.githubusercontent.com/zhayujie/CowAgent/master/docker/agent-mail/entrypoint.sh
+echo "COMPOSE_FILE=docker-compose.yml:docker-compose.agent-mail.yml" >> .env
+```
+
+写入 `.env` 的 `COMPOSE_FILE` 会让该目录下之后的所有 `docker compose` 命令（包括升级用的 `pull`）自动带上叠加配置。
+
+## 2. 启动容器
+
+```bash
+sudo docker compose up -d
+```
+
+首次启动时会把 Node.js 和 `agently-cli` 下载到 `./agent-mail-data/`，之后重启、重建容器或升级镜像都不会重复下载。如果下载失败，CowAgent 仍会正常启动，只是暂时无法使用 Agent Mail；可在 `docker compose logs` 中查看 `[agent-mail]` 开头的日志，重启容器即可重试。
+
+<Tip>
+  国内网络下载较慢时，可将 `docker-compose.agent-mail.yml` 中的 `NODE_MIRROR` 和 `NPM_CONFIG_REGISTRY` 分别改为 `https://npmmirror.com/mirrors/node` 和 `https://registry.npmmirror.com`。
+</Tip>
+
+## 3. 授权邮箱
+
+```bash
+sudo docker compose exec -u agent chatgpt-on-wechat agently-cli auth login
+```
+
+在浏览器中打开命令输出的链接完成授权，授权成功后命令会自动退出。
+
+## 4. 安装技能
+
+技能用于告诉 Agent 如何使用 `agently-cli`。在对话中发送：
+
+```text
+/skill install https://agent.qq.com/.well-known/skills/agently-mail/SKILL.md
+```
+
+或在终端执行：
+
+```bash
+sudo docker compose exec -u agent chatgpt-on-wechat cow skill install https://agent.qq.com/.well-known/skills/agently-mail/SKILL.md
+```
+
+技能会安装到工作空间（`./cow/skills`）。安装完成后，直接让 Agent 发邮件或查看邮件即可。
+
+## 数据持久化
+
+| 宿主机目录 | 内容 |
+| --- | --- |
+| `./agent-mail-data/config` | `agently-cli` 配置和登录凭证 |
+| `./agent-mail-data/share` | `agently-cli` 本地数据 |
+| `./agent-mail-data/npm-global` | Node.js 运行时和 `agently-cli` |
+
+<Warning>
+  `./agent-mail-data/config` 中包含邮箱凭证，请妥善保管，不要提交到代码仓库或分享给他人。
+</Warning>

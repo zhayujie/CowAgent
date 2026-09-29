@@ -61,11 +61,12 @@ def clear_index(db_path, storage=None) -> int:
     if owns_storage:
         storage = MemoryStorage(db_path)
     try:
-        before = storage.conn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0]
-        storage.conn.execute("DELETE FROM chunks")
-        storage.conn.execute("DELETE FROM files")
-        storage.conn.commit()
-        storage.reset_fts5()
+        with storage._lock:
+            before = storage.conn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0]
+            storage.conn.execute("DELETE FROM chunks")
+            storage.conn.execute("DELETE FROM files")
+            storage.conn.commit()
+            storage.reset_fts5()
     finally:
         if owns_storage:
             storage.close()
@@ -150,7 +151,7 @@ def rebuild_in_process(memory_manager) -> RebuildResult:
 
 def main() -> int:
     """Standalone CLI entry. Must be run from project root (relative config path)."""
-    from config import conf, load_config
+    from config import load_config
     from agent.memory import MemoryConfig, MemoryManager
 
     load_config()
