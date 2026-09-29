@@ -72,8 +72,12 @@ class AgentEventHandler:
         else:
             if self.current_content.strip():
                 logger.debug(f"💬 {self.current_content.strip()[:200]}{'...' if len(self.current_content) > 200 else ''}")
-            # Drain weixin buffer before final reply leaves chat_channel
-            self._flush_merged_now()
+
+        # Drain weixin buffer before the turn's text leaves chat_channel. Both
+        # paths, not just the final one: a turn that ends in a tool call parks
+        # its text until some later turn or agent_end happens to arrive, and a
+        # run that stops here drops it.
+        self._flush_merged_now()
 
         self.current_content = ""
 
