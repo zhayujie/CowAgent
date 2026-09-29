@@ -293,6 +293,21 @@ class Read(BaseTool):
         end_line = total_lines
         user_limited = False
         if limit is not None:
+            # A non-positive limit selects no line at all, which makes it a bad
+            # argument rather than a request for an empty read. It used to be
+            # accepted: the empty slice still counted as "user limited", so the
+            # reader appended "Use offset=N to continue." pointing back at the
+            # line it had stopped on and following that hint returned a
+            # byte-identical read, forever. A negative limit was quietly worse
+            # - it drove end_line negative and sliced from the end of the list.
+            # Reject it the way an out-of-range offset is already rejected, so
+            # the model is told the call was wrong instead of being handed an
+            # empty page; a positive limit keeps its exact meaning.
+            if limit <= 0:
+                return None, (
+                    f"Error: limit must be a positive number of lines (got {limit}). "
+                    f"Omit limit to read the whole file, or pass limit=20 to read 20 lines."
+                )
             end_line = min(start_line + limit, total_lines)
             user_limited = True
 
