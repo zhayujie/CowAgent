@@ -294,6 +294,8 @@ class Godcmd(Plugin):
                             Bridge().reset_bot()
                             model = conf().get("model") or const.GPT35
                             ok, result = True, "模型设置为: " + str(model)
+                    else:
+                        ok, result = False, "只能指定一个模型名称"
                 elif cmd == "id":
                     ok, result = True, user
                 elif cmd == "set_openai_api_key":
@@ -394,11 +396,18 @@ class Godcmd(Plugin):
                             if len(args) != 2:
                                 ok, result = False, "请提供插件名和优先级"
                             else:
-                                ok = PluginManager().set_plugin_priority(args[0], int(args[1]))
-                                if ok:
-                                    result = "插件" + args[0] + "优先级已设置为" + args[1]
+                                try:
+                                    priority = int(args[1])
+                                except ValueError:
+                                    priority = None
+                                if priority is None:
+                                    ok, result = False, "优先级必须是整数"
                                 else:
-                                    result = "插件不存在"
+                                    ok = PluginManager().set_plugin_priority(args[0], priority)
+                                    if ok:
+                                        result = "插件" + args[0] + "优先级已设置为" + args[1]
+                                    else:
+                                        result = "插件不存在"
                         elif cmd == "reloadp":
                             if len(args) != 1:
                                 ok, result = False, "请提供插件名"
