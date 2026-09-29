@@ -259,11 +259,24 @@ function skillReadonlyReason(data) {
     return docUneditableReason(data);
 }
 
+/** Drop the surrounding quotes a YAML scalar may carry. */
+function yamlScalar(raw) {
+    return raw.trim().replace(/^(['"])(.*)\1$/, '$2');
+}
+
 /**
  * Split a skill's SKILL.md into its YAML frontmatter fields and the markdown
  * body. The `---` header is metadata, not prose: fed to the markdown renderer
  * as-is it turns into a giant bold heading and a horizontal rule. Pull it out
  * so the viewer can present name/description as a proper header instead.
+ *
+ * Frontmatter nests: `metadata.cowagent.requires.anyEnv` is a list four levels
+ * down. Read line by line with no regard for indentation, each container key
+ * showed up as an empty row and the list under it vanished. So this walks the
+ * indentation instead: a nested map becomes one row per leaf, keyed by its
+ * dotted path; a list or a block scalar (`|`, `>`) becomes one row with its
+ * lines joined. Only leaves are rows - a key that merely holds others has
+ * nothing to say on its own. Kept in step with the desktop client's copy.
  *
  * @returns {{fields: Array<[string, string]>, body: string}}
  */
@@ -273,18 +286,61 @@ function parseSkillFrontmatter(content) {
     if (!match) return { fields: [], body: text };
 
     const fields = [];
+    // The key at each indentation level above the current line.
+    const path = [];
+    // A key whose value is still being collected from the lines below it: the
+    // items of a list, or the lines of a block scalar.
+    let open = null;
+
+    const flush = () => {
+        if (!open) return;
+        fields.push([open.key, open.block ? open.items.join(' ').trim() : open.items.join(', ')]);
+        open = null;
+    };
+
     for (const raw of match[1].split(/\r?\n/)) {
         const line = raw.trim();
-        if (!line || line.startsWith('#')) continue;
+        if (!line) continue;
+        const indent = raw.length - raw.trimStart().length;
+        // Inside a block scalar a `#` line is text, not a comment.
+        if (open && open.block && indent > open.indent) {
+            open.items.push(line);
+            continue;
+        }
+        if (line.startsWith('#')) continue;
+        // A list's dashes may sit level with their key or under it.
+        if (open && !open.block && indent >= open.indent && line.startsWith('- ')) {
+            open.items.push(yamlScalar(line.slice(2)));
+            continue;
+        }
+        // Anything else ends an open value: what follows is the next key, or -
+        // under a key opened as a possible list - the first key of a map.
+        flush();
+
+        while (path.length && path[path.length - 1].indent >= indent) path.pop();
         const idx = line.indexOf(':');
         if (idx === -1) continue;
-        const key = line.slice(0, idx).trim();
-        let value = line.slice(idx + 1).trim();
-        // Drop surrounding quotes a YAML scalar may carry.
-        value = value.replace(/^['"]|['"]$/g, '');
-        if (key) fields.push([key, value]);
+        const key = yamlScalar(line.slice(0, idx));
+        if (!key) continue;
+        const dotted = [...path.map(p => p.key), key].join('.');
+        const rest = line.slice(idx + 1).trim();
+
+        if (!rest) {
+            // A nested map, or a list starting on the next line: the line that
+            // follows decides, so open both readings.
+            path.push({ indent, key });
+            open = { key: dotted, indent, items: [], block: false };
+        } else if (/^[|>][-+0-9]*$/.test(rest)) {
+            open = { key: dotted, indent, items: [], block: true };
+        } else {
+            fields.push([dotted, yamlScalar(rest)]);
+        }
     }
-    return { fields, body: text.slice(match[0].length) };
+    flush();
+
+    // A container key opened as a possible list but then held a map instead:
+    // its children have their own rows, so drop the empty one it left behind.
+    return { fields: fields.filter(([, value]) => value !== ''), body: text.slice(match[0].length) };
 }
 
 /** How one of the open skill's files was listed, or null if it is not in the tree. */
@@ -335,15 +391,12 @@ function skillRenderBody(doc) {
     const { fields, body } = parseSkillFrontmatter(doc.content);
     let headerHtml = '';
     if (fields.length) {
+        // A dotted path may wrap, but only at its dots. escapeHtml leaves `"`
+        // alone, and a third-party SKILL.md picks these keys.
         const rows = fields.map(([key, value]) => `
-            <div class="flex gap-3 text-sm">
-                <span class="flex-shrink-0 w-24 font-medium text-slate-400 dark:text-slate-500">${escapeHtml(key)}</span>
-                <span class="flex-1 min-w-0 text-slate-700 dark:text-slate-200 break-words">${escapeHtml(value)}</span>
-            </div>`).join('');
-        headerHtml = `
-            <div class="mb-5 pb-5 border-b border-slate-100 dark:border-white/10 space-y-2">
-                ${rows}
-            </div>`;
+            <dt title="${escapeHtml(key).replace(/"/g, '&quot;')}">${key.split('.').map(escapeHtml).join('.<wbr>')}</dt>
+            <dd>${escapeHtml(value)}</dd>`).join('');
+        headerHtml = `<dl class="skill-frontmatter">${rows}</dl>`;
     }
 
     el.innerHTML = headerHtml + `<div class="msg-content">${renderMarkdown(body || '')}</div>`;
@@ -440,17 +493,27 @@ function renderSkillFilesTree() {
     const tree = document.getElementById('skill-files-tree');
     if (!panel || !tree) return;
 
-    // The switch in the header goes with the panel: with no listing there is
-    // nothing to show, folded away or not.
-    const toggle = document.getElementById('skill-files-toggle');
+    // One switch for both states, riding the border the list would sit
+    // against: the divider while the list is out, the card's own edge once it
+    // is folded away. Gone where there is no listing - with nothing to show, a
+    // switch that folds nothing away is just a dead button.
     const listed = _skillFiles.length > 0;
+    const show = listed && _skillFilesPanelOpen;
+    const toggle = document.getElementById('skill-files-toggle');
     if (toggle) {
         toggle.classList.toggle('hidden', !listed);
-        toggle.classList.toggle('doc-action-btn-on', listed && _skillFilesPanelOpen);
-        toggle.setAttribute('aria-pressed', String(_skillFilesPanelOpen));
+        toggle.classList.toggle('is-open', show);
+        toggle.setAttribute('aria-expanded', String(show));
+        // Keep the data-i18n keys in step so a language switch re-translates
+        // the tip for the state on screen, not the one the markup started in.
+        const tipKey = show ? 'skill_files_collapse' : 'skill_files_expand';
+        toggle.dataset.i18nTitle = tipKey;
+        toggle.dataset.i18nAriaLabel = tipKey;
+        toggle.title = t(tipKey);
+        toggle.setAttribute('aria-label', t(tipKey));
+        const icon = toggle.querySelector('i');
+        if (icon) icon.className = `fas fa-chevron-${show ? 'left' : 'right'}`;
     }
-
-    const show = listed && _skillFilesPanelOpen;
     panel.classList.toggle('hidden', !show);
     if (!show) {
         tree.innerHTML = '';
@@ -465,7 +528,8 @@ function renderSkillFilesTree() {
         const row = document.createElement('button');
         row.className = 'skill-file-row' + (file.path === current ? ' active' : '')
             + (file.is_dir ? ' skill-file-dir' : '');
-        row.style.paddingLeft = `${10 + file.depth * 13}px`;
+        // 6 + the row's 6px inset puts depth 0 under the panel title.
+        row.style.paddingLeft = `${6 + file.depth * 13}px`;
         row.title = file.path;
         // A caret only where there is something to fold; the others keep its
         // width so every name in one directory still starts at one column.
@@ -546,6 +610,7 @@ function resetSkillViewer() {
     _skillFiles = [];
     _skillFoldedDirs = new Set();
     document.getElementById('skill-files-panel')?.classList.add('hidden');
+    document.getElementById('skill-files-toggle')?.classList.add('hidden');
     document.getElementById('skills-panel-viewer')?.classList.add('hidden');
     document.getElementById('skills-panel-list')?.classList.remove('hidden');
 }

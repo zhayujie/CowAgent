@@ -66,14 +66,6 @@
                                         <i class="fas fa-arrow-left text-xs"></i>
                                         <span data-i18n="skill_back">返回列表</span>
                                     </button>
-                                    <!-- Folding the file list away is the only way back to a
-                                         full-width document, so the switch cannot live inside
-                                         the panel it hides. -->
-                                    <button id="skill-files-toggle" onclick="toggleSkillFilesPanel()"
-                                            class="doc-action-btn doc-action-btn-icon hidden"
-                                            title="技能文件" data-i18n-title="skill_files_title">
-                                        <i class="fas fa-folder-tree text-xs"></i>
-                                    </button>
                                     <h2 id="skill-viewer-title"
                                         class="flex-1 min-w-0 text-base font-semibold text-slate-800 dark:text-slate-100 font-mono truncate"></h2>
                                     <span id="skill-viewer-readonly"
@@ -95,26 +87,32 @@
                                         <span data-i18n="ws_edit_cancel">退出编辑</span>
                                     </button>
                                 </div>
-                                <div class="flex items-start gap-4">
-                                    <!-- A skill is a directory: the tree is what makes the files
-                                         beside its SKILL.md reachable, and what says what the
-                                         skill is made of even when that is one file. -->
-                                    <div id="skill-files-panel"
-                                         class="hidden w-56 flex-shrink-0 bg-white dark:bg-[#1A1A1A] rounded-xl border border-slate-200 dark:border-white/10 overflow-hidden">
-                                        <button onclick="toggleSkillFilesPanel()"
-                                                class="w-full flex items-center gap-1.5 px-3 py-2 border-b border-slate-100 dark:border-white/10
-                                                       text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500
-                                                       hover:text-slate-600 dark:hover:text-slate-300 transition-colors cursor-pointer">
-                                            <span class="flex-1 text-left" data-i18n="skill_files_title">技能文件</span>
-                                            <i class="fas fa-chevron-left text-[10px] opacity-70"></i>
-                                        </button>
-                                        <div id="skill-files-tree" class="py-1.5 overflow-y-auto"
-                                             style="max-height: calc(100dvh - 264px)"></div>
-                                    </div>
-                                    <div class="flex-1 min-w-0 bg-white dark:bg-[#1A1A1A] rounded-xl border border-slate-200 dark:border-white/10 overflow-hidden">
+                                <!-- One card for the file list and the document, so its edges
+                                     line up with the header above instead of the document
+                                     starting wherever the list happens to end. -->
+                                <div class="relative">
+                                    <!-- Folding the list away is the only way back to a full-width
+                                         document, so the switch cannot live inside the panel it
+                                         hides. It rides the border instead: the divider while the
+                                         list is out, the card's left edge once it is folded. -->
+                                    <button id="skill-files-toggle" onclick="toggleSkillFilesPanel()"
+                                            class="skill-files-switch hidden"
+                                            title="展开文件列表" aria-label="展开文件列表" aria-expanded="false"
+                                            data-i18n-title="skill_files_expand" data-i18n-aria-label="skill_files_expand">
+                                        <i class="fas fa-chevron-right"></i>
+                                    </button>
+                                    <div class="skill-viewer-card flex bg-white dark:bg-[#1A1A1A] rounded-xl border border-slate-200 dark:border-white/10 overflow-hidden">
+                                        <!-- A skill is a directory: the tree is what makes the files
+                                             beside its SKILL.md reachable, and what says what the
+                                             skill is made of even when that is one file. -->
+                                        <div id="skill-files-panel"
+                                             class="hidden w-56 flex-shrink-0 flex flex-col min-h-0 border-r border-slate-100 dark:border-white/10 bg-slate-50/60 dark:bg-white/[0.02]">
+                                            <div class="flex-shrink-0 px-3 pt-3 pb-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500"
+                                                 data-i18n="skill_files_title">技能文件</div>
+                                            <div id="skill-files-tree" class="flex-1 min-h-0 pb-2 overflow-y-auto"></div>
+                                        </div>
                                         <div id="skill-viewer-content"
-                                             class="p-5 overflow-y-auto text-sm text-slate-700 dark:text-slate-200"
-                                             style="max-height: calc(100dvh - 220px)"></div>
+                                             class="flex-1 min-w-0 px-8 py-6 overflow-y-auto text-sm text-slate-700 dark:text-slate-200"></div>
                                     </div>
                                 </div>
                             </div>

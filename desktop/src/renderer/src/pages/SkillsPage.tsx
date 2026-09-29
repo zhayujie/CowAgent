@@ -11,7 +11,6 @@ import {
   Folder,
   FolderOpen,
   FolderPlus,
-  FolderTree,
   Loader2,
   Lock,
   Paperclip,
@@ -66,32 +65,89 @@ const skillEditor = createDocEditorStore<SkillRef, SkillContent & ApiResult>({
   refusal: (data) => (data.ships_with_install ? t('skill_builtin_readonly') : docRefusal(data)),
 })
 
+/** Drop the surrounding quotes a YAML scalar may carry. */
+function yamlScalar(raw: string): string {
+  return raw.trim().replace(/^(['"])(.*)\1$/, '$2')
+}
+
 /**
  * Split a skill's SKILL.md into its YAML frontmatter fields and the markdown
  * body. The `---` header is metadata, not prose: handed to the markdown
  * renderer as-is it becomes a giant bold heading and a horizontal rule. Pull it
  * out so name/description show as a proper header instead.
+ *
+ * Frontmatter nests: `metadata.cowagent.requires.anyEnv` is a list four levels
+ * down. Read line by line with no regard for indentation, each container key
+ * showed up as an empty row and the list under it vanished. So this walks the
+ * indentation instead: a nested map becomes one row per leaf, keyed by its
+ * dotted path; a list or a block scalar (`|`, `>`) becomes one row with its
+ * lines joined. Only leaves are rows - a key that merely holds others has
+ * nothing to say on its own.
  */
 function parseSkillFrontmatter(content: string): { fields: Array<[string, string]>; body: string } {
   const text = content || ''
   const match = text.match(/^---\s*\r?\n([\s\S]*?)\r?\n---\s*\r?\n?/)
   if (!match) return { fields: [], body: text }
 
+  const lines = match[1].split(/\r?\n/)
   const fields: Array<[string, string]> = []
-  for (const raw of match[1].split(/\r?\n/)) {
+  // The key at each indentation level above the current line.
+  const path: Array<{ indent: number; key: string }> = []
+  // A key whose value is still being collected from the lines below it: the
+  // items of a list, or the lines of a block scalar.
+  let open: { key: string; indent: number; items: string[]; block: boolean } | null = null
+
+  const flush = () => {
+    if (!open) return
+    const joined = open.block ? open.items.join(' ').trim() : open.items.join(', ')
+    fields.push([open.key, joined])
+    open = null
+  }
+
+  for (const raw of lines) {
     const line = raw.trim()
-    if (!line || line.startsWith('#')) continue
+    if (!line) continue
+    const indent = raw.length - raw.trimStart().length
+    // Inside a block scalar a `#` line is text, not a comment.
+    if (open && open.block && indent > open.indent) {
+      open.items.push(line)
+      continue
+    }
+    if (line.startsWith('#')) continue
+    // A list's dashes may sit level with their key or under it.
+    if (open && !open.block && indent >= open.indent && line.startsWith('- ')) {
+      open.items.push(yamlScalar(line.slice(2)))
+      continue
+    }
+    // Anything else ends an open value: what follows is the next key, or -
+    // under a key opened as a possible list - the first key of a nested map.
+    flush()
+
+    while (path.length && path[path.length - 1].indent >= indent) path.pop()
     const idx = line.indexOf(':')
     if (idx === -1) continue
-    const key = line.slice(0, idx).trim()
-    // Drop surrounding quotes a YAML scalar may carry.
-    const value = line
-      .slice(idx + 1)
-      .trim()
-      .replace(/^['"]|['"]$/g, '')
-    if (key) fields.push([key, value])
+    const key = yamlScalar(line.slice(0, idx))
+    if (!key) continue
+    const dotted = [...path.map((p) => p.key), key].join('.')
+    const rest = line.slice(idx + 1).trim()
+
+    if (!rest) {
+      // Either a nested map, or a list that starts on the next line: which one
+      // is decided by the line that follows. Open both readings and let the
+      // next indented line settle it.
+      path.push({ indent, key })
+      open = { key: dotted, indent, items: [], block: false }
+    } else if (/^[|>][-+0-9]*$/.test(rest)) {
+      open = { key: dotted, indent, items: [], block: true }
+    } else {
+      fields.push([dotted, yamlScalar(rest)])
+    }
   }
-  return { fields, body: text.slice(match[0].length) }
+  flush()
+
+  // A container key opened as a possible list but then held a map instead: its
+  // children have their own rows, so drop the empty one it left behind.
+  return { fields: fields.filter(([, value]) => value !== ''), body: text.slice(match[0].length) }
 }
 
 /**
@@ -146,14 +202,29 @@ const SkillContentView: React.FC<{
   return (
     <>
       {fields.length > 0 && (
-        <div className="mb-5 pb-5 border-b border-subtle space-y-2">
-          {fields.map(([key, value]) => (
-            <div key={key} className="flex gap-3 text-sm">
-              <span className="flex-shrink-0 w-24 font-medium text-content-tertiary">{key}</span>
-              <span className="flex-1 min-w-0 text-content break-words">{value}</span>
-            </div>
+        // The label column sizes to the longest key, up to a cap; past it a
+        // dotted path like `metadata.cowagent.requires.anyEnv` wraps at its
+        // dots rather than squeezing the values into a sliver.
+        <dl className="mb-6 grid grid-cols-[minmax(5rem,9rem)_1fr] gap-x-4 gap-y-1.5 rounded-card border border-default bg-inset px-4 py-3 text-sm">
+          {/* Index keys: a hand-written header may repeat a key. */}
+          {fields.map(([key, value], row) => (
+            <React.Fragment key={row}>
+              <dt className="font-mono text-xs leading-6 text-content-tertiary break-words" title={key}>
+                {key.split('.').map((part, i, parts) => (
+                  <React.Fragment key={i}>
+                    {part}
+                    {i < parts.length - 1 && (
+                      <>
+                        .<wbr />
+                      </>
+                    )}
+                  </React.Fragment>
+                ))}
+              </dt>
+              <dd className="min-w-0 leading-6 text-content break-words">{value}</dd>
+            </React.Fragment>
           ))}
-        </div>
+        </dl>
       )}
       <Markdown content={body} />
     </>
@@ -175,9 +246,7 @@ const SkillFileTree: React.FC<{
   folded: Set<string>
   onSelect: (path: string) => void
   onToggleDir: (path: string) => void
-  /** Fold the whole list away, giving the document the full width. */
-  onCollapse: () => void
-}> = ({ files, current, folded, onSelect, onToggleDir, onCollapse }) => {
+}> = ({ files, current, folded, onSelect, onToggleDir }) => {
   if (!files.length) return null
 
   const hiddenByFold = (path: string): boolean => {
@@ -186,66 +255,94 @@ const SkillFileTree: React.FC<{
   }
 
   return (
-    <div className="w-56 flex-shrink-0 border-r border-subtle overflow-y-auto py-2">
-      <button
-        type="button"
-        onClick={onCollapse}
-        className="w-full flex items-center gap-1.5 px-3 pb-1.5 text-xs font-semibold uppercase tracking-wider text-content-tertiary hover:text-content-secondary transition-colors cursor-pointer"
-      >
-        <span className="flex-1 text-left">{t('skill_files_title')}</span>
-        <ChevronLeft size={11} className="opacity-70" />
-      </button>
-      {files
-        .filter((file) => !hiddenByFold(file.path))
-        .map((file) => {
-          const isFolded = folded.has(file.path)
-          return (
-            <button
-              key={file.path}
-              type="button"
-              title={file.path}
-              onClick={() => (file.is_dir ? onToggleDir(file.path) : onSelect(file.path))}
-              style={{ paddingLeft: 10 + file.depth * 13 }}
-              className={`w-full flex items-center gap-1.5 py-1 pr-2 text-xs text-left transition-colors cursor-pointer ${
-                file.path === current
-                  ? 'bg-accent-soft text-accent font-medium'
-                  : 'text-content-secondary hover:bg-inset'
-              }`}
-            >
-              {/* A caret only where there is something to fold; the others keep
-                  its width so every name in one directory starts at one column. */}
-              {file.is_dir ? (
-                isFolded ? (
-                  <ChevronRight size={11} className="flex-shrink-0 opacity-60" />
+    <div className="w-60 flex-shrink-0 flex flex-col min-h-0 border-r border-default">
+      <div className="flex-shrink-0 px-4 pt-3 pb-1.5 truncate text-xs font-semibold uppercase tracking-wider text-content-tertiary">
+        {t('skill_files_title')}
+      </div>
+      <div className="flex-1 overflow-y-auto px-2 pb-2 space-y-0.5">
+        {files
+          .filter((file) => !hiddenByFold(file.path))
+          .map((file) => {
+            const isFolded = folded.has(file.path)
+            const active = !file.is_dir && file.path === current
+            return (
+              <button
+                key={file.path}
+                type="button"
+                title={file.path}
+                onClick={() => (file.is_dir ? onToggleDir(file.path) : onSelect(file.path))}
+                style={{ paddingLeft: 8 + file.depth * 14 }}
+                className={`w-full flex items-center gap-1.5 py-1.5 pr-2 rounded-btn text-[13px] text-left transition-colors cursor-pointer ${
+                  active
+                    ? 'bg-accent-soft text-accent'
+                    : file.is_dir
+                      ? 'text-content-secondary font-medium hover:bg-surface-2'
+                      : 'text-content-secondary hover:bg-surface-2'
+                }`}
+              >
+                {/* A caret only where there is something to fold; the others keep
+                    its width so every name in one directory starts at one column. */}
+                {file.is_dir ? (
+                  isFolded ? (
+                    <ChevronRight size={13} className="flex-shrink-0 opacity-70" />
+                  ) : (
+                    <ChevronDown size={13} className="flex-shrink-0 opacity-70" />
+                  )
                 ) : (
-                  <ChevronDown size={11} className="flex-shrink-0 opacity-60" />
-                )
-              ) : (
-                <span className="w-[11px] flex-shrink-0" />
-              )}
-              {file.is_dir ? (
-                isFolded ? (
-                  <Folder size={14} className="flex-shrink-0 text-content-tertiary" />
+                  <span className="w-[13px] flex-shrink-0" />
+                )}
+                {file.is_dir ? (
+                  isFolded ? (
+                    <Folder size={13} className="flex-shrink-0 opacity-70" />
+                  ) : (
+                    <FolderOpen size={13} className="flex-shrink-0 opacity-70" />
+                  )
                 ) : (
-                  <FolderOpen size={14} className="flex-shrink-0 text-content-tertiary" />
-                )
-              ) : (
-                <FileText size={14} className="flex-shrink-0 opacity-80" />
-              )}
-              <span className="flex-1 min-w-0 truncate">{file.name}</span>
-              {/* Only for files: a directory's own size says nothing about what
-                  the tree shows inside it. */}
-              {!file.is_dir && (
-                <span className="flex-shrink-0 text-[10px] text-content-tertiary tabular-nums">
-                  {formatSkillFileSize(file.size)}
-                </span>
-              )}
-            </button>
-          )
-        })}
+                  <FileText size={13} className="flex-shrink-0 opacity-70" />
+                )}
+                <span className="flex-1 min-w-0 truncate">{file.name}</span>
+                {/* Only for files: a directory's own size says nothing about what
+                    the tree shows inside it. */}
+                {!file.is_dir && (
+                  <span
+                    className={`flex-shrink-0 text-[10px] tabular-nums ${
+                      active ? 'text-accent opacity-70' : 'text-content-tertiary'
+                    }`}
+                  >
+                    {formatSkillFileSize(file.size)}
+                  </span>
+                )}
+              </button>
+            )
+          })}
+      </div>
     </div>
   )
 }
+
+/**
+ * The switch that folds the file list away and brings it back, riding the
+ * border the list sits against: centred on the divider while the list is out
+ * (15rem is the panel's w-60), on the card's own left edge once it is folded,
+ * level with the list's title. The half pixel centres it on a 1px line rather
+ * than beside it. Mirrors `.skill-files-switch` in the web console.
+ */
+const SkillFilesSwitch: React.FC<{ expanded: boolean; onClick: () => void }> = ({
+  expanded,
+  onClick,
+}) => (
+  <button
+    type="button"
+    onClick={onClick}
+    aria-expanded={expanded}
+    aria-label={t(expanded ? 'skill_files_collapse' : 'skill_files_expand')}
+    title={t(expanded ? 'skill_files_collapse' : 'skill_files_expand')}
+    style={{ left: expanded ? 'calc(15rem + 0.5px)' : '0.5px' }}
+    className="absolute top-[10px] z-10 -translate-x-1/2 w-[22px] h-[22px] inline-flex items-center justify-center rounded-full border border-default bg-surface shadow-sm text-content-tertiary hover:text-accent hover:border-accent transition-colors cursor-pointer"
+  >
+    {expanded ? <ChevronLeft size={12} /> : <ChevronRight size={12} />}
+  </button>
+)
 
 const SkillsPage: React.FC<SkillsPageProps> = ({ baseUrl }) => {
   const [tools, setTools] = useState<ToolInfo[]>([])
@@ -414,7 +511,7 @@ const SkillsPage: React.FC<SkillsPageProps> = ({ baseUrl }) => {
       {doc ? (
         /* Skill viewer / editor */
         <div className="flex-1 flex flex-col min-h-0 border-t border-default">
-          <div className="flex items-center gap-3 px-6 py-3 flex-shrink-0 border-b border-subtle">
+          <div className="flex items-center gap-3 px-6 py-3 flex-shrink-0">
             <button
               onClick={() => void closeViewer()}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-btn text-sm text-content-secondary hover:bg-inset border border-strong transition-colors cursor-pointer"
@@ -422,23 +519,6 @@ const SkillsPage: React.FC<SkillsPageProps> = ({ baseUrl }) => {
               <ArrowLeft size={14} />
               {t('skill_back')}
             </button>
-            {/* Folding the file list away is the only way back to a full-width
-                document, so the switch cannot live inside the panel it hides. */}
-            {skillFiles.length > 0 && (
-              <button
-                type="button"
-                title={t('skill_files_title')}
-                aria-pressed={filesPanelOpen}
-                onClick={toggleFilesPanel}
-                className={`inline-flex items-center px-2.5 py-1.5 rounded-btn text-sm border border-strong transition-colors cursor-pointer ${
-                  filesPanelOpen
-                    ? 'bg-inset text-content'
-                    : 'text-content-secondary hover:bg-inset'
-                }`}
-              >
-                <FolderTree size={14} />
-              </button>
-            )}
             <h3 className="flex-1 text-sm font-semibold text-content truncate">
               {doc.path ? `${doc.label}/${doc.path}` : doc.label}
               {edit?.dirty && (
@@ -459,42 +539,54 @@ const SkillsPage: React.FC<SkillsPageProps> = ({ baseUrl }) => {
             )}
             <DocActions store={skillEditor} textareaRef={editorRef} />
           </div>
-          <div className="flex-1 flex min-h-0">
-            {filesPanelOpen && (
-              <SkillFileTree
-                files={skillFiles}
-                current={currentPath}
-                folded={foldedDirs}
-                onSelect={(path) => void selectSkillFile(path)}
-                onToggleDir={toggleSkillDir}
-                onCollapse={toggleFilesPanel}
-              />
-            )}
-            {edit ? (
-              <div className="flex-1 min-h-0 overflow-hidden">
-                <DocEditor
-                  key={`${doc.name}/${doc.path || ''}`}
-                  store={skillEditor}
-                  textareaRef={editorRef}
-                />
-              </div>
-            ) : (
-              <DocView store={skillEditor}>
-                <div className="max-w-3xl mx-auto px-6 py-6">
-                  {docLoading ? (
-                    <div className="flex items-center text-content-tertiary py-8">
-                      <Loader2 size={16} className="animate-spin mr-2" />
-                    </div>
-                  ) : (
-                    <SkillContentView
-                      content={content}
-                      path={currentPath}
-                      file={skillFiles.find((file) => file.path === currentPath)}
+          {/* One card for the file list and the document, inset to the header's
+              padding so its edges line up with Back and the actions above. */}
+          <div className="flex-1 min-h-0 px-6 pb-6">
+            <div className="relative h-full">
+              {/* Folding the list away is the only way back to a full-width
+                  document, so the switch cannot live inside the panel it hides.
+                  It rides the border instead: the divider while the list is
+                  out, the card's left edge once it is folded. */}
+              {skillFiles.length > 0 && (
+                <SkillFilesSwitch expanded={filesPanelOpen} onClick={toggleFilesPanel} />
+              )}
+              <div className="h-full flex rounded-card border border-default bg-surface overflow-hidden">
+                {skillFiles.length > 0 && filesPanelOpen && (
+                  <SkillFileTree
+                    files={skillFiles}
+                    current={currentPath}
+                    folded={foldedDirs}
+                    onSelect={(path) => void selectSkillFile(path)}
+                    onToggleDir={toggleSkillDir}
+                  />
+                )}
+                {edit ? (
+                  <div className="flex-1 min-w-0 min-h-0 overflow-hidden">
+                    <DocEditor
+                      key={`${doc.name}/${doc.path || ''}`}
+                      store={skillEditor}
+                      textareaRef={editorRef}
                     />
-                  )}
-                </div>
-              </DocView>
-            )}
+                  </div>
+                ) : (
+                  <DocView store={skillEditor}>
+                    <div className="max-w-3xl mx-auto px-8 py-6">
+                      {docLoading ? (
+                        <div className="flex items-center text-content-tertiary py-8">
+                          <Loader2 size={16} className="animate-spin mr-2" />
+                        </div>
+                      ) : (
+                        <SkillContentView
+                          content={content}
+                          path={currentPath}
+                          file={skillFiles.find((file) => file.path === currentPath)}
+                        />
+                      )}
+                    </div>
+                  </DocView>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       ) : (
@@ -805,14 +897,16 @@ const SkillCreateDialog: React.FC<{
       onMouseDown={() => !busy && onClose()}
     >
       <div
-        className="w-full max-w-lg max-h-[90vh] flex flex-col bg-surface border border-default rounded-xl shadow-xl"
+        // `overflow-hidden` keeps the body's scrollbar inside the rounded corners.
+        className="w-full max-w-lg max-h-[90vh] flex flex-col bg-surface border border-default rounded-xl shadow-xl overflow-hidden"
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <div className="p-5 overflow-y-auto">
+        {/* Title and tabs stay put; only the fields below scroll. */}
+        <div className="px-5 pt-5 pb-4 flex-shrink-0">
           <h3 className="text-base font-semibold text-content">{t('skill_new_title')}</h3>
           <p className="text-xs text-content-tertiary mt-1 mb-4">{t('skill_new_subtitle')}</p>
 
-          <div className="flex gap-1 p-1 mb-4 rounded-btn bg-inset">
+          <div className="flex gap-1 p-1 rounded-btn bg-inset">
             {(['form', 'upload'] as const).map((value) => (
               <button
                 key={value}
@@ -830,7 +924,9 @@ const SkillCreateDialog: React.FC<{
               </button>
             ))}
           </div>
+        </div>
 
+        <div className="px-5 pb-5 min-h-0 overflow-y-auto">
           {mode === 'form' ? (
             <div className="space-y-4">
               <div>
@@ -870,7 +966,7 @@ const SkillCreateDialog: React.FC<{
               <div>
                 <label className="block text-sm text-content-secondary mb-1.5">{t('skill_new_body')}</label>
                 <textarea
-                  rows={8}
+                  rows={6}
                   value={body}
                   onChange={(e) => setBody(e.target.value)}
                   placeholder={'## Usage\n\n...'}

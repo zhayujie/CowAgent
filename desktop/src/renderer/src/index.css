@@ -352,7 +352,10 @@ body * {
 .msg-content > *:first-child { margin-top: 0; }
 .msg-content > *:last-child { margin-bottom: 0; }
 .msg-content p { margin: 0.5em 0; line-height: 1.7; }
+/* Tailwind's preflight strips list markers, so they have to be put back. */
 .msg-content ul, .msg-content ol { padding-left: 1.4em; margin: 0.5em 0; }
+.msg-content ul { list-style: disc; }
+.msg-content ol { list-style: decimal; }
 .msg-content li { margin: 0.25em 0; }
 .msg-content h1, .msg-content h2, .msg-content h3, .msg-content h4 {
   font-weight: 600;

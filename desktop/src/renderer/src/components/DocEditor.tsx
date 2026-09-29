@@ -67,7 +67,10 @@ export function DocView<D>({
   }, [doc])
 
   return (
-    <div ref={ref} className="flex-1 overflow-y-auto">
+    // `min-w-0` for the pages that put a file list beside this: a flex item
+    // will not shrink below its content otherwise, and a wide code block would
+    // push the document out past the window instead of scrolling inside it.
+    <div ref={ref} className="flex-1 min-w-0 overflow-y-auto">
       {children}
     </div>
   )
