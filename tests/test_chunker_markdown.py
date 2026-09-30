@@ -150,5 +150,48 @@ class TestChunkMarkdownLarge(unittest.TestCase):
             self.assertIn(h, joined)
 
 
+class TestChunkMarkdownCoverage(unittest.TestCase):
+    """Every line of a large file lands in exactly one chunk."""
+
+    def setUp(self):
+        self.c = TextChunker()
+
+    def _assert_each_line_once(self, chunks, n_lines):
+        covered = []
+        for ch in chunks:
+            covered.extend(range(ch.start_line, ch.end_line + 1))
+        self.assertEqual(covered, list(range(1, n_lines + 1)))
+
+    def test_text_before_the_first_heading_is_kept(self):
+        """A preface (front text, a note, a TOC) before the first heading was
+        in no segment at all, so it never reached the index."""
+        md = "\n".join([
+            "前言：这段文字位于第一个标题之前。",
+            "",
+            "# 一",
+            "正文A。" * 200,
+            "# 二",
+            "正文B。" * 200,
+        ])
+        self.assertGreater(len(md), self.c.MD_CHUNK_TARGET)
+        chunks = self.c.chunk_markdown(md)
+        self.assertEqual(chunks[0].start_line, 1)
+        self.assertIn("前言", chunks[0].text)
+        self._assert_each_line_once(chunks, len(md.split("\n")))
+
+    def test_skipped_heading_level_is_not_indexed_twice(self):
+        """``#`` followed by ``###`` (no ``##``): the parent's own body ran on
+        past the ``###`` heading, so that section was in two chunks."""
+        md = _md([
+            ("# 父", ["父正文。" * 200]),
+            ("### 子", ["子正文。" * 200]),
+            ("# 后", ["后正文。" * 200]),
+        ])
+        chunks = self.c.chunk_markdown(md)
+        joined = "\n".join(ch.text for ch in chunks)
+        self.assertEqual(joined.count("### 子"), 1)
+        self._assert_each_line_once(chunks, len(md.split("\n")))
+
+
 if __name__ == "__main__":
     unittest.main()

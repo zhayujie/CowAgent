@@ -360,6 +360,15 @@ const AgentProfilePane: React.FC<{ agent: AgentProfile; isDefault: boolean; onMu
   const [status, setStatus] = useState<{ text: string; error?: boolean } | null>(null)
   const [busy, setBusy] = useState(false)
 
+  // The roster can refresh after this pane mounts (e.g. a startup fallback
+  // replaced by the real snapshot), so follow the latest saved values.
+  useEffect(() => setName(agent.name || ''), [agent.name])
+  useEffect(() => setDescription(agent.description || ''), [agent.description])
+  useEffect(
+    () => setModelKey(agent.model ? `${agent.bot_type || ''}|${agent.model}` : ''),
+    [agent.model, agent.bot_type],
+  )
+
   // The model catalog is the one the composer chip uses (only providers with a
   // key show up). Reuse the session-settings store's copy when it has one;
   // otherwise fetch it here so the picker works even when no chat was opened

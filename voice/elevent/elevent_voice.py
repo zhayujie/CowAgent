@@ -22,12 +22,20 @@ class ElevenLabsVoice(Voice):
         pass
 
     def textToVoice(self, text):
-        audio = client.generate(
-            text=text,
-            voice=name,
-            model='eleven_multilingual_v2'
-        )
         fileName = TmpDir().path() + "reply-" + str(int(time.time())) + "-" + str(hash(text) & 0x7FFFFFFF) + ".mp3"
-        save(audio, fileName)
+
+        try:
+            audio = client.generate(
+                text=text,
+                voice=name,
+                model='eleven_multilingual_v2'
+            )
+            save(audio, fileName)
+        except Exception as e:
+            # Raising here would drop the text answer too, since this runs while
+            # the text reply is being converted to voice.
+            logger.error("[ElevenLabs] textToVoice failed: {}".format(e))
+            return Reply(ReplyType.ERROR, "抱歉，语音合成失败")
+
         logger.info("[ElevenLabs] textToVoice text={} voice file name={}".format(text, fileName))
         return Reply(ReplyType.VOICE, fileName)

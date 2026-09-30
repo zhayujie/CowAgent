@@ -1,5 +1,4 @@
 import json
-from pathlib import Path
 from unittest.mock import patch
 
 
@@ -64,7 +63,6 @@ def test_knowledge_action_handler_preserves_dispatch_error(tmp_path):
 
 
 def test_knowledge_frontend_management_contract():
-    root = Path(__file__).parents[1]
     # The page is assembled from templates/, so assert against what is served.
     from channel.web.core import template
     html = template.render("chat.html")
@@ -145,14 +143,14 @@ def test_knowledge_import_handler_delegates_to_dispatch(tmp_path):
     dispatched = {"action": "import_documents", "code": 200, "message": "success",
                   "payload": {"imported": 2, "skipped": 0, "failed": 0}}
     params = {
-        "target_category": "notes",
-        "conflict_strategy": "rename",
+        "target_category": ["notes"],
+        "conflict_strategy": ["rename"],
         "files": [UploadedFile("a.md", b"# A"), UploadedFile("b.txt", b"B")],
     }
 
     with patch("channel.web.api.knowledge._require_auth"), \
          patch("channel.web.api.knowledge.web.header"), \
-         patch("channel.web.api.knowledge._raw_web_input", return_value=params), \
+         patch("channel.web.api.knowledge._multipart_lists", return_value=params), \
          patch("channel.web.api.knowledge._get_workspace_root", return_value=str(tmp_path)), \
          patch("agent.knowledge.service.KnowledgeService.dispatch", return_value=dispatched) as dispatch:
         response = json.loads(KnowledgeImportHandler().POST())

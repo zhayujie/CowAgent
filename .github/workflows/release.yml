@@ -113,6 +113,26 @@ jobs:
             exit 1
           fi
 
+      # The bundle carries a single libssl.3.dylib (Python's own). An extension
+      # linked against a different OpenSSL resolves to that copy at runtime and
+      # fails with missing symbols, so only statically linked builds may ship.
+      - name: Verify no extension links a foreign OpenSSL
+        if: matrix.platform == 'mac'
+        shell: bash
+        run: |
+          internal=desktop/build/dist/cowagent-backend/_internal
+          bad=""
+          while IFS= read -r -d '' so; do
+            case "$so" in */python3.*/lib-dynload/*) continue ;; esac
+            if otool -L "$so" | tail -n +2 | grep -Eq 'lib(ssl|crypto)\.[0-9.]+dylib'; then
+              bad="$bad ${so#$internal/}"
+            fi
+          done < <(find "$internal" -name '*.so' -print0)
+          if [ -n "$bad" ]; then
+            echo "::error::extensions dynamically linked to OpenSSL:$bad"
+            exit 1
+          fi
+
       - name: Install desktop deps
         working-directory: desktop
         run: npm ci

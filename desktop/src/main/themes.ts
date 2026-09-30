@@ -64,6 +64,17 @@ export interface AppConfig {
   // Optional override for the auto-update feed base URL. When set, the updater
   // uses it as-is instead of the default build's feed.
   updateFeedUrl?: string
+  // false: ignore runtime icon/title overrides (set-app-icon / set-app-title)
+  // and their cache, for a build that ships its own fixed name and icon.
+  runtimeIconTitle?: boolean
+  // false: hide the skill hub entry points.
+  skillHub?: boolean
+  // Help > Documentation target; an empty string hides the item.
+  docsUrl?: string
+  // Name of the built-in default agent (the backend's default_agent_name).
+  agentName?: string
+  // Windows AppUserModelID; must equal the build's appId.
+  appUserModelId?: string
 }
 
 function appConfigPath(): string {

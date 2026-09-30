@@ -155,4 +155,71 @@ def test_a_failed_save_leaves_no_temp_file_behind(store, monkeypatch):
     with pytest.raises(OSError):
         manager.save_config()
 
-    assert not (data_cfg.parent / "plugins.json.tmp").exists()
+    assert list(data_cfg.parent.glob("*.tmp")) == []
+
+
+def test_an_entry_that_lost_its_priority_still_loads(store):
+    """``plugins/README.md:201`` tells users to edit plugins.json by hand, and a
+    single missing key is not a reason to lose every plugin: ``load_config``
+    sorted the store with ``v["priority"]`` (plugins/plugin_manager.py:131), so
+    the entry raised ``KeyError`` out of the load."""
+    data_cfg, _ = store
+    data_cfg.write_text('{"plugins": {"GODCMD": {"enabled": true}}}', encoding="utf-8")
+
+    pconf = _load()
+
+    # 0 is the default the plugin's own registration would have used
+    # (PluginManager.register, plugins/plugin_manager.py:47).
+    assert pconf["plugins"]["GODCMD"]["priority"] == 0
+    assert pconf["plugins"]["GODCMD"]["enabled"] is True
+
+
+def test_a_priority_that_is_not_a_number_does_not_break_the_ordering(store):
+    """Quoting the value is the other typo the same edit makes easy. The heap
+    compares ``(priority, name)`` pairs, so a string next to an integer raises
+    ``TypeError`` while the store is being built."""
+    data_cfg, _ = store
+    data_cfg.write_text(
+        json.dumps(
+            {
+                "plugins": {
+                    "QUOTED": {"enabled": True, "priority": "9999"},
+                    "NUMBER": {"enabled": True, "priority": 5},
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    pconf = _load()
+
+    assert list(pconf["plugins"]) == ["NUMBER", "QUOTED"]
+    assert pconf["plugins"]["QUOTED"]["priority"] == 0
+
+
+def test_an_entry_that_is_not_an_object_is_dropped(store):
+    """The rest of the store still loads: one broken entry must not abort it,
+    the same way a truncated file no longer does. ``scan_plugins`` re-adds the
+    name from the plugin's own registration."""
+    data_cfg, _ = store
+    data_cfg.write_text(
+        '{"plugins": {"GODCMD": 9999, "HELLO": {"enabled": true, "priority": 1}}}',
+        encoding="utf-8",
+    )
+
+    pconf = _load()
+
+    assert list(pconf["plugins"]) == ["HELLO"]
+
+
+def test_an_entry_that_lost_enabled_gets_the_registration_default(store):
+    """``scan_plugins`` reads ``pconf["plugins"][rawname]["enabled"]`` directly
+    (plugins/plugin_manager.py:205), so a store without the key survives the
+    load only to raise during the scan."""
+    data_cfg, _ = store
+    data_cfg.write_text('{"plugins": {"GODCMD": {"priority": 9}}}', encoding="utf-8")
+
+    pconf = _load()
+
+    assert pconf["plugins"]["GODCMD"]["enabled"] is True
+    assert pconf["plugins"]["GODCMD"]["priority"] == 9

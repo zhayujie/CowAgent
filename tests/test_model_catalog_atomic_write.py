@@ -69,7 +69,7 @@ def test_a_failed_store_write_leaves_no_temp_file(store_path, monkeypatch):
     with pytest.raises(OSError):
         model_catalog._write_store({"providers": {}})
 
-    assert not (store_path.parent / "models.json.tmp").exists()
+    assert list(store_path.parent.glob("*.tmp")) == []
 
 
 def test_a_store_write_lands_in_one_piece(store_path):
@@ -78,7 +78,7 @@ def test_a_store_write_lands_in_one_piece(store_path):
     model_catalog._write_store(doc)
 
     assert json.loads(store_path.read_text(encoding="utf-8")) == doc
-    assert not (store_path.parent / "models.json.tmp").exists()
+    assert list(store_path.parent.glob("*.tmp")) == []
 
 
 def test_a_failed_legacy_cleanup_keeps_config_json(tmp_path, monkeypatch):

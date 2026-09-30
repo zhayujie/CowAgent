@@ -63,14 +63,22 @@ def test_cancel_message_targets_active_request_without_clearing_queue(monkeypatc
     assert remaining.get_nowait().get("msg").msg_id == "later"
 
 
-def test_feishu_message_uses_message_id_for_precise_recall(monkeypatch):
+@pytest.mark.parametrize("routed_agent", [None, "team-a"])
+def test_feishu_message_uses_message_id_for_precise_recall(monkeypatch, routed_agent):
     channel = FeiShuChanel()
     channel.receivedMsgs = ExpiredDict(60)
     channel._message_sessions = ExpiredDict(60)
     monkeypatch.setattr(channel, "fetch_access_token", lambda: "tenant-token")
     monkeypatch.setattr(channel, "_make_feishu_stream_callback", lambda *_: MagicMock())
     produced = []
-    monkeypatch.setattr(channel, "produce", produced.append)
+
+    def produce(context):
+        # What AgentBridge.route_context does on the way into the queue.
+        if routed_agent is not None:
+            context["agent_id"] = routed_agent
+        produced.append(context)
+
+    monkeypatch.setattr(channel, "produce", produce)
 
     channel._handle_message_event(
         {
@@ -89,13 +97,15 @@ def test_feishu_message_uses_message_id_for_precise_recall(monkeypatch):
 
     assert len(produced) == 1
     assert produced[0]["request_id"] == "om_recall_me"
-    assert channel._message_sessions.get("om_recall_me") == "ou_user"
+    # produce() resolved the route, and that is what keys the queue the recall
+    # has to look into; a patched-out produce() leaves the agent unset.
+    assert channel._message_sessions.get("om_recall_me") == ("ou_user", routed_agent)
 
 
 def test_feishu_recall_cancels_only_the_original_message(monkeypatch):
     channel = FeiShuChanel()
     channel._message_sessions = ExpiredDict(60)
-    channel._message_sessions["om_recalled"] = "session-1"
+    channel._message_sessions["om_recalled"] = ("session-1", "team-a")
     cancel_message = MagicMock(return_value=(0, True))
     monkeypatch.setattr(channel, "cancel_message", cancel_message)
 
@@ -104,7 +114,7 @@ def test_feishu_recall_cancels_only_the_original_message(monkeypatch):
     )
 
     assert result == (0, True)
-    cancel_message.assert_called_once_with("session-1", "om_recalled")
+    cancel_message.assert_called_once_with("session-1", "om_recalled", agent_id="team-a")
     assert channel._message_sessions.get("om_recalled") is None
 
 

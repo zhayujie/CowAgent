@@ -17,6 +17,7 @@ from channel.chat_channel import ChatChannel
 from channel.wechatmp.common import *
 from channel.wechatmp.wechatmp_client import WechatMPClient
 from common.log import logger
+from common.media_download import download_bytes
 from common.singleton import singleton
 from common.utils import split_string_by_utf8_length, remove_markdown_symbol
 from config import conf
@@ -39,6 +40,34 @@ _IMAGE_SIGNATURES = (
     (b"GIF89a", "gif"),
     (b"BM", "bmp"),
 )
+_MAX_REMOTE_MEDIA_BYTES = 10 * 1024 * 1024
+_MAX_REMOTE_MEDIA_SECONDS = 60
+
+
+def _download_remote_media(url, media_type):
+    """Bound a remote download before handing it to the WeChat upload API."""
+    try:
+        return io.BytesIO(download_bytes(
+            url, _MAX_REMOTE_MEDIA_BYTES, timeout=(5, 30), max_seconds=_MAX_REMOTE_MEDIA_SECONDS,
+        ))
+    except (requests.RequestException, OSError, ValueError) as exc:
+        logger.warning("[wechatmp] {} download failed: {}".format(media_type, type(exc).__name__))
+        return None
+
+
+def _local_media_stream(storage):
+    """Open a local ``file://`` payload for upload, or pass a stream through.
+
+    ``ChatChannel`` hands a locally produced media reply over as
+    ``Reply(type, "file://" + path)`` (channel/chat_channel.py), and every other
+    channel reads that content as a path. This channel read it as an already
+    open handle, so ``.seek`` raised ``AttributeError`` before the upload.
+    """
+    if not isinstance(storage, str):
+        return storage
+    path = storage[len("file://"):] if storage.startswith("file://") else storage
+    with open(path, "rb") as f:
+        return io.BytesIO(f.read())
 
 
 def _sniff_image_type(storage) -> str:
@@ -179,9 +208,9 @@ class WechatMPChannel(ChatChannel):
                     with open(local_path, "rb") as f:
                         image_storage.write(f.read())
                 else:
-                    pic_res = requests.get(img_url, stream=True, timeout=60)
-                    for block in pic_res.iter_content(1024):
-                        image_storage.write(block)
+                    image_storage = _download_remote_media(img_url, "image")
+                    if image_storage is None:
+                        return
                 image_storage.seek(0)
                 image_type = _sniff_image_type(image_storage)
                 filename = receiver + "-" + str(context["msg"].msg_id) + "." + image_type
@@ -212,11 +241,9 @@ class WechatMPChannel(ChatChannel):
                 self.cache_dict[receiver].append(("image", media_id))
             elif reply.type == ReplyType.VIDEO_URL:  # 从网络下载视频
                 video_url = reply.content
-                video_res = requests.get(video_url, stream=True, timeout=60)
-                video_storage = io.BytesIO()
-                for block in video_res.iter_content(1024):
-                    video_storage.write(block)
-                video_storage.seek(0)
+                video_storage = _download_remote_media(video_url, "video")
+                if video_storage is None:
+                    return
                 video_type = 'mp4'
                 filename = receiver + "-" + str(context["msg"].msg_id) + "." + video_type
                 content_type = "video/" + video_type
@@ -231,7 +258,7 @@ class WechatMPChannel(ChatChannel):
                 self.cache_dict[receiver].append(("video", media_id))
 
             elif reply.type == ReplyType.VIDEO:  # 从文件读取视频
-                video_storage = reply.content
+                video_storage = _local_media_stream(reply.content)
                 video_storage.seek(0)
                 video_type = 'mp4'
                 filename = receiver + "-" + str(context["msg"].msg_id) + "." + video_type
@@ -309,9 +336,9 @@ class WechatMPChannel(ChatChannel):
                     with open(local_path, "rb") as f:
                         image_storage.write(f.read())
                 else:
-                    pic_res = requests.get(img_url, stream=True, timeout=60)
-                    for block in pic_res.iter_content(1024):
-                        image_storage.write(block)
+                    image_storage = _download_remote_media(img_url, "image")
+                    if image_storage is None:
+                        return
                 image_storage.seek(0)
                 image_type = _sniff_image_type(image_storage)
                 filename = receiver + "-" + str(context["msg"].msg_id) + "." + image_type
@@ -340,11 +367,9 @@ class WechatMPChannel(ChatChannel):
                 logger.info("[wechatmp] Do send image to {}".format(receiver))
             elif reply.type == ReplyType.VIDEO_URL:  # 从网络下载视频
                 video_url = reply.content
-                video_res = requests.get(video_url, stream=True, timeout=60)
-                video_storage = io.BytesIO()
-                for block in video_res.iter_content(1024):
-                    video_storage.write(block)
-                video_storage.seek(0)
+                video_storage = _download_remote_media(video_url, "video")
+                if video_storage is None:
+                    return
                 video_type = 'mp4'
                 filename = receiver + "-" + str(context["msg"].msg_id) + "." + video_type
                 content_type = "video/" + video_type
@@ -357,7 +382,7 @@ class WechatMPChannel(ChatChannel):
                 self.client.message.send_video(receiver, response["media_id"])
                 logger.info("[wechatmp] Do send video to {}".format(receiver))
             elif reply.type == ReplyType.VIDEO:  # 从文件读取视频
-                video_storage = reply.content
+                video_storage = _local_media_stream(reply.content)
                 video_storage.seek(0)
                 video_type = 'mp4'
                 filename = receiver + "-" + str(context["msg"].msg_id) + "." + video_type

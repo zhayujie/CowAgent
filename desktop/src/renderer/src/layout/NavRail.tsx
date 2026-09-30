@@ -41,7 +41,7 @@ import { product } from '@product'
 // Fallback shown when app.getVersion() is unavailable (dev/web preview). Keep
 // in sync with desktop/package.json "version"; the packaged app overrides this
 // with the real value via IPC, so it only matters outside a packaged build.
-const FALLBACK_VERSION = '2.1.9'
+const FALLBACK_VERSION = '2.2.0'
 
 // External links opened in the user's default browser. The window-open handler
 // in the main process routes window.open() through shell.openExternal.

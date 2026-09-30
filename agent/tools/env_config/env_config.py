@@ -8,6 +8,7 @@ from typing import Dict, Any
 from pathlib import Path
 
 from agent.tools.base_tool import BaseTool, ToolResult
+from common.atomic_write import write_text_atomic
 from common.log import logger
 from common.utils import expand_path
 
@@ -81,6 +82,10 @@ class EnvConfig(BaseTool):
         if not os.path.exists(self.env_path):
             Path(self.env_path).touch()
             logger.info(f"[EnvConfig] Created .env file at {self.env_path}")
+
+        # Covers the file this call just created and one an earlier version
+        # left group-readable.
+        self._restrict_to_owner()
     
     def _mask_value(self, value: str) -> str:
         """Mask sensitive parts of a value for logging"""
@@ -105,13 +110,27 @@ class EnvConfig(BaseTool):
                         env_vars[key.strip()] = value.strip()
         return env_vars
     
+    def _restrict_to_owner(self) -> None:
+        """Keep the credentials file readable by its owner only.
+
+        ~/.cow also holds mcp_oauth.json, which is written 0o600 for the same
+        reason; the mode is best-effort because Windows has no equivalent.
+        """
+        try:
+            os.chmod(self.env_path, 0o600)
+        except OSError:
+            pass
+
     def _write_env_file(self, env_vars: Dict[str, str]):
         """Write all key-value pairs to .env file"""
-        with open(self.env_path, 'w', encoding='utf-8') as f:
-            f.write("# Environment variables for agent skills\n")
-            f.write("# Auto-managed by env_config tool\n\n")
-            for key, value in sorted(env_vars.items()):
-                f.write(f"{key}={value}\n")
+        lines = [
+            "# Environment variables for agent skills",
+            "# Auto-managed by env_config tool",
+            "",
+        ]
+        lines.extend(f"{key}={value}" for key, value in sorted(env_vars.items()))
+        write_text_atomic(self.env_path, "\n".join(lines) + "\n")
+        self._restrict_to_owner()
     
     def _reload_env(self):
         """Reload environment variables from .env file"""

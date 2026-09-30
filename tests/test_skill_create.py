@@ -159,9 +159,11 @@ class UploadedFile:
 
 def _post(handler_cls, params, service):
     module = handler_cls.__module__
+    # What _multipart_lists hands back: every field as a list of its values.
+    fields = {key: value if isinstance(value, list) else [value] for key, value in params.items()}
     with patch(f"{module}._require_auth"), \
          patch(f"{module}.web.header"), \
-         patch(f"{module}._raw_web_input", return_value=params), \
+         patch(f"{module}._multipart_lists", return_value=fields), \
          patch(f"{module}._skill_service", return_value=service):
         return json.loads(handler_cls().POST())
 

@@ -29,10 +29,10 @@ from channel.chat_channel import ChatChannel, check_prefix
 from channel.web.core import providers
 from channel.web.core._common import (
     _addressed_agent_id, _build_artifact_payload, _cancel_reply_text,
-    _desktop_token_matches, _ensure_list, _get_upload_dir, _get_workspace_root,
+    _desktop_token_matches, _first_value, _get_upload_dir, _get_workspace_root,
     IMAGE_EXTENSIONS, _is_loopback_request, _is_password_enabled,
     _is_within_directory, _log_bind_failure, MAX_LOCAL_IMPORT_BYTES,
-    _raw_web_input, _read_uploaded_file_bytes,
+    _multipart_lists, _read_uploaded_file_bytes,
     _resolve_upload_path, _rewrite_relative_media, _sanitize_upload_id,
     _scoped_agent_id, SERVING, _session_roster, SSEStreamState,
     _steer_reply_text, VIDEO_EXTENSIONS, WebMessage,
@@ -52,6 +52,8 @@ class WebChannel(ChatChannel):
     SSE_POST_DONE_TAIL_SECONDS = 60
     SSE_COMPLETED_TTL_SECONDS = 60
     SSE_IDLE_TIMEOUT_SECONDS = 1800
+    # Two parts (file + relative path) per file of a folder upload.
+    MAX_UPLOAD_PARTS = 20000
 
     # def __new__(cls):
     #     if cls._instance is None:
@@ -810,21 +812,21 @@ class WebChannel(ChatChannel):
                 web.ctx.env.get("CONTENT_LENGTH") or "?",
                 web.ctx.env.get("CONTENT_TYPE") or "?",
             )
-            params = _raw_web_input()
-            file_obj = params.get("file")
-            file_objs = params.get("files")
-            relative_path = params.get("relative_path", "")
-            relative_paths = params.get("relative_paths")
-            upload_id = params.get("upload_id", "")
+            # Every file of a folder upload repeats `files` and `relative_paths`;
+            # read them as lists, since newer web.py keeps only the last value.
+            params = _multipart_lists(self.MAX_UPLOAD_PARTS)
+            file_obj = _first_value(params, "file")
+            relative_path = _first_value(params, "relative_path", "")
+            upload_id = _first_value(params, "upload_id", "")
 
-            directory_files = _ensure_list(file_objs)
+            directory_files = list(params.get("files") or [])
 
             # NOTE: cgi.FieldStorage raises TypeError on truthy checks for single-file
             # uploads (Python 3.9+). Always use `is not None` instead of `if file_obj`.
             if not directory_files and file_obj is not None and relative_path:
                 directory_files = [file_obj]
 
-            directory_rel_paths = _ensure_list(relative_paths)
+            directory_rel_paths = list(params.get("relative_paths") or [])
 
             if not directory_rel_paths and relative_path:
                 directory_rel_paths = [relative_path]

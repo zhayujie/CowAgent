@@ -323,6 +323,59 @@ def test_multi_agent_restore_reuses_matching_local_destinations(tmp_path):
     }
 
 
+def test_multi_agent_restore_reuses_the_local_roster_file(tmp_path):
+    source_data = tmp_path / "source-data"
+    source_primary = tmp_path / "source-primary"
+    source_research = tmp_path / "source-research"
+    _write_json(
+        source_data / "config.json",
+        {
+            "default_agent_id": "primary",
+            "agents": [
+                {"id": "primary", "workspace": str(source_primary)},
+                {"id": "research", "workspace": str(source_research)},
+            ],
+        },
+    )
+    source_primary.mkdir()
+    source_research.mkdir()
+    (source_primary / "AGENT.md").write_text("new primary", encoding="utf-8")
+    (source_research / "AGENT.md").write_text("new research", encoding="utf-8")
+    archive = tmp_path / "multi.zip"
+    create_backup_archive(archive, source_data, source_primary)
+
+    target_data = tmp_path / "target-data"
+    local_primary = tmp_path / "local-primary"
+    local_research = tmp_path / "local-research"
+    local_primary.mkdir()
+    local_research.mkdir()
+    # What a current install leaves behind once the roster has moved out of
+    # config.json: the file beside the workspaces holds it, config.json holds
+    # none of it.
+    _write_json(target_data / "config.json", {"agent_workspace": str(local_primary)})
+    _write_json(
+        local_primary / "agents" / team.FILE_NAME,
+        {
+            "default_agent_id": "primary",
+            "agents": [
+                {"id": "primary"},
+                {"id": "research", "workspace": str(local_research)},
+            ],
+        },
+    )
+    (local_research / "AGENT.md").write_text("local research", encoding="utf-8")
+
+    restore_backup_archive(archive, target_data)
+
+    assert (local_primary / "AGENT.md").read_text(encoding="utf-8") == "new primary"
+    assert (local_research / "AGENT.md").read_text(encoding="utf-8") == "new research"
+    roster = team.read({"agent_workspace": str(local_primary)})
+    assert {item["id"]: item.get("workspace") for item in roster["agents"]} == {
+        "primary": None,
+        "research": str(local_research.resolve()),
+    }
+
+
 def test_multi_agent_restore_rejects_manifest_registry_mismatch(tmp_path):
     archive = tmp_path / "mismatch.zip"
     manifest = {

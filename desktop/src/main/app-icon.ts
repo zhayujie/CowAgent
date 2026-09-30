@@ -3,9 +3,16 @@ import { execFile } from 'child_process'
 import path from 'path'
 import fs from 'fs'
 import os from 'os'
+import { loadAppConfig } from './themes'
 
 // Let the web layer override the window icon/title at runtime and remember it,
 // so it also applies on the next launch before the page loads.
+
+// The cache lives under ~/.cow, which every desktop build on the machine
+// shares, so a build with a fixed name and icon must neither read nor write it.
+function runtimeIconTitleEnabled(): boolean {
+  return loadAppConfig()?.runtimeIconTitle !== false
+}
 
 const CACHE_DIRNAME = 'app-icon'
 const ICON_FILE = 'icon.png'
@@ -182,6 +189,7 @@ function cacheMeta(meta: CachedMeta): void {
 // app.setName changes where that path points: calling it later would strand the
 // data written under the previous name.
 export function applyCachedAppName(): void {
+  if (!runtimeIconTitleEnabled()) return
   try {
     const meta = JSON.parse(fs.readFileSync(metaCachePath(), 'utf8')) as CachedMeta
     const trimmed = meta.title?.trim()
@@ -194,6 +202,7 @@ export function applyCachedAppName(): void {
 // Apply the cached icon/title before the page loads, so a custom mark shows
 // from the first paint instead of flashing the default.
 export function applyCachedAppIcon(): void {
+  if (!runtimeIconTitleEnabled()) return
   let icon: NativeImage | null = null
   try {
     const buf = fs.readFileSync(iconCachePath())
@@ -219,6 +228,7 @@ export function applyCachedAppIcon(): void {
 // current window/Dock icon. Returns null when no custom icon has been applied,
 // so callers can fall back to the bundle icon.
 export function getRuntimeAppIcon(): NativeImage | null {
+  if (!runtimeIconTitleEnabled()) return null
   try {
     const buf = fs.readFileSync(iconCachePath())
     if (!buf.length || buf.length > MAX_ICON_BYTES) return null
@@ -554,7 +564,7 @@ async function recordShortcutName(name: string): Promise<void> {
 // install the NSIS hooks in build/installer.nsh already repair and re-create the
 // shortcuts during the update, so a launch never needs to touch them.
 export function repairWindowsShortcuts(): void {
-  if (process.platform !== 'win32') return
+  if (process.platform !== 'win32' || !runtimeIconTitleEnabled()) return
   let title = ''
   let checkedFor = ''
   try {
@@ -578,7 +588,7 @@ export function setupAppIconIPC(deps: {
   getTrayIcon = deps.getTray
 
   ipcMain.handle('set-app-icon', async (_event, iconUrl: unknown, icoUrl: unknown) => {
-    if (typeof iconUrl !== 'string' || !iconUrl) return false
+    if (!runtimeIconTitleEnabled() || typeof iconUrl !== 'string' || !iconUrl) return false
     const icon = await downloadImage(iconUrl)
     if (!icon) return false
     applyIcon(icon)
@@ -593,7 +603,7 @@ export function setupAppIconIPC(deps: {
   })
 
   ipcMain.handle('set-app-title', (_event, title: unknown) => {
-    if (typeof title !== 'string' || !title.trim()) return false
+    if (!runtimeIconTitleEnabled() || typeof title !== 'string' || !title.trim()) return false
     applyTitle(title)
     cacheMeta({ title })
     // Reuse the cached icon (if any) so the renamed shortcut keeps it.

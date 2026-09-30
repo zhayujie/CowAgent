@@ -30,10 +30,7 @@ import time
 import uuid
 import re
 from abc import ABC, abstractmethod
-from pathlib import Path
 from urllib.request import urlopen, Request
-from urllib.parse import urlparse
-from urllib.error import URLError
 
 try:
     import requests
@@ -1074,6 +1071,9 @@ _MODEL_PREFERRED_PROVIDER: list[tuple[tuple[str, ...], str]] = [
 # Default global priority when the model has no preferred provider.
 _DEFAULT_PROVIDER_ORDER = ["OpenAI", "Gemini", "Seedream", "Qwen", "MiniMax", "LinkAI"]
 
+# Aggregator providers that also accept these vendors' model ids unchanged.
+_AGGREGATOR_FAMILIES = {"LinkAI": {"OpenAI", "Gemini"}}
+
 # UI provider id (persisted via the Models page) → internal label used by
 # the factory dict in `_build_providers`. Allows pinning a vendor for
 # custom model names that prefix-inference can't recognize.
@@ -1139,7 +1139,8 @@ def _build_providers(model: str, provider_id: str = "") -> list[tuple[str, Image
          is configured, it is promoted to the front so it gets the first
          attempt with the right model id.
       3. If the preferred provider is NOT configured (no API key), the model
-         id would 100% fail on every other backend, so we drop the explicit
+         goes to a configured aggregator that serves the same id; otherwise
+         the id would fail on every other backend, so we drop the explicit
          model and fall back to automatic routing — every provider then uses
          its own DEFAULT_MODEL.
     """
@@ -1172,10 +1173,16 @@ def _build_providers(model: str, provider_id: str = "") -> list[tuple[str, Image
         pref = _preferred_provider(model)
 
     # If a specific model is requested and its native provider has no key,
-    # other backends won't recognise the id → reset to auto routing.
+    # use an aggregator serving the same id; otherwise no other backend
+    # recognises the id → reset to auto routing.
     if pref and not keys.get(pref):
-        model = ""
-        pref = None
+        via = next((p for p, fams in _AGGREGATOR_FAMILIES.items() if pref in fams and keys.get(p)), None)
+        if via:
+            model = _GEMINI_MODEL_ALIASES.get(model.lower(), model)
+            pref = via
+        else:
+            model = ""
+            pref = None
 
     factories = {
         "OpenAI": OpenAIProvider,

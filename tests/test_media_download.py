@@ -1,5 +1,7 @@
 """Shared size-capped media downloads used by the IM channels."""
 
+from types import SimpleNamespace
+
 import pytest
 import requests
 
@@ -112,6 +114,19 @@ def test_bytes_download_is_capped(serve):
     with pytest.raises(MediaTooLargeError):
         download_bytes("https://example.test/a", 4)
     assert too_big.closed
+
+
+def test_max_seconds_stops_a_trickling_download(serve, monkeypatch):
+    response = Response(chunks=(b"ab", b"cd"))
+    calls = serve(response)
+    clock = iter([0, 1, 61])
+    monkeypatch.setattr(media_download, "time", SimpleNamespace(monotonic=lambda: next(clock)))
+
+    with pytest.raises(requests.Timeout):
+        download_bytes("https://example.test/a", 10, max_seconds=60)
+
+    assert "max_seconds" not in calls[0]
+    assert response.closed
 
 
 def test_bytes_download_raises_on_http_error(serve):

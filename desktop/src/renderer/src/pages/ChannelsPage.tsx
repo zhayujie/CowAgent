@@ -126,7 +126,10 @@ const ChannelsPage: React.FC<ChannelsPageProps> = ({ baseUrl }) => {
 
   // While a channel is still settling (booting, or waiting for a scan that may
   // happen elsewhere), poll so its card flips to "connected" on its own.
-  const settling = channels.some((c) => pendingState(c) !== 'none')
+  // Multi-Agent WeChat cards live in `instances`, not the per-type list.
+  const settling =
+    channels.some((c) => pendingState(c) !== 'none') ||
+    instances.some((c) => pendingState(c) !== 'none')
   useEffect(() => {
     if (!settling) return
     const id = setInterval(() => void loadChannels(true), 3000)
@@ -717,7 +720,12 @@ const ChannelCard: React.FC<{
           "waiting for scan" badge is what tells a live card why it reappeared. */}
       {weixinQr && (
         <div className={channel.active ? 'mt-4 pt-4 border-t border-subtle' : 'mt-2'}>
-          <QrScanPanel provider="weixin" onConnected={onChanged} newInstance={multiAgent && (forceNewInstance || !channel.instance_id)} />
+          <QrScanPanel
+            provider="weixin"
+            onConnected={onChanged}
+            newInstance={multiAgent && (forceNewInstance || !channel.instance_id)}
+            instanceId={channel.instance_id}
+          />
         </div>
       )}
 

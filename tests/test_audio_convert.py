@@ -9,12 +9,80 @@ import os
 import sys
 import tempfile
 import unittest
+import wave
 from types import SimpleNamespace
 from unittest.mock import patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import voice.audio_convert as audio_convert
+
+
+class TestGetPcmFromWav(unittest.TestCase):
+    """get_pcm_from_wav runs on every Ali and Baidu transcription.
+
+    It used to drop the wave reader without closing it, so each request left a
+    file handle open for as long as the process lived.
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory(prefix="pcm-wav-")
+        self.addCleanup(self._tmp.cleanup)
+        self.wav_path = os.path.join(self._tmp.name, "voice.wav")
+        with wave.open(self.wav_path, "wb") as w:
+            w.setnchannels(1)
+            w.setsampwidth(2)
+            w.setframerate(16000)
+            w.writeframes(b"\x00\x01" * 1600)
+
+    def test_returns_the_pcm_frames(self):
+        pcm = audio_convert.get_pcm_from_wav(self.wav_path)
+        self.assertEqual(pcm, b"\x00\x01" * 1600)
+
+    def test_closes_the_wave_handle(self):
+        closed = []
+        real_open = wave.open
+
+        def spy_open(*args, **kwargs):
+            handle = real_open(*args, **kwargs)
+            real_close = handle.close
+
+            def close():
+                closed.append(True)
+                real_close()
+
+            handle.close = close
+            return handle
+
+        with patch.object(audio_convert.wave, "open", spy_open):
+            audio_convert.get_pcm_from_wav(self.wav_path)
+
+        self.assertEqual(
+            closed, [True], "wave handle left open after get_pcm_from_wav returned"
+        )
+
+    def test_closes_the_handle_on_a_read_error(self):
+        """A read failure must not leave the handle open either."""
+        closed = []
+        real_open = wave.open
+
+        def spy_open(*args, **kwargs):
+            handle = real_open(*args, **kwargs)
+            real_close = handle.close
+
+            def close():
+                closed.append(True)
+                real_close()
+
+            handle.close = close
+            handle.getnframes = lambda: (_ for _ in ()).throw(OSError("boom"))
+            return handle
+
+        with patch.object(audio_convert.wave, "open", spy_open):
+            with self.assertRaises(OSError):
+                audio_convert.get_pcm_from_wav(self.wav_path)
+
+        self.assertEqual(closed, [True], "wave handle left open when the read raised")
 
 
 class _FakeSegment:

@@ -718,6 +718,8 @@ const skillAdd = {
     skills: [],
     selected: new Set(),
     busy: false,
+    // Bumped when a fetch or upload is abandoned, so its late reply is ignored.
+    req: 0,
 };
 
 function bindSkillAddUi() {
@@ -790,7 +792,12 @@ function openSkillAdd() {
 }
 
 function closeSkillAdd() {
-    if (skillAdd.busy) return;
+    if (skillAdd.busy) {
+        // Installing is quick and not safely interruptible; fetching can hang on the network.
+        if (skillAdd.step !== 'input') return;
+        skillAdd.req++;
+        setSkillAddBusy(false);
+    }
     discardSkillPreview();
     document.getElementById('skill-add-overlay').classList.add('hidden');
 }
@@ -880,7 +887,7 @@ function syncSkillAddFooter() {
     back.classList.toggle('hidden', skillAdd.step !== 'preview');
     back.disabled = skillAdd.busy;
     cancel.classList.toggle('hidden', skillAdd.step === 'done');
-    cancel.disabled = skillAdd.busy;
+    cancel.disabled = skillAdd.busy && skillAdd.step !== 'input';
 
     let text = '';
     let show = true;
@@ -915,16 +922,25 @@ async function fetchSkillPreview() {
     if (skillAdd.busy || skillAdd.tab !== 'market') return;
     const value = document.getElementById('skill-value-input').value.trim();
     if (!value) return;
+    await stageSkillPreview(() => postJson('/api/skills', { action: 'preview', source: skillAdd.source, value }));
+}
+
+async function stageSkillPreview(request) {
+    const req = ++skillAdd.req;
     hideSkillInputError();
     setSkillAddBusy(true);
     try {
-        const data = await postJson('/api/skills', { action: 'preview', source: skillAdd.source, value });
+        const data = await request();
+        if (req !== skillAdd.req) {
+            if (data && data.token) postJson('/api/skills', { action: 'discard', token: data.token }).catch(() => {});
+            return;
+        }
         if (data.status !== 'success') throw new Error(data.message || t('skill_install_error'));
         showSkillPreview(data);
     } catch (err) {
-        showSkillInputError(err.message || t('skill_install_error'));
+        if (req === skillAdd.req) showSkillInputError(err.message || t('skill_install_error'));
     } finally {
-        setSkillAddBusy(false);
+        if (req === skillAdd.req) setSkillAddBusy(false);
     }
 }
 
@@ -971,17 +987,10 @@ async function uploadSkillFiles(files) {
         form.append('files', file, file.name);
         form.append('paths', path);
     });
-    setSkillAddBusy(true);
-    try {
+    await stageSkillPreview(async () => {
         const res = await fetch('/api/skills/upload', { method: 'POST', body: form });
-        const data = await res.json();
-        if (data.status !== 'success') throw new Error(data.message || t('skill_install_error'));
-        showSkillPreview(data);
-    } catch (err) {
-        showSkillInputError(err.message || t('skill_install_error'));
-    } finally {
-        setSkillAddBusy(false);
-    }
+        return res.json();
+    });
 }
 
 function showSkillPreview(data) {

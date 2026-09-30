@@ -1,0 +1,126 @@
+---
+title: v2.2.0
+description: "CowAgent 2.2.0: a new Capabilities center, improved multi-Agent collaboration, a rebuilt Web console, higher model cache hit rates, and broad stability and security hardening"
+---
+
+🌐 [English](https://docs.cowagent.ai/releases/v2.2.0) | [中文](https://docs.cowagent.ai/zh/releases/v2.2.0)
+
+## 🧩 Capabilities Center
+
+The former **Skills** menu is now **Capabilities**, a single place in the Web console and desktop client to manage built-in tools, MCP tools, and skills:
+
+- **Skill installation**: install from Cow Skill Hub, GitHub, or ClawHub, or upload an archive, a `SKILL.md`, or a folder. Every skill is previewed first and only installed after you confirm.
+- **MCP configuration**: add, edit, and remove MCP servers in the UI, covering the stdio, SSE, and Streamable HTTP transports. Both form and JSON editing are available, and you can paste one or more `mcpServers` entries directly. Saving checks the connection and lists the server's tools; changes take effect on the next message without a restart. Thanks @tsumon (#3155)
+- **Tool retrieval diagnostics**: see how MCP tools were ranked and why retrieval fell back during a conversation, making it easier to find out why a tool was not picked. Thanks @zhongjunqi7657 (#3165)
+
+<Frame>
+  <img src="https://cdn.jsdelivr.net/gh/zhayujie/cowagent-assets@main/screenshots/en/capabilities-overview.png" alt="Capabilities" width="800" />
+</Frame>
+
+Related docs: [MCP Tools](https://docs.cowagent.ai/tools/mcp), [Installing Skills](https://docs.cowagent.ai/skills/install)
+
+## 🤝 Multi-Agent Collaboration
+
+- **Task handoff as separate messages**: when an Agent delegates a task to a team member, the member's reply streams as its own message under its own name and avatar, on both the Web console and the desktop client.
+- **Team session management**: clearing context now clears it for every participant in a team session; a group chat shows its members in the session list before the first message is sent; the `@` picker can select the Agent that owns the session.
+- **Data isolation**: skills, uploaded file previews, and website directories are now scoped per Agent.
+- **Fixes**:
+  - Fixed an Agent answering on behalf of a team member, and an Agent's own tool calls disappearing after a refresh.
+  - Fixed deleted Agents lingering in member lists, which left direct chats unable to use tools (Thanks @Frank-zhu0404 #3234).
+  - Fixed the default Agent not being resolved when building team members and cleaning up channel teams (Thanks @c020627 #3205).
+  - Fixed some endpoints failing to locate the Agent when the parameter was sent only in the request body (Thanks @c020627 #3177).
+
+<Frame>
+  <img src="https://cdn.jsdelivr.net/gh/zhayujie/cowagent-assets@main/screenshots/en/agent-task-handoff.png" alt="Task handoff as separate messages" width="800" />
+</Frame>
+
+## 🖥 Console Upgrades
+
+- **Frontend and backend rebuild**: the Web console's frontend pages and backend API controllers are split into feature modules, replacing the oversized single files that had become hard to maintain. Frontend assets load per module and are cached, so a refresh no longer downloads everything again. Each page has its own URL (such as `/agents`, `/settings`, `/scheduler`), browser back and forward work, a refresh stays on the current page, and the old `/chat` address redirects automatically. Thanks @zkjqd (#3167, #3172)
+- **Message navigator**: jump quickly to earlier questions in a session. The Web console opens a question list from a button in the header, and the desktop client adds a navigation rail on the right.
+- **One-click update**: the version menu in the sidebar checks for and applies source updates in one click. User data is backed up before updating, and a failed update does not affect the running service. Thanks @tsumon (#3154)
+- **Reply status**: stopped, interrupted, and in-progress replies are labeled accordingly. A reply cut off by a service restart shows a clear notice, and after a refresh you can keep following a reply that is still being generated.
+
+## 🧠 Memory & Knowledge Base
+
+- **Reranking**: memory retrieval supports an optional rerank model that re-scores recalled results for better precision. It is off by default and enabled via `rerank_provider`. Thanks @SummerCaptain (#3230)
+- **Hybrid retrieval scoring**: vector and keyword retrieval are now fused by rank-normalized scores, fixing diluted scores when one side has no hits and mismatched score scales between the two. Thanks @SummerCaptain (#3164)
+- **Knowledge base index**: `index.md` is updated when documents are deleted or moved (Thanks @alanyz106 #3237); a large index injects only the list of titles to avoid taking up too much conversation context.
+- **Shared knowledge base**: fixed reading and syncing a shared knowledge base located outside the Agent workspace (Thanks @lorenzozanee #3182, @Jeremy-xuan #3183); edits made through tools or the console now mark the index for refresh (Thanks @NBSW002 #3184, @c020627 #3206).
+- **Long-term memory**: when `MEMORY.md` exceeds its length limit, the newest entries are kept first (Thanks @SEVEN-us #3244).
+- **Document chunking**: fixed content before the first heading of a long Markdown document not being indexed, and content being indexed twice when heading levels are skipped; `/memory status` prompts you to rebuild the index (Thanks @Bdysj #3309).
+- **Session loading**: opening a session no longer triggers a memory scan and index rebuild, so the first message in a new session responds faster.
+
+Related docs: [Memory](https://docs.cowagent.ai/memory/index)
+
+## 📐 Context & Token Cost
+
+- **Higher model cache hit rate**: the system prompt now carries only the current date, and the exact time comes from a new `time` tool. The system prompt stays stable throughout the day, which greatly improves model cache hit rates and lowers token usage. Thanks @a1094174619 (#3250)
+- **Context trimming**: turn-based and token-budget trimming are merged into a single budget-driven pass. No summarization call is made while within budget, avoiding unnecessary model requests, and the previous turn is always kept. Thanks @liuns-yang (#3188), @Frank-zhu0404 (#3199), @lorenzozanee (#3185)
+- **Follow-up messages**: messages you send while the model is still streaming are now picked up promptly (Thanks @tsumon #3190).
+
+## 🤖 Model Capabilities
+
+- **New models**: added `gpt-6.1-sol`, `gpt-6-luna` and `gpt-6-sol`, with `gpt-6.1-sol` as the default recommended OpenAI model (tool calling goes through the Responses API); added `claude-opus-5-5` as the default recommended Claude model.
+- **Context window**: the Claude 5 family (`claude-opus-5-5`, `claude-opus-5`, `claude-sonnet-5`, `claude-fable-5`, etc.) is now counted at a 1M context window and 128K max output, instead of the previous flat 200K. Claude 4 and earlier are unchanged.
+- **OpenAI Responses API**: a new `open_ai_api_type` setting. Set it to `responses` to call the Responses API, for endpoints that no longer provide `/chat/completions`. The default `auto` keeps the existing behavior.
+- **MiniMax**: image understanding now uses M3's native multimodal capability (Thanks @octo-patch #3160).
+- **Qwen**: `qwen3.8-max` and `qwen3.8-flash` are handled as hybrid-thinking models; fixed DashScope sessions ignoring the system prompt set by the role plugin (Thanks @Bdysj #3310).
+- **Speech recognition**: uses the configured ASR model instead of always using `whisper-1`.
+- **AnySearch**: configurable search region and language, with stricter validation of returned results (Thanks @WangPan59 #3153, #3163).
+
+## 📡 Channels
+
+- **DingTalk**:
+  - AI card streaming replies when `dingtalk_card_enabled` is on (Thanks @tsumon #3162); replies fall back to Markdown when cards are off or a card fails to send.
+  - Receives file attachments (Thanks @tsumon #3161).
+  - Fixed error and notice replies being dropped, group messages outside the allowlist raising errors, and rich-text messages without images getting no response (Thanks @Lesereingrape #3282, #3284, #3293).
+- **QQ**:
+  - Voice messages use the official transcription and are handed to the Agent immediately (Thanks @HnBigVolibear #3195).
+  - Receives files, renders Markdown replies, and keeps the original file name when sending documents (Thanks @c020627 #3209).
+  - Group chat sessions now follow `group_shared_session`, consistent with other channels: each member gets their own session by default, whereas earlier versions shared one session across the whole group. Set `"group_shared_session": true` to keep the previous behavior (Thanks @c020627 #3209).
+- **Feishu**: group messages that only @-mention other members no longer trigger a reply, and rich-text group messages are checked against their @ list (Thanks @c020627 #3173); image and file replies upload directly from memory (Thanks @c020627 #3226); webhook callbacks now verify the token.
+- **WeCom**: the WeCom app supports file and video replies (Thanks @c020627 #3249) and replying with locally generated images (Thanks @Lesereingrape #3312), and its callback verifies the Corp ID (Thanks @c020627 #3159); WeCom Bot group messages are correctly recognized as @-mentions (Thanks @c020627 #3193).
+- **WeChat Customer Service**: sends local media files, and file replies include their accompanying text (Thanks @c020627 #3262); fixed the message sync cursor not advancing in time (Thanks @rudycelekli #3258).
+- **WeChat**: fixed managing multiple channel instances in multi-Agent setups; login state is kept when channel instances change.
+- **Video replies**: Discord, Slack, Telegram, Feishu, DingTalk, WeChat Customer Service, and WeChat Official Account upload locally generated videos directly, instead of dropping them or sending only the file path (Thanks @Lesereingrape #3289, #3299, #3321, @c020627 #3297).
+- **Slack / Telegram**: Telegram renders `~~~` code blocks correctly (Thanks @huiq777 #3287); Slack files with the same name no longer overwrite each other (Thanks @rudycelekli #3265).
+- **WeChat Official Account**: compatible with Python 3.13 (Thanks @c020627 #3214).
+
+## 🛡 Stability & Security
+
+This release makes task execution more reliable and systematically hardens external resource access and local file writes:
+
+- **Persistent execution**: each step's model reply, tool calls, and results are written to the session database as soon as the step completes, instead of all at once at the end of the turn. After a service restart or an unexpected process exit, an interrupted turn is restored together with its completed steps, and the next message can continue from there. Thanks @liuns-yang (#3191)
+- **Download limits**: external downloads — channel media, terminal images, image understanding, keyword files, and more — are capped in file size and total time, so oversized files or slow connections cannot drag the service down. Image understanding re-validates the address on every redirect. Thanks @rudycelekli (#3255, #3256, #3257, #3264, #3266, #3267, #3268, #3269, #3270, #3271, #3272), @c020627 (#3219, #3225, #3252, #3300, #3322)
+- **Request timeouts**: every external request for models, voice, translation, and more now has a timeout, so an unresponsive upstream no longer hangs the conversation. Thanks @c020627 (#3217, #3220, #3240, #3254, #3275)
+- **Safe config writes**: `config.json`, plugin configs, model lists, scheduled tasks, skill configs, credential files, `MEMORY.md`, and more are written atomically, so a write that fails midway cannot corrupt the original file; a corrupted scheduled-task file is restored from its backup automatically. Thanks @c020627 (#3223, #3239, #3241, #3242, #3259, #3273, #3274, #3276, #3279, #3280, #3281), @rudycelekli (#3260)
+- **Temporary files**: file names received by channels are confined to the temporary directory and limited in length (Thanks @Lesereingrape #3247, #3248, @c020627 #3212, #3301); downloaded media, reply attachments, and synthesized speech are stored in the owning Agent's temporary directory (Thanks @c020627 #3198, #3207, #3208, #3213); the temporary directory is cleaned up when a skill archive fails to extract (Thanks @Lesereingrape #3325).
+- **Log redaction**: channel credentials are masked in debug logs (Thanks @fuxicodex #3228).
+
+## 🛠 Other Improvements & Fixes
+
+- **Voice**:
+  - Converts silk voice and amr files with upper-case extensions (Thanks @c020627 #3152).
+  - Alibaba Cloud, Edge, ElevenLabs, and other voice services return an error message on failure instead of silently dropping the reply (Thanks @c020627 #3243, #3263, #3278).
+  - Fixed WAV file handles not being closed (Thanks @aniruddhaadak80 #3286).
+  - Google speech recognition returns an error message on exceptions instead of masking the original error (Thanks @aniruddhaadak80 #3326).
+- **Scheduled tasks**: local run times are kept across daylight saving transitions (Thanks @liuns-yang #3189, #3204); files produced by scheduled skill runs are delivered directly instead of as file paths (Thanks @c020627 #3253).
+- **Backup**: backups can be written to a different file system (Thanks @zyc2022 #3200, @chen1070109514 #3246); restoring a multi-Agent backup keeps this machine's existing Agent workspace paths (Thanks @Lesereingrape #3319).
+- **Plugins**: plugins start normally when their config is empty or incomplete (Thanks @c020627 #3224); Midjourney reports an invalid image index (Thanks @Lesereingrape #3291); the role plugin returns help when a custom role has no description (Thanks @Lesereingrape #3296); admin commands report invalid arguments when setting plugin priority or switching models (Thanks @Lesereingrape #3303, #3305); a missing or malformed entry in `plugins.json` is filled with defaults instead of breaking every plugin (Thanks @Lesereingrape #3314); fixed file naming and unclosed handles in the summary plugin (Thanks @c020627 #3215).
+- **Agent management**: deleting an Agent also removes its project data (Thanks @c020627 #3216).
+- **Agent Mail**: Docker Compose adds an optional Agent Mail setup that lets the Agent send, receive, search, and manage email. See [Agent Mail](https://docs.cowagent.ai/extensions/agent-mail) (Thanks @tsumon #3236).
+- **Message handling**: fixed message context parameters being shared across sessions (Thanks @c020627 #3222); file cache expiry is measured from the most recent file (Thanks @c020627 #3218); fixed the rate limiter blocking process exit and failing at a rate of 0 (Thanks @aniruddhaadak80 #3285); unsupported reply types show the original type in the error message, and voice sessions no longer error after a plugin drops the reply (Thanks @Bdysj #3306, #3307); fixed `#reset`, Feishu message recall, and session deletion failing to clear queued messages under non-default Agents (Thanks @Lesereingrape #3316).
+- **Browser tool**: recovers automatically after the browser driver disconnects instead of erroring repeatedly.
+- **Desktop client**: fixed the microphone permission prompt not appearing on macOS (Thanks @cowagent #3181); fixed a startup crash caused by Windows shortcuts and duplicated backend log lines.
+- **Engineering**: added a full test pipeline and lint gate (Thanks @fuxicodex #3166, #3203); improved test isolation (Thanks @c020627 #3169, #3201, @rudycelekli #3261).
+- **Docs**:
+  - Documented MCP configuration with static Bearer authentication (Thanks @ct-jaryn #3227).
+  - Fixed broken links and log wording in the README (Thanks @yetuge #3194, #3196, #3197).
+
+## 📦 How to Upgrade
+
+- **Source deployment**: run `cow update` for a one-click upgrade, update from the version menu in the Web console sidebar, or pull the latest code and restart. See the [upgrade guide](https://docs.cowagent.ai/guide/upgrade).
+- **Desktop client**: check for updates and update with one click inside the client, or get the latest version from the [download page](https://cowagent.ai/download/).
+
+**Release date**: 2026.09.30 | [Full Changelog](https://github.com/zhayujie/CowAgent/compare/2.1.9...2.2.0)

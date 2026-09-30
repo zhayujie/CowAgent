@@ -102,6 +102,41 @@ def test_save_replaces_edited_fields_and_keeps_unknown_ones(tmp_path, monkeypatc
     assert entry == {"type": "sse", "url": "https://example.com/sse", "cwd": "/srv"}
 
 
+def test_without_mcp_json_the_editor_lists_config_json_servers(tmp_path, monkeypatch):
+    """The runtime falls back to config.json's mcp_servers when mcp.json is
+    absent. The first console save creates mcp.json, which then shadows
+    config.json, so the editor has to start from the same list."""
+    monkeypatch.setattr(
+        "agent.tools.mcp.service.mcp_config_path",
+        lambda workspace=None: str(tmp_path / "mcp.json"),
+    )
+    legacy = [{"name": "legacy", "command": "uvx", "args": ["mcp-server-fetch"]}]
+    with patch("config.conf", return_value={"mcp_servers": legacy}):
+        loaded = load_servers(str(tmp_path))
+        assert [item["name"] for item in loaded] == ["legacy"]
+        save_servers(str(tmp_path), loaded + [{"name": "new", "url": "https://example.com/sse"}])
+
+    saved = json.loads((tmp_path / "mcp.json").read_text(encoding="utf-8"))["mcpServers"]
+    assert set(saved) == {"legacy", "new"}
+
+
+def test_save_keeps_other_top_level_keys_of_mcp_json(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "agent.tools.mcp.service.mcp_config_path",
+        lambda workspace=None: str(tmp_path / "mcp.json"),
+    )
+    (tmp_path / "mcp.json").write_text(json.dumps({
+        "$schema": "https://example.com/schema.json",
+        "mcpServers": {"fetch": {"command": "uvx"}},
+    }), encoding="utf-8")
+
+    save_servers(str(tmp_path), [{"name": "fetch", "command": "npx"}])
+
+    data = json.loads((tmp_path / "mcp.json").read_text(encoding="utf-8"))
+    assert data["$schema"] == "https://example.com/schema.json"
+    assert data["mcpServers"]["fetch"]["command"] == "npx"
+
+
 def test_get_does_not_spawn_servers(tmp_path, monkeypatch):
     monkeypatch.setattr(
         "agent.tools.mcp.service.mcp_config_path",

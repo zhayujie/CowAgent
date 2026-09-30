@@ -56,13 +56,13 @@ class LinkAIVoice(Voice):
                 except Exception:
                     pass
                 logger.error(f"[LinkVoice] voiceToText error, status_code={res.status_code}, msg={msg}")
-                return None
+                return Reply(ReplyType.ERROR, "抱歉，语音识别失败")
             text = res.json().get("text")
             logger.info(f"[LinkVoice] voiceToText success, text={text}, file name={voice_file}")
             return Reply(ReplyType.TEXT, text)
         except Exception as e:
             logger.error(e)
-            return None
+            return Reply(ReplyType.ERROR, "抱歉，语音识别失败")
 
     def textToVoice(self, text):
         try:
@@ -88,7 +88,7 @@ class LinkAIVoice(Voice):
                 except Exception:
                     pass
                 logger.error(f"[LinkVoice] textToVoice error, status_code={res.status_code}, msg={msg}")
-                return None
+                return Reply(ReplyType.ERROR, "抱歉，语音合成失败")
             tmp_file_name = TmpDir().path() + datetime.datetime.now().strftime('%Y%m%d%H%M%S') + str(random.randint(0, 1000)) + ".mp3"
             with open(tmp_file_name, 'wb') as f:
                 f.write(res.content)
@@ -96,4 +96,4 @@ class LinkAIVoice(Voice):
             return Reply(ReplyType.VOICE, tmp_file_name)
         except Exception as e:
             logger.error(e)
-            return None
+            return Reply(ReplyType.ERROR, "抱歉，语音合成失败")

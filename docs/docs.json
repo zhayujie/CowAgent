@@ -285,6 +285,7 @@
                 "group": "Release Notes",
                 "pages": [
                   "releases/overview",
+                  "releases/v2.2.0",
                   "releases/v2.1.9",
                   "releases/v2.1.8",
                   "releases/v2.1.7",
@@ -545,6 +546,7 @@
                 "group": "发布记录",
                 "pages": [
                   "zh/releases/overview",
+                  "zh/releases/v2.2.0",
                   "zh/releases/v2.1.9",
                   "zh/releases/v2.1.8",
                   "zh/releases/v2.1.7",
@@ -804,6 +806,7 @@
                 "group": "リリースノート",
                 "pages": [
                   "ja/releases/overview",
+                  "ja/releases/v2.2.0",
                   "ja/releases/v2.1.9",
                   "ja/releases/v2.1.8",
                   "ja/releases/v2.1.7",

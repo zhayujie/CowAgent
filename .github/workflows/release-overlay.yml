@@ -155,6 +155,26 @@ jobs:
             --distpath desktop/build/dist \
             --workpath desktop/build/build-work
 
+      # Same guard as release.yml: the bundle carries only Python's own
+      # libssl.3.dylib, so an extension linked against another OpenSSL fails to
+      # load on users' machines.
+      - name: Verify no extension links a foreign OpenSSL
+        if: matrix.platform == 'mac'
+        shell: bash
+        run: |
+          internal=desktop/build/dist/cowagent-backend/_internal
+          bad=""
+          while IFS= read -r -d '' so; do
+            case "$so" in */python3.*/lib-dynload/*) continue ;; esac
+            if otool -L "$so" | tail -n +2 | grep -Eq 'lib(ssl|crypto)\.[0-9.]+dylib'; then
+              bad="$bad ${so#$internal/}"
+            fi
+          done < <(find "$internal" -name '*.so' -print0)
+          if [ -n "$bad" ]; then
+            echo "::error::extensions dynamically linked to OpenSSL:$bad"
+            exit 1
+          fi
+
       - name: Install desktop deps
         working-directory: desktop
         run: npm ci

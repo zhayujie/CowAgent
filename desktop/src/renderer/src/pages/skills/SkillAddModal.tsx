@@ -133,6 +133,8 @@ const SkillAddModal: React.FC<SkillAddModalProps> = ({ open, onClose, onInstalle
   const [dragOver, setDragOver] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const folderRef = useRef<HTMLInputElement>(null)
+  // Bumped when a fetch or upload is abandoned, so its late reply is ignored.
+  const reqRef = useRef(0)
 
   useEffect(() => {
     if (!open) return
@@ -155,7 +157,12 @@ const SkillAddModal: React.FC<SkillAddModalProps> = ({ open, onClose, onInstalle
   }
 
   const close = (): void => {
-    if (busy) return
+    if (busy) {
+      // Installing is quick and not safely interruptible; fetching can hang on the network.
+      if (step !== 'input') return
+      reqRef.current++
+      setBusy(false)
+    }
     discard()
     onClose()
   }
@@ -181,11 +188,30 @@ const SkillAddModal: React.FC<SkillAddModalProps> = ({ open, onClose, onInstalle
     }
   }
 
+  const stage = (request: () => Promise<SkillPreviewResult>): void => {
+    const req = ++reqRef.current
+    setError('')
+    setBusy(true)
+    request()
+      .then((data) => {
+        if (req !== reqRef.current) {
+          if (data.token) void apiClient.discardSkill(data.token).catch(() => undefined)
+          return
+        }
+        showPreview(data)
+      })
+      .catch((err) => {
+        if (req === reqRef.current) setError((err as Error).message || t('skill_install_error'))
+      })
+      .finally(() => {
+        if (req === reqRef.current) setBusy(false)
+      })
+  }
+
   const fetchPreview = (): void => {
     const spec = value.trim()
     if (!spec || busy) return
-    setError('')
-    void run(async () => showPreview(await apiClient.previewSkill(source, spec)), setError)
+    stage(() => apiClient.previewSkill(source, spec))
   }
 
   const upload = (files: UploadFile[]): void => {
@@ -196,7 +222,7 @@ const SkillAddModal: React.FC<SkillAddModalProps> = ({ open, onClose, onInstalle
       setError(t('skill_upload_too_large'))
       return
     }
-    void run(async () => showPreview(await apiClient.uploadSkill(files)), setError)
+    stage(() => apiClient.uploadSkill(files))
   }
 
   const confirm = (): void => {
@@ -238,7 +264,7 @@ const SkillAddModal: React.FC<SkillAddModalProps> = ({ open, onClose, onInstalle
   if (step === 'input') {
     footer = (
       <>
-        <Btn onClick={close} disabled={busy}>
+        <Btn onClick={close}>
           {t('mcp_cancel')}
         </Btn>
         {tab === 'market' && (

@@ -22,6 +22,7 @@ import plugins
 from plugins import Plugin, Event, EventContext, EventAction
 from bridge.context import ContextType
 from bridge.reply import Reply, ReplyType
+from common.atomic_write import write_json_atomic
 from common.log import logger
 from common.i18n import t as _t
 from config import conf
@@ -68,20 +69,6 @@ DEFAULT_ALIASES = {
 def _app_name() -> str:
     """Product name shown in command output; a desktop build may rename it."""
     return (os.environ.get("COW_APP_NAME") or "").strip() or "CowAgent"
-
-
-def _skill_hub_enabled() -> bool:
-    """Whether the online skill hub is offered; a desktop build may turn it off."""
-    return (os.environ.get("COW_SKILL_HUB") or "").strip() != "0"
-
-
-_HUB_OFF_MSG = (
-    "当前版本未开放技能广场，可在「技能」页上传技能。",
-    "The skill hub isn't available in this app. Upload skills from the Skills page.",
-)
-
-# Help lines that point at the skill hub, dropped when it is turned off.
-_HUB_HELP_PREFIXES = ("/skill list --remote", "/skill search", "/skill install")
 
 
 @plugins.register(
@@ -426,8 +413,6 @@ class CowCliPlugin(Plugin):
                 "",
                 "💡 也可以用 cow <command> 代替 /<command>",
             ]
-        if not _skill_hub_enabled():
-            lines = [l for l in lines if not l.startswith(_HUB_HELP_PREFIXES)]
         # The `cow` prefix is named after the default product; a renamed build
         # keeps the slash form only in its help.
         if os.environ.get("COW_APP_NAME"):
@@ -767,9 +752,6 @@ class CowCliPlugin(Plugin):
     _CONFIG_READABLE = _CONFIG_WRITABLE | {"channel_type"}
 
     def _cmd_config(self, args: str, e_context, **_) -> str:
-        from config import conf, load_config
-        import json as _json
-
         parts = args.strip().split(None, 1)
         if not parts:
             return self._config_show_all()
@@ -850,8 +832,7 @@ class CowCliPlugin(Plugin):
             with open(config_path, "r", encoding="utf-8-sig") as f:
                 file_config = _json.load(f)
             file_config.update(updates)
-            with open(config_path, "w", encoding="utf-8") as f:
-                _json.dump(file_config, f, indent=4, ensure_ascii=False)
+            write_json_atomic(config_path, file_config)
         except Exception as e:
             return _t(f"写入 config.json 失败: {e}", f"Failed to write config.json: {e}")
 
@@ -979,10 +960,6 @@ class CowCliPlugin(Plugin):
         sub = parts[0].lower() if parts else ""
         sub_args = parts[1].strip() if len(parts) > 1 else ""
 
-        hub = _skill_hub_enabled()
-        if not hub and (sub in ("search", "install") or (sub == "list" and self._wants_remote(sub_args))):
-            return _t(*_HUB_OFF_MSG)
-
         if sub == "list":
             return self._skill_list(sub_args, e_context)
         elif sub == "search":
@@ -998,7 +975,9 @@ class CowCliPlugin(Plugin):
         elif sub == "disable":
             return self._skill_set_enabled(sub_args, False)
         else:
-            subs = _t(
+            return _t(
+                "用法: /skill <子命令>\n\n"
+                "子命令:\n"
                 "list [--remote]: 查看技能列表\n"
                 "search <关键词>: 搜索技能\n"
                 "install <名称>: 安装技能\n"
@@ -1006,6 +985,8 @@ class CowCliPlugin(Plugin):
                 "info <名称>: 查看技能详情\n"
                 "enable <名称>: 启用技能\n"
                 "disable <名称>: 禁用技能",
+                "Usage: /skill <subcommand>\n\n"
+                "Subcommands:\n"
                 "list [--remote]: List skills\n"
                 "search <keyword>: Search skills\n"
                 "install <name>: Install a skill\n"
@@ -1013,10 +994,7 @@ class CowCliPlugin(Plugin):
                 "info <name>: Show skill details\n"
                 "enable <name>: Enable a skill\n"
                 "disable <name>: Disable a skill",
-            ).split("\n")
-            if not hub:
-                subs = [s.replace(" [--remote]", "") for s in subs if not s.startswith(("search", "install"))]
-            return _t("用法: /skill <子命令>\n\n子命令:\n", "Usage: /skill <subcommand>\n\nSubcommands:\n") + "\n".join(subs)
+            )
 
     def _refresh_skill_manager(self):
         """Re-scan skill directories so skills_config.json reflects disk state."""
@@ -1063,8 +1041,6 @@ class CowCliPlugin(Plugin):
                         if os.path.exists(os.path.join(skill_path, "SKILL.md")):
                             entries.append({"name": name, "source": source, "enabled": True})
             if not entries:
-                if not _skill_hub_enabled():
-                    return _t("暂无已安装的技能", "No skills installed yet")
                 return _t(
                     "暂无已安装的技能\n\n💡 /skill list --remote: 浏览技能广场",
                     "No skills installed yet\n\n💡 /skill list --remote: Browse Skill Hub",
@@ -1095,19 +1071,13 @@ class CowCliPlugin(Plugin):
             lines.append("")
 
         lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━")
-        if _skill_hub_enabled():
-            lines.append(_t("💡 /skill list --remote: 浏览技能广场", "💡 /skill list --remote: Browse Skill Hub"))
+        lines.append(_t("💡 /skill list --remote: 浏览技能广场", "💡 /skill list --remote: Browse Skill Hub"))
         lines.append(_t("💡 /skill info <名称>: 查看详情", "💡 /skill info <name>: Show details"))
         return "\n".join(lines)
 
-    @staticmethod
-    def _wants_remote(args: str) -> bool:
-        parts = args.strip().split()
-        return "--remote" in parts or "-r" in parts
-
     def _skill_list(self, args: str, e_context=None) -> str:
         parts = args.strip().split()
-        if self._wants_remote(args):
+        if "--remote" in parts or "-r" in parts:
             page = 1
             for i, p in enumerate(parts):
                 if p == "--page" and i + 1 < len(parts) and parts[i + 1].isdigit():
@@ -1189,7 +1159,9 @@ class CowCliPlugin(Plugin):
             lines.append(_t(f"💡 /skill list --remote --page {page - 1}: 上一页", f"💡 /skill list --remote --page {page - 1}: Previous page"))
         lines.append(_t("💡 /skill install <名称>: 安装技能", "💡 /skill install <name>: Install a skill"))
         lines.append(_t("💡 /skill search <关键词>: 搜索技能", "💡 /skill search <keyword>: Search skills"))
-        lines.append(_t("🌐 https://skills.cowagent.ai  在线浏览全部技能", "🌐 https://skills.cowagent.ai  Browse all skills online"))
+        # The hub site is the default product's; a renamed build leaves it out.
+        if not os.environ.get("COW_APP_NAME"):
+            lines.append(_t("🌐 https://skills.cowagent.ai  在线浏览全部技能", "🌐 https://skills.cowagent.ai  Browse all skills online"))
         return "\n".join(lines)
 
     def _skill_search(self, query: str) -> str:
@@ -1301,8 +1273,7 @@ class CowCliPlugin(Plugin):
                 with open(config_path, "r", encoding="utf-8") as f:
                     config = json.load(f)
                 config.pop(name, None)
-                with open(config_path, "w", encoding="utf-8") as f:
-                    json.dump(config, f, indent=4, ensure_ascii=False)
+                write_json_atomic(config_path, config)
             except Exception:
                 pass
 
@@ -1423,8 +1394,7 @@ class CowCliPlugin(Plugin):
             return _t(f"技能 '{name}' 未在配置中找到", f"Skill '{name}' not found in config")
 
         config[name]["enabled"] = enabled
-        with open(config_path, "w", encoding="utf-8") as f:
-            json.dump(config, f, indent=4, ensure_ascii=False)
+        write_json_atomic(config_path, config)
 
         icon = "✅" if enabled else "⬚"
         if enabled:
@@ -1823,8 +1793,6 @@ class CowCliPlugin(Plugin):
     @staticmethod
     def _create_standalone_flush_manager():
         """Create a MemoryFlushManager without a running agent (for pre-init dream)."""
-        from pathlib import Path
-        from config import conf
         from common.state_dir import state_root
         from agent.memory.summarizer import MemoryFlushManager
         from bridge.bridge import Bridge
@@ -1864,8 +1832,7 @@ class CowCliPlugin(Plugin):
             with open(config_path, "r", encoding="utf-8-sig") as f:
                 file_config = _json.load(f)
             file_config["knowledge"] = enabled
-            with open(config_path, "w", encoding="utf-8") as f:
-                _json.dump(file_config, f, indent=4, ensure_ascii=False)
+            write_json_atomic(config_path, file_config)
         except Exception as e:
             return _t(f"⚠️ 内存中已切换，但写入 config.json 失败: {e}", f"⚠️ Switched in memory, but failed to write config.json: {e}")
 

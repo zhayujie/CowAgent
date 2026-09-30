@@ -13,6 +13,7 @@ import threading
 from typing import Optional, Callable, Any, List, Dict
 from pathlib import Path
 from datetime import datetime
+from common.atomic_write import write_text_atomic
 from common.log import logger
 
 
@@ -188,7 +189,6 @@ def _is_empty_sentinel(text: str) -> bool:
         return True
     s = text.strip()
     return s == "" or s == "无" or s.lower() == "none"
-
 
 
 class MemoryFlushManager:
@@ -557,7 +557,7 @@ class MemoryFlushManager:
         try:
             main_file = self.get_main_memory_file(user_id)
             old_size = len(memory_content)
-            main_file.write_text(new_memory + "\n", encoding="utf-8")
+            write_text_atomic(main_file, new_memory + "\n")
             logger.info(
                 f"[DeepDream] Updated MEMORY.md "
                 f"({old_size} → {len(new_memory)} chars)"
@@ -646,10 +646,7 @@ class MemoryFlushManager:
 
         today = datetime.now().strftime("%Y-%m-%d")
         diary_file = dreams_dir / f"{today}.md"
-        diary_file.write_text(
-            f"# Dream Diary: {today}\n\n{content}\n",
-            encoding="utf-8",
-        )
+        write_text_atomic(diary_file, f"# Dream Diary: {today}\n\n{content}\n")
         logger.info(f"[DeepDream] Wrote dream diary to {diary_file}")
 
     # ---- Internal helpers ----

@@ -137,6 +137,8 @@ def on_open(ws):
 # 收到websocket错误的处理
 def on_error(ws, error):
     print("### error:", error)
+    global stream_error
+    stream_error = error
 
 
 
@@ -146,9 +148,27 @@ def on_close(ws):
 
 
 
+# The TTS stream hands the whole text over and then waits for the audio frames:
+# it only closes once the server reports the last one (``status == 2``, in
+# ``on_message``). A provider that accepts the connection and then stops
+# answering therefore leaves ``run_forever`` looping forever, because nothing is
+# ever sent that could fail. Pinging bounds it — websocket-client ends the loop
+# with ``WebSocketTimeoutException`` once no pong comes back. ``ping_interval``
+# has to be greater than ``ping_timeout``.
+WS_PING_INTERVAL = 20
+WS_PING_TIMEOUT = 10
+
+# What the stream ended with, if anything. ``run_forever`` hands errors to
+# ``on_error`` and then simply returns, so without this a caller cannot tell a
+# stream that produced audio from one that gave up.
+stream_error = None
+
+
 def xunfei_tts(APPID, APIKey, APISecret,BusinessArgsTTS, Text, OutFile):
     global outfile
-    global wsParam 
+    global wsParam
+    global stream_error
+    stream_error = None
     outfile = OutFile
     wsParam1 = Ws_Param(APPID,APIKey,APISecret,BusinessArgsTTS,Text)
     wsParam = wsParam1
@@ -156,6 +176,12 @@ def xunfei_tts(APPID, APIKey, APISecret,BusinessArgsTTS, Text, OutFile):
     wsUrl = wsParam.create_url()
     ws = websocket.WebSocketApp(wsUrl, on_message=on_message, on_error=on_error, on_close=on_close)
     ws.on_open = on_open
-    ws.run_forever(sslopt={"cert_reqs": ssl.CERT_NONE})
+    ws.run_forever(sslopt={"cert_reqs": ssl.CERT_NONE},
+                   ping_interval=WS_PING_INTERVAL,
+                   ping_timeout=WS_PING_TIMEOUT)
+    if stream_error:
+        # Hand the failure to the caller instead of returning a file that was
+        # never written: XunfeiVoice.textToVoice turns it into an ERROR reply.
+        raise RuntimeError("[Xunfei] text-to-speech stream failed: {}".format(stream_error))
     return outfile
      

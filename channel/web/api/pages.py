@@ -24,7 +24,9 @@ class RootHandler:
     banner of any running instance, still point at."""
 
     def GET(self):
-        raise web.seeother('/')
+        # A relative Location on purpose: web.seeother() builds an absolute URL
+        # from wsgi.url_scheme, which is http behind a TLS-terminating proxy.
+        raise web.HTTPError('303 See Other', {'Location': '/'}, '')
 
 
 class HealthHandler:

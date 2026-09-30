@@ -10,6 +10,13 @@
 # small. That bundle relies on `requests` and `pycryptodome` below rather than
 # shipping its own copies.
 
+# cryptography (pulled in by dashscope) stopped shipping macOS x86_64 wheels at
+# 49.0. A source build links the runner's Homebrew OpenSSL, and PyInstaller then
+# bundles it beside Python's older libssl.3.dylib under the same name, so the
+# extension fails to load on users' machines. Wheels link OpenSSL statically;
+# forcing them makes pip settle on the newest version that has one per arch.
+--only-binary=cryptography
+
 # ---- core ----
 numpy>=1.21
 # aiohttp<3.10 has no prebuilt wheels for Python 3.13+ (would need MSVC to build).

@@ -15,6 +15,12 @@ from common.tmp_dir import TmpDir
 from config import conf
 from voice.voice import Voice
 
+# Bound every outbound call. An unbounded request waits forever when the
+# service stalls: nothing is raised, nothing is logged, the turn never
+# finishes and the user never gets a reply. Same (connect, read) shape as the
+# other providers (mimo/openai/zhipuai define REQUEST_TIMEOUT the same way).
+REQUEST_TIMEOUT = (5, 60)
+
 try:
     from voice.audio_convert import get_pcm_from_wav
 except ImportError as e:
@@ -68,7 +74,7 @@ class BaiduVoice(Voice):
                 "client_id":     self.api_key,
                 "client_secret": self.secret_key,
             }
-            resp = requests.post(url, params=params).json()
+            resp = requests.post(url, params=params, timeout=REQUEST_TIMEOUT).json()
             token = resp.get("access_token")
             expires_in = resp.get("expires_in", 2592000)
             if token:
@@ -110,7 +116,9 @@ class BaiduVoice(Voice):
             "enable_subtitle": 0,
         }
         headers = {"Content-Type": "application/json"}
-        create_resp = requests.post(create_url, headers=headers, json=payload).json()
+        create_resp = requests.post(
+            create_url, headers=headers, json=payload, timeout=REQUEST_TIMEOUT
+        ).json()
         task_id = create_resp.get("task_id")
         if not task_id:
             logger.error("[Baidu] 长文本合成创建任务失败: %s", create_resp)
@@ -121,7 +129,10 @@ class BaiduVoice(Voice):
         query_url = f"https://aip.baidubce.com/rpc/2.0/tts/v1/query?access_token={token}"
         for _ in range(100):
             time.sleep(3)
-            resp = requests.post(query_url, headers=headers, json={"task_ids":[task_id]})
+            resp = requests.post(
+                query_url, headers=headers, json={"task_ids":[task_id]},
+                timeout=REQUEST_TIMEOUT,
+            )
             result = resp.json()
             infos = result.get("tasks_info") or result.get("tasks") or []
             if not infos:
@@ -141,7 +152,7 @@ class BaiduVoice(Voice):
             return Reply(ReplyType.ERROR, "长文本合成超时，请稍后重试")
 
         # 下载并保存音频
-        audio_data = requests.get(audio_url).content
+        audio_data = requests.get(audio_url, timeout=REQUEST_TIMEOUT).content
         fn = TmpDir().path() + f"reply-long-{int(time.time())}-{hash(text)&0x7FFFFFFF}.mp3"
         with open(fn, "wb") as f:
             f.write(audio_data)

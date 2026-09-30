@@ -13,14 +13,14 @@ Claude 由 Anthropic 提供，支持文本对话与图像理解，主流 Sonnet 
 
 ```json
 {
-  "model": "claude-opus-5",
+  "model": "claude-opus-5-5",
   "claude_api_key": "YOUR_API_KEY"
 }
 ```
 
 | 参数 | 说明 |
 | --- | --- |
-| `model` | 支持 `claude-opus-5`、`claude-sonnet-5`、`claude-fable-5-1`、`claude-fable-5`、`claude-opus-4-8`、`claude-opus-4-7`、`claude-sonnet-4-6`、`claude-opus-4-6`、`claude-sonnet-4-5`、`claude-sonnet-4-0`、`claude-3-5-sonnet-latest` 等，参考 [官方模型](https://docs.anthropic.com/en/docs/about-claude/models/overview) |
+| `model` | 支持 `claude-opus-5-5`、`claude-opus-5`、`claude-sonnet-5`、`claude-fable-5-1`、`claude-fable-5`、`claude-opus-4-8`、`claude-opus-4-7`、`claude-sonnet-4-6`、`claude-opus-4-6`、`claude-sonnet-4-5`、`claude-sonnet-4-0`、`claude-3-5-sonnet-latest` 等，参考 [官方模型](https://docs.anthropic.com/en/docs/about-claude/models/overview) |
 | `claude_api_key` | 在 [Claude 控制台](https://console.anthropic.com/settings/keys) 创建 |
 | `claude_api_base` | 可选，默认为 `https://api.anthropic.com/v1`，可改为第三方代理 |
 
@@ -28,12 +28,12 @@ Claude 由 Anthropic 提供，支持文本对话与图像理解，主流 Sonnet 
 
 | 模型 | 适用场景 |
 | --- | --- |
-| `claude-opus-5` | 最新旗舰，默认推荐模型，复杂推理与长链路 Agent 任务效果最佳 |
+| `claude-opus-5-5` | 最新旗舰，默认推荐模型，复杂推理与长链路 Agent 任务效果最佳 |
+| `claude-opus-5` | 上一代 Opus 旗舰 |
 | `claude-sonnet-5` | Claude 5 系列均衡款，推理效果与成本平衡，价格更低 |
 | `claude-fable-5-1` | Claude 5 系列的另一款旗舰模型（新版） |
 | `claude-fable-5` | Claude 5 系列的另一款旗舰模型 |
-| `claude-opus-4-8` | 上一代 Opus 旗舰 |
-| `claude-opus-4-7` | 更早的 Opus 旗舰 |
+| `claude-opus-4-8` / `claude-opus-4-7` | 更早的 Opus 旗舰 |
 | `claude-sonnet-4-6` | 性价比与速度平衡，成本更低 |
 | `claude-opus-4-6` / `claude-sonnet-4-5` / `claude-sonnet-4-0` | 更早的旗舰，价格更低 |
 

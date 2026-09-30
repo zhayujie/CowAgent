@@ -11,6 +11,7 @@ import {
   Mic
 } from 'lucide-react'
 import { t } from '../i18n'
+import { product } from '@product'
 import type { Attachment, WorkspaceEntry, AgentBadge } from '../types'
 import AgentAvatar from './AgentAvatar'
 import { chatDraft } from '../store/draftStore'
@@ -273,8 +274,12 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     { cmd: '/context', desc: t('slash_context') },
     { cmd: '/compact', desc: t('slash_compact') },
     { cmd: '/skill list', desc: t('slash_skill_list') },
-    { cmd: '/skill search ', desc: t('slash_skill_search') },
-    { cmd: '/skill install ', desc: t('slash_skill_install') },
+    ...(product.skills?.uploadOnly
+      ? []
+      : [
+          { cmd: '/skill search ', desc: t('slash_skill_search') },
+          { cmd: '/skill install ', desc: t('slash_skill_install') },
+        ]),
     { cmd: '/memory dream ', desc: t('slash_memory_dream') },
     { cmd: '/knowledge', desc: t('slash_knowledge') },
     { cmd: '/knowledge list', desc: t('slash_knowledge_list') },

@@ -44,8 +44,9 @@ _MODEL_SPECS = {
                  "fallback_window": 64000, "full_cap_names": ("deepseek-flash",)},
     # gemini: 1M context, 64K max output.
     "gemini": {"window": 1000000, "max_output": 64000},
-    # claude: 200K context, 64K max output.
-    "claude": {"window": 200000, "max_output": 64000},
+    # claude 5+: 1M context, 128K max output; claude 4 and earlier: 200K / 64K.
+    "claude": {"version_min": 5.0, "window": 1000000, "max_output": 128000,
+               "fallback_window": 200000, "fallback_max_output": 64000},
     # GLM: only 5.3-flash ships a 1M window; older glm-5.x stays at 200K.
     "glm": {"prefix": "glm-5.3-flash", "window": 1000000, "max_output": None,
             "fallback_window": 200000},
@@ -84,7 +85,7 @@ def resolve_family_spec(model_name: str):
         if version_min is not None and (version is None or version < version_min):
             # Older release of a family that only bumped at version_min
             # (e.g. deepseek < v4): use its conservative fallback window.
-            return spec.get("fallback_window", 128000), None
+            return spec.get("fallback_window", 128000), spec.get("fallback_max_output")
         return spec["window"], spec.get("max_output")
     return None, None
 from agent.protocol.models import LLMModel

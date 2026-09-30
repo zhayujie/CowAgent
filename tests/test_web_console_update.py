@@ -117,6 +117,8 @@ def test_failed_pip_resets_git(tmp_path, monkeypatch):
         calls.append(cmd)
         if cmd[:2] == ["git", "rev-parse"]:
             return types.SimpleNamespace(returncode=0, stdout="abc123\n")
+        if cmd[:2] == ["git", "status"]:
+            return types.SimpleNamespace(returncode=0, stdout="")
         if cmd[:2] == ["git", "pull"]:
             return types.SimpleNamespace(returncode=0, stdout="Already up to date.\n")
         if cmd[:2] == ["git", "reset"]:
@@ -129,6 +131,51 @@ def test_failed_pip_resets_git(tmp_path, monkeypatch):
         apply_source_update(str(tmp_path), python="python", restore_sha="abc123")
     assert exc.value.step == "install_deps"
     assert ["git", "reset", "--hard", "abc123"] in calls
+
+
+def test_local_edits_block_the_update_before_anything_runs(tmp_path, monkeypatch):
+    calls = []
+
+    def fake_run(cmd, cwd):
+        calls.append(cmd)
+        if cmd[:2] == ["git", "status"]:
+            return types.SimpleNamespace(returncode=0, stdout=" M plugins/foo.py\n")
+        return types.SimpleNamespace(returncode=0, stdout="")
+
+    monkeypatch.setattr("cli.update_service._run", fake_run)
+    with pytest.raises(UpdateError) as exc:
+        apply_source_update(str(tmp_path), python="python", restore_sha="abc123")
+    assert exc.value.step == "git_pull"
+    assert "plugins/foo.py" in exc.value.output
+    assert not any(cmd[:2] in (["git", "pull"], ["git", "reset"]) for cmd in calls)
+
+
+def test_the_console_pulls_fast_forward_only(tmp_path, monkeypatch):
+    calls = []
+
+    def fake_run(cmd, cwd):
+        calls.append(cmd)
+        return types.SimpleNamespace(returncode=0, stdout="")
+
+    monkeypatch.setattr("cli.update_service._run", fake_run)
+    monkeypatch.setattr("cli.update_service.os.path.exists", lambda path: False)
+    apply_source_update(str(tmp_path), python="python", restore_sha="abc123")
+    assert ["git", "pull", "--ff-only"] in calls
+
+
+def test_a_running_status_left_by_a_dead_worker_does_not_block(tmp_path, monkeypatch):
+    from cli import update_service
+
+    monkeypatch.setattr(update_service, "_worker_alive", lambda pid: False)
+    assert update_service._update_is_stale({"state": "running", "worker_pid": 4242}) is True
+
+    monkeypatch.setattr(update_service, "_worker_alive", lambda pid: True)
+    fresh = {"state": "running", "worker_pid": 4242, "started_at": update_service.datetime.now(
+        update_service.timezone.utc).isoformat()}
+    assert update_service._update_is_stale(fresh) is False
+    assert update_service._update_is_stale(
+        {"state": "running", "started_at": "2020-01-01T00:00:00+00:00"}
+    ) is True
 
 
 def test_web_handlers_auth_and_no_github_on_version(monkeypatch):

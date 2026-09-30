@@ -17,7 +17,21 @@ from common.log import logger
 
 _STREAM_THROTTLE_S = 0.15
 _FENCE_RE = re.compile(r"```[\w+-]*\n.*?```", re.DOTALL)
-_HTML_TAG_RE = re.compile(r"</?([a-zA-Z][a-zA-Z0-9]*)\b[^>]*>")
+_INLINE_CODE_RE = re.compile(r"`[^`\n]+`")
+# Only real HTML element names are stripped: generics such as List<String>,
+# Map<K, V> or placeholders like <file> are ordinary text in a reply.
+_HTML_TAG_NAMES = (
+    "a|abbr|address|article|aside|audio|b|big|blockquote|body|br|button|caption|"
+    "center|cite|code|col|colgroup|dd|del|details|dfn|div|dl|dt|em|figcaption|"
+    "figure|font|footer|form|h[1-6]|head|header|hr|html|i|iframe|img|input|ins|"
+    "kbd|label|li|mark|nav|ol|p|picture|pre|q|s|samp|section|small|source|span|"
+    "strike|strong|style|sub|summary|sup|table|tbody|td|tfoot|th|thead|title|tr|"
+    "tt|u|ul|var|video"
+)
+_HTML_TAG_RE = re.compile(
+    rf"</?(?:{_HTML_TAG_NAMES})(?:\s[^<>]*)?/?>",
+    re.IGNORECASE,
+)
 _HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
 _BR_RE = re.compile(r"<br\s*/?>", re.IGNORECASE)
 _IMG_RE = re.compile(
@@ -52,6 +66,7 @@ def sanitize_dingtalk_markdown(text: str) -> str:
         return f"\x00FENCE{len(fences) - 1}\x00"
 
     protected = _FENCE_RE.sub(_hold_fence, normalised)
+    protected = _INLINE_CODE_RE.sub(_hold_fence, protected)
     protected = _HTML_COMMENT_RE.sub("", protected)
     protected = _BR_RE.sub("\n", protected)
     protected = _IMG_RE.sub(lambda match: f"![]({match.group(1)})", protected)

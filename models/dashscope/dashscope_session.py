@@ -4,7 +4,8 @@ from common.log import logger
 
 class DashscopeSession(Session):
     def __init__(self, session_id, system_prompt=None, model="qwen-turbo"):
-        super().__init__(session_id)
+        super().__init__(session_id, system_prompt)
+        self.model = model
         self.reset()
 
     def discard_exceeding(self, max_tokens, cur_tokens=None):

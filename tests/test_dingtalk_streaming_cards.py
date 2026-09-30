@@ -155,6 +155,17 @@ def test_sanitize_strips_html_and_task_boxes():
     assert "world" in out
 
 
+def test_sanitize_keeps_angle_bracket_text_that_is_not_html():
+    text = "Use `List<String>` or Map<K, V>; run `echo <file>`, Optional<Integer> and `<b>`"
+    out = sanitize_dingtalk_markdown(text)
+    assert out == text
+
+
+def test_sanitize_still_strips_html_with_attributes_and_case():
+    out = sanitize_dingtalk_markdown('<DIV class="x">hi</DIV> <span style="c">there</span>')
+    assert out == "hi there"
+
+
 def test_sanitize_empty_and_none():
     assert sanitize_dingtalk_markdown("") == ""
     assert sanitize_dingtalk_markdown(None) == ""

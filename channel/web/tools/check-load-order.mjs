@@ -47,7 +47,12 @@ const STATIC = resolve(WEB, 'static')
 
 const shell = readFileSync(resolve(WEB, 'chat.html'), 'utf8')
   .replace(/<!--#include ([^\s>]+?)\s*-->/g, (_, p) => readFileSync(resolve(WEB, p), 'utf8'))
-const scripts = [...shell.matchAll(/<script defer src="assets\/(js\/[^"?]+)"/g)].map((m) => m[1])
+const scripts = [...shell.matchAll(/<script defer src="\/?assets\/(js\/[^"?]+)"/g)].map((m) => m[1])
+if (!scripts.length) {
+  // A pattern that matches nothing would report every order as consistent.
+  console.error('no <script defer src="/assets/js/..."> tags found in chat.html')
+  process.exit(2)
+}
 
 const isFn = (n) => ts.isFunctionExpression(n) || ts.isArrowFunction(n) ||
   ts.isFunctionDeclaration(n) || ts.isMethodDeclaration(n)

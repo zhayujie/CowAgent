@@ -181,13 +181,7 @@ def mcp_config_path(workspace: Optional[str] = None) -> str:
     return str(mcp_config_file())
 
 
-def load_servers(workspace: Optional[str] = None) -> list:
-    """Read servers from mcp.json. Missing file -> empty list. Does not boot."""
-    from agent.tools.tool_manager import _normalize_mcp_configs
-
-    path = mcp_config_path(workspace)
-    if not os.path.exists(path):
-        return []
+def _read_mcp_file(path: str):
     try:
         with open(path, "r", encoding="utf-8") as handle:
             data = json.load(handle)
@@ -195,9 +189,27 @@ def load_servers(workspace: Optional[str] = None) -> list:
         raise McpConfigError(f"mcp.json is not valid JSON: {exc}") from exc
     except OSError as exc:
         raise McpConfigError(f"failed to read mcp.json: {exc}") from exc
-
     if not isinstance(data, dict):
         raise McpConfigError("mcp.json must be a JSON object")
+    return data
+
+
+def load_servers(workspace: Optional[str] = None) -> list:
+    """Read the servers the runtime would load. Does not boot.
+
+    Same precedence as ToolManager: mcp.json when it exists, otherwise the
+    legacy ``mcp_servers`` list in config.json. Showing the fallback matters:
+    the first save creates mcp.json, which from then on shadows config.json,
+    so servers the editor never listed would silently stop loading.
+    """
+    from agent.tools.tool_manager import _normalize_mcp_configs
+
+    path = mcp_config_path(workspace)
+    if not os.path.exists(path):
+        from config import conf
+
+        return _normalize_mcp_configs(conf().get("mcp_servers") or [])
+    data = _read_mcp_file(path)
     raw = data.get("mcpServers")
     if raw is None:
         raw = data.get("mcp_servers", data)
@@ -243,7 +255,14 @@ def save_servers(workspace: Optional[str], servers: list) -> list:
     if parent:
         os.makedirs(parent, exist_ok=True)
 
-    payload = {"mcpServers": {entry["name"]: _persistable(entry) for entry in normalized}}
+    # Keep any other top-level keys a hand-edited mcp.json carries; a flat
+    # file (servers at the top level) has nothing besides servers to keep.
+    payload = {}
+    if os.path.exists(path):
+        current = _read_mcp_file(path)
+        if "mcpServers" in current or "mcp_servers" in current:
+            payload = {k: v for k, v in current.items() if k not in ("mcpServers", "mcp_servers")}
+    payload["mcpServers"] = {entry["name"]: _persistable(entry) for entry in normalized}
     tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as handle:
         json.dump(payload, handle, indent=2, ensure_ascii=False)

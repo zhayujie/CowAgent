@@ -75,6 +75,7 @@ const RELOAD_AFTER_DROP_INTERVAL_MS = 2000
 // history until it ends.
 const FOLLOW_RUNNING_INTERVAL_MS = 3000
 const followTimers: Record<string, ReturnType<typeof setTimeout>> = {}
+const followReloads = new Set<string>()
 
 const EMPTY: SessionRuntime = {
   messages: [],
@@ -205,6 +206,19 @@ function attachmentsFromSteps(steps: MessageStep[]): Attachment[] {
  * without a hand-off comes back as the single message it always was.
  */
 function historyToMessages(m: HistoryMessage): ChatMessage[] {
+  const out = splitHistoryMessage(m)
+  // Ids derived from the stored seq stay the same across reloads, so rereading
+  // the history (following a running reply) updates bubbles in place instead
+  // of remounting every one of them.
+  if (m._seq != null) {
+    out.forEach((msg, i) => {
+      msg.id = `h_${m.role}_${m._seq}_${i}`
+    })
+  }
+  return out
+}
+
+function splitHistoryMessage(m: HistoryMessage): ChatMessage[] {
   const steps = m.steps || []
   if (m.role === 'user' || !steps.some(handoffPayload)) return [historyToMessage(m)]
 
@@ -337,9 +351,13 @@ export const useChatStore = create<ChatState>((set, get) => {
     // Set when the floor comes back, so the next thing said opens a new bubble
     // instead of reopening the one the teammate's reply now sits below.
     let resumed = false
+    // Every bubble this turn opened: a bubble replaced when the floor changes
+    // hands again is no longer `main` or in `peers`, but still has to settle.
+    const opened = new Set<string>([botId])
 
     const openBubble = (agentId?: string): Speaker => {
       const id = uid('assistant')
+      opened.add(id)
       patchMessages(sid, (msgs) => [
         ...msgs,
         {
@@ -400,9 +418,8 @@ export const useChatStore = create<ChatState>((set, get) => {
     const completeTurn = () => {
       if (!detached()) patchSession(sid, { isStreaming: false, requestId: null })
       // Every bubble the turn was spoken in, not just the one it started in.
-      const ids = new Set([botId, main.id, ...peers.map((p) => p.id)])
       patchMessages(sid, (msgs) =>
-        msgs.map((m) => (ids.has(m.id) ? { ...m, isStreaming: false } : m))
+        msgs.map((m) => (opened.has(m.id) ? { ...m, isStreaming: false } : m))
       )
     }
 
@@ -877,24 +894,32 @@ export const useChatStore = create<ChatState>((set, get) => {
     },
 
     loadHistory: async (sid, page = 1, untilSeq) => {
+      const following = followReloads.delete(sid)
       try {
         const res = await apiClient.getHistory(sid, page, 20, sessionOwner(sid) || undefined, untilSeq)
         // A turn sent while this was loading owns the live bubbles now.
         if (page === 1 && get().sessions[sid]?.isStreaming) return true
         const uiMsgs = res.messages.flatMap(historyToMessages)
+        const current = get().sessions[sid]
+        // Following a running reply rereads page 1 only; keep the older pages
+        // the user already scrolled in rather than dropping back to 20 messages.
+        const anchor = following && uiMsgs.length ? (current?.messages || []).findIndex((m) => m.id === uiMsgs[0].id) : -1
+        const keepOlder = anchor > 0
         patchSession(sid, {
-          historyPage: res.page,
-          historyHasMore: res.has_more,
+          historyPage: keepOlder ? Math.max(current?.historyPage || 1, res.page) : res.page,
+          historyHasMore: keepOlder ? !!current?.historyHasMore : res.has_more,
           historyLoaded: true,
         })
         if (page === 1) {
-          patchMessages(sid, () => uiMsgs)
+          patchMessages(sid, (msgs) => (keepOlder ? [...msgs.slice(0, anchor), ...uiMsgs] : uiMsgs))
           clearTimeout(followTimers[sid])
           delete followTimers[sid]
           if (uiMsgs[uiMsgs.length - 1]?.runState === 'running') {
             followTimers[sid] = setTimeout(() => {
               delete followTimers[sid]
-              if (!get().sessions[sid]?.isStreaming) void get().loadHistory(sid, 1)
+              if (get().sessions[sid]?.isStreaming) return
+              followReloads.add(sid)
+              void get().loadHistory(sid, 1)
             }, FOLLOW_RUNNING_INTERVAL_MS)
           }
         } else {

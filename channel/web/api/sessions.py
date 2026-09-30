@@ -393,7 +393,7 @@ class SessionDetailHandler:
             try:
                 from agent.protocol import get_cancel_registry
                 from bridge.bridge import Bridge
-                scoped = Bridge().get_agent_bridge().scoped_session_key(session_id)
+                scoped = Bridge().get_agent_bridge().scoped_session_key(session_id, agent_id)
                 cancelled = get_cancel_registry().cancel_session(scoped)
                 if cancelled:
                     logger.info(
@@ -429,7 +429,7 @@ class SessionDetailHandler:
             # Drop messages still waiting in the channel queue: processing them
             # after the delete would recreate the session from scratch.
             try:
-                channel.cancel_session(session_id)
+                channel.cancel_session(session_id, agent_id=agent_id)
             except Exception as e:
                 logger.warning(f"[WebChannel] Failed to drain queue on delete: {e}")
             channel.session_queues.pop(

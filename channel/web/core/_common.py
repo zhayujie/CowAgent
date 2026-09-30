@@ -125,12 +125,27 @@ def _write_config_file_for_write(config_path: str, data: dict) -> None:
     deployment instead raises and never starts. Building the result beside the
     file and replacing it means a failed save leaves whatever was there before.
     """
+    # Write through a symlinked config.json rather than replacing the link.
+    config_path = os.path.realpath(config_path)
     # A unique temp name per save: the console handlers run on a thread pool
     # without a lock, and a shared name would let two overlapping saves truncate
     # and rename each other's file.
-    fd, tmp_path = tempfile.mkstemp(
-        prefix=".config.", suffix=".tmp", dir=os.path.dirname(config_path) or "."
-    )
+    try:
+        fd, tmp_path = tempfile.mkstemp(
+            prefix=".config.", suffix=".tmp", dir=os.path.dirname(config_path) or "."
+        )
+    except PermissionError as e:
+        # A writable config.json in a directory that is not: nothing to rename
+        # beside it, so serialise fully first and write in place.
+        if not os.path.isfile(config_path):
+            raise
+        text = json.dumps(data, indent=4, ensure_ascii=False)
+        logger.warning(f"[WebChannel] Cannot create a temp file beside config.json ({e}), writing in place")
+        with open(config_path, "w", encoding="utf-8") as dst:
+            dst.write(text)
+            dst.flush()
+            os.fsync(dst.fileno())
+        return
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=4, ensure_ascii=False)
@@ -278,8 +293,13 @@ def _get_query_token():
     and file:// cookies are unreliable, so the desktop client passes the token
     in the query string for /stream and /api/logs.
     """
+    # Read the query string alone: web.input() would also consume a multipart
+    # body, leaving nothing for handlers that parse the form themselves.
     try:
-        return web.input(token="").token or ""
+        from urllib.parse import parse_qs
+
+        values = parse_qs(web.ctx.env.get("QUERY_STRING") or "").get("token") or [""]
+        return values[-1] or ""
     except Exception:
         return ""
 
@@ -635,6 +655,35 @@ def _ensure_list(value):
     if isinstance(value, list):
         return value
     return [value]
+
+
+def _multipart_lists(max_parts: int) -> dict:
+    """
+    The request's multipart form, every field as a list of all its values.
+
+    Newer web.py parses forms with the ``multipart`` package, keeps only the
+    last value of a repeated field, and inherits that package's 128-part cap.
+    A folder upload repeats ``files`` and ``paths`` once per file, so the body
+    is parsed here directly whenever that package is what web.py relies on.
+    """
+    multipart = getattr(getattr(web, "webapi", None), "multipart", None)
+    env = web.ctx.env
+    content_type = (env.get("CONTENT_TYPE") or "").lower()
+    if not hasattr(multipart, "parse_form_data") or not content_type.startswith("multipart/"):
+        return {key: _ensure_list(value) for key, value in _raw_web_input().items()}
+    forms, files = multipart.parse_form_data(
+        environ=env, ignore_errors=False, part_limit=max_parts,
+    )
+    return {
+        key: forms.getall(key) + files.getall(key)
+        for key in set(forms.keys()) | set(files.keys())
+    }
+
+
+def _first_value(params: dict, key: str, default=None):
+    """The single value of a field from ``_multipart_lists`` output."""
+    values = params.get(key) or []
+    return values[0] if values else default
 
 
 class WebMessage(ChatMessage):

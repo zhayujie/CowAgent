@@ -52,7 +52,7 @@ if "dingtalk_stream" not in sys.modules:
 
 from bridge.context import ContextType
 from channel.chat_message import ChatMessage
-from channel.dingtalk.dingtalk_message import DingTalkMessage, _safe_filename
+from channel.dingtalk.dingtalk_message import DingTalkMessage, safe_filename
 from channel.file_cache import get_file_cache
 
 
@@ -237,8 +237,8 @@ def test_unknown_type_logs_instead_of_missing_image(caplog):
 
 
 def test_safe_filename_keeps_basename_only():
-    assert _safe_filename(r"..\..\a b.pdf") == "a b.pdf"
-    assert _safe_filename("") == ""
+    assert safe_filename(r"..\..\a b.pdf") == "a b.pdf"
+    assert safe_filename("") == ""
 
 
 def test_oversized_dingtalk_download_leaves_no_file(monkeypatch, tmp_path):

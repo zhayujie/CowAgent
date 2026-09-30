@@ -1,11 +1,11 @@
 # encoding:utf-8
 
-import json
 import os
 
 import plugins
 from bridge.context import ContextType
 from bridge.reply import Reply, ReplyType
+from common.atomic_write import write_json_atomic
 from common.log import logger
 from plugins import *
 
@@ -41,8 +41,7 @@ class Banwords(Plugin):
                 conf = {**DEFAULT_CONFIG, **(conf if isinstance(conf, dict) else {})}
                 config_path = os.path.join(curdir, "config.json")
                 try:
-                    with open(config_path, "w", encoding="utf-8") as f:
-                        json.dump(conf, f, indent=4)
+                    write_json_atomic(config_path, conf)
                 except OSError as e:
                     # Repairing the file on disk is a convenience; the defaults
                     # above are enough to run. Raising here would reach

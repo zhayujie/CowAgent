@@ -115,16 +115,20 @@ class TestSyncStampsVersion(unittest.TestCase):
                   encoding="utf-8") as f:
             f.write("# A\n\n内容。" * 400)
         m = self._make(ws)
-        # First (empty->full) sync stamps v1.
+        # First (empty->full) sync stamps the current version.
         asyncio.run(m.sync(force=True))
-        self.assertEqual(m.storage.get_meta("chunker_version"), "1")
+        self.assertEqual(
+            m.storage.get_meta("chunker_version"), str(TextChunker.CHUNKER_VERSION)
+        )
         # Add a second file; index is now non-empty before sync, so the stamp
         # must stay whatever it was (not unset, not blindly rewritten).
         with open(os.path.join(ws, "knowledge", "infra", "b.md"), "w",
                   encoding="utf-8") as f:
             f.write("# B\n\n其他内容。" * 300)
         asyncio.run(m.sync())
-        self.assertEqual(m.storage.get_meta("chunker_version"), "1")
+        self.assertEqual(
+            m.storage.get_meta("chunker_version"), str(TextChunker.CHUNKER_VERSION)
+        )
 
     def test_sync_indexes_shared_knowledge_outside_agent_workspace(self):
         shared_root = Path(tempfile.mkdtemp())

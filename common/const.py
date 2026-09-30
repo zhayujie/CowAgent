@@ -39,7 +39,8 @@ CLAUDE_4_SONNET = "claude-sonnet-4-0"    # Claude Sonnet 4.0
 CLAUDE_4_5_SONNET = "claude-sonnet-4-5"  # Claude Sonnet 4.5 - Agent recommended model
 CLAUDE_4_6_SONNET = "claude-sonnet-4-6"  # Claude Sonnet 4.6 - Agent recommended model
 CLAUDE_SONNET_5 = "claude-sonnet-5"      # Claude Sonnet 5 - balanced Claude 5 flagship
-CLAUDE_OPUS_5 = "claude-opus-5"          # Claude Opus 5 - default flagship model for Claude
+CLAUDE_OPUS_5 = "claude-opus-5"          # Claude Opus 5 - previous Opus flagship
+CLAUDE_OPUS_5_5 = "claude-opus-5-5"      # Claude Opus 5.5 - default flagship model for Claude
 
 # Gemini (Google)
 GEMINI_PRO = "gemini-1.0-pro"
@@ -85,8 +86,11 @@ GPT_54 = "gpt-5.4"  # GPT-5.4 - Agent recommended model
 GPT_54_MINI = "gpt-5.4-mini"
 GPT_54_NANO = "gpt-5.4-nano"
 GPT_55 = "gpt-5.5"  # GPT-5.5 - top-tier (expensive), not default
-GPT_56_LUNA = "gpt-5.6-luna"    # GPT-5.6 Luna - default flagship model for GPT
+GPT_61_SOL = "gpt-6.1-sol"      # GPT-6.1 Sol - default flagship model for GPT (Responses API)
+GPT_6_LUNA = "gpt-6-luna"       # GPT-6 Luna (Responses API)
+GPT_6_SOL = "gpt-6-sol"         # GPT-6 Sol (Responses API)
 GPT_6_ASTRA = "gpt-6-astra"     # GPT-6 Astra - most intelligent flagship (Responses API, higher cost)
+GPT_56_LUNA = "gpt-5.6-luna"    # GPT-5.6 Luna
 GPT_56_TERRA = "gpt-5.6-terra"  # GPT-5.6 Terra
 GPT_56_SOL = "gpt-5.6-sol"      # GPT-5.6 Sol - highest intelligence, higher latency
 O1 = "o1-preview"
@@ -216,7 +220,7 @@ MODEL_LIST = [
               MIMO, MIMO_V2_5_PRO, MIMO_V2_5, MIMO_V2_PRO, MIMO_V2_OMNI, MIMO_V2_FLASH,
 
               # Claude
-              CLAUDE_OPUS_5, CLAUDE_SONNET_5, CLAUDE_FABLE_5_1, CLAUDE_FABLE_5, CLAUDE3, CLAUDE_4_8_OPUS, CLAUDE_4_7_OPUS, CLAUDE_4_6_SONNET, CLAUDE_4_6_OPUS, CLAUDE_4_OPUS, CLAUDE_4_5_SONNET, CLAUDE_4_SONNET, CLAUDE_3_OPUS, CLAUDE_3_OPUS_0229,
+              CLAUDE_OPUS_5_5, CLAUDE_OPUS_5, CLAUDE_SONNET_5, CLAUDE_FABLE_5_1, CLAUDE_FABLE_5, CLAUDE3, CLAUDE_4_8_OPUS, CLAUDE_4_7_OPUS, CLAUDE_4_6_SONNET, CLAUDE_4_6_OPUS, CLAUDE_4_OPUS, CLAUDE_4_5_SONNET, CLAUDE_4_SONNET, CLAUDE_3_OPUS, CLAUDE_3_OPUS_0229,
               CLAUDE_35_SONNET, CLAUDE_35_SONNET_1022, CLAUDE_35_SONNET_0620, CLAUDE_3_SONNET, CLAUDE_3_HAIKU,
               "claude", "claude-3-haiku", "claude-3-sonnet", "claude-3-opus", "claude-3.5-sonnet",
 
@@ -230,6 +234,7 @@ MODEL_LIST = [
               GPT4_TURBO, GPT4_TURBO_PREVIEW, GPT4_TURBO_01_25, GPT4_TURBO_11_06, GPT4_TURBO_04_09,
               GPT_4o, GPT_4O_0806, GPT_4o_MINI,
               GPT_41, GPT_41_MINI, GPT_41_NANO,
+              GPT_61_SOL, GPT_6_LUNA, GPT_6_SOL, GPT_6_ASTRA,
               GPT_56_LUNA, GPT_56_TERRA, GPT_56_SOL,
               GPT_5, GPT_5_MINI, GPT_5_NANO,
               GPT_54, GPT_55, GPT_54_MINI, GPT_54_NANO,

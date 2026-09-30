@@ -9,9 +9,9 @@ import json
 import web
 
 from channel.web.core._common import (
-    _ensure_list,
+    _first_value,
     _get_workspace_root,
-    _raw_web_input,
+    _multipart_lists,
     _read_uploaded_file_bytes_limited,
     _request_agent_id,
     _require_auth,
@@ -117,14 +117,11 @@ class KnowledgeImportHandler:
                     "message": "import batch too large",
                     "payload": None,
                 })
-            params = _raw_web_input()
+            params = _multipart_lists(KnowledgeService.MAX_IMPORT_FILES * 2 + 16)
             agent_id = _scoped_agent_id(params)
-            target_category = params.get("target_category", "")
-            conflict_strategy = params.get("conflict_strategy", "skip")
-            uploaded = _ensure_list(params.get("files"))
-            single = params.get("file")
-            if single is not None:
-                uploaded.append(single)
+            target_category = _first_value(params, "target_category", "")
+            conflict_strategy = _first_value(params, "conflict_strategy", "skip")
+            uploaded = list(params.get("files") or []) + list(params.get("file") or [])
             if not uploaded:
                 return json.dumps({"status": "error", "code": 400, "message": "No files uploaded", "payload": None})
             if len(uploaded) > KnowledgeService.MAX_IMPORT_FILES:

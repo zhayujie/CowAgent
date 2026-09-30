@@ -99,6 +99,13 @@ class AgentAdminService:
             data = json.load(handle)
         if not isinstance(data, dict):
             raise AgentAdminError("config root must be an object")
+        # Values injected via environment at startup never reach config.json.
+        from config import conf
+
+        live = conf()
+        for key in ("default_agent_name", "default_agent_description"):
+            if not data.get(key) and live.get(key):
+                data[key] = live[key]
         return team.resolve(data)
 
     def _write(self, settings: Dict) -> None:

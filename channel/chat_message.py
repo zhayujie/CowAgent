@@ -46,9 +46,6 @@ def safe_filename(name) -> str:
     redirects that write outside the directory the app manages and cleans.
     Strip it down before it reaches ``os.path.join``; callers fall back to
     their own generated name when this returns ``""``.
-
-    ``qq_message``/``dingtalk_message`` each carry a private copy of this
-    guard.
     """
     name = os.path.basename(str(name or "").replace("\\", "/"))
     name = re.sub(r"[^\w.\- ]+", "_", name).strip(" .")

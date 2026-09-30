@@ -14,6 +14,7 @@ TEXT_LIMIT = 4096
 CAPTION_LIMIT = 1024
 
 _FENCE_RE = re.compile(r"```([^\n]*)\n(.*?)```", re.S)
+_FENCE_OPEN_RE = re.compile(r"^[ \t]*(`{3,}|~{3,})(.*)$")
 _TABLE_RE = re.compile(r"(?:^[ \t]*\|.*\|[ \t]*\n?)+", re.M)
 _INLINE_CODE_RE = re.compile(r"`([^`\n]+)`")
 _DIVIDER_CELL_RE = re.compile(r"^:?-{2,}:?$")
@@ -47,12 +48,14 @@ def to_telegram_html(text: str) -> str:
         parked.append(rendered)
         return f"\x00{len(parked) - 1}\x00"
 
-    def fence(m: re.Match) -> str:
-        lang = (m.group(1) or "").strip()
+    def fence(lang: str, code: str) -> str:
+        lang = lang.strip()
         attr = f' class="language-{html.escape(lang, quote=True)}"' if lang else ""
-        return park(f"<pre><code{attr}>{html.escape(m.group(2), quote=False)}</code></pre>")
+        return park(f"<pre><code{attr}>{html.escape(code, quote=False)}</code></pre>")
 
-    text = _FENCE_RE.sub(fence, text)
+    text = _replace_fenced_blocks(text, fence)
+    # Whatever the line scan leaves, e.g. a fence closed on the code's own line.
+    text = _FENCE_RE.sub(lambda m: fence(m.group(1) or "", m.group(2)), text)
     text = _TABLE_RE.sub(lambda m: park(_render_table(m.group(0))), text)
     text = _INLINE_CODE_RE.sub(
         lambda m: park(f"<code>{html.escape(m.group(1), quote=False)}</code>"), text
@@ -64,6 +67,37 @@ def to_telegram_html(text: str) -> str:
 
     text = _PLACEHOLDER_RE.sub(lambda m: parked[int(m.group(1))], text)
     return text.strip()
+
+
+def _replace_fenced_blocks(text: str, render) -> str:
+    """Replace each closed fenced code block with ``render(info, code)``.
+
+    A block opens on a ``` or ~~~ line (a backtick fence's info string cannot
+    contain a backtick) and closes on a line holding only a run of the same
+    character that is at least as long, so ~~~ fences work and a ```` fence
+    can show a ``` example. Unclosed fences are left as they are.
+    """
+    lines = text.split("\n")
+    out = []
+    i = 0
+    while i < len(lines):
+        match = _FENCE_OPEN_RE.match(lines[i])
+        if match and not (match.group(1)[0] == "`" and "`" in match.group(2)):
+            fence_run = match.group(1)
+            for j in range(i + 1, len(lines)):
+                closing = lines[j].strip()
+                if closing == fence_run[0] * len(closing) and len(closing) >= len(fence_run):
+                    code = "".join(line + "\n" for line in lines[i + 1:j])
+                    out.append(render(match.group(2), code))
+                    i = j + 1
+                    break
+            else:
+                out.append(lines[i])
+                i += 1
+            continue
+        out.append(lines[i])
+        i += 1
+    return "\n".join(out)
 
 
 def _render_table(block: str) -> str:

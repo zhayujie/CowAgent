@@ -531,9 +531,9 @@ function Add-ScriptsDirToPath {
 # Each entry: Provider / default model name / config key field / optional base.
 $ModelChoices = @{
     1  = @{ Provider = "DeepSeek";                Default = "deepseek-flash";                      Field = "deepseek_api_key" }
-    2  = @{ Provider = "Claude";                  Default = "claude-opus-5";                       Field = "claude_api_key";    BaseField = "claude_api_base" }
+    2  = @{ Provider = "Claude";                  Default = "claude-opus-5-5";                     Field = "claude_api_key";    BaseField = "claude_api_base" }
     3  = @{ Provider = "Gemini";                  Default = "gemini-3.1-pro-preview";              Field = "gemini_api_key";    BaseField = "gemini_api_base" }
-    4  = @{ Provider = "OpenAI";                  Default = "gpt-5.6-luna";                        Field = "open_ai_api_key";   BaseField = "open_ai_api_base" }
+    4  = @{ Provider = "OpenAI";                  Default = "gpt-6.1-sol";                         Field = "open_ai_api_key";   BaseField = "open_ai_api_base" }
     5  = @{ Provider = "MiniMax";                 Default = "MiniMax-M3";                          Field = "minimax_api_key" }
     6  = @{ Provider = "GLM";                     Default = "glm-5.3-flash";                       Field = "zhipu_ai_api_key" }
     7  = @{ Provider = "Qwen (DashScope)";        Default = "qwen3.8-flash";                       Field = "dashscope_api_key" }
@@ -548,9 +548,9 @@ function Select-Model {
     $title = T "选择 AI 模型" "Select AI Model"
     $options = @(
         "DeepSeek (deepseek-flash, deepseek-v4-pro, etc.)",
-        "Claude (claude-opus-5, claude-sonnet-5, etc.)",
+        "Claude (claude-opus-5-5, claude-sonnet-5, etc.)",
         "Gemini (gemini-3.5-flash, gemini-3.1-pro-preview, etc.)",
-        "OpenAI (gpt-5.6-luna, etc.)",
+        "OpenAI (gpt-6.1-sol, gpt-6-luna, etc.)",
         "MiniMax (MiniMax-M3, etc.)",
         "GLM (glm-5.3-flash, glm-5.3, etc.)",
         "Qwen (qwen3.8-flash, qwen3.8-max, etc.)",
@@ -642,7 +642,7 @@ function Configure-Channel {
             # Web (also the default when skipped). Default port, no prompt.
             $script:ChannelType = "web"
             $script:ChannelExtra["web_port"] = 9899
-            $script:AccessInfo = (T "Web 控制台地址" "Web console") + " : http://localhost:9899/chat"
+            $script:AccessInfo = (T "Web 控制台地址" "Web console") + " : http://localhost:9899/"
         }
         "weixin" {
             $script:ChannelType = "weixin"

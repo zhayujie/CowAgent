@@ -10,6 +10,8 @@ import json
 import logging
 import os
 import time
+from urllib.parse import unquote, urlparse
+
 import requests
 
 import dingtalk_stream
@@ -21,7 +23,9 @@ from dingtalk_stream.card_replier import CardReplier
 from bridge.context import Context, ContextType
 from bridge.reply import Reply, ReplyType
 from channel.chat_channel import ChatChannel
+from channel.chat_message import safe_filename
 from common import state_dir
+from common.media_download import MAX_FILE_BYTES, MediaTooLargeError, download_to_file
 from channel.dingtalk.dingtalk_message import DingTalkMessage
 from channel.dingtalk.dingtalk_stream_card import (
     DingTalkCardStreamer,
@@ -32,6 +36,8 @@ from common.log import logger
 from common.singleton import singleton
 from common.time_check import time_checker
 from config import conf
+
+_MAX_REMOTE_FILE_SECONDS = 300
 
 
 def _markdown_preview_title(markdown: str, limit: int = 30) -> str:
@@ -442,26 +448,29 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
         if file_path.startswith("file://"):
             file_path = file_path[7:]
         
-        # 如果是 HTTP URL，先下载
+        # 如果是 HTTP URL，先下载（带字节上限，防止超大响应耗尽内存/磁盘）
         if file_path.startswith("http://") or file_path.startswith("https://"):
             try:
                 import uuid
-                response = requests.get(file_path, timeout=(5, 60))
-                if response.status_code != 200:
-                    logger.error(f"[DingTalk] Failed to download file from URL: {file_path}")
-                    return None
-                
-                # 保存到临时文件
-                file_name = os.path.basename(file_path) or f"media_{uuid.uuid4()}"
+                # Query strings may carry tokens and characters Windows rejects
+                # in file names; keep only the sanitized last path segment.
+                file_name = (
+                    safe_filename(unquote(os.path.basename(urlparse(file_path).path)))
+                    or f"media_{uuid.uuid4()}"
+                )
                 temp_file = os.path.join(str(state_dir.tmp_dir()), file_name)
-                
-                with open(temp_file, "wb") as f:
-                    f.write(response.content)
-                
+                try:
+                    download_to_file(
+                        file_path, temp_file, MAX_FILE_BYTES,
+                        timeout=(5, 60), max_seconds=_MAX_REMOTE_FILE_SECONDS,
+                    )
+                except MediaTooLargeError:
+                    logger.error("[DingTalk] Remote file exceeds size limit, skipped upload")
+                    return None
                 file_path = temp_file
                 logger.info(f"[DingTalk] Downloaded file to {file_path}")
             except Exception as e:
-                logger.error(f"[DingTalk] Error downloading file: {e}")
+                logger.error(f"[DingTalk] Error downloading file: {type(e).__name__}")
                 return None
         
         if not os.path.exists(file_path):
@@ -804,8 +813,8 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
                 file_cache.clear(session_id)
         
         context = self._compose_context(cmsg.ctype, cmsg.content, isgroup=True, msg=cmsg)
-        context['no_need_at'] = True
         if context:
+            context['no_need_at'] = True
             from agent.team_addressing import stamp_speaker_from_channel
             stamp_speaker_from_channel(self, context, cmsg.content)
             self._maybe_attach_dingtalk_stream(context)
@@ -917,7 +926,7 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
                 self.reply_text("抱歉，图片上传失败", incoming_message)
             return
         
-        elif reply.type == ReplyType.FILE:
+        elif reply.type in (ReplyType.FILE, ReplyType.VIDEO):
             # 如果有附加的文本内容，先发送文本
             if hasattr(reply, 'text_content') and reply.text_content:
                 self.reply_text(reply.text_content, incoming_message)
@@ -929,7 +938,10 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
             if file_path.startswith("file://"):
                 file_path = file_path[7:]
             
-            is_video = file_path.lower().endswith(('.mp4', '.avi', '.mov', '.wmv', '.flv'))
+            # ReplyType.VIDEO 已说明内容就是视频，不能只靠扩展名判断：
+            # 生成的临时文件名可能没有已知的视频后缀。
+            is_video = reply.type == ReplyType.VIDEO or file_path.lower().endswith(
+                ('.mp4', '.avi', '.mov', '.wmv', '.flv'))
             
             access_token = self.get_access_token()
             if not access_token:
@@ -1058,6 +1070,25 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
                     reply_with_text()
             else:
                 self._reply_markdown_or_text(reply.content, incoming_message)
+            return
+
+        # ERROR carries a failed turn from the bridge and INFO carries godcmd and
+        # plugin answers; both reach send() through ChatChannel._send_reply's last
+        # else, so without this branch the user got silence instead of the message.
+        elif reply.type in (ReplyType.ERROR, ReplyType.INFO):
+            text = str(reply.content) if reply.content is not None else ""
+            if not text:
+                logger.warning(f"[DingTalk] Empty {reply.type} reply, nothing to send")
+                return
+            logger.info(f"[DingTalk] Sending {reply.type} reply as text, length={len(text)}")
+            self._reply_markdown_or_text(text, incoming_message)
+            return
+
+        else:
+            # In-memory IMAGE, VIDEO_URL and the WeChat-only card types need an
+            # upload or a payload this channel does not implement. Log them: a
+            # silent return leaves no trace of why nothing arrived.
+            logger.warning(f"[DingTalk] Unsupported reply type: {reply.type}, not sent")
             return
 
     def _reply_markdown_or_text(self, content: str, incoming_message) -> None:

@@ -28,7 +28,12 @@ class _Recorder:
         self.message = self
 
     def upload(self, media_type, media_file):
-        name, body = media_file
+        # A file reply hands over ``(name, body)``; an image hands over the
+        # BytesIO that goes straight to the upload API.
+        if isinstance(media_file, tuple):
+            name, body = media_file
+        else:
+            name, body = None, media_file.read()
         self.calls.append(("upload", media_type, name, body))
         return {"media_id": "media-1"}
 
@@ -37,6 +42,9 @@ class _Recorder:
 
     def send_file(self, agent_id, receiver, media_id):
         self.calls.append(("file", media_id))
+
+    def send_image(self, agent_id, receiver, media_id):
+        self.calls.append(("image", media_id))
 
     def send_video(self, agent_id, receiver, media_id):
         self.calls.append(("video", media_id))
@@ -117,4 +125,43 @@ class WeComAppFileReplyTest(unittest.TestCase):
     def test_an_unhandled_reply_type_falls_back_to_text(self):
         self.channel.send(Reply(ReplyType.CARD, "card-payload"), self.context)
         self.assertIn(("text", "card-payload"), self.rec.calls)
+
+    @staticmethod
+    def _local_image():
+        fd, path = tempfile.mkstemp(suffix=".png")
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(b"\x89png-body")
+        return path
+
+    def test_a_local_image_reply_is_uploaded_and_delivered(self):
+        """An image the agent wrote on disk reaches the user.
+
+        ``bridge/agent_bridge.py:1902-1908`` and ``channel/chat_channel.py:422``
+        both hand a generated image over as ``Reply(ReplyType.IMAGE_URL,
+        "file://<path>")``, but this branch only knew how to fetch a URL:
+        ``download_bytes`` has no ``file://`` adapter, so the upload never ran
+        and the user got the prose with the image missing.
+        """
+        path = self._local_image()
+        self.channel.send(Reply(ReplyType.IMAGE_URL, "file://" + path), self.context)
+        self.assertIn(("upload", "image", None, b"\x89png-body"), self.rec.calls)
+        self.assertIn(("image", "media-1"), self.rec.calls)
+
+    def test_a_local_image_path_without_a_scheme_is_uploaded_too(self):
+        path = self._local_image()
+        self.channel.send(Reply(ReplyType.IMAGE_URL, path), self.context)
+        self.assertIn(("upload", "image", None, b"\x89png-body"), self.rec.calls)
+        self.assertIn(("image", "media-1"), self.rec.calls)
+
+    def test_a_remote_image_is_still_downloaded_before_uploading(self):
+        """Reading local files must not take the network path away."""
+        with patch("common.media_download.requests.get") as get:
+            get.return_value.headers = {}
+            get.return_value.iter_content.return_value = [b"remote-png"]
+            self.channel.send(
+                Reply(ReplyType.IMAGE_URL, "https://img.example.com/a.png"), self.context
+            )
+        self.assertIn(("upload", "image", None, b"remote-png"), self.rec.calls)
+        self.assertIn(("image", "media-1"), self.rec.calls)
+        self.assertTrue(get.call_args.kwargs["stream"])
 

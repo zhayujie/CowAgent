@@ -1,5 +1,4 @@
 import json
-from pathlib import Path
 
 import pytest
 
@@ -147,6 +146,21 @@ def test_cloning_the_default_agent_into_its_own_subtree_terminates(tmp_path):
         assert not (nested / "agents").exists()
         assert not (nested / "skills").exists()
         assert not (nested / ".env").exists()
+    finally:
+        set_agent_registry(None)
+
+
+def test_snapshot_uses_the_startup_default_agent_name(tmp_path, monkeypatch):
+    import config
+
+    settings = {"agent_workspace": str(tmp_path)}
+    config_path = tmp_path / "config.json"
+    config_path.write_text(json.dumps(settings), encoding="utf-8")
+    monkeypatch.setattr(config, "config", config.Config({"default_agent_name": "Helper"}))
+    _pin(settings)
+    try:
+        agents = AgentAdminService(str(config_path)).snapshot()["agents"]
+        assert [a["name"] for a in agents] == ["Helper"]
     finally:
         set_agent_registry(None)
 

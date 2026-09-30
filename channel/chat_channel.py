@@ -17,7 +17,7 @@ from plugins import *
 
 try:
     from voice.audio_convert import any_to_wav
-except Exception as e:
+except Exception:
     pass
 
 handler_pool = ThreadPoolExecutor(max_workers=8)  # 处理消息的线程池
@@ -250,7 +250,7 @@ class ChatChannel(Channel):
                     os.remove(file_path)
                     if wav_path != file_path:
                         os.remove(wav_path)
-                except Exception as e:
+                except Exception:
                     pass
                     # logger.warning("[chat_channel]delete temp file error: " + str(e))
 
@@ -286,9 +286,10 @@ class ChatChannel(Channel):
             desire_rtype = context.get("desire_rtype")
             if not e_context.is_pass() and reply and reply.type:
                 if reply.type in self.NOT_SUPPORT_REPLYTYPE:
-                    logger.error("[chat_channel]reply type not support: " + str(reply.type))
+                    unsupported_type = reply.type
+                    logger.error("[chat_channel]reply type not support: " + str(unsupported_type))
                     reply.type = ReplyType.ERROR
-                    reply.content = _t("不支持发送的消息类型: ", "Unsupported message type: ") + str(reply.type)
+                    reply.content = _t("不支持发送的消息类型: ", "Unsupported message type: ") + str(unsupported_type)
 
                 if reply.type == ReplyType.TEXT:
                     reply_text = reply.content
@@ -311,7 +312,7 @@ class ChatChannel(Channel):
                 else:
                     logger.error("[chat_channel] unknown reply type: {}".format(reply.type))
                     return
-            if desire_rtype and desire_rtype != reply.type and reply.type not in [ReplyType.ERROR, ReplyType.INFO]:
+            if reply and desire_rtype and desire_rtype != reply.type and reply.type not in [ReplyType.ERROR, ReplyType.INFO]:
                 logger.warning("[chat_channel] desire_rtype: {}, but reply type: {}".format(context.get("desire_rtype"), reply.type))
             return reply
 
@@ -460,7 +461,7 @@ class ChatChannel(Channel):
                     self._fail_callback(session_id, exception=worker_exception, **kwargs)
                 else:
                     self._success_callback(session_id, **kwargs)
-            except CancelledError as e:
+            except CancelledError:
                 logger.info("Worker cancelled, session_id = {}".format(session_id))
             except Exception as e:
                 logger.exception("Worker raise exception: {}".format(e))
@@ -623,16 +624,35 @@ class ChatChannel(Channel):
                         semaphore.release()
             time.sleep(0.2)
 
-    def cancel_message(self, session_id: str, message_id: str):
+    def _queue_key(self, session_id: str, agent_id: str = None) -> str:
+        """Return the key produce() filed this session's queue under.
+
+        Session ids are only unique within one Agent, so produce() namespaces
+        them; a cancel that searches with the bare id finds no queue and leaves
+        the queued messages running under an Agent the caller just reset.
+        """
+        try:
+            from bridge.bridge import Bridge
+            return Bridge().get_agent_bridge().scoped_session_key(session_id, agent_id)
+        except Exception as e:
+            logger.warning(
+                "[chat_channel] Agent scope unavailable for {}, cancelling by bare id: {}".format(
+                    session_id, e)
+            )
+            return session_id
+
+    def cancel_message(self, session_id: str, message_id: str, agent_id: str = None):
         """Cancel one channel message without disturbing later queued work.
 
         Queued contexts are matched by their original channel message ID. An
         in-flight agent run is cancelled through the per-request token that the
-        channel placed on the context before dispatch.
+        channel placed on the context before dispatch. ``agent_id`` is the Agent
+        produce() routed the turn to, which decides where the queue is filed.
         """
         removed = 0
+        queue_key = self._queue_key(session_id, agent_id)
         with self.lock:
-            session = self.sessions.get(session_id)
+            session = self.sessions.get(queue_key)
             if session is not None:
                 context_queue = session[0]
                 kept = []
@@ -660,18 +680,19 @@ class ChatChannel(Channel):
         return removed, active
 
     # 取消session_id对应的所有任务，只能取消排队的消息和已提交线程池但未执行的任务
-    def cancel_session(self, session_id):
+    def cancel_session(self, session_id, agent_id: str = None):
+        queue_key = self._queue_key(session_id, agent_id)
         with self.lock:
-            if session_id in self.sessions:
-                # futures[session_id] is only created in consume() when a task is
+            if queue_key in self.sessions:
+                # futures[queue_key] is only created in consume() when a task is
                 # dispatched, so it may be absent if cancel happens right after
                 # produce() but before the first dispatch. Default to [].
-                for future in self.futures.get(session_id, []):
+                for future in self.futures.get(queue_key, []):
                     future.cancel()
-                cnt = self.sessions[session_id][0].qsize()
+                cnt = self.sessions[queue_key][0].qsize()
                 if cnt > 0:
                     logger.info("Cancel {} messages in session {}".format(cnt, session_id))
-                self.sessions[session_id][0] = Dequeue()
+                self.sessions[queue_key][0] = Dequeue()
 
     def cancel_all_session(self):
         with self.lock:

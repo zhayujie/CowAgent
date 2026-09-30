@@ -20,11 +20,10 @@ first write migrates them and clears the old keys.
 from __future__ import annotations
 
 import json
-import os
-import tempfile
 from pathlib import Path
 from typing import Any, Dict, Iterable, Mapping, Optional
 
+from common.atomic_write import write_text_atomic
 from common.log import logger
 from common.utils import expand_path
 
@@ -150,20 +149,7 @@ def write(settings: Mapping[str, Any], roster: Mapping[str, Any]) -> Path:
     )
     if bootstrapped:
         payload["channel_instances"] = bootstrapped
-    fd, tmp_name = tempfile.mkstemp(prefix=f".{FILE_NAME}.", suffix=".tmp", dir=str(path.parent))
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            json.dump(payload, handle, indent=4, ensure_ascii=False)
-            handle.write("\n")
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(tmp_name, path)
-    except Exception:
-        try:
-            os.unlink(tmp_name)
-        except OSError:
-            pass
-        raise
+    write_text_atomic(path, json.dumps(payload, indent=4, ensure_ascii=False) + "\n")
     return path
 
 
@@ -252,8 +238,8 @@ def retire_legacy(config_path: Optional[Path]) -> None:
             return
         for key in TEAM_KEYS:
             settings.pop(key, None)
-        path.write_text(
-            json.dumps(settings, indent=4, ensure_ascii=False) + "\n", encoding="utf-8"
+        write_text_atomic(
+            path, json.dumps(settings, indent=4, ensure_ascii=False) + "\n"
         )
     except (OSError, ValueError) as e:
         logger.warning(f"[Roster] Left the old roster in {config_path}: {e}")

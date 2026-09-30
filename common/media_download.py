@@ -2,11 +2,14 @@
 
 Bodies are streamed and counted chunk by chunk, so a huge or endless response
 is cut off at ``max_bytes`` instead of being buffered into memory first.
+``max_seconds`` optionally caps the whole transfer, since the socket timeout
+alone never fires on a server that keeps trickling bytes.
 Every failure raises; callers decide how to degrade.
 """
 
 import os
 import tempfile
+import time
 from typing import NamedTuple
 
 import requests
@@ -27,7 +30,8 @@ class DownloadResult(NamedTuple):
     content_type: str
 
 
-def download_to_file(url, path, max_bytes=MAX_FILE_BYTES, timeout=_DEFAULT_TIMEOUT, **kwargs) -> DownloadResult:
+def download_to_file(url, path, max_bytes=MAX_FILE_BYTES, timeout=_DEFAULT_TIMEOUT, max_seconds=None,
+                     **kwargs) -> DownloadResult:
     """Stream ``url`` into ``path``.
 
     The body goes to a temp file next to ``path`` and is moved into place only
@@ -36,6 +40,7 @@ def download_to_file(url, path, max_bytes=MAX_FILE_BYTES, timeout=_DEFAULT_TIMEO
     Extra ``kwargs`` (headers, params, ...) are passed to ``requests.get``.
     """
     temp_path = None
+    deadline = _deadline(max_seconds)
     response = _open(url, max_bytes, timeout, kwargs)
     try:
         size = 0
@@ -43,7 +48,7 @@ def download_to_file(url, path, max_bytes=MAX_FILE_BYTES, timeout=_DEFAULT_TIMEO
             dir=os.path.dirname(path) or ".", prefix=".download_", delete=False
         ) as out:
             temp_path = out.name
-            for chunk in _read_chunks(response, max_bytes):
+            for chunk in _read_chunks(response, max_bytes, deadline):
                 out.write(chunk)
                 size += len(chunk)
         os.replace(temp_path, path)
@@ -58,11 +63,12 @@ def download_to_file(url, path, max_bytes=MAX_FILE_BYTES, timeout=_DEFAULT_TIMEO
                 pass
 
 
-def download_bytes(url, max_bytes=MAX_FILE_BYTES, timeout=_DEFAULT_TIMEOUT, **kwargs) -> bytes:
+def download_bytes(url, max_bytes=MAX_FILE_BYTES, timeout=_DEFAULT_TIMEOUT, max_seconds=None, **kwargs) -> bytes:
     """Return the body of ``url``, refusing anything larger than ``max_bytes``."""
+    deadline = _deadline(max_seconds)
     response = _open(url, max_bytes, timeout, kwargs)
     try:
-        return b"".join(_read_chunks(response, max_bytes))
+        return b"".join(_read_chunks(response, max_bytes, deadline))
     finally:
         response.close()
 
@@ -83,9 +89,15 @@ def _open(url, max_bytes, timeout, kwargs):
     return response
 
 
-def _read_chunks(response, max_bytes):
+def _deadline(max_seconds):
+    return time.monotonic() + max_seconds if max_seconds else None
+
+
+def _read_chunks(response, max_bytes, deadline=None):
     size = 0
     for chunk in response.iter_content(chunk_size=_CHUNK_SIZE):
+        if deadline is not None and time.monotonic() > deadline:
+            raise requests.exceptions.Timeout("media download took too long")
         if not chunk:
             continue
         size += len(chunk)

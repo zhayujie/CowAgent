@@ -10,11 +10,20 @@ class TokenBucket:
         self.timeout = timeout  # 等待令牌超时时间
         self.cond = threading.Condition()  # 条件变量
         self.is_running = True
-        # 开启令牌生成线程
-        threading.Thread(target=self._generate_tokens).start()
+        # Start the token generator thread. It must be a daemon: a rate limiter
+        # has no reason to keep the process from exiting, and both production
+        # call sites build a bucket without ever calling close().
+        self._thread = threading.Thread(target=self._generate_tokens, daemon=True)
+        self._thread.start()
 
     def _generate_tokens(self):
         """生成令牌"""
+        if self.rate <= 0:
+            # A sub-1 tokens-per-minute config rounds to a rate of zero, so
+            # there is nothing to generate. Stop here instead of dividing by 0
+            # in the sleep below, which would kill this thread silently.
+            self.is_running = False
+            return
         while self.is_running:
             with self.cond:
                 if self.tokens < self.capacity:
@@ -34,6 +43,9 @@ class TokenBucket:
 
     def close(self):
         self.is_running = False
+        # The generator may be mid-sleep, so bound the wait. It is a daemon
+        # thread, so a missed join can never keep the process alive.
+        self._thread.join(timeout=1)
 
 
 if __name__ == "__main__":

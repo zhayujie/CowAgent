@@ -43,8 +43,8 @@ def get_pcm_from_wav(wav_path):
     :param wav_path: wav 文件路径
     :returns: pcm 数据
     """
-    wav = wave.open(wav_path, "rb")
-    return wav.readframes(wav.getnframes())
+    with wave.open(wav_path, "rb") as wav:
+        return wav.readframes(wav.getnframes())
 
 
 def any_to_mp3(any_path, mp3_path):

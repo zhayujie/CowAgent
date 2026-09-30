@@ -235,8 +235,31 @@ def git_rev_parse(root: str) -> str:
     return (proc.stdout or "").strip()
 
 
-def run_git_pull(root: str) -> subprocess.CompletedProcess:
-    return _run(["git", "pull"], cwd=root)
+def run_git_pull(root: str, ff_only: bool = False) -> subprocess.CompletedProcess:
+    return _run(["git", "pull", "--ff-only"] if ff_only else ["git", "pull"], cwd=root)
+
+
+def git_tracked_changes(root: str) -> Optional[str]:
+    """Locally modified tracked files, "" when clean, None when git can't tell."""
+    proc = _run(["git", "status", "--porcelain", "--untracked-files=no"], cwd=root)
+    if proc.returncode != 0:
+        return None
+    return (proc.stdout or "").strip()
+
+
+def ensure_clean_checkout(root: str) -> None:
+    """Refuse to update over local edits: a failed step rolls back with
+    `git reset --hard`, which would silently discard them."""
+    changes = git_tracked_changes(root)
+    if changes is None:
+        raise UpdateError("git_pull", "Could not read git status of the checkout")
+    if changes:
+        raise UpdateError(
+            "git_pull",
+            "The checkout has local changes to tracked files; commit or stash "
+            "them, or run `cow update` in a terminal",
+            changes,
+        )
 
 
 def git_reset_hard(root: str, sha: str) -> subprocess.CompletedProcess:
@@ -303,8 +326,9 @@ def apply_source_update(
     python = python or sys.executable
     previous = restore_sha or git_rev_parse(root)
 
+    ensure_clean_checkout(root)
     _emit(progress, "git_pull", "Pulling latest code")
-    pull = run_git_pull(root)
+    pull = run_git_pull(root, ff_only=True)
     if pull.returncode != 0:
         raise UpdateError("git_pull", "git pull failed", pull.stdout or "")
 
@@ -347,6 +371,39 @@ def _pid_alive(pid: int) -> bool:
         return True
     except OSError:
         return False
+
+
+STALE_UPDATE_SECONDS = 30 * 60
+
+
+def _worker_alive(pid: int) -> bool:
+    # The worker is our own child: a dead one lingers as a zombie that
+    # os.kill(pid, 0) still reports alive, so reap it first.
+    try:
+        done, _ = os.waitpid(pid, os.WNOHANG)
+        if done == pid:
+            return False
+    except ChildProcessError:
+        pass
+    except OSError:
+        return False
+    return _pid_alive(pid)
+
+
+def _update_is_stale(status: Dict[str, Any]) -> bool:
+    """A running/restarting status whose worker is gone (killed, OOM, reboot)
+    would otherwise block every later update."""
+    worker_pid = int(status.get("worker_pid") or 0)
+    if worker_pid and not _worker_alive(worker_pid):
+        return True
+    started = status.get("started_at") or status.get("updated_at")
+    try:
+        started_at = datetime.fromisoformat(str(started))
+    except (TypeError, ValueError):
+        return True
+    if started_at.tzinfo is None:
+        started_at = started_at.replace(tzinfo=timezone.utc)
+    return (datetime.now(timezone.utc) - started_at).total_seconds() > STALE_UPDATE_SECONDS
 
 
 def _restart_unix_service(root: str, python: str, old_pid: int, log_file: str, pid_file: str) -> int:
@@ -467,11 +524,17 @@ def run_web_update_worker() -> None:
         logger.error("[WebUpdate] FAILED at step '%s': %s", exc.step, exc.message)
         if exc.output:
             logger.error("[WebUpdate] command output:\n%s", exc.output.rstrip())
-        logger.error(
-            "[WebUpdate] the running service was left untouched; "
-            "checkout reset to %s. Fix the cause and try again.",
-            previous_sha or "(unknown)",
-        )
+        if exc.step == "git_pull":
+            logger.error(
+                "[WebUpdate] the running service and the checkout were left "
+                "untouched. Fix the cause and try again."
+            )
+        else:
+            logger.error(
+                "[WebUpdate] the running service was left untouched; "
+                "checkout reset to %s. Fix the cause and try again.",
+                previous_sha or "(unknown)",
+            )
         write_update_status(
             {
                 "state": "failed",
@@ -513,14 +576,16 @@ def schedule_web_update(root: Optional[str] = None) -> Dict[str, Any]:
         raise UpdateError("start", kind.unsupported_reason or "Update is not supported")
 
     current = read_update_status(root)
-    if current.get("state") in {"running", "restarting"}:
+    if current.get("state") in {"running", "restarting"} and not _update_is_stale(current):
         raise UpdateError("start", "An update is already in progress")
+
+    ensure_clean_checkout(root)
 
     from cli.commands.process import _get_log_file, _get_pid_file, _read_pid
 
     log_file = _get_log_file()
     old_pid = _read_pid() or os.getpid()
-    payload = write_update_status(
+    write_update_status(
         {
             "state": "running",
             "step": "starting",
@@ -529,6 +594,8 @@ def schedule_web_update(root: Optional[str] = None) -> Dict[str, Any]:
             "old_pid": old_pid,
             "log_file": log_file,
             "pid_file": _get_pid_file(),
+            "worker_pid": None,
+            "new_pid": None,
             "error": None,
             "output": "",
             "started_at": datetime.now(timezone.utc).isoformat(),
@@ -548,7 +615,7 @@ def schedule_web_update(root: Optional[str] = None) -> Dict[str, Any]:
         worker_err = open(log_file, "a", encoding="utf-8")
     except OSError:
         worker_err = subprocess.DEVNULL
-    subprocess.Popen(
+    worker = subprocess.Popen(
         [sys.executable, "-m", "cli.update_service"],
         cwd=root,
         env=env,
@@ -556,7 +623,7 @@ def schedule_web_update(root: Optional[str] = None) -> Dict[str, Any]:
         stdout=subprocess.DEVNULL,
         stderr=worker_err,
     )
-    return payload
+    return write_update_status({"worker_pid": worker.pid}, root)
 
 
 if __name__ == "__main__":

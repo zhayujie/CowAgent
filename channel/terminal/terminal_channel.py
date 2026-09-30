@@ -11,6 +11,11 @@ from common.log import logger
 from config import conf
 
 
+_MAX_REMOTE_IMAGE_BYTES = 10 * 1024 * 1024
+_MAX_REMOTE_IMAGE_PIXELS = 40_000_000
+_MAX_REMOTE_IMAGE_SECONDS = 60
+
+
 class _Style:
     """ANSI escape codes for terminal styling. Disabled when not a tty."""
 
@@ -223,16 +228,43 @@ class TerminalChannel(ChatChannel):
             from PIL import Image
 
             img_url = reply.content
-            pic_res = requests.get(img_url, stream=True)
-            image_storage = io.BytesIO()
-            for block in pic_res.iter_content(1024):
-                image_storage.write(block)
-            image_storage.seek(0)
-            img = Image.open(image_storage)
             if not streamed:
                 print("\nAgent: ")
-            print(img_url)
-            img.show()
+            try:
+                deadline = time.monotonic() + _MAX_REMOTE_IMAGE_SECONDS
+                pic_res = requests.get(img_url, stream=True, timeout=(5, 15))
+                try:
+                    pic_res.raise_for_status()
+                    try:
+                        content_length = int(pic_res.headers.get("Content-Length", 0))
+                    except (TypeError, ValueError):
+                        content_length = 0
+                    if content_length > _MAX_REMOTE_IMAGE_BYTES:
+                        raise ValueError("remote image exceeds 10 MB")
+                    with io.BytesIO() as image_storage:
+                        for block in pic_res.iter_content(chunk_size=8192):
+                            if time.monotonic() > deadline:
+                                raise ValueError("remote image download timed out")
+                            if image_storage.tell() + len(block) > _MAX_REMOTE_IMAGE_BYTES:
+                                raise ValueError("remote image exceeds 10 MB")
+                            image_storage.write(block)
+                        image_storage.seek(0)
+                        with Image.open(image_storage) as img:
+                            if img.width * img.height > _MAX_REMOTE_IMAGE_PIXELS:
+                                raise ValueError("remote image dimensions are too large")
+                            img.load()
+                            print(img_url)
+                            img.show()
+                finally:
+                    pic_res.close()
+            except (
+                requests.RequestException,
+                Image.DecompressionBombError,
+                OSError,
+                ValueError,
+            ) as e:
+                logger.warning(f"[Terminal] remote image unavailable: {type(e).__name__}")
+                print("Image unavailable")
         else:
             # When agent already streamed the answer, skip re-printing the
             # final text to avoid duplication; just emit a trailing newline.

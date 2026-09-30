@@ -177,8 +177,8 @@ export class PythonBackend extends EventEmitter {
   }
 
   // Optional fields of the bundled app-config forwarded to the backend:
-  // clientSource tags outbound requests for stats, appName is the name shown
-  // in command output, and skillHub: false turns off the online skill hub.
+  // clientSource tags outbound requests for stats and appName is the name
+  // shown in command output.
   private appConfigEnv(): Record<string, string> {
     try {
       const cfgPath = this.packaged
@@ -188,7 +188,7 @@ export class PythonBackend extends EventEmitter {
       const env: Record<string, string> = {}
       if (typeof cfg.clientSource === 'string' && cfg.clientSource.trim()) env.COW_CLIENT_SOURCE = cfg.clientSource.trim()
       if (typeof cfg.appName === 'string' && cfg.appName.trim()) env.COW_APP_NAME = cfg.appName.trim()
-      if (cfg.skillHub === false) env.COW_SKILL_HUB = '0'
+      if (typeof cfg.agentName === 'string' && cfg.agentName.trim()) env.DEFAULT_AGENT_NAME = cfg.agentName.trim()
       return env
     } catch {
       return {}

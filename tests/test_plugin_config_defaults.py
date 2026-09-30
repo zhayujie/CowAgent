@@ -151,3 +151,40 @@ def test_a_read_only_plugin_dir_does_not_take_the_plugin_down(
         assert plugin.password == ""
         assert plugin.admin_users == []
     assert config_path.read_text(encoding="utf-8") == "{}"
+
+
+def _fail_halfway(monkeypatch):
+    """Let a JSON write start, then fail the way a full disk does.
+
+    ``_reject_writes`` covers ``open`` failing outright; this covers the write
+    that begins and then dies, which is what leaves a half-written file.
+    """
+    def half_dump(obj, fp, **kwargs):
+        fp.write('{"half')
+        fp.flush()
+        raise OSError(28, "No space left on device")
+
+    monkeypatch.setattr(json, "dump", half_dump)
+
+
+@pytest.mark.parametrize(
+    "module_name, plugin_dir, registry_name, existing",
+    [
+        ("plugins.banwords.banwords", "./plugins/banwords", "BANWORDS", '{"other": 1}'),
+        ("plugins.godcmd.godcmd", "./plugins/godcmd", "GODCMD", '{"password": "set-by-the-user"}'),
+    ],
+)
+def test_a_repair_that_fails_halfway_keeps_the_existing_file(
+    tmp_path, monkeypatch, module_name, plugin_dir, registry_name, existing
+):
+    module, plugin_cls = _load(module_name, plugin_dir, registry_name)
+    config_path = _point_at(monkeypatch, module, plugin_cls, tmp_path)
+    config_path.write_text(existing, encoding="utf-8")
+    _fail_halfway(monkeypatch)
+
+    plugin_cls()  # must not raise: the defaults held in memory are enough
+
+    # The repair is best-effort. A write that dies halfway must not turn an
+    # incomplete config into one the next start cannot parse -- that is what
+    # makes activate_plugins disable the plugin for good.
+    assert json.loads(config_path.read_text(encoding="utf-8")) == json.loads(existing)

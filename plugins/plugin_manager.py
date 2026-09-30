@@ -6,6 +6,7 @@ import json
 import os
 import sys
 
+from common.atomic_write import write_json_atomic
 from common.log import logger
 from common.singleton import singleton
 from common.sorted_dict import SortedDict
@@ -73,21 +74,7 @@ class PluginManager:
         and load_config has no guard around that. See load_config for why a
         damaged store must not be allowed to abort the load.
         """
-        cfg_path = os.path.join(_plugins_data_dir(), "plugins.json")
-        temporary = f"{cfg_path}.tmp"
-        try:
-            with open(temporary, "w", encoding="utf-8") as f:
-                json.dump(self.pconf, f, indent=4, ensure_ascii=False)
-                f.flush()
-                os.fsync(f.fileno())
-            os.replace(temporary, cfg_path)
-        except Exception:
-            try:
-                if os.path.exists(temporary):
-                    os.remove(temporary)
-            except OSError:
-                pass
-            raise
+        write_json_atomic(os.path.join(_plugins_data_dir(), "plugins.json"), self.pconf)
 
     @staticmethod
     def _read_plugin_store(path: str):
@@ -110,6 +97,24 @@ class PluginManager:
         if not isinstance(stored, dict) or not isinstance(stored.get("plugins"), dict):
             logger.warning("Plugin config %s has no \"plugins\" mapping, ignoring it" % path)
             return None
+        entries = stored["plugins"]
+        for name in list(entries):
+            entry = entries[name]
+            if not isinstance(entry, dict):
+                logger.warning("Plugin entry %s in %s is not an object, ignoring it" % (name, path))
+                del entries[name]
+                continue
+            # Both keys are read with a bare subscript from here on -- the sort
+            # below and scan_plugins -- so a hand-edited entry that lost one of
+            # them takes every plugin down with it. Fall back to the values the
+            # plugin's own registration uses (register/desire_priority).
+            priority = entry.get("priority")
+            if isinstance(priority, bool) or not isinstance(priority, (int, float)):
+                logger.warning("Plugin entry %s in %s has no numeric priority, using 0" % (name, path))
+                entry["priority"] = 0
+            if not isinstance(entry.get("enabled"), bool):
+                logger.warning("Plugin entry %s in %s has no enabled flag, using true" % (name, path))
+                entry["enabled"] = True
         return stored
 
     def load_config(self):

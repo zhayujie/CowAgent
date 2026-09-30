@@ -60,5 +60,4 @@ class PyttsVoice(Voice):
 
         except Exception as e:
             reply = Reply(ReplyType.ERROR, str(e))
-        finally:
-            return reply
+        return reply

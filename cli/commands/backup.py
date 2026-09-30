@@ -418,6 +418,12 @@ def restore_backup_archive(
     archive_path = Path(archive_path).expanduser().resolve()
     data_root = Path(data_root).expanduser().resolve()
     current_config = _read_config(data_root)
+    if current_config:
+        # A live install keeps its roster beside the workspaces rather than in
+        # config.json, so the layout this machine runs on only shows up once
+        # team.json is overlaid. Without it every Agent lands on the layout the
+        # archive implies and its real workspace is left behind.
+        current_config = _team().resolve(current_config)
 
     temp_dir = Path(tempfile.mkdtemp(prefix="cowagent-restore-"))
     try:

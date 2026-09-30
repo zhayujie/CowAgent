@@ -107,3 +107,61 @@ def test_a_successful_save_leaves_no_temporary_file_behind(tmp_path):
     store.save_tasks({"task-1": _task("task-1")})
 
     assert sorted(entry.name for entry in tmp_path.iterdir()) == ["tasks.json"]
+
+
+def test_corrupt_primary_recovers_tasks_from_valid_backup(tmp_path):
+    store_path = tmp_path / "tasks.json"
+    backup_path = tmp_path / "tasks.json.bak"
+    _write_store(backup_path, {"task-1": _task("task-1")})
+    store_path.write_text("{broken json", encoding="utf-8")
+    store = TaskStore(str(store_path))
+
+    assert set(store.load_tasks()) == {"task-1"}
+    assert set(json.loads(store_path.read_text(encoding="utf-8"))["tasks"]) == {"task-1"}
+
+
+def test_next_save_preserves_recovered_tasks_and_backup(tmp_path):
+    store_path = tmp_path / "tasks.json"
+    backup_path = tmp_path / "tasks.json.bak"
+    _write_store(backup_path, {"task-1": _task("task-1")})
+    store_path.write_text("{broken json", encoding="utf-8")
+    store = TaskStore(str(store_path))
+
+    store.add_task(_task("task-2"))
+
+    assert set(store.load_tasks()) == {"task-1", "task-2"}
+    assert set(json.loads(backup_path.read_text(encoding="utf-8"))["tasks"]) == {"task-1"}
+
+
+def test_invalid_task_entry_recovers_from_backup(tmp_path):
+    store_path = tmp_path / "tasks.json"
+    backup_path = tmp_path / "tasks.json.bak"
+    _write_store(backup_path, {"task-1": _task("task-1")})
+    _write_store(store_path, {"task-2": None})
+    store = TaskStore(str(store_path))
+
+    assert set(store.load_tasks()) == {"task-1"}
+
+
+def test_invalid_backup_is_not_used_for_recovery(tmp_path):
+    store_path = tmp_path / "tasks.json"
+    backup_path = tmp_path / "tasks.json.bak"
+    store_path.write_text("{broken json", encoding="utf-8")
+    backup_path.write_text('{"version": 1, "tasks": []}', encoding="utf-8")
+    store = TaskStore(str(store_path))
+
+    assert store.load_tasks() == {}
+    assert store_path.read_text(encoding="utf-8") == "{broken json"
+
+
+def test_valid_primary_takes_precedence_over_older_backup(tmp_path):
+    store_path = tmp_path / "tasks.json"
+    backup_path = tmp_path / "tasks.json.bak"
+    _write_store(store_path, {"task-1": _task("task-1"), "task-2": _task("task-2")})
+    _write_store(backup_path, {"task-1": _task("task-1")})
+    store = TaskStore(str(store_path))
+
+    assert set(store.load_tasks()) == {"task-1", "task-2"}
+    assert set(json.loads(store_path.read_text(encoding="utf-8"))["tasks"]) == {
+        "task-1", "task-2"
+    }

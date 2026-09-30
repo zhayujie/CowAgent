@@ -203,7 +203,38 @@ def test_the_console_answers_at_the_root():
     with open(os.path.join(WEB, "api", "pages.py"), encoding="utf-8") as f:
         source = f.read()
     root = source[source.index("class RootHandler:"):]
-    assert "seeother('/')" in root[:root.index("\n\n\nclass ")]
+    root = root[:root.index("\n\n\nclass ")]
+    assert "'Location': '/'" in root
+    # web.seeother() would send an absolute http:// URL behind an HTTPS proxy.
+    assert "raise web.seeother" not in root
+
+
+def test_chat_redirect_keeps_the_scheme_behind_an_https_proxy():
+    # A subprocess, because other test modules stub the web package in-process.
+    import subprocess
+    import sys
+
+    script = (
+        "import io\n"
+        "from channel.web import web_channel\n"
+        "app = web_channel.build_app()\n"
+        "env = {'REQUEST_METHOD': 'GET', 'PATH_INFO': '/chat', 'QUERY_STRING': '',\n"
+        "       'HTTP_HOST': 'cow.example.com', 'HTTP_X_FORWARDED_PROTO': 'https',\n"
+        "       'wsgi.url_scheme': 'http', 'wsgi.input': io.BytesIO(b''),\n"
+        "       'SERVER_NAME': 'cow.example.com', 'SERVER_PORT': '80'}\n"
+        "seen = {}\n"
+        "def start_response(status, headers, exc_info=None):\n"
+        "    seen['status'] = status; seen['headers'] = dict(headers)\n"
+        "b''.join(app.wsgifunc()(env, start_response))\n"
+        "print(seen['status'].split()[0], seen['headers']['Location'])\n"
+    )
+    out = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=os.path.abspath(os.path.join(os.path.dirname(__file__), "..")),
+        capture_output=True, text=True, timeout=60,
+    )
+    assert out.returncode == 0, out.stderr
+    assert out.stdout.strip().splitlines()[-1] == "303 /"
 
 
 def test_the_first_route_is_applied_only_once_auth_has_settled():

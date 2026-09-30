@@ -1,6 +1,5 @@
 # encoding:utf-8
 
-import json
 import os
 import random
 import string
@@ -12,6 +11,7 @@ from bridge.bridge import Bridge
 from bridge.context import ContextType
 from bridge.reply import Reply, ReplyType
 from common import const
+from common.atomic_write import write_json_atomic
 from config import conf, load_config, global_config
 from plugins import *
 
@@ -199,8 +199,7 @@ class Godcmd(Plugin):
         if not isinstance(gconf, dict) or not all(k in gconf for k in DEFAULT_CONFIG):
             gconf = {**DEFAULT_CONFIG, **(gconf if isinstance(gconf, dict) else {})}
             try:
-                with open(config_path, "w", encoding="utf-8") as f:
-                    json.dump(gconf, f, indent=4)
+                write_json_atomic(config_path, gconf)
             except OSError as e:
                 # Repairing the file on disk is a convenience; the defaults above
                 # are enough to run. Raising here would reach activate_plugins,
@@ -295,6 +294,8 @@ class Godcmd(Plugin):
                             Bridge().reset_bot()
                             model = conf().get("model") or const.GPT35
                             ok, result = True, "模型设置为: " + str(model)
+                    else:
+                        ok, result = False, "只能指定一个模型名称"
                 elif cmd == "id":
                     ok, result = True, user
                 elif cmd == "set_openai_api_key":
@@ -336,7 +337,9 @@ class Godcmd(Plugin):
                         bot.sessions.clear_session(session_id)
                         if Bridge().chat_bots.get(bottype):
                             Bridge().chat_bots.get(bottype).sessions.clear_session(session_id)
-                        channel.cancel_session(session_id)
+                        channel.cancel_session(
+                            session_id, agent_id=e_context["context"].get("agent_id")
+                        )
                         ok, result = True, "会话已重置"
                     else:
                         ok, result = False, "当前对话机器人不支持重置会话"
@@ -395,11 +398,16 @@ class Godcmd(Plugin):
                             if len(args) != 2:
                                 ok, result = False, "请提供插件名和优先级"
                             else:
-                                ok = PluginManager().set_plugin_priority(args[0], int(args[1]))
-                                if ok:
-                                    result = "插件" + args[0] + "优先级已设置为" + args[1]
+                                try:
+                                    priority = int(args[1])
+                                except ValueError:
+                                    ok, result = False, f"优先级 {args[1]} 无效, 应为整数"
                                 else:
-                                    result = "插件不存在"
+                                    ok = PluginManager().set_plugin_priority(args[0], priority)
+                                    if ok:
+                                        result = "插件" + args[0] + "优先级已设置为" + args[1]
+                                    else:
+                                        result = "插件不存在"
                         elif cmd == "reloadp":
                             if len(args) != 1:
                                 ok, result = False, "请提供插件名"

@@ -18,9 +18,9 @@ from typing import List, Optional
 import web
 
 from channel.web.core._common import (
-    _ensure_list,
+    _first_value,
     _get_workspace_root,
-    _raw_web_input,
+    _multipart_lists,
     _read_uploaded_file_bytes_limited,
     _request_agent_id,
     _require_auth,
@@ -93,11 +93,15 @@ def _market_spec(source: str, value: str) -> str:
             raise ValueError(f"invalid skill name: {value}")
         return value
     if source == "clawhub":
+        from cli.commands.skill import SkillInstallError, parse_clawhub_ref
+
         if value.startswith("clawhub:"):
             value = value[len("clawhub:"):]
-        if not _SKILL_NAME_RE.match(value):
-            raise ValueError(f"invalid ClawHub skill name: {value}")
-        return f"clawhub:{value}"
+        try:
+            owner, slug = parse_clawhub_ref(value)
+        except SkillInstallError:
+            raise ValueError(f"invalid ClawHub skill: {value}")
+        return f"clawhub:{owner}/{slug}" if owner else f"clawhub:{slug}"
     if source == "github":
         if value.startswith(("https://", "http://")) or _GITHUB_SHORTHAND_RE.match(value):
             return value
@@ -418,8 +422,8 @@ def _uploaded_files(params, max_bytes: int) -> List[dict]:
     already uses. A plain multi-file pick sends no paths, so each file keeps its
     own name.
     """
-    uploaded = _ensure_list(params.get("files"))
-    rel_paths = _ensure_list(params.get("relative_paths"))
+    uploaded = params.get("files") or []
+    rel_paths = params.get("relative_paths") or []
     if rel_paths and len(rel_paths) != len(uploaded):
         raise ValueError("upload payload mismatch: a path per file is required")
 
@@ -459,12 +463,14 @@ class SkillCreateHandler:
             if oversize:
                 return oversize
 
-            params = _raw_web_input()
+            # Every field as a list: newer web.py keeps only the last of a
+            # repeated one, and the form repeats `files` per attachment.
+            params = _multipart_lists(SkillService.MAX_UPLOAD_FILES * 2 + 16)
             service = _skill_service(_scoped_agent_id(params))
             result = service.create({
-                "name": params.get("name", ""),
-                "description": params.get("description", ""),
-                "body": params.get("body", ""),
+                "name": _first_value(params, "name", ""),
+                "description": _first_value(params, "description", ""),
+                "body": _first_value(params, "body", ""),
                 "files": _uploaded_files(params, SkillService.MAX_UPLOAD_FILE_SIZE),
             })
             logger.info(f"[WebChannel] Skill created: {result['name']} "
@@ -477,29 +483,6 @@ class SkillCreateHandler:
         except Exception as e:
             logger.error(f"[WebChannel] Skill create error: {e}", exc_info=True)
             return json.dumps({"status": "error", "message": str(e)}, ensure_ascii=False)
-
-
-def _multipart_lists(max_parts: int) -> dict:
-    """
-    The request's multipart form, every field as a list of all its values.
-
-    Newer web.py parses forms with the ``multipart`` package, keeps only the
-    last value of a repeated field, and inherits that package's 128-part cap.
-    A folder upload repeats ``files`` and ``paths`` once per file, so the body
-    is parsed here directly whenever that package is what web.py relies on.
-    """
-    multipart = getattr(getattr(web, "webapi", None), "multipart", None)
-    env = web.ctx.env
-    content_type = (env.get("CONTENT_TYPE") or "").lower()
-    if not hasattr(multipart, "parse_form_data") or not content_type.startswith("multipart/"):
-        return {key: _ensure_list(value) for key, value in _raw_web_input().items()}
-    forms, files = multipart.parse_form_data(
-        environ=env, ignore_errors=False, part_limit=max_parts,
-    )
-    return {
-        key: forms.getall(key) + files.getall(key)
-        for key in set(forms.keys()) | set(files.keys())
-    }
 
 
 class SkillUploadHandler:

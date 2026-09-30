@@ -34,7 +34,7 @@ export function createTray({ getWindow, iconPath, onQuit }: TrayDeps): Tray | nu
   }
 
   const contextMenu = Menu.buildFromTemplate([
-    { label: 'Show CowAgent', click: showWindow },
+    { label: `Show ${app.name}`, click: showWindow },
     {
       label: 'New Chat',
       click: () => {

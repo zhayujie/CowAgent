@@ -69,8 +69,7 @@ class OpenaiVoice(Voice):
         except Exception as e:
             logger.error(f"[Openai] voiceToText exception: {e}", exc_info=True)
             reply = Reply(ReplyType.ERROR, "我暂时还无法听清您的语音，请稍后再试吧~")
-        finally:
-            return reply
+        return reply
 
 
     def textToVoice(self, text):

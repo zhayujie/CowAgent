@@ -103,9 +103,10 @@ def test_responses_mode_non_reasoning_model_sends_no_effort(monkeypatch):
     assert "reasoning" not in params
 
 
-def test_auto_mode_gpt6_behavior_unchanged(monkeypatch):
-    bot, client = _make_bot(monkeypatch, model="gpt-6-astra")
-    _call_tools(bot, model="gpt-6-astra", thinking={"type": "disabled"})
+@pytest.mark.parametrize("model", ["gpt-6-astra", "gpt-6.1-sol"])
+def test_auto_mode_gpt6_behavior_unchanged(monkeypatch, model):
+    bot, client = _make_bot(monkeypatch, model=model)
+    _call_tools(bot, model=model, thinking={"type": "disabled"})
     kind, params = client.calls[0]
     assert kind == "responses"
     assert "reasoning" not in params
@@ -166,4 +167,5 @@ def test_resolve_api_type(value, expected):
 def test_normalize_effort_only_clamps_responses_only_models():
     assert responses_adapter.normalize_effort("none", "gpt-5.5") == "none"
     assert responses_adapter.normalize_effort("none", "gpt-6-astra") == "low"
+    assert responses_adapter.normalize_effort("none", "gpt-6.1-sol") == "low"
     assert responses_adapter.normalize_effort("minimal") == "low"

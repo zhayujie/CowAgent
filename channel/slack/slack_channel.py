@@ -480,7 +480,7 @@ class SlackChannel(ChatChannel):
                 # Post the URL as text; Slack will unfurl it as an image preview
                 self._client.chat_postMessage(channel=channel_id, text=url, thread_ts=thread_ts)
 
-        elif rtype in (ReplyType.VOICE, ReplyType.FILE):
+        elif rtype in (ReplyType.VOICE, ReplyType.FILE, ReplyType.VIDEO):
             local = content[7:] if isinstance(content, str) and content.startswith("file://") else content
             caption = getattr(reply, "text_content", None) or None
             self._client.files_upload_v2(

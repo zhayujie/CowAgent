@@ -236,6 +236,9 @@ function _waitForBackend() {
                 UPDATE_CHECK = { up_to_date: true, newer_releases: [], latest: null, current_release: null };
                 _updateRunning = false;
                 _renderUpdateAction('up_to_date', t('update_done'));
+                // This tab still runs the previous release's scripts against the
+                // new backend; reload so the page matches the code now serving it.
+                setTimeout(() => window.location.reload(), 1500);
             })
             .catch(() => {});
     }, 1500);

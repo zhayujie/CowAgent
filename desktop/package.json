@@ -1,6 +1,6 @@
 {
   "name": "cowagent-desktop",
-  "version": "2.1.9",
+  "version": "2.2.0",
   "description": "CowAgent Desktop Client - AI Agent on your desktop",
   "main": "dist/main/index.js",
   "author": "CowAgent",

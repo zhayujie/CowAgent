@@ -15,18 +15,24 @@ interface QrScanPanelProps {
   // mints a NEW channel instance (instance_id '') rather than editing the
   // single legacy one. Undefined/false keeps the legacy single-instance path.
   newInstance?: boolean
+  // Existing instance this card belongs to. Its QR is read off that channel,
+  // and a confirm reconnects the same id; an empty id would mint a second card.
+  instanceId?: string
 }
 
 const POLL_INTERVAL = 2000
+// A live instance may still be fetching its code, or restarting after an
+// expired attempt; keep asking for this many polls before giving up.
+const WEIXIN_QR_PENDING_MAX_TRIES = 15
 
 // Shared inline QR panel for WeChat login and Feishu app registration. Mirrors
 // the web console: fetch a QR, poll its status, then connect the channel. The
 // scan starts as soon as the panel mounts, so the caller decides when to show
 // it rather than wiring up a separate "start" button.
-const QrScanPanel: React.FC<QrScanPanelProps> = ({ provider, onConnected, newInstance }) => {
-  // When minting a new instance, pass instance_id ''; otherwise omit it so the
-  // legacy per-type path is taken untouched.
-  const instanceArg = newInstance ? '' : undefined
+const QrScanPanel: React.FC<QrScanPanelProps> = ({ provider, onConnected, newInstance, instanceId }) => {
+  // When minting a new instance, pass instance_id ''; an existing card passes
+  // its own id. Omit it entirely for the legacy per-type path.
+  const instanceArg = newInstance ? '' : instanceId || undefined
   const [phase, setPhase] = useState<Phase>('loading')
   const [qr, setQr] = useState('')
   const [openLink, setOpenLink] = useState('')
@@ -86,7 +92,7 @@ const QrScanPanel: React.FC<QrScanPanelProps> = ({ provider, onConnected, newIns
   // console owns the QR session instead, so polling has to switch over.
   const refreshChannelQr = async (): Promise<boolean> => {
     try {
-      const data = await apiClient.getWeixinQr()
+      const data = await apiClient.getWeixinQr(instanceId)
       if (!aliveRef.current || data.status !== 'success') return true
       const img = data.qr_image || data.qrcode_url
       if (img) setQr(img)
@@ -101,9 +107,11 @@ const QrScanPanel: React.FC<QrScanPanelProps> = ({ provider, onConnected, newIns
       if (!aliveRef.current) return
       let handedOver = false
       try {
-        const list = await apiClient.getChannels()
+        const data = await apiClient.getChannelsFull()
         if (!aliveRef.current) return
-        const wx = list?.find((c) => c.name === 'weixin')
+        const wx = instanceId
+          ? (data.instances || []).find((c) => c.instance_id === instanceId)
+          : (data.channels || []).find((c) => c.name === 'weixin')
         if (wx?.login_status === 'logged_in') {
           setPhase('success')
           onConnected()
@@ -123,7 +131,14 @@ const QrScanPanel: React.FC<QrScanPanelProps> = ({ provider, onConnected, newIns
   const startWeixin = async () => {
     setPhase('loading')
     try {
-      const data = await apiClient.getWeixinQr()
+      let data = await apiClient.getWeixinQr(instanceId)
+      let pendingTries = 0
+      while (data.status === 'pending' && pendingTries < WEIXIN_QR_PENDING_MAX_TRIES) {
+        pendingTries += 1
+        await new Promise((r) => setTimeout(r, POLL_INTERVAL))
+        if (!aliveRef.current) return
+        data = await apiClient.getWeixinQr(instanceId)
+      }
       if (!aliveRef.current) return
       if (data.status !== 'success') return fail(data.message || t('weixin_scan_fail'))
       setQr(data.qr_image || data.qrcode_url || '')

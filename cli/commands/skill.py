@@ -18,6 +18,7 @@ import click
 import requests
 
 from cli.utils import (
+    _ensure_project_on_path,
     get_skills_dir,
     get_builtin_skills_dir,
     load_skills_config,
@@ -51,6 +52,12 @@ _GITLAB_URL_RE = re.compile(
 )
 _GIT_SSH_RE = re.compile(
     r"^git@([^:]+):([^/]+)/([^/]+?)(?:\.git)?$"
+)
+_CLAWHUB_OWNER_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.\-]{0,63}$")
+# A skill page, e.g. https://clawhub.ai/steipete/skills/gog
+_CLAWHUB_URL_RE = re.compile(
+    r"^https?://(?:www\.)?clawhub\.ai/@?([^/?#]+)/skills/([^/?#]+)/?(?:[?#].*)?$",
+    re.IGNORECASE,
 )
 
 # Set while staging a preview so every installer writes into a scratch dir
@@ -163,19 +170,25 @@ def _download_repo_zip(spec: str, branch: str = "main", host: str = "github", ti
     resp.raise_for_status()
 
     tmp_dir = tempfile.mkdtemp(prefix="cow-skill-")
-    zip_path = os.path.join(tmp_dir, "repo.zip")
-    with open(zip_path, "wb") as f:
-        f.write(resp.content)
+    try:
+        zip_path = os.path.join(tmp_dir, "repo.zip")
+        with open(zip_path, "wb") as f:
+            f.write(resp.content)
 
-    extract_dir = os.path.join(tmp_dir, "extracted")
-    with zipfile.ZipFile(zip_path, "r") as zf:
-        _safe_extractall(zf, extract_dir)
+        extract_dir = os.path.join(tmp_dir, "extracted")
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            _safe_extractall(zf, extract_dir)
 
-    # GitHub zips have a single top-level dir like "repo-main/"
-    top_items = [d for d in os.listdir(extract_dir) if not d.startswith(".")]
-    if len(top_items) == 1 and os.path.isdir(os.path.join(extract_dir, top_items[0])):
-        return tmp_dir, os.path.join(extract_dir, top_items[0])
-    return tmp_dir, extract_dir
+        # GitHub zips have a single top-level dir like "repo-main/"
+        top_items = [d for d in os.listdir(extract_dir) if not d.startswith(".")]
+        if len(top_items) == 1 and os.path.isdir(os.path.join(extract_dir, top_items[0])):
+            return tmp_dir, os.path.join(extract_dir, top_items[0])
+        return tmp_dir, extract_dir
+    except Exception:
+        # The directory is only handed back through the return value, so a caller
+        # cannot clean it up after this function raises; do it here.
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        raise
 
 
 def _download_github_dir(owner, repo, branch, subpath, dest_dir):
@@ -348,6 +361,14 @@ def _install_local(path: str, result: InstallResult, agent_id: str = None):
     _batch_install_skills(discovered, path, skills_dir, "local", result, agent_id=agent_id)
 
 
+def _write_skills_config(config: dict, skills_dir: str) -> None:
+    _ensure_project_on_path()
+    from common.atomic_write import write_json_atomic
+
+    os.makedirs(skills_dir, exist_ok=True)
+    write_json_atomic(os.path.join(skills_dir, "skills_config.json"), config)
+
+
 def _register_installed_skill(name: str, source: str = "cowhub", display_name: str = "", agent_id: str = None):
     """Register a newly installed skill into skills_config.json.
 
@@ -368,8 +389,7 @@ def _register_installed_skill(name: str, source: str = "cowhub", display_name: s
         if display_name and not config[name].get("display_name"):
             config[name]["display_name"] = display_name
             try:
-                with open(config_path, "w", encoding="utf-8") as f:
-                    json.dump(config, f, indent=4, ensure_ascii=False)
+                _write_skills_config(config, skills_dir)
             except Exception:
                 pass
         return
@@ -389,8 +409,7 @@ def _register_installed_skill(name: str, source: str = "cowhub", display_name: s
     config[name] = entry
 
     try:
-        with open(config_path, "w", encoding="utf-8") as f:
-            json.dump(config, f, indent=4, ensure_ascii=False)
+        _write_skills_config(config, skills_dir)
     except Exception:
         pass
 
@@ -588,6 +607,42 @@ def _check_skill_name(name: str):
         )
 
 
+def is_clawhub_url(value: str) -> bool:
+    return bool(_CLAWHUB_URL_RE.match((value or "").strip()))
+
+
+def parse_clawhub_ref(ref: str):
+    """Split a ClawHub reference into ``(owner, slug)``; owner is None if not given.
+
+    Accepts ``slug``, ``owner/slug``, ``@owner/slug`` and a skill page URL.
+    ClawHub slugs are only unique per publisher, so a slug several publishers
+    share can only be downloaded together with its owner.
+    """
+    ref = (ref or "").strip()
+    m = _CLAWHUB_URL_RE.match(ref)
+    if m:
+        owner, slug = m.groups()
+    elif "/" in ref:
+        owner, slug = ref.split("/", 1)
+    else:
+        owner, slug = None, ref
+    if owner is not None:
+        owner = owner.lstrip("@")
+        if not _CLAWHUB_OWNER_RE.match(owner):
+            raise SkillInstallError(f"Invalid ClawHub owner '{owner}'.")
+    _check_skill_name(slug)
+    return owner, slug
+
+
+def _with_query(url: str, **params) -> str:
+    from urllib.parse import parse_qsl, urlencode, urlunparse
+
+    parsed = urlparse(url)
+    query = dict(parse_qsl(parsed.query, keep_blank_values=True))
+    query.update(params)
+    return urlunparse(parsed._replace(query=urlencode(query)))
+
+
 def _check_github_spec(spec: str):
     """Raise SkillInstallError if spec is not owner/repo."""
     if not re.match(r"^[a-zA-Z0-9_\-]+/[a-zA-Z0-9_.\-]+$", spec):
@@ -701,11 +756,8 @@ def _merge_builtin_into_config(config: dict, builtin_dir: str, skills_dir: str):
             }
             dirty = True
     if dirty:
-        config_path = os.path.join(skills_dir, "skills_config.json")
         try:
-            os.makedirs(skills_dir, exist_ok=True)
-            with open(config_path, "w", encoding="utf-8") as f:
-                json.dump(config, f, indent=4, ensure_ascii=False)
+            _write_skills_config(config, skills_dir)
         except Exception:
             pass
 
@@ -915,11 +967,10 @@ def _route_install(name: str, result: InstallResult, agent_id: str = None):
             _install_hub(raw, result, provider="github", agent_id=agent_id)
         return
 
-    # --- clawhub: prefix ---
-    if name.startswith("clawhub:"):
-        skill_name = name[8:]
-        _check_skill_name(skill_name)
-        _install_hub(skill_name, result, provider="clawhub", agent_id=agent_id)
+    # --- clawhub: prefix, or a ClawHub skill page URL ---
+    if name.startswith("clawhub:") or is_clawhub_url(name):
+        owner, skill_name = parse_clawhub_ref(name[8:] if name.startswith("clawhub:") else name)
+        _install_hub(skill_name, result, provider="clawhub", owner=owner, agent_id=agent_id)
         return
 
     # --- linkai: prefix ---
@@ -1160,8 +1211,12 @@ def install(name):
         sys.exit(1)
 
 
-def _install_hub(name, result: InstallResult, provider=None, agent_id: str = None):
-    """Install a skill from Skill Hub."""
+def _install_hub(name, result: InstallResult, provider=None, agent_id: str = None, owner: str = None):
+    """Install a skill from Skill Hub.
+
+    ``owner`` picks one publisher's skill on a registry whose slugs are only
+    unique per publisher (ClawHub).
+    """
     skills_dir = _target_skills_dir(agent_id)
     os.makedirs(skills_dir, exist_ok=True)
 
@@ -1171,6 +1226,8 @@ def _install_hub(name, result: InstallResult, provider=None, agent_id: str = Non
         body = {}
         if provider:
             body["provider"] = provider
+        if owner:
+            body["owner"] = owner
         resp = requests.post(
             f"{SKILL_HUB_API}/skills/{name}/download",
             json=body,
@@ -1253,8 +1310,12 @@ def _install_hub(name, result: InstallResult, provider=None, agent_id: str = Non
                 if parsed.scheme != "https":
                     raise SkillInstallError("Refusing to download from non-HTTPS URL.")
                 src_provider = data.get("source_provider", "registry")
-                has_mirror = data.get("has_mirror", False)
+                # The mirror is keyed by slug alone, so it cannot honour a
+                # requested publisher and might hand back someone else's skill.
+                has_mirror = data.get("has_mirror", False) and not owner
                 expected_checksum = data.get("checksum") or data.get("sha256")
+                if owner:
+                    download_url = _with_query(download_url, ownerHandle=owner)
                 result.messages.append(f"Source: {src_provider}")
                 result.messages.append("Downloading skill package...")
                 dl_err = None
@@ -1268,8 +1329,14 @@ def _install_hub(name, result: InstallResult, provider=None, agent_id: str = Non
                     dl_resp.raise_for_status()
                 except Exception as e:
                     dl_err = e
+                    status = getattr(getattr(e, "response", None), "status_code", None)
+                    if status == 409 and not owner:
+                        raise SkillInstallError(
+                            f"More than one publisher on {src_provider} has a skill named '{name}'. "
+                            f"Include the publisher, e.g. {provider or src_provider}:<owner>/{name}, "
+                            f"or paste the skill's page URL."
+                        )
                     if not has_mirror:
-                        status = getattr(getattr(e, "response", None), "status_code", None)
                         if status == 404:
                             raise SkillInstallError(
                                 f"Skill '{name}' was not found on {src_provider}. "
@@ -1591,8 +1658,7 @@ def uninstall(name, yes):
             with open(config_path, "r", encoding="utf-8") as f:
                 config = json.load(f)
             config.pop(name, None)
-            with open(config_path, "w", encoding="utf-8") as f:
-                json.dump(config, f, indent=4, ensure_ascii=False)
+            _write_skills_config(config, skills_dir)
         except Exception:
             pass
 
@@ -1644,8 +1710,7 @@ def _set_enabled(name, enabled):
         sys.exit(1)
 
     config[name]["enabled"] = enabled
-    with open(config_path, "w", encoding="utf-8") as f:
-        json.dump(config, f, indent=4, ensure_ascii=False)
+    _write_skills_config(config, skills_dir)
 
     state = "enabled" if enabled else "disabled"
     icon = "✓" if enabled else "✗"

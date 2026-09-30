@@ -706,14 +706,14 @@ class TelegramChannel(ChatChannel):
                         )
                 await self._send_with_retry(_send_voice, label="send_voice")
 
-            elif rtype == ReplyType.FILE:
+            elif rtype in (ReplyType.FILE, ReplyType.VIDEO):
                 # Videos go through send_video, everything else through send_document
                 local = content[7:] if isinstance(content, str) and content.startswith("file://") else content
                 # File replies may carry an accompanying text caption
                 caption = getattr(reply, "text_content", None) or None
-                is_video = isinstance(local, str) and local.lower().endswith(
+                is_video = rtype == ReplyType.VIDEO or (isinstance(local, str) and local.lower().endswith(
                     (".mp4", ".mov", ".avi", ".mkv", ".webm")
-                )
+                ))
 
                 # Captions are capped far below a message, and an oversized one
                 # fails the upload itself. Anything too long follows separately.

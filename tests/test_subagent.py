@@ -445,6 +445,11 @@ def test_a_timed_out_call_returns_without_waiting_for_the_worker(parent, workspa
     the timeout exists to enforce."""
     settings = SubagentSettings(enabled=True, max_depth=1, max_concurrent=2, timeout_seconds=0.2)
     release = threading.Event()
+    worker_finished = threading.Event()
+
+    def on_state(_index, state):
+        if state.get("status") in ("cancelled", "completed", "failed"):
+            worker_finished.set()
 
     class _Stuck:
         def __init__(self, **kwargs):
@@ -457,9 +462,18 @@ def test_a_timed_out_call_returns_without_waiting_for_the_worker(parent, workspa
     monkeypatch.setattr("agent.protocol.agent.Agent", _Stuck)
 
     started = time.time()
-    results = run_tasks(parent, [SubagentTask(goal="stuck")], load_templates(str(workspace)), settings)
+    results = run_tasks(
+        parent,
+        [SubagentTask(goal="stuck")],
+        load_templates(str(workspace)),
+        settings,
+        on_state=on_state,
+    )
     elapsed = time.time() - started
     release.set()
+    # run_tasks must return without joining, but the test must not leak its
+    # abandoned worker into the next test after monkeypatch restores Agent.
+    assert worker_finished.wait(timeout=5)
 
     assert results[0]["status"] == "timeout"
     assert elapsed < 5, f"run_tasks blocked for {elapsed:.1f}s waiting on the abandoned worker"

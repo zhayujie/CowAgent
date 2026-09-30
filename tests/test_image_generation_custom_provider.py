@@ -81,6 +81,34 @@ def test_build_providers_uses_explicit_custom_provider(monkeypatch):
     assert provider.model == "vendor-image-model"
 
 
+def _only_aggregator_key(monkeypatch):
+    for name in ("OPENAI_API_KEY", "GEMINI_API_KEY", "ARK_API_KEY",
+                 "DASHSCOPE_API_KEY", "MINIMAX_API_KEY"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("LINKAI_API_KEY", "aggregator-key")
+
+
+def test_build_providers_keeps_pinned_model_on_aggregator(monkeypatch):
+    _only_aggregator_key(monkeypatch)
+
+    for requested, expected in (
+        ("gpt-image-2.5-flare", "gpt-image-2.5-flare"),
+        ("nano-banana-pro", "gemini-3-pro-image-preview"),
+    ):
+        providers = image_generation._build_providers(requested)
+        assert [p.model for _, p in providers] == [expected]
+
+
+def test_build_providers_drops_model_aggregator_does_not_serve(monkeypatch):
+    _only_aggregator_key(monkeypatch)
+
+    providers = image_generation._build_providers("qwen-image-2.0")
+
+    assert [p.model for _, p in providers] == [
+        image_generation.LinkAIProvider.DEFAULT_MODEL,
+    ]
+
+
 def test_build_providers_does_not_fallback_for_missing_custom_provider(
     monkeypatch,
 ):

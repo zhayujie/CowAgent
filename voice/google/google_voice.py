@@ -25,13 +25,16 @@ class GoogleVoice(Voice):
         try:
             text = self.recognizer.recognize_google(audio, language="zh-CN")
             logger.info("[Google] voiceToText text={} voice file name={}".format(text, voice_file))
-            reply = Reply(ReplyType.TEXT, text)
+            return Reply(ReplyType.TEXT, text)
         except speech_recognition.UnknownValueError:
-            reply = Reply(ReplyType.ERROR, "抱歉，我听不懂")
+            return Reply(ReplyType.ERROR, "抱歉，我听不懂")
         except speech_recognition.RequestError as e:
-            reply = Reply(ReplyType.ERROR, "抱歉，无法连接到 Google 语音识别服务；{0}".format(e))
-        finally:
-            return reply
+            return Reply(ReplyType.ERROR, "抱歉，无法连接到 Google 语音识别服务；{0}".format(e))
+        except Exception as e:
+            # Anything else used to hit `finally: return reply` with `reply`
+            # unbound, so the caller saw UnboundLocalError instead of the cause.
+            logger.error("[Google] voiceToText exception: {0}".format(e), exc_info=True)
+            return Reply(ReplyType.ERROR, "抱歉，我暂时听不清您的语音，请稍后再试吧~")
 
     def textToVoice(self, text):
         try:
@@ -40,8 +43,6 @@ class GoogleVoice(Voice):
             tts = gTTS(text=text, lang="zh")
             tts.save(mp3File)
             logger.info("[Google] textToVoice text={} voice file name={}".format(text, mp3File))
-            reply = Reply(ReplyType.VOICE, mp3File)
+            return Reply(ReplyType.VOICE, mp3File)
         except Exception as e:
-            reply = Reply(ReplyType.ERROR, str(e))
-        finally:
-            return reply
+            return Reply(ReplyType.ERROR, str(e))

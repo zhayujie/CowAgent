@@ -138,6 +138,18 @@ class SkillService:
             )
         return skill_dir
 
+    def _contained_skill_dir(self, base_dir: str, name: str) -> str:
+        """Validate that a loaded skill's directory sits inside the skills root.
+
+        :raises ValueError: for the root itself or anything outside it, such
+            as a builtin skill resolved from the install directory.
+        """
+        skill_dir = os.path.realpath(base_dir)
+        root = os.path.realpath(self.manager.custom_dir)
+        if not skill_dir.startswith(root + os.sep):
+            raise ValueError(f"skill {name!r} is not in the workspace skills directory")
+        return skill_dir
+
     @staticmethod
     def _safe_file_path(root: str, rel_path: str) -> str:
         """Resolve a skill file path and validate it stays inside ``root``.
@@ -675,7 +687,13 @@ class SkillService:
         if not name:
             raise ValueError("skill name is required")
 
-        skill_dir = self._safe_skill_dir(name)
+        entry = self.manager.get_skill(name)
+        if entry is not None:
+            # The folder need not be named after the frontmatter ``name`` (a
+            # hand-made or renamed skill), so remove it where the loader found it.
+            skill_dir = self._contained_skill_dir(entry.skill.base_dir, name)
+        else:
+            skill_dir = self._safe_skill_dir(name)
         if os.path.exists(skill_dir):
             shutil.rmtree(skill_dir)
             logger.info(f"[SkillService] delete: removed directory {skill_dir}")
