@@ -121,7 +121,7 @@ Two rules for includes:
 | `views/chat.html` | Chat view: message list, composer card, workspace panel |
 | `views/agents.html` | Agent team: list, detail drawer, create form |
 | `views/config.html` | Settings view with the "basic" and "models" tabs |
-| `views/skills.html` | Skill list, and the viewer for one skill: its file tree beside the file on screen (the create dialog is `modals/skill-create.html`) |
+| `views/skills.html` | Skill list, and the viewer for one skill: its file tree beside the file on screen (adding one is `modals/skill-add.html`) |
 | `views/memory.html` | Memory list and file viewer |
 | `views/knowledge.html` | Knowledge base: documents panel and relation graph panel |
 | `views/channels.html` | Channels view (content injected by JS) |
@@ -129,7 +129,7 @@ Two rules for includes:
 | `views/logs.html` | Log terminal |
 | `modals/team-chat.html` | New multi-agent conversation |
 | `modals/knowledge-dialog.html` | Knowledge create/rename/delete dialog |
-| `modals/skill-create.html` | New skill: the form (attachments picked as files or as a folder), and folder / archive upload |
+| `modals/skill-add.html` | Add skill: install from a market or an upload after a preview, or write a new one from a form (attachments picked as files or as a folder) |
 | `modals/confirm-dialog.html` | Static confirm dialog |
 | `modals/rename-dialog.html` | Channel instance rename |
 | `modals/folder-picker.html` | Project folder picker |

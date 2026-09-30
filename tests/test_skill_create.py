@@ -253,7 +253,7 @@ def test_create_endpoint_reports_a_refusal_as_a_message(tmp_path):
     assert "description is required" in response["message"]
 
 
-def test_the_console_offers_the_create_form_beside_the_add_dialog():
+def test_the_create_form_is_a_tab_of_the_add_dialog():
     from channel.web.core import template
     from conftest import console_js
 
@@ -261,20 +261,20 @@ def test_the_console_offers_the_create_form_beside_the_add_dialog():
     html = template.render("chat.html")
     js = console_js()
 
-    assert 'onclick="openSkillCreateDialog()"' in html
+    # One way in: the add dialog, whose third tab is the form.
     assert 'id="skill-add-btn"' in html
-    assert 'id="skill-create-overlay"' in html
+    assert 'data-skill-tab="create"' in html
+    assert 'id="skill-pane-create"' in html
+    assert "skill-create-overlay" not in html
+    assert "openSkillCreateDialog" not in html + js
     for field in ("skill-create-name", "skill-create-desc", "skill-create-body",
                   "skill-create-files", "skill-create-folder"):
         assert f'id="{field}"' in html, field
     # A folder picker needs the attribute, not just the input.
     assert 'id="skill-create-folder" type="file" class="hidden" multiple webkitdirectory' in html
-    # Uploading an existing skill is the add dialog's, with a preview first; the
-    # create dialog does not offer a second, unpreviewed way in.
-    assert "data-skill-create-tab" not in html
-    assert "switchSkillCreateMode" not in js
 
-    assert "function openSkillCreateDialog(" in js
+    # The dialog's own footer button submits the form on that tab.
+    assert "skillAdd.tab === 'create') submitSkillCreate();" in js
     assert "fetch('/api/skills/create'" in js
     # The form's attachments keep their paths, so a folder picked there installs
     # as the directory it was picked as.
@@ -319,10 +319,10 @@ def test_both_kinds_of_attachment_pick_sit_behind_one_button():
     assert "function initSkillAttachMenu(" in js
     assert "hideSkillAttachMenu();" in js
 
-    page = (Path(__file__).parents[1]
-            / "desktop/src/renderer/src/pages/SkillsPage.tsx").read_text(encoding="utf-8")
-    assert "setAttachOpen((v) => !v)" in page
-    assert "!attachRef.current.contains(e.target as Node)" in page
+    form = (Path(__file__).parents[1]
+            / "desktop/src/renderer/src/pages/skills/SkillCreateForm.tsx").read_text(encoding="utf-8")
+    assert "setAttachOpen((v) => !v)" in form
+    assert "!attachRef.current.contains(e.target as Node)" in form
 
 
 def test_the_desktop_create_form_bundles_a_folder_the_same_way():
@@ -331,14 +331,18 @@ def test_the_desktop_create_form_bundles_a_folder_the_same_way():
     from pathlib import Path
 
     root = Path(__file__).parents[1] / "desktop/src/renderer/src"
-    page = (root / "pages/SkillsPage.tsx").read_text(encoding="utf-8")
+    form = (root / "pages/skills/SkillCreateForm.tsx").read_text(encoding="utf-8")
+    modal = (root / "pages/skills/SkillAddModal.tsx").read_text(encoding="utf-8")
     client = (root / "api/client.ts").read_text(encoding="utf-8")
 
     assert "formData.append('relative_paths', file.webkitRelativePath || file.name)" in client
     # A folder picker needs the attribute React's typings do not carry.
-    assert page.count("{...FOLDER_INPUT_PROPS}") == 1
-    assert "function skillUploadCandidates(" in page
-    assert "addAttachments(picked, true)" in page
+    assert form.count("{...FOLDER_INPUT_PROPS}") == 1
+    assert "function skillUploadCandidates(" in form
+    assert "addAttachments(picked, true)" in form
+    # The form is the add dialog's third tab, submitted by the dialog's footer.
+    assert "value: 'create', label: t('skill_add_tab_create')" in modal
+    assert "form={SKILL_CREATE_FORM_ID}" in modal
     # Uploading an existing skill is SkillAddModal's staged flow alone.
     assert "uploadSkillArchive" not in client and "uploadSkillFolder" not in client
 

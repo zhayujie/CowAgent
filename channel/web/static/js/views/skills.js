@@ -737,6 +737,7 @@ function bindSkillAddUi() {
         btn.addEventListener('click', () => setSkillSource(btn.dataset.source));
     });
     on('skill-value-input', 'input', () => { hideSkillInputError(); syncSkillAddFooter(); });
+    ['skill-create-name', 'skill-create-desc'].forEach(id => on(id, 'input', hideSkillInputError));
     on('skill-value-input', 'keydown', (e) => {
         if (e.key === 'Enter') { e.preventDefault(); fetchSkillPreview(); }
     });
@@ -784,6 +785,8 @@ function openSkillAdd() {
     skillAdd.selected = new Set();
     skillAdd.busy = false;
     document.getElementById('skill-value-input').value = '';
+    resetSkillCreateForm();
+    initSkillAttachMenu();
     switchSkillTab('market');
     setSkillSource('hub');
     showSkillStep('input');
@@ -794,7 +797,8 @@ function openSkillAdd() {
 function closeSkillAdd() {
     if (skillAdd.busy) {
         // Installing is quick and not safely interruptible; fetching can hang on the network.
-        if (skillAdd.step !== 'input') return;
+        // Creating writes the skill like installing does, so it cannot be walked away from either.
+        if (skillAdd.step !== 'input' || skillAdd.tab === 'create') return;
         skillAdd.req++;
         setSkillAddBusy(false);
     }
@@ -817,8 +821,11 @@ function switchSkillTab(tab) {
     });
     document.getElementById('skill-pane-market').classList.toggle('hidden', tab !== 'market');
     document.getElementById('skill-pane-upload').classList.toggle('hidden', tab !== 'upload');
+    document.getElementById('skill-pane-create').classList.toggle('hidden', tab !== 'create');
+    hideSkillAttachMenu();
     hideSkillInputError();
     syncSkillAddFooter();
+    if (tab === 'create') document.getElementById('skill-create-name')?.focus();
 }
 
 function setSkillSource(source) {
@@ -887,7 +894,7 @@ function syncSkillAddFooter() {
     back.classList.toggle('hidden', skillAdd.step !== 'preview');
     back.disabled = skillAdd.busy;
     cancel.classList.toggle('hidden', skillAdd.step === 'done');
-    cancel.disabled = skillAdd.busy && skillAdd.step !== 'input';
+    cancel.disabled = skillAdd.busy && (skillAdd.step !== 'input' || skillAdd.tab === 'create');
 
     let text = '';
     let show = true;
@@ -896,6 +903,8 @@ function syncSkillAddFooter() {
         if (skillAdd.tab === 'upload') {
             show = skillAdd.busy;
             text = t('skill_uploading');
+        } else if (skillAdd.tab === 'create') {
+            text = t('skill_new_submit');
         } else {
             text = t(skillAdd.busy ? 'skill_fetching' : 'skill_fetch');
             enabled = enabled && !!document.getElementById('skill-value-input').value.trim();
@@ -913,7 +922,8 @@ function syncSkillAddFooter() {
 }
 
 function onSkillAddPrimary() {
-    if (skillAdd.step === 'input') fetchSkillPreview();
+    if (skillAdd.step === 'input' && skillAdd.tab === 'create') submitSkillCreate();
+    else if (skillAdd.step === 'input') fetchSkillPreview();
     else if (skillAdd.step === 'preview') confirmSkillInstall();
     else finishSkillAdd();
 }
@@ -1761,8 +1771,9 @@ function resetSkillViewer() {
 }
 
 // ---------------------------------------------------------------------
-// Creating a skill from a form. Installing an existing one - from the hub,
-// GitHub or an upload - is the Add dialog's, with a preview before install.
+// The Add dialog's create tab: write a new skill from a form. Unlike the
+// market and upload tabs it has no preview step - what is typed is what gets
+// written - so it posts straight to /api/skills/create.
 // ---------------------------------------------------------------------
 
 // The server's own ceilings for a form's attachments, mirrored so a 50 MB
@@ -1773,28 +1784,9 @@ const SKILL_UPLOAD_MAX_FILE_SIZE = 10 * 1024 * 1024;
 const SKILL_UPLOAD_MAX_TOTAL_SIZE = 50 * 1024 * 1024;
 
 let _skillCreateFiles = [];
-let _skillCreateBusy = false;
 let _skillAttachMenuReady = false;
 
-function openSkillCreateDialog() {
-    resetSkillCreateDialog();
-    document.getElementById('skill-create-overlay')?.classList.remove('hidden');
-    initSkillAttachMenu();
-    // A folder picker is Chromium/WebKit only; without it the menu would offer
-    // an entry that does nothing.
-    const folderOption = document.getElementById('skill-create-folder-option');
-    const folderInput = document.getElementById('skill-create-folder');
-    folderOption?.classList.toggle('hidden', !(folderInput && 'webkitdirectory' in folderInput));
-    document.getElementById('skill-create-name')?.focus();
-}
-
-function closeSkillCreateDialog() {
-    if (_skillCreateBusy) return;
-    document.getElementById('skill-create-overlay')?.classList.add('hidden');
-    resetSkillCreateDialog();
-}
-
-function resetSkillCreateDialog() {
+function resetSkillCreateForm() {
     ['skill-create-name', 'skill-create-desc', 'skill-create-body'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.value = '';
@@ -1803,20 +1795,6 @@ function resetSkillCreateDialog() {
     renderSkillCreateFiles();
     renderSkillNamePreview();
     hideSkillAttachMenu();
-    setSkillCreateError('');
-}
-
-function setSkillCreateError(message) {
-    const el = document.getElementById('skill-create-error');
-    if (!el) return;
-    el.textContent = message || '';
-    el.classList.toggle('hidden', !message);
-}
-
-function setSkillCreateBusy(busy) {
-    _skillCreateBusy = busy;
-    const submit = document.getElementById('skill-create-submit');
-    if (submit) submit.disabled = busy;
 }
 
 /**
@@ -1903,6 +1881,11 @@ function initSkillAttachMenu() {
     const btn = document.getElementById('skill-create-attach-btn');
     if (!menu || !btn) return;
     _skillAttachMenuReady = true;
+    // A folder picker is Chromium/WebKit only; without it the menu would offer
+    // an entry that does nothing.
+    const folderInput = document.getElementById('skill-create-folder');
+    document.getElementById('skill-create-folder-option')
+        ?.classList.toggle('hidden', !(folderInput && 'webkitdirectory' in folderInput));
     document.addEventListener('click', event => {
         if (menu.classList.contains('hidden')) return;
         if (menu.contains(event.target) || btn.contains(event.target)) return;
@@ -1996,16 +1979,16 @@ function validateSkillUploadFiles(files) {
 }
 
 function submitSkillCreate() {
-    if (_skillCreateBusy) return;
+    if (skillAdd.busy) return;
     const name = (document.getElementById('skill-create-name')?.value || '').trim();
     const description = (document.getElementById('skill-create-desc')?.value || '').trim();
     const body = document.getElementById('skill-create-body')?.value || '';
-    if (!skillNameSlug(name)) return setSkillCreateError(t('skill_new_name_invalid'));
+    if (!skillNameSlug(name)) return showSkillInputError(t('skill_new_name_invalid'));
     // The loader drops a skill with no description, so it is required here too.
-    if (!description) return setSkillCreateError(t('skill_new_desc_required'));
+    if (!description) return showSkillInputError(t('skill_new_desc_required'));
     if (_skillCreateFiles.length) {
         const error = validateSkillUploadFiles(_skillCreateFiles);
-        if (error) return setSkillCreateError(error);
+        if (error) return showSkillInputError(error);
     }
 
     const form = new FormData();
@@ -2023,8 +2006,8 @@ function submitSkillCreate() {
 }
 
 async function postSkillCreate(formData) {
-    setSkillCreateBusy(true);
-    setSkillCreateError('');
+    setSkillAddBusy(true);
+    hideSkillInputError();
     let data = null;
     try {
         const res = await fetch('/api/skills/create', { method: 'POST', body: formData });
@@ -2032,14 +2015,14 @@ async function postSkillCreate(formData) {
     } catch (e) {
         data = null;
     } finally {
-        setSkillCreateBusy(false);
+        setSkillAddBusy(false);
     }
 
-    if (!data) return setSkillCreateError(t('skill_new_failed'));
-    if (data.status !== 'success') return setSkillCreateError(data.message || t('skill_new_failed'));
+    if (!data) return showSkillInputError(t('skill_new_failed'));
+    if (data.status !== 'success') return showSkillInputError(data.message || t('skill_new_failed'));
 
-    closeSkillCreateDialog();
+    closeSkillAdd();
     _wsToast(`${t('skill_new_created')}: ${data.name}`);
-    loadSkillsSection();
+    loadSkillsSection([data.name]);
 }
 
