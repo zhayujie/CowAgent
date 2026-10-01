@@ -374,5 +374,77 @@ class TestTrigramUpdateTrigger(unittest.TestCase):
         storage.close()
 
 
+class TestTrigramTokenizerUnavailable(unittest.TestCase):
+    """A database written where the trigram tokenizer exists (SQLite 3.34+)
+    carries an index an older build cannot open. Its triggers fire on every
+    insert, update and delete on `chunks`, so leaving them in place breaks the
+    whole memory and knowledge index — every save comes back with "no such
+    tokenizer: trigram" — rather than only CJK search.
+    """
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.db = self.tmp / "index.db"
+        self._log = logging.getLogger("log")
+        self._log_level = self._log.level
+        self._log.setLevel(logging.CRITICAL + 1)
+
+    def tearDown(self):
+        self._log.setLevel(self._log_level)
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_an_unopenable_trigram_index_is_detached_rather_than_breaking_writes(self):
+        MemoryStorage(self.db).close()
+        # Install the trigger by hand so the case is the same whether or not
+        # this build's SQLite created one of its own on that first open.
+        conn = sqlite3.connect(str(self.db))
+        conn.execute(
+            "CREATE TRIGGER IF NOT EXISTS chunks_trigram_ai AFTER INSERT ON chunks BEGIN "
+            "INSERT INTO chunks_fts_trigram(rowid, text) VALUES (new.rowid, new.text); END"
+        )
+        conn.execute(
+            "INSERT OR REPLACE INTO _meta(key, value) VALUES('trigram_backfill_done', '1')"
+        )
+        conn.commit()
+        conn.close()
+
+        def unavailable(conn):
+            raise sqlite3.OperationalError("no such tokenizer: trigram")
+
+        with unittest.mock.patch.object(MemoryStorage, "_create_trigram_objects",
+                                        staticmethod(unavailable)):
+            storage = MemoryStorage(self.db)
+
+        self.assertFalse(storage.trigram_fts5_available)
+        self.assertEqual(
+            storage.conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='trigger' "
+                "AND name LIKE 'chunks_trigram%'"
+            ).fetchall(),
+            [],
+        )
+        # The backfill flag has to go with them, or a later open by a build that
+        # does have the tokenizer would trust an index missing every write made
+        # in between.
+        self.assertIsNone(
+            storage.conn.execute(
+                "SELECT 1 FROM _meta WHERE key = 'trigram_backfill_done'"
+            ).fetchone()
+        )
+
+        # The point of all of the above: saving still works.
+        storage.save_chunk(MemoryChunk(
+            id="c1", user_id=None, scope="shared", source="knowledge",
+            path="knowledge/notes/a.md", start_line=1, end_line=1,
+            text="知识库编辑", embedding=None, hash="h",
+        ))
+        self.assertEqual(
+            [r.path for r in storage.search_keyword("知识库编辑")],
+            ["knowledge/notes/a.md"],
+        )
+        storage.delete_by_path("knowledge/notes/a.md")
+        storage.close()
+
+
 if __name__ == "__main__":
     unittest.main()

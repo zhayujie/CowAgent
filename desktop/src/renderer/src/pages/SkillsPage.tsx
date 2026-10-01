@@ -9,12 +9,16 @@ import {
   Plug,
   Trash2,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Compass,
   ExternalLink,
   Terminal,
+  FileQuestion,
   FileText,
   FilePen,
   SquarePen,
+  Folder,
   FolderOpen,
   Send,
   Search,
@@ -28,14 +32,15 @@ import type { LucideIcon } from 'lucide-react'
 import { t } from '../i18n'
 import apiClient from '../api/client'
 import type { ApiResult } from '../api/client'
-import type { ToolInfo, SkillInfo, SkillContent, McpServerConfig } from '../types'
+import type { ToolInfo, SkillInfo, SkillContent, SkillFileEntry, McpServerConfig } from '../types'
 import { Toggle } from './settings/primitives'
 import Markdown from '../components/Markdown'
-import { DocActions, DocEditor, DocNotice } from '../components/DocEditor'
+import { DocActions, DocEditor, DocNotice, DocView } from '../components/DocEditor'
 import { createDocEditorStore, docRefusal } from '../store/docEditorStore'
 import { askConfirm } from '../store/confirmStore'
 import McpEditorModal from './skills/McpEditorModal'
 import SkillAddModal from './skills/SkillAddModal'
+import { formatSkillFileSize } from './skills/SkillCreateForm'
 import { parseSkillFrontmatter } from './skills/frontmatter'
 import { MCP_TRANSPORT_LABELS, mcpTransport } from './skills/mcpConfig'
 import { product } from '@product'
@@ -64,43 +69,227 @@ const TOOL_ICONS: Record<string, LucideIcon> = {
   memory_search: Brain,
 }
 
+/** Where the file list's own show/hide state is kept, as in the web console. */
+const SKILL_FILES_PANEL_KEY = 'cow_skill_files_panel'
+
 /**
- * Skills are addressed by name, not by path: which file a name resolves to is
- * the loader's business, and a builtin skill's file sits outside the workspace.
+ * A skill is addressed by name, not by path: which directory a name resolves to
+ * is the loader's business, and a builtin skill sits outside the workspace.
+ * `path` then names one file inside it - a skill is a directory, and the files
+ * beside its SKILL.md are as much part of it.
  */
 interface SkillRef {
   name: string
   label: string
+  /** File within the skill directory; its SKILL.md when empty. */
+  path?: string
 }
 
 /** Created at module scope so an unsaved edit survives a route change. */
 const skillEditor = createDocEditorStore<SkillRef, SkillContent & ApiResult>({
-  keyOf: (doc) => doc.name,
-  read: (doc) => apiClient.readSkill(doc.name),
+  // The file, not just the skill: switching between two files of one skill has
+  // to read as a different document, or a late response would be dropped as a
+  // duplicate of the one on screen.
+  keyOf: (doc) => `${doc.name}/${doc.path || ''}`,
+  read: (doc) => apiClient.readSkill(doc.name, doc.path),
   write: (doc, content, expectedMtime) =>
-    apiClient.writeSkill({ name: doc.name, content, expectedMtime }),
+    apiClient.writeSkill({ name: doc.name, path: doc.path, content, expectedMtime }),
   refusal: (data) => (data.ships_with_install ? t('skill_builtin_readonly') : docRefusal(data)),
 })
 
-/** A skill's read-only view: frontmatter as a titled header, body as markdown. */
-const SkillContentView: React.FC<{ content: string }> = ({ content }) => {
+/**
+ * A non-markdown file as a fenced code block, so it renders with the same
+ * highlighting and copy button as code anywhere else in the app.
+ *
+ * The fence is longer than any run of backticks in the file, or a code sample
+ * inside it would end the block early.
+ */
+function skillCodeBlock(path: string, content: string): string {
+  // Only a real extension names a language: left unguarded a `LICENSE` would be
+  // labelled one, and the highlighter asked to find it.
+  const filename = path.split('/').pop() || ''
+  const lang = filename.includes('.') ? (filename.split('.').pop() || '').toLowerCase() : ''
+  // Folded rather than spread into Math.max: a file can hold more runs of
+  // backticks than an argument list takes.
+  const longest = (content.match(/`+/g) || []).reduce((n, run) => Math.max(n, run.length), 2)
+  const fence = '`'.repeat(longest + 1)
+  return `${fence}${lang}\n${content}\n${fence}`
+}
+
+/**
+ * The read-only view of one of a skill's files.
+ *
+ * A markdown file - its SKILL.md above all - reads as prose, with the
+ * frontmatter lifted out into a header: handed to the markdown renderer as-is
+ * the `---` block becomes a giant bold heading and a horizontal rule. Anything
+ * else is a script or a data file, and reads as code.
+ */
+const SkillContentView: React.FC<{
+  content: string
+  /** Which file is open; empty for the skill's own SKILL.md. */
+  path?: string
+  /** How it was listed, when the tree knows it. */
+  file?: SkillFileEntry
+}> = ({ content, path, file }) => {
+  // A bundled asset belongs in the tree - it is part of the skill - but showing
+  // it here would only print mojibake.
+  if (file && !file.text) {
+    return (
+      <div className="py-12 flex flex-col items-center gap-2 text-content-tertiary">
+        <FileQuestion size={22} />
+        <span className="text-sm">{t('skill_file_not_text')}</span>
+      </div>
+    )
+  }
+
+  const isMarkdown = file ? file.kind === 'markdown' : !path || /\.(md|markdown)$/i.test(path)
+  if (!isMarkdown) return <Markdown content={skillCodeBlock(path || '', content)} />
+
   const { fields, body } = parseSkillFrontmatter(content)
   return (
     <>
       {fields.length > 0 && (
-        <div className="mb-5 pb-5 border-b border-subtle space-y-2">
-          {fields.map(([key, value]) => (
-            <div key={key} className="flex gap-3 text-sm">
-              <span className="flex-shrink-0 w-24 font-medium text-content-tertiary">{key}</span>
-              <span className="flex-1 min-w-0 text-content break-words">{value}</span>
-            </div>
+        // The label column sizes to the longest key, up to a cap; past it a
+        // dotted path like `metadata.cowagent.requires.anyEnv` wraps at its
+        // dots rather than squeezing the values into a sliver.
+        <dl className="mb-6 grid grid-cols-[minmax(5rem,9rem)_1fr] gap-x-4 gap-y-1.5 rounded-card border border-default bg-inset px-4 py-3 text-sm">
+          {/* Index keys: a hand-written header may repeat a key. */}
+          {fields.map(([key, value], row) => (
+            <React.Fragment key={row}>
+              <dt className="font-mono text-xs leading-6 text-content-tertiary break-words" title={key}>
+                {key.split('.').map((part, i, parts) => (
+                  <React.Fragment key={i}>
+                    {part}
+                    {i < parts.length - 1 && (
+                      <>
+                        .<wbr />
+                      </>
+                    )}
+                  </React.Fragment>
+                ))}
+              </dt>
+              <dd className="min-w-0 leading-6 text-content break-words">{value}</dd>
+            </React.Fragment>
           ))}
-        </div>
+        </dl>
       )}
       <Markdown content={body} />
     </>
   )
 }
+
+/**
+ * The open skill's files, indented by the depth the server listed them at.
+ *
+ * Shown even for a skill that is only its SKILL.md: the panel is what says what
+ * a skill is made of, and "one file, this big" is an answer to that. It only
+ * goes away when the listing could not be fetched at all, where an empty tree
+ * beside the file on screen would just look broken.
+ */
+const SkillFileTree: React.FC<{
+  files: SkillFileEntry[]
+  current: string
+  /** Directories the reader has folded away, by path. Empty means all open. */
+  folded: Set<string>
+  onSelect: (path: string) => void
+  onToggleDir: (path: string) => void
+}> = ({ files, current, folded, onSelect, onToggleDir }) => {
+  if (!files.length) return null
+
+  const hiddenByFold = (path: string): boolean => {
+    for (const dir of folded) if (path.startsWith(`${dir}/`)) return true
+    return false
+  }
+
+  return (
+    <div className="w-60 flex-shrink-0 flex flex-col min-h-0 border-r border-default">
+      <div className="flex-shrink-0 px-4 pt-3 pb-1.5 truncate text-xs font-semibold uppercase tracking-wider text-content-tertiary">
+        {t('skill_files_title')}
+      </div>
+      <div className="flex-1 overflow-y-auto px-2 pb-2 space-y-0.5">
+        {files
+          .filter((file) => !hiddenByFold(file.path))
+          .map((file) => {
+            const isFolded = folded.has(file.path)
+            const active = !file.is_dir && file.path === current
+            return (
+              <button
+                key={file.path}
+                type="button"
+                title={file.path}
+                onClick={() => (file.is_dir ? onToggleDir(file.path) : onSelect(file.path))}
+                style={{ paddingLeft: 8 + file.depth * 14 }}
+                className={`w-full flex items-center gap-1.5 py-1.5 pr-2 rounded-btn text-[13px] text-left transition-colors cursor-pointer ${
+                  active
+                    ? 'bg-accent-soft text-accent'
+                    : file.is_dir
+                      ? 'text-content-secondary font-medium hover:bg-surface-2'
+                      : 'text-content-secondary hover:bg-surface-2'
+                }`}
+              >
+                {/* A caret only where there is something to fold; the others keep
+                    its width so every name in one directory starts at one column. */}
+                {file.is_dir ? (
+                  isFolded ? (
+                    <ChevronRight size={13} className="flex-shrink-0 opacity-70" />
+                  ) : (
+                    <ChevronDown size={13} className="flex-shrink-0 opacity-70" />
+                  )
+                ) : (
+                  <span className="w-[13px] flex-shrink-0" />
+                )}
+                {file.is_dir ? (
+                  isFolded ? (
+                    <Folder size={13} className="flex-shrink-0 opacity-70" />
+                  ) : (
+                    <FolderOpen size={13} className="flex-shrink-0 opacity-70" />
+                  )
+                ) : (
+                  <FileText size={13} className="flex-shrink-0 opacity-70" />
+                )}
+                <span className="flex-1 min-w-0 truncate">{file.name}</span>
+                {/* Only for files: a directory's own size says nothing about what
+                    the tree shows inside it. */}
+                {!file.is_dir && (
+                  <span
+                    className={`flex-shrink-0 text-[10px] tabular-nums ${
+                      active ? 'text-accent opacity-70' : 'text-content-tertiary'
+                    }`}
+                  >
+                    {formatSkillFileSize(file.size)}
+                  </span>
+                )}
+              </button>
+            )
+          })}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * The switch that folds the file list away and brings it back, riding the
+ * border the list sits against: centred on the divider while the list is out
+ * (15rem is the panel's w-60), on the card's own left edge once it is folded,
+ * level with the list's title. The half pixel centres it on a 1px line rather
+ * than beside it. Mirrors `.skill-files-switch` in the web console.
+ */
+const SkillFilesSwitch: React.FC<{ expanded: boolean; onClick: () => void }> = ({
+  expanded,
+  onClick,
+}) => (
+  <button
+    type="button"
+    onClick={onClick}
+    aria-expanded={expanded}
+    aria-label={t(expanded ? 'skill_files_collapse' : 'skill_files_expand')}
+    title={t(expanded ? 'skill_files_collapse' : 'skill_files_expand')}
+    style={{ left: expanded ? 'calc(15rem + 0.5px)' : '0.5px' }}
+    className="absolute top-[10px] z-10 -translate-x-1/2 w-[22px] h-[22px] inline-flex items-center justify-center rounded-full border border-default bg-surface shadow-sm text-content-tertiary hover:text-accent hover:border-accent transition-colors cursor-pointer"
+  >
+    {expanded ? <ChevronLeft size={12} /> : <ChevronRight size={12} />}
+  </button>
+)
 
 function mcpStatusLabel(status?: string): string {
   const key: Record<string, string> = {
@@ -146,6 +335,19 @@ const SkillsPage: React.FC<SkillsPageProps> = ({ baseUrl }) => {
   const readonly = skillEditor((s) => s.readonly)
   const edit = skillEditor((s) => s.edit)
   const editorRef = useRef<HTMLTextAreaElement>(null)
+  const [skillFiles, setSkillFiles] = useState<SkillFileEntry[]>([])
+  /** Directories the reader has folded away, by path. Empty means all open. */
+  const [foldedDirs, setFoldedDirs] = useState<Set<string>>(new Set())
+  // Whether the file list is showing at all. Remembered across sessions:
+  // someone who reads skills on a narrow window should not have to fold it
+  // away again on every visit.
+  const [filesPanelOpen, setFilesPanelOpen] = useState(
+    () => localStorage.getItem(SKILL_FILES_PANEL_KEY) !== '0'
+  )
+  const openSkillName = doc?.name
+  // A skill opens on its SKILL.md, which the tree lists under that name even
+  // though the document was opened without naming a path.
+  const currentPath = doc?.path || 'SKILL.md'
 
   const flash = (text: string) => {
     setNotice(text)
@@ -202,6 +404,26 @@ const SkillsPage: React.FC<SkillsPageProps> = ({ baseUrl }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [baseUrl])
 
+  // Keyed on the skill rather than on the open file: moving between two files
+  // of one skill must not refetch the tree they are both listed in. The tree is
+  // a convenience, so a failure leaves it empty rather than reporting itself.
+  useEffect(() => {
+    // The folds belonged to the tree being left behind, not to the next one.
+    setFoldedDirs(new Set())
+    if (!openSkillName) {
+      setSkillFiles([])
+      return
+    }
+    let live = true
+    apiClient
+      .listSkillFiles(openSkillName)
+      .then((files) => live && setSkillFiles(files))
+      .catch(() => live && setSkillFiles([]))
+    return () => {
+      live = false
+    }
+  }, [openSkillName])
+
   const toggle = async (skill: SkillInfo, enabled: boolean) => {
     // Optimistic flip; revert on failure.
     setSkills((prev) => prev.map((s) => (s.name === skill.name ? { ...s, enabled } : s)))
@@ -222,6 +444,27 @@ const SkillsPage: React.FC<SkillsPageProps> = ({ baseUrl }) => {
       .getState()
       .open({ name: skill.name, label: skill.display_name || skill.name })
     await skillEditor.getState().startEdit()
+  }
+
+  const toggleFilesPanel = () => {
+    const open = !filesPanelOpen
+    setFilesPanelOpen(open)
+    localStorage.setItem(SKILL_FILES_PANEL_KEY, open ? '1' : '0')
+  }
+
+  const toggleSkillDir = (path: string) =>
+    setFoldedDirs((prev) => {
+      const next = new Set(prev)
+      if (!next.delete(path)) next.add(path)
+      return next
+    })
+
+  /** Show another of the open skill's files. */
+  const selectSkillFile = async (path: string) => {
+    if (!doc || currentPath === path) return
+    // `open` is what asks about an unsaved edit before the text area is
+    // replaced by another file's contents.
+    await skillEditor.getState().open({ ...doc, path })
   }
 
   const closeViewer = async () => {
@@ -293,7 +536,7 @@ const SkillsPage: React.FC<SkillsPageProps> = ({ baseUrl }) => {
 
       {doc ? (
         <div className="flex-1 flex flex-col min-h-0 border-t border-default">
-          <div className="flex items-center gap-3 px-6 py-3 flex-shrink-0 border-b border-subtle">
+          <div className="flex items-center gap-3 px-6 py-3 flex-shrink-0">
             <button
               onClick={() => void closeViewer()}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-btn text-sm text-content-secondary hover:bg-inset border border-strong transition-colors cursor-pointer"
@@ -302,7 +545,7 @@ const SkillsPage: React.FC<SkillsPageProps> = ({ baseUrl }) => {
               {t('skill_back')}
             </button>
             <h3 className="flex-1 text-sm font-semibold text-content truncate">
-              {doc.label}
+              {doc.path ? `${doc.label}/${doc.path}` : doc.label}
               {edit?.dirty && (
                 <span className="text-accent" title={t('ws_edit_unsaved')}>
                   {' '}
@@ -321,23 +564,55 @@ const SkillsPage: React.FC<SkillsPageProps> = ({ baseUrl }) => {
             )}
             <DocActions store={skillEditor} textareaRef={editorRef} />
           </div>
-          {edit ? (
-            <div className="flex-1 min-h-0 overflow-hidden">
-              <DocEditor key={doc.name} store={skillEditor} textareaRef={editorRef} />
-            </div>
-          ) : (
-            <div className="flex-1 overflow-y-auto">
-              <div className="max-w-3xl mx-auto px-6 py-6">
-                {docLoading ? (
-                  <div className="flex items-center text-content-tertiary py-8">
-                    <Loader2 size={16} className="animate-spin mr-2" />
+          {/* One card for the file list and the document, inset to the header's
+              padding so its edges line up with Back and the actions above. */}
+          <div className="flex-1 min-h-0 px-6 pb-6">
+            <div className="relative h-full">
+              {/* Folding the list away is the only way back to a full-width
+                  document, so the switch cannot live inside the panel it hides.
+                  It rides the border instead: the divider while the list is
+                  out, the card's left edge once it is folded. */}
+              {skillFiles.length > 0 && (
+                <SkillFilesSwitch expanded={filesPanelOpen} onClick={toggleFilesPanel} />
+              )}
+              <div className="h-full flex rounded-card border border-default bg-surface overflow-hidden">
+                {skillFiles.length > 0 && filesPanelOpen && (
+                  <SkillFileTree
+                    files={skillFiles}
+                    current={currentPath}
+                    folded={foldedDirs}
+                    onSelect={(path) => void selectSkillFile(path)}
+                    onToggleDir={toggleSkillDir}
+                  />
+                )}
+                {edit ? (
+                  <div className="flex-1 min-w-0 min-h-0 overflow-hidden">
+                    <DocEditor
+                      key={`${doc.name}/${doc.path || ''}`}
+                      store={skillEditor}
+                      textareaRef={editorRef}
+                    />
                   </div>
                 ) : (
-                  <SkillContentView content={content} />
+                  <DocView store={skillEditor}>
+                    <div className="max-w-3xl mx-auto px-8 py-6">
+                      {docLoading ? (
+                        <div className="flex items-center text-content-tertiary py-8">
+                          <Loader2 size={16} className="animate-spin mr-2" />
+                        </div>
+                      ) : (
+                        <SkillContentView
+                          content={content}
+                          path={currentPath}
+                          file={skillFiles.find((file) => file.path === currentPath)}
+                        />
+                      )}
+                    </div>
+                  </DocView>
                 )}
               </div>
             </div>
-          )}
+          </div>
         </div>
       ) : (
       <div className="flex-1 overflow-y-auto border-t border-default">
@@ -558,7 +833,16 @@ const SkillsPage: React.FC<SkillsPageProps> = ({ baseUrl }) => {
         onClose={() => setEditing(undefined)}
         onSave={saveFromEditor}
       />
-      <SkillAddModal open={addingSkill} onClose={() => setAddingSkill(false)} onInstalled={onSkillsInstalled} />
+      <SkillAddModal
+        open={addingSkill}
+        onClose={() => setAddingSkill(false)}
+        onInstalled={onSkillsInstalled}
+        onCreated={(name) => {
+          setAddingSkill(false)
+          flash(`${t('skill_new_created')}: ${name}`)
+          onSkillsInstalled([name])
+        }}
+      />
 
       {notice && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[80] px-4 py-2 rounded-btn bg-neutral-900/90 text-white text-sm shadow-lg pointer-events-none">

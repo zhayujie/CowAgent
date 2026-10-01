@@ -106,7 +106,7 @@ const translations: Record<string, Record<string, string>> = {
     knowledge_loading: '加载知识库中...',
     knowledge_graph_empty: '暂无关联图谱',
     knowledge_disabled: '知识库未启用',
-    knowledge_doc_load_error: '文档加载失败',
+    knowledge_doc_readonly: 'index.md 和 log.md 由 Agent 自动维护，不可编辑',
     // knowledge management
     knowledge_new: '新建',
     knowledge_new_category: '新建分类',
@@ -534,6 +534,30 @@ const translations: Record<string, Record<string, string>> = {
     skill_edit_hint: '编辑技能',
     skill_back: '返回列表',
     skill_builtin_readonly: '内置技能不可编辑（重启会覆盖）',
+    skill_files_title: '技能文件',
+    skill_files_collapse: '收起文件列表',
+    skill_files_expand: '展开文件列表',
+    skill_file_not_text: '该文件不是文本，无法在此查看',
+    skill_new_name: '名称',
+    skill_new_name_hint: '将作为技能目录名，仅保留小写字母、数字和连字符',
+    skill_new_name_dir: '目录名',
+    skill_new_name_invalid: '名称需包含英文字母或数字',
+    skill_new_desc: '描述',
+    skill_new_desc_hint: 'Agent 靠描述决定何时使用该技能，写清用途和触发场景',
+    skill_new_desc_required: '请填写描述',
+    skill_new_body: '说明内容',
+    skill_new_body_hint: 'SKILL.md 正文，可留空后续在技能详情页编辑',
+    skill_new_files: '附件',
+    skill_new_files_add: '添加',
+    skill_new_files_pick: '选择文件',
+    skill_new_files_pick_folder: '选择文件夹',
+    skill_new_files_hint: '脚本、模板等资源文件，将放入技能目录',
+    skill_new_submit: '创建',
+    skill_new_created: '技能已创建',
+    skill_new_failed: '创建失败，请稍后再试',
+    skill_upload_too_many: '一次最多上传 {max} 个文件',
+    skill_upload_file_too_large: '{name} 超过 {max}MB',
+    skill_upload_total_too_large: '单次上传总大小不能超过 {max}MB',
     skill_toggle_error: '操作失败，请稍后再试',
     mcp_section_title: 'MCP 工具',
     mcp_add: '添加 MCP',
@@ -591,6 +615,7 @@ const translations: Record<string, Record<string, string>> = {
     skill_add: '添加技能',
     skill_add_tab_market: '从市场安装',
     skill_add_tab_upload: '本地上传',
+    skill_add_tab_create: '表单创建',
     skill_source: '来源',
     skill_source_local: '本地上传',
     skill_value_hub: '技能名称',
@@ -953,7 +978,7 @@ const translations: Record<string, Record<string, string>> = {
     knowledge_loading: 'Loading knowledge base...',
     knowledge_graph_empty: 'No graph available',
     knowledge_disabled: 'Knowledge base is disabled',
-    knowledge_doc_load_error: 'Failed to load document',
+    knowledge_doc_readonly: 'index.md and log.md are maintained by the Agent and cannot be edited',
     // knowledge management
     knowledge_new: 'New',
     knowledge_new_category: 'New category',
@@ -1383,6 +1408,31 @@ const translations: Record<string, Record<string, string>> = {
     skill_edit_hint: 'Edit skill',
     skill_back: 'Back to list',
     skill_builtin_readonly: 'Built-in skill, read-only (replaced on restart)',
+    skill_files_title: 'Skill files',
+    skill_files_collapse: 'Collapse file list',
+    skill_files_expand: 'Expand file list',
+    skill_file_not_text: 'This file is not text and cannot be shown here',
+    skill_new_name: 'Name',
+    skill_new_name_hint: 'Becomes the skill directory: lowercase letters, digits and hyphens',
+    skill_new_name_dir: 'Directory',
+    skill_new_name_invalid: 'The name needs latin letters or digits',
+    skill_new_desc: 'Description',
+    skill_new_desc_hint:
+      'The description is what tells the agent when to use this skill, so say what it does and when',
+    skill_new_desc_required: 'A description is required',
+    skill_new_body: 'Instructions',
+    skill_new_body_hint: 'The body of SKILL.md. Can be left empty and written later in the skill view',
+    skill_new_files: 'Files',
+    skill_new_files_add: 'Add',
+    skill_new_files_pick: 'Choose files',
+    skill_new_files_pick_folder: 'Choose folder',
+    skill_new_files_hint: 'Scripts, templates and other resources, bundled into the skill directory',
+    skill_new_submit: 'Create',
+    skill_new_created: 'Skill created',
+    skill_new_failed: 'Could not create the skill, please try again',
+    skill_upload_too_many: 'Upload at most {max} files at a time',
+    skill_upload_file_too_large: '{name} exceeds {max}MB',
+    skill_upload_total_too_large: 'Total upload size cannot exceed {max}MB',
     skill_toggle_error: 'Operation failed, please try again',
     mcp_section_title: 'MCP Tools',
     mcp_add: 'Add MCP',
@@ -1440,6 +1490,7 @@ const translations: Record<string, Record<string, string>> = {
     skill_add: 'Add skill',
     skill_add_tab_market: 'From a market',
     skill_add_tab_upload: 'Upload',
+    skill_add_tab_create: 'Write one',
     skill_source: 'Source',
     skill_source_local: 'Uploaded',
     skill_value_hub: 'Skill name',
@@ -1717,6 +1768,13 @@ let currentLang: Lang = savedLang === 'zh' || savedLang === 'en' ? savedLang : d
 
 export function t(key: string): string {
   return translations[currentLang]?.[key] || translations['en']?.[key] || key
+}
+
+/** {@link t} with simple `{placeholder}` interpolation. */
+export function tf(key: string, vars: Record<string, string | number>): string {
+  let out = t(key)
+  for (const [k, v] of Object.entries(vars)) out = out.replace(`{${k}}`, String(v))
+  return out
 }
 
 export function getLang(): Lang {

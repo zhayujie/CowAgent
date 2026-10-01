@@ -21,6 +21,28 @@ def test_knowledge_action_handler_delegates_to_dispatch(tmp_path):
     assert response["payload"]["created"] is True
 
 
+def test_knowledge_action_handler_reindexes_behind_the_response(tmp_path):
+    """The reindex may wait on an embedding call or on the Agent holding the
+    index. The console's save must not."""
+    from channel.web.api.knowledge import KnowledgeActionHandler
+
+    request = {"action": "update_document", "payload": {"path": "a.md", "content": "x"}}
+    seen = {}
+
+    def dispatch(self, action, payload):
+        seen["background"] = self.reindex_in_background
+        return {"action": action, "code": 200, "message": "success", "payload": {}}
+
+    with patch("channel.web.api.knowledge._require_auth"), \
+         patch("channel.web.api.knowledge.web.header"), \
+         patch("channel.web.api.knowledge.web.data", return_value=json.dumps(request).encode()), \
+         patch("channel.web.api.knowledge._get_workspace_root", return_value=str(tmp_path)), \
+         patch("agent.knowledge.service.KnowledgeService.dispatch", dispatch):
+        KnowledgeActionHandler().POST()
+
+    assert seen["background"] is True
+
+
 def test_knowledge_action_handler_preserves_dispatch_error(tmp_path):
     from channel.web.api.knowledge import KnowledgeActionHandler
 
@@ -76,6 +98,37 @@ def test_knowledge_frontend_management_contract():
     assert "prompt(" not in knowledge_section
     assert "alert(" not in knowledge_section
     assert "if (path === 'index.md' || path === 'log.md') return '';" in knowledge_section
+
+
+def test_knowledge_document_editor_contract():
+    from channel.web.core import template
+    html = template.render("chat.html")
+    from conftest import console_js
+    js = console_js()
+
+    assert 'id="knowledge-btn-edit"' in html
+    assert 'id="knowledge-btn-save"' in html
+    assert 'id="knowledge-btn-cancel"' in html
+    # The page's three editors share doc-editor.js, which therefore has to keep
+    # loading before the views that build one at top level.
+    assert html.index("/assets/js/doc-editor.js") < html.index("/assets/js/views/knowledge.js")
+    assert "const knowledgeEditor = createDocEditor(" in js
+    assert "action: 'update_document'" in js
+    assert "expected_mtime: expectedMtime" in js
+    assert "data.payload?.conflict ? 'conflict' : data.code" in js
+    # Every way out of an open text area asks before dropping what is in it.
+    assert "memoryEditor.guard(next) && skillEditor.guard(next) && knowledgeEditor.guard(next)" in js
+    for leaving in ("openKnowledgeFile(path, title)", "switchKnowledgeTab(tab)",
+                    "selectKnowledgeAgent(agentId)", "knowledgeMobileBack",
+                    # These end in loadKnowledgeView(), which redraws the tree
+                    # and the viewer with it, so they drop an open text area
+                    # just as surely as opening another document does.
+                    "createKnowledgeCategory", "createKnowledgeDocument",
+                    "renameKnowledgeCategory(path)", "deleteKnowledgeCategory(path)",
+                    "deleteKnowledgeDocument(path)", "moveKnowledgeDocument(path)",
+                    "openKnowledgeImportDialog(files)"):
+        assert f"knowledgeEditor.guard(() => {leaving})" in js or \
+               f"knowledgeEditor.guard({leaving})" in js, leaving
 
 
 class UploadedFile:

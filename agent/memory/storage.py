@@ -448,6 +448,12 @@ class MemoryStorage:
                 if self._migrate_legacy_trigram_update_trigger():
                     repair_pending = True
                 self._create_trigram_objects(self.conn)
+                # CREATE ... IF NOT EXISTS says nothing when the table is
+                # already there: SQLite skips it without loading the module, so
+                # a database written by a build with the trigram tokenizer looks
+                # healthy to one without it, right up until a trigger fires.
+                # Touch the table to find out now.
+                self.conn.execute("SELECT 1 FROM chunks_fts_trigram LIMIT 1").fetchone()
                 self.trigram_fts5_available = True
                 # An empty chunks table has nothing to backfill; its trigram
                 # index is kept complete by the triggers from here on.
@@ -461,7 +467,7 @@ class MemoryStorage:
             except Exception:
                 from common.log import logger
                 logger.warning("[MemoryStorage] trigram FTS5 unavailable, CJK search will use LIKE fallback", exc_info=True)
-                self.trigram_fts5_available = False
+                self._disable_trigram_index()
 
         # Create files metadata table
         self.conn.execute("""
@@ -477,6 +483,30 @@ class MemoryStorage:
 
         self.conn.commit()
         self._schedule_maintenance(repair_pending)
+
+    def _disable_trigram_index(self):
+        """Detach a trigram index this build cannot open.
+
+        The table and its triggers live in the database file, so one written by
+        a build that has the trigram tokenizer (SQLite 3.34+) makes *every*
+        insert, update and delete on ``chunks`` fail with "no such tokenizer:
+        trigram" once an older build opens it - the triggers fire on all three.
+        That is the whole memory and knowledge index, not just CJK search.
+
+        Only the triggers are dropped: dropping the table itself runs the
+        module's destructor, which fails for the same reason. The orphan table
+        is harmless while no trigger writes to it, and searches already gate on
+        ``trigram_fts5_available``. Clearing the backfill flag is what makes a
+        later open by a capable build rebuild the index over the writes it
+        missed.
+        """
+        try:
+            for trigger in ("chunks_trigram_ai", "chunks_trigram_ad", "chunks_trigram_au"):
+                self.conn.execute(f"DROP TRIGGER IF EXISTS {trigger}")
+            self.conn.execute("DELETE FROM _meta WHERE key = ?", (_TRIGRAM_DONE,))
+        except Exception:
+            from common.log import logger
+            logger.warning("[MemoryStorage] Failed to drop trigram triggers", exc_info=True)
 
     def _migrate_legacy_trigram_update_trigger(self) -> bool:
         """Replace the legacy chunks_trigram_au trigger if present.

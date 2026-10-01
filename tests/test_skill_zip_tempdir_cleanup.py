@@ -56,7 +56,7 @@ def test_zip_with_a_traversal_entry_is_cleaned_up(sandbox, monkeypatch):
         zf.writestr("../escape.txt", "outside the extraction root")
     _serve(monkeypatch, buf.getvalue())
 
-    with pytest.raises(ValueError, match="Unsafe zip entry"):
+    with pytest.raises(ValueError, match="path traversal"):
         skill_cmd._download_repo_zip("owner/repo")
 
     assert _leftovers(sandbox) == []

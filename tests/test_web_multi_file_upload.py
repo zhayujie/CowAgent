@@ -112,7 +112,7 @@ def test_a_knowledge_import_keeps_every_document(console):
         MAX_IMPORT_FILE_SIZE = _Real.MAX_IMPORT_FILE_SIZE
         MAX_IMPORT_FILES = _Real.MAX_IMPORT_FILES
 
-        def __init__(self, workspace):
+        def __init__(self, workspace, **_options):
             pass
 
         def dispatch(self, action, payload):

@@ -1,5 +1,18 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { ArrowLeft, Box, Check, ChevronRight, FileUp, Loader2, PawPrint, ShieldAlert, Store, Upload, Zap } from 'lucide-react'
+import {
+  ArrowLeft,
+  Box,
+  Check,
+  ChevronRight,
+  FileUp,
+  Loader2,
+  PawPrint,
+  ShieldAlert,
+  SquarePen,
+  Store,
+  Upload,
+  Zap,
+} from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { t } from '../../i18n'
 import apiClient from '../../api/client'
@@ -7,10 +20,11 @@ import type { SkillMarketSource, SkillPreviewItem, SkillPreviewResult } from '..
 import Markdown from '../../components/Markdown'
 import { Btn, Field, Modal, TextInput } from '../settings/primitives'
 import { SegTabs } from './SegTabs'
+import SkillCreateForm, { SKILL_CREATE_FORM_ID } from './SkillCreateForm'
 import { parseSkillFrontmatter } from './frontmatter'
 import { product } from '@product'
 
-type Tab = 'market' | 'upload'
+type Tab = 'market' | 'upload' | 'create'
 
 const uploadOnly = product.skills?.uploadOnly === true
 const initialTab: Tab = uploadOnly ? 'upload' : 'market'
@@ -117,9 +131,11 @@ interface SkillAddModalProps {
   open: boolean
   onClose: () => void
   onInstalled: (names: string[]) => void
+  /** A skill written from the create tab; the dialog is the caller's to close. */
+  onCreated: (name: string) => void
 }
 
-const SkillAddModal: React.FC<SkillAddModalProps> = ({ open, onClose, onInstalled }) => {
+const SkillAddModal: React.FC<SkillAddModalProps> = ({ open, onClose, onInstalled, onCreated }) => {
   const [tab, setTab] = useState<Tab>(initialTab)
   const [source, setSource] = useState<SkillMarketSource>('hub')
   const [value, setValue] = useState('')
@@ -159,7 +175,8 @@ const SkillAddModal: React.FC<SkillAddModalProps> = ({ open, onClose, onInstalle
   const close = (): void => {
     if (busy) {
       // Installing is quick and not safely interruptible; fetching can hang on the network.
-      if (step !== 'input') return
+      // Creating writes the skill like installing does, so it cannot be walked away from either.
+      if (step !== 'input' || tab === 'create') return
       reqRef.current++
       setBusy(false)
     }
@@ -264,13 +281,25 @@ const SkillAddModal: React.FC<SkillAddModalProps> = ({ open, onClose, onInstalle
   if (step === 'input') {
     footer = (
       <>
-        <Btn onClick={close}>
+        <Btn onClick={close} disabled={busy && tab === 'create'}>
           {t('mcp_cancel')}
         </Btn>
         {tab === 'market' && (
           <Btn variant="primary" onClick={fetchPreview} disabled={busy || !value.trim()} className="inline-flex items-center gap-1.5">
             {busy && <Loader2 size={13} className="animate-spin" />}
             {t(busy ? 'skill_fetching' : 'skill_fetch')}
+          </Btn>
+        )}
+        {tab === 'create' && (
+          <Btn
+            variant="primary"
+            type="submit"
+            form={SKILL_CREATE_FORM_ID}
+            disabled={busy}
+            className="inline-flex items-center gap-1.5"
+          >
+            {busy && <Loader2 size={13} className="animate-spin" />}
+            {t('skill_new_submit')}
           </Btn>
         )}
       </>
@@ -309,21 +338,25 @@ const SkillAddModal: React.FC<SkillAddModalProps> = ({ open, onClose, onInstalle
     <Modal open={open} size="lg" title={t('skill_add')} onClose={close} footer={footer}>
       {step === 'input' && (
         <>
-          {!uploadOnly && (
-            <SegTabs<Tab>
-              value={tab}
-              onChange={(next) => {
-                if (busy) return
-                setTab(next)
-                setError('')
-              }}
-              tabs={[
-                { value: 'market', label: t('skill_add_tab_market'), icon: Store },
-                { value: 'upload', label: t('skill_add_tab_upload'), icon: Upload },
-              ]}
-            />
-          )}
-          {tab === 'market' ? (
+          <SegTabs<Tab>
+            value={tab}
+            onChange={(next) => {
+              if (busy) return
+              setTab(next)
+              setError('')
+            }}
+            tabs={[
+              ...(uploadOnly ? [] : [{ value: 'market' as const, label: t('skill_add_tab_market'), icon: Store }]),
+              { value: 'upload', label: t('skill_add_tab_upload'), icon: Upload },
+              { value: 'create', label: t('skill_add_tab_create'), icon: SquarePen },
+            ]}
+          />
+          {/* Kept mounted while another tab is showing, so a half-written skill
+              survives a look at the market. */}
+          <div hidden={tab !== 'create'}>
+            <SkillCreateForm active={tab === 'create'} busy={busy} onBusyChange={setBusy} onCreated={onCreated} />
+          </div>
+          {tab === 'create' ? null : tab === 'market' ? (
             <>
               <Field label={t('skill_source')}>
                 <div className="grid grid-cols-3 gap-2">
@@ -446,7 +479,7 @@ const SkillAddModal: React.FC<SkillAddModalProps> = ({ open, onClose, onInstalle
               />
             </div>
           )}
-          {error && <p className="text-sm text-danger">{error}</p>}
+          {tab !== 'create' && error && <p className="text-sm text-danger">{error}</p>}
         </>
       )}
 

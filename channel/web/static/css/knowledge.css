@@ -194,3 +194,10 @@
     stroke: rgba(26,26,26,0.9);
 }
 
+/* The viewer body already fills the documents panel, so the editor's text area
+   follows it rather than the viewport-derived default height in workspace.css,
+   which would overflow this panel by its header and padding. */
+#knowledge-viewer-body textarea.doc-editor {
+    height: 100%;
+}
+

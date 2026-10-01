@@ -1,4 +1,4 @@
-    <!-- Add Skill: fetch or upload, review, then install -->
+    <!-- Add Skill: fetch or upload, review, then install - or write a new one from a form -->
     <div id="skill-add-overlay" class="fixed inset-0 bg-black/50 z-[200] hidden flex items-center justify-center">
         <div class="bg-white dark:bg-[#1A1A1A] rounded-2xl border border-slate-200 dark:border-white/10 shadow-xl
                     w-full max-w-2xl mx-4 max-h-[88vh] flex flex-col overflow-hidden">
@@ -26,6 +26,9 @@
                         </button>
                         <button type="button" class="cap-tab" data-skill-tab="upload">
                             <i class="fas fa-upload text-[11px]"></i><span data-i18n="skill_add_tab_upload">本地上传</span>
+                        </button>
+                        <button type="button" class="cap-tab" data-skill-tab="create">
+                            <i class="fas fa-pen-to-square text-[11px]"></i><span data-i18n="skill_add_tab_create">表单创建</span>
                         </button>
                     </div>
 
@@ -66,6 +69,63 @@
                         </div>
                         <input type="file" id="skill-file-input" class="hidden" accept=".zip,.tar.gz,.tgz,.md">
                         <input type="file" id="skill-folder-input" class="hidden" webkitdirectory multiple>
+                    </div>
+
+                    <!-- Write a new skill: no preview step, what is typed is what gets written -->
+                    <div id="skill-pane-create" class="hidden space-y-4">
+                        <div>
+                            <label class="cap-label" for="skill-create-name" data-i18n="skill_new_name">名称</label>
+                            <input id="skill-create-name" type="text" maxlength="64" placeholder="weather-api"
+                                   oninput="renderSkillNamePreview()" autocomplete="off" spellcheck="false"
+                                   class="cap-input">
+                            <p id="skill-create-name-preview" class="mt-1.5 text-xs text-slate-400 dark:text-slate-500 font-mono break-all" data-i18n="skill_new_name_hint">将作为技能目录名，仅保留小写字母、数字和连字符</p>
+                        </div>
+                        <div>
+                            <label class="cap-label" for="skill-create-desc" data-i18n="skill_new_desc">描述</label>
+                            <textarea id="skill-create-desc" rows="3" class="cap-input resize-y"></textarea>
+                            <p class="mt-1.5 text-xs text-slate-400 dark:text-slate-500" data-i18n="skill_new_desc_hint">Agent 靠描述决定何时使用该技能，写清用途和触发场景</p>
+                        </div>
+                        <div>
+                            <label class="cap-label" for="skill-create-body" data-i18n="skill_new_body">说明内容</label>
+                            <textarea id="skill-create-body" rows="7" placeholder="## Usage&#10;&#10;..."
+                                      class="cap-input cap-input-mono resize-y"></textarea>
+                            <p class="mt-1.5 text-xs text-slate-400 dark:text-slate-500" data-i18n="skill_new_body_hint">SKILL.md 正文，可留空后续在技能详情页编辑</p>
+                        </div>
+                        <div>
+                            <div class="flex items-center justify-between mb-1.5">
+                                <label class="cap-label" style="margin-bottom:0" data-i18n="skill_new_files">附件</label>
+                                <!-- One entry point for both kinds of pick, the way the composer's
+                                     attach button offers them: a native file dialog cannot browse
+                                     for files and for a directory at once, so which one it opens
+                                     is chosen here first. A skill's resources come as a directory
+                                     as often as they come as loose files - `scripts/`,
+                                     `references/` - and the paths are kept, so the layout picked
+                                     here is the one installed. -->
+                                <div class="relative">
+                                    <button type="button" id="skill-create-attach-btn" onclick="toggleSkillAttachMenu(event)"
+                                            class="text-xs text-primary-500 hover:text-primary-600 cursor-pointer">
+                                        <i class="fas fa-paperclip text-[10px] mr-1"></i><span data-i18n="skill_new_files_add">添加</span>
+                                    </button>
+                                    <div id="skill-create-attach-menu" class="attach-menu skill-attach-menu hidden">
+                                        <button type="button" onclick="selectSkillCreateFiles()" class="attach-menu-item">
+                                            <i class="fas fa-file-arrow-up"></i>
+                                            <span data-i18n="skill_new_files_pick">选择文件</span>
+                                        </button>
+                                        <button type="button" id="skill-create-folder-option" onclick="selectSkillCreateFolder()"
+                                                class="attach-menu-item">
+                                            <i class="fas fa-folder-plus"></i>
+                                            <span data-i18n="skill_new_files_pick_folder">选择文件夹</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- A picked folder can be dozens of files, so the list scrolls rather
+                                 than pushing the create button off the dialog. -->
+                            <div id="skill-create-files-list" class="space-y-1.5 max-h-40 overflow-y-auto"></div>
+                            <p id="skill-create-files-empty" class="text-xs text-slate-400 dark:text-slate-500" data-i18n="skill_new_files_hint">脚本、模板等资源文件，将放入技能目录</p>
+                        </div>
+                        <input id="skill-create-files" type="file" class="hidden" multiple>
+                        <input id="skill-create-folder" type="file" class="hidden" multiple webkitdirectory directory>
                     </div>
 
                     <p id="skill-input-error" class="hidden mt-3 text-sm text-red-500"></p>

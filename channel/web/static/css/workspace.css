@@ -366,6 +366,135 @@ textarea.doc-editor {
 /* Unsaved-changes marker beside the file name in a viewer title. */
 .doc-dirty-dot { color: #35A85B; }
 
+/* The attach menu of the skill create dialog: the composer's menu card, hung
+   under the right edge of its button instead of over the composer. Written with
+   both classes so it wins over `.attach-menu` whichever sheet loads last.
+
+   Opening upwards, as it does over the composer: the attachments are the last
+   field of a dialog that scrolls, so a menu dropped below the button would be
+   clipped by the dialog's own overflow. */
+.attach-menu.skill-attach-menu {
+    left: auto;
+    right: 0;
+    min-width: 132px;
+}
+
+/* The skill viewer's one card: file list and document side by side. Capped
+   to the viewport so each half scrolls on its own; the list stretches to the
+   document's height, so its divider runs the full card. */
+.skill-viewer-card { max-height: calc(100dvh - 220px); }
+
+/* The switch that folds the skill file list away and brings it back. It rides
+   the border the list sits against - centred on the divider while the list is
+   out (14rem is the panel's w-56), on the card's own left edge once it is
+   folded - level with the list's title. The half pixel centres it on a 1px
+   line rather than beside it. */
+.skill-files-switch {
+    position: absolute;
+    top: 10px;
+    left: 0.5px;
+    z-index: 5;
+    transform: translateX(-50%);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: 1px solid #e2e8f0;
+    border-radius: 9999px;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+    font-size: 9px;
+    color: #94a3b8;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+.skill-files-switch.is-open { left: calc(14rem + 0.5px); }
+.skill-files-switch.hidden { display: none; }
+.skill-files-switch:hover { color: #228547; border-color: #ABF4C7; box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1); }
+.dark .skill-files-switch { background: #1A1A1A; border-color: rgba(255, 255, 255, 0.12); color: #64748b; }
+.dark .skill-files-switch:hover { color: #4ABE6E; border-color: rgba(74, 190, 110, 0.4); }
+
+/* A SKILL.md's frontmatter, lifted out of the prose into a key/value card.
+   The label column sizes to the longest key up to a cap; past it a dotted
+   path wraps at its dots (the markup puts a <wbr> after each) rather than
+   squeezing the values. One line height for both columns so every row's
+   label sits level with its value. */
+.skill-frontmatter {
+    display: grid;
+    grid-template-columns: minmax(5rem, 9rem) minmax(0, 1fr);
+    column-gap: 16px;
+    row-gap: 6px;
+    margin: 0 0 24px;
+    padding: 12px 16px;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    background: #f8fafc;
+    line-height: 22px;
+}
+.skill-frontmatter dt {
+    /* The console's mono stack (tailwind.config in chat.html), not the
+       system's: on Windows `ui-monospace` falls through to a hairline face. */
+    font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+    font-size: 12px;
+    color: #94a3b8;
+    overflow-wrap: break-word;
+}
+.skill-frontmatter dd {
+    margin: 0;
+    font-size: 13px;
+    color: #334155;
+    overflow-wrap: anywhere;
+}
+.dark .skill-frontmatter { background: rgba(255, 255, 255, 0.03); border-color: rgba(255, 255, 255, 0.08); }
+.dark .skill-frontmatter dt { color: #64748b; }
+.dark .skill-frontmatter dd { color: #e2e8f0; }
+
+/* Skill file tree: the files a skill directory holds beside its SKILL.md.
+   Indentation comes from an inline padding-left per row, so the padding here
+   only sets the other three sides. */
+.skill-file-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    /* Inset from the panel's edges, so the active row reads as a pill rather
+       than a stripe running into the divider. */
+    width: calc(100% - 12px);
+    margin: 1px 6px;
+    padding: 5px 10px;
+    border-radius: 6px;
+    border: none;
+    background: none;
+    font-size: 12px;
+    color: #64748b;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.15s, color 0.15s;
+}
+.skill-file-row:hover { background: rgba(0, 0, 0, 0.04); color: #334155; }
+.skill-file-row.active { background: #EDFDF3; color: #228547; font-weight: 500; }
+/* A directory folds rather than opens, so it is never the active row. */
+.skill-file-row.skill-file-dir { color: #475569; }
+/* Reserved even where there is nothing to fold, so the names in one directory
+   all start at the same column. */
+.skill-file-caret { flex-shrink: 0; width: 9px; font-size: 9px; opacity: 0.6; text-align: center; }
+.skill-file-icon { flex-shrink: 0; width: 14px; font-size: 12px; opacity: 0.8; }
+.skill-file-dir .skill-file-icon { color: #94a3b8; opacity: 1; }
+/* Tabular figures so the sizes line up as a column rather than jittering. */
+.skill-file-size {
+    flex-shrink: 0;
+    font-size: 10px;
+    color: #94a3b8;
+    font-variant-numeric: tabular-nums;
+}
+.dark .skill-file-size { color: #64748b; }
+.dark .skill-file-row { color: #94a3b8; }
+.dark .skill-file-row:hover { background: rgba(255, 255, 255, 0.06); color: #e2e8f0; }
+.dark .skill-file-row.active { background: rgba(74, 190, 110, 0.1); color: #4ABE6E; }
+.dark .skill-file-row.skill-file-dir { color: #cbd5e1; }
+.dark .skill-file-dir .skill-file-icon { color: #64748b; }
+
 .workspace-empty {
     height: 100%;
     display: flex;

@@ -15,16 +15,19 @@ import {
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { t, getLang } from '../i18n'
+import { t, tf, getLang } from '../i18n'
 import apiClient from '../api/client'
 import type {
   KnowledgeDir,
   KnowledgeFile,
   KnowledgeList,
+  KnowledgeReadResult,
   KnowledgeGraph as KnowledgeGraphData,
 } from '../types'
 import Markdown from '../components/Markdown'
 import KnowledgeGraph from '../components/KnowledgeGraph'
+import { DocActions, DocEditor, DocNotice, DocView } from '../components/DocEditor'
+import { createDocEditorStore } from '../store/docEditorStore'
 import AgentScopeSelect from '../components/AgentScopeSelect'
 import { useAgentStore, selectMultiAgent } from '../store/agentStore'
 
@@ -38,12 +41,63 @@ const KNOWLEDGE_IMPORT_MAX_FILES = 100
 const KNOWLEDGE_IMPORT_MAX_FILE_SIZE = 10 * 1024 * 1024
 const KNOWLEDGE_IMPORT_MAX_TOTAL_SIZE = 200 * 1024 * 1024
 
-// t() with simple {placeholder} interpolation.
-const tf = (key: string, vars: Record<string, string | number>): string => {
-  let out = t(key)
-  for (const [k, v] of Object.entries(vars)) out = out.replace(`{${k}}`, String(v))
-  return out
+// Pages the Agent maintains: index.md is regenerated from the tree and log.md
+// is its own journal. The backend refuses both; this is only so the viewer can
+// say why instead of falling back to the generic "unsupported file" reason.
+const PROTECTED_KNOWLEDGE_PAGES = ['index.md', 'log.md']
+
+/** A knowledge page, as the editor addresses it. */
+interface KnowledgeRef {
+  path: string
+  /** Title to show until the tree is re-read; see `docTitle` below. */
+  title: string
+  /** Whose base the page belongs to. Empty in single-Agent mode. */
+  agentId: string
+  /**
+   * Absolute directory of the page, for resolving image srcs written relative
+   * to it. Filled in by the read rather than by the caller, since only the
+   * response knows where the base resolved to; the render that draws the new
+   * content picks it up, so it needs no state of its own.
+   */
+  dir?: string
 }
+
+/**
+ * Created at module scope so an unsaved edit survives this page being unmounted
+ * by a route change, which is also what lets the navigation guard find it.
+ *
+ * Saving goes through the knowledge endpoint rather than the workspace one: it
+ * reindexes the page afterwards, so semantic search stops answering with the
+ * pre-edit text.
+ */
+const knowledgeEditor = createDocEditorStore<KnowledgeRef, KnowledgeReadResult>({
+  keyOf: (doc) => `${doc.agentId}:${doc.path}`,
+  read: async (doc) => {
+    const res = await apiClient.readKnowledge(doc.path, doc.agentId || undefined)
+    doc.dir = res.dir || ''
+    return res
+  },
+  write: async (doc, content, expectedMtime) => {
+    const res = await apiClient.knowledgeAction({
+      action: 'update_document',
+      payload: { path: doc.path, content, expected_mtime: expectedMtime },
+      ...(doc.agentId ? { agent_id: doc.agentId } : {}),
+    })
+    // The knowledge endpoint answers in its own envelope: `code` there is an
+    // HTTP status, and a conflict is flagged inside the payload instead.
+    const payload = (res.payload || {}) as { conflict?: boolean; mtime?: number }
+    return {
+      status: res.status,
+      message: typeof res.message === 'string' ? res.message : undefined,
+      code: payload.conflict ? 'conflict' : undefined,
+      mtime: payload.mtime,
+    }
+  },
+  // The read never truncates, so size is the only other reason it reports a
+  // page as uneditable - the bound the save would reject it against anyway.
+  refusal: (data) =>
+    PROTECTED_KNOWLEDGE_PAGES.includes(data.path) ? t('knowledge_doc_readonly') : t('ws_edit_too_large'),
+})
 
 const formatSize = (bytes: number): string => {
   if (bytes < 1024) return bytes + ' B'
@@ -205,12 +259,18 @@ const KnowledgePage: React.FC<KnowledgePageProps> = ({ baseUrl }) => {
   const remembered = agents.some((a) => a.id === scopeAgentId) ? scopeAgentId : ''
   const viewingAgentId = multiAgent ? remembered || defaultAgentId : ''
 
-  const [activePath, setActivePath] = useState<string | null>(null)
-  const [docTitle, setDocTitle] = useState('')
-  const [content, setContent] = useState('')
-  // Absolute dir of the open doc, for resolving doc-relative image srcs.
-  const [docDir, setDocDir] = useState('')
-  const [docLoading, setDocLoading] = useState(false)
+  // The open document lives in the editor store, so an unsaved edit is not tied
+  // to this component being mounted.
+  const doc = knowledgeEditor((s) => s.doc)
+  const content = knowledgeEditor((s) => s.content)
+  const docLoading = knowledgeEditor((s) => s.loading)
+  const edit = knowledgeEditor((s) => s.edit)
+  const readonly = knowledgeEditor((s) => s.readonly)
+  const editorRef = useRef<HTMLTextAreaElement>(null)
+  const activePath = doc?.path ?? null
+  // Taken from the tree rather than from whatever opened the page, so a save
+  // that rewrote the H1 retitles the header as soon as the tree is re-read.
+  const docTitle = doc ? (data ? findTitle(data, doc.path) : doc.title) : ''
 
   const [graph, setGraph] = useState<KnowledgeGraphData | null>(null)
   const [graphLoading, setGraphLoading] = useState(false)
@@ -232,21 +292,8 @@ const KnowledgePage: React.FC<KnowledgePageProps> = ({ baseUrl }) => {
   }, [])
 
   const openDoc = useCallback(
-    async (path: string, title: string) => {
-      setActivePath(path)
-      setDocTitle(title)
-      setDocLoading(true)
-      setContent('')
-      setDocDir('')
-      try {
-        const res = await apiClient.readKnowledge(path, viewingAgentId || undefined)
-        setContent(stripDuplicateH1(res.content || '', title))
-        setDocDir(res.dir || '')
-      } catch {
-        setContent(`> ${t('knowledge_doc_load_error')}`)
-      } finally {
-        setDocLoading(false)
-      }
+    (path: string, title: string) => {
+      void knowledgeEditor.getState().open({ path, title, agentId: viewingAgentId })
     },
     [viewingAgentId]
   )
@@ -257,7 +304,7 @@ const KnowledgePage: React.FC<KnowledgePageProps> = ({ baseUrl }) => {
     (href: string) => {
       if (!data) return
       const hit = resolveKnowledgeLink(data, href)
-      if (hit) void openDoc(hit.path, hit.title)
+      if (hit) openDoc(hit.path, hit.title)
     },
     [data, openDoc]
   )
@@ -270,10 +317,10 @@ const KnowledgePage: React.FC<KnowledgePageProps> = ({ baseUrl }) => {
         const fresh = await apiClient.getKnowledgeList(viewingAgentId || undefined)
         setData(fresh)
         if (targetPath) {
-          void openDoc(targetPath, findTitle(fresh, targetPath))
+          openDoc(targetPath, findTitle(fresh, targetPath))
         } else if (!activePath) {
           const first = firstFile(fresh)
-          if (first) void openDoc(first.path, first.title)
+          if (first) openDoc(first.path, first.title)
         }
         return fresh
       } catch (e) {
@@ -290,16 +337,16 @@ const KnowledgePage: React.FC<KnowledgePageProps> = ({ baseUrl }) => {
     ;(async () => {
       setLoading(true)
       // Switching the viewed Agent shows a different base, so drop the open doc
-      // and its graph and reopen the first file of the new base.
-      setActivePath(null)
-      setContent('')
+      // and its graph and reopen the first file of the new base. Anything
+      // unsaved was already asked about by setScope, which is the only way in.
+      knowledgeEditor.getState().forget()
       setGraph(null)
       try {
         const fresh = await apiClient.getKnowledgeList(viewingAgentId || undefined)
         if (cancelled) return
         setData(fresh)
         const first = firstFile(fresh)
-        if (first) void openDoc(first.path, first.title)
+        if (first) openDoc(first.path, first.title)
       } catch (e) {
         console.error('Failed to load knowledge:', e)
       } finally {
@@ -313,10 +360,23 @@ const KnowledgePage: React.FC<KnowledgePageProps> = ({ baseUrl }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [baseUrl, viewingAgentId])
 
-  const setScope = (id: string) => {
+  const setScope = async (id: string) => {
+    // Another Agent's base replaces the open document, edit and all.
+    if (!(await knowledgeEditor.getState().guard())) return
     setScopeAgentId(id)
     localStorage.setItem('cow_knowledge_agent', id)
   }
+
+  // A save can rewrite the page's H1 - its title in the tree - and always moves
+  // its size, so the tree has to be re-read for the header and the stats line.
+  useEffect(
+    () =>
+      knowledgeEditor.subscribe((state, prev) => {
+        // Same document, new text, with an editor open: only a save does that.
+        if (prev.edit && state.doc === prev.doc && state.content !== prev.content) void refresh()
+      }),
+    [refresh]
+  )
 
   const loadGraph = useCallback(async () => {
     if (graph) return
@@ -331,7 +391,10 @@ const KnowledgePage: React.FC<KnowledgePageProps> = ({ baseUrl }) => {
     }
   }, [graph, viewingAgentId])
 
-  const switchTab = (next: Tab) => {
+  const switchTab = async (next: Tab) => {
+    if (next === tab) return
+    // The graph tab hides the documents panel, text area and all.
+    if (!(await knowledgeEditor.getState().guard())) return
     setTab(next)
     if (next === 'graph') void loadGraph()
   }
@@ -340,7 +403,7 @@ const KnowledgePage: React.FC<KnowledgePageProps> = ({ baseUrl }) => {
   const onGraphSelect = useCallback(
     (id: string, label: string) => {
       setTab('docs')
-      void openDoc(id, label)
+      openDoc(id, label)
     },
     [openDoc]
   )
@@ -487,7 +550,7 @@ const KnowledgePage: React.FC<KnowledgePageProps> = ({ baseUrl }) => {
           <div>
             <h2 className="text-xl font-bold text-content">{t('knowledge_title')}</h2>
           </div>
-          <AgentScopeSelect value={viewingAgentId} onChange={setScope} />
+          <AgentScopeSelect value={viewingAgentId} onChange={(id) => void setScope(id)} />
         </div>
         <div className="flex-1 flex flex-col items-center justify-center px-6 text-center border-t border-default">
           <div className="w-14 h-14 rounded-2xl bg-accent-soft text-accent flex items-center justify-center mb-5">
@@ -528,14 +591,19 @@ const KnowledgePage: React.FC<KnowledgePageProps> = ({ baseUrl }) => {
               {status.text}
             </span>
           )}
-          <AgentScopeSelect value={viewingAgentId} onChange={setScope} />
+          <AgentScopeSelect value={viewingAgentId} onChange={(id) => void setScope(id)} />
           <div className="flex items-center gap-1 bg-inset-2 rounded-btn p-0.5">
-            <TabBtn icon={Files} label={t('knowledge_tab_docs')} active={tab === 'docs'} onClick={() => switchTab('docs')} />
+            <TabBtn
+              icon={Files}
+              label={t('knowledge_tab_docs')}
+              active={tab === 'docs'}
+              onClick={() => void switchTab('docs')}
+            />
             <TabBtn
               icon={Network}
               label={t('knowledge_tab_graph')}
               active={tab === 'graph'}
-              onClick={() => switchTab('graph')}
+              onClick={() => void switchTab('graph')}
             />
           </div>
           <NewMenu
@@ -616,25 +684,62 @@ const KnowledgePage: React.FC<KnowledgePageProps> = ({ baseUrl }) => {
             </div>
           </div>
 
-          {/* Document viewer */}
-          <div className="flex-1 min-w-0 overflow-y-auto">
-            {!activePath ? (
+          {/* Document viewer / editor */}
+          <div className="flex-1 min-w-0 flex flex-col min-h-0">
+            {!doc ? (
               <div className="h-full flex flex-col items-center justify-center text-content-tertiary">
                 <FileText size={28} className="mb-3 opacity-50" />
                 <p className="text-sm">{t('knowledge_select_hint')}</p>
               </div>
             ) : (
-              <div className="max-w-3xl mx-auto px-6 py-6">
-                <h1 className="text-lg font-semibold text-content mb-1">{docTitle}</h1>
-                <p className="text-xs text-content-tertiary mb-5 font-mono">{activePath}</p>
-                {docLoading ? (
-                  <div className="flex items-center text-content-tertiary py-8">
-                    <Loader2 size={16} className="animate-spin mr-2" />
+              <>
+                <div className="flex items-center gap-3 px-6 py-3 flex-shrink-0 border-b border-subtle">
+                  <h3 className="flex-1 min-w-0 text-sm font-semibold text-content truncate">
+                    {docTitle}
+                    {edit?.dirty && (
+                      <span className="text-accent" title={t('ws_edit_unsaved')}>
+                        {' '}
+                        •
+                      </span>
+                    )}
+                  </h3>
+                  {/* index.md is where the page opens, so the reason its Edit
+                      button is missing has to be on screen, not implied. */}
+                  <span
+                    className={`text-xs text-content-tertiary truncate max-w-[45%] ${
+                      readonly ? '' : 'font-mono'
+                    }`}
+                    title={readonly || activePath || ''}
+                  >
+                    {readonly || activePath}
+                  </span>
+                  <DocActions store={knowledgeEditor} textareaRef={editorRef} />
+                </div>
+                <DocNotice store={knowledgeEditor} />
+                {edit ? (
+                  // Keyed so switching the edited page remounts the text area
+                  // and reseeds it, instead of keeping the previous page's text.
+                  <div className="flex-1 min-h-0 overflow-hidden">
+                    <DocEditor key={doc.path} store={knowledgeEditor} textareaRef={editorRef} />
                   </div>
                 ) : (
-                  <Markdown content={content} onInternalLink={openInternalLink} imageBaseDir={docDir} />
+                  <DocView store={knowledgeEditor}>
+                    <div className="max-w-3xl mx-auto px-6 py-6">
+                      {docLoading ? (
+                        <div className="flex items-center text-content-tertiary py-8">
+                          <Loader2 size={16} className="animate-spin mr-2" />
+                        </div>
+                      ) : (
+                        <Markdown
+                          content={stripDuplicateH1(content, docTitle)}
+                          onInternalLink={openInternalLink}
+                          imageBaseDir={doc.dir}
+                        />
+                      )}
+                    </div>
+                  </DocView>
                 )}
-              </div>
+              </>
             )}
           </div>
         </div>

@@ -1,5 +1,7 @@
 import asyncio
 import os
+import sqlite3
+import threading
 from pathlib import Path
 from unittest.mock import patch
 
@@ -222,6 +224,153 @@ def test_create_document_writes_and_syncs(tmp_path):
     assert (tmp_path / "knowledge/notes/new.md").read_text(encoding="utf-8") == "# New\nBody"
     assert manager.dirty == 1
     assert manager.synced == 1
+
+
+def test_update_document_rewrites_and_reindexes(tmp_path):
+    svc, manager = service(tmp_path)
+    (tmp_path / "knowledge/notes").mkdir()
+    page = tmp_path / "knowledge/notes/a.md"
+    page.write_text("# Old\nBody", encoding="utf-8")
+
+    result = svc.dispatch("update_document", {
+        "path": "notes/a.md", "content": "# New\nBody",
+    })
+
+    assert result["code"] == 200
+    assert page.read_text(encoding="utf-8") == "# New\nBody"
+    # Dropping the old key and flagging the index is what lets the edited page
+    # be re-embedded instead of answering searches with its pre-edit text.
+    assert manager.storage.deleted == ["knowledge/notes/a.md"]
+    assert manager.dirty == 1
+    assert manager.synced == 1
+    # The H1 is the page's title, so the regenerated index links the new one.
+    assert "[New](./notes/a.md)" in (tmp_path / "knowledge/index.md").read_text(encoding="utf-8")
+
+
+def test_update_document_survives_an_index_that_will_not_open(tmp_path):
+    """The page is on disk before the index is touched. A broken index - an old
+    SQLite meeting a database from a newer one, a lock held by the Agent - must
+    not report a save that landed as a failure, which would also send the user
+    back to retry against an mtime the save itself moved."""
+    svc, manager = service(tmp_path)
+    (tmp_path / "knowledge/notes").mkdir()
+    page = tmp_path / "knowledge/notes/a.md"
+    page.write_text("# Old\nBody", encoding="utf-8")
+
+    def refuse():
+        raise sqlite3.OperationalError("no such tokenizer: trigram")
+
+    manager.mark_dirty = refuse
+
+    result = svc.dispatch("update_document", {"path": "notes/a.md", "content": "# New\nBody"})
+
+    assert result["code"] == 200
+    assert page.read_text(encoding="utf-8") == "# New\nBody"
+    assert manager.synced == 0
+
+
+class GatedMemoryManager(FakeMemoryManager):
+    """A sync that blocks until the test lets it through, so the test can look
+    at the world while a reindex is in flight."""
+
+    def __init__(self):
+        super().__init__()
+        self.gate = threading.Event()
+        self.started = threading.Event()
+
+    async def sync(self):
+        self.started.set()
+        self.gate.wait(timeout=5)
+        self.synced += 1
+
+
+def test_background_reindex_answers_before_the_index_is_touched(tmp_path):
+    """The reindex is a full scan, possibly an embedding call, possibly a wait
+    on the index the Agent is using. None of that is the save's business."""
+    (tmp_path / "knowledge/notes").mkdir(parents=True)
+    page = tmp_path / "knowledge/notes/a.md"
+    page.write_text("# Old\nBody", encoding="utf-8")
+    manager = GatedMemoryManager()
+    svc = KnowledgeService(str(tmp_path), manager, reindex_in_background=True)
+
+    result = svc.dispatch("update_document", {"path": "notes/a.md", "content": "# New\nBody"})
+
+    # Answered with the file written and index.md rebuilt, sync still pending.
+    assert result["code"] == 200
+    assert page.read_text(encoding="utf-8") == "# New\nBody"
+    assert "[New](./notes/a.md)" in (tmp_path / "knowledge/index.md").read_text(encoding="utf-8")
+    assert manager.started.wait(timeout=5)
+    assert manager.synced == 0
+
+    manager.gate.set()
+    KnowledgeService.wait_for_reindex(timeout=5)
+    assert manager.storage.deleted == ["knowledge/notes/a.md"]
+    assert manager.synced == 1
+
+
+def test_background_reindex_coalesces_a_burst_of_saves(tmp_path):
+    """Ctrl+S three times must not sync three times, nor sync the same index
+    from three threads at once: the paths pile up and the running worker takes
+    them in one pass after the current one."""
+    (tmp_path / "knowledge/notes").mkdir(parents=True)
+    for name in ("a", "b", "c"):
+        (tmp_path / f"knowledge/notes/{name}.md").write_text(f"# {name}", encoding="utf-8")
+    manager = GatedMemoryManager()
+    svc = KnowledgeService(str(tmp_path), manager, reindex_in_background=True)
+
+    svc.dispatch("update_document", {"path": "notes/a.md", "content": "# a2"})
+    assert manager.started.wait(timeout=5)
+    # Two more land while the first sync is blocked.
+    svc.dispatch("update_document", {"path": "notes/b.md", "content": "# b2"})
+    svc.dispatch("update_document", {"path": "notes/c.md", "content": "# c2"})
+
+    manager.gate.set()
+    KnowledgeService.wait_for_reindex(timeout=5)
+    assert sorted(manager.storage.deleted) == [
+        "knowledge/notes/a.md", "knowledge/notes/b.md", "knowledge/notes/c.md",
+    ]
+    assert manager.synced == 2
+
+
+def test_update_document_refuses_protected_and_missing_pages(tmp_path):
+    svc, manager = service(tmp_path)
+    (tmp_path / "knowledge/index.md").write_text("index", encoding="utf-8")
+
+    protected = svc.dispatch("update_document", {"path": "index.md", "content": "hacked"})
+    assert protected["code"] == 403
+    assert (tmp_path / "knowledge/index.md").read_text(encoding="utf-8") == "index"
+
+    missing = svc.dispatch("update_document", {"path": "notes/gone.md", "content": "x"})
+    assert missing["code"] == 404
+    assert manager.synced == 0
+
+
+def test_update_document_reports_a_concurrent_agent_write_as_conflict(tmp_path):
+    svc, manager = service(tmp_path)
+    (tmp_path / "knowledge/notes").mkdir()
+    page = tmp_path / "knowledge/notes/a.md"
+    page.write_text("# A", encoding="utf-8")
+    stale_mtime = page.stat().st_mtime - 10
+
+    result = svc.dispatch("update_document", {
+        "path": "notes/a.md", "content": "# Mine", "expected_mtime": stale_mtime,
+    })
+
+    assert result["code"] == 409
+    assert result["payload"] == {"conflict": True}
+    assert page.read_text(encoding="utf-8") == "# A"
+    assert manager.synced == 0
+
+
+def test_read_file_reports_editability_for_the_console_editor(tmp_path):
+    svc, _ = service(tmp_path)
+    (tmp_path / "knowledge/index.md").write_text("index", encoding="utf-8")
+    (tmp_path / "knowledge/a.md").write_text("# A", encoding="utf-8")
+
+    page = svc.dispatch("read", {"path": "a.md"})["payload"]
+    assert page["editable"] is True
+    assert page["mtime"] == (tmp_path / "knowledge/a.md").stat().st_mtime
+    assert svc.dispatch("read", {"path": "index.md"})["payload"]["editable"] is False
 
 
 def test_import_documents_supports_md_txt_and_rename_conflicts(tmp_path):

@@ -11,6 +11,71 @@ import type { DocEditorStore } from '../store/docEditorStore'
  * The counterpart of the preview panel's FileEditor, for the pages that show one
  * document at a time (memory files, skill definitions) rather than a file tree.
  */
+/**
+ * How far through the document the reader was, per editor, with the document
+ * it was measured in.
+ *
+ * The rendered view and the text area are different elements — one replaces the
+ * other — so there is no scroll position to hand over, only a proportion. They
+ * are different heights too, which makes it an approximation, but one that
+ * lands on the same passage instead of the top. Keyed by document so opening a
+ * different one still starts where it should.
+ */
+const scrollMemory = new WeakMap<object, { doc: unknown; ratio: number }>()
+
+function scrollRatioOf(el: HTMLElement): number {
+  const max = el.scrollHeight - el.clientHeight
+  return max > 0 ? el.scrollTop / max : 0
+}
+
+function applyScrollRatio(el: HTMLElement, ratio: number): void {
+  const max = el.scrollHeight - el.clientHeight
+  if (max > 0) el.scrollTop = Math.round(ratio * max)
+}
+
+function rememberedRatio<D>(store: DocEditorStore<D>, doc: D | null): number {
+  const held = scrollMemory.get(store)
+  return held && held.doc === doc ? held.ratio : 0
+}
+
+/**
+ * Scroll container for the read-only document, the other half of the swap
+ * {@link DocEditor} completes.
+ *
+ * Its scroll position would otherwise die with the element when the text area
+ * takes over, sending the reader back to the top of a page they were halfway
+ * down — on the way in, and again on the way back out after a save.
+ */
+export function DocView<D>({
+  store,
+  children,
+}: {
+  store: DocEditorStore<D>
+  children: React.ReactNode
+}): React.ReactElement {
+  const ref = React.useRef<HTMLDivElement>(null)
+  const doc = store((s) => s.doc)
+
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (el) applyScrollRatio(el, rememberedRatio(store, doc))
+    return () => {
+      if (el) scrollMemory.set(store, { doc, ratio: scrollRatioOf(el) })
+    }
+    // Keyed on the document: the same element is reused when the page switches
+    // documents, and that is a fresh read that belongs at the top.
+  }, [doc])
+
+  return (
+    // `min-w-0` for the pages that put a file list beside this: a flex item
+    // will not shrink below its content otherwise, and a wide code block would
+    // push the document out past the window instead of scrolling inside it.
+    <div ref={ref} className="flex-1 min-w-0 overflow-y-auto">
+      {children}
+    </div>
+  )
+}
+
 export function DocEditor<D>({
   store,
   textareaRef: ref,
@@ -37,13 +102,34 @@ export function DocEditor<D>({
     if (!pendingConfirm && el && document.activeElement !== el) el.focus()
   }, [pendingConfirm])
 
+  // Open on the passage the reader was on, with the caret there rather than at
+  // the top, so the first keystroke lands where they are looking. Runs after
+  // the focus above, which scrolls to the caret.
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el || !edit) return
+    const ratio = rememberedRatio(store, edit.doc)
+    const lines = el.value.split('\n')
+    const line = Math.min(lines.length - 1, Math.round(ratio * lines.length))
+    let offset = 0
+    for (let i = 0; i < line; i++) offset += lines[i].length + 1
+    el.setSelectionRange(offset, offset)
+    applyScrollRatio(el, ratio)
+    // Mount only: afterwards the reader owns the caret and the scroll.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // Leaving the page unmounts the text area; hand the work in progress back to
-  // the store so returning restores it rather than losing it.
+  // the store so returning restores it rather than losing it, and leave the
+  // rendered view that replaces it looking at the same passage.
   useEffect(() => {
     const el = ref.current
     return () => {
-      if (el) stashText(el.value)
+      if (!el) return
+      stashText(el.value)
+      if (edit) scrollMemory.set(store, { doc: edit.doc, ratio: scrollRatioOf(el) })
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // A save in place moves the baseline. Re-derive from the text area rather than
