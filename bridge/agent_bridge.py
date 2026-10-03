@@ -1507,6 +1507,9 @@ class AgentBridge:
         request_id = None
         cancel_event = None
         token_key = None
+        # Bound before the try so the error paths below can read it even when
+        # the failure happened before it was computed.
+        scoped_session_id = None
         steer_inbox = None
         run_id = None
         run_token = None
@@ -1591,16 +1594,24 @@ class AgentBridge:
             # fall back to session_id (IM channels). The Event is polled by
             # AgentStreamExecutor at safe checkpoints.
             registry = get_cancel_registry()
+            # Both the cancel token and the session grouping are namespaced:
+            # session ids are only unique within one Agent, so two Agents
+            # serving the same id must not cancel or steer each other. The
+            # steer registry is keyed by the same scoped id.
+            scoped_session_id = (
+                self._cancel_key(
+                    resolved_agent_id,
+                    session_id,
+                    self.agent_registry.default_agent_id,
+                )
+                if session_id
+                else None
+            )
             token_key = request_id or session_id
             if token_key:
                 token_key = self._cancel_key(
                     resolved_agent_id,
                     token_key,
-                    self.agent_registry.default_agent_id,
-                )
-                scoped_session_id = self._cancel_key(
-                    resolved_agent_id,
-                    session_id,
                     self.agent_registry.default_agent_id,
                 )
                 cancel_event = registry.register(
@@ -1732,8 +1743,8 @@ class AgentBridge:
                 pass
 
             try:
-                if session_id:
-                    steer_inbox = get_steer_registry().register(session_id)
+                if scoped_session_id:
+                    steer_inbox = get_steer_registry().register(scoped_session_id)
                 # Use agent's run_stream method with event handler
                 response = agent.run_stream(
                     user_message=model_query,
@@ -1774,8 +1785,8 @@ class AgentBridge:
                         registry.unregister(token_key)
                     except Exception:
                         pass
-                if session_id and steer_inbox is not None:
-                    get_steer_registry().unregister(session_id, steer_inbox)
+                if scoped_session_id and steer_inbox is not None:
+                    get_steer_registry().unregister(scoped_session_id, steer_inbox)
 
             # A cancelled turn is not a failure, but it is not a completed run
             # either: the distinction is what tells a reader whether the result
@@ -1862,9 +1873,9 @@ class AgentBridge:
                     get_cancel_registry().unregister(token_key)
                 except Exception:
                     pass
-            if session_id and steer_inbox is not None:
+            if scoped_session_id and steer_inbox is not None:
                 try:
-                    get_steer_registry().unregister(session_id, steer_inbox)
+                    get_steer_registry().unregister(scoped_session_id, steer_inbox)
                 except Exception:
                     pass
             return Reply(ReplyType.ERROR, f"Agent error: {str(e)}")
