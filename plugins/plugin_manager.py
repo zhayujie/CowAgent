@@ -10,7 +10,7 @@ from common.atomic_write import write_json_atomic
 from common.log import logger
 from common.singleton import singleton
 from common.sorted_dict import SortedDict
-from config import remove_plugin_config, write_plugin_config, get_data_root, get_resource_root
+from config import write_plugin_config, get_data_root, get_resource_root
 
 from .event import *
 
@@ -258,7 +258,18 @@ class PluginManager:
 
     def reload_plugin(self, name: str):
         name = name.upper()
-        remove_plugin_config(name)
+        # The plugin keeps the configuration it already has. Dropping it here
+        # used to be the way to make the reloaded copy re-read its settings, but
+        # Plugin.load_config only ever falls back to the plugin's *own*
+        # config.json -- never to plugins/config.json, which is where a plugin
+        # configured at runtime lives. So for such a plugin the entry was simply
+        # gone and the fresh instance came up on defaults: `#reloadp Godcmd`
+        # reported success while clearing the admin password and admin list, and
+        # `#reloadp <a name that is not loaded>` erased that plugin's settings
+        # before even finding out it had nothing to reload. Reloading a
+        # plugin's code is not the operation that reloads its configuration;
+        # `#reconf` is, and it is what a user reaches for after editing
+        # config.json.
         if name in self.instances:
             for event in self.listening_plugins:
                 if name in self.listening_plugins[event]:
