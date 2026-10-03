@@ -371,6 +371,51 @@ function evolutionContentKey(text) {
     return (text || '').replace(/\s+/g, ' ').trim();
 }
 
+// Format a token count compactly while keeping the exact values in the
+// tooltip. The composer donut answers current-window usage; this per-message
+// line answers "what did this reply cost?" even after a reload.
+function formatMessageTokens(value) {
+    const n = Math.max(0, Number(value) || 0);
+    if (n < 1000) return String(Math.round(n));
+    if (n < 10000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k';
+    return Math.round(n / 1000) + 'k';
+}
+
+function renderMessageUsageHtml(usage) {
+    if (!usage || typeof usage !== 'object') return '';
+    const input = Math.max(0, Number(usage.prompt_tokens) || 0);
+    const output = Math.max(0, Number(usage.completion_tokens) || 0);
+    const total = Math.max(0, Number(usage.total_tokens) || (input + output));
+    if (!total && !input && !output) return '';
+    const cached = Math.max(0, Number(usage.prompt_cache_hit_tokens) || 0);
+    const miss = Math.max(0, Number(usage.prompt_cache_miss_tokens) || (input - cached));
+    const calls = Math.max(1, Number(usage.calls) || 1);
+    const title = [
+        t('msg_usage_total') + ': ' + total,
+        t('msg_usage_in') + ': ' + input,
+        t('msg_usage_out') + ': ' + output,
+        t('msg_usage_cached') + ': ' + cached,
+        t('msg_usage_cache_miss') + ': ' + miss,
+    ].join(' · ') + (calls > 1 ? ' · calls: ' + calls : '');
+    return '<span class="message-usage text-xs text-slate-400 dark:text-slate-500 whitespace-nowrap cursor-help"' +
+        ' data-message-usage="1" title="' + escapeHtml(title) + '">' +
+        '<i class="fas fa-coins mr-1 opacity-70"></i>' +
+        formatMessageTokens(total) + ' ' + escapeHtml(t('msg_usage_tokens')) + ' · ' +
+        formatMessageTokens(input) + ' ' + escapeHtml(t('msg_usage_in')) + ' / ' +
+        formatMessageTokens(output) + ' ' + escapeHtml(t('msg_usage_out')) +
+        '</span>';
+}
+
+function attachMessageUsage(botEl, usage) {
+    if (!botEl || !usage) return;
+    const footer = botEl.querySelector('.bot-message-meta');
+    if (!footer) return;
+    const old = footer.querySelector('[data-message-usage]');
+    if (old) old.remove();
+    const html = renderMessageUsageHtml(usage);
+    if (html) footer.insertAdjacentHTML('afterbegin', html);
+}
+
 function createBotMessageEl(content, timestamp, requestId, msg, peer) {
     const el = document.createElement('div');
     el.className = 'flex gap-3 px-4 sm:px-6 py-3 bot-message-group';
@@ -453,7 +498,8 @@ function createBotMessageEl(content, timestamp, requestId, msg, peer) {
                 <div class="media-content">${artifactsHtml}</div>
                 <div class="bot-audio-slot"></div>
             </div>
-            <div class="flex items-center gap-2 mt-1.5">
+            <div class="bot-message-meta flex items-center gap-2 mt-1.5 flex-wrap">
+                ${renderMessageUsageHtml(msg && msg.usage)}
                 <span class="text-xs text-slate-400 dark:text-slate-500">${formatTime(timestamp)}</span>
                 <button class="copy-msg-btn text-xs text-slate-300 dark:text-slate-600 hover:text-slate-500 dark:hover:text-slate-400 transition-colors cursor-pointer" title="${currentLang === 'zh' ? '复制' : 'Copy'}">
                     <i class="fas fa-copy"></i>

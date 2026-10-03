@@ -402,6 +402,20 @@ def _ends_with_answer(rest: List[tuple]) -> bool:
     ))
 
 
+def _usage_from_extras(raw_extras: Any) -> Optional[Dict[str, Any]]:
+    """Read a normalized per-message usage snapshot from stored extras."""
+    if not raw_extras:
+        return None
+    try:
+        extras = json.loads(raw_extras) if isinstance(raw_extras, str) else raw_extras
+    except Exception:
+        return None
+    if not isinstance(extras, dict):
+        return None
+    usage = extras.get("usage")
+    return usage if isinstance(usage, dict) and usage else None
+
+
 def _group_into_display_turns(
     rows: List[tuple],
     include_thinking: bool = True,
@@ -580,6 +594,9 @@ def _group_into_display_turns(
                 turn["kind"] = "evolution"
             if merged_extras:
                 turn["extras"] = merged_extras
+                usage = merged_extras.get("usage")
+                if isinstance(usage, dict) and usage:
+                    turn["usage"] = usage
             if final_seq is not None:
                 turn["_seq"] = final_seq
             turns.append(turn)
@@ -907,32 +924,33 @@ class ConversationStore:
             finally:
                 conn.close()
 
-    def get_latest_pair_seqs(self, session_id: str) -> Dict[str, Optional[int]]:
-        """Return the seq numbers of the latest visible user message and the
-        latest assistant message in a session.
+    def get_latest_pair_seqs(self, session_id: str) -> Dict[str, Any]:
+        """Return the latest visible user/assistant seqs and assistant usage.
 
         A "visible" user message is one whose content is real user text
         (not just a tool_result block), so tool-execution turns do not
         shadow the actual user query.
 
         Returns:
-            Dict with keys ``user_seq`` and ``bot_seq``; either may be None
-            when no matching message exists.
+            Dict with keys ``user_seq``, ``bot_seq`` and ``usage``; seqs may be
+            None when no matching message exists, and usage is None when the
+            latest assistant message has no provider snapshot.
         """
-        result: Dict[str, Optional[int]] = {"user_seq": None, "bot_seq": None}
+        result: Dict[str, Any] = {"user_seq": None, "bot_seq": None, "usage": None}
         with self._lock:
             conn = self._connect()
             try:
                 aid = self._agent_id
                 # Latest assistant message (cheap: single row by seq DESC).
                 row = conn.execute(
-                    "SELECT seq FROM messages "
+                    "SELECT seq, extras FROM messages "
                     "WHERE agent_id = ? AND session_id = ? AND role = 'assistant' "
                     "ORDER BY seq DESC LIMIT 1",
                     (aid, session_id),
                 ).fetchone()
                 if row:
                     result["bot_seq"] = int(row[0])
+                    result["usage"] = _usage_from_extras(row[1])
 
                 # Latest visible user message: scan recent user rows and
                 # skip pure tool_result entries.
@@ -1706,6 +1724,7 @@ class ConversationStore:
                         "role": "user" | "assistant",
                         "content": str,
                         "tool_calls": [...],   # assistant only, may be []
+                        "usage": {...},        # assistant only, provider-reported totals
                         "created_at": int,
                     },
                     ...

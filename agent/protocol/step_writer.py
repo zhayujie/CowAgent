@@ -100,14 +100,29 @@ class StepWriter:
     def _commit(self, messages: List[Dict]) -> None:
         if not messages:
             return
-        self._write(list(messages))
+        self._write(self._with_run_usage(list(messages)))
         self._started = True
         for message in messages:
             self._mark(message)
 
+    def _with_run_usage(self, messages: List[Dict]) -> List[Dict]:
+        """Stamp the run's usage on a closing answer, on a copy of it."""
+        usage = getattr(self._executor, "run_usage", None)
+        last = messages[-1]
+        if usage and last.get("role") == "assistant" and not _has_tool_use(last):
+            messages[-1] = {**last, "extras": {**(last.get("extras") or {}), "usage": dict(usage)}}
+        return messages
+
     def _mark(self, message: Dict) -> None:
         self._written_ids.add(id(message))
         self._written.append(message)
+
+
+def _has_tool_use(message: Dict) -> bool:
+    content = message.get("content")
+    return isinstance(content, list) and any(
+        isinstance(block, dict) and block.get("type") == "tool_use" for block in content
+    )
 
 
 def _closed_prefix(messages: List[Dict]) -> int:
