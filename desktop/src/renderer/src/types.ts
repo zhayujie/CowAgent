@@ -830,6 +830,7 @@ export type ModelsAction =
   // (edited/added entries) and `hidden` the removed preset names; the backend
   // drops the provider's overlay entirely when both are empty (back to presets).
   | { action: 'save_catalog'; provider_id: string; models: ModelCatalogEntry[]; hidden: string[] }
+  | { action: 'discover_models'; provider_id?: string; api_key?: string; api_base?: string }
   // `chat_fallback` is not a first-class CapabilityKey (it has no top-level
   // card), but it is persisted through the same set_capability action, so it
   // is accepted here alongside its opt-in fields.

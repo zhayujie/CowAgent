@@ -3,6 +3,7 @@ import { ChevronDown, Plus, RotateCcw, Trash2 } from 'lucide-react'
 import { t } from '../../i18n'
 import type { ModelCapability, ModelCatalogEntry, ModelProvider } from '../../types'
 import { TextInput } from './primitives'
+import { apiClient } from '../../api/client'
 
 // The per-provider model catalog editor, embedded as a collapsible advanced
 // section inside the vendor / custom-provider modals. It mirrors the web
@@ -107,6 +108,11 @@ interface ModelCatalogEditorProps {
   // Custom providers show a hint (their catalog turns the model field into a
   // dropdown); built-in vendors show the "restore defaults" control instead.
   isCustom: boolean
+  // Credentials currently typed in the parent modal. Discovery uses these
+  // without persisting them first, so a provider can be inspected before Save.
+  providerId?: string
+  apiBase?: string
+  apiKey?: string
 }
 
 const CapTag: React.FC<{ on: boolean; label: string; onClick: () => void }> = ({ on, label, onClick }) => (
@@ -129,6 +135,9 @@ export const ModelCatalogEditor: React.FC<ModelCatalogEditorProps> = ({
   rows,
   onRowsChange,
   isCustom,
+  providerId,
+  apiBase,
+  apiKey,
 }) => {
   const seed = useMemo(() => provider?.seed || [], [provider])
 
@@ -136,6 +145,8 @@ export const ModelCatalogEditor: React.FC<ModelCatalogEditorProps> = ({
   // advanced, opt-in section the user expands deliberately. The parent remounts
   // this editor per provider (via `key`), so it re-collapses on each open.
   const [open, setOpen] = useState(false)
+  const [discovering, setDiscovering] = useState(false)
+  const [discoverError, setDiscoverError] = useState('')
 
   const setRow = (idx: number, patch: Partial<CatalogDraftRow>) => {
     onRowsChange(rows.map((r, i) => (i === idx ? { ...r, ...patch } : r)))
@@ -161,6 +172,37 @@ export const ModelCatalogEditor: React.FC<ModelCatalogEditorProps> = ({
       ...rows,
       { name: '', capabilities: ['text'], context_window: '', max_output_tokens: '' },
     ])
+  }
+
+  const discover = async () => {
+    setDiscovering(true)
+    setDiscoverError('')
+    try {
+      const key = apiKey && apiKey.includes('*') ? '' : (apiKey || '')
+      const res = await apiClient.modelsAction({
+        action: 'discover_models',
+        provider_id: providerId || provider?.id || '',
+        api_base: apiBase || '',
+        api_key: key,
+      })
+      const found = Array.isArray(res.models) ? res.models : []
+      const existing = new Set(rows.map((row) => row.name.trim()).filter(Boolean))
+      const next = rows.slice()
+      for (const item of found) {
+        const raw = item && typeof item === 'object' ? item : null
+        const name = String((raw && (raw as { name?: string }).name) || '').trim()
+        if (!name || existing.has(name)) continue
+        existing.add(name)
+        const caps = (raw as { capabilities?: ModelCapability[] }).capabilities
+        const capabilities = Array.isArray(caps) && caps.length ? caps.slice() : (['text'] as ModelCapability[])
+        next.push({ name, capabilities, context_window: '', max_output_tokens: '' })
+      }
+      onRowsChange(next)
+    } catch (err) {
+      setDiscoverError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setDiscovering(false)
+    }
   }
 
   const removeRow = (idx: number) => {
@@ -278,6 +320,16 @@ export const ModelCatalogEditor: React.FC<ModelCatalogEditorProps> = ({
               <Plus size={12} />
               {t('models_catalog_add')}
             </button>
+            <button
+              type="button"
+              onClick={discover}
+              disabled={discovering}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-btn text-xs font-medium
+                         text-content-secondary hover:bg-hover cursor-pointer transition-colors
+                         disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {discovering ? t('models_catalog_discovering') : t('models_catalog_discover')}
+            </button>
             {!isCustom && (
               <button
                 type="button"
@@ -290,6 +342,9 @@ export const ModelCatalogEditor: React.FC<ModelCatalogEditorProps> = ({
               </button>
             )}
           </div>
+          {discoverError && (
+            <p className="text-xs text-danger break-words">{discoverError}</p>
+          )}
         </div>
       )}
     </div>

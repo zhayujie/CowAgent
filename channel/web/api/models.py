@@ -13,6 +13,7 @@ from typing import List
 import json
 import os
 
+import requests
 import web
 
 from channel.web.core._common import (
@@ -34,6 +35,128 @@ from config import (
     sync_image_generation_custom_provider_env,
 )
 from models import model_catalog
+
+
+class ModelDiscoveryError(Exception):
+    """A provider discovery request could not produce a usable model list."""
+
+
+def _models_endpoint(provider_id: str, api_base: str) -> str:
+    base = (api_base or "").strip().rstrip("/")
+    if not base:
+        raise ModelDiscoveryError("provider has no API base URL")
+    if not base.startswith(("http://", "https://")):
+        raise ModelDiscoveryError("API base must be an http(s) URL")
+    if provider_id == "gemini" and not base.endswith("/v1beta"):
+        if not base.endswith("/v1"):
+            base += "/v1beta"
+    if base.endswith("/models"):
+        return base
+    return base + "/models"
+
+
+def _strip_provider_model_name(value) -> str:
+    name = str(value or "").strip()
+    if name.startswith("models/"):
+        name = name[len("models/"):]
+    return name
+
+
+def _same_base(a: str, b: str) -> bool:
+    return (a or "").strip().rstrip("/") == (b or "").strip().rstrip("/")
+
+
+def _discovered_capabilities(name: str) -> List[str]:
+    """Best-effort capability tag from a model name; the user can edit it."""
+    lowered = name.lower()
+    if "embed" in lowered:
+        return ["embedding"]
+    if "tts" in lowered:
+        return ["tts"]
+    if "whisper" in lowered or "transcribe" in lowered:
+        return ["asr"]
+    if "dall-e" in lowered or "image" in lowered:
+        return ["image"]
+    return ["text"]
+
+
+def _discover_models(provider_id: str, api_key: str, api_base: str) -> List[str]:
+    """Fetch and normalize a provider's model list.
+
+    Supports OpenAI-compatible ``/models`` endpoints, Anthropic's ``/models``
+    header contract, and Gemini's query-key response shape. Upstream failures
+    are converted to ModelDiscoveryError so the HTTP handler can return a
+    normal JSON error instead of a traceback.
+    """
+    url = _models_endpoint(provider_id, api_base)
+    headers = {}
+    params = None
+    if provider_id == "claudeAPI":
+        headers = {
+            "x-api-key": api_key,
+            "anthropic-version": "2023-06-01",
+        }
+    elif provider_id == "gemini":
+        params = {"key": api_key}
+    elif api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    try:
+        response = requests.get(url, headers=headers, params=params, timeout=10)
+    except requests.RequestException as exc:
+        detail = str(exc).replace(api_key, "***") if api_key else str(exc)
+        raise ModelDiscoveryError(f"provider request failed: {detail}") from exc
+
+    if response.status_code != 200:
+        detail = ""
+        try:
+            payload = response.json()
+            if isinstance(payload, dict):
+                err = payload.get("error") or payload.get("message") or payload
+                if isinstance(err, dict):
+                    detail = str(err.get("message") or err.get("detail") or "")
+                else:
+                    detail = str(err)
+        except Exception:
+            detail = str(getattr(response, "text", "") or "")
+        detail = detail.replace(api_key, "***") if api_key else detail
+        detail = detail[:300]
+        suffix = f": {detail}" if detail else ""
+        raise ModelDiscoveryError(f"provider returned HTTP {response.status_code}{suffix}")
+
+    try:
+        payload = response.json()
+    except Exception as exc:
+        raise ModelDiscoveryError("provider returned invalid JSON") from exc
+
+    rows = []
+    if isinstance(payload, dict):
+        rows = payload.get("data") or payload.get("models") or payload.get("result") or []
+    elif isinstance(payload, list):
+        rows = payload
+    if not isinstance(rows, list):
+        raise ModelDiscoveryError("provider response did not contain a model list")
+
+    models = []
+    seen = set()
+    for row in rows:
+        if isinstance(row, str):
+            name = row
+        elif isinstance(row, dict):
+            name = row.get("id") or row.get("name") or row.get("model") or ""
+        else:
+            continue
+        name = _strip_provider_model_name(name)
+        if any(word in name.lower() for word in ("moderation", "rerank")):
+            continue
+        if name and name not in seen:
+            seen.add(name)
+            models.append(name)
+            if len(models) >= 1000:
+                break
+    if not models:
+        raise ModelDiscoveryError("provider returned an empty model list")
+    return models
 
 
 class ModelsHandler:
@@ -1513,6 +1636,8 @@ class ModelsHandler:
                 return self._handle_set_capability(data)
             if action == "save_catalog":
                 return self._handle_save_catalog(data)
+            if action == "discover_models":
+                return self._handle_discover_models(data)
             if action == "set_voice_reply_mode":
                 return self._handle_set_voice_reply_mode(data)
             if action == "set_search_credential":
@@ -1521,6 +1646,72 @@ class ModelsHandler:
         except Exception as e:
             logger.error(f"[ModelsHandler] POST failed: {e}")
             return json.dumps({"status": "error", "message": str(e)})
+
+    def _handle_discover_models(self, data: dict) -> str:
+        """Probe a provider's model endpoint without persisting credentials."""
+        provider_id = (data.get("provider_id") or "").strip()
+        if provider_id == "chatGPT":
+            provider_id = "openai"
+        requested_key = (data.get("api_key") or "").strip()
+        requested_base = (data.get("api_base") or "").strip()
+
+        local_config = conf()
+        stored_key = ""
+        stored_base = ""
+        effective_id = provider_id or "custom"
+
+        if provider_id.startswith("custom:"):
+            custom_id = provider_id[len("custom:"):]
+            from models.custom_provider import get_custom_providers
+            provider = next(
+                (p for p in get_custom_providers() if p.get("id") == custom_id),
+                None,
+            )
+            if provider is None:
+                return json.dumps({
+                    "status": "error",
+                    "message": f"unknown custom provider: {custom_id}",
+                })
+            stored_key = provider.get("api_key") or ""
+            stored_base = provider.get("api_base") or ""
+            effective_id = "custom"
+        elif provider_id and provider_id != "custom":
+            meta = PROVIDER_MODELS.get(provider_id)
+            if not meta:
+                return json.dumps({
+                    "status": "error",
+                    "message": f"unknown provider: {provider_id}",
+                })
+            key_field = meta.get("api_key_field")
+            base_field = meta.get("api_base_key")
+            stored_key = local_config.get(key_field, "") if key_field else ""
+            stored_base = local_config.get(base_field, "") if base_field else ""
+            stored_base = stored_base or meta.get("api_base_default") or ""
+        else:
+            stored_key = local_config.get("custom_api_key", "")
+            stored_base = local_config.get("custom_api_base", "")
+
+        api_base = requested_base or stored_base
+        # A masked value is the UI's "unchanged" sentinel, not a credential. The
+        # stored key is only ever sent to the stored base.
+        if requested_key and "*" not in requested_key:
+            api_key = requested_key
+        elif _same_base(api_base, stored_base) and is_real_key(stored_key):
+            api_key = stored_key
+        else:
+            api_key = ""
+        if not api_key and effective_id != "custom":
+            return json.dumps({"status": "error", "message": "API key is required"})
+        try:
+            names = _discover_models(effective_id, api_key, api_base)
+        except ModelDiscoveryError as exc:
+            return json.dumps({"status": "error", "message": str(exc)})
+        return json.dumps({
+            "status": "success",
+            "provider_id": provider_id,
+            "models": [{"name": name, "capabilities": _discovered_capabilities(name)} for name in names],
+            "count": len(names),
+        }, ensure_ascii=False)
 
     def _handle_set_provider(self, data: dict) -> str:
         provider_id = (data.get("provider_id") or "").strip()
