@@ -441,6 +441,9 @@ class DiscordChannel(ChatChannel):
             future.result(timeout=180)
         except Exception as e:
             logger.error(f"[Discord] send failed: {e}")
+            # Raise so chat_channel._send can retry; swallowing here loses
+            # the reply on a transient rate limit or API error.
+            raise
 
     async def _async_send(self, reply: Reply, channel_id):
         try:
@@ -488,6 +491,10 @@ class DiscordChannel(ChatChannel):
 
         except Exception as e:
             logger.error(f"[Discord] _async_send error: {e}", exc_info=True)
+            # Propagate: send() only sees this failure through
+            # future.result(), so swallowing here would make the retry
+            # above unreachable.
+            raise
 
 
 def _split_text(text: str, limit: int):
