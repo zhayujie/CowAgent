@@ -77,6 +77,51 @@ def number_lines(text: str, start_line: int) -> str:
     )
 
 
+def coerce_line_number(name: str, value: Any):
+    """Normalise a model-supplied ``offset``/``limit`` to an int.
+
+    Both are declared integers, but models routinely send them as JSON strings
+    (``"offset": "2"``). ``path`` is already normalised on the way in, these
+    never were, so they reached the reader's comparisons and arithmetic
+    unchecked and the call died as a raw TypeError
+    ("'<' not supported between instances of 'str' and 'int'"). Accept a
+    numeric spelling - "2", " 2 ", "2.0" - and refuse anything genuinely
+    non-numeric with a message the model can act on, rather than a Python
+    type name. ``None`` still means "argument not given".
+
+    :return: (value, error_message) - exactly one is not None.
+    """
+    if value is None:
+        return None, None
+
+    number = None
+    # bool is an int subclass, but a JSON boolean is not a line number: reading
+    # one line because the model sent "limit": true would be a guess.
+    if isinstance(value, int) and not isinstance(value, bool):
+        number = value
+    elif isinstance(value, str):
+        text = value.strip()
+        try:
+            number = int(text)
+        except ValueError:
+            try:
+                candidate = float(text)
+            except ValueError:
+                candidate = None
+            # is_integer() is already False for nan and inf.
+            if candidate is not None and candidate.is_integer():
+                number = int(candidate)
+    elif isinstance(value, float) and value.is_integer():
+        number = int(value)
+
+    if number is None:
+        return None, (
+            f"Error: {name} must be a whole number, got {value!r}. "
+            f"Send it unquoted, e.g. {name}=2."
+        )
+    return number, None
+
+
 class Read(BaseTool):
     """Tool for reading file contents"""
     
@@ -145,6 +190,15 @@ class Read(BaseTool):
 
         if not path:
             return ToolResult.fail("Error: path parameter is required")
+
+        # Normalise the line numbers before they are compared and added to, the
+        # way `path` is handled above. A model that quotes "2" means 2.
+        offset, offset_error = coerce_line_number("offset", offset)
+        if offset_error:
+            return ToolResult.fail(offset_error)
+        limit, limit_error = coerce_line_number("limit", limit)
+        if limit_error:
+            return ToolResult.fail(limit_error)
         
         # Resolve path
         absolute_path = self._resolve_path(path)
@@ -293,6 +347,21 @@ class Read(BaseTool):
         end_line = total_lines
         user_limited = False
         if limit is not None:
+            # A non-positive limit selects no line at all, which makes it a bad
+            # argument rather than a request for an empty read. It used to be
+            # accepted: the empty slice still counted as "user limited", so the
+            # reader appended "Use offset=N to continue." pointing back at the
+            # line it had stopped on and following that hint returned a
+            # byte-identical read, forever. A negative limit was quietly worse
+            # - it drove end_line negative and sliced from the end of the list.
+            # Reject it the way an out-of-range offset is already rejected, so
+            # the model is told the call was wrong instead of being handed an
+            # empty page; a positive limit keeps its exact meaning.
+            if limit <= 0:
+                return None, (
+                    f"Error: limit must be a positive number of lines (got {limit}). "
+                    f"Omit limit to read the whole file, or pass limit=20 to read 20 lines."
+                )
             end_line = min(start_line + limit, total_lines)
             user_limited = True
 
