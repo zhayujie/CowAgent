@@ -179,6 +179,27 @@ class ChannelsHandler:
         return value[:4] + "*" * (len(value) - 8) + value[-4:]
 
     @staticmethod
+    def _is_masked_secret(value) -> bool:
+        """True for an empty value or one this handler already masked.
+
+        The console renders a masked credential and posts it straight back, so
+        every save path has to recognise its own mask and leave the stored
+        secret alone. The shape is decided by ``_mask_secret`` rather than by a
+        star count of its own: that mask emits one star per hidden character,
+        so a 9-character credential comes back as a single star and a guard
+        that insists on four would store that mask over the real secret.
+
+        A masked value is four characters, then nothing but stars, then four
+        characters - which is what makes "every save path" one shared predicate
+        instead of three copies of a star count.
+        """
+        if value is None or value == "":
+            return True
+        text = str(value)
+        middle = text[4:-4]
+        return len(text) > 8 and middle and set(middle) == {"*"}
+
+    @staticmethod
     def _parse_channel_list(raw) -> list:
         if isinstance(raw, list):
             return [ch.strip() for ch in raw if ch.strip()]
@@ -426,7 +447,7 @@ class ChannelsHandler:
             if key not in valid_keys:
                 continue
             if key in secret_keys:
-                if not value or (len(value) > 8 and "*" * 4 in value):
+                if self._is_masked_secret(value):
                     continue
             field_def = next((f for f in ch_def["fields"] if f["key"] == key), None)
             if field_def:
@@ -493,7 +514,7 @@ class ChannelsHandler:
             if key not in valid_keys:
                 continue
             if key in secret_keys:
-                if not value or (len(value) > 8 and "*" * 4 in value):
+                if self._is_masked_secret(value):
                     continue
             field_def = next((f for f in ch_def["fields"] if f["key"] == key), None)
             if field_def:
@@ -620,7 +641,7 @@ class ChannelsHandler:
             if key in secret_keys:
                 # Skip empty or still-masked secrets so a save that leaves the
                 # secret untouched does not overwrite it with the mask.
-                if not value or (len(str(value)) > 8 and "*" * 4 in str(value)):
+                if self._is_masked_secret(value):
                     continue
             creds[key] = value
         return creds
