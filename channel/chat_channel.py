@@ -341,6 +341,10 @@ class ChatChannel(Channel):
                     self._send(text_reply, context)
                     # 短暂延迟后发送图片
                     time.sleep(0.3)
+                    # The reply object still carries its caption, so a channel that
+                    # also sends it on the way to the image would deliver the
+                    # same sentence twice. Say here that it is already out.
+                    context["image_caption_sent"] = True
                     self._send(reply, context)
                 # Send text bubble before voice, unless channel already streamed
                 # the text (feishu) or natively renders STT under the voice (wechatcom).

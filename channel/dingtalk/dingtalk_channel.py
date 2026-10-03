@@ -908,8 +908,13 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
         if reply.type == ReplyType.IMAGE_URL:
             logger.info(f"[DingTalk] Sending image: {reply.content}")
             
-            # 如果有附加的文本内容，先发送文本
-            if hasattr(reply, 'text_content') and reply.text_content:
+            # 如果有附加的文本内容，先发送文本。
+            # For an image, _send_reply has already sent the caption and then
+            # hands this same reply object straight through, so sending it here
+            # too delivers the sentence twice. Callers that invoke send()
+            # directly (the scheduler) never set the flag and still need it.
+            if (hasattr(reply, 'text_content') and reply.text_content
+                    and not context.get("image_caption_sent")):
                 self.reply_text(reply.text_content, incoming_message)
                 import time
                 time.sleep(0.3)  # 短暂延迟，确保文本先到达
