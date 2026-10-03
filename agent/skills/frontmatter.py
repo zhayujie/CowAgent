@@ -98,7 +98,7 @@ def parse_metadata(frontmatter: Dict[str, Any]) -> Optional[SkillMetadata]:
             if not isinstance(spec_raw, dict):
                 continue
             
-            kind = spec_raw.get('kind', spec_raw.get('type', '')).lower()
+            kind = _normalize_kind(spec_raw.get('kind', spec_raw.get('type')))
             if not kind:
                 continue
             
@@ -156,6 +156,19 @@ def _unwrap_metadata_namespace(metadata_raw: Dict[str, Any]) -> Dict[str, Any]:
         if isinstance(inner, dict):
             return inner
     return metadata_raw
+
+
+def _normalize_kind(value: Any) -> str:
+    """Normalize a value to a lower-cased kind string.
+
+    A skill file is hand-written YAML, so ``kind:`` with nothing after it
+    arrives as None and ``kind: 1`` as an int. Calling ``.lower()`` on either
+    raises before the caller's empty check can skip the entry, which takes the
+    whole skill library down with it.
+    """
+    if not isinstance(value, str):
+        return ""
+    return value.strip().lower()
 
 
 def _normalize_string_list(value: Any) -> List[str]:
