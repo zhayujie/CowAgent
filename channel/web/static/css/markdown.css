@@ -260,6 +260,18 @@
 .tool-error-text { color: #f87171; }
 .tool-live-output:empty { display: none; }
 
+.file-diff { font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace; font-size: 0.7rem; }
+.tool-file-path { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: 0.6; font-size: 0.7rem; }
+.file-diff-path { padding: 0.35rem 0.5rem; font-weight: 600; word-break: break-all; }
+.file-diff-lines { max-height: 320px; overflow: auto; border: 1px solid rgba(128, 128, 128, 0.18); border-radius: 0.375rem; }
+.file-diff-row { display: grid; grid-template-columns: 2.5rem 2.5rem minmax(max-content, 1fr); min-height: 1.3rem; }
+.file-diff-line-number { padding: 0 0.3rem; color: #64748b; text-align: right; user-select: none; border-right: 1px solid rgba(128, 128, 128, 0.12); }
+.file-diff-text { padding: 0 0.5rem; white-space: pre; }
+.file-diff-added { background: rgba(34, 197, 94, 0.13); }
+.file-diff-removed { background: rgba(239, 68, 68, 0.13); }
+.file-diff-hunk { background: rgba(59, 130, 246, 0.12); }
+.file-diff-truncated { padding: 0.35rem 0.5rem; color: #a16207; }
+
 /* Sub agent steps: the tool calls a sub agent made inside one spawn */
 .agent-tool-step .tool-substep-count {
     font-size: 0.65rem;
@@ -320,6 +332,7 @@
     background: #f1f5f9;
     border-radius: 4px;
 }
+.tool-display-output.has-content.file-diff-output { max-height: none; overflow: visible; padding: 0; background: transparent; }
 .dark .tool-display-output.has-content {
     background: #111111;
 }
@@ -440,4 +453,3 @@
     border-radius: 0;
     border: none;
 }
-

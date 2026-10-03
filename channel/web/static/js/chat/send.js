@@ -612,8 +612,20 @@ function startSSE(requestId, loadingEl, timestamp, titleInfo, replayItems, resum
                     const outputLabel = toolEl.querySelector('.tool-output-label');
                     const outputEl = toolEl.querySelector('.tool-live-output');
                     const displayEl = toolEl.querySelector('.tool-display-output');
+                    const fileChangeHtml = !isError ? renderFileChangeHtml(item.file_change) : '';
+                    if (fileChangeHtml && item.file_change.path) {
+                        const pathEl = document.createElement('span');
+                        pathEl.className = 'tool-file-path';
+                        pathEl.textContent = item.file_change.path;
+                        nameEl.after(pathEl);
+                    }
                     if (outputLabel) outputLabel.textContent = isError ? 'Error' : 'Output';
-                    if (displayEl && item.display) {
+                    if (displayEl && fileChangeHtml) {
+                        displayEl.innerHTML = fileChangeHtml;
+                        displayEl.classList.add('has-content');
+                        displayEl.classList.add('file-diff-output');
+                        if (outputEl) outputEl.textContent = '';
+                    } else if (displayEl && item.display) {
                         displayEl.innerHTML = renderMarkdown(String(item.display));
                         displayEl.classList.add('has-content');
                         if (outputEl) outputEl.textContent = '';
@@ -629,8 +641,8 @@ function startSSE(requestId, loadingEl, timestamp, titleInfo, replayItems, resum
                     // the exception: its answer is already the bubble below, so
                     // it folds away and keeps the task it passed on for whoever
                     // opens it.
-                    toolEl.classList.toggle('expanded', !!item.display && !handoff);
-                    if (!item.result && !item.display) {
+                    toolEl.classList.toggle('expanded', !!(fileChangeHtml || item.display) && !handoff);
+                    if (!item.result && !item.display && !fileChangeHtml) {
                         const outputSection = toolEl.querySelector('.tool-output-section');
                         if (outputSection) outputSection.remove();
                     }
@@ -1086,4 +1098,3 @@ function startPolling() {
     }
     poll();
 }
-

@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import {
   ChevronRight, Loader2, Check, X, Lightbulb, ListFilter, Layers3, Shield, Share2, CircleStop, CircleAlert, Hourglass,
 } from 'lucide-react'
-import type { MessageStep, RunState, SubStep } from '../types'
+import type { FileChange, MessageStep, RunState, SubStep } from '../types'
 import { t } from '../i18n'
 import Markdown from './Markdown'
 import { handoffTarget } from '../lib/handoff'
@@ -110,6 +110,45 @@ const SubStepRow: React.FC<{ sub: SubStep }> = ({ sub }) => {
   )
 }
 
+const FileDiff: React.FC<{ change: FileChange }> = ({ change }) => {
+  let oldLine = 0
+  let newLine = 0
+  const rows = change.diff.split('\n').map((line, index) => {
+    let kind = 'text-content-tertiary'
+    let oldNumber = ''
+    let newNumber = ''
+    const hunk = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(line)
+    if (hunk) {
+      oldLine = Number(hunk[1])
+      newLine = Number(hunk[2])
+      kind = 'bg-blue-500/10'
+    } else if (line.startsWith('+') && !line.startsWith('+++')) {
+      newNumber = String(newLine++)
+      kind = 'bg-green-500/10'
+    } else if (line.startsWith('-') && !line.startsWith('---')) {
+      oldNumber = String(oldLine++)
+      kind = 'bg-red-500/10'
+    } else if (line.startsWith(' ')) {
+      oldNumber = String(oldLine++)
+      newNumber = String(newLine++)
+    }
+    return (
+      <div key={index} className={`grid grid-cols-[2.5rem_2.5rem_minmax(max-content,1fr)] min-h-[1.3rem] ${kind}`}>
+        <span className="text-right pr-1 text-content-tertiary opacity-60 border-r border-subtle select-none">{oldNumber}</span>
+        <span className="text-right pr-1 text-content-tertiary opacity-60 border-r border-subtle select-none">{newNumber}</span>
+        <span className="px-2 whitespace-pre">{line}</span>
+      </div>
+    )
+  })
+  return (
+    <div className="font-mono text-[11px] min-w-0" aria-label="File changes">
+      <div className="font-semibold break-all px-1 pb-1">{change.path}</div>
+      <div className="max-h-[320px] overflow-auto rounded border border-subtle">{rows}</div>
+      {change.truncated && <div className="px-1 pt-1 text-amber-600">Diff shortened for display</div>}
+    </div>
+  )
+}
+
 const ToolStep: React.FC<{ step: MessageStep }> = ({ step }) => {
   const substeps = step.substeps || []
   const [expanded, setExpanded] = useState(false)
@@ -124,10 +163,10 @@ const ToolStep: React.FC<{ step: MessageStep }> = ({ step }) => {
   // once and only once, so the reader can shut it again and have it stay shut.
   const opened = useRef(false)
   useEffect(() => {
-    if (opened.current || handoff || (!step.display && substeps.length === 0)) return
+    if (opened.current || handoff || (!step.display && !step.file_change && substeps.length === 0)) return
     opened.current = true
     setExpanded(true)
-  }, [step.display, substeps.length, handoff])
+  }, [step.display, step.file_change, substeps.length, handoff])
 
   const icon = running ? (
     <Loader2 size={12} className="text-accent animate-spin" />
@@ -148,6 +187,7 @@ const ToolStep: React.FC<{ step: MessageStep }> = ({ step }) => {
       >
         <span className="flex-shrink-0">{icon}</span>
         <span className={`font-medium ${isError ? 'text-danger' : ''}`}>{label}</span>
+        {step.file_change && !isError && <span className="truncate opacity-60">{step.file_change.path}</span>}
         {step.execution_time !== undefined && (
           <span className="opacity-60">{step.execution_time}s</span>
         )}
@@ -180,7 +220,9 @@ const ToolStep: React.FC<{ step: MessageStep }> = ({ step }) => {
           )}
           {/* The outcome written for a person is what gets shown; the raw
               result is the form the model was handed and stays hidden then. */}
-          {step.display ? (
+          {step.file_change && !isError ? (
+            <FileDiff change={step.file_change} />
+          ) : step.display ? (
             <div>
               <div className="text-[10px] font-semibold uppercase tracking-wide opacity-60 mb-1">
                 {isError ? 'Error' : 'Output'}

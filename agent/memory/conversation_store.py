@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from common.log import logger
+from common.file_change import file_change_from_result
 
 
 # Runs this process opened and has not finished yet. A run stored as
@@ -536,6 +537,10 @@ def _group_into_display_turns(
                     tr = {"result": tr}
                 step["result"] = tr.get("result", "")
                 step["is_error"] = tr.get("is_error", False)
+                if not step["is_error"]:
+                    file_change = file_change_from_result(step.get("name"), step["result"])
+                    if file_change:
+                        step["file_change"] = file_change
 
         # Detect a self-evolution bubble BEFORE cleaning the marker away, so the
         # UI can flag it even though the visible text stays clean.

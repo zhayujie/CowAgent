@@ -39,6 +39,7 @@ from channel.web.core._common import (
 )
 from common import i18n
 from common.log import logger
+from common.file_change import file_change_from_result
 from common.singleton import singleton
 from config import conf
 
@@ -433,6 +434,10 @@ class WebChannel(ChatChannel):
                     "result": result_str,
                     "execution_time": round(exec_time, 2)
                 }
+                if status == "success":
+                    file_change = file_change_from_result(tool_name, result)
+                    if file_change:
+                        payload["file_change"] = file_change
                 # Carry the permission-refusal marker so the UI can offer a
                 # one-click "switch permission" hint rather than a generic error.
                 if data.get("permission_denied"):
