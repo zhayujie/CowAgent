@@ -901,8 +901,13 @@ class Agent:
         )
 
         with self.messages_lock:
-            before = len(self.messages)
-            turns = identify_complete_turns(self.messages)
+            # Kept so the write-back can tell whether the history it is about to
+            # replace is still the one the summary was computed from. The
+            # summarize call below runs without the lock, and a turn that lands
+            # meanwhile writes self.messages as a whole new list.
+            snapshot = list(self.messages)
+            before = len(snapshot)
+            turns = identify_complete_turns(snapshot)
 
             if len(turns) <= keep_recent_turns:
                 return {
@@ -960,6 +965,22 @@ class Agent:
         # that would break strict user/assistant alternation on some providers.
         turn_count = len(discarded_turns)
         with self.messages_lock:
+            if self.messages[:before] != snapshot[:before]:
+                # The history was rewritten rather than appended to, so the kept
+                # turns no longer describe it. Say so instead of overwriting.
+                return {
+                    "ok": False,
+                    "reason": "history_changed",
+                    "compacted_turns": 0,
+                    "before": before,
+                    "after": len(self.messages),
+                }
+
+            # Messages a concurrent turn appended while the summary was being
+            # produced are still the user's. They are not part of any kept turn,
+            # so they go after the compacted history instead of being lost.
+            arrived = self.messages[before:]
+
             new_messages = []
             for turn in kept_turns:
                 new_messages.extend(turn["messages"])
@@ -979,6 +1000,7 @@ class Agent:
                     }],
                 })
 
+            new_messages.extend(arrived)
             self.messages = new_messages
             after = len(self.messages)
 
