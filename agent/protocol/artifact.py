@@ -175,7 +175,9 @@ def _describe(abs_path: str, root: str) -> Optional[Dict]:
         size = 0
 
     try:
-        rel_path = os.path.relpath(abs_path, root)
+        # POSIX on every platform, like the memory index keys: a Windows
+        # separator makes the same file read as a different path.
+        rel_path = os.path.relpath(abs_path, root).replace(os.sep, "/")
     except ValueError:
         rel_path = abs_path
     if rel_path.startswith(".."):
