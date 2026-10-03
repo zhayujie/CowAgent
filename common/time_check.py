@@ -38,8 +38,10 @@ def time_checker(f):
             elif chat_start_time < chat_stop_time and chat_start_time <= now_time <= chat_stop_time:
                 f(self, *args, **kwargs)
             else:
-                # 定义匹配规则，如果以 #reconf 或者  #更新配置  结尾, 非服务时间可以修改开始/结束时间并重载配置
-                pattern = re.compile(r"^.*#(?:reconf|更新配置)$")
+                # 定义匹配规则，如果以 #reconf 或者 #更新配置 结尾，非服务时间可以修改开始/结束时间并重载配置。
+                # 重载配置是 godcmd 认的中文别名（ADMIN_COMMANDS["reconf"]["alias"]），
+                # 和 #reconf 指的是同一件事，不该只认英文那一个。
+                pattern = re.compile(r"^.*#(?:reconf|重载配置|更新配置)$")
                 if args and pattern.match(args[0].content):
                     f(self, *args, **kwargs)
                 else:
