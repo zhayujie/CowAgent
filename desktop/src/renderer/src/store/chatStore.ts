@@ -535,6 +535,7 @@ export const useChatStore = create<ChatState>((set, get) => {
                     ...s,
                     status: data.status,
                     result: data.result ?? s.result,
+                    file_change: data.file_change ?? s.file_change,
                     display: data.display ?? s.display,
                     execution_time: data.execution_time,
                     is_error: data.status !== 'success',

@@ -9,7 +9,7 @@ from typing import Dict, Any
 from agent.tools.base_tool import BaseTool, ToolResult
 from common.atomic_write import write_text_atomic
 from agent.tools.utils.credentials import is_credential_path
-from agent.tools.utils.diff import looks_like_line_numbered_block
+from agent.tools.utils.diff import generate_diff_string, looks_like_line_numbered_block
 from agent.tools.utils.file_state import note_write, staleness_warning
 from agent.tools.utils.memory_path import feeds_memory_index
 from agent.tools.utils.syntax_check import review as syntax_review
@@ -77,7 +77,8 @@ class Write(BaseTool):
             warning = staleness_warning(absolute_path)
 
             previous = None
-            if os.path.isfile(absolute_path):
+            existed_before = os.path.isfile(absolute_path)
+            if existed_before:
                 try:
                     with open(absolute_path, 'r', encoding='utf-8') as f:
                         previous = f.read()
@@ -104,6 +105,10 @@ class Write(BaseTool):
                 "path": path,
                 "bytes_written": bytes_written
             }
+            # The old bytes were already read for syntax review. Expose the
+            # same unified diff edit returns so clients can show the change.
+            if previous is not None or not existed_before:
+                result.update(generate_diff_string(previous or "", content))
             warnings = [w for w in (warning, syntax_warning) if w]
             if warnings:
                 result["warning"] = " ".join(warnings)

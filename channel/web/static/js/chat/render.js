@@ -132,6 +132,36 @@ function renderToolCallsHtml(toolCalls) {
     }).join('');
 }
 
+/** Render a bounded unified diff from a successful edit/write tool call. */
+function renderFileChangeHtml(change) {
+    if (!change || typeof change.path !== 'string' || typeof change.diff !== 'string' || !change.diff) return '';
+    let oldLine = 0;
+    let newLine = 0;
+    const rows = change.diff.split('\n').map(line => {
+        let kind = 'meta';
+        let oldNumber = '';
+        let newNumber = '';
+        const hunk = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(line);
+        if (hunk) {
+            oldLine = Number(hunk[1]);
+            newLine = Number(hunk[2]);
+            kind = 'hunk';
+        } else if (line.startsWith('+') && !line.startsWith('+++')) {
+            kind = 'added';
+            newNumber = String(newLine++);
+        } else if (line.startsWith('-') && !line.startsWith('---')) {
+            kind = 'removed';
+            oldNumber = String(oldLine++);
+        } else if (line.startsWith(' ')) {
+            kind = 'context';
+            oldNumber = String(oldLine++);
+            newNumber = String(newLine++);
+        }
+        return `<div class="file-diff-row file-diff-${kind}"><span class="file-diff-line-number">${oldNumber}</span><span class="file-diff-line-number">${newNumber}</span><span class="file-diff-text">${escapeHtml(line)}</span></div>`;
+    }).join('');
+    return `<div class="file-diff" aria-label="File changes"><div class="file-diff-path">${escapeHtml(change.path)}</div><div class="file-diff-lines">${rows}</div>${change.truncated ? '<div class="file-diff-truncated">Diff shortened for display</div>' : ''}</div>`;
+}
+
 // Cap for rendering reasoning content in the bubble. Beyond this size,
 // we skip markdown rendering entirely and show plain text head + tail to
 // keep the page responsive (very long chains-of-thought can otherwise
@@ -265,6 +295,7 @@ function renderStepsHtml(steps, keepContent, carded) {
         } else if (step.type === 'tool') {
             const argsStr = formatToolArgs(step.arguments || {});
             const resultStr = step.result ? escapeHtml(String(step.result)) : '';
+            const fileChangeHtml = renderFileChangeHtml(step.file_change);
             const isErr = step.is_error === true;
             // A hand-off is headed by who took the work, since its answer is
             // replayed as that teammate's own bubble just below. The card still
@@ -278,16 +309,17 @@ function renderStepsHtml(steps, keepContent, carded) {
                 : (step.name || '');
             // Same rule as the live stream: a tool that wrote its outcome for
             // a person shows that, not the form the model was handed.
-            const outputHtml = step.display
+            const outputHtml = fileChangeHtml || (step.display
                 ? `<div class="tool-display-output has-content">${renderMarkdown(String(step.display))}</div>`
                 : (resultStr
                     ? `<pre class="tool-detail-content${isErr ? ' tool-error-text' : ''}">${resultStr}</pre>`
-                    : '');
+                    : ''));
             html += `
-<div class="agent-step agent-tool-step${isErr ? ' tool-failed' : ''}${handoff ? ' agent-handoff-step' : ''}">
+<div class="agent-step agent-tool-step${isErr ? ' tool-failed' : ''}${handoff ? ' agent-handoff-step' : ''}${fileChangeHtml ? ' expanded' : ''}">
     <div class="tool-header" onclick="this.parentElement.classList.toggle('expanded')">
         <i class="${iconClass}"></i>
         <span class="tool-name">${escapeHtml(toolLabel)}</span>
+        ${fileChangeHtml ? `<span class="tool-file-path">${escapeHtml(step.file_change.path)}</span>` : ''}
         <i class="fas fa-chevron-right tool-chevron"></i>
     </div>
     <div class="tool-detail">
@@ -897,4 +929,3 @@ function addLoadingIndicator() {
     scrollChatToBottom();
     return el;
 }
-

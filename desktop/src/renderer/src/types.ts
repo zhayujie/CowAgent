@@ -149,6 +149,7 @@ export interface MessageStep {
   name?: string
   arguments?: Record<string, unknown>
   result?: string
+  file_change?: FileChange
   is_error?: boolean
   status?: string
   execution_time?: number
@@ -162,6 +163,13 @@ export interface MessageStep {
   permission_denied?: boolean
   /** The mode that refused the call (read-only / workspace-write / full-access). */
   permission_mode?: string
+}
+
+export interface FileChange {
+  path: string
+  diff: string
+  first_changed_line?: number | null
+  truncated?: boolean
 }
 
 /** Local UI message model (superset of backend history message). */
@@ -417,6 +425,7 @@ export interface StreamEvent {
   arguments?: Record<string, unknown>
   status?: string
   result?: string
+  file_change?: FileChange
   /** `tool_end`: the outcome written for a person, when the tool wrote one. */
   display?: string
   execution_time?: number
