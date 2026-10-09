@@ -11,6 +11,7 @@ import hashlib
 from datetime import datetime
 
 from agent.memory.config import MemoryConfig, get_default_memory_config
+from agent.memory.annotations import strip_memory_markers
 from agent.memory.storage import MemoryStorage, MemoryChunk, SearchResult
 from agent.memory.chunker import TextChunker
 from agent.memory.embedding import EmbeddingProvider, EmbeddingCache
@@ -221,7 +222,23 @@ class MemoryManager:
         # rerank; the reranker only reorders the candidates that pass it.
         filtered = [r for r in merged if r.score >= min_score]
         filtered = self._rerank(query, filtered)
-        return filtered[:max_results]
+        # The hit boost runs last, as a pure reordering multiplier over the
+        # final candidates: it rewards chunks that proved useful before but
+        # can neither rescue below-threshold results nor bypass the reranker.
+        filtered = self._apply_hit_boost(filtered)
+        top = filtered[:max_results]
+
+        # Count one retrieval hit per returned chunk, as ranking feedback for
+        # the hit-popularity boost. Bookkeeping must never break the search.
+        if top:
+            try:
+                self.storage.record_hits(
+                    [(r.path, r.start_line, r.end_line) for r in top]
+                )
+            except Exception as e:
+                logger.warning(f"[MemoryManager] Hit write-back failed: {e}")
+
+        return top
     
     async def add_memory(
         self,
@@ -254,8 +271,9 @@ class MemoryManager:
             else:
                 path = f"memory/shared/memory_{content_hash}.md"
         
-        # Chunk content
-        chunks = self.chunker.chunk_text(content)
+        # Chunk content; inline entry markers are provenance for Deep Dream,
+        # so they never reach embeddings or stored chunk text.
+        chunks = self.chunker.chunk_text(strip_memory_markers(content))
         
         # Generate embeddings (if provider available)
         texts = [chunk.text for chunk in chunks]
@@ -427,6 +445,11 @@ class MemoryManager:
             previous_hash = self.storage.get_file_hash(rel_path)
             if previous_hash == file_hash:
                 continue
+            # Inline entry markers are provenance for Deep Dream, not content:
+            # strip them so they never reach embeddings or stored chunk text.
+            # The file hash above is computed on the raw content, so marker
+            # edits alone still trigger a re-chunk.
+            content = strip_memory_markers(content)
             # Markdown files (memory + knowledge) get structure-aware chunking;
             # anything else (rare) falls back to the plain char splitter.
             if file_path.suffix.lower() == '.md':
@@ -822,3 +845,66 @@ class MemoryManager:
 
         reranked.sort(key=lambda r: r.score, reverse=True)
         return reranked
+
+    def _apply_hit_boost(
+        self,
+        results: List[SearchResult]
+    ) -> List[SearchResult]:
+        """Nudge chunks that were retrieved often (and recently) up the ranking.
+
+        The multiplier is ``1 + w*log2(1 + hits)`` plus a same-sized recency
+        term that decays over a week since ``last_hit_at``, capped at
+        ``hit_boost_max``. The log keeps the curve flat at the high end and the
+        cap bounds the feedback loop, so repeated queries can only re-order
+        near-equal candidates, never crowd out everything else.
+
+        Uses getattr lookups so a bare instance (tests call the pure fusion
+        helpers without storage/config) degrades to a no-op, and any storage
+        failure degrades to the unboosted order like rerank does.
+        """
+        if not results:
+            return results
+        storage = getattr(self, "storage", None)
+        if storage is None or not hasattr(storage, "get_hit_stats"):
+            return results
+
+        config = getattr(self, "config", None)
+        weight = float(getattr(config, "hit_boost_weight", 0.05)) if config else 0.05
+        cap = float(getattr(config, "hit_boost_max", 1.25)) if config else 1.25
+        if weight <= 0 or cap <= 1.0:
+            return results
+
+        import math
+        import time
+
+        from common.log import logger
+
+        try:
+            keys = [(r.path, r.start_line, r.end_line) for r in results]
+            stats = storage.get_hit_stats(keys)
+        except Exception as e:
+            logger.warning(f"[MemoryManager] Hit stats unavailable, skipping boost: {e}")
+            return results
+
+        now = time.time()
+        boosted = []
+        for result in results:
+            hits, last_hit_at = stats.get(
+                (result.path, result.start_line, result.end_line), (0, None)
+            )
+            factor = 1.0 + weight * math.log2(1.0 + max(0, int(hits or 0)))
+            if last_hit_at:
+                age_days = max(0.0, (now - float(last_hit_at)) / 86400.0)
+                factor += weight * math.exp(-age_days / 7.0)
+            boosted.append(SearchResult(
+                path=result.path,
+                start_line=result.start_line,
+                end_line=result.end_line,
+                score=result.score * min(factor, cap),
+                snippet=result.snippet,
+                source=result.source,
+                user_id=result.user_id
+            ))
+
+        boosted.sort(key=lambda r: r.score, reverse=True)
+        return boosted
