@@ -449,6 +449,9 @@ class SlackChannel(ChatChannel):
             logger.info(f"[Slack] sent reply (type={reply.type}, channel={channel_id})")
         except Exception as e:
             logger.error(f"[Slack] send failed: {e}", exc_info=True)
+            # Raise so chat_channel._send can retry; swallowing here loses
+            # the reply on a transient rate limit or API error.
+            raise
 
     def _do_send(self, reply: Reply, channel_id: str, thread_ts):
         rtype = reply.type
