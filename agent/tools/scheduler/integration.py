@@ -734,8 +734,15 @@ def _run_scheduled_task(
         elif action_type == "skill_call":
             ok = _execute_skill_call(task, agent_bridge, agent_id, output_sink=sink)
         else:
-            logger.warning(f"[Scheduler] Unknown action type: {action_type}")
-            ok = True
+            logger.warning(
+                f"[Scheduler] Unknown action type: {action_type} "
+                f"(known: agent_task, send_message, tool_call, skill_call)"
+            )
+            # Nothing was delivered, so this is a failure, not a success: the
+            # caller must keep the task (and its next_run_at) so the next tick
+            # retries it. Reporting success advanced a recurring task's schedule
+            # past the delivery and deleted a "once" task outright.
+            ok = False
         if not ok:
             status = "error"
             error = "deferred or delivery failed"
