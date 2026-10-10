@@ -369,6 +369,7 @@ class SubagentTool(BaseTool):
         results = run_tasks(
             parent, tasks, templates, settings,
             on_state=view.on_state, on_event=view.on_event,
+            cancel_event=self.cancel_event,
         )
         for item in results:
             # A sub agent names its files in prose, if at all. Listing them

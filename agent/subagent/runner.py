@@ -200,6 +200,15 @@ def _close_run(store, run_id: str, result: Dict[str, Any]) -> None:
 
 def _run_one(parent, template, task: SubagentTask, index: int, cancel_event,
              on_state=None, on_event=None) -> Dict[str, Any]:
+    if cancel_event.is_set():
+        result = {
+            "task_index": index,
+            "subagent_type": template.name,
+            "status": "cancelled",
+            "error": "The task was cancelled before it started.",
+        }
+        _notify(on_state, index, result)
+        return result
     started = time.time()
     run_id = uuid.uuid4().hex[:12]
     # Before identity_scope below, so the parent's run id is still ambient.
@@ -248,12 +257,16 @@ def run_tasks(
     settings: SubagentSettings,
     on_state=None,
     on_event=None,
+    cancel_event=None,
 ) -> List[Dict[str, Any]]:
     """Run every task and return one result per task, in the order given.
 
     Tasks run concurrently. A task that times out is cancelled and reported as
     such rather than abandoned, so the parent always gets a full-length result
     list and can tell the difference between "nothing found" and "never ran".
+
+    The optional parent ``cancel_event`` stops the whole spawn. Child timeout
+    events stay independent and never set the parent event.
 
     `on_state(index, state)` is called as each task starts and again as it
     settles, so a caller can follow tasks individually while they run rather
@@ -270,6 +283,20 @@ def run_tasks(
     for task in tasks:
         name = task.subagent_type or ""
         resolved.append(templates[name] if name in templates else templates[_default_name(templates)])
+
+    if cancel_event is not None and cancel_event.is_set():
+        cancelled = [
+            {
+                "task_index": index,
+                "subagent_type": template.name,
+                "status": "cancelled",
+                "error": "The parent run was cancelled.",
+            }
+            for index, template in enumerate(resolved)
+        ]
+        for index, result in enumerate(cancelled):
+            _notify(on_state, index, result)
+        return cancelled
 
     pool = ThreadPoolExecutor(
         max_workers=min(len(tasks), settings.max_concurrent),
@@ -291,27 +318,51 @@ def run_tasks(
 
         deadline = time.time() + settings.timeout_seconds
         results: List[Optional[Dict[str, Any]]] = [None] * len(tasks)
+        parent_stopped = False
         for index, future in enumerate(futures):
-            remaining = max(0.0, deadline - time.time())
-            try:
-                results[index] = future.result(timeout=remaining)
-            except FutureTimeout:
-                # Tell the run to stop and report it. The worker winds down at
-                # its next checkpoint, which may be a whole LLM response away.
-                cancel_events[index].set()
-                results[index] = {
-                    "task_index": index,
-                    "subagent_type": resolved[index].name,
-                    "status": "timeout",
-                    "error": (
-                        f"Exceeded the {settings.timeout_seconds:g}s sub agent budget. "
-                        f"Split the task or raise subagent.timeout_seconds."
-                    ),
-                }
-                # The worker is still winding down and will not report this
-                # itself, so close the task out here rather than leave whoever
-                # is following it waiting on a task that is never coming back.
-                _notify(on_state, index, results[index])
+            while True:
+                if cancel_event is not None and cancel_event.is_set():
+                    parent_stopped = True
+                    for child_cancel in cancel_events:
+                        child_cancel.set()
+                    for pending_index in range(index, len(futures)):
+                        pending = futures[pending_index]
+                        if pending.done() and not pending.cancelled():
+                            results[pending_index] = pending.result()
+                            continue
+                        pending.cancel()
+                        results[pending_index] = {
+                            "task_index": pending_index,
+                            "subagent_type": resolved[pending_index].name,
+                            "status": "cancelled",
+                            "error": "The parent run was cancelled.",
+                        }
+                        _notify(on_state, pending_index, results[pending_index])
+                    break
+                remaining = max(0.0, deadline - time.time())
+                try:
+                    # A bounded wait lets user Stop reach the child events even
+                    # while a worker is blocked on its model or a tool.
+                    wait_seconds = min(remaining, 0.05) if cancel_event is not None else remaining
+                    results[index] = future.result(timeout=wait_seconds)
+                    break
+                except FutureTimeout:
+                    if time.time() < deadline:
+                        continue
+                    cancel_events[index].set()
+                    results[index] = {
+                        "task_index": index,
+                        "subagent_type": resolved[index].name,
+                        "status": "timeout",
+                        "error": (
+                            f"Exceeded the {settings.timeout_seconds:g}s sub agent budget. "
+                            f"Split the task or raise subagent.timeout_seconds."
+                        ),
+                    }
+                    _notify(on_state, index, results[index])
+                    break
+            if parent_stopped:
+                break
     finally:
         # Deliberately not waiting: a `with` block would join the very threads
         # we just gave up on, so the tool call would overrun the budget it is
