@@ -10,6 +10,7 @@ Supports:
 import os
 import re
 import uuid
+from html.parser import HTMLParser
 from typing import Dict, Any, Optional, Set
 from urllib.parse import urlparse, unquote
 
@@ -84,6 +85,43 @@ def _parse_content_length(response: requests.Response) -> int:
         return max(int(response.headers.get("Content-Length", 0)), 0)
     except (TypeError, ValueError):
         return 0
+
+
+class _PageTextParser(HTMLParser):
+    """Keep text and block boundaries without treating quoted attributes as text."""
+
+    _BLOCK_TAGS = frozenset({
+        "address", "article", "aside", "blockquote", "caption", "center",
+        "dd", "details", "dialog", "div", "dl", "dt", "fieldset", "figcaption",
+        "figure", "footer", "form", "h1", "h2", "h3", "h4", "h5", "h6",
+        "header", "hr", "li", "main", "nav", "ol", "p", "pre", "section",
+        "summary", "table", "tbody", "td", "tfoot", "th", "thead", "tr", "ul",
+    })
+
+    def __init__(self):
+        # Decode character references once, in text rather than in markup.
+        super().__init__(convert_charrefs=True)
+        self.parts = []
+        self.hidden_tag = None
+
+    def handle_starttag(self, tag, attrs):
+        if self.hidden_tag:
+            return
+        if tag in ("script", "style"):
+            self.hidden_tag = tag
+        elif tag == "br" or tag in self._BLOCK_TAGS:
+            self.parts.append("\n")
+
+    def handle_endtag(self, tag):
+        if self.hidden_tag:
+            if tag == self.hidden_tag:
+                self.hidden_tag = None
+        elif tag in self._BLOCK_TAGS:
+            self.parts.append("\n")
+
+    def handle_data(self, data):
+        if not self.hidden_tag:
+            self.parts.append(data)
 
 
 class WebFetch(BaseTool):
@@ -476,7 +514,7 @@ class WebFetch(BaseTool):
         response.close()
         return ToolResult.fail(f"Error: URL returned binary content ({content_type}), not a supported document type")
 
-    # ---- HTML extraction (unchanged) ----
+    # ---- HTML extraction ----
 
     @staticmethod
     def _extract_title(html: str) -> str:
@@ -485,11 +523,10 @@ class WebFetch(BaseTool):
 
     @staticmethod
     def _extract_text(html: str) -> str:
-        text = re.sub(r"<script[^>]*>.*?</script>", "", html, flags=re.IGNORECASE | re.DOTALL)
-        text = re.sub(r"<style[^>]*>.*?</style>", "", text, flags=re.IGNORECASE | re.DOTALL)
-        text = re.sub(r"<[^>]+>", "", text)
-        text = text.replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
-        text = text.replace("&quot;", '"').replace("&#39;", "'").replace("&nbsp;", " ")
+        parser = _PageTextParser()
+        parser.feed(html)
+        parser.close()
+        text = "".join(parser.parts)
         text = re.sub(r"[^\S\n]+", " ", text)
         text = re.sub(r"\n{3,}", "\n\n", text)
         lines = [line.strip() for line in text.splitlines()]
