@@ -480,7 +480,9 @@ class SearchFiles(BaseTool):
         if not opts.no_ignore:
             for d in _SKIP_DIR_NAMES:
                 cmd += ["--glob", f"!{d}"]
-        cmd += ["--max-columns", "1000"]
+        # Keep a bounded source preview instead of rg's omission placeholder;
+        # truncate_line applies the same display limit as the other backends.
+        cmd += ["--max-columns", "1000", "--max-columns-preview"]
         if opts.ignore_case:
             cmd.append("-i")
         if opts.no_ignore:
