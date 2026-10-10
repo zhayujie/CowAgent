@@ -52,6 +52,7 @@ class ConfigHandler:
     # file keeps a feature's settings together under one object.
     NESTED_BOOLS = {
         "subagent_enabled": ("subagent", "enabled"),
+        "memory_hit_boost": ("memory", "hit_boost"),
     }
 
     def GET(self):
@@ -148,6 +149,7 @@ class ConfigHandler:
                 # applies to an absent setting is the one shown here.
                 "self_evolution_enabled": get_evolution_config().enabled,
                 "subagent_enabled": SubagentSettings.from_config().enabled,
+                "memory_hit_boost": bool((local_config.get("memory") or {}).get("hit_boost", False)),
                 # Default permission mode for sessions that have not pinned one.
                 "agent_permission_mode": permission_global_mode(),
                 "permission_modes": list(PERMISSION_MODES),

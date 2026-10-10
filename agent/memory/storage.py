@@ -13,7 +13,7 @@ import sqlite3
 import threading
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from agent.memory.vector_backend import (
     SQLiteVectorBackend,
@@ -393,9 +393,15 @@ class MemoryStorage:
                 hash TEXT NOT NULL,
                 metadata TEXT,
                 created_at INTEGER DEFAULT (strftime('%s', 'now')),
-                updated_at INTEGER DEFAULT (strftime('%s', 'now'))
+                updated_at INTEGER DEFAULT (strftime('%s', 'now')),
+                hit_count INTEGER NOT NULL DEFAULT 0,
+                last_hit_at INTEGER
             )
         """)
+
+        # Older builds created chunks without hit tracking; add the columns
+        # in place so an existing index keeps working without a rebuild.
+        self._migrate_hit_columns()
 
         # Create indexes
         self.conn.execute("""
@@ -477,6 +483,20 @@ class MemoryStorage:
 
         self.conn.commit()
         self._schedule_maintenance(repair_pending)
+
+    def _migrate_hit_columns(self):
+        """Add hit tracking columns to a chunks table created by an older build.
+
+        PRAGMA table_info is metadata-only, so the check is cheap enough to run
+        on every open; ALTER TABLE only fires when the columns are missing.
+        """
+        cols = {row["name"] for row in self.conn.execute("PRAGMA table_info(chunks)")}
+        if "hit_count" not in cols:
+            self.conn.execute(
+                "ALTER TABLE chunks ADD COLUMN hit_count INTEGER NOT NULL DEFAULT 0"
+            )
+        if "last_hit_at" not in cols:
+            self.conn.execute("ALTER TABLE chunks ADD COLUMN last_hit_at INTEGER")
 
     def _migrate_legacy_fts_triggers(self) -> bool:
         """Drop external-content triggers that cannot read the previous row text.
@@ -771,7 +791,47 @@ class MemoryStorage:
             return None
         
         return self._row_to_chunk(row)
-    
+
+    def record_hits(self, keys: List[Tuple[str, int, int]]):
+        """Count one retrieval hit per chunk key (path, start_line, end_line).
+
+        Called from the search path, so it stays a single small transaction
+        that only touches the matched rows. Callers are expected to wrap it in
+        try/except: bookkeeping must never break the search that produced it.
+        """
+        if not keys:
+            return
+        with self._lock:
+            try:
+                self.conn.executemany(
+                    "UPDATE chunks SET hit_count = hit_count + 1, "
+                    "last_hit_at = strftime('%s', 'now') "
+                    "WHERE path = ? AND start_line = ? AND end_line = ?",
+                    [(path, start_line, end_line) for path, start_line, end_line in keys],
+                )
+                self.conn.commit()
+            except Exception:
+                self.conn.rollback()
+                raise
+
+    def get_hit_stats(
+        self, keys: List[Tuple[str, int, int]]
+    ) -> Dict[Tuple[str, int, int], Tuple[int, Optional[int]]]:
+        """Read (hit_count, last_hit_at) per chunk key; absent keys are omitted."""
+        stats: Dict[Tuple[str, int, int], Tuple[int, Optional[int]]] = {}
+        for path, start_line, end_line in keys:
+            row = self.conn.execute(
+                "SELECT hit_count, last_hit_at FROM chunks "
+                "WHERE path = ? AND start_line = ? AND end_line = ? LIMIT 1",
+                (path, start_line, end_line),
+            ).fetchone()
+            if row:
+                stats[(path, start_line, end_line)] = (
+                    int(row["hit_count"] or 0),
+                    row["last_hit_at"],
+                )
+        return stats
+
     def search_vector(
         self,
         query_embedding: List[float],

@@ -221,7 +221,25 @@ class MemoryManager:
         # rerank; the reranker only reorders the candidates that pass it.
         filtered = [r for r in merged if r.score >= min_score]
         filtered = self._rerank(query, filtered)
-        return filtered[:max_results]
+        # The hit boost runs last, as a pure reordering multiplier over the
+        # final candidates: it rewards chunks that proved useful before but
+        # can neither rescue below-threshold results nor bypass the reranker.
+        filtered = self._apply_hit_boost(filtered)
+        top = filtered[:max_results]
+
+        # Count one retrieval hit per returned chunk, as ranking feedback for
+        # the hit-popularity boost. Opt-in only: with the boost disabled the
+        # write transaction is skipped entirely. Bookkeeping must never break
+        # the search.
+        if top and self._hit_boost_enabled():
+            try:
+                self.storage.record_hits(
+                    [(r.path, r.start_line, r.end_line) for r in top]
+                )
+            except Exception as e:
+                logger.warning(f"[MemoryManager] Hit write-back failed: {e}")
+
+        return top
     
     async def add_memory(
         self,
@@ -822,3 +840,77 @@ class MemoryManager:
 
         reranked.sort(key=lambda r: r.score, reverse=True)
         return reranked
+
+    def _hit_boost_enabled(self) -> bool:
+        """True when the hit-popularity boost is on. It is opt-in: a retrieval
+        hit is not proof of usefulness, so with the default weight of 0 both
+        the re-ranking and the per-search hit write-back stay off."""
+        config = getattr(self, "config", None)
+        weight = float(getattr(config, "hit_boost_weight", 0.0)) if config else 0.0
+        cap = float(getattr(config, "hit_boost_max", 1.25)) if config else 1.25
+        return weight > 0 and cap > 1.0
+
+    def _apply_hit_boost(
+        self,
+        results: List[SearchResult]
+    ) -> List[SearchResult]:
+        """Nudge chunks that were retrieved often (and recently) up the ranking.
+
+        The multiplier is ``1 + w*log2(1 + hits)`` plus a same-sized recency
+        term that decays over a week since ``last_hit_at``, capped at
+        ``hit_boost_max``. The log keeps the curve flat at the high end and the
+        cap bounds the feedback loop, so repeated queries can only re-order
+        near-equal candidates, never crowd out everything else. The boost is
+        opt-in: with the default ``hit_boost_weight = 0`` this returns the
+        results untouched and ``search()`` skips the hit write-back too.
+
+        Uses getattr lookups so a bare instance (tests call the pure fusion
+        helpers without storage/config) degrades to a no-op, and any storage
+        failure degrades to the unboosted order like rerank does.
+        """
+        if not results:
+            return results
+        storage = getattr(self, "storage", None)
+        if storage is None or not hasattr(storage, "get_hit_stats"):
+            return results
+        if not self._hit_boost_enabled():
+            return results
+
+        config = getattr(self, "config", None)
+        weight = float(getattr(config, "hit_boost_weight", 0.0)) if config else 0.0
+        cap = float(getattr(config, "hit_boost_max", 1.25)) if config else 1.25
+
+        import math
+        import time
+
+        from common.log import logger
+
+        try:
+            keys = [(r.path, r.start_line, r.end_line) for r in results]
+            stats = storage.get_hit_stats(keys)
+        except Exception as e:
+            logger.warning(f"[MemoryManager] Hit stats unavailable, skipping boost: {e}")
+            return results
+
+        now = time.time()
+        boosted = []
+        for result in results:
+            hits, last_hit_at = stats.get(
+                (result.path, result.start_line, result.end_line), (0, None)
+            )
+            factor = 1.0 + weight * math.log2(1.0 + max(0, int(hits or 0)))
+            if last_hit_at:
+                age_days = max(0.0, (now - float(last_hit_at)) / 86400.0)
+                factor += weight * math.exp(-age_days / 7.0)
+            boosted.append(SearchResult(
+                path=result.path,
+                start_line=result.start_line,
+                end_line=result.end_line,
+                score=result.score * min(factor, cap),
+                snippet=result.snippet,
+                source=result.source,
+                user_id=result.user_id
+            ))
+
+        boosted.sort(key=lambda r: r.score, reverse=True)
+        return boosted
