@@ -13,16 +13,23 @@ def iter_docx_body_text(document):
     Builds python-docx's block objects directly, which also works on versions
     that predate ``Document.iter_inner_content()``.
     """
+    yield from _iter_docx_blocks(document.element.body, document)
+
+
+def _iter_docx_blocks(container, parent):
+    """Traverse paragraphs and tables in either a document body or a cell."""
     from docx.oxml.ns import qn
     from docx.table import Table
     from docx.text.paragraph import Paragraph
 
-    for element in document.element.body.iterchildren():
+    for element in container.iterchildren():
         if element.tag == qn("w:p"):
-            yield Paragraph(element, document).text
+            yield Paragraph(element, parent).text
         elif element.tag == qn("w:tbl"):
-            for row in Table(element, document).rows:
-                yield "\t".join(cell.text for cell in row.cells)
+            for row in Table(element, parent).rows:
+                yield "\t".join(
+                    "\n".join(_iter_docx_blocks(cell._tc, cell)) for cell in row.cells
+                )
 
 
 def iter_pptx_shape_text(shapes):
