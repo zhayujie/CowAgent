@@ -49,8 +49,9 @@ class MemoryConfig:
     # Hit-popularity boost: frequently retrieved chunks get a ranking nudge of
     # 1 + hit_boost_weight * log2(1 + hit_count), plus a same-sized recency
     # term on last_hit_at. hit_boost_max caps the combined multiplier so the
-    # feedback loop stays gentle (a cap <= 1.0 disables the boost).
-    hit_boost_weight: float = 0.05
+    # feedback loop stays gentle. Opt-in (default 0): a retrieval hit is not
+    # proof of usefulness, so the signal is off unless explicitly enabled.
+    hit_boost_weight: float = 0.0
     hit_boost_max: float = 1.25
     
     # Memory sources

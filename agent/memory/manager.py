@@ -11,7 +11,6 @@ import hashlib
 from datetime import datetime
 
 from agent.memory.config import MemoryConfig, get_default_memory_config
-from agent.memory.annotations import strip_memory_markers
 from agent.memory.storage import MemoryStorage, MemoryChunk, SearchResult
 from agent.memory.chunker import TextChunker
 from agent.memory.embedding import EmbeddingProvider, EmbeddingCache
@@ -229,8 +228,10 @@ class MemoryManager:
         top = filtered[:max_results]
 
         # Count one retrieval hit per returned chunk, as ranking feedback for
-        # the hit-popularity boost. Bookkeeping must never break the search.
-        if top:
+        # the hit-popularity boost. Opt-in only: with the boost disabled the
+        # write transaction is skipped entirely. Bookkeeping must never break
+        # the search.
+        if top and self._hit_boost_enabled():
             try:
                 self.storage.record_hits(
                     [(r.path, r.start_line, r.end_line) for r in top]
@@ -271,9 +272,8 @@ class MemoryManager:
             else:
                 path = f"memory/shared/memory_{content_hash}.md"
         
-        # Chunk content; inline entry markers are provenance for Deep Dream,
-        # so they never reach embeddings or stored chunk text.
-        chunks = self.chunker.chunk_text(strip_memory_markers(content))
+        # Chunk content
+        chunks = self.chunker.chunk_text(content)
         
         # Generate embeddings (if provider available)
         texts = [chunk.text for chunk in chunks]
@@ -445,11 +445,6 @@ class MemoryManager:
             previous_hash = self.storage.get_file_hash(rel_path)
             if previous_hash == file_hash:
                 continue
-            # Inline entry markers are provenance for Deep Dream, not content:
-            # strip them so they never reach embeddings or stored chunk text.
-            # The file hash above is computed on the raw content, so marker
-            # edits alone still trigger a re-chunk.
-            content = strip_memory_markers(content)
             # Markdown files (memory + knowledge) get structure-aware chunking;
             # anything else (rare) falls back to the plain char splitter.
             if file_path.suffix.lower() == '.md':
@@ -846,6 +841,15 @@ class MemoryManager:
         reranked.sort(key=lambda r: r.score, reverse=True)
         return reranked
 
+    def _hit_boost_enabled(self) -> bool:
+        """True when the hit-popularity boost is on. It is opt-in: a retrieval
+        hit is not proof of usefulness, so with the default weight of 0 both
+        the re-ranking and the per-search hit write-back stay off."""
+        config = getattr(self, "config", None)
+        weight = float(getattr(config, "hit_boost_weight", 0.0)) if config else 0.0
+        cap = float(getattr(config, "hit_boost_max", 1.25)) if config else 1.25
+        return weight > 0 and cap > 1.0
+
     def _apply_hit_boost(
         self,
         results: List[SearchResult]
@@ -856,7 +860,9 @@ class MemoryManager:
         term that decays over a week since ``last_hit_at``, capped at
         ``hit_boost_max``. The log keeps the curve flat at the high end and the
         cap bounds the feedback loop, so repeated queries can only re-order
-        near-equal candidates, never crowd out everything else.
+        near-equal candidates, never crowd out everything else. The boost is
+        opt-in: with the default ``hit_boost_weight = 0`` this returns the
+        results untouched and ``search()`` skips the hit write-back too.
 
         Uses getattr lookups so a bare instance (tests call the pure fusion
         helpers without storage/config) degrades to a no-op, and any storage
@@ -867,12 +873,12 @@ class MemoryManager:
         storage = getattr(self, "storage", None)
         if storage is None or not hasattr(storage, "get_hit_stats"):
             return results
+        if not self._hit_boost_enabled():
+            return results
 
         config = getattr(self, "config", None)
-        weight = float(getattr(config, "hit_boost_weight", 0.05)) if config else 0.05
+        weight = float(getattr(config, "hit_boost_weight", 0.0)) if config else 0.0
         cap = float(getattr(config, "hit_boost_max", 1.25)) if config else 1.25
-        if weight <= 0 or cap <= 1.0:
-            return results
 
         import math
         import time

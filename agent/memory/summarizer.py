@@ -74,7 +74,6 @@ MEMORY.md 会注入每次对话的系统提示词中，因此必须保持精炼�
 - **清理无效**：删除临时性记录、空白条目、格式残留、无意义、重复内容等
 - **删除冗余**：已被更精炼表述涵盖的旧条目应删除，避免信息重复
 - 每条一行，用 "- " 开头，不带日期前缀
-- 条目可携带行内标记 `[YYYY-MM-DD|conf:high|src:dialog]`（conf: high/mid/low）：未改动的条目原样保留其标记；conf:high 的条目除非与新信息矛盾，否则不得删除
 - 可用 "## 标题" 对相关条目分组，使结构更清晰
 - 目标：控制在 50 条以内，每条尽量一句话概括
 
@@ -119,7 +118,6 @@ Organize and distill on top of the existing memory, and output the complete upda
 - **Clean invalid**: remove temporary notes, blank items, formatting residue, meaningless or duplicate content
 - **Drop redundancy**: delete old items already covered by a more concise statement
 - One item per line, starting with "- ", without a date prefix
-- Entries may carry an inline marker `[YYYY-MM-DD|conf:high|src:dialog]` (conf: high/mid/low): keep the marker when re-emitting an entry unchanged; never drop conf:high entries unless newer information contradicts them
 - You may group related items under "## headings" for clarity
 - Goal: keep under 50 items, each ideally a single sentence
 
