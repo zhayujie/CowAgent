@@ -569,6 +569,9 @@ const VendorModal: React.FC<{
           rows={catalogRows}
           onRowsChange={setCatalogRows}
           isCustom={false}
+          providerId={effective.id}
+          apiBase={apiBase}
+          apiKey={apiKey}
         />
       )}
     </Modal>
@@ -707,6 +710,9 @@ const CustomProviderModal: React.FC<{
         rows={catalogRows}
         onRowsChange={setCatalogRows}
         isCustom
+        providerId={editing ? `custom:${editing.custom_id}` : ''}
+        apiBase={apiBase}
+        apiKey={apiKey}
       />
     </Modal>
   )

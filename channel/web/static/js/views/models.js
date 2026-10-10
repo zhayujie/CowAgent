@@ -2344,11 +2344,75 @@ function toggleCatalogSection(prefix) {
 
 /** Wire the section to one modal. Assigned (not addEventListener) so a
  *  repeated open cannot stack duplicate handlers. */
+function discoverCatalogModels(prefix, providerId) {
+    const btn = document.getElementById(prefix + '-catalog-discover');
+    const status = document.getElementById(prefix + '-status');
+    const baseInput = document.getElementById(prefix + '-base');
+    const keyInput = document.getElementById(prefix + '-key');
+    const apiBase = baseInput ? baseInput.value.trim() : '';
+    let apiKey = keyInput ? keyInput.value.trim() : '';
+    if (keyInput && keyInput.dataset.masked === '1'
+        && apiKey === (keyInput.dataset.maskedVal || '')) {
+        apiKey = '';
+    }
+    if (!apiBase && !providerId) {
+        if (status) { status.textContent = t('models_custom_base_required'); status.classList.remove('opacity-0'); }
+        return;
+    }
+    const payload = { action: 'discover_models', provider_id: providerId || '', api_base: apiBase };
+    if (apiKey) payload.api_key = apiKey;
+    if (btn) btn.disabled = true;
+    if (status) {
+        status.textContent = t('models_catalog_discovering');
+        status.classList.remove('opacity-0', 'text-red-500');
+        status.classList.add('text-primary-500');
+    }
+    fetch('/api/models', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+    }).then(r => r.json()).then(data => {
+        if (btn) btn.disabled = false;
+        if (data.status !== 'success') {
+            if (status) {
+                status.textContent = data.message || t('models_save_failed');
+                status.classList.remove('opacity-0', 'text-primary-500');
+                status.classList.add('text-red-500');
+            }
+            return;
+        }
+        const draft = _catalogRows(prefix);
+        const have = new Set(draft.map(e => (e.name || '').trim()).filter(Boolean));
+        (data.models || []).forEach(model => {
+            const name = (model && (model.name || model.id)) || '';
+            if (!name || have.has(name)) return;
+            have.add(name);
+            const capabilities = Array.isArray(model.capabilities) && model.capabilities.length ? model.capabilities.slice() : ['text'];
+            draft.push({ name, capabilities, context_window: '', max_output_tokens: '' });
+        });
+        renderCatalogRows(prefix);
+        if (status) {
+            status.textContent = t('models_catalog_discovered') + ' · ' + (data.count || 0);
+            status.classList.remove('opacity-0', 'text-red-500');
+            status.classList.add('text-primary-500');
+        }
+    }).catch(() => {
+        if (btn) btn.disabled = false;
+        if (status) {
+            status.textContent = t('models_save_failed');
+            status.classList.remove('opacity-0', 'text-primary-500');
+            status.classList.add('text-red-500');
+        }
+    });
+}
+
 function bindCatalogControls(prefix, providerIdForSeed) {
     const toggle = document.getElementById(prefix + '-catalog-toggle');
     const add = document.getElementById(prefix + '-catalog-add');
     if (toggle) toggle.onclick = () => toggleCatalogSection(prefix);
     if (add) add.onclick = () => addCatalogRow(prefix);
+    const discover = document.getElementById(prefix + '-catalog-discover');
+    if (discover) discover.onclick = () => discoverCatalogModels(prefix, providerIdForSeed);
     const seed = document.getElementById(prefix + '-catalog-seed');
     if (seed) seed.onclick = () => seedCatalogFromPresets(prefix, providerIdForSeed);
 }
