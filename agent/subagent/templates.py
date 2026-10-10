@@ -9,6 +9,7 @@ the same shape skills already use.
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
@@ -147,10 +148,9 @@ def parse_template(content: str, fallback_name: str, source: str) -> Optional[Su
 
     frontmatter = parse_frontmatter(content) or {}
     body = content
-    if content.startswith("---"):
-        parts = content.split("---", 2)
-        if len(parts) == 3:
-            body = parts[2]
+    frontmatter_block = re.match(r"^---\s*\n.*?\n---\s*\n", content, re.DOTALL)
+    if frontmatter_block is not None:
+        body = content[frontmatter_block.end():]
     body = body.strip()
 
     name = str(frontmatter.get("name") or fallback_name).strip()
