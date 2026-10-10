@@ -196,7 +196,7 @@ def load_templates(workspace_dir: Optional[str] = None) -> Dict[str, SubagentTem
         try:
             with open(path, "r", encoding="utf-8") as handle:
                 content = handle.read()
-        except OSError as e:
+        except (OSError, UnicodeError) as e:
             logger.warning(f"[SubAgent] Cannot read template {path}: {e}")
             continue
 

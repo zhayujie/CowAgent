@@ -134,6 +134,39 @@ def test_user_template_can_replace_a_builtin(workspace):
     assert load_templates(str(workspace))["explore"].description == "Mine."
 
 
+def test_bad_template_encoding_does_not_disable_valid_subagents(
+    spawn_tool, enabled, workspace, monkeypatch
+):
+    directory = workspace / "subagents"
+    directory.mkdir(parents=True)
+    invalid = directory / "00-broken.md"
+    invalid.write_bytes(b"---\nname: broken\ndescription: Bad encoding.\n---\n\xff\n")
+    (directory / "auditor.md").write_text(
+        "---\nname: auditor\ndescription: Review defects.\n---\nAudit carefully.\n",
+        encoding="utf-8",
+    )
+    built = _capture_children(monkeypatch)
+
+    # The description and execution both reload the entire directory. One
+    # undecodable file must not remove the valid types from either surface.
+    result = spawn_tool.execute({
+        "tasks": [
+            {"goal": "review", "subagent_type": "auditor"},
+            {"goal": "investigate", "subagent_type": "explore"},
+        ]
+    })
+    outcomes = json.loads(result.result)["results"]
+    assert result.success
+    assert "auditor: Review defects." in spawn_tool.description
+    assert "general-purpose:" in spawn_tool.description
+    assert [item["status"] for item in outcomes] == ["completed", "completed"]
+    assert {child.kwargs["description"] for child in built} == {
+        "sub agent (auditor)", "sub agent (explore)"
+    }
+    assert "broken" not in load_templates(str(workspace))
+    assert invalid.read_bytes().endswith(b"\xff\n")
+
+
 def test_the_shipped_guide_is_not_offered_as_a_type(workspace):
     """README.md sits in the same directory as real templates. Loading it would
     put a bogus type in front of the Agent on every turn."""
