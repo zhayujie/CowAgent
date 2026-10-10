@@ -48,7 +48,9 @@ def _sheet_rows(cached_sheet, formula_sheet):
         for cached, source in zip(cached_row, formula_row):
             value = cached.value
             if value is None and source.data_type == "f":
-                value = f"[Formula: {source.value} (not calculated)]"
+                # openpyxl's array formulas store their source in .text.
+                formula = getattr(source.value, "text", source.value)
+                value = f"[Formula: {formula} (not calculated)]"
             values.append(str(value) if value is not None else "")
         yield values
 
