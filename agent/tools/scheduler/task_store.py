@@ -166,6 +166,20 @@ class TaskStore:
             if not task_id:
                 raise ValueError("Task must have an 'id' field")
 
+            if not tasks:
+                paths = (self.store_path, f"{self.store_path}.bak")
+                if any(os.path.exists(path) for path in paths):
+                    # The read-only fallback also returns {} for corrupt data.
+                    # A new task must not silently replace that unrecovered store.
+                    for path in paths:
+                        try:
+                            tasks = _read_tasks(path)[1]
+                            break
+                        except (OSError, ValueError):
+                            continue
+                    else:
+                        raise ValueError("Cannot add a task: unrecoverable task store")
+
             if task_id in tasks:
                 raise ValueError(f"Task with id '{task_id}' already exists")
 
