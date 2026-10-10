@@ -786,6 +786,7 @@ function startSSE(requestId, loadingEl, timestamp, titleInfo, replayItems, resum
                     ? messagesDiv.querySelector(`[data-request-id="${requestId}"]:not([data-peer-bubble])`)
                     : null);
                 if (targetBotEl) {
+                    attachMessageUsage(targetBotEl, item.usage);
                     if (item.bot_seq !== undefined && item.bot_seq !== null) {
                         targetBotEl.dataset.seq = item.bot_seq;
                     }

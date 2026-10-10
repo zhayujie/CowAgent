@@ -221,6 +221,7 @@ class WebChannel(ChatChannel):
                             "timestamp": time.time(),
                             "user_seq": seqs.get("user_seq"),
                             "bot_seq": seqs.get("bot_seq"),
+                            "usage": seqs.get("usage"),
                         })
                         if published:
                             self._publish_sse_event(
@@ -257,6 +258,7 @@ class WebChannel(ChatChannel):
                     "timestamp": time.time(),
                     "user_seq": seqs.get("user_seq"),
                     "bot_seq": seqs.get("bot_seq"),
+                    "usage": seqs.get("usage"),
                 })
                 logger.debug(f"SSE done sent for request {request_id}")
                 # Auto-trigger TTS once the bot finishes its text reply. The

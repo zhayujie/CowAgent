@@ -143,6 +143,14 @@ def _cache_hit_tokens(usage: Dict[str, Any]) -> int:
         return 0
 
 
+def _nonnegative_int(value: Any) -> int:
+    """Coerce a provider-supplied count to a non-negative integer."""
+    try:
+        return max(0, int(value or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
 # Cap for the 429 incremental backoff. The base curve is 30 + retry_count*15,
 # which without a cap crosses the web channel's 600s SSE idle timeout by the
 # 8th retry; capping each wait at 60s keeps the cumulative sleep in bounds.
@@ -306,6 +314,57 @@ class AgentStreamExecutor:
         # Absolute paths already reported as artifacts, so a write-then-edit
         # sequence on the same file only surfaces one card in the UI.
         self._emitted_artifacts = set()
+
+        # Provider usage summed over every model call of this run; StepWriter
+        # stamps it on the stored answer.
+        self.run_usage: Optional[Dict[str, int]] = None
+
+    @staticmethod
+    def _normalize_stream_usage(stream_usage: Dict[str, Any]) -> Dict[str, int]:
+        """Normalize one provider usage payload to the console's field names."""
+        if not isinstance(stream_usage, dict):
+            return {}
+        prompt = _nonnegative_int(stream_usage.get("prompt_tokens"))
+        completion = _nonnegative_int(stream_usage.get("completion_tokens"))
+        total = _nonnegative_int(stream_usage.get("total_tokens")) or prompt + completion
+        cache_hit = min(prompt, max(0, _cache_hit_tokens(stream_usage)))
+        if not any((prompt, completion, total, cache_hit)):
+            return {}
+        return {
+            "prompt_tokens": prompt,
+            "completion_tokens": completion,
+            "total_tokens": total,
+            "prompt_cache_hit_tokens": cache_hit,
+            "prompt_cache_miss_tokens": max(0, prompt - cache_hit),
+            "calls": 1,
+        }
+
+    @staticmethod
+    def _merge_usage(
+        first: Optional[Dict[str, Any]],
+        second: Optional[Dict[str, Any]],
+    ) -> Dict[str, int]:
+        """Add two normalized usage snapshots field by field."""
+        if not first:
+            return dict(second or {})
+        if not second:
+            return dict(first)
+        keys = (
+            "prompt_tokens",
+            "completion_tokens",
+            "total_tokens",
+            "prompt_cache_hit_tokens",
+            "prompt_cache_miss_tokens",
+            "calls",
+        )
+        return {
+            key: _nonnegative_int(first.get(key)) + _nonnegative_int(second.get(key))
+            for key in keys
+        }
+
+    def _record_stream_usage(self, snapshot: Optional[Dict[str, Any]]) -> None:
+        if snapshot:
+            self.run_usage = self._merge_usage(self.run_usage, snapshot)
 
     def _check_cancelled(self) -> None:
         """Raise AgentCancelledError if the user requested cancellation.
@@ -870,6 +929,7 @@ class AgentStreamExecutor:
 
         final_response = ""
         turn = 0
+        self.run_usage = None
 
         # Respect a run id an outer scope already set (a subagent spawn or a
         # delegated task passes one down); only mint a fresh one when this turn
@@ -1955,6 +2015,8 @@ class AgentStreamExecutor:
         # tools + history — which is exactly the "used" the chart wants.
         if stream_usage is not None:
             try:
+                usage_snapshot = self._normalize_stream_usage(stream_usage)
+                self._record_stream_usage(usage_snapshot)
                 # Fingerprint the history this usage describes. get_context_usage
                 # compares it against the live history estimate: if trimming /
                 # compaction (or new turns) has since changed the history, the
@@ -1963,12 +2025,7 @@ class AgentStreamExecutor:
                     self.agent._estimate_message_tokens(m) for m in self.messages
                 )
                 self.agent.last_usage = {
-                    "prompt_tokens": int(stream_usage.get("prompt_tokens") or 0),
-                    "completion_tokens": int(stream_usage.get("completion_tokens") or 0),
-                    "total_tokens": int(stream_usage.get("total_tokens") or 0),
-                    # Server-side prefix cache hits; providers that don't
-                    # report it leave this at 0, which reads as "unknown".
-                    "prompt_cache_hit_tokens": _cache_hit_tokens(stream_usage),
+                    **usage_snapshot,
                     # History estimate at capture time (freshness fingerprint).
                     "_est_history": est_history,
                 }
