@@ -97,7 +97,7 @@ def _save(data: Dict) -> None:
 
 def _normalize(path: str) -> str:
     from common.utils import expand_path
-    return os.path.realpath(expand_path((path or "").strip()))
+    return os.path.realpath(expand_path(path or ""))
 
 
 def _session_key(session_id: str, agent_id: Optional[str]) -> str:
@@ -329,7 +329,7 @@ def set_order(order: List[str]) -> List[str]:
     for key in order or []:
         if not isinstance(key, str):
             continue
-        k = key.strip()
+        k = key
         if not k or k in seen:
             continue
         # Real project paths are normalized; the default sentinel is kept as-is.

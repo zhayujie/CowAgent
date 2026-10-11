@@ -426,7 +426,7 @@ class ProjectManageHandler:
         try:
             from agent.workspace import project_store
             body = json.loads(web.data() or b"{}")
-            path = (body.get("path") or "").strip()
+            path = body.get("path") or ""
             if not path:
                 return json.dumps({"status": "error", "message": "path is required"})
             name = project_store.rename_project(path, body.get("name") or "")
@@ -441,7 +441,7 @@ class ProjectManageHandler:
         try:
             from agent.workspace import project_store
             body = json.loads(web.data() or b"{}")
-            path = (body.get("path") or "").strip()
+            path = body.get("path") or ""
             agent_id = body.get("agent") or body.get("agent_id")
             if not path:
                 return json.dumps({"status": "error", "message": "path is required"})
@@ -471,7 +471,7 @@ class ProjectBrowseHandler:
         try:
             from common.utils import expand_path
             params = web.input(path='')
-            raw = (params.path or '').strip()
+            raw = params.path or ''
 
             # On Windows, "__DRIVES__" is a virtual path listing all logical
             # drives, so the user can hop across drives from a drive root.
