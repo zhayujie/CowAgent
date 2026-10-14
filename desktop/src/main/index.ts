@@ -1,9 +1,9 @@
 import { app, BrowserWindow, session, shell, ipcMain, dialog, nativeImage, Notification, systemPreferences, crashReporter, Menu, clipboard, net } from 'electron'
 import path from 'path'
 import fs from 'fs'
-import os from 'os'
 import http from 'http'
 import { PythonBackend, BackendError } from './python-manager'
+import { COW_DATA_DIR } from './data-dir'
 import { buildAppMenu } from './menu'
 import { createTray, destroyTray, getTray } from './tray'
 import { initUpdater, checkForUpdates, startDownload, quitAndInstall, setUpdateLanguage, setUpdateFeedQuery } from './updater'
@@ -18,10 +18,9 @@ import {
 } from './app-icon'
 
 // Where the packaged backend keeps its writable data (config.json, run.log).
-// Kept in sync with COW_DATA_DIR in python-manager.ts so the desktop shell
-// writes its own diagnostics into the SAME run.log the "open log folder" button
-// reveals and the in-app Logs page tails — one place to look for both layers.
-const COW_DATA_DIR = path.join(os.homedir(), '.cow')
+// Shared with python-manager.ts so the desktop shell writes its own
+// diagnostics into the SAME run.log the "open log folder" button reveals and
+// the in-app Logs page tails — one place to look for both layers.
 
 // Mirror the main process's console output and any uncaught crash to run.log.
 // Packaged builds have no terminal, so every console.log/error and every
@@ -487,7 +486,7 @@ async function startBackend() {
   const backendPath = getBackendPath()
   // isDev distinguishes a source checkout from an installed app. The backend
   // manager needs to know: an installed app must never fall back to looking
-  // for a Python interpreter, and its writable data always lives in ~/.cow.
+  // for a Python interpreter, and its writable data always lives in COW_DATA_DIR.
   pythonBackend = new PythonBackend(backendPath, !isDev)
 
   pythonBackend.on('ready', (port: number) => {
