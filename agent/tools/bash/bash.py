@@ -17,7 +17,7 @@ from agent.tools.bash import background, exit_codes
 from agent.tools.bash.decode import decode_output
 from agent.tools.utils.truncate import truncate_tail, format_size, DEFAULT_MAX_LINES, DEFAULT_MAX_BYTES
 from common.log import logger
-from common.utils import expand_path
+from common.utils import cow_home
 
 
 class _Cancelled(Exception):
@@ -197,7 +197,7 @@ SAFETY:
                 pass
 
             # Load environment variables from ~/.cow/.env if it exists
-            env_file = expand_path("~/.cow/.env")
+            env_file = os.path.join(cow_home(), ".env")
             dotenv_vars = {}
             if os.path.exists(env_file):
                 try:

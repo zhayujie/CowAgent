@@ -10,7 +10,7 @@ from pathlib import Path
 from agent.tools.base_tool import BaseTool, ToolResult
 from common.atomic_write import write_text_atomic
 from common.log import logger
-from common.utils import expand_path
+from common.utils import cow_home
 
 
 # API Key 知识库：常见的环境变量及其描述
@@ -68,7 +68,7 @@ class EnvConfig(BaseTool):
     def __init__(self, config: dict = None):
         self.config = config or {}
         # Store env config in ~/.cow directory (outside workspace for security)
-        self.env_dir = expand_path("~/.cow")
+        self.env_dir = cow_home()
         self.env_path = os.path.join(self.env_dir, '.env')
         self.agent_bridge = self.config.get("agent_bridge")  # Reference to AgentBridge for hot reload
         # Don't create .env file in __init__ to avoid issues during tool discovery

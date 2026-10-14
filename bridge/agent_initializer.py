@@ -14,7 +14,7 @@ from typing import Dict, List, Optional, Tuple
 from agent.protocol import Agent
 from agent.tools import ToolManager
 from common.log import logger
-from common.utils import expand_path
+from common.utils import cow_home
 
 # Module-level lock to serialize scheduler init across concurrent sessions
 _scheduler_init_lock = threading.Lock()
@@ -818,7 +818,7 @@ class AgentInitializer:
     
     def _load_env_file(self):
         """Load environment variables from .env file"""
-        env_file = expand_path("~/.cow/.env")
+        env_file = os.path.join(cow_home(), ".env")
         if os.path.exists(env_file):
             try:
                 from dotenv import load_dotenv
@@ -1224,7 +1224,7 @@ class AgentInitializer:
             "linkai_api_key": "LINKAI_API_KEY",
         }
         
-        env_file = expand_path("~/.cow/.env")
+        env_file = os.path.join(cow_home(), ".env")
         
         # Read existing env vars (key -> value)
         existing_env_vars = {}

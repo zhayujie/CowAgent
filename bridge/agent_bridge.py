@@ -23,7 +23,7 @@ from bridge.context import Context
 from bridge.reply import Reply, ReplyType
 from common import const
 from common.log import logger
-from common.utils import expand_path
+from common.utils import cow_home
 from config import conf
 from models.openai_compatible_bot import OpenAICompatibleBot
 
@@ -2026,7 +2026,7 @@ class AgentBridge:
             "linkai_api_key": "LINKAI_API_KEY",
         }
         
-        env_file = expand_path("~/.cow/.env")
+        env_file = os.path.join(cow_home(), ".env")
         
         # Read existing env vars (key -> value)
         existing_env_vars = {}

@@ -28,6 +28,7 @@ import urllib.error
 from typing import Optional
 
 from common.log import logger
+from common.utils import cow_home
 
 
 # ------------------------------------------------------------------
@@ -38,7 +39,7 @@ _STORE_LOCK = threading.Lock()
 
 
 def _store_path() -> str:
-    base = os.path.expanduser("~/.cow")
+    base = cow_home()
     try:
         os.makedirs(base, exist_ok=True)
     except OSError:

@@ -214,7 +214,7 @@ def test_credential_directory_is_pruned_mid_walk(tmp_path, monkeypatch):
     fake_cow = tmp_path / ".cow"
     fake_cow.mkdir()
     (fake_cow / "secret.env").write_text("API_KEY=leaked\n", encoding="utf-8")
-    monkeypatch.setattr(sf_module, "expand_path", lambda p: str(fake_cow) if p == "~/.cow" else p)
+    monkeypatch.setattr(sf_module, "cow_home", lambda: str(fake_cow))
 
     tool = _make_tool(tmp_path)
     result = tool.execute({"pattern": "API_KEY"})
@@ -246,7 +246,7 @@ def test_symlink_to_credential_file_is_skipped_not_opened(tmp_path, monkeypatch)
     fake_cow = tmp_path / "fake_cow"
     fake_cow.mkdir()
     (fake_cow / "secret.env").write_text("API_KEY=super-secret-value\n", encoding="utf-8")
-    monkeypatch.setattr(sf_module, "expand_path", lambda p: str(fake_cow) if p == "~/.cow" else p)
+    monkeypatch.setattr(sf_module, "cow_home", lambda: str(fake_cow))
 
     workspace = tmp_path / "workspace"
     workspace.mkdir()
@@ -272,7 +272,7 @@ def test_symlinked_directory_pointing_at_credential_dir_is_pruned(tmp_path, monk
     fake_cow = tmp_path / "fake_cow"
     fake_cow.mkdir()
     (fake_cow / "secret.env").write_text("API_KEY=super-secret-value\n", encoding="utf-8")
-    monkeypatch.setattr(sf_module, "expand_path", lambda p: str(fake_cow) if p == "~/.cow" else p)
+    monkeypatch.setattr(sf_module, "cow_home", lambda: str(fake_cow))
 
     workspace = tmp_path / "workspace"
     workspace.mkdir()
