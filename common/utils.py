@@ -130,6 +130,16 @@ def expand_path(path: str) -> str:
     return expanded
 
 
+def cow_home() -> str:
+    """Directory holding the agent's credentials (.env, mcp_oauth.json).
+
+    ~/.cow by default. The desktop client sets COW_HOME when the user picked
+    another data folder at install time, so credentials stay with the rest of
+    the app data instead of on the system drive.
+    """
+    return expand_path(os.environ.get("COW_HOME") or "~/.cow")
+
+
 def constant_time_equals(left: str, right: str) -> bool:
     """Timing-safe string comparison that answers False instead of raising.
 

@@ -66,6 +66,8 @@ Secret keys are stored separately in `~/.cow` directory for security:
 └── .env               # Secret keys for skills
 ```
 
+On Windows, the desktop installer asks where to keep this data on a fresh install. If you pick a folder other than your user folder, both directories are created there as `<folder>\cow` and `<folder>\.cow`.
+
 ### Project Workspace {#project-workspace}
 
 Besides the default workspace, each session can be bound to its own **project directory**. The Agent's file reads/writes and command execution happen inside that directory, giving you multi-project isolation; memory, skills, and the like still live in the default workspace. When more than one project is in use, the Web/desktop history list automatically groups sessions by project.
