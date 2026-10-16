@@ -12,6 +12,79 @@ scheduled tasks, logs).
 - Under Docker, map the port to the host in `docker-compose.yml` if it has to
   be reachable from outside.
 
+## HTTPS and reverse proxy
+
+To serve the console on a domain name with HTTPS, pick one of the two
+supported setups. Both are opt-in and off by default.
+
+| Config key | Default | Meaning |
+|---|---|---|
+| `web_https_enabled` | `false` | Serve TLS directly from the console (needs the two keys below) |
+| `web_ssl_certfile` | `""` | PEM certificate file (full chain recommended) |
+| `web_ssl_keyfile` | `""` | PEM private key file |
+| `web_trust_proxy` | `false` | Honor `X-Forwarded-Proto` / `X-Forwarded-Host` / `X-Forwarded-For` from a reverse proxy |
+| `web_external_url` | `""` | Public base URL, e.g. `https://cow.example.com`; used for absolute URLs (MCP OAuth callback) and shown in the startup banner |
+
+### Option A: direct HTTPS
+
+```json
+{
+  "web_https_enabled": true,
+  "web_ssl_certfile": "/etc/letsencrypt/live/cow.example.com/fullchain.pem",
+  "web_ssl_keyfile": "/etc/letsencrypt/live/cow.example.com/privkey.pem",
+  "web_external_url": "https://cow.example.com"
+}
+```
+
+The console terminates TLS itself (via cheroot). A missing or unreadable
+cert/key fails startup with a clear error instead of silently serving HTTP.
+
+### Option B: nginx reverse proxy (recommended)
+
+Terminate TLS at nginx and proxy plain HTTP to the console:
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name cow.example.com;
+
+    ssl_certificate     /etc/letsencrypt/live/cow.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/cow.example.com/privkey.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:9899;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        # SSE streams stay open a long time; don't let nginx cut them off.
+        proxy_read_timeout 3600s;
+        proxy_buffering off;
+    }
+}
+```
+
+```json
+{
+  "web_host": "127.0.0.1",
+  "web_trust_proxy": true,
+  "web_external_url": "https://cow.example.com"
+}
+```
+
+Notes:
+
+- `proxy_read_timeout` and `proxy_buffering off` matter: the console streams
+  replies over SSE, and buffered/short-lived proxy connections truncate them.
+- Only enable `web_trust_proxy` when the console is reachable **exclusively**
+  through the proxy -- the forwarded headers are spoofable by any client that
+  can reach the console directly. Binding `web_host` to `127.0.0.1` (as above)
+  achieves that on a single machine.
+- If you serve the console under a sub-path (e.g.
+  `https://example.com/cow/`), that is not supported: the console expects to
+  own the root path. Use a dedicated subdomain instead.
+
 # Backend layout
 
 `web_channel.py` is the URL table and nothing else: 89 routes, `build_app()`,

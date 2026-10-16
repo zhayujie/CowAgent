@@ -1535,7 +1535,7 @@ class WebChannel(ChatChannel):
 
         self._cleanup_stale_voice_recordings()
 
-        def _log_startup_banner():
+        def _log_startup_banner(scheme: str):
             """Announce the console. Only called once the socket is actually
             bound — printing it up front made a failed bind look like a
             successful startup in the logs."""
@@ -1578,9 +1578,12 @@ class WebChannel(ChatChannel):
             for idx, (name, label) in enumerate(channels, 1):
                 logger.info(f"[WebChannel]  {idx:>2}. {name:<{name_width}} - {label}")
             logger.info("[WebChannel] ✅ Web console is running")
-            logger.info(f"[WebChannel] 🌐 Local access: http://localhost:{port}")
-            if is_public_bind:
-                logger.info(f"[WebChannel] 🌍 Server access: http://YOUR_IP:{port} (replace YOUR_IP with your server IP)")
+            logger.info(f"[WebChannel] 🌐 Local access: {scheme}://localhost:{port}")
+            external_url = (conf().get("web_external_url") or "").strip().rstrip("/")
+            if external_url:
+                logger.info(f"[WebChannel] 🌍 Public URL: {external_url}")
+            elif is_public_bind:
+                logger.info(f"[WebChannel] 🌍 Server access: {scheme}://YOUR_IP:{port} (replace YOUR_IP with your server IP)")
                 if not _is_password_enabled():
                     logger.info("[WebChannel] ⚠️  Listening on 0.0.0.0 without web_password set; set an access password in config.json for public deployment")
             else:
@@ -1591,8 +1594,8 @@ class WebChannel(ChatChannel):
             if os.environ.get("COW_DESKTOP") != "1":
                 try:
                     import webbrowser
-                    webbrowser.open(f"http://localhost:{port}")
-                    logger.debug(f"[WebChannel] Opened browser at http://localhost:{port}")
+                    webbrowser.open(f"{scheme}://localhost:{port}")
+                    logger.debug(f"[WebChannel] Opened browser at {scheme}://localhost:{port}")
                 except Exception as e:
                     logger.debug(f"[WebChannel] Could not open browser: {e}")
 
@@ -1622,10 +1625,41 @@ class WebChannel(ChatChannel):
         logging.getLogger("web").setLevel(logging.ERROR)
         logging.getLogger("web.httpserver").setLevel(logging.ERROR)
 
+        from channel.web.core.proxy import (
+            TrustProxyMiddleware, build_ssl_adapter, resolve_tls_config,
+        )
+
         # Build WSGI app with middleware (same as runsimple but without print)
-        func = web.httpserver.StaticMiddleware(app.wsgifunc())
+        wsgi_app = app.wsgifunc()
+        if conf().get("web_trust_proxy", False):
+            # Behind nginx/Caddy/Traefik: let the app see the public scheme,
+            # host, and client IP from the proxy's X-Forwarded-* headers. Only
+            # enable this when the console is reachable exclusively through
+            # the proxy -- the headers are spoofable by direct clients.
+            wsgi_app = TrustProxyMiddleware(wsgi_app)
+            logger.info("[WebChannel] Trusting X-Forwarded-* headers from reverse proxy")
+        func = web.httpserver.StaticMiddleware(wsgi_app)
         func = web.httpserver.LogMiddleware(func)
+
+        # Direct HTTPS: terminate TLS in the console itself via cheroot's
+        # BuiltinSSLAdapter. Fails fast on a misconfigured cert/key so a typo
+        # never silently serves plain HTTP instead.
+        scheme = "http"
+        certfile = keyfile = None
+        try:
+            certfile, keyfile = resolve_tls_config(
+                bool(conf().get("web_https_enabled", False)),
+                conf().get("web_ssl_certfile", ""),
+                conf().get("web_ssl_keyfile", ""),
+            )
+        except ValueError as e:
+            logger.error(f"[WebChannel] HTTPS misconfigured: {e}")
+            raise
         server = web.httpserver.WSGIServer((host, port), func)
+        if certfile:
+            server.ssl_adapter = build_ssl_adapter(certfile, keyfile)
+            scheme = "https"
+            logger.info("[WebChannel] 🔒 Serving the web console over HTTPS")
         server.daemon_threads = True
         # Default request_queue_size(5) / timeout(10s) / numthreads(10) are
         # too small: when SSE streams occupy many threads, the backlog fills
@@ -1655,7 +1689,7 @@ class WebChannel(ChatChannel):
             _log_bind_failure(host, port, e)
             raise
         SERVING.set()
-        _log_startup_banner()
+        _log_startup_banner(scheme)
         try:
             server.serve()
         except (KeyboardInterrupt, SystemExit):

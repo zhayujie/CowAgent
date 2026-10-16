@@ -75,13 +75,16 @@ def notify_server_authorized(server_name: str) -> None:
 def _oauth_redirect_uri() -> str:
     """Build the OAuth redirect URI served by the web console callback.
 
-    Priority: explicit mcp_oauth_redirect_base config, otherwise the local
-    web console address (127.0.0.1:<web_port>). Both point at the shared
-    /mcp/oauth/callback route.
+    Priority: explicit mcp_oauth_redirect_base config, otherwise the
+    web_external_url public base URL (for domain / reverse-proxy setups),
+    otherwise the local web console address (127.0.0.1:<web_port>). All point
+    at the shared /mcp/oauth/callback route.
     """
     try:
         from config import conf
         base = (conf().get("mcp_oauth_redirect_base") or "").strip().rstrip("/")
+        if not base:
+            base = (conf().get("web_external_url") or "").strip().rstrip("/")
         if not base:
             port = int(os.environ.get("COW_WEB_PORT") or conf().get("web_port", 9899))
             base = f"http://127.0.0.1:{port}"
