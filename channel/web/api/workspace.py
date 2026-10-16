@@ -39,10 +39,21 @@ def _is_system_asset_rel(rel_path: str) -> bool:
     return p in _SYSTEM_ASSET_FILES or p.startswith(_SYSTEM_ASSET_PREFIXES)
 
 
-def _system_workspace_service():
+def _system_workspace_service(agent_id: str = None, rel_path: str = None):
     from agent.workspace.service import WorkspaceService
-    from common.state_dir import state_root_str
-    return WorkspaceService(state_root_str())
+    from common.runtime_identity import RuntimeIdentity
+    from common.state_dir import knowledge_dir, state_root_str
+    # HTTP handlers resolve their requested Agent explicitly; they do not
+    # install its runtime identity. A project's system-file fallback must
+    # follow that same Agent instead of the ambient/default workspace.
+    identity = RuntimeIdentity(agent_id=agent_id) if agent_id else None
+    root = state_root_str(identity)
+    if rel_path and rel_path.lstrip("./").startswith(("knowledge/", "knowledge\\")):
+        knowledge = knowledge_dir(identity)
+        # Keep the public knowledge/... path while validating its narrower root.
+        WorkspaceService(str(knowledge)).to_workspace_rel(os.path.join(str(knowledge.parent), rel_path))
+        root = str(knowledge.parent)
+    return WorkspaceService(root)
 
 
 def _decorate_entry(svc, entry: dict) -> dict:
@@ -136,7 +147,7 @@ class WorkspaceResolveHandler:
                     # Memory/knowledge live in state_root, not the project. Retry
                     # there so their cards still preview when a project is open.
                     if _is_system_asset_rel(raw_path):
-                        entry = _system_workspace_service().stat_file(raw_path)
+                        entry = _system_workspace_service(params.agent or params.agent_id or None, raw_path).stat_file(raw_path)
                     else:
                         raise
 
@@ -176,16 +187,24 @@ def _editable_target(raw_path: str, session_id: str = None, agent_id: str = None
     assets that live there even while a project is open.
     """
     svc = _workspace_service(session_id, agent_id)
-    system = _system_workspace_service()
+    system = _system_workspace_service(agent_id)
     try:
         rel = svc.to_workspace_rel(raw_path)
     except ValueError:
-        # Absolute path outside the session workspace: the state root is the
-        # only other place the console is allowed to edit.
-        return system, system.to_workspace_rel(raw_path)
-    if svc.root != system.root and _is_system_asset_rel(rel) \
-            and not os.path.isfile(svc.resolve(rel)):
-        return system, rel
+        # Absolute paths may also name this Agent's state or its selected
+        # knowledge directory, never arbitrary files in the shared root.
+        try:
+            return system, system.to_workspace_rel(raw_path)
+        except ValueError:
+            from common.runtime_identity import RuntimeIdentity
+            from common.state_dir import knowledge_dir
+            from agent.workspace.service import WorkspaceService
+            identity = RuntimeIdentity(agent_id=agent_id) if agent_id else None
+            knowledge = knowledge_dir(identity)
+            knowledge_rel = WorkspaceService(str(knowledge)).to_workspace_rel(raw_path)
+            return WorkspaceService(str(knowledge.parent)), os.path.join(knowledge.name, knowledge_rel)
+    if _is_system_asset_rel(rel) and not os.path.isfile(svc.resolve(rel)):
+        return _system_workspace_service(agent_id, rel), rel
     return svc, rel
 
 
