@@ -298,6 +298,9 @@ class AgentStreamExecutor:
         self.cancel_event = cancel_event
         self.steer_inbox = steer_inbox
         self.allow_empty_response = allow_empty_response
+        # Bound explicitly by the conversation owner at bridge entry. Children
+        # get a fresh executor and cannot inherit their parent's todo authority.
+        self._todo_owner = None
 
         # Message history - use provided messages or create new list
         self.messages = messages if messages is not None else []
@@ -365,6 +368,10 @@ class AgentStreamExecutor:
     def _record_stream_usage(self, snapshot: Optional[Dict[str, Any]]) -> None:
         if snapshot:
             self.run_usage = self._merge_usage(self.run_usage, snapshot)
+
+    def bind_todo_owner(self, store, session_id: str, agent_id: str, run_id: str) -> None:
+        """Bind this executor to the explicitly selected conversation owner."""
+        self._todo_owner = (store, session_id, agent_id, run_id)
 
     def _check_cancelled(self) -> None:
         """Raise AgentCancelledError if the user requested cancellation.
@@ -2343,6 +2350,11 @@ class AgentStreamExecutor:
             return result
 
         tool = tool_override or self.tools.get(tool_name)
+        if tool_name == "todo_write" and tool is not None:
+            # Tools may be shared by runs and children; all injected state must
+            # live on a private instance, including a caller-supplied override.
+            tool = copy.copy(tool)
+            tool.todo_context = None
         start_event = {
             "tool_call_id": tool_id,
             "tool_name": tool_name,
@@ -2386,8 +2398,28 @@ class AgentStreamExecutor:
             # Execute tool
             start_time = time.time()
             try:
+                if tool_name == "todo_write" and self._todo_owner is not None:
+                    # Import only at invocation to keep tool discovery acyclic.
+                    from agent.tools.todo_write.todo_write_tool import TodoContext
+                    from common.utils import current_agent_run_id
+
+                    store, session_id, agent_id, bound_run_id = self._todo_owner
+                    run_id = current_agent_run_id()
+                    if store is not None and run_id and run_id == bound_run_id:
+                        def commit(todos, explanation):
+                            return store.commit_todo_snapshot(
+                                session_id, run_id, tool_id, todos, explanation
+                            )
+
+                        tool.todo_context = TodoContext(
+                            agent_id=agent_id, session_id=session_id,
+                            run_id=run_id, tool_call_id=tool_id, commit=commit,
+                        )
                 result: ToolResult = tool.execute_tool(arguments)
             finally:
+                if tool_name == "todo_write":
+                    tool.todo_context = None
+                    tool.context = None
                 tool.progress_callback = None
                 tool.cancel_event = None
                 tool.event_callback = None

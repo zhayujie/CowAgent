@@ -400,6 +400,7 @@ export interface ToolCall {
 export type StreamEventType =
   | 'delta'
   | 'reasoning'
+  | 'todo_update'
   | 'tool_retrieval'
   | 'tool_start'
   | 'tool_progress'
@@ -422,6 +423,11 @@ export type StreamEventType =
 
 export interface StreamEvent {
   type: StreamEventType
+  session_id?: string
+  version?: number
+  todos?: TodoItem[]
+  run_id?: string
+  explanation?: string
   content?: string
   tool?: string
   tool_call_id?: string
@@ -579,7 +585,27 @@ export interface HistoryMessage {
 
 export type RunState = 'interrupted' | 'running'
 
+export interface TodoItem {
+  content: string
+  status: 'pending' | 'in_progress' | 'completed'
+}
+
+export interface TodoSnapshot {
+  agent_id: string
+  session_id: string
+  version: number
+  todos: TodoItem[]
+  run_id?: string
+  tool_call_id?: string
+  explanation?: string
+  created_at?: number
+}
+
 export interface HistoryPage {
+  /** Latest durable state, only returned with the first history page. */
+  todo_snapshot?: TodoSnapshot | null
+  agent_id?: string
+  session_id?: string
   messages: HistoryMessage[]
   total: number
   page: number

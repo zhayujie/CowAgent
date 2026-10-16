@@ -1,5 +1,10 @@
 const translations: Record<string, Record<string, string>> = {
   zh: {
+    todo_title: '任务',
+    todo_pending: '未开始',
+    todo_in_progress: '进行中',
+    todo_completed: '已完成',
+    chat_scroll_to_bottom: '滚动到底部',
     console: '控制台',
     nav_chat: '对话',
     nav_manage: '管理',
@@ -984,6 +989,11 @@ const translations: Record<string, Record<string, string>> = {
     slash_version: '查看版本',
   },
   en: {
+    todo_title: 'Tasks',
+    todo_pending: 'Pending',
+    todo_in_progress: 'In progress',
+    todo_completed: 'Completed',
+    chat_scroll_to_bottom: 'Scroll to bottom',
     console: 'Console',
     nav_chat: 'Chat',
     nav_manage: 'Management',

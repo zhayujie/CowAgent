@@ -1143,3 +1143,245 @@
     100% { box-shadow: 0 0 0 3px rgba(74, 190, 110, 0); }
 }
 
+
+/* Task card stays inside the footer and reserves space above the composer. */
+.todo-composer-anchor {
+    position: relative;
+}
+.todo-panel {
+    position: relative;
+    /* The anchor is already the composer's width, so a flat 32px inset keeps
+       the panel 16px inside the composer at every viewport width. */
+    width: calc(100% - 32px);
+    margin: 0 auto 6px;
+    border-radius: 16px;
+    border: 1px solid #e2e8f0;
+    background: #ffffff;
+    color: #334155;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+    overflow: hidden;
+}
+.todo-panel[hidden], .todo-panel [hidden] {
+    display: none;
+}
+.todo-toggle {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 6px 12px;
+    font-size: 12px;
+    line-height: 1.4;
+    cursor: pointer;
+    border: none;
+    background: transparent;
+    color: inherit;
+    text-align: left;
+    user-select: none;
+    transition: background 0.15s ease;
+}
+.todo-toggle:hover {
+    background: rgba(0, 0, 0, 0.02);
+}
+.todo-toggle:focus-visible {
+    outline: 2px solid #35a85b;
+    outline-offset: -2px;
+}
+.todo-toggle i.fa-list-check {
+    font-size: 14px;
+    color: #94a3b8;
+    flex-shrink: 0;
+}
+.todo-title {
+    flex-shrink: 0;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 24px;
+    color: #334155;
+}
+.todo-summary {
+    flex: 1;
+    min-width: 0;
+    font-size: 13px;
+    font-weight: 400;
+    line-height: 20px;
+    color: #94a3b8;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.todo-toggle i#todo-chevron {
+    font-size: 12px;
+    color: #94a3b8;
+    flex-shrink: 0;
+    transition: transform 0.2s ease;
+}
+.todo-body {
+    padding: 2px 12px 10px;
+    max-height: 180px;
+    overflow-y: auto;
+    font-size: 12px;
+    scrollbar-width: thin;
+}
+.todo-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+.todo-row {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    padding: 5px 4px;
+    border-radius: 6px;
+    font-size: 12.5px;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+    color: #334155;
+    transition: background 0.15s ease;
+}
+.todo-row:hover {
+    background: rgba(0, 0, 0, 0.02);
+}
+.todo-row i {
+    flex-shrink: 0;
+    width: 13px;
+    font-size: 11px;
+    margin-top: 1px;
+}
+.todo-pending {
+    color: #64748b;
+}
+.todo-pending i {
+    color: #94a3b8;
+}
+.todo-in_progress {
+    color: #1e293b;
+    font-weight: 500;
+}
+.todo-in_progress i {
+    color: #22c55e;
+}
+.todo-completed {
+    color: #94a3b8;
+}
+.todo-completed span {
+    text-decoration: line-through;
+    opacity: 0.85;
+}
+.todo-completed i {
+    color: #22c55e;
+}
+.todo-explanation {
+    margin: 8px 0 0;
+    padding: 6px 4px 0;
+    border-top: 1px solid #e2e8f0;
+    font-size: 11px;
+    line-height: 1.4;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    color: #64748b;
+}
+
+/* Dark mode theme matching */
+.dark .todo-panel {
+    background: #212121;
+    border-color: rgba(255, 255, 255, 0.08);
+    color: #e2e8f0;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+.dark .todo-toggle:hover {
+    background: rgba(255, 255, 255, 0.04);
+}
+.dark .todo-toggle i.fa-list-check {
+    color: #94a3b8;
+}
+.dark .todo-title {
+    color: #e2e8f0;
+}
+.dark .todo-summary {
+    color: #94a3b8;
+}
+.dark .todo-toggle i#todo-chevron {
+    color: #64748b;
+}
+.dark .todo-row {
+    color: #e2e8f0;
+}
+.dark .todo-row:hover {
+    background: rgba(255, 255, 255, 0.03);
+}
+.dark .todo-pending {
+    color: #94a3b8;
+}
+.dark .todo-pending i {
+    color: #64748b;
+}
+.dark .todo-in_progress {
+    color: #f8fafc;
+}
+.dark .todo-in_progress i {
+    color: #4ade80;
+}
+.dark .todo-completed {
+    color: #64748b;
+}
+.dark .todo-completed span {
+    color: #64748b;
+}
+.dark .todo-completed i {
+    color: #4ade80;
+}
+.dark .todo-explanation {
+    color: #94a3b8;
+    border-color: rgba(255, 255, 255, 0.08);
+}
+
+/* Scroll anchoring & layout containment for long conversation performance */
+#chat-messages {
+    overflow-anchor: auto;
+}
+
+.chat-scroll-to-bottom {
+    position: absolute;
+    z-index: 20;
+    left: 50%;
+    bottom: calc(var(--chat-composer-height, 96px) + 12px);
+    display: flex;
+    width: 36px;
+    height: 36px;
+    align-items: center;
+    justify-content: center;
+    transform: translateX(-50%);
+    border: 1px solid #e2e8f0;
+    border-radius: 9999px;
+    background: #fff;
+    color: #64748b;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.14);
+    cursor: pointer;
+    transition: color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+}
+.chat-scroll-to-bottom.hidden {
+    display: none;
+}
+.chat-scroll-to-bottom:hover {
+    color: #16a34a;
+    transform: translateX(-50%) scale(1.05);
+}
+.chat-scroll-to-bottom:focus-visible {
+    outline: 2px solid #35a85b;
+    outline-offset: 2px;
+}
+.dark .chat-scroll-to-bottom {
+    border-color: rgba(255, 255, 255, 0.15);
+    background: #2a2a2a;
+    color: #94a3b8;
+}
+.dark .chat-scroll-to-bottom:hover {
+    color: #4ade80;
+}
+.msg-content, .agent-step {
+    contain: layout style;
+}

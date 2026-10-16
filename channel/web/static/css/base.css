@@ -106,6 +106,7 @@
 /* Chat view is split horizontally: conversation + workspace panel */
 #view-chat.active { flex-direction: row; }
 .chat-main {
+    position: relative;
     flex: 1;
     min-width: 0;
     display: flex;

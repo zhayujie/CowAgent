@@ -627,11 +627,13 @@ function _reattachStream(sid) {
 }
 
 function switchSession(newSessionId, agentId) {
+    const previousAgentId = activeAgentId;
     if (agentId && agentId !== activeAgentId) {
         activeAgentId = agentId;
         localStorage.setItem('cow_active_agent', activeAgentId);
     }
-    if (newSessionId === sessionId) {
+    if (newSessionId === sessionId && previousAgentId === activeAgentId) {
+        renderWebTodoPanel();
         if (currentView !== 'chat') navigateTo('chat');
         renderComposerIdentity();
         return;
@@ -648,6 +650,7 @@ function switchSession(newSessionId, agentId) {
     // Switching back re-attaches and resumes live streaming.
 
     sessionId = newSessionId;
+    renderWebTodoPanel();
     updateEditButtonsState();
     localStorage.setItem(activeSessionStorageKey(), sessionId);
     refreshWorkspaceSelector();
@@ -775,6 +778,7 @@ function deleteSession(sid, agentId) {
             .then(r => r.json())
             .then(data => {
                 if (data.status !== 'success') return;
+                deleteWebTodoSession(owner, sid);
                 if (!deletingCurrent) {
                     loadSessionList();
                     return;

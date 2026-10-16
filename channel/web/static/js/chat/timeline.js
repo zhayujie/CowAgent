@@ -159,7 +159,9 @@ function _timelineFindBubble(seq) {
 function _timelineSetScroll(y) {
     if (Math.abs(messagesDiv.scrollTop - y) < 0.5) return;
     _programmaticScroll = true;
+    _programmaticScrollTop = y;
     messagesDiv.scrollTop = y;
+    _programmaticScrollTop = messagesDiv.scrollTop;
     _lastScrollTop = messagesDiv.scrollTop;
 }
 
@@ -180,7 +182,7 @@ function _timelineGlideTo(el, landOffset) {
     _autoScrollEnabled = false;
     // A session opened just now still has bottom re-pins queued; they would
     // yank the view back down once the glide lands.
-    historyPinToken++;
+    cancelChatScrollForNavigation();
     // Freshly prepended bubbles keep growing for a few frames. Scroll anchoring
     // would answer each growth with a scroll of its own, after ours, and the
     // two tug the view back and forth; the glide already tracks the target.

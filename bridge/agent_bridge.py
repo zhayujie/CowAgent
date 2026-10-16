@@ -1748,6 +1748,16 @@ class AgentBridge:
 
             writer = StepWriter(write_reply, skip_query=pre_persisted) if session_id else None
 
+            def bind_executor(executor):
+                # Capture this turn's owner, never the speaker's workspace or
+                # mutable attributes on a cached runtime. Only this executor is
+                # authorized; spawned children remain unbound.
+                executor.bind_todo_owner(
+                    run_store, session_id, resolved_agent_id, run_id
+                )
+                if writer is not None:
+                    writer.bind(executor)
+
             def on_run_event(event):
                 # Store the step before announcing it: a listener hearing
                 # turn_end may rely on the step being in the transcript.
@@ -1779,7 +1789,7 @@ class AgentBridge:
                     # waiting on this run, so an empty answer stays empty and
                     # the scheduler sends no message at all.
                     allow_empty_response=bool(context and context.get("is_scheduled_task")),
-                    on_executor=writer.bind if writer is not None else None,
+                    on_executor=bind_executor,
                 )
             except Exception:
                 # Keep the steps finished before the failure.

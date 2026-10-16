@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useCallback, useState } from 'react'
 import {
-  ChevronUp,
+  ChevronDown,
   Loader2,
   FolderOpen,
   Clock,
@@ -14,6 +14,9 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import MessageBubble from '../components/MessageBubble'
 import ChatInput, { type ChatInputHandle } from '../components/ChatInput'
 import ChatTimeline from '../components/ChatTimeline'
+import TodoPanel from '../components/TodoPanel'
+import { todoOwner } from '../store/chatStore'
+import { todoScope, useTodoStore } from '../store/todoStore'
 import { useTimelineStore } from '../store/timelineStore'
 import { TeamChatModal } from '../components/NewChatMenu'
 import { product } from '@product'
@@ -25,13 +28,14 @@ import { useSessionStore, sessionOwner } from '../store/sessionStore'
 import { useAgentStore } from '../store/agentStore'
 import { useWorkspaceStore } from '../store/workspaceStore'
 import { startNewChat } from '../lib/newChat'
+import { followingAfterUserScroll, shouldApplyBottomScroll, shouldFollowContentChange, shouldShowScrollToBottom } from '../lib/chatScroll'
 
 interface ChatPageProps {
   baseUrl: string
 }
 
 // Welcome-screen suggestion cards (aligned with the web console: 6 cards).
-// `send` overrides the text dropped into the input (e.g. show "查看全部命令"
+// `send` overrides the text dropped into the input (e.g. show "View all commands"
 // but fill "/help"); otherwise the card's *_text is used.
 // Icon + accent color per card, aligned with the web console palette.
 const SUGGESTIONS: {
@@ -78,6 +82,9 @@ const ChatPage: React.FC<ChatPageProps> = ({ baseUrl }) => {
   const loadSessions = useSessionStore((s) => s.loadSessions)
   const activeAgentId = useAgentStore((s) => s.activeAgentId)
 
+  const defaultAgentId = useAgentStore((s) => s.defaultAgentId)
+  const planScope = todoScope(todoOwner(activeId), activeId)
+  const todoSnapshot = useTodoStore(s => planScope ? s.snapshots[planScope] : undefined)
   const session = useChatStore((s) => s.sessions[activeId])
   const send = useChatStore((s) => s.send)
   const cancel = useChatStore((s) => s.cancel)
@@ -92,9 +99,15 @@ const ChatPage: React.FC<ChatPageProps> = ({ baseUrl }) => {
 
   const messages = session?.messages ?? []
   const isStreaming = session?.isStreaming ?? false
+  const isEmpty = messages.length === 0
 
   const scrollRef = useRef<HTMLDivElement>(null)
-  const bottomRef = useRef<HTMLDivElement>(null)
+  const followBottomRef = useRef(true)
+  const userScrollDirectionRef = useRef<'up' | 'down' | 'scrollbar' | null>(null)
+  const touchStartYRef = useRef<number | null>(null)
+  const programmaticScrollRef = useRef(false)
+  const programmaticScrollTopRef = useRef<number | null>(null)
+  const contentRef = useRef<HTMLDivElement>(null)
   const inputResetRef = useRef<ChatInputHandle>(null)
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -156,21 +169,75 @@ const ChatPage: React.FC<ChatPageProps> = ({ baseUrl }) => {
     wsOnSessionSwitch(activeId)
   }, [activeId, wsOnSessionSwitch])
 
-  const scrollToBottom = useCallback((smooth = true) => {
-    // Defer to the next frame so we read the height *after* the new content has
-    // been laid out (markdown/streaming renders a frame later than the effect).
-    requestAnimationFrame(() => {
-      const el = scrollRef.current
-      if (!el) return
-      // Smooth animations get interrupted by high-frequency streaming updates
-      // and never catch up, so jump instantly while following the stream.
-      if (smooth) {
-        bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-      } else {
-        el.scrollTop = el.scrollHeight
-      }
-    })
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false)
+  const scrollFrameRef = useRef<number | null>(null)
+  const previousScrollTopRef = useRef(0)
+  const scrollSessionRef = useRef('')
+  const bottomScrollRef = useRef<() => void>(() => {})
+
+  const updateScrollButton = useCallback((el: HTMLDivElement, following = followBottomRef.current) => {
+    setShowScrollToBottom(shouldShowScrollToBottom(following, {
+      scrollTop: el.scrollTop,
+      scrollHeight: el.scrollHeight,
+      clientHeight: el.clientHeight,
+    }))
   }, [])
+
+  const cancelQueuedScroll = useCallback(() => {
+    if (scrollFrameRef.current !== null) {
+      cancelAnimationFrame(scrollFrameRef.current)
+      scrollFrameRef.current = null
+    }
+  }, [])
+
+  const scrollToBottom = useCallback((force = false) => {
+    const el = scrollRef.current
+    if (force) {
+      followBottomRef.current = true
+      useTimelineStore.getState().setJumping(false)
+    }
+    if (!el || (!force && (!followBottomRef.current || useTimelineStore.getState().jumping))) {
+      if (el) updateScrollButton(el)
+      return
+    }
+    if (force) cancelQueuedScroll()
+    if (scrollFrameRef.current !== null) return
+    const sid = activeId
+    const apply = () => {
+      scrollFrameRef.current = null
+      const current = scrollRef.current
+      if (!current || !shouldApplyBottomScroll({
+        following: followBottomRef.current,
+        jumping: useTimelineStore.getState().jumping,
+        currentSession: scrollSessionRef.current,
+        scheduledSession: sid,
+      })) {
+        if (current) updateScrollButton(current)
+        return
+      }
+      const target = Math.max(0, current.scrollHeight - current.clientHeight)
+      if (Math.abs(current.scrollTop - target) > 1) {
+        programmaticScrollRef.current = true
+        programmaticScrollTopRef.current = target
+        current.scrollTop = target
+      }
+      previousScrollTopRef.current = current.scrollTop
+      updateScrollButton(current)
+    }
+    if (force) {
+      const target = Math.max(0, el.scrollHeight - el.clientHeight)
+      if (Math.abs(el.scrollTop - target) > 1) {
+        programmaticScrollRef.current = true
+        programmaticScrollTopRef.current = target
+        el.scrollTop = target
+      }
+      previousScrollTopRef.current = el.scrollTop
+      updateScrollButton(el)
+      return
+    }
+    scrollFrameRef.current = requestAnimationFrame(apply)
+  }, [activeId, cancelQueuedScroll, updateScrollButton])
+  bottomScrollRef.current = () => scrollToBottom(true)
 
   // Snap to the bottom instantly when switching sessions (no top-to-bottom animation).
   // History may load a frame later, so keep snapping instantly until content arrives.
@@ -179,13 +246,40 @@ const ChatPage: React.FC<ChatPageProps> = ({ baseUrl }) => {
   // when an older history page is prepended above the reader.
   const lastIdRef = useRef<string | undefined>(undefined)
   const pendingSnapRef = useRef(false)
-  // True while we should keep the view pinned to the bottom (e.g. during
-  // streaming). Cleared when the user scrolls up to read earlier messages.
-  const followBottomRef = useRef(true)
+  // Follow intent changes only from user scrolling or explicit return-to-bottom.
   // Tracks the previous streaming state so we can do one final snap to the
   // bottom right when streaming ends (the last chunk of a long command output
   // often lands together with isStreaming flipping to false).
   const wasStreamingRef = useRef(false)
+
+  // The task card and input occupy layout space. Keep an already-following
+  // conversation pinned when their height changes, without moving a reader.
+  useEffect(() => {
+    const viewport = scrollRef.current
+    if (!viewport) return
+    let observedContent: HTMLDivElement | null = null
+    const observer = new ResizeObserver(() => {
+      if (shouldFollowContentChange(followBottomRef.current, useTimelineStore.getState().jumping)) scrollToBottom()
+      else updateScrollButton(viewport)
+    })
+    observer.observe(viewport)
+    const syncContent = () => {
+      const content = contentRef.current
+      if (content === observedContent) return
+      if (observedContent) observer.unobserve(observedContent)
+      observedContent = content
+      if (content) observer.observe(content)
+    }
+    syncContent()
+    const mutation = new MutationObserver(syncContent)
+    mutation.observe(viewport, { childList: true, subtree: true })
+    return () => {
+      mutation.disconnect()
+      observer.disconnect()
+      cancelQueuedScroll()
+    }
+  }, [cancelQueuedScroll, scrollToBottom, updateScrollButton])
+
   useEffect(() => {
     const el = scrollRef.current
     if (!el) return
@@ -193,9 +287,13 @@ const ChatPage: React.FC<ChatPageProps> = ({ baseUrl }) => {
     const lastId = messages[messages.length - 1]?.id
     if (lastSessionRef.current !== activeId) {
       lastSessionRef.current = activeId
+      scrollSessionRef.current = activeId
       lastIdRef.current = lastId
       pendingSnapRef.current = true
       followBottomRef.current = true
+      previousScrollTopRef.current = el.scrollTop
+      cancelQueuedScroll()
+      setShowScrollToBottom(false)
     }
 
     if (pendingSnapRef.current) {
@@ -211,25 +309,11 @@ const ChatPage: React.FC<ChatPageProps> = ({ baseUrl }) => {
     // A message-navigator jump owns the scroll position until it lands.
     if (useTimelineStore.getState().jumping) return
 
-    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 160
-    // Follow the bottom when: a new message arrived, the user is already near
-    // the bottom, or we're streaming and the user hasn't scrolled up. This
-    // keeps long command/streaming output (where length is unchanged but the
-    // content keeps growing) glued to the latest line.
-    // One final snap right when streaming ends, so the tail of a long command
-    // output isn't left scrolled off-screen.
     const justFinished = wasStreamingRef.current && !isStreaming
     wasStreamingRef.current = isStreaming
-
-    const following = isStreaming && followBottomRef.current
-    if (grew || nearBottom || following || (justFinished && followBottomRef.current)) {
-      // Instant jump while streaming/new content (smooth animations get
-      // interrupted by rapid updates and never reach the bottom); smooth only
-      // for a lone increment when the user is already sitting near the bottom.
-      const smooth = nearBottom && !following && !grew && !justFinished
-      scrollToBottom(smooth)
-    }
-  }, [messages, activeId, isStreaming, scrollToBottom])
+    if (grew || isStreaming || justFinished || followBottomRef.current) scrollToBottom()
+    else updateScrollButton(el)
+  }, [messages, activeId, isStreaming, cancelQueuedScroll, scrollToBottom, updateScrollButton])
 
   const handleSend = useCallback(
     async (text: string, attachments: Attachment[]) => {
@@ -293,33 +377,78 @@ const ChatPage: React.FC<ChatPageProps> = ({ baseUrl }) => {
   // so a scroll triggered on message change fires before the final height is
   // known. Re-scroll once media loads, but only while following the bottom.
   const handleMediaLoad = useCallback(() => {
-    if (followBottomRef.current && !useTimelineStore.getState().jumping) scrollToBottom(false)
-  }, [scrollToBottom])
+      if (shouldFollowContentChange(followBottomRef.current, useTimelineStore.getState().jumping)) scrollToBottom()
+    }, [scrollToBottom])
+
+  const handleUserScrollIntent = useCallback((direction: 'up' | 'down' | 'scrollbar') => {
+    userScrollDirectionRef.current = direction
+    if (direction === 'up') {
+      followBottomRef.current = false
+      cancelQueuedScroll()
+      const el = scrollRef.current
+      if (el) updateScrollButton(el, false)
+    } else {
+      const el = scrollRef.current
+      if (el) {
+        if (el.scrollHeight - el.scrollTop - el.clientHeight <= 48) followBottomRef.current = true
+        updateScrollButton(el)
+      }
+    }
+  }, [cancelQueuedScroll, updateScrollButton])
 
   const handleScroll = useCallback(
     async (e: React.UIEvent<HTMLDivElement>) => {
       const el = e.currentTarget
-      // Track whether the user wants to stay pinned to the bottom: scrolling up
-      // pauses auto-follow; returning near the bottom resumes it.
-      followBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 160
+      const intent = userScrollDirectionRef.current
+      if (programmaticScrollRef.current && intent === null) {
+        programmaticScrollRef.current = false
+        programmaticScrollTopRef.current = null
+      } else if (intent !== null) {
+        const direction = intent === 'scrollbar'
+          ? (el.scrollTop < previousScrollTopRef.current - 1 ? 'up' : el.scrollTop > previousScrollTopRef.current + 1 ? 'down' : null)
+          : intent
+        if (direction !== null) {
+          followBottomRef.current = followingAfterUserScroll(followBottomRef.current, direction, {
+            scrollTop: el.scrollTop, scrollHeight: el.scrollHeight, clientHeight: el.clientHeight,
+          })
+        }
+        if (!followBottomRef.current) cancelQueuedScroll()
+        programmaticScrollRef.current = false
+        programmaticScrollTopRef.current = null
+      }
+      userScrollDirectionRef.current = null
+      previousScrollTopRef.current = el.scrollTop
+      updateScrollButton(el)
       const s = useChatStore.getState().sessions[activeId]
+      // Explicit user input takes ownership from an in-flight timeline jump.
+      if (intent !== null && useTimelineStore.getState().jumping) {
+        cancelQueuedScroll()
+        useTimelineStore.getState().setJumping(false)
+      }
       // A navigator jump loads the pages it needs itself.
       if (useTimelineStore.getState().jumping) return
       if (el.scrollTop < 40 && s?.historyHasMore && !loadingMore && !isStreaming) {
         setLoadingMore(true)
         const prevHeight = el.scrollHeight
         await loadHistory(activeId, s.historyPage + 1)
-        requestAnimationFrame(() => {
-          // preserve scroll position after prepending older messages
-          el.scrollTop = el.scrollHeight - prevHeight
-          setLoadingMore(false)
-        })
+          requestAnimationFrame(() => {
+            // Preserve scroll position after prepending older messages. This is
+            // layout compensation, not a new user scroll intent.
+            const target = Math.max(0, el.scrollHeight - prevHeight)
+            if (Math.abs(el.scrollTop - target) > 1) {
+              programmaticScrollRef.current = true
+              programmaticScrollTopRef.current = target
+              el.scrollTop = target
+            }
+            previousScrollTopRef.current = el.scrollTop
+            updateScrollButton(el)
+            setLoadingMore(false)
+          })
       }
     },
-    [activeId, loadHistory, loadingMore, isStreaming]
+    [activeId, cancelQueuedScroll, loadHistory, loadingMore, isStreaming, updateScrollButton]
   )
 
-  const isEmpty = messages.length === 0
   // A sent question only gets its seq once the turn is persisted, which leaves
   // the length unchanged, so the navigator keys on the persisted seqs too.
   const persistedUserSeqs = messages.filter((m) => m.role === 'user' && m.userSeq != null).length
@@ -338,7 +467,29 @@ const ChatPage: React.FC<ChatPageProps> = ({ baseUrl }) => {
       {!isEmpty && (
         <ChatTimeline sessionId={activeId} scrollRef={scrollRef} revision={timelineRevision} />
       )}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto" onScroll={handleScroll}>
+      <div
+        ref={scrollRef}
+        className="relative min-h-0 flex-1 overflow-y-auto"
+        onScroll={handleScroll}
+        onWheel={e => { if (e.deltaY < 0) handleUserScrollIntent('up'); else if (e.deltaY > 0) handleUserScrollIntent('down') }}
+        onTouchStart={e => { touchStartYRef.current = e.touches[0]?.clientY ?? null }}
+        onTouchMove={e => {
+          const start = touchStartYRef.current
+          const current = e.touches[0]?.clientY
+          if (start !== null && current !== undefined && Math.abs(current - start) > 2) {
+            handleUserScrollIntent(current > start ? 'up' : 'down')
+          }
+        }}
+        onTouchEnd={() => { touchStartYRef.current = null }}
+        onKeyDown={e => {
+          if (['ArrowUp', 'PageUp', 'Home'].includes(e.key)) handleUserScrollIntent('up')
+          else if (['ArrowDown', 'PageDown', 'End', ' '].includes(e.key)) handleUserScrollIntent('down')
+        }}
+        onPointerDown={e => {
+          const el = scrollRef.current
+          if (el && e.target === el && e.clientX >= el.getBoundingClientRect().right - 16) handleUserScrollIntent('scrollbar')
+        }}
+      >
         {loadingMore && (
           <div className="flex items-center justify-center py-3 text-content-tertiary">
             <Loader2 size={16} className="animate-spin" />
@@ -385,7 +536,7 @@ const ChatPage: React.FC<ChatPageProps> = ({ baseUrl }) => {
             )}
           </div>
         ) : (
-          <div className="py-3 max-w-3xl mx-auto">
+          <div ref={contentRef} className="py-3 max-w-3xl mx-auto">
             {messages.map((msg, i) =>
               msg.kind === 'divider' ? (
                 <div key={msg.id} className="flex items-center gap-3 px-6 py-3 text-content-tertiary">
@@ -420,23 +571,34 @@ const ChatPage: React.FC<ChatPageProps> = ({ baseUrl }) => {
                 </div>
               )
             )}
-            <div ref={bottomRef} />
           </div>
+        )}
+        {showScrollToBottom && (
+          <button
+            type="button"
+            title={t('chat_scroll_to_bottom')}
+            aria-label={t('chat_scroll_to_bottom')}
+            onClick={() => bottomScrollRef.current()}
+            className="sticky bottom-3 z-20 mx-auto -mt-9 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-default bg-surface text-content-secondary shadow-md transition-colors hover:bg-surface-2 hover:text-content focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+          >
+            <ChevronDown size={16} aria-hidden="true" />
+          </button>
         )}
       </div>
 
-      {/* Jump-to-bottom affordance could go here in a later pass */}
-
-      <ChatInput
-        onSend={handleSend}
-        onNewChat={handleNewChat}
-        onStop={handleStop}
-        onClearContext={handleClearContext}
-        isStreaming={isStreaming}
-        sessionId={activeId}
-        onAdjustContext={handleAdjustContext}
-        ref={inputResetRef}
-      />
+      <div className="shrink-0">
+        <ChatInput
+          aboveInput={todoSnapshot?.todos.length ? <TodoPanel snapshot={todoSnapshot} /> : undefined}
+          onSend={handleSend}
+          onNewChat={handleNewChat}
+          onStop={handleStop}
+          onClearContext={handleClearContext}
+          isStreaming={isStreaming}
+          sessionId={activeId}
+          onAdjustContext={handleAdjustContext}
+          ref={inputResetRef}
+        />
+      </div>
 
       <TeamChatModal
         open={teamOpen}

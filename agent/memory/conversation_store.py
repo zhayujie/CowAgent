@@ -71,6 +71,21 @@ CREATE TABLE IF NOT EXISTS messages (
 );
 """
 
+_TODO_SNAPSHOTS_DDL = """
+CREATE TABLE IF NOT EXISTS todo_snapshots (
+    agent_id     TEXT    NOT NULL DEFAULT '',
+    session_id   TEXT    NOT NULL,
+    version      INTEGER NOT NULL,
+    run_id       TEXT    NOT NULL,
+    tool_call_id TEXT    NOT NULL,
+    todos_json   TEXT    NOT NULL,
+    explanation  TEXT    NOT NULL DEFAULT '',
+    created_at   INTEGER NOT NULL,
+    PRIMARY KEY (agent_id, session_id, version),
+    UNIQUE (agent_id, session_id, run_id, tool_call_id)
+);
+"""
+
 # Indexes live apart from table creation because on a pre-global database the
 # tables already exist without ``agent_id``; the column is added by ``_migrate``
 # first, and only then can these indexes reference it. Creating them here would
@@ -912,6 +927,80 @@ class ConversationStore:
             finally:
                 conn.close()
 
+    def commit_todo_snapshot(
+        self, session_id: str, run_id: str, tool_call_id: str,
+        todos: List[Dict[str, Any]], explanation: str = "",
+    ) -> int:
+        """Commit a complete replacement, returning its session-local version.
+
+        Retries of the same run/call must carry the same payload. The SQLite
+        write lock covers session existence, retry detection and version
+        allocation, including across independent store handles.
+        """
+        todos_json = json.dumps(
+            todos, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+            allow_nan=False,
+        )
+        with self._lock:
+            conn = self._connect()
+            try:
+                with conn:
+                    conn.execute("BEGIN IMMEDIATE")
+                    aid = self._agent_id
+                    if conn.execute(
+                        "SELECT 1 FROM sessions WHERE agent_id = ? AND session_id = ?",
+                        (aid, session_id),
+                    ).fetchone() is None:
+                        raise ValueError("Cannot commit todo snapshot: session does not exist")
+                    previous = conn.execute(
+                        "SELECT version, todos_json, explanation FROM todo_snapshots "
+                        "WHERE agent_id = ? AND session_id = ? AND run_id = ? AND tool_call_id = ?",
+                        (aid, session_id, run_id, tool_call_id),
+                    ).fetchone()
+                    if previous is not None:
+                        if previous[1:] != (todos_json, explanation):
+                            raise ValueError("Conflicting todo snapshot for the same run/tool call")
+                        return previous[0]
+                    version = conn.execute(
+                        "SELECT COALESCE(MAX(version), 0) + 1 FROM todo_snapshots "
+                        "WHERE agent_id = ? AND session_id = ?",
+                        (aid, session_id),
+                    ).fetchone()[0]
+                    conn.execute(
+                        "INSERT INTO todo_snapshots "
+                        "(agent_id, session_id, version, run_id, tool_call_id, todos_json, explanation, created_at) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                        (aid, session_id, version, run_id, tool_call_id, todos_json,
+                         explanation, int(time.time())),
+                    )
+                    return version
+            finally:
+                conn.close()
+
+    def get_todo_snapshot(self, session_id: str) -> Optional[Dict[str, Any]]:
+        """Return the latest complete snapshot, or None when none is stored.
+
+        Context clearing, message deletion and run deletion preserve snapshots.
+        Session deletion and retention cleanup remove them.
+        """
+        with self._lock:
+            conn = self._connect()
+            try:
+                row = conn.execute(
+                    "SELECT version, run_id, tool_call_id, todos_json, explanation, created_at "
+                    "FROM todo_snapshots WHERE agent_id = ? AND session_id = ? "
+                    "ORDER BY version DESC LIMIT 1",
+                    (self._agent_id, session_id),
+                ).fetchone()
+            finally:
+                conn.close()
+        if row is None:
+            return None
+        return {
+            "version": row[0], "run_id": row[1], "tool_call_id": row[2],
+            "todos": json.loads(row[3]), "explanation": row[4], "created_at": row[5],
+        }
+
     def clear_context(self, session_id: str) -> int:
         """
         Set the context boundary to after the current last message.
@@ -1021,6 +1110,10 @@ class ConversationStore:
                     aid = self._agent_id
                     conn.execute(
                         "DELETE FROM messages WHERE agent_id = ? AND session_id = ?",
+                        (aid, session_id),
+                    )
+                    conn.execute(
+                        "DELETE FROM todo_snapshots WHERE agent_id = ? AND session_id = ?",
                         (aid, session_id),
                     )
                     conn.execute(
@@ -1253,6 +1346,10 @@ class ConversationStore:
                     for (sid,) in stale:
                         conn.execute(
                             "DELETE FROM messages WHERE agent_id = ? AND session_id = ?",
+                            (aid, sid),
+                        )
+                        conn.execute(
+                            "DELETE FROM todo_snapshots WHERE agent_id = ? AND session_id = ?",
                             (aid, sid),
                         )
                         conn.execute(
@@ -2379,6 +2476,8 @@ class ConversationStore:
             conn.executescript(_DDL)
             conn.commit()
             self._migrate(conn)
+            conn.executescript(_TODO_SNAPSHOTS_DDL)
+            conn.commit()
             # Runs are auxiliary. Their setup is isolated so a legacy table, a
             # half-applied upgrade or any other surprise degrades run tracking
             # instead of taking conversation history offline.

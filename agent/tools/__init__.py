@@ -24,6 +24,9 @@ from agent.tools.agent_delegate.agent_delegate import AgentDelegateTool
 # Import sub agent tools
 from agent.tools.subagent.subagent import SubagentTool
 
+# Import update plan tools
+from agent.tools.todo_write.todo_write_tool import TodoWriteTool
+
 # Import tools with optional dependencies
 _PIP_PACKAGES = {
     "dotenv": "python-dotenv>=1.0.0",
@@ -158,6 +161,7 @@ __all__ = [
     'MemoryGetTool',
     'EvolutionUndoTool',
     'SubagentTool',
+    'TodoWriteTool',
     'AgentDelegateTool',
     'EnvConfig',
     'SchedulerTool',

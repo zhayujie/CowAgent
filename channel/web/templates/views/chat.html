@@ -78,21 +78,26 @@
                         </div>
                     </div>
 
-                    <!-- Scroll-to-bottom FAB -->
-                    <button id="scroll-to-bottom-btn"
-                            class="hidden absolute right-5 bottom-[80px] z-10
-                                   w-9 h-9 rounded-full shadow-lg
-                                   bg-white dark:bg-[#2A2A2A] border border-slate-200 dark:border-white/15
-                                   text-slate-500 dark:text-slate-400 hover:text-primary-500 dark:hover:text-primary-400
-                                   flex items-center justify-center cursor-pointer transition-all duration-200
-                                   hover:shadow-xl hover:scale-105"
-                            onclick="_autoScrollEnabled = true; scrollChatToBottom(true);">
-                        <i class="fas fa-chevron-down text-sm"></i>
+                    <!-- Scroll-to-bottom control follows the entire composer stack. -->
+                    <button id="scroll-to-bottom-btn" type="button" class="chat-scroll-to-bottom hidden" data-i18n-title="chat_scroll_to_bottom" data-i18n-aria-label="chat_scroll_to_bottom" onclick="scrollChatToBottom(true)">
+                        <i class="fas fa-chevron-down" aria-hidden="true"></i>
                     </button>
 
                     <!-- Chat Input -->
-                    <div class="flex-shrink-0 border-t border-slate-200 dark:border-white/10 bg-white dark:bg-[#1A1A1A] px-4 py-3">
-                        <div class="max-w-3xl mx-auto">
+                    <div id="chat-composer" class="flex-shrink-0 border-t border-slate-200 dark:border-white/10 bg-white dark:bg-[#1A1A1A] px-4 py-3">
+                        <div class="max-w-3xl mx-auto todo-composer-anchor">
+                            <section id="todo-panel" class="todo-panel" hidden aria-labelledby="todo-title">
+                                <button id="todo-toggle" type="button" class="todo-toggle" onclick="toggleWebTodoPanel()" aria-expanded="false" aria-controls="todo-body">
+                                    <i class="fas fa-list-check" aria-hidden="true"></i>
+                                    <span id="todo-title" class="todo-title"></span>
+                                    <span id="todo-summary" class="todo-summary"></span>
+                                    <i id="todo-chevron" class="fas fa-chevron-right" aria-hidden="true"></i>
+                                </button>
+                                <div id="todo-body" class="todo-body" hidden>
+                                    <ul id="todo-list" class="todo-list"></ul>
+                                    <p id="todo-explanation" class="todo-explanation" hidden></p>
+                                </div>
+                            </section>
                             <!-- Composer card: text on top, session controls along the bottom -->
                             <div id="composer-card" class="composer-card">
                                 <!-- Attachment preview: scrolls horizontally above the text -->

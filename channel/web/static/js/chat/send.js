@@ -283,6 +283,7 @@ function startSSE(requestId, loadingEl, timestamp, titleInfo, replayItems, resum
     // bubble by replaying the buffer and then resume live rendering.
     const ownerSession = sessionId;
     const ownerAgent = activeAgentId;
+    const todoOwnerAgent = webTodoOwner();
     const ownerKey = runtimeSessionKey(ownerSession, ownerAgent);
     const isActive = () => ownerSession === sessionId && ownerAgent === activeAgentId;
     sessionActiveRequest[ownerKey] = requestId;
@@ -351,6 +352,7 @@ function startSSE(requestId, loadingEl, timestamp, titleInfo, replayItems, resum
             </div>
         `;
         messagesDiv.appendChild(botEl);
+        refreshChatScrollControls();
         stepsEl = botEl.querySelector('.agent-steps');
         contentEl = botEl.querySelector('.answer-content');
         mediaEl = botEl.querySelector('.media-content');
@@ -385,7 +387,9 @@ function startSSE(requestId, loadingEl, timestamp, titleInfo, replayItems, resum
     // Render one SSE event into the bubble. Used by the live handler and by
     // re-attach replay alike, so both paths produce identical UI.
     function processSSEItem(item) {
-            if (item.type === 'reasoning') {
+            if (item.type === 'todo_update') {
+                applyWebTodoSnapshot(item, todoOwnerAgent, ownerSession);
+            } else if (item.type === 'reasoning') {
                 ensureBotEl();
                 reasoningText += item.content;
                 if (!currentReasoningEl) {
@@ -935,7 +939,9 @@ function startSSE(requestId, loadingEl, timestamp, titleInfo, replayItems, resum
             // and persists, but skip rendering into the now-foreign view. The
             // buffer above still grows so returning to the session can rebuild
             // the bubble and resume live rendering.
-            if (ownerSession !== sessionId) {
+            // Cache todo updates even while this stream belongs to a background session.
+            if (item.type === 'todo_update') applyWebTodoSnapshot(item, todoOwnerAgent, ownerSession);
+            if (!isActive()) {
                 if (item.type === 'stream_end' || item.type === 'error' || item.type === 'resync_required') {
                     done = true;
                     es.close();

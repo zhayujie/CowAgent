@@ -1036,6 +1036,18 @@ class HistoryHandler:
                 until_seq=int(until_seq) if until_seq.lstrip('-').isdigit() else None,
                 max_seq=live["stored_seq"] if live else None,
             )
+            # Latest committed state is independent of the messages in this page.
+            # Subsequent pages never restore an older plan or duplicate the snapshot.
+            if page == 1:
+                from agent.registry import get_agent_registry
+                owner_id = get_agent_registry().get(agent_id).id
+                snapshot = store.get_todo_snapshot(session_id)
+                result["agent_id"] = owner_id
+                result["session_id"] = session_id
+                result["todo_snapshot"] = (
+                    {**snapshot, "agent_id": owner_id, "session_id": session_id}
+                    if snapshot is not None else None
+                )
             if live:
                 messages = result.get("messages") or []
                 last = messages[-1] if messages else {}

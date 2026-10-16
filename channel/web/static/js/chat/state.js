@@ -449,27 +449,74 @@ function resetComposerHeight() {
 // feels like the list "fighting" the user and snapping to the bottom.
 let _autoScrollEnabled = true;
 const _SCROLL_THRESHOLD = 80; // px from bottom to re-enable auto-scroll
-let _programmaticScroll = false; // set while scrollChatToBottom() adjusts scrollTop
+let _programmaticScroll = false;
+let _programmaticScrollTop = null;
 let _lastScrollTop = 0;
+let _userScrollIntent = null;
+let _touchScrollStartY = null;
+
+messagesDiv.addEventListener('wheel', event => {
+    if (event.deltaY < 0) _userScrollIntent = 'up';
+    else if (event.deltaY > 0) _userScrollIntent = 'down';
+}, { passive: true });
+messagesDiv.addEventListener('touchstart', event => {
+    _touchScrollStartY = event.touches[0]?.clientY ?? null;
+}, { passive: true });
+messagesDiv.addEventListener('touchend', event => {
+    const endY = event.changedTouches[0]?.clientY;
+    if (_touchScrollStartY !== null && endY !== undefined) {
+        _userScrollIntent = endY > _touchScrollStartY ? 'up' : endY < _touchScrollStartY ? 'down' : null;
+    }
+    _touchScrollStartY = null;
+}, { passive: true });
+messagesDiv.addEventListener('keydown', event => {
+    if (event.target.closest('input, textarea, select, [contenteditable="true"]')) return;
+    if (['ArrowUp', 'PageUp', 'Home'].includes(event.key) || (event.key === ' ' && event.shiftKey)) _userScrollIntent = 'up';
+    else if (['ArrowDown', 'PageDown', 'End'].includes(event.key) || (event.key === ' ' && !event.shiftKey)) _userScrollIntent = 'down';
+});
+messagesDiv.addEventListener('pointerdown', event => {
+    const rect = messagesDiv.getBoundingClientRect();
+    if (event.target === messagesDiv && event.clientX >= rect.right - 16) _userScrollIntent = 'scrollbar';
+}, { passive: true });
 
 messagesDiv.addEventListener('scroll', () => {
     const scrollTop = messagesDiv.scrollTop;
     const distFromBottom = messagesDiv.scrollHeight - scrollTop - messagesDiv.clientHeight;
-
-    if (_programmaticScroll) {
-        // Our own scroll-to-bottom; don't reinterpret it as user intent.
+    if (_userScrollIntent !== null) {
+        const intent = _userScrollIntent === 'scrollbar'
+            ? (scrollTop < _lastScrollTop - 1 ? 'up' : scrollTop > _lastScrollTop + 1 ? 'down' : null)
+            : _userScrollIntent;
+        if (intent === 'up') {
+            _autoScrollEnabled = false;
+            if (typeof cancelHistoryBottomPins === 'function') cancelHistoryBottomPins();
+        } else if (intent === 'down' && distFromBottom <= _SCROLL_THRESHOLD) {
+            _autoScrollEnabled = true;
+        }
         _programmaticScroll = false;
-    } else if (scrollTop < _lastScrollTop - 1) {
-        // User scrolled up (any amount) -> stop following the stream.
-        _autoScrollEnabled = false;
-    } else if (distFromBottom <= _SCROLL_THRESHOLD) {
-        // User is back near the bottom -> resume auto-scroll.
-        _autoScrollEnabled = true;
+        _programmaticScrollTop = null;
     }
-
+    _userScrollIntent = null;
+    _programmaticScroll = false;
+    _programmaticScrollTop = null;
     _lastScrollTop = scrollTop;
     _updateScrollToBottomBtn();
 });
+
+// Composer/task-panel resizing changes the viewport, not the user's intent.
+// Observe the viewport rather than each message so long conversations stay cheap.
+if (typeof ResizeObserver !== 'undefined') {
+    let previousWidth = messagesDiv.clientWidth;
+    let previousHeight = messagesDiv.clientHeight;
+    const chatViewportObserver = new ResizeObserver(() => {
+        const width = messagesDiv.clientWidth;
+        const height = messagesDiv.clientHeight;
+        if (width === previousWidth && height === previousHeight) return;
+        previousWidth = width;
+        previousHeight = height;
+        refreshChatScrollControls();
+    });
+    chatViewportObserver.observe(messagesDiv);
+}
 
 // Intercept internal navigation links in chat messages
 messagesDiv.addEventListener('click', (e) => {

@@ -395,6 +395,7 @@ class _ScriptedAgent:
 
     def run_stream(self, user_message, on_event=None, on_executor=None, **_):
         executor = SimpleNamespace(messages=list(self.messages), run_user_message=None)
+        executor.bind_todo_owner = lambda *owner: AgentStreamExecutor.bind_todo_owner(executor, *owner)
         executor.run_start_index = lambda: AgentStreamExecutor.run_start_index(executor)
         if on_executor:
             on_executor(executor)
@@ -476,3 +477,39 @@ def test_bridge_finished_turn_has_no_run_state(bridge_run):
     turns = bridge_run.store.load_history_page("s1")["messages"]
     assert turns[-1]["content"] == "answer"
     assert "run_state" not in turns[-1]
+
+
+def test_bridge_binds_todo_owner_before_executor_runs(bridge_run):
+    from agent.tools.todo_write.todo_write_tool import TodoWriteTool
+    from common.utils import current_agent_run_id
+
+    seen = []
+
+    class TodoScript(_Script):
+        def play(self, executor, query, on_event):
+            store, sid, agent_id, run_id = executor._todo_owner
+            assert store is bridge_run.store
+            assert (sid, agent_id) == ("s1", "primary")
+            assert run_id == current_agent_run_id()
+            assert run_id
+            real = AgentStreamExecutor(None, None, "", [TodoWriteTool()])
+            real.bind_todo_owner(store, sid, agent_id, run_id)
+            real._emit_event = lambda kind, data: on_event({"type": kind, "data": data})
+            result = real._execute_tool({
+                "id": "todo-call", "name": "todo_write",
+                "arguments": {"todos": [{"content": "Read source", "status": "in_progress"}]},
+            })
+            assert result["status"] == "success"
+            return super().play(executor, query, on_event)
+
+    def on_event(event):
+        if event["type"] == "todo_update":
+            snapshot = bridge_run.store.get_todo_snapshot("s1")
+            assert snapshot["version"] == event["data"]["version"]
+            seen.append(event["data"])
+
+    bridge_run(TodoScript(_STEPS), on_event=on_event)
+    assert len(seen) == 1
+    assert seen[0]["agent_id"] == "primary"
+    assert seen[0]["session_id"] == "s1"
+    assert seen[0]["tool_call_id"] == "todo-call"

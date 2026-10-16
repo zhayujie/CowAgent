@@ -303,6 +303,10 @@ def _build_tooling_section(tools: List[Any], language: str) -> List[str]:
             "",
             "Tool-calling style:",
             "",
+            "- For tasks with two or more concrete steps, call todo_write before starting work, with one todo per step. "
+            "Begin execution immediately after writing the list; do not end the response after only listing todos. "
+            "Mark each item completed as soon as it is done, and update the complete list when the steps change. "
+            "Skip trivial single-step tasks; do not artificially split a task just to use the tool.",
             "- For multi-step tasks, complex decisions or sensitive operations, briefly explain what you are doing and why, so the user follows key progress",
             "- Never just announce intent and stop: if you say you will do something, actually call the tool in the same turn. A text-only reply ends the turn, so only reply with plain text once the work is genuinely finished",
             "- Keep going until the task is done, then report the result to the user",
@@ -327,6 +331,10 @@ def _build_tooling_section(tools: List[Any], language: str) -> List[str]:
             "",
             "工具调用风格：",
             "",
+            "- 任务包含两个或更多具体步骤时，在开始执行前调用 todo_write 列出待办，每个具体步骤对应一项；"
+            "列完立即开始执行，不要只列待办就结束回复。"
+            "每完成一项就立即标记为 completed，执行过程中发现步骤变化时及时更新完整列表。"
+            "简单的单步任务不必列待办，不要为了使用工具而人为拆分步骤。",
             "- 多步骤任务、复杂决策、敏感操作时，应简要说明当前在做什么、为什么这样做，让用户了解关键进展",
             "- 不要只宣告意图就停下：一旦你说要做某事，就必须在同一轮真正发起工具调用。纯文本回复会立即结束本轮，因此只有在任务真正完成后才用纯文本收尾",
             "- 持续推进直到任务完成，完成后向用户报告结果",

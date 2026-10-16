@@ -110,7 +110,11 @@ function newChat(optimistic = true, inherit = true) {
     // replies still complete and persist.
 
     // Generate a fresh session and persist it so the next page load also starts clean
+    if (typeof cancelChatScrollForNavigation === 'function') cancelChatScrollForNavigation();
     sessionId = generateSessionId();
+    _autoScrollEnabled = true;
+    renderWebTodoPanel();
+    _updateScrollToBottomBtn();
     localStorage.setItem(activeSessionStorageKey(), sessionId);
     refreshWorkspaceSelector();  // a fresh session starts on the default workspace
     refreshSessionSettings();    // ... and on the global model / permission

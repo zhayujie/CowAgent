@@ -132,26 +132,69 @@ function updateSubstepCount(toolEl, count) {
     if (countEl) countEl.textContent = count === 1 ? '1 step' : `${count} steps`;
 }
 
-function scrollChatToBottom(force) {
-    if (force || _autoScrollEnabled) {
-        if (force) _autoScrollEnabled = true;
-        const target = messagesDiv.scrollHeight;
-        // Only flag a programmatic scroll when scrollTop will actually change
-        // (i.e. a scroll event will fire). Otherwise the flag would go stale
-        // and swallow the user's next real scroll-up gesture.
-        if (Math.abs(messagesDiv.scrollTop - target) > 1) {
-            _programmaticScroll = true;
-        }
+let _scrollRafId = null;
+
+function _applyChatBottomScroll() {
+    const target = Math.max(0, messagesDiv.scrollHeight - messagesDiv.clientHeight);
+    // A no-op must not leave a flag that swallows the next user gesture.
+    if (Math.abs(messagesDiv.scrollTop - target) > 1) {
+        _programmaticScroll = true;
+        _programmaticScrollTop = target;
         messagesDiv.scrollTop = target;
-        _lastScrollTop = messagesDiv.scrollTop;
     }
+    _lastScrollTop = messagesDiv.scrollTop;
+    _updateScrollToBottomBtn();
+}
+
+function cancelQueuedChatScroll() {
+    if (_scrollRafId !== null) {
+        cancelAnimationFrame(_scrollRafId);
+        _scrollRafId = null;
+    }
+}
+
+function scrollChatToBottom(force) {
+    if (force) {
+        cancelQueuedChatScroll();
+        _autoScrollEnabled = true;
+        _applyChatBottomScroll();
+        return;
+    }
+
+    if (!_autoScrollEnabled || _scrollRafId !== null) {
+        _updateScrollToBottomBtn();
+        return;
+    }
+    _scrollRafId = requestAnimationFrame(() => {
+        _scrollRafId = null;
+        // User intent may change between scheduling and painting this frame.
+        if (_autoScrollEnabled) _applyChatBottomScroll();
+    });
 }
 
 function _updateScrollToBottomBtn() {
     const btn = document.getElementById('scroll-to-bottom-btn');
     if (!btn) return;
     const distFromBottom = messagesDiv.scrollHeight - messagesDiv.scrollTop - messagesDiv.clientHeight;
-    btn.classList.toggle('hidden', distFromBottom <= _SCROLL_THRESHOLD);
+    btn.classList.toggle('hidden', _autoScrollEnabled || distFromBottom <= _SCROLL_THRESHOLD);
+}
+
+function refreshChatScrollControls() {
+    _updateScrollToBottomBtn();
+    if (!_autoScrollEnabled) return;
+    scrollChatToBottom();
+}
+
+if (typeof ResizeObserver !== 'undefined') {
+    const composer = document.getElementById('chat-composer');
+    if (composer) {
+        new ResizeObserver(() => {
+            const rect = composer.getBoundingClientRect();
+            const chatMain = document.getElementById('chat-main');
+            if (chatMain) chatMain.style.setProperty('--chat-composer-height', `${Math.ceil(rect.height)}px`);
+            refreshChatScrollControls();
+        }).observe(composer);
+    }
 }
 
 function applyHighlighting(container) {
