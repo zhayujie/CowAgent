@@ -73,6 +73,12 @@ def spreadsheet_sheets(file_path, load_workbook):
     try:
         formulas = load_workbook(file_path, read_only=True, data_only=False)
         try:
+            # Some spreadsheet producers leave stale used-range metadata. In
+            # read-only mode those bounds silently clip real XML cells, so let
+            # both views stream their actual rows/columns before pairing them.
+            for sheet in cached.worksheets:
+                sheet.reset_dimensions()
+                formulas[sheet.title].reset_dimensions()
             yield ((sheet.title, _sheet_rows(sheet, formulas[sheet.title])) for sheet in cached.worksheets)
         finally:
             formulas.close()
