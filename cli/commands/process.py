@@ -13,13 +13,7 @@ from cli.utils import _ensure_project_on_path, get_project_root, load_config_jso
 _IS_WIN = sys.platform == "win32"
 
 
-def _is_terminal_only() -> bool:
-    """Whether terminal is the only configured channel.
-
-    Terminal needs an interactive stdin/tty, which is incompatible with the
-    background daemon mode (stdout/stdin detached). When terminal is the only
-    channel, `start` must run in the foreground so it can own the tty.
-    """
+def _configured_channels() -> list[str]:
     channel = load_config_json().get("channel_type", "")
     if isinstance(channel, str):
         names = [c.strip() for c in channel.split(",") if c.strip()]
@@ -27,7 +21,17 @@ def _is_terminal_only() -> bool:
         names = [str(c).strip() for c in channel if str(c).strip()]
     else:
         names = []
-    return names == ["terminal"]
+    return names
+
+
+def _is_terminal_only() -> bool:
+    """Whether terminal is the only configured channel.
+
+    Terminal needs an interactive stdin/tty, which is incompatible with the
+    background daemon mode (stdout/stdin detached). When terminal is the only
+    channel, `start` must run in the foreground so it can own the tty.
+    """
+    return _configured_channels() == ["terminal"]
 
 
 def _get_pid_file():
@@ -150,6 +154,8 @@ def start(foreground, no_logs):
         with open(log_file, "a") as log:
             proc = subprocess.Popen(
                 [python, app_py],
+                # A terminal channel exits the whole service on stdin EOF.
+                stdin=None if "terminal" in _configured_channels() else subprocess.DEVNULL,
                 stdout=log,
                 stderr=log,
                 **popen_kwargs,
