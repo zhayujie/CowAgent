@@ -87,10 +87,17 @@ class ChromeLauncher:
         the whole terminate timeout on a process that is already gone.
         """
         if sys.platform == "win32":
-            result = subprocess.run(
-                ["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
-                capture_output=True, text=True, errors="replace",
-            )
+            try:
+                result = subprocess.run(
+                    ["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
+                    capture_output=True, text=True, errors="replace",
+                    timeout=5,
+                )
+            except (OSError, subprocess.SubprocessError):
+                # Same posture as the ps branch below: a probe we cannot
+                # finish must not raise out of terminate/adopt -- treat the
+                # pid as alive so the caller keeps its existing handling.
+                return True
             return f'"{pid}"' in result.stdout
         try:
             os.kill(pid, 0)
