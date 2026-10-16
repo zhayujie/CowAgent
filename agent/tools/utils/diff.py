@@ -205,7 +205,8 @@ def reindent_replacement(matched_text: str, old_text: str, new_text: str) -> str
     Only the first line's indentation is compared; the delta is applied to every
     line so the block's internal structure is preserved.
     """
-    old_first = old_text.split('\n', 1)[0]
+    # Match the outer-newline trimming performed by _build_fuzzy_pattern.
+    old_first = old_text.strip('\n').split('\n', 1)[0]
     old_indent = old_first[:len(old_first) - len(old_first.lstrip())]
     if not old_indent:
         # An unindented old_text never swallows the file's indentation, so
