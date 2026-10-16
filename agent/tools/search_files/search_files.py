@@ -523,6 +523,10 @@ class SearchFiles(BaseTool):
 
     # ------------------------------------------------------------ grep backend
     def _backend_grep(self, opts: "_SearchOptions") -> "_BackendResult":
+        # grep --include matches basenames, so a directory filter would silently
+        # return no matches. Reuse the path-aware fallback for these filters.
+        if "/" in opts.file_glob:
+            return self._backend_python(opts)
         # -H forces filename even for a single-file target; -r recurses; -E = ERE
         # (aligns alternation/quantifier syntax with rg). -n is added only in
         # content mode — mixing it with -c/-l corrupts their output.
