@@ -183,11 +183,12 @@ class SkillManager:
             logger.warning(f"[SkillManager] Failed to load {SKILLS_CONFIG_FILE}: {e}")
         return None
 
-    def _save_skills_config(self):
+    def _save_skills_config(self, *, strict: bool = False):
         """Persist skills_config to custom_dir/skills_config.json.
 
         Written to a temporary file and renamed into place, so a concurrent
         reader sees either the old file or the new one, never a partial write.
+        A failure is logged and swallowed unless ``strict`` is set.
         """
         os.makedirs(self.custom_dir, exist_ok=True)
         tmp_path = os.path.join(
@@ -204,6 +205,8 @@ class SkillManager:
                 os.remove(tmp_path)
             except OSError:
                 pass
+            if strict:
+                raise
 
     def _sync_skills_config(self):
         """
@@ -287,8 +290,17 @@ class SkillManager:
         """
         if name not in self.skills_config:
             raise ValueError(f"skill '{name}' not found in config")
-        self.skills_config[name]["enabled"] = enabled
-        self._save_skills_config()
+        entry = self.skills_config[name]
+        previous = entry.get("enabled")
+        entry["enabled"] = enabled
+        try:
+            self._save_skills_config(strict=True)
+        except Exception:
+            if previous is None:
+                entry.pop("enabled", None)
+            else:
+                entry["enabled"] = previous
+            raise
 
     def get_skills_config(self) -> Dict[str, dict]:
         """
