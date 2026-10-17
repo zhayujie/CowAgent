@@ -324,7 +324,8 @@ def _validate_archive(archive: zipfile.ZipFile) -> dict:
     return manifest
 
 
-def _extract_validated(archive: zipfile.ZipFile, destination: Path) -> None:
+def _extract_validated(archive: zipfile.ZipFile, destination: Path) -> dict:
+    file_modes = {}
     for info in archive.infolist():
         target = destination.joinpath(*PurePosixPath(info.filename).parts)
         if info.is_dir():
@@ -333,14 +334,27 @@ def _extract_validated(archive: zipfile.ZipFile, destination: Path) -> None:
         target.parent.mkdir(parents=True, exist_ok=True)
         with archive.open(info, "r") as source, target.open("wb") as output:
             shutil.copyfileobj(source, output)
+        # Keep staging files readable for config parsing and copying. Apply
+        # archived rwx bits only when publishing the destination's sibling.
+        # DOS archives may have no Unix mode; keep their existing defaults.
+        mode = (info.external_attr >> 16) & 0o777
+        if os.name != "nt" and info.create_system == 3 and mode:
+            file_modes[target] = mode
+        else:
+            file_modes.pop(target, None)
+    return file_modes
 
 
-def _atomic_copy(source: Path, destination: Path, private: bool = False) -> None:
+def _atomic_copy(
+    source: Path, destination: Path, private: bool = False, mode: Optional[int] = None
+) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
     fd, temp_name = tempfile.mkstemp(prefix=destination.name + ".", dir=str(destination.parent))
     os.close(fd)
     try:
         shutil.copy2(str(source), temp_name)
+        if mode is not None and not private:
+            os.chmod(temp_name, mode)
         os.replace(temp_name, str(destination))
         if private:
             try:
@@ -430,7 +444,7 @@ def restore_backup_archive(
     try:
         with zipfile.ZipFile(str(archive_path), "r") as archive:
             manifest = _validate_archive(archive)
-            _extract_validated(archive, temp_dir)
+            file_modes = _extract_validated(archive, temp_dir)
 
         archived_config_path = temp_dir / "data" / "config.json"
         archived_config = {}
@@ -505,7 +519,7 @@ def restore_backup_archive(
                             raise ValueError(
                                 f"unsafe Agent workspace destination: {agent_id}/{relative}"
                             )
-                        _atomic_copy(source, destination)
+                        _atomic_copy(source, destination, mode=file_modes.get(source))
                         restored_files += 1
                         agent_files += 1
                 restored_agents.append(
@@ -519,7 +533,7 @@ def restore_backup_archive(
                     destination = target_workspace / relative
                     if not _is_within(destination, target_workspace):
                         raise ValueError(f"unsafe workspace destination: {relative}")
-                    _atomic_copy(source, destination)
+                    _atomic_copy(source, destination, mode=file_modes.get(source))
                     restored_files += 1
 
         # Publish config only after every workspace file has been validated
