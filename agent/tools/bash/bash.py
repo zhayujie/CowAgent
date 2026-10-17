@@ -319,9 +319,9 @@ SAFETY:
 
             # Check if we need to save full output to temp file
             temp_file_path = None
-            total_bytes = len(output.encode('utf-8'))
+            truncation = truncate_tail(output)
 
-            if total_bytes > DEFAULT_MAX_BYTES:
+            if truncation.truncated:
                 # Save full output to temp file. encoding='utf-8' is required:
                 # the default text-mode encoding is the platform locale (e.g.
                 # cp936/GBK on Chinese Windows), which raises UnicodeEncodeError
@@ -331,8 +331,6 @@ SAFETY:
                     f.write(output)
                     temp_file_path = f.name
 
-            # Apply tail truncation
-            truncation = truncate_tail(output)
             output_text = truncation.content or "(no output)"
 
             # Build result
