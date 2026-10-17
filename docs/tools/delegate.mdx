@@ -83,3 +83,9 @@ Delegation happens between full Agents, so it comes with boundaries:
 | `max_message_chars` | `8000` | The length limit for a single delegation task |
 
 An Agent configured with an empty array, like `"research"` above, can be delegated to but cannot delegate further.
+
+Local delegation requests cancellation when its time budget expires. Cancellation
+is cooperative: an in-flight backend must return to an Agent cancellation
+checkpoint before the call can finish. The target session remains locked until
+that run has finished cleaning up, so a later delegation cannot run concurrently
+against its context. A timed-out call is reported as failed.

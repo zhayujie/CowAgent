@@ -6,6 +6,7 @@ import hashlib
 import threading
 import time
 import uuid
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Mapping, Optional, Tuple
 
@@ -156,6 +157,39 @@ class _DelegateView:
             self.END,
             {"card_id": self.card_id, "agent_id": self.target_id, "status": status},
         )
+
+
+@contextmanager
+def _local_run_deadline(bridge, agent_id, request_id, session_id, seconds):
+    """Cancel cooperatively at the deadline without detaching the running Agent."""
+    from agent.protocol import get_cancel_registry
+
+    registry = get_cancel_registry()
+    default = bridge.agent_registry.default_agent_id
+    key = bridge._cancel_key(agent_id, request_id, default)
+    session_key = bridge._cancel_key(agent_id, session_id, default)
+    if registry.get_event(key) is not None:
+        raise RuntimeError("Delegation request is already running")
+    # The request id was minted for this call. Register before starting the
+    # timer so a slow bridge setup cannot miss an early cancellation.
+    cancelled = registry.register(key, session_id=session_key)
+    expired = threading.Event()
+
+    def expire():
+        expired.set()
+        cancelled.set()  # Only this run's event, never a later registry entry.
+
+    timer = threading.Timer(seconds, expire)
+    timer.daemon = True
+    try:
+        timer.start()
+        yield expired
+    finally:
+        timer.cancel()
+        if timer.ident is not None:
+            timer.join()
+        if registry.get_event(key) is cancelled:
+            registry.unregister(key)
 
 
 @dataclass(frozen=True)
@@ -559,10 +593,13 @@ class AgentDelegateTool(BaseTool):
                 display=display,
             )
         started_at = time.monotonic()
+        timed_out = None
         try:
-            reply = self.agent_bridge.agent_reply(
-                prompt, context=delegated_context, on_event=view.relay
-            )
+            with _local_run_deadline(self.agent_bridge, target.id, request_id,
+                                     session_id, policy.timeout_seconds) as timed_out:
+                reply = self.agent_bridge.agent_reply(
+                    prompt, context=delegated_context, on_event=view.relay
+                )
         except Exception as exc:
             display = format_delegate_result(
                 source.name, target.name, str(exc), status="failed"
@@ -572,10 +609,15 @@ class AgentDelegateTool(BaseTool):
             )
         finally:
             # Whatever happened, the teammate is done speaking.
-            view.close()
+            view.close("failed" if timed_out is not None and timed_out.is_set() else "done")
             lock.release()
         duration = time.monotonic() - started_at
 
+        if timed_out.is_set():
+            message = f"Delegation to '{target.id}' exceeded its {policy.timeout_seconds:g}s time budget"
+            return ToolResult.fail(message, display=format_delegate_result(
+                source.name, target.name, message, status="failed", duration_seconds=duration,
+            ))
         if reply is not None and reply.type == ReplyType.ERROR:
             display = format_delegate_result(
                 source.name, target.name, str(reply.content), status="failed",
