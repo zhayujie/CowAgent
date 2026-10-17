@@ -7,7 +7,9 @@ from email.message import Message
 from io import BytesIO
 from unittest.mock import patch
 
-from agent.tools.mcp.mcp_client import McpClient
+import pytest
+
+from agent.tools.mcp.mcp_client import McpClient, McpToolCallError
 
 
 class _Response:
@@ -101,9 +103,9 @@ def test_does_not_reinitialize_404_without_a_session():
         raise _http_error(request)
 
     with patch("urllib.request.urlopen", side_effect=urlopen):
-        result = client.call_tool("ping", {})
+        with pytest.raises(McpToolCallError, match="HTTP 404"):
+            client.call_tool("ping", {})
 
-    assert "HTTP 404" in result
     assert client._http_session_id is None
 
 

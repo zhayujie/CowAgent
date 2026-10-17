@@ -90,7 +90,11 @@ def _oauth_redirect_uri() -> str:
     return f"{base}/mcp/oauth/callback"
 
 
-class McpToolExecutionError(RuntimeError):
+class McpToolCallError(RuntimeError):
+    """An MCP tool call failed, rather than returning successful text."""
+
+
+class McpToolExecutionError(McpToolCallError):
     """The server executed the tool and reported a failed result."""
 
 
@@ -214,7 +218,7 @@ class McpClient:
             return []
 
     def call_tool(self, name: str, arguments: dict) -> str:
-        """Call a tool and return the result as a string."""
+        """Return successful tool text; raise McpToolCallError when the call fails."""
         try:
             resp = self._send_request("tools/call", {"name": name, "arguments": arguments})
             self._raise_for_rpc_error(resp)
@@ -227,11 +231,11 @@ class McpClient:
             if result.get("isError"):
                 raise McpToolExecutionError(text or "MCP tool execution failed")
             return text
-        except McpToolExecutionError:
+        except McpToolCallError:
             raise
         except Exception as e:
             logger.warning(f"[MCP:{self.name}] call_tool({name}) failed: {e}")
-            return f"Error: {e}"
+            raise McpToolCallError(f"Error: {e}") from e
 
     def _raise_for_rpc_error(self, resp: dict) -> None:
         """Raise when a response is a JSON-RPC error rather than a result.

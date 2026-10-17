@@ -7,9 +7,11 @@ import logging
 import os
 import sys
 
+import pytest
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from agent.tools.mcp.mcp_client import McpClient  # noqa: E402
+from agent.tools.mcp.mcp_client import McpClient, McpToolCallError  # noqa: E402
 
 
 def _client(response):
@@ -73,10 +75,9 @@ class TestMcpRpcErrorIsSurfaced:
         assert any("Method not found" in m for m in records), records
 
     def test_call_tool_tells_the_model_about_the_error(self):
-        out = _client(RPC_ERROR).call_tool("search", {"q": "x"})
-        assert out.startswith("Error:")
-        assert "Method not found" in out, (
-            "the server's own message must reach the model, not an empty string")
+        with pytest.raises(McpToolCallError, match="Method not found") as failure:
+            _client(RPC_ERROR).call_tool("search", {"q": "x"})
+        assert str(failure.value).startswith("Error:")
 
     def test_a_null_result_is_not_treated_as_an_error(self):
         # result: null is legal JSON-RPC for a tool with no return value.
