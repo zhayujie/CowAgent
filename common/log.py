@@ -1,7 +1,20 @@
 import logging
 import os
 import sys
-import io
+
+
+class _Utf8ConsoleStream:
+    """Write UTF-8 to a borrowed buffer without owning or closing it."""
+
+    def __init__(self, buffer):
+        self.buffer = buffer
+
+    def write(self, text):
+        self.buffer.write(text.encode("utf-8", errors="replace"))
+        return len(text)
+
+    def flush(self):
+        self.buffer.flush()
 
 
 def _log_path():
@@ -17,7 +30,7 @@ def _log_path():
 
 
 def _reset_logger(log):
-    for handler in log.handlers:
+    for handler in list(log.handlers):
         handler.close()
         log.removeHandler(handler)
         del handler
@@ -25,7 +38,7 @@ def _reset_logger(log):
     log.propagate = False
     stdout = sys.stdout
     if hasattr(stdout, "buffer"):
-        stdout = io.TextIOWrapper(stdout.buffer, encoding="utf-8", errors="replace", line_buffering=True)
+        stdout = _Utf8ConsoleStream(stdout.buffer)
     console_handle = logging.StreamHandler(stdout)
     console_handle.setFormatter(
         logging.Formatter(
