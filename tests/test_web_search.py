@@ -82,14 +82,15 @@ class TestAnySearchKeyResolution(unittest.TestCase):
 
 
 class TestProviderOrder(unittest.TestCase):
-    """New providers are appended after the originals, leaving existing routing
-    untouched: anysearch, serply, tavily, searxng, then keenable last (its
-    keyless tier must come after every provider the user may have paid for)."""
+    """Provider order keeps existing routing untouched: deepseek joins the
+    Chinese-vendor group after linkai (its in-house engine is the newest of
+    the group), and keenable stays last — its keyless tier must come after
+    every provider the user may have paid for."""
 
     def test_provider_order_appends_new_providers_last(self):
         self.assertEqual(
             web_search_module.PROVIDER_ORDER,
-            ("bocha", "qianfan", "zhipu", "linkai", "anysearch", "serply", "tavily", "searxng", "keenable"),
+            ("bocha", "qianfan", "zhipu", "linkai", "deepseek", "anysearch", "serply", "tavily", "searxng", "keenable"),
         )
 
     def test_web_console_provider_list_stays_in_sync(self):
@@ -148,6 +149,7 @@ class TestProviderOrder(unittest.TestCase):
 
 _ALL_SEARCH_ENV = (
     "BOCHA_API_KEY", "ZHIPUAI_API_KEY", "QIANFAN_API_KEY", "LINKAI_API_KEY",
+    "DEEPSEEK_API_KEY",
     "ANYSEARCH_API_KEY", "SERPLY_API_KEY", "KEENABLE_API_KEY",
 )
 
@@ -1087,6 +1089,194 @@ class TestSearxngBackend(unittest.TestCase):
                     result = self.tool._search_searxng("q", 10)
                 self.assertEqual(result.status, "error")
                 self.assertIn(fragment, result.result)
+
+
+def _deepseek_payload(results):
+    """Build a DeepSeek /v1/tools/search response body in the documented shape."""
+    return {"results": results}
+
+
+def _deepseek_result(**overrides):
+    item = {
+        "rerank_score": 2.4,
+        "title": "DeepSeek V4 model released",
+        "url": "https://example.com/deepseek-v4",
+        "snippet": "DeepSeek V4 is now available.",
+        "summary": "DeepSeek has released the V4 model with improved tool calling.",
+        "content": "",
+        "site_name": "Example News",
+        "site_icon": "https://example.com/favicon.ico",
+        "date": "2026-06-01T00:00:00+00:00",
+        "authority": 3,
+    }
+    item.update(overrides)
+    return item
+
+
+class TestDeepSeekKeyResolution(unittest.TestCase):
+    """The deepseek key prefers the dedicated tools.web_search key, then the
+    shared DeepSeek model credential (config or env) — the Search API uses
+    the same bearer <redacted>"""
+
+    def test_dedicated_search_key_wins(self):
+        cfg = {
+            "tools": {"web_search": {"deepseek_api_key": "search-key"}},
+            "deepseek_api_key": "model-key",
+        }
+        with patch.object(web_search_module, "conf", lambda: cfg), \
+                patch.dict(os.environ, {"DEEPSEEK_API_KEY": "env-key"}):
+            self.assertEqual(web_search_module._get_api_key("deepseek"), "search-key")
+
+    def test_model_key_fallback(self):
+        cfg = {"deepseek_api_key": "model-key"}
+        with patch.object(web_search_module, "conf", lambda: cfg), \
+                patch.dict(os.environ, {"DEEPSEEK_API_KEY": ""}):
+            self.assertEqual(web_search_module._get_api_key("deepseek"), "model-key")
+
+    def test_env_fallback(self):
+        with patch.object(web_search_module, "conf", lambda: {}), \
+                patch.dict(os.environ, {"DEEPSEEK_API_KEY": "env-key"}):
+            self.assertEqual(web_search_module._get_api_key("deepseek"), "env-key")
+
+    def test_no_key_anywhere(self):
+        with patch.object(web_search_module, "conf", lambda: {}), \
+                patch.dict(os.environ, {"DEEPSEEK_API_KEY": ""}):
+            self.assertEqual(web_search_module._get_api_key("deepseek"), "")
+
+
+class TestDeepSeekBackend(unittest.TestCase):
+    """Behaviour of WebSearch._search_deepseek with a stubbed HTTP layer."""
+
+    def setUp(self):
+        self.tool = web_search_module.WebSearch()
+
+    def test_search_deepseek_maps_results(self):
+        """title/url/snippet/site_name/date map to the unified shape; the
+        long summary is only surfaced when summary=True; authority and
+        rerank_score ride along as DeepSeek-specific signals."""
+        payload = _deepseek_payload([_deepseek_result(), _deepseek_result(title="T2", summary="")])
+        with patch.object(web_search_module, "_get_api_key", return_value="test-key-123"), \
+                patch.object(web_search_module.requests, "post",
+                             return_value=_fake_response(200, payload)) as mock_post:
+            result = self.tool._search_deepseek("cowagent", 10, "noLimit", True)
+
+        self.assertEqual(result.status, "success")
+        self.assertEqual(result.result["backend"], "deepseek")
+        self.assertEqual(result.result["count"], 2)
+        first, second = result.result["results"]
+        self.assertEqual(first["title"], "DeepSeek V4 model released")
+        self.assertEqual(first["url"], "https://example.com/deepseek-v4")
+        self.assertEqual(first["snippet"], "DeepSeek V4 is now available.")
+        self.assertEqual(first["siteName"], "Example News")
+        self.assertEqual(first["datePublished"], "2026-06-01T00:00:00+00:00")
+        self.assertEqual(first["authority"], 3)
+        self.assertEqual(first["rerank_score"], 2.4)
+        self.assertIn("summary", first)
+        self.assertNotIn("summary", second)
+        # Bearer auth against the documented endpoint.
+        self.assertEqual(mock_post.call_args[0][0], "https://api.deepseek.com/v1/tools/search")
+        self.assertEqual(mock_post.call_args[1]["headers"]["Authorization"], "Bearer test-key-123")
+        self.assertEqual(mock_post.call_args[1]["json"]["query"], "cowagent")
+        self.assertEqual(mock_post.call_args[1]["json"]["count"], 10)
+
+    def test_search_deepseek_summary_flag_off(self):
+        """summary=False keeps the long per-result summary out of the payload."""
+        payload = _deepseek_payload([_deepseek_result()])
+        with patch.object(web_search_module, "_get_api_key", return_value="k"), \
+                patch.object(web_search_module.requests, "post",
+                             return_value=_fake_response(200, payload)):
+            result = self.tool._search_deepseek("q", 10, "noLimit", False)
+        self.assertEqual(result.status, "success")
+        self.assertNotIn("summary", result.result["results"][0])
+
+    def test_search_deepseek_clamps_count(self):
+        """count is clamped into 1-50; a falsy count falls back to 10."""
+        with patch.object(web_search_module, "_get_api_key", return_value="k"), \
+                patch.object(web_search_module.requests, "post",
+                             return_value=_fake_response(200, _deepseek_payload([]))) as mock_post:
+            for count, expected in ((50, 50), (99, 50), (0, 10), (None, 10), (10, 10)):
+                with self.subTest(count=count):
+                    self.tool._search_deepseek("q", count, "noLimit", False)
+                    self.assertEqual(mock_post.call_args[1]["json"]["count"], expected)
+
+    def test_search_deepseek_freshness_becomes_query_operators(self):
+        """DeepSeek has no freshness parameter: the shared vocabulary is
+        translated into the documented after:/before: query operators."""
+        with patch.object(web_search_module, "_get_api_key", return_value="k"), \
+                patch.object(web_search_module.requests, "post",
+                             return_value=_fake_response(200, _deepseek_payload([]))) as mock_post:
+            self.tool._search_deepseek("q", 10, "noLimit", False)
+            self.assertEqual(mock_post.call_args[1]["json"]["query"], "q")
+
+            self.tool._search_deepseek("q", 10, "2025-01-01..2025-06-01", False)
+            sent = mock_post.call_args[1]["json"]["query"]
+            self.assertIn("after:2025-01-01", sent)
+            self.assertIn("before:2025-06-01", sent)
+
+            self.tool._search_deepseek("q", 10, "oneWeek", False)
+            sent = mock_post.call_args[1]["json"]["query"]
+            self.assertRegex(sent, r"^q after:\d{4}-\d{2}-\d{2}$")
+
+    def test_search_deepseek_error_status_mapping(self):
+        """401/402/429 map to specific messages; other statuses are generic."""
+        cases = {
+            401: "Invalid DeepSeek API key",
+            402: "insufficient balance",
+            429: "rate limit reached",
+            500: "HTTP 500",
+        }
+        for status_code, fragment in cases.items():
+            with self.subTest(status_code=status_code):
+                with patch.object(web_search_module, "_get_api_key", return_value="k"), \
+                        patch.object(web_search_module.requests, "post",
+                                     return_value=_fake_response(status_code)):
+                    result = self.tool._search_deepseek("q", 10, "noLimit", False)
+                self.assertEqual(result.status, "error")
+                self.assertIn(fragment, result.result)
+
+    def test_search_deepseek_business_error_envelope(self):
+        """Even on HTTP 200, the OpenAI-compatible {"error": ...} envelope is
+        surfaced instead of degrading to empty results."""
+        payload = {"error": {"message": "'count' must be between 1 and 50",
+                             "type": "invalid_request_error", "param": None,
+                             "code": "invalid_request_error"}}
+        with patch.object(web_search_module, "_get_api_key", return_value="k"), \
+                patch.object(web_search_module.requests, "post",
+                             return_value=_fake_response(200, payload)):
+            result = self.tool._search_deepseek("q", 10, "noLimit", False)
+        self.assertEqual(result.status, "error")
+        self.assertIn("invalid_request_error", result.result)
+
+    def test_deepseek_in_configured_providers(self):
+        """A DeepSeek key alone makes the provider resolvable and selectable."""
+        cfg = {"deepseek_api_key": "model-key"}
+        with patch.object(web_search_module, "conf", lambda: cfg), \
+                patch.dict(os.environ, {k: "" for k in _ALL_SEARCH_ENV}):
+            self.assertEqual(web_search_module.configured_providers(), ["deepseek"])
+            self.assertEqual(self.tool._resolve_provider(None), "deepseek")
+            self.assertEqual(self.tool._resolve_provider("deepseek"), "deepseek")
+
+    def test_web_console_lists_deepseek(self):
+        """The Search panel mirrors the tool: order, labels, and key
+        resolution all track the new backend."""
+        from channel.web.api.models import ModelsHandler
+
+        self.assertEqual(ModelsHandler._SEARCH_PROVIDERS, web_search_module.PROVIDER_ORDER)
+        self.assertIn("deepseek", ModelsHandler._SEARCH_PROVIDER_LABELS)
+
+        cfg = {"tools": {"web_search": {"deepseek_api_key": "console-key"}}}
+        self.assertEqual(ModelsHandler._search_provider_key("deepseek", cfg), "console-key")
+        cfg = {"deepseek_api_key": "model-key"}
+        with patch.dict(os.environ, {"DEEPSEEK_API_KEY": ""}):
+            self.assertEqual(ModelsHandler._search_provider_key("deepseek", cfg), "model-key")
+        with patch.dict(os.environ, {"DEEPSEEK_API_KEY": "env-key"}):
+            self.assertEqual(ModelsHandler._search_provider_key("deepseek", {}), "env-key")
+
+        with patch.dict(os.environ, {k: "" for k in _ALL_SEARCH_ENV}):
+            fresh = ModelsHandler._search_capability({})
+            self.assertNotIn("deepseek", fresh["configured_providers"])
+            keyed = ModelsHandler._search_capability({"deepseek_api_key": "sk-test"})
+            self.assertIn("deepseek", keyed["configured_providers"])
 
 
 if __name__ == "__main__":

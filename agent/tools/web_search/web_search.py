@@ -1,8 +1,9 @@
-"""Web Search tool. Supports nine backends with a unified response format:
+"""Web Search tool. Supports ten backends with a unified response format:
   - bocha   (https://open.bochaai.com)
   - zhipu   (https://docs.bigmodel.cn/cn/guide/tools/web-search)
   - qianfan (https://cloud.baidu.com/doc/qianfan/s/2mh4su4uy)
   - linkai  (https://link-ai.tech, fallback)
+  - deepseek (https://api-docs.deepseek.com/guides/search, official Search API)
   - anysearch (https://anysearch.com)
   - serply  (https://serply.io, Google/Bing SERP API)
   - tavily  (https://tavily.com, AI-optimized search API)
@@ -11,11 +12,12 @@
 
 Provider selection
   - strategy 'auto' (default): pick the first configured provider in the
-    canonical order [bocha, qianfan, zhipu, linkai, anysearch, serply,
-    tavily, searxng, keenable]. Keenable counts as configured with a key or with the explicit
-    `keenable_anonymous` opt-in (same contract as `anysearch_anonymous`). When
-    the caller passes an explicit `provider` it overrides the pick; an
-    invalid/unconfigured one silently falls back to the auto order.
+    canonical order [bocha, qianfan, zhipu, linkai, deepseek, anysearch,
+    serply, tavily, searxng, keenable]. Keenable counts as configured with a
+    key or with the explicit `keenable_anonymous` opt-in (same contract as
+    `anysearch_anonymous`). When the caller passes an explicit `provider`
+    it overrides the pick; an invalid/unconfigured one silently falls back
+    to the auto order.
   - strategy 'fixed': use the configured provider; if its credential is
     missing at call time, silently fall back to auto order (no card hint).
 
@@ -24,6 +26,10 @@ Credentials
   - zhipu   : conf.zhipu_ai_api_key            ->  env ZHIPUAI_API_KEY
   - qianfan : conf.qianfan_api_key             ->  env QIANFAN_API_KEY
   - linkai  : conf.linkai_api_key              ->  env LINKAI_API_KEY
+  - deepseek: tools.web_search.deepseek_api_key -> env DEEPSEEK_API_KEY ->
+              conf.deepseek_api_key (the Search API uses the same bearer
+              <redacted> as the DeepSeek model API, so configuring the model
+              automatically grants search capability)
   - anysearch : tools.web_search.anysearch_api_key  -> env ANYSEARCH_API_KEY
   - serply  : tools.web_search.serply_api_key  ->  env SERPLY_API_KEY
   - tavily  : tools.web_search.tavily_api_key  ->  env TAVILY_API_KEY
@@ -51,17 +57,19 @@ DEFAULT_TIMEOUT = 30
 # Canonical fallback order. Empirically ordered by Chinese real-time
 # quality + relevance: bocha (best overall), qianfan (best for hot news),
 # zhipu (strong on long-form articles), linkai (cloud aggregator),
+# deepseek (official in-house engine, newest of the group),
 # anysearch, serply (global Google/Bing SERP, last since it isn't
 # benchmarked against the Chinese-market providers above), tavily, searxng,
 # keenable (global index, keyless tier behind an explicit opt-in; placed last
 # so any provider the user paid for wins).
-PROVIDER_ORDER = ("bocha", "qianfan", "zhipu", "linkai", "anysearch", "serply", "tavily", "searxng", "keenable")
+PROVIDER_ORDER = ("bocha", "qianfan", "zhipu", "linkai", "deepseek", "anysearch", "serply", "tavily", "searxng", "keenable")
 
 PROVIDER_LABELS = {
     "bocha":   "Bocha",
     "zhipu":   "Zhipu",
     "qianfan": "Baidu Qianfan",
     "linkai":  "LinkAI",
+    "deepseek": "DeepSeek",
     "anysearch": "AnySearch",
     "serply":  "Serply",
     "tavily":  "Tavily",
@@ -99,6 +107,14 @@ def _get_api_key(provider: str) -> str:
     if provider == "linkai":
         key = _conf_str(conf().get("linkai_api_key"), "")
         return key or os.environ.get("LINKAI_API_KEY", "").strip()
+    if provider == "deepseek":
+        # Dedicated search key first, then the shared DeepSeek credential: the
+        # Search API uses the same bearer <redacted> as the model API.
+        key = _conf_str(_tools_web_search_conf().get("deepseek_api_key"), "")
+        if key:
+            return key
+        key = _conf_str(conf().get("deepseek_api_key"), "")
+        return key or os.environ.get("DEEPSEEK_API_KEY", "").strip()
     if provider == "anysearch":
         key = _conf_str(_tools_web_search_conf().get("anysearch_api_key"), "")
         return key or os.environ.get("ANYSEARCH_API_KEY", "").strip()
@@ -191,13 +207,15 @@ class WebSearch(BaseTool):
                     "Time range filter. Options: "
                     "'noLimit' (default), 'oneDay', 'oneWeek', 'oneMonth', 'oneYear', "
                     "or date range like '2025-01-01..2025-02-01'. "
-                    "Honored by bocha/zhipu/qianfan/linkai/keenable; ignored by anysearch."
+                    "Honored by bocha/zhipu/qianfan/linkai/deepseek/keenable; ignored by anysearch. "
+                    "DeepSeek has no native freshness parameter, so it is translated into the "
+                    "documented after:/before: query operators."
                 )
             },
             "summary": {
                 "type": "boolean",
                 "description": "Whether to include text summary for each result (default: false). "
-                               "Bocha/linkai/keenable only; ignored by anysearch."
+                               "Bocha/linkai/deepseek/keenable only; ignored by anysearch."
             }
         },
         "required": ["query"]
@@ -303,7 +321,7 @@ class WebSearch(BaseTool):
             return ToolResult.fail(
                 "Error: No search provider configured. "
                 "Configure one of BOCHA_API_KEY / zhipu_ai_api_key / qianfan_api_key / linkai_api_key / "
-                "anysearch_api_key / SERPLY_API_KEY / TAVILY_API_KEY / SEARXNG_URL."
+                "deepseek_api_key / anysearch_api_key / SERPLY_API_KEY / TAVILY_API_KEY / SEARXNG_URL."
             )
 
         # Always log the routing decision so multi-provider deployments can
@@ -325,6 +343,8 @@ class WebSearch(BaseTool):
                 return self._search_qianfan(query, count, freshness)
             if provider == "linkai":
                 return self._search_linkai(query, count, freshness)
+            if provider == "deepseek":
+                return self._search_deepseek(query, count, freshness, summary)
             if provider == "anysearch":
                 return self._search_anysearch(query, count, freshness, summary)
             if provider == "serply":
@@ -587,6 +607,82 @@ class WebSearch(BaseTool):
         return ToolResult.success({
             "query": query, "backend": "linkai",
             "total": 1, "count": 1, "results": [{"content": str(raw)}],
+        })
+
+    # ------------------------------------------------------------------
+    # DeepSeek (official Search API)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _deepseek_build_query(query: str, freshness: str) -> str:
+        """Translate the shared freshness vocabulary into DeepSeek's query
+        operators. The Search API has no freshness parameter; the docs define
+        after:/before: operators (YYYY or YYYY-MM-DD), so the time filter is
+        appended to the query instead of being dropped silently."""
+        if not freshness or freshness == "noLimit":
+            return query
+        delta_days = {"oneDay": 1, "oneWeek": 7, "oneMonth": 30, "oneYear": 365}.get(freshness)
+        if delta_days:
+            from datetime import datetime, timedelta
+            after = (datetime.now() - timedelta(days=delta_days)).strftime("%Y-%m-%d")
+            return f"{query} after:{after}"
+        start, sep, end = freshness.partition("..")
+        if sep and start.strip() and end.strip():
+            return f"{query} after:{start.strip()} before:{end.strip()}"
+        return query
+
+    def _search_deepseek(self, query: str, count: int, freshness: str, summary: bool) -> ToolResult:
+        api_key = _get_api_key("deepseek")
+        url = "https://api.deepseek.com/v1/tools/search"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        }
+        payload: Dict[str, Any] = {
+            "query": self._deepseek_build_query(query, freshness),
+            "count": max(1, min(int(count or 10), 50)),
+        }
+
+        logger.debug(f"[WebSearch] deepseek: query='{payload['query']}', count={payload['count']}")
+        resp = requests.post(url, headers=headers, json=payload, timeout=DEFAULT_TIMEOUT)
+
+        if resp.status_code == 401:
+            return ToolResult.fail("Error: Invalid DeepSeek API key.")
+        if resp.status_code == 402:
+            return ToolResult.fail("Error: DeepSeek API — insufficient balance. Top up at https://platform.deepseek.com")
+        if resp.status_code == 429:
+            return ToolResult.fail("Error: DeepSeek Search API rate limit reached (5 QPS per account).")
+        if resp.status_code != 200:
+            return ToolResult.fail(f"Error: DeepSeek Search API returned HTTP {resp.status_code}: {resp.text[:200]}")
+
+        data = resp.json()
+        # Business-level errors use the OpenAI-compatible {"error": {...}}
+        # envelope, with param always null.
+        if isinstance(data, dict) and data.get("error"):
+            err = data["error"] or {}
+            return ToolResult.fail(f"Error: DeepSeek Search returned {err.get('code')}: {err.get('message', '')}")
+
+        items = data.get("results") or []
+        results = []
+        for it in items:
+            item = {
+                "title": it.get("title", ""),
+                "url": it.get("url", ""),
+                "snippet": it.get("snippet", ""),
+                "siteName": it.get("site_name") or "",
+                "datePublished": it.get("date") or "",
+                # DeepSeek-specific signals, kept for callers that want them.
+                "authority": it.get("authority"),
+                "rerank_score": it.get("rerank_score"),
+            }
+            # The API always returns a long summary; only surface it when the
+            # caller asked for summaries, matching the shared `summary` flag.
+            if summary and it.get("summary"):
+                item["summary"] = it["summary"]
+            results.append(item)
+        return ToolResult.success({
+            "query": query, "backend": "deepseek",
+            "total": len(results), "count": len(results), "results": results,
         })
 
     def _search_anysearch(self, query: str, count: int, freshness: str = "noLimit", summary: bool = False) -> ToolResult:

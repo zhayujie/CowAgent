@@ -27,6 +27,31 @@ HTTP/HTTPS URL の内容を取得します。Web ページからは可読テキ�
 - リモートドキュメントのダウンロードと解析
 - API レスポンスの確認
 
+## DeepSeek Fetch バックエンド（オプトイン）
+
+デフォルトでは `web_fetch` はページを直接取得します。`tools.web_fetch.provider`
+を `"deepseek"` に設定すると、[DeepSeek 公式 Fetch API](https://api-docs.deepseek.com/guides/search)
+経由で取得し、ページを Markdown として返します。直接取得では描画できない
+ページ（JavaScript 中心のサイトなど）に有効です。
+
+```json
+{
+  "tools": {
+    "web_fetch": {
+      "provider": "deepseek"
+    }
+  }
+}
+```
+
+このバックエンドは `deepseek_api_key` モデル認証情報（または
+`DEEPSEEK_API_KEY` 環境変数）を使用します。専用キー
+`tools.web_fetch.deepseek_api_key` で上書きできます。呼び出しは成功リク
+エスト単位で課金（1,000 件あたり $0.75）されるためオプトイン制です。
+`"direct"`（デフォルト）は無料です。SSRF ガードは引き続き適用され、プラ
+イベート／ループバック／クラウドメタデータの URL はリクエスト前に拒否
+されます。
+
 <Note>
   `web_fetch` は静的 HTML のみ取得できます。JavaScript レンダリングが必要なページ（SPA など）は `browser` ツールを使用してください。
 </Note>

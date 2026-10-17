@@ -27,6 +27,28 @@ description: "web_fetch 工具获取 HTTP / HTTPS 地址的内容：从网页提
 - 下载并解析远程文档
 - 获取 API 响应内容
 
+## DeepSeek Fetch 后端（可选）
+
+默认情况下 `web_fetch` 直接抓取页面。将 `tools.web_fetch.provider` 设为
+`"deepseek"` 可改用 [DeepSeek 官方 Fetch API](https://api-docs.deepseek.com/guides/search)
+抓取，返回页面的 Markdown 内容——适合直接抓取无法渲染的页面（如重度依赖
+JavaScript 的站点）。
+
+```json
+{
+  "tools": {
+    "web_fetch": {
+      "provider": "deepseek"
+    }
+  }
+}
+```
+
+该后端复用 `deepseek_api_key` 模型凭证（或 `DEEPSEEK_API_KEY` 环境变量）；
+专用密钥 `tools.web_fetch.deepseek_api_key` 可覆盖。调用按成功请求计费
+（每 1000 次 $0.75），因此保持为手动开启；`"direct"`（默认）免费。
+SSRF 防护仍然生效：内网、回环及云元数据地址在请求发出前即被拒绝。
+
 <Note>
   `web_fetch` 只能获取静态 HTML 内容。如果页面需要 JavaScript 渲染（如 SPA 单页应用），请使用 `browser` 工具。
 </Note>

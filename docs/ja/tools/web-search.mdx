@@ -3,7 +3,7 @@ title: web_search - Web 検索
 description: "web_search ツールはリアルタイムの情報やニュースを検索します。Bocha、Tavily、Serply、SearXNG など複数の検索バックエンドに対応し、Web コンソールで設定できます。"
 ---
 
-インターネットからリアルタイム情報、ニュース、リサーチなどを検索します。Bocha、百度 Qianfan、智谱（Zhipu）、LinkAI、AnySearch、Serply、Tavily、SearXNG、Keenable の 9 つのバックエンドに対応しています。Keenable には明示的に有効化する匿名モード（API Key 不要）もあります。各プロバイダーは認証情報（または匿名モードのオプトイン）を設定すると利用可能になります。
+インターネットからリアルタイム情報、ニュース、リサーチなどを検索します。Bocha、百度 Qianfan、智谱（Zhipu）、LinkAI、DeepSeek、AnySearch、Serply、Tavily、SearXNG、Keenable の 10 のバックエンドに対応しています。Keenable には明示的に有効化する匿名モード（API Key 不要）もあります。各プロバイダーは認証情報（または匿名モードのオプトイン）を設定すると利用可能になります。
 
 <Tip>
   [Web コンソール](/ja/channels/web) の「モデル管理 → 検索」パネルから、プロバイダーと戦略を可視化して設定するのが推奨です。設定ファイルを手動で編集する必要はありません。
@@ -17,13 +17,14 @@ description: "web_search ツールはリアルタイムの情報やニュース�
 | 百度 Qianfan | `qianfan_api_key` を再利用 | [Qianfan コンソール](https://cloud.baidu.com/doc/qianfan/s/2mh4su4uy) |
 | 智谱 Zhipu | `zhipu_ai_api_key` を再利用 | [Zhipu Open Platform](https://docs.bigmodel.cn/cn/guide/tools/web-search) |
 | LinkAI | `linkai_api_key` を再利用 | [LinkAI コンソール](https://link-ai.tech/console/interface?utm_source=cowagent&utm_medium=docs&utm_campaign=tools-web-search) |
+| DeepSeek | `deepseek_api_key` を再利用（オプションの上書き：`tools.web_search.deepseek_api_key`） | [DeepSeek API ドキュメント](https://api-docs.deepseek.com/guides/search) |
 | AnySearch | オプション設定 `tools.web_search.anysearch_api_key`、または `anysearch_anonymous: true` で Key なし利用 | [AnySearch Open Platform](https://anysearch.com/) |
 | Serply | `tools.web_search.serply_api_key` | [Serply](https://serply.io)（[ドキュメント](https://serply.io/docs)） |
 | Tavily | `tools.web_search.tavily_api_key` | [Tavily](https://tavily.com) |
 | SearXNG | `tools.web_search.searxng_url`（セルフホスト型インスタンス URL、API Key 不要） | [SearXNG](https://docs.searxng.org/) |
 | Keenable | オプション設定 `tools.web_search.keenable_api_key`、または `keenable_anonymous: true` で Key なし利用 | [Keenable](https://keenable.ai) |
 
-Bocha、Serply、Tavily については専用キーを別途設定する必要があります。智谱、百度 Qianfan、LinkAI は対応するモデルの API キーをそのまま流用でき、モデルを設定すれば同時に検索機能も利用可能になります。SearXNG はセルフホスト型で、インスタンス URL のみ設定が必要です。AnySearch は Key なし利用がオプトイン方式です。`tools.web_search.anysearch_anonymous` を `true` に設定（またはコンソールの「検索」パネルで Key を空のまま保存）すると匿名で呼び出せます。`tools.web_search.anysearch_api_key`（未設定時は環境変数 `ANYSEARCH_API_KEY` にフォールバック）を設定した場合はオプトイン不要で、利用枠と権限は AnySearch サーバー側に従います。Keenable はオプトイン方式です。`tools.web_search.keenable_anonymous` を `true` に設定（またはコンソールの「検索」パネルで Key を空のまま保存）すると、IP 単位のレート制限（10 リクエスト/秒、1000 リクエスト/時）がある公開エンドポイントを呼び出します。任意の `keenable_api_key`（または `KEENABLE_API_KEY`）を設定すると制限が解除され、オプトインは不要です。
+Bocha、Serply、Tavily については専用キーを別途設定する必要があります。智谱、百度 Qianfan、LinkAI、DeepSeek は対応するモデルの API キーをそのまま流用でき、モデルを設定すれば同時に検索機能も利用可能になります。DeepSeek はさらに `tools.web_search.deepseek_api_key` で専用キーを設定できます（未設定時は環境変数 `DEEPSEEK_API_KEY` にフォールバック）。SearXNG はセルフホスト型で、インスタンス URL のみ設定が必要です。AnySearch は Key なし利用がオプトイン方式です。`tools.web_search.anysearch_anonymous` を `true` に設定（またはコンソールの「検索」パネルで Key を空のまま保存）すると匿名で呼び出せます。`tools.web_search.anysearch_api_key`（未設定時は環境変数 `ANYSEARCH_API_KEY` にフォールバック）を設定した場合はオプトイン不要で、利用枠と権限は AnySearch サーバー側に従います。Keenable はオプトイン方式です。`tools.web_search.keenable_anonymous` を `true` に設定（またはコンソールの「検索」パネルで Key を空のまま保存）すると、IP 単位のレート制限（10 リクエスト/秒、1000 リクエスト/時）がある公開エンドポイントを呼び出します。任意の `keenable_api_key`（または `KEENABLE_API_KEY`）を設定すると制限が解除され、オプトインは不要です。
 
 ## ルーティング戦略
 
@@ -38,7 +39,7 @@ Bocha、Serply、Tavily については専用キーを別途設定する必要�
 }
 ```
 
-- `auto`（デフォルト）：Agent が設定済みのプロバイダーから自動的に選択し、1 回のタスク内で複数回呼び出し、異なるプロバイダーを切り替えてより包括的な結果を取得できます。未指定の場合は `bocha → qianfan → zhipu → linkai → anysearch → serply → tavily → searxng → keenable` の順でフォールバックします。
+- `auto`（デフォルト）：Agent が設定済みのプロバイダーから自動的に選択し、1 回のタスク内で複数回呼び出し、異なるプロバイダーを切り替えてより包括的な結果を取得できます。未指定の場合は `bocha → qianfan → zhipu → linkai → deepseek → anysearch → serply → tavily → searxng → keenable` の順でフォールバックします。
 
 - `fixed`：`provider` で指定したプロバイダーに固定。該当プロバイダーの認証情報が欠けている場合は自動的に auto の順序にフォールバックします。
 
@@ -53,6 +54,6 @@ Bocha、Serply、Tavily については専用キーを別途設定する必要�
 | `provider` | string | いいえ | `auto` 戦略で複数プロバイダーを設定している場合に表示。単回のプロバイダー切り替えに使用 |
 
 <Note>
-  9 社のプロバイダーがいずれも未設定（Key もインスタンス URL も匿名モードのオプトインもない）の場合、このツールは Agent に登録されません。
+  10 社のプロバイダーがいずれも未設定（Key もインスタンス URL も匿名モードのオプトインもない）の場合、このツールは Agent に登録されません。
 </Note>
 

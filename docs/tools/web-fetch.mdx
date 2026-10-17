@@ -27,6 +27,30 @@ Fetch the content of an HTTP/HTTPS URL. Web pages are extracted as readable text
 - Download and parse remote documents
 - Inspect API response bodies
 
+## DeepSeek Fetch backend (opt-in)
+
+By default `web_fetch` retrieves pages directly. Set `tools.web_fetch.provider`
+to `"deepseek"` to fetch through [DeepSeek's official Fetch API](https://api-docs.deepseek.com/guides/search)
+instead, which returns the page as Markdown — handy for pages the direct
+backend cannot render (e.g. JavaScript-heavy sites).
+
+```json
+{
+  "tools": {
+    "web_fetch": {
+      "provider": "deepseek"
+    }
+  }
+}
+```
+
+The backend uses the `deepseek_api_key` model credential (or the
+`DEEPSEEK_API_KEY` environment variable); a dedicated
+`tools.web_fetch.deepseek_api_key` overrides it. Calls are billed per
+successful request ($0.75 per 1,000), so the backend stays opt-in; `"direct"`
+(the default) is free. The SSRF guard still applies: private, loopback, and
+cloud-metadata URLs are rejected before any request is issued.
+
 <Note>
   `web_fetch` only retrieves static HTML. For pages that require JavaScript rendering (such as SPAs), use the `browser` tool instead.
 </Note>
