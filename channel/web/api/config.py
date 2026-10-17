@@ -7,6 +7,7 @@ page also renders is served by api/models.py.
 
 import json
 import os
+import threading
 
 import web
 
@@ -30,6 +31,9 @@ from common import i18n
 from common.log import logger
 from config import conf, get_data_root
 from models.reasoning_capabilities import provider_reasoning_metadata
+
+
+_settings_save_lock = threading.RLock()
 
 
 class ConfigHandler:
@@ -171,6 +175,12 @@ class ConfigHandler:
             return json.dumps({"status": "error", "message": str(e)})
 
     def POST(self):
+        # Keep settings saves ordered through persistence and live publication.
+        # Other config-writing endpoints retain their existing behavior.
+        with _settings_save_lock:
+            return self._save_settings()
+
+    def _save_settings(self):
         _require_auth()
         web.header('Content-Type', 'application/json; charset=utf-8')
         try:
@@ -218,10 +228,6 @@ class ConfigHandler:
             if not applied and not nested:
                 return json.dumps({"status": "error", "message": "no valid keys to update"})
 
-            # Apply only after every value coerced, so a rejected save changes nothing.
-            for key, value in applied.items():
-                local_config[key] = value
-
             config_path = os.path.join(get_data_root(), "config.json")
             file_cfg = _read_config_file_for_write()
             # Capture old password before updating
@@ -233,9 +239,13 @@ class ConfigHandler:
                 merged = dict(file_cfg.get(section) or {})
                 merged.update(values)
                 file_cfg[section] = merged
-                local_config[section] = merged
                 applied[section] = merged
             _write_config_file_for_write(config_path, file_cfg)
+
+            # A failed read or write must leave running settings (including
+            # authentication) unchanged, just as it leaves the old file intact.
+            for key, value in applied.items():
+                local_config[key] = value
 
             logger.info(f"[WebChannel] Config updated: {list(applied.keys())}")
 
