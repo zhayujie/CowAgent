@@ -26,7 +26,7 @@ import uuid
 from collections import deque
 from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 import web
 
@@ -319,10 +319,68 @@ def _get_query_token():
         return ""
 
 
+# Methods that change state and therefore must not be reachable by a
+# cross-origin request when the console runs with no password set.
+_STATE_CHANGING_METHODS = ("POST", "PUT", "PATCH", "DELETE")
+
+
+def _is_state_changing_method() -> bool:
+    env = getattr(web.ctx, "env", {}) or {}
+    return (env.get("REQUEST_METHOD") or "GET").upper() in _STATE_CHANGING_METHODS
+
+
+def _origin_is_foreign() -> bool:
+    """Whether an Origin/Referer header names a site other than this console.
+
+    A browser attaches ``Origin`` (and ``Referer``) to a cross-origin request,
+    including the CORS-simple ``text/plain`` POST the console accepts, so this
+    is what separates a drive-by from a legitimate caller. A request with no
+    Origin/Referer at all is not a browser making a cross-site call -- curl, the
+    desktop shell's non-XHR callers and local scripts all look like that -- and
+    the desktop renderer's ``file://`` origin arrives as the literal ``null``;
+    both are treated as local rather than foreign.
+    """
+    env = getattr(web.ctx, "env", {}) or {}
+    host = (env.get("HTTP_HOST") or "").strip().lower()
+    for header in ("HTTP_ORIGIN", "HTTP_REFERER"):
+        raw = (env.get(header) or "").strip()
+        if not raw:
+            continue
+        if raw.lower() == "null":
+            return False
+        try:
+            netloc = urlsplit(raw).netloc.lower()
+        except ValueError:
+            return True
+        # Same-origin (or a header we can't attribute to another host): not foreign.
+        return bool(netloc) and netloc != host
+    return False
+
+
+def _passwordless_write_blocked() -> bool:
+    """Whether a write on a password-less console must be refused.
+
+    With no ``web_password`` (the shipped default) the console is reachable
+    without credentials, so any page the operator visits can POST to loopback
+    and drive the full-access agent. Refuse those cross-origin writes while
+    leaving reads (already local-only) and the desktop shell untouched.
+    """
+    if not _is_state_changing_method():
+        return False
+    if _desktop_token_matches():
+        return False
+    return _origin_is_foreign()
+
+
 def _check_auth():
-    """Return True if request is authenticated or password not enabled."""
+    """Return True if request is authenticated, or password not enabled.
+
+    When no password is configured, reads stay open so the local console keeps
+    working, but a state-changing request that a browser is making from another
+    origin is rejected (CSRF guard) -- see :func:`_passwordless_write_blocked`.
+    """
     if not _is_password_enabled():
-        return True
+        return not _passwordless_write_blocked()
     if _verify_auth_token(web.cookies().get("cow_auth_token", "")):
         return True
     if _verify_auth_token(_get_bearer_token()):
