@@ -534,7 +534,7 @@ $ModelChoices = @{
     2  = @{ Provider = "Claude";                  Default = "claude-opus-5-5";                     Field = "claude_api_key";    BaseField = "claude_api_base" }
     3  = @{ Provider = "Gemini";                  Default = "gemini-3.1-pro-preview";              Field = "gemini_api_key";    BaseField = "gemini_api_base" }
     4  = @{ Provider = "OpenAI";                  Default = "gpt-6.1-sol";                         Field = "open_ai_api_key";   BaseField = "open_ai_api_base" }
-    5  = @{ Provider = "MiniMax";                 Default = "MiniMax-M3";                          Field = "minimax_api_key" }
+    5  = @{ Provider = "MiniMax";                 Default = "MiniMax-M3.1-Flash";                          Field = "minimax_api_key" }
     6  = @{ Provider = "GLM";                     Default = "glm-5.3-flash";                       Field = "zhipu_ai_api_key" }
     7  = @{ Provider = "Qwen (DashScope)";        Default = "qwen3.8-flash";                       Field = "dashscope_api_key" }
     8  = @{ Provider = "Doubao (Volcengine Ark)"; Default = "doubao-seed-2-1-pro-260628"; Field = "ark_api_key" }
@@ -551,7 +551,7 @@ function Select-Model {
         "Claude (claude-opus-5-5, claude-sonnet-5, etc.)",
         "Gemini (gemini-3.5-flash, gemini-3.1-pro-preview, etc.)",
         "OpenAI (gpt-6.1-sol, gpt-6-luna, etc.)",
-        "MiniMax (MiniMax-M3, etc.)",
+        "MiniMax (MiniMax-M3.1-Flash, MiniMax-M3)",
         "GLM (glm-5.3-flash, glm-5.3, etc.)",
         "Qwen (qwen3.8-flash, qwen3.8-max, etc.)",
         "Doubao (doubao-seed-2.1, etc.)",

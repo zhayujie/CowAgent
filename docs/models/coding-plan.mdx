@@ -56,24 +56,32 @@ Reference: [Quick Start](https://help.aliyun.com/zh/model-studio/coding-plan-qui
 
 ---
 
-## MiniMax
+## MiniMax M Plan (China)
+
+The current China M Plan subscriptions (Go, Explore and Build) support `MiniMax-M3.1-Flash`. Obtain an M Plan subscription key from the [M Plan console](https://platform.minimax.cn/console/plan), then configure CowAgent's OpenAI-compatible mode:
 
 ```json
 {
   "bot_type": "openai",
-  "model": "MiniMax-M3",
-  "open_ai_api_base": "https://api.minimaxi.com/v1",
-  "open_ai_api_key": "YOUR_API_KEY"
+  "model": "MiniMax-M3.1-Flash",
+  "open_ai_api_base": "https://api.minimax.cn/v1",
+  "open_ai_api_key": "YOUR_M_PLAN_API_KEY"
 }
 ```
 
 | Parameter | Description |
 | --- | --- |
-| `model` | `MiniMax-M3`, `MiniMax-M2.7`, `MiniMax-M2.7-highspeed` |
-| `open_ai_api_base` | China: `https://api.minimaxi.com/v1`; Global: `https://api.minimax.io/v1` |
-| `open_ai_api_key` | Coding Plan specific key (not shared with pay-as-you-go) |
+| `model` | `MiniMax-M3.1-Flash` |
+| `open_ai_api_base` | `https://api.minimax.cn/v1` |
+| `open_ai_api_key` | Subscription key from the China M Plan console |
 
-Reference: [China Key](https://platform.minimaxi.com/docs/coding-plan/quickstart), [Model List](https://platform.minimaxi.com/docs/guides/pricing-coding-plan), [Global Key](https://platform.minimax.io/docs/coding-plan/quickstart)
+The official M Plan guide also documents the Anthropic-compatible base `https://api.minimax.cn/anthropic` with the same model ID; the configuration above uses OpenAI-compatible mode.
+
+### Legacy Coding Plan
+
+This is a separate onboarding path for the current China M Plan. Earlier Coding Plan examples used `https://api.minimaxi.com/v1`; do not assume an existing Coding Plan key or saved configuration can be migrated to M Plan. Check your account's product and model entitlements before changing it. The current M Plan documentation cited here does not establish `MiniMax-M3` subscription entitlement or gateway support. Existing saved/custom configurations are not changed by this guide.
+
+Reference: [M Plan overview](https://platform.minimaxi.com/docs/token-plan/intro.md), [M Plan tool configuration](https://platform.minimaxi.com/docs/m-plan/other-tools.md)
 
 ---
 

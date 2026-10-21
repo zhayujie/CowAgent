@@ -56,24 +56,32 @@ description: "在 CowAgent 中使用各厂商的 Coding Plan 编程包月套餐�
 
 ---
 
-## MiniMax
+## MiniMax M Plan（中国区）
+
+当前中国区 M Plan 的 Go、Explore、Build 套餐均支持 `MiniMax-M3.1-Flash`。从 [M Plan 控制台](https://platform.minimax.cn/console/plan) 获取订阅 Key，然后使用 CowAgent 的 OpenAI 兼容模式配置：
 
 ```json
 {
   "bot_type": "openai",
-  "model": "MiniMax-M3",
-  "open_ai_api_base": "https://api.minimaxi.com/v1",
-  "open_ai_api_key": "YOUR_API_KEY"
+  "model": "MiniMax-M3.1-Flash",
+  "open_ai_api_base": "https://api.minimax.cn/v1",
+  "open_ai_api_key": "YOUR_M_PLAN_API_KEY"
 }
 ```
 
 | 参数 | 说明 |
 | --- | --- |
-| `model` | `MiniMax-M3`、`MiniMax-M2.7`、`MiniMax-M2.7-highspeed` |
-| `open_ai_api_base` | 国内：`https://api.minimaxi.com/v1`；海外：`https://api.minimax.io/v1` |
-| `open_ai_api_key` | Coding Plan 专用 Key（与按量计费接口不通用） |
+| `model` | `MiniMax-M3.1-Flash` |
+| `open_ai_api_base` | `https://api.minimax.cn/v1` |
+| `open_ai_api_key` | 中国区 M Plan 控制台提供的订阅 Key |
 
-官方文档：[国内 Key 获取](https://platform.minimaxi.com/docs/coding-plan/quickstart)、[模型列表](https://platform.minimaxi.com/docs/guides/pricing-coding-plan)、[国际 Key 获取](https://platform.minimax.io/docs/coding-plan/quickstart)
+官方 M Plan 接入指南还列出了 Anthropic 兼容地址 `https://api.minimax.cn/anthropic`，模型 ID 同样为 `MiniMax-M3.1-Flash`；上面的配置使用 OpenAI 兼容模式。
+
+### 旧版 Coding Plan
+
+这里介绍的是当前中国区 M Plan 的独立接入路径。此前的 Coding Plan 示例使用 `https://api.minimaxi.com/v1`，不能据此假定已有 Coding Plan Key 或保存的配置可迁移到 M Plan。修改前请核对账户所属产品及模型权益。此处引用的当前 M Plan 文档未证实 `MiniMax-M3` 的订阅权益或网关支持；本指南不变更已有保存或自定义配置。
+
+官方文档：[M Plan 概览](https://platform.minimaxi.com/docs/token-plan/intro.md)、[M Plan 工具配置](https://platform.minimaxi.com/docs/m-plan/other-tools.md)
 
 ---
 

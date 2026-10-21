@@ -65,6 +65,8 @@ def resolve_family_spec(model_name: str):
     numbers) go through here, so a new family entry updates both at once.
     ``max_output`` may be None (no published cap)."""
     name = (model_name or "").lower()
+    if name == "minimax-m3.1-flash":
+        return 1000000, 524288
     if not name:
         return None, None
     version = _first_version(name)

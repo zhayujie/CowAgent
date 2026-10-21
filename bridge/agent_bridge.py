@@ -136,7 +136,7 @@ class AgentLLMModel(LLMModel):
             self._session_model
             or self._agent_model
             or conf().get("model")
-            or const.DEFAULT_MODEL
+            or (const.MINIMAX_M3_1_FLASH if conf().get("bot_type") == const.MiniMax else const.DEFAULT_MODEL)
         )
 
     @model.setter

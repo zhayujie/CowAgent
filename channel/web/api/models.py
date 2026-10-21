@@ -654,7 +654,7 @@ class ModelsHandler:
         "zhipu":     [const.GLM_5_3_FLASH, const.GLM_5V_TURBO],
         # MiniMax-M3 natively accepts text, image, and video input. The M2.x
         # chat family remains text-only and is not offered for vision.
-        "minimax":   [const.MINIMAX_M3],
+        "minimax":   [const.MINIMAX_M3_1_FLASH, const.MINIMAX_M3],
         # MiMo 原生全模态模型：v2.5-pro / v2.5 支持图像/音频/视频输入
         "mimo":      [const.MIMO_V2_5_PRO, const.MIMO_V2_5],
         # LinkAI proxies the underlying vendor; surface a curated set of
@@ -1635,6 +1635,9 @@ class ModelsHandler:
         "ernie-4.5-turbo-128k": {"context_window": 128000, "max_output_tokens": 16000},
         "ernie-4.5-turbo-32k": {"context_window": 32000, "max_output_tokens": 16000},
         "ernie-4.5-turbo-vl": {"capabilities": ["text", "vision"], "context_window": 128000, "max_output_tokens": 16000},
+        "MiniMax-M3.1-Flash": {
+            "capabilities": ["text", "vision", "video"], "context_window": 1000000, "max_output_tokens": 524288,
+        },
         "MiniMax-M3": {"capabilities": ["text", "vision", "video"], "context_window": 1000000, "max_output_tokens": 512000},
         "MiniMax-M2.7": {"context_window": 204800, "max_output_tokens": 196608},
         "MiniMax-M2.7-highspeed": {"context_window": 204800, "max_output_tokens": 196608},

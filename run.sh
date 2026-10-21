@@ -591,7 +591,7 @@ select_model() {
         "Claude (claude-opus-5-5, claude-sonnet-5, etc.)" \
         "OpenAI (gpt-6.1-sol, gpt-6-luna, etc.)" \
         "Gemini (gemini-3.8-flash, gemini-3.7-flash, etc.)" \
-        "MiniMax (MiniMax-M3, etc.)" \
+        "MiniMax (MiniMax-M3.1-Flash, MiniMax-M3)" \
         "GLM (glm-5.3-flash, glm-5.3, etc.)" \
         "Qwen (qwen3.8-flash, qwen3.8-max, etc.)" \
         "Kimi (kimi-k3, etc.)" \
@@ -623,7 +623,7 @@ configure_model() {
         2) read_model_config "Claude" "claude-opus-5-5" "CLAUDE_KEY" ;;
         3) read_model_config "OpenAI" "gpt-6.1-sol" "OPENAI_KEY" ;;
         4) read_model_config "Gemini" "gemini-3.8-flash" "GEMINI_KEY" ;;
-        5) read_model_config "MiniMax" "MiniMax-M3" "MINIMAX_KEY" ;;
+        5) read_model_config "MiniMax" "MiniMax-M3.1-Flash" "MINIMAX_KEY" ;;
         6) read_model_config "GLM" "glm-5.3-flash" "ZHIPU_KEY" ;;
         7) read_model_config "Qwen (DashScope)" "qwen3.8-flash" "DASHSCOPE_KEY" ;;
         8) read_model_config "Kimi (Moonshot)" "kimi-k3" "MOONSHOT_KEY" ;;
