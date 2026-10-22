@@ -200,6 +200,32 @@ class TaskStore:
             self.save_tasks(tasks)
         return True
     
+    def finish_scheduled_run(self, task_id: str, expected: dict,
+                             updates: Optional[dict]) -> bool:
+        """Advance/remove only the scheduling state the completed run observed.
+
+        A user can edit or delete a task while its callback is running. Compare
+        under the store lock so completion cannot overwrite a newer schedule.
+        ``updates=None`` consumes an unchanged one-time task.
+        """
+        with self.lock:
+            tasks = self.load_tasks()
+            current = tasks.get(task_id)
+            if current is None:
+                return False
+            if any(
+                current.get(key) != expected.get(key)
+                for key in ("schedule", "next_run_at")
+            ) or current.get("enabled", True) != expected.get("enabled", True):
+                return False
+            if updates is None:
+                del tasks[task_id]
+            else:
+                current.update(updates)
+                current["updated_at"] = datetime.now().isoformat()
+            self.save_tasks(tasks)
+            return True
+
     def delete_task(self, task_id: str) -> bool:
         """
         Delete a task

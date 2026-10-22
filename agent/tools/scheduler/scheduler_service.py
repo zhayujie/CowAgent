@@ -120,14 +120,14 @@ class SchedulerService:
         tasks = []
         for raw_task in self.task_store.list_tasks(enabled_only=True):
             try:
-                tasks.append(_migrate_naive_timestamps(raw_task))
+                tasks.append((_migrate_naive_timestamps(raw_task), raw_task))
             except Exception as e:
                 logger.error(
                     f"[Scheduler] Failed to normalize timestamps for task "
                     f"{raw_task.get('id')}: {e}"
                 )
         
-        for task in tasks:
+        for task, observed_task in tasks:
             try:
                 if self._is_task_due(task, now):
                     logger.info(f"[Scheduler] Executing task: {task['id']} - {task['name']}")
@@ -152,13 +152,16 @@ class SchedulerService:
                     next_run = self._calculate_next_run(task, now)
                     if next_run:
                         completed_at = scheduled_reference_time(task, now)
-                        self.task_store.update_task(task['id'], {
+                        self.task_store.finish_scheduled_run(task['id'], observed_task, {
                             "next_run_at": format_scheduled_time(next_run),
                             "last_run_at": format_scheduled_time(completed_at)
                         })
                     else:
-                        self.task_store.delete_task(task['id'])
-                        logger.info(f"[Scheduler] One-time task completed and removed: {task['id']}")
+                        removed = self.task_store.finish_scheduled_run(
+                            task['id'], observed_task, None
+                        )
+                        if removed:
+                            logger.info(f"[Scheduler] One-time task completed and removed: {task['id']}")
             except Exception as e:
                 logger.error(f"[Scheduler] Error processing task {task.get('id')}: {e}")
 
