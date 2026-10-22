@@ -24,23 +24,7 @@ async function regenerateResponse(botMsgEl) {
     // (because /message will create a fresh user message + new bot reply)
     // Must await to ensure delete completes before /message is sent
     const userSeq = prevEl.dataset.seq;
-    if (userSeq) {
-        try {
-            const resp = await fetch('/api/messages/delete', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    session_id: sessionId, 
-                    user_seq: parseInt(userSeq),
-                    delete_user: true
-                })
-            });
-            const data = await resp.json();
-            if (data.status === 'success') console.log(`Deleted ${data.deleted} old messages`);
-        } catch (err) {
-            console.error('Failed to delete old messages:', err);
-        }
-    }
+    if (userSeq && !await deletePersistedMessage(userSeq, { delete_user: true })) return;
 
     // Remove both the old user message and bot message from DOM
     if (prevEl.parentNode) prevEl.parentNode.removeChild(prevEl);
