@@ -14,7 +14,6 @@ across sessions inside that dir.
 """
 
 import os
-import re
 import sys
 import time
 import socket
@@ -122,31 +121,36 @@ class ChromeLauncher:
         """
         if sys.platform == "win32":
             return []
-        try:
-            listing = subprocess.run(
-                ["ps", "-Ao", "pid=,state=,command="],
-                capture_output=True, text=True, errors="replace", timeout=5,
-            ).stdout
-        except (OSError, subprocess.SubprocessError):
-            return []
+        import psutil
+
         own_pid = self._proc.pid if self._proc else None
-        needle = f"--user-data-dir={self._user_data_dir}"
         found = []
-        for line in listing.splitlines():
-            # --type= marks renderer/GPU children; only the browser holds the lock.
-            if needle not in line or "--type=" in line:
-                continue
-            fields = line.split(maxsplit=2)
-            if len(fields) < 3 or fields[1].startswith("Z"):
-                continue
-            try:
-                pid = int(fields[0])
-            except ValueError:
-                continue
-            if pid == own_pid:
-                continue
-            port_match = re.search(r"--remote-debugging-port=(\d+)", line)
-            found.append((pid, int(port_match.group(1)) if port_match else None))
+        try:
+            processes = psutil.process_iter()
+            for process in processes:
+                if process.pid == own_pid:
+                    continue
+                try:
+                    if process.status() == psutil.STATUS_ZOMBIE:
+                        continue
+                    args = process.cmdline()
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+                # Match actual argv entries: a rendered command cannot separate
+                # a profile path containing spaces/options from real switches.
+                options = {}
+                for arg in args[1:]:
+                    if arg == "--":
+                        break
+                    if arg.startswith("--"):
+                        key, _, value = arg.partition("=")
+                        options[key] = value
+                if options.get("--user-data-dir") != self._user_data_dir or "--type" in options:
+                    continue
+                port = options.get("--remote-debugging-port", "")
+                found.append((process.pid, int(port) if port.isascii() and port.isdecimal() else None))
+        except (psutil.Error, OSError):
+            return []
         return found
 
     def _clear_stale_singleton_locks(self):

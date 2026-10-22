@@ -73,3 +73,6 @@ websocket-client>=1.4.0
 python-telegram-bot
 slack_bolt
 discord.py
+
+# Exact argv identity for POSIX managed browser profile discovery.
+psutil>=5.9.0; sys_platform != "win32"

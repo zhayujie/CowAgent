@@ -47,3 +47,6 @@ discord.py
 # for it only where it can be installed.
 web.py; python_version < "3.10"
 web.py>=0.76; python_version >= "3.10"
+
+# Exact argv identity for POSIX managed browser profile discovery.
+psutil>=5.9.0; sys_platform != "win32"
