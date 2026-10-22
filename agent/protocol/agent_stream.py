@@ -298,6 +298,9 @@ class AgentStreamExecutor:
         self.cancel_event = cancel_event
         self.steer_inbox = steer_inbox
         self.allow_empty_response = allow_empty_response
+        # Bound explicitly by the conversation owner at bridge entry. Children
+        # get a fresh executor and cannot inherit their parent's todo authority.
+        self._todo_owner = None
 
         # Message history - use provided messages or create new list
         self.messages = messages if messages is not None else []
@@ -365,6 +368,10 @@ class AgentStreamExecutor:
     def _record_stream_usage(self, snapshot: Optional[Dict[str, Any]]) -> None:
         if snapshot:
             self.run_usage = self._merge_usage(self.run_usage, snapshot)
+
+    def bind_todo_owner(self, store, session_id: str, agent_id: str, run_id: str) -> None:
+        """Bind this executor to the explicitly selected conversation owner."""
+        self._todo_owner = (store, session_id, agent_id, run_id)
 
     def _check_cancelled(self) -> None:
         """Raise AgentCancelledError if the user requested cancellation.
@@ -1612,9 +1619,8 @@ class AgentStreamExecutor:
         turns = self._identify_complete_turns()
         logger.info(f"Sending {len(messages)} messages ({len(turns)} turns) to LLM")
 
-        # Pull in any MCP tools that finished loading since this turn started.
-        # Cheap dict reconciliation (microseconds) — lets the agent pick up
-        # newly available MCP tools mid-conversation without a session restart.
+        # Pull in MCP tools loaded since this run's tool list was created.
+        # The run owns a private list so this does not mutate the cached Agent.
         try:
             from agent.tools import ToolManager
             ToolManager().sync_mcp_into_agent(self)
@@ -1889,6 +1895,7 @@ class AgentStreamExecutor:
                 # because every load path strips tool_use/tool_result blocks.
                 logger.warning("🔄 Resetting in-memory context to recover (stored history kept)")
                 self.messages.clear()
+                self._request_todo_recovery()
                 if is_context_overflow:
                     raise Exception(_t(
                         "抱歉，对话历史过长导致上下文溢出。我已重置当前上下文（历史记录仍然保留），请重新描述你的需求。",
@@ -2343,6 +2350,11 @@ class AgentStreamExecutor:
             return result
 
         tool = tool_override or self.tools.get(tool_name)
+        if tool_name == "todo_write" and tool is not None:
+            # Tools may be shared by runs and children; all injected state must
+            # live on a private instance, including a caller-supplied override.
+            tool = copy.copy(tool)
+            tool.todo_context = None
         start_event = {
             "tool_call_id": tool_id,
             "tool_name": tool_name,
@@ -2386,8 +2398,28 @@ class AgentStreamExecutor:
             # Execute tool
             start_time = time.time()
             try:
+                if tool_name == "todo_write" and self._todo_owner is not None:
+                    # Import only at invocation to keep tool discovery acyclic.
+                    from agent.tools.todo_write.todo_write_tool import TodoContext
+                    from common.utils import current_agent_run_id
+
+                    store, session_id, agent_id, bound_run_id = self._todo_owner
+                    run_id = current_agent_run_id()
+                    if store is not None and run_id and run_id == bound_run_id:
+                        def commit(todos, explanation):
+                            return store.commit_todo_snapshot(
+                                session_id, run_id, tool_id, todos, explanation
+                            )
+
+                        tool.todo_context = TodoContext(
+                            agent_id=agent_id, session_id=session_id,
+                            run_id=run_id, tool_call_id=tool_id, commit=commit,
+                        )
                 result: ToolResult = tool.execute_tool(arguments)
             finally:
+                if tool_name == "todo_write":
+                    tool.todo_context = None
+                    tool.context = None
                 tool.progress_callback = None
                 tool.cancel_event = None
                 tool.event_callback = None
@@ -2627,6 +2659,12 @@ class AgentStreamExecutor:
             {"role": "system", "content": self.system_prompt}
         )
         budget = int((window - completion - system_tokens) * 0.9)
+        # The provider may report a smaller window than the catalog; tighten
+        # the recovery note allowance before retrying.
+        self._todo_context_token_limit = max(1, budget // 20)
+        todo_tokens = self._todo_context_tokens(rebuilt=True)
+        if getattr(self, "_todo_owner", None) is not None:
+            return max(1, budget - todo_tokens)
         return max(2000, budget)
 
     def _smart_compact_to_budget(self, error_str: str) -> bool:
@@ -2646,7 +2684,9 @@ class AgentStreamExecutor:
         """
         COMPRESS_THRESHOLD = 5
 
+        original_todo_tokens = self._todo_context_tokens()
         input_budget = self._overflow_input_budget(error_str)
+        todo_reduced = self._todo_context_tokens(rebuilt=True) < original_todo_tokens
         original_count = len(self.messages)
 
         turns = self._identify_complete_turns()
@@ -2716,10 +2756,14 @@ class AgentStreamExecutor:
                 logger.warning("🧹 Smart compaction produced no messages, will clear history")
                 return False
             if len(new_messages) >= original_count:
+                if todo_reduced:
+                    self._request_todo_recovery()
+                    return True
                 logger.warning("🧹 Smart compaction could not reduce the context, will clear history")
                 return False
 
         self.messages[:] = new_messages
+        self._request_todo_recovery()
         new_tokens = sum(self._estimate_turn_tokens(t) for t in turns)
         logger.info(
             f"🔄 Smart compaction: {original_count} -> {len(self.messages)} messages "
@@ -2824,7 +2868,9 @@ class AgentStreamExecutor:
             max_tokens = input_ceiling
 
         system_tokens = self.agent._estimate_message_tokens({"role": "system", "content": self.system_prompt})
-        budget = max_tokens - system_tokens
+        # Kept history repeats the current note; a trim re-renders it.
+        todo_tokens = max(self._todo_context_tokens(), self._todo_context_tokens(rebuilt=True))
+        budget = max_tokens - system_tokens - todo_tokens
         current_tokens = sum(self._estimate_turn_tokens(turn) for turn in turns)
 
         # Step 3: Trim to satisfy BOTH constraints (AND):
@@ -2834,7 +2880,7 @@ class AgentStreamExecutor:
         # History is only kept when it fits within the token budget AND the
         # turn cap. If both are already satisfied, keep everything untouched
         # (no trimming, no summary LLM call).
-        if current_tokens + system_tokens <= max_tokens and len(turns) <= self.max_context_turns:
+        if current_tokens <= budget and len(turns) <= self.max_context_turns:
             new_messages = []
             for turn in turns:
                 new_messages.extend(turn['messages'])
@@ -2891,7 +2937,7 @@ class AgentStreamExecutor:
         # already thin. This keeps the user query + final reply of each turn.
         COMPRESS_THRESHOLD = 5
         if (not kept_previous and len(kept_turns) < COMPRESS_THRESHOLD
-                and kept_tokens + system_tokens > max_tokens):
+                and kept_tokens > budget):
             compressed_turns = []
             for t in kept_turns:
                 compressed = compress_turn_to_text_only(t)
@@ -2935,6 +2981,7 @@ class AgentStreamExecutor:
             new_messages.extend(turn['messages'])
 
         self.messages = new_messages
+        self._request_todo_recovery()
 
     def run_start_index(self) -> Optional[int]:
         """Index in ``self.messages`` where this run's messages begin.
@@ -2951,12 +2998,190 @@ class AgentStreamExecutor:
                 return idx
         return None
 
+    def _todo_context_text(self) -> str:
+        """Render durable state within a bounded request-only token allowance."""
+        owner = getattr(self, "_todo_owner", None)
+        if owner is None:
+            return ""
+
+        store, session_id, _agent_id, _run_id = owner
+        if store is None:
+            return ""
+
+        try:
+            from agent.tools.todo_write.todo_write_tool import MAX_TODOS
+
+            snapshot = store.get_todo_snapshot(session_id)
+        except Exception as exc:
+            logger.exception(
+                "[Todo] Failed to load snapshot for session=%s", session_id
+            )
+            raise RuntimeError(
+                "Failed to load the current todo state; the model request was not sent"
+            ) from exc
+
+        if snapshot is None:
+            return ""
+
+        todos = snapshot.get("todos")
+        if not isinstance(todos, list) or any(
+            not isinstance(item, dict)
+            or item.get("status") not in ("pending", "in_progress", "completed")
+            or not isinstance(item.get("content"), str)
+            or not item["content"].strip()
+            for item in todos
+        ):
+            raise RuntimeError("The current todo snapshot is invalid; the model request was not sent")
+
+        from agent.protocol.agent import Agent
+
+        estimate = Agent._estimate_text_tokens
+        budget = 2048
+        if self.agent is not None and hasattr(self.agent, "_get_model_context_window"):
+            available = max(1, self.agent._get_model_context_window()
+                            - self.agent._get_output_reserve_tokens())
+            cap = getattr(self.agent, "max_context_tokens", None)
+            if cap:
+                available = min(available, cap)
+            budget = min(budget, max(1, available // 20))
+        budget = min(budget, getattr(self, "_todo_context_token_limit", budget))
+
+        header = _t(
+            f"压缩恢复时的待办状态（版本 {snapshot['version']}）：",
+            f"Todo state at context recovery (version {snapshot['version']}):",
+        )
+        instruction = _t(
+            "之后的 todo_write 结果优先；任务变化时用 todo_write 更新完整清单。",
+            "Later todo_write results take precedence; use todo_write to update the complete list when it changes.",
+        )
+        if len(todos) > MAX_TODOS:
+            instruction += _t(
+                f" 旧清单共 {len(todos)} 项，下次写入请整理至最多 {MAX_TODOS} 项。",
+                f" This legacy list has {len(todos)} items; consolidate it to at most {MAX_TODOS} on the next write.",
+            )
+        if not todos:
+            text = header + "\n" + _t(
+                "当前待办清单为空，不要恢复旧清单。",
+                "The current todo list is empty; do not restore an older list.",
+            )
+            return text if estimate(text) <= budget else ""
+
+        marks = {"pending": "[ ]", "in_progress": "[~]", "completed": "[x]"}
+
+        def render(limit=None):
+            lines = [header]
+            for item in todos:
+                content = item["content"].strip()
+                if limit is not None and len(content) > limit:
+                    content = content[:limit] + "…"
+                lines.append(f"{marks[item['status']]} {content}")
+            lines.append(instruction)
+            if limit is not None:
+                lines.append(_t(
+                    "描述已缩略，原文仍完整保存；核对任务含义后再更新，勿凭缩略文本重建清单。",
+                    "Descriptions are abbreviated; originals remain stored. Verify task details before updating; do not rebuild from abbreviations.",
+                ))
+            return "\n".join(lines)
+
+        text = render()
+        if estimate(text) <= budget:
+            return text
+        # Abbreviate only the request view. Binary search bounds the estimated
+        # token cost of mixed-language descriptions without changing storage.
+        low, high = 0, max(len(item["content"]) for item in todos)
+        while low < high:
+            middle = (low + high + 1) // 2
+            if estimate(render(middle)) <= budget:
+                low = middle
+            else:
+                high = middle - 1
+        text = render(low)
+        if estimate(text) <= budget:
+            return text
+        # An oversized legacy list falls back to counts. The note must forbid
+        # replacing the stored list from this incomplete view.
+        counts = {status: sum(item["status"] == status for item in todos) for status in marks}
+        text = header + "\n" + _t(
+            f"清单过长，条目未注入：{counts}。原文仍完整保存。请先核对原计划；不要根据此统计覆盖清单。",
+            f"List too long; items omitted: {counts}. Originals remain stored. Verify the original plan. Do not replace or rebuild the list from these counts.",
+        )
+        if estimate(text) > budget:
+            logger.warning("[Todo] Recovery note omitted: insufficient token budget")
+            return ""
+        return text
+
+    def _todo_context_tokens(self, rebuilt: bool = False) -> int:
+        """Estimate the recovery note the next request will carry.
+
+        A pending or ``rebuilt`` context renders the latest snapshot; otherwise
+        the request repeats the fixed note only while its anchor survives, and
+        that note may be larger than the latest snapshot.
+        """
+        from agent.protocol.agent import Agent
+
+        agent = self.agent
+        if agent is None:
+            return 0
+        pending = getattr(agent, "_todo_recovery_pending", False)
+        if rebuilt or (pending and getattr(self, "_todo_owner", None) is not None):
+            return Agent._estimate_text_tokens(self._todo_context_text())
+        recovery = getattr(agent, "_todo_recovery", None)
+        if not recovery or not any(m is recovery["anchor"] for m in self.messages):
+            return 0
+        return Agent._estimate_text_tokens(recovery["text"])
+
+    def _request_todo_recovery(self) -> None:
+        """Mark the context as rebuilt so the next request restores todos once."""
+        if self.agent is not None:
+            self.agent._todo_recovery_pending = True
+
     def _prepare_messages(self) -> List[Dict[str, Any]]:
+        """Attach the recovery note to a request copy without changing history.
+
+        The note is rendered once, right after the context is compacted or
+        rebuilt, and then repeated verbatim on the same anchor so later
+        requests share a stable prefix. Normal requests rely on the
+        todo_write results already in context.
         """
-        Prepare messages to send to LLM
-        
-        Note: For Claude API, system prompt should be passed separately via system parameter,
-        not as a message. The AgentLLMModel will handle this.
-        """
-        # Don't add system message here - it will be handled separately by the LLM adapter
-        return self.messages
+        agent = self.agent
+        if agent is None:
+            return self.messages
+        if getattr(agent, "_todo_recovery_pending", False) and self._todo_owner is not None:
+            agent._todo_recovery = None
+            state_text = self._todo_context_text()
+            if state_text:
+                anchor = next(
+                    (message for message in reversed(self.messages)
+                     if message.get("role") == "user"),
+                    None,
+                )
+                if anchor is None:
+                    raise RuntimeError(
+                        "No user message is available for the current todo state; "
+                        "the model request was not sent"
+                    )
+                agent._todo_recovery = {"anchor": anchor, "text": state_text}
+            agent._todo_recovery_pending = False
+
+        recovery = getattr(agent, "_todo_recovery", None)
+        if not recovery:
+            return self.messages
+        user_index = next(
+            (index for index, message in enumerate(self.messages)
+             if message is recovery["anchor"]),
+            None,
+        )
+        if user_index is None:
+            return self.messages
+        state_text = recovery["text"]
+        messages = self.messages.copy()
+        user_message = copy.copy(messages[user_index])
+        messages[user_index] = user_message
+        content = user_message.get("content")
+        if isinstance(content, list):
+            user_message["content"] = content + [{"type": "text", "text": state_text}]
+        elif isinstance(content, str):
+            user_message["content"] = content + "\n\n" + state_text
+        else:
+            user_message["content"] = [{"type": "text", "text": state_text}]
+        return messages

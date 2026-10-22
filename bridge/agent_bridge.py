@@ -28,6 +28,18 @@ from config import conf
 from models.openai_compatible_bot import OpenAICompatibleBot
 
 
+def _todo_enabled_for_context(context, session_id: Optional[str]) -> bool:
+    """Whether this interactive conversation may expose todo_write."""
+    if not context or not session_id:
+        return False
+    channel_type = str(context.get("channel_type") or "").strip().lower()
+    if channel_type not in {"web", "desktop"}:
+        return False
+    if context.get("is_scheduled_task") or context.get("is_delegated_task"):
+        return False
+    return not (session_id or "").startswith("scheduler_")
+
+
 def add_openai_compatible_support(bot_instance):
     """
     Dynamically add OpenAI-compatible tool calling support to a bot instance.
@@ -1663,15 +1675,29 @@ class AgentBridge:
             # Filter tools based on context
             original_tools = agent.tools
             filtered_tools = original_tools
-            
-            # If this is a scheduled task execution, exclude scheduler tool to prevent recursion
+
+            # Todo snapshots belong to interactive Web/Desktop conversations.
+            # Filter per run so a cached Agent cannot leak the tool across channels.
+            allow_todo = _todo_enabled_for_context(context, session_id)
+            filtered_tools = [
+                tool for tool in original_tools
+                if tool.name != "todo_write" or allow_todo
+            ]
+            if allow_todo and not any(tool.name == "todo_write" for tool in filtered_tools):
+                from agent.tools.todo_write.todo_write_tool import TodoWriteTool
+                from config import conf
+
+                configured_tools = conf().get("tools", {})
+                todo_config = configured_tools.get("todo_write", {}) if isinstance(configured_tools, dict) else {}
+                filtered_tools.append(TodoWriteTool(todo_config))
+
+            # Scheduled tasks cannot recursively schedule themselves.
             if context and context.get("is_scheduled_task"):
-                filtered_tools = [tool for tool in agent.tools if tool.name != "scheduler"]
-                agent.tools = filtered_tools
+                filtered_tools = [tool for tool in filtered_tools if tool.name != "scheduler"]
                 logger.info(f"[AgentBridge] Scheduled task execution: excluded scheduler tool ({len(filtered_tools)}/{len(original_tools)} tools)")
 
-            if context and agent.tools:
-                for tool in agent.tools:
+            if context and filtered_tools:
+                for tool in filtered_tools:
                     if tool.name == "scheduler" and not context.get("is_scheduled_task"):
                         try:
                             from agent.tools.scheduler.integration import attach_scheduler_to_tool
@@ -1748,6 +1774,17 @@ class AgentBridge:
 
             writer = StepWriter(write_reply, skip_query=pre_persisted) if session_id else None
 
+            def bind_executor(executor):
+                # Capture this turn's owner, never the speaker's workspace or
+                # mutable attributes on a cached runtime. Only this executor is
+                # authorized; spawned children remain unbound.
+                if allow_todo:
+                    executor.bind_todo_owner(
+                        run_store, session_id, resolved_agent_id, run_id
+                    )
+                if writer is not None:
+                    writer.bind(executor)
+
             def on_run_event(event):
                 # Store the step before announcing it: a listener hearing
                 # turn_end may rely on the step being in the transcript.
@@ -1774,12 +1811,13 @@ class AgentBridge:
                     clear_history=clear_history,
                     cancel_event=cancel_event,
                     steer_inbox=steer_inbox,
+                    tools_override=filtered_tools,
                     # A scheduled task may legitimately have nothing to report
                     # (e.g. "notify me only if the price drops"). Nobody is
                     # waiting on this run, so an empty answer stays empty and
                     # the scheduler sends no message at all.
                     allow_empty_response=bool(context and context.get("is_scheduled_task")),
-                    on_executor=writer.bind if writer is not None else None,
+                    on_executor=bind_executor,
                 )
             except Exception:
                 # Keep the steps finished before the failure.
@@ -1793,10 +1831,6 @@ class AgentBridge:
                     mark_run_active(agent, False)
                 except Exception:
                     pass
-
-                # Restore original tools
-                if context and context.get("is_scheduled_task"):
-                    agent.tools = original_tools
 
                 # Log execution summary
                 event_handler.log_summary()

@@ -111,6 +111,7 @@ function newChat(optimistic = true, inherit = true) {
 
     // Generate a fresh session and persist it so the next page load also starts clean
     sessionId = generateSessionId();
+    renderWebTodoPanel();
     localStorage.setItem(activeSessionStorageKey(), sessionId);
     refreshWorkspaceSelector();  // a fresh session starts on the default workspace
     refreshSessionSettings();    // ... and on the global model / permission

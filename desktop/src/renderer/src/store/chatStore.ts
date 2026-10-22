@@ -3,7 +3,8 @@ import apiClient from '../api/client'
 import { useWorkspaceStore } from './workspaceStore'
 import { sessionOwner } from './sessionStore'
 import { cfgFor } from './sessionSettingsStore'
-import { findAgent } from './agentStore'
+import { findAgent, useAgentStore } from './agentStore'
+import { useTodoStore } from './todoStore'
 import { notifyRunDone } from '../lib/taskNotify'
 import { parseAttachmentMarkers } from '../lib/fileKind'
 import { handoffPayload } from '../lib/handoff'
@@ -77,6 +78,10 @@ const RELOAD_AFTER_DROP_INTERVAL_MS = 2000
 const FOLLOW_RUNNING_INTERVAL_MS = 3000
 const followTimers: Record<string, ReturnType<typeof setTimeout>> = {}
 const followReloads = new Set<string>()
+// Invalidates pending history and stream callbacks when a session is removed.
+const sessionEpochs: Record<string, number> = {}
+const historyRequests: Record<string, number> = {}
+export const todoOwner = (sid: string): string => sessionOwner(sid) || useAgentStore.getState().defaultAgentId
 
 const EMPTY: SessionRuntime = {
   messages: [],
@@ -336,7 +341,8 @@ export const useChatStore = create<ChatState>((set, get) => {
     patchMessages(sid, (msgs) => msgs.map((m) => (m.id === id ? fn(m) : m)))
 
   /** Attach an EventSource for a request and wire all SSE events to a bot message. */
-  const attachStream = (sid: string, requestId: string, botId: string) => {
+  const attachStream = (sid: string, requestId: string, botId: string, owner = todoOwner(sid)) => {
+    const epoch = sessionEpochs[sid] || 0
     const es = apiClient.createSSEStream(requestId)
     streams[sid] = es
     let tailTimer: ReturnType<typeof setTimeout> | null = null
@@ -451,6 +457,7 @@ export const useChatStore = create<ChatState>((set, get) => {
     }
 
     es.onmessage = (event) => {
+      if ((sessionEpochs[sid] || 0) !== epoch) return
       let data: StreamEvent
       try {
         data = JSON.parse(event.data)
@@ -463,6 +470,17 @@ export const useChatStore = create<ChatState>((set, get) => {
       if (detached() && (data.type === 'delta' || data.type === 'reasoning')) return
 
       switch (data.type) {
+        case 'todo_update': {
+          // Missing fields may use this stream’s captured origin; explicit
+          // mismatches (including teammate events) never write the owner’s plan.
+          if (todoOwner(sid) !== owner || !owner) break
+          useTodoStore.getState().applySnapshot({
+            ...data,
+            agent_id: data.agent_id ?? owner,
+            session_id: data.session_id ?? sid,
+          }, owner, sid)
+          break
+        }
         case 'reasoning':
           updateMsg(sid, speaking(), (m) => ({ ...m, reasoning: (m.reasoning || '') + (data.content || '') }))
           break
@@ -747,6 +765,7 @@ export const useChatStore = create<ChatState>((set, get) => {
     }
 
     es.onerror = () => {
+      if ((sessionEpochs[sid] || 0) !== epoch) return
       flushDeltas()
       // Stream closed (often the normal end after `done`/tail). Finalize.
       if (ended) finishStream()
@@ -788,6 +807,8 @@ export const useChatStore = create<ChatState>((set, get) => {
       // Empty in single-Agent mode, so those replies keep the product logo
       // exactly as before.
       const owner = sessionOwner(sid)
+      const planOwner = todoOwner(sid)
+      const sendEpoch = sessionEpochs[sid] || 0
       const addressed = owner ? addressedAgentId(text, sessionRoster(sid)) : ''
       const speakerAgentId = addressed || owner
       const botMsg: ChatMessage = {
@@ -811,6 +832,7 @@ export const useChatStore = create<ChatState>((set, get) => {
           speakerAgentId: addressed && addressed !== owner ? addressed : undefined,
           display: display || undefined,
         })
+        if ((sessionEpochs[sid] || 0) !== sendEpoch) return
         // The server is the authority on who took the turn; repaint the live
         // bubble if it resolved the mention differently than we guessed.
         if (owner && res.status === 'success') {
@@ -821,7 +843,7 @@ export const useChatStore = create<ChatState>((set, get) => {
         }
         if (res.status === 'success' && res.stream && res.request_id) {
           patchSession(sid, { requestId: res.request_id })
-          attachStream(sid, res.request_id, botId)
+          attachStream(sid, res.request_id, botId, planOwner)
         } else if (res.inline_reply) {
           updateMsg(sid, botId, (m) => ({ ...m, content: res.inline_reply || '', isStreaming: false }))
           patchSession(sid, { isStreaming: false })
@@ -830,6 +852,7 @@ export const useChatStore = create<ChatState>((set, get) => {
           patchSession(sid, { isStreaming: false })
         }
       } catch (err) {
+        if ((sessionEpochs[sid] || 0) !== sendEpoch) return
         updateMsg(sid, botId, (m) => ({ ...m, error: `${err}`, isStreaming: false }))
         patchSession(sid, { isStreaming: false })
       }
@@ -933,8 +956,19 @@ export const useChatStore = create<ChatState>((set, get) => {
 
     loadHistory: async (sid, page = 1, untilSeq) => {
       const following = followReloads.delete(sid)
+      const owner = todoOwner(sid)
+      const epoch = sessionEpochs[sid] || 0
+      const request = (historyRequests[sid] || 0) + 1
+      historyRequests[sid] = request
+      const currentRequest = () => (sessionEpochs[sid] || 0) === epoch && historyRequests[sid] === request &&
+        (todoOwner(sid) === owner || (!owner && todoOwner(sid) === useAgentStore.getState().defaultAgentId))
       try {
-        const res = await apiClient.getHistory(sid, page, 20, sessionOwner(sid) || undefined, untilSeq)
+        const res = await apiClient.getHistory(sid, page, 20, owner || undefined, untilSeq)
+        if (!currentRequest()) return false
+        if (page === 1 && res.agent_id && res.session_id === sid &&
+            (res.agent_id === owner || (!owner && (!todoOwner(sid) || res.agent_id === todoOwner(sid))))) {
+          useTodoStore.getState().applySnapshot(res.todo_snapshot, res.agent_id, sid)
+        }
         // A turn sent while this was loading owns the live bubbles now.
         if (page === 1 && get().sessions[sid]?.isStreaming) return true
         const uiMsgs = res.messages.flatMap(historyToMessages)
@@ -966,6 +1000,7 @@ export const useChatStore = create<ChatState>((set, get) => {
         }
         return true
       } catch {
+        if (!currentRequest()) return false
         patchSession(sid, { historyLoaded: true })
         return false
       }
@@ -1025,6 +1060,9 @@ export const useChatStore = create<ChatState>((set, get) => {
     },
 
     clearLocal: (sid) => {
+      sessionEpochs[sid] = (sessionEpochs[sid] || 0) + 1
+      useTodoStore.getState().clearSession(sid)
+      followReloads.delete(sid)
       clearTimeout(followTimers[sid])
       delete followTimers[sid]
       const es = streams[sid]

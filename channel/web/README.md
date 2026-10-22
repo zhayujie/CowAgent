@@ -313,6 +313,7 @@ auth), see `tests/test_web_console_routing.py`.
 |---|---|
 | `chat/state.js` | Session and streaming state, history loading, attachments, `agent_id` injection into `fetch` |
 | `chat/context-usage.js` | Usage popover on the clear-context button and compaction |
+| `chat/todo.js` | Floating todo panel, Agent/session snapshot versions, SSE updates and history recovery; loads after state and before consumers |
 | `chat/workspace-selector.js` | Project selector above the input and the file picker dialog |
 | `chat/session-settings.js` | Per-session permission mode and model: the two chips under the input |
 | `chat/composer-input.js` | Drag-and-drop upload, paste, slash command menu, input key handling |

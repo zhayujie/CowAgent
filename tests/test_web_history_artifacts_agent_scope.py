@@ -90,24 +90,29 @@ def _write_step(path):
     }
 
 
-def _history_for(agent_id, steps):
+def _history_for(agent_id, steps, page=1, snapshot=None):
     """The /api/history response for one assistant turn carrying ``steps``."""
     from channel.web.api import sessions as sessions_api
 
     class _Store:
+        def get_todo_snapshot(self, session_id):
+            assert session_id == SESSION_ID
+            assert page == 1, 'older pages must not read snapshots'
+            return snapshot
+
         def load_history_page(self, **kwargs):
             return {
                 "messages": [
                     {"role": "assistant", "content": "wrote it", "steps": steps},
                 ],
                 "total": 1,
-                "page": 1,
+                "page": page,
                 "page_size": 20,
                 "has_more": False,
             }
 
     params = types.SimpleNamespace(
-        session_id=SESSION_ID, page="1", page_size="20", agent_id=agent_id,
+        session_id=SESSION_ID, page=str(page), page_size="20", agent_id=agent_id,
         until_seq="",
     )
 
@@ -173,3 +178,46 @@ def test_history_still_leaves_out_a_file_outside_the_sessions_root(
     response = _history_for("writer", [_write_step(stray)])
 
     assert response["messages"][0].get("artifacts") is None
+
+
+@pytest.mark.parametrize("agent_id, expected_owner", [("writer", "writer"), ("", "primary")])
+def test_history_first_page_includes_scoped_todo_snapshot(
+    two_agent_registry, agent_id, expected_owner
+):
+    snapshot = {
+        "version": 3,
+        "todos": [{"content": "Check history", "status": "in_progress"}],
+        "run_id": "run-1",
+        "tool_call_id": "todo-1",
+    }
+
+    response = _history_for(agent_id, [], snapshot=snapshot)
+
+    assert response["status"] == "success"
+    assert response["agent_id"] == expected_owner
+    assert response["session_id"] == SESSION_ID
+    assert response["todo_snapshot"] == {
+        **snapshot, "agent_id": expected_owner, "session_id": SESSION_ID,
+    }
+    assert "agent_id" not in snapshot  # Handler must not mutate the stored state.
+
+
+def test_history_first_page_without_todos_returns_scoped_null(two_agent_registry):
+    response = _history_for("writer", [])
+
+    assert response["status"] == "success"
+    assert response["agent_id"] == "writer"
+    assert response["session_id"] == SESSION_ID
+    assert "todo_snapshot" in response
+    assert response["todo_snapshot"] is None
+
+
+def test_history_older_pages_neither_read_nor_return_todo_snapshot(two_agent_registry):
+    # The fixture's get_todo_snapshot raises if the handler reads it on page 2.
+    response = _history_for("writer", [], page=2, snapshot={"version": 5, "todos": []})
+
+    assert response["status"] == "success"
+    assert response["page"] == 2
+    assert "todo_snapshot" not in response
+    assert "agent_id" not in response
+    assert "session_id" not in response

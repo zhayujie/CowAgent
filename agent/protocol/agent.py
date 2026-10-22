@@ -137,6 +137,10 @@ class Agent:
         self.output_mode = output_mode
         self.last_usage = None  # Store last API response usage info
         self.messages = []  # Unified message history for stream mode
+        # A fresh runtime restores truncated history, so the first request
+        # after it carries one todo recovery note (see AgentStreamExecutor).
+        self._todo_recovery_pending = True
+        self._todo_recovery = None
         self.messages_lock = threading.Lock()  # Lock for thread-safe message operations
         self.memory_manager = memory_manager  # Memory manager for auto memory flush
         self.workspace_dir = workspace_dir  # Workspace directory (state root, e.g. ~/cow)
@@ -307,7 +311,7 @@ class Agent:
             logger.warning(f"Failed to build skills prompt: {e}")
             return ""
     
-    def get_full_system_prompt(self, skill_filter=None) -> str:
+    def get_full_system_prompt(self, skill_filter=None, tools_override=None) -> str:
         """
         Build the complete system prompt from scratch every time.
 
@@ -335,7 +339,10 @@ class Agent:
                 # Same list the model is offered this turn: describing a tool
                 # in the prompt that is not in the schema invites it to call
                 # something that is not there.
-                tools=[tool for tool in self.tools if is_tool_available(tool)],
+                tools=[
+                    tool for tool in (tools_override if tools_override is not None else self.tools)
+                    if is_tool_available(tool)
+                ],
                 context_files=context_files,
                 skill_manager=self.skill_manager,
                 memory_manager=self.memory_manager,
@@ -758,7 +765,8 @@ class Agent:
 
     def run_stream(self, user_message: str, on_event=None, clear_history: bool = False,
                    skill_filter=None, cancel_event=None, steer_inbox=None,
-                   allow_empty_response: bool = False, on_executor=None) -> str:
+                   allow_empty_response: bool = False, on_executor=None,
+                   tools_override=None) -> str:
         """
         Execute single agent task with streaming (based on tool-call)
 
@@ -788,6 +796,8 @@ class Agent:
                 (scheduled tasks), where sending nothing is a valid outcome.
             on_executor: Optional callback(executor), called once before the
                 run starts, for callers that follow its messages as it goes.
+            tools_override: Optional per-run tool list. When supplied, it is used
+                for this executor and its prompt without mutating the cached Agent.
 
         Returns:
             Final response text
@@ -810,7 +820,14 @@ class Agent:
             raise ValueError("No model available for agent")
 
         # Get full system prompt with skills
-        full_system_prompt = self.get_full_system_prompt(skill_filter=skill_filter)
+        if tools_override is None:
+            full_system_prompt = self.get_full_system_prompt(skill_filter=skill_filter)
+            run_tools = list(self.tools)
+        else:
+            full_system_prompt = self.get_full_system_prompt(
+                skill_filter=skill_filter, tools_override=tools_override
+            )
+            run_tools = list(tools_override)
 
         # Create a copy of messages for this execution to avoid concurrent modification
         # Record the original length to track which messages are new
@@ -827,7 +844,7 @@ class Agent:
             agent=self,
             model=self.model,
             system_prompt=full_system_prompt,
-            tools=self.tools,
+            tools=run_tools,
             max_turns=self.max_steps,
             on_event=on_event,
             messages=messages_copy,  # Pass copied message history
@@ -1027,6 +1044,7 @@ class Agent:
 
             new_messages.extend(arrived)
             self.messages = new_messages
+            self._todo_recovery_pending = True
             after = len(self.messages)
 
         # The last provider usage described the pre-compaction history, so it is
