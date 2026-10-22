@@ -5,6 +5,7 @@ supplied by the caller (openpyxl's ``load_workbook``).
 """
 
 from contextlib import contextmanager
+from copy import deepcopy
 
 
 def iter_docx_body_text(document):
@@ -24,6 +25,17 @@ def _iter_docx_blocks(container, parent):
 
     for element in container.iterchildren():
         if element.tag == qn("w:p"):
+            fields = list(element.iter(qn("w:fldSimple")))
+            if fields:
+                # python-docx skips simple-field containers, although their
+                # child runs hold the displayed result saved by Word. Unwrap
+                # a copy only: read cached text without executing instructions
+                # or removing fields from the caller's document.
+                element = deepcopy(element)
+                for field in list(element.iter(qn("w:fldSimple"))):
+                    for child in list(field):
+                        field.addprevious(child)
+                    field.getparent().remove(field)
             yield Paragraph(element, parent).text
         elif element.tag == qn("w:sdt"):
             content = element.find(qn("w:sdtContent"))
