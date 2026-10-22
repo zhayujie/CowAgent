@@ -25,10 +25,10 @@ def fsize(file):
 def compress_imgfile(file, max_size):
     if fsize(file) <= max_size:
         return file
-    from PIL import Image
+    from PIL import Image, ImageOps
     file.seek(0)
     img = Image.open(file)
-    rgb_image = img.convert("RGB")
+    rgb_image = ImageOps.exif_transpose(img).convert("RGB")
     quality = 95
     min_quality = 10
     while True:
