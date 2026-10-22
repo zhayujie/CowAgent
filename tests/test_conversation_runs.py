@@ -152,8 +152,16 @@ def test_get_run_detail_recovers_full_output_from_session():
         store.append_messages(
             session_id,
             [
-                {"role": "user", "content": [{"type": "text", "text": "[SCHEDULED] run it"}]},
-                {"role": "assistant", "content": [{"type": "text", "text": long_body}]},
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "text": "[SCHEDULED] run it"}],
+                    "run_id": "r-detail",
+                },
+                {
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": long_body}],
+                    "run_id": "r-detail",
+                },
             ],
         )
 

@@ -593,6 +593,7 @@ def _remember_delivered_output(
     channel_type: str,
     content: str,
     agent_id: str = None,
+    run_id: str = "",
 ) -> None:
     """Best-effort persistence of the message the scheduler sent to a user.
 
@@ -637,6 +638,18 @@ def _remember_delivered_output(
             }
             if hasattr(agent_bridge, "agent_registry"):
                 kwargs["agent_id"] = agent_id
+            if run_id:
+                import inspect
+
+                try:
+                    params = inspect.signature(remember).parameters.values()
+                    if any(
+                        p.name == "run_id" or p.kind == inspect.Parameter.VAR_KEYWORD
+                        for p in params
+                    ):
+                        kwargs["run_id"] = run_id
+                except (TypeError, ValueError):
+                    pass
             remember(session_id, str(content), **kwargs)
     except Exception as e:
         logger.warning(
@@ -732,7 +745,7 @@ def _run_scheduled_task(
         return False
 
     run = _record_scheduler_run(task, agent_id, trigger=trigger)
-    sink: Dict[str, str] = {}
+    sink: Dict[str, str] = {"run_id": run[1]} if run is not None else {}
     status = "done"
     error = ""
     try:
@@ -888,7 +901,8 @@ def _execute_agent_task(
             if output_sink is not None:
                 output_sink["preview"] = str(reply.content)
             _remember_delivered_output(
-                agent_bridge, task, channel_type, reply.content, agent_id
+                agent_bridge, task, channel_type, reply.content, agent_id,
+                run_id=(output_sink or {}).get("run_id", ""),
             )
             logger.info(f"[Scheduler] Task {task['id']} executed successfully, result sent to {receiver}")
             return True
@@ -980,7 +994,8 @@ def _execute_send_message(
         if output_sink is not None:
             output_sink["preview"] = str(content)
         _remember_delivered_output(
-            agent_bridge, task, channel_type, content, agent_id
+            agent_bridge, task, channel_type, content, agent_id,
+            run_id=(output_sink or {}).get("run_id", ""),
         )
         logger.info(f"[Scheduler] Task {task['id']} executed: sent message to {receiver}")
         return True
@@ -1060,7 +1075,8 @@ def _execute_tool_call(
         if output_sink is not None:
             output_sink["preview"] = str(content)
         _remember_delivered_output(
-            agent_bridge, task, channel_type, content, agent_id
+            agent_bridge, task, channel_type, content, agent_id,
+            run_id=(output_sink or {}).get("run_id", ""),
         )
         logger.info(f"[Scheduler] Task {task['id']} executed: sent tool result to {receiver}")
         return True
@@ -1164,7 +1180,8 @@ def _execute_skill_call(
         if output_sink is not None:
             output_sink["preview"] = str(summary)
         _remember_delivered_output(
-            agent_bridge, task, channel_type, summary, agent_id
+            agent_bridge, task, channel_type, summary, agent_id,
+            run_id=(output_sink or {}).get("run_id", ""),
         )
         logger.info(f"[Scheduler] Task {task['id']} executed: skill result sent to {receiver}")
         return True

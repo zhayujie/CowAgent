@@ -1644,14 +1644,10 @@ class ConversationStore:
         the scheduler threads the push into (``_remember_delivered_output``), so
         this joins back to that session to recover the full body.
 
-        Correlation is by ``(session_id, agent_id)`` from the run, then the
-        scheduler-injected assistant message whose ``created_at`` is closest at
-        or after the run's ``started_at`` (the pair this run wrote). It is
-        best-effort: the session copy is itself capped (~2000 chars) and old
-        scheduler pairs are pruned, so ``full_output`` may be ``None`` — the
-        caller falls back to the preview. Messages are scoped to the *run's*
-        ``agent_id``, not this store's bound id, since a run may belong to any
-        Agent in the global ledger.
+        Correlation uses the scheduler run id persisted on the delivered pair,
+        scoped to its Agent and receiver session. If that pair was pruned or
+        predates run-id association, leave ``full_output`` unset so the caller
+        uses this run's durable preview instead of another task's message.
         """
         run = self.get_run(run_id)
         if run is None:
@@ -1672,45 +1668,39 @@ class ConversationStore:
             return detail
 
         run_agent_id = run.get("agent_id") or ""
-        started_at = run.get("started_at") or 0
+        try:
+            from agent.registry import get_agent_registry
+            if run_agent_id == get_agent_registry().default_agent_id:
+                run_agent_id = ""
+        except Exception:
+            pass
         with self._lock:
             conn = self._connect()
             try:
                 rows = conn.execute(
                     """
-                    SELECT seq, role, content, created_at
+                    SELECT role, content
                     FROM messages
-                    WHERE agent_id = ? AND session_id = ?
+                    WHERE agent_id = ? AND session_id = ? AND run_id = ?
                     ORDER BY seq ASC
                     """,
-                    (run_agent_id, session_id),
+                    (run_agent_id, session_id, run_id),
                 ).fetchall()
             except sqlite3.OperationalError:
                 rows = []
             finally:
                 conn.close()
 
-        # Assistant messages that answer a [SCHEDULED] user turn are the delivered
-        # bodies. Pick the one written closest at/after this run started; fall
-        # back to the newest scheduler body if none lands after the timestamp
-        # (clock skew, or the pair persisted a hair before the run row).
-        candidates: List[tuple] = []  # (created_at, text)
-        for i, (seq, role, raw, created_at) in enumerate(rows):
-            if role != "user":
+        candidates = []
+        for index, (role, raw) in enumerate(rows):
+            if role != "user" or not _message_is_scheduled_marker(raw):
                 continue
-            if not _message_is_scheduled_marker(raw):
-                continue
-            if i + 1 < len(rows) and rows[i + 1][1] == "assistant":
-                text = _message_plain_text(rows[i + 1][2])
+            if index + 1 < len(rows) and rows[index + 1][0] == "assistant":
+                text = _message_plain_text(rows[index + 1][1])
                 if text:
-                    candidates.append((rows[i + 1][3] or 0, text))
-
-        if candidates:
-            after = [c for c in candidates if c[0] >= started_at]
-            chosen = min(after, key=lambda c: c[0]) if after else max(
-                candidates, key=lambda c: c[0]
-            )
-            detail["full_output"] = chosen[1]
+                    candidates.append(text)
+        if len(candidates) == 1:
+            detail["full_output"] = candidates[0]
         return detail
 
     def load_history_page(

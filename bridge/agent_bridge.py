@@ -2212,6 +2212,7 @@ class AgentBridge:
         channel_type: str = "",
         task_description: str = "",
         agent_id: str = None,
+        run_id: str = "",
     ) -> None:
         """Add the visible output of a scheduled task to the receiver's session.
 
@@ -2226,6 +2227,9 @@ class AgentBridge:
             scheduler_inject_max_per_session (int, default 3):
                 Maximum scheduler-injected user/assistant pairs retained per
                 session. Older injections are pruned automatically.
+
+        ``run_id`` associates the stored pair with its scheduler execution;
+        callers without an id remain supported without guessing association.
 
         Content is truncated to 4000 chars to prevent a single high-volume task
         from bloating one entry, while staying long enough that the history
@@ -2251,9 +2255,14 @@ class AgentBridge:
             {"role": "assistant", "content": [{"type": "text", "text": content}]},
         ]
 
+        # Association is storage metadata, not a field in model messages.
+        persisted_messages = (
+            [dict(message, run_id=run_id) for message in messages] if run_id else messages
+        )
+
         # Persist first so the new pair gets a stable seq, then prune old
         # scheduler pairs in DB, then sync the in-memory agent.messages buffer.
-        self._persist_messages(session_id, messages, channel_type, agent_id)
+        self._persist_messages(session_id, persisted_messages, channel_type, agent_id)
 
         keep_last_n = max(int(conf().get("scheduler_inject_max_per_session", 3) or 0), 0)
         try:
