@@ -28,7 +28,7 @@ The Web Console is CowAgent's default channel. It runs automatically once starte
 | `external_api_enabled` | Turn on the [Chat API](/extensions/chat-api) | `false` |
 | `external_api_token` | API key of the [Chat API](/extensions/chat-api), kept while the API is off | `""` |
 | `web_session_expire_days` | Login session validity in days | `30` |
-| `web_file_serve_root` | Root directory the web console can directly read/send files from. Defaults to the user home dir and agent workspace only; set to `/` to allow the whole filesystem | `"~"` |
+| `web_file_serve_root` | Additional root directory the web console can directly read/send files from (defaults to the user home directory). Configured Agent workspaces, including disabled Agents, and opened project directories are also allowed; set to `/` to allow the whole filesystem | `"~"` |
 | `enable_thinking` | Whether to enable deep thinking mode | `false` |
 
 Once a password is configured, you must enter it to log in when accessing the console. The login session is kept for 30 days by default, so restarting the service during that period does not require re-login. The password can also be changed online from the "Configuration" page in the console.
