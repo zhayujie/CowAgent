@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 from cli.utils import get_project_root
+from common.atomic_write import write_text_atomic
 
 logger = logging.getLogger(__name__)
 
@@ -315,7 +316,13 @@ def write_update_status(payload: Dict[str, Any], root: Optional[str] = None) -> 
     current = read_update_status(root)
     current.update(payload)
     current["updated_at"] = datetime.now(timezone.utc).isoformat()
-    path.write_text(json.dumps(current, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    # Write through a temporary sibling: the status file guards the "an update
+    # is already running" check, and read_update_status reports a half-written
+    # file as {"state": "idle"}, so a write interrupted here would let a second
+    # update start on top of the first.
+    write_text_atomic(
+        path, json.dumps(current, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
     return current
 
 
