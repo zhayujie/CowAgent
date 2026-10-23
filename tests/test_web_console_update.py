@@ -264,6 +264,30 @@ def test_a_running_status_left_by_a_dead_worker_does_not_block(tmp_path, monkeyp
     ) is True
 
 
+def test_a_corrupt_worker_pid_does_not_crash_the_in_progress_guard(tmp_path, monkeypatch):
+    """A status file carrying a non-numeric worker_pid must not raise.
+
+    read_update_status already tolerates a missing file, unreadable bytes, invalid
+    JSON and a non-dict payload, but it does not validate the fields it hands on.
+    int() on a corrupt pid raised ValueError out of the "already in progress" check.
+    """
+    from cli import update_service
+
+    monkeypatch.setattr(update_service, "_worker_alive", lambda pid: True)
+    fresh = update_service.datetime.now(update_service.timezone.utc).isoformat()
+
+    for bad in ("abc", "", "12abc", [], {}, 1.5e3):
+        status = {"state": "running", "worker_pid": bad, "started_at": fresh}
+        # A corrupt pid is no evidence the worker died, so a fresh run still blocks.
+        assert update_service._update_is_stale(status) is False, bad
+
+    # ... and an old run is still reported stale rather than blocking forever.
+    for bad in ("abc", [], {}):
+        assert update_service._update_is_stale(
+            {"state": "running", "worker_pid": bad, "started_at": "2020-01-01T00:00:00+00:00"}
+        ) is True, bad
+
+
 def test_web_handlers_auth_and_no_github_on_version(monkeypatch):
     if "web" not in sys.modules:
         web_stub = types.ModuleType("web")

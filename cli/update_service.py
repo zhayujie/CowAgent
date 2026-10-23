@@ -403,7 +403,13 @@ def _worker_alive(pid: int) -> bool:
 def _update_is_stale(status: Dict[str, Any]) -> bool:
     """A running/restarting status whose worker is gone (killed, OOM, reboot)
     would otherwise block every later update."""
-    worker_pid = int(status.get("worker_pid") or 0)
+    try:
+        worker_pid = int(status.get("worker_pid") or 0)
+    except (TypeError, ValueError):
+        # A corrupt pid tells us nothing about the worker, so fall through to the
+        # timestamp check instead of raising. Reporting the run stale here would
+        # unblock an update that may still be running.
+        worker_pid = 0
     if worker_pid and not _worker_alive(worker_pid):
         return True
     started = status.get("started_at") or status.get("updated_at")
