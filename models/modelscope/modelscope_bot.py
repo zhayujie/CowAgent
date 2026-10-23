@@ -213,11 +213,21 @@ class ModelScopeBot(Bot):
                             total_tokens = json_data["usage"].get("total_tokens", 0)
                             completion_tokens = json_data["usage"].get("completion_tokens", 0)
 
-                        delta = json_data.get("choices", [{}])[0].get("delta", {})
+                        # The include_usage trailer carries usage with an empty
+                        # choices list. Usage is read above, so skip the chunk
+                        # rather than indexing into it: the default only covers a
+                        # missing key, not a present-but-empty list, and the
+                        # IndexError escaped the JSONDecodeError handler below and
+                        # discarded the whole reply.
+                        choices = json_data.get("choices") or []
+                        if not choices:
+                            continue
+
+                        delta = choices[0].get("delta", {})
                         if delta and delta.get("content"):
                             content += delta["content"]
 
-                        choice = json_data.get("choices", [{}])[0]
+                        choice = choices[0]
                         if choice.get("finish_reason"):
                             finish_reason = choice["finish_reason"]
                             
