@@ -242,19 +242,24 @@ class ChatChannel(Channel):
                     any_to_wav(file_path, wav_path)
                 except Exception as e:  # 转换失败，直接使用mp3，对于某些api，mp3也可以识别
                     logger.warning("[chat_channel]any to wav error, use raw path. " + str(e))
-                    wav_path = file_path
+                    # Keep wav_path pointing at the file the conversion may
+                    # have created: pydub opens the destination wb+ before it
+                    # runs ffmpeg, so an encoder that exits nonzero leaves a
+                    # file there, and reassigning the name here orphaned it in
+                    # the tmp dir for good.
+                    stt_path = file_path
+                else:
+                    stt_path = wav_path
                 # 语音识别
-                reply = self._safe_voice_to_text(wav_path)
+                reply = self._safe_voice_to_text(stt_path)
                 if reply is None:
                     reply = Reply(ReplyType.ERROR, "语音识别失败，请重试或发送文字消息")
-                # 删除临时文件
-                try:
-                    os.remove(file_path)
-                    if wav_path != file_path:
-                        os.remove(wav_path)
-                except Exception:
-                    pass
-                    # logger.warning("[chat_channel]delete temp file error: " + str(e))
+                # 删除临时文件：逐个删除，一个失败不会连带跳过另一个
+                for path in {file_path, wav_path}:
+                    try:
+                        os.remove(path)
+                    except Exception:
+                        pass
 
                 if reply.type == ReplyType.TEXT:
                     new_context = self._compose_context(ContextType.TEXT, reply.content, **context.kwargs)
