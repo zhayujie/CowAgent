@@ -194,9 +194,9 @@ class ChatGPTBot(Bot, OpenAIImage, OpenAICompatibleBot):
         """
         import base64
         import os
-        
+
+        image_path = context.content
         try:
-            image_path = context.content
             logger.info(f"[CHATGPT] Processing image: {image_path}")
             
             # Check if file exists
@@ -270,21 +270,20 @@ class ChatGPTBot(Bot, OpenAIImage, OpenAICompatibleBot):
 
             content = response["choices"][0]["message"]["content"]
             logger.info(f"[CHATGPT] Vision API response: {content[:100]}...")
-            
-            # Clean up temp file
-            try:
-                os.remove(image_path)
-                logger.debug(f"[CHATGPT] Removed temp image file: {image_path}")
-            except Exception:
-                pass
-            
+
             return Reply(ReplyType.TEXT, content)
-            
+
         except Exception as e:
             logger.error(f"[CHATGPT] Image processing error: {e}")
             import traceback
             logger.error(traceback.format_exc())
             return Reply(ReplyType.ERROR, _t("图片识别失败: ", "Image recognition failed: ") + str(e))
+        finally:
+            try:
+                os.remove(image_path)
+                logger.debug(f"[CHATGPT] Removed temp image file: {image_path}")
+            except OSError:
+                pass
 
     def reply_text(self, session: ChatGPTSession, api_key=None, args=None, retry_count=0) -> dict:
         """
