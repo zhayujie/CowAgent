@@ -17,19 +17,25 @@ Implementation note:
 
 import asyncio
 import concurrent.futures
+import copy
 import os
 import re
 import threading
+from urllib.parse import urlparse
 
 from bridge.context import Context, ContextType
 from bridge.reply import Reply, ReplyType
 from channel.chat_channel import ChatChannel, check_prefix
 from channel.discord.discord_message import DiscordMessage
+from common import state_dir
 from common.expired_dict import ExpiredDict
 from common.log import logger
-from common.media_download import MAX_FILE_BYTES, MAX_IMAGE_BYTES
+from common.media_download import MAX_FILE_BYTES, MAX_IMAGE_BYTES, download_to_file, remove_download
 from common.singleton import singleton
 from config import conf
+
+# send() runs on the shared reply thread; a stalled download must not block it.
+_MAX_REMOTE_FILE_SECONDS = 300
 
 # Discord caps a single message at 2000 chars; split conservatively below.
 DISCORD_MSG_LIMIT = 1900
@@ -444,7 +450,12 @@ class DiscordChannel(ChatChannel):
             return
 
         progress = {"sent": False}
+        downloaded = None
         try:
+            if reply.type in (ReplyType.VOICE, ReplyType.FILE, ReplyType.VIDEO) \
+                    and isinstance(reply.content, str) \
+                    and reply.content.startswith(("http://", "https://")):
+                reply, downloaded = self._download_file_reply(reply)
             future = asyncio.run_coroutine_threadsafe(
                 self._async_send(reply, channel_id, progress), self._loop
             )
@@ -457,6 +468,24 @@ class DiscordChannel(ChatChannel):
             # chat_channel._send retries the whole reply: only worth it when nothing went out.
             if not progress["sent"]:
                 raise
+        finally:
+            remove_download(downloaded)
+
+    def _download_file_reply(self, reply: Reply):
+        """Fetch a remote file reply so it can be uploaded like a local one.
+
+        Cloud deployments publish sent files and hand over their URL.
+        Returns ``(local_reply, temp_path)``.
+        """
+        url_path = urlparse(reply.content).path
+        path = state_dir.tmp_file("discord_file", os.path.splitext(url_path)[1] or ".bin")
+        download_to_file(reply.content, path, MAX_FILE_BYTES, timeout=60,
+                         max_seconds=_MAX_REMOTE_FILE_SECONDS, guarded=True)
+        local = copy.copy(reply)
+        local.content = "file://" + path
+        # The published URL's last segment is a random hash, not the user's file name.
+        local.file_name = getattr(reply, "file_name", "") or os.path.basename(url_path)
+        return local, path
 
     async def _async_send(self, reply: Reply, channel_id, progress: dict = None):
         import discord
@@ -495,7 +524,8 @@ class DiscordChannel(ChatChannel):
         elif rtype in (ReplyType.VOICE, ReplyType.FILE, ReplyType.VIDEO):
             local = content[7:] if isinstance(content, str) and content.startswith("file://") else content
             caption = getattr(reply, "text_content", None) or None
-            await channel.send(content=caption, file=discord.File(local))
+            file_name = getattr(reply, "file_name", None) or None
+            await channel.send(content=caption, file=discord.File(local, filename=file_name))
 
         else:
             # Fallback: send as plain text
