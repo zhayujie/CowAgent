@@ -17,9 +17,11 @@ Implementation note:
 """
 
 import asyncio
+import copy
 import os
 import re
 import threading
+from urllib.parse import urlparse
 
 from bridge.context import Context, ContextType
 from bridge.reply import Reply, ReplyType
@@ -27,10 +29,15 @@ from channel.chat_channel import ChatChannel, check_prefix
 from channel.chat_message import safe_filename
 from channel.telegram.telegram_markdown import CAPTION_LIMIT, to_telegram_html
 from channel.telegram.telegram_message import TelegramMessage
+from common import state_dir
 from common.expired_dict import ExpiredDict
 from common.log import logger
+from common.media_download import MAX_FILE_BYTES, download_to_file, remove_download
 from common.singleton import singleton
 from config import conf
+
+# send() runs on the shared reply thread; a stalled download must not block it.
+_MAX_REMOTE_FILE_SECONDS = 300
 
 # Bot command menu, aligned with Web slash commands.
 # Top-level commands only; sub-commands are entered with a space (e.g. "/skill list").
@@ -581,6 +588,13 @@ class TelegramChannel(ChatChannel):
             logger.warning("[Telegram] no telegram_chat_id in context, drop reply")
             return
 
+        downloaded = None
+        if reply.type in (ReplyType.FILE, ReplyType.VIDEO) and isinstance(reply.content, str) \
+                and reply.content.startswith(("http://", "https://")):
+            reply, downloaded = self._download_file_reply(reply)
+            if reply is None:
+                return
+
         coro = self._async_send(reply, chat_id, reply_to)
         try:
             future = asyncio.run_coroutine_threadsafe(coro, self._loop)
@@ -588,6 +602,30 @@ class TelegramChannel(ChatChannel):
             future.result(timeout=180)
         except Exception as e:
             logger.error(f"[Telegram] send failed: {e}")
+        finally:
+            remove_download(downloaded)
+
+    def _download_file_reply(self, reply: Reply):
+        """Fetch a remote file reply so it can be uploaded like a local one.
+
+        Cloud deployments publish sent files and hand over their URL. Returns
+        ``(local_reply, temp_path)``, or ``(None, None)`` if the download failed.
+        """
+        url = reply.content
+        url_path = urlparse(url).path
+        path = state_dir.tmp_file("telegram_file", os.path.splitext(url_path)[1] or ".bin")
+        try:
+            download_to_file(url, path, MAX_FILE_BYTES, timeout=60,
+                             max_seconds=_MAX_REMOTE_FILE_SECONDS, guarded=True)
+        except Exception as e:
+            logger.error(f"[Telegram] failed to fetch remote file: {type(e).__name__}")
+            remove_download(path)
+            return None, None
+        local = copy.copy(reply)
+        local.content = "file://" + path
+        # The published URL's last segment is a random hash, not the user's file name.
+        local.file_name = getattr(reply, "file_name", "") or os.path.basename(url_path)
+        return local, path
 
     # Number of retries for transient network errors (proxy hiccups etc.)
     _SEND_RETRIES = 2
@@ -729,16 +767,20 @@ class TelegramChannel(ChatChannel):
                 from telegram.constants import ParseMode
                 from telegram.error import BadRequest
 
+                file_name = getattr(reply, "file_name", None) or None
+
                 async def _send_file(cap, mode):
                     with open(local, "rb") as f:
                         if is_video:
                             return await self._bot.send_video(
                                 chat_id=chat_id, video=f, caption=cap, parse_mode=mode,
+                                filename=file_name,
                                 reply_to_message_id=reply_to_msg_id,
                                 allow_sending_without_reply=True,
                             )
                         return await self._bot.send_document(
                             chat_id=chat_id, document=f, caption=cap, parse_mode=mode,
+                            filename=file_name,
                             reply_to_message_id=reply_to_msg_id,
                             allow_sending_without_reply=True,
                         )
