@@ -19,16 +19,21 @@ import os
 import re
 import threading
 import uuid
+from urllib.parse import urlparse
 
 from bridge.context import Context, ContextType
 from bridge.reply import Reply, ReplyType
 from channel.chat_channel import ChatChannel, check_prefix
 from channel.slack.slack_message import SlackMessage
+from common import state_dir
 from common.expired_dict import ExpiredDict
 from common.log import logger
-from common.media_download import MAX_FILE_BYTES, download_to_file
+from common.media_download import MAX_FILE_BYTES, download_to_file, remove_download
 from common.singleton import singleton
 from config import conf
+
+# send() runs on the shared reply thread; a stalled download must not block it.
+_MAX_REMOTE_FILE_SECONDS = 300
 
 
 # `message` event subtypes that carry something a user typed or shared; every other subtype
@@ -496,9 +501,24 @@ class SlackChannel(ChatChannel):
         elif rtype in (ReplyType.VOICE, ReplyType.FILE, ReplyType.VIDEO):
             local = content[7:] if isinstance(content, str) and content.startswith("file://") else content
             caption = getattr(reply, "text_content", None) or None
-            self._client.files_upload_v2(
-                channel=channel_id, file=local, initial_comment=caption, thread_ts=thread_ts,
-            )
+            file_name = getattr(reply, "file_name", None) or None
+            downloaded = None
+            try:
+                if isinstance(local, str) and local.startswith(("http://", "https://")):
+                    # Cloud deployments publish sent files and hand over their URL.
+                    url_path = urlparse(local).path
+                    downloaded = state_dir.tmp_file("slack_file", os.path.splitext(url_path)[1] or ".bin")
+                    download_to_file(local, downloaded, MAX_FILE_BYTES, timeout=60,
+                                     max_seconds=_MAX_REMOTE_FILE_SECONDS, guarded=True)
+                    # The published URL's last segment is a random hash, not the user's file name.
+                    file_name = file_name or os.path.basename(url_path)
+                    local = downloaded
+                self._client.files_upload_v2(
+                    channel=channel_id, file=local, filename=file_name,
+                    initial_comment=caption, thread_ts=thread_ts,
+                )
+            finally:
+                remove_download(downloaded)
 
         else:
             # Fallback: send as plain text
