@@ -661,6 +661,7 @@ class DashscopeBot(Bot):
                 # Check if this is a tool result message (user role with tool_result blocks)
                 if role == "user" and any(block.get("type") == "tool_result" for block in content):
                     # Convert each tool_result block to a separate tool message
+                    text_parts = []
                     for block in content:
                         if block.get("type") == "tool_result":
                             dashscope_messages.append({
@@ -668,6 +669,12 @@ class DashscopeBot(Bot):
                                 "content": block.get("content", ""),
                                 "tool_call_id": block.get("tool_use_id")  # DashScope uses 'tool_call_id'
                             })
+                        elif block.get("type") == "text":
+                            text_parts.append(block.get("text", ""))
+                    # Text next to tool results (e.g. a steering message sent
+                    # while tools ran) follows them as a user message.
+                    if text_parts:
+                        dashscope_messages.append({"role": "user", "content": "\n".join(text_parts)})
                 
                 # Check if this is an assistant message with tool_use blocks
                 elif role == "assistant":
