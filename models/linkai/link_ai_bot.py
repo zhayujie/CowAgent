@@ -16,6 +16,7 @@ from common.log import logger
 from config import conf, pconf
 import threading
 from common import memory, state_dir, utils
+from common.media_download import MAX_FILE_BYTES, download_to_file
 import base64
 import os
 from urllib.parse import urlparse
@@ -515,10 +516,11 @@ def _download_file(url: str):
         # the process CWD, which the packaged desktop app does not control and may
         # not be able to write, and state_dir owns the layout anyway.
         file_path = state_dir.tmp_dir() / file_name
-        response = requests.get(url, timeout=(5, 60))
-        # An expired signed link answers with an HTML error page, not the file.
-        response.raise_for_status()
-        file_path.write_bytes(response.content)
+        # Stream it under the shared cap, the way the LinkAI voice download
+        # already does: the vendor decides the size, and an unbounded body
+        # would be buffered whole before anything could object. A refused
+        # download leaves no partial file behind.
+        download_to_file(url, str(file_path), MAX_FILE_BYTES, timeout=(5, 60))
         return str(file_path)
     except Exception as e:
         logger.warn(e)

@@ -19,6 +19,9 @@ def _download(tmp_path, status_code, content):
     response = requests.Response()
     response.status_code = status_code
     response._content = content
+    # The download is streamed now, so the response has to hand its body out
+    # in chunks; a Response whose content was already read can do that.
+    response._content_consumed = True
     with patch.object(link_ai_bot.state_dir, "tmp_dir", return_value=tmp_path), \
             patch.object(link_ai_bot.requests, "get", return_value=response):
         return link_ai_bot._download_file(URL)
