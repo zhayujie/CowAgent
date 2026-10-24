@@ -6,6 +6,20 @@
 const chatView = document.getElementById('view-chat');
 const chatInputArea = document.getElementById('composer-card') || chatInput.closest('.flex-shrink-0');
 
+// Make the empty parts of the composer card act like the text area. Keep
+// controls and their popovers in charge of their own clicks.
+chatInputArea.addEventListener('click', (event) => {
+    const target = event.target;
+    if (!(target instanceof Element) || target === chatInput) return;
+    const excluded = target.closest([
+        'button', 'input', 'select', 'a', '[role="button"]', 'textarea',
+        '.attachment-preview', '.attach-menu', '.slash-menu', '.mention-menu',
+        '.workspace-selector-menu', '.composer-menu',
+    ].join(', '));
+    if (excluded) return;
+    chatInput.focus({ preventScroll: true });
+});
+
 // Create drag overlay for visual feedback
 let dragOverlay = document.getElementById('drag-overlay');
 if (!dragOverlay) {
