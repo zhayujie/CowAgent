@@ -960,6 +960,22 @@ class ClaudeAPIBot(Bot, OpenAIImage):
                                             }]
                                         }
                             
+                            elif event_type == "error":
+                                # Anthropic can fail a stream after the 200
+                                # response has started (e.g. overloaded_error).
+                                # Surface it so the agent's retry/fallback logic
+                                # sees a real error instead of a truncated reply.
+                                err = event.get("error") or {}
+                                err_type = err.get("type", "")
+                                err_msg = err.get("message") or err_type or "Unknown stream error"
+                                logger.error(f"[Claude] Stream error event: {err_type}: {err_msg}")
+                                yield {
+                                    "error": True,
+                                    "message": f"{err_type}: {err_msg}" if err_type else err_msg,
+                                    "status_code": 529 if err_type == "overloaded_error" else 500,
+                                }
+                                return
+
                             elif event_type == "message_stop":
                                 # Final event - log completion
                                 logger.debug(f"[Claude] Stream completed with stop_reason: {stop_reason}")
