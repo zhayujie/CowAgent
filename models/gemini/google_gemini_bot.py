@@ -22,7 +22,6 @@ from bridge.reply import Reply, ReplyType
 from common.log import logger
 from config import conf
 from models.chatgpt.chat_gpt_session import ChatGPTSession
-from models.baidu.baidu_wenxin_session import BaiduWenxinSession
 
 
 # OpenAI对话模型API (可用)
@@ -434,6 +433,11 @@ class GoogleGeminiBot(Bot):
                                     tool_result_data = tool_content
                             except Exception:
                                 tool_result_data = {"result": tool_content}
+                            # functionResponse.response must be a JSON object;
+                            # tool text that parses to a list or scalar (e.g. an
+                            # MCP tool returning a JSON array) is wrapped.
+                            if not isinstance(tool_result_data, dict):
+                                tool_result_data = {"result": tool_result_data}
                             
                             # Find the tool name from previous messages
                             tool_name = None
