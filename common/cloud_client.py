@@ -22,7 +22,7 @@ from bridge.reply import Reply, ReplyType
 from common.atomic_write import write_json_atomic
 from common.log import logger
 from linkai import LinkAIClient, PushMsg
-from config import conf, pconf, plugin_config, available_setting, write_plugin_config, get_root, get_weixin_credentials_path, drag_sensitive
+from config import conf, pconf, plugin_config, available_setting, write_plugin_config, get_data_root, get_weixin_credentials_path, drag_sensitive
 from plugins import PluginManager
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -1743,7 +1743,7 @@ class CloudClient(LinkAIClient):
         Save configuration to config.json file.
         """
         try:
-            config_path = os.path.join(get_root(), "config.json")
+            config_path = os.path.join(get_data_root(), "config.json")
             if not os.path.exists(config_path):
                 logger.warning(f"[CloudClient] config.json not found at {config_path}, skip saving")
                 return

@@ -24,7 +24,7 @@ def _push(root, remote_config, plugin_config):
     client.client_id = "test-client"
     client._peer_transport = None
     client.channel_mgr = None
-    with patch.object(cloud_client, "get_root", return_value=str(root)), \
+    with patch.object(cloud_client, "get_data_root", return_value=str(root)), \
             patch.object(cloud_client, "conf", return_value={}), \
             patch.object(cloud_client, "pconf", return_value=plugin_config):
         client.on_config(remote_config)
