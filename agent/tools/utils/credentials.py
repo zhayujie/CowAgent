@@ -15,7 +15,7 @@ narrowed to ~/.cow/.env. See also issue #2913 for the bypasses handled here.
 import os
 import re
 
-from common.utils import expand_path
+from common.utils import cow_home
 
 # Paths whose CONTENT mirrors the process environment (and thus any secrets
 # loaded from ~/.cow/.env). Reading them bypasses the env_config boundary.
@@ -53,5 +53,5 @@ def is_credential_path(absolute_path: str) -> bool:
             return True
 
     # 2. The credential file itself, following symlinks on both sides.
-    env_real = os.path.realpath(expand_path("~/.cow/.env")).replace(os.sep, "/")
+    env_real = os.path.realpath(os.path.join(cow_home(), ".env")).replace(os.sep, "/")
     return env_real in candidates

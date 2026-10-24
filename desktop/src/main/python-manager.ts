@@ -7,11 +7,12 @@ import fs from 'fs'
 import http from 'http'
 import net from 'net'
 import crypto from 'crypto'
+import { COW_DATA_DIR, COW_WORKSPACE_DIR } from './data-dir'
 
-// Writable data dir for the packaged app (config.json, run.log, user data).
-// Lives in the user's home so it survives app updates and avoids writing into
-// the read-only app bundle. Source/dev runs keep using the repo CWD instead.
-const COW_DATA_DIR = path.join(os.homedir(), '.cow')
+// Writable data dir for the packaged app (config.json, run.log, user data),
+// COW_DATA_DIR from data-dir.ts. It lives outside the install dir so it
+// survives app updates and avoids writing into the read-only app bundle.
+// Source/dev runs keep using the repo CWD instead.
 
 // Preferred port for the desktop backend. Deliberately not 9899 (the web
 // console's default) so a source-run `python app.py` never collides with the
@@ -434,7 +435,7 @@ export class PythonBackend extends EventEmitter {
 
   /**
    * Read an explicit `web_port` from config.json, if the user pinned one. The
-   * packaged build keeps config in COW_DATA_DIR (~/.cow); dev reads it from the
+   * packaged build keeps config in COW_DATA_DIR; dev reads it from the
    * repo path. Returns null when unset, so the caller can auto-pick a free port
    * instead of fighting over a fixed one.
    */
@@ -452,6 +453,31 @@ export class PythonBackend extends EventEmitter {
       // ignore — fall through to auto-selection
     }
     return null
+  }
+
+  /**
+   * Env for a data root the installer put somewhere other than the home folder.
+   * COW_HOME moves the credentials (.env, mcp_oauth.json) next to the rest of
+   * the data. AGENT_WORKSPACE points the workspace at <root>\cow, but env vars
+   * override config.json on the backend, so it only applies until config.json
+   * holds an agent_workspace of its own; after that the user's setting wins.
+   * Values the user set in their own environment are left alone.
+   */
+  private dataRootEnv(): Record<string, string> {
+    if (!COW_WORKSPACE_DIR) return {}
+    const env: Record<string, string> = {}
+    if (!process.env.COW_HOME) env.COW_HOME = COW_DATA_DIR
+    if (!process.env.AGENT_WORKSPACE) {
+      let configured = false
+      try {
+        const config = JSON.parse(fs.readFileSync(path.join(COW_DATA_DIR, 'config.json'), 'utf-8'))
+        configured = Boolean(config && config.agent_workspace)
+      } catch {
+        // No config.json yet (first launch) or unreadable: use the chosen root.
+      }
+      if (!configured) env.AGENT_WORKSPACE = COW_WORKSPACE_DIR
+    }
+    return env
   }
 
   /**
@@ -707,7 +733,7 @@ export class PythonBackend extends EventEmitter {
     this.recentLogs = []
     this.lastError = null
 
-    // Packaged app stores writable data in ~/.cow; dev keeps it in the repo.
+    // Packaged app stores writable data in COW_DATA_DIR; dev keeps it in the repo.
     const dataDir = this.getDataDir()
 
     // Start mirroring backend output to run.log before we spawn, so even an
@@ -757,7 +783,7 @@ export class PythonBackend extends EventEmitter {
     if (bundled) {
       command = bundled
       args = []
-      // Run from the writable data dir (~/.cow), NOT the install dir. When the
+      // Run from the writable data dir (COW_DATA_DIR), NOT the install dir. When the
       // app is installed under Program Files, a non-admin user has no write
       // permission to the executable's folder, so any relative-path write
       // during startup would crash the backend (works only as admin). The
@@ -786,7 +812,7 @@ export class PythonBackend extends EventEmitter {
     this.process = spawn(command, args, {
       cwd,
       // COW_DESKTOP enables the lighter desktop runtime (no plugins, no MCP).
-      // COW_DATA_DIR (packaged only) redirects writable data to ~/.cow so the
+      // COW_DATA_DIR (packaged only) redirects writable data to the data dir so the
       // app bundle stays read-only; dev runs omit it and keep using the repo.
       env: {
         ...process.env,
@@ -800,7 +826,7 @@ export class PythonBackend extends EventEmitter {
         // two sides can never disagree (and we avoid the 9899 web-console clash).
         COW_WEB_PORT: String(this.port),
         COW_DESKTOP_TOKEN: this.desktopToken,
-        ...(bundled ? { COW_DATA_DIR } : {}),
+        ...(bundled ? { COW_DATA_DIR, ...this.dataRootEnv() } : {}),
         ...this.appConfigEnv(),
         COW_CLIENT_VERSION: app.getVersion(),
       },
