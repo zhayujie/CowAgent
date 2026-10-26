@@ -51,6 +51,21 @@ def test_plain_turn_has_no_display():
         assert "display" not in user
 
 
+def test_steering_note_shows_what_the_user_sent():
+    from agent.protocol.agent_stream import AgentStreamExecutor
+
+    note = AgentStreamExecutor._steering_text(["check memory too"])
+    with tempfile.TemporaryDirectory() as tmp:
+        store = ConversationStore(Path(tmp) / "index.db")
+        store.append_messages("s", [_user("inspect the server"), _user(note), _assistant("done")])
+
+        users = [m for m in store.load_history_page("s")["messages"] if m["role"] == "user"]
+
+        assert users[1]["content"] == note
+        assert users[1]["display"] == "↪ check memory too"
+        assert "display" not in users[0]
+
+
 def test_pre_persisted_user_turn_keeps_display_from_context():
     with tempfile.TemporaryDirectory() as tmp:
         store = ConversationStore(Path(tmp) / "index.db")

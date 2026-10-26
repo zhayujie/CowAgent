@@ -16,8 +16,8 @@ from common.log import logger
 
 # Denied to every sub agent regardless of template.
 #
-# Each of these reaches outside the delegated task: `send` and `scheduler` act
-# on the user's channel in the parent's name, and `env_config` and
+# Each of these reaches outside the delegated task: `send`, `scheduler` and
+# `task_create` act on the user's channel in the parent's name, and `env_config` and
 # `evolution_undo` mutate the Agent itself. The `subagent` tool itself is denied
 # so that a template granting "all tools" cannot recurse; the depth limit
 # governs the nesting that is actually allowed.
@@ -30,6 +30,7 @@ BLOCKED_TOOLS = frozenset(
         "subagent",
         "send",
         "scheduler",
+        "task_create",
         "env_config",
         "evolution_undo",
     }

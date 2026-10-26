@@ -301,13 +301,27 @@ def _first_line_preview(text: str, max_chars: int = 60) -> str:
 # content (the LLM reads them, e.g. to find a backup_id for undo) but should
 # never be shown verbatim to the user in the chat history UI.
 _SCHEDULED_DISPLAY_MARKERS = ("[SCHEDULED]", "Scheduled task")
+_TASK_DISPLAY_MARKER = "[TASK]"
 _EVOLUTION_DISPLAY_MARKER = "[EVOLUTION]"
+# An instruction sent to a run in flight (agent_stream's steering text). The
+# model reads the whole note; the user sees what they wrote, as it streamed.
+_STEERING_DISPLAY_MARKER = "[Steering update for the active task]"
+
+
+def _steering_display(text: str) -> Optional[str]:
+    t = (text or "").lstrip()
+    if not t.startswith(_STEERING_DISPLAY_MARKER):
+        return None
+    _, _, body = t.partition("\n\n")
+    return f"↪ {body.strip()}" if body.strip() else None
 
 
 def _is_internal_user_marker(text: str) -> bool:
     """True if a user-turn text is an internal injection marker (hide from UI)."""
     t = (text or "").lstrip()
-    return any(t.startswith(m) for m in _SCHEDULED_DISPLAY_MARKERS)
+    return t.startswith(_TASK_DISPLAY_MARKER) or any(
+        t.startswith(m) for m in _SCHEDULED_DISPLAY_MARKERS
+    )
 
 
 def _is_evolution_text(text: str) -> bool:
@@ -331,7 +345,8 @@ def _message_plain_text(raw_content: Any) -> str:
 def _message_is_scheduled_marker(raw_content: Any) -> bool:
     """True when a stored user message is the ``[SCHEDULED]`` injection marker
     that precedes a scheduled task's delivered assistant reply."""
-    return _is_internal_user_marker(_message_plain_text(raw_content))
+    t = _message_plain_text(raw_content).lstrip()
+    return any(t.startswith(m) for m in _SCHEDULED_DISPLAY_MARKERS)
 
 
 def _clean_display_text(text: str) -> str:
@@ -506,7 +521,7 @@ def _group_into_display_turns(
             # the assistant reply that follows is still rendered.
             if text and not _is_internal_user_marker(text):
                 turn = {"role": "user", "content": text, "created_at": created_at}
-                display = u_extras.get("display")
+                display = u_extras.get("display") or _steering_display(text)
                 if isinstance(display, str) and display:
                     turn["display"] = display
                 if user_seq is not None:

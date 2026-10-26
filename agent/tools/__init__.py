@@ -24,6 +24,7 @@ from agent.tools.agent_delegate.agent_delegate import AgentDelegateTool
 
 # Import sub agent tools
 from agent.tools.subagent.subagent import SubagentTool
+from agent.tools.task_create.task_create import TaskCreateTool
 
 # Import tools with optional dependencies
 _PIP_PACKAGES = {
@@ -164,6 +165,7 @@ __all__ = [
     'MemoryGetTool',
     'EvolutionUndoTool',
     'SubagentTool',
+    'TaskCreateTool',
     'AgentDelegateTool',
     'EnvConfig',
     'SchedulerTool',
