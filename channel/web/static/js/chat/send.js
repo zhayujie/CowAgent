@@ -655,6 +655,10 @@ function startSSE(requestId, loadingEl, timestamp, replayItems, resume) {
                     if (item.permission_denied) {
                         _appendPermissionDeniedHint(toolEl, item.permission_mode);
                     }
+                    // Held by an approval rule: decide it right here.
+                    if (item.approval_pending && typeof appendInlineApproval === 'function') {
+                        appendInlineApproval(toolEl, item);
+                    }
                     toolElements.delete(item.tool_call_id);
                 }
 

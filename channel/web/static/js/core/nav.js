@@ -225,7 +225,12 @@ function navigateTo(viewId, tab) {
     // it with.
     else if (viewId === 'knowledge') { loadKnowledgeView(); if (tab) switchKnowledgeTab(tab); }
     else if (viewId === 'channels') loadChannelsView();
-    else if (viewId === 'tasks') { switchTasksTab(tab || 'tasks'); loadTasksView(); }
+    else if (viewId === 'tasks') {
+        // With background tasks on, the board is where the menu lands.
+        const landing = (typeof taskFeatureEnabled !== 'undefined' && taskFeatureEnabled) ? 'board' : 'tasks';
+        switchTasksTab(tab || landing);
+        loadTasksView();
+    }
     else if (viewId === 'logs') startLogStream();
     else if (viewId === 'artifacts') loadArtifactsView();
     else if (viewId === 'custom') menuShowPage(tab);

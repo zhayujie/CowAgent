@@ -3,13 +3,26 @@
                 <!-- ====================================================== -->
                 <div id="view-tasks" class="view">
                     <div class="flex-1 overflow-y-auto p-6">
-                        <div class="max-w-4xl mx-auto">
+                        <div id="tasks-container" class="max-w-4xl mx-auto">
                             <div class="flex items-center justify-between mb-4">
                                 <div>
-                                    <h2 class="text-xl font-bold text-slate-800 dark:text-slate-100" data-i18n="tasks_title">定时任务</h2>
+                                    <h2 id="tasks-title" class="text-xl font-bold text-slate-800 dark:text-slate-100" data-i18n="tasks_title">定时任务</h2>
                                     <p id="tasks-subtitle" class="text-sm text-slate-500 dark:text-slate-400 mt-1" data-i18n="tasks_desc">查看和管理定时任务</p>
                                 </div>
                                 <div class="flex items-center gap-2">
+                                    <button id="board-add-btn" onclick="openBoardTaskModal()"
+                                            class="hidden px-3 py-2 rounded-lg bg-primary-500 hover:bg-primary-600 text-white
+                                                   text-sm font-medium cursor-pointer transition-colors duration-150 flex items-center gap-1.5">
+                                        <i class="fas fa-plus text-xs"></i>
+                                        <span data-i18n="board_add_btn">新建任务</span>
+                                    </button>
+                                    <button id="board-settings-btn" onclick="openBoardSettingsModal()"
+                                            class="hidden px-3 py-2 rounded-lg border border-slate-200 dark:border-white/10
+                                                   text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5
+                                                   text-sm font-medium cursor-pointer transition-colors duration-150 inline-flex items-center gap-1.5">
+                                        <i class="fas fa-sliders text-xs"></i>
+                                        <span data-i18n="board_rules_btn">审批规则</span>
+                                    </button>
                                     <button id="task-add-btn" onclick="openTaskCreateModal()"
                                             class="px-3 py-2 rounded-lg bg-primary-500 hover:bg-primary-600 text-white
                                                    text-sm font-medium cursor-pointer transition-colors duration-150 flex items-center gap-1.5">
@@ -25,9 +38,15 @@
                                 </div>
                             </div>
 
-                            <!-- Tabs: 任务 | 执行记录. The refresh button above drives
-                                 whichever tab is active. -->
+                            <!-- Tabs: board | scheduled | history. The refresh button above
+                                 drives whichever tab is active. -->
                             <div class="flex items-center gap-1 border-b border-slate-200 dark:border-white/10 mb-5">
+                                <!-- Only shown while background tasks are on (see task-board.js). -->
+                                <button id="tasks-tab-board" onclick="switchTasksTab('board')"
+                                        class="tasks-tab relative px-3 py-2 text-sm font-medium cursor-pointer transition-colors text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 hidden">
+                                    <span class="inline-flex items-center gap-1.5"><i class="fas fa-table-columns text-xs"></i><span data-i18n="tasks_tab_board">看板</span><span id="board-tab-badge" class="board-count-badge hidden"></span></span>
+                                    <span class="tasks-tab-underline absolute left-0 right-0 -bottom-px h-0.5 bg-primary-500 rounded-full hidden"></span>
+                                </button>
                                 <button id="tasks-tab-tasks" onclick="switchTasksTab('tasks')"
                                         class="tasks-tab relative px-3 py-2 text-sm font-medium cursor-pointer transition-colors text-primary-500">
                                     <span class="inline-flex items-center gap-1.5"><i class="fas fa-calendar-days text-xs"></i><span data-i18n="tasks_tab_tasks">任务</span></span>
@@ -38,6 +57,13 @@
                                     <span class="inline-flex items-center gap-1.5"><i class="fas fa-clock-rotate-left text-xs"></i><span data-i18n="tasks_tab_records">执行记录</span></span>
                                     <span class="tasks-tab-underline absolute left-0 right-0 -bottom-px h-0.5 bg-primary-500 rounded-full hidden"></span>
                                 </button>
+                            </div>
+
+                            <!-- Board pane: background tasks by state, plus the
+                                 approvals waiting on the user. -->
+                            <div id="board-pane" class="hidden">
+                                <div id="board-summary" class="board-summary"></div>
+                                <div id="board-lanes" class="board-lanes"></div>
                             </div>
 
                             <!-- Tasks pane -->

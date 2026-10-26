@@ -55,6 +55,7 @@
     <link rel="stylesheet" href="/assets/css/agents.css">
     <link rel="stylesheet" href="/assets/css/artifacts.css">
     <link rel="stylesheet" href="/assets/css/menu.css">
+    <link rel="stylesheet" href="/assets/css/tasks.css">
     <!-- Apply theme/lang before first paint to avoid flash of unstyled content.
          This runs synchronously in <head> so the correct class is on <html>
          before any CSS or body rendering occurs. -->
@@ -169,6 +170,8 @@
 
 <!--#include templates/modals/run-detail.html-->
 
+<!--#include templates/modals/task-board.html-->
+
 <!--#include templates/modals/menu-editor.html-->
 
     <!-- Split out of a single console.js. These are classic scripts, not
@@ -225,6 +228,9 @@
     <script defer src="/assets/js/views/channels-feishu.js"></script>
     <script defer src="/assets/js/views/tasks.js"></script>
     <script defer src="/assets/js/views/tasks-modal.js"></script>
+    <script defer src="/assets/js/views/task-board.js"></script>
+    <script defer src="/assets/js/views/task-detail.js"></script>
+    <script defer src="/assets/js/chat/approvals.js"></script>
     <script defer src="/assets/js/views/skills.js"></script>
     <script defer src="/assets/js/views/memory.js"></script>
     <script defer src="/assets/js/views/doc-viewers.js"></script>

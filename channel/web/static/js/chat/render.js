@@ -117,11 +117,12 @@ function lazyStepBodyAttr(build) {
 }
 
 // Drop builders whose step is no longer on screen (a session switch clears
-// the message list without telling anyone).
+// the message list without telling anyone). Steps render outside the chat too
+// (the task detail), so the whole page counts.
 function pruneLazyStepBodies() {
     if (!_lazyStepBodies.size) return;
     const live = new Set();
-    messagesDiv.querySelectorAll('[data-lazy-body]').forEach(el => live.add(el.dataset.lazyBody));
+    document.querySelectorAll('[data-lazy-body]').forEach(el => live.add(el.dataset.lazyBody));
     for (const id of _lazyStepBodies.keys()) {
         if (!live.has(id)) _lazyStepBodies.delete(id);
     }

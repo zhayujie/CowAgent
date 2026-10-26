@@ -46,6 +46,7 @@ The code sits in two packages, mirroring the frontend's `core/` and `views/`:
 | `models.py` | `/api/models` |
 | `channels.py` | `/api/channels`, the WeChat QR and Feishu registration flows |
 | `scheduler.py` | `/api/scheduler/*` |
+| `tasks.py` | `/api/tasks/*`, `/api/approvals/*`: background tasks, the approvals they wait on, and the bell's summary |
 | `skills.py`, `memory.py`, `knowledge.py`, `logs.py` | The remaining management views |
 | `update.py` | `/VERSION`, `/api/update/*` |
 | `openai_compat.py` | `/v1/chat/completions`, `/v1/models` |
@@ -338,6 +339,9 @@ auth), see `tests/test_web_console_routing.py`.
 | `views/channels-feishu.js` | Feishu one-click app registration |
 | `views/tasks.js` | Scheduled tasks and run records |
 | `views/tasks-modal.js` | Scheduled task create/edit dialog |
+| `views/task-board.js` | Background task board: lanes, create, all-tasks list, approval rules |
+| `views/task-detail.js` | Task detail: the run as a chat transcript with its live stream, the follow-up composer, facts and decisions |
+| `chat/approvals.js` | Header approval inbox, its polling and notices, the inline approval card in chat |
 | `views/skills.js` | Built-in tools, installed skills, the viewer for a skill's files, and creating a skill from a form or an upload |
 | `views/memory.js` | Memory file list |
 | `views/doc-viewers.js` | Viewer/editor for memory files, and the pieces the skill viewer shares with it |
@@ -422,6 +426,7 @@ section before reordering or inserting a file.**
 | `agents.css` | Agent cards, detail drawer, composer identity badge |
 | `artifacts.css` | Artifacts view, and the lit state of the header's view buttons |
 | `menu.css` | Custom sidebar labels, custom pages, menu editor |
+| `tasks.css` | Task board lanes and cards, approval inbox, inline approval card |
 
 Two things to watch when moving rules:
 

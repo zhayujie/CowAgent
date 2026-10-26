@@ -43,7 +43,7 @@ for (const view in ROUTE_PATHS) ROUTE_VIEWS[ROUTE_PATHS[view]] = view;
 const ROUTE_TABS = {
     config:    ['basic', 'models'],
     memory:    ['files', 'dreams'],
-    tasks:     ['tasks', 'records'],
+    tasks:     ['board', 'tasks', 'records'],
     knowledge: ['docs', 'graph'],
 };
 
