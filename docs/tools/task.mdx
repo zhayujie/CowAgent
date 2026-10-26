@@ -1,0 +1,117 @@
+---
+title: task_create - Background Tasks & Approvals
+description: "Hand work to an agent in the background and follow it on a board. Sensitive actions stop for your approval by rule, results can require your review, and you are notified when something is done or needs you."
+---
+
+Background tasks free the agent from working step by step inside a conversation. Once the goal is clear it works on its own in the background, while you keep chatting about something else or close the page, and it tells you when it is done or needs a decision. With approval rules, sensitive actions such as sending mail, pushing code or deleting files stop and wait for your confirmation first. **This is enforced at run time, not by the prompt.**
+
+<Note>
+This feature is in Beta and off by default. While it is off, no board or bell is shown, no approval rule is checked, and scheduled tasks run exactly as before, so existing setups are unaffected.
+</Note>
+
+## Turning it on
+
+Switch on "Background Tasks & Approvals" under **Config → Agent** in the console, or add this to `config.json`:
+
+```json
+{
+  "task": {
+    "enabled": true,
+    "chat_create": false,
+    "max_concurrency": 2,
+    "notify_webhook": "",
+    "approval_rules": []
+  }
+}
+```
+
+| Key | Default | Description |
+| --- | --- | --- |
+| `enabled` | `false` | Master switch |
+| `chat_create` | `false` | Whether the agent may create background tasks from a conversation (the `task_create` tool). While off, conversations stay exactly as they are |
+| `max_concurrency` | `2` | Background tasks that run at the same time (1–10); the rest wait in the queue. Scheduled tasks don't count |
+| `notify_webhook` | empty | Optional. A JSON notice is POSTed here when something awaits approval or review, or a task fails |
+| `approval_rules` | `[]` | Approval rules, see below. With none, every action runs directly as usual |
+
+## Creating tasks
+
+There are three ways in:
+
+- **From the board**: click **New task** under Tasks → Board and describe the work. You can pick the agent and ask to review the result before it counts as done.
+- **From a schedule**: while the feature is on, scheduled tasks of the "Agent task" type run as background tasks when they fire. They follow the approval rules and appear on the board. They start on time without taking a concurrency slot, and results still go to the receiver the schedule is configured with, images and files included. A firing is skipped while the previous run of the same schedule is still going.
+- **From a conversation**: requires `chat_create`. Say so explicitly, e.g. "do this in the background" or "let me know when it's done". The agent calls `task_create`, replies right away and leaves the conversation free. It only does this when you ask; ordinary requests are still handled in the conversation.
+
+## The board
+
+The Tasks page gains a **Board** tab with five columns:
+
+| Column | Meaning |
+| --- | --- |
+| Queued | Waiting for a free slot |
+| Running | In progress, with the time spent so far |
+| Needs you | Waiting for you to approve an action or review a result |
+| Done | The result can be read and copied from the detail view |
+| Failed / stopped | Shows why it failed; run it again with one click |
+
+Click a card for its details. The run is shown the same way as in a conversation: thinking, every tool call and its output can be expanded, and it updates live while the task runs. Alongside are the task's details, pending approvals and approval history, and you can stop, rerun or delete the task.
+
+The box at the bottom of the detail adds to the task at any time:
+
+- **Running**: the instruction takes effect after the current step, without stopping the task.
+- **Queued / waiting for approval**: the instruction is passed along when the run starts or once the approval is handled.
+- **Waiting for review**: what you write is the rework feedback.
+- **Done / failed / stopped**: the task carries on with its full context. For a task that came from a schedule, the follow-up result is read on the board and is not sent to the schedule's receiver again.
+
+**Rerun** instead clears the execution log and starts over from the original task.
+
+## Approval rules
+
+Manage them under **Approval rules** at the top right of the board. Each rule has:
+
+| Field | Description |
+| --- | --- |
+| Tool | The tool to hold. Accepts `*` wildcards and commas, e.g. `bash` or `*mail*,send` |
+| Match | Optional. A case-insensitive regex over the call arguments (JSON), e.g. `git\s+push`. Leave it empty to cover every call of the tool |
+| Action | **Ask**: stop and wait for your confirmation. **Deny**: refuse right away and tell the agent to find another way |
+
+Templates for pushing code, recursive deletes, publishing / deploying and sending mail are provided; add one and adjust it.
+
+Rules apply to **both background tasks and ordinary conversations**. A call that hits an "Ask" rule does not run. The agent finishes whatever does not depend on it, then stops and says which approval it is waiting for.
+
+## Handling approvals
+
+When something needs you, the bell at the top right of the console shows a count; open it to handle items. Approval cards also appear in the board's "Needs you" column and right below a held tool call in the chat.
+
+- **Approve** runs the exact call that was held and hands its result back to the agent.
+- **Reject** takes an optional reason. The agent receives it and changes course without running the original action.
+- **More** lets you edit the call's arguments before approving. You can also tick "Always allow actions like this", which turns off the matching rule.
+- **Review**: for tasks that need it, **Accept** finishes the task, and **Rework** sends it back with your feedback for a revised result.
+
+On WeChat, Feishu, DingTalk and other channels the agent shows the approval number; just reply:
+
+```
+approve 3
+reject 3 don't push yet, let me check first
+```
+
+The number can be left out when only one item is pending. An approval can only be handled from the conversation that raised it.
+
+## Results and notices
+
+- Results of tasks created on the board are read on the board, and the browser shows a notification (task notifications must be on in the console). To follow up or ask for changes, add to the task from its detail.
+- A task created from a conversation sends its result back to that conversation and adds it to the conversation's context, so you can ask follow-up questions.
+- With `notify_webhook` set, a JSON notice is posted for pending approvals (`approval_pending`), pending reviews (`accept_pending`), finished tasks (`task_done`) and failures (`task_failed`). Background runs of scheduled tasks only post the events that need you, plus failures.
+
+```json
+{
+  "event": "approval_pending",
+  "task_id": 12,
+  "approval_id": 3,
+  "title": "Weekly issue report",
+  "text": "[Approval #3] Task #12 \"Weekly issue report\" wants to: Push code\nAction: bash  git push origin main\nReply \"approve 3\" or \"reject 3 <reason>\""
+}
+```
+
+<Tip>
+Background tasks run in their own sessions, so they do not appear in the conversation list or trigger self-evolution. Tasks that were running when the service stopped are queued again on the next start.
+</Tip>

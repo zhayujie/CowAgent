@@ -149,6 +149,7 @@
                   "tools/env-config",
                   "tools/web-fetch",
                   "tools/scheduler",
+                  "tools/task",
                   "tools/delegate",
                   "tools/subagent"
                 ]
@@ -423,6 +424,7 @@
                   "zh/tools/env-config",
                   "zh/tools/web-fetch",
                   "zh/tools/scheduler",
+                  "zh/tools/task",
                   "zh/tools/delegate",
                   "zh/tools/subagent"
                 ]
