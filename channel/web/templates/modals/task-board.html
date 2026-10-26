@@ -1,0 +1,239 @@
+    <!-- Background task: create -->
+    <div id="board-task-modal-overlay" class="fixed inset-0 bg-black/50 z-[100] hidden flex items-center justify-center">
+        <div class="bg-white dark:bg-[#1A1A1A] rounded-2xl border border-slate-200 dark:border-white/10 shadow-xl
+                    w-full max-w-xl mx-4 max-h-[90vh] overflow-y-auto">
+            <div class="p-6">
+                <div class="flex items-center gap-3 mb-5">
+                    <div class="w-10 h-10 rounded-xl bg-primary-50 dark:bg-primary-900/20 flex items-center justify-center flex-shrink-0">
+                        <i class="fas fa-paper-plane text-primary-500"></i>
+                    </div>
+                    <div class="min-w-0 flex-1">
+                        <h3 class="font-semibold text-slate-800 dark:text-slate-100 text-base" data-i18n="board_create_title">新建后台任务</h3>
+                        <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5" data-i18n="board_create_desc">交给 Agent 在后台完成，做完通知你</p>
+                    </div>
+                    <button class="board-modal-close text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer text-xl leading-none px-1 flex-shrink-0">&times;</button>
+                </div>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5" data-i18n="board_field_prompt">要做什么</label>
+                        <textarea id="board-task-prompt" rows="5"
+                                  class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600
+                                         bg-slate-50 dark:bg-white/5 text-sm text-slate-800 dark:text-slate-100
+                                         focus:outline-none focus:border-primary-500 transition-colors resize-y"
+                                  data-i18n-placeholder="board_prompt_placeholder"></textarea>
+                        <p class="text-xs text-slate-400 dark:text-slate-500 mt-1" data-i18n="board_prompt_hint">写清目标、输入和期望的产出，Agent 会独立完成，不会中途提问。</p>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5" data-i18n="board_field_title">标题（可选）</label>
+                        <input id="board-task-title" type="text" maxlength="60"
+                               class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600
+                                      bg-slate-50 dark:bg-white/5 text-sm text-slate-800 dark:text-slate-100
+                                      focus:outline-none focus:border-primary-500 transition-colors"
+                               data-i18n-placeholder="board_title_placeholder">
+                    </div>
+                    <div id="board-task-agent-wrap" class="hidden">
+                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5" data-i18n="board_field_agent">执行的 Agent</label>
+                        <div class="board-select-wrap">
+                            <select id="board-task-agent" class="board-select"></select>
+                            <i class="fas fa-chevron-down"></i>
+                        </div>
+                    </div>
+                    <label class="board-check">
+                        <input id="board-task-accept" type="checkbox">
+                        <span>
+                            <span class="board-check-title" data-i18n="board_field_accept">完成后需要我验收</span>
+                            <span class="board-check-desc" data-i18n="board_field_accept_desc">结果先进入「等我处理」，通过才算完成，驳回会按意见返工</span>
+                        </span>
+                    </label>
+                </div>
+            </div>
+            <div class="flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-100 dark:border-white/5 rounded-b-2xl">
+                <span id="board-task-status" class="flex-1 text-xs text-red-500"></span>
+                <button class="board-modal-close px-4 py-2 rounded-lg border border-slate-200 dark:border-white/10
+                               text-slate-600 dark:text-slate-300 text-sm font-medium hover:bg-slate-50 dark:hover:bg-white/5
+                               cursor-pointer transition-colors duration-150" data-i18n="cancel">取消</button>
+                <button id="board-task-submit"
+                        class="px-4 py-2 rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-sm font-medium
+                               cursor-pointer transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+                        data-i18n="board_submit">开始执行</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Background task: every task, filtered. Sits before the detail dialog
+         so a task opened from here stacks on top of it. -->
+    <div id="board-history-modal-overlay" class="fixed inset-0 bg-black/50 z-[100] hidden flex items-center justify-center">
+        <div class="bg-white dark:bg-[#1A1A1A] rounded-2xl border border-slate-200 dark:border-white/10 shadow-xl
+                    w-full max-w-3xl mx-4 h-[80vh] flex flex-col">
+            <div class="flex items-center gap-3 px-6 pt-6 pb-4">
+                <div class="w-10 h-10 rounded-xl bg-slate-100 dark:bg-white/10 flex items-center justify-center flex-shrink-0">
+                    <i class="fas fa-list-check text-slate-500 dark:text-slate-400"></i>
+                </div>
+                <div class="min-w-0 flex-1">
+                    <h3 class="font-semibold text-slate-800 dark:text-slate-100 text-base" data-i18n="board_all_tasks">全部任务</h3>
+                    <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5" data-i18n="board_history_desc">所有后台任务，按状态和来源筛选</p>
+                </div>
+                <button class="board-modal-close text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer text-xl leading-none px-1 flex-shrink-0">&times;</button>
+            </div>
+            <div class="flex items-center gap-3 flex-wrap px-6 pb-3">
+                <div id="board-history-state" class="board-seg"></div>
+                <div id="board-history-source" class="board-seg"></div>
+                <span id="board-history-count" class="ml-auto text-xs text-slate-400"></span>
+            </div>
+            <div id="board-history-list" class="px-6 pb-6 overflow-y-auto flex-1 min-h-0"></div>
+        </div>
+    </div>
+
+    <!-- Background task: detail. The run reads like a chat (same bubbles,
+         same live stream) with a composer to add to it, and the task's
+         facts and pending decisions alongside. -->
+    <div id="board-detail-modal-overlay" class="fixed inset-0 bg-black/50 z-[100] hidden flex items-center justify-center">
+        <div class="bg-white dark:bg-[#1A1A1A] rounded-2xl border border-slate-200 dark:border-white/10 shadow-xl
+                    w-full max-w-6xl mx-4 h-[90vh] flex flex-col overflow-hidden">
+            <div class="flex items-center gap-3 px-5 py-4 border-b border-slate-100 dark:border-white/5">
+                <div id="board-detail-icon" class="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"></div>
+                <div class="min-w-0 flex-1">
+                    <h3 id="board-detail-title" class="font-semibold text-slate-800 dark:text-slate-100 text-base truncate"></h3>
+                    <p id="board-detail-sub" class="text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate"></p>
+                </div>
+                <div id="board-detail-actions" class="flex items-center gap-1.5 flex-shrink-0">
+                    <button id="board-detail-cancel" class="hidden bd-head-btn">
+                        <i class="fas fa-stop"></i><span data-i18n="board_cancel_task">停止任务</span>
+                    </button>
+                    <button id="board-detail-retry" class="hidden bd-head-btn">
+                        <i class="fas fa-rotate-right"></i><span data-i18n="board_retry">重新执行</span>
+                    </button>
+                    <button id="board-detail-delete" class="bd-head-btn is-danger" data-i18n-title="board_delete" title="删除">
+                        <i class="fas fa-trash-can"></i>
+                    </button>
+                </div>
+                <button class="board-modal-close text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer text-xl leading-none px-1 flex-shrink-0">&times;</button>
+            </div>
+            <div class="flex flex-1 min-h-0">
+                <div class="flex flex-col flex-1 min-w-0 bg-slate-50/60 dark:bg-white/[0.02]">
+                    <div id="board-detail-chat" class="flex-1 min-h-0 overflow-y-auto py-3"></div>
+                    <div id="board-detail-composer" class="hidden flex-shrink-0 px-4 pb-4 pt-1">
+                        <div class="composer-card">
+                            <div class="composer-identity-row">
+                                <textarea id="board-detail-input" class="composer-textarea" rows="1"></textarea>
+                            </div>
+                            <div class="composer-toolbar">
+                                <span id="board-detail-hint" class="text-xs text-slate-400 dark:text-slate-500 truncate"></span>
+                                <div class="composer-group composer-group-end">
+                                    <button id="board-detail-send" class="composer-send-btn" disabled>
+                                        <i class="fas fa-paper-plane text-sm"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <aside id="board-detail-side" class="w-72 flex-shrink-0 border-l border-slate-100 dark:border-white/5 overflow-y-auto px-5 py-4"></aside>
+            </div>
+        </div>
+    </div>
+
+    <!-- Approval: reject with a note, or edit the call and approve -->
+    <div id="approval-decide-modal-overlay" class="fixed inset-0 bg-black/50 z-[110] hidden flex items-center justify-center">
+        <div class="bg-white dark:bg-[#1A1A1A] rounded-2xl border border-slate-200 dark:border-white/10 shadow-xl
+                    w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+            <div class="p-6">
+                <div class="flex items-center gap-3 mb-4">
+                    <div id="approval-decide-icon" class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"></div>
+                    <div class="min-w-0 flex-1">
+                        <h3 id="approval-decide-title" class="font-semibold text-slate-800 dark:text-slate-100 text-base"></h3>
+                        <p id="approval-decide-sub" class="text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate"></p>
+                    </div>
+                    <button class="board-modal-close text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer text-xl leading-none px-1 flex-shrink-0">&times;</button>
+                </div>
+                <div id="approval-decide-args-wrap" class="mb-4 hidden">
+                    <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5" data-i18n="approval_edit_args">调用参数（可修改）</label>
+                    <textarea id="approval-decide-args" rows="8" spellcheck="false"
+                              class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600
+                                     bg-slate-50 dark:bg-white/5 text-xs font-mono text-slate-800 dark:text-slate-100
+                                     focus:outline-none focus:border-primary-500 transition-colors resize-y"></textarea>
+                </div>
+                <div id="approval-decide-note-wrap" class="hidden">
+                    <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5" id="approval-decide-note-label"></label>
+                    <textarea id="approval-decide-note" rows="3"
+                              class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600
+                                     bg-slate-50 dark:bg-white/5 text-sm text-slate-800 dark:text-slate-100
+                                     focus:outline-none focus:border-primary-500 transition-colors resize-y"></textarea>
+                </div>
+                <label id="approval-decide-always-wrap" class="board-check mt-4 hidden">
+                    <input id="approval-decide-always" type="checkbox">
+                    <span>
+                        <span class="board-check-title" data-i18n="approval_always_auto">以后这类操作自动通过</span>
+                        <span class="board-check-desc" data-i18n="approval_always_auto_desc">会停用匹配到的规则，可在「审批规则」中重新开启</span>
+                    </span>
+                </label>
+                <p id="approval-decide-error" class="text-xs text-red-500 mt-2 hidden"></p>
+            </div>
+            <div class="flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-100 dark:border-white/5 rounded-b-2xl">
+                <button class="board-modal-close px-4 py-2 rounded-lg border border-slate-200 dark:border-white/10
+                               text-slate-600 dark:text-slate-300 text-sm font-medium hover:bg-slate-50 dark:hover:bg-white/5
+                               cursor-pointer transition-colors duration-150" data-i18n="cancel">取消</button>
+                <button id="approval-decide-submit"
+                        class="px-4 py-2 rounded-lg text-white text-sm font-medium cursor-pointer transition-colors duration-150
+                               disabled:opacity-50 disabled:cursor-not-allowed"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Background tasks: approval rules and notices -->
+    <div id="board-settings-modal-overlay" class="fixed inset-0 bg-black/50 z-[100] hidden flex items-center justify-center">
+        <div class="bg-white dark:bg-[#1A1A1A] rounded-2xl border border-slate-200 dark:border-white/10 shadow-xl
+                    w-full max-w-2xl mx-4 max-h-[90vh] flex flex-col">
+            <div class="flex items-center gap-3 px-6 pt-6 pb-4">
+                <div class="w-10 h-10 rounded-xl bg-primary-50 dark:bg-primary-900/20 flex items-center justify-center flex-shrink-0">
+                    <i class="fas fa-shield-halved text-primary-500"></i>
+                </div>
+                <div class="min-w-0 flex-1">
+                    <h3 class="font-semibold text-slate-800 dark:text-slate-100 text-base" data-i18n="board_settings_title">审批规则与通知</h3>
+                    <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5" data-i18n="board_settings_desc">匹配规则的操作会先停下来等你审批，在执行时强制生效，不依赖提示词</p>
+                </div>
+                <button class="board-modal-close text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer text-xl leading-none px-1 flex-shrink-0">&times;</button>
+            </div>
+            <div class="px-6 pb-6 overflow-y-auto flex-1 min-h-0 space-y-5">
+                <div>
+                    <div class="flex items-start justify-between gap-3 mb-2">
+                        <span class="text-sm font-medium text-slate-700 dark:text-slate-200 flex-shrink-0 pt-0.5" data-i18n="board_rules">审批规则</span>
+                        <div class="flex items-center gap-1.5 flex-wrap justify-end" id="board-rule-templates"></div>
+                    </div>
+                    <div id="board-rules-list" class="space-y-2"></div>
+                    <button id="board-rule-add" class="mt-2 w-full py-2 rounded-lg border border-dashed border-slate-300 dark:border-white/15
+                                                   text-sm text-slate-500 dark:text-slate-400 hover:border-primary-400 hover:text-primary-500
+                                                   cursor-pointer transition-colors">
+                        <i class="fas fa-plus text-xs mr-1"></i><span data-i18n="board_rule_add">添加规则</span>
+                    </button>
+                    <p class="text-xs text-slate-400 dark:text-slate-500 mt-2" data-i18n="board_rule_hint">工具名支持 * 和逗号分隔；匹配内容是对调用参数（JSON）的正则，留空表示该工具的所有调用。</p>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5" data-i18n="board_concurrency">同时执行</label>
+                        <input id="board-setting-concurrency" type="number" min="1" max="10"
+                               class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600
+                                      bg-slate-50 dark:bg-white/5 text-sm text-slate-800 dark:text-slate-100
+                                      focus:outline-none focus:border-primary-500 transition-colors">
+                    </div>
+                    <div class="sm:col-span-2">
+                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5" data-i18n="board_webhook">通知 Webhook（可选）</label>
+                        <input id="board-setting-webhook" type="url"
+                               class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600
+                                      bg-slate-50 dark:bg-white/5 text-sm text-slate-800 dark:text-slate-100
+                                      focus:outline-none focus:border-primary-500 transition-colors"
+                               placeholder="https://">
+                    </div>
+                </div>
+            </div>
+            <div class="flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-100 dark:border-white/5 rounded-b-2xl">
+                <span id="board-settings-status" class="flex-1 text-xs"></span>
+                <button class="board-modal-close px-4 py-2 rounded-lg border border-slate-200 dark:border-white/10
+                               text-slate-600 dark:text-slate-300 text-sm font-medium hover:bg-slate-50 dark:hover:bg-white/5
+                               cursor-pointer transition-colors duration-150" data-i18n="cancel">取消</button>
+                <button id="board-settings-save"
+                        class="px-4 py-2 rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-sm font-medium
+                               cursor-pointer transition-colors duration-150 disabled:opacity-50" data-i18n="save">保存</button>
+            </div>
+        </div>
+    </div>

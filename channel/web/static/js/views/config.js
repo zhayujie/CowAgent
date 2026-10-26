@@ -198,6 +198,7 @@ function initConfigView(data) {
     syncReasoningEffortOptions();
     document.getElementById('cfg-subagent').checked = data.subagent_enabled !== false;
     document.getElementById('cfg-self-evolution').checked = data.self_evolution_enabled === true;
+    document.getElementById('cfg-task').checked = data.task_enabled === true;
 
     // Reflect the current UI language (already resolved, may include the user's
     // local choice) on the selector so it stays in sync with the top-right toggle.
@@ -581,6 +582,7 @@ function saveAgentConfig() {
         enable_thinking: document.getElementById('cfg-enable-thinking').checked,
         subagent_enabled: document.getElementById('cfg-subagent').checked,
         self_evolution_enabled: document.getElementById('cfg-self-evolution').checked,
+        task_enabled: document.getElementById('cfg-task').checked,
     };
 
     const btn = document.getElementById('cfg-agent-save');
@@ -597,6 +599,7 @@ function saveAgentConfig() {
             // just-saved value instead of a stale in-memory one.
             configReasoningByModel = mergedEffortByModel;
             showStatus('cfg-agent-status', 'config_saved', false);
+            if (typeof pollTaskSummary === 'function') pollTaskSummary();
         } else {
             showStatus('cfg-agent-status', 'config_save_error', true);
         }

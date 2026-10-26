@@ -6,26 +6,41 @@
 // Scheduler View
 // =====================================================================
 let tasksLoaded = false;
-// Which sub-tab of the Tasks view is showing: 'tasks' | 'records'.
+// Which sub-tab of the Tasks view is showing: 'board' | 'tasks' | 'records'.
 let tasksActiveTab = 'tasks';
 let runsLoaded = false;
 
-// Switch between the task list and the execution-record history. The header's
-// add/refresh buttons and subtitle follow the active tab so the two panes share
-// one chrome (mirrors the desktop client).
+// Switch between the background-task board, the scheduled-task list and the
+// execution-record history. The header's buttons and subtitle follow the
+// active tab so the panes share one chrome (mirrors the desktop client).
 function switchTasksTab(tab) {
+    // The board only exists while background tasks are on.
+    if (tab === 'board' && !(typeof taskFeatureEnabled !== 'undefined' && taskFeatureEnabled)) tab = 'tasks';
     tasksActiveTab = tab;
+    const isBoard = tab === 'board';
     const isTasks = tab === 'tasks';
+    const isRecords = tab === 'records';
+    document.getElementById('board-pane').classList.toggle('hidden', !isBoard);
     document.getElementById('tasks-pane').classList.toggle('hidden', !isTasks);
-    document.getElementById('runs-pane').classList.toggle('hidden', isTasks);
-    // Add button is only meaningful on the task list.
+    document.getElementById('runs-pane').classList.toggle('hidden', !isRecords);
+    // Each tab's own primary actions.
     const addBtn = document.getElementById('task-add-btn');
     if (addBtn) addBtn.classList.toggle('hidden', !isTasks);
+    const boardAdd = document.getElementById('board-add-btn');
+    if (boardAdd) boardAdd.classList.toggle('hidden', !isBoard);
+    const boardSettings = document.getElementById('board-settings-btn');
+    if (boardSettings) boardSettings.classList.toggle('hidden', !isBoard);
+    // Five lanes need more room than a list does.
+    const container = document.getElementById('tasks-container');
+    if (container) {
+        container.classList.toggle('max-w-4xl', !isBoard);
+        container.classList.toggle('max-w-7xl', isBoard);
+    }
     const subtitle = document.getElementById('tasks-subtitle');
-    if (subtitle) subtitle.textContent = t(isTasks ? 'tasks_desc' : 'records_desc');
+    if (subtitle) subtitle.textContent = t(isBoard ? 'board_desc' : (isTasks ? 'tasks_desc' : 'records_desc'));
 
     // Tab visual state (active color + underline).
-    [['tasks-tab-tasks', isTasks], ['tasks-tab-records', !isTasks]].forEach(([id, active]) => {
+    [['tasks-tab-board', isBoard], ['tasks-tab-tasks', isTasks], ['tasks-tab-records', isRecords]].forEach(([id, active]) => {
         const el = document.getElementById(id);
         if (!el) return;
         el.classList.toggle('text-primary-500', active);
@@ -35,7 +50,8 @@ function switchTasksTab(tab) {
         if (underline) underline.classList.toggle('hidden', !active);
     });
 
-    if (!isTasks) loadRunsView();
+    if (isRecords) loadRunsView();
+    if (isBoard && typeof loadTaskBoard === 'function') loadTaskBoard();
     routeNoteTab('tasks', tab);
 }
 
@@ -47,14 +63,16 @@ function refreshTasksView() {
     icon.classList.add('fa-spin');
     btn.disabled = true;
     
-    if (tasksActiveTab === 'records') {
+    if (tasksActiveTab === 'board') {
+        loadTaskBoard();
+    } else if (tasksActiveTab === 'records') {
         runsLoaded = false;
         loadRunsView();
     } else {
-    tasksLoaded = false;
-    const listEl = document.getElementById('tasks-list');
-    listEl.innerHTML = '';
-    loadTasksView();
+        tasksLoaded = false;
+        const listEl = document.getElementById('tasks-list');
+        listEl.innerHTML = '';
+        loadTasksView();
     }
     
     // Restore button after animation ends

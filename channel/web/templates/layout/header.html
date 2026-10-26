@@ -44,6 +44,25 @@
 
                 <div class="flex-1"></div>
 
+                <!-- Approval inbox: only while background tasks are on (see approvals.js) -->
+                <div id="approval-bell" class="relative hidden">
+                    <button id="approval-bell-btn" class="relative p-2 rounded-lg text-slate-500 dark:text-slate-400
+                                                         hover:bg-slate-100 dark:hover:bg-white/10 cursor-pointer transition-colors duration-150"
+                            onclick="toggleApprovalInbox(event)" data-tip-key="inbox_title" data-tooltip-pos="bottom">
+                        <i class="fas fa-bell text-base"></i>
+                        <span id="approval-bell-badge" class="approval-bell-badge hidden"></span>
+                    </button>
+                    <div id="approval-inbox" class="approval-inbox hidden">
+                        <div class="approval-inbox-head">
+                            <span class="font-semibold text-sm text-slate-800 dark:text-slate-100" data-i18n="inbox_title">待我处理</span>
+                            <button class="approval-inbox-link" onclick="openTaskBoardFromInbox()">
+                                <span data-i18n="inbox_open_board">打开看板</span><i class="fas fa-arrow-right text-[10px]"></i>
+                            </button>
+                        </div>
+                        <div id="approval-inbox-list" class="approval-inbox-list"></div>
+                    </div>
+                </div>
+
                 <!-- Language Selector (dropdown) -->
                 <div id="lang-selector" class="relative">
                     <button id="lang-toggle" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium
