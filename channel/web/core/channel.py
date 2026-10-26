@@ -30,12 +30,12 @@ from channel.web.core import providers
 from channel.web.core._common import (
     _addressed_agent_id, _build_artifact_payload, _build_preview_url, _cancel_reply_text,
     _desktop_token_matches, _first_value, _get_upload_dir, _get_workspace_root,
-    IMAGE_EXTENSIONS, _is_loopback_request, _is_password_enabled,
+    classify_attachment_type, _is_loopback_request, _is_password_enabled,
     _is_within_directory, _log_bind_failure, MAX_LOCAL_IMPORT_BYTES,
     _multipart_lists, _read_uploaded_file_bytes,
     _resolve_upload_path, _rewrite_relative_media, _sanitize_upload_id,
     _scoped_agent_id, SERVING, _session_roster, SSEStreamState,
-    _steer_reply_text, VIDEO_EXTENSIONS, WebMessage,
+    _steer_reply_text, WebMessage,
 )
 from common import i18n
 from common.log import logger
@@ -913,12 +913,7 @@ class WebChannel(ChatChannel):
             with open(save_path, "wb") as f:
                 f.write(content_bytes)
 
-            if ext in IMAGE_EXTENSIONS:
-                file_type = "image"
-            elif ext in VIDEO_EXTENSIONS:
-                file_type = "video"
-            else:
-                file_type = "file"
+            file_type = classify_attachment_type(ext)
 
             from urllib.parse import quote
             # Uploads land in the agent's own workspace, so the URL has to name
@@ -989,12 +984,7 @@ class WebChannel(ChatChannel):
             save_path = os.path.join(upload_dir, safe_name)
             shutil.copyfile(real_path, save_path)
 
-            if ext in IMAGE_EXTENSIONS:
-                file_type = "image"
-            elif ext in VIDEO_EXTENSIONS:
-                file_type = "video"
-            else:
-                file_type = "file"
+            file_type = classify_attachment_type(ext)
 
             logger.info(
                 f"[WebChannel] File imported by path: {original_name} -> {save_path} ({file_type}, {size} bytes)"
@@ -1120,6 +1110,8 @@ class WebChannel(ChatChannel):
                         file_refs.append(f"[{i18n.t('图片', 'Image')}: {fpath}]")
                     elif ftype == "video":
                         file_refs.append(f"[{i18n.t('视频', 'Video')}: {fpath}]")
+                    elif ftype == "audio":
+                        file_refs.append(f"[{i18n.t('音频', 'Audio')}: {fpath}]")
                     elif ftype == "directory":
                         file_refs.append(f"[{i18n.t('目录', 'Directory')}: {fpath}]")
                     else:

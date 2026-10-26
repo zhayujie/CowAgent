@@ -68,8 +68,8 @@ def _paths_written_by_step(step: dict) -> list:
 
 
 def _path_sent_by_step(step: dict) -> str:
-    """The local document a `send` step delivered. Images and videos are left
-    out: the history view renders those inline from the step itself."""
+    """The local document a `send` step delivered. Images, videos and audio are
+    left out: the history view renders those inline from the step itself."""
     if step.get("name") != "send":
         return ""
     try:
@@ -78,7 +78,7 @@ def _path_sent_by_step(step: dict) -> str:
         return ""
     if not isinstance(payload, dict) or payload.get("type") != "file_to_send":
         return ""
-    if payload.get("file_type") in ("image", "video") or payload.get("url"):
+    if payload.get("file_type") in ("image", "video", "audio") or payload.get("url"):
         return ""
     return str(payload.get("path") or "").strip()
 

@@ -181,6 +181,17 @@ function _buildVideoHtml(url) {
         `<i class="fas fa-download"></i> ${escapeHtml(fileName)}</a></div>`;
 }
 
+function _buildAudioHtml(url) {
+    const webUrl = _toWebUrl(url);
+    const fileName = url.split('/').pop().split('?')[0];
+    return `<div style="margin:10px 0;">` +
+        `<audio controls preload="metadata" style="width:min(100%,420px);display:block;">` +
+        `<source src="${webUrl}"></audio>` +
+        `<a href="${webUrl}" target="_blank" ` +
+        `style="display:inline-flex;align-items:center;gap:4px;margin-top:4px;font-size:12px;color:#8b8fa8;text-decoration:none;">` +
+        `<i class="fas fa-download"></i> ${escapeHtml(fileName)}</a></div>`;
+}
+
 function _openImageLightbox(src) {
     let overlay = document.getElementById('cow-lightbox');
     if (!overlay) {

@@ -698,6 +698,13 @@ function startSSE(requestId, loadingEl, timestamp, replayItems, resume) {
                 mediaEl.appendChild(wrapper.firstElementChild || wrapper);
                 scrollChatToBottom();
 
+            } else if (item.type === 'file' && item.file_type === 'audio') {
+                ensureBotEl();
+                const wrapper = document.createElement('div');
+                wrapper.innerHTML = _buildAudioHtml(item.content);
+                mediaEl.appendChild(wrapper.firstElementChild || wrapper);
+                scrollChatToBottom();
+
             } else if (item.type === 'file' && item.abs_path && typeof appendArtifactCard === 'function') {
                 // A local document delivered with `send`: the same card as a
                 // file the agent wrote, so it previews and opens in Artifacts.

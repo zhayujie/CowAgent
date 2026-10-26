@@ -317,13 +317,16 @@ def test_history_cards_include_sent_documents_but_not_inline_media(tmp_path, mon
 
     doc = _touch(tmp_path / "docs" / "guide.docx")
     shot = _touch(tmp_path / "tmp" / "shot.png")
+    clip = _touch(tmp_path / "tmp" / "voice.mp3")
     monkeypatch.setattr(sessions, "_get_workspace_root", lambda *a: str(tmp_path))
 
     def sent(path, file_type):
         return {"type": "tool", "name": "send", "arguments": {"path": str(path)},
                 "result": json.dumps({"type": "file_to_send", "path": str(path), "file_type": file_type})}
 
-    cards = sessions._artifacts_from_steps([sent(doc, "document"), sent(shot, "image")], session_id="s1")
+    cards = sessions._artifacts_from_steps(
+        [sent(doc, "document"), sent(shot, "image"), sent(clip, "audio")], session_id="s1",
+    )
     assert [(c["file_name"], c["rel_path"], c["kind"]) for c in cards] == [
         ("guide.docx", "docs/guide.docx", "office")]
     # The web history drops the step's download link only for a path carded here.
