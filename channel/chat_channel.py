@@ -581,6 +581,9 @@ class ChatChannel(Channel):
                 self._handle_steer_command(context, session_id, instruction)
                 self._release_claim(context, session_id)
                 return
+            if self._handle_approval_reply(context):
+                self._release_claim(context, session_id)
+                return
 
         with self.lock:
             if queue_key not in self.sessions:
@@ -592,6 +595,26 @@ class ChatChannel(Channel):
                 self.sessions[queue_key][0].putleft(context)  # 优先处理管理命令
             else:
                 self.sessions[queue_key][0].put(context)
+
+    def _handle_approval_reply(self, context: Context) -> bool:
+        """Settle an approval answered by chat ("通过 5"); True when handled."""
+        try:
+            from agent.task.settings import is_enabled
+            if not is_enabled():
+                return False
+            from agent.task.commands import try_handle
+            text = try_handle(
+                context.content,
+                context.get("channel_type") or "",
+                str(context.get("receiver") or ""),
+            )
+        except Exception as e:
+            logger.warning(f"[chat_channel] Approval reply check failed: {e}")
+            return False
+        if text is None:
+            return False
+        self._send_reply(context, Reply(ReplyType.TEXT, text))
+        return True
 
     def _handle_cancel_command(self, context: Context, session_id: str) -> None:
         """Cancel any in-flight agent run for *session_id* and reply inline.

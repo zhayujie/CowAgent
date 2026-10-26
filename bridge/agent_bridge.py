@@ -631,6 +631,14 @@ class AgentBridge:
         except Exception as e:
             logger.warning(f"[AgentBridge] Evolution trigger init failed: {e}")
 
+        try:
+            from agent.task.settings import is_enabled as task_enabled
+            if task_enabled():
+                from agent.task.runner import ensure_runner
+                ensure_runner(self)
+        except Exception as e:
+            logger.warning(f"[AgentBridge] Task runner init failed: {e}")
+
     def create_agent(self, system_prompt: str, tools: List = None, **kwargs) -> Agent:
         """
         Create the super agent with COW integration
@@ -1664,11 +1672,17 @@ class AgentBridge:
             original_tools = agent.tools
             filtered_tools = original_tools
             
-            # If this is a scheduled task execution, exclude scheduler tool to prevent recursion
-            if context and context.get("is_scheduled_task"):
-                filtered_tools = [tool for tool in agent.tools if tool.name != "scheduler"]
+            # Background runs must not schedule or spawn more background work.
+            excluded_tools = set()
+            if context and (context.get("is_scheduled_task") or context.get("is_task")):
+                excluded_tools.update(("scheduler", "task_create"))
+            if excluded_tools:
+                filtered_tools = [tool for tool in agent.tools if tool.name not in excluded_tools]
                 agent.tools = filtered_tools
-                logger.info(f"[AgentBridge] Scheduled task execution: excluded scheduler tool ({len(filtered_tools)}/{len(original_tools)} tools)")
+                logger.info(
+                    f"[AgentBridge] Background run: excluded {sorted(excluded_tools)} "
+                    f"({len(filtered_tools)}/{len(original_tools)} tools)"
+                )
 
             if context and agent.tools:
                 for tool in agent.tools:
@@ -1696,6 +1710,7 @@ class AgentBridge:
             # guest speaker still reads and writes the shared one.
             agent._current_session_id = session_id
             agent._current_agent_id = resolved_agent_id
+            agent._current_context = context
 
             # Bound the in-memory context for scheduler sessions before each run.
             # Scheduler sessions are stable per-task and append every trigger,
@@ -1795,7 +1810,7 @@ class AgentBridge:
                     pass
 
                 # Restore original tools
-                if context and context.get("is_scheduled_task"):
+                if excluded_tools:
                     agent.tools = original_tools
 
                 # Log execution summary
@@ -1834,6 +1849,7 @@ class AgentBridge:
                 context and (
                     context.get("is_scheduled_task")
                     or context.get("is_delegated_task")
+                    or context.get("is_task")
                 )
             ):
                 try:
@@ -2292,6 +2308,51 @@ class AgentBridge:
                     f"for session={session_id}: {e}"
                 )
 
+    _TASK_MARKER = "[TASK]"
+    # Task results a chat keeps in its context; the board holds every one.
+    _TASK_KEEP_PER_SESSION = 5
+
+    def remember_task_output(
+        self,
+        session_id: str,
+        task_id: int,
+        title: str,
+        content: str,
+        channel_type: str = "",
+        agent_id: str = None,
+    ) -> None:
+        """Add a finished background task's result to the conversation it was
+        started from, so a follow-up there can build on it. The user-side
+        marker is hidden in the chat UI like the scheduler's."""
+        if not session_id or not content:
+            return
+        max_len = 4000
+        if len(content) > max_len:
+            content = content[:max_len].rstrip() + "…"
+        from common.i18n import t as i18n_t
+
+        heading = i18n_t(f"【任务 #{task_id} 已完成】{title}", f"[Task #{task_id} done] {title}")
+        messages = [
+            {"role": "user", "content": [{"type": "text", "text": f"{self._TASK_MARKER} #{task_id} {title}"}]},
+            {"role": "assistant", "content": [{"type": "text", "text": f"{heading}\n\n{content}"}]},
+        ]
+        self._persist_messages(session_id, messages, channel_type, agent_id)
+        keep = self._TASK_KEEP_PER_SESSION
+        try:
+            self.get_conversation_store(agent_id).prune_scheduled_messages(
+                session_id, keep_last_n=keep, markers=[self._TASK_MARKER]
+            )
+        except Exception as e:
+            logger.warning(f"[AgentBridge] Failed to prune task output in session={session_id}: {e}")
+        agent = self.get_cached_agent(session_id, agent_id=agent_id)
+        if agent:
+            try:
+                with agent.messages_lock:
+                    agent.messages.extend(messages)
+                    self._prune_scheduled_in_memory(agent, keep, markers=(self._TASK_MARKER,))
+            except Exception as e:
+                logger.warning(f"[AgentBridge] Failed to add task output to session={session_id}: {e}")
+
     @staticmethod
     def _trim_in_memory_to_turns(agent, keep_turns: int) -> None:
         """Bound ``agent.messages`` to the most recent ``keep_turns`` real
@@ -2348,7 +2409,7 @@ class AgentBridge:
             )
 
     @classmethod
-    def _prune_scheduled_in_memory(cls, agent, keep_last_n: int) -> None:
+    def _prune_scheduled_in_memory(cls, agent, keep_last_n: int, markers=None) -> None:
         """Mirror conversation_store.prune_scheduled_messages on agent.messages.
 
         Caller must hold ``agent.messages_lock``.
@@ -2356,7 +2417,9 @@ class AgentBridge:
         if keep_last_n < 0:
             keep_last_n = 0
 
-        markers = (cls._SCHEDULED_MARKER,) + cls._SCHEDULED_LEGACY_MARKERS
+        if markers is None:
+            markers = (cls._SCHEDULED_MARKER,) + cls._SCHEDULED_LEGACY_MARKERS
+        markers = tuple(markers)
 
         def _is_marker_user(msg) -> bool:
             if not isinstance(msg, dict) or msg.get("role") != "user":

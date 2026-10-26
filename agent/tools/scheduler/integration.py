@@ -744,6 +744,19 @@ def _run_scheduled_task(
         )
         return False
 
+    # With background tasks on, an agent task runs on the task board instead,
+    # which records the run and delivers the result when it finishes.
+    if action_type == "agent_task":
+        try:
+            from agent.task.settings import is_enabled as tasks_enabled
+            if tasks_enabled():
+                from agent.task.runner import handoff_scheduled_task
+                if handoff_scheduled_task(task, agent_id, trigger=trigger):
+                    logger.info(f"[Scheduler] Task {task.get('id')}: handed to the task runner")
+                    return True
+        except Exception as e:
+            logger.warning(f"[Scheduler] Task hand-off failed, running inline: {e}")
+
     run = _record_scheduler_run(task, agent_id, trigger=trigger)
     sink: Dict[str, str] = {"run_id": run[1]} if run is not None else {}
     status = "done"

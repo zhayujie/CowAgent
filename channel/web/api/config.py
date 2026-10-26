@@ -57,6 +57,7 @@ class ConfigHandler:
     # file keeps a feature's settings together under one object.
     NESTED_BOOLS = {
         "subagent_enabled": ("subagent", "enabled"),
+        "task_enabled": ("task", "enabled"),
     }
 
     def GET(self):
@@ -65,6 +66,7 @@ class ConfigHandler:
         try:
             from agent.subagent import SubagentSettings
             from agent.evolution.config import get_evolution_config
+            from agent.task.settings import is_enabled as task_enabled
 
             local_config = conf()
             use_agent = local_config.get("agent", True)
@@ -153,6 +155,7 @@ class ConfigHandler:
                 # applies to an absent setting is the one shown here.
                 "self_evolution_enabled": get_evolution_config().enabled,
                 "subagent_enabled": SubagentSettings.from_config().enabled,
+                "task_enabled": task_enabled(),
                 # Default permission mode for sessions that have not pinned one.
                 "agent_permission_mode": permission_global_mode(),
                 "permission_modes": list(PERMISSION_MODES),
@@ -246,6 +249,13 @@ class ConfigHandler:
                 local_config[key] = value
 
             logger.info(f"[WebChannel] Config updated: {list(applied.keys())}")
+
+            if (applied.get("task") or {}).get("enabled"):
+                try:
+                    from agent.task.runner import ensure_runner
+                    ensure_runner()
+                except Exception as runner_err:
+                    logger.warning(f"[WebChannel] Task runner start failed: {runner_err}")
 
             # Apply a language change immediately so backend logs, agent
             # replies and CLI output switch without a restart.

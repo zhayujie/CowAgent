@@ -2320,6 +2320,10 @@ class AgentStreamExecutor:
             # failure limit that aborts the conversation.
             return result
 
+        gated = self._approval_gate(tool_id, tool_name, arguments)
+        if gated is not None:
+            return gated
+
         # Check for consecutive failures (retry protection)
         should_stop, stop_reason, is_critical = self._check_consecutive_failures(tool_name, arguments)
         if should_stop:
@@ -2447,6 +2451,52 @@ class AgentStreamExecutor:
                 **error_result
             })
             return error_result
+
+    def _approval_gate(self, tool_id: str, tool_name: str, arguments: Dict) -> Optional[Dict[str, Any]]:
+        """Apply the user's approval rules to this call.
+
+        None lets the call run. Otherwise the call does not run here and the
+        returned result tells the model why: refused by a rule, parked for the
+        user's approval, or already decided earlier in this conversation.
+        Like the permission check, a broken gate must not take the
+        conversation down, so an error lets the call through.
+        """
+        if self.agent is None:
+            return None
+        try:
+            from agent.task.settings import is_enabled
+            if not is_enabled():
+                return None
+            from agent.task.approval import check
+            decision = check(self.agent, tool_name, arguments)
+        except Exception as e:
+            logger.warning(f"[Approval] Gate skipped for {tool_name}: {e}")
+            return None
+        if decision.action == "auto":
+            return None
+
+        if decision.action == "deny":
+            result = {"status": "error", "result": decision.message, "execution_time": 0}
+        else:
+            result = {"status": "success", "result": decision.message, "execution_time": 0}
+        end_event = {"tool_call_id": tool_id, "tool_name": tool_name, **result}
+        if decision.action == "ask" and decision.approval:
+            end_event.update({
+                "approval_pending": True,
+                "approval_id": decision.approval.get("id"),
+                "approval_label": decision.approval.get("label") or "",
+                "approval_summary": decision.approval.get("summary") or "",
+            })
+        elif decision.action == "deny":
+            end_event["approval_denied"] = True
+        logger.info(f"[Approval] {tool_name}: {decision.action}")
+        self._emit_event("tool_execution_start", {
+            "tool_call_id": tool_id,
+            "tool_name": tool_name,
+            "arguments": arguments,
+        })
+        self._emit_event("tool_execution_end", end_event)
+        return result
 
     def _permission_denial(self, tool_name: str, arguments: Dict) -> Optional[str]:
         """Reason this call is not allowed, or None when it may run.

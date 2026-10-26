@@ -239,6 +239,7 @@ def _build_tooling_section(tools: List[Any], language: str) -> List[str]:
             "send": "send a local file to the user (local files only; put URLs directly in the reply text)",
             "vision": "analyze images (recognition, description, OCR, etc.)",
             "subagent": "hand a self-contained task to a sub agent and get back only its conclusion",
+            "task_create": "run work in the background and deliver the result later (only when the user asks for it)",
         }
     else:
         core_summaries = {
@@ -260,6 +261,7 @@ def _build_tooling_section(tools: List[Any], language: str) -> List[str]:
             "send": "发送本地文件给用户（仅限本地文件，URL直接放在回复文本中）",
             "vision": "分析图片内容（识别、描述、OCR文字提取等）",
             "subagent": "把一件自成一体的任务交给子 Agent，只拿回它的结论",
+            "task_create": "把工作放到后台执行，完成后再交付结果（仅在用户明确要求时使用）",
         }
 
     # Preferred display order
@@ -268,7 +270,7 @@ def _build_tooling_section(tools: List[Any], language: str) -> List[str]:
         "bash", "terminal",
         "web_search", "web_fetch", "browser",
         "memory_search", "memory_get",
-        "env_config", "time", "scheduler", "send", "vision", "subagent",
+        "env_config", "time", "scheduler", "task_create", "send", "vision", "subagent",
     ]
 
     # Build name -> summary mapping for available tools

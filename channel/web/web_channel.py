@@ -66,6 +66,10 @@ from channel.web.api.skills import (  # noqa: F401
     SkillsHandler, SkillUploadHandler, ToolsHandler,
     _install_skill_for_agent,
 )
+from channel.web.api.tasks import (  # noqa: F401
+    ApprovalDecideHandler, ApprovalsHandler, TaskActionHandler, TaskDetailHandler,
+    TaskSettingsHandler, TaskSummaryHandler, TasksHandler,
+)
 from channel.web.api.update import (  # noqa: F401
     UpdateCheckHandler, UpdateStartHandler, UpdateStatusHandler, VersionHandler,
 )
@@ -154,6 +158,13 @@ URLS = (
     '/api/scheduler/create', 'SchedulerCreateHandler',
     '/api/scheduler/recipients', 'SchedulerRecipientsHandler',
     '/api/scheduler/instances', 'SchedulerInstancesHandler',
+    '/api/tasks', 'TasksHandler',
+    '/api/tasks/settings', 'TaskSettingsHandler',
+    '/api/tasks/summary', 'TaskSummaryHandler',
+    '/api/tasks/(\\d+)', 'TaskDetailHandler',
+    '/api/tasks/(\\d+)/(cancel|retry|delete|reply)', 'TaskActionHandler',
+    '/api/approvals', 'ApprovalsHandler',
+    '/api/approvals/(\\d+)/decide', 'ApprovalDecideHandler',
     '/api/agents', 'AgentsHandler',
     '/api/agents/([^/]+)/avatar', 'AgentAvatarHandler',
     '/api/agents/([^/]+)/files/([^/]+)', 'AgentCoreFileHandler',

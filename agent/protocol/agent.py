@@ -891,7 +891,16 @@ class Agent:
                 self._last_run_new_messages = list(executor.messages[new_start:])
             else:
                 self._last_run_new_messages = list(executor.messages[original_length:])
-            self.messages = list(executor.messages)
+            # Messages written into the history while this run was going (a
+            # scheduled or background result landing in the chat) are not in
+            # the executor's copy; keep them after this run's turn.
+            seen = {id(m) for m in messages_copy}
+            seen.update(id(m) for m in executor.messages)
+            tail = len(self.messages)
+            while tail > 0 and id(self.messages[tail - 1]) not in seen:
+                tail -= 1
+            arrived = self.messages[tail:] if tail > 0 or not messages_copy else []
+            self.messages = list(executor.messages) + arrived
         
         # Store executor reference for agent_bridge to access files_to_send
         self.stream_executor = executor

@@ -24,5 +24,7 @@ def singleton(cls):
         return cls(*args, **kwargs)
 
     get_instance.new_instance = new_instance
+    # The instance if one was made, without making it.
+    get_instance.peek = lambda: instances.get(cls)
 
     return get_instance

@@ -332,6 +332,19 @@ available_setting = {
         "max_concurrent": 3,     # parallel sub agents per spawn call (range 1-10)
         "timeout_seconds": 300,  # budget for one spawn call (range 10-3600)
     },
+    # Background tasks, approvals and notices. Off by default: with enabled
+    # false there is no task tool, no task board and no approval check, and
+    # scheduled tasks run exactly as before.
+    "task": {
+        "enabled": False,
+        "chat_create": False,     # let a conversation hand work over with the task_create tool
+        "max_concurrency": 2,     # tasks running at the same time (range 1-10); scheduled runs don't count
+        "notify_webhook": "",     # optional URL that receives a JSON POST per notice
+        # [{"tool": "bash", "match": "git\\s+push", "action": "ask|deny", "label": "..."}]
+        # `tool` accepts * and comma-separated names; `match` is a regex over the
+        # call's JSON arguments. Matching calls wait for the user's approval.
+        "approval_rules": [],
+    },
     # Delegation between configured agents. Unlike a sub agent, the target is a
     # standing peer that answers in its own workspace. The call is synchronous:
     # the delegating Agent waits for the teammate's result. The tool only

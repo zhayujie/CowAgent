@@ -440,6 +440,13 @@ class WebChannel(ChatChannel):
                 if data.get("permission_denied"):
                     payload["permission_denied"] = True
                     payload["permission_mode"] = data.get("permission_mode")
+                if data.get("approval_pending"):
+                    payload["approval_pending"] = True
+                    payload["approval_id"] = data.get("approval_id")
+                    payload["approval_label"] = data.get("approval_label") or ""
+                    payload["approval_summary"] = data.get("approval_summary") or ""
+                elif data.get("approval_denied"):
+                    payload["approval_denied"] = True
                 # A tool that wrote its outcome for a person sends that
                 # instead. It gets a far larger budget than `result`: this is
                 # the report itself, not a trace of how it was produced.
@@ -1200,6 +1207,68 @@ class WebChannel(ChatChannel):
         except Exception as e:
             logger.error(f"Error processing message: {e}")
             return json.dumps({"status": "error", "message": str(e)})
+
+    def start_server_turn(self, session_id: str, agent_id: str, prompt: str,
+                          display: str = "") -> str:
+        """Run one turn in a Web conversation that nobody typed, e.g. the
+        continuation after an approval. It streams like a typed turn, so a
+        page showing the conversation can follow it by request id."""
+        request_id = self._generate_request_id()
+        self.request_to_session[request_id] = session_id
+        self.request_to_agent[request_id] = agent_id
+        queue_key = self._session_queue_key(session_id, agent_id)
+        if queue_key not in self.session_queues:
+            self.session_queues[queue_key] = Queue()
+        with self._sse_streams_lock:
+            self.sse_streams[request_id] = SSEStreamState()
+
+        trigger_prefixs = conf().get("single_chat_prefix", [""])
+        if trigger_prefixs and check_prefix(prompt, trigger_prefixs) is None:
+            prompt = trigger_prefixs[0] + prompt
+        msg = WebMessage(self._generate_msg_id(), prompt)
+        msg.from_user_id = session_id
+        context = self._compose_context(ContextType.TEXT, prompt, msg=msg, isgroup=False)
+        if context is None:
+            self._drop_sse_request(request_id)
+            return ""
+        context["session_id"] = session_id
+        context["receiver"] = session_id
+        context["request_id"] = request_id
+        context["agent_id"] = agent_id
+        if display:
+            context["display"] = display
+        context["on_event"] = self._make_sse_callback(request_id)
+        threading.Thread(target=self.produce, args=(context,), daemon=True).start()
+        return request_id
+
+    def open_background_stream(self, request_id: str, session_id: str, agent_id: str):
+        """Stream a run that does not reply through this channel, such as a
+        background task, so a page can follow it by request id the way it
+        follows a chat turn. Returns the event callback for the run; the run
+        ends it with :meth:`close_background_stream`."""
+        self.request_to_session[request_id] = session_id
+        self.request_to_agent[request_id] = agent_id
+        with self._sse_streams_lock:
+            self.sse_streams[request_id] = SSEStreamState()
+        return self._make_sse_callback(request_id)
+
+    def close_background_stream(self, request_id: str, content: str = "") -> None:
+        with self._sse_streams_lock:
+            state = self.sse_streams.get(request_id)
+        if state is None:
+            return
+        with state.condition:
+            main_done, complete = state.main_done, state.stream_complete
+        if complete:
+            return
+        if not main_done:
+            self._publish_sse_event(request_id, {
+                "type": "done",
+                "content": content,
+                "request_id": request_id,
+                "timestamp": time.time(),
+            })
+        self._publish_sse_event(request_id, {"type": "stream_end"})
 
     def _drop_sse_request(self, request_id: str):
         """Reclaim all state tied to an SSE request."""
