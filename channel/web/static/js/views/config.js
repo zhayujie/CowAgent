@@ -662,7 +662,7 @@ function _externalApiRevealed() {
 }
 
 function externalApiExample(lang, reveal) {
-    const base = `${window.location.origin}/v1`;
+    const base = `${integrationBaseUrl()}/v1`;
     const raw = externalApiState.api_key || '';
     const key = reveal ? raw : raw.slice(0, 7) + '********' + raw.slice(-4);
     if (lang === 'python') {
@@ -703,7 +703,7 @@ function renderExternalApi() {
     document.getElementById('cfg-api-enabled').checked = !!s.enabled;
     document.getElementById('cfg-api-detail').classList.toggle('hidden', !s.enabled);
     if (!s.enabled) return;
-    document.getElementById('cfg-api-base-url').value = `${window.location.origin}/v1`;
+    document.getElementById('cfg-api-base-url').value = `${integrationBaseUrl()}/v1`;
     document.getElementById('cfg-api-token').value = s.api_key || '';
     document.querySelectorAll('.cfg-api-lang').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.lang === externalApiLang);
@@ -780,11 +780,12 @@ function copyExternalApiField(id, btn) {
 }
 
 function switchConfigTab(tab) {
-    ['basic', 'models'].forEach(name => {
+    ['basic', 'models', 'integrations'].forEach(name => {
         document.getElementById(`config-tab-${name}`)?.classList.toggle('active', name === tab);
         document.getElementById(`config-panel-${name}`)?.classList.toggle('hidden', name !== tab);
     });
     if (tab === 'models') loadModelsView();
+    if (tab === 'integrations') loadIntegrationsView();
     // Re-pull /config when returning to Basic: a provider added on the Models
     // tab must show up in the basic main-model provider picker without a manual
     // page refresh. loadConfigView re-renders from the fresh provider list.

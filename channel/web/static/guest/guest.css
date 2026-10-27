@@ -1,0 +1,104 @@
+/* Guest share page. Everything else comes from the console's own sheets;
+   these are only the differences of a chat page without a sidebar. */
+
+/* With no sidebar the list spans the whole window, so the conversation is
+   held to the composer's column (max-w-3xl plus the rows' sm:px-6 gutter). */
+#chat-messages > .user-message-group,
+#chat-messages > .bot-message-group,
+#chat-messages > .loading-indicator {
+    width: 100%;
+    max-width: calc(48rem + 3rem);
+    margin-left: auto;
+    margin-right: auto;
+}
+
+/* A suggested question is one line of text, so icon and text share a row. */
+.example-card.guest-example-card { flex-direction: row; align-items: center; text-align: left; }
+#welcome-examples > .guest-example-card:last-child:nth-child(odd) { grid-column: 1 / -1; }
+
+/* A file the reply produced: the console's file card, opened by a click. */
+.media-content .file-card-list { margin-top: 8px; }
+.media-content .file-card { cursor: pointer; }
+.media-content .file-card-btn { text-decoration: none; color: inherit; }
+
+/* Centred with auto margins rather than justify-content, which pushes the
+   top of a welcome screen taller than the window out of scroll reach. */
+#welcome-screen { justify-content: flex-start; }
+#welcome-screen > :first-child { margin-top: auto; }
+#welcome-screen > :last-child { margin-bottom: auto; }
+
+/* Short windows, such as the embedded panel: keep the welcome screen in view. */
+@media (max-height: 720px) {
+    #welcome-screen { padding-top: 24px !important; padding-bottom: 24px; }
+    #welcome-screen > img { width: 48px; height: 48px; margin-bottom: 16px; }
+    #welcome-title { font-size: 1.25rem; margin-bottom: 8px; }
+    #welcome-subtitle { font-size: 14px; margin-bottom: 24px; }
+    #welcome-examples { gap: 8px; }
+    .example-card.guest-example-card { padding: 10px 12px; }
+}
+@media (max-height: 520px) {
+    #welcome-screen { padding-top: 16px !important; padding-bottom: 16px; }
+    #welcome-screen > img { width: 40px; height: 40px; margin-bottom: 10px; }
+    #welcome-title { font-size: 1.125rem; margin-bottom: 4px; }
+    #welcome-subtitle { font-size: 13px; margin-bottom: 16px; }
+}
+
+#guest-toast { bottom: calc(var(--chat-composer-height, 96px) + 16px); }
+
+/* An uploaded logo may be any shape; keep it in the default's square. */
+.guest-logo { background: #fff; }
+
+.guest-powered {
+    display: block;
+    width: fit-content;
+    margin: 8px auto -2px;
+    max-width: calc(100% - 32px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 11px;
+    line-height: 1.2;
+    letter-spacing: 0.01em;
+    color: #94a3b8;
+    text-decoration: none;
+    transition: color 0.15s ease;
+}
+.guest-powered[href]:hover { color: #475569; }
+.dark .guest-powered { color: #64748b; }
+.dark .guest-powered[href]:hover { color: #cbd5e1; }
+.guest-powered-fixed { position: absolute; left: 0; right: 0; bottom: 24px; margin: 0 auto; }
+
+/* A page with its own color: the console's hard-coded green, swapped for it. */
+.guest-branded .composer-card:focus-within,
+.guest-branded .composer-card.drag-over {
+    border-color: var(--gb-400);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--gb-400) 14%, transparent);
+}
+.guest-branded .composer-icon-btn:hover { background: var(--gb-50); color: var(--gb-600); }
+.guest-branded.dark .composer-icon-btn:hover {
+    background: color-mix(in srgb, var(--gb-400) 16%, transparent);
+    color: var(--gb-300);
+}
+.guest-branded .composer-send-btn { background: var(--gb-400); color: var(--gb-on); }
+.guest-branded .composer-send-btn:hover:not(:disabled) { background: var(--gb-500); }
+.guest-branded .composer-send-btn:disabled { background: #cbd5e1; color: #fff; }
+.guest-branded.dark .composer-send-btn:disabled { background: #475569; }
+.guest-branded .user-bubble { color: var(--gb-on); }
+.guest-branded #guest-gate-btn { color: var(--gb-on); }
+.guest-branded .session-item.active .session-icon { color: var(--gb-400); }
+.guest-branded .msg-content a { color: var(--gb-500); }
+.guest-branded .msg-content a:hover { color: var(--gb-600); }
+.guest-branded .msg-content blockquote {
+    border-left-color: var(--gb-400);
+    background: color-mix(in srgb, var(--gb-400) 6%, transparent);
+}
+.guest-branded .msg-content :not(pre) > code {
+    background: color-mix(in srgb, var(--gb-400) 10%, transparent);
+    color: var(--gb-600);
+}
+.guest-branded.dark .msg-content :not(pre) > code {
+    background: color-mix(in srgb, var(--gb-400) 16%, transparent);
+    color: var(--gb-300);
+}
+.guest-branded .user-bubble :not(pre) > code { color: inherit; }
+.guest-branded .sse-streaming::after { color: var(--gb-400); }

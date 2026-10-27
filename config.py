@@ -287,6 +287,13 @@ available_setting = {
     "external_api_token": "",  # API key for the /v1 chat API; kept while the API is off
     "web_session_expire_days": 30,  # Auth session expiry in days
     "web_file_serve_root": "~",  # Root dir the /api/file endpoint may serve; "/" allows the whole filesystem
+    # Guest share: public chat pages (/share/<token>) backed by guest profiles in
+    # <workspace>/guests/. Off by default, and refused while web_password is
+    # empty, because the console on the same port would be open to visitors.
+    "guest_share": {
+        "enabled": False,
+    },
+    "web_public_url": "",  # Address shown in API examples, share links and embed code; empty uses the page's own
     "mcp_oauth_redirect_base": "",  # Base URL for MCP OAuth callback (e.g. http://your-ip:9899); empty uses local web console
     "agent": True,  # whether to enable Agent mode
     "agent_workspace": "~/cow",  # agent workspace path, used to store skills, memory, etc.

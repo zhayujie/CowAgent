@@ -516,10 +516,7 @@ def _download_file(url: str):
         # the process CWD, which the packaged desktop app does not control and may
         # not be able to write, and state_dir owns the layout anyway.
         file_path = state_dir.tmp_dir() / file_name
-        # Stream it under the shared cap, the way the LinkAI voice download
-        # already does: the vendor decides the size, and an unbounded body
-        # would be buffered whole before anything could object. A refused
-        # download leaves no partial file behind.
+        # The remote side decides the size; stream under the shared cap.
         download_to_file(url, str(file_path), MAX_FILE_BYTES, timeout=(5, 60))
         return str(file_path)
     except Exception as e:

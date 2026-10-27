@@ -32,6 +32,16 @@ from channel.web.api.files import (  # noqa: F401
     FileRevealHandler, FileServeHandler, PreviewHandler, UploadHandler, UploadsHandler,
     VoiceAsrHandler, VoiceTtsHandler,
 )
+from channel.web.api.guest import (  # noqa: F401
+    GUEST_URLS, GuestCancelHandler, GuestClearHandler, GuestConversationHandler,
+    GuestConversationsHandler, GuestFileHandler, GuestHistoryHandler,
+    GuestInfoHandler, GuestLogoHandler, GuestMessageHandler, GuestPageHandler,
+    GuestSessionHandler, GuestShareActionHandler, GuestShareHandler,
+    GuestShareLogoHandler, GuestShareLogHandler,
+    GuestShareLogsHandler, GuestSharesHandler, GuestStreamHandler,
+    GuestUploadHandler, GuestVoiceHandler,
+)
+from channel.web.api.integrations import IntegrationsHandler  # noqa: F401
 from channel.web.api.knowledge import (  # noqa: F401
     KnowledgeActionHandler, KnowledgeGraphHandler, KnowledgeImportHandler,
     KnowledgeListHandler, KnowledgeReadHandler,
@@ -88,6 +98,9 @@ URLS = (
     '/', 'ChatHandler',
     '/chat', 'RootHandler',
     '/api/health', 'HealthHandler',
+    # Guest share visitor pages (/share/<token>) and the owner's share API.
+    *GUEST_URLS,
+    '/api/integrations', 'IntegrationsHandler',
     '/auth/login', 'AuthLoginHandler',
     '/auth/check', 'AuthCheckHandler',
     '/auth/logout', 'AuthLogoutHandler',

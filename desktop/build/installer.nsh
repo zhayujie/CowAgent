@@ -38,6 +38,44 @@
   ClearErrors
 !macroend
 
+# Second extraction pass when the first one may have left files out.
+#
+# electron-builder extracts the app into $PLUGINSDIR\7z-out and copies it into
+# $INSTDIR, retrying while a file is held (security software scanning what was
+# just written, a process still on its way out). If the copy keeps failing, a
+# silent update falls back to deleting the staging folder and extracting
+# straight over $INSTDIR with errors ignored: whatever is still held is simply
+# missing, and the app comes up with a backend that fails on every message.
+# The missing staging folder is the only trace that path leaves, so extract
+# again a little later, once a passing lock has usually cleared. A normal
+# install keeps the folder and skips this entirely.
+!macro cowReextractIfForced
+  !ifndef APP_BUILD_DIR
+  !ifndef APP_PACKAGE_URL
+  !ifndef ZIP_COMPRESSION
+    ${IfNot} ${FileExists} "$PLUGINSDIR\7z-out\*.*"
+    ${AndIf} ${FileExists} "$PLUGINSDIR\app-$packageArch.7z"
+      Push $OUTDIR
+      Push $R8
+      SetOutPath $INSTDIR
+      StrCpy $R8 0
+      cowReextractLoop:
+        IntOp $R8 $R8 + 1
+        Sleep 2000
+        Nsis7z::Extract "$PLUGINSDIR\app-$packageArch.7z"
+        ${If} $R8 < 2
+          Goto cowReextractLoop
+        ${EndIf}
+      Pop $R8
+      Exch $0
+      SetOutPath $0
+      Pop $0
+    ${EndIf}
+  !endif
+  !endif
+  !endif
+!macroend
+
 # Repair pass for shortcuts an earlier update already damaged.
 #
 # customRemoveFiles above only stops NEW damage, and only from the version after
@@ -60,6 +98,8 @@
 # interrupted first install never created would otherwise never appear. A stray
 # extra icon is a far smaller problem than no way into the app.
 !macro customInstall
+  !insertmacro cowReextractIfForced
+
   !ifndef DO_NOT_CREATE_DESKTOP_SHORTCUT
     ${If} ${FileExists} "$newDesktopLink"
       CreateShortCut "$newDesktopLink" "$appExe" "" "$appExe" 0 "" "" "${APP_DESCRIPTION}"

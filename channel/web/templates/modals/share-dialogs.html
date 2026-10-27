@@ -1,0 +1,280 @@
+    <!-- Share Editor Modal -->
+    <div id="share-editor-overlay" class="fixed inset-0 bg-black/50 z-[100] hidden flex items-center justify-center">
+        <div class="bg-white dark:bg-[#1A1A1A] rounded-2xl border border-slate-200 dark:border-white/10 shadow-xl
+                    w-full max-w-2xl mx-4 max-h-[90vh] flex flex-col overflow-hidden">
+            <div class="flex items-center gap-3 px-6 pt-6 pb-4">
+                <div class="w-10 h-10 rounded-xl bg-primary-50 dark:bg-primary-900/20 flex items-center justify-center flex-shrink-0">
+                    <i class="fas fa-share-nodes text-primary-500"></i>
+                </div>
+                <div class="min-w-0 flex-1">
+                    <h3 id="share-editor-title" class="font-semibold text-slate-800 dark:text-slate-100 text-base"></h3>
+                    <p id="share-editor-subtitle" class="text-xs text-slate-500 dark:text-slate-400 mt-0.5"></p>
+                </div>
+                <button onclick="closeShareEditor()" class="share-icon-btn" aria-label="close">
+                    <i class="fas fa-xmark"></i>
+                </button>
+            </div>
+
+            <div class="flex-1 min-h-0 overflow-y-auto px-6 pb-6 space-y-5">
+                <div>
+                    <label class="share-label" data-i18n="shares_field_name">名称</label>
+                    <input id="share-ed-name" type="text" maxlength="60" class="share-input" data-i18n-placeholder="shares_field_name_ph" placeholder="访客看到的标题">
+                </div>
+
+                <div>
+                    <label class="share-label" data-i18n="shares_field_model">模型</label>
+                    <div id="share-ed-model" class="cfg-dropdown" tabindex="0">
+                        <div class="cfg-dropdown-selected">
+                            <span class="cfg-dropdown-text">--</span>
+                            <i class="fas fa-chevron-down cfg-dropdown-arrow"></i>
+                        </div>
+                        <div class="cfg-dropdown-menu"></div>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="share-label" data-i18n="shares_field_welcome">欢迎语</label>
+                    <textarea id="share-ed-welcome" rows="2" maxlength="2000" class="share-input resize-none"
+                              data-i18n-placeholder="shares_field_welcome_ph" placeholder="访客打开链接时看到的第一句话"></textarea>
+                </div>
+
+                <div>
+                    <label class="share-label">
+                        <span data-i18n="shares_field_questions">引导问题</span>
+                        <span class="cfg-tip" data-tip-key="shares_field_questions_tip"><i class="fas fa-circle-question"></i></span>
+                    </label>
+                    <div id="share-ed-questions" class="space-y-2"></div>
+                    <button type="button" id="share-ed-q-add" class="share-add-row" onclick="addShareQuestion()">
+                        <i class="fas fa-plus"></i><span data-i18n="shares_add_question">添加问题</span>
+                    </button>
+                </div>
+
+                <div class="share-section-title" data-i18n="shares_section_look">外观</div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="share-label">
+                            <span data-i18n="shares_field_logo">图标</span>
+                            <span class="cfg-tip" data-tip-key="shares_field_logo_tip"><i class="fas fa-circle-question"></i></span>
+                        </label>
+                        <div class="share-logo-row">
+                            <img id="share-ed-logo-img" class="share-logo-preview" src="/assets/logo.jpg" alt="">
+                            <button type="button" class="share-action" onclick="document.getElementById('share-ed-logo-file').click()">
+                                <i class="fas fa-arrow-up-from-bracket"></i><span data-i18n="shares_logo_upload">上传图片</span>
+                            </button>
+                            <button type="button" id="share-ed-logo-reset" class="share-action hidden" onclick="resetShareLogo()">
+                                <span data-i18n="shares_logo_reset">恢复默认</span>
+                            </button>
+                            <input type="file" id="share-ed-logo-file" class="hidden" accept="image/png,image/jpeg,image/webp" onchange="onShareLogoPicked(this)">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="share-label">
+                            <span data-i18n="shares_field_color">主题色</span>
+                            <span class="cfg-tip" data-tip-key="shares_field_color_tip"><i class="fas fa-circle-question"></i></span>
+                        </label>
+                        <div id="share-ed-colors" class="share-swatches"></div>
+                    </div>
+                </div>
+
+                <div class="share-section-title" data-i18n="shares_section_access">访问控制</div>
+
+                <div>
+                    <div class="flex items-center justify-between mb-1.5">
+                        <label class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="shares_field_password">访问密码</label>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="share-ed-pwd-on" class="sr-only peer">
+                            <div class="w-9 h-5 bg-slate-200 rounded-full peer peer-checked:after:translate-x-4 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary-500 dark:bg-slate-600 dark:peer-checked:bg-primary-500"></div>
+                        </label>
+                    </div>
+                    <input id="share-ed-password" type="password" autocomplete="new-password" class="share-input" disabled>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="share-label">
+                            <span data-i18n="shares_field_quota">每人每日提问</span>
+                            <span class="cfg-tip" data-tip-key="shares_field_quota_tip"><i class="fas fa-circle-question"></i></span>
+                        </label>
+                        <div class="share-input-unit">
+                            <input id="share-ed-quota" type="number" min="0" max="100000" step="1" class="share-input">
+                            <span data-i18n="shares_quota_unit">次</span>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="share-label">
+                            <span data-i18n="shares_field_expires">有效期至</span>
+                            <span class="cfg-tip" data-tip-key="shares_field_expires_tip"><i class="fas fa-circle-question"></i></span>
+                        </label>
+                        <input id="share-ed-expires" type="date" class="share-input cursor-pointer"
+                               onclick="this.showPicker && this.showPicker()">
+                    </div>
+                </div>
+
+                <div>
+                    <button type="button" id="share-ed-more-toggle" onclick="toggleShareMore()"
+                            class="flex items-center gap-2 text-sm font-medium text-slate-500 dark:text-slate-400 hover:text-primary-500 cursor-pointer transition-colors">
+                        <i class="fas fa-chevron-right text-[10px] transition-transform duration-150"></i>
+                        <span data-i18n="shares_section_more">更多设置</span>
+                        <span class="text-xs font-normal text-slate-400 dark:text-slate-500" data-i18n="shares_section_more_desc">工具、技能、参考资料、访客规则、页脚标识</span>
+                    </button>
+                    <div id="share-ed-more" class="hidden mt-4 space-y-5">
+                        <div>
+                            <label class="share-label">
+                                <span data-i18n="shares_field_tools">可用工具</span>
+                                <span class="cfg-tip" data-tip-key="shares_field_tools_tip"><i class="fas fa-circle-question"></i></span>
+                            </label>
+                            <div id="share-ed-tools" class="flex flex-wrap gap-2"></div>
+                        </div>
+                        <div>
+                            <label class="share-label">
+                                <span data-i18n="shares_field_skills">技能</span>
+                                <span class="cfg-tip" data-tip-key="shares_field_skills_tip"><i class="fas fa-circle-question"></i></span>
+                            </label>
+                            <div id="share-ed-skills" class="flex flex-wrap gap-2 mb-2"></div>
+                            <div id="share-ed-skill-add" class="cfg-dropdown sm:max-w-xs" tabindex="0">
+                                <div class="cfg-dropdown-selected">
+                                    <span class="cfg-dropdown-text">--</span>
+                                    <i class="fas fa-chevron-down cfg-dropdown-arrow"></i>
+                                </div>
+                                <div class="cfg-dropdown-menu"></div>
+                            </div>
+                            <span id="share-ed-skills-empty" class="hidden text-xs text-slate-400" data-i18n="shares_skills_empty">没有可供访客使用的技能</span>
+                        </div>
+                        <div>
+                            <label class="share-label">
+                                <span data-i18n="shares_field_paths">参考资料</span>
+                                <span class="cfg-tip" data-tip-key="shares_field_paths_tip"><i class="fas fa-circle-question"></i></span>
+                            </label>
+                            <div id="share-ed-refs" class="space-y-2 mb-2"></div>
+                            <div id="share-ed-ref-add" class="cfg-dropdown sm:max-w-xs" tabindex="0">
+                                <div class="cfg-dropdown-selected">
+                                    <span class="cfg-dropdown-text">--</span>
+                                    <i class="fas fa-chevron-down cfg-dropdown-arrow"></i>
+                                </div>
+                                <div class="cfg-dropdown-menu"></div>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="share-label">
+                                <span data-i18n="shares_field_rules">访客规则</span>
+                                <span class="cfg-tip" data-tip-key="shares_field_rules_tip"><i class="fas fa-circle-question"></i></span>
+                            </label>
+                            <textarea id="share-ed-guest-md" rows="6" class="share-input font-mono text-[13px] leading-relaxed"
+                                      data-i18n-placeholder="shares_field_rules_ph"></textarea>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label class="share-label">
+                                    <span data-i18n="shares_field_footer">页脚文字</span>
+                                    <span class="cfg-tip" data-tip-key="shares_field_footer_tip"><i class="fas fa-circle-question"></i></span>
+                                </label>
+                                <input id="share-ed-footer-text" type="text" maxlength="80" class="share-input"
+                                       data-i18n-placeholder="shares_field_footer_ph" placeholder="留空则不显示">
+                            </div>
+                            <div>
+                                <label class="share-label" data-i18n="shares_field_footer_url">页脚链接</label>
+                                <input id="share-ed-footer-url" type="url" maxlength="500" class="share-input" spellcheck="false"
+                                       data-i18n-placeholder="shares_field_footer_url_ph" placeholder="https://，留空则不加链接">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-100 dark:border-white/5">
+                <span id="share-editor-error" class="flex-1 min-w-0 text-xs text-red-500 truncate"></span>
+                <button onclick="closeShareEditor()"
+                        class="px-4 py-2 rounded-lg border border-slate-200 dark:border-white/10
+                               text-slate-600 dark:text-slate-300 text-sm font-medium
+                               hover:bg-slate-50 dark:hover:bg-white/5
+                               cursor-pointer transition-colors duration-150" data-i18n="cancel">取消</button>
+                <button id="share-editor-save" onclick="saveShareEditor()"
+                        class="px-4 py-2 rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-sm font-medium
+                               cursor-pointer transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+                        data-i18n="save">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Share Embed Modal -->
+    <div id="share-embed-overlay" class="fixed inset-0 bg-black/50 z-[100] hidden flex items-center justify-center">
+        <div class="bg-white dark:bg-[#1A1A1A] rounded-2xl border border-slate-200 dark:border-white/10 shadow-xl
+                    w-full max-w-2xl lg:max-w-[1080px] mx-4 max-h-[92vh] flex flex-col overflow-hidden">
+            <div class="flex-1 min-h-0 overflow-y-auto p-6 flex gap-6">
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-3 mb-4">
+                    <div class="w-10 h-10 rounded-xl bg-primary-50 dark:bg-primary-900/20 flex items-center justify-center flex-shrink-0">
+                        <i class="fas fa-code text-primary-500"></i>
+                    </div>
+                    <div class="min-w-0 flex-1">
+                        <h3 class="font-semibold text-slate-800 dark:text-slate-100 text-base" data-i18n="shares_embed_title">嵌入网页</h3>
+                        <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5" data-i18n="shares_embed_desc">把这段代码放到网页的 body 中，右下角会出现对话入口</p>
+                    </div>
+                </div>
+                <div class="share-code">
+                    <div class="share-code-head">
+                        <span>HTML</span>
+                        <button id="share-embed-copy" class="share-code-copy" onclick="copyShareEmbed()">
+                            <i class="fas fa-copy"></i><span data-i18n="shares_copy">复制</span>
+                        </button>
+                    </div>
+                    <pre id="share-embed-code"></pre>
+                </div>
+                <div class="mt-5">
+                    <label class="share-label">
+                        <span data-i18n="shares_field_origins">允许嵌入的网站</span>
+                        <span class="cfg-tip" data-tip-key="shares_field_origins_tip"><i class="fas fa-circle-question"></i></span>
+                    </label>
+                    <textarea id="share-embed-origins" rows="3" spellcheck="false" class="share-input font-mono text-[13px] resize-none"
+                              data-i18n-placeholder="shares_field_origins_ph" placeholder="每行一个，例如 https://example.com"></textarea>
+                    <p class="text-xs text-slate-400 dark:text-slate-500 mt-1.5" data-i18n="shares_embed_origins_hint">留空时只能在新窗口打开，无法嵌入到其他网站</p>
+                </div>
+              </div>
+
+              <!-- What a visitor sees on the owner's site: the live chat window and the launcher. -->
+              <div class="share-preview hidden lg:flex">
+                  <div id="share-preview-panel" class="share-preview-panel"></div>
+                  <button id="share-preview-btn" type="button" class="share-preview-btn" onclick="toggleSharePreview()">
+                      <img id="share-preview-icon" alt="">
+                      <svg class="ico-fold" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M6 9l6 6 6-6"/></svg>
+                  </button>
+              </div>
+            </div>
+            <div class="flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-100 dark:border-white/5">
+                <span id="share-embed-error" class="flex-1 min-w-0 text-xs text-red-500 truncate"></span>
+                <button onclick="closeShareEmbed()"
+                        class="px-4 py-2 rounded-lg border border-slate-200 dark:border-white/10
+                               text-slate-600 dark:text-slate-300 text-sm font-medium
+                               hover:bg-slate-50 dark:hover:bg-white/5
+                               cursor-pointer transition-colors duration-150" data-i18n="cancel">取消</button>
+                <button id="share-embed-save" onclick="saveShareEmbed()"
+                        class="px-4 py-2 rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-sm font-medium
+                               cursor-pointer transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+                        data-i18n="save">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Share Visitor Logs Modal -->
+    <div id="share-logs-overlay" class="fixed inset-0 bg-black/50 z-[100] hidden flex items-center justify-center">
+        <div class="bg-white dark:bg-[#1A1A1A] rounded-2xl border border-slate-200 dark:border-white/10 shadow-xl
+                    w-full max-w-4xl mx-4 h-[80vh] flex flex-col overflow-hidden">
+            <div class="flex items-center gap-3 px-6 py-4 border-b border-slate-100 dark:border-white/5">
+                <div class="w-10 h-10 rounded-xl bg-primary-50 dark:bg-primary-900/20 flex items-center justify-center flex-shrink-0">
+                    <i class="fas fa-clock-rotate-left text-primary-500"></i>
+                </div>
+                <div class="min-w-0 flex-1">
+                    <h3 class="font-semibold text-slate-800 dark:text-slate-100 text-base" data-i18n="shares_logs_title">访客记录</h3>
+                    <p id="share-logs-subtitle" class="text-xs text-slate-500 dark:text-slate-400 mt-0.5"></p>
+                </div>
+                <button onclick="closeShareLogs()" class="share-icon-btn" aria-label="close">
+                    <i class="fas fa-xmark"></i>
+                </button>
+            </div>
+            <div class="flex-1 min-h-0 flex">
+                <div id="share-logs-list" class="share-logs-list"></div>
+                <div id="share-logs-detail" class="share-logs-detail"></div>
+            </div>
+        </div>
+    </div>

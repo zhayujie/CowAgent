@@ -274,7 +274,14 @@ class ApiClient {
       /** Shown for this turn instead of `message`, which the agent still gets in full. */
       display?: string
     }
-  ): Promise<{ status: string; request_id: string; stream: boolean; inline_reply?: string; speaker?: string }> {
+  ): Promise<{
+    status: string
+    request_id: string
+    stream: boolean
+    inline_reply?: string
+    speaker?: string
+    message?: string
+  }> {
     // Route to a specific Agent when asked, else the active one. Empty (legacy
     // single-Agent) omits agent_id entirely, so the backend uses its default.
     const agentId = opts?.agentId || this.activeAgentId

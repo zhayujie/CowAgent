@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="zh" class="">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="referrer" content="no-referrer">
+    <meta name="robots" content="noindex, nofollow">
+    <title></title>
+    <link rel="icon" href="{{GUEST_ICON}}">
+    <link rel="stylesheet" href="/assets/vendor/fontawesome/css/all.min.css">
+    <link rel="stylesheet" href="/assets/vendor/fonts/inter/inter.css">
+    <script src="/assets/vendor/tailwind/tailwind.min.js"></script>
+    <script src="/assets/vendor/markdown-it/markdown-it.min.js"></script>
+    <link id="hljs-light" rel="stylesheet" href="/assets/vendor/highlightjs/styles/github.min.css">
+    <link id="hljs-dark" rel="stylesheet" href="/assets/vendor/highlightjs/styles/github-dark.min.css" disabled>
+    <script src="/assets/vendor/highlightjs/highlight.min.js"></script>
+    <script src="/assets/vendor/highlightjs/languages/python.min.js"></script>
+    <script src="/assets/vendor/highlightjs/languages/javascript.min.js"></script>
+    <script src="/assets/vendor/highlightjs/languages/java.min.js"></script>
+    <script src="/assets/vendor/highlightjs/languages/go.min.js"></script>
+    <script src="/assets/vendor/highlightjs/languages/bash.min.js"></script>
+    <script>
+    window.__GUEST_BRAND__ = {{GUEST_BRAND}};
+    tailwind.config = {
+        darkMode: 'class',
+        theme: {
+            extend: {
+                fontFamily: {
+                    sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+                    mono: ['"JetBrains Mono"', '"Fira Code"', 'Consolas', 'monospace'],
+                },
+                colors: {
+                    primary: window.__GUEST_BRAND__.palette || {
+                        50: '#EDFDF3', 100: '#D4FAE2', 200: '#ABF4C7', 300: '#74E9A4',
+                        400: '#4ABE6E', 500: '#35A85B', 600: '#228547', 700: '#1C6B3B',
+                        800: '#1A5532', 900: '#16462A',
+                    }
+                },
+                animation: {
+                    'pulse-dot': 'pulseDot 1.4s infinite ease-in-out both',
+                }
+            }
+        }
+    }
+    </script>
+    <!-- Same sheets, same order as the console (channel/web/chat.html). -->
+    <link rel="stylesheet" href="/assets/css/base.css">
+    <link rel="stylesheet" href="/assets/css/sessions.css">
+    <link rel="stylesheet" href="/assets/css/components.css">
+    <link rel="stylesheet" href="/assets/css/markdown.css">
+    <link rel="stylesheet" href="/assets/css/chat.css">
+    <link rel="stylesheet" href="/assets/css/workspace.css">
+    <link rel="stylesheet" href="/assets/css/agents.css">
+    <link rel="stylesheet" href="/assets/css/artifacts.css">
+    <link rel="stylesheet" href="/assets/guest/guest.css">
+    <script>
+    window.__cowNormalizeLang__ = function(raw) {
+        if (!raw) return '';
+        var v = String(raw).trim().toLowerCase().replace('_', '-');
+        if (v === 'auto') return '';
+        if (v === 'zh-hant' || v.indexOf('zh-hant-') === 0 || v === 'zh-tw' || v === 'zh-hk') return 'zh-Hant';
+        if (v.indexOf('zh') === 0) return 'zh';
+        if (v.indexOf('en') === 0) return 'en';
+        return '';
+    };
+    // A visitor's own browser speaks first; the instance default is the fallback.
+    window.__cowResolveLang__ = function() {
+        return window.__cowNormalizeLang__(localStorage.getItem('cow_lang'))
+            || window.__cowNormalizeLang__(navigator.language || (navigator.languages && navigator.languages[0]))
+            || window.__cowNormalizeLang__(window.__COW_DEFAULT_LANG__)
+            || 'zh';
+    };
+    (function() {
+        window.__COW_DEFAULT_LANG__ = '{{COW_DEFAULT_LANG}}';
+        var theme = localStorage.getItem('cow_theme') || 'dark';
+        var root = document.documentElement;
+        if (theme === 'dark') root.classList.add('dark');
+        root.setAttribute('lang', window.__cowResolveLang__());
+        // The console's sheets hard-code its green; guest.css swaps it for
+        // these where a page has its own color.
+        var brand = window.__GUEST_BRAND__;
+        if (brand.palette) {
+            var p = brand.palette;
+            root.classList.add('guest-branded');
+            root.style.setProperty('--gb-50', p['50']);
+            root.style.setProperty('--gb-400', p['400']);
+            root.style.setProperty('--gb-500', p['500']);
+            root.style.setProperty('--gb-600', p['600']);
+            root.style.setProperty('--gb-300', p['300']);
+            root.style.setProperty('--gb-on', brand.on);
+        }
+    })();
+    </script>
+</head>
+<body class="h-screen overflow-hidden bg-gray-50 dark:bg-[#111111] text-slate-800 dark:text-slate-200 font-sans">
+
+    <!-- Password gate: the console's login screen, for this page. -->
+    <div id="guest-gate" class="fixed inset-0 z-[200] bg-gray-50 dark:bg-[#111111] flex items-center justify-center hidden">
+        <div class="w-full max-w-sm mx-4">
+            <div class="flex flex-col items-center mb-8">
+                <img src="{{GUEST_LOGO}}" alt="" class="guest-logo object-cover w-16 h-16 rounded-2xl mb-4 shadow-lg">
+                <h1 class="guest-name text-xl font-bold text-slate-800 dark:text-slate-100 text-center"></h1>
+                <p id="guest-gate-subtitle" class="text-sm text-slate-500 dark:text-slate-400 mt-1"></p>
+            </div>
+            <form id="guest-gate-form" class="space-y-4">
+                <div class="relative">
+                    <input id="guest-password" type="password" autocomplete="current-password"
+                           class="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-white/10
+                                  bg-white dark:bg-[#1A1A1A] text-slate-800 dark:text-slate-200
+                                  placeholder-slate-400 dark:placeholder-slate-500
+                                  focus:outline-none focus:ring-2 focus:ring-primary-400/50 focus:border-primary-400
+                                  transition-all duration-150 text-sm">
+                    <button type="button" id="guest-toggle-pwd"
+                            class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600
+                                   dark:hover:text-slate-300 cursor-pointer transition-colors">
+                        <i class="fas fa-eye text-sm"></i>
+                    </button>
+                </div>
+                <p id="guest-gate-error" class="text-sm text-red-500 hidden"></p>
+                <button id="guest-gate-btn" type="submit"
+                        class="w-full py-3 rounded-xl bg-primary-500 hover:bg-primary-600 text-white font-medium
+                               text-sm cursor-pointer transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed">
+                </button>
+            </form>
+        </div>
+        <a class="guest-powered guest-powered-fixed hidden" target="_blank" rel="noopener noreferrer"></a>
+    </div>
+
+    <!-- Link turned off, expired, or not reachable. -->
+    <div id="guest-unavailable" class="fixed inset-0 z-[200] bg-gray-50 dark:bg-[#111111] flex items-center justify-center hidden">
+        <div class="w-full max-w-sm mx-4 flex flex-col items-center text-center">
+            <img src="{{GUEST_LOGO}}" alt="" class="guest-logo object-cover w-16 h-16 rounded-2xl mb-4 shadow-lg opacity-80">
+            <h1 id="guest-unavailable-title" class="text-xl font-bold text-slate-800 dark:text-slate-100"></h1>
+            <p id="guest-unavailable-text" class="text-sm text-slate-500 dark:text-slate-400 mt-2 leading-relaxed"></p>
+        </div>
+    </div>
+
+    <div id="app" class="flex h-screen">
+        <!-- The console's session panel (layout/session-panel.html), for this visitor's own chats. -->
+        <aside id="session-panel" class="session-panel hidden">
+            <div class="session-panel-header">
+                <span id="session-panel-title" class="session-panel-title"></span>
+                <button class="session-panel-close" onclick="toggleSessionPanel()" aria-label="close">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="session-panel-new-wrap">
+                <button class="session-panel-new" onclick="newChat()">
+                    <i class="fas fa-plus"></i>
+                    <span id="session-panel-new-label"></span>
+                </button>
+            </div>
+            <div id="session-list" class="session-list"></div>
+        </aside>
+        <div id="session-panel-overlay" class="session-panel-overlay hidden" onclick="toggleSessionPanel()"></div>
+
+        <div id="main-content" class="flex-1 flex flex-col min-w-0 h-screen">
+            <header id="guest-header" class="h-14 flex items-center gap-3 px-4 border-b border-slate-200 dark:border-white/10 bg-white dark:bg-[#1A1A1A] flex-shrink-0 z-10">
+                <button id="session-toggle-btn" class="p-2 -ml-1 rounded-lg hover:bg-slate-100 dark:hover:bg-white/10 cursor-pointer transition-colors duration-150"
+                        onclick="toggleSessionPanel()" data-tip-float data-tooltip-pos="bottom">
+                    <i class="fas fa-clock-rotate-left text-slate-500 dark:text-slate-400"></i>
+                </button>
+                <span class="guest-name font-semibold text-sm text-slate-800 dark:text-slate-100 truncate min-w-0"></span>
+                <div class="flex-1"></div>
+                <button id="theme-toggle" class="p-2 rounded-lg text-slate-500 dark:text-slate-400
+                                                  hover:bg-slate-100 dark:hover:bg-white/10
+                                                  cursor-pointer transition-colors duration-150"
+                        onclick="toggleTheme()">
+                    <i id="theme-icon" class="fas fa-moon"></i>
+                </button>
+                <button id="guest-close-btn" class="hidden p-2 -mr-1 rounded-lg text-slate-500 dark:text-slate-400
+                                                    hover:bg-slate-100 dark:hover:bg-white/10
+                                                    cursor-pointer transition-colors duration-150" aria-label="close">
+                    <i class="fas fa-chevron-down"></i>
+                </button>
+            </header>
+
+            <div id="content-area" class="flex-1 overflow-hidden">
+                <div id="view-chat" class="view active">
+                  <div id="chat-main" class="chat-main relative">
+                    <div id="chat-messages" class="flex-1 overflow-y-auto">
+                        <div id="welcome-screen" class="flex flex-col items-center justify-center min-h-full px-6 pb-16 invisible" style="padding-top: 6vh">
+                            <img src="{{GUEST_LOGO}}" alt="" class="guest-logo object-cover w-16 h-16 rounded-2xl mb-6 shadow-lg shadow-primary-500/20">
+                            <h1 id="welcome-title" class="guest-name text-2xl font-bold text-slate-800 dark:text-slate-100 mb-3 text-center"></h1>
+                            <p id="welcome-subtitle" class="text-slate-500 dark:text-slate-400 text-center max-w-lg mb-10 leading-relaxed whitespace-pre-line"></p>
+                            <div id="welcome-examples" class="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-2xl"></div>
+                        </div>
+                    </div>
+
+                    <button id="scroll-to-bottom-btn" type="button" class="chat-scroll-to-bottom hidden" onclick="scrollChatToBottom(true)">
+                        <i class="fas fa-chevron-down" aria-hidden="true"></i>
+                    </button>
+
+                    <div id="chat-composer" class="flex-shrink-0 border-t border-slate-200 dark:border-white/10 bg-white dark:bg-[#1A1A1A] px-4 py-3">
+                        <div class="max-w-3xl mx-auto">
+                            <div id="composer-card" class="composer-card">
+                                <div id="attachment-preview" class="attachment-preview hidden"></div>
+
+                                <div class="composer-identity-row">
+                                    <textarea id="chat-input" class="composer-textarea" rows="1"></textarea>
+                                </div>
+
+                                <div class="composer-toolbar">
+                                    <div class="composer-group">
+                                        <button id="new-chat-btn" type="button" class="composer-icon-btn" data-tip-float data-tooltip-pos="top">
+                                            <i class="fas fa-plus"></i>
+                                        </button>
+                                        <button id="clear-context-btn" type="button" class="composer-icon-btn" data-tip-float data-tooltip-pos="top">
+                                            <i class="fas fa-trash-can"></i>
+                                        </button>
+                                        <button id="attach-btn" type="button" class="composer-icon-btn hidden" data-tip-float data-tooltip-pos="top">
+                                            <i class="fas fa-paperclip"></i>
+                                        </button>
+                                    </div>
+                                    <div class="composer-group composer-group-end">
+                                        <button id="mic-btn" type="button" class="composer-icon-btn text-slate-400 hidden" data-tip-float data-tooltip-pos="top">
+                                            <i class="fas fa-microphone text-sm"></i>
+                                        </button>
+                                        <button id="send-btn" type="button" class="composer-send-btn" disabled>
+                                            <i class="fas fa-paper-plane text-sm"></i>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <input type="file" id="file-input" class="hidden" multiple>
+                            </div>
+                            <a class="guest-powered hidden" target="_blank" rel="noopener noreferrer"></a>
+                        </div>
+                    </div>
+                  </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Console scripts the chat view is built from, then this page. -->
+    <script defer src="/assets/js/core/i18n.js"></script>
+    <script defer src="/assets/js/core/theme.js"></script>
+    <script defer src="/assets/js/core/utils.js"></script>
+    <script defer src="/assets/js/core/markdown.js"></script>
+    <script defer src="/assets/guest/guest.js"></script>
+</body>
+</html>

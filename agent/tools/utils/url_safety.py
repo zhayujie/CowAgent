@@ -13,12 +13,47 @@ link-local (incl. the 169.254.169.254 cloud-metadata endpoint) and otherwise
 reserved addresses are rejected, for both IPv4 and IPv6.
 """
 
+import contextvars
 import ipaddress
 import os
 import socket
+from contextlib import contextmanager
+from typing import Iterable, Optional
 from urllib.parse import urlparse
 
 import requests
+
+# Set by strict_url_guard() for the code running inside it: SSRF protection is
+# forced on there, and hosts may be further limited to an allowlist.
+_STRICT_GUARD: contextvars.ContextVar = contextvars.ContextVar("cow_strict_url_guard", default=None)
+
+
+@contextmanager
+def strict_url_guard(allowed_domains: Optional[Iterable[str]] = None):
+    """Force SSRF protection for the calls made inside this block.
+
+    ``allowed_domains`` (when non-empty) also restricts every URL, redirect
+    hops included, to those hosts and their subdomains. Used for callers that
+    act on behalf of someone less trusted than the person running the
+    instance, regardless of the instance-wide SSRF setting.
+    """
+    domains = tuple(d.strip().lower().lstrip(".") for d in (allowed_domains or ()) if d and d.strip())
+    token = _STRICT_GUARD.set({"domains": domains})
+    try:
+        yield
+    finally:
+        _STRICT_GUARD.reset(token)
+
+
+def host_allowed(hostname: str, domains: Iterable[str]) -> bool:
+    """Whether ``hostname`` is one of ``domains`` or a subdomain of one."""
+    host = (hostname or "").strip().lower().rstrip(".")
+    if not host:
+        return False
+    for domain in domains:
+        if host == domain or host.endswith("." + domain):
+            return True
+    return False
 
 
 def _ssrf_protection_enabled() -> bool:
@@ -28,6 +63,8 @@ def _ssrf_protection_enabled() -> bool:
     global config; any failure to read config is treated as "disabled" so
     the guard never breaks normal fetching.
     """
+    if _STRICT_GUARD.get() is not None:
+        return True
     env = os.getenv("WEB_SECURITY_SSRF_PROTECTION")
     if env is not None:
         return env.strip().lower() in ("1", "true", "yes", "on")
@@ -87,6 +124,10 @@ def validate_url_safe(url: str) -> None:
     hostname = parsed.hostname
     if not hostname:
         raise ValueError("URL has no hostname")
+
+    guard = _STRICT_GUARD.get()
+    if guard and guard["domains"] and not host_allowed(hostname, guard["domains"]):
+        raise ValueError(f"Host {hostname} is not in the allowed domain list")
 
     try:
         # Resolve all addresses for the hostname.

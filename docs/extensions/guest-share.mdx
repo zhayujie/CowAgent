@@ -1,0 +1,70 @@
+---
+title: Guest Pages
+description: "Share an Agent as a standalone chat page, or embed it in your site as a chat window. Visitors just open the link, no sign-in needed."
+---
+
+> Share an Agent as a standalone chat page, or embed it in your own site, for product questions, docs Q&A, customer support and the like. Visitors open the link and start chatting, no sign-in needed.
+
+The Agent on a guest page is kept apart from the one you use every day. It only gets the tools, skills and references you open up for that page, and never sees your memory, chats or workspace.
+
+## Turn it on
+
+Go to **Config → Integrations → Guest pages** and turn on the switch.
+
+- **Set a console password first.** Guest pages share the console's port, so their links stay offline until the console has a password, then go live on their own.
+- **The server must be reachable from outside.** See [Web Console](/channels/web) for deployment. If you serve it through a domain or a public IP, enter that address under **Public address** on the same page; share links and embed code will use it.
+
+## Create a page
+
+Click **New guest page**, fill it in and save. The link is created right away.
+
+### Basics
+
+Name, model, welcome message and suggested questions. Without a model picked, the page uses the global default. Suggested questions appear on the welcome screen for visitors to tap.
+
+### Appearance
+
+Icon and theme color, used on the page and on the embedded chat button.
+
+### Access
+
+- **Password**: visitors must enter it before chatting.
+- **Questions per visitor a day**: visitors are told apart by browser. Defaults to 100; 0 means no limit.
+- **Expires on**: the link stops working after this date. Leave empty to keep it open.
+
+### More settings
+
+- **Tools**: reading and writing files, searching files, sending files, web search, fetching pages, vision and the current time. New pages get all of them. Guest pages cannot run commands.
+- **Skills**: pick from your installed skills. Skills that rely on commands or scripts can't work on a guest page and are left out of the list.
+- **References**: folders the Agent may look things up in, read-only. Pick your knowledge base or one of its categories, or enter any other folder. Each one can carry a short note, such as "product docs, for feature and pricing questions", so the Agent knows when to look there.
+- **Guest rules**: written into the Agent's system prompt. Use them to set who it is, what it helps with and how it replies.
+- **Footer**: the text and link at the bottom of the page. Edit or clear them.
+
+## Share and embed
+
+Copy the link from the page list to share it. Links look like `https://<public address>/share/<token>`.
+
+To embed the page in your site, click **Embed** on the page. Add your site (e.g. `https://example.com`) under **Sites allowed to embed**, then put the code in your page's `<body>`. A chat button appears in the bottom-right corner, and the dialog shows a live preview.
+
+```html
+<script src="https://agent.example.com/assets/guest/embed.js"
+  data-share-url="https://agent.example.com/share/<token>"
+  data-title="Ask us"
+  defer></script>
+```
+
+Add `data-color` to change the button color, or `data-position="left"` to move it to the bottom-left corner.
+
+## Manage pages
+
+- **Visitor logs**: read each visitor's conversations.
+- **Reset link**: issues a new link; the old link and embed code stop working at once.
+- **Sign out visitors**: everyone has to come in again (and re-enter the password, if the page has one). Earlier chats are no longer shown to them.
+- **Pause / Resume**: a paused page's link stops working for now, and replies in progress are stopped.
+- **Delete**: removes the page, its link and all visitor logs. This cannot be undone.
+
+## Security
+
+- The guest Agent can only reach the current conversation's scratch folder and the references and skills you picked. It never sees real paths and cannot step outside these folders.
+- It cannot run commands. Network tools only reach the public internet; local and private network addresses are blocked.
+- Page settings live in `~/cow/guests/<page id>/`, so you can also ask your own Agent to change them. Changes that widen access, such as adding tools or references, turning on the network or removing the password, only take effect after you click **Confirm** in the console.

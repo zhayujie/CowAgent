@@ -826,7 +826,7 @@ export const useChatStore = create<ChatState>((set, get) => {
           updateMsg(sid, botId, (m) => ({ ...m, content: res.inline_reply || '', isStreaming: false }))
           patchSession(sid, { isStreaming: false })
         } else {
-          updateMsg(sid, botId, (m) => ({ ...m, error: 'send failed', isStreaming: false }))
+          updateMsg(sid, botId, (m) => ({ ...m, error: res.message || 'send failed', isStreaming: false }))
           patchSession(sid, { isStreaming: false })
         }
       } catch (err) {

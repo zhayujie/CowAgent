@@ -277,6 +277,12 @@
                 ]
               },
               {
+                "group": "Sharing",
+                "pages": [
+                  "extensions/guest-share"
+                ]
+              },
+              {
                 "group": "Customization",
                 "pages": [
                   "extensions/custom-menu"
@@ -551,6 +557,12 @@
                 ]
               },
               {
+                "group": "对外分享",
+                "pages": [
+                  "zh/extensions/guest-share"
+                ]
+              },
+              {
                 "group": "界面定制",
                 "pages": [
                   "zh/extensions/custom-menu"
@@ -821,6 +833,12 @@
                 "group": "API",
                 "pages": [
                   "ja/extensions/chat-api"
+                ]
+              },
+              {
+                "group": "共有",
+                "pages": [
+                  "ja/extensions/guest-share"
                 ]
               },
               {

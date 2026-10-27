@@ -54,6 +54,7 @@
     <link rel="stylesheet" href="/assets/css/knowledge.css">
     <link rel="stylesheet" href="/assets/css/agents.css">
     <link rel="stylesheet" href="/assets/css/artifacts.css">
+    <link rel="stylesheet" href="/assets/css/shares.css">
     <link rel="stylesheet" href="/assets/css/menu.css">
     <!-- Apply theme/lang before first paint to avoid flash of unstyled content.
          This runs synchronously in <head> so the correct class is on <html>
@@ -171,6 +172,8 @@
 
 <!--#include templates/modals/menu-editor.html-->
 
+<!--#include templates/modals/share-dialogs.html-->
+
     <!-- Split out of a single console.js. These are classic scripts, not
          modules: they share one global scope and `defer` runs them in this
          order. The order is load-bearing - see channel/web/README.md before
@@ -232,6 +235,7 @@
     <script defer src="/assets/js/views/logs.js"></script>
     <script defer src="/assets/js/views/artifacts.js"></script>
     <script defer src="/assets/js/views/menu-editor.js"></script>
+    <script defer src="/assets/js/views/shares.js"></script>
 
     <!-- Last of the core layer rather than first, which is where it sat in
          console.js. It installs a window.fetch wrapper for 401 handling, and

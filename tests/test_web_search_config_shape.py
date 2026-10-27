@@ -23,7 +23,7 @@ TRUTHY_NON_STRINGS = [True, 1, -1, 3.5, ["local"], {"provider": "local"},
                       (1, 2), b"local"]
 
 _SEARCH_ENV = (
-    "BOCHA_API_KEY", "ZHIPUAI_API_KEY", "QIANFAN_API_KEY", "LINKAI_API_KEY",
+    "DEEPSEEK_API_KEY", "BOCHA_API_KEY", "ZHIPUAI_API_KEY", "QIANFAN_API_KEY", "LINKAI_API_KEY",
     "ANYSEARCH_API_KEY", "SERPLY_API_KEY", "TAVILY_API_KEY", "KEENABLE_API_KEY",
     "SEARXNG_URL",
 )
