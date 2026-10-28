@@ -365,6 +365,16 @@ class WebChannel(ChatChannel):
                 reasoning_chars_sent[0] += len(delta)
                 publish({"type": "reasoning", "content": delta})
 
+            elif event_type == "todo_update":
+                # Only committed snapshot fields cross the Web event boundary.
+                publish({
+                    "type": "todo_update",
+                    **{key: data[key] for key in (
+                        "agent_id", "session_id", "run_id", "tool_call_id",
+                        "version", "todos", "counts", "explanation",
+                    ) if key in data},
+                })
+
             elif event_type == "message_update":
                 delta = data.get("delta", "")
                 if delta:

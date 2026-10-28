@@ -14,6 +14,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import MessageBubble from '../components/MessageBubble'
 import ChatInput, { type ChatInputHandle } from '../components/ChatInput'
 import ChatTimeline from '../components/ChatTimeline'
+import TodoPanel from '../components/TodoPanel'
 import { useTimelineStore } from '../store/timelineStore'
 import { TeamChatModal } from '../components/NewChatMenu'
 import { product } from '@product'
@@ -24,6 +25,7 @@ import { useChatStore } from '../store/chatStore'
 import { useSessionStore, sessionOwner } from '../store/sessionStore'
 import { useAgentStore } from '../store/agentStore'
 import { useWorkspaceStore } from '../store/workspaceStore'
+import { useTodoStore, todoScope } from '../store/todoStore'
 import { startNewChat } from '../lib/newChat'
 import { followingAfterUserScroll, shouldApplyBottomScroll, shouldFollowContentChange, shouldShowScrollToBottom } from '../lib/chatScroll'
 
@@ -79,6 +81,10 @@ const ChatPage: React.FC<ChatPageProps> = ({ baseUrl }) => {
   const activeId = useSessionStore((s) => s.activeId)
   const loadSessions = useSessionStore((s) => s.loadSessions)
   const activeAgentId = useAgentStore((s) => s.activeAgentId)
+  const defaultAgentId = useAgentStore((s) => s.defaultAgentId)
+  const todoOwnerId = sessionOwner(activeId) || activeAgentId || defaultAgentId
+  const todoKey = todoScope(todoOwnerId, activeId)
+  const todoSnapshot = useTodoStore((s) => todoKey ? s.snapshots[todoKey] : undefined)
 
   const session = useChatStore((s) => s.sessions[activeId])
   const send = useChatStore((s) => s.send)
@@ -598,6 +604,7 @@ const ChatPage: React.FC<ChatPageProps> = ({ baseUrl }) => {
         )}
       </div>
 
+      <TodoPanel snapshot={todoSnapshot} />
       <ChatInput
         onSend={handleSend}
         onNewChat={handleNewChat}

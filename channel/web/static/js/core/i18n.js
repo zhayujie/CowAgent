@@ -8,6 +8,8 @@
 const I18N = {
     zh: {
         chat_scroll_to_bottom: '滚动到底部',
+        todo_title: '任务',
+        todo_pending: '未开始', todo_in_progress: '进行中', todo_completed: '已完成',
         console: '控制台',
         nav_chat: '对话', nav_manage: '管理', nav_monitor: '监控',
         menu_chat: '对话', menu_agents: '智能体', menu_config: '配置', menu_skills: '能力',
@@ -784,6 +786,8 @@ const I18N = {
     'zh-Hant': {
 
         chat_scroll_to_bottom: '捲動至底部',
+        todo_title: '任務',
+        todo_pending: '未開始', todo_in_progress: '進行中', todo_completed: '已完成',
         console: '控制台',
         nav_chat: '對話', nav_manage: '管理', nav_monitor: '監控',
         menu_chat: '對話', menu_agents: '智慧體', menu_config: '設定', menu_skills: '能力',
@@ -1555,6 +1559,8 @@ const I18N = {
         },
     en: {
         chat_scroll_to_bottom: 'Scroll to bottom',
+        todo_title: 'Tasks',
+        todo_pending: 'Pending', todo_in_progress: 'In progress', todo_completed: 'Completed',
         console: 'Console',
         nav_chat: 'Chat', nav_manage: 'Management', nav_monitor: 'Monitor',
         menu_chat: 'Chat', menu_agents: 'Agents', menu_config: 'Config', menu_skills: 'Capabilities',
@@ -2511,6 +2517,7 @@ document.addEventListener('click', (e) => {
 // Refresh JS-rendered views after a language switch. Each branch uses the
 // lightweight in-memory re-render path (no extra network round-trips).
 function rerenderDynamicViews() {
+    if (typeof renderWebTodoPanel === 'function') renderWebTodoPanel();
     // Models are a tab of the config view, not a view of their own.
     if (currentView === 'config' && typeof renderModelsView === 'function'
             && modelsState && (modelsState.providers || modelsState.capabilities)) {

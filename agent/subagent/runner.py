@@ -94,7 +94,11 @@ def _private_tools(parent, template) -> list:
     run its own slots for those attributes while leaving anything the tool holds
     open (a browser session, an MCP client) shared, as it already is today.
     """
-    return [copy.copy(tool) for tool in template.select_tools(list(parent.tools))]
+    return [
+        copy.copy(tool)
+        for tool in template.select_tools(list(parent.tools))
+        if getattr(tool, "name", None) != "todo_write"
+    ]
 
 
 def _build_child(parent, template, task: SubagentTask):

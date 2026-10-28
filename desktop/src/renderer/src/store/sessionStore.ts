@@ -1,3 +1,4 @@
+import { useChatStore } from './chatStore'
 import { create } from 'zustand'
 import apiClient from '../api/client'
 import { t } from '../i18n'
@@ -259,6 +260,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
   remove: async (id) => {
     await apiClient.deleteSession(id, sessionOwner(id))
+    useChatStore.getState().clearLocal(id)
     forgetOwner(id)
     set((s) => ({ sessions: s.sessions.filter((sess) => sess.session_id !== id) }))
     if (get().activeId === id) get().newSession()

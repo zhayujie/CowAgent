@@ -55,10 +55,11 @@ interface ChatInputProps {
   onAdjustContext: () => void
   // Transient toast surface owned by the page.
   onToast?: (msg: string) => void
+  aboveInput?: React.ReactNode
 }
 
 const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput(
-  { onSend, onNewChat, onStop, onClearContext, isStreaming, sessionId, onAdjustContext, onToast },
+  { onSend, onNewChat, onStop, onClearContext, isStreaming, sessionId, onAdjustContext, onToast, aboveInput },
   ref
 ) {
   // Restore the draft saved in `chatDraft` on mount (lazy init: the very first
@@ -683,6 +684,9 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
 
   return (
     <div className="flex-shrink-0 border-t border-default bg-surface px-4 py-3">
+      {/* The dock sits inside the composer's own max width, inset 16px per
+          side so it reads as part of the input area rather than a wider card. */}
+      {aboveInput && <div className="max-w-3xl mx-auto mb-1.5 px-4">{aboveInput}</div>}
       {/* One tall rounded card holds the textarea on top and a toolbar row
           (chips + actions) at the bottom, matching the web console composer. */}
       <div
