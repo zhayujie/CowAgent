@@ -29,6 +29,7 @@ const ROUTE_PATHS = {
     memory:    'memory',
     knowledge: 'knowledge',
     channels:  'channels',
+    users:     'users',
     tasks:     'scheduler',
     logs:      'logs',
 };

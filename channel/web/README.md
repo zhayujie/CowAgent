@@ -14,7 +14,7 @@ scheduled tasks, logs).
 
 # Backend layout
 
-`web_channel.py` is the URL table and nothing else: 89 routes, `build_app()`,
+`web_channel.py` is the URL table and nothing else: 94 routes, `build_app()`,
 and the imports that put every handler in scope. web.py resolves the handler
 names in the table against a namespace dict, so every handler has to be
 importable there -- that is why the file imports names it never calls.
@@ -38,7 +38,7 @@ The code sits in two packages, mirroring the frontend's `core/` and `views/`:
 | `auth.py` | `/api/auth/*`, the MCP OAuth callback |
 | `chat.py` | `/api/message`, `/api/poll`, `/api/cancel`, the SSE stream |
 | `files.py` | Uploads, `/api/file`, `/api/file/reveal` (local-only show in folder), `/uploads/*`, `/preview/*`, ASR and TTS |
-| `sessions.py` | `/api/sessions/*`, `/api/history`, per-session settings and context |
+| `sessions.py` | `/api/sessions/*`, `/api/channel_sessions`, `/api/history`, per-session settings and context |
 | `artifacts.py` | `/api/artifacts`, `/api/artifacts/add`, `/api/artifacts/pin`, `/api/artifacts/rename`, `/api/artifacts/delete`: the cross-Agent index of files the conversations produced |
 | `menu.py` | `/api/menu`: the menu the user arranged, shared with the desktop client; its custom pages open at `/m/<id>` |
 | `agents.py` | `/api/agents/*`, core files, avatars |
@@ -128,6 +128,7 @@ Two rules for includes:
 | `views/memory.html` | Memory list and file viewer |
 | `views/knowledge.html` | Knowledge base: documents panel and relation graph panel |
 | `views/channels.html` | Channels view (content injected by JS) |
+| `views/channel-users.html` | Channel users view: the people who wrote in over an IM channel, beside a read-only transcript (content injected by JS) |
 | `views/tasks.html` | Scheduled tasks and run records |
 | `views/logs.html` | Log terminal |
 | `views/custom.html` | A page the user put in the menu: an embedded web page or artifact, at `/m/<id>` |
@@ -336,6 +337,7 @@ auth), see `tests/test_web_console_routing.py`.
 | `views/channels-weixin.js` | WeChat QR login |
 | `views/channels-wecom.js` | WeCom bot QR authorisation |
 | `views/channels-feishu.js` | Feishu one-click app registration |
+| `views/channel-users.js` | Channel users: the user list, its channel filter, and the transcript replay |
 | `views/tasks.js` | Scheduled tasks and run records |
 | `views/tasks-modal.js` | Scheduled task create/edit dialog |
 | `views/skills.js` | Built-in tools, installed skills, the viewer for a skill's files, and creating a skill from a form or an upload |
@@ -422,6 +424,7 @@ section before reordering or inserting a file.**
 | `agents.css` | Agent cards, detail drawer, composer identity badge |
 | `artifacts.css` | Artifacts view, and the lit state of the header's view buttons |
 | `menu.css` | Custom sidebar labels, custom pages, menu editor |
+| `channel-users.css` | Channel users view: two-pane shell, user list, transcript |
 
 Two things to watch when moving rules:
 

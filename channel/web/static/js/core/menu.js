@@ -18,6 +18,7 @@ const MENU_BUILTINS = {
     memory:    { icon: 'fa-brain',            label: 'menu_memory' },
     knowledge: { icon: 'fa-book',             label: 'menu_knowledge' },
     channels:  { icon: 'fa-tower-broadcast',  label: 'menu_channels' },
+    users:     { icon: 'fa-user-group',       label: 'menu_users' },
     tasks:     { icon: 'fa-clock',            label: 'menu_tasks' },
     logs:      { icon: 'fa-terminal',         label: 'menu_logs' },
 };
@@ -25,7 +26,7 @@ const MENU_BUILTINS = {
 // The built-in menu, as sidebar.html draws it before any script runs.
 const MENU_DEFAULT = [
     { id: 'chat',    views: ['chat', 'artifacts'] },
-    { id: 'manage',  views: ['agents', 'config', 'skills', 'memory', 'knowledge', 'channels', 'tasks'] },
+    { id: 'manage',  views: ['agents', 'config', 'skills', 'memory', 'knowledge', 'channels', 'users', 'tasks'] },
     { id: 'monitor', views: ['logs'] },
 ];
 // Built-in pages that start hidden, so only the menu editor offers them.

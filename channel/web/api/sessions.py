@@ -10,7 +10,7 @@ the only thing that reads stored steps back: a live turn streams them as
 they happen.
 """
 
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Set
 import json
 
 import web
@@ -395,6 +395,160 @@ class SessionsHandler:
             return json.dumps({"status": "success", **result}, ensure_ascii=False)
         except Exception as e:
             logger.error(f"[WebChannel] Sessions API error: {e}")
+            return json.dumps({"status": "error", "message": str(e)})
+
+
+# A page is built by asking every Agent for the rows that could sort into it, so
+# the ask grows with the page number -- and it comes from a query parameter. This
+# caps it: past that depth the list stops offering another page instead of
+# building one out of an unbounded read of every workspace.
+MAX_MERGE_ROWS = 2000
+
+
+def _channel_contacts(wanted: Optional[Set[str]] = None) -> Dict[str, dict]:
+    """What the recipient directory knows about channel contacts, by session id.
+
+    A WeChat/Feishu id is not a name, and the session title is only the first
+    thing the person said, so neither reads as "who is this". The recipient
+    directory is the one place inbound channels already record a name for a
+    contact (it exists for scheduled delivery), so the list borrows it.
+
+    ``wanted`` keeps the walk to the contacts on this page: the directory is
+    every contact across every channel, and only a page worth of them is being
+    drawn.
+
+    Decoration only: an unreadable directory must not cost the user the list.
+    """
+    try:
+        from agent.tools.scheduler.integration import get_recipient_store
+
+        store = get_recipient_store()
+        if store is None:
+            return {}
+        contacts: Dict[str, dict] = {}
+        for entry in store.list():
+            session_id = str(entry.get("session_id") or "").strip()
+            if not session_id:
+                continue
+            if wanted is not None and session_id not in wanted:
+                continue
+            name = str(entry.get("name") or "").strip()
+            # ``name`` falls back to the receiver id when the channel never
+            # learned one; that is the id again, so it adds nothing.
+            if name == str(entry.get("receiver") or ""):
+                name = ""
+            contacts.setdefault(session_id, {
+                "name": name,
+                "is_group": bool(entry.get("is_group")),
+            })
+        return contacts
+    except Exception as e:
+        logger.warning(f"[WebChannel] Could not read channel contacts: {e}")
+        return {}
+
+
+class ChannelSessionsHandler:
+    """GET /api/channel_sessions -- the people who reached the Agent over a channel.
+
+    The console's own conversations are the ``web`` channel; everyone who wrote
+    in through WeChat, Feishu, Telegram, WeCom and so on has a session here
+    instead, and until now nothing in the console could show them. This lists
+    them and hands back enough identity to read each one's history through the
+    existing ``/api/history``.
+
+    Deliberately not scoped to the selected Agent: a channel instance binds to
+    one Agent, so filtering by the console's current Agent would hide users
+    whose channel happens to be bound elsewhere and read as "nobody has written
+    in". Each row carries its Agent instead, and the history request passes that
+    Agent back, which is what makes the transcript resolve to the right
+    workspace. ``agent_id`` narrows the list when a caller wants one Agent.
+    """
+    def GET(self):
+        _require_auth()
+        web.header('Content-Type', 'application/json; charset=utf-8')
+        web.header('Access-Control-Allow-Origin', '*')
+        try:
+            params = web.input(
+                channel_type='', page='1', page_size='50', agent_id=''
+            )
+            from agent.memory import get_conversation_store
+            from agent.memory.conversation_store import page_window
+            from agent.registry import get_agent_registry
+
+            page, page_size = page_window(params.page, params.page_size, 50)
+            channel_type = (params.channel_type or '').strip()
+            agent_id = _request_agent_id(params)
+
+            # Rows are scoped by Agent, so each Agent is asked separately and
+            # asked for as many rows as the page could draw from it, because
+            # any of them can supply the row that sorts into this page.
+            wanted_rows = max(1, page) * page_size
+            take = min(wanted_rows, MAX_MERGE_ROWS)
+            merged: List[dict] = []
+            channels: Dict[str, dict] = {}
+            total = 0
+            for profile in get_agent_registry().list(include_disabled=False):
+                if agent_id and profile.id != agent_id:
+                    continue
+                try:
+                    store = get_conversation_store(profile.workspace)
+                    chunk = store.list_channel_sessions(
+                        channel_type=channel_type or None,
+                        page=1,
+                        page_size=take,
+                    )
+                    types = store.list_channel_types()
+                except Exception as e:
+                    # One unreadable workspace must not blank out the others.
+                    logger.warning(
+                        f"[WebChannel] Skipping channel sessions for agent={profile.id}: {e}"
+                    )
+                    continue
+
+                total += chunk.get("total", 0)
+                badge = _agent_badge(profile)
+                for session in chunk.get("sessions") or []:
+                    session["agent"] = badge
+                    session["agent_id"] = profile.id or ""
+                    merged.append(session)
+                for item in types:
+                    key = item.get("channel_type") or ""
+                    slot = channels.setdefault(
+                        key,
+                        {"channel_type": key, "session_count": 0, "last_active": 0},
+                    )
+                    slot["session_count"] += int(item.get("session_count") or 0)
+                    slot["last_active"] = max(
+                        slot["last_active"], int(item.get("last_active") or 0)
+                    )
+
+            merged.sort(key=lambda s: s.get("last_active") or 0, reverse=True)
+            start = (page - 1) * page_size
+            window = merged[start:start + page_size]
+
+            contacts = _channel_contacts(
+                {s.get("session_id") or "" for s in window}
+            )
+            for session in window:
+                contact = contacts.get(session.get("session_id") or "", {})
+                session["name"] = contact.get("name") or session.get("session_id") or ""
+                session["is_group"] = bool(contact.get("is_group"))
+
+            channel_list = sorted(
+                channels.values(), key=lambda c: c["last_active"], reverse=True
+            )
+            return json.dumps({
+                "status": "success",
+                "sessions": window,
+                "channels": channel_list,
+                "total": total,
+                "page": page,
+                "page_size": page_size,
+                "has_more": (start + page_size < total
+                             and wanted_rows <= MAX_MERGE_ROWS),
+            }, ensure_ascii=False)
+        except Exception as e:
+            logger.error(f"[WebChannel] Channel sessions API error: {e}")
             return json.dumps({"status": "error", "message": str(e)})
 
 

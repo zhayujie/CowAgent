@@ -15,6 +15,7 @@ const VIEW_META = {
     memory:   { group: 'nav_manage',  page: 'menu_memory' },
     knowledge:{ group: 'nav_manage',  page: 'menu_knowledge' },
     channels: { group: 'nav_manage',  page: 'menu_channels' },
+    users:    { group: 'nav_manage',  page: 'menu_users' },
     tasks:    { group: 'nav_manage',  page: 'menu_tasks' },
     logs:     { group: 'nav_monitor', page: 'menu_logs' },
     // An artifact or link the user put in the menu; menu.js names it in the breadcrumb.
@@ -225,6 +226,7 @@ function navigateTo(viewId, tab) {
     // it with.
     else if (viewId === 'knowledge') { loadKnowledgeView(); if (tab) switchKnowledgeTab(tab); }
     else if (viewId === 'channels') loadChannelsView();
+    else if (viewId === 'users') loadChannelUsersView();
     else if (viewId === 'tasks') { switchTasksTab(tab || 'tasks'); loadTasksView(); }
     else if (viewId === 'logs') startLogStream();
     else if (viewId === 'artifacts') loadArtifactsView();

@@ -56,6 +56,7 @@
     <link rel="stylesheet" href="/assets/css/artifacts.css">
     <link rel="stylesheet" href="/assets/css/shares.css">
     <link rel="stylesheet" href="/assets/css/menu.css">
+    <link rel="stylesheet" href="/assets/css/channel-users.css">
     <!-- Apply theme/lang before first paint to avoid flash of unstyled content.
          This runs synchronously in <head> so the correct class is on <html>
          before any CSS or body rendering occurs. -->
@@ -139,6 +140,8 @@
 <!--#include templates/views/knowledge.html-->
 
 <!--#include templates/views/channels.html-->
+
+<!--#include templates/views/channel-users.html-->
 
 <!--#include templates/views/tasks.html-->
 
@@ -226,6 +229,10 @@
     <script defer src="/assets/js/views/channels-weixin.js"></script>
     <script defer src="/assets/js/views/channels-wecom.js"></script>
     <script defer src="/assets/js/views/channels-feishu.js"></script>
+    <!-- After chat/render.js: this view replays a transcript with the bubble
+         builders the chat view uses, instead of a second renderer that would
+         drift from it. -->
+    <script defer src="/assets/js/views/channel-users.js"></script>
     <script defer src="/assets/js/views/tasks.js"></script>
     <script defer src="/assets/js/views/tasks-modal.js"></script>
     <script defer src="/assets/js/views/skills.js"></script>

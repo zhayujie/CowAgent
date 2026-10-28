@@ -2033,6 +2033,104 @@ class ConversationStore:
             "has_more": (page - 1) * page_size + page_size < total,
         }
 
+    def list_channel_sessions(
+        self,
+        channel_type: Optional[str] = None,
+        page: int = 1,
+        page_size: int = 50,
+    ) -> Dict[str, Any]:
+        """Conversations that arrived over an IM channel, newest first.
+
+        The console's own sessions are the ``web`` channel; everything else is a
+        person who reached the Agent through WeChat, Feishu, Telegram and so on.
+        ``channel_type=None`` means all of them, which is what the list shows
+        until the user picks one channel.
+
+        Each row carries ``channel_type``: unlike ``list_sessions``, the caller
+        is showing one list spanning several channels, so a row that did not say
+        which channel it came from could not be labelled -- and the user would
+        have to guess who they are looking at.
+
+        Rows with an empty ``channel_type`` are left out. Before channel types
+        were recorded they would have been indistinguishable from the web
+        console's; showing them as channel users would invent contacts.
+        """
+        page, page_size = page_window(page, page_size, 50, cap=None)
+        where = ["agent_id = ?", "channel_type NOT IN ('', 'web')"]
+        args: List[Any] = [self._agent_id]
+        if channel_type:
+            where.append("channel_type = ?")
+            args.append(channel_type)
+        clause = " AND ".join(where)
+        offset = (page - 1) * page_size
+        with self._lock:
+            conn = self._connect()
+            try:
+                total = conn.execute(
+                    f"SELECT COUNT(*) FROM sessions WHERE {clause}", tuple(args)
+                ).fetchone()[0]
+                rows = conn.execute(
+                    f"""
+                    SELECT session_id, title, created_at, last_active, msg_count,
+                           pinned, channel_type
+                    FROM sessions
+                    WHERE {clause}
+                    ORDER BY last_active DESC
+                    LIMIT ? OFFSET ?
+                    """,
+                    tuple(args) + (page_size, offset),
+                ).fetchall()
+            finally:
+                conn.close()
+
+        sessions = [
+            {
+                "session_id": r[0],
+                "title": r[1],
+                "created_at": r[2],
+                "last_active": r[3],
+                "msg_count": r[4],
+                "pinned": bool(r[5]),
+                "channel_type": r[6],
+            }
+            for r in rows
+        ]
+        return {
+            "sessions": sessions,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "has_more": offset + page_size < total,
+        }
+
+    def list_channel_types(self) -> List[Dict[str, Any]]:
+        """Which channels have conversations here, and how many each.
+
+        Feeds the filter above the list. Derived from the sessions table rather
+        than from the configured channels, so the filter never offers a channel
+        with nothing behind it -- a tab that opens onto an empty list reads as a
+        broken view rather than as "nobody has written in".
+        """
+        with self._lock:
+            conn = self._connect()
+            try:
+                rows = conn.execute(
+                    """
+                    SELECT channel_type, COUNT(*), MAX(last_active)
+                    FROM sessions
+                    WHERE agent_id = ? AND channel_type NOT IN ('', 'web')
+                    GROUP BY channel_type
+                    ORDER BY MAX(last_active) DESC
+                    """,
+                    (self._agent_id,),
+                ).fetchall()
+            finally:
+                conn.close()
+        return [
+            {"channel_type": r[0], "session_count": r[1], "last_active": r[2]}
+            for r in rows
+        ]
+
     def rename_session(self, session_id: str, title: str) -> bool:
         """Update the title of a session. Returns True if the session existed."""
         with self._lock:

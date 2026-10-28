@@ -65,10 +65,11 @@ from channel.web.api.scheduler import (  # noqa: F401
     SchedulerRunsHandler, SchedulerToggleHandler, SchedulerUpdateHandler,
 )
 from channel.web.api.sessions import (  # noqa: F401
-    HistoryHandler, MessageDeleteHandler, PromptOptimizeHandler,
-    SessionClearContextHandler, SessionCompactContextHandler,
-    SessionContextUsageHandler, SessionDetailHandler, SessionSettingsHandler,
-    SessionTitleHandler, SessionsHandler, UserMessagesHandler,
+    ChannelSessionsHandler, HistoryHandler, MessageDeleteHandler,
+    PromptOptimizeHandler, SessionClearContextHandler,
+    SessionCompactContextHandler, SessionContextUsageHandler,
+    SessionDetailHandler, SessionSettingsHandler, SessionTitleHandler,
+    SessionsHandler, UserMessagesHandler,
 )
 from channel.web.api.skills import (  # noqa: F401
     McpServerTestHandler, McpServersHandler,
@@ -171,6 +172,8 @@ URLS = (
     '/api/agents/([^/]+)/avatar', 'AgentAvatarHandler',
     '/api/agents/([^/]+)/files/([^/]+)', 'AgentCoreFileHandler',
     '/api/sessions', 'SessionsHandler',
+    # The people who wrote in over an IM channel, and their conversations.
+    '/api/channel_sessions', 'ChannelSessionsHandler',
     '/api/sessions/(.*)/generate_title', 'SessionTitleHandler',
     '/api/prompt/optimize', 'PromptOptimizeHandler',
     '/api/sessions/(.*)/clear_context', 'SessionClearContextHandler',
@@ -196,7 +199,7 @@ URLS = (
     # can ever shadow an API route above -- which is also why the
     # settings view is /settings and not /config, a path the config
     # API already owns.
-    '/(?:agents|artifacts|settings|skills|memory|knowledge|channels|scheduler|logs)'
+    '/(?:agents|artifacts|settings|skills|memory|knowledge|channels|scheduler|logs|users)'
     '(?:/[a-z]+)?/?', 'ChatHandler',
     # A page the user put in the menu: /m/<item id>.
     '/m/[A-Za-z0-9_-]{1,40}/?', 'ChatHandler',

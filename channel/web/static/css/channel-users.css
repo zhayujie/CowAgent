@@ -1,0 +1,240 @@
+/* =====================================================================
+   Channel users view: who wrote in over an IM channel, and the
+   read-only transcript of each conversation.
+   ===================================================================== */
+
+.cu-shell {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+}
+
+/* ---- left: the people ---- */
+
+.cu-side {
+    width: 320px;
+    flex-shrink: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid #e2e8f0;
+    background: #ffffff;
+}
+.dark .cu-side {
+    border-right-color: rgba(255, 255, 255, 0.1);
+    background: #1a1a1a;
+}
+
+.cu-side-head { padding: 20px 20px 12px; }
+
+.cu-channels {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 0 16px 12px;
+}
+
+.cu-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    cursor: pointer;
+    color: #475569;
+    background: #f1f5f9;
+    border: 1px solid transparent;
+    transition: background 0.15s, color 0.15s;
+}
+.cu-chip:hover { background: #e2e8f0; }
+.cu-chip.active {
+    background: rgba(59, 130, 246, 0.12);
+    color: #2563eb;
+    border-color: rgba(59, 130, 246, 0.35);
+}
+.dark .cu-chip { color: #cbd5e1; background: rgba(255, 255, 255, 0.06); }
+.dark .cu-chip:hover { background: rgba(255, 255, 255, 0.12); }
+.dark .cu-chip.active {
+    background: rgba(96, 165, 250, 0.16);
+    color: #93c5fd;
+    border-color: rgba(96, 165, 250, 0.35);
+}
+.cu-chip-count { opacity: 0.6; font-size: 11px; }
+
+.cu-list {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 0 8px 12px;
+}
+
+.cu-row {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 10px 12px;
+    border-radius: 10px;
+    cursor: pointer;
+    background: transparent;
+    border: 1px solid transparent;
+    transition: background 0.15s;
+}
+.cu-row:hover { background: #f8fafc; }
+.cu-row.active { background: rgba(59, 130, 246, 0.1); border-color: rgba(59, 130, 246, 0.3); }
+.dark .cu-row:hover { background: rgba(255, 255, 255, 0.05); }
+.dark .cu-row.active { background: rgba(96, 165, 250, 0.14); border-color: rgba(96, 165, 250, 0.3); }
+
+.cu-row-top {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+}
+.cu-row-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: #1e293b;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.dark .cu-row-name { color: #e2e8f0; }
+.cu-row-time { font-size: 11px; color: #94a3b8; flex-shrink: 0; }
+
+.cu-row-preview {
+    margin-top: 2px;
+    font-size: 12px;
+    color: #64748b;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.dark .cu-row-preview { color: #94a3b8; }
+
+.cu-row-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 6px;
+    flex-wrap: wrap;
+}
+.cu-row-count { font-size: 11px; color: #94a3b8; }
+
+.cu-tag {
+    display: inline-block;
+    padding: 1px 7px;
+    border-radius: 6px;
+    font-size: 11px;
+    line-height: 18px;
+    background: #f1f5f9;
+    color: #64748b;
+}
+.dark .cu-tag { background: rgba(255, 255, 255, 0.08); color: #94a3b8; }
+.cu-tag-channel { background: rgba(16, 185, 129, 0.12); color: #059669; }
+.dark .cu-tag-channel { background: rgba(52, 211, 153, 0.14); color: #6ee7b7; }
+.cu-tag-agent { background: rgba(99, 102, 241, 0.12); color: #4f46e5; }
+.dark .cu-tag-agent { background: rgba(129, 140, 248, 0.16); color: #a5b4fc; }
+
+.cu-more {
+    display: block;
+    width: calc(100% - 16px);
+    margin: 8px;
+    padding: 8px;
+    border-radius: 8px;
+    font-size: 12px;
+    cursor: pointer;
+    color: #475569;
+    background: #f1f5f9;
+    border: none;
+}
+.cu-more:hover { background: #e2e8f0; }
+.dark .cu-more { color: #cbd5e1; background: rgba(255, 255, 255, 0.06); }
+.dark .cu-more:hover { background: rgba(255, 255, 255, 0.12); }
+.cu-more-top { width: auto; margin: 12px auto; padding: 6px 16px; }
+
+/* ---- right: one conversation ---- */
+
+.cu-main {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    background: #ffffff;
+}
+.dark .cu-main { background: #111111; }
+
+.cu-conv-head {
+    padding: 16px 20px;
+    border-bottom: 1px solid #e2e8f0;
+}
+.dark .cu-conv-head { border-bottom-color: rgba(255, 255, 255, 0.1); }
+
+.cu-conv-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.cu-conv-name {
+    font-size: 16px;
+    font-weight: 600;
+    color: #1e293b;
+}
+.dark .cu-conv-name { color: #e2e8f0; }
+.cu-conv-sub {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 4px;
+    font-size: 12px;
+    color: #94a3b8;
+    flex-wrap: wrap;
+}
+.cu-conv-readonly { color: #94a3b8; }
+
+.cu-conv-body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding-bottom: 24px;
+}
+
+/* A transcript is read, not edited: the bubble builders are shared with the
+   chat view, where these controls act on the open session. Clicking them here
+   would silently target that session, so they are hidden rather than left to
+   do nothing visible. */
+.cu-conv-body .edit-msg-btn,
+.cu-conv-body .delete-msg-btn,
+.cu-conv-body .regenerate-msg-btn {
+    display: none;
+}
+
+/* ---- empty states ---- */
+
+.cu-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 32px 20px;
+    text-align: center;
+    color: #94a3b8;
+    font-size: 13px;
+}
+.cu-empty i { font-size: 18px; opacity: 0.7; }
+.cu-empty-sub { font-size: 12px; color: #b6c2d2; }
+.cu-empty-main { height: 100%; }
+
+@media (max-width: 900px) {
+    .cu-shell { flex-direction: column; }
+    .cu-side {
+        width: 100%;
+        max-height: 45%;
+        border-right: none;
+        border-bottom: 1px solid #e2e8f0;
+    }
+    .dark .cu-side { border-bottom-color: rgba(255, 255, 255, 0.1); }
+}
