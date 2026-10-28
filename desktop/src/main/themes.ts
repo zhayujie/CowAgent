@@ -1,7 +1,7 @@
 import { app, ipcMain } from 'electron'
 import path from 'path'
 import fs from 'fs'
-import os from 'os'
+import { COW_DATA_DIR } from './data-dir'
 
 // Themes come from two sources and are merged at load time:
 //
@@ -33,8 +33,8 @@ const IMAGE_MIME: Record<string, string> = {
 }
 
 function cowRoot(): string {
-  // Honor an explicit override, else default to ~/.cow to match the backend.
-  return process.env.COW_HOME || path.join(os.homedir(), '.cow')
+  // Honor an explicit override, else the backend's data dir.
+  return process.env.COW_HOME || COW_DATA_DIR
 }
 
 export function themesDir(): string {

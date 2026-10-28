@@ -3,6 +3,7 @@ import { execFile } from 'child_process'
 import path from 'path'
 import fs from 'fs'
 import os from 'os'
+import { COW_DATA_DIR } from './data-dir'
 import { loadAppConfig } from './themes'
 
 // Let the web layer override the window icon/title at runtime and remember it,
@@ -45,7 +46,7 @@ let getMainWindow: (() => BrowserWindow | null) | null = null
 let getTrayIcon: (() => Electron.Tray | null) | null = null
 
 function cacheDir(): string {
-  const root = process.env.COW_HOME || path.join(os.homedir(), '.cow')
+  const root = process.env.COW_HOME || COW_DATA_DIR
   return path.join(root, CACHE_DIRNAME)
 }
 

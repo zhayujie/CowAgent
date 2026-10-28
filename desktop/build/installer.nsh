@@ -97,6 +97,92 @@
 # reinstall over an existing app keeps shortcuts too (keepShortcuts), so one an
 # interrupted first install never created would otherwise never appear. A stray
 # extra icon is a far smaller problem than no way into the app.
+# Data root picker (issue #3136). The install directory is already choosable;
+# app data was always written to %USERPROFILE%\.cow and the agent workspace to
+# %USERPROFILE%\cow. This page lets the user put both under another root:
+#
+#   <root>\.cow   app data and credentials (COW_DATA_DIR)
+#   <root>\cow    agent workspace (agent_workspace)
+#
+# The choice is recorded in %APPDATA%\CowAgent\data-root, which
+# desktop/src/main/data-dir.ts reads at startup. The page is only shown on a
+# fresh install: updates and reinstalls over existing data keep it where it is,
+# because moving data is not something an installer should do silently.
+!macro customPageAfterChangeDir
+  !define COW_DATA_ROOT_PAGE
+  !include nsDialogs.nsh
+
+  Var cowDataRoot
+  Var cowDataRootInput
+
+  Page custom cowDataRootPageCreate cowDataRootPageLeave
+
+  Function cowDataRootPageCreate
+    ${If} ${isUpdated}
+      Abort
+    ${EndIf}
+    ReadEnvStr $0 APPDATA
+    ${If} ${FileExists} "$0\CowAgent\data-root"
+    ${OrIf} ${FileExists} "$PROFILE\.cow\*.*"
+      Abort
+    ${EndIf}
+    ${If} $cowDataRoot == ""
+      StrCpy $cowDataRoot "$PROFILE"
+    ${EndIf}
+
+    !insertmacro MUI_HEADER_TEXT "Data Location" "Choose where ${PRODUCT_NAME} keeps its data."
+    nsDialogs::Create 1018
+    Pop $0
+    ${If} $0 == error
+      Abort
+    ${EndIf}
+
+    ${NSD_CreateLabel} 0 0 100% 36u "Settings, logs and the agent workspace are stored under this folder, in a .cow and a cow subfolder. The default is your user folder."
+    Pop $0
+    ${NSD_CreateDirRequest} 0 44u 78% 12u "$cowDataRoot"
+    Pop $cowDataRootInput
+    ${NSD_CreateBrowseButton} 80% 43u 20% 14u "Browse..."
+    Pop $0
+    ${NSD_OnClick} $0 cowDataRootBrowse
+
+    nsDialogs::Show
+  FunctionEnd
+
+  Function cowDataRootBrowse
+    ${NSD_GetText} $cowDataRootInput $0
+    nsDialogs::SelectFolderDialog "Choose the data folder" "$0"
+    Pop $0
+    ${If} $0 != error
+      ${NSD_SetText} $cowDataRootInput "$0"
+    ${EndIf}
+  FunctionEnd
+
+  Function cowDataRootPageLeave
+    ${NSD_GetText} $cowDataRootInput $0
+    # Drop a trailing backslash, but keep a drive root like D:\ intact.
+    StrCpy $1 $0 "" -1
+    StrLen $2 $0
+    ${If} $1 == "\"
+    ${AndIf} $2 > 3
+      StrCpy $0 $0 -1
+    ${EndIf}
+    StrCpy $1 $0 2 1
+    StrCpy $2 $0 2
+    ${If} $1 != ":\"
+    ${AndIf} $2 != "\\"
+      MessageBox MB_OK|MB_ICONEXCLAMATION "Please choose a full folder path, for example D:\CowAgentData."
+      Abort
+    ${EndIf}
+    ClearErrors
+    CreateDirectory "$0\.cow"
+    ${If} ${Errors}
+      MessageBox MB_OK|MB_ICONEXCLAMATION "Cannot create a folder in $0. Please choose another location."
+      Abort
+    ${EndIf}
+    StrCpy $cowDataRoot $0
+  FunctionEnd
+!macroend
+
 !macro customInstall
   !insertmacro cowReextractIfForced
 
@@ -153,6 +239,25 @@
   # at broken icons. The executable is always the more reliable target, and by
   # this point it is on disk.
   StrCpy $launchLink "$appExe"
+
+  # Record the data root chosen on the page above (only set on a fresh,
+  # interactive install). UTF-16LE with a BOM so a non-ASCII user folder is
+  # read back correctly by data-dir.ts.
+  !ifdef COW_DATA_ROOT_PAGE
+    ${If} $cowDataRoot != ""
+      CreateDirectory "$cowDataRoot\.cow"
+      CreateDirectory "$cowDataRoot\cow"
+      ReadEnvStr $0 APPDATA
+      CreateDirectory "$0\CowAgent"
+      ClearErrors
+      FileOpen $1 "$0\CowAgent\data-root" w
+      ${IfNot} ${Errors}
+        FileWriteUTF16LE /BOM $1 "$cowDataRoot"
+        FileClose $1
+      ${EndIf}
+      ClearErrors
+    ${EndIf}
+  !endif
 
   System::Call 'Shell32::SHChangeNotify(i 0x8000000, i 0, i 0, i 0)'
 !macroend

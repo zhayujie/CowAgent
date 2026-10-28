@@ -41,7 +41,7 @@ import regex as re  # not stdlib re: .search() takes a real per-call timeout, st
 from agent.tools.base_tool import BaseTool, ToolResult
 from agent.tools.utils.truncate import truncate_line
 from common.log import logger
-from common.utils import expand_path
+from common.utils import cow_home, expand_path
 
 # Short label per backend method, surfaced in a debug log so we can tell which
 # search engine actually ran when triaging platform-specific issues.
@@ -269,7 +269,7 @@ class SearchFiles(BaseTool):
         self.cwd = self.config.get("cwd", os.getcwd())
         self.timeout = self.config.get("timeout", SEARCH_TIMEOUT_SECONDS)
         # Resolved once (assumes ~/.cow is stable for this session), not per-check.
-        self._cow_dir = os.path.realpath(expand_path("~/.cow")).replace(os.sep, "/")
+        self._cow_dir = os.path.realpath(cow_home()).replace(os.sep, "/")
 
     # --------------------------------------------------------- file-name search
     def _find_by_name(self, pattern: str, root: str, ignore_case: bool,
