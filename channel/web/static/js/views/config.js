@@ -658,6 +658,7 @@ function loadConfigView() {
         initConfigView(data);
     }).catch(() => {});
     loadExternalApi();
+    loadWorkspaceLocation();
 }
 
 // ---- Chat API card: the OpenAI-compatible /v1 endpoint ----------------------

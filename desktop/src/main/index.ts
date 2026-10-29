@@ -9,6 +9,7 @@ import { createTray, destroyTray, getTray } from './tray'
 import { initUpdater, checkForUpdates, startDownload, quitAndInstall, setUpdateLanguage, setUpdateFeedQuery } from './updater'
 import { setupThemeIPC, loadAppConfig } from './themes'
 import { setupHttpRelayIPC } from './http-relay'
+import { setupWorkspaceMigrationIPC } from './workspace-migration'
 import {
   setupAppIconIPC,
   applyCachedAppIcon,
@@ -818,6 +819,18 @@ app.whenReady().then(async () => {
   })
 
   setupIPC()
+  const backendDataDir = () => pythonBackend?.getDataDir() || (isDev ? getBackendPath() : COW_DATA_DIR)
+  setupWorkspaceMigrationIPC({
+    getWindow: () => mainWindow,
+    configPath: () => path.join(backendDataDir(), 'config.json'),
+    protectedDirs: () => [COW_DATA_DIR, backendDataDir()],
+    stopBackend: async () => {
+      await pythonBackend?.stopAndWait()
+    },
+    startBackend: async () => {
+      await pythonBackend?.start()
+    },
+  })
   setupThemeIPC(() => pythonBackend?.getDataDir() ?? '')
   setupHttpRelayIPC()
   setupAppIconIPC({ getWindow: () => mainWindow, getTray })

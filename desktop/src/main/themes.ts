@@ -3,6 +3,7 @@ import path from 'path'
 import fs from 'fs'
 import os from 'os'
 import zlib from 'zlib'
+import { workspaceLocation } from './workspace-location'
 
 // Themes come from two sources and are merged at load time:
 //
@@ -41,16 +42,16 @@ const LOGO_FILES = ['logo.png', 'logo.svg', 'logo.webp', 'logo.jpg', 'logo.jpeg'
 let getDataDir: () => string = () => ''
 
 // The Agent workspace, resolved like the backend does: config.json's
-// agent_workspace, else ~/cow.
+// agent_workspace, else the workspace location (~/cow by default).
 function workspaceDir(): string {
-  let workspace = '~/cow'
+  let workspace = workspaceLocation().workspace
   try {
     const dataDir = getDataDir() || path.join(os.homedir(), '.cow')
     const cfg = JSON.parse(fs.readFileSync(path.join(dataDir, 'config.json'), 'utf8'))
     const value = cfg && cfg.agent_workspace
     if (typeof value === 'string' && value.trim()) workspace = value.trim()
   } catch {
-    // No or unreadable config: the backend falls back to ~/cow as well.
+    // No or unreadable config: the backend falls back to the same default.
   }
   if (workspace === '~' || /^~[\\/]/.test(workspace)) workspace = path.join(os.homedir(), workspace.slice(1))
   return path.resolve(workspace)
