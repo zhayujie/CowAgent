@@ -24,14 +24,22 @@ def _store():
 def _same_origin(origin):
     from channel.web.api.integrations import public_url
 
+    parsed = urlsplit(origin)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc or parsed.path or parsed.query or parsed.fragment:
+        return False
+    # Fetch Metadata describes the browser-facing origin even when a reverse
+    # proxy rewrites Host or terminates TLS. Page scripts cannot set Sec-* headers;
+    # do not infer this from client-supplied X-Forwarded-* headers instead.
+    if web.ctx.env.get("HTTP_SEC_FETCH_SITE") == "same-origin":
+        return True
     expected = [urlsplit(web.ctx.homedomain)]
     # TLS-terminating proxies leave WSGI's scheme as http. Reuse the existing
     # public URL setting instead of trusting arbitrary forwarding headers.
     external = public_url()
     if external:
-        parsed = urlsplit(external)
-        expected.append(parsed._replace(path="", query="", fragment=""))
-    return origin != "null" and urlsplit(origin) in expected
+        public = urlsplit(external)
+        expected.append(public._replace(path="", query="", fragment=""))
+    return parsed in expected
 
 
 def _endpoint(write=False):
