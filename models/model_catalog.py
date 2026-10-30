@@ -62,12 +62,69 @@ DEFAULT_CAPABILITIES = ["text"]
 # prefs and logs always use the real name.
 MAX_ALIAS_LENGTH = 64
 
+# Reasoning control for a custom provider's model. A gateway fronts models
+# from many vendors, so only the user knows which parameter a given model
+# accepts and with which values. The catalog carries that declaration:
+#
+#   {"param": "reasoning_effort", "options": ["minimal", "low"],
+#    "default": "minimal"}
+#   {"param": "thinking", "options": ["enabled", "disabled"],
+#    "default": "disabled"}
+#
+# ``reasoning_effort`` is the vendor's effort tier (the model always thinks
+# and the tier shapes the trace); ``thinking`` is the on/off switch some
+# models expose instead. Request and response shapes stay untouched.
+REASONING_PARAMS = ("reasoning_effort", "thinking")
+
 
 def _store_path() -> str:
     """Path to the catalog overlay under the instance's shared workspace
     (``<workspace>/system/models.json``, e.g. ``~/cow/system/models.json``)."""
     from common import state_dir
     return str(state_dir.models_catalog_file())
+
+
+def _normalize_reasoning(raw) -> dict:
+    """Validate a model-level reasoning declaration.
+
+    The user states which parameter the model understands and which values
+    it accepts; CowAgent then sends exactly that and nothing else, so a
+    gateway can front models with completely different protocols.
+    """
+    if not isinstance(raw, dict):
+        raise ValueError("reasoning must be an object")
+
+    param = str(raw.get("param") or "reasoning_effort").strip()
+    if param not in REASONING_PARAMS:
+        raise ValueError(
+            "reasoning.param must be one of: %s" % ", ".join(REASONING_PARAMS))
+
+    options = raw.get("options")
+    if isinstance(options, str):
+        options = [options]
+    if not isinstance(options, list):
+        raise ValueError("reasoning.options must be a non-empty list")
+    values = []
+    for value in options:
+        value = str(value or "").strip()
+        if value and value not in values:
+            values.append(value)
+    if not values:
+        raise ValueError("reasoning.options must be a non-empty list")
+
+    default = str(raw.get("default") or values[0]).strip()
+    if default not in values:
+        raise ValueError("reasoning.default must be one of reasoning.options")
+
+    reasoning = {"param": param, "options": values, "default": default}
+    # A model whose only knob is the effort tier always thinks: the tier
+    # shapes the trace, so the generic thinking toggle must not silence it.
+    # A model exposing the on/off switch instead has no tiers to speak of.
+    thinking_only = raw.get("thinking_only")
+    if thinking_only is None:
+        thinking_only = param == "reasoning_effort"
+    reasoning["thinking_only"] = bool(thinking_only)
+    return reasoning
 
 
 def normalize_entry(raw) -> dict:
@@ -109,6 +166,10 @@ def normalize_entry(raw) -> dict:
     alias = str(raw.get("alias") or "").strip()[:MAX_ALIAS_LENGTH]
     if alias and alias != name:
         entry["alias"] = alias
+
+    reasoning = raw.get("reasoning")
+    if reasoning not in (None, ""):
+        entry["reasoning"] = _normalize_reasoning(reasoning)
     return entry
 
 
@@ -308,9 +369,12 @@ def save_catalog(provider_id, models, hidden=None) -> list:
     entries = [normalize_entry(m) for m in models]
     if not str(provider_id).startswith("custom:"):
         # Aliases are for custom providers only: a built-in vendor's model
-        # names are already readable.
+        # names are already readable. The same holds for the reasoning
+        # declaration — a built-in vendor's protocol is known from the code,
+        # so only a custom gateway needs to state it.
         for entry in entries:
             entry.pop("alias", None)
+            entry.pop("reasoning", None)
     names = [e["name"] for e in entries]
     if len(names) != len(set(names)):
         raise ValueError("duplicate model name in catalog")

@@ -67,6 +67,57 @@ class OpenAICompatibleBot:
         """
         raise NotImplementedError("Subclasses must implement get_api_config()")
     
+    def _custom_reasoning_capability(self, model_name: str) -> dict:
+        """Reasoning capability for this instance's provider/model pair.
+
+        Only custom (OpenAI-compatible) providers declare their protocol in
+        the model catalog; a built-in vendor's protocol is known from the
+        code. Returns {} when the provider/model has no declared control.
+        """
+        bot_type = str(getattr(self, "_bot_type", "") or "")
+        if not bot_type.startswith("custom:"):
+            return {}
+        try:
+            from models.reasoning_capabilities import get_reasoning_capability
+
+            capability = get_reasoning_capability(bot_type, model_name)
+        except Exception:
+            return {}
+        return capability if capability.get("supported") else {}
+
+    def _apply_reasoning(self, request_params: dict, model_name: str, kwargs: dict) -> None:
+        """Send the reasoning parameter the model was declared to accept.
+
+        A custom gateway fronts models from many vendors: one takes
+        ``reasoning_effort`` tiers, another an on/off ``thinking`` switch, a
+        third nothing at all. The catalog states which one applies, and only
+        that parameter is sent — an undeclared parameter is rejected by some
+        vendors, so guessing is worse than staying silent.
+        """
+        capability = self._custom_reasoning_capability(model_name)
+        if not capability:
+            return
+
+        param = capability.get("param") or "reasoning_effort"
+        options = {o.get("value") for o in (capability.get("options") or [])}
+        if param == "thinking":
+            # The model exposes the generic on/off switch instead of tiers.
+            thinking = kwargs.get("thinking")
+            if not isinstance(thinking, dict):
+                return
+            value = str(thinking.get("type") or "")
+            if value not in options:
+                return
+            request_params["thinking"] = thinking
+            return
+
+        effort = kwargs.get("reasoning_effort")
+        if not effort:
+            return
+        if options and effort not in options:
+            return
+        request_params["reasoning_effort"] = effort
+
     def call_with_tools(self, messages, tools=None, stream=False, **kwargs):
         """
         Call OpenAI-compatible API with tool support for agent integration
@@ -168,7 +219,13 @@ class OpenAICompatibleBot:
                 # the Responses API.
                 if is_gpt5_reasoning:
                     request_params["reasoning_effort"] = "none"
-            
+
+            # Reasoning control declared in the model catalog (custom
+            # providers only). Applied after the tools block so it never
+            # overrides the GPT-5 "none" workaround above.
+            if not is_gpt5_reasoning:
+                self._apply_reasoning(request_params, model_name, kwargs)
+
             # Make API call with proper configuration
             api_key = api_config.get('api_key')
             api_base = api_config.get('api_base')
