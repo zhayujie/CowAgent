@@ -6,6 +6,7 @@ import apiClient from '../api/client'
 import { workspaceHrefOf } from '../lib/fileKind'
 import { useWorkspaceStore } from '../store/workspaceStore'
 import { useLightboxStore } from './Lightbox'
+import { handleMermaidClick } from './mermaidView'
 
 /**
  * Markdown renderer aligned 1:1 with the web console (markdown-it + highlight.js
@@ -188,6 +189,38 @@ const defaultFence =
 md.renderer.rules.fence = function (tokens, idx, options, env, self) {
   const token = tokens[idx]
   const info = token.info ? token.info.trim().split(/\s+/)[0] : ''
+  // A ```mermaid fence stays a code block with a Code/Preview switch.
+  // The diagram itself loads only after Preview. Same split as the web
+  // console's fence rule; interaction lives in mermaidView.ts.
+  if (info.toLowerCase() === 'mermaid') {
+    const source = md.utils.escapeHtml(token.content)
+    return (
+      `<div class="mermaid-block" data-mermaid="idle" data-mermaid-mode="code">` +
+      `<div class="code-block-wrapper">` +
+      `<div class="code-block-header">` +
+      `<span class="code-block-lang">mermaid</span>` +
+      `<div class="mermaid-toolbar">` +
+      `<button type="button" class="mermaid-mode-btn active" data-mermaid-view="code">${t('mermaid_code')}</button>` +
+      `<button type="button" class="mermaid-mode-btn" data-mermaid-view="chart">` +
+      `<i class="fas fa-spinner fa-spin mermaid-spinner"></i>${t('mermaid_preview')}` +
+      `</button>` +
+      `<span class="mermaid-chart-tools">` +
+      `<button type="button" class="mermaid-tool-btn" data-mermaid-zoom="in" title="Zoom in">` +
+      `<i class="fas fa-magnifying-glass-plus"></i></button>` +
+      `<button type="button" class="mermaid-tool-btn" data-mermaid-zoom="out" title="Zoom out">` +
+      `<i class="fas fa-magnifying-glass-minus"></i></button>` +
+      `<button type="button" class="mermaid-tool-btn" data-mermaid-zoom="reset" title="Reset zoom">` +
+      `<i class="fas fa-arrows-rotate"></i></button>` +
+      `<button type="button" class="mermaid-tool-btn mermaid-fullscreen-btn" title="Fullscreen">` +
+      `<i class="fas fa-expand"></i></button>` +
+      `</span>` +
+      `</div>` +
+      `<button type="button" class="code-copy-btn" data-code-id="cb-${idx}" aria-label="Copy code">${t('msg_copy')}</button>` +
+      `</div>` +
+      `<pre><code class="hljs language-mermaid">${source}</code></pre>` +
+      `</div></div>`
+    )
+  }
   // Ensure the `hljs` class is present so the GitHub theme background/base
   // color applies (markdown-it only adds language-* by default).
   let rendered = defaultFence(tokens, idx, options, env, self)
@@ -238,6 +271,11 @@ const Markdown: React.FC<MarkdownProps> = ({ content, onInternalLink, imageBaseD
   const handleClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
       const target = e.target as HTMLElement
+
+      if (handleMermaidClick(target)) {
+        e.preventDefault()
+        return
+      }
 
       // Any inline image opens in the lightbox.
       const img = target.closest('img') as HTMLImageElement | null
