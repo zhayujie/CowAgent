@@ -153,6 +153,15 @@ export interface ToolRetrievalMetadata {
   fallback_reason?: string | null
 }
 
+/** Unified diff for one edit or write, rendered as its own block. */
+export interface FileChange {
+  path: string
+  diff: string
+  first_changed_line?: number | null
+  truncated?: boolean
+  message?: string
+}
+
 /** A single ordered step inside an assistant turn (matches backend history). */
 export interface MessageStep {
   type: 'thinking' | 'content' | 'tool' | 'retrieval'
@@ -169,6 +178,8 @@ export interface MessageStep {
   /** The outcome written for a person. Rendered instead of `result`, which is
    * the form the model was handed. */
   display?: string
+  /** edit/write: unified diff, kept off the truncated result string. */
+  file_change?: FileChange
   /** Work done inside this step, for a tool that drives sub agents. */
   substeps?: SubStep[]
   /** Set when the tool was refused by the session's permission mode, so the UI
@@ -446,6 +457,8 @@ export interface StreamEvent {
   result?: string
   /** `tool_end`: the outcome written for a person, when the tool wrote one. */
   display?: string
+  /** `tool_end`: unified diff when the tool was edit or write. */
+  file_change?: FileChange
   execution_time?: number
   has_tool_calls?: boolean
   /** `tool_retrieval`: sanitized MCP retrieval decision metadata. */
