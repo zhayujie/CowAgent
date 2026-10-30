@@ -27,6 +27,7 @@ let currentView = 'chat';
 // with the unsaved-edit guard and the per-view lazy loading.
 function _switchToView(viewId) {
     if (!VIEW_META[viewId]) return;
+    if (viewId !== 'config' && typeof clearEnvEditor === 'function') clearEnvEditor();
     document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
     const target = document.getElementById('view-' + viewId);
     if (target) target.classList.add('active');

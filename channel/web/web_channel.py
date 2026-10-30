@@ -28,6 +28,7 @@ from channel.web.api.chat import (  # noqa: F401
     CancelHandler, MessageHandler, PollHandler, StreamHandler,
 )
 from channel.web.api.config import ConfigHandler, ExternalApiHandler  # noqa: F401
+from channel.web.api.env import EnvVariablesHandler, EnvVariableHandler, EnvSyncHandler  # noqa: F401
 from channel.web.api.files import (  # noqa: F401
     FileRevealHandler, FileServeHandler, PreviewHandler, UploadHandler, UploadsHandler,
     VoiceAsrHandler, VoiceTtsHandler,
@@ -142,6 +143,9 @@ URLS = (
     '/v1/chat/completions', 'OpenAIChatCompletionsHandler',
     '/v1/models', 'OpenAIModelsHandler',
     '/config', 'ConfigHandler',
+    '/api/env', 'EnvVariablesHandler',
+    '/api/env/actions/sync', 'EnvSyncHandler',
+    '/api/env/([^/]+)', 'EnvVariableHandler',
     '/api/external_api', 'ExternalApiHandler',
     '/api/models', 'ModelsHandler',
     '/api/channels', 'ChannelsHandler',
