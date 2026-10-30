@@ -27,9 +27,10 @@ _FIELDS = ("agent_id", "user_id", "session_id", "run_id")
 class RuntimeIdentity:
     """Every field is optional.
 
-    ``agent_id`` is None on single-Agent installs and before routing has run;
-    ``user_id`` stays None until tenancy lands; ``run_id`` is set per task once
-    sub agents exist. Consumers must treat None as "use the default".
+    ``agent_id`` is None on single-Agent installs and before routing has run.
+    ``user_id`` is the chat sender when the channel has one, and stays None
+    when it does not — a session id is not a user. ``run_id`` is set per task
+    once sub agents exist. Consumers must treat None as "use the default".
     """
 
     agent_id: Optional[str] = None
