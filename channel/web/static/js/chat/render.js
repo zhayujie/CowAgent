@@ -152,22 +152,104 @@ function toolDetailBodyHtml(argsStr, labelText, outputHtml) {
         </div>` : ''}`;
 }
 
+// A stored tool result is the JSON the model was handed. edit and write put
+// a unified diff in it; anything else stays plain text.
+function fileChangeFromStored(result) {
+    if (!result || typeof result !== 'string') return null;
+    const text = result.trim();
+    if (!text.startsWith('{')) return null;
+    let payload;
+    try { payload = JSON.parse(text); } catch (_) { return null; }
+    if (!payload || typeof payload.diff !== 'string' || typeof payload.path !== 'string' || !payload.path) return null;
+    if (!/^(---|\+\+\+|@@|\+|-)/m.test(payload.diff)) return null;
+    return {
+        path: payload.path,
+        diff: payload.diff,
+        first_changed_line: typeof payload.first_changed_line === 'number' ? payload.first_changed_line : null,
+        message: typeof payload.message === 'string' ? payload.message : '',
+        truncated: false,
+    };
+}
+
+// Draw one unified diff. The first lines stay visible; the rest sit behind
+// a native disclosure so a long rewrite does not take over the transcript.
+function renderFileDiffHtml(change) {
+    if (!change || typeof change.diff !== 'string' || !change.diff) return '';
+    const rows = [];
+    let oldNo = 0;
+    let newNo = 0;
+    change.diff.split('\n').forEach(line => {
+        if (line.startsWith('@@')) {
+            const match = /@@ -(\d+)(?:,\d*)? \+(\d+)/.exec(line);
+            oldNo = match ? parseInt(match[1], 10) : 0;
+            newNo = match ? parseInt(match[2], 10) : 0;
+            rows.push({ kind: 'hunk', text: line });
+            return;
+        }
+        if (line.startsWith('---') || line.startsWith('+++') || line.startsWith('\\')) {
+            rows.push({ kind: 'meta', text: line });
+            return;
+        }
+        if (line.startsWith('+')) {
+            rows.push({ kind: 'add', text: line.slice(1), no: newNo });
+            newNo += 1;
+            return;
+        }
+        if (line.startsWith('-')) {
+            rows.push({ kind: 'del', text: line.slice(1), no: oldNo });
+            oldNo += 1;
+            return;
+        }
+        const text = line.startsWith(' ') ? line.slice(1) : line;
+        rows.push({ kind: 'ctx', text, no: newNo || oldNo });
+        if (oldNo) oldNo += 1;
+        if (newNo) newNo += 1;
+    });
+    const preview = 40;
+    const htmlFor = list => list.map(row => {
+        const gutter = row.no ? String(row.no) : '';
+        return `<div class="file-diff-line ${row.kind}"><span class="file-diff-gutter">${escapeHtml(gutter)}</span><span class="file-diff-text">${escapeHtml(row.text)}</span></div>`;
+    }).join('');
+    const head = htmlFor(rows.slice(0, preview));
+    const rest = rows.length > preview
+        ? `<details class="file-diff-more"><summary>Show full diff</summary>${htmlFor(rows.slice(preview))}</details>`
+        : '';
+    const note = change.truncated ? '<div class="file-diff-note">Diff truncated</div>' : '';
+    const where = change.first_changed_line ? `${change.path}:${change.first_changed_line}` : change.path;
+    return `<div class="file-diff"><div class="file-diff-path">${escapeHtml(where)}</div>${head}${rest}${note}</div>`;
+}
+
+function toolOutputHtml(step, isErr) {
+    const change = step.file_change || fileChangeFromStored(step.result);
+    const diffHtml = change ? renderFileDiffHtml(change) : '';
+    if (step.display) {
+        return `<div class="tool-display-output has-content">${renderMarkdown(String(step.display))}</div>${diffHtml}`;
+    }
+    const text = change ? (change.message || '') : (step.result ? String(step.result) : '');
+    const pre = text
+        ? `<pre class="tool-detail-content${isErr ? ' tool-error-text' : ''}">${escapeHtml(text)}</pre>`
+        : '';
+    return pre || diffHtml ? `${pre}${diffHtml}` : '';
+}
+
 function renderToolCallsHtml(toolCalls) {
     if (!toolCalls || toolCalls.length === 0) return '';
     return toolCalls.map(tc => {
-        const body = lazyStepBodyAttr(() => toolDetailBodyHtml(
-            formatToolArgs(tc.arguments || {}),
-            'Output',
-            tc.result ? `<pre class="tool-detail-content">${escapeHtml(String(tc.result))}</pre>` : ''
-        ));
+        const change = tc.file_change || fileChangeFromStored(tc.result);
+        const output = toolOutputHtml(tc, false);
+        const label = change && change.path ? `${tc.name || ''}  ${change.path}` : (tc.name || '');
+        const inner = toolDetailBodyHtml(formatToolArgs(tc.arguments || {}), 'Output', output);
+        const detail = change
+            ? `<div class="tool-detail">${inner}</div>`
+            : `<div class="tool-detail" ${lazyStepBodyAttr(() => inner)}></div>`;
         return `
-<div class="agent-step agent-tool-step">
+<div class="agent-step agent-tool-step${change ? ' expanded' : ''}">
     <div class="tool-header" onclick="toggleStepDetail(this)">
         <i class="fas fa-check text-primary-400 flex-shrink-0 tool-icon"></i>
-        <span class="tool-name">${escapeHtml(tc.name || '')}</span>
+        <span class="tool-name">${escapeHtml(label)}</span>
         <i class="fas fa-chevron-right tool-chevron"></i>
     </div>
-    <div class="tool-detail" ${body}></div>
+    ${detail}
 </div>`;
     }).join('');
 }
@@ -312,29 +394,26 @@ function renderStepsHtml(steps, keepContent, carded) {
             const iconClass = isErr
                 ? 'fas fa-times text-red-400 flex-shrink-0 tool-icon'
                 : `fas ${handoff ? 'fa-share' : 'fa-check'} text-primary-400 flex-shrink-0 tool-icon`;
+            const change = handoff ? null : (step.file_change || fileChangeFromStored(step.result));
             const toolLabel = handoff
                 ? t('handoff_to').replace('{name}', handoff.agent_name || handoff.agent_id || '')
-                : (step.name || '');
+                : (change && change.path ? `${step.name || ''}  ${change.path}` : (step.name || ''));
             // Same rule as the live stream: a tool that wrote its outcome for
-            // a person shows that, not the form the model was handed.
-            const body = lazyStepBodyAttr(() => {
-                const outputHtml = step.display
-                    ? `<div class="tool-display-output has-content">${renderMarkdown(String(step.display))}</div>`
-                    : (step.result
-                        ? `<pre class="tool-detail-content${isErr ? ' tool-error-text' : ''}">${escapeHtml(String(step.result))}</pre>`
-                        : '');
-                return toolDetailBodyHtml(
-                    formatToolArgs(step.arguments || {}), isErr ? 'Error' : 'Output', outputHtml
-                );
-            });
+            // a person shows that, not the form the model was handed. A file
+            // diff is filled in now so the open card is not empty.
+            const outputLabel = isErr ? 'Error' : 'Output';
+            const inner = () => toolDetailBodyHtml(formatToolArgs(step.arguments || {}), outputLabel, toolOutputHtml(step, isErr));
+            const detail = change
+                ? `<div class="tool-detail">${inner()}</div>`
+                : `<div class="tool-detail" ${lazyStepBodyAttr(inner)}></div>`;
             html += `
-<div class="agent-step agent-tool-step${isErr ? ' tool-failed' : ''}${handoff ? ' agent-handoff-step' : ''}">
+<div class="agent-step agent-tool-step${isErr ? ' tool-failed' : ''}${handoff ? ' agent-handoff-step' : ''}${change ? ' expanded' : ''}">
     <div class="tool-header" onclick="toggleStepDetail(this)">
         <i class="${iconClass}"></i>
         <span class="tool-name">${escapeHtml(toolLabel)}</span>
         <i class="fas fa-chevron-right tool-chevron"></i>
     </div>
-    <div class="tool-detail" ${body}></div>
+    ${detail}
 </div>`;
             // If this tool sent a file (send/read tool), render the media inline
             // so it persists across page refreshes (SSE-only file events are not stored).
