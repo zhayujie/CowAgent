@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 from croniter import croniter
+from agent.tools.scheduler.integration import effective_task_agent_id
 from agent.tools.scheduler.time_utils import (
     display_local,
     format_scheduled_time,
@@ -334,9 +335,38 @@ class SchedulerTool(BaseTool):
             f"🕐 下次执行: {next_run.astimezone().strftime('%Y-%m-%d %H:%M:%S') if next_run else '未知'}"
         )
     
+    def _caller_agent_id(self) -> str:
+        """The Agent this turn runs as, or "" when it cannot be determined.
+
+        The initializer stamps ``agent_id`` onto the tool config, and a
+        context attached by ``attach_scheduler_to_tool`` carries it too. A
+        bare tool (CLI, unit tests) knows no identity and stays unscoped
+        rather than hiding every task from every caller.
+        """
+        for source in (self.config or {}, self.current_context or {}):
+            agent_id = (source.get("agent_id") or "").strip()
+            if agent_id:
+                return agent_id
+        return ""
+
+    def _owned_task(self, task_id: str):
+        """Fetch a task the calling Agent owns, or the error to report.
+
+        Another Agent's task is indistinguishable from a missing one: the
+        caller learns nothing about a roster it is not part of, and cannot
+        read, disable or delete what it does not own.
+        """
+        task = self.task_store.get_task(task_id)
+        if not task:
+            return None, _SchedulerError(f"错误: 任务 '{task_id}' 不存在")
+        owner = self._caller_agent_id()
+        if owner and effective_task_agent_id(task) != owner:
+            return None, _SchedulerError(f"错误: 任务 '{task_id}' 不存在")
+        return task, None
+
     def _list_tasks(self, **kwargs) -> str:
-        """List all tasks"""
-        tasks = self.task_store.list_tasks()
+        """List the calling Agent's tasks"""
+        tasks = self.task_store.list_tasks(agent_id=self._caller_agent_id() or None)
         
         if not tasks:
             return "📋 暂无定时任务"
@@ -380,11 +410,11 @@ class SchedulerTool(BaseTool):
         task_id = kwargs.get("task_id")
         if not task_id:
             return _SchedulerError("错误: 缺少任务ID (task_id)")
-        
-        task = self.task_store.get_task(task_id)
-        if not task:
-            return _SchedulerError(f"错误: 任务 '{task_id}' 不存在")
-        
+
+        task, error = self._owned_task(task_id)
+        if error:
+            return error
+
         status = "启用" if task.get("enabled", True) else "禁用"
         schedule_desc = self._format_schedule_description(task.get("schedule", {}))
         action = task.get("action", {})
@@ -412,11 +442,11 @@ class SchedulerTool(BaseTool):
         task_id = kwargs.get("task_id")
         if not task_id:
             return _SchedulerError("错误: 缺少任务ID (task_id)")
-        
-        task = self.task_store.get_task(task_id)
-        if not task:
-            return _SchedulerError(f"错误: 任务 '{task_id}' 不存在")
-        
+
+        task, error = self._owned_task(task_id)
+        if error:
+            return error
+
         self.task_store.delete_task(task_id)
         return f"✅ 任务 '{task['name']}' ({task_id}) 已删除"
     
@@ -425,11 +455,11 @@ class SchedulerTool(BaseTool):
         task_id = kwargs.get("task_id")
         if not task_id:
             return _SchedulerError("错误: 缺少任务ID (task_id)")
-        
-        task = self.task_store.get_task(task_id)
-        if not task:
-            return _SchedulerError(f"错误: 任务 '{task_id}' 不存在")
-        
+
+        task, error = self._owned_task(task_id)
+        if error:
+            return error
+
         self.task_store.enable_task(task_id, True)
         return f"✅ 任务 '{task['name']}' ({task_id}) 已启用"
     
@@ -438,11 +468,11 @@ class SchedulerTool(BaseTool):
         task_id = kwargs.get("task_id")
         if not task_id:
             return _SchedulerError("错误: 缺少任务ID (task_id)")
-        
-        task = self.task_store.get_task(task_id)
-        if not task:
-            return _SchedulerError(f"错误: 任务 '{task_id}' 不存在")
-        
+
+        task, error = self._owned_task(task_id)
+        if error:
+            return error
+
         self.task_store.enable_task(task_id, False)
         return f"✅ 任务 '{task['name']}' ({task_id}) 已禁用"
     
