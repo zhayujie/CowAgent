@@ -483,14 +483,6 @@ class FeiShuChanel(ChatChannel):
         def start_client_with_retry():
             """Run ws client in this thread with its own event loop to avoid conflicts."""
             import asyncio
-            import ssl as ssl_module
-            original_create_default_context = ssl_module.create_default_context
-
-            def create_unverified_context(*args, **kwargs):
-                context = original_create_default_context(*args, **kwargs)
-                context.check_hostname = False
-                context.verify_mode = ssl.CERT_NONE
-                return context
 
             # lark_oapi.ws.client keeps its event loop in a module-level global,
             # and Client.start() / _select() / _ping_loop() all reference it. A
@@ -510,11 +502,6 @@ class FeiShuChanel(ChatChannel):
             startup_error = None
             for attempt in range(2):
                 try:
-                    if attempt == 1:
-                        logger.warning("[FeiShu] Retrying with SSL verification disabled...")
-                        ssl_module.create_default_context = create_unverified_context
-                        ssl_module._create_unverified_context = create_unverified_context
-
                     ws_client = ws_client_mod.Client(
                         self.feishu_app_id,
                         self.feishu_app_secret,
@@ -534,11 +521,21 @@ class FeiShuChanel(ChatChannel):
                     is_ssl_error = ("CERTIFICATE_VERIFY_FAILED" in error_msg
                                     or "certificate verify failed" in error_msg.lower())
                     if is_ssl_error and attempt == 0:
-                        logger.warning(f"[FeiShu] SSL error: {error_msg}, retrying...")
-                        continue
+                        logger.warning(f"[FeiShu] SSL error: {error_msg}, attempting to fix CA bundle...")
+                        try:
+                            from common.ssl_certs import ensure_ca_bundle
+                            ca_bundle = ensure_ca_bundle()
+                            if ca_bundle:
+                                logger.info(f"[FeiShu] CA bundle set via SSL_CERT_FILE={ca_bundle}, retrying...")
+                                continue
+                            else:
+                                logger.error("[FeiShu] No CA bundle available, cannot proceed securely")
+                        except Exception as fix_err:
+                            logger.error(f"[FeiShu] Failed to fix CA bundle: {fix_err}")
+                        startup_error = error_msg
+                        break
                     logger.error(f"[FeiShu] Websocket client error: {e}", exc_info=True)
                     startup_error = error_msg
-                    ssl_module.create_default_context = original_create_default_context
                     break
             if startup_error:
                 self.report_startup_error(startup_error)
