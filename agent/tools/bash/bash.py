@@ -185,6 +185,7 @@ SAFETY:
                 _cow_utils.apply_client_source(_attr)
                 _header_to_env = {
                     "X-Agent-Run-Id": "COW_AGENT_RUN_ID",
+                    "X-Agent-User-Id": "COW_AGENT_USER_ID",
                     "X-Client-Source": "COW_CLIENT_SOURCE",
                     "X-Client-OS": "COW_CLIENT_OS",
                     "X-Client-Version": "COW_CLIENT_VERSION",
@@ -195,6 +196,16 @@ SAFETY:
                         env[_e] = _attr[_h]
             except Exception:
                 pass
+            # Header propagation can fail while the identity is still set.
+            # The child still needs the sender, and must not invent one.
+            if not env.get("COW_AGENT_USER_ID"):
+                try:
+                    from common.runtime_identity import current_identity
+                    _user_id = current_identity().user_id
+                    if _user_id:
+                        env["COW_AGENT_USER_ID"] = _user_id
+                except Exception:
+                    pass
 
             # Load environment variables from ~/.cow/.env if it exists
             env_file = expand_path("~/.cow/.env")
