@@ -79,6 +79,51 @@ Fully compatible with the MCP community standard, identical to Claude Desktop / 
 - **fetch**: Generic web page fetcher that returns page text content. No API key required.
 - **github**: Access GitHub repos, issues, PRs, etc. Requires a Personal Access Token.
 
+### Optional local code lookup with Sem
+
+[Sem](https://github.com/Ataraxy-Labs/sem) provides function/entity lookup,
+source context, and statically discovered call relationships for a local
+Git checkout. Install [Sem](https://github.com/Ataraxy-Labs/sem#installation)
+(tested with 0.28.3), then merge this entry into your existing
+`mcpServers` object, replacing both absolute paths:
+
+```json
+{
+  "mcpServers": {
+    "sem": {
+      "command": "/absolute/path/to/sem",
+      "args": ["mcp"],
+      "env": {
+        "SEM_REPO": "/absolute/path/to/checkout",
+        "SEM_NO_NETWORK": "1",
+        "SEM_NO_TELEMETRY": "1"
+      },
+      "tool_name_prefix": "code_"
+    }
+  }
+}
+```
+
+In the console, test the connection and confirm `code_sem_find` is listed.
+On the next message, try: “Use code_sem_find to locate parse_config and inspect
+its callers. Explain the code; do not edit files or execute the project.”
+Replace the function name with one in your checkout. `code_` is a local alias;
+CowAgent still calls the server's original `sem_find` tool.
+
+- Paths refer to the machine/container running CowAgent, not your browser. For
+  Docker, install the executable and mount the checkout inside that container.
+- If `mcp_stdio_command_allowlist` is configured, have the administrator review
+  and allow `sem`; do not disable the allowlist to make the example work.
+- The server exposes tools beyond lookup. A name prefix does not restrict them.
+  Review permissions before enabling it; `SEM_REPO` is not a sandbox boundary.
+- Lookup can write local indexes. The flags disable Sem networking/telemetry,
+  but results can still reach CowAgent's configured model provider.
+- Static relationships may be incomplete; absence of callers is not proof
+  that a function is unused. Verify important claims against source and tests.
+
+Disable the server in the console (or set `"disabled": true` on this entry)
+to stop loading its tools; remove only the `sem` entry to uninstall the connection.
+
 ### Streamable HTTP with a Bearer Key
 
 For a remote server that authenticates with a static API key, set `type` explicitly — a remote URL without it falls back to `sse` — and pass the key in `headers`:
