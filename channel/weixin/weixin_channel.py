@@ -33,6 +33,12 @@ from common.singleton import singleton
 from common.utils import is_cloud_deployment
 from config import conf, get_weixin_credentials_path
 
+# A reply's media URL comes from the model, and the download runs on the thread
+# that is sending that reply. A socket timeout alone never fires on a server
+# that keeps trickling bytes, so cap the whole transfer too - the same rule the
+# other channels apply to remote replies.
+_MAX_REMOTE_MEDIA_SECONDS = 300
+
 MAX_CONSECUTIVE_FAILURES = 3
 BACKOFF_DELAY = 30
 RETRY_DELAY = 2
@@ -122,6 +128,37 @@ def _guess_download_ext(url: str, headers) -> str:
     ct = headers.get("Content-Type", "").split(";")[0].strip().lower()
     ext = _CONTENT_TYPE_EXTS.get(ct) or _valid_ext(mimetypes.guess_extension(ct) or "")
     return ext or ".bin"
+
+
+def _open_media_response(url: str, timeout: float = 60):
+    """Open a reply's media URL, guarding it like the other channels do.
+
+    The URL came from the model, not from the user, so when the SSRF guard is
+    on the target - and every redirect hop - must resolve to a public address.
+    The response is left open for the caller to stream into a file.
+    """
+    from agent.tools.utils.url_safety import (
+        _ssrf_protection_enabled, safe_get, validate_url_safe,
+    )
+
+    if _ssrf_protection_enabled():
+        # safe_get only re-checks the hops it follows, so the first one is
+        # validated here (same order as common.media_download._open).
+        validate_url_safe(url)
+        response = safe_get(url, timeout=timeout, stream=True)
+    else:
+        response = requests.get(url, timeout=timeout, stream=True)
+    try:
+        response.raise_for_status()
+    except BaseException:
+        # Only a body that opened successfully is handed to save_response,
+        # so a rejected status must release its stream here.
+        try:
+            response.close()
+        except Exception:
+            pass
+        raise
+    return response
 
 
 def _console_print(*args, **kwargs):
@@ -1132,11 +1169,11 @@ class WeixinChannel(ChatChannel):
 
         if local_path.startswith(("http://", "https://")):
             try:
-                resp = requests.get(local_path, timeout=60, stream=True)
-                resp.raise_for_status()
+                resp = _open_media_response(local_path)
                 ext = _guess_download_ext(local_path, resp.headers)
                 tmp_path = state_dir.tmp_file("wx_media", ext)
-                save_response(resp, tmp_path, MAX_FILE_BYTES)
+                save_response(resp, tmp_path, MAX_FILE_BYTES,
+                              max_seconds=_MAX_REMOTE_MEDIA_SECONDS)
                 return tmp_path
             except Exception as e:
                 logger.error(f"[Weixin] Failed to download media: {e}")
