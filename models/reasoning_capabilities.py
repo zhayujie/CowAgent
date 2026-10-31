@@ -96,10 +96,58 @@ def _base_provider_id(provider_id: str) -> str:
     return pid
 
 
+def _custom_capability(provider_id: str, model_name: str) -> dict:
+    """Capability declared in the model catalog for a custom provider.
+
+    The catalog entry may carry a ``reasoning`` block; without one the model
+    gets no reasoning control, exactly like before this feature.
+    """
+    try:
+        from models.model_catalog import resolve_model_meta
+
+        meta = resolve_model_meta(provider_id, model_name)
+        if not meta:
+            # Gateway model ids are usually lower-case, but the catalog stores
+            # the name as the user typed it — match case-insensitively too.
+            meta = resolve_model_meta(provider_id, (model_name or "").strip().lower())
+    except Exception:
+        meta = {}
+
+    declaration = meta.get("reasoning") if isinstance(meta, dict) else None
+    if not isinstance(declaration, dict):
+        return {"supported": False, "options": []}
+
+    values = [str(v) for v in (declaration.get("options") or []) if str(v).strip()]
+    if not values:
+        return {"supported": False, "options": []}
+
+    param = str(declaration.get("param") or "reasoning_effort")
+    default = str(declaration.get("default") or values[0])
+    if default not in values:
+        default = values[0]
+
+    capability = {
+        "supported": True,
+        "param": param,
+        "default": default,
+        "options": [_option(value) for value in values],
+    }
+    if declaration.get("thinking_only"):
+        capability["thinking_only"] = True
+    return capability
+
+
 def get_reasoning_capability(provider_id: str, model_name: str = "") -> dict:
     """Return provider-native reasoning metadata for a provider/model pair."""
     base_pid = _base_provider_id(provider_id)
     model = (model_name or "").strip().lower()
+
+    if base_pid == "custom":
+        # A custom gateway fronts models from many vendors, so its protocol
+        # is declared per model in the model catalog. The user states which
+        # parameter the model takes and with which values; CowAgent then
+        # sends exactly that.
+        return _custom_capability(provider_id, model_name)
 
     if base_pid == "deepseek" and model.startswith(DEEPSEEK_THINKING_MODELS):
         return _capability(DEEPSEEK_VALUES, default="high")
