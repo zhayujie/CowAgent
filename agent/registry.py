@@ -13,6 +13,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 
+from common.cow_paths import default_workspace
 from common.utils import expand_path
 
 
@@ -192,7 +193,7 @@ class AgentRegistry:
 
     @classmethod
     def from_config(cls, settings: Mapping[str, Any]) -> "AgentRegistry":
-        instance_root = _normalise_workspace(settings.get("agent_workspace") or "~/cow")
+        instance_root = _normalise_workspace(settings.get("agent_workspace") or default_workspace())
 
         raw_agents = settings.get("agents")
         if raw_agents is None or raw_agents == []:

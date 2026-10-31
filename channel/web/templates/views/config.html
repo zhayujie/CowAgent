@@ -327,6 +327,40 @@
                                     </div>
                                 </div>
 
+                                <!-- Workspace Location Card (hidden in the desktop client, which has its own) -->
+                                <div id="config-workspace-card" class="hidden bg-panel rounded-xl border border-slate-200 dark:border-white/10 p-6">
+                                    <div class="flex items-center gap-3 mb-5">
+                                        <div class="w-9 h-9 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 flex items-center justify-center">
+                                            <i class="fas fa-hard-drive text-emerald-500 text-sm"></i>
+                                        </div>
+                                        <h3 class="font-semibold text-slate-800 dark:text-slate-100" data-i18n="ws_loc_title">工作空间位置</h3>
+                                    </div>
+                                    <div class="space-y-4">
+                                        <div>
+                                            <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5" data-i18n="ws_loc_current">当前位置</label>
+                                            <div class="flex items-center gap-3 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-white/5">
+                                                <span id="ws-loc-path" class="flex-1 min-w-0 font-mono text-xs text-slate-700 dark:text-slate-200 truncate"></span>
+                                                <span id="ws-loc-size" class="flex-shrink-0 text-xs text-slate-400 dark:text-slate-500 tabular-nums"></span>
+                                                <button id="ws-loc-change" onclick="wsLocChoose()"
+                                                        class="flex-shrink-0 text-xs font-medium text-primary-500 hover:text-primary-600
+                                                               cursor-pointer transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                        data-i18n="ws_loc_change">更改</button>
+                                            </div>
+                                            <p class="text-xs text-slate-400 dark:text-slate-500 mt-1.5" data-i18n="ws_loc_hint">对话记录、记忆、知识库和技能保存在这里</p>
+                                        </div>
+                                        <div id="ws-loc-notice" class="hidden flex items-start gap-2 text-xs rounded-lg px-3 py-2">
+                                            <i id="ws-loc-notice-icon" class="fas mt-0.5"></i>
+                                            <span id="ws-loc-notice-text" class="break-all whitespace-pre-line"></span>
+                                        </div>
+                                        <div id="ws-loc-actions" class="hidden flex items-center justify-end gap-3 pt-1">
+                                            <button id="ws-loc-restart" onclick="wsLocRestart()"
+                                                    class="hidden px-4 py-2 rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-sm font-medium
+                                                           cursor-pointer transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                    data-i18n="ws_loc_restart">立即重启</button>
+                                        </div>
+                                    </div>
+                                </div>
+
                             </div>
 
                             <!-- Panel: 模型配置 (advanced vendor / capability management) -->

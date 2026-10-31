@@ -669,6 +669,34 @@ def _migrate_conversations():
         logger.warning(f"[App] Conversation global migration skipped: {e}")
 
 
+def _apply_pending_workspace_migration():
+    """Move the workspace if the web console scheduled it, before anything has
+    opened it. The desktop client moves its workspace from its own shell."""
+    if DESKTOP_MODE:
+        return
+    try:
+        from common import workspace_migration as wm
+
+        if not wm.read_pending():
+            return
+        stop = None
+        try:
+            from channel.web.core._common import _is_password_enabled
+
+            host = conf().get("web_host", "") or ("0.0.0.0" if _is_password_enabled() else "127.0.0.1")
+            port = int(os.environ.get("COW_WEB_PORT") or conf().get("web_port", 9899))
+            stop = wm.serve_progress(host, port)
+        except Exception as e:
+            logger.warning(f"[App] Workspace migration progress page unavailable: {e}")
+        try:
+            wm.apply_pending()
+        finally:
+            if stop:
+                stop()
+    except Exception as e:
+        logger.error(f"[App] Workspace migration skipped: {e}")
+
+
 def _warn_if_legacy_workspace_data_exists():
     """
     Warn if the hardcoded ~/cow default holds data that agent_workspace
@@ -799,6 +827,7 @@ def run():
             logger.debug(f"[App] using certifi CA bundle: {bundle}")
         # load config
         load_config()
+        _apply_pending_workspace_migration()
         _register_pid_file()
         _migrate_team_roster()
         _migrate_conversations()
