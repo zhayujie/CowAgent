@@ -496,6 +496,16 @@
     cursor: pointer;
 }
 .user-msg-image:hover { opacity: 0.9; }
+.user-msg-video {
+    max-width: 280px;
+    max-height: 200px;
+    border-radius: 8px;
+}
+.user-msg-audio {
+    width: 280px;
+    max-width: 100%;
+    height: 34px;
+}
 .user-msg-file {
     display: flex;
     align-items: center;

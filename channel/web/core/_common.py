@@ -40,6 +40,23 @@ from config import conf, get_data_root, read_config_template
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg"}
 VIDEO_EXTENSIONS = {".mp4", ".webm", ".avi", ".mov", ".mkv"}
+AUDIO_EXTENSIONS = {
+    ".mp3", ".wav", ".m4a", ".aac", ".ogg", ".opus",
+    ".flac", ".wma", ".amr", ".aiff", ".aif",
+}
+
+
+def classify_attachment_type(ext: str) -> str:
+    """Map a file extension to the attachment kind shown by the console."""
+    ext = (ext or "").lower()
+    if ext in IMAGE_EXTENSIONS:
+        return "image"
+    if ext in VIDEO_EXTENSIONS:
+        return "video"
+    if ext in AUDIO_EXTENSIONS:
+        return "audio"
+    return "file"
+
 
 # Cap for a file the desktop client asks us to import by path. Matches the
 # multipart body cap on the HTTP server so both upload routes agree.

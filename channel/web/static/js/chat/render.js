@@ -10,6 +10,7 @@ const ATTACHMENT_MARKER_TYPES = {
     '工作空间目录': 'workspace_dir', '工作空间目錄': 'workspace_dir', 'Workspace directory': 'workspace_dir',
     '图片': 'image', '圖片': 'image', 'Image': 'image',
     '视频': 'video', '影片': 'video', 'Video': 'video',
+    '音频': 'audio', '音訊': 'audio', '音頻': 'audio', 'Audio': 'audio',
     '目录': 'directory', '目錄': 'directory', 'Directory': 'directory',
     '文件': 'file', '檔案': 'file', 'File': 'file',
 };
@@ -64,10 +65,20 @@ function createUserMessageEl(content, timestamp, attachments) {
                 const src = (a.preview_url || _toWebUrl(a.file_path || '')).replace(/"/g, '&quot;');
                 return `<img src="${src}" alt="${escapeHtml(a.file_name)}" class="user-msg-image" onclick="_openImageLightbox(this.src)">`;
             }
+            if (a.file_type === 'video' || a.file_type === 'audio') {
+                // Play them inline: an uploaded clip or recording is only useful
+                // if it can be played back without opening the file panel.
+                const src = (a.preview_url || _toWebUrl(a.file_path || '')).replace(/"/g, '&quot;');
+                const isVideo = a.file_type === 'video';
+                const tag = isVideo ? 'video' : 'audio';
+                return `<${tag} controls preload="metadata" class="${isVideo ? 'user-msg-video' : 'user-msg-audio'}" src="${src}"></${tag}>` +
+                    `<div class="user-msg-file"><i class="fas ${isVideo ? 'fa-film' : 'fa-music'}"></i> ${escapeHtml(a.file_name)}</div>`;
+            }
             const icon = a.file_type === 'video'
                 ? 'fa-film'
+                : (a.file_type === 'audio' ? 'fa-music'
                 : (a.file_type === 'directory' ? 'fa-folder-tree'
-                : (a.is_dir ? 'fa-folder' : 'fa-file-alt'));
+                : (a.is_dir ? 'fa-folder' : 'fa-file-alt')));
             const suffix = a.file_type === 'directory' && a.file_count
                 ? ` (${a.file_count})`
                 : '';
@@ -363,6 +374,9 @@ function _renderSentFileFromToolResult(step, carded) {
     }
     if (fileType === 'video') {
         return `<div class="agent-step">${_buildVideoHtml(webUrl)}</div>`;
+    }
+    if (fileType === 'audio') {
+        return `<div class="agent-step">${_buildAudioHtml(webUrl)}</div>`;
     }
     // Without a card (file gone, hidden, or not indexed) the link stays the
     // only trace of the delivery.
