@@ -518,6 +518,76 @@ body * {
   padding: 0;
 }
 
+/* Mermaid: a code block plus a Code/Preview switch. The diagram, zoom and
+   fullscreen only appear once a preview has rendered (data-mermaid="done"). */
+.msg-content .mermaid-block .mermaid-figure {
+  display: flex;
+  justify-content: center;
+  padding: 0.75em 1em;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.msg-content .mermaid-block .mermaid-figure svg {
+  max-width: 100%;
+  height: auto;
+}
+.msg-content .mermaid-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  margin-right: 4px;
+}
+.msg-content .mermaid-mode-btn,
+.msg-content .mermaid-tool-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 5px;
+  font-size: 11px;
+}
+.msg-content .mermaid-mode-btn:hover,
+.msg-content .mermaid-tool-btn:hover {
+  color: var(--text-secondary);
+  background: var(--bg-inset-2);
+}
+.msg-content .mermaid-mode-btn.active {
+  color: var(--text);
+  background: var(--bg-inset);
+}
+.msg-content .mermaid-mode-btn.failed { color: #dc2626; }
+.dark .msg-content .mermaid-mode-btn.failed { color: #f87171; }
+.msg-content .mermaid-spinner { display: none; margin-right: 0.35em; }
+.msg-content .mermaid-mode-btn.loading .mermaid-spinner { display: inline-block; }
+.msg-content .mermaid-chart-tools,
+.msg-content .mermaid-block[data-mermaid-mode="code"] .mermaid-figure { display: none; }
+.msg-content .mermaid-block[data-mermaid-mode="chart"][data-mermaid="done"] .mermaid-chart-tools {
+  display: inline-flex;
+  align-items: center;
+}
+.msg-content .mermaid-block[data-mermaid-mode="chart"][data-mermaid="done"] .code-block-wrapper pre,
+.msg-content .mermaid-block[data-mermaid-mode="chart"][data-mermaid="done"] .code-copy-btn {
+  display: none;
+}
+.msg-content .mermaid-block .code-block-wrapper:fullscreen,
+.msg-content .mermaid-block.mermaid-fullscreen .code-block-wrapper {
+  width: 100%;
+  height: 100%;
+  padding: 1.5em;
+  overflow: auto;
+  background: var(--bg-surface);
+  border-radius: 0;
+}
+.msg-content .mermaid-block.mermaid-fullscreen .code-block-wrapper {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  margin: 0;
+  border: none;
+}
+
 /* Message list only. It follows the chat pane (a small side gutter,
    not a locked 48rem / 768px strip) so a large window uses the width,
    capped at 64rem so ultra-wide screens keep readable line lengths.

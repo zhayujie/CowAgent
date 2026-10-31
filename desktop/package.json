@@ -25,6 +25,7 @@
     "highlight.js": "^11.11.1",
     "lucide-react": "^1.21.0",
     "markdown-it": "^14.2.0",
+    "mermaid": "11.17.2",
     "png-to-ico": "^3.0.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
