@@ -89,7 +89,8 @@ class TestProviderOrder(unittest.TestCase):
     def test_provider_order(self):
         self.assertEqual(
             web_search_module.PROVIDER_ORDER,
-            ("deepseek", "bocha", "qianfan", "zhipu", "linkai", "anysearch", "serply", "tavily", "searxng", "keenable"),
+            ("deepseek", "bocha", "qianfan", "zhipu", "linkai", "anysearch", "serply", "tavily", "outcrawl", "searxng",
+             "keenable"),
         )
 
     def test_web_console_provider_list_stays_in_sync(self):
@@ -114,6 +115,11 @@ class TestProviderOrder(unittest.TestCase):
         self.assertEqual(ModelsHandler._search_provider_key("keenable", cfg), "console-key")
         with patch.dict(os.environ, {"KEENABLE_API_KEY": "env-key"}):
             self.assertEqual(ModelsHandler._search_provider_key("keenable", {}), "env-key")
+
+        cfg = {"tools": {"web_search": {"outcrawl_api_key": "console-key"}}}
+        self.assertEqual(ModelsHandler._search_provider_key("outcrawl", cfg), "console-key")
+        with patch.dict(os.environ, {"OUTCRAWL_API_KEY": "env-key"}):
+            self.assertEqual(ModelsHandler._search_provider_key("outcrawl", {}), "env-key")
 
     def test_web_console_mirrors_keenable_opt_in(self):
         """The Search panel agrees with the tool: keenable is not configured
@@ -814,6 +820,35 @@ class TestTavilyKeyResolution(unittest.TestCase):
             self.assertEqual(web_search_module._get_api_key("tavily"), "")
 
 
+class TestOutcrawlKeyResolution(unittest.TestCase):
+    """The outcrawl key lives under tools.web_search, falling back to env."""
+
+    def setUp(self):
+        self._prev_env = os.environ.get("OUTCRAWL_API_KEY")
+        os.environ.pop("OUTCRAWL_API_KEY", None)
+
+    def tearDown(self):
+        if self._prev_env is None:
+            os.environ.pop("OUTCRAWL_API_KEY", None)
+        else:
+            os.environ["OUTCRAWL_API_KEY"] = self._prev_env
+
+    def test_outcrawl_key_from_tools_config(self):
+        """tools.web_search.outcrawl_api_key is resolved, and wins over env."""
+        cfg = {"tools": {"web_search": {"outcrawl_api_key": "test-key-123"}}}
+        with patch.object(web_search_module, "conf", lambda: cfg):
+            self.assertEqual(web_search_module._get_api_key("outcrawl"), "test-key-123")
+            with patch.dict(os.environ, {"OUTCRAWL_API_KEY": "env-key-456"}):
+                self.assertEqual(web_search_module._get_api_key("outcrawl"), "test-key-123")
+
+    def test_outcrawl_key_env_fallback(self):
+        """Without a config value, OUTCRAWL_API_KEY is used; both empty -> ''."""
+        with patch.object(web_search_module, "conf", lambda: {}):
+            with patch.dict(os.environ, {"OUTCRAWL_API_KEY": "env-key-456"}):
+                self.assertEqual(web_search_module._get_api_key("outcrawl"), "env-key-456")
+            self.assertEqual(web_search_module._get_api_key("outcrawl"), "")
+
+
 class TestKeenableBackend(unittest.TestCase):
     """Behaviour of WebSearch._search_keenable with a stubbed HTTP layer."""
 
@@ -980,6 +1015,68 @@ class TestTavilyBackend(unittest.TestCase):
                         patch.object(web_search_module.requests, "post",
                                      return_value=_fake_response(status_code)):
                     result = self.tool._search_tavily("q", 10)
+                self.assertEqual(result.status, "error")
+                self.assertIn(fragment, result.result)
+
+
+class TestOutcrawlBackend(unittest.TestCase):
+    """Behaviour of WebSearch._search_outcrawl with a stubbed HTTP layer."""
+
+    def setUp(self):
+        self.tool = web_search_module.WebSearch()
+
+    def test_search_outcrawl_maps_results(self):
+        """Outcrawl's hits map to the unified output shape, the key travels as
+        a Bearer token and the query in the POST json body."""
+        payload = {
+            "hits": [
+                {"url": "https://a.example/1", "title": "T1", "snippet": "s1", "rank": 1},
+                {"url": "https://a.example/2", "title": "T2", "rank": 2},
+            ],
+            "usage": {"credits": "1"},
+        }
+        with patch.object(web_search_module, "_get_api_key", return_value="test-key-123"), \
+                patch.object(web_search_module.requests, "post",
+                             return_value=_fake_response(200, payload)) as mock_post:
+            result = self.tool._search_outcrawl("cowagent", 10)
+
+        self.assertEqual(result.status, "success")
+        self.assertEqual(result.result["backend"], "outcrawl")
+        self.assertEqual(result.result["total"], 2)
+        first, second = result.result["results"]
+        self.assertEqual(first["title"], "T1")
+        self.assertEqual(first["url"], "https://a.example/1")
+        self.assertEqual(first["snippet"], "s1")
+        self.assertEqual(second["snippet"], "")
+        self.assertEqual(mock_post.call_args[0][0], "https://api.outcrawl.ai/v1/search")
+        self.assertEqual(mock_post.call_args[1]["headers"]["Authorization"], "Bearer test-key-123")
+        body = mock_post.call_args[1]["json"]
+        self.assertEqual(body, {"query": "cowagent", "limit": 10})
+
+    def test_search_outcrawl_clamps_count(self):
+        """count is clamped into 1-20 and sent as limit; falsy -> 10."""
+        with patch.object(web_search_module, "_get_api_key", return_value="k"), \
+                patch.object(web_search_module.requests, "post",
+                             return_value=_fake_response(200, {"hits": []})) as mock_post:
+            for count, expected in ((20, 20), (99, 20), (0, 10), (None, 10), (5, 5)):
+                with self.subTest(count=count):
+                    self.tool._search_outcrawl("q", count)
+                    self.assertEqual(mock_post.call_args[1]["json"]["limit"], expected)
+
+    def test_search_outcrawl_error_status_mapping(self):
+        """401/429 map to specific messages; other statuses are generic."""
+        cases = {
+            401: "Invalid Outcrawl API key",
+            429: "rate limit reached",
+            402: "HTTP 402",
+            500: "HTTP 500",
+        }
+        for status_code, fragment in cases.items():
+            with self.subTest(status_code=status_code):
+                with patch.object(web_search_module, "_get_api_key", return_value="k"), \
+                        patch.object(web_search_module.requests, "post",
+                                     return_value=_fake_response(status_code)):
+                    result = self.tool._search_outcrawl("q", 10)
                 self.assertEqual(result.status, "error")
                 self.assertIn(fragment, result.result)
 

@@ -1,4 +1,4 @@
-"""Web Search tool. Supports ten backends with a unified response format:
+"""Web Search tool. Supports eleven backends with a unified response format:
   - deepseek (https://api-docs.deepseek.com/guides/search, official Search API)
   - bocha   (https://open.bochaai.com)
   - zhipu   (https://docs.bigmodel.cn/cn/guide/tools/web-search)
@@ -7,13 +7,14 @@
   - anysearch (https://anysearch.com)
   - serply  (https://serply.io, Google/Bing SERP API)
   - tavily  (https://tavily.com, AI-optimized search API)
+  - outcrawl (https://outcrawl.ai, scrape and search API for AI agents)
   - searxng (https://docs.searxng.org, self-hosted meta search engine)
   - keenable (https://keenable.ai, keyless tier behind an explicit opt-in)
 
 Provider selection
   - strategy 'auto' (default): pick the first configured provider in the
     canonical order [deepseek, bocha, qianfan, zhipu, linkai, anysearch,
-    serply, tavily, searxng, keenable]. Keenable counts as configured with a
+    serply, tavily, outcrawl, searxng, keenable]. Keenable counts as configured with a
     key or with the explicit `keenable_anonymous` opt-in (same contract as
     `anysearch_anonymous`). When the caller passes an explicit `provider`
     it overrides the pick; an invalid/unconfigured one silently falls back
@@ -33,6 +34,7 @@ Credentials
   - anysearch : tools.web_search.anysearch_api_key  -> env ANYSEARCH_API_KEY
   - serply  : tools.web_search.serply_api_key  ->  env SERPLY_API_KEY
   - tavily  : tools.web_search.tavily_api_key  ->  env TAVILY_API_KEY
+  - outcrawl: tools.web_search.outcrawl_api_key  ->  env OUTCRAWL_API_KEY
   - searxng : tools.web_search.searxng_url     ->  env SEARXNG_URL
   - keenable: tools.web_search.keenable_api_key -> env KEENABLE_API_KEY (optional,
               only lifts the rate limits of the keyless public endpoint);
@@ -59,10 +61,10 @@ DEFAULT_TIMEOUT = 30
 # quality + relevance: bocha (best overall), qianfan (best for hot news),
 # zhipu (strong on long-form articles), linkai (cloud aggregator),
 # anysearch, serply (global Google/Bing SERP, last since it isn't
-# benchmarked against the Chinese-market providers above), tavily, searxng,
-# keenable (global index, keyless tier behind an explicit opt-in; placed last
-# so any provider the user paid for wins).
-PROVIDER_ORDER = ("deepseek", "bocha", "qianfan", "zhipu", "linkai", "anysearch", "serply", "tavily", "searxng", "keenable")
+# benchmarked against the Chinese-market providers above), tavily, outcrawl,
+# searxng, keenable (global index, keyless tier behind an explicit opt-in;
+# placed last so any provider the user paid for wins).
+PROVIDER_ORDER = ("deepseek", "bocha", "qianfan", "zhipu", "linkai", "anysearch", "serply", "tavily", "outcrawl", "searxng", "keenable")
 
 PROVIDER_LABELS = {
     "bocha":   "Bocha",
@@ -73,6 +75,7 @@ PROVIDER_LABELS = {
     "anysearch": "AnySearch",
     "serply":  "Serply",
     "tavily":  "Tavily",
+    "outcrawl": "Outcrawl",
     "searxng": "SearXNG",
     "keenable": "Keenable",
 }
@@ -127,6 +130,9 @@ def _get_api_key(provider: str) -> str:
     if provider == "tavily":
         key = _conf_str(_tools_web_search_conf().get("tavily_api_key"), "")
         return key or os.environ.get("TAVILY_API_KEY", "").strip()
+    if provider == "outcrawl":
+        key = _conf_str(_tools_web_search_conf().get("outcrawl_api_key"), "")
+        return key or os.environ.get("OUTCRAWL_API_KEY", "").strip()
     if provider == "keenable":
         key = _conf_str(_tools_web_search_conf().get("keenable_api_key"), "")
         return key or os.environ.get("KEENABLE_API_KEY", "").strip()
@@ -342,7 +348,7 @@ class WebSearch(BaseTool):
             return ToolResult.fail(
                 "Error: No search provider configured. "
                 "Configure one of BOCHA_API_KEY / zhipu_ai_api_key / qianfan_api_key / linkai_api_key / "
-                "deepseek_api_key / anysearch_api_key / SERPLY_API_KEY / TAVILY_API_KEY / SEARXNG_URL."
+                "deepseek_api_key / anysearch_api_key / SERPLY_API_KEY / TAVILY_API_KEY / OUTCRAWL_API_KEY / SEARXNG_URL."
             )
 
         # Always log the routing decision so multi-provider deployments can
@@ -372,6 +378,8 @@ class WebSearch(BaseTool):
                 return self._search_serply(query, count)
             if provider == "tavily":
                 return self._search_tavily(query, count)
+            if provider == "outcrawl":
+                return self._search_outcrawl(query, count)
             if provider == "searxng":
                 return self._search_searxng(query, count)
             if provider == "keenable":
@@ -1043,6 +1051,44 @@ class WebSearch(BaseTool):
             })
         return ToolResult.success({
             "query": query, "backend": "tavily",
+            "total": len(results), "count": len(results), "results": results,
+        })
+
+    # ------------------------------------------------------------------
+    # Outcrawl
+    # ------------------------------------------------------------------
+
+    def _search_outcrawl(self, query: str, count: int) -> ToolResult:
+        api_key = _get_api_key("outcrawl")
+        url = "https://api.outcrawl.ai/v1/search"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        }
+        limit = max(1, min(int(count or 10), 20))
+        payload: Dict[str, Any] = {"query": query, "limit": limit}
+
+        logger.debug(f"[WebSearch] outcrawl: query='{query}', limit={limit}")
+        resp = requests.post(url, headers=headers, json=payload, timeout=DEFAULT_TIMEOUT)
+
+        if resp.status_code == 401:
+            return ToolResult.fail("Error: Invalid Outcrawl API key.")
+        if resp.status_code == 429:
+            return ToolResult.fail("Error: Outcrawl API rate limit reached.")
+        if resp.status_code != 200:
+            return ToolResult.fail(f"Error: Outcrawl API returned HTTP {resp.status_code}: {resp.text[:200]}")
+
+        data = resp.json()
+        results = []
+        for it in data.get("hits") or []:
+            results.append({
+                "title": it.get("title", ""),
+                "url": it.get("url", ""),
+                "snippet": it.get("snippet", ""),
+            })
+        return ToolResult.success({
+            "query": query, "backend": "outcrawl",
             "total": len(results), "count": len(results), "results": results,
         })
 

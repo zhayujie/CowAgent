@@ -3,7 +3,7 @@ title: web_search - Web 検索
 description: "web_search ツールはリアルタイムの情報やニュースを検索します。Bocha、Tavily、Serply、SearXNG など複数の検索バックエンドに対応し、Web コンソールで設定できます。"
 ---
 
-インターネットからリアルタイム情報、ニュース、リサーチなどを検索します。Bocha、百度 Qianfan、智谱（Zhipu）、LinkAI、DeepSeek、AnySearch、Serply、Tavily、SearXNG、Keenable の 10 のバックエンドに対応しています。Keenable には明示的に有効化する匿名モード（API Key 不要）もあります。各プロバイダーは認証情報（または匿名モードのオプトイン）を設定すると利用可能になります。
+インターネットからリアルタイム情報、ニュース、リサーチなどを検索します。Bocha、百度 Qianfan、智谱（Zhipu）、LinkAI、DeepSeek、AnySearch、Serply、Tavily、Outcrawl、SearXNG、Keenable の 11 のバックエンドに対応しています。Keenable には明示的に有効化する匿名モード（API Key 不要）もあります。各プロバイダーは認証情報（または匿名モードのオプトイン）を設定すると利用可能になります。
 
 <Tip>
   [Web コンソール](/ja/channels/web) の「モデル管理 → 検索」パネルから、プロバイダーと戦略を可視化して設定するのが推奨です。設定ファイルを手動で編集する必要はありません。
@@ -21,6 +21,7 @@ description: "web_search ツールはリアルタイムの情報やニュース�
 | AnySearch | オプション設定 `tools.web_search.anysearch_api_key`、または `anysearch_anonymous: true` で Key なし利用 | [AnySearch Open Platform](https://anysearch.com/) |
 | Serply | `tools.web_search.serply_api_key` | [Serply](https://serply.io)（[ドキュメント](https://serply.io/docs)） |
 | Tavily | `tools.web_search.tavily_api_key` | [Tavily](https://tavily.com) |
+| Outcrawl | `tools.web_search.outcrawl_api_key` | [Outcrawl](https://outcrawl.ai)（[ドキュメント](https://outcrawl.ai/docs/search/overview)） |
 | SearXNG | `tools.web_search.searxng_url`（セルフホスト型インスタンス URL、API Key 不要） | [SearXNG](https://docs.searxng.org/) |
 | Keenable | オプション設定 `tools.web_search.keenable_api_key`、または `keenable_anonymous: true` で Key なし利用 | [Keenable](https://keenable.ai) |
 
@@ -39,7 +40,7 @@ Bocha、Serply、Tavily については専用キーを別途設定する必要�
 }
 ```
 
-- `auto`（デフォルト）：Agent が設定済みのプロバイダーから自動的に選択し、1 回のタスク内で複数回呼び出し、異なるプロバイダーを切り替えてより包括的な結果を取得できます。未指定の場合は `deepseek → bocha → qianfan → zhipu → linkai → anysearch → serply → tavily → searxng → keenable` の順でフォールバックします。
+- `auto`（デフォルト）：Agent が設定済みのプロバイダーから自動的に選択し、1 回のタスク内で複数回呼び出し、異なるプロバイダーを切り替えてより包括的な結果を取得できます。未指定の場合は `deepseek → bocha → qianfan → zhipu → linkai → anysearch → serply → tavily → outcrawl → searxng → keenable` の順でフォールバックします。
 
 - `fixed`：`provider` で指定したプロバイダーに固定。該当プロバイダーの認証情報が欠けている場合は自動的に auto の順序にフォールバックします。
 
@@ -54,6 +55,6 @@ Bocha、Serply、Tavily については専用キーを別途設定する必要�
 | `provider` | string | いいえ | `auto` 戦略で複数プロバイダーを設定している場合に表示。単回のプロバイダー切り替えに使用 |
 
 <Note>
-  10 社のプロバイダーがいずれも未設定（Key もインスタンス URL も匿名モードのオプトインもない）の場合、このツールは Agent に登録されません。
+  11 社のプロバイダーがいずれも未設定（Key もインスタンス URL も匿名モードのオプトインもない）の場合、このツールは Agent に登録されません。
 </Note>
 
