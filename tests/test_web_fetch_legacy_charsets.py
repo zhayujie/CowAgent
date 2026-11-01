@@ -21,6 +21,9 @@ CANTONESE = "佢哋話呢度啲嘢好好食"  # 哋 啲 嘢 are HKSCS, not Big5
 ENGLISH = "He said “yes” — it costs €5."
 TURKISH = "Türkçe “alıntı” — 5€"
 THAI = "ราคา “พิเศษ” 5€ …"
+# Plain Shift_JIS and EUC-KR text, long enough for chardet to detect
+JAPANESE_PARAGRAPH = "日本の首都は東京です。今日はとても良い天気ですね。私は毎朝コーヒーを飲みます。"
+KOREAN_PARAGRAPH = "대한민국의 수도는 서울입니다. 오늘은 날씨가 아주 좋습니다. 저는 매일 아침 커피를 마십니다."
 
 
 @pytest.fixture(scope="module")
@@ -104,6 +107,42 @@ def test_undeclared_webpage_uses_the_superset_of_the_detected_charset(fetch, mon
 
     assert result.status == "success", result.result
     assert CHINESE in result.result
+
+
+@pytest.mark.parametrize(
+    "detected, text, codec",
+    [
+        pytest.param("CP932", JAPANESE, "cp932", id="cp932"),
+        pytest.param("CP949", KOREAN, "cp949", id="cp949"),
+    ],
+)
+def test_undeclared_webpage_detected_as_cp932_or_cp949(fetch, monkeypatch, detected, text, codec):
+    # chardet 7.x reports most Japanese and Korean pages as CP932 and CP949, and
+    # chardet 5.x does for pages with characters such as ① or 똠.
+    monkeypatch.setattr(requests.Response, "apparent_encoding", property(lambda self: detected))
+    body = f"<html><body><p>{text}</p></body></html>".encode(codec)
+
+    result = fetch("/news", "text/html", body)
+
+    assert result.status == "success", result.result
+    assert text in result.result
+
+
+@pytest.mark.parametrize(
+    "text, codec",
+    [
+        pytest.param(JAPANESE_PARAGRAPH, "shift_jis", id="shift_jis"),
+        pytest.param(KOREAN_PARAGRAPH, "euc_kr", id="euc-kr"),
+    ],
+)
+def test_undeclared_japanese_and_korean_webpages_are_decoded(fetch, text, codec):
+    # Real detection: chardet 7.x reports these pages as CP932 and CP949.
+    body = f"<html><body><p>{text}</p></body></html>".encode(codec)
+
+    result = fetch("/news", "text/html", body)
+
+    assert result.status == "success", result.result
+    assert text in result.result
 
 
 @pytest.mark.parametrize(

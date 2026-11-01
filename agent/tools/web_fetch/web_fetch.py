@@ -579,9 +579,11 @@ class WebFetch(BaseTool):
         apparent = response.apparent_encoding
         if apparent:
             apparent_lower = apparent.lower()
-            # Trust CJK / Windows encodings detected by chardet
+            # Trust CJK / Windows encodings detected by chardet, including the Japanese
+            # and Korean Windows code pages, which it names CP932 and CP949
             trusted_prefixes = ("utf", "gb", "big5", "euc", "shift_jis", "iso-2022", "windows", "ascii")
-            if any(apparent_lower.startswith(p) for p in trusted_prefixes):
+            trusted_names = ("cp932", "cp949")
+            if apparent_lower in trusted_names or any(apparent_lower.startswith(p) for p in trusted_prefixes):
                 return _browser_charset(apparent)
 
         # 4. Fallback
