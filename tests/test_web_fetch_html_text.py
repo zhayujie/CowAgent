@@ -50,3 +50,72 @@ def test_html_preserves_readable_text(html, expected_lines):
 )
 def test_existing_text_controls(html, expected):
     assert WebFetch._extract_text(html) == expected
+
+
+@pytest.mark.parametrize(
+    "html, expected",
+    [
+        pytest.param(
+            '<p>Put   this in <code>config.yaml</code>:</p><pre><code class="language-yaml">'
+            "server:\n  port: 8080\n  tls:\n    enabled: true\n</code></pre><p>Then restart.</p>",
+            "Put this in config.yaml:\n\nserver:\n  port: 8080\n  tls:\n    enabled: true\n\nThen restart.",
+            id="yaml",
+        ),
+        pytest.param(
+            '<div class="highlight"><pre><span></span><span class="k">def</span> <span class="nf">main</span>'
+            '<span class="p">():</span>\n    <span class="k">if</span> <span class="n">ready</span>'
+            '<span class="p">():</span>\n        <span class="n">serve</span><span class="p">()</span>\n</pre></div>',
+            "def main():\n    if ready():\n        serve()",
+            id="pygments",
+        ),
+        pytest.param(
+            "<pre>x = 1        # one\nlonger = 22  # two\n\n\nprint(x)</pre>",
+            "x = 1        # one\nlonger = 22  # two\n\n\nprint(x)",
+            id="alignment-and-blank-lines",
+        ),
+        pytest.param("<pre>build:\n\tgo build ./...\n</pre>", "build:\n\tgo build ./...", id="tabs"),
+        pytest.param(
+            # Docusaurus: a block per line, each ended by <br/>.
+            '<pre><code><div class="token-line"><span>export default {</span><br/></div>'
+            '<div class="token-line"><span>  title: "Docs",</span><br/></div>'
+            '<div class="token-line"><span></span><br/></div>'
+            '<div class="token-line"><span>};</span><br/></div></code></pre>',
+            'export default {\n  title: "Docs",\n\n};',
+            id="block-and-br-per-line",
+        ),
+        pytest.param(
+            # Expressive Code (Starlight): a block per line; an empty line holds a newline.
+            '<pre><code><div class="ec-line"><div class="code">items:</div></div>'
+            '<div class="ec-line"><div class="code"><span class="indent">  </span>- one</div></div>'
+            '<div class="ec-line"><div class="code">\n</div></div>'
+            '<div class="ec-line"><div class="code"><span class="indent">  </span>- two</div></div></code></pre>',
+            "items:\n  - one\n\n  - two",
+            id="block-per-line",
+        ),
+        pytest.param(
+            "<pre>\r\n    first();\r\n    second();\r\n</pre>",
+            "    first();\n    second();",
+            id="newline-after-pre-and-crlf",
+        ),
+        pytest.param(
+            "<pre>if (a &lt; b &amp;&amp; c) {\n    s = &quot;&amp;lt;&quot;;\n}</pre>",
+            'if (a < b && c) {\n    s = "&lt;";\n}',
+            id="entities",
+        ),
+        pytest.param(
+            "<pre>  a = 1<script>track('<pre>')</script>\n  b = 2</pre>",
+            "  a = 1\n  b = 2",
+            id="script-inside-pre",
+        ),
+        pytest.param("<p>Run:</p><pre>  make\n    install", "Run:\n\n  make\n    install", id="unclosed"),
+        pytest.param(
+            # NUL characters are dropped from page text, so it can't stand in for a <pre> block.
+            "<pre>  first</pre><p>a\0b</p><pre>  second</pre>",
+            "  first\n\nab\n\n  second",
+            id="nul-in-text",
+        ),
+        pytest.param("<p>A</p><pre>\n</pre><p>B</p>", "A\n\nB", id="empty"),
+    ],
+)
+def test_pre_keeps_code_as_written(html, expected):
+    assert WebFetch._extract_text(html) == expected
