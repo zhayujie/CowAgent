@@ -6,6 +6,7 @@ import sys
 from typing import Optional
 from urllib.parse import urlparse
 from common.log import logger
+from common.markdown_fence import transform_outside_fences
 
 def fsize(file):
     if isinstance(file, io.BytesIO):
@@ -84,11 +85,67 @@ def convert_webp_to_png(webp_image):
         raise
 
 
+# An inline code span on one line (a backtick run closed by the next run of the
+# same length), a ** or a line break.
+_BOLD_TOKEN = re.compile(r"(?<!`)(`+)(?!`).*?(?<!`)\1(?!`)|\*\*|\n")
+
+
 def remove_markdown_symbol(text: str):
     # 移除markdown格式，目前先移除**
+    # Code blocks and inline code keep their **, as in {**a, **b} or **kwargs.
     if not text:
         return text
-    return re.sub(r'\*\*(.*?)\*\*', r'\1', text)
+    return transform_outside_fences(text, _remove_bold)
+
+
+def _remove_bold(text: str) -> str:
+    # As in Markdown, ** opens bold only before a non-space character and
+    # closes it only after one, so the operator in "2 ** 10" is not taken for
+    # bold, and a closing ** pairs with the nearest opening ** before it. Pairs
+    # are only looked for within one line.
+    paired, stars, openers = set(), [], []  # stars: each ** of the line
+    for token in _BOLD_TOKEN.finditer(text):
+        start = token.start()
+        if token.group(1):  # inline code
+            continue
+        if token.group() == "\n":
+            if openers:  # a ** after a colon may still close one of them
+                _pair_after_colon(text, stars, paired)
+            stars.clear()
+            openers.clear()
+            continue
+        stars.append(start)
+        can_close = start > 0 and not text[start - 1].isspace()
+        can_open = start + 2 < len(text) and not text[start + 2].isspace()
+        if can_close and openers and openers[-1] + 2 < start:  # and not empty
+            paired.update((openers.pop(), start))
+        elif can_open:
+            openers.append(start)
+    if openers:
+        _pair_after_colon(text, stars, paired)
+    # Drop the ** of each pair.
+    parts, last = [], 0
+    for start in sorted(paired):
+        parts.append(text[last:start])
+        last = start + 2
+    return "".join(parts) + text[last:]
+
+
+def _pair_after_colon(text: str, stars: list, paired: set) -> None:
+    # Models also write "**Note: **text", with the space inside the bold. So
+    # once a line is paired, a ** left over after a colon and spaces or tabs
+    # closes the nearest leftover ** before it that can open.
+    openers = []
+    for start in stars:
+        if start in paired:
+            continue
+        before = start
+        while before > 0 and text[before - 1] in " \t":
+            before -= 1
+        if openers and before > 0 and text[before - 1] in ":：":
+            paired.update((openers.pop(), start))
+        elif start + 2 < len(text) and not text[start + 2].isspace():
+            openers.append(start)
 
 
 def expand_path(path: str) -> str:
