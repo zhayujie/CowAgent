@@ -742,6 +742,7 @@ class FeiShuChanel(ChatChannel):
                 return
 
         is_group = False
+        bot_mention_keys = set()
         chat_type = msg.get("chat_type")
 
         if chat_type == "group":
@@ -759,6 +760,9 @@ class FeiShuChanel(ChatChannel):
                         f"[FeiShu] group msg mentions others, ignored, msg_id={msg_id}"
                     )
                     return
+                # Which mentions are the bot itself, by the same test, so that
+                # only the bot's own @ is dropped from the text.
+                bot_mention_keys = {m.get("key") for m in msg.get("mentions") if self._is_mention_bot([m])}
             # 群聊
             is_group = True
             receive_id_type = "chat_id"
@@ -778,7 +782,9 @@ class FeiShuChanel(ChatChannel):
             return
 
         # 构造飞书消息对象
-        feishu_msg = FeishuMessage(event, is_group=is_group, access_token=self.fetch_access_token())
+        feishu_msg = FeishuMessage(
+            event, is_group=is_group, access_token=self.fetch_access_token(), bot_mention_keys=bot_mention_keys
+        )
         if not feishu_msg:
             return
 

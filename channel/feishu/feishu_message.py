@@ -3,6 +3,7 @@ from channel.chat_message import ChatMessage
 from channel.chat_message import safe_filename
 import json
 import os
+import re
 import requests
 from common.log import logger
 from common import state_dir, utils
@@ -24,11 +25,49 @@ def _download_resource(message_id, key, resource_type, access_token, path, max_b
         return False
 
 
+def _mention_labels(mentions, bot_mention_keys) -> dict:
+    """What the agent reads in place of each mention key.
+
+    A text message writes the n-th person it @-mentions, the bot included, as
+    the key @_user_n; the event's "mentions" pairs each key with that person's
+    name. A person reads as "@name" and the bot's own mention as nothing. A key
+    that comes without a name is its own label, so its placeholder stays as it is.
+    """
+    labels = {}
+    for mention in mentions or []:
+        key = mention.get("key")
+        if not key:
+            continue
+        if key in bot_mention_keys:
+            labels[key] = ""
+        else:
+            labels[key] = "@" + mention["name"] if mention.get("name") else key
+    return labels
+
+
+def _name_mentions(text, labels) -> str:
+    """Put each key's label in its place; the bot's key goes with the spaces after it.
+
+    Only the keys of the message's own mentions are matched, the longest first:
+    with twelve mentions @_user_12 is one key, and with fewer it is @_user_1
+    followed by a 2 the sender typed.
+    """
+    if not labels:
+        return text
+
+    def replace(match):
+        key, spaces = match.groups()
+        return labels[key] + spaces if labels[key] else ""
+
+    keys = "|".join(re.escape(key) for key in sorted(labels, key=len, reverse=True))
+    return re.sub(f"({keys})( *)", replace, text)
+
+
 class FeishuMessage(ChatMessage):
     # Message types __init__ can parse; anything else raises NotImplementedError.
     SUPPORTED_TYPES = ("text", "image", "post", "file", "audio")
 
-    def __init__(self, event: dict, is_group=False, access_token=None):
+    def __init__(self, event: dict, is_group=False, access_token=None, bot_mention_keys=()):
         super().__init__(event)
         msg = event.get("message")
         sender = event.get("sender")
@@ -38,6 +77,9 @@ class FeishuMessage(ChatMessage):
         self.is_group = is_group
         self.quoted_content = ""
         msg_type = msg.get("message_type")
+        # Who each mention key in a group message stands for; bot_mention_keys
+        # are the bot's own. Direct messages are left as they are.
+        mention_labels = _mention_labels(msg.get("mentions"), bot_mention_keys) if is_group else {}
 
         if msg_type == "text":
             self.ctype = ContextType.TEXT
@@ -76,6 +118,8 @@ class FeishuMessage(ChatMessage):
 
             image_keys = []
             text_parts = []
+            # Where the @-mentions sit in text_parts; they are not the post's own words
+            mention_parts = set()
             # (file_key, file_name, file_type) for videos and file attachments
             file_items = []
             folder_names = []
@@ -107,6 +151,14 @@ class FeishuMessage(ChatMessage):
                         href = element.get("href", "")
                         if link_text or href:
                             text_parts.append(f"{link_text} ({href})" if link_text and href else (link_text or href))
+                    elif element_tag == "at":
+                        # user_id is the mention key (@_user_n) here, not an id.
+                        # The bot's own key and a key without a name are left out.
+                        key = element.get("user_id")
+                        label = mention_labels.get(key)
+                        if label and label != key:
+                            mention_parts.add(len(text_parts))
+                            text_parts.append(label)
                     elif element_tag == "media":
                         file_key = element.get("file_key")
                         if file_key:
@@ -134,11 +186,14 @@ class FeishuMessage(ChatMessage):
 
             # 富文本消息统一作为文本消息处理
             self.ctype = ContextType.TEXT
-            self.post_text = "\n".join(text_parts).strip()
+            # The post's own words: @-mentions alone don't make a post of files
+            # a question, so the channel still caches its files until one comes.
+            self.post_text = "\n".join(p for i, p in enumerate(text_parts) if i not in mention_parts).strip()
             # (local_path, file_type) of every successfully downloaded attachment
             self.attachments = []
             tmp_dir = str(state_dir.tmp_dir())
-            content_parts = [self.post_text] if self.post_text else []
+            text = "\n".join(text_parts).strip()
+            content_parts = [text] if text else []
 
             # Only successful downloads are recorded as paths; failed ones
             # keep a marker so the agent knows something was sent.
@@ -227,7 +282,7 @@ class FeishuMessage(ChatMessage):
             # 群聊
             self.other_user_id = msg.get("chat_id")
             self.actual_user_id = self.from_user_id
-            self.content = self.content.replace("@_user_1", "").strip()
+            self.content = _name_mentions(self.content, mention_labels).strip()
             self.actual_user_nickname = ""
         else:
             # 私聊
