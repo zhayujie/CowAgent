@@ -13,6 +13,8 @@ the user's day-to-day browser profile, while still persisting login state
 across sessions inside that dir.
 """
 
+import base64
+import ntpath
 import os
 import re
 import sys
@@ -121,7 +123,30 @@ class ChromeLauncher:
         means we proceed as before.
         """
         if sys.platform == "win32":
-            return []
+            processes = self._windows_profile_processes()
+            # Popen quotes an argument that contains spaces, and Windows
+            # paths compare case-insensitively.
+            boundary, flags = r'(?=["\s]|$)', re.IGNORECASE
+        else:
+            processes = self._posix_processes()
+            boundary, flags = r"(?=\s|$)", 0
+        own_pid = self._proc.pid if self._proc else None
+        needle = f"--user-data-dir={self._user_data_dir}"
+        profile_arg = re.compile(re.escape(needle) + boundary, flags)
+        found = []
+        for pid, command in processes:
+            # --type= marks renderer/GPU children; only the browser holds the lock.
+            if not profile_arg.search(command) or "--type=" in command:
+                continue
+            if pid == own_pid:
+                continue
+            port_match = re.search(r"--remote-debugging-port=(\d+)", command)
+            found.append((pid, int(port_match.group(1)) if port_match else None))
+        return found
+
+    @staticmethod
+    def _posix_processes() -> List[Tuple[int, str]]:
+        """(pid, command line) of every live process, zombies left out."""
         try:
             listing = subprocess.run(
                 ["ps", "-Aww", "-o", "pid=,state=,command="],
@@ -129,26 +154,73 @@ class ChromeLauncher:
             ).stdout
         except (OSError, subprocess.SubprocessError):
             return []
-        own_pid = self._proc.pid if self._proc else None
-        needle = f"--user-data-dir={self._user_data_dir}"
-        profile_arg = re.compile(re.escape(needle) + r"(?=\s|$)")
-        found = []
+        processes = []
         for line in listing.splitlines():
-            # --type= marks renderer/GPU children; only the browser holds the lock.
-            if not profile_arg.search(line) or "--type=" in line:
-                continue
             fields = line.split(maxsplit=2)
             if len(fields) < 3 or fields[1].startswith("Z"):
                 continue
             try:
-                pid = int(fields[0])
+                processes.append((int(fields[0]), fields[2]))
             except ValueError:
                 continue
-            if pid == own_pid:
+        return processes
+
+    def _windows_profile_in_use(self) -> bool:
+        """Whether a running Chrome holds our profile.
+
+        Windows Chrome has no SingletonLock symlink; it keeps <profile>/lockfile
+        open exclusively instead, so a sharing violation on open means the
+        profile is taken. Anything other than a clean open counts as taken, so
+        the caller goes on to look for the owner.
+        """
+        path = os.path.join(self._user_data_dir, "lockfile")
+        if not os.path.exists(path):
+            return False
+        try:
+            with open(path, "a"):
+                pass
+        except OSError:
+            return True
+        return False
+
+    def _windows_profile_processes(self) -> List[Tuple[int, str]]:
+        """(pid, command line) of browser processes that may hold our profile.
+
+        Only queried when the profile is in use, since starting PowerShell
+        costs about a second.
+        """
+        if not self._windows_profile_in_use():
+            return []
+        image = ntpath.basename(self._executable)
+        if not image or "'" in image:
+            return []
+        script = (
+            "[Console]::OutputEncoding=[Text.Encoding]::UTF8;"
+            f"Get-CimInstance Win32_Process -Filter \"Name='{image}'\" | "
+            "ForEach-Object { \"$($_.ProcessId)`t$($_.CommandLine)\" }"
+        )
+        # -EncodedCommand sidesteps how Windows PowerShell re-parses embedded quotes.
+        encoded = base64.b64encode(script.encode("utf-16-le")).decode("ascii")
+        try:
+            listing = subprocess.run(
+                ["powershell", "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded],
+                capture_output=True, text=True, encoding="utf-8", errors="replace",
+                timeout=15, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            ).stdout
+        except (OSError, subprocess.SubprocessError) as e:
+            logger.warning(f"[Browser] could not list {image} processes: {e}")
+            return []
+        processes = []
+        for line in listing.splitlines():
+            pid_text, _, command = line.partition("\t")
+            try:
+                processes.append((int(pid_text.strip()), command))
+            except ValueError:
                 continue
-            port_match = re.search(r"--remote-debugging-port=(\d+)", line)
-            found.append((pid, int(port_match.group(1)) if port_match else None))
-        return found
+        if not processes:
+            logger.warning(f"[Browser] profile is in use but no {image} process "
+                           f"could be found holding it ({self._user_data_dir})")
+        return processes
 
     def _clear_stale_singleton_locks(self):
         """Remove leftover Chrome Singleton* locks from a crashed/killed run.
