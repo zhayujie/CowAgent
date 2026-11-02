@@ -894,7 +894,7 @@ function _launchSearchProviderConfig(providerId, providerMeta) {
     // Providers that hold their own credential (dedicated key or, for SearXNG,
     // an instance URL) use the bespoke search-key modal. zhipu/qianfan/linkai
     // reuse a model-vendor key and go through the vendor modal instead.
-    if (['bocha', 'anysearch', 'serply', 'tavily', 'searxng', 'keenable'].includes(providerId)) {
+    if (['bocha', 'anysearch', 'serply', 'tavily', 'outcrawl', 'searxng', 'keenable'].includes(providerId)) {
         openSearchKeyModal(providerId, providerMeta);
     } else if (providerId === 'deepseek') {
         openDeepseekSearchModal();
