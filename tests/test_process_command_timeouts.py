@@ -86,3 +86,30 @@ def test_relay_self_check_is_bounded():
     assert len(runs) == 1, "the relay script's shape changed; revisit this test"
     assert any(kw.arg == "timeout" for kw in runs[0].keywords), \
         "the self-check subprocess.run lost its timeout"
+
+
+def test_relay_logs_and_aborts_when_the_self_check_times_out(monkeypatch, tmp_path):
+    """The relay's stderr is discarded, so a timed-out self-check has to be
+    logged by the relay itself, and the old process must not be signalled."""
+    log_file = tmp_path / "nohup.out"
+    signalled = []
+
+    def hung(cmd, **kwargs):
+        raise subprocess.TimeoutExpired(cmd=cmd, timeout=kwargs.get("timeout"))
+
+    monkeypatch.setattr(subprocess, "run", hung)
+    monkeypatch.setattr("os.kill", lambda pid, sig: signalled.append((pid, sig)))
+    monkeypatch.setattr("sys.argv", [
+        "-c", str(tmp_path), "python", str(tmp_path / "app.py"),
+        str(tmp_path / "cow.pid"), str(log_file), "4321",
+    ])
+
+    try:
+        exec(compile(process._RELAY_SCRIPT, "<relay>", "exec"), {"__name__": "__main__"})
+    except SystemExit as e:
+        assert e.code == 1
+    else:
+        raise AssertionError("the relay went on past a timed-out self-check")
+
+    assert "self-check timed out" in log_file.read_text()
+    assert signalled == [], "the old process was signalled after the self-check failed"

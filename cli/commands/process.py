@@ -250,15 +250,18 @@ def log(msg):
 # `import app` exercises top-level imports / syntax of the entry module. If it
 # fails, abort and leave the running service untouched — never end up with the
 # old process killed and the new one unable to start.
-check = subprocess.run(
-    [python, "-c", "import app"], cwd=root,
-    stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-    # A hung import (a top-level network call, a missing dependency waiting on
-    # something) must not leave the relay stuck forever between the two
-    # states it exists to move between: timing out lands in the same abort
-    # path as a failing import, and the running service stays untouched.
-    timeout=60,
-)
+# A hung import (a top-level network call, a dependency waiting on something)
+# must not leave the relay stuck forever, so it is bounded and aborts the same
+# way a failing import does. The relay's stderr is discarded, so log it here.
+try:
+    check = subprocess.run(
+        [python, "-c", "import app"], cwd=root,
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        timeout=60,
+    )
+except subprocess.TimeoutExpired:
+    log("self-check timed out after 60s, aborting restart; service left running")
+    sys.exit(1)
 if check.returncode != 0:
     detail = (check.stdout or b"").decode("utf-8", "replace").strip()
     log("self-check FAILED, aborting restart; service left running:\n" + detail)
