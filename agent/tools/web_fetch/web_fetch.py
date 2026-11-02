@@ -151,8 +151,17 @@ def _parse_content_length(response: requests.Response) -> int:
         return 0
 
 
+# Stands in for a <pre> block while the text around it is normalized. Page text
+# can't contain it: the parser drops NUL characters, as browsers do.
+_PRE_MARK = "\0"
+
+
 class _PageTextParser(HTMLParser):
-    """Keep text and block boundaries without treating quoted attributes as text."""
+    """Keep text and block boundaries without treating quoted attributes as text.
+
+    The text of each <pre> block is kept as written, in ``pre_blocks``, and
+    ``parts`` holds _PRE_MARK in its place.
+    """
 
     _BLOCK_TAGS = frozenset({
         "address", "article", "aside", "blockquote", "caption", "center",
@@ -167,6 +176,9 @@ class _PageTextParser(HTMLParser):
         super().__init__(convert_charrefs=True)
         self.parts = []
         self.hidden_tag = None
+        self.pre_blocks = []
+        self.pre_parts = []
+        self.pre_depth = 0
 
     def handle_starttag(self, tag, attrs):
         if self.hidden_tag:
@@ -174,18 +186,48 @@ class _PageTextParser(HTMLParser):
         if tag in ("script", "style"):
             self.hidden_tag = tag
         elif tag == "br" or tag in self._BLOCK_TAGS:
-            self.parts.append("\n")
+            self._line_break(forced=tag == "br")
+        if tag == "pre":
+            self.pre_depth += 1
 
     def handle_endtag(self, tag):
         if self.hidden_tag:
             if tag == self.hidden_tag:
                 self.hidden_tag = None
         elif tag in self._BLOCK_TAGS:
-            self.parts.append("\n")
+            if tag == "pre" and self.pre_depth:
+                self.pre_depth -= 1
+                if not self.pre_depth:
+                    self._end_pre()
+            self._line_break()
 
     def handle_data(self, data):
-        if not self.hidden_tag:
-            self.parts.append(data)
+        data = data.replace(_PRE_MARK, "")
+        if data and not self.hidden_tag:
+            (self.pre_parts if self.pre_depth else self.parts).append(data)
+
+    def close(self):
+        super().close()
+        if self.pre_depth:  # an unclosed <pre> runs to the end of the page
+            self.pre_depth = 0
+            self._end_pre()
+
+    def _line_break(self, forced=False):
+        if not self.pre_depth:
+            self.parts.append("\n")
+        elif forced or (self.pre_parts and not self.pre_parts[-1].endswith("\n")):
+            # Inside <pre>, a block starts a new line but doesn't add a blank one.
+            self.pre_parts.append("\n")
+
+    def _end_pre(self):
+        # As in browsers, CRLF and CR are newlines and the newline right after <pre>
+        # is skipped; other leading blank lines and the trailing whitespace go too.
+        text = re.sub(r"\r\n?", "\n", "".join(self.pre_parts))
+        text = re.sub(r"^\s*\n", "", text).rstrip()
+        self.pre_parts = []
+        if text:
+            self.pre_blocks.append(text)
+            self.parts.append(_PRE_MARK)
 
 
 class WebFetch(BaseTool):
@@ -669,4 +711,6 @@ class WebFetch(BaseTool):
         text = re.sub(r"\n{3,}", "\n\n", text)
         lines = [line.strip() for line in text.splitlines()]
         text = "\n".join(lines)
-        return text.strip()
+        # Code in <pre> keeps its indentation, spacing and blank lines.
+        pre_blocks = iter(parser.pre_blocks)
+        return re.sub(_PRE_MARK, lambda _: next(pre_blocks), text.strip())
