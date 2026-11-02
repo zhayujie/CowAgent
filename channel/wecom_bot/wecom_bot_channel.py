@@ -38,6 +38,13 @@ from config import conf
 
 WECOM_WS_URL = "wss://openws.work.weixin.qq.com"
 HEARTBEAT_INTERVAL = 30
+# Reconnect backoff: 5s, 10s, 20s ... capped. A persistent outage should not
+# turn into a 5s reconnect loop that logs a failure every time.
+WS_RECONNECT_BASE_SECONDS = 5
+WS_RECONNECT_MAX_SECONDS = 180
+# A connection that survived this long counts as recovered: the next drop
+# starts a fresh failure streak instead of continuing an old backoff.
+WS_RECONNECT_STABLE_SECONDS = 60
 MEDIA_CHUNK_SIZE = 512 * 1024  # 512KB per chunk (before base64 encoding)
 # Fixed URL path for the callback (webhook) HTTP server. The bot's
 # receive-message URL must point at this path, e.g. http://host:9892/wecombot
@@ -231,8 +238,25 @@ class WecomBotChannel(ChatChannel):
     # ------------------------------------------------------------------
 
     def _start_ws(self):
+        """Run the long connection until stop() is called.
+
+        Reconnecting from inside on_close nests one run per reconnect: this
+        method joins the thread it starts, so a reconnect issued from the dying
+        socket's own callback leaves that thread parked in the new thread's
+        join forever, one per disconnect. Reconnect from a loop in the single
+        worker thread instead, and back off like the weixin/dingtalk long-poll
+        loops so a persistent outage does not reconnect (and log) every 5s.
+        """
+        # Consecutive failures and when the current connection came up; both
+        # are only touched by the worker thread and its callbacks.
+        state = {"failures": 0, "opened_at": None}
+
         def _on_open(ws):
-            logger.info("[WecomBot] WebSocket connected, sending subscribe...")
+            state["opened_at"] = time.time()
+            if state["failures"]:
+                logger.info(f"[WecomBot] WebSocket reconnected after {state['failures']} failed attempt(s)")
+            else:
+                logger.info("[WecomBot] WebSocket connected, sending subscribe...")
             self._send_subscribe()
 
         def _on_message(ws, raw):
@@ -243,32 +267,59 @@ class WecomBotChannel(ChatChannel):
                 logger.error(f"[WecomBot] Failed to handle ws message: {e}", exc_info=True)
 
         def _on_error(ws, error):
-            logger.error(f"[WecomBot] WebSocket error: {error}")
+            # The reconnect loop reports the failure; per-attempt errors are
+            # not worth an ERROR line each, otherwise a flapping link floods.
+            logger.warning(f"[WecomBot] WebSocket error: {error}")
 
         def _on_close(ws, close_status_code, close_msg):
             logger.warning(f"[WecomBot] WebSocket closed: status={close_status_code}, msg={close_msg}")
             self._connected = False
-            if not self._stop_event.is_set():
-                logger.info("[WecomBot] Will reconnect in 5s...")
-                time.sleep(5)
-                if not self._stop_event.is_set():
-                    self._start_ws()
+            # No reconnect here: run_forever owns that and logs it.
 
-        self._ws = websocket.WebSocketApp(
-            WECOM_WS_URL,
-            on_open=_on_open,
-            on_message=_on_message,
-            on_error=_on_error,
-            on_close=_on_close,
-        )
+        def _reconnect_delay(failures: int) -> float:
+            return min(
+                WS_RECONNECT_MAX_SECONDS,
+                WS_RECONNECT_BASE_SECONDS * (2 ** (failures - 1)),
+            )
 
         def run_forever():
-            try:
-                websocket_app_run_forever(self._ws, ping_interval=0, reconnect=0)
-            except (SystemExit, KeyboardInterrupt):
-                logger.info("[WecomBot] WebSocket thread interrupted")
-            except Exception as e:
-                logger.error(f"[WecomBot] WebSocket run_forever error: {e}")
+            while not self._stop_event.is_set():
+                self._ws = websocket.WebSocketApp(
+                    WECOM_WS_URL,
+                    on_open=_on_open,
+                    on_message=_on_message,
+                    on_error=_on_error,
+                    on_close=_on_close,
+                )
+                try:
+                    websocket_app_run_forever(self._ws, ping_interval=0, reconnect=0)
+                except (SystemExit, KeyboardInterrupt):
+                    logger.info("[WecomBot] WebSocket thread interrupted")
+                    return
+                except Exception as e:
+                    logger.error(f"[WecomBot] WebSocket run_forever error: {e}")
+                if self._stop_event.is_set():
+                    return
+
+                opened_for = 0.0
+                if state["opened_at"] is not None:
+                    opened_for = time.time() - state["opened_at"]
+                    state["opened_at"] = None
+                if opened_for >= WS_RECONNECT_STABLE_SECONDS:
+                    # It was a working connection, not a failing one.
+                    state["failures"] = 0
+
+                state["failures"] += 1
+                delay = _reconnect_delay(state["failures"])
+                if state["failures"] == 1:
+                    logger.error(f"[WecomBot] WebSocket lost, reconnecting in {delay}s")
+                else:
+                    logger.warning(
+                        f"[WecomBot] WebSocket still down, retrying in {delay}s "
+                        f"(attempt {state['failures']})"
+                    )
+                # Wait on the event so stop() interrupts a long backoff.
+                self._stop_event.wait(delay)
 
         self._ws_thread = threading.Thread(target=run_forever, daemon=True)
         self._ws_thread.start()
