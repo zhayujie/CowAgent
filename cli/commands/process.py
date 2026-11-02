@@ -49,6 +49,7 @@ def _is_pid_alive(pid: int) -> bool:
             out = subprocess.check_output(
                 ["tasklist", "/FI", f"PID eq {pid}", "/NH"],
                 stderr=subprocess.DEVNULL,
+                timeout=5,
             )
             return str(pid) in out.decode(errors="ignore")
         except Exception:
@@ -70,7 +71,12 @@ def _kill_pid(pid: int, force: bool = False):
         if force:
             cmd.append("/F")
         cmd.extend(["/PID", str(pid)])
-        subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10)
+        except (OSError, subprocess.SubprocessError):
+            # A taskkill that cannot run or will not finish must not wedge
+            # `stop` -- the liveness loop below decides what actually happened.
+            pass
     else:
         import signal
         sig = signal.SIGKILL if force else signal.SIGTERM
@@ -247,6 +253,11 @@ def log(msg):
 check = subprocess.run(
     [python, "-c", "import app"], cwd=root,
     stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+    # A hung import (a top-level network call, a missing dependency waiting on
+    # something) must not leave the relay stuck forever between the two
+    # states it exists to move between: timing out lands in the same abort
+    # path as a failing import, and the running service stays untouched.
+    timeout=60,
 )
 if check.returncode != 0:
     detail = (check.stdout or b"").decode("utf-8", "replace").strip()
