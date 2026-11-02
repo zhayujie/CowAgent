@@ -24,6 +24,14 @@ class _Resp:
     def raise_for_status(self):
         return None
 
+    def iter_content(self, chunk_size=1):
+        # The download is streamed through media_download now; a one-chunk
+        # body keeps these tests about extraction, not chunking.
+        yield self.content
+
+    def close(self):
+        return None
+
 
 def _leftovers(sandbox):
     return sorted(p.name for p in sandbox.glob("cow-skill-*"))
