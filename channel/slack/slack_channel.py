@@ -28,6 +28,7 @@ from channel.slack.slack_message import SlackMessage
 from common import state_dir
 from common.expired_dict import ExpiredDict
 from common.log import logger
+from common.markdown_fence import split_markdown
 from common.media_download import MAX_FILE_BYTES, download_to_file, remove_download
 from common.singleton import singleton
 from config import conf
@@ -476,7 +477,7 @@ class SlackChannel(ChatChannel):
             if not text:
                 return
             # Slack caps a message around 40k chars; split conservatively
-            for chunk in _split_text(text, 3500):
+            for chunk in split_markdown(text, 3500):
                 self._client.chat_postMessage(channel=channel_id, text=chunk, thread_ts=thread_ts)
                 progress["sent"] = True
 
@@ -523,24 +524,3 @@ class SlackChannel(ChatChannel):
         else:
             # Fallback: send as plain text
             self._client.chat_postMessage(channel=channel_id, text=str(content), thread_ts=thread_ts)
-
-
-def _split_text(text: str, limit: int):
-    """Split long text preferring line breaks to keep markdown structure intact."""
-    if len(text) <= limit:
-        yield text
-        return
-    buf = []
-    size = 0
-    for line in text.splitlines(keepends=True):
-        if size + len(line) > limit and buf:
-            yield "".join(buf)
-            buf, size = [], 0
-        # Hard-split single lines that exceed the limit
-        while len(line) > limit:
-            yield line[:limit]
-            line = line[limit:]
-        buf.append(line)
-        size += len(line)
-    if buf:
-        yield "".join(buf)

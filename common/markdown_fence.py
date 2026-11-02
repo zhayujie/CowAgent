@@ -1,4 +1,4 @@
-"""Fenced code block scanning shared by the channels' markdown converters."""
+"""Fenced code block scanning shared by the channels' markdown converters and message splitting."""
 
 import re
 
@@ -64,3 +64,63 @@ def transform_outside_fences(text: str, transform) -> str:
     if prose:
         out.append(transform("\n".join(prose)))
     return "\n".join(out)
+
+
+def split_markdown(text: str, limit: int):
+    """Split long text into chunks of at most ``limit`` characters, preferring
+    line breaks to keep markdown structure intact.
+
+    A cut inside a closed fenced block closes the block at the end of the
+    chunk and reopens it with the same opening line, info string included,
+    at the start of the next, so both parts still render as code.
+    """
+    if len(text) <= limit:
+        yield text
+        return
+    head = ""  # the opening line that reopens a block at the start of a chunk
+    buf = []
+    size = 0
+    open_block = None  # the block the buffered lines leave open
+    for line, block in _lines(text, limit):
+        # A line inside a block keeps room for the block's closing line.
+        room = limit - len(block[1]) if block else limit
+        if size + len(line) > room and buf:
+            yield head + "".join(buf) + (open_block[1] if open_block else "")
+            head = open_block[0] if open_block else ""
+            buf, size = [], len(head)
+        # Hard-split single lines that exceed the limit
+        while size + len(line) > room:
+            cut = room - size - (1 if block else 0)
+            yield head + line[:cut] + ("\n" + block[1] if block else "")
+            head = block[0] if block else ""
+            line, size = line[cut:], len(head)
+        buf.append(line)
+        size += len(line)
+        open_block = block
+    if buf:
+        yield head + "".join(buf)
+
+
+def _lines(text: str, limit: int):
+    """Yield ``(line, block)`` for each line of ``text``, line break included.
+
+    ``block`` is the ``(opening, closing)`` line pair of the closed fenced
+    block that is still open after the line, else None. A block's opening line
+    comes joined to the line after it, so no chunk ends on it, and a block
+    whose fence lines leave no room for code within ``limit`` is split as text.
+    """
+    items = list(_scan(text))
+    for n, (info, item) in enumerate(items):
+        end = "\n" if n < len(items) - 1 else ""
+        if info is not None:
+            block = (item[0] + "\n", item[-1] + end)
+            if len(block[0]) + len(block[1]) + 2 <= limit:
+                lines = [line + "\n" for line in item[1:-1]] + [block[1]]
+                lines[0] = block[0] + lines[0]
+                for line in lines[:-1]:
+                    yield line, block
+                yield lines[-1], None
+                continue
+            item = "\n".join(item)
+        for line in (item + end).splitlines(keepends=True):
+            yield line, None
