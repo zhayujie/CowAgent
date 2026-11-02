@@ -30,6 +30,7 @@ from channel.discord.discord_message import DiscordMessage
 from common import state_dir
 from common.expired_dict import ExpiredDict
 from common.log import logger
+from common.markdown_fence import split_markdown
 from common.media_download import MAX_FILE_BYTES, MAX_IMAGE_BYTES, download_to_file, remove_download
 from common.singleton import singleton
 from config import conf
@@ -503,7 +504,7 @@ class DiscordChannel(ChatChannel):
             text = str(content) if content is not None else ""
             if not text:
                 return
-            for chunk in _split_text(text, DISCORD_MSG_LIMIT):
+            for chunk in split_markdown(text, DISCORD_MSG_LIMIT):
                 await channel.send(chunk)
                 progress["sent"] = True
 
@@ -532,24 +533,3 @@ class DiscordChannel(ChatChannel):
             await channel.send(str(content))
 
         logger.info(f"[Discord] sent reply (type={rtype}, channel={channel_id})")
-
-
-def _split_text(text: str, limit: int):
-    """Split long text preferring line breaks to keep markdown structure intact."""
-    if len(text) <= limit:
-        yield text
-        return
-    buf = []
-    size = 0
-    for line in text.splitlines(keepends=True):
-        if size + len(line) > limit and buf:
-            yield "".join(buf)
-            buf, size = [], 0
-        # Hard-split single lines that exceed the limit
-        while len(line) > limit:
-            yield line[:limit]
-            line = line[limit:]
-        buf.append(line)
-        size += len(line)
-    if buf:
-        yield "".join(buf)
