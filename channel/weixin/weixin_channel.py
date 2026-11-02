@@ -35,6 +35,9 @@ from config import conf, get_weixin_credentials_path
 
 MAX_CONSECUTIVE_FAILURES = 3
 BACKOFF_DELAY = 30
+# Backoff doubles per failure past MAX_CONSECUTIVE_FAILURES up to this cap, so
+# a long outage logs a few lines per hour instead of a few hundred.
+MAX_BACKOFF_DELAY = 180
 RETRY_DELAY = 2
 SESSION_EXPIRED_ERRCODE = -14
 TEXT_CHUNK_LIMIT = 4000
@@ -702,15 +705,15 @@ class WeixinChannel(ChatChannel):
 
                     consecutive_failures += 1
                     errmsg = resp.get("errmsg", "")
-                    logger.error(f"[Weixin] getUpdates error: ret={ret} errcode={errcode} "
-                                 f"errmsg={errmsg} ({consecutive_failures}/{MAX_CONSECUTIVE_FAILURES})")
-                    if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
-                        consecutive_failures = 0
-                        self._stop_event.wait(BACKOFF_DELAY)
-                    else:
-                        self._stop_event.wait(RETRY_DELAY)
+                    self._stop_event.wait(self._poll_failure_delay(
+                        consecutive_failures,
+                        f"error: ret={ret} errcode={errcode} errmsg={errmsg}",
+                    ))
                     continue
 
+                if consecutive_failures:
+                    logger.info(f"[Weixin] getUpdates recovered after "
+                                f"{consecutive_failures} failed attempt(s)")
                 consecutive_failures = 0
 
                 # Update sync cursor
@@ -734,15 +737,32 @@ class WeixinChannel(ChatChannel):
                 if self._stop_event.is_set():
                     break
                 consecutive_failures += 1
-                logger.error(f"[Weixin] getUpdates exception: {e} "
-                             f"({consecutive_failures}/{MAX_CONSECUTIVE_FAILURES})")
-                if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
-                    consecutive_failures = 0
-                    self._stop_event.wait(BACKOFF_DELAY)
-                else:
-                    self._stop_event.wait(RETRY_DELAY)
+                self._stop_event.wait(self._poll_failure_delay(
+                    consecutive_failures, f"exception: {e}",
+                ))
 
         logger.info("[Weixin] Long-poll loop ended")
+
+    @staticmethod
+    def _poll_failure_delay(failures: int, detail: str) -> float:
+        """Log a failed getUpdates and return how long to wait before the next one.
+
+        A failure streak is logged once at ERROR when it starts and once per
+        backoff after that; the quick retries in between stay at DEBUG.
+        """
+        if failures < MAX_CONSECUTIVE_FAILURES:
+            delay = RETRY_DELAY
+        else:
+            doublings = min(failures - MAX_CONSECUTIVE_FAILURES, 10)
+            delay = min(BACKOFF_DELAY * 2 ** doublings, MAX_BACKOFF_DELAY)
+        if failures == 1:
+            logger.error(f"[Weixin] getUpdates {detail}")
+        elif failures >= MAX_CONSECUTIVE_FAILURES:
+            logger.warning(f"[Weixin] getUpdates still failing ({failures} in a row), "
+                           f"retrying in {delay}s: {detail}")
+        else:
+            logger.debug(f"[Weixin] getUpdates {detail} ({failures} in a row)")
+        return delay
 
     @staticmethod
     def _raw_msg_has_media(raw_msg: dict) -> bool:
