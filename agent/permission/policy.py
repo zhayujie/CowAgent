@@ -267,6 +267,32 @@ _DESTINATION_ONLY_COMMANDS = frozenset({
     "cp", "copy", "rsync", "install", "ln", "unzip", "tar", "zip",
 })
 
+# These commands name their destination with a flag instead of with an operand,
+# so the last operand is a source and the write itself goes unchecked. The
+# value is the short option letter, the long spelling of the same option and
+# the short options that carry a value of their own.
+_FLAG_DESTINATIONS = {
+    "cp": ("t", "--target-directory", "SZ"),
+    "copy": ("t", "--target-directory", "SZ"),
+    "install": ("t", "--target-directory", "SZmog"),
+    "ln": ("t", "--target-directory", "SZ"),
+    "move": ("t", "--target-directory", "SZ"),
+    "mv": ("t", "--target-directory", "SZ"),
+    "unzip": ("d", "", "xP"),
+}
+
+# A tar run writes the archive -f names when it creates one and the directory
+# -C names when it extracts one; listing and comparing write nothing.
+_TAR_MODES = {
+    "c": "f", "u": "f", "r": "f", "A": "f", "x": "C", "t": "", "d": "",
+    "--create": "f", "--update": "f", "--append": "f", "--concatenate": "f",
+    "--delete": "f", "--extract": "C", "--get": "C",
+    "--list": "", "--diff": "", "--compare": "",
+}
+
+# The tar options that carry a value of their own.
+_TAR_VALUES = "fCTbXS"
+
 # When their last operand is a directory, the sources land inside it by name.
 _INTO_DIRECTORY_COMMANDS = frozenset({
     "mv", "move", "cp", "copy", "rsync", "install", "ln",
@@ -832,6 +858,57 @@ def _check_git_read_only(args: Sequence[str]) -> Decision:
     return ALLOW
 
 
+def _flag_destination(name: str, args: Sequence[str]) -> List[str]:
+    """The paths a command writes when a flag names them instead of operands.
+
+    ``cp -t DIR`` copies into DIR and ``unzip -d DIR`` extracts into DIR.
+    ``tar`` writes the archive ``-f`` names when it creates one and the
+    directory ``-C`` names when it extracts one.
+    """
+    if name == "tar":
+        mode = ""
+        for arg in args:
+            if arg == "--":
+                break
+            if arg.startswith("--"):
+                mode = _TAR_MODES.get(arg.split("=", 1)[0], mode)
+                continue
+            if arg.startswith("-") and len(arg) > 1:
+                for letter in arg[1:]:
+                    if letter in _TAR_VALUES:
+                        break
+                    mode = _TAR_MODES.get(letter, mode)
+        if not mode:
+            return []
+        short = mode
+        long = "--file" if mode == "f" else "--directory"
+        stop = _TAR_VALUES
+    else:
+        spec = _FLAG_DESTINATIONS.get(name)
+        if spec is None:
+            return []
+        short, long, stop = spec
+
+    found = []
+    for index, arg in enumerate(args):
+        if arg == "--":
+            break
+        nxt = args[index + 1] if index + 1 < len(args) else None
+        if arg.startswith("--"):
+            key, sep, value = arg.partition("=")
+            if long and key == long:
+                found.append(value if sep else nxt)
+        elif arg.startswith("-") and len(arg) > 1:
+            cluster = arg[1:]
+            for position, letter in enumerate(cluster):
+                if letter == short:
+                    found.append(cluster[position + 1:] or nxt)
+                    break
+                if letter in stop:
+                    break
+    return found
+
+
 def _workspace_write_paths(name: str, args: Sequence[str]) -> List[str]:
     """Paths a path-mutating command writes, including flag-driven forms."""
     if name == "sort":
@@ -916,6 +993,18 @@ def _check_bash_workspace_write(
             if not _inside_roots(path, roots, cwd):
                 return _deny(
                     f"'{name}' would change '{path}', outside the writable area "
+                    f"({_roots_hint(roots)}). Reading it is still allowed.",
+                    WORKSPACE_WRITE,
+                )
+
+        for destination in _flag_destination(name, rest):
+            if not destination or destination in _NULL_SINKS:
+                continue
+            if _is_protected(destination, protected, cwd):
+                return _deny_protected(destination)
+            if not _inside_roots(destination, roots, cwd):
+                return _deny(
+                    f"'{name}' would change '{destination}', outside the writable area "
                     f"({_roots_hint(roots)}). Reading it is still allowed.",
                     WORKSPACE_WRITE,
                 )
