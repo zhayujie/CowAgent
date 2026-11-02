@@ -72,6 +72,19 @@ def _app_name() -> str:
     return (os.environ.get("COW_APP_NAME") or "").strip() or "CowAgent"
 
 
+# Skills whose install is still running in a worker thread, keyed by
+# (agent_id, name). A timed-out install keeps writing after the chat command
+# has returned, so its key is released by the worker's done callback rather
+# than by the caller.
+_installing = set()
+_installing_guard = threading.Lock()
+
+
+def _forget_install(key) -> None:
+    with _installing_guard:
+        _installing.discard(key)
+
+
 @plugins.register(
     name="cow_cli",
     desc="Handle cow/slash commands in chat messages",
@@ -1257,22 +1270,46 @@ class CowCliPlugin(Plugin):
         from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
         from cli.commands.skill import install_skill
 
+        # An install that runs past the budget below cannot be cancelled:
+        # install_skill takes no token and writes as it downloads. So a repeat
+        # request must wait for the one already running instead of starting a
+        # second writer on the same directory.
+        key = (agent_id or "", name)
+        with _installing_guard:
+            if key in _installing:
+                return _t(f"技能 '{name}' 正在安装中，请稍候", f"'{name}' is already being installed, please wait")
+            _installing.add(key)
+
+        # Deliberately not `with ThreadPoolExecutor(...)`: that joins the worker
+        # on exit, so the timeout below would not return until the stalled
+        # install had finished anyway, and the user would sit on a frozen chat
+        # command for the whole download.
+        pool = ThreadPoolExecutor(max_workers=1)
         try:
-            with ThreadPoolExecutor(max_workers=1) as pool:
-                future = pool.submit(install_skill, name, agent_id)
-                result = future.result(timeout=self._INSTALL_TIMEOUT)
+            future = pool.submit(install_skill, name, agent_id)
+        except Exception as e:
+            pool.shutdown(wait=False)
+            _forget_install(key)
+            return _t(f"安装失败: {e}", f"Install failed: {e}")
+        # Released when the worker really finishes, not when this returns.
+        future.add_done_callback(lambda _done: _forget_install(key))
 
-            if result.error:
-                return _t(f"安装失败: {result.error}", f"Install failed: {result.error}")
-
-            if not result.installed:
-                return "\n".join(result.messages) if result.messages else _t("未找到可安装的技能", "No installable skill found")
-
-            return self._format_install_result(result, agent_id)
+        try:
+            result = future.result(timeout=self._INSTALL_TIMEOUT)
         except FuturesTimeout:
             return _t("安装超时，请稍后重试或检查网络连接", "Install timed out. Please retry later or check your network connection.")
         except Exception as e:
             return _t(f"安装失败: {e}", f"Install failed: {e}")
+        finally:
+            pool.shutdown(wait=False)
+
+        if result.error:
+            return _t(f"安装失败: {result.error}", f"Install failed: {result.error}")
+
+        if not result.installed:
+            return "\n".join(result.messages) if result.messages else _t("未找到可安装的技能", "No installable skill found")
+
+        return self._format_install_result(result, agent_id)
 
     @staticmethod
     def _format_install_result(result, agent_id=None) -> str:
