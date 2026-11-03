@@ -342,7 +342,7 @@ def deliver_result(task: Optional[dict], reply=None) -> None:
     result = task.get("result") or ""
     origin = task.get("origin") or {}
     try:
-        from agent.task.notify import done_text, notify_task_done
+        from agent.task.notify import can_quote_reply, done_text, notify_task_done
         from agent.task.origin import is_deliverable, send_text_to_origin
 
         if task.get("source") == st.SOURCE_SCHEDULE:
@@ -358,16 +358,16 @@ def deliver_result(task: Optional[dict], reply=None) -> None:
                     # An open chat shows it live; the stored copy covers the rest.
                     send_text_to_origin(origin, _web_result_text(task, result))
                 else:
-                    send_text_to_origin(origin, done_text(task, result))
+                    send_text_to_origin(origin, done_text(task, result, quote_hint=can_quote_reply(task)))
         notify_task_done(task, result)
     except Exception as e:
         logger.warning(f"[Task] Delivering result of #{task.get('id')} failed: {e}")
 
 
 def _web_result_text(task: dict, result: str) -> str:
-    heading = i18n.t(f"【任务 #{task['id']} 已完成】{task.get('title') or ''}",
-                     f"[Task #{task['id']} done] {task.get('title') or ''}")
-    return f"{heading}\n\n{result}"
+    from agent.task.notify import done_heading
+
+    return f"{done_heading(task['id'], task.get('title') or '', link=True)}\n\n{result}"
 
 
 def _remember_in_origin(task: dict, result: str) -> None:

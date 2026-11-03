@@ -62,6 +62,16 @@ function openBoardDetail(taskId) {
     refreshBoardDetail(taskId);
 }
 
+// A task linked from a chat (its result, or the step that started it) opens
+// over the conversation, which stays where it was.
+document.addEventListener('click', (e) => {
+    const link = e.target.closest('a.task-link');
+    if (!link) return;
+    e.preventDefault();
+    const taskId = parseInt(link.dataset.taskId, 10);
+    if (taskId) openBoardDetail(taskId);
+});
+
 // A chat approval has no task to show, so the dialog holds just the request
 // and a way back to the conversation that asked.
 function openApprovalDetail(appr) {

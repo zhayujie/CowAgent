@@ -16,6 +16,8 @@ from typing import Any, Dict, Optional
 from common import i18n
 from common.log import logger
 
+from agent.task import store as st
+
 EVENT_APPROVAL_PENDING = "approval_pending"
 EVENT_ACCEPT_PENDING = "accept_pending"
 EVENT_TASK_DONE = "task_done"
@@ -25,6 +27,11 @@ _ACTION_EVENTS = (EVENT_APPROVAL_PENDING, EVENT_ACCEPT_PENDING, EVENT_TASK_FAILE
 
 SUMMARY_LIMIT = 200
 RESULT_PREVIEW_LIMIT = 300
+
+TASK_LINK_PREFIX = "#task-"
+# Channels that hand the text of a quoted message to the agent along with the
+# reply, so quoting a notice can address its task.
+QUOTE_REPLY_CHANNELS = ("weixin", "feishu")
 
 
 def _clip(text: str, limit: int) -> str:
@@ -86,18 +93,50 @@ def accept_card(approval: dict, task: dict, result: str) -> str:
     return "\n".join(lines)
 
 
-def done_text(task: dict, result: str) -> str:
-    head = i18n.t(f"【任务 #{task['id']} 已完成】{task.get('title') or ''}",
-                  f"[Task #{task['id']} done] {task.get('title') or ''}")
-    return f"{head}\n\n{result}" if result else head
+def task_link(task: dict) -> str:
+    """A Markdown link the Web console opens as the task's detail view."""
+    title = (task.get("title") or "").replace("[", "(").replace("]", ")")
+    return f"[#{task['id']} {title}]({TASK_LINK_PREFIX}{task['id']})"
 
 
-def failed_text(task: dict, error: str) -> str:
-    return "\n".join([
+def done_heading(task_id: int, title: str, link: bool = False) -> str:
+    """The first line of a finished task's result. Quote replies find the task
+    by it (see ``commands``), so its leading words must stay as they are."""
+    ref = i18n.t(f"任务 #{task_id}", f"Task #{task_id}")
+    if link:
+        ref = f"[{ref}]({TASK_LINK_PREFIX}{task_id})"
+    return i18n.t(f"【{ref} 已完成】{title or ''}", f"[{ref} done] {title or ''}")
+
+
+def done_text(task: dict, result: str, quote_hint: bool = False) -> str:
+    text = done_heading(task["id"], task.get("title") or "")
+    if result:
+        text = f"{text}\n\n{result}"
+    if quote_hint:
+        text += "\n\n" + i18n.t("（引用这条消息回复，可以让任务接着改）",
+                                "(Quote this message in a reply to have the task carry on)")
+    return text
+
+
+def failed_text(task: dict, error: str, quote_hint: bool = False) -> str:
+    lines = [
         i18n.t(f"【任务 #{task['id']} 执行失败】{task.get('title') or ''}",
                f"[Task #{task['id']} failed] {task.get('title') or ''}"),
         i18n.t(f"原因：{_clip(error, SUMMARY_LIMIT)}", f"Reason: {_clip(error, SUMMARY_LIMIT)}"),
-    ])
+    ]
+    if quote_hint:
+        lines.append(i18n.t("（引用这条消息回复补充信息，任务会接着处理）",
+                            "(Quote this message in a reply with more to go on, and the task carries on)"))
+    return "\n".join(lines)
+
+
+def can_quote_reply(task: Optional[dict]) -> bool:
+    """Whether quoting this task's notice in its conversation reaches the task:
+    the channel hands quoted text to the commands, and the task delivers its
+    next result there (a scheduled run's follow-up stays on the board)."""
+    task = task or {}
+    return (task.get("source") != st.SOURCE_SCHEDULE
+            and (task.get("origin") or {}).get("channel_type") in QUOTE_REPLY_CHANNELS)
 
 
 def _allowed(event: str, task: Optional[dict]) -> bool:
@@ -161,7 +200,7 @@ def notify_accept_pending(approval: dict, task: dict, result: str) -> None:
 
 
 def notify_task_failed(task: dict, error: str) -> None:
-    _emit(EVENT_TASK_FAILED, failed_text(task, error), task)
+    _emit(EVENT_TASK_FAILED, failed_text(task, error, quote_hint=can_quote_reply(task)), task)
 
 
 def notify_task_done(task: dict, result: str) -> None:
