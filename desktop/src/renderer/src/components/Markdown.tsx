@@ -17,7 +17,9 @@ const md: MarkdownIt = new MarkdownIt({
   html: false,
   breaks: true,
   linkify: true,
-  typographer: true,
+  // Off, as in the web console: it rewrites the text itself, turning `(c)` into
+  // ©, `cd ..` into `cd …` and straight quotes into curly ones.
+  typographer: false,
   highlight(str, lang) {
     if (lang && hljs.getLanguage(lang)) {
       try {
