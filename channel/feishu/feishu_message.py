@@ -416,6 +416,9 @@ class FeishuMessage(ChatMessage):
                         parts.append("{} ({})".format(text, href) if href else text)
                     elif tag == "img" and element.get("image_key"):
                         image_keys.append(element["image_key"])
+        elif msg_type == "interactive":
+            # Markdown replies go out as cards (see feishu_static_card).
+            return {"text": FeishuMessage._card_text(content), "attachments": []}
         elif msg_type == "text":
             return {"text": str(content.get("text") or "").strip(), "attachments": []}
         elif msg_type == "file":
@@ -443,3 +446,25 @@ class FeishuMessage(ChatMessage):
             else:
                 parts.append(f"[引用图片下载失败: {image_key}]")
         return {"text": "\n".join(parts).strip(), "attachments": attachments}
+
+    @staticmethod
+    def _card_text(card) -> str:
+        """The readable text of a card: its markdown and plain-text elements,
+        in order. Empty for a card laid out some other way."""
+        parts = []
+
+        def walk(node):
+            if isinstance(node, dict):
+                text = node.get("content")
+                if node.get("tag") in ("markdown", "lark_md", "plain_text") and isinstance(text, str):
+                    if text.strip():
+                        parts.append(text.strip())
+                for value in node.values():
+                    if isinstance(value, (dict, list)):
+                        walk(value)
+            elif isinstance(node, list):
+                for value in node:
+                    walk(value)
+
+        walk(card)
+        return "\n".join(parts)
