@@ -9,8 +9,9 @@ one of: done, failed, waiting for an approval the run asked for, waiting for
 the user to accept the result, or straight back in the queue when a decision
 arrived while it was still going.
 
-A task found running at startup was cut off by the previous process and is
-run again from the top; waiting tasks stay as they are.
+A task found running at startup was cut off by the previous process: it goes
+back to the queue with a note to check what was already done before carrying
+on. Waiting tasks stay as they are.
 """
 
 from __future__ import annotations
@@ -53,7 +54,11 @@ class TaskRunner:
             if self.running:
                 return
             try:
-                requeued = st.get_task_store().requeue_interrupted()
+                store = st.get_task_store()
+                for task in store.list_tasks(statuses=[st.RUNNING], limit=1000):
+                    store.append_pending_input(task["id"], _recovery_note(task), i18n.t(
+                        "↻ 服务重启，继续执行", "↻ Service restarted, carrying on"))
+                requeued = store.requeue_interrupted()
                 if requeued:
                     logger.info(f"[Task] Re-queued {requeued} task(s) interrupted by the last shutdown")
             except Exception as e:
@@ -255,6 +260,23 @@ def _build_prompt(task: dict) -> str:
     if pending:
         parts.append(pending)
     return "\n\n".join(parts)
+
+
+def _recovery_note(task: dict) -> str:
+    """The next round's message for a task the last shutdown cut off. Its
+    finished steps are in the session, but a first round may have stopped
+    before any were stored, so that one carries its brief again."""
+    note = i18n.t(
+        "服务在执行这个任务时重启了，上一轮只保存了部分进度。继续之前先核对已经做过的事"
+        "（文件、已发出的消息、对外的改动），已经完成的对外操作不要重复；然后把任务做完，给出最终结果。",
+        "The service restarted while this task was running, so only part of the last round "
+        "was saved. Before carrying on, check what is already done (files, messages sent, "
+        "external changes) and do not repeat an external action that already completed; "
+        "then finish the task and give the final result.",
+    )
+    if task.get("run_count", 1) > 1:
+        return note
+    return f"{_build_prompt({**task, 'run_count': 1, 'pending_input': ''})}\n\n{note}"
 
 
 def _run_agent(task: dict, agent_id: str, prompt: str, token: str):
