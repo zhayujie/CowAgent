@@ -71,12 +71,9 @@ def own_text(text: str, quoted: str) -> str:
 
 
 def _belongs_to(item: dict, channel_type: str, receiver: str) -> bool:
-    origin = item.get("origin") or {}
-    return (
-        bool(receiver)
-        and origin.get("receiver") == receiver
-        and (origin.get("channel_type") or "") == (channel_type or "")
-    )
+    from agent.task.overview import belongs_to
+
+    return belongs_to(item, {"channel_type": channel_type or "", "receiver": receiver or ""})
 
 
 def _pending_for(channel_type: str, receiver: str) -> List[dict]:

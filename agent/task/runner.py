@@ -525,7 +525,8 @@ def cancel_task(task_id: int) -> bool:
 
 
 def reply_to_task(task_id: int, message: str) -> Optional[str]:
-    """Hand a task more instructions from its detail view. Returns how it was
+    """Hand a task more instructions (from its detail view, a quoted notice or
+    the conversation's task tool). Returns how it was
     taken: ``steer`` (read by the running round), ``queued`` (read when the
     next round starts), ``rework`` (the result under review is redone) or
     ``reopened`` (a finished task carries on with its full context)."""

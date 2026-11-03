@@ -396,6 +396,7 @@ class AgentStreamExecutor:
             cancel_event=None,
             steer_inbox=None,
             allow_empty_response: bool = False,
+            turn_note: str = "",
     ):
         """
         Initialize stream executor
@@ -419,6 +420,8 @@ class AgentStreamExecutor:
                 outcome and is returned as-is instead of being replaced with
                 fallback text. Set for runs with no human waiting on a reply
                 (scheduled tasks), where silence can be the intended result.
+            turn_note: Context for this run only, shown to the model after the
+                user's message on every call and never kept in the history.
         """
         self.agent = agent
         self.model = model
@@ -431,6 +434,7 @@ class AgentStreamExecutor:
         self.cancel_event = cancel_event
         self.steer_inbox = steer_inbox
         self.allow_empty_response = allow_empty_response
+        self.turn_note = turn_note or ""
 
         # Message history - use provided messages or create new list
         self.messages = messages if messages is not None else []
@@ -3282,7 +3286,7 @@ class AgentStreamExecutor:
         images = self._run_image_blocks()
         self._images_in_request = False
         if "vision" not in (self.tools or {}):
-            return self.messages
+            return self._with_turn_note(self.messages)
 
         prepared = []
         for msg in self.messages:
@@ -3299,7 +3303,19 @@ class AgentStreamExecutor:
                 else:
                     msg = {**msg, "content": f"{content}\n{_IMAGE_NOT_ATTACHED}"}
             prepared.append(msg)
-        return prepared
+        return self._with_turn_note(prepared)
+
+    def _with_turn_note(self, messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        if not self.turn_note or self.run_user_message is None:
+            return messages
+        note = {"type": "text", "text": self.turn_note}
+        out = list(messages)
+        # Matched by position: the image step may already have replaced the
+        # run's user message with a copy.
+        for i, msg in enumerate(self.messages):
+            if msg is self.run_user_message:
+                out[i] = {**out[i], "content": list(out[i].get("content") or []) + [note]}
+        return out
 
     def _run_image_blocks(self) -> Dict[str, Dict[str, Any]]:
         """Image blocks for the query's attached images, when the main model
