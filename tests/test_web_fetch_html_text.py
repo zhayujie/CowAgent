@@ -119,3 +119,28 @@ def test_existing_text_controls(html, expected):
 )
 def test_pre_keeps_code_as_written(html, expected):
     assert WebFetch._extract_text(html) == expected
+
+
+@pytest.mark.parametrize(
+    "html, base_url, expected",
+    [
+        pytest.param('<p>Before <img src="https://cdn.example.com/a.png" alt="Overview"> after.</p>', "",
+                     "Before ![Overview](https://cdn.example.com/a.png) after.", id="absolute"),
+        pytest.param('<p><img src="/img/b.png" alt="Flow"></p>', "https://blog.example.com/post.html?lang=en",
+                     "![Flow](https://blog.example.com/img/b.png)", id="relative-resolved"),
+        pytest.param('<img src="data:image/gif;base64,R0lG" data-src="https://cdn.example.com/lazy.png">', "",
+                     "![](https://cdn.example.com/lazy.png)", id="lazy-loaded"),
+        pytest.param('<img src="https://t.example.com/p.gif" width="1" height="1"><p>Text</p>', "",
+                     "Text", id="tracking-pixel"),
+        pytest.param('<img src="https://cdn.example.com/a.png"><img src="https://cdn.example.com/a.png"/>', "",
+                     "![](https://cdn.example.com/a.png)", id="deduplicated"),
+        pytest.param('<img src="https://cdn.example.com/my pic (1).png" alt="A [b]\nc">', "",
+                     "![A b c](https://cdn.example.com/my%20pic%20%281%29.png)", id="escaped"),
+        pytest.param('<img src="javascript:alert(1)"><img src="/x.png">', "",
+                     "", id="unsafe-or-unresolved"),
+        pytest.param('<pre><img src="https://cdn.example.com/a.png">code</pre>', "",
+                     "code", id="inside-pre"),
+    ],
+)
+def test_images_become_markdown(html, base_url, expected):
+    assert WebFetch._extract_text(html, base_url) == expected

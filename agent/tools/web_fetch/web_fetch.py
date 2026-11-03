@@ -15,7 +15,7 @@ import re
 import uuid
 from html.parser import HTMLParser
 from typing import Dict, Any, Optional, Set
-from urllib.parse import urlparse, unquote
+from urllib.parse import urlparse, unquote, urljoin
 
 import requests
 
@@ -160,7 +160,8 @@ class _PageTextParser(HTMLParser):
     """Keep text and block boundaries without treating quoted attributes as text.
 
     The text of each <pre> block is kept as written, in ``pre_blocks``, and
-    ``parts`` holds _PRE_MARK in its place.
+    ``parts`` holds _PRE_MARK in its place. Images become Markdown images when
+    their source resolves to an http(s) URL against ``base_url``.
     """
 
     _BLOCK_TAGS = frozenset({
@@ -171,7 +172,7 @@ class _PageTextParser(HTMLParser):
         "summary", "table", "tbody", "td", "tfoot", "th", "thead", "tr", "ul",
     })
 
-    def __init__(self):
+    def __init__(self, base_url: str = ""):
         # Decode character references once, in text rather than in markup.
         super().__init__(convert_charrefs=True)
         self.parts = []
@@ -179,6 +180,8 @@ class _PageTextParser(HTMLParser):
         self.pre_blocks = []
         self.pre_parts = []
         self.pre_depth = 0
+        self.base_url = base_url
+        self.seen_images = set()
 
     def handle_starttag(self, tag, attrs):
         if self.hidden_tag:
@@ -187,8 +190,27 @@ class _PageTextParser(HTMLParser):
             self.hidden_tag = tag
         elif tag == "br" or tag in self._BLOCK_TAGS:
             self._line_break(forced=tag == "br")
+        elif tag == "img" and not self.pre_depth:
+            self._image(dict(attrs))
         if tag == "pre":
             self.pre_depth += 1
+
+    def _image(self, attrs):
+        # Tracking pixels carry no content.
+        if (attrs.get("width") or "").strip() in ("0", "1") or (attrs.get("height") or "").strip() in ("0", "1"):
+            return
+        # Lazy-loaded images keep the real source in a data attribute.
+        src = next((v.strip() for v in (attrs.get("src"), attrs.get("data-src"), attrs.get("data-original"))
+                    if v and v.strip() and not v.strip().lower().startswith("data:")), "")
+        if not src:
+            return
+        url = urljoin(self.base_url, src) if self.base_url else src
+        if urlparse(url).scheme not in ("http", "https") or url in self.seen_images:
+            return
+        self.seen_images.add(url)
+        alt = re.sub(r"[\[\]\s]+", " ", attrs.get("alt") or "").strip()
+        url = url.replace(" ", "%20").replace("(", "%28").replace(")", "%29")
+        self.parts.append(f"![{alt}]({url})")
 
     def handle_endtag(self, tag):
         if self.hidden_tag:
@@ -413,7 +435,7 @@ class WebFetch(BaseTool):
                 text = html
             else:
                 title = self._extract_title(html)
-                text = self._extract_text(html)
+                text = self._extract_text(html, response.url or url)
 
             return ToolResult.success(f"Title: {title}\n\nContent:\n{text}")
         finally:
@@ -704,8 +726,8 @@ class WebFetch(BaseTool):
         return match.group(1).strip() if match else "Untitled"
 
     @staticmethod
-    def _extract_text(html: str) -> str:
-        parser = _PageTextParser()
+    def _extract_text(html: str, base_url: str = "") -> str:
+        parser = _PageTextParser(base_url)
         parser.feed(html)
         parser.close()
         text = "".join(parser.parts)
