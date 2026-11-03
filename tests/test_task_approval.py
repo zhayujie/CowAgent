@@ -251,17 +251,13 @@ def test_review_accept_finishes_and_rework_requeues(store):
 
 # --- tool and api ------------------------------------------------------------------
 
-def test_task_create_tool_needs_its_own_switch():
-    from agent.tools.task_create.task_create import TaskCreateTool
+def test_task_tool_follows_the_master_switch():
+    from agent.tools.task.task import TaskTool
 
     with patch("config.conf", return_value=_conf(enabled=False)):
-        assert not TaskCreateTool().is_available()
+        assert not TaskTool().is_available()
     with patch("config.conf", return_value=_conf(enabled=True)):
-        assert not TaskCreateTool().is_available()
-    on = _conf(enabled=True)
-    on["task"]["chat_create"] = True
-    with patch("config.conf", return_value=on):
-        assert TaskCreateTool().is_available()
+        assert TaskTool().is_available()
 
 
 # --- scheduled runs ----------------------------------------------------------------

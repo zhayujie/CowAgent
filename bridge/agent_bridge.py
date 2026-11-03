@@ -723,6 +723,16 @@ class AgentBridge:
         """Resolve and attach the workspace selected for an inbound context."""
         return self.agent_router.resolve_context(context)
 
+    @staticmethod
+    def _task_turn_note(context: Context) -> str:
+        """This conversation's background tasks, for the model to read this turn."""
+        try:
+            from agent.task.overview import turn_note
+            return turn_note(context)
+        except Exception as e:
+            logger.debug(f"[AgentBridge] No task note: {e}")
+            return ""
+
     def get_conversation_store(self, agent_id: str = None):
         """Return the session store owned by one agent workspace."""
         profile = self.agent_registry.get(agent_id)
@@ -1675,7 +1685,7 @@ class AgentBridge:
             # Background runs must not schedule or spawn more background work.
             excluded_tools = set()
             if context and (context.get("is_scheduled_task") or context.get("is_task")):
-                excluded_tools.update(("scheduler", "task_create"))
+                excluded_tools.update(("scheduler", "task"))
             if excluded_tools:
                 filtered_tools = [tool for tool in agent.tools if tool.name not in excluded_tools]
                 agent.tools = filtered_tools
@@ -1795,6 +1805,7 @@ class AgentBridge:
                     # the scheduler sends no message at all.
                     allow_empty_response=bool(context and context.get("is_scheduled_task")),
                     on_executor=writer.bind if writer is not None else None,
+                    turn_note=self._task_turn_note(context),
                 )
             except Exception:
                 # Keep the steps finished before the failure.

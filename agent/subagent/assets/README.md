@@ -83,7 +83,7 @@ description: A helpful research assistant.
 
 Some tools are denied to every sub agent no matter what `tools` says:
 
-`subagent`, `send`, `scheduler`, `task_create`, `env_config`, `evolution_undo`,
+`subagent`, `send`, `scheduler`, `task`, `env_config`, `evolution_undo`,
 `memory_search`, `memory_get`
 
 They all reach outside the delegated task — messaging the user, scheduling work

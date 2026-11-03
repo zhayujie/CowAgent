@@ -199,6 +199,8 @@ function initConfigView(data) {
     document.getElementById('cfg-subagent').checked = data.subagent_enabled !== false;
     document.getElementById('cfg-self-evolution').checked = data.self_evolution_enabled === true;
     document.getElementById('cfg-task').checked = data.task_enabled === true;
+    document.getElementById('cfg-task-chat-create').checked = data.task_chat_create !== false;
+    syncTaskSubSwitches();
 
     // Reflect the current UI language (already resolved, may include the user's
     // local choice) on the selector so it stays in sync with the top-right toggle.
@@ -535,6 +537,12 @@ function saveModelConfig() {
     .finally(() => { btn.disabled = false; });
 }
 
+// Settings that only mean something while background tasks are on.
+function syncTaskSubSwitches() {
+    const row = document.getElementById('cfg-task-chat-create-row');
+    if (row) row.classList.toggle('hidden', !document.getElementById('cfg-task').checked);
+}
+
 function saveAgentConfig() {
     const effortKey = `${cfgProviderValue}:${getSelectedModel().trim().toLowerCase()}`;
     const mergedEffortByModel = Object.assign({}, configReasoningByModel, { [effortKey]: cfgReasoningEffortValue });
@@ -549,6 +557,7 @@ function saveAgentConfig() {
         subagent_enabled: document.getElementById('cfg-subagent').checked,
         self_evolution_enabled: document.getElementById('cfg-self-evolution').checked,
         task_enabled: document.getElementById('cfg-task').checked,
+        task_chat_create: document.getElementById('cfg-task-chat-create').checked,
     };
 
     const btn = document.getElementById('cfg-agent-save');

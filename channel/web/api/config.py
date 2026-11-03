@@ -58,6 +58,7 @@ class ConfigHandler:
     NESTED_BOOLS = {
         "subagent_enabled": ("subagent", "enabled"),
         "task_enabled": ("task", "enabled"),
+        "task_chat_create": ("task", "chat_create"),
     }
 
     def GET(self):
@@ -66,7 +67,7 @@ class ConfigHandler:
         try:
             from agent.subagent import SubagentSettings
             from agent.evolution.config import get_evolution_config
-            from agent.task.settings import is_enabled as task_enabled
+            from agent.task.settings import is_enabled as task_enabled, task_settings
 
             local_config = conf()
             use_agent = local_config.get("agent", True)
@@ -156,6 +157,7 @@ class ConfigHandler:
                 "self_evolution_enabled": get_evolution_config().enabled,
                 "subagent_enabled": SubagentSettings.from_config().enabled,
                 "task_enabled": task_enabled(),
+                "task_chat_create": task_settings()["chat_create"],
                 # Default permission mode for sessions that have not pinned one.
                 "agent_permission_mode": permission_global_mode(),
                 "permission_modes": list(PERMISSION_MODES),

@@ -337,7 +337,7 @@ available_setting = {
     # scheduled tasks run exactly as before.
     "task": {
         "enabled": False,
-        "chat_create": False,     # let a conversation hand work over with the task_create tool
+        "chat_create": True,      # a conversation may turn a request into a task when asked
         "max_concurrency": 2,     # tasks running at the same time (range 1-10); scheduled runs don't count
         "notify_webhook": "",     # optional URL that receives a JSON POST per notice
         # [{"tool": "bash", "match": "git\\s+push", "action": "ask|deny", "label": "..."}]

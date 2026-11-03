@@ -223,7 +223,19 @@
                                                 <span class="cfg-tip" data-tip-key="config_task_hint"><i class="fas fa-circle-question"></i></span>
                                             </label>
                                             <label class="relative inline-flex items-center cursor-pointer">
-                                                <input id="cfg-task" type="checkbox" class="sr-only peer">
+                                                <input id="cfg-task" type="checkbox" class="sr-only peer" onchange="syncTaskSubSwitches()">
+                                                <div class="w-9 h-5 bg-slate-200 dark:bg-slate-700 peer-checked:bg-primary-400 rounded-full
+                                                            after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white
+                                                            after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full"></div>
+                                            </label>
+                                        </div>
+                                        <div id="cfg-task-chat-create-row" class="hidden flex items-center justify-between pl-4">
+                                            <label class="flex items-center gap-1.5 text-sm text-slate-500 dark:text-slate-400">
+                                                <span data-i18n="config_task_chat_create">Create tasks from chat</span>
+                                                <span class="cfg-tip" data-tip-key="config_task_chat_create_hint"><i class="fas fa-circle-question"></i></span>
+                                            </label>
+                                            <label class="relative inline-flex items-center cursor-pointer">
+                                                <input id="cfg-task-chat-create" type="checkbox" class="sr-only peer">
                                                 <div class="w-9 h-5 bg-slate-200 dark:bg-slate-700 peer-checked:bg-primary-400 rounded-full
                                                             after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white
                                                             after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full"></div>

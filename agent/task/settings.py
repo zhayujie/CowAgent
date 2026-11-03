@@ -18,7 +18,7 @@ CONFIG_KEY = "task"
 
 DEFAULTS: Dict[str, Any] = {
     "enabled": False,
-    "chat_create": False,
+    "chat_create": True,
     "max_concurrency": 2,
     "notify_webhook": "",
     "approval_rules": [],
@@ -44,7 +44,7 @@ def task_settings() -> Dict[str, Any]:
             if key in raw:
                 merged[key] = raw[key]
     merged["enabled"] = bool(merged.get("enabled"))
-    merged["chat_create"] = bool(merged.get("chat_create"))
+    merged["chat_create"] = merged.get("chat_create") is not False
     merged["max_concurrency"] = _clamp_concurrency(merged.get("max_concurrency"))
     merged["notify_webhook"] = str(merged.get("notify_webhook") or "").strip()
     merged["approval_rules"] = normalize_rules(merged.get("approval_rules"))
@@ -59,6 +59,12 @@ def is_enabled() -> bool:
     except Exception:
         return False
     return isinstance(raw, dict) and bool(raw.get("enabled"))
+
+
+def chat_create_enabled() -> bool:
+    """Whether a conversation may turn a request into a background task. The
+    rest of what a conversation does with its tasks stays on regardless."""
+    return is_enabled() and task_settings()["chat_create"]
 
 
 def _clamp_concurrency(value) -> int:
@@ -132,6 +138,8 @@ def save_task_settings(updates: Dict[str, Any]) -> Dict[str, Any]:
         current = task_settings()
         if "enabled" in updates:
             current["enabled"] = bool(updates["enabled"])
+        if "chat_create" in updates:
+            current["chat_create"] = bool(updates["chat_create"])
         if "max_concurrency" in updates:
             current["max_concurrency"] = _clamp_concurrency(updates["max_concurrency"])
         if "notify_webhook" in updates:

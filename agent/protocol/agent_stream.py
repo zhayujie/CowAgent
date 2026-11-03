@@ -263,6 +263,7 @@ class AgentStreamExecutor:
             cancel_event=None,
             steer_inbox=None,
             allow_empty_response: bool = False,
+            turn_note: str = "",
     ):
         """
         Initialize stream executor
@@ -286,6 +287,8 @@ class AgentStreamExecutor:
                 outcome and is returned as-is instead of being replaced with
                 fallback text. Set for runs with no human waiting on a reply
                 (scheduled tasks), where silence can be the intended result.
+            turn_note: Context for this run only, shown to the model after the
+                user's message on every call and never kept in the history.
         """
         self.agent = agent
         self.model = model
@@ -298,6 +301,7 @@ class AgentStreamExecutor:
         self.cancel_event = cancel_event
         self.steer_inbox = steer_inbox
         self.allow_empty_response = allow_empty_response
+        self.turn_note = turn_note or ""
 
         # Message history - use provided messages or create new list
         self.messages = messages if messages is not None else []
@@ -3009,4 +3013,11 @@ class AgentStreamExecutor:
         not as a message. The AgentLLMModel will handle this.
         """
         # Don't add system message here - it will be handled separately by the LLM adapter
-        return self.messages
+        if not self.turn_note or self.run_user_message is None:
+            return self.messages
+        note = {"type": "text", "text": self.turn_note}
+        return [
+            {**msg, "content": list(msg.get("content") or []) + [note]}
+            if msg is self.run_user_message else msg
+            for msg in self.messages
+        ]
