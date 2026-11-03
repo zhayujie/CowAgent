@@ -356,8 +356,10 @@ class TaskStore:
                 conn.close()
 
     def claim_next(self, limit: int, scheduled: Optional[bool] = None) -> List[Dict[str, Any]]:
-        """Move up to ``limit`` queued tasks to running, oldest first; only
-        scheduled ones or only the rest when ``scheduled`` says so."""
+        """Move up to ``limit`` queued tasks to running; only scheduled ones or
+        only the rest when ``scheduled`` says so. A task that has run before
+        goes first, since it is back in the queue because someone followed it
+        up or decided on it; new tasks then follow, oldest first."""
         if limit <= 0:
             return []
         sql = "SELECT id FROM tasks WHERE status = ?"
@@ -365,7 +367,7 @@ class TaskStore:
         if scheduled is not None:
             sql += " AND source = ?" if scheduled else " AND source != ?"
             params.append(SOURCE_SCHEDULE)
-        sql += " ORDER BY updated_at ASC, id ASC LIMIT ?"
+        sql += " ORDER BY CASE WHEN run_count > 0 THEN 0 ELSE 1 END, updated_at ASC, id ASC LIMIT ?"
         params.append(int(limit))
         claimed = []
         with self._lock:
@@ -390,7 +392,7 @@ class TaskStore:
         return [t for t in (self.get_task(tid) for tid in claimed) if t]
 
     def requeue_interrupted(self) -> int:
-        """Tasks left running by a previous process start over."""
+        """Tasks left running by a previous process go back to the queue."""
         with self._lock:
             conn = self._connect()
             try:
