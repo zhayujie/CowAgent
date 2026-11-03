@@ -57,6 +57,8 @@ class WeixinMessage(ChatMessage):
         media_item = None
         media_type = None
         ref_text = ""
+        # What the message quotes, on its own; ``content`` carries it inline.
+        self.quoted_content = ""
 
         for item in item_list:
             itype = item.get("type", 0)
@@ -74,7 +76,8 @@ class WeixinMessage(ChatMessage):
                         ref_body = ref_mi.get("text_item", {}).get("text", "")
                     if ref_title or ref_body:
                         parts = [p for p in [ref_title, ref_body] if p]
-                        ref_text = f"[引用: {' | '.join(parts)}]\n"
+                        self.quoted_content = ' | '.join(parts)
+                        ref_text = f"[引用: {self.quoted_content}]\n"
                     # If ref is a media item, treat it as the media to download
                     if ref_mi.get("type") in (ITEM_IMAGE, ITEM_VIDEO, ITEM_FILE):
                         media_item = ref_mi

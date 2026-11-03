@@ -597,7 +597,8 @@ class ChatChannel(Channel):
                 self.sessions[queue_key][0].put(context)
 
     def _handle_approval_reply(self, context: Context) -> bool:
-        """Settle an approval answered by chat ("通过 5"); True when handled."""
+        """Settle an approval answered by chat ("通过 5"), or pass a reply
+        quoting a task's notice to that task; True when handled."""
         try:
             from agent.task.settings import is_enabled
             if not is_enabled():
@@ -607,6 +608,7 @@ class ChatChannel(Channel):
                 context.content,
                 context.get("channel_type") or "",
                 str(context.get("receiver") or ""),
+                quoted=str(getattr(context.get("msg"), "quoted_content", "") or ""),
             )
         except Exception as e:
             logger.warning(f"[chat_channel] Approval reply check failed: {e}")

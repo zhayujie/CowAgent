@@ -2329,9 +2329,9 @@ class AgentBridge:
         max_len = 4000
         if len(content) > max_len:
             content = content[:max_len].rstrip() + "…"
-        from common.i18n import t as i18n_t
+        from agent.task.notify import done_heading
 
-        heading = i18n_t(f"【任务 #{task_id} 已完成】{title}", f"[Task #{task_id} done] {title}")
+        heading = done_heading(task_id, title, link=channel_type == "web")
         messages = [
             {"role": "user", "content": [{"type": "text", "text": f"{self._TASK_MARKER} #{task_id} {title}"}]},
             {"role": "assistant", "content": [{"type": "text", "text": f"{heading}\n\n{content}"}]},

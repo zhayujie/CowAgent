@@ -102,9 +102,14 @@ function createMd() {
         // A workspace-relative href would resolve against the console URL and
         // 404 in a new tab. Tag it instead so the click handler in
         // workspace.js opens it in the preview panel.
-        const wsPath = typeof wsWorkspaceHref === 'function'
-            ? wsWorkspaceHref(token.attrGet('href') || '') : null;
-        if (wsPath) {
+        const href = token.attrGet('href') || '';
+        const wsPath = typeof wsWorkspaceHref === 'function' ? wsWorkspaceHref(href) : null;
+        const taskRef = /^#task-(\d+)$/.exec(href);
+        if (taskRef) {
+            // A background task, opened in place by the handler in task-detail.js.
+            token.attrPush(['data-task-id', taskRef[1]]);
+            token.attrJoin('class', 'task-link');
+        } else if (wsPath) {
             token.attrPush(['data-ws-path', wsPath]);
             token.attrJoin('class', 'ws-link');
         } else {
