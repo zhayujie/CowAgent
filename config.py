@@ -450,20 +450,29 @@ class Config(dict):
 config = Config()
 
 
-def _mask_value(val):
-    """Mask a sensitive string value, keeping first 3 and last 3 chars."""
-    if not isinstance(val, str) or len(val) <= 8:
+_SENSITIVE_KEY_PARTS = ("key", "secret", "token", "password", "passwd", "cookie", "authorization")
+_FULLY_MASKED_KEY_PARTS = ("password", "passwd")
+
+
+def _mask_value(val, full=False):
+    """Mask a sensitive string value, keeping first 3 and last 3 chars of a
+    long one. Short values and passwords are hidden entirely, since a few
+    characters of them is most of the secret."""
+    if not isinstance(val, str) or not val:
         return val
+    if full or len(val) <= 8:
+        return "*" * 8
     return val[0:3] + "*" * 5 + val[-3:]
 
 
 def _mask_sensitive_recursive(obj):
-    """Recursively mask values whose keys contain 'key' or 'secret'."""
+    """Recursively mask string values whose keys name a credential."""
     if isinstance(obj, dict):
         masked = {}
         for k, v in obj.items():
-            if ("key" in k or "secret" in k) and isinstance(v, str):
-                masked[k] = _mask_value(v)
+            name = str(k).lower()
+            if isinstance(v, str) and any(p in name for p in _SENSITIVE_KEY_PARTS):
+                masked[k] = _mask_value(v, full=any(p in name for p in _FULLY_MASKED_KEY_PARTS))
             else:
                 masked[k] = _mask_sensitive_recursive(v)
         return masked

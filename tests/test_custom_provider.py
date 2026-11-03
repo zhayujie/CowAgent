@@ -298,6 +298,36 @@ class TestDragSensitiveNested(unittest.TestCase):
         self.assertNotIn("1234567890abcdef", result)
         self.assertNotIn("nested-very-long-secret", result)
 
+    def test_tokens_passwords_and_headers_masked(self):
+        from config import drag_sensitive
+        test_config = {
+            "web_password": "Pass2024xyz",
+            "discord_token": "MTU0.discord-bot-token-value",
+            "external_api_token": "ext-api-token-abcdef",
+            "claude_api_cookie": "sessionKey=sk-ant-cookie",
+            "custom_providers": [{"id": "p1", "headers": {"Authorization": "Bearer header-secret-value"}}],
+        }
+        result = str(drag_sensitive(test_config))
+        for leaked in ("Pass", "2024", "xyz", "discord-bot-token", "ext-api-token",
+                       "sk-ant-cookie", "header-secret"):
+            self.assertNotIn(leaked, result)
+        self.assertEqual(drag_sensitive(test_config)["web_password"], "********")
+
+    def test_short_secret_hidden_and_other_values_kept(self):
+        from config import drag_sensitive
+        result = drag_sensitive({
+            "telegram_token": "abc123",
+            "web_password": "",
+            "agent_max_context_tokens": 200000,
+            "weixin_credentials_path": "~/.weixin_cow_credentials.json",
+            "model": "deepseek-flash",
+        })
+        self.assertEqual(result["telegram_token"], "********")
+        self.assertEqual(result["web_password"], "")
+        self.assertEqual(result["agent_max_context_tokens"], 200000)
+        self.assertEqual(result["weixin_credentials_path"], "~/.weixin_cow_credentials.json")
+        self.assertEqual(result["model"], "deepseek-flash")
+
 
 if __name__ == "__main__":
     unittest.main()
