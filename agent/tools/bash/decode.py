@@ -14,6 +14,13 @@ def _fallback_encoding() -> str:
         return ""
     try:
         import locale
+        # In Python's UTF-8 mode (PYTHONUTF8=1 / -X utf8, and the default from
+        # Python 3.15) getpreferredencoding() always returns "utf-8", which
+        # would skip the fallback. getencoding() (3.11+) still returns the
+        # Windows code page.
+        getencoding = getattr(locale, "getencoding", None)
+        if getencoding is not None:
+            return getencoding() or "gbk"
         return locale.getpreferredencoding(False) or "gbk"
     except Exception:
         return "gbk"
