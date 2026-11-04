@@ -16,6 +16,7 @@ MOONSHOT = "moonshot"
 MiniMax = "minimax"
 DEEPSEEK = "deepseek"
 MIMO = "mimo"  # Xiaomi MiMo
+ATLASCLOUD = "atlascloud"  # Atlas Cloud OpenAI-compatible gateway
 CUSTOM = "custom"  # custom OpenAI-compatible API, bot_type won't auto-switch on model change
 MODELSCOPE = "modelscope"
 

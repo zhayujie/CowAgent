@@ -132,6 +132,17 @@ PROVIDER_MODELS = OrderedDict([
         "api_base_placeholder": _PLACEHOLDER_V1,
         "models": [const.MIMO_V2_6_PRO, const.MIMO_V2_6_FLASH],
     }),
+    ("atlascloud", {
+        "label": "Atlas Cloud",
+        "api_key_field": "atlascloud_api_key",
+        "api_base_key": "atlascloud_api_base",
+        "api_base_default": "https://api.atlascloud.ai/v1",
+        "api_base_placeholder": _PLACEHOLDER_V1,
+        "models": [
+            "deepseek-ai/deepseek-v4-flash", "moonshotai/kimi-k3", "zai-org/glm-5.2",
+            "qwen/qwen3.5-397b-a17b", "minimaxai/minimax-m3",
+        ],
+    }),
     ("linkai", {
         "label": "LinkAI",
         "api_key_field": "linkai_api_key",

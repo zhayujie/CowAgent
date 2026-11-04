@@ -1,0 +1,26 @@
+---
+title: Atlas Cloud
+description: "Configure Atlas Cloud, an OpenAI-compatible gateway for DeepSeek, Kimi, GLM, Qwen, MiniMax and more, in CowAgent with one API key via the web console or config.json."
+---
+
+[Atlas Cloud](https://www.atlascloud.ai) is an OpenAI-compatible gateway that serves models from many vendors behind a single API key.
+
+```json
+{
+  "bot_type": "atlascloud",
+  "model": "deepseek-ai/deepseek-v4-flash",
+  "atlascloud_api_key": "YOUR_API_KEY",
+  "atlascloud_api_base": "https://api.atlascloud.ai/v1"
+}
+```
+
+| Parameter | Description |
+| --- | --- |
+| `bot_type` | Set to `atlascloud`. Model ids are vendor-prefixed (e.g. `deepseek-ai/...`), so the provider is not inferred from the model name |
+| `model` | Any chat model id from the [Atlas Cloud catalog](https://api.atlascloud.ai/v1/models), e.g. `deepseek-ai/deepseek-v4-flash`, `moonshotai/kimi-k3`, `zai-org/glm-5.2`, `qwen/qwen3.5-397b-a17b` |
+| `atlascloud_api_key` | Create one in the [Atlas Cloud console](https://console.atlascloud.ai/api-keys); also read from the `ATLASCLOUD_API_KEY` environment variable |
+| `atlascloud_api_base` | Optional, defaults to `https://api.atlascloud.ai/v1` |
+
+<Tip>
+  The model list at `https://api.atlascloud.ai/v1/models` is public and changes over time. In the Web Console's "Model Management" page, use "Discover models" to pull the current list.
+</Tip>

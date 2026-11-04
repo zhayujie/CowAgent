@@ -1,0 +1,26 @@
+---
+title: Atlas Cloud
+description: "CowAgent で Atlas Cloud を設定します。OpenAI 互換のゲートウェイで、1 つの API キーで DeepSeek・Kimi・GLM・Qwen・MiniMax などを利用できます。"
+---
+
+[Atlas Cloud](https://www.atlascloud.ai) は OpenAI 互換のゲートウェイで、1 つの API キーで複数ベンダーのモデルを利用できます。
+
+```json
+{
+  "bot_type": "atlascloud",
+  "model": "deepseek-ai/deepseek-v4-flash",
+  "atlascloud_api_key": "YOUR_API_KEY",
+  "atlascloud_api_base": "https://api.atlascloud.ai/v1"
+}
+```
+
+| パラメータ | 説明 |
+| --- | --- |
+| `bot_type` | `atlascloud` を指定します。モデル ID にはベンダー接頭辞（例: `deepseek-ai/...`）が付くため、モデル名からは推測されません |
+| `model` | [Atlas Cloud のモデル一覧](https://api.atlascloud.ai/v1/models) にある任意のチャットモデル。例: `deepseek-ai/deepseek-v4-flash`、`moonshotai/kimi-k3`、`zai-org/glm-5.2`、`qwen/qwen3.5-397b-a17b` |
+| `atlascloud_api_key` | [Atlas Cloud コンソール](https://console.atlascloud.ai/api-keys) で作成します。環境変数 `ATLASCLOUD_API_KEY` からも読み込まれます |
+| `atlascloud_api_base` | 任意。デフォルトは `https://api.atlascloud.ai/v1` |
+
+<Tip>
+  `https://api.atlascloud.ai/v1/models` は公開されており、随時更新されます。Web コンソールの「モデル管理」で「モデルを検出」を使うと最新の一覧を取得できます。
+</Tip>

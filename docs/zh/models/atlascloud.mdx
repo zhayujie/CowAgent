@@ -1,0 +1,26 @@
+---
+title: Atlas Cloud
+description: "在 CowAgent 中配置 Atlas Cloud：一个兼容 OpenAI 协议的模型网关，一个 API Key 即可调用 DeepSeek、Kimi、GLM、Qwen、MiniMax 等多家模型，可在 Web 控制台或 config.json 中完成配置。"
+---
+
+[Atlas Cloud](https://www.atlascloud.ai) 是兼容 OpenAI 协议的模型网关，一个 API Key 即可访问多家厂商的模型。
+
+```json
+{
+  "bot_type": "atlascloud",
+  "model": "deepseek-ai/deepseek-v4-flash",
+  "atlascloud_api_key": "YOUR_API_KEY",
+  "atlascloud_api_base": "https://api.atlascloud.ai/v1"
+}
+```
+
+| 参数 | 说明 |
+| --- | --- |
+| `bot_type` | 设置为 `atlascloud`。模型 ID 带有厂商前缀（如 `deepseek-ai/...`），因此不会根据模型名自动推断 |
+| `model` | 取自 [Atlas Cloud 模型列表](https://api.atlascloud.ai/v1/models) 的任意对话模型，如 `deepseek-ai/deepseek-v4-flash`、`moonshotai/kimi-k3`、`zai-org/glm-5.2`、`qwen/qwen3.5-397b-a17b` |
+| `atlascloud_api_key` | 在 [Atlas Cloud 控制台](https://console.atlascloud.ai/api-keys) 创建，也可通过环境变量 `ATLASCLOUD_API_KEY` 读取 |
+| `atlascloud_api_base` | 可选，默认 `https://api.atlascloud.ai/v1` |
+
+<Tip>
+  `https://api.atlascloud.ai/v1/models` 为公开接口且会不定期更新。在 Web 控制台的「模型管理」页面可通过「发现模型」拉取最新列表。
+</Tip>

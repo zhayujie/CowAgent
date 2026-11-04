@@ -134,6 +134,7 @@
                   "models/kimi",
                   "models/qianfan",
                   "models/mimo",
+                  "models/atlascloud",
                   "models/linkai",
                   "models/coding-plan",
                   "models/custom"
@@ -416,6 +417,7 @@
                   "zh/models/kimi",
                   "zh/models/qianfan",
                   "zh/models/mimo",
+                  "zh/models/atlascloud",
                   "zh/models/linkai",
                   "zh/models/coding-plan",
                   "zh/models/custom"
@@ -698,6 +700,7 @@
                   "ja/models/kimi",
                   "ja/models/qianfan",
                   "ja/models/mimo",
+                  "ja/models/atlascloud",
                   "ja/models/linkai",
                   "ja/models/coding-plan",
                   "ja/models/custom"

@@ -141,6 +141,7 @@ CowAgent 支持国内外主流厂商的大语言模型。**文本对话、图像
 | [豆包 Doubao](https://docs.cowagent.ai/zh/models/doubao) | doubao-seed-2.1 系列 | ✅ | ✅ | ✅ | | | ✅ |
 | [百度ERNIE](https://docs.cowagent.ai/zh/models/qianfan) | ernie-5.1 | ✅ | ✅ | | | | |
 | [小米 MiMo](https://docs.cowagent.ai/zh/models/mimo) | mimo-v2.6-pro / v2.6-flash | ✅ | ✅ | | ✅ | ✅ | |
+| [Atlas Cloud](https://docs.cowagent.ai/zh/models/atlascloud) | 一个 Key 调用 DeepSeek / Kimi / GLM / Qwen 等 | ✅ | | | | | |
 | [LinkAI](https://docs.cowagent.ai/zh/models/linkai) | 一个 Key 接入 100+ 模型 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | [自定义](https://docs.cowagent.ai/zh/models/custom) | 本地模型 / 三方代理 | ✅ | | | | | |
 
