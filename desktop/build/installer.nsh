@@ -2,6 +2,192 @@
 # <buildResources>/installer.nsh. Included in both the installer and the
 # uninstaller script, so a macro only takes effect where it is inserted.
 
+!include nsDialogs.nsh
+!include WordFunc.nsh
+
+# Workspace location page, shown after electron-builder's directory page.
+#
+# The Agent workspace goes into a "cow" folder inside the folder picked here,
+# which defaults to the user profile (~/cow). Another choice is recorded in the
+# pointer file the app reads at startup (src/main/workspace-location.ts); keep
+# the path and format in sync. Config and credentials (~/.cow) never move.
+!define COW_LOCATION_DIR "CowAgent"
+!define COW_LOCATION_FILE "workspace-location.json"
+
+!macro customPageAfterChangeDir
+  Var cowWorkspaceRoot
+  Var cowWorkspaceRootField
+
+  Page custom cowWorkspaceLocationPageCreate cowWorkspaceLocationPageLeave
+
+  Function cowWorkspaceLocationPageCreate
+    # Only asked while there is no workspace yet. An existing one keeps its
+    # location (choosing another here would not move the files); relocating it
+    # is done from the app's Settings. Config and keys play no part in this.
+    ${If} ${isUpdated}
+      Abort
+    ${EndIf}
+    # The pointer is per user even for an all-users install.
+    StrCpy $0 "0"
+    SetShellVarContext current
+    ${If} ${FileExists} "$APPDATA\${COW_LOCATION_DIR}\${COW_LOCATION_FILE}"
+    ${OrIf} ${FileExists} "$PROFILE\cow\*.*"
+      StrCpy $0 "1"
+    ${EndIf}
+    ${If} $installMode == "all"
+      SetShellVarContext all
+    ${EndIf}
+    ${If} $0 == "1"
+      StrCpy $cowWorkspaceRoot ""
+      Abort
+    ${EndIf}
+
+    ${If} $cowWorkspaceRoot == ""
+      StrCpy $cowWorkspaceRoot "$PROFILE"
+    ${EndIf}
+
+    ${If} $LANGUAGE == 2052
+      !insertmacro MUI_HEADER_TEXT "工作空间位置" "选择 ${PRODUCT_NAME} 保存对话记录、记忆和知识库的位置。"
+      StrCpy $R1 "将在所选文件夹下创建 cow 目录作为工作空间，存放对话记录、记忆、知识库和技能。$\r$\n$\r$\n工作空间会随使用增长，建议选择空间充足的磁盘。安装后可随时在「设置」中更改并迁移。"
+      StrCpy $R2 "浏览..."
+    ${Else}
+      !insertmacro MUI_HEADER_TEXT "Workspace Location" "Choose where ${PRODUCT_NAME} keeps conversations, memory and the knowledge base."
+      StrCpy $R1 "A cow folder is created inside the selected folder as the workspace, holding conversations, memory, the knowledge base and skills.$\r$\n$\r$\nThe workspace grows with use, so pick a drive with enough free space. You can change and migrate it later in Settings."
+      StrCpy $R2 "Browse..."
+    ${EndIf}
+
+    nsDialogs::Create 1018
+    Pop $0
+    ${If} $0 == error
+      Abort
+    ${EndIf}
+
+    ${NSD_CreateLabel} 0 0 100% 52u "$R1"
+    Pop $0
+    ${NSD_CreateDirRequest} 0 60u 76% 13u "$cowWorkspaceRoot"
+    Pop $cowWorkspaceRootField
+    ${NSD_CreateBrowseButton} 78% 59u 22% 15u "$R2"
+    Pop $0
+    ${NSD_OnClick} $0 cowWorkspaceLocationBrowse
+
+    nsDialogs::Show
+  FunctionEnd
+
+  Function cowWorkspaceLocationBrowse
+    Pop $0
+    ${NSD_GetText} $cowWorkspaceRootField $0
+    nsDialogs::SelectFolderDialog "" "$0"
+    Pop $0
+    ${If} $0 != error
+      ${NSD_SetText} $cowWorkspaceRootField "$0"
+    ${EndIf}
+  FunctionEnd
+
+  Function cowWorkspaceLocationPageLeave
+    ${NSD_GetText} $cowWorkspaceRootField $0
+
+    # Drop a trailing separator, except on a drive root ("D:\").
+    StrCpy $1 $0 1 -1
+    StrLen $2 $0
+    ${If} $1 == "\"
+    ${AndIf} $2 > 3
+      IntOp $2 $2 - 1
+      StrCpy $0 $0 $2
+    ${EndIf}
+
+    StrCpy $1 $0 1 1
+    StrCpy $3 $0 2
+    ${If} $1 != ":"
+    ${AndIf} $3 != "\\"
+      ${If} $LANGUAGE == 2052
+        MessageBox MB_ICONEXCLAMATION|MB_OK "请选择一个完整的文件夹路径，例如 D:\CowAgentData。"
+      ${Else}
+        MessageBox MB_ICONEXCLAMATION|MB_OK "Please choose a full folder path, for example D:\CowAgentData."
+      ${EndIf}
+      Abort
+    ${EndIf}
+
+    # An update deletes the install directory, so data kept inside it would be
+    # wiped by the next release. Checked on the workspace itself ($5): picking
+    # D:\ with the app installed in D:\cow must be refused too.
+    StrCpy $1 $0 1 -1
+    ${If} $1 == "\"
+      StrCpy $5 "$0cow"
+    ${Else}
+      StrCpy $5 "$0\cow"
+    ${EndIf}
+    StrLen $2 "$INSTDIR"
+    StrCpy $3 $5 $2
+    StrCpy $4 $5 1 $2
+    ${If} $3 == "$INSTDIR"
+      ${If} $4 == ""
+      ${OrIf} $4 == "\"
+        ${If} $LANGUAGE == 2052
+          MessageBox MB_ICONEXCLAMATION|MB_OK "工作空间不能放在安装目录内，升级时安装目录会被清空。请选择其他文件夹。"
+        ${Else}
+          MessageBox MB_ICONEXCLAMATION|MB_OK "The workspace can't be inside the install folder, which is replaced on every update. Please choose another folder."
+        ${EndIf}
+        Abort
+      ${EndIf}
+    ${EndIf}
+
+    # The Agent can read and write everything in its workspace, so it must not
+    # sit inside the folder holding config and credentials.
+    StrLen $2 "$PROFILE\.cow"
+    StrCpy $3 $0 $2
+    StrCpy $4 $0 1 $2
+    ${If} $3 == "$PROFILE\.cow"
+      ${If} $4 == ""
+      ${OrIf} $4 == "\"
+        ${If} $LANGUAGE == 2052
+          MessageBox MB_ICONEXCLAMATION|MB_OK "工作空间不能放在配置和密钥目录（.cow）内，请选择其他文件夹。"
+        ${Else}
+          MessageBox MB_ICONEXCLAMATION|MB_OK "The workspace can't be inside the settings and keys folder (.cow). Please choose another folder."
+        ${EndIf}
+        Abort
+      ${EndIf}
+    ${EndIf}
+
+    ClearErrors
+    CreateDirectory "$0"
+    FileOpen $1 "$0\.cow-write-test" w
+    ${If} ${Errors}
+      ${If} $LANGUAGE == 2052
+        MessageBox MB_ICONEXCLAMATION|MB_OK "无法写入该文件夹，请选择其他位置：$\r$\n$0"
+      ${Else}
+        MessageBox MB_ICONEXCLAMATION|MB_OK "This folder isn't writable, please choose another one:$\r$\n$0"
+      ${EndIf}
+      Abort
+    ${EndIf}
+    FileClose $1
+    Delete "$0\.cow-write-test"
+
+    StrCpy $cowWorkspaceRoot $0
+  FunctionEnd
+!macroend
+
+# Records a non-default workspace location for the app. Written UTF-16LE with a
+# BOM: FileWrite would emit the ANSI code page and mangle a non-ASCII path.
+!macro cowWriteWorkspaceLocation
+  ${If} $cowWorkspaceRoot != ""
+  ${AndIf} $cowWorkspaceRoot != "$PROFILE"
+    # The pointer is per user even for an all-users install.
+    SetShellVarContext current
+    CreateDirectory "$APPDATA\${COW_LOCATION_DIR}"
+    ${WordReplace} "$cowWorkspaceRoot" "\" "/" "+" $0
+    ClearErrors
+    FileOpen $1 "$APPDATA\${COW_LOCATION_DIR}\${COW_LOCATION_FILE}" w
+    ${IfNot} ${Errors}
+      FileWriteWord $1 0xFEFF
+      FileWriteUTF16LE $1 '{"workspace": "$0/cow"}'
+      FileClose $1
+    ${EndIf}
+    ${If} $installMode == "all"
+      SetShellVarContext all
+    ${EndIf}
+  ${EndIf}
+!macroend
+
 # Replaces electron-builder's default update-removal step, which stages the old
 # installation before deleting it:
 #
@@ -99,6 +285,7 @@
 # extra icon is a far smaller problem than no way into the app.
 !macro customInstall
   !insertmacro cowReextractIfForced
+  !insertmacro cowWriteWorkspaceLocation
 
   !ifndef DO_NOT_CREATE_DESKTOP_SHORTCUT
     ${If} ${FileExists} "$newDesktopLink"

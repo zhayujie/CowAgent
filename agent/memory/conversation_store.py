@@ -2762,7 +2762,7 @@ def _default_db_path() -> Path:
     Agent X's own file and split X's writes off into its (soon-archived) source
     DB instead of the shared global file. This must be identity-independent.
     """
-    from common.utils import expand_path
+    from common.cow_paths import default_workspace
 
     try:
         from agent.registry import get_agent_registry
@@ -2772,7 +2772,7 @@ def _default_db_path() -> Path:
         return MemoryConfig(workspace_root=str(default_ws)).get_db_path().resolve()
     except Exception:
         return (
-            Path(expand_path("~/cow")) / "memory" / "long-term" / "index.db"
+            Path(default_workspace()) / "memory" / "long-term" / "index.db"
         ).resolve()
 
 

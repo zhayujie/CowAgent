@@ -60,8 +60,16 @@ def _read_config(data_root: Path) -> dict:
         return {}
 
 
+def _default_workspace() -> Path:
+    """Mirrors common.cow_paths.default_workspace without importing the project."""
+    configured = (os.environ.get("COW_DEFAULT_WORKSPACE") or "").strip()
+    return Path(configured or "~/cow").expanduser().resolve()
+
+
 def _workspace_from_config(config: dict) -> Path:
-    return Path(config.get("agent_workspace") or "~/cow").expanduser().resolve()
+    if config.get("agent_workspace"):
+        return Path(config["agent_workspace"]).expanduser().resolve()
+    return _default_workspace()
 
 
 def _configured_workspaces(config: dict, fallback: Path):
@@ -491,7 +499,7 @@ def restore_backup_archive(
                 # Do not trust an archive-controlled absolute destination on a
                 # fresh machine. Portable restores default to ~/cow unless the
                 # operator supplies --workspace.
-                target_workspace = Path("~/cow").expanduser().resolve()
+                target_workspace = _default_workspace()
             if restored_config:
                 restored_config["agent_workspace"] = str(target_workspace)
 
