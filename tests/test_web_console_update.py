@@ -199,7 +199,7 @@ def test_check_up_to_date(monkeypatch):
 def test_failed_pip_resets_git(tmp_path, monkeypatch):
     calls = []
 
-    def fake_run(cmd, cwd):
+    def fake_run(cmd, cwd, **kwargs):
         calls.append(cmd)
         if cmd[:2] == ["git", "rev-parse"]:
             return types.SimpleNamespace(returncode=0, stdout="abc123\n")
@@ -222,7 +222,7 @@ def test_failed_pip_resets_git(tmp_path, monkeypatch):
 def test_local_edits_block_the_update_before_anything_runs(tmp_path, monkeypatch):
     calls = []
 
-    def fake_run(cmd, cwd):
+    def fake_run(cmd, cwd, **kwargs):
         calls.append(cmd)
         if cmd[:2] == ["git", "status"]:
             return types.SimpleNamespace(returncode=0, stdout=" M plugins/foo.py\n")
@@ -239,7 +239,7 @@ def test_local_edits_block_the_update_before_anything_runs(tmp_path, monkeypatch
 def test_the_console_pulls_fast_forward_only(tmp_path, monkeypatch):
     calls = []
 
-    def fake_run(cmd, cwd):
+    def fake_run(cmd, cwd, **kwargs):
         calls.append(cmd)
         return types.SimpleNamespace(returncode=0, stdout="")
 
