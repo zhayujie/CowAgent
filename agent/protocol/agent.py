@@ -56,8 +56,8 @@ _MODEL_SPECS = {
     # MiniMax-M3.1-Flash: 1M context, 512K max output.
     "minimax": {"prefix": "minimax-m3.1-flash", "window": 1000000, "max_output": 524288,
                 "fallback_window": 128000},
-    # Kimi K3.1 Pro / Highspeed: 1M context, 128K default max output.
-    "kimi": {"prefix": "kimi-k3.1", "window": 1048576, "max_output": 131072,
+    # Kimi K3 / K3.1 Pro / Highspeed: 1M context, 128K default max output.
+    "kimi": {"prefix": "kimi-k3", "window": 1048576, "max_output": 131072,
              "fallback_window": 128000},
 }
 
