@@ -13,6 +13,11 @@ from common.log import logger
 from config import conf, load_config
 from .moonshot_session import MoonshotSession
 
+# An overloaded endpoint can hold the stream open with only ": keep-alive"
+# comments. Each one resets the socket read timeout, so without this cap a
+# queued request can hang for many minutes.
+STREAM_KEEPALIVE_MAX_SECONDS = 180
+
 
 # Moonshot (Kimi) API Bot
 class MoonshotBot(Bot):
@@ -344,12 +349,30 @@ class MoonshotBot(Bot):
             current_tool_calls = {}
             finish_reason = None
             stream_usage = None  # Provider-reported token usage (include_usage)
+            last_data_at = time.time()
 
             for line in response.iter_lines():
                 if not line:
                     continue
 
                 line = line.decode("utf-8")
+                if line.startswith(":"):
+                    if time.time() - last_data_at > STREAM_KEEPALIVE_MAX_SECONDS:
+                        logger.error(
+                            f"[MOONSHOT] Stream timeout: only keep-alive received for "
+                            f"{STREAM_KEEPALIVE_MAX_SECONDS}s"
+                        )
+                        yield {
+                            "error": True,
+                            "message": f"Stream timeout: only keep-alive received for {STREAM_KEEPALIVE_MAX_SECONDS}s",
+                            "status_code": 504,
+                        }
+                        return
+                    # Empty chunk lets the caller check for cancel while the server is queueing
+                    yield {}
+                    continue
+                last_data_at = time.time()
+
                 # Handle both "data: {...}" and "data:{...}" (Kimi Coding Plan omits the space)
                 if line.startswith("data: "):
                     data_str = line[6:]
