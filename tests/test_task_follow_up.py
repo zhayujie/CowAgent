@@ -1,5 +1,5 @@
 # encoding:utf-8
-"""Following a task up: queue order, restarts, quote replies and task links."""
+"""Following a task up: queue order, restarts, quoted replies and task links."""
 
 import json
 from types import SimpleNamespace
@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from agent.task import store as st
-from agent.task.commands import own_text, quoted_notice, try_handle
+from agent.task.commands import own_text, quoted_approval, try_handle
 
 
 @pytest.fixture
@@ -56,14 +56,12 @@ def test_restart_requeues_with_a_recovery_note(store):
 
 # --- quote replies ------------------------------------------------------------------
 
-def test_quoted_notices_are_recognized():
-    assert quoted_notice("【任务 #12 已完成】周报\n\n内容") == ("task", 12)
-    assert quoted_notice("[Task #12 failed] report") == ("task", 12)
-    assert quoted_notice("【[任务 #12](#task-12) 已完成】周报") == ("task", 12)
-    assert quoted_notice("bot | 【任务 #12 已完成】周报") == ("task", 12)
-    assert quoted_notice("【待审批 #3】任务 #12「周报」要执行：推送代码") == ("approval", 3)
-    assert quoted_notice("[Review #4] Task #12 \"report\" is done") == ("approval", 4)
-    assert quoted_notice("今天天气不错，任务 #12 呢") == ("", None)
+def test_quoted_approval_cards_are_recognized():
+    assert quoted_approval("【待审批 #3】任务 #12「周报」要执行：推送代码") == 3
+    assert quoted_approval("[Review #4] Task #12 \"report\" is done") == 4
+    assert quoted_approval("bot | 【待验收 #5】任务 #12「周报」已完成") == 5
+    assert quoted_approval("【任务 #12 已完成】周报") is None
+    assert quoted_approval("今天天气不错，待审批 #12 呢") is None
 
 
 def test_own_text_drops_the_quote_block():
@@ -73,26 +71,14 @@ def test_own_text_drops_the_quote_block():
     assert own_text("加个图表", "") == "加个图表"
 
 
-def test_quoting_a_task_notice_reaches_that_task(store):
+def test_quoting_a_task_notice_goes_to_the_agent(store):
     task = store.create_task("周报", "p", source=st.SOURCE_CHAT, origin=dict(_FEISHU))
     store.update_task(task["id"], status=st.DONE, result="r")
     quoted = f"【任务 #{task['id']} 已完成】周报\n\nr"
     text = f"[Quoted message]\n{quoted}\n[/Quoted message]\n\n加个图表"
-    with _on(), patch("agent.task.runner.reply_to_task", return_value="reopened") as reply:
-        assert f"#{task['id']}" in try_handle(text, "feishu", "u1", quoted=quoted)
-        reply.assert_called_once_with(task["id"], "加个图表")
-        # Another conversation, or no quote: the message goes to the agent.
-        assert try_handle(text, "feishu", "u2", quoted=quoted) is None
-        assert try_handle("加个图表", "feishu", "u1") is None
-        assert reply.call_count == 1
-
-
-def test_quoting_a_scheduled_run_goes_to_the_agent(store):
-    task = store.create_task("daily", "p", source=st.SOURCE_SCHEDULE, origin=dict(_FEISHU))
-    store.update_task(task["id"], status=st.DONE)
-    quoted = f"【任务 #{task['id']} 已完成】daily"
     with _on(), patch("agent.task.runner.reply_to_task") as reply:
-        assert try_handle(f"[引用: {quoted}]\nagain", "feishu", "u1", quoted=quoted) is None
+        assert try_handle(text, "feishu", "u1", quoted=quoted) is None
+        assert try_handle(f"[引用: {quoted}]\n这个结果什么意思", "feishu", "u1", quoted=quoted) is None
         reply.assert_not_called()
 
 
@@ -112,15 +98,17 @@ def test_quoting_an_approval_card_names_the_approval(store):
     assert first["id"] != second["id"]
 
 
-def test_feedback_quoting_a_review_card_is_rework(store):
+def test_rejecting_a_quoted_review_card_is_rework(store):
     task = store.create_task("周报", "p", origin=dict(_FEISHU), require_accept=True)
     store.update_task(task["id"], status=st.WAITING, wait_type=st.WAIT_ACCEPT)
     review = store.create_approval(st.KIND_ACCEPT, task_id=task["id"], session_id=task["session_id"],
                                    origin=dict(_FEISHU))
     quoted = f"【待验收 #{review['id']}】任务 #{task['id']}「周报」已完成"
-    with _on(), patch("agent.task.runner.reply_to_task", return_value="rework") as reply:
-        assert try_handle(f"[引用: {quoted}]\n第二段再短点", "feishu", "u1", quoted=quoted)
-        reply.assert_called_once_with(task["id"], "第二段再短点")
+    with _on(), patch("agent.task.approval.decide") as decide:
+        assert try_handle(f"[引用: {quoted}]\n驳回 第二段再短点", "feishu", "u1", quoted=quoted)
+        decide.assert_called_once_with(review["id"], "reject", note="第二段再短点", via="feishu")
+        # Feedback without "reject" is for the agent, which knows the task from the card.
+        assert try_handle(f"[引用: {quoted}]\n第二段再短点", "feishu", "u1", quoted=quoted) is None
 
 
 def test_quote_hint_only_where_quotes_reach_the_task():
@@ -131,7 +119,6 @@ def test_quote_hint_only_where_quotes_reach_the_task():
     assert not can_quote_reply({**chat, "origin": {"channel_type": "dingtalk"}})
     assert not can_quote_reply({**chat, "source": st.SOURCE_SCHEDULE})
     assert done_text(chat, "r", quote_hint=True) != done_text(chat, "r")
-    assert quoted_notice(done_text(chat, "r", quote_hint=True)) == ("task", 1)
 
 
 def test_feishu_card_quote_reads_its_markdown():

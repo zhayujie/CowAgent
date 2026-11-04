@@ -12,8 +12,9 @@ CREATE_HINT_LIMIT = 3
 
 _INTRO = (
     "Manage this conversation's background tasks: work that runs on its own, apart "
-    "from this chat, and sends its result back here when it finishes. The tasks of "
-    "this conversation are listed with the user's message on each turn.\n\n"
+    "from this chat, and sends its result back here when it finishes. A task's status "
+    "changes outside this chat, so when the user asks how one is going, check it with "
+    "list or get instead of answering from earlier messages.\n\n"
     "Actions:\n"
     "- list: this conversation's tasks with their status.\n"
     "- get (task_id): one task in detail: times, what it is waiting on, its latest "
@@ -38,9 +39,11 @@ _MANAGE = (
     "- delete (task_id): remove a task and its record; only when the user explicitly "
     "asks to delete it.\n\n"
     "When the user is talking about an existing task, act on that task with follow or "
-    "cancel; do not do its work here yourself or create a new task for it. If it is "
-    "unclear which task they mean, ask. After {after}, tell the user in one sentence "
-    "what happens next and end the turn."
+    "cancel; do not do its work here yourself or create a new task for it. A message "
+    "quoting a task's notice (\"【任务 #3 …】\", \"[Task #3 …]\", or a review card naming "
+    "task #3) is about that task, though a question about the result can just be "
+    "answered. If it is unclear which task they mean, ask. After {after}, tell the "
+    "user in one sentence what happens next and end the turn."
 )
 _CREATE_PARAMS = {
     "title": {
@@ -61,6 +64,23 @@ _CREATE_PARAMS = {
 CREATE_HINT_ZH = "不需要放后台的话，回复「直接做」就会停掉它、在这里接着做；也可以在「配置 → Agent 配置」里关闭「对话中创建任务」。"
 CREATE_HINT_EN = ("Don't need it in the background? Reply \"do it now\" and it stops and gets done "
                   "here, or turn off \"Create tasks from chat\" under Config → Agent Configuration.")
+
+
+def _follow_text(mode, tid: int):
+    """What the user is told after the instruction reached the task, by how
+    ``reply_to_task`` took it; None when it did not."""
+    if mode == "steer":
+        return i18n.t(f"已补充给正在执行的任务 #{tid}。", f"Passed on to task #{tid}, which is running.")
+    if mode == "queued":
+        return i18n.t(f"已记下，任务 #{tid} 接着做时会一并处理。",
+                      f"Noted; task #{tid} takes it up when it carries on.")
+    if mode == "rework":
+        return i18n.t(f"已退回任务 #{tid}，按用户的意见修改后再发回来。",
+                      f"Sent task #{tid} back; it will be revised per the user's note and sent back.")
+    if mode == "reopened":
+        return i18n.t(f"任务 #{tid} 接着处理中，完成后结果会发回这个对话。",
+                      f"Task #{tid} is carrying on; its result will be sent back to this conversation.")
+    return None
 
 
 def _can_create() -> bool:
@@ -149,7 +169,7 @@ class TaskTool(BaseTool):
     def _list(self, context) -> ToolResult:
         from agent.task import overview
 
-        tasks = overview.conversation_tasks(overview.conversation_of(context), limit=20)
+        tasks = overview.conversation_tasks(overview.conversation_of(context))
         if not tasks:
             return ToolResult.success(i18n.t(
                 "这个对话目前没有后台任务（6 小时内也没有已结束的）。",
@@ -228,7 +248,6 @@ class TaskTool(BaseTool):
 
     def _follow(self, task: dict, message: str) -> ToolResult:
         from agent.task import store as st
-        from agent.task.commands import follow_up_text
         from agent.task.notify import task_link
         from agent.task.runner import reply_to_task
 
@@ -241,7 +260,7 @@ class TaskTool(BaseTool):
                 f"Task #{task['id']} is one run of a schedule; what it does next is not sent "
                 "back here. To change future runs, edit the schedule instead.",
             ))
-        text = follow_up_text(reply_to_task(task["id"], message), task["id"])
+        text = _follow_text(reply_to_task(task["id"], message), task["id"])
         if not text:
             return ToolResult.fail(i18n.t(
                 f"任务 #{task['id']} 现在没能接收这条补充，请稍后再试。",

@@ -43,7 +43,7 @@ There are three ways in:
 
 ## Managing tasks from a conversation
 
-The conversation is where you talk; the tasks are where the work runs. On every turn the agent knows this conversation's background tasks and their status (unfinished ones, plus those finished in the last 6 hours), so just say what you want:
+The conversation is where you talk; the tasks are where the work runs. The agent can look up this conversation's background tasks and their status at any time (unfinished ones, plus those finished in the last 6 hours), so just say what you want:
 
 | You say | The agent |
 | --- | --- |
@@ -53,8 +53,6 @@ The conversation is where you talk; the tasks are where the work runs. On every 
 | "Delete #3" | Deletes the task and its record (only when you say delete) |
 
 The agent does not redo a task's work in the chat or create a second task for the same work, and asks when it is unclear which task you mean. A conversation only sees and manages the tasks started from it; a console chat can manage every task on the board. Background runs of scheduled tasks can be checked and stopped; to change what future runs do, edit the schedule itself.
-
-The task list is given to the agent for that turn only and is not written into the conversation history.
 
 ## The board
 
@@ -115,7 +113,7 @@ The number can be left out when only one item is pending. On WeChat and Feishu y
 
 - Results of tasks created on the board are read on the board, and the browser shows a notification (task notifications must be on in the console). To follow up or ask for changes, add to the task from its detail.
 - A task created from a conversation sends its result back to that conversation and adds it to the conversation's context, so you can ask follow-up questions. In a console chat, click the task number in the result's heading to open the task's detail.
-- On WeChat and Feishu, **quote** a task's done or failed message in your reply and the reply goes to that task instead of starting an ordinary chat turn: the task carries on with its full context and sends the new result back. Quoting a review message with your feedback counts as rework.
+- On WeChat and Feishu you can also **quote** a task's done or failed message in your reply: the agent knows which task you mean and passes changes or additions on to it, and the task carries on with its full context and sends the new result back; a question about the result is simply answered. Quoting a review message with "reject <feedback>" counts as rework.
 - With `notify_webhook` set, a JSON notice is posted for pending approvals (`approval_pending`), pending reviews (`accept_pending`), finished tasks (`task_done`) and failures (`task_failed`). Background runs of scheduled tasks only post the events that need you, plus failures.
 
 ```json

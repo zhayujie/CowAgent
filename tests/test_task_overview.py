@@ -1,5 +1,5 @@
 # encoding:utf-8
-"""A conversation managing its tasks: the per-turn list and the task tool."""
+"""A conversation managing its background tasks through the task tool."""
 
 import time
 from types import SimpleNamespace
@@ -36,9 +36,9 @@ def _chat_task(store, title, origin=_FEISHU, source=st.SOURCE_CHAT, **fields):
     return store.get_task(task["id"])
 
 
-# --- the per-turn list -------------------------------------------------------------
+# --- which tasks a conversation sees ------------------------------------------------
 
-def test_turn_note_lists_only_this_conversations_tasks(store, enabled):
+def test_list_shows_only_this_conversations_tasks(store, enabled):
     now = time.time()
     running = _chat_task(store, "周报", status=st.RUNNING, started_at=now - 180)
     _chat_task(store, "别人的", origin=_OTHER, status=st.RUNNING, started_at=now)
@@ -47,40 +47,16 @@ def test_turn_note_lists_only_this_conversations_tasks(store, enabled):
     failed = _chat_task(store, "日报", source=st.SOURCE_SCHEDULE, status=st.FAILED,
                         finished_at=now, error="quota exceeded")
 
-    note = overview.turn_note(dict(_FEISHU))
-    assert f"#{running['id']}「周报」" in note and "3" in note
-    assert f"#{failed['id']}「日报」" in note and "quota exceeded" in note
-    assert "别人的" not in note and "很久以前" not in note and "每日简报" not in note
-    assert "follow" in note and "cancel" in note
+    listed = _tool(dict(_FEISHU)).execute({"action": "list"}).result
+    assert f"#{running['id']}「周报」" in listed and "3" in listed
+    assert f"#{failed['id']}「日报」" in listed and "quota exceeded" in listed
+    assert "别人的" not in listed and "很久以前" not in listed and "每日简报" not in listed
 
 
-def test_turn_note_is_empty_when_there_is_nothing_to_say(store, enabled):
-    assert overview.turn_note(dict(_FEISHU)) == ""
-    _chat_task(store, "周报", status=st.RUNNING, started_at=time.time())
-    assert overview.turn_note({**_FEISHU, "is_task": True}) == ""
-    assert overview.turn_note({**_FEISHU, "is_scheduled_task": True}) == ""
-    with patch("config.conf", return_value={"task": {"enabled": False}}):
-        assert overview.turn_note(dict(_FEISHU)) == ""
-
-
-def test_turn_note_reaches_the_model_but_not_the_history():
-    from agent.protocol.agent_stream import AgentStreamExecutor
-
-    executor = AgentStreamExecutor(
-        agent=MagicMock(), model=MagicMock(), system_prompt="", tools=[],
-        messages=[{"role": "user", "content": [{"type": "text", "text": "earlier"}]}],
-        turn_note="[tasks] #1 running",
-    )
-    executor.run_user_message = {"role": "user", "content": [{"type": "text", "text": "how is it going"}]}
-    executor.messages.append(executor.run_user_message)
-
-    sent = executor._prepare_messages()
-    assert sent[-1]["content"][-1]["text"] == "[tasks] #1 running"
-    assert sent[0] is executor.messages[0]
-    assert executor.messages[-1]["content"] == [{"type": "text", "text": "how is it going"}]
-
-    executor.turn_note = ""
-    assert executor._prepare_messages() is executor.messages
+def test_list_says_so_when_there_are_none(store, enabled):
+    _chat_task(store, "别人的", origin=_OTHER, status=st.RUNNING, started_at=time.time())
+    result = _tool(dict(_FEISHU)).execute({"action": "list"})
+    assert result.status == "success" and "#" not in result.result
 
 
 # --- the task tool -----------------------------------------------------------------
