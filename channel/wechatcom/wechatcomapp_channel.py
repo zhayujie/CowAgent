@@ -96,6 +96,12 @@ class WechatComAppChannel(ChatChannel):
             except Exception as e:
                 logger.warning(f"[wechatcom] Error stopping HTTP server: {e}")
             self._http_server = None
+        # The client owns a token-refresh thread; a channel that is replaced by
+        # a restart must not leave it polling for a client nobody uses.
+        try:
+            self.client.close()
+        except Exception as e:
+            logger.warning(f"[wechatcom] Error stopping the token refresher: {e}")
 
     def send(self, reply: Reply, context: Context):
         receiver = context["receiver"]
