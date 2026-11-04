@@ -100,8 +100,8 @@ def task_link(task: dict) -> str:
 
 
 def done_heading(task_id: int, title: str, link: bool = False) -> str:
-    """The first line of a finished task's result. Quote replies find the task
-    by it (see ``commands``), so its leading words must stay as they are."""
+    """The first line of a finished task's result. A reply quoting it names the
+    task by these words (see the ``task`` tool), so they must stay as they are."""
     ref = i18n.t(f"任务 #{task_id}", f"Task #{task_id}")
     if link:
         ref = f"[{ref}]({TASK_LINK_PREFIX}{task_id})"
@@ -132,8 +132,9 @@ def failed_text(task: dict, error: str, quote_hint: bool = False) -> str:
 
 def can_quote_reply(task: Optional[dict]) -> bool:
     """Whether quoting this task's notice in its conversation reaches the task:
-    the channel hands quoted text to the commands, and the task delivers its
-    next result there (a scheduled run's follow-up stays on the board)."""
+    the channel hands the quoted text to the agent, which passes the reply on,
+    and the task delivers its next result there (a scheduled run's follow-up
+    stays on the board)."""
     task = task or {}
     return (task.get("source") != st.SOURCE_SCHEDULE
             and (task.get("origin") or {}).get("channel_type") in QUOTE_REPLY_CHANNELS)

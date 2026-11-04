@@ -1,9 +1,8 @@
 """What a conversation knows about its background tasks.
 
 The conversation is where the user talks; the tasks are where the work runs.
-So each chat turn carries a short list of this conversation's tasks (``turn_note``)
-and the ``task`` tool reads and acts on them. Both are scoped to the
-conversation the task was started from, so one chat never sees another's work.
+The ``task`` tool reads and acts on them, scoped to the conversation a task
+was started from, so one chat never sees another's work.
 """
 
 from __future__ import annotations
@@ -15,11 +14,9 @@ from common import i18n
 from common.log import logger
 
 from agent.task import store as st
-from agent.task.settings import is_enabled
 
 # Finished tasks stay in the list this long, so "did it work?" has an answer.
 RECENT_SECONDS = 6 * 3600
-NOTE_LIMIT = 8
 _SCAN_LIMIT = 200
 
 
@@ -52,7 +49,7 @@ def _worth_listing(task: dict, now: float) -> bool:
     return task.get("source") != st.SOURCE_SCHEDULE or task["status"] == st.FAILED
 
 
-def conversation_tasks(conversation: Dict[str, str], limit: int = NOTE_LIMIT) -> List[dict]:
+def conversation_tasks(conversation: Dict[str, str], limit: int = 20) -> List[dict]:
     """This conversation's unfinished tasks and recently finished ones, the
     most recently updated first."""
     now = time.time()
@@ -152,37 +149,3 @@ def task_detail(task: dict, result_chars: int = 1500) -> str:
         lines.append(i18n.t("错误：", "Error: ") + str(task["error"])[:500])
     return "\n".join(lines)
 
-
-def turn_note(context) -> str:
-    """The list of this conversation's tasks for the model to read on this
-    turn, or "" when there is nothing to say. Never stored in the history."""
-    if context is None or context.get("is_task") or context.get("is_scheduled_task") \
-            or context.get("is_delegated_task"):
-        return ""
-    try:
-        if not is_enabled():
-            return ""
-        conversation = conversation_of(context)
-        tasks = conversation_tasks(conversation)
-    except Exception as e:
-        logger.debug(f"[Task] No task list for this turn: {e}")
-        return ""
-    if not tasks:
-        return ""
-    now = time.time()
-    lines = [f"- {task_line(t, now)}" for t in tasks]
-    guide = i18n.t(
-        "这些任务在后台独立执行，结果会发回这个对话。用户问起进展时据此回答，要细节用 task 的 get；"
-        "用户要修改、补充或继续某个任务时，用 task 的 follow 转交给它，要停止就用 cancel。"
-        "不要在对话里自己去做这些任务的工作，也不要为同一件事再建新任务；除非用户说不用后台、直接在这里做，"
-        "这时先 cancel 再做。指的是哪个任务不清楚时先问用户。",
-        "These tasks run on their own in the background and send their results back to this "
-        "conversation. When the user asks how they are going, answer from this list and use "
-        "task get for details. When the user wants to change, add to or continue one, pass it "
-        "on with task follow; to stop one, use task cancel. Do not do these tasks' work here "
-        "yourself or create another task for the same work, unless the user says to do it "
-        "here instead of in the background: then cancel it first and do it. If it is unclear "
-        "which task the user means, ask.",
-    )
-    head = i18n.t("[本会话的后台任务，截至此刻]", "[This conversation's background tasks, as of now]")
-    return "\n".join([head, *lines, guide])
