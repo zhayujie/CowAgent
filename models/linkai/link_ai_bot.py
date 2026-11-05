@@ -21,6 +21,11 @@ import base64
 import os
 from urllib.parse import urlparse
 
+# An overloaded endpoint can hold the stream open with only ": keep-alive"
+# comments. Each one resets the socket read timeout, so without this cap a
+# queued request can hang for many minutes.
+STREAM_KEEPALIVE_MAX_SECONDS = 180
+
 
 def _linkai_base_url():
     """Resolve the LinkAI API host, tolerating a stray trailing '/v1'.
@@ -714,6 +719,7 @@ def _handle_linkai_sync_response(self, base_url, headers, body):
 def _handle_linkai_stream_response(self, base_url, headers, body):
     """Handle streaming LinkAI API response"""
     try:
+        last_data_at = time.time()
         res = requests.post(
             url=base_url + "/v1/chat/completions",
             json=body,
@@ -742,6 +748,22 @@ def _handle_linkai_stream_response(self, base_url, headers, body):
         for line in res.iter_lines():
             if line:
                 line = line.decode('utf-8')
+                if line.startswith(":"):
+                    if time.time() - last_data_at > STREAM_KEEPALIVE_MAX_SECONDS:
+                        logger.error(
+                            f"[LinkAI] Stream timeout: only keep-alive received for "
+                            f"{STREAM_KEEPALIVE_MAX_SECONDS}s"
+                        )
+                        yield {
+                            "error": True,
+                            "message": f"Stream timeout: only keep-alive received for {STREAM_KEEPALIVE_MAX_SECONDS}s",
+                            "status_code": 504,
+                        }
+                        return
+                    # Empty chunk lets the caller check for cancel while the server is queueing
+                    yield {}
+                    continue
+                last_data_at = time.time()
                 if line.startswith('data: '):
                     line = line[6:]  # Remove 'data: ' prefix
                     if line == '[DONE]':
