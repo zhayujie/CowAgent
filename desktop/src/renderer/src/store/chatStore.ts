@@ -568,6 +568,7 @@ export const useChatStore = create<ChatState>((set, get) => {
                     status: data.status,
                     result: data.result ?? s.result,
                     display: data.display ?? s.display,
+                    file_change: data.file_change ?? s.file_change,
                     execution_time: data.execution_time,
                     is_error: data.status !== 'success',
                     permission_denied: data.permission_denied,

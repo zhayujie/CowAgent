@@ -27,6 +27,7 @@ from bridge.context import *
 from bridge.reply import Reply, ReplyType
 from channel.chat_channel import ChatChannel, check_prefix
 from channel.web.core import providers
+from channel.web.core.file_change import present_tool_result
 from channel.web.core._common import (
     _addressed_agent_id, _build_artifact_payload, _build_preview_url, _cancel_reply_text,
     _desktop_token_matches, _first_value, _get_upload_dir, _get_workspace_root,
@@ -426,8 +427,9 @@ class WebChannel(ChatChannel):
                 status = data.get("status", "success")
                 result = data.get("result", "")
                 exec_time = data.get("execution_time", 0)
-                # Truncate long results to avoid huge SSE payloads
-                result_str = str(result)
+                # edit/write already computed a unified diff. Keep it off the
+                # 2000-char trace so the page can draw the change itself.
+                result_str, file_change = present_tool_result(result)
                 if len(result_str) > 2000:
                     result_str = result_str[:2000] + "…"
                 payload = {
@@ -438,6 +440,8 @@ class WebChannel(ChatChannel):
                     "result": result_str,
                     "execution_time": round(exec_time, 2)
                 }
+                if file_change:
+                    payload["file_change"] = file_change
                 # Carry the permission-refusal marker so the UI can offer a
                 # one-click "switch permission" hint rather than a generic error.
                 if data.get("permission_denied"):
