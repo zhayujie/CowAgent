@@ -89,8 +89,8 @@ class TestProviderOrder(unittest.TestCase):
     def test_provider_order(self):
         self.assertEqual(
             web_search_module.PROVIDER_ORDER,
-            ("deepseek", "bocha", "qianfan", "zhipu", "linkai", "anysearch", "serply", "tavily", "outcrawl", "searxng",
-             "keenable"),
+            ("deepseek", "bocha", "qianfan", "zhipu", "linkai", "anysearch", "serply", "tavily", "outcrawl", "firecrawl",
+             "searxng", "keenable"),
         )
 
     def test_web_console_provider_list_stays_in_sync(self):
@@ -120,6 +120,11 @@ class TestProviderOrder(unittest.TestCase):
         self.assertEqual(ModelsHandler._search_provider_key("outcrawl", cfg), "console-key")
         with patch.dict(os.environ, {"OUTCRAWL_API_KEY": "env-key"}):
             self.assertEqual(ModelsHandler._search_provider_key("outcrawl", {}), "env-key")
+
+        cfg = {"tools": {"web_search": {"firecrawl_api_key": "console-key"}}}
+        self.assertEqual(ModelsHandler._search_provider_key("firecrawl", cfg), "console-key")
+        with patch.dict(os.environ, {"FIRECRAWL_API_KEY": "env-key"}):
+            self.assertEqual(ModelsHandler._search_provider_key("firecrawl", {}), "env-key")
 
     def test_web_console_mirrors_keenable_opt_in(self):
         """The Search panel agrees with the tool: keenable is not configured
@@ -849,6 +854,35 @@ class TestOutcrawlKeyResolution(unittest.TestCase):
             self.assertEqual(web_search_module._get_api_key("outcrawl"), "")
 
 
+class TestFirecrawlKeyResolution(unittest.TestCase):
+    """The firecrawl key lives under tools.web_search, falling back to env."""
+
+    def setUp(self):
+        self._prev_env = os.environ.get("FIRECRAWL_API_KEY")
+        os.environ.pop("FIRECRAWL_API_KEY", None)
+
+    def tearDown(self):
+        if self._prev_env is None:
+            os.environ.pop("FIRECRAWL_API_KEY", None)
+        else:
+            os.environ["FIRECRAWL_API_KEY"] = self._prev_env
+
+    def test_firecrawl_key_from_tools_config(self):
+        """tools.web_search.firecrawl_api_key is resolved, and wins over env."""
+        cfg = {"tools": {"web_search": {"firecrawl_api_key": "test-key-123"}}}
+        with patch.object(web_search_module, "conf", lambda: cfg):
+            self.assertEqual(web_search_module._get_api_key("firecrawl"), "test-key-123")
+            with patch.dict(os.environ, {"FIRECRAWL_API_KEY": "env-key-456"}):
+                self.assertEqual(web_search_module._get_api_key("firecrawl"), "test-key-123")
+
+    def test_firecrawl_key_env_fallback(self):
+        """Without a config value, FIRECRAWL_API_KEY is used; both empty -> ''."""
+        with patch.object(web_search_module, "conf", lambda: {}):
+            with patch.dict(os.environ, {"FIRECRAWL_API_KEY": "env-key-456"}):
+                self.assertEqual(web_search_module._get_api_key("firecrawl"), "env-key-456")
+            self.assertEqual(web_search_module._get_api_key("firecrawl"), "")
+
+
 class TestKeenableBackend(unittest.TestCase):
     """Behaviour of WebSearch._search_keenable with a stubbed HTTP layer."""
 
@@ -1079,6 +1113,79 @@ class TestOutcrawlBackend(unittest.TestCase):
                     result = self.tool._search_outcrawl("q", 10)
                 self.assertEqual(result.status, "error")
                 self.assertIn(fragment, result.result)
+
+
+class TestFirecrawlBackend(unittest.TestCase):
+    """Behaviour of WebSearch._search_firecrawl with a stubbed HTTP layer."""
+
+    def setUp(self):
+        self.tool = web_search_module.WebSearch()
+
+    def test_search_firecrawl_maps_results(self):
+        """Firecrawl's data.web items map to the unified output shape, the key
+        travels as a Bearer token and the query in the POST json body."""
+        payload = {
+            "success": True,
+            "data": {
+                "web": [
+                    {"url": "https://a.example/1", "title": "T1", "description": "s1", "position": 1},
+                    {"url": "https://a.example/2", "title": "T2", "position": 2},
+                ],
+            },
+            "creditsUsed": 2,
+        }
+        with patch.object(web_search_module, "_get_api_key", return_value="test-key-123"), \
+                patch.object(web_search_module.requests, "post",
+                             return_value=_fake_response(200, payload)) as mock_post:
+            result = self.tool._search_firecrawl("cowagent", 10)
+
+        self.assertEqual(result.status, "success")
+        self.assertEqual(result.result["backend"], "firecrawl")
+        self.assertEqual(result.result["total"], 2)
+        first, second = result.result["results"]
+        self.assertEqual(first, {"title": "T1", "url": "https://a.example/1", "snippet": "s1"})
+        self.assertEqual(second["snippet"], "")
+        self.assertEqual(mock_post.call_args[0][0], "https://api.firecrawl.dev/v2/search")
+        self.assertEqual(mock_post.call_args[1]["headers"]["Authorization"], "Bearer test-key-123")
+        body = mock_post.call_args[1]["json"]
+        self.assertEqual(body, {"query": "cowagent", "limit": 10, "origin": "cowagent"})
+
+    def test_search_firecrawl_clamps_count(self):
+        """count is clamped into 1-20 and sent as limit; falsy -> 10."""
+        with patch.object(web_search_module, "_get_api_key", return_value="k"), \
+                patch.object(web_search_module.requests, "post",
+                             return_value=_fake_response(200, {"success": True, "data": {"web": []}})) as mock_post:
+            for count, expected in ((20, 20), (99, 20), (0, 10), (None, 10), (5, 5)):
+                with self.subTest(count=count):
+                    self.tool._search_firecrawl("q", count)
+                    self.assertEqual(mock_post.call_args[1]["json"]["limit"], expected)
+
+    def test_search_firecrawl_error_status_mapping(self):
+        """401/402/429 map to specific messages; other statuses are generic."""
+        cases = {
+            401: "Invalid Firecrawl API key",
+            402: "credits exhausted",
+            429: "rate limit reached",
+            500: "HTTP 500",
+        }
+        for status_code, fragment in cases.items():
+            with self.subTest(status_code=status_code):
+                with patch.object(web_search_module, "_get_api_key", return_value="k"), \
+                        patch.object(web_search_module.requests, "post",
+                                     return_value=_fake_response(status_code)):
+                    result = self.tool._search_firecrawl("q", 10)
+                self.assertEqual(result.status, "error")
+                self.assertIn(fragment, result.result)
+
+    def test_search_firecrawl_unsuccessful_body(self):
+        """A 200 response with success=false surfaces the API's error."""
+        payload = {"success": False, "error": "Query is required"}
+        with patch.object(web_search_module, "_get_api_key", return_value="k"), \
+                patch.object(web_search_module.requests, "post",
+                             return_value=_fake_response(200, payload)):
+            result = self.tool._search_firecrawl("q", 10)
+        self.assertEqual(result.status, "error")
+        self.assertIn("Query is required", result.result)
 
 
 class TestSearxngUrlResolution(unittest.TestCase):

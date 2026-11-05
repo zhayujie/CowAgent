@@ -1,4 +1,4 @@
-"""Web Search tool. Supports eleven backends with a unified response format:
+"""Web Search tool. Supports twelve backends with a unified response format:
   - deepseek (https://api-docs.deepseek.com/guides/search, official Search API)
   - bocha   (https://open.bochaai.com)
   - zhipu   (https://docs.bigmodel.cn/cn/guide/tools/web-search)
@@ -8,13 +8,14 @@
   - serply  (https://serply.io, Google/Bing SERP API)
   - tavily  (https://tavily.com, AI-optimized search API)
   - outcrawl (https://outcrawl.ai, scrape and search API for AI agents)
+  - firecrawl (https://www.firecrawl.dev/?utm_source=cowagent&utm_medium=integration, context API for AI agents)
   - searxng (https://docs.searxng.org, self-hosted meta search engine)
   - keenable (https://keenable.ai, keyless tier behind an explicit opt-in)
 
 Provider selection
   - strategy 'auto' (default): pick the first configured provider in the
     canonical order [deepseek, bocha, qianfan, zhipu, linkai, anysearch,
-    serply, tavily, outcrawl, searxng, keenable]. Keenable counts as configured with a
+    serply, tavily, outcrawl, firecrawl, searxng, keenable]. Keenable counts as configured with a
     key or with the explicit `keenable_anonymous` opt-in (same contract as
     `anysearch_anonymous`). When the caller passes an explicit `provider`
     it overrides the pick; an invalid/unconfigured one silently falls back
@@ -35,6 +36,7 @@ Credentials
   - serply  : tools.web_search.serply_api_key  ->  env SERPLY_API_KEY
   - tavily  : tools.web_search.tavily_api_key  ->  env TAVILY_API_KEY
   - outcrawl: tools.web_search.outcrawl_api_key  ->  env OUTCRAWL_API_KEY
+  - firecrawl: tools.web_search.firecrawl_api_key  ->  env FIRECRAWL_API_KEY
   - searxng : tools.web_search.searxng_url     ->  env SEARXNG_URL
   - keenable: tools.web_search.keenable_api_key -> env KEENABLE_API_KEY (optional,
               only lifts the rate limits of the keyless public endpoint);
@@ -62,9 +64,9 @@ DEFAULT_TIMEOUT = 30
 # zhipu (strong on long-form articles), linkai (cloud aggregator),
 # anysearch, serply (global Google/Bing SERP, last since it isn't
 # benchmarked against the Chinese-market providers above), tavily, outcrawl,
-# searxng, keenable (global index, keyless tier behind an explicit opt-in;
-# placed last so any provider the user paid for wins).
-PROVIDER_ORDER = ("deepseek", "bocha", "qianfan", "zhipu", "linkai", "anysearch", "serply", "tavily", "outcrawl", "searxng", "keenable")
+# firecrawl, searxng, keenable (global index, keyless tier behind an explicit
+# opt-in; placed last so any provider the user paid for wins).
+PROVIDER_ORDER = ("deepseek", "bocha", "qianfan", "zhipu", "linkai", "anysearch", "serply", "tavily", "outcrawl", "firecrawl", "searxng", "keenable")
 
 PROVIDER_LABELS = {
     "bocha":   "Bocha",
@@ -76,6 +78,7 @@ PROVIDER_LABELS = {
     "serply":  "Serply",
     "tavily":  "Tavily",
     "outcrawl": "Outcrawl",
+    "firecrawl": "Firecrawl",
     "searxng": "SearXNG",
     "keenable": "Keenable",
 }
@@ -133,6 +136,9 @@ def _get_api_key(provider: str) -> str:
     if provider == "outcrawl":
         key = _conf_str(_tools_web_search_conf().get("outcrawl_api_key"), "")
         return key or os.environ.get("OUTCRAWL_API_KEY", "").strip()
+    if provider == "firecrawl":
+        key = _conf_str(_tools_web_search_conf().get("firecrawl_api_key"), "")
+        return key or os.environ.get("FIRECRAWL_API_KEY", "").strip()
     if provider == "keenable":
         key = _conf_str(_tools_web_search_conf().get("keenable_api_key"), "")
         return key or os.environ.get("KEENABLE_API_KEY", "").strip()
@@ -348,7 +354,7 @@ class WebSearch(BaseTool):
             return ToolResult.fail(
                 "Error: No search provider configured. "
                 "Configure one of BOCHA_API_KEY / zhipu_ai_api_key / qianfan_api_key / linkai_api_key / "
-                "deepseek_api_key / anysearch_api_key / SERPLY_API_KEY / TAVILY_API_KEY / OUTCRAWL_API_KEY / SEARXNG_URL."
+                "deepseek_api_key / anysearch_api_key / SERPLY_API_KEY / TAVILY_API_KEY / OUTCRAWL_API_KEY / FIRECRAWL_API_KEY / SEARXNG_URL."
             )
 
         # Always log the routing decision so multi-provider deployments can
@@ -380,6 +386,8 @@ class WebSearch(BaseTool):
                 return self._search_tavily(query, count)
             if provider == "outcrawl":
                 return self._search_outcrawl(query, count)
+            if provider == "firecrawl":
+                return self._search_firecrawl(query, count)
             if provider == "searxng":
                 return self._search_searxng(query, count)
             if provider == "keenable":
@@ -1089,6 +1097,48 @@ class WebSearch(BaseTool):
             })
         return ToolResult.success({
             "query": query, "backend": "outcrawl",
+            "total": len(results), "count": len(results), "results": results,
+        })
+
+    # ------------------------------------------------------------------
+    # Firecrawl
+    # ------------------------------------------------------------------
+
+    def _search_firecrawl(self, query: str, count: int) -> ToolResult:
+        api_key = _get_api_key("firecrawl")
+        url = "https://api.firecrawl.dev/v2/search"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        }
+        limit = max(1, min(int(count or 10), 20))
+        payload: Dict[str, Any] = {"query": query, "limit": limit, "origin": "cowagent"}
+
+        logger.debug(f"[WebSearch] firecrawl: query='{query}', limit={limit}")
+        resp = requests.post(url, headers=headers, json=payload, timeout=DEFAULT_TIMEOUT)
+
+        if resp.status_code == 401:
+            return ToolResult.fail("Error: Invalid Firecrawl API key.")
+        if resp.status_code == 402:
+            return ToolResult.fail("Error: Firecrawl API credits exhausted.")
+        if resp.status_code == 429:
+            return ToolResult.fail("Error: Firecrawl API rate limit reached.")
+        if resp.status_code != 200:
+            return ToolResult.fail(f"Error: Firecrawl API returned HTTP {resp.status_code}: {resp.text[:200]}")
+
+        data = resp.json()
+        if data.get("success") is False:
+            return ToolResult.fail(f"Error: Firecrawl API error: {data.get('error') or 'unknown error'}")
+        results = []
+        for it in (data.get("data") or {}).get("web") or []:
+            results.append({
+                "title": it.get("title", ""),
+                "url": it.get("url", ""),
+                "snippet": it.get("description", ""),
+            })
+        return ToolResult.success({
+            "query": query, "backend": "firecrawl",
             "total": len(results), "count": len(results), "results": results,
         })
 
