@@ -114,18 +114,35 @@ class ConfigHandler:
                 for cp in custom_list:
                     cid = f"custom:{cp.get('id')}"
                     cname = cp.get("name") or cp.get("id")
+                    # A custom provider declares its reasoning protocol per
+                    # model in the model catalog, so the effort selector is
+                    # built from the catalog rather than from a preset list.
+                    custom_models = []
+                    custom_reasoning_by_model = {}
+                    try:
+                        from models.model_catalog import get_catalog
+
+                        for entry in get_catalog(cid):
+                            name = entry.get("name")
+                            if not name:
+                                continue
+                            custom_models.append(name)
+                            custom_reasoning_by_model[name] = provider_reasoning_metadata(cid, name)
+                    except Exception as cat_err:
+                        logger.warning(f"[ConfigHandler] custom catalog unavailable: {cat_err}")
+                    if cp.get("model") and cp["model"] not in custom_models:
+                        custom_models.insert(0, cp["model"])
+                        custom_reasoning_by_model.setdefault(
+                            cp["model"], provider_reasoning_metadata(cid, cp["model"]))
                     providers[cid] = {
                         "label": {"zh": cname, "en": cname},
-                        "models": [cp["model"]] if cp.get("model") else [],
+                        "models": custom_models,
                         "api_base_key": None,
                         "api_base_default": None,
                         "api_base_placeholder": "",
                         "api_key_field": None,
                         "reasoning": provider_reasoning_metadata(cid, cp.get("model") or ""),
-                        "reasoning_by_model": (
-                            {cp["model"]: provider_reasoning_metadata(cid, cp["model"])}
-                            if cp.get("model") else {}
-                        ),
+                        "reasoning_by_model": custom_reasoning_by_model,
                     }
             except Exception as cp_err:
                 logger.warning(f"[ConfigHandler] failed to expand custom providers: {cp_err}")

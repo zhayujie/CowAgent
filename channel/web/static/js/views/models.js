@@ -2345,6 +2345,16 @@ function renderCatalogRows(prefix) {
                     </label>
                 </div>`;
             })()}
+            ${withAlias ? `<label class="block mt-2">
+                <span class="block text-[10px] text-slate-400 dark:text-slate-500 mb-0.5">${escapeHtml(t('models_catalog_reasoning'))}</span>
+                <input type="text" value="${escapeHtml(entry.reasoning_text || '')}"
+                       placeholder="${escapeHtml(t('models_catalog_reasoning_ph'))}"
+                       title="${escapeHtml(t('models_catalog_reasoning_tip'))}"
+                       oninput="updateCatalogRow('${prefix}', ${idx}, 'reasoning_text', this.value)"
+                       class="w-full px-2 py-1 rounded border border-slate-200 dark:border-slate-600
+                              bg-white dark:bg-white/5 text-xs text-slate-800 dark:text-slate-100
+                              focus:outline-none focus:border-primary-500 transition-colors">
+            </label>` : ''}
         </div>`).join('');
 }
 
@@ -2435,6 +2445,7 @@ function collectCatalogPayload(prefix) {
             if (!Number.isNaN(cw) && cw > 0) out.context_window = cw;
             if (!Number.isNaN(mo) && mo > 0) out.max_output_tokens = mo;
             _setCatalogAlias(out, e.alias);
+            _setCatalogReasoning(out, e.reasoning_text);
             return out;
         });
 }
@@ -2462,6 +2473,9 @@ function fillCatalogForProvider(prefix, providerId) {
         context_window: e.context_window || '',
         max_output_tokens: e.max_output_tokens || '',
         alias: e.alias || '',
+        // Keep the reasoning declaration in the draft so saving the catalog
+        // does not silently drop it.
+        reasoning_text: _formatCatalogReasoning(e.reasoning),
     }));
     // The pick list lives in this modal for every vendor; drop the previous
     // vendor's candidates so switching providers cannot leave them open.
@@ -2488,6 +2502,7 @@ function _normalizeEntries(rows) {
             if (!Number.isNaN(cw) && cw > 0) out.context_window = cw;
             if (!Number.isNaN(mo) && mo > 0) out.max_output_tokens = mo;
             _setCatalogAlias(out, e.alias);
+            _setCatalogReasoning(out, e.reasoning_text || e.reasoning);
             return out;
         });
 }
@@ -2496,6 +2511,42 @@ function _normalizeEntries(rows) {
 function _setCatalogAlias(out, rawAlias) {
     const alias = (rawAlias || '').trim();
     if (alias && alias !== out.name) out.alias = alias;
+}
+
+/** Render a stored reasoning declaration as an editable string: "param: v1, v2".
+ *  The default comes first so the string round-trips to the same declaration. */
+function _formatCatalogReasoning(reasoning) {
+    if (!reasoning || typeof reasoning !== 'object') return '';
+    const param = (reasoning.param || '').trim();
+    const options = Array.isArray(reasoning.options) ? reasoning.options : [];
+    if (!param || !options.length) return '';
+    const values = options.map(v => (v || '').trim()).filter(Boolean);
+    if (!values.length) return '';
+    const def = (reasoning.default || '').trim();
+    const ordered = values.includes(def) ? [def].concat(values.filter(v => v !== def)) : values;
+    return param + ': ' + ordered.join(', ');
+}
+
+/** Parse the reasoning declaration typed by the user: "param: v1, v2".
+ *  Returns null when the field is empty or unusable — the server validates it
+ *  again, and rejects the whole save if a declaration is malformed. */
+function _parseCatalogReasoning(raw) {
+    const text = (raw || '').trim();
+    if (!text) return null;
+    const sep = text.indexOf(':');
+    const param = (sep >= 0 ? text.slice(0, sep) : text).trim();
+    const values = (sep >= 0 ? text.slice(sep + 1) : '')
+        .split(',').map(v => v.trim()).filter(Boolean);
+    if (!param || !values.length) return null;
+    return { param, options: values, default: values[0] };
+}
+
+/** Attach the reasoning declaration to a catalog payload entry. Accepts the
+ *  editable string from a draft row or a stored declaration object. */
+function _setCatalogReasoning(out, raw) {
+    const text = (raw && typeof raw === 'object') ? _formatCatalogReasoning(raw) : raw;
+    const reasoning = _parseCatalogReasoning(text);
+    if (reasoning) out.reasoning = reasoning;
 }
 
 function setCatalogSectionOpen(prefix, open) {
