@@ -145,19 +145,22 @@ def sanitize_claude_messages(messages: List[Dict]) -> int:
     # 1. Adjacency repair (Anthropic: tool_result must be in the next user message)
     adj_repairs = _repair_tool_use_adjacency(messages)
 
-    # 2. Remove leading orphaned tool_result user messages
+    # 2. Remove leading orphaned tool_result blocks, retaining user content.
     while messages:
         first = messages[0]
         if first.get("role") != "user":
             break
         content = first.get("content", [])
-        if isinstance(content, list) and _has_block_type(content, "tool_result") \
-                and not _has_block_type(content, "text"):
-            logger.warning("⚠️ Removing leading orphaned tool_result user message")
-            messages.pop(0)
-            removed += 1
-        else:
+        if not isinstance(content, list) or not _has_block_type(content, "tool_result"):
             break
+        remaining = [b for b in content if not (isinstance(b, dict) and b.get("type") == "tool_result")]
+        logger.warning("⚠️ Removing leading orphaned tool_result block(s)")
+        if remaining:
+            first["content"] = remaining
+            removed += len(content) - len(remaining)
+            break
+        messages.pop(0)
+        removed += 1
 
     # 3. Iteratively remove unmatched tool_use / tool_result until stable.
     #    Removing one broken message can orphan others (e.g. an assistant msg

@@ -458,7 +458,9 @@ class KnowledgeService:
                 old_exists = destination.exists()
                 content = self._decode_document_content(content_bytes)
                 destination.parent.mkdir(parents=True, exist_ok=True)
-                write_text_atomic(destination, content)
+                # newline="" saves the file's line breaks as uploaded; on
+                # Windows, text mode turns each CRLF into CR CR LF.
+                write_text_atomic(destination, content, newline="")
                 if old_exists:
                     old_paths.append(rel_path)
                 imported += 1

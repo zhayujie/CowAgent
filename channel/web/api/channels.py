@@ -15,6 +15,7 @@ import time
 import web
 
 from channel.web.core._common import (
+    _config_write_guard,
     _live_channel_manager,
     _read_config_file_for_write,
     _require_auth,
@@ -454,9 +455,10 @@ class ChannelsHandler:
             return json.dumps({"status": "error", "message": "no valid fields to update"})
 
         config_path = os.path.join(get_data_root(), "config.json")
-        file_cfg = _read_config_file_for_write()
-        file_cfg.update(applied)
-        _write_config_file_for_write(config_path, file_cfg)
+        with _config_write_guard():
+            file_cfg = _read_config_file_for_write()
+            file_cfg.update(applied)
+            _write_config_file_for_write(config_path, file_cfg)
 
         logger.info(
             f"[WebChannel] Channel '{channel_name}' config saved: {list(applied.keys())}, "
@@ -522,10 +524,11 @@ class ChannelsHandler:
         local_config["channel_type"] = new_channel_type
 
         config_path = os.path.join(get_data_root(), "config.json")
-        file_cfg = _read_config_file_for_write()
-        file_cfg.update(applied)
-        file_cfg["channel_type"] = new_channel_type
-        _write_config_file_for_write(config_path, file_cfg)
+        with _config_write_guard():
+            file_cfg = _read_config_file_for_write()
+            file_cfg.update(applied)
+            file_cfg["channel_type"] = new_channel_type
+            _write_config_file_for_write(config_path, file_cfg)
 
         logger.info(f"[WebChannel] Channel '{channel_name}' connecting, channel_type={new_channel_type}")
 
@@ -583,9 +586,10 @@ class ChannelsHandler:
         local_config["channel_type"] = new_channel_type
 
         config_path = os.path.join(get_data_root(), "config.json")
-        file_cfg = _read_config_file_for_write()
-        file_cfg["channel_type"] = new_channel_type
-        _write_config_file_for_write(config_path, file_cfg)
+        with _config_write_guard():
+            file_cfg = _read_config_file_for_write()
+            file_cfg["channel_type"] = new_channel_type
+            _write_config_file_for_write(config_path, file_cfg)
 
         def _do_stop():
             try:
@@ -818,9 +822,10 @@ class ChannelsHandler:
         conf()["channel_type"] = new_channel_type
         try:
             config_path = os.path.join(get_data_root(), "config.json")
-            file_cfg = _read_config_file_for_write()
-            file_cfg["channel_type"] = new_channel_type
-            _write_config_file_for_write(config_path, file_cfg)
+            with _config_write_guard():
+                file_cfg = _read_config_file_for_write()
+                file_cfg["channel_type"] = new_channel_type
+                _write_config_file_for_write(config_path, file_cfg)
             logger.info(
                 f"[WebChannel] Pruned legacy channel_type '{channel_name}', "
                 f"channel_type={new_channel_type}"

@@ -72,6 +72,10 @@ const ModelsTab: React.FC<ModelsTabProps> = ({ baseUrl }) => {
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState<string>('') // capability key currently saving
   const [statusMap, setStatusMap] = useState<Record<string, string>>({})
+  // Search chips for Zhipu / Qianfan / LinkAI open the vendor editor, which
+  // lives in VendorSection. A provider id here is consumed once.
+  const [vendorEditId, setVendorEditId] = useState<string | null>(null)
+  const clearVendorEdit = useCallback(() => setVendorEditId(null), [])
 
   const load = useCallback(async () => {
     try {
@@ -128,7 +132,14 @@ const ModelsTab: React.FC<ModelsTabProps> = ({ baseUrl }) => {
 
   return (
     <div className="grid gap-5">
-      <VendorSection data={data} onChanged={load} statusMap={statusMap} flash={flash} />
+      <VendorSection
+        data={data}
+        onChanged={load}
+        statusMap={statusMap}
+        flash={flash}
+        requestedEditId={vendorEditId}
+        onEditRequestHandled={clearVendorEdit}
+      />
 
       {/* Chat — the fallback is a small button on this card's header rather
           than a separate card, since it's a rarely-touched safety net. */}
@@ -261,6 +272,7 @@ const ModelsTab: React.FC<ModelsTabProps> = ({ baseUrl }) => {
         }
         keyStatus={statusMap.search_key}
         keyBusy={busy === 'search_key'}
+        onEditVendor={setVendorEditId}
       />
     </div>
   )
@@ -275,9 +287,16 @@ interface VendorSectionProps {
   onChanged: () => Promise<void>
   statusMap: Record<string, string>
   flash: (key: string, msg: string) => void
+  requestedEditId?: string | null
+  onEditRequestHandled?: () => void
 }
 
-const VendorSection: React.FC<VendorSectionProps> = ({ data, onChanged }) => {
+const VendorSection: React.FC<VendorSectionProps> = ({
+  data,
+  onChanged,
+  requestedEditId,
+  onEditRequestHandled,
+}) => {
   // Edit an existing built-in vendor.
   const [editing, setEditing] = useState<ModelProvider | null>(null)
   // Add flow: open the vendor modal with a provider picker.
@@ -288,6 +307,15 @@ const VendorSection: React.FC<VendorSectionProps> = ({ data, onChanged }) => {
   const isCustomCard = (p: ModelProvider) => p.is_custom && !!p.custom_name
   // Unified grid: configured built-ins + all custom provider cards (web parity).
   const shown = data.providers.filter((p) => p.configured || isCustomCard(p))
+
+  // The search card asks to edit a shared-key vendor (Zhipu, Qianfan, LinkAI).
+  // Open that vendor even when its card is not in the configured grid.
+  useEffect(() => {
+    if (!requestedEditId) return
+    const match = data.providers.find((p) => p.id === requestedEditId && !p.is_custom)
+    if (match) setEditing(match)
+    onEditRequestHandled?.()
+  }, [requestedEditId, data.providers, onEditRequestHandled])
 
   return (
     <Card icon={<Database size={16} />} title={t('models_vendors')} subtitle={t('models_vendors_sub')}>
@@ -900,14 +928,14 @@ const EmbeddingCard: React.FC<{
   </CapabilityCard>
 )
 
-// Search providers editable from the search card: a dedicated API key, or —
-// for SearXNG — a self-hosted instance URL. AnySearch additionally supports an
-// anonymous tier, so it counts as "configured" even without a key. DeepSeek
-// edits the shared model key and base. Mirrors the web console flow.
-const isDedicatedKeyProvider = (p: SearchProviderMeta): boolean =>
-  p.needs_dedicated_key ||
-  p.needs_url ||
-  ['deepseek', 'bocha', 'anysearch', 'serply', 'tavily', 'searxng', 'keenable'].includes(p.id)
+// Dedicated-key backends and DeepSeek keep their own search-card editors.
+// Zhipu, Qianfan, and LinkAI reuse a model-vendor credential, so they open
+// the vendor modal instead. Same split as `_launchSearchProviderConfig`
+// in channel/web/static/js/views/models.js. Listing uses the backend
+// provider list directly — a hardcoded id whitelist used to drop the
+// shared-key backends from the desktop chips.
+const usesVendorCredential = (p: SearchProviderMeta): boolean =>
+  p.id !== 'deepseek' && !p.needs_dedicated_key && !p.needs_url
 
 const SearchCard: React.FC<{
   state: SearchCapabilityState
@@ -916,30 +944,56 @@ const SearchCard: React.FC<{
   onSaveStrategy: (strategy: string, provider: string) => void
   onSaveSearchKey: (provider: string, key: string, anonymous: boolean) => void
   onSaveDeepseek: (apiKey: string, apiBase: string) => void
+  onEditVendor: (providerId: string) => void
   keyStatus?: string
   keyBusy: boolean
-}> = ({ state, busy, status, onSaveStrategy, onSaveSearchKey, onSaveDeepseek, keyStatus, keyBusy }) => {
+}> = ({
+  state,
+  busy,
+  status,
+  onSaveStrategy,
+  onSaveSearchKey,
+  onSaveDeepseek,
+  onEditVendor,
+  keyStatus,
+  keyBusy,
+}) => {
   const [strategy, setStrategy] = useState<string>(state.strategy || 'auto')
-  const [provider, setProvider] = useState<string>(state.fixed_provider || state.current_provider || '')
+  const configuredIds = useMemo(
+    () => state.configured_providers || state.providers.filter((p) => p.configured).map((p) => p.id),
+    [state.configured_providers, state.providers]
+  )
+  const [provider, setProvider] = useState<string>(() => {
+    const saved = state.fixed_provider || state.current_provider || ''
+    return configuredIds.includes(saved) ? saved : configuredIds[0] || ''
+  })
   // The dedicated-key provider currently open in the credential modal, or null.
   const [keyProvider, setKeyProvider] = useState<SearchProviderMeta | null>(null)
-  // Two-step add flow: when >1 dedicated provider is unconfigured, first show a
-  // picker; a single unconfigured one opens its editor directly.
+  // Two-step add flow: when more than one provider is unconfigured, first show
+  // a picker; a single unconfigured one opens its editor directly.
   const [pickerOpen, setPickerOpen] = useState(false)
 
+  // Only configured providers can be pinned; an unconfigured one would
+  // silently fall back. Same as the web console.
   const providerOptions = useMemo(
-    () => state.providers.map((p) => ({ value: p.id, label: localizedLabel(p.label) })),
-    [state.providers]
+    () =>
+      configuredIds.map((id) => {
+        const meta = state.providers.find((p) => p.id === id)
+        return { value: id, label: meta ? localizedLabel(meta.label) : id }
+      }),
+    [configuredIds, state.providers]
   )
 
-  // Providers that hold their own key: split into configured (editable chips)
-  // and unconfigured (offered behind the "+ add" entry).
-  const dedicated = useMemo(() => state.providers.filter(isDedicatedKeyProvider), [state.providers])
-  const configured = dedicated.filter((p) => p.configured)
-  const missing = dedicated.filter((p) => !p.configured)
+  // Every backend provider: configured chips, unconfigured ones behind "+ add".
+  const configured = state.providers.filter((p) => p.configured)
+  const missing = state.providers.filter((p) => !p.configured)
 
   const openProvider = (p: SearchProviderMeta) => {
     setPickerOpen(false)
+    if (usesVendorCredential(p)) {
+      onEditVendor(p.id)
+      return
+    }
     setKeyProvider(p)
   }
   const onAdd = () => {
@@ -972,7 +1026,7 @@ const SearchCard: React.FC<{
           </Field>
         )}
 
-        {/* Dedicated-key providers: configured chips (click to edit) + add entry. */}
+        {/* Configured chips (click to edit) plus an add entry for the rest. */}
         <Field label={t('models_search_bocha_key')}>
           <div className="flex items-center flex-wrap gap-2">
             {configured.map((p) => (

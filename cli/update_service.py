@@ -226,16 +226,41 @@ def check_for_updates(current_version: Optional[str] = None) -> Dict[str, Any]:
     }
 
 
-def _run(cmd: List[str], cwd: str) -> subprocess.CompletedProcess:
-    return subprocess.run(
-        cmd,
-        cwd=cwd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-    )
+# Ceilings for the web one-click update's subprocesses. git pull and pip both
+# talk to the network and can stall well past a sane wait; a step that never
+# finishes leaves the worker (and its child) alive with the status file stuck
+# mid-update, and once STALE_UPDATE_SECONDS lets a second update start, both
+# work on the same checkout.
+_GIT_TIMEOUT_S = 600
+_PIP_TIMEOUT_S = 900
+_IMPORT_TIMEOUT_S = 60
+
+
+def _run(cmd: List[str], cwd: str, timeout: int = _GIT_TIMEOUT_S) -> subprocess.CompletedProcess:
+    try:
+        return subprocess.run(
+            cmd,
+            cwd=cwd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as exc:
+        # Callers branch on returncode and read stdout, so a stalled step
+        # reports as a failed one - which sends apply_source_update down its
+        # existing git_reset_hard rollback - instead of hanging the worker
+        # forever. TimeoutExpired carries bytes even under text=True.
+        out = exc.stdout
+        if isinstance(out, bytes):
+            out = out.decode("utf-8", "replace")
+        return subprocess.CompletedProcess(
+            args=cmd,
+            returncode=-1,
+            stdout="".join([(out or "").rstrip(), f"\n[update] timed out after {timeout}s and was stopped"]),
+        )
 
 
 def git_rev_parse(root: str) -> str:
@@ -281,16 +306,16 @@ def install_requirements(root: str, python: str, quiet: bool = False) -> subproc
     extra = ["-q"] if quiet else []
     if not os.path.exists(req):
         return subprocess.CompletedProcess(args=[], returncode=0, stdout="")
-    return _run([python, "-m", "pip", "install", "-r", req, *extra], cwd=root)
+    return _run([python, "-m", "pip", "install", "-r", req, *extra], cwd=root, timeout=_PIP_TIMEOUT_S)
 
 
 def install_editable(root: str, python: str, quiet: bool = False) -> subprocess.CompletedProcess:
     extra = ["-q"] if quiet else []
-    return _run([python, "-m", "pip", "install", "-e", ".", *extra], cwd=root)
+    return _run([python, "-m", "pip", "install", "-e", ".", *extra], cwd=root, timeout=_PIP_TIMEOUT_S)
 
 
 def self_check_app(root: str, python: str) -> subprocess.CompletedProcess:
-    return _run([python, "-c", "import app"], cwd=root)
+    return _run([python, "-c", "import app"], cwd=root, timeout=_IMPORT_TIMEOUT_S)
 
 
 def status_path(root: Optional[str] = None) -> Path:

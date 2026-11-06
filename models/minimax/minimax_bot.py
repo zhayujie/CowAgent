@@ -16,6 +16,11 @@ from config import conf, load_config
 from common import const
 from agent.protocol.message_utils import drop_orphaned_tool_results_openai
 
+# An overloaded endpoint can hold the stream open with only ": keep-alive"
+# comments. Each one resets the socket read timeout, so without this cap a
+# queued request can hang for many minutes.
+STREAM_KEEPALIVE_MAX_SECONDS = 180
+
 
 NATIVE_VISION_MODELS = frozenset({const.MINIMAX_M3_1_FLASH.lower(), const.MINIMAX_M3.lower()})
 
@@ -589,6 +594,7 @@ class MinimaxBot(Bot):
             finish_reason = None
             chunk_count = 0
             stream_usage = None  # Provider-reported token usage
+            last_data_at = time.time()
 
             # Process SSE stream
             for line in response.iter_lines():
@@ -596,6 +602,23 @@ class MinimaxBot(Bot):
                     continue
 
                 line = line.decode('utf-8')
+                if line.startswith(":"):
+                    if time.time() - last_data_at > STREAM_KEEPALIVE_MAX_SECONDS:
+                        logger.error(
+                            f"[MINIMAX] Stream timeout: only keep-alive received for "
+                            f"{STREAM_KEEPALIVE_MAX_SECONDS}s"
+                        )
+                        yield {
+                            "error": True,
+                            "message": f"Stream timeout: only keep-alive received for {STREAM_KEEPALIVE_MAX_SECONDS}s",
+                            "status_code": 504,
+                        }
+                        return
+                    # Empty chunk lets the caller check for cancel while the server is queueing
+                    yield {}
+                    continue
+                last_data_at = time.time()
+
                 if not line.startswith('data: '):
                     continue
 

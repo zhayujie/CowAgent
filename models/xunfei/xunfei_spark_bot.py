@@ -59,43 +59,49 @@ class XunFeiBot(Bot):
             session_id = context["session_id"]
             request_id = self.gen_request_id(session_id)
             reply_map[request_id] = ""
-            session = self.sessions.session_query(query, session_id)
-            threading.Thread(target=self.create_web_socket,
-                             args=(session.messages, request_id)).start()
-            depth = 0
-            time.sleep(0.1)
-            t1 = time.time()
-            usage = {}
-            while depth <= 300:
-                try:
-                    data_queue = queue_map.get(request_id)
-                    if not data_queue:
-                        depth += 1
-                        time.sleep(0.1)
-                        continue
-                    data_item = data_queue.get(block=True, timeout=0.1)
-                    if data_item.is_end:
-                        # 请求结束
-                        del queue_map[request_id]
-                        if data_item.reply:
-                            reply_map[request_id] += data_item.reply
-                        usage = data_item.usage
-                        break
+            try:
+                session = self.sessions.session_query(query, session_id)
+                threading.Thread(target=self.create_web_socket,
+                                 args=(session.messages, request_id)).start()
+                depth = 0
+                time.sleep(0.1)
+                t1 = time.time()
+                usage = {}
+                while depth <= 300:
+                    try:
+                        data_queue = queue_map.get(request_id)
+                        if not data_queue:
+                            depth += 1
+                            time.sleep(0.1)
+                            continue
+                        data_item = data_queue.get(block=True, timeout=0.1)
+                        if data_item.is_end:
+                            # 请求结束
+                            if data_item.reply:
+                                reply_map[request_id] += data_item.reply
+                            # The end marker from on_close carries no usage;
+                            # keep usage a dict so the lookup below is safe.
+                            usage = data_item.usage or {}
+                            break
 
-                    reply_map[request_id] += data_item.reply
-                    depth += 1
-                except Exception:
-                    depth += 1
-                    continue
-            t2 = time.time()
-            logger.info(
-                f"[XunFei-API] response={reply_map[request_id]}, time={t2 - t1}s, usage={usage}"
-            )
-            self.sessions.session_reply(reply_map[request_id], session_id,
-                                        usage.get("total_tokens"))
-            reply = Reply(ReplyType.TEXT, reply_map[request_id])
-            del reply_map[request_id]
-            return reply
+                        reply_map[request_id] += data_item.reply
+                        depth += 1
+                    except Exception:
+                        depth += 1
+                        continue
+                t2 = time.time()
+                content = reply_map[request_id]
+                logger.info(
+                    f"[XunFei-API] response={content}, time={t2 - t1}s, usage={usage}"
+                )
+                self.sessions.session_reply(content, session_id,
+                                            usage.get("total_tokens"))
+                return Reply(ReplyType.TEXT, content)
+            finally:
+                # The socket thread can outlive this call, and a failed or
+                # half-finished request used to pin both entries forever.
+                queue_map.pop(request_id, None)
+                reply_map.pop(request_id, None)
         else:
             reply = Reply(ReplyType.ERROR,
                           "Bot不支持处理{}类型的消息".format(context.type))
@@ -196,7 +202,14 @@ def on_error(ws, error):
 # 收到websocket关闭的处理
 def on_close(ws, one, two):
     data_queue = queue_map.get(ws.session_id)
-    data_queue.put("END")
+    if not data_queue:
+        # The waiter already finished and released the queue (see reply()).
+        # The socket can close after that, so there is nothing left to signal.
+        return
+    # The reader in reply() inspects ``is_end``/``reply``/``usage``, so the
+    # end marker has to be a ReplyItem. A bare string raised AttributeError,
+    # which reply() swallows, leaving the caller to spin out its whole budget.
+    data_queue.put(ReplyItem("", is_end=True))
 
 
 # 收到websocket连接建立的处理

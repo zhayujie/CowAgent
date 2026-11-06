@@ -50,6 +50,12 @@ def _openai_usage(usage_meta) -> dict:
 _THINKING_LEVEL_MODELS = ("gemini-4",)
 _THINKING_LEVELS = ("low", "medium", "high")
 
+# Inlined images come out of message content or the model itself, so they are
+# fetched the way every channel fetches media: streamed under a size cap, with
+# the SSRF guard re-checking each redirect hop when it is switched on.
+_REMOTE_IMAGE_TIMEOUT = (5, 60)
+_REMOTE_IMAGE_MAX_SECONDS = 30
+
 
 def _thinking_level(model_name: str, effort) -> Optional[str]:
     """Map the resolved reasoning effort to Gemini 4's thinkingLevel, if applicable."""
@@ -209,6 +215,16 @@ class GoogleGeminiBot(Bot):
                 logger.warning(f"[Gemini] Image file not found: {image_path}")
                 return None
 
+            from common.media_download import MAX_IMAGE_BYTES
+
+            size = os.path.getsize(image_path)
+            if size > MAX_IMAGE_BYTES:
+                # Reading it first and checking afterwards would already have
+                # paid the memory cost, and base64 adds another third on top.
+                logger.warning(
+                    f"[Gemini] Image too large to inline ({size} bytes, limit {MAX_IMAGE_BYTES}): {image_path}")
+                return None
+
             with open(image_path, "rb") as f:
                 image_bytes = f.read()
 
@@ -253,25 +269,59 @@ class GoogleGeminiBot(Bot):
 
         if image_url.startswith("http://") or image_url.startswith("https://"):
             try:
-                response = requests.get(image_url, timeout=20)
-                if response.status_code != 200:
-                    logger.warning(f"[Gemini] Failed to fetch remote image: status={response.status_code}, url={image_url}")
-                    return None
-                mime_type = response.headers.get("Content-Type", "image/png").split(";")[0].strip()
-                if not mime_type.startswith("image/"):
-                    mime_type = "image/png"
-                return {
-                    "inlineData": {
-                        "mimeType": mime_type,
-                        "data": base64.b64encode(response.content).decode("utf-8")
-                    }
-                }
+                fetched = GoogleGeminiBot._fetch_remote_image(image_url)
             except Exception as e:
                 logger.warning(f"[Gemini] Failed to download remote image: url={image_url}, err={e}")
                 return None
+            if not fetched:
+                return None
+            mime_type, image_bytes = fetched
+            return {
+                "inlineData": {
+                    "mimeType": mime_type,
+                    "data": base64.b64encode(image_bytes).decode("utf-8")
+                }
+            }
 
         logger.warning(f"[Gemini] Unsupported image URL format: {image_url[:120]}")
         return None
+
+    @staticmethod
+    def _fetch_remote_image(image_url):
+        """Download a remote image under the same rules the channels use.
+
+        ``image_url`` comes out of a message content block, and ``call_vision``
+        hands over one the model produced, so it is treated as model-supplied:
+        with ``web_security_ssrf_protection`` on, the URL and every redirect
+        hop must resolve to a public address. The body is counted while it
+        streams and cut off at ``MAX_IMAGE_BYTES``, which also bounds the
+        base64 copy handed to the API and the wait on a trickling server.
+
+        Returns ``(mime_type, body)``, or ``None`` when the image is unusable.
+        """
+        # Imported here so building a bot never pulls the tool tree in.
+        from agent.tools.utils.url_safety import _ssrf_protection_enabled, safe_get, validate_url_safe
+        from common.media_download import MAX_IMAGE_BYTES, read_response
+
+        get = requests.get
+        if _ssrf_protection_enabled():
+            validate_url_safe(image_url)
+            get = safe_get
+
+        response = get(image_url, stream=True, timeout=_REMOTE_IMAGE_TIMEOUT)
+        try:
+            if response.status_code != 200:
+                logger.warning(
+                    f"[Gemini] Failed to fetch remote image: status={response.status_code}, url={image_url}")
+                return None
+            mime_type = (response.headers.get("Content-Type") or "").split(";")[0].strip()
+            if not mime_type.startswith("image/"):
+                mime_type = mimetypes.guess_type(image_url)[0] or "image/png"
+                if not mime_type.startswith("image/"):
+                    mime_type = "image/png"
+            return mime_type, read_response(response, MAX_IMAGE_BYTES, max_seconds=_REMOTE_IMAGE_MAX_SECONDS)
+        finally:
+            response.close()
 
     def call_vision(self, image_url: str, question: str,
                     model: Optional[str] = None,

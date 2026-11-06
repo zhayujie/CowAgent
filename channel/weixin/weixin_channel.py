@@ -33,8 +33,17 @@ from common.singleton import singleton
 from common.utils import is_cloud_deployment
 from config import conf, get_weixin_credentials_path
 
+# A reply's media URL comes from the model, and the download runs on the thread
+# that is sending that reply. A socket timeout alone never fires on a server
+# that keeps trickling bytes, so cap the whole transfer too - the same rule the
+# other channels apply to remote replies.
+_MAX_REMOTE_MEDIA_SECONDS = 300
+
 MAX_CONSECUTIVE_FAILURES = 3
 BACKOFF_DELAY = 30
+# Backoff doubles per failure past MAX_CONSECUTIVE_FAILURES up to this cap, so
+# a long outage logs a few lines per hour instead of a few hundred.
+MAX_BACKOFF_DELAY = 180
 RETRY_DELAY = 2
 SESSION_EXPIRED_ERRCODE = -14
 TEXT_CHUNK_LIMIT = 4000
@@ -122,6 +131,37 @@ def _guess_download_ext(url: str, headers) -> str:
     ct = headers.get("Content-Type", "").split(";")[0].strip().lower()
     ext = _CONTENT_TYPE_EXTS.get(ct) or _valid_ext(mimetypes.guess_extension(ct) or "")
     return ext or ".bin"
+
+
+def _open_media_response(url: str, timeout: float = 60):
+    """Open a reply's media URL, guarding it like the other channels do.
+
+    The URL came from the model, not from the user, so when the SSRF guard is
+    on the target - and every redirect hop - must resolve to a public address.
+    The response is left open for the caller to stream into a file.
+    """
+    from agent.tools.utils.url_safety import (
+        _ssrf_protection_enabled, safe_get, validate_url_safe,
+    )
+
+    if _ssrf_protection_enabled():
+        # safe_get only re-checks the hops it follows, so the first one is
+        # validated here (same order as common.media_download._open).
+        validate_url_safe(url)
+        response = safe_get(url, timeout=timeout, stream=True)
+    else:
+        response = requests.get(url, timeout=timeout, stream=True)
+    try:
+        response.raise_for_status()
+    except BaseException:
+        # Only a body that opened successfully is handed to save_response,
+        # so a rejected status must release its stream here.
+        try:
+            response.close()
+        except Exception:
+            pass
+        raise
+    return response
 
 
 def _console_print(*args, **kwargs):
@@ -702,15 +742,15 @@ class WeixinChannel(ChatChannel):
 
                     consecutive_failures += 1
                     errmsg = resp.get("errmsg", "")
-                    logger.error(f"[Weixin] getUpdates error: ret={ret} errcode={errcode} "
-                                 f"errmsg={errmsg} ({consecutive_failures}/{MAX_CONSECUTIVE_FAILURES})")
-                    if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
-                        consecutive_failures = 0
-                        self._stop_event.wait(BACKOFF_DELAY)
-                    else:
-                        self._stop_event.wait(RETRY_DELAY)
+                    self._stop_event.wait(self._poll_failure_delay(
+                        consecutive_failures,
+                        f"error: ret={ret} errcode={errcode} errmsg={errmsg}",
+                    ))
                     continue
 
+                if consecutive_failures:
+                    logger.info(f"[Weixin] getUpdates recovered after "
+                                f"{consecutive_failures} failed attempt(s)")
                 consecutive_failures = 0
 
                 # Update sync cursor
@@ -734,15 +774,32 @@ class WeixinChannel(ChatChannel):
                 if self._stop_event.is_set():
                     break
                 consecutive_failures += 1
-                logger.error(f"[Weixin] getUpdates exception: {e} "
-                             f"({consecutive_failures}/{MAX_CONSECUTIVE_FAILURES})")
-                if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
-                    consecutive_failures = 0
-                    self._stop_event.wait(BACKOFF_DELAY)
-                else:
-                    self._stop_event.wait(RETRY_DELAY)
+                self._stop_event.wait(self._poll_failure_delay(
+                    consecutive_failures, f"exception: {e}",
+                ))
 
         logger.info("[Weixin] Long-poll loop ended")
+
+    @staticmethod
+    def _poll_failure_delay(failures: int, detail: str) -> float:
+        """Log a failed getUpdates and return how long to wait before the next one.
+
+        A failure streak is logged once at ERROR when it starts and once per
+        backoff after that; the quick retries in between stay at DEBUG.
+        """
+        if failures < MAX_CONSECUTIVE_FAILURES:
+            delay = RETRY_DELAY
+        else:
+            doublings = min(failures - MAX_CONSECUTIVE_FAILURES, 10)
+            delay = min(BACKOFF_DELAY * 2 ** doublings, MAX_BACKOFF_DELAY)
+        if failures == 1:
+            logger.error(f"[Weixin] getUpdates {detail}")
+        elif failures >= MAX_CONSECUTIVE_FAILURES:
+            logger.warning(f"[Weixin] getUpdates still failing ({failures} in a row), "
+                           f"retrying in {delay}s: {detail}")
+        else:
+            logger.debug(f"[Weixin] getUpdates {detail} ({failures} in a row)")
+        return delay
 
     @staticmethod
     def _raw_msg_has_media(raw_msg: dict) -> bool:
@@ -1132,11 +1189,11 @@ class WeixinChannel(ChatChannel):
 
         if local_path.startswith(("http://", "https://")):
             try:
-                resp = requests.get(local_path, timeout=60, stream=True)
-                resp.raise_for_status()
+                resp = _open_media_response(local_path)
                 ext = _guess_download_ext(local_path, resp.headers)
                 tmp_path = state_dir.tmp_file("wx_media", ext)
-                save_response(resp, tmp_path, MAX_FILE_BYTES)
+                save_response(resp, tmp_path, MAX_FILE_BYTES,
+                              max_seconds=_MAX_REMOTE_MEDIA_SECONDS)
                 return tmp_path
             except Exception as e:
                 logger.error(f"[Weixin] Failed to download media: {e}")

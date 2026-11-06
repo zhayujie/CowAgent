@@ -6,6 +6,7 @@ Supports text files, images (jpg, png, gif, webp), and PDF files
 import os
 import shlex
 import stat
+import sys
 from typing import Dict, Any, Optional
 from pathlib import Path
 
@@ -16,6 +17,12 @@ from agent.tools.utils.truncate import truncate_head, format_size, DEFAULT_MAX_L
 from common.utils import expand_path
 
 EMPTY_FILE_NOTICE = "[File exists but is empty]"
+
+_IS_WIN = sys.platform == "win32"
+
+# PowerShell ends a single-quoted string at any of these, not only at the
+# ASCII apostrophe, and a doubled one stands for itself.
+_PS_SINGLE_QUOTES = "'\u2018\u2019\u201a\u201b"
 
 
 def split_lines(content: str) -> list:
@@ -76,6 +83,31 @@ def number_lines(text: str, start_line: int) -> str:
     """
     return '\n'.join(
         f"{start_line + i}|{line}" for i, line in enumerate(text.split('\n'))
+    )
+
+
+def _long_line_command(path: str, line_number: int) -> str:
+    """A bash tool command that prints up to DEFAULT_MAX_BYTES bytes of one line.
+
+    On Windows the bash tool runs cmd.exe, which has no tail or head, so the
+    line is read with PowerShell there. It writes raw bytes, so the console
+    code page does not matter, and it stops before a character the limit would
+    cut, so the output is valid UTF-8 and stays within the bash tool's limit.
+    """
+    if not _IS_WIN:
+        return f"tail -n +{line_number} -- {shlex.quote(path)} | head -c {DEFAULT_MAX_BYTES}"
+    literal = "'" + "".join(c * 2 if c in _PS_SINGLE_QUOTES else c for c in path) + "'"
+    if "%" in path:
+        # cmd.exe expands %NAME% even inside double quotes, so never hand it a %.
+        literal = "(" + literal.replace("%", "'+[char]37+'") + ")"
+    return (
+        'powershell -NoProfile -Command "'
+        f"$bytes = [Text.Encoding]::UTF8.GetBytes([string](Get-Content -LiteralPath {literal} -Encoding UTF8"
+        f" | Select-Object -Skip {line_number - 1} -First 1)); "
+        f"$end = [Math]::Min($bytes.Length, {DEFAULT_MAX_BYTES}); "
+        # Step back over UTF-8 continuation bytes so no character is cut.
+        "while ($end -lt $bytes.Length -and ($bytes[$end] -band 0xC0) -eq 0x80) { $end-- }; "
+        '[Console]::OpenStandardOutput().Write($bytes, 0, $end)"'
     )
 
 
@@ -324,7 +356,7 @@ class Read(BaseTool):
                 "content": (
                     f"[Line {start_display} is {size}, exceeds "
                     f"{format_size(DEFAULT_MAX_BYTES)} limit. Use bash tool to read: "
-                    f"tail -n +{start_display} -- {shlex.quote(expand_path(display_path))} | head -c {DEFAULT_MAX_BYTES}]"
+                    f"{_long_line_command(expand_path(display_path), start_display)}]"
                 ),
                 "total_lines": total_lines,
                 "start_line": start_display,

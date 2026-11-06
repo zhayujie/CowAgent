@@ -1432,7 +1432,7 @@ class ModelsHandler:
 
     # Canonical search provider order. Mirrors PROVIDER_ORDER in
     # agent/tools/web_search/web_search.py — keep them in sync.
-    _SEARCH_PROVIDERS = ("deepseek", "bocha", "qianfan", "zhipu", "linkai", "anysearch", "serply", "tavily", "searxng", "keenable")
+    _SEARCH_PROVIDERS = ("deepseek", "bocha", "qianfan", "zhipu", "linkai", "anysearch", "serply", "tavily", "outcrawl", "firecrawl", "searxng", "keenable")
 
     _SEARCH_PROVIDER_LABELS = {
         "bocha":   {"zh": "博查", "en": "Bocha"},
@@ -1443,6 +1443,8 @@ class ModelsHandler:
         "anysearch": {"zh": "AnySearch", "en": "AnySearch"},
         "serply":  {"zh": "Serply", "en": "Serply"},
         "tavily":  {"zh": "Tavily", "en": "Tavily"},
+        "outcrawl": {"zh": "Outcrawl", "en": "Outcrawl"},
+        "firecrawl": {"zh": "Firecrawl", "en": "Firecrawl"},
         "searxng": {"zh": "SearXNG", "en": "SearXNG"},
         "keenable": {"zh": "Keenable", "en": "Keenable"},
     }
@@ -1477,6 +1479,16 @@ class ModelsHandler:
             block = tools_cfg.get("web_search") or {} if isinstance(tools_cfg, dict) else {}
             return (block.get("tavily_api_key") if isinstance(block, dict) else "") or os.environ.get(
                 "TAVILY_API_KEY", "")
+        if provider == "outcrawl":
+            tools_cfg = local_config.get("tools") or {}
+            block = tools_cfg.get("web_search") or {} if isinstance(tools_cfg, dict) else {}
+            return (block.get("outcrawl_api_key") if isinstance(block, dict) else "") or os.environ.get(
+                "OUTCRAWL_API_KEY", "")
+        if provider == "firecrawl":
+            tools_cfg = local_config.get("tools") or {}
+            block = tools_cfg.get("web_search") or {} if isinstance(tools_cfg, dict) else {}
+            return (block.get("firecrawl_api_key") if isinstance(block, dict) else "") or os.environ.get(
+                "FIRECRAWL_API_KEY", "")
         if provider == "keenable":
             tools_cfg = local_config.get("tools") or {}
             block = tools_cfg.get("web_search") or {} if isinstance(tools_cfg, dict) else {}
@@ -1531,7 +1543,7 @@ class ModelsHandler:
                 # to surface.
                 # Lets the frontend badge "匿名/anonymous" only in anonymous mode.
                 "anonymous": pid in ("anysearch", "keenable") and ok and not raw_key,
-                "needs_dedicated_key": pid in ("bocha", "anysearch", "serply", "tavily", "keenable"),
+                "needs_dedicated_key": pid in ("bocha", "anysearch", "serply", "tavily", "outcrawl", "firecrawl", "keenable"),
                 "needs_url": pid == "searxng",
                 # SearXNG stores an instance URL (not a secret), so echo it back
                 # verbatim to prefill/edit; other providers mask their key.
@@ -2707,7 +2719,7 @@ class ModelsHandler:
         instead.
         """
         provider = (data.get("provider") or "bocha").strip().lower()
-        if provider not in ("bocha", "anysearch", "serply", "tavily", "searxng", "keenable"):
+        if provider not in ("bocha", "anysearch", "serply", "tavily", "outcrawl", "firecrawl", "searxng", "keenable"):
             return json.dumps({"status": "error", "message": f"unsupported search provider: {provider!r}"})
 
         if provider in ("anysearch", "keenable"):

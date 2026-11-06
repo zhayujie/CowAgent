@@ -11,6 +11,7 @@ before, the handlers and the channel had to share a module to share a helper.
 """
 
 import base64
+import contextlib
 import errno
 import hashlib
 import hmac
@@ -124,6 +125,26 @@ def _read_config_file_for_write() -> dict:
         with open(config_path, "r", encoding="utf-8-sig") as f:
             return json.load(f)
     return read_config_template()
+
+
+@contextlib.contextmanager
+def _config_write_guard():
+    """Hold the console's config-save lock across a read-modify-write.
+
+    Every console handler rewrites the whole file: it reads config.json, changes
+    a few keys and writes the dict back. Two of those overlapping without a
+    shared lock each write back the copy they read, so whichever finishes last
+    silently drops everything the other changed -- a channel credential typed
+    while another tab saved its settings simply disappears, and the file is
+    still valid so nothing reports an error. ``channel/web/api/config.py`` owns
+    the lock and ``integrations.save_config_values`` already takes it; this is
+    the same guard for the channel handlers. Imported lazily because
+    ``channel.web.api.config`` imports this module.
+    """
+    from channel.web.api.config import _settings_save_lock
+
+    with _settings_save_lock:
+        yield
 
 
 def _write_config_file_for_write(config_path: str, data: dict) -> None:

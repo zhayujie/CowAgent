@@ -49,6 +49,7 @@ def _is_pid_alive(pid: int) -> bool:
             out = subprocess.check_output(
                 ["tasklist", "/FI", f"PID eq {pid}", "/NH"],
                 stderr=subprocess.DEVNULL,
+                timeout=5,
             )
             return str(pid) in out.decode(errors="ignore")
         except Exception:
@@ -70,7 +71,12 @@ def _kill_pid(pid: int, force: bool = False):
         if force:
             cmd.append("/F")
         cmd.extend(["/PID", str(pid)])
-        subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10)
+        except (OSError, subprocess.SubprocessError):
+            # A taskkill that cannot run or will not finish must not wedge
+            # `stop` -- the liveness loop below decides what actually happened.
+            pass
     else:
         import signal
         sig = signal.SIGKILL if force else signal.SIGTERM
@@ -244,10 +250,18 @@ def log(msg):
 # `import app` exercises top-level imports / syntax of the entry module. If it
 # fails, abort and leave the running service untouched — never end up with the
 # old process killed and the new one unable to start.
-check = subprocess.run(
-    [python, "-c", "import app"], cwd=root,
-    stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-)
+# A hung import (a top-level network call, a dependency waiting on something)
+# must not leave the relay stuck forever, so it is bounded and aborts the same
+# way a failing import does. The relay's stderr is discarded, so log it here.
+try:
+    check = subprocess.run(
+        [python, "-c", "import app"], cwd=root,
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        timeout=60,
+    )
+except subprocess.TimeoutExpired:
+    log("self-check timed out after 60s, aborting restart; service left running")
+    sys.exit(1)
 if check.returncode != 0:
     detail = (check.stdout or b"").decode("utf-8", "replace").strip()
     log("self-check FAILED, aborting restart; service left running:\n" + detail)

@@ -173,7 +173,12 @@ class WeixinApi:
         self.cdn_base_url = cdn_base_url
 
     def _post(self, endpoint: str, body: dict, timeout: int = DEFAULT_API_TIMEOUT,
-              retries: int = 0) -> dict:
+              retries: int = 0, log_errors: bool = True) -> dict:
+        """POST to the ilink API.
+
+        ``log_errors=False`` leaves failures to the caller, for the long poll
+        whose loop already logs them with backoff context.
+        """
         url = _ensure_trailing_slash(self.base_url) + endpoint
         headers = _build_headers(self.token)
         body.setdefault("base_info", {}).setdefault("channel_version", CHANNEL_VERSION)
@@ -184,7 +189,8 @@ class WeixinApi:
                 resp.raise_for_status()
                 return resp.json()
             except requests.exceptions.ReadTimeout as e:
-                logger.error(f"[Weixin] API read timeout {endpoint}: {e}")
+                if log_errors:
+                    logger.error(f"[Weixin] API read timeout {endpoint}: {e}")
                 raise
             except RETRYABLE_ERRORS as e:
                 if attempt < retries:
@@ -195,10 +201,12 @@ class WeixinApi:
                                    f"{backoff}s: {e}")
                     time.sleep(backoff)
                     continue
-                logger.error(f"[Weixin] API error {endpoint}: {e}")
+                if log_errors:
+                    logger.error(f"[Weixin] API error {endpoint}: {e}")
                 raise
             except Exception as e:
-                logger.error(f"[Weixin] API error {endpoint}: {e}")
+                if log_errors:
+                    logger.error(f"[Weixin] API error {endpoint}: {e}")
                 raise
 
     # ── getUpdates (long-poll) ─────────────────────────────────────────
@@ -207,7 +215,7 @@ class WeixinApi:
         try:
             return self._post("ilink/bot/getupdates", {
                 "get_updates_buf": get_updates_buf,
-            }, timeout=timeout + 5)
+            }, timeout=timeout + 5, log_errors=False)
         except requests.exceptions.ReadTimeout:
             # A long poll that times out just means no message arrived.
             logger.debug("[Weixin] getUpdates read timeout: empty poll")

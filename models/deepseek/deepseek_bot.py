@@ -43,6 +43,11 @@ DEFAULT_API_BASE = "https://api.deepseek.com/v1"
 # This is a ceiling, not a reservation: unused budget costs nothing.
 V4_AGENT_MAX_TOKENS = 128 * 1024
 
+# While overloaded, DeepSeek holds a stream open with only ": keep-alive"
+# comments. Each one resets the socket read timeout, so without this cap a
+# queued request can hang for many minutes.
+STREAM_KEEPALIVE_MAX_SECONDS = 180
+
 
 class DeepSeekBot(Bot, OpenAICompatibleBot):
     def __init__(self):
@@ -340,12 +345,30 @@ class DeepSeekBot(Bot, OpenAICompatibleBot):
             current_tool_calls = {}
             finish_reason = None
             stream_usage = None  # Provider-reported token usage (include_usage)
+            last_data_at = time.time()
 
             for line in response.iter_lines():
                 if not line:
                     continue
 
                 line = line.decode("utf-8")
+                if line.startswith(":"):
+                    if time.time() - last_data_at > STREAM_KEEPALIVE_MAX_SECONDS:
+                        logger.error(
+                            f"[DEEPSEEK] Stream timeout: only keep-alive received for "
+                            f"{STREAM_KEEPALIVE_MAX_SECONDS}s"
+                        )
+                        yield {
+                            "error": True,
+                            "message": f"Stream timeout: only keep-alive received for {STREAM_KEEPALIVE_MAX_SECONDS}s",
+                            "status_code": 504,
+                        }
+                        return
+                    # Empty chunk lets the caller check for cancel while the server is queueing
+                    yield {}
+                    continue
+                last_data_at = time.time()
+
                 if line.startswith("data: "):
                     data_str = line[6:]
                 elif line.startswith("data:"):

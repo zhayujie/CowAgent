@@ -15,7 +15,7 @@ import re
 import uuid
 from html.parser import HTMLParser
 from typing import Dict, Any, Optional, Set
-from urllib.parse import urlparse, unquote
+from urllib.parse import urlparse, unquote, urljoin
 
 import requests
 
@@ -52,6 +52,29 @@ _META_HTTP_EQUIV_RE = re.compile(
     rb'<meta[^>]+http-equiv\s*=\s*["\']?Content-Type["\']?[^>]+content\s*=\s*["\'][^"\']*charset=([\w\-]+)',
     re.IGNORECASE,
 )
+
+# Charset labels that browsers decode with a superset codec, per the WHATWG
+# Encoding Standard (https://encoding.spec.whatwg.org/#names-and-labels).
+# Pages rely on the superset (gb2312 pages use GBK characters, ISO-8859-1
+# pages use windows-1252 quotes), and Python's narrower codec garbles them.
+# All of the standard's labels for these encodings are listed, including ones
+# Python doesn't know at all, such as x-sjis and windows-874.
+_BROWSER_CHARSETS = {
+    label: codec
+    for codec, labels in (
+        ("gb18030", "chinese csgb2312 csiso58gb231280 gb2312 gb_2312 gb_2312-80 gbk iso-ir-58 x-gbk"),
+        ("cp932", "csshiftjis ms932 ms_kanji shift-jis shift_jis sjis windows-31j x-sjis"),
+        ("cp949", "cseuckr csksc56011987 euc-kr iso-ir-149 korean ks_c_5601-1987 ks_c_5601-1989 ksc5601 "
+                  "ksc_5601 windows-949"),
+        ("big5hkscs", "big5 big5-hkscs cn-big5 csbig5 x-x-big5"),
+        ("cp1252", "ansi_x3.4-1968 ascii cp1252 cp819 csisolatin1 ibm819 iso-8859-1 iso-ir-100 iso8859-1 "
+                   "iso88591 iso_8859-1 iso_8859-1:1987 l1 latin1 us-ascii windows-1252 x-cp1252"),
+        ("cp1254", "cp1254 csisolatin5 iso-8859-9 iso-ir-148 iso8859-9 iso88599 iso_8859-9 iso_8859-9:1989 "
+                   "l5 latin5 windows-1254 x-cp1254"),
+        ("cp874", "dos-874 iso-8859-11 iso8859-11 iso885911 tis-620 windows-874"),
+    )
+    for label in labels.split()
+}
 
 
 def _tools_web_fetch_conf() -> dict:
@@ -103,6 +126,11 @@ def _extract_charset_from_html_meta(raw_bytes: bytes) -> Optional[str]:
     return None
 
 
+def _browser_charset(label: str) -> str:
+    """The codec a browser decodes a charset label with, or the label itself."""
+    return _BROWSER_CHARSETS.get(label.lower(), label)
+
+
 def _get_url_suffix(url: str) -> str:
     """Extract file extension from URL path, ignoring query params."""
     path = unquote(urlparse(url).path)
@@ -123,8 +151,18 @@ def _parse_content_length(response: requests.Response) -> int:
         return 0
 
 
+# Stands in for a <pre> block while the text around it is normalized. Page text
+# can't contain it: the parser drops NUL characters, as browsers do.
+_PRE_MARK = "\0"
+
+
 class _PageTextParser(HTMLParser):
-    """Keep text and block boundaries without treating quoted attributes as text."""
+    """Keep text and block boundaries without treating quoted attributes as text.
+
+    The text of each <pre> block is kept as written, in ``pre_blocks``, and
+    ``parts`` holds _PRE_MARK in its place. Images become Markdown images when
+    their source resolves to an http(s) URL against ``base_url``.
+    """
 
     _BLOCK_TAGS = frozenset({
         "address", "article", "aside", "blockquote", "caption", "center",
@@ -134,11 +172,16 @@ class _PageTextParser(HTMLParser):
         "summary", "table", "tbody", "td", "tfoot", "th", "thead", "tr", "ul",
     })
 
-    def __init__(self):
+    def __init__(self, base_url: str = ""):
         # Decode character references once, in text rather than in markup.
         super().__init__(convert_charrefs=True)
         self.parts = []
         self.hidden_tag = None
+        self.pre_blocks = []
+        self.pre_parts = []
+        self.pre_depth = 0
+        self.base_url = base_url
+        self.seen_images = set()
 
     def handle_starttag(self, tag, attrs):
         if self.hidden_tag:
@@ -146,18 +189,67 @@ class _PageTextParser(HTMLParser):
         if tag in ("script", "style"):
             self.hidden_tag = tag
         elif tag == "br" or tag in self._BLOCK_TAGS:
-            self.parts.append("\n")
+            self._line_break(forced=tag == "br")
+        elif tag == "img" and not self.pre_depth:
+            self._image(dict(attrs))
+        if tag == "pre":
+            self.pre_depth += 1
+
+    def _image(self, attrs):
+        # Tracking pixels carry no content.
+        if (attrs.get("width") or "").strip() in ("0", "1") or (attrs.get("height") or "").strip() in ("0", "1"):
+            return
+        # Lazy-loaded images keep the real source in a data attribute.
+        src = next((v.strip() for v in (attrs.get("src"), attrs.get("data-src"), attrs.get("data-original"))
+                    if v and v.strip() and not v.strip().lower().startswith("data:")), "")
+        if not src:
+            return
+        url = urljoin(self.base_url, src) if self.base_url else src
+        if urlparse(url).scheme not in ("http", "https") or url in self.seen_images:
+            return
+        self.seen_images.add(url)
+        alt = re.sub(r"[\[\]\s]+", " ", attrs.get("alt") or "").strip()
+        url = url.replace(" ", "%20").replace("(", "%28").replace(")", "%29")
+        self.parts.append(f"![{alt}]({url})")
 
     def handle_endtag(self, tag):
         if self.hidden_tag:
             if tag == self.hidden_tag:
                 self.hidden_tag = None
         elif tag in self._BLOCK_TAGS:
-            self.parts.append("\n")
+            if tag == "pre" and self.pre_depth:
+                self.pre_depth -= 1
+                if not self.pre_depth:
+                    self._end_pre()
+            self._line_break()
 
     def handle_data(self, data):
-        if not self.hidden_tag:
-            self.parts.append(data)
+        data = data.replace(_PRE_MARK, "")
+        if data and not self.hidden_tag:
+            (self.pre_parts if self.pre_depth else self.parts).append(data)
+
+    def close(self):
+        super().close()
+        if self.pre_depth:  # an unclosed <pre> runs to the end of the page
+            self.pre_depth = 0
+            self._end_pre()
+
+    def _line_break(self, forced=False):
+        if not self.pre_depth:
+            self.parts.append("\n")
+        elif forced or (self.pre_parts and not self.pre_parts[-1].endswith("\n")):
+            # Inside <pre>, a block starts a new line but doesn't add a blank one.
+            self.pre_parts.append("\n")
+
+    def _end_pre(self):
+        # As in browsers, CRLF and CR are newlines and the newline right after <pre>
+        # is skipped; other leading blank lines and the trailing whitespace go too.
+        text = re.sub(r"\r\n?", "\n", "".join(self.pre_parts))
+        text = re.sub(r"^\s*\n", "", text).rstrip()
+        self.pre_parts = []
+        if text:
+            self.pre_blocks.append(text)
+            self.parts.append(_PRE_MARK)
 
 
 class WebFetch(BaseTool):
@@ -343,7 +435,7 @@ class WebFetch(BaseTool):
                 text = html
             else:
                 title = self._extract_title(html)
-                text = self._extract_text(html)
+                text = self._extract_text(html, response.url or url)
 
             return ToolResult.success(f"Title: {title}\n\nContent:\n{text}")
         finally:
@@ -473,7 +565,12 @@ class WebFetch(BaseTool):
     def _parse_text(self, file_path: str, charset: Optional[str] = None) -> str:
         """Read plain text, trying a declared charset before existing fallbacks."""
         encodings = ["utf-8", "utf-8-sig", "gbk", "gb2312", "latin-1"]
-        if charset:
+        if charset and charset.lower() in _BROWSER_CHARSETS:
+            # Downloads with a legacy label are often UTF-8 anyway, and the browser
+            # codec would read much of that as garbage, so UTF-8 goes first. Real
+            # legacy text is rarely valid UTF-8.
+            encodings.insert(1, _BROWSER_CHARSETS[charset.lower()])
+        elif charset:
             encodings.insert(0, charset)
         for enc in encodings:
             try:
@@ -526,27 +623,32 @@ class WebFetch(BaseTool):
 
     @staticmethod
     def _detect_encoding(response: requests.Response) -> str:
-        """Detect response encoding with priority: Content-Type header > HTML meta > chardet > utf-8."""
+        """Detect response encoding with priority: Content-Type header > HTML meta > chardet > utf-8.
+
+        The detected label is mapped to the codec a browser decodes it with.
+        """
         # 1. Check Content-Type header for explicit charset
         content_type = response.headers.get("Content-Type", "")
         charset = _extract_charset_from_content_type(content_type)
         if charset:
-            return charset
+            return _browser_charset(charset)
 
         # 2. Scan raw bytes for HTML meta charset declaration
         raw = response.content[:4096]
         charset = _extract_charset_from_html_meta(raw)
         if charset:
-            return charset
+            return _browser_charset(charset)
 
         # 3. Use apparent_encoding (chardet-based detection) if confident enough
         apparent = response.apparent_encoding
         if apparent:
             apparent_lower = apparent.lower()
-            # Trust CJK / Windows encodings detected by chardet
+            # Trust CJK / Windows encodings detected by chardet, including the Japanese
+            # and Korean Windows code pages, which it names CP932 and CP949
             trusted_prefixes = ("utf", "gb", "big5", "euc", "shift_jis", "iso-2022", "windows", "ascii")
-            if any(apparent_lower.startswith(p) for p in trusted_prefixes):
-                return apparent
+            trusted_names = ("cp932", "cp949")
+            if apparent_lower in trusted_names or any(apparent_lower.startswith(p) for p in trusted_prefixes):
+                return _browser_charset(apparent)
 
         # 4. Fallback
         return "utf-8"
@@ -624,8 +726,8 @@ class WebFetch(BaseTool):
         return match.group(1).strip() if match else "Untitled"
 
     @staticmethod
-    def _extract_text(html: str) -> str:
-        parser = _PageTextParser()
+    def _extract_text(html: str, base_url: str = "") -> str:
+        parser = _PageTextParser(base_url)
         parser.feed(html)
         parser.close()
         text = "".join(parser.parts)
@@ -633,4 +735,6 @@ class WebFetch(BaseTool):
         text = re.sub(r"\n{3,}", "\n\n", text)
         lines = [line.strip() for line in text.splitlines()]
         text = "\n".join(lines)
-        return text.strip()
+        # Code in <pre> keeps its indentation, spacing and blank lines.
+        pre_blocks = iter(parser.pre_blocks)
+        return re.sub(_PRE_MARK, lambda _: next(pre_blocks), text.strip())

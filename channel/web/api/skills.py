@@ -76,6 +76,13 @@ _SKILL_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_\-]{0,63}$")
 _GITHUB_SHORTHAND_RE = re.compile(r"^[A-Za-z0-9_\-]+/[A-Za-z0-9_.\-]+(?:#.+)?$")
 
 
+def _is_local_path(spec: str) -> bool:
+    """Whether ``spec`` is a local path to the console or to the installer."""
+    from cli.commands.skill import is_local_path
+
+    return spec.startswith(_LOCAL_PATH_PREFIXES) or is_local_path(spec)
+
+
 def _market_spec(source: str, value: str) -> str:
     """Turn the console's (source, value) pair into an installer spec.
 
@@ -86,7 +93,7 @@ def _market_spec(source: str, value: str) -> str:
     value = (value or "").strip()
     if not value:
         raise ValueError("value is required")
-    if value.startswith(_LOCAL_PATH_PREFIXES):
+    if _is_local_path(value):
         raise ValueError("local paths cannot be installed from the console")
     if source == "hub":
         if not _SKILL_NAME_RE.match(value):
@@ -402,7 +409,7 @@ class SkillsHandler:
                 spec = (body.get("spec") or name).strip()
                 if not spec:
                     return json.dumps({"status": "error", "message": "spec is required"})
-                if spec.startswith(_LOCAL_PATH_PREFIXES):
+                if _is_local_path(spec):
                     return json.dumps({"status": "error", "message": "local paths cannot be installed from the console"})
                 result = _install_skill_for_agent(spec, agent_id)
                 if result.error:

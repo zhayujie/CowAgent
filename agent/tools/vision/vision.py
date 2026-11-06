@@ -20,6 +20,7 @@ import base64
 import os
 import re
 import subprocess
+import sys
 import tempfile
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
@@ -891,6 +892,10 @@ class Vision(BaseTool):
                 return False
 
         def _try_convert(max_dim: str, quality: str) -> bool:
+            # On Windows a bare "convert" is System32's FAT-to-NTFS volume
+            # converter, which is found before anything on PATH.
+            if sys.platform == "win32":
+                return False
             try:
                 subprocess.run(
                     ["convert", path, "-resize", f"{max_dim}x{max_dim}>",
@@ -901,6 +906,28 @@ class Vision(BaseTool):
             except (FileNotFoundError, subprocess.CalledProcessError):
                 return False
 
+        def _try_pillow(max_dim: str, quality: str) -> bool:
+            # Windows and the Docker image have neither tool; Pillow is a core dependency.
+            try:
+                from PIL import Image, ImageOps
+                with Image.open(path) as img:
+                    # The JPEG is saved without EXIF, so bake the orientation in.
+                    img = ImageOps.exif_transpose(img)
+                    if img.mode in ("I", "I;16"):
+                        # 16-bit grayscale: scale it to 8 bits, or the conversion below clips it to white.
+                        img = img.point(lambda v: v / 256)
+                    if img.mode != "RGB" or "transparency" in img.info:
+                        # Flatten to RGB for JPEG, with transparent areas on white rather than black.
+                        rgba = img.convert("RGBA")
+                        img = Image.new("RGB", rgba.size, "white")
+                        img.paste(rgba, mask=rgba)
+                    img.thumbnail((int(max_dim), int(max_dim)))  # only shrinks, like convert's ">"
+                    img.save(tmp.name, "JPEG", quality=int(quality))
+                return True
+            except Exception as e:
+                logger.debug(f"[Vision] Pillow compression failed: {e}")
+                return False
+
         attempts = [
             (COMPRESS_MAX_DIM, "85"),
             (COMPRESS_MAX_DIM, "70"),
@@ -909,7 +936,7 @@ class Vision(BaseTool):
         ]
 
         for max_dim, quality in attempts:
-            ok = _try_sips(max_dim, quality) or _try_convert(max_dim, quality)
+            ok = _try_sips(max_dim, quality) or _try_convert(max_dim, quality) or _try_pillow(max_dim, quality)
             if not ok:
                 continue
             new_size = os.path.getsize(tmp.name)
