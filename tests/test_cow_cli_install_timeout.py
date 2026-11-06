@@ -12,17 +12,35 @@ started twice on the same directory.
 """
 import os
 import threading
+import time
+
+import pytest
 
 import plugins
 
 _old_plugin_path = plugins.instance.current_plugin_path
 plugins.instance.current_plugin_path = os.path.join(os.getcwd(), "plugins", "cow_cli")
 try:
-    import plugins.cow_cli.cow_cli  # noqa: F401
+    import plugins.cow_cli.cow_cli as cow_cli_module
 finally:
     plugins.instance.current_plugin_path = _old_plugin_path
 
 CowCliPlugin = plugins.instance.plugins["COW_CLI"]
+
+
+@pytest.fixture(autouse=True)
+def _drain_installs():
+    # A released install keeps its key until the pool worker's done callback
+    # runs, which can be after the test returns. Wait for it so the next test
+    # does not see the same skill as still installing.
+    yield
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        with cow_cli_module._installing_guard:
+            if not cow_cli_module._installing:
+                return
+        time.sleep(0.01)
+    raise AssertionError("an install worker never released its key")
 
 
 def _stalled_install(monkeypatch, calls, release):
