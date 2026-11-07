@@ -17,6 +17,7 @@ import requests
 import web
 
 from channel.web.core._common import (
+    _config_write_guard,
     _read_config_file_for_write,
     _require_auth,
     _write_config_file_for_write,
@@ -1805,32 +1806,49 @@ class ModelsHandler:
         try:
             data = json.loads(web.data() or b"{}")
             action = data.get("action") or ""
-            if action == "set_provider":
-                return self._handle_set_provider(data)
-            if action == "delete_provider":
-                return self._handle_delete_provider(data)
-            if action == "set_custom_provider":
-                return self._handle_set_custom_provider(data)
-            if action == "delete_custom_provider":
-                return self._handle_delete_custom_provider(data)
-            if action == "set_active_custom_provider":
-                return self._handle_set_active_custom_provider(data)
-            if action == "set_capability":
-                return self._handle_set_capability(data)
-            if action == "save_catalog":
-                return self._handle_save_catalog(data)
             if action == "discover_models":
+                # Read-only: this probes the provider's /models endpoint with a
+                # 10s timeout and never writes config.json. Holding the save
+                # lock across that request would stall every other console save
+                # behind an unrelated network call.
                 return self._handle_discover_models(data)
-            if action == "set_voice_reply_mode":
-                return self._handle_set_voice_reply_mode(data)
-            if action == "set_search_credential":
-                return self._handle_set_search_credential(data)
-            if action == "set_search_provider_enabled":
-                return self._handle_set_search_provider_enabled(data)
-            return json.dumps({"status": "error", "message": f"unknown action: {action!r}"})
+            # ConfigHandler.POST, integrations.save_config_values and the four
+            # channel handlers all hold _settings_save_lock across their
+            # read-modify-write. Every models action rewrites the whole of
+            # config.json, so it must take the same lock: an overlapping save
+            # otherwise writes back the copy it read before the other landed and
+            # silently drops the keys the other one changed -- a provider key,
+            # a channel_type, a nested tool setting. The file stays valid, so
+            # nothing reports an error.
+            with _config_write_guard():
+                return self._dispatch_write_action(action, data)
         except Exception as e:
             logger.error(f"[ModelsHandler] POST failed: {e}")
             return json.dumps({"status": "error", "message": str(e)})
+
+    def _dispatch_write_action(self, action: str, data: dict) -> str:
+        """The POST actions that persist config (all run under the save lock)."""
+        if action == "set_provider":
+            return self._handle_set_provider(data)
+        if action == "delete_provider":
+            return self._handle_delete_provider(data)
+        if action == "set_custom_provider":
+            return self._handle_set_custom_provider(data)
+        if action == "delete_custom_provider":
+            return self._handle_delete_custom_provider(data)
+        if action == "set_active_custom_provider":
+            return self._handle_set_active_custom_provider(data)
+        if action == "set_capability":
+            return self._handle_set_capability(data)
+        if action == "save_catalog":
+            return self._handle_save_catalog(data)
+        if action == "set_voice_reply_mode":
+            return self._handle_set_voice_reply_mode(data)
+        if action == "set_search_credential":
+            return self._handle_set_search_credential(data)
+        if action == "set_search_provider_enabled":
+            return self._handle_set_search_provider_enabled(data)
+        return json.dumps({"status": "error", "message": f"unknown action: {action!r}"})
 
     def _handle_discover_models(self, data: dict) -> str:
         """Probe a provider's model endpoint without persisting credentials."""
