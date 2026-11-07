@@ -45,6 +45,10 @@ def _is_blocked_ip(ip: "ipaddress._BaseAddress") -> bool:
         or ip.is_reserved
         or ip.is_multicast
         or ip.is_unspecified
+        # Anything else outside the public range, e.g. the 100.64.0.0/10
+        # shared address space, which is_private does not cover and which
+        # hosts Alibaba Cloud's 100.100.100.200 metadata service.
+        or not ip.is_global
     )
 
 
