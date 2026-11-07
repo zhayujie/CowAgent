@@ -519,33 +519,21 @@ class FeiShuChanel(ChatChannel):
             asyncio.set_event_loop(loop)
             ws_client_mod = _new_lark_ws_client_module(loop)
 
-            startup_error = None
-            # Retry forever instead of twice.
-            #
-            # The original `for attempt in range(2)` gave up after two failed
-            # attempts, which killed the websocket thread for the rest of the
-            # process lifetime. Only an SSL error was retried; every other
-            # failure (invalid app_id/app_secret, network unreachable, ...)
-            # fell through to `break`, and the channel went permanently deaf
-            # with nothing but a one-line error in the log.
-            #
-            # The SDK cannot be relied on to recover: in lark_oapi/ws/client.py
-            # the `except ClientException: raise` branch is the only path that
-            # bypasses auto_reconnect, so a failed handshake tears down the
-            # SDK's own reconnect loop as well. The retry has to live here.
+            # Retry until stop() instead of giving up: a failed handshake
+            # raises ClientException, which lark_oapi/ws/client.py re-raises
+            # without going through auto_reconnect, so the SDK will not
+            # recover on its own and the channel would stay deaf.
             #
             # Backoff: 5s -> 10s -> 20s -> 40s -> 60s (capped).
-            # SSL errors keep the original behaviour of retrying once with
-            # certificate verification disabled.
+            # The ssl patch is process-wide, so only a certificate error may
+            # switch to unverified TLS (once, retried immediately); any other
+            # failure must leave verification untouched.
             attempt = 0
             backoff = 5
+            ssl_verify_disabled = False
+            error_reported = False
             while True:
                 try:
-                    if attempt == 1:
-                        logger.warning("[FeiShu] Retrying with SSL verification disabled...")
-                        ssl_module.create_default_context = create_unverified_context
-                        ssl_module._create_unverified_context = create_unverified_context
-
                     ws_client = ws_client_mod.Client(
                         self.feishu_app_id,
                         self.feishu_app_secret,
@@ -555,48 +543,34 @@ class FeiShuChanel(ChatChannel):
                     self._ws_client = ws_client
                     logger.debug("[FeiShu] Websocket client starting...")
                     ws_client.start()
-                    # Only reached once the connection is actually established
-                    # and running: start() blocks until the socket drops.
-                    startup_error = None
                     break
 
                 except (SystemExit, KeyboardInterrupt):
                     logger.info("[FeiShu] Websocket thread received stop signal")
-                    startup_error = None
                     break
                 except Exception as e:
                     error_msg = str(e)
                     is_ssl_error = ("CERTIFICATE_VERIFY_FAILED" in error_msg
                                     or "certificate verify failed" in error_msg.lower())
                     attempt += 1
-                    logger.error(
-                        "[FeiShu] Websocket client error (attempt %d, retry in %ds): %s"
-                        % (attempt, backoff, e), exc_info=True)
-                    startup_error = error_msg
-                    if is_ssl_error and attempt == 1:
-                        # First SSL error: retry immediately with verification off.
-                        logger.warning(f"[FeiShu] SSL error: {error_msg}, retrying with verification disabled...")
-                        continue
-                    if is_ssl_error:
-                        # Still an SSL error: keep verification disabled.
+                    if is_ssl_error and not ssl_verify_disabled:
+                        logger.warning(f"[FeiShu] SSL error: {error_msg}, retrying with SSL verification disabled...")
                         ssl_module.create_default_context = create_unverified_context
                         ssl_module._create_unverified_context = create_unverified_context
-                    else:
-                        ssl_module.create_default_context = original_create_default_context
-                        ssl_module._create_unverified_context = original_create_default_context
-                    # Do not break: the thread stays alive so the channel can
-                    # recover on its own once the cause is fixed.
-                    logger.warning(
-                        "[FeiShu] Websocket will retry in %ds (attempt %d). "
-                        "The thread stays alive so the channel can recover." % (backoff, attempt))
-                    # Event.wait() instead of time.sleep() so stop() can wake it.
+                        ssl_verify_disabled = True
+                        continue
+                    logger.error(
+                        "[FeiShu] Websocket client error (attempt %d, retry in %ds): %s"
+                        % (attempt, backoff, e), exc_info=not error_reported)
+                    if not error_reported:
+                        # wait_startup() only sees the first result, so report
+                        # now and keep retrying in the background.
+                        self.report_startup_error(error_msg)
+                        error_reported = True
                     if self._ws_stop_event.wait(timeout=backoff):
                         logger.info("[FeiShu] stop() requested during websocket backoff, exiting retry loop")
-                        startup_error = None
                         break
                     backoff = min(backoff * 2, 60)
-            if startup_error:
-                self.report_startup_error(startup_error)
             try:
                 loop.close()
             except Exception:
