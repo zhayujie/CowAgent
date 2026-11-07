@@ -11,6 +11,7 @@ from agent.tools.base_tool import BaseTool, ToolResult
 from common.atomic_write import write_text_atomic
 from common.log import logger
 from common.utils import expand_path
+from agent.tools.env_config.storage import env_file_lock
 
 
 # API Key 知识库：常见的环境变量及其描述
@@ -157,6 +158,17 @@ class EnvConfig(BaseTool):
         return False
     
     def execute(self, args: Dict[str, Any]) -> ToolResult:
+        # Share the Web editor's read/modify/write lock. Read-only tool actions
+        # keep their original behavior and do not create a lock file.
+        if args.get("action") in ("set", "delete"):
+            try:
+                with env_file_lock(self.env_path):
+                    return self._execute(args)
+            except OSError:
+                return ToolResult.fail("Environment credentials storage is unavailable.")
+        return self._execute(args)
+
+    def _execute(self, args: Dict[str, Any]) -> ToolResult:
         """
         Execute environment configuration operation
         

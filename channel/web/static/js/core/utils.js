@@ -180,6 +180,8 @@ function _updateScrollToBottomBtn() {
 }
 
 function refreshChatScrollControls() {
+    // ResizeObserver can fire between deferred scripts, before chat/state.js.
+    if (typeof messagesDiv === 'undefined') return;
     _updateScrollToBottomBtn();
     if (!_autoScrollEnabled) return;
     scrollChatToBottom();

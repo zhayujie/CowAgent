@@ -92,6 +92,11 @@
     overflow-y: hidden;
 }
 .composer-textarea::placeholder { color: rgb(var(--cw-slate-400)); }
+/* Override Tailwind's :-moz-focusring reset; the card owns the focus ring. */
+.composer-textarea:focus {
+    outline: none;
+    box-shadow: none;
+}
 .dark .composer-textarea { color: rgb(var(--cw-slate-100)); }
 .dark .composer-textarea::placeholder { color: rgb(var(--cw-slate-500)); }
 
