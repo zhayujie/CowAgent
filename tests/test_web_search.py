@@ -90,7 +90,7 @@ class TestProviderOrder(unittest.TestCase):
         self.assertEqual(
             web_search_module.PROVIDER_ORDER,
             ("deepseek", "bocha", "qianfan", "zhipu", "linkai", "anysearch", "serply", "tavily", "outcrawl", "firecrawl",
-             "searxng", "keenable"),
+             "specstream", "searxng", "keenable"),
         )
 
     def test_web_console_provider_list_stays_in_sync(self):
@@ -125,6 +125,11 @@ class TestProviderOrder(unittest.TestCase):
         self.assertEqual(ModelsHandler._search_provider_key("firecrawl", cfg), "console-key")
         with patch.dict(os.environ, {"FIRECRAWL_API_KEY": "env-key"}):
             self.assertEqual(ModelsHandler._search_provider_key("firecrawl", {}), "env-key")
+
+        cfg = {"tools": {"web_search": {"specstream_api_key": "console-key"}}}
+        self.assertEqual(ModelsHandler._search_provider_key("specstream", cfg), "console-key")
+        with patch.dict(os.environ, {"SPECSTREAM_API_KEY": "env-key"}):
+            self.assertEqual(ModelsHandler._search_provider_key("specstream", {}), "env-key")
 
     def test_web_console_mirrors_keenable_opt_in(self):
         """The Search panel agrees with the tool: keenable is not configured
@@ -883,6 +888,35 @@ class TestFirecrawlKeyResolution(unittest.TestCase):
             self.assertEqual(web_search_module._get_api_key("firecrawl"), "")
 
 
+class TestSpecstreamKeyResolution(unittest.TestCase):
+    """The specstream key lives under tools.web_search, falling back to env."""
+
+    def setUp(self):
+        self._prev_env = os.environ.get("SPECSTREAM_API_KEY")
+        os.environ.pop("SPECSTREAM_API_KEY", None)
+
+    def tearDown(self):
+        if self._prev_env is None:
+            os.environ.pop("SPECSTREAM_API_KEY", None)
+        else:
+            os.environ["SPECSTREAM_API_KEY"] = self._prev_env
+
+    def test_specstream_key_from_tools_config(self):
+        """tools.web_search.specstream_api_key is resolved, and wins over env."""
+        cfg = {"tools": {"web_search": {"specstream_api_key": "test-key-123"}}}
+        with patch.object(web_search_module, "conf", lambda: cfg):
+            self.assertEqual(web_search_module._get_api_key("specstream"), "test-key-123")
+            with patch.dict(os.environ, {"SPECSTREAM_API_KEY": "env-key-456"}):
+                self.assertEqual(web_search_module._get_api_key("specstream"), "test-key-123")
+
+    def test_specstream_key_env_fallback(self):
+        """Without a config value, SPECSTREAM_API_KEY is used; both empty -> ''."""
+        with patch.object(web_search_module, "conf", lambda: {}):
+            with patch.dict(os.environ, {"SPECSTREAM_API_KEY": "env-key-456"}):
+                self.assertEqual(web_search_module._get_api_key("specstream"), "env-key-456")
+            self.assertEqual(web_search_module._get_api_key("specstream"), "")
+
+
 class TestKeenableBackend(unittest.TestCase):
     """Behaviour of WebSearch._search_keenable with a stubbed HTTP layer."""
 
@@ -1186,6 +1220,96 @@ class TestFirecrawlBackend(unittest.TestCase):
             result = self.tool._search_firecrawl("q", 10)
         self.assertEqual(result.status, "error")
         self.assertIn("Query is required", result.result)
+
+
+class TestSpecstreamBackend(unittest.TestCase):
+    """Behaviour of WebSearch._search_specstream with a stubbed HTTP layer."""
+
+    def setUp(self):
+        self.tool = web_search_module.WebSearch()
+
+    def test_search_specstream_maps_sources(self):
+        """data.sources items map to the unified output shape, the key travels
+        as a Bearer token and the query as the q parameter of a GET."""
+        payload = {
+            "data": {
+                "kind": "answer",
+                "answer": None,
+                "rows": [],
+                "sources": [
+                    {"url": "https://a.example/1", "title": "T1", "site": "a.example",
+                     "snippet": "s1", "published": "2026-01-02", "cited": True},
+                    {"url": "https://a.example/2", "title": "T2", "site": "a.example",
+                     "snippet": None, "published": None, "cited": False},
+                ],
+            },
+        }
+        with patch.object(web_search_module, "_get_api_key", return_value="test-key-123"), \
+                patch.object(web_search_module.requests, "get",
+                             return_value=_fake_response(200, payload)) as mock_get:
+            result = self.tool._search_specstream("cowagent", 10)
+
+        self.assertEqual(result.status, "success")
+        self.assertEqual(result.result["backend"], "specstream")
+        self.assertEqual(result.result["total"], 2)
+        first, second = result.result["results"]
+        self.assertEqual(first, {
+            "title": "T1", "url": "https://a.example/1", "snippet": "s1",
+            "siteName": "a.example", "datePublished": "2026-01-02",
+        })
+        self.assertEqual(second["snippet"], "")
+        self.assertEqual(second["datePublished"], "")
+        self.assertEqual(mock_get.call_args[0][0], "https://api.specstream.ai/v1/web-search")
+        self.assertEqual(mock_get.call_args[1]["headers"]["Authorization"], "Bearer test-key-123")
+        self.assertEqual(mock_get.call_args[1]["params"], {"q": "cowagent"})
+
+    def test_search_specstream_trims_to_count(self):
+        """The API has no count parameter: count is clamped into 1-20 and the
+        source list is cut locally; falsy -> 10."""
+        sources = [{"url": f"https://a.example/{i}", "title": f"T{i}"} for i in range(30)]
+        payload = {"data": {"sources": sources}}
+        with patch.object(web_search_module, "_get_api_key", return_value="k"), \
+                patch.object(web_search_module.requests, "get",
+                             return_value=_fake_response(200, payload)):
+            for count, expected in ((20, 20), (99, 20), (0, 10), (None, 10), (5, 5)):
+                with self.subTest(count=count):
+                    result = self.tool._search_specstream("q", count)
+                    self.assertEqual(len(result.result["results"]), expected)
+
+    def test_search_specstream_empty_sources(self):
+        """A reply without sources is an empty success, not an error."""
+        with patch.object(web_search_module, "_get_api_key", return_value="k"), \
+                patch.object(web_search_module.requests, "get",
+                             return_value=_fake_response(200, {"data": {"kind": "answer", "sources": []}})):
+            result = self.tool._search_specstream("q", 10)
+        self.assertEqual(result.status, "success")
+        self.assertEqual(result.result["results"], [])
+
+    def test_search_specstream_error_status_mapping(self):
+        """401/402/503 map to specific messages; other statuses are generic."""
+        cases = {
+            401: "Invalid SpecStream API key",
+            402: "balance is empty",
+            503: "temporarily unavailable",
+            500: "HTTP 500",
+        }
+        for status_code, fragment in cases.items():
+            with self.subTest(status_code=status_code):
+                with patch.object(web_search_module, "_get_api_key", return_value="k"), \
+                        patch.object(web_search_module.requests, "get",
+                                     return_value=_fake_response(status_code)):
+                    result = self.tool._search_specstream("q", 10)
+                self.assertEqual(result.status, "error")
+                self.assertIn(fragment, result.result)
+
+    def test_search_specstream_503_reports_retry_after(self):
+        """The Retry-After header of a 503 reaches the message."""
+        with patch.object(web_search_module, "_get_api_key", return_value="k"), \
+                patch.object(web_search_module.requests, "get",
+                             return_value=_fake_response(503, headers={"Retry-After": "7"})):
+            result = self.tool._search_specstream("q", 10)
+        self.assertEqual(result.status, "error")
+        self.assertIn("Retry after 7 seconds", result.result)
 
 
 class TestSearxngUrlResolution(unittest.TestCase):
