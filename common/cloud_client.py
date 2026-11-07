@@ -1260,7 +1260,9 @@ class CloudClient(LinkAIClient):
     def _memory_service_for(self, agent_id):
         """A MemoryService bound to the requested agent's workspace. Falls back
         to the process-wide default-agent service when no agent is requested,
-        so single-agent installs are unaffected."""
+        so single-agent installs are unaffected. A failed build for a requested
+        agent yields None so the caller reports it rather than serving the
+        default agent's data."""
         workspace = self._agent_workspace(agent_id)
         if workspace is None:
             return self.memory_service
@@ -1269,7 +1271,8 @@ class CloudClient(LinkAIClient):
             return MemoryService(workspace)
         except Exception as e:
             logger.error(f"[CloudClient] Failed to build MemoryService for agent: {e}")
-            return self.memory_service
+            # A requested agent must never be answered with the default agent's data.
+            return None
 
     # ------------------------------------------------------------------
     # knowledge callback
@@ -1300,7 +1303,9 @@ class CloudClient(LinkAIClient):
         """A KnowledgeService bound to the requested agent's workspace. Falls
         back to the process-wide default-agent service when no agent is
         requested, so single-agent installs are unaffected. An agent with its
-        own knowledge/ reads that; otherwise it transparently reads the shared one."""
+        own knowledge/ reads that; otherwise it transparently reads the shared one.
+        A failed build for a requested agent yields None so the caller reports it
+        rather than serving the default agent's data."""
         workspace = self._agent_workspace(agent_id)
         if workspace is None:
             return self.knowledge_service
@@ -1309,7 +1314,8 @@ class CloudClient(LinkAIClient):
             return KnowledgeService(str(workspace))
         except Exception as e:
             logger.error(f"[CloudClient] Failed to build KnowledgeService for agent: {e}")
-            return self.knowledge_service
+            # A requested agent must never be answered with the default agent's data.
+            return None
 
     # ------------------------------------------------------------------
     # workspace callback
@@ -1342,7 +1348,9 @@ class CloudClient(LinkAIClient):
     def _workspace_service_for(self, agent_id):
         """A WorkspaceService rooted at the requested agent's workspace. Falls
         back to the process-wide default-agent service when no agent is
-        requested, so single-agent installs are unaffected."""
+        requested, so single-agent installs are unaffected. A failed build for
+        a requested agent yields None so the caller reports it rather than
+        serving the default agent's data."""
         workspace = self._agent_workspace(agent_id)
         if workspace is None:
             return self.workspace_service
@@ -1351,7 +1359,8 @@ class CloudClient(LinkAIClient):
             return WorkspaceService(str(workspace))
         except Exception as e:
             logger.error(f"[CloudClient] Failed to build WorkspaceService for agent: {e}")
-            return self.workspace_service
+            # A requested agent must never be answered with the default agent's data.
+            return None
 
     # ------------------------------------------------------------------
     # chat callback
