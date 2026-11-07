@@ -292,6 +292,10 @@ class FeiShuChanel(ChatChannel):
         self._http_server = None
         self._ws_client = None
         self._ws_thread = None
+        # Lets stop() wake a websocket retry that is waiting out its backoff.
+        # time.sleep() is not usable here: it blocks for up to 60 seconds and
+        # stop() must not wait that long.
+        self._ws_stop_event = threading.Event()
         self._bot_open_id = None  # cached bot open_id for @-mention matching
         self._bot_open_id_fetched_at = 0.0  # last lookup attempt, for retry backoff
         # When this channel started serving. Set in startup(); 0 means "unknown",
@@ -322,6 +326,11 @@ class FeiShuChanel(ChatChannel):
         # and a message the user sends while waiting for the client to come up is
         # a new message that must be answered — not backlog to discard.
         self._startup_ts = time.time()
+        # stop() sets _ws_stop_event so a retry loop parked in its backoff can
+        # exit immediately. It MUST be cleared here: without it, the first
+        # wait() after a restart returns True straight away, the retry loop
+        # breaks, and the websocket never starts.
+        self._ws_stop_event.clear()
         self.feishu_app_id = self.cfg('feishu_app_id')
         self.feishu_app_secret = self.cfg('feishu_app_secret')
         self.feishu_token = self.cfg('feishu_token')
@@ -372,6 +381,9 @@ class FeiShuChanel(ChatChannel):
     def stop(self):
         import ctypes
         logger.info("[FeiShu] stop() called")
+        # Wake the retry loop so it leaves its backoff wait immediately.
+        if self._ws_stop_event:
+            self._ws_stop_event.set()
         self._ws_client = None
         ws_thread = self._ws_thread
         self._ws_thread = None
@@ -507,14 +519,21 @@ class FeiShuChanel(ChatChannel):
             asyncio.set_event_loop(loop)
             ws_client_mod = _new_lark_ws_client_module(loop)
 
-            startup_error = None
-            for attempt in range(2):
+            # Retry until stop() instead of giving up: a failed handshake
+            # raises ClientException, which lark_oapi/ws/client.py re-raises
+            # without going through auto_reconnect, so the SDK will not
+            # recover on its own and the channel would stay deaf.
+            #
+            # Backoff: 5s -> 10s -> 20s -> 40s -> 60s (capped).
+            # The ssl patch is process-wide, so only a certificate error may
+            # switch to unverified TLS (once, retried immediately); any other
+            # failure must leave verification untouched.
+            attempt = 0
+            backoff = 5
+            ssl_verify_disabled = False
+            error_reported = False
+            while True:
                 try:
-                    if attempt == 1:
-                        logger.warning("[FeiShu] Retrying with SSL verification disabled...")
-                        ssl_module.create_default_context = create_unverified_context
-                        ssl_module._create_unverified_context = create_unverified_context
-
                     ws_client = ws_client_mod.Client(
                         self.feishu_app_id,
                         self.feishu_app_secret,
@@ -533,15 +552,25 @@ class FeiShuChanel(ChatChannel):
                     error_msg = str(e)
                     is_ssl_error = ("CERTIFICATE_VERIFY_FAILED" in error_msg
                                     or "certificate verify failed" in error_msg.lower())
-                    if is_ssl_error and attempt == 0:
-                        logger.warning(f"[FeiShu] SSL error: {error_msg}, retrying...")
+                    attempt += 1
+                    if is_ssl_error and not ssl_verify_disabled:
+                        logger.warning(f"[FeiShu] SSL error: {error_msg}, retrying with SSL verification disabled...")
+                        ssl_module.create_default_context = create_unverified_context
+                        ssl_module._create_unverified_context = create_unverified_context
+                        ssl_verify_disabled = True
                         continue
-                    logger.error(f"[FeiShu] Websocket client error: {e}", exc_info=True)
-                    startup_error = error_msg
-                    ssl_module.create_default_context = original_create_default_context
-                    break
-            if startup_error:
-                self.report_startup_error(startup_error)
+                    logger.error(
+                        "[FeiShu] Websocket client error (attempt %d, retry in %ds): %s"
+                        % (attempt, backoff, e), exc_info=not error_reported)
+                    if not error_reported:
+                        # wait_startup() only sees the first result, so report
+                        # now and keep retrying in the background.
+                        self.report_startup_error(error_msg)
+                        error_reported = True
+                    if self._ws_stop_event.wait(timeout=backoff):
+                        logger.info("[FeiShu] stop() requested during websocket backoff, exiting retry loop")
+                        break
+                    backoff = min(backoff * 2, 60)
             try:
                 loop.close()
             except Exception:
