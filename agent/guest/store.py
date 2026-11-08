@@ -465,12 +465,15 @@ def tokens_today(slug: str) -> int:
     return int(row["n"])
 
 
-def questions_today(slug: str, visitor_id: str) -> int:
+def questions_today(slug: str, visitor_id: Optional[str] = None) -> int:
+    """Questions asked today by one visitor, or by every visitor when ``visitor_id`` is None."""
+    sql = "SELECT COALESCE(SUM(questions), 0) AS n FROM guest_usage WHERE slug = ? AND day = ?"
+    args = [slug, _today()]
+    if visitor_id is not None:
+        sql += " AND visitor_id = ?"
+        args.append(visitor_id)
     with _db() as conn:
-        row = conn.execute(
-            "SELECT COALESCE(SUM(questions), 0) AS n FROM guest_usage WHERE slug = ? AND day = ? AND visitor_id = ?",
-            (slug, _today(), visitor_id),
-        ).fetchone()
+        row = conn.execute(sql, args).fetchone()
     return int(row["n"])
 
 

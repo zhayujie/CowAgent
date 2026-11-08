@@ -129,7 +129,11 @@ def _upsert(payload: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _get(payload: Dict[str, Any]) -> Dict[str, Any]:
-    return _view(_state(payload), detail=True)
+    state = _state(payload)
+    view = _view(state, detail=True)
+    view["questions_today"] = store.questions_today(state.slug)
+    view["tokens_today"] = store.tokens_today(state.slug)
+    return view
 
 
 def _list(payload: Dict[str, Any]) -> Dict[str, Any]:

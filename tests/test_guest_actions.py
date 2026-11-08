@@ -195,6 +195,9 @@ def test_the_daily_question_limit_applies(guest_env, monkeypatch):
     message = {"slug": "web-demo", "visitor_id": visitor_id, "session_id": session_id, "text": "hi"}
     _ok("message", message)
     assert _refused("message", message) == (429, "visitor_quota")
+    other_id, other_session = _visitor()
+    _ok("message", {"slug": "web-demo", "visitor_id": other_id, "session_id": other_session, "text": "hi"})
+    assert _ok("get", {"slug": "web-demo"})["questions_today"] == 2
 
 
 def test_files_are_limited_to_the_conversation_and_what_replies_offered(guest_env, monkeypatch):
