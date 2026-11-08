@@ -355,7 +355,7 @@ def run_install_browser(
 
     if _is_headless_linux() and not legacy_mode:
         ver = _version_tuple(installed or "")
-        if ver >= (1, 57, 0):
+        if ver >= (1, 52, 0):
             pw_args.append("--only-shell")
             stream("  (headless shell for Linux server)", None)
         else:

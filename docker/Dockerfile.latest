@@ -6,7 +6,10 @@ ARG TZ='Asia/Shanghai'
 ARG CHATGPT_ON_WECHAT_VER
 # Set to "false" to skip Playwright/Chromium and produce a smaller image
 ARG INSTALL_BROWSER=true
-# Set to "true" to use China mirrors for apt / pip / playwright (faster in CN)
+# Node.js for npx-based MCP servers and skills; set to "false" to skip
+ARG INSTALL_NODE=true
+ARG NODE_VERSION=24.22.2
+# Set to "true" to use China mirrors for apt / pip / playwright / node (faster in CN)
 ARG USE_CN_MIRROR=false
 
 ENV PLAYWRIGHT_BROWSERS_PATH=/app/ms-playwright
@@ -29,10 +32,29 @@ ADD . ${BUILD_PREFIX}
 # The base image ships perl-base from security (now 404 after EOL); downgrade it
 # to whatever version the main suite still offers so perl-dependent packages
 # resolve cleanly. Detect the candidate version dynamically to avoid pinning.
+# Containers have no display, so the browser tool always runs headless: only the
+# headless shell is installed, as full Chromium would add ~580MB it never uses.
 RUN apt-get update \
     && PERL_BASE_VER="$(apt-cache madison perl-base | awk '{print $3}' | head -n1)" \
     && apt-get install -y --allow-downgrades "perl-base=${PERL_BASE_VER}" \
     && apt-get install -y --no-install-recommends bash ffmpeg espeak libavcodec-extra tzdata \
+        ca-certificates curl git jq xz-utils \
+    && if [ "$INSTALL_NODE" = "true" ]; then \
+        NODE_ARCH="$(dpkg --print-architecture | sed 's/^amd64$/x64/')" \
+        && NODE_DIST="https://nodejs.org/dist/v${NODE_VERSION}" \
+        && if [ "$USE_CN_MIRROR" = "true" ]; then \
+            NODE_DIST="https://registry.npmmirror.com/-/binary/node/v${NODE_VERSION}"; \
+        fi \
+        && NODE_TARBALL="node-v${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz" \
+        && curl -fsSLO "${NODE_DIST}/${NODE_TARBALL}" \
+        && curl -fsSL "${NODE_DIST}/SHASUMS256.txt" | grep " ${NODE_TARBALL}\$" | sha256sum -c - \
+        && tar -xJf "${NODE_TARBALL}" -C /usr/local --strip-components=1 --no-same-owner \
+        && rm -f "${NODE_TARBALL}" \
+        && if [ "$USE_CN_MIRROR" = "true" ]; then \
+            npm config set registry https://registry.npmmirror.com --location=global; \
+        fi \
+        && node -v && npm -v; \
+    fi \
     && ln -snf /usr/share/zoneinfo/${TZ} /etc/localtime \
     && echo ${TZ} > /etc/timezone \
     && cd ${BUILD_PREFIX} \
@@ -41,22 +63,21 @@ RUN apt-get update \
     && pip install --no-cache -r requirements.txt \
     && pip install --no-cache -r requirements-optional.txt \
     && pip install --no-cache -e . \
+    && pip install --no-cache uv \
     && if [ "$INSTALL_BROWSER" = "true" ]; then \
         apt-get install -y --no-install-recommends fonts-wqy-zenhei \
         && pip install --no-cache "playwright==1.52.0" \
         && python -m playwright install-deps chromium \
         && mkdir -p /app/ms-playwright \
         && if [ "$USE_CN_MIRROR" = "true" ]; then \
-            PLAYWRIGHT_DOWNLOAD_HOST=https://registry.npmmirror.com/-/binary/playwright \
-            python -m playwright install chromium; \
-        else \
-            python -m playwright install chromium; \
-        fi; \
+            export PLAYWRIGHT_DOWNLOAD_HOST=https://registry.npmmirror.com/-/binary/playwright; \
+        fi \
+        && python -m playwright install --only-shell chromium; \
     fi \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /home/agent/cow \
-    && groupadd -r agent \
-    && useradd -r -g agent -s /bin/bash -d /home/agent agent \
+    && groupadd -r -g 999 agent \
+    && useradd -r -u 999 -g agent -s /bin/bash -d /home/agent agent \
     && chown -R agent:agent /home/agent ${BUILD_PREFIX} /usr/local/lib
 
 WORKDIR ${BUILD_PREFIX}
