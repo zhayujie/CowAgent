@@ -58,6 +58,9 @@ PEER_RESULT_ACTION = "agent_invoke_result"
 # report normally arrives before we give up on our side.
 _PEER_GRACE_SECONDS = 15.0
 
+# Guest pages rendered by the console and answered by the guest runtime here.
+GUEST_MSG_TYPE = "GUEST"
+
 
 class _PendingHandoff:
     __slots__ = ("done", "result", "on_event")
@@ -1352,6 +1355,61 @@ class CloudClient(LinkAIClient):
         except Exception as e:
             logger.error(f"[CloudClient] Failed to build WorkspaceService for agent: {e}")
             return self.workspace_service
+
+    # ------------------------------------------------------------------
+    # guest callback
+    # ------------------------------------------------------------------
+    def _dispatch_msg(self, msg):
+        # The base client drops message types it does not know, GUEST
+        # included, so it is routed here before falling through.
+        if isinstance(msg, dict) and msg.get("type") == GUEST_MSG_TYPE:
+            threading.Thread(target=self._handle_guest, args=(msg.get("data") or {}, msg.get("requestId")),
+                             name="guest-request", daemon=True).start()
+            return
+        super()._dispatch_msg(msg)
+
+    def _handle_guest(self, data: dict, request_id):
+        """Run one GUEST request off the receive loop, so a reply in progress
+        never holds up the cancel that follows it."""
+        action = data.get("action", "")
+
+        def send(body: dict):
+            if request_id:
+                self._send_package({"type": GUEST_MSG_TYPE, "code": 200, "requestId": request_id, "data": body})
+
+        def send_chunk(chunk: dict):
+            send({"action": action, "streaming": True, "payload": chunk})
+
+        try:
+            result = self.on_guest(data, send_chunk)
+        except Exception as e:
+            logger.error(f"[CloudClient] on_guest failed: action={action}, error={e}")
+            result = {"action": action, "code": 500, "message": "Internal error.", "payload": None}
+        try:
+            send(dict(result, streaming=False))
+        except Exception as e:
+            logger.error(f"[CloudClient] GUEST response send error: {e}")
+
+    def on_guest(self, data: dict, send_chunk_fn=None) -> dict:
+        """
+        Handle GUEST messages: guest pages whose front end is the console.
+
+        Everything runs in the confined guest runtime, never the owner's Agent.
+        Model usage is attributed to ``user_id``, as for CHAT.
+
+        :param data: message data with 'action' and 'payload'
+        :param send_chunk_fn: callable(chunk) for a reply's progress events
+        :return: response dict
+        """
+        action = data.get("action", "")
+        payload = data.get("payload") or {}
+        # Visitors' messages are not logged.
+        logger.info(f"[CloudClient] on_guest: action={action}, slug={payload.get('slug', '')}, "
+                    f"session={str(payload.get('session_id') or '')[:8]}")
+        from agent.guest.actions import dispatch
+
+        with _acting_user(payload.get("user_id") or data.get("user_id")):
+            return dispatch(action, payload, send_chunk_fn)
 
     # ------------------------------------------------------------------
     # chat callback

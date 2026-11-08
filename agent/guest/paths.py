@@ -30,6 +30,8 @@ from typing import Dict, List, Optional
 from agent.guest.policy import in_no_entry, is_within, path_key
 
 WORK = "/work"
+# A virtual path written into a reply, e.g. ``![chart](/work/chart.png)``.
+MENTION_RE = re.compile(r"/(?:work|data|skills)/[^\s)\"'<>\]`*]+")
 
 
 class GuestPathError(Exception):
