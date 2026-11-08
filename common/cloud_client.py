@@ -1871,32 +1871,68 @@ def get_website_base_url(workspace_dir: str = "") -> str:
 COW_SEND_WEB_SUBDIR = "cow-send"
 
 
+def _file_digest(path: str) -> str:
+    import hashlib
+
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
 def copy_send_file(src_path: str, workspace_root: str) -> str:
-    """Copy *src_path* into ``websites/cow-send/`` and return its URL.
+    """Return a public URL for *src_path*, copying it into ``websites/cow-send/``.
+
+    A file already under the published dir is linked in place. Copies are
+    named by content hash, so sending the same file again reuses the copy,
+    while an edited file gets a new one and earlier links keep their content.
 
     Returns empty string in local env.
     """
     import shutil
-    import uuid
+    import tempfile
+    from urllib.parse import quote
 
     base = get_website_base_url(workspace_root)
     if not base or not src_path or not os.path.isfile(src_path):
         return ""
-    send_dir = os.path.join(get_publish_dir(workspace_root), COW_SEND_WEB_SUBDIR)
+    publish_dir = get_publish_dir(workspace_root)
+
+    real_src = os.path.realpath(src_path)
+    real_publish = os.path.realpath(publish_dir)
     try:
-        os.makedirs(send_dir, exist_ok=True)
-    except OSError:
-        return ""
+        if os.path.commonpath([real_src, real_publish]) == real_publish:
+            relative = os.path.relpath(real_src, real_publish).replace(os.sep, "/")
+            return f"{base}/{quote(relative)}"
+    except ValueError:
+        pass
+
+    send_dir = os.path.join(publish_dir, COW_SEND_WEB_SUBDIR)
     ext = os.path.splitext(src_path)[1].lower()
     if len(ext) > 12 or not ext.replace(".", "").isalnum():
         ext = ""
-    dest_name = f"{uuid.uuid4().hex}{ext}"
-    dest_path = os.path.join(send_dir, dest_name)
+    tmp_path = ""
     try:
-        shutil.copy2(src_path, dest_path)
+        os.makedirs(send_dir, exist_ok=True)
+        dest_name = f"{_file_digest(src_path)[:32]}{ext}"
+        dest_path = os.path.join(send_dir, dest_name)
+        if not (os.path.isfile(dest_path) and os.path.getsize(dest_path) == os.path.getsize(src_path)):
+            # Copy then rename, so a concurrent send never serves a partial file.
+            fd, tmp_path = tempfile.mkstemp(dir=send_dir, prefix=".tmp-")
+            os.close(fd)
+            shutil.copy2(src_path, tmp_path)
+            os.replace(tmp_path, dest_path)
+            tmp_path = ""
     except OSError as e:
         logger.warning(f"[cloud] copy_send_file: copy failed: {e}")
         return ""
+    finally:
+        if tmp_path:
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
     return f"{base}/{COW_SEND_WEB_SUBDIR}/{dest_name}"
 
 
