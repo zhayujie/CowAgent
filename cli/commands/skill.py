@@ -749,7 +749,7 @@ def skill():
 # cow skill list
 # ------------------------------------------------------------------
 @skill.command("list")
-@click.option("--remote", is_flag=True, help="Browse skills on Skill Hub")
+@click.option("--remote", "-r", is_flag=True, help="Browse skills on Skill Hub")
 @click.option("--page", default=1, type=int, help="Page number for remote listing")
 def skill_list(remote, page):
     """List installed skills or browse Skill Hub."""
