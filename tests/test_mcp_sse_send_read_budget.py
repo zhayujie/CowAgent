@@ -59,11 +59,10 @@ class _Resp:
 @pytest.fixture
 def client():
     """An McpClient wired for the SSE transport with a 1s budget."""
-    handle = mcp.McpClient.__new__(mcp.McpClient)
-    handle.name = "probe"
-    handle.transport = "sse"
+    handle = mcp.McpClient({"name": "probe", "type": "sse", "url": "http://127.0.0.1:9/sse"})
     handle._sse_url = "http://127.0.0.1:9/sse"
     handle._post_url = "http://127.0.0.1:9/message"
+    handle._sse_alive = True
     handle._timeout = 1
     return handle
 
@@ -128,9 +127,35 @@ def test_a_normal_response_still_parses(client, monkeypatch):
                                                  "result": {"tools": []}}
 
 
-def test_an_empty_body_still_raises_the_json_error(client, monkeypatch):
-    with pytest.raises(json.JSONDecodeError):
-        _post(client, monkeypatch, _Resp(body=b""))
+def test_a_body_without_a_reply_waits_on_the_stream_within_the_budget(client, monkeypatch):
+    # "Accepted" is what a spec-conforming server answers; the reply comes over
+    # the event stream, and none arrives here.
+    start = time.monotonic()
+    with pytest.raises(TimeoutError):
+        _post(client, monkeypatch, _Resp(body=b"Accepted"))
+    assert time.monotonic() - start < 10
+
+
+def test_a_reply_pushed_over_the_stream_is_returned(client, monkeypatch):
+    reply = {"jsonrpc": "2.0", "id": 1, "result": {"tools": []}}
+
+    def accept(*_args, **_kwargs):
+        client._sse_deliver(json.dumps(reply))
+        return _Resp(body=b"Accepted")
+
+    monkeypatch.setattr(urllib.request, "urlopen", accept)
+    assert client._sse_send({"jsonrpc": "2.0", "id": 1, "method": "tools/list"}) == reply
+
+
+def test_a_closed_stream_fails_the_waiting_request(client, monkeypatch):
+    def accept(*_args, **_kwargs):
+        client._sse_close_stream()
+        return _Resp(body=b"Accepted")
+
+    monkeypatch.setattr(urllib.request, "urlopen", accept)
+    with pytest.raises(IOError) as caught:
+        client._sse_send({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
+    assert "closed" in str(caught.value)
 
 
 def test_an_oversized_body_is_refused(client, monkeypatch):
