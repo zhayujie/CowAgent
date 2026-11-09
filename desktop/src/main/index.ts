@@ -236,12 +236,14 @@ const windowStateFile = () => path.join(app.getPath('userData'), 'window-state.j
 
 type WindowBounds = { width: number; height: number; x?: number; y?: number }
 
-// 窗口至少要有这么大一块落在某个显示器工作区内，才算"用户能看见并拖得动"。
+// How much of the window must overlap a display's work area for the user to
+// still see it and drag it back.
 const MIN_VISIBLE_PX = 100
 
-// 判断一组 bounds 是否有足够面积落在当前任一显示器的工作区内。
-// 外接显示器拔掉、分辨率/缩放变化、或 Windows 最小化时记下的 (-32000,-32000)
-// 都会让保存的坐标落到屏幕外：窗口其实已经 show 了（任务栏能预览），但点击后什么也看不到。
+// A disconnected monitor, a resolution/DPI change, Windows' minimized
+// (-32000, -32000), or a third-party tool parking the window far away can all
+// leave saved bounds off every display: the window is shown (the taskbar
+// previews it) yet clicking it reveals nothing.
 function isOnSomeDisplay(b: { x: number; y: number; width: number; height: number }): boolean {
   return screen.getAllDisplays().some(({ workArea: wa }) => {
     const w = Math.min(b.x + b.width, wa.x + wa.width) - Math.max(b.x, wa.x)
@@ -250,7 +252,8 @@ function isOnSomeDisplay(b: { x: number; y: number; width: number; height: numbe
   })
 }
 
-// 把尺寸限制在主显示器工作区内，并去掉不可见的坐标（交给 Electron 居中）。
+// Clamp the size to the primary work area and drop an off-screen position so
+// Electron centers the window instead.
 function sanitizeWindowState(s: WindowBounds): WindowBounds {
   const wa = screen.getPrimaryDisplay().workArea
   const width = Math.min(Math.max(s.width, 900), wa.width)
@@ -260,7 +263,8 @@ function sanitizeWindowState(s: WindowBounds): WindowBounds {
   return { width, height, x: s.x, y: s.y }
 }
 
-// 窗口已在屏幕外时（如运行中拔掉了外接显示器），把它移回主显示器中央。
+// Pull a window that ended up off-screen (e.g. its monitor was unplugged while
+// running) back to the center of the primary display.
 function ensureWindowOnScreen(win: BrowserWindow) {
   if (win.isDestroyed() || win.isMinimized() || win.isFullScreen()) return
   const b = win.getBounds()
@@ -290,7 +294,8 @@ function loadWindowState(): WindowBounds {
 function saveWindowState() {
   if (!mainWindow || mainWindow.isDestroyed()) return
   if (mainWindow.isMinimized() || mainWindow.isFullScreen()) return
-  // 最大化时记录还原尺寸；不可见的坐标不落盘，避免下次启动直接出现在屏幕外。
+  // Keep the restore size while maximized, and never persist an off-screen
+  // position, or the next launch would open there again.
   const b = mainWindow.isMaximized() ? mainWindow.getNormalBounds() : mainWindow.getBounds()
   if (!isOnSomeDisplay(b)) return
   try {
@@ -433,7 +438,8 @@ function createWindow() {
   mainWindow.on('move', persist)
   mainWindow.on('maximize', emitMaximizeState)
   mainWindow.on('unmaximize', emitMaximizeState)
-  // 托盘、任务栏、second-instance、通知点击等所有唤起路径最终都会触发 show。
+  // Every way of bringing the window up (tray, taskbar, second-instance,
+  // notification click) ends in a show event.
   mainWindow.on('show', () => mainWindow && ensureWindowOnScreen(mainWindow))
   const recheck = () => {
     if (mainWindow?.isVisible()) ensureWindowOnScreen(mainWindow)
