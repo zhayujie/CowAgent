@@ -17,7 +17,7 @@ import ChatTimeline from '../components/ChatTimeline'
 import { useTimelineStore } from '../store/timelineStore'
 import { TeamChatModal } from '../components/NewChatMenu'
 import { product } from '@product'
-import { t } from '../i18n'
+import { t, getLang } from '../i18n'
 import apiClient from '../api/client'
 import type { Attachment, ChatMessage } from '../types'
 import { useChatStore } from '../store/chatStore'
@@ -581,6 +581,7 @@ const ChatPage: React.FC<ChatPageProps> = ({ baseUrl }) => {
                     onDelete={handleDelete}
                     onMediaLoad={handleMediaLoad}
                     turnSeq={turnSeqs[i]}
+                    lang={getLang()}
                   />
                 </div>
               )

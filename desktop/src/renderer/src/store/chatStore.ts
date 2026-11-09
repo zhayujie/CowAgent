@@ -433,21 +433,53 @@ export const useChatStore = create<ChatState>((set, get) => {
       closeStream()
     }
 
-    // Deltas may arrive in a burst (an upstream that buffers the reply and
-    // flushes it at once). Committing each one re-renders the whole answer, so
-    // they are buffered and committed at most once per frame.
+    // Deltas, reasoning and tool progress arrive one token or line per event,
+    // often in bursts. Each commit is a synchronous store update that
+    // re-renders the conversation, so a long session streaming its thinking
+    // froze the window until the burst was over. They are buffered and
+    // committed at most once per frame.
     let pendingText = ''
     let pendingTarget = ''
+    let pendingReasoning = ''
+    let pendingReasoningTarget = ''
+    // tool_progress replaces a card's result, so only the latest per card counts.
+    const pendingProgress = new Map<string, string | undefined>()
     let flushFrame: number | null = null
     const flushDeltas = () => {
       if (flushFrame !== null) {
         cancelAnimationFrame(flushFrame)
         flushFrame = null
       }
-      if (!pendingText) return
-      const text = pendingText
-      pendingText = ''
-      updateMsg(sid, pendingTarget, (m) => ({ ...m, content: m.content + text }))
+      if (pendingReasoning) {
+        const text = pendingReasoning
+        pendingReasoning = ''
+        updateMsg(sid, pendingReasoningTarget, (m) => ({ ...m, reasoning: (m.reasoning || '') + text }))
+      }
+      if (pendingText) {
+        const text = pendingText
+        pendingText = ''
+        updateMsg(sid, pendingTarget, (m) => ({ ...m, content: m.content + text }))
+      }
+      if (pendingProgress.size) {
+        const progress = new Map(pendingProgress)
+        pendingProgress.clear()
+        const hit = (s: MessageStep) =>
+          s.type === 'tool' && !!s.id && progress.has(s.id)
+        patchMessages(sid, (msgs) =>
+          msgs.map((m) =>
+            (m.steps || []).some(hit)
+              ? { ...m, steps: m.steps!.map((s) => (hit(s) ? { ...s, result: progress.get(s.id!) } : s)) }
+              : m
+          )
+        )
+      }
+    }
+    const scheduleFlush = () => {
+      if (flushFrame !== null) return
+      flushFrame = requestAnimationFrame(() => {
+        flushFrame = null
+        flushDeltas()
+      })
     }
 
     es.onmessage = (event) => {
@@ -458,26 +490,27 @@ export const useChatStore = create<ChatState>((set, get) => {
         return // keepalive
       }
       // Every other event may read or replace the bubble's content.
-      if (data.type !== 'delta') flushDeltas()
+      if (data.type !== 'delta' && data.type !== 'reasoning' && data.type !== 'tool_progress') flushDeltas()
       // Stopped: nothing more is said, but a step already running still ends.
       if (detached() && (data.type === 'delta' || data.type === 'reasoning')) return
 
       switch (data.type) {
-        case 'reasoning':
-          updateMsg(sid, speaking(), (m) => ({ ...m, reasoning: (m.reasoning || '') + (data.content || '') }))
+        case 'reasoning': {
+          const target = speaking()
+          // Commit buffered answer text first so the two never reorder.
+          if (pendingText || target !== pendingReasoningTarget) flushDeltas()
+          pendingReasoningTarget = target
+          pendingReasoning += data.content || ''
+          scheduleFlush()
           break
+        }
 
         case 'delta': {
           const target = speaking()
-          if (target !== pendingTarget) flushDeltas()
+          if (pendingReasoning || target !== pendingTarget) flushDeltas()
           pendingTarget = target
           pendingText += data.content || ''
-          if (flushFrame === null) {
-            flushFrame = requestAnimationFrame(() => {
-              flushFrame = null
-              flushDeltas()
-            })
-          }
+          scheduleFlush()
           break
         }
 
@@ -550,12 +583,9 @@ export const useChatStore = create<ChatState>((set, get) => {
           break
 
         case 'tool_progress':
-          updateCard(data.tool_call_id, (m) => ({
-            ...m,
-            steps: (m.steps || []).map((s) =>
-              s.type === 'tool' && s.id === data.tool_call_id ? { ...s, result: data.content } : s
-            ),
-          }))
+          if (!data.tool_call_id) break
+          pendingProgress.set(data.tool_call_id, data.content)
+          scheduleFlush()
           break
 
         case 'tool_end':
