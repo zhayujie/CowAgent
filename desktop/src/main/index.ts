@@ -1,4 +1,4 @@
-import { app, BrowserWindow, session, shell, ipcMain, dialog, nativeImage, Notification, systemPreferences, crashReporter, Menu, clipboard, net } from 'electron'
+import { app, BrowserWindow, screen, session, shell, ipcMain, dialog, nativeImage, Notification, systemPreferences, crashReporter, Menu, clipboard, net } from 'electron'
 import path from 'path'
 import fs from 'fs'
 import os from 'os'
@@ -234,11 +234,53 @@ const isWin = process.platform === 'win32'
 // Persisted window bounds
 const windowStateFile = () => path.join(app.getPath('userData'), 'window-state.json')
 
-function loadWindowState(): { width: number; height: number; x?: number; y?: number } {
+type WindowBounds = { width: number; height: number; x?: number; y?: number }
+
+// 窗口至少要有这么大一块落在某个显示器工作区内，才算"用户能看见并拖得动"。
+const MIN_VISIBLE_PX = 100
+
+// 判断一组 bounds 是否有足够面积落在当前任一显示器的工作区内。
+// 外接显示器拔掉、分辨率/缩放变化、或 Windows 最小化时记下的 (-32000,-32000)
+// 都会让保存的坐标落到屏幕外：窗口其实已经 show 了（任务栏能预览），但点击后什么也看不到。
+function isOnSomeDisplay(b: { x: number; y: number; width: number; height: number }): boolean {
+  return screen.getAllDisplays().some(({ workArea: wa }) => {
+    const w = Math.min(b.x + b.width, wa.x + wa.width) - Math.max(b.x, wa.x)
+    const h = Math.min(b.y + b.height, wa.y + wa.height) - Math.max(b.y, wa.y)
+    return w >= MIN_VISIBLE_PX && h >= MIN_VISIBLE_PX
+  })
+}
+
+// 把尺寸限制在主显示器工作区内，并去掉不可见的坐标（交给 Electron 居中）。
+function sanitizeWindowState(s: WindowBounds): WindowBounds {
+  const wa = screen.getPrimaryDisplay().workArea
+  const width = Math.min(Math.max(s.width, 900), wa.width)
+  const height = Math.min(Math.max(s.height, 600), wa.height)
+  if (typeof s.x !== 'number' || typeof s.y !== 'number') return { width, height }
+  if (!isOnSomeDisplay({ x: s.x, y: s.y, width, height })) return { width, height }
+  return { width, height, x: s.x, y: s.y }
+}
+
+// 窗口已在屏幕外时（如运行中拔掉了外接显示器），把它移回主显示器中央。
+function ensureWindowOnScreen(win: BrowserWindow) {
+  if (win.isDestroyed() || win.isMinimized() || win.isFullScreen()) return
+  const b = win.getBounds()
+  if (isOnSomeDisplay(b)) return
+  const wa = screen.getPrimaryDisplay().workArea
+  const width = Math.min(b.width, wa.width)
+  const height = Math.min(b.height, wa.height)
+  win.setBounds({
+    x: Math.round(wa.x + (wa.width - width) / 2),
+    y: Math.round(wa.y + (wa.height - height) / 2),
+    width,
+    height,
+  })
+}
+
+function loadWindowState(): WindowBounds {
   try {
     const raw = fs.readFileSync(windowStateFile(), 'utf-8')
     const s = JSON.parse(raw)
-    if (typeof s.width === 'number' && typeof s.height === 'number') return s
+    if (typeof s.width === 'number' && typeof s.height === 'number') return sanitizeWindowState(s)
   } catch {
     /* first run or unreadable */
   }
@@ -248,7 +290,9 @@ function loadWindowState(): { width: number; height: number; x?: number; y?: num
 function saveWindowState() {
   if (!mainWindow || mainWindow.isDestroyed()) return
   if (mainWindow.isMinimized() || mainWindow.isFullScreen()) return
-  const b = mainWindow.getBounds()
+  // 最大化时记录还原尺寸；不可见的坐标不落盘，避免下次启动直接出现在屏幕外。
+  const b = mainWindow.isMaximized() ? mainWindow.getNormalBounds() : mainWindow.getBounds()
+  if (!isOnSomeDisplay(b)) return
   try {
     fs.writeFileSync(windowStateFile(), JSON.stringify(b))
   } catch {
@@ -389,6 +433,17 @@ function createWindow() {
   mainWindow.on('move', persist)
   mainWindow.on('maximize', emitMaximizeState)
   mainWindow.on('unmaximize', emitMaximizeState)
+  // 托盘、任务栏、second-instance、通知点击等所有唤起路径最终都会触发 show。
+  mainWindow.on('show', () => mainWindow && ensureWindowOnScreen(mainWindow))
+  const recheck = () => {
+    if (mainWindow?.isVisible()) ensureWindowOnScreen(mainWindow)
+  }
+  screen.on('display-removed', recheck)
+  screen.on('display-metrics-changed', recheck)
+  mainWindow.on('closed', () => {
+    screen.removeListener('display-removed', recheck)
+    screen.removeListener('display-metrics-changed', recheck)
+  })
 
   const rendererHtml = path.join(__dirname, '../renderer/index.html')
 
