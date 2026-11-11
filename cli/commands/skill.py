@@ -27,6 +27,7 @@ from cli.utils import (
     skill_hub,
     SKILL_HUB_API,
 )
+from common.media_download import MAX_FILE_BYTES, download_bytes, download_to_file, read_response
 
 
 # ======================================================================
@@ -176,14 +177,12 @@ def _download_repo_zip(spec: str, branch: str = "main", host: str = "github", ti
         req_timeout = timeout
     else:
         req_timeout = (min(timeout, 5), timeout)
-    resp = requests.get(zip_url, timeout=req_timeout, allow_redirects=True)
-    resp.raise_for_status()
-
     tmp_dir = tempfile.mkdtemp(prefix="cow-skill-")
     try:
         zip_path = os.path.join(tmp_dir, "repo.zip")
-        with open(zip_path, "wb") as f:
-            f.write(resp.content)
+        # A repo archive is the one download here with no natural size bound,
+        # so it goes through the shared helper rather than being buffered.
+        download_to_file(zip_url, zip_path, MAX_FILE_BYTES, timeout=req_timeout)
 
         extract_dir = os.path.join(tmp_dir, "extracted")
         with zipfile.ZipFile(zip_path, "r") as zf:
@@ -227,10 +226,7 @@ def _download_github_dir(owner, repo, branch, subpath, dest_dir):
             dl_url = item.get("download_url")
             if not dl_url:
                 continue
-            file_resp = requests.get(dl_url, timeout=30)
-            file_resp.raise_for_status()
-            with open(local_path, "wb") as f:
-                f.write(file_resp.content)
+            download_to_file(dl_url, local_path, MAX_FILE_BYTES, timeout=30)
         elif item["type"] == "dir":
             os.makedirs(local_path, exist_ok=True)
             child_subpath = item["path"]
@@ -464,12 +460,11 @@ def _install_url(url: str, result: InstallResult, agent_id: str = None):
     """Install a skill from a direct SKILL.md URL."""
     result.messages.append(f"Downloading SKILL.md from {url} ...")
     try:
-        resp = requests.get(url, timeout=30)
-        resp.raise_for_status()
+        raw = download_bytes(url, MAX_FILE_BYTES, timeout=30)
     except Exception as e:
         raise SkillInstallError(f"Failed to download SKILL.md: {e}")
 
-    content = resp.text
+    content = raw.decode("utf-8", errors="replace")
     fm = _parse_skill_frontmatter(content)
     skill_name = fm.get("name")
     if not skill_name:
@@ -507,21 +502,24 @@ def _install_archive_url(url: str, result: InstallResult, agent_id: str = None):
 
     result.messages.append(f"Downloading archive from {url} ...")
     try:
-        resp = requests.get(url, timeout=30, allow_redirects=True)
+        resp = requests.get(url, timeout=30, allow_redirects=True, stream=True)
         resp.raise_for_status()
+        content_type = resp.headers.get("Content-Type", "")
+        # Read the body through the shared cap: an archive can be far bigger
+        # than the SKILL.md it carries.
+        content = read_response(resp, MAX_FILE_BYTES)
     except Exception as e:
         raise SkillInstallError(f"Failed to download archive: {e}")
 
     skills_dir = _target_skills_dir(agent_id)
     os.makedirs(skills_dir, exist_ok=True)
 
-    content_type = resp.headers.get("Content-Type", "")
     lower_url = url.lower()
 
     if lower_url.endswith((".tar.gz", ".tgz")) or "gzip" in content_type:
-        _install_targz_bytes(resp.content, fallback_name, skills_dir, result, agent_id=agent_id)
+        _install_targz_bytes(content, fallback_name, skills_dir, result, agent_id=agent_id)
     else:
-        _install_zip_bytes(resp.content, fallback_name, skills_dir, result=result, source_label="url", agent_id=agent_id)
+        _install_zip_bytes(content, fallback_name, skills_dir, result=result, source_label="url", agent_id=agent_id)
 
 
 def _install_targz_bytes(content: bytes, name: str, skills_dir: str, result: InstallResult, agent_id: str = None, source_label: str = "url"):
