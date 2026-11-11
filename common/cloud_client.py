@@ -58,6 +58,16 @@ PEER_RESULT_ACTION = "agent_invoke_result"
 # report normally arrives before we give up on our side.
 _PEER_GRACE_SECONDS = 15.0
 
+
+class AgentRegistryUnavailable(RuntimeError):
+    """A named Agent could not be resolved because the registry is down.
+
+    Distinct from an unknown Agent (``KeyError``): a registry that cannot be
+    loaded during a config reload or with a missing optional dependency is a
+    transient server-side failure. It must be reported as an error, never as
+    "no Agent was requested", which would answer with another Agent's data.
+    """
+
 # Guest pages rendered by the console and answered by the guest runtime here.
 GUEST_MSG_TYPE = "GUEST"
 
@@ -1223,7 +1233,14 @@ class CloudClient(LinkAIClient):
         """A SkillService over the requested agent's skills: its own set when it
         has one, else the shared set. Falls back to the process-wide service when
         no agent is requested, so single-agent installs are unaffected."""
-        workspace = self._agent_workspace(agent_id)
+        try:
+            workspace = self._agent_workspace(agent_id)
+        except KeyError:
+            raise
+        except Exception as e:
+            logger.error(f"[CloudClient] Cannot resolve agent workspace: {e}")
+            # A requested agent must never be answered with the default agent's data.
+            return None
         if workspace is None:
             return self.skill_service
         try:
@@ -1266,7 +1283,14 @@ class CloudClient(LinkAIClient):
         so single-agent installs are unaffected. A failed build for a requested
         agent yields None so the caller reports it rather than serving the
         default agent's data."""
-        workspace = self._agent_workspace(agent_id)
+        try:
+            workspace = self._agent_workspace(agent_id)
+        except KeyError:
+            raise
+        except Exception as e:
+            logger.error(f"[CloudClient] Cannot resolve agent workspace: {e}")
+            # A requested agent must never be answered with the default agent's data.
+            return None
         if workspace is None:
             return self.memory_service
         try:
@@ -1309,7 +1333,14 @@ class CloudClient(LinkAIClient):
         own knowledge/ reads that; otherwise it transparently reads the shared one.
         A failed build for a requested agent yields None so the caller reports it
         rather than serving the default agent's data."""
-        workspace = self._agent_workspace(agent_id)
+        try:
+            workspace = self._agent_workspace(agent_id)
+        except KeyError:
+            raise
+        except Exception as e:
+            logger.error(f"[CloudClient] Cannot resolve agent workspace: {e}")
+            # A requested agent must never be answered with the default agent's data.
+            return None
         if workspace is None:
             return self.knowledge_service
         try:
@@ -1354,7 +1385,14 @@ class CloudClient(LinkAIClient):
         requested, so single-agent installs are unaffected. A failed build for
         a requested agent yields None so the caller reports it rather than
         serving the default agent's data."""
-        workspace = self._agent_workspace(agent_id)
+        try:
+            workspace = self._agent_workspace(agent_id)
+        except KeyError:
+            raise
+        except Exception as e:
+            logger.error(f"[CloudClient] Cannot resolve agent workspace: {e}")
+            # A requested agent must never be answered with the default agent's data.
+            return None
         if workspace is None:
             return self.workspace_service
         try:
@@ -1593,11 +1631,16 @@ class CloudClient(LinkAIClient):
             return None
 
     def _agent_workspace(self, agent_id):
-        """Resolve a requested agent id to its workspace root, or None to keep
-        the default-agent behaviour when no agent is requested. An agent that is
-        requested but unknown raises KeyError rather than silently serving the
-        default agent's data (see AgentRegistry.get_addressed for the ids that
-        are tolerated)."""
+        """Resolve a requested agent id to its workspace root.
+
+        ``None`` means *no Agent was requested* and is the only case in which a
+        builder may use the process-wide default-agent service. A requested but
+        unknown Agent raises ``KeyError`` so the caller answers 404. A requested
+        Agent whose registry cannot be loaded raises ``AgentRegistryUnavailable``:
+        returning ``None`` here used to make every builder dispatch against the
+        default Agent's service and report success (the contract #3914 fixed in
+        the builders themselves still has to hold at their shared input).
+        """
         agent_id = str(agent_id).strip() if agent_id is not None else ""
         if not agent_id:
             return None
@@ -1605,8 +1648,7 @@ class CloudClient(LinkAIClient):
             from agent.registry import get_agent_registry
             registry = get_agent_registry()
         except Exception as e:
-            logger.warning(f"[CloudClient] agent registry unavailable, using default: {e}")
-            return None
+            raise AgentRegistryUnavailable(f"agent registry unavailable: {e}") from e
         return registry.get_addressed(agent_id, require_enabled=False).workspace
 
     @staticmethod
