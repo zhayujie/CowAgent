@@ -83,7 +83,7 @@ jobs:
           # first and the published feed loses an architecture. Windows has a
           # single leg and parks its feed untagged.
           - name: macOS arm64
-            os: macos-14
+            os: macos-15
             platform: mac
             eb_flags: --mac --arm64
             meta_arch: arm64
