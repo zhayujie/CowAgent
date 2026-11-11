@@ -26,6 +26,10 @@ from common.log import logger
 _STDIO_ENV_PASSTHROUGH = (
     "PATH", "HOME", "USER", "LOGNAME", "SHELL", "LANG", "LC_ALL", "LC_CTYPE",
     "TERM", "TZ", "TMPDIR", "NODE_PATH", "NVM_DIR", "PYTHONPATH", "PYTHONHOME",
+    # Package mirrors, so npx / uvx can fetch the server where the default
+    # registries are slow or blocked.
+    "NPM_CONFIG_REGISTRY", "npm_config_registry", "PIP_INDEX_URL",
+    "PIP_EXTRA_INDEX_URL", "UV_INDEX_URL", "UV_DEFAULT_INDEX",
     # Windows essentials
     "SYSTEMROOT", "SystemRoot", "WINDIR", "COMSPEC", "PATHEXT", "APPDATA",
     "LOCALAPPDATA", "USERPROFILE", "PROGRAMFILES", "PROGRAMFILES(X86)",
