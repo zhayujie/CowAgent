@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from agent.guest import branding, policy, store
+from common.deployment import is_managed
 from agent.guest.profile import (
     GuestProfile,
     load_profile,
@@ -42,7 +43,7 @@ def feature_status() -> Dict[str, Any]:
     settings = conf().get("guest_share") or {}
     enabled = isinstance(settings, dict) and settings.get("enabled") is True
     password_set = bool(str(conf().get("web_password", "") or ""))
-    auth_proxy = conf().get("web_auth_proxy") is True
+    auth_proxy = is_managed()
     reason = ""
     if not enabled:
         reason = "disabled"

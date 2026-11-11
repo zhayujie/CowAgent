@@ -13,7 +13,7 @@ device on the same network.
 ``web_host`` is where the server listens. Changing it here moves the running
 server to the new address, so no restart is needed.
 
-Behind ``web_auth_proxy`` the proxy is the only way in: the listen address is
+In a managed deployment a reverse proxy is the only way in: the listen address is
 its to route to, and this machine's addresses reach no one, so neither is
 shown or changed here. A ``web_public_url`` set in the environment wins over
 config.json at every start, so it is shown but not edited either.
@@ -36,6 +36,7 @@ from channel.web.core._common import (
     _require_auth,
     _write_config_file_for_write,
 )
+from common.deployment import is_desktop, is_managed
 
 _PUBLIC_URL_RE = re.compile(r"^https?://[A-Za-z0-9.\-\[\]:]+(:\d{1,5})?(/[A-Za-z0-9._~\-/]*)?$")
 # Interfaces VPNs, containers and VMs create; their addresses are not on the
@@ -161,9 +162,7 @@ def public_url() -> str:
 
 
 def _behind_auth_proxy() -> bool:
-    from config import conf
-
-    return conf().get("web_auth_proxy") is True
+    return is_managed()
 
 
 def _public_url_fixed() -> bool:
@@ -182,7 +181,7 @@ def _state(host: str = None, port: int = None) -> dict:
         "listen": {"host": host, "port": port},
         "listen_fixed": proxied,
         # The desktop app owns its backend's port.
-        "port_fixed": os.environ.get("COW_DESKTOP") == "1",
+        "port_fixed": is_desktop(),
         "local_only": is_loopback_host(host),
         "password_set": _is_password_enabled(),
     }
@@ -254,7 +253,7 @@ def _port_problem(host: str, port: int) -> str:
         return "invalid_port"
     if port == _listen["port"]:
         return ""
-    if os.environ.get("COW_DESKTOP") == "1":
+    if is_desktop():
         return "port_fixed"
     return "" if can_bind(host, port) else "port_in_use"
 

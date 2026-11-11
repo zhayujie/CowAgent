@@ -18,6 +18,7 @@ import urllib.error
 from typing import Optional
 
 from common.log import logger
+from common.deployment import is_desktop
 
 
 # System env vars a stdio MCP subprocess legitimately needs to run
@@ -916,7 +917,7 @@ class McpClient:
             f"    {auth_url}"
         )
         # On a machine with a local browser (desktop/dev), open it directly.
-        if os.environ.get("COW_DESKTOP") == "1" or not os.environ.get("COW_HEADLESS"):
+        if is_desktop() or not os.environ.get("COW_HEADLESS"):
             try:
                 import webbrowser
                 webbrowser.open(auth_url)

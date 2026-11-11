@@ -73,8 +73,24 @@ def compare_versions(left: str, right: str) -> int:
     return (a > b) - (a < b)
 
 
+def _deployment():
+    # Imported on use: an installed CLI must import without the project root.
+    _ensure_project_on_path()
+    from common import deployment
+
+    return deployment
+
+
+def is_managed() -> bool:
+    return _deployment().is_managed()
+
+
+def manage_url() -> str:
+    return _deployment().manage_url()
+
+
 def _is_docker_install() -> bool:
-    if os.environ.get("COW_DOCKER") == "1":
+    if _deployment().deployment() == "docker":
         return True
     try:
         return Path("/.dockerenv").exists()
@@ -87,7 +103,14 @@ def detect_install_kind(root: Optional[str] = None) -> InstallKind:
     root = root or get_project_root()
     platform = sys.platform
 
-    if os.environ.get("COW_DESKTOP") == "1" or getattr(sys, "frozen", False):
+    if is_managed():
+        return InstallKind(
+            kind="managed",
+            update_supported=False,
+            unsupported_reason="This install is updated by whoever runs it.",
+            platform=platform,
+        )
+    if _deployment().is_desktop() or getattr(sys, "frozen", False):
         return InstallKind(
             kind="packaged",
             update_supported=False,
@@ -151,6 +174,7 @@ def version_payload(root: Optional[str] = None) -> Dict[str, Any]:
         "update_supported": kind.update_supported,
         "unsupported_reason": kind.unsupported_reason,
         "platform": kind.platform,
+        "manage_url": manage_url() if kind.kind == "managed" else "",
     }
 
 
@@ -195,6 +219,8 @@ def check_for_updates(current_version: Optional[str] = None) -> Dict[str, Any]:
     """Hit GitHub releases. Call only from an explicit user action."""
     from cli import __version__
 
+    if is_managed():
+        raise UpdateError("check", "This install is updated by whoever runs it.")
     current = current_version or __version__
     releases = []
     for item in fetch_github_releases():

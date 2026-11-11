@@ -24,7 +24,6 @@ Design goals:
 
 import hashlib
 import json
-import os
 import re
 import uuid
 from typing import Any, Dict, Generator, Optional
@@ -33,6 +32,7 @@ from urllib.parse import urlparse
 import requests
 
 from common.log import logger
+from common.deployment import is_desktop
 
 
 DEFAULT_API_BASE = "https://api.openai.com/v1"
@@ -89,7 +89,7 @@ def _resolve_attribution_headers(url: str) -> Dict[str, str]:
                     apply_client_source(resolved)
                 except Exception:
                     resolved[_SOURCE_HEADER] = (
-                        "desktop" if os.environ.get("COW_DESKTOP") == "1" else "open-source"
+                        "desktop" if is_desktop() else "open-source"
                     )
             return resolved
     return {}

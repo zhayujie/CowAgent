@@ -118,7 +118,7 @@ def test_behind_an_auth_proxy_pages_need_a_public_address_not_a_password(guest_e
     app = _app()
     share = _create_confirmed(app, _owner_cookie(app))
     monkeypatch.setitem(config.conf(), "web_password", "")
-    monkeypatch.setitem(config.conf(), "web_auth_proxy", True)
+    monkeypatch.setenv("COW_DEPLOYMENT", "managed")
     monkeypatch.setitem(config.conf(), "web_public_url", "")
     assert feature_status()["reason"] == "public_url_required"
     assert app.request(f"/share/{share['share_token']}").status.startswith("404")
@@ -619,7 +619,7 @@ def test_behind_an_auth_proxy_the_listen_address_is_hidden_and_fixed(guest_env, 
 
     monkeypatch.setattr(integrations_api, "_lan_ips", lambda: ["10.0.3.7"])
     monkeypatch.setattr(integrations_api, "_listen", {"host": "0.0.0.0", "port": 9876, "scheme": "http"})
-    monkeypatch.setitem(config.conf(), "web_auth_proxy", True)
+    monkeypatch.setenv("COW_DEPLOYMENT", "managed")
     monkeypatch.setenv("WEB_PUBLIC_URL", "https://guests.example.com")
     monkeypatch.setitem(config.conf(), "web_public_url", "https://guests.example.com")
     app = _app()

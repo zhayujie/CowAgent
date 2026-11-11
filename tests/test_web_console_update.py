@@ -374,3 +374,46 @@ def test_frontend_contract():
     assert "from cli.update_service import run_git_pull" in (
         root / "cli/commands/process.py"
     ).read_text(encoding="utf-8")
+
+
+def test_managed_install_never_self_updates(tmp_path, monkeypatch):
+    (tmp_path / ".git").mkdir()
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setenv("COW_DEPLOYMENT", "managed")
+    monkeypatch.setenv("COW_MANAGE_URL", "https://example.com/instances/a")
+    kind = detect_install_kind(str(tmp_path))
+    assert kind.kind == "managed"
+    assert kind.update_supported is False
+    assert version_payload(str(tmp_path))["manage_url"] == "https://example.com/instances/a"
+    with patch("cli.update_service.fetch_github_releases") as fetch:
+        with pytest.raises(UpdateError):
+            check_for_updates("2.0.0")
+        fetch.assert_not_called()
+    with pytest.raises(UpdateError):
+        schedule_web_update(str(tmp_path))
+
+
+def test_manage_url_only_for_managed_and_http(tmp_path, monkeypatch):
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setenv("COW_MANAGE_URL", "javascript:alert(1)")
+    monkeypatch.setenv("COW_DEPLOYMENT", "managed")
+    assert version_payload(str(tmp_path))["manage_url"] == ""
+    monkeypatch.setenv("COW_MANAGE_URL", "https://example.com")
+    monkeypatch.setenv("COW_DEPLOYMENT", "docker")
+    assert version_payload(str(tmp_path))["manage_url"] == ""
+
+
+def test_deployment_reads_the_enum_and_the_older_flags(monkeypatch):
+    from common.deployment import deployment
+
+    for key in ("COW_DEPLOYMENT", "COW_DESKTOP", "COW_DOCKER"):
+        monkeypatch.delenv(key, raising=False)
+    assert deployment() == "source"
+    monkeypatch.setenv("COW_DESKTOP", "1")
+    assert deployment() == "desktop"
+    monkeypatch.setenv("COW_DEPLOYMENT", "Managed")
+    assert deployment() == "managed"
+    monkeypatch.setenv("COW_DEPLOYMENT", "bogus")
+    assert deployment() == "desktop"
+    monkeypatch.setenv("COW_DEPLOYMENT", "source")
+    assert deployment() == "source"

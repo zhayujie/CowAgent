@@ -36,6 +36,8 @@ import tempfile
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
+from common.deployment import is_desktop
+
 READ_ONLY = "read-only"
 WORKSPACE_WRITE = "workspace-write"
 FULL_ACCESS = "full-access"
@@ -576,7 +578,7 @@ def _switch_hint() -> str:
     cannot see anything "under the chat input". We name the console by build so
     the model can point the user to the right place, and keep it short.
     """
-    where = "the desktop app" if os.environ.get("COW_DESKTOP") == "1" else "the Web console"
+    where = "the desktop app" if is_desktop() else "the Web console"
     return (
         f"To allow it, the user can change this session's permission in {where} "
         f"(or the global security setting). Do not retry the same call: use a "

@@ -13,6 +13,7 @@ from common.sorted_dict import SortedDict
 from config import write_plugin_config, get_data_root, get_resource_root
 
 from .event import *
+from common.deployment import is_desktop
 
 
 def _plugins_resource_dir():
@@ -285,7 +286,7 @@ class PluginManager:
         plugins.json (bundle default or user copy) says. Runs after scan (which
         syncs enabled from plugins.json) and before activate, so denied plugins
         are never instantiated and never write into the read-only bundle."""
-        if os.environ.get("COW_DESKTOP") != "1":
+        if not is_desktop():
             return
         for name in list(self.plugins.keys()):
             if name.upper() in self.DESKTOP_DISABLED_PLUGINS and self.plugins[name].enabled:

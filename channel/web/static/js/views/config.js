@@ -228,6 +228,9 @@ function initConfigView(data) {
 
     const pwdInput = document.getElementById('cfg-password');
     const maskedPwd = data.web_password_masked || '';
+    // A managed deployment signs the owner in; a password left over from
+    // before stays visible so it can still be cleared.
+    document.getElementById('cfg-password-row').classList.toggle('hidden', !!data.managed && !maskedPwd);
     pwdInput.value = maskedPwd;
     pwdInput.dataset.masked = maskedPwd ? '1' : '';
     pwdInput.dataset.maskedVal = maskedPwd;

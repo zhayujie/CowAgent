@@ -41,6 +41,7 @@ from common import i18n
 from common.log import logger
 from common.singleton import singleton
 from config import conf
+from common.deployment import is_desktop
 
 
 @singleton
@@ -1595,7 +1596,7 @@ class WebChannel(ChatChannel):
 
             # In desktop mode the Electron shell renders the UI, so don't pop a
             # browser window (also avoids issues when running detached/headless).
-            if os.environ.get("COW_DESKTOP") != "1":
+            if not is_desktop():
                 try:
                     import webbrowser
                     webbrowser.open(f"{scheme}://localhost:{port}")
@@ -1636,7 +1637,7 @@ class WebChannel(ChatChannel):
         func = web.httpserver.LogMiddleware(func)
 
         # The desktop shell probes and loads the console over plain http.
-        https_enabled = bool(conf().get("web_https_enabled", False)) and os.environ.get("COW_DESKTOP") != "1"
+        https_enabled = bool(conf().get("web_https_enabled", False)) and not is_desktop()
         try:
             certfile, keyfile = resolve_tls_config(
                 https_enabled,
@@ -1751,7 +1752,7 @@ class WebChannel(ChatChannel):
 
         if is_loopback_host(host):
             return False
-        return os.environ.get("COW_DESKTOP") == "1" or not can_bind(host, 0)
+        return is_desktop() or not can_bind(host, 0)
 
     def _bind_again(self, build, target: tuple, previous: tuple):
         """Bind the new address, else go back to the previous one. The console
@@ -1781,7 +1782,7 @@ class WebChannel(ChatChannel):
         on one other address would cut off, so loopback is served alongside."""
         from channel.web.api.integrations import is_loopback_host
 
-        if os.environ.get("COW_DESKTOP") != "1" or host in ("0.0.0.0", "::") or is_loopback_host(host):
+        if not is_desktop() or host in ("0.0.0.0", "::") or is_loopback_host(host):
             return
         server = build("127.0.0.1", port)
         try:

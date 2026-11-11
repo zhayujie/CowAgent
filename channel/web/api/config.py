@@ -31,6 +31,7 @@ from common import i18n
 from common.log import logger
 from config import conf, get_data_root
 from models.reasoning_capabilities import provider_reasoning_metadata
+from common.deployment import is_desktop, is_managed
 
 
 _settings_save_lock = threading.Lock()
@@ -166,6 +167,7 @@ class ConfigHandler:
                 "api_keys": api_keys_masked,
                 "providers": providers,
                 "web_password_masked": masked_pwd,
+                "managed": is_managed(),
                 "skill_hub_url": local_config.get("skill_hub_url", ""),
                 # Whether "show in folder" can open this machine's file manager.
                 "can_reveal_files": _can_reveal_in_file_manager(),
@@ -173,7 +175,7 @@ class ConfigHandler:
             # The desktop app runs on the local trusted machine, so it can edit
             # the real password in place (cursor at the end, delete to clear).
             # Browser access only ever sees the masked value.
-            if os.environ.get("COW_DESKTOP") == "1":
+            if is_desktop():
                 result["web_password"] = raw_pwd
             return json.dumps(result, ensure_ascii=False)
         except Exception as e:
