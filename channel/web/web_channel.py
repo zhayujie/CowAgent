@@ -88,6 +88,7 @@ from channel.web.api.workspace import (  # noqa: F401
     WorkspaceMetaHandler, WorkspaceReadHandler, WorkspaceResolveHandler,
     WorkspaceSearchHandler, WorkspaceTreeHandler, WorkspaceWriteHandler,
 )
+from channel.web.api.workspace_location import WorkspaceLocationHandler  # noqa: F401
 # Re-exported, not used here. app.py waits on SERVING and channel_factory
 # resolves "channel.web.web_channel.WebChannel" by name, so both have to stay
 # reachable through this module; the tests reach for the rest.
@@ -119,6 +120,7 @@ URLS = (
     '/api/workspace/meta', 'WorkspaceMetaHandler',
     '/api/workspace/read', 'WorkspaceReadHandler',
     '/api/workspace/write', 'WorkspaceWriteHandler',
+    '/api/workspace-location', 'WorkspaceLocationHandler',
     '/api/artifacts/add', 'ArtifactAddHandler',
     '/api/artifacts/pin', 'ArtifactPinHandler',
     '/api/artifacts/rename', 'ArtifactRenameHandler',

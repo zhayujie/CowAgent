@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, Mapping, Optional
 
 from common.atomic_write import write_text_atomic
+from common.cow_paths import default_workspace
 from common.log import logger
 from common.utils import expand_path
 
@@ -39,7 +40,7 @@ FILE_NAME = "team.json"
 
 
 def instance_root(settings: Mapping[str, Any]) -> Path:
-    return Path(expand_path((settings.get("agent_workspace") or "~/cow")))
+    return Path(expand_path((settings.get("agent_workspace") or default_workspace())))
 
 
 def team_file(settings: Mapping[str, Any]) -> Path:

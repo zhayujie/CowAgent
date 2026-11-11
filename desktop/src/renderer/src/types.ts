@@ -82,9 +82,65 @@ export interface ElectronAPI {
   // onOpenSession with the session id.
   notify?: (payload: { title?: string; body?: string; sessionId?: string; silent?: boolean; force?: boolean }) => Promise<boolean>
   onOpenSession?: (callback: (sessionId: string) => void) => () => void
+  // Workspace location (Settings): where the Agent workspace lives, and moving
+  // it elsewhere. Applying a location ends with relaunchForWorkspaceLocation.
+  getWorkspaceLocation?: () => Promise<WorkspaceInfo>
+  getWorkspaceUsage?: () => Promise<number>
+  pickWorkspaceLocation?: (title?: string) => Promise<string | null>
+  checkWorkspaceLocation?: (parent: string) => Promise<WorkspaceCheck>
+  applyWorkspaceLocation?: (opts: { parent: string; keepLink: boolean }) => Promise<WorkspaceApplyResult>
+  relaunchForWorkspaceLocation?: () => Promise<void>
+  onWorkspaceMigrationProgress?: (callback: (progress: WorkspaceMigrationProgress) => void) => () => void
   platform: string
   // OS UI language (e.g. "zh-CN"); used to default the language on first run.
   systemLocale?: string
+}
+
+// Mirror the types in src/main/workspace-migration.ts.
+export interface WorkspaceInfo {
+  workspace: string
+  realWorkspace: string
+  pinnedByConfig: boolean
+  managedByEnv: boolean
+}
+
+export type WorkspaceErrorCode =
+  | 'busy'
+  | 'managed_by_env'
+  | 'same_location'
+  | 'not_absolute'
+  | 'inside_install_dir'
+  | 'protected_dir'
+  | 'nested'
+  | 'not_writable'
+  | 'insufficient_space'
+  | 'target_has_data'
+  | 'copy_failed'
+  | 'verify_failed'
+  | 'finalize_failed'
+
+export interface WorkspaceCheck {
+  ok: boolean
+  code?: WorkspaceErrorCode
+  detail?: string
+  target: string
+  requiredBytes: number
+  freeBytes: number | null
+}
+
+export interface WorkspaceApplyResult {
+  ok: boolean
+  code?: WorkspaceErrorCode
+  detail?: string
+  warnings: string[]
+}
+
+export interface WorkspaceMigrationProgress {
+  phase: 'stopping' | 'scanning' | 'copying' | 'finishing'
+  doneBytes: number
+  totalBytes: number
+  doneFiles: number
+  totalFiles: number
 }
 
 // Mirrors UpdateStatus in src/main/updater.ts.
