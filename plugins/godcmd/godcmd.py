@@ -2,6 +2,7 @@
 
 import os
 import random
+import secrets
 import string
 import logging
 from typing import Tuple
@@ -208,8 +209,8 @@ class Godcmd(Plugin):
                 # (packaged builds) or a full disk must not take the plugin down.
                 logger.warning(f"[Godcmd] cannot write {config_path}: {e}")
         if gconf["password"] == "":
-            self.temp_password = "".join(random.sample(string.digits, 4))
-            logger.info("[Godcmd] 因未设置口令，本次的临时口令为%s。" % self.temp_password)
+            self.temp_password = "".join(secrets.choice(string.digits) for _ in range(8))
+            logger.info("[Godcmd] 因未设置口令，本次已生成临时口令。")
         else:
             self.temp_password = None
         custom_commands = conf().get("clear_memory_commands", [])
@@ -426,7 +427,7 @@ class Godcmd(Plugin):
                             if len(args) != 1:
                                 ok, result = False, "请提供插件名"
                             else:
-                                ok = PluginManager().disable_plugin(args[0])
+                                ok, result = PluginManager().disable_plugin(args[0])
                                 if ok:
                                     result = "插件已禁用"
                                 else:
