@@ -214,10 +214,24 @@ class ChatChannel(Channel):
         ``produce`` already routed the context, so the agent is read back here
         rather than resolved twice. Without this the bridge would serve the
         bound Agent while workspace paths still resolved to the default one.
+
+        ``user_id`` is the person who sent the message. In a group,
+        ``actual_user_id`` is that person when the message was routed on their
+        behalf, so it wins over ``from_user_id``. A channel with no end user
+        leaves it None; the session id is not a substitute.
         """
+        msg = context.get("msg")
+        sender = ""
+        if msg is not None:
+            sender = (
+                getattr(msg, "actual_user_id", None)
+                or getattr(msg, "from_user_id", None)
+                or ""
+            )
         return RuntimeIdentity(
             agent_id=context.get("agent_id"),
             session_id=context.get("session_id"),
+            user_id=(sender or None),
         )
 
     def _generate_reply(self, context: Context, reply: Reply = Reply()) -> Reply:
