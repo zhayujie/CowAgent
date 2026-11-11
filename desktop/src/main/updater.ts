@@ -43,16 +43,21 @@ function isLegacyWindows(): boolean {
 // is specific to the default build's infrastructure). Absent -> default feed.
 const CONFIGURED_FEED = (loadAppConfig()?.updateFeedUrl || '').trim()
 
-// The update feed. Both entries hit the same Pages Function
-// (https://cowagent.ai/update/); the ?lang=zh query tells it to 302 installer
-// downloads to the China CDN mirror instead of R2. The feed metadata is
-// identical either way, so we can freely switch the feed URL between attempts
-// to fall back from one download origin to the other. Legacy Windows appends a
-// /legacy/ segment so it gets the win-legacy release instead of the standard.
-const FEED_BASE = 'https://cowagent.ai/update/' + (isLegacyWindows() ? 'legacy/' : '')
+// The update feed. Both entries hit the same /update/ endpoint; the ?lang=zh
+// query tells it to 302 installer downloads to the China CDN mirror instead of
+// R2. The feed metadata is identical either way, so we can freely switch the
+// feed URL between attempts to fall back from one download origin to the
+// other. Legacy Windows appends a /legacy/ segment so it gets the win-legacy
+// release instead of the standard.
+// The endpoint is served by two hosts with the same feed. The first is the
+// default; a check that fails on the current host is retried once on the
+// other, and whichever answered stays in use for the session.
+const FEED_HOSTS = ['https://cowagent.ai', 'https://cowagent.cn']
+let feedHost = 0
+const feedBase = () => `${FEED_HOSTS[feedHost]}/update/` + (isLegacyWindows() ? 'legacy/' : '')
 const feedUrlFor = (china: boolean) => {
   if (CONFIGURED_FEED) return withFeedQuery(CONFIGURED_FEED)
-  return withFeedQuery(china ? `${FEED_BASE}?lang=zh` : FEED_BASE)
+  return withFeedQuery(china ? `${feedBase()}?lang=zh` : feedBase())
 }
 
 // A channel set explicitly at build time (publish.channel) names a dedicated
@@ -250,6 +255,9 @@ export function initUpdater(windowGetter: () => BrowserWindow | null): void {
   autoUpdater.on('error', (err) => {
     const message = err == null ? 'unknown' : err.message || String(err)
     log(`error: ${message}`, err instanceof Error && err.stack ? err.stack : '')
+    // runCheck retries this check on the other feed host, so the user only
+    // hears about it if that attempt fails too.
+    if (checkRetryPending) return
     send({ state: 'error', message })
   })
 }
@@ -281,12 +289,40 @@ export function checkForUpdates(userInitiated = false): void {
     send({ state: 'not-available' })
     return
   }
+  if (checkInFlight) {
+    log('checkForUpdates: a check is already running, its result will be reported')
+    return
+  }
   log(`checkForUpdates: requesting feed, current=${app.getVersion()}`)
-  autoUpdater.checkForUpdates().catch((err) => {
-    const message = err?.message || String(err)
-    log(`checkForUpdates: request failed: ${message}`, err instanceof Error && err.stack ? err.stack : '')
-    send({ state: 'error', message })
-  })
+  runCheck(!CONFIGURED_FEED)
+}
+
+let checkInFlight = false
+// True while a failed check is still going to be retried on the other host.
+let checkRetryPending = false
+
+function runCheck(retryOnOtherHost: boolean): void {
+  checkInFlight = true
+  checkRetryPending = retryOnOtherHost
+  autoUpdater
+    .checkForUpdates()
+    .then(() => {
+      checkInFlight = false
+      checkRetryPending = false
+    })
+    .catch((err) => {
+      const message = err?.message || String(err)
+      log(`checkForUpdates: request failed: ${message}`, err instanceof Error && err.stack ? err.stack : '')
+      if (checkRetryPending) {
+        feedHost = (feedHost + 1) % FEED_HOSTS.length
+        applyFeedUrl()
+        log(`checkForUpdates: retrying on ${FEED_HOSTS[feedHost]}`)
+        runCheck(false)
+        return
+      }
+      checkInFlight = false
+      send({ state: 'error', message })
+    })
 }
 
 export function startDownload(): void {
