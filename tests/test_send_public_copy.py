@@ -87,3 +87,18 @@ def test_nothing_is_copied_without_a_public_route(tmp_path, monkeypatch):
 
     assert cloud_client.copy_send_file(str(src), str(tmp_path)) == ""
     assert os.listdir(tmp_path) == ["report.pdf"]
+
+
+def test_a_configured_base_url_is_the_route_without_a_deployment(monkeypatch):
+    from config import conf
+
+    monkeypatch.delenv("CLOUD_DEPLOYMENT_ID", raising=False)
+    monkeypatch.setitem(conf(), "cloud_deployment_id", "")
+    monkeypatch.setitem(conf(), "websites_base_url", "")
+    assert cloud_client._deployment_base_url() == ""
+
+    monkeypatch.setitem(conf(), "websites_base_url", "https://files.example.com/")
+    assert cloud_client._deployment_base_url() == "https://files.example.com"
+
+    monkeypatch.setitem(conf(), "websites_base_url", "files.example.com")
+    assert cloud_client._deployment_base_url() == ""

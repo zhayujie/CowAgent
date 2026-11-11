@@ -296,6 +296,11 @@ available_setting = {
         "enabled": False,
     },
     "web_public_url": "",  # Address shown in API examples, share links and embed code; empty uses the page's own
+    "websites_base_url": "",  # Public URL prefix a static server exposes the Agent's websites/ dir at; empty disables published links
+    # Owners reach the console only through a reverse proxy that signs them in.
+    # The console then needs no password of its own, guest pages are served at
+    # web_public_url, and the listen address belongs to the proxy.
+    "web_auth_proxy": False,
     "mcp_oauth_redirect_base": "",  # Base URL for MCP OAuth callback (e.g. http://your-ip:9899); empty uses local web console
     "agent": True,  # whether to enable Agent mode
     "agent_workspace": "~/cow",  # agent workspace path, used to store skills, memory, etc.

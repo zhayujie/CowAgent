@@ -1853,6 +1853,10 @@ def get_deployment_id() -> str:
 
 def _deployment_base_url() -> str:
     """Return the URL prefix the deployment's websites/ dir is served at."""
+    base_url = str(conf().get("websites_base_url") or "").strip().rstrip("/")
+    if base_url.startswith(("http://", "https://")):
+        return base_url
+
     deployment_id = get_deployment_id()
     if not deployment_id:
         return ""
@@ -1904,7 +1908,7 @@ def get_publish_dir(workspace_dir: str = "", ensure: bool = False) -> str:
 def get_website_base_url(workspace_dir: str = "") -> str:
     """Return the URL prefix that maps to an Agent's websites/ dir.
 
-    Do nothing when in local env.
+    Empty unless ``websites_base_url`` or a deployment id says where it is served.
 
     The route serves the default Agent's directory at the root, so every other
     Agent is addressed by where its own directory sits relative to the instance
@@ -2012,9 +2016,9 @@ def _display_path(path: str) -> str:
 
 
 def build_website_prompt(workspace_dir: str) -> list:
-    """Build system prompt lines for cloud website/file sharing rules.
+    """Build system prompt lines for the website/file sharing rules.
 
-    Returns an empty list when cloud deployment is not configured,
+    Returns an empty list when the websites/ dir has no public address,
     so callers can safely do ``lines.extend(build_website_prompt(...))``.
 
     The directory is named absolutely rather than as a bare ``websites/``: each
@@ -2027,9 +2031,11 @@ def build_website_prompt(workspace_dir: str) -> list:
     pub = _display_path(get_publish_dir(workspace_dir))
 
     return [
-        "**文件分享与网页生成规则** (非常重要 — 当前为云部署模式):",
+        "**文件分享与网页生成规则** (非常重要):",
         "",
-        f"云端已为工作空间的 `{pub}/` 目录配置好公网路由映射，访问地址前缀为: `{base_url}`",
+        f"工作空间的 `{pub}/` 目录已配置公网访问，访问地址前缀为: `{base_url}`",
+        "",
+        f"该目录下的文件任何拿到链接的人都能打开，**不要**放入密钥、配置文件或隐私数据",
         "",
         f"1. **网页/网站**: 编写网页、H5页面等前端代码时，**必须**将文件放到 `{pub}/` 目录中",
         f"   - 例如: `{pub}/index.html` → `{base_url}/index.html`",

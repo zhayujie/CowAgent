@@ -112,6 +112,22 @@ def test_visitor_pages_are_404_without_a_console_password(guest_env, monkeypatch
     assert app.request(f"/share/{share['share_token']}").status.startswith("404")
 
 
+def test_behind_an_auth_proxy_pages_need_a_public_address_not_a_password(guest_env, monkeypatch):
+    from agent.guest.share import feature_status
+
+    app = _app()
+    share = _create_confirmed(app, _owner_cookie(app))
+    monkeypatch.setitem(config.conf(), "web_password", "")
+    monkeypatch.setitem(config.conf(), "web_auth_proxy", True)
+    monkeypatch.setitem(config.conf(), "web_public_url", "")
+    assert feature_status()["reason"] == "public_url_required"
+    assert app.request(f"/share/{share['share_token']}").status.startswith("404")
+
+    monkeypatch.setitem(config.conf(), "web_public_url", "https://guests.example.com")
+    assert feature_status()["serving"] is True
+    assert app.request(f"/share/{share['share_token']}").status.startswith("200")
+
+
 def test_only_the_owner_switches_the_feature_and_it_persists(guest_env):
     app = _app()
     cookie = _owner_cookie(app)
@@ -595,6 +611,30 @@ def test_integrations_report_where_the_server_listens(guest_env, monkeypatch):
     integrations_api.record_listen("192.168.1.30", 9876, "http")
     data = json.loads(app.request("/api/integrations", headers={"Cookie": cookie}).data)
     assert data["local_only"] is False and data["lan_urls"] == ["http://192.168.1.30:9876"]
+    assert data["listen_fixed"] is False and data["public_url_fixed"] is False
+
+
+def test_behind_an_auth_proxy_the_listen_address_is_hidden_and_fixed(guest_env, monkeypatch):
+    from channel.web.api import integrations as integrations_api
+
+    monkeypatch.setattr(integrations_api, "_lan_ips", lambda: ["10.0.3.7"])
+    monkeypatch.setattr(integrations_api, "_listen", {"host": "0.0.0.0", "port": 9876, "scheme": "http"})
+    monkeypatch.setitem(config.conf(), "web_auth_proxy", True)
+    monkeypatch.setenv("WEB_PUBLIC_URL", "https://guests.example.com")
+    monkeypatch.setitem(config.conf(), "web_public_url", "https://guests.example.com")
+    app = _app()
+    cookie = _owner_cookie(app)
+
+    def put(body):
+        res = app.request("/api/integrations", method="PUT", data=json.dumps(body),
+                          headers={"Cookie": cookie, "Content-Type": "application/json"})
+        return json.loads(res.data)
+
+    data = json.loads(app.request("/api/integrations", headers={"Cookie": cookie}).data)
+    assert data["lan_urls"] == [] and data["listen_fixed"] is True and data["public_url_fixed"] is True
+    assert put({"web_host": "127.0.0.1"})["reason"] == "listen_fixed"
+    assert put({"public_url": "https://other.example.com"})["reason"] == "public_url_fixed"
+    assert config.conf()["web_public_url"] == "https://guests.example.com"
 
 
 def test_saving_the_listen_address_moves_the_server(guest_env, monkeypatch):
