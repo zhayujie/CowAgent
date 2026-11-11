@@ -1074,7 +1074,10 @@ _MODEL_PREFERRED_PROVIDER: list[tuple[tuple[str, ...], str]] = [
 _DEFAULT_PROVIDER_ORDER = ["OpenAI", "Gemini", "Seedream", "Qwen", "MiniMax", "CowAgent", "LinkAI"]
 
 # Aggregator providers that also accept these vendors' model ids unchanged.
-_AGGREGATOR_FAMILIES = {"LinkAI": {"OpenAI", "Gemini"}}
+_AGGREGATOR_FAMILIES = {
+    "CowAgent": {"OpenAI", "Gemini", "Seedream"},
+    "LinkAI": {"OpenAI", "Gemini"},
+}
 
 # UI provider id (persisted via the Models page) → internal label used by
 # the factory dict in `_build_providers`. Allows pinning a vendor for
