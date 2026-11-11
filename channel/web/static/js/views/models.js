@@ -2347,8 +2347,9 @@ function renderCatalogRows(prefix) {
     const draft = _catalogRows(prefix);
     const rows = document.getElementById(prefix + '-catalog-rows');
     if (!rows) return;
-    // Display names are offered for custom providers only.
-    const withAlias = prefix === 'custom-provider';
+    // Aliases are display-only, so every provider can use them without
+    // changing the model id sent to the API.
+    const withAlias = true;
     rows.innerHTML = draft.map((entry, idx) => `
         <div class="rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 p-2.5">
             <div class="flex items-center gap-2 mb-2">
