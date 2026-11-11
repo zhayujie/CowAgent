@@ -616,6 +616,11 @@ function startSSE(requestId, loadingEl, timestamp, replayItems, resume) {
 
                     // Show execution time
                     const nameEl = toolEl.querySelector('.tool-name');
+                    const change = item.file_change && typeof item.file_change.diff === 'string' && item.file_change.diff
+                        ? item.file_change : null;
+                    if (change && change.path) {
+                        nameEl.insertAdjacentText('beforeend', '  ' + change.path);
+                    }
                     if (item.execution_time !== undefined) {
                         nameEl.innerHTML += ` <span class="tool-time">${item.execution_time}s</span>`;
                     }
@@ -635,16 +640,23 @@ function startSSE(requestId, loadingEl, timestamp, replayItems, resume) {
                         outputEl.textContent = item.result ? String(item.result) : '';
                         outputEl.classList.toggle('tool-error-text', isError);
                     }
+                    // The diff arrives only when the tool has finished. Progress
+                    // events stay plain text; a half-written file is not a diff.
+                    if (change && typeof renderFileDiffHtml === 'function') {
+                        const slot = document.createElement('div');
+                        slot.className = 'tool-diff-slot';
+                        slot.innerHTML = renderFileDiffHtml(change);
+                        const section = toolEl.querySelector('.tool-output-section');
+                        if (section) section.appendChild(slot);
+                    }
 
                     toolEl.classList.remove('tool-streaming');
                     // Tools collapse once they are done; their output is a
-                    // trace. A tool that wrote something for a person to read
-                    // stays open — the reader just waited for it. A hand-off is
-                    // the exception: its answer is already the bubble below, so
-                    // it folds away and keeps the task it passed on for whoever
-                    // opens it.
-                    toolEl.classList.toggle('expanded', !!item.display && !handoff);
-                    if (!item.result && !item.display) {
+                    // trace. A tool that wrote something for a person to read,
+                    // or that changed a file, stays open. A hand-off is the
+                    // exception: its answer is already the bubble below.
+                    toolEl.classList.toggle('expanded', (!!item.display || !!change) && !handoff);
+                    if (!item.result && !item.display && !change) {
                         const outputSection = toolEl.querySelector('.tool-output-section');
                         if (outputSection) outputSection.remove();
                     }
