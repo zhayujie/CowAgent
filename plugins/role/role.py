@@ -77,9 +77,9 @@ class Role(Plugin):
             logger.debug("[Role] inited")
         except Exception as e:
             if isinstance(e, FileNotFoundError):
-                logger.warn(f"[Role] init failed, {config_path} not found, ignore or see https://github.com/zhayujie/chatgpt-on-wechat/tree/master/plugins/role .")
+                logger.warn(f"[Role] init failed, {config_path} not found, ignore or see https://github.com/zhayujie/CowAgent/tree/master/plugins/role .")
             else:
-                logger.warn("[Role] init failed, ignore or see https://github.com/zhayujie/chatgpt-on-wechat/tree/master/plugins/role .")
+                logger.warn("[Role] init failed, ignore or see https://github.com/zhayujie/CowAgent/tree/master/plugins/role .")
             raise e
 
     def _load_role_file(self, filepath):

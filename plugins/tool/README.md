@@ -40,14 +40,14 @@ $tool reset: 重置工具。
 ### 3. terminal
 ###### 在你运行的电脑里执行shell命令，可以配合你想要chatgpt生成的代码使用，给予自然语言控制手段
 
-> terminal调优记录：https://github.com/zhayujie/chatgpt-on-wechat/issues/776#issue-1659347640
+> terminal调优记录：https://github.com/zhayujie/CowAgent/issues/776#issue-1659347640
 
 ### 4. meteo
 ###### 回答你有关天气的询问, 需要获取时间、地点上下文信息，本工具使用了[meteo open api](https://open-meteo.com/)
 注：该工具需要较高的对话技巧，不保证你问的任何问题均能得到满意的回复
 注2：当前版本可只使用这个工具，返回结果较可控。
 
-> meteo调优记录：https://github.com/zhayujie/chatgpt-on-wechat/issues/776#issuecomment-1500771334
+> meteo调优记录：https://github.com/zhayujie/CowAgent/issues/776#issuecomment-1500771334
 
 ## 使用本插件对话（prompt）技巧
 ### 1. 有指引的询问
