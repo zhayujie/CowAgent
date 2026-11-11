@@ -841,6 +841,7 @@ class ModelsHandler:
                 "effective": catalog,
                 "models": ([e["name"] for e in catalog] if catalog
                            else ([p.get("model")] if p.get("model") else [])),
+                "model_labels": {e["name"]: e["alias"] for e in catalog if e.get("alias")},
             })
         return cards
 
@@ -910,6 +911,7 @@ class ModelsHandler:
                 "effective": effective,
                 "models": [e["name"] for e in effective] if effective
                           else list(p.get("models") or []),
+                "model_labels": {e["name"]: e["alias"] for e in effective if e.get("alias")},
             })
 
         def _sort_key(it):
@@ -1678,10 +1680,16 @@ class ModelsHandler:
                 continue  # no overlay: presets stand as-is
             base_seed = [] if pid.startswith("custom:") else cls._preset_seed(pid)
             effective = cls._merged_catalog(pid, base_seed, catalog_map, hidden_map)
-            merged[pid] = [
-                {"value": e["name"]} for e in effective
-                if capability is None or capability in (e.get("capabilities") or [])
-            ]
+            model_options = []
+            for entry in effective:
+                if capability is not None and capability not in (entry.get("capabilities") or []):
+                    continue
+                option = {"value": entry["name"]}
+                alias = entry.get("alias")
+                if alias:
+                    option.update(label=alias, hint=entry["name"])
+                model_options.append(option)
+            merged[pid] = model_options
         return merged
 
     # Researched specs (context window / max output) for built-in preset
