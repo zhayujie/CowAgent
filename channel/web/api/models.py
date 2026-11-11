@@ -37,6 +37,7 @@ from config import (
     sync_image_generation_custom_provider_env,
 )
 from models import model_catalog
+from models.cowagent_provider import resolve_cowagent_credentials
 
 
 class ModelDiscoveryError(Exception):
@@ -874,6 +875,10 @@ class ModelsHandler:
             base_field = p.get("api_base_key")
             raw_key = local_config.get(key_field, "") if key_field else ""
             raw_base = local_config.get(base_field, "") if base_field else ""
+            if not raw_base and pid == const.COWAGENT:
+                # An unset base follows the UI language; show that site, or saving
+                # the form would pin the default one and break keys from the other.
+                raw_base = resolve_cowagent_credentials()[1]
             configured = is_real_key(raw_key)
             overrides = catalog_map.get(pid) or []
             hidden = hidden_map.get(pid) or []
