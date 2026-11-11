@@ -20,7 +20,7 @@ import { apiClient } from '../../api/client'
 // - A custom provider has no presets (`seed` is empty), so every row is an
 //   override and nothing is ever tombstoned.
 
-const CAPABILITIES: ModelCapability[] = ['text', 'vision', 'video', 'image', 'embedding', 'asr', 'tts']
+const CAPABILITIES: ModelCapability[] = ['text', 'vision', 'image', 'video', 'embedding', 'asr', 'tts']
 
 const CAP_TAG_KEYS: Record<ModelCapability, string> = {
   text: 'models_cap_tag_text',

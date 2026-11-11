@@ -6,6 +6,7 @@ import type { ModelsData } from '../types'
 import { Field, Dropdown, TextInput, type DropdownOption } from '../pages/settings/primitives'
 import { resolveModels, providerLabel } from '../pages/settings/modelsHelpers'
 import { useOnboardingStore } from '../store/onboardingStore'
+import { BasePresetChips, activeBasePreset, initialApiBase, orderedBasePresets } from './ApiBasePresets'
 
 interface OnboardingWizardProps {
   // Called after the wizard finishes so the host can refresh language/state.
@@ -72,10 +73,12 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onDone }) => {
   // The currently selected provider's api_base placeholder/default, if any.
   const providerMeta = models?.providers?.find((p) => p.id === provider)
   const apiBasePlaceholder = providerMeta?.api_base_placeholder || providerMeta?.api_base_default
+  const basePresets = orderedBasePresets(providerMeta?.api_base_presets)
+  const keyConsole = activeBasePreset(basePresets, apiBase)?.keys_url || PROVIDER_KEY_CONSOLE[provider]
 
   const handleProvider = (id: string) => {
     setProvider(id)
-    setApiBase('')
+    setApiBase(initialApiBase(models?.providers?.find((p) => p.id === id)))
     const first = resolveModels(models, id, models?.capabilities?.chat?.provider_models)[0]
     setModel(first?.value || '')
   }
@@ -209,9 +212,9 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onDone }) => {
                       placeholder={t('onboarding_apikey_placeholder')}
                       className="font-mono"
                     />
-                    {PROVIDER_KEY_CONSOLE[provider] && (
+                    {keyConsole && (
                       <a
-                        href={PROVIDER_KEY_CONSOLE[provider]}
+                        href={keyConsole}
                         target="_blank"
                         rel="noreferrer"
                         className="mt-1.5 inline-flex items-center gap-1 text-xs text-accent hover:underline"
@@ -222,7 +225,10 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onDone }) => {
                     )}
                   </Field>
                   {providerMeta?.api_base_field && (
-                    <Field label={t('onboarding_apibase')}>
+                    <Field
+                      label={t('onboarding_apibase')}
+                      labelAction={<BasePresetChips presets={basePresets} value={apiBase} onPick={setApiBase} />}
+                    >
                       <TextInput
                         value={apiBase}
                         onChange={(e) => setApiBase(e.target.value)}

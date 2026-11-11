@@ -3,7 +3,7 @@ title: image-generation - 图像生成
 description: "image-generation 技能支持文生图、图生图和多图融合，接入 OpenAI、Gemini、Seedream、Qwen、MiniMax 等多家厂商，按已配置的厂商自动路由并在失败时自动回退，也可指定模型。"
 ---
 
-通用的图像生成与编辑技能，支持 OpenAI、Gemini、Seedream（火山方舟）、Qwen（百炼）、MiniMax、LinkAI 共六家厂商。配好任意一家的 Key 即可使用，配多家可享受自动回退。
+通用的图像生成与编辑技能，支持 OpenAI、Gemini、Seedream（火山方舟）、Qwen（百炼）、MiniMax、CowAgent、LinkAI 共七家厂商。配好任意一家的 Key 即可使用，配多家可享受自动回退。
 
 ## 支持的模型
 
@@ -14,13 +14,14 @@ description: "image-generation 技能支持文生图、图生图和多图融合�
 | Seedream（火山方舟） | `seedream-5.0-lite`、`seedream-4.5` | 原生 2K–4K，最多 14 张图融合 |
 | Qwen（百炼） | `qwen-image-2.0`、`qwen-image-2.0-pro` | 擅长中文排版和图文融合 |
 | MiniMax | `image-01` | 简单快速 |
+| CowAgent | `gpt-image-2.5-flare`、`gpt-image-2.5-sunburst`、`gemini-3.1-flash-image`、`gemini-3-pro-image`、`seedream-5.0-pro`、`seedream-5.0-lite` | OpenAI 兼容接口，复用对话的 Key |
 | LinkAI | 任意模型 | 统一网关，作为兜底 |
 
 ## 模型选择
 
 默认走「自动路由 + 失败回退」：
 
-1. 按 `OpenAI → Gemini → Seedream → Qwen → MiniMax → LinkAI` 顺序选第一个已配置的厂商
+1. 按 `OpenAI → Gemini → Seedream → Qwen → MiniMax → CowAgent → LinkAI` 顺序选第一个已配置的厂商
 2. 遇到 401、模型未开通、网络异常等错误时，自动切到下一家
 3. 用户在对话里指定模型时（如「用 seedream 画一只猫」），对应厂商会被提到最前优先尝试
 
@@ -51,6 +52,7 @@ description: "image-generation 技能支持文生图、图生图和多图融合�
 | `ark_api_key` | 火山方舟（Seedream） |
 | `dashscope_api_key` | 阿里百炼（Qwen） |
 | `minimax_api_key` | MiniMax |
+| `cowagent_api_key` | CowAgent（国内站默认，全球站需同时设置 `cowagent_api_base` 为 `https://api.cowagent.ai/v1`） |
 | `linkai_api_key` | LinkAI |
 
 

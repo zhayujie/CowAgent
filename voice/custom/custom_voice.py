@@ -38,6 +38,12 @@ REQUEST_TIMEOUT = (5, 120)
 
 
 class CustomVoice(Voice):
+    # Used when the matching config key is empty. Custom vendors have no
+    # defaults; subclasses for a known endpoint set them.
+    DEFAULT_ASR_MODEL = ""
+    DEFAULT_TTS_MODEL = ""
+    DEFAULT_VOICE = "alloy"
+
     def __init__(self, voice_type: str):
         self.voice_type = voice_type
 
@@ -67,7 +73,7 @@ class CustomVoice(Voice):
     def voiceToText(self, voice_file):
         try:
             api_key, api_base = self._resolve_credentials()
-            model = (conf().get("voice_to_text_model") or "").strip()
+            model = (conf().get("voice_to_text_model") or self.DEFAULT_ASR_MODEL).strip()
             if not api_base or not model:
                 logger.error(
                     f"[Custom] voiceToText missing config: api_base={bool(api_base)}, "
@@ -101,7 +107,7 @@ class CustomVoice(Voice):
     def textToVoice(self, text):
         try:
             api_key, api_base = self._resolve_credentials()
-            model = (conf().get("text_to_voice_model") or "").strip()
+            model = (conf().get("text_to_voice_model") or self.DEFAULT_TTS_MODEL).strip()
             if not api_base or not model:
                 logger.error(
                     f"[Custom] textToVoice missing config: api_base={bool(api_base)}, "
@@ -119,7 +125,7 @@ class CustomVoice(Voice):
                 json={
                     "model": model,
                     "input": text,
-                    "voice": conf().get("tts_voice_id") or "alloy",
+                    "voice": conf().get("tts_voice_id") or self.DEFAULT_VOICE,
                 },
                 timeout=REQUEST_TIMEOUT,
                 stream=True,

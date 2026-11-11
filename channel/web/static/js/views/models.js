@@ -2174,11 +2174,15 @@ function fillVendorModalForProvider(providerId) {
     document.getElementById('vendor-modal-title').textContent = localizedLabel(meta.label);
     document.getElementById('vendor-modal-subtitle').textContent = meta.id;
 
-    // LinkAI aggregates many vendors, so only for it do we surface a link to its
-    // console for creating/managing the aggregated key. Other providers manage
-    // their keys on their own sites.
+    // Aggregators get a link to the console that issues their key; other
+    // providers manage keys on their own sites. Providers with base presets
+    // link to the console of the selected preset (see syncVendorBasePresets).
     const manageKey = document.getElementById('vendor-modal-manage-key');
-    if (manageKey) manageKey.classList.toggle('hidden', meta.id !== 'linkai');
+    if (manageKey) {
+        if (!manageKey.dataset.defaultHref) manageKey.dataset.defaultHref = manageKey.href;
+        manageKey.href = manageKey.dataset.defaultHref;
+        manageKey.classList.toggle('hidden', meta.id !== 'linkai');
+    }
 
     // ----- API Base -----
     // Always reflect the *current effective* base as the input value so the
@@ -2197,6 +2201,7 @@ function fillVendorModalForProvider(providerId) {
         baseWrap.classList.add('hidden');
         baseInput.value = '';
     }
+    renderVendorBasePresets(meta);
 
     // ----- API Key -----
     // For configured vendors, surface the masked key as the input *value* so
@@ -2226,6 +2231,70 @@ function fillVendorModalForProvider(providerId) {
     vendorModalState.providerId = providerId;
 }
 
+// Base presets: one chip per preset (e.g. the China and global sites of the
+// same API) that fills the API Base input. A provider that is not configured
+// yet starts on the preset matching the UI language.
+function renderVendorBasePresets(meta) {
+    const wrap = document.getElementById('vendor-modal-base-presets');
+    const baseInput = document.getElementById('vendor-modal-base');
+    if (!wrap || !baseInput) return;
+    const presets = (meta.api_base_field && meta.api_base_presets) || [];
+    // Only the Chinese UI offers the site switch, China site first. Other
+    // languages get the global site (listed last) prefilled and no switch.
+    const showChips = currentLang === 'zh';
+    wrap.innerHTML = '';
+    wrap.classList.toggle('hidden', !(showChips && presets.length));
+    baseInput.oninput = null;
+    if (!presets.length) return;
+
+    if (!meta.configured && (!meta.api_base || meta.api_base === meta.api_base_default)) {
+        baseInput.value = presets[showChips ? 0 : presets.length - 1].value;
+    }
+    if (showChips) presets.forEach(preset => {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.dataset.value = preset.value;
+        chip.textContent = localizedLabel(preset.label);
+        chip.className = 'px-2 py-0.5 rounded-md text-xs border transition-colors cursor-pointer';
+        chip.addEventListener('click', () => {
+            baseInput.value = preset.value;
+            syncVendorBasePresets(presets);
+        });
+        wrap.appendChild(chip);
+    });
+    baseInput.oninput = () => syncVendorBasePresets(presets);
+    syncVendorBasePresets(presets);
+}
+
+// Sites are told apart by domain, so any host under cowagent.cn (staging
+// included) maps to the China site and its key console.
+function matchBasePreset(presets, base) {
+    const domain = (url) => {
+        try { return new URL(url).hostname.split('.').slice(-2).join('.'); } catch (e) { return ''; }
+    };
+    const d = domain((base || '').trim());
+    return d ? presets.find(p => domain(p.value) === d) : undefined;
+}
+
+function syncVendorBasePresets(presets) {
+    const wrap = document.getElementById('vendor-modal-base-presets');
+    const active = matchBasePreset(presets, document.getElementById('vendor-modal-base').value);
+    wrap.querySelectorAll('button').forEach(chip => {
+        const on = !!active && chip.dataset.value === active.value;
+        chip.classList.toggle('border-primary-500', on);
+        chip.classList.toggle('text-primary-500', on);
+        chip.classList.toggle('border-slate-200', !on);
+        chip.classList.toggle('dark:border-slate-600', !on);
+        chip.classList.toggle('text-slate-500', !on);
+    });
+    const manageKey = document.getElementById('vendor-modal-manage-key');
+    const keysUrl = active && active.keys_url;
+    if (manageKey) {
+        manageKey.classList.toggle('hidden', !keysUrl);
+        if (keysUrl) manageKey.href = keysUrl;
+    }
+}
+
 function closeVendorModal() {
     document.getElementById('vendor-modal-overlay').classList.add('hidden');
 }
@@ -2243,7 +2312,7 @@ function closeVendorModal() {
 
 // Mirrors models/model_catalog.py VALID_CAPABILITIES. "text" drives the main
 // model dropdown, the rest route a model into the matching tool position.
-const MODEL_CATALOG_CAPABILITIES = ['text', 'vision', 'video', 'image', 'embedding', 'asr', 'tts'];
+const MODEL_CATALOG_CAPABILITIES = ['text', 'vision', 'image', 'video', 'embedding', 'asr', 'tts'];
 
 const MODEL_CATALOG_TAG_KEYS = {
     text: 'models_tag_chat',

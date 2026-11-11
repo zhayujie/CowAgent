@@ -43,9 +43,11 @@ class ConfigHandler:
         "model", "bot_type", "use_linkai",
         "open_ai_api_base", "deepseek_api_base", "qianfan_api_base", "claude_api_base", "gemini_api_base",
         "zhipu_ai_api_base", "moonshot_base_url", "ark_base_url", "custom_api_base", "mimo_api_base",
+        "cowagent_api_base",
         "open_ai_api_key", "deepseek_api_key", "qianfan_api_key", "claude_api_key", "gemini_api_key",
         "zhipu_ai_api_key", "dashscope_api_key", "moonshot_api_key",
         "ark_api_key", "minimax_api_key", "linkai_api_key", "custom_api_key", "mimo_api_key",
+        "cowagent_api_key",
         "custom_providers",
         "agent_max_context_tokens", "agent_max_context_turns", "agent_max_steps",
         "enable_thinking", "reasoning_effort", "reasoning_effort_by_model", "self_evolution_enabled", "web_password",
@@ -75,7 +77,10 @@ class ConfigHandler:
             for pid, pinfo in PROVIDER_MODELS.items():
                 base_key = pinfo.get("api_base_key")
                 if base_key:
-                    api_bases[base_key] = local_config.get(base_key, pinfo["api_base_default"])
+                    # A vendor with site presets reports an unset base as empty, so the
+                    # console can pick the site that matches the UI language.
+                    fallback = "" if pinfo.get("api_base_presets") else pinfo["api_base_default"]
+                    api_bases[base_key] = local_config.get(base_key) or fallback
                 key_field = pinfo.get("api_key_field")
                 if key_field and key_field not in api_keys_masked:
                     raw = local_config.get(key_field, "")
@@ -94,6 +99,7 @@ class ConfigHandler:
                     "api_base_key": p["api_base_key"],
                     "api_base_default": p["api_base_default"],
                     "api_base_placeholder": p.get("api_base_placeholder", ""),
+                    "api_base_presets": p.get("api_base_presets") or [],
                     "api_key_field": p.get("api_key_field"),
                     "reasoning": provider_reasoning_metadata(pid, provider_model),
                     "reasoning_by_model": reasoning_by_model,

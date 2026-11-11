@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react'
+import React, { useCallback, useLayoutEffect, useRef } from 'react'
 import { Check, Cpu } from 'lucide-react'
 import { product } from '@product'
 import { t, localizedLabel } from '../i18n'
@@ -35,6 +35,26 @@ const CatalogModelSelector: React.FC<ModelSelectorProps> = ({ sessionId }) => {
 
   const close = useCallback(() => setOpenMenu(null), [setOpenMenu])
 
+  // Once per opening, scroll the menu so the active model sits in the middle;
+  // a model typed by hand has no row, so fall back to its provider's heading.
+  const titleRef = useRef<HTMLDivElement>(null)
+  const scrolledRef = useRef(false)
+  useLayoutEffect(() => {
+    if (!open) {
+      scrolledRef.current = false
+      return
+    }
+    const menu = titleRef.current?.parentElement
+    if (!menu || scrolledRef.current || providers.length === 0) return
+    const target =
+      menu.querySelector<HTMLElement>('[data-active-model]') ||
+      menu.querySelector<HTMLElement>('[data-current-provider]')
+    scrolledRef.current = true
+    if (!target) return
+    const offset = target.getBoundingClientRect().top - menu.getBoundingClientRect().top + menu.scrollTop
+    menu.scrollTop = Math.max(0, offset - (menu.clientHeight - target.offsetHeight) / 2)
+  }, [open, providers])
+
   const toggle = () => {
     if (open) {
       close()
@@ -67,7 +87,7 @@ const CatalogModelSelector: React.FC<ModelSelectorProps> = ({ sessionId }) => {
       align="end"
       menuClassName="w-[340px]"
     >
-      <div className="px-2.5 pt-1 pb-1.5 text-[11px] font-semibold text-content-tertiary">
+      <div ref={titleRef} className="px-2.5 pt-1 pb-1.5 text-[11px] font-semibold text-content-tertiary">
         {t('model_menu_title')}
       </div>
       {error && <div className="px-2.5 pb-1.5 text-[11px] text-red-500">{error}</div>}
@@ -77,7 +97,10 @@ const CatalogModelSelector: React.FC<ModelSelectorProps> = ({ sessionId }) => {
       {providers.map((p, idx) => (
         <React.Fragment key={p.id}>
           {idx > 0 && <div className="my-1 h-px bg-default" />}
-          <div className="px-2.5 pt-1 pb-1 text-[11px] font-semibold text-content-tertiary">
+          <div
+            data-current-provider={p.id === activeProvider ? '' : undefined}
+            className="px-2.5 pt-1 pb-1 text-[11px] font-semibold text-content-tertiary"
+          >
             {localizedLabel(p.label)}
           </div>
           {(p.models || []).map((m) => {
@@ -87,6 +110,7 @@ const CatalogModelSelector: React.FC<ModelSelectorProps> = ({ sessionId }) => {
               <button
                 key={`${p.id}:${m}`}
                 type="button"
+                data-active-model={active ? '' : undefined}
                 onClick={() => select(active && pinned ? null : p.id, active && pinned ? null : m)}
                 className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left cursor-pointer transition-colors ${
                   active ? 'bg-accent-soft text-accent' : 'hover:bg-surface-2 text-content'

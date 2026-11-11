@@ -37,6 +37,7 @@ import {
 } from './ModelCatalogEditor'
 import { normEntries, providerLabel, resolveVoices, CUSTOM_OPTION } from './modelsHelpers'
 import { product } from '@product'
+import { BasePresetChips, ManageKeyLink, activeBasePreset, initialApiBase, orderedBasePresets } from '../../components/ApiBasePresets'
 
 // Whether the "add custom provider" entry is available. Defaults to true.
 const allowCustomProviders = product.models?.allowCustomProviders !== false
@@ -366,14 +367,37 @@ const VendorSection: React.FC<VendorSectionProps> = ({
   )
 }
 
+// Same logo set as the web console (static/logos, bundled as the public dir).
+// Black marks are inverted in dark mode; a missing file falls back to the
+// label's initial.
+const PROVIDER_LOGO_DARK_INVERT = new Set(['openai', 'moonshot', 'zhipu', 'custom'])
+
+const ProviderLogo: React.FC<{ provider: ModelProvider }> = ({ provider }) => {
+  const [failed, setFailed] = useState(false)
+  const id = provider.id
+  return (
+    <span className="flex-shrink-0 w-7 h-7 rounded-lg bg-surface-2 text-content-secondary flex items-center justify-center text-xs font-bold overflow-hidden">
+      {failed ? (
+        (localizedLabel(provider.label) || provider.id || '?').slice(0, 1).toUpperCase()
+      ) : (
+        <img
+          src={`./logos/${encodeURIComponent(id)}.svg`}
+          alt=""
+          aria-hidden="true"
+          className={`w-[18px] h-[18px] ${PROVIDER_LOGO_DARK_INVERT.has(id) ? 'dark:invert' : ''}`}
+          onError={() => setFailed(true)}
+        />
+      )}
+    </span>
+  )
+}
+
 const VendorChip: React.FC<{ provider: ModelProvider; onClick: () => void }> = ({ provider, onClick }) => (
   <button
     onClick={onClick}
     className="group flex items-center gap-2.5 px-3 py-2.5 rounded-btn border border-default bg-inset-2 hover:border-accent cursor-pointer transition-colors text-left"
   >
-    <span className="flex-shrink-0 w-7 h-7 rounded-lg bg-surface-2 text-content-secondary flex items-center justify-center text-xs font-bold">
-      {(localizedLabel(provider.label) || provider.id || '?').slice(0, 1).toUpperCase()}
-    </span>
+    <ProviderLogo provider={provider} />
     <span className="flex-1 min-w-0 text-sm font-medium text-content truncate">{localizedLabel(provider.label)}</span>
     <Pencil size={12} className="flex-shrink-0 text-content-tertiary group-hover:text-accent transition-colors" />
   </button>
@@ -465,7 +489,7 @@ const VendorModal: React.FC<{
     const init = provider || (addMode ? firstUnconfigured : undefined)
     setPickId(provider ? provider.id : firstUnconfigured?.id || '')
     setApiKey(init?.api_key_masked || '')
-    setApiBase(init?.api_base || '')
+    setApiBase(initialApiBase(init))
     setKeyDirty(false)
     setKeyVisible(false)
     loadCatalogRows(init)
@@ -493,12 +517,14 @@ const VendorModal: React.FC<{
     setPickId(val)
     const p = builtins.find((x) => x.id === val)
     setApiKey(p?.api_key_masked || '')
-    setApiBase(p?.api_base || '')
+    setApiBase(initialApiBase(p))
     setKeyDirty(false)
     loadCatalogRows(p)
   }
 
   const hasBase = !!effective?.api_base_field
+  const basePresets = hasBase ? orderedBasePresets(effective?.api_base_presets) : []
+  const keysUrl = activeBasePreset(basePresets, apiBase)?.keys_url
 
   const save = async () => {
     if (!effective) return
@@ -560,7 +586,9 @@ const VendorModal: React.FC<{
       )}
       <Field
         label="API Key"
-        labelAction={effective?.id === 'linkai' ? <ManageLinkAIKeyLink /> : undefined}
+        labelAction={
+          effective?.id === 'linkai' ? <ManageLinkAIKeyLink /> : keysUrl ? <ManageKeyLink href={keysUrl} /> : undefined
+        }
       >
         <div className="relative">
           <TextInput
@@ -589,7 +617,10 @@ const VendorModal: React.FC<{
         </div>
       </Field>
       {hasBase && (
-        <Field label="API Base">
+        <Field
+          label="API Base"
+          labelAction={<BasePresetChips presets={basePresets} value={apiBase} onPick={setApiBase} />}
+        >
           <TextInput
             className="font-mono"
             value={apiBase}

@@ -89,7 +89,7 @@ class TestProviderOrder(unittest.TestCase):
     def test_provider_order(self):
         self.assertEqual(
             web_search_module.PROVIDER_ORDER,
-            ("deepseek", "bocha", "qianfan", "zhipu", "linkai", "anysearch", "serply", "tavily", "outcrawl", "firecrawl",
+            ("deepseek", "bocha", "qianfan", "zhipu", "cowagent", "linkai", "anysearch", "serply", "tavily", "outcrawl", "firecrawl",
              "specstream", "searxng", "keenable"),
         )
 

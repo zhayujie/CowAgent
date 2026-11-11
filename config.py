@@ -263,6 +263,8 @@ available_setting = {
     "modelscope_base_url": "https://api-inference.modelscope.cn/v1/chat/completions",
     # LinkAI platform config
     "use_linkai": False,
+    "cowagent_api_key": "",
+    "cowagent_api_base": "",  # empty means const.COWAGENT_API_BASE_CN
     "linkai_api_key": "",
     "linkai_app_code": "",
     "linkai_api_base": "https://api.link-ai.tech",
@@ -521,6 +523,8 @@ def _quarantine_corrupted_config(config_path):
 CONFIG_TO_ENV = {
     "open_ai_api_key": "OPENAI_API_KEY",
     "open_ai_api_base": "OPENAI_API_BASE",
+    "cowagent_api_key": "COWAGENT_API_KEY",
+    "cowagent_api_base": "COWAGENT_API_BASE",
     "linkai_api_key": "LINKAI_API_KEY",
     "linkai_api_base": "LINKAI_API_BASE",
     "claude_api_key": "CLAUDE_API_KEY",
@@ -735,6 +739,13 @@ def load_config():
             if val:
                 os.environ[env_key] = str(val)
                 injected += 1
+
+    # Skill scripts only see the environment, so hand them the same base the
+    # runtime falls back to when cowagent_api_base is unset.
+    if config.get("cowagent_api_key") and not os.environ.get("COWAGENT_API_BASE"):
+        from models.cowagent_provider import default_cowagent_api_base
+        os.environ["COWAGENT_API_BASE"] = default_cowagent_api_base()
+        injected += 1
 
     injected += _sync_skill_config_to_env(config.get("skills", {}))
     injected += sync_image_generation_custom_provider_env(config)

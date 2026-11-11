@@ -1,0 +1,132 @@
+---
+title: CowAgent
+description: "CowAgent's model service: GPT, Claude, Gemini, DeepSeek and other mainstream models with a single API key."
+---
+
+Besides chat, the same key covers image understanding, image generation, speech, embeddings and web search. Add it once in the Web Console and every capability below is ready to use.
+
+CowAgent runs two sites with separate accounts. A key only works on the site that issued it:
+
+| Site | API Base | Console (create API keys) |
+| --- | --- | --- |
+| Global | `https://api.cowagent.ai/v1` | [cloud.cowagent.ai](https://cloud.cowagent.ai/keys) |
+| China | `https://api.cowagent.cn/v1` | [cloud.cowagent.cn](https://cloud.cowagent.cn/keys) |
+
+<Tip>
+  The easiest way is the "Model Management" page of the Web Console: the CowAgent provider dialog comes with the Global API Base filled in, so you only paste your key. Every capability below reuses the same key.
+</Tip>
+
+## Text Chat
+
+```json
+{
+  "bot_type": "cowagent",
+  "model": "deepseek-v4.1-flash",
+  "cowagent_api_key": "YOUR_API_KEY",
+  "cowagent_api_base": "https://api.cowagent.ai/v1"
+}
+```
+
+| Parameter | Description |
+| --- | --- |
+| `bot_type` | Set to `cowagent` |
+| `cowagent_api_key` | Create one in the [Global console](https://cloud.cowagent.ai/keys) |
+| `cowagent_api_base` | `https://api.cowagent.ai/v1` for a Global key, `https://api.cowagent.cn/v1` for a China key. When omitted it follows the UI language: the China site for Chinese, the Global site otherwise |
+| `model` | One of the model IDs below |
+
+Available models: `gpt-6.1-terra`, `gpt-6.1-sol`, `gpt-6-luna`, `gpt-6-astra`, `claude-opus-5-5`, `claude-sonnet-5-5`, `claude-haiku-5-5`, `claude-fable-5-1`, `gemini-4-argon`, `gemini-3.8-flash`, `deepseek-v4.1-flash`, `deepseek-v4-pro`, `deepseek-v4-flash`, `qwen3.8-flash`, `qwen3.8-max`, `qwen3.6-plus`, `glm-5.3-flash`, `glm-5.3`, `kimi-k3.1-pro`, `kimi-k3`, `MiniMax-M3.1-Flash`, `MiniMax-M3`, `doubao-seed-2-1-turbo`. See the console for the full list and pricing.
+
+## Image Understanding
+
+No extra setup once the key is configured: images go to the main model when it accepts image input, otherwise the Vision tool uses `deepseek-v4.1-flash`. To pin a model:
+
+```json
+{
+  "tools": {
+    "vision": {
+      "provider": "cowagent",
+      "model": "deepseek-v4.1-flash"
+    }
+  }
+}
+```
+
+Models with image input: `gpt-6.1-terra`, `gpt-6.1-sol`, `gpt-6-luna`, `gpt-6-astra`, `claude-fable-5-1`, `gemini-4-argon`, `deepseek-v4.1-flash`, `qwen3.8-flash`, `qwen3.8-max`, `qwen3.6-plus`, `glm-5.3-flash`, `MiniMax-M3.1-Flash`, `doubao-seed-2-1-turbo`.
+
+## Image Generation
+
+```json
+{
+  "skills": {
+    "image-generation": {
+      "provider": "cowagent",
+      "model": "gpt-image-2.5-flare"
+    }
+  }
+}
+```
+
+| Model ID | Notes |
+| --- | --- |
+| `gpt-image-2.5-flare` | OpenAI, default |
+| `gpt-image-2.5-sunburst` | OpenAI, higher editing precision |
+| `gemini-3.1-flash-image` | Nano Banana 2 |
+| `gemini-3-pro-image` | Nano Banana Pro |
+| `seedream-5.0-pro` | ByteDance Doubao Seedream |
+| `seedream-5.0-lite` | ByteDance Doubao Seedream |
+
+## Speech-to-Text (ASR)
+
+```json
+{
+  "voice_to_text": "cowagent",
+  "voice_to_text_model": "seed-asr"
+}
+```
+
+## Text-to-Speech (TTS)
+
+```json
+{
+  "text_to_voice": "cowagent",
+  "text_to_voice_model": "seed-tts-2.0",
+  "tts_voice_id": "en_female_dacey_uranus_bigtts"
+}
+```
+
+| `tts_voice_id` | Voice |
+| --- | --- |
+| `zh_female_vv_uranus_bigtts` | Chinese · Female · Vivi (default) |
+| `zh_female_xiaohe_uranus_bigtts` | Chinese · Female · Xiaohe |
+| `zh_male_m191_uranus_bigtts` | Chinese · Male · Yunzhou |
+| `zh_male_taocheng_uranus_bigtts` | Chinese · Male · Xiaotian |
+| `zh_male_liufei_uranus_bigtts` | Chinese · Male · Liufei |
+| `en_male_tim_uranus_bigtts` | English · Male · Tim |
+| `en_female_dacey_uranus_bigtts` | English · Female · Dacey |
+| `en_female_stokie_uranus_bigtts` | English · Female · Stokie |
+
+## Embedding
+
+```json
+{
+  "embedding_provider": "cowagent",
+  "embedding_model": "text-embedding-3-small"
+}
+```
+
+The default model is `text-embedding-3-small` (1536 dimensions). After changing the embedding, run `/memory rebuild-index` to rebuild the index.
+
+## Web Search
+
+Once the key is configured, the [web_search](/tools/web-search) tool can search through CowAgent with no extra setup. To always use it:
+
+```json
+{
+  "tools": {
+    "web_search": {
+      "strategy": "fixed",
+      "provider": "cowagent"
+    }
+  }
+}
+```

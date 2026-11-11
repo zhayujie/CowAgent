@@ -1,8 +1,9 @@
-"""Web Search tool. Supports thirteen backends with a unified response format:
+"""Web Search tool. Supports fourteen backends with a unified response format:
   - deepseek (https://api-docs.deepseek.com/guides/search, official Search API)
   - bocha   (https://open.bochaai.com)
   - zhipu   (https://docs.bigmodel.cn/cn/guide/tools/web-search)
   - qianfan (https://cloud.baidu.com/doc/qianfan/s/2mh4su4uy)
+  - cowagent (https://cowagent.ai, reuses the CowAgent model API key)
   - linkai  (https://link-ai.tech, fallback)
   - anysearch (https://anysearch.com)
   - serply  (https://serply.io, Google/Bing SERP API)
@@ -15,7 +16,7 @@
 
 Provider selection
   - strategy 'auto' (default): pick the first configured provider in the
-    canonical order [deepseek, bocha, qianfan, zhipu, linkai, anysearch,
+    canonical order [deepseek, bocha, qianfan, zhipu, cowagent, linkai, anysearch,
     serply, tavily, outcrawl, firecrawl, specstream, searxng, keenable]. Keenable counts as configured with a
     key or with the explicit `keenable_anonymous` opt-in (same contract as
     `anysearch_anonymous`). When the caller passes an explicit `provider`
@@ -31,6 +32,7 @@ Credentials
   - bocha   : tools.web_search.bocha_api_key  ->  env BOCHA_API_KEY
   - zhipu   : conf.zhipu_ai_api_key            ->  env ZHIPUAI_API_KEY
   - qianfan : conf.qianfan_api_key             ->  env QIANFAN_API_KEY
+  - cowagent: conf.cowagent_api_key            ->  env COWAGENT_API_KEY
   - linkai  : conf.linkai_api_key              ->  env LINKAI_API_KEY
   - deepseek: conf.deepseek_api_key           ->  env DEEPSEEK_API_KEY
   - anysearch : tools.web_search.anysearch_api_key  -> env ANYSEARCH_API_KEY
@@ -63,17 +65,18 @@ DEFAULT_TIMEOUT = 30
 # Canonical fallback order. deepseek (official search, reuses the model key)
 # comes first; the rest are empirically ordered by Chinese real-time
 # quality + relevance: bocha (best overall), qianfan (best for hot news),
-# zhipu (strong on long-form articles), linkai (cloud aggregator),
+# zhipu (strong on long-form articles), cowagent and linkai (aggregators),
 # anysearch, serply (global Google/Bing SERP, last since it isn't
 # benchmarked against the Chinese-market providers above), tavily, outcrawl,
 # firecrawl, specstream, searxng, keenable (global index, keyless tier behind an explicit
 # opt-in; placed last so any provider the user paid for wins).
-PROVIDER_ORDER = ("deepseek", "bocha", "qianfan", "zhipu", "linkai", "anysearch", "serply", "tavily", "outcrawl", "firecrawl", "specstream", "searxng", "keenable")
+PROVIDER_ORDER = ("deepseek", "bocha", "qianfan", "zhipu", "cowagent", "linkai", "anysearch", "serply", "tavily", "outcrawl", "firecrawl", "specstream", "searxng", "keenable")
 
 PROVIDER_LABELS = {
     "bocha":   "Bocha",
     "zhipu":   "Zhipu",
     "qianfan": "Baidu Qianfan",
+    "cowagent": "CowAgent",
     "linkai":  "LinkAI",
     "deepseek": "DeepSeek",
     "anysearch": "AnySearch",
@@ -121,6 +124,9 @@ def _get_api_key(provider: str) -> str:
     if provider == "qianfan":
         key = _conf_str(conf().get("qianfan_api_key"), "")
         return key or os.environ.get("QIANFAN_API_KEY", "").strip()
+    if provider == "cowagent":
+        from models.cowagent_provider import resolve_cowagent_credentials
+        return resolve_cowagent_credentials()[0]
     if provider == "linkai":
         key = _conf_str(conf().get("linkai_api_key"), "")
         return key or os.environ.get("LINKAI_API_KEY", "").strip()
@@ -380,6 +386,8 @@ class WebSearch(BaseTool):
                 return self._search_zhipu(query, count, freshness)
             if provider == "qianfan":
                 return self._search_qianfan(query, count, freshness)
+            if provider == "cowagent":
+                return self._search_cowagent(query, count, freshness, summary)
             if provider == "linkai":
                 return self._search_linkai(query, count, freshness)
             if provider == "deepseek":
@@ -652,6 +660,54 @@ class WebSearch(BaseTool):
         return ToolResult.success({
             "query": query, "backend": "linkai",
             "total": 1, "count": 1, "results": [{"content": str(raw)}],
+        })
+
+    # ------------------------------------------------------------------
+    # CowAgent (POST {api_base}/search)
+    # ------------------------------------------------------------------
+
+    def _search_cowagent(self, query: str, count: int, freshness: str, summary: bool) -> ToolResult:
+        from models.cowagent_provider import resolve_cowagent_credentials
+        api_key, api_base = resolve_cowagent_credentials()
+        payload = {
+            "query": query,
+            "count": max(1, min(int(count or 10), 50)),
+            "freshness": freshness or "noLimit",
+            "summary": bool(summary),
+        }
+        logger.debug(f"[WebSearch] cowagent: query='{query}', count={payload['count']}")
+        resp = requests.post(
+            f"{api_base}/search",
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json=payload,
+            timeout=DEFAULT_TIMEOUT,
+        )
+        try:
+            data = resp.json()
+        except ValueError:
+            data = {}
+        if resp.status_code != 200:
+            err = data.get("error") if isinstance(data, dict) else None
+            msg = err.get("message") if isinstance(err, dict) else ""
+            if resp.status_code == 401:
+                return ToolResult.fail(f"Error: Invalid CowAgent API key. {msg}".rstrip())
+            return ToolResult.fail(f"Error: CowAgent API returned HTTP {resp.status_code}. {msg}".rstrip())
+
+        results = []
+        for p in (data.get("results") or []) if isinstance(data, dict) else []:
+            item = {
+                "title": p.get("title", ""),
+                "url": p.get("url", ""),
+                "snippet": p.get("snippet", ""),
+                "siteName": p.get("site_name", ""),
+                "datePublished": p.get("published_at", ""),
+            }
+            if p.get("summary"):
+                item["summary"] = p["summary"]
+            results.append(item)
+        return ToolResult.success({
+            "query": query, "backend": "cowagent",
+            "total": len(results), "count": len(results), "results": results,
         })
 
     # ------------------------------------------------------------------

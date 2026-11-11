@@ -155,7 +155,8 @@ def _capabilities_from_modalities(row: Dict[str, Any]) -> List[str]:
         caps.append("vision")
     if "image" in out:
         caps.append("image")
-    if "video" in inp or "video" in out:
+    # "video" tags video generation, like "image" does for images.
+    if "video" in out:
         caps.append("video")
     if "audio" in inp:
         caps.append("asr")
@@ -321,9 +322,9 @@ class ModelsHandler:
     """
 
     # Capability -> provider ids drawn from PROVIDER_MODELS.
-    _ASR_PROVIDERS = ["openai", "dashscope", "zhipu", "mimo", "linkai"]
+    _ASR_PROVIDERS = ["openai", "dashscope", "zhipu", "mimo", "cowagent", "linkai"]
     # Web-console white-list. Other vendors stay usable via direct config.
-    _TTS_PROVIDERS = ["openai", "minimax", "dashscope", "mimo", "linkai"]
+    _TTS_PROVIDERS = ["openai", "minimax", "dashscope", "mimo", "cowagent", "linkai"]
 
     # TTS engine catalog (speech models, not voice timbres). Entries are
     # either a bare code or {value, hint?} when a friendly label helps.
@@ -341,6 +342,9 @@ class ModelsHandler:
         # 小米 MiMo TTS 系列，通过 chat completions 接口合成
         "mimo": [
             {"value": "mimo-v2.5-tts", "hint": "预置音色 · 支持唱歌模式"},
+        ],
+        "cowagent": [
+            {"value": "seed-tts-2.0", "hint": "豆包语音 · 中英文音色"},
         ],
         # Aggregating gateway: a single endpoint multiplexes several
         # underlying TTS engines, selected via the `model` field.
@@ -369,6 +373,9 @@ class ModelsHandler:
         ],
         "mimo": [
             {"value": "mimo-v2.5-asr", "hint": "中英文 · 支持方言"},
+        ],
+        "cowagent": [
+            {"value": "seed-asr", "hint": "豆包语音识别 · 中英文"},
         ],
         # LinkAI gateway routes ASR by `model` (see
         # https://docs.link-ai.tech/platform/api/voice-recognition). An empty
@@ -502,6 +509,17 @@ class ModelsHandler:
             {"value": "Milo",  "hint": "英文 · 男声 · Milo"},
             {"value": "Dean",  "hint": "英文 · 男声 · Dean"},
         ],
+        # seed-tts-2.0 voices; the first one is the default.
+        "cowagent": [
+            {"value": "zh_female_vv_uranus_bigtts",     "hint": "中文 · 女声 · Vivi"},
+            {"value": "zh_female_xiaohe_uranus_bigtts", "hint": "中文 · 女声 · 小何"},
+            {"value": "zh_male_m191_uranus_bigtts",     "hint": "中文 · 男声 · 云舟"},
+            {"value": "zh_male_taocheng_uranus_bigtts", "hint": "中文 · 男声 · 小天"},
+            {"value": "zh_male_liufei_uranus_bigtts",   "hint": "中文 · 男声 · 刘飞"},
+            {"value": "en_male_tim_uranus_bigtts",      "hint": "英文 · 男声 · Tim"},
+            {"value": "en_female_dacey_uranus_bigtts",  "hint": "英文 · 女声 · Dacey"},
+            {"value": "en_female_stokie_uranus_bigtts", "hint": "英文 · 女声 · Stokie"},
+        ],
         # Aggregating gateway: voices are scoped per engine model. The
         # frontend picks the correct list based on the selected model so
         # users don't see incompatible timbres for the active engine.
@@ -602,7 +620,7 @@ class ModelsHandler:
             ],
         },
     }
-    _EMBEDDING_PROVIDERS = ["openai", "dashscope", "doubao", "zhipu", "linkai", "custom"]
+    _EMBEDDING_PROVIDERS = ["openai", "dashscope", "doubao", "zhipu", "cowagent", "linkai", "custom"]
 
     # Embedding model catalog per provider. Mirrors the default_model in
     # agent/memory/embedding/provider.py::EMBEDDING_VENDORS.
@@ -613,6 +631,7 @@ class ModelsHandler:
         "dashscope": ["text-embedding-v4"],
         "doubao":    ["doubao-embedding-vision-251215"],
         "zhipu":     ["embedding-3"],
+        "cowagent":  ["text-embedding-3-small"],
         "linkai":    ["text-embedding-3-small"],
         "custom":    [],
     }
@@ -662,6 +681,22 @@ class ModelsHandler:
         "minimax":   [const.MINIMAX_M3_1_FLASH, const.MINIMAX_M3],
         # MiMo 原生全模态模型：v2.6-pro / v2.6-flash 支持图像/音频/视频输入
         "mimo":      [const.MIMO_V2_6_PRO, const.MIMO_V2_6_FLASH],
+        # Multimodal models of the CowAgent API; the first is the auto pick.
+        "cowagent":  [
+            "deepseek-v4.1-flash",
+            "MiniMax-M3.1-Flash",
+            "gpt-6-luna",
+            "gpt-6.1-terra",
+            "gpt-6.1-sol",
+            "gpt-6-astra",
+            "claude-fable-5-1",
+            "gemini-4-argon",
+            "glm-5.3-flash",
+            "qwen3.8-flash",
+            "qwen3.8-max",
+            "qwen3.6-plus",
+            "doubao-seed-2-1-turbo",
+        ],
         # LinkAI proxies the underlying vendor; surface a curated set of
         # multimodal models. Order: gpt-4.1-mini → gpt-5.4-mini as the
         # cross-vendor baselines, then each vendor's recommended default.
@@ -706,6 +741,14 @@ class ModelsHandler:
         "doubao":    ["seedream-5.0-lite", "seedream-4.5"],
         "dashscope": ["qwen-image-2.0-pro", "qwen-image-2.0"],
         "minimax":   ["image-01"],
+        "cowagent": [
+            "gpt-image-2.5-flare",
+            "gpt-image-2.5-sunburst",
+            {"value": "gemini-3.1-flash-image", "hint": "Nano Banana 2"},
+            {"value": "gemini-3-pro-image",     "hint": "Nano Banana Pro"},
+            "seedream-5.0-pro",
+            "seedream-5.0-lite",
+        ],
         "linkai": [
             "gpt-image-2.5-flare",
             "gpt-image-2.5-sunburst",
@@ -850,6 +893,7 @@ class ModelsHandler:
                 "api_base": raw_base or (p.get("api_base_default") or ""),
                 "api_base_default": p.get("api_base_default") or "",
                 "api_base_placeholder": p.get("api_base_placeholder") or "",
+                "api_base_presets": p.get("api_base_presets") or [],
                 # Raw stored overlay (overrides + tombstones), so the editor can
                 # tell what the user actually changed from the presets.
                 "catalog": overrides,
@@ -1139,7 +1183,11 @@ class ModelsHandler:
         if is_real_key(local_config.get("open_ai_api_key", "")):
             return {"provider": "openai", "model": const.GPT_55}
 
-        # 5. LinkAI as last resort (only reached when use_linkai is off)
+        # 5. CowAgent with its own default vision model
+        if is_real_key(local_config.get("cowagent_api_key", "")):
+            return {"provider": "cowagent", "model": cls._VISION_PROVIDER_MODELS["cowagent"][0]}
+
+        # 6. LinkAI as last resort (only reached when use_linkai is off)
         if linkai_configured:
             return {"provider": "linkai", "model": const.GPT_41_MINI}
 
@@ -1335,6 +1383,7 @@ class ModelsHandler:
         ("doubao",    "seedream-5.0-lite"),
         ("dashscope", "qwen-image-2.0"),
         ("minimax",   "image-01"),
+        ("cowagent",  "gpt-image-2.5-flare"),
         ("linkai",    "gpt-image-2.5-flare"),
     ]
 
@@ -1433,12 +1482,13 @@ class ModelsHandler:
 
     # Canonical search provider order. Mirrors PROVIDER_ORDER in
     # agent/tools/web_search/web_search.py — keep them in sync.
-    _SEARCH_PROVIDERS = ("deepseek", "bocha", "qianfan", "zhipu", "linkai", "anysearch", "serply", "tavily", "outcrawl", "firecrawl", "specstream", "searxng", "keenable")
+    _SEARCH_PROVIDERS = ("deepseek", "bocha", "qianfan", "zhipu", "cowagent", "linkai", "anysearch", "serply", "tavily", "outcrawl", "firecrawl", "specstream", "searxng", "keenable")
 
     _SEARCH_PROVIDER_LABELS = {
         "bocha":   {"zh": "博查", "en": "Bocha"},
         "zhipu":   {"zh": "智谱", "en": "GLM"},
         "qianfan": {"zh": "百度", "en": "ERNIE"},
+        "cowagent": {"zh": "CowAgent", "en": "CowAgent"},
         "linkai":  {"zh": "LinkAI", "en": "LinkAI"},
         "deepseek": {"zh": "DeepSeek", "en": "DeepSeek"},
         "anysearch": {"zh": "AnySearch", "en": "AnySearch"},
@@ -1462,6 +1512,8 @@ class ModelsHandler:
             return local_config.get("zhipu_ai_api_key") or os.environ.get("ZHIPUAI_API_KEY", "")
         if provider == "qianfan":
             return local_config.get("qianfan_api_key") or os.environ.get("QIANFAN_API_KEY", "")
+        if provider == "cowagent":
+            return local_config.get("cowagent_api_key") or os.environ.get("COWAGENT_API_KEY", "")
         if provider == "linkai":
             return local_config.get("linkai_api_key") or os.environ.get("LINKAI_API_KEY", "")
         if provider == "deepseek":
@@ -1666,9 +1718,9 @@ class ModelsHandler:
         "ernie-4.5-turbo-32k": {"context_window": 32000, "max_output_tokens": 16000},
         "ernie-4.5-turbo-vl": {"capabilities": ["text", "vision"], "context_window": 128000, "max_output_tokens": 16000},
         "MiniMax-M3.1-Flash": {
-            "capabilities": ["text", "vision", "video"], "context_window": 1000000, "max_output_tokens": 524288,
+            "capabilities": ["text", "vision"], "context_window": 1000000, "max_output_tokens": 524288,
         },
-        "MiniMax-M3": {"capabilities": ["text", "vision", "video"], "context_window": 1000000, "max_output_tokens": 512000},
+        "MiniMax-M3": {"capabilities": ["text", "vision"], "context_window": 1000000, "max_output_tokens": 512000},
         "MiniMax-M2.7": {"context_window": 204800, "max_output_tokens": 196608},
         "MiniMax-M2.7-highspeed": {"context_window": 204800, "max_output_tokens": 196608},
         "MiniMax-Text-01": {"context_window": 1000000},

@@ -216,7 +216,12 @@ function toggleModelSelector(event) {
         return;
     }
     _closeComposerMenus(menu);
-    const open = () => { renderModelMenu(); menu.classList.remove('hidden'); _modelBtn()?.classList.add('open'); };
+    const open = () => {
+        renderModelMenu();
+        menu.classList.remove('hidden');
+        _modelBtn()?.classList.add('open');
+        _scrollModelMenuToActive(menu);
+    };
     // Always re-fetch: the catalog depends on which providers have keys, which
     // may have changed in Settings since this page loaded.
     refreshSessionSettings().then(() => { if (_sessCfg) open(); });
@@ -237,7 +242,8 @@ function renderModelMenu() {
     const parts = [`<div class="composer-menu-title">${escapeHtml(t('model_menu_title'))}</div>`];
     providers.forEach((p, idx) => {
         if (idx > 0) parts.push('<div class="composer-menu-divider"></div>');
-        parts.push(`<div class="composer-menu-title">${escapeHtml(localizedLabel(p.label))}</div>`);
+        const current = p.id === activeProvider ? ' data-current-provider' : '';
+        parts.push(`<div class="composer-menu-title"${current}>${escapeHtml(localizedLabel(p.label))}</div>`);
         (p.models || []).forEach(m => {
             const active = m === activeModel && p.id === activeProvider;
             // Clicking the already-pinned model clears the pin (back to global);
@@ -263,6 +269,16 @@ function renderModelMenu() {
     });
 
     menu.innerHTML = parts.join('');
+}
+
+// Scroll the menu (not the page) so the active model sits in the middle; a
+// model typed by hand has no row, so fall back to its provider's heading.
+function _scrollModelMenuToActive(menu) {
+    const target = menu.querySelector('.composer-menu-item.active')
+        || menu.querySelector('[data-current-provider]');
+    if (!target) return;
+    const offset = target.getBoundingClientRect().top - menu.getBoundingClientRect().top + menu.scrollTop;
+    menu.scrollTop = Math.max(0, offset - (menu.clientHeight - target.offsetHeight) / 2);
 }
 
 /** Pin a model for this session; pass nulls to follow the global model again. */

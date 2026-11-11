@@ -102,6 +102,16 @@ EMBEDDING_VENDORS = {
         # both the token-per-request budget and a reasonable wall clock.
         "max_batch_size": 64,
     },
+    "cowagent": {
+        "default_base_url": "https://api.cowagent.cn/v1",
+        "default_model": "text-embedding-3-small",
+        "default_dimensions": 1536,
+        "supports_dim_param": True,
+        "needs_client_truncate": False,
+        "needs_client_normalize": False,
+        "query_instruction": "",
+        "max_batch_size": 64,
+    },
     "linkai": {
         "default_base_url": "https://api.link-ai.tech/v1",
         "default_model": "text-embedding-3-small",
