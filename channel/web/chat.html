@@ -96,7 +96,9 @@
     (function() {
         // Backend-resolved default language (from cow_lang config / auto-detect).
         window.__COW_DEFAULT_LANG__ = '{{COW_DEFAULT_LANG}}';
-        var theme = localStorage.getItem('cow_theme') || 'dark';
+        // An explicit toggle wins; otherwise follow the OS, falling back to light.
+        window.__COW_DEFAULT_THEME__ = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        var theme = localStorage.getItem('cow_theme') || window.__COW_DEFAULT_THEME__;
         if (theme === 'dark') document.documentElement.classList.add('dark');
         // Replay the color theme's last variables (written by themes.js) so
         // the first paint already has them.
