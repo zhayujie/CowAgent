@@ -113,7 +113,7 @@ class Bridge(object):
     def _auto_pick_voice_to_text() -> str:
         """Pick an ASR provider by configured api keys when voice_to_text is
         unset. Order matches the web console: openai → dashscope → zhipu →
-        mimo → linkai. Falls back to 'openai' when nothing is configured so the
+        mimo → cowagent → linkai. Falls back to 'openai' when nothing is configured so the
         original "missing key" error is preserved.
         """
         def has(k: str) -> bool:
@@ -125,6 +125,7 @@ class Bridge(object):
             ("dashscope_api_key", "dashscope"),
             ("zhipu_ai_api_key", "zhipu"),
             ("mimo_api_key", "mimo"),
+            ("cowagent_api_key", "cowagent"),
             ("linkai_api_key", "linkai"),
         ):
             if has(key):

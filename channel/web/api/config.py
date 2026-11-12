@@ -31,6 +31,7 @@ from common import i18n
 from common.log import logger
 from config import conf, get_data_root
 from models.reasoning_capabilities import provider_reasoning_metadata
+from common.deployment import is_desktop, is_managed
 
 
 _settings_save_lock = threading.Lock()
@@ -43,9 +44,11 @@ class ConfigHandler:
         "model", "bot_type", "use_linkai",
         "open_ai_api_base", "deepseek_api_base", "qianfan_api_base", "claude_api_base", "gemini_api_base",
         "zhipu_ai_api_base", "moonshot_base_url", "ark_base_url", "custom_api_base", "mimo_api_base",
+        "cowagent_api_base",
         "open_ai_api_key", "deepseek_api_key", "qianfan_api_key", "claude_api_key", "gemini_api_key",
         "zhipu_ai_api_key", "dashscope_api_key", "moonshot_api_key",
         "ark_api_key", "minimax_api_key", "linkai_api_key", "custom_api_key", "mimo_api_key",
+        "cowagent_api_key",
         "custom_providers",
         "agent_max_context_tokens", "agent_max_context_turns", "agent_max_steps",
         "enable_thinking", "reasoning_effort", "reasoning_effort_by_model", "self_evolution_enabled", "web_password",
@@ -75,7 +78,10 @@ class ConfigHandler:
             for pid, pinfo in PROVIDER_MODELS.items():
                 base_key = pinfo.get("api_base_key")
                 if base_key:
-                    api_bases[base_key] = local_config.get(base_key, pinfo["api_base_default"])
+                    # A vendor with site presets reports an unset base as empty, so the
+                    # console can pick the site that matches the UI language.
+                    fallback = "" if pinfo.get("api_base_presets") else pinfo["api_base_default"]
+                    api_bases[base_key] = local_config.get(base_key) or fallback
                 key_field = pinfo.get("api_key_field")
                 if key_field and key_field not in api_keys_masked:
                     raw = local_config.get(key_field, "")
@@ -94,6 +100,7 @@ class ConfigHandler:
                     "api_base_key": p["api_base_key"],
                     "api_base_default": p["api_base_default"],
                     "api_base_placeholder": p.get("api_base_placeholder", ""),
+                    "api_base_presets": p.get("api_base_presets") or [],
                     "api_key_field": p.get("api_key_field"),
                     "reasoning": provider_reasoning_metadata(pid, provider_model),
                     "reasoning_by_model": reasoning_by_model,
@@ -160,6 +167,7 @@ class ConfigHandler:
                 "api_keys": api_keys_masked,
                 "providers": providers,
                 "web_password_masked": masked_pwd,
+                "managed": is_managed(),
                 "skill_hub_url": local_config.get("skill_hub_url", ""),
                 # Whether "show in folder" can open this machine's file manager.
                 "can_reveal_files": _can_reveal_in_file_manager(),
@@ -167,7 +175,7 @@ class ConfigHandler:
             # The desktop app runs on the local trusted machine, so it can edit
             # the real password in place (cursor at the end, delete to clear).
             # Browser access only ever sees the masked value.
-            if os.environ.get("COW_DESKTOP") == "1":
+            if is_desktop():
                 result["web_password"] = raw_pwd
             return json.dumps(result, ensure_ascii=False)
         except Exception as e:

@@ -228,6 +228,9 @@ function initConfigView(data) {
 
     const pwdInput = document.getElementById('cfg-password');
     const maskedPwd = data.web_password_masked || '';
+    // A managed deployment signs the owner in; a password left over from
+    // before stays visible so it can still be cleared.
+    document.getElementById('cfg-password-row').classList.toggle('hidden', !!data.managed && !maskedPwd);
     pwdInput.value = maskedPwd;
     pwdInput.dataset.masked = maskedPwd ? '1' : '';
     pwdInput.dataset.maskedVal = maskedPwd;
@@ -303,10 +306,16 @@ function onProviderChange(pid) {
     const keyWrap = document.getElementById('cfg-api-key-wrap');
     const keyInput = document.getElementById('cfg-api-key');
 
-    // Only LinkAI (an aggregation platform) gets a link to its console for
-    // managing the aggregated key; other providers manage keys on their sites.
+    // Aggregators get a link to the console that issues their key; other
+    // providers manage keys on their own sites. Providers with base presets
+    // link to the console of the preset matching the API Base (see
+    // syncCfgManageKey).
     const cfgManageKey = document.getElementById('cfg-manage-key');
-    if (cfgManageKey) cfgManageKey.classList.toggle('hidden', cfgProviderValue !== 'linkai');
+    if (cfgManageKey) {
+        if (!cfgManageKey.dataset.defaultHref) cfgManageKey.dataset.defaultHref = cfgManageKey.href;
+        cfgManageKey.href = cfgManageKey.dataset.defaultHref;
+        cfgManageKey.classList.toggle('hidden', cfgProviderValue !== 'linkai');
+    }
     if (keyField) {
         keyWrap.classList.remove('hidden');
         keyInput.classList.add('cfg-key-masked');
@@ -348,11 +357,17 @@ function onProviderChange(pid) {
     const apiBaseInput = document.getElementById('cfg-api-base');
     if (p.api_base_key) {
         document.getElementById('cfg-api-base-wrap').classList.remove('hidden');
-        apiBaseInput.value = configApiBases[p.api_base_key] || p.api_base_default || '';
+        const presets = p.api_base_presets || [];
+        // Unset bases follow the UI language: the China site for zh, otherwise the global one.
+        const presetBase = presets.length ? presets[currentLang === 'zh' ? 0 : presets.length - 1].value : '';
+        apiBaseInput.value = configApiBases[p.api_base_key] || presetBase || p.api_base_default || '';
         // Hint the version-path tail (e.g. /v1) so users are reminded to
         // include it themselves. We don't auto-rewrite anything server-side.
         apiBaseInput.placeholder = p.api_base_placeholder || 'https://...';
+        apiBaseInput.oninput = presets.length ? () => syncCfgManageKey(presets) : null;
+        if (presets.length) syncCfgManageKey(presets);
     } else {
+        apiBaseInput.oninput = null;
         document.getElementById('cfg-api-base-wrap').classList.add('hidden');
         apiBaseInput.value = '';
         apiBaseInput.placeholder = 'https://...';
@@ -453,6 +468,14 @@ function getSelectedModel() {
         return document.getElementById('cfg-model-custom').value.trim();
     }
     return cfgModelValue;
+}
+
+function syncCfgManageKey(presets) {
+    const link = document.getElementById('cfg-manage-key');
+    if (!link) return;
+    const active = matchBasePreset(presets, document.getElementById('cfg-api-base').value);
+    link.classList.toggle('hidden', !(active && active.keys_url));
+    if (active && active.keys_url) link.href = active.keys_url;
 }
 
 function toggleApiKeyVisibility() {

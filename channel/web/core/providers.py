@@ -32,6 +32,20 @@ _RECOMMENDED_MODELS = [
     const.MIMO_V2_6_PRO, const.MIMO_V2_6_FLASH,
 ]
 
+# Chat models served by the CowAgent model API, named as that API names them
+# (some differ from the vendors' own ids, e.g. deepseek-v4.1-flash).
+_COWAGENT_MODELS = [
+    "deepseek-v4.1-flash", "deepseek-v4-pro", "deepseek-v4-flash",
+    "MiniMax-M3.1-Flash", "MiniMax-M3",
+    "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "claude-fable-5-1",
+    "gpt-6.1-terra", "gpt-6.1-sol", "gpt-6-luna", "gpt-6-astra",
+    "gemini-4-argon", "gemini-3.8-flash",
+    "glm-5.3-flash", "glm-5.3",
+    "qwen3.8-flash", "qwen3.8-max", "qwen3.6-plus",
+    "doubao-seed-2-1-turbo",
+    "kimi-k3.1-pro", "kimi-k3",
+]
+
 # Generic placeholder hints surfaced in the web console. We deliberately
 # show the version-path tail (e.g. "/v1") so users are reminded to type
 # the full base URL. The form is intentionally vague (`...../v1`) so it
@@ -131,6 +145,29 @@ PROVIDER_MODELS = OrderedDict([
         "api_base_default": "https://api.xiaomimimo.com/v1",
         "api_base_placeholder": _PLACEHOLDER_V1,
         "models": [const.MIMO_V2_6_PRO, const.MIMO_V2_6_FLASH],
+    }),
+    ("cowagent", {
+        "label": "CowAgent",
+        "api_key_field": "cowagent_api_key",
+        "api_base_key": "cowagent_api_base",
+        "api_base_default": const.COWAGENT_API_BASE_CN,
+        "api_base_placeholder": _PLACEHOLDER_V1,
+        # The two sites are separate accounts: a key only works on the site
+        # that issued it, so the form offers both bases and links each to the
+        # console where its keys are managed.
+        "api_base_presets": [
+            {
+                "label": {"zh": "国内站", "en": "cowagent.cn"},
+                "value": const.COWAGENT_API_BASE_CN,
+                "keys_url": "https://cloud.cowagent.cn/keys",
+            },
+            {
+                "label": {"zh": "全球站", "en": "cowagent.ai"},
+                "value": const.COWAGENT_API_BASE_GLOBAL,
+                "keys_url": "https://cloud.cowagent.ai/keys",
+            },
+        ],
+        "models": _COWAGENT_MODELS,
     }),
     ("linkai", {
         "label": "LinkAI",

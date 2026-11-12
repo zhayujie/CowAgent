@@ -58,7 +58,9 @@ def test_a_zombie_does_not_count_as_alive():
     if pid == 0:
         os._exit(0)
     try:
-        # Not reaped yet, so the pid still exists but the process is gone.
+        # Block until the child has exited, without reaping it: right after
+        # fork() it may still be running, and ps would report it as alive.
+        os.waitid(os.P_PID, pid, os.WEXITED | os.WNOWAIT)
         assert ChromeLauncher._pid_alive(pid) is False
     finally:
         os.waitpid(pid, 0)

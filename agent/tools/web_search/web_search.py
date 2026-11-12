@@ -1,21 +1,23 @@
-"""Web Search tool. Supports twelve backends with a unified response format:
+"""Web Search tool. Supports fourteen backends with a unified response format:
   - deepseek (https://api-docs.deepseek.com/guides/search, official Search API)
   - bocha   (https://open.bochaai.com)
   - zhipu   (https://docs.bigmodel.cn/cn/guide/tools/web-search)
   - qianfan (https://cloud.baidu.com/doc/qianfan/s/2mh4su4uy)
+  - cowagent (https://cowagent.ai, reuses the CowAgent model API key)
   - linkai  (https://link-ai.tech, fallback)
   - anysearch (https://anysearch.com)
   - serply  (https://serply.io, Google/Bing SERP API)
   - tavily  (https://tavily.com, AI-optimized search API)
   - outcrawl (https://outcrawl.ai, scrape and search API for AI agents)
   - firecrawl (https://www.firecrawl.dev/?utm_source=cowagent&utm_medium=integration, context API for AI agents)
+  - specstream (https://specstream.ai/docs/search-api, web search and page extraction API)
   - searxng (https://docs.searxng.org, self-hosted meta search engine)
   - keenable (https://keenable.ai, keyless tier behind an explicit opt-in)
 
 Provider selection
   - strategy 'auto' (default): pick the first configured provider in the
-    canonical order [deepseek, bocha, qianfan, zhipu, linkai, anysearch,
-    serply, tavily, outcrawl, firecrawl, searxng, keenable]. Keenable counts as configured with a
+    canonical order [deepseek, bocha, qianfan, zhipu, cowagent, linkai, anysearch,
+    serply, tavily, outcrawl, firecrawl, specstream, searxng, keenable]. Keenable counts as configured with a
     key or with the explicit `keenable_anonymous` opt-in (same contract as
     `anysearch_anonymous`). When the caller passes an explicit `provider`
     it overrides the pick; an invalid/unconfigured one silently falls back
@@ -30,6 +32,7 @@ Credentials
   - bocha   : tools.web_search.bocha_api_key  ->  env BOCHA_API_KEY
   - zhipu   : conf.zhipu_ai_api_key            ->  env ZHIPUAI_API_KEY
   - qianfan : conf.qianfan_api_key             ->  env QIANFAN_API_KEY
+  - cowagent: conf.cowagent_api_key            ->  env COWAGENT_API_KEY
   - linkai  : conf.linkai_api_key              ->  env LINKAI_API_KEY
   - deepseek: conf.deepseek_api_key           ->  env DEEPSEEK_API_KEY
   - anysearch : tools.web_search.anysearch_api_key  -> env ANYSEARCH_API_KEY
@@ -37,6 +40,7 @@ Credentials
   - tavily  : tools.web_search.tavily_api_key  ->  env TAVILY_API_KEY
   - outcrawl: tools.web_search.outcrawl_api_key  ->  env OUTCRAWL_API_KEY
   - firecrawl: tools.web_search.firecrawl_api_key  ->  env FIRECRAWL_API_KEY
+  - specstream: tools.web_search.specstream_api_key  ->  env SPECSTREAM_API_KEY
   - searxng : tools.web_search.searxng_url     ->  env SEARXNG_URL
   - keenable: tools.web_search.keenable_api_key -> env KEENABLE_API_KEY (optional,
               only lifts the rate limits of the keyless public endpoint);
@@ -61,17 +65,18 @@ DEFAULT_TIMEOUT = 30
 # Canonical fallback order. deepseek (official search, reuses the model key)
 # comes first; the rest are empirically ordered by Chinese real-time
 # quality + relevance: bocha (best overall), qianfan (best for hot news),
-# zhipu (strong on long-form articles), linkai (cloud aggregator),
+# zhipu (strong on long-form articles), cowagent and linkai (aggregators),
 # anysearch, serply (global Google/Bing SERP, last since it isn't
 # benchmarked against the Chinese-market providers above), tavily, outcrawl,
-# firecrawl, searxng, keenable (global index, keyless tier behind an explicit
+# firecrawl, specstream, searxng, keenable (global index, keyless tier behind an explicit
 # opt-in; placed last so any provider the user paid for wins).
-PROVIDER_ORDER = ("deepseek", "bocha", "qianfan", "zhipu", "linkai", "anysearch", "serply", "tavily", "outcrawl", "firecrawl", "searxng", "keenable")
+PROVIDER_ORDER = ("deepseek", "bocha", "qianfan", "zhipu", "cowagent", "linkai", "anysearch", "serply", "tavily", "outcrawl", "firecrawl", "specstream", "searxng", "keenable")
 
 PROVIDER_LABELS = {
     "bocha":   "Bocha",
     "zhipu":   "Zhipu",
     "qianfan": "Baidu Qianfan",
+    "cowagent": "CowAgent",
     "linkai":  "LinkAI",
     "deepseek": "DeepSeek",
     "anysearch": "AnySearch",
@@ -79,6 +84,7 @@ PROVIDER_LABELS = {
     "tavily":  "Tavily",
     "outcrawl": "Outcrawl",
     "firecrawl": "Firecrawl",
+    "specstream": "SpecStream",
     "searxng": "SearXNG",
     "keenable": "Keenable",
 }
@@ -118,6 +124,9 @@ def _get_api_key(provider: str) -> str:
     if provider == "qianfan":
         key = _conf_str(conf().get("qianfan_api_key"), "")
         return key or os.environ.get("QIANFAN_API_KEY", "").strip()
+    if provider == "cowagent":
+        from models.cowagent_provider import resolve_cowagent_credentials
+        return resolve_cowagent_credentials()[0]
     if provider == "linkai":
         key = _conf_str(conf().get("linkai_api_key"), "")
         return key or os.environ.get("LINKAI_API_KEY", "").strip()
@@ -139,6 +148,9 @@ def _get_api_key(provider: str) -> str:
     if provider == "firecrawl":
         key = _conf_str(_tools_web_search_conf().get("firecrawl_api_key"), "")
         return key or os.environ.get("FIRECRAWL_API_KEY", "").strip()
+    if provider == "specstream":
+        key = _conf_str(_tools_web_search_conf().get("specstream_api_key"), "")
+        return key or os.environ.get("SPECSTREAM_API_KEY", "").strip()
     if provider == "keenable":
         key = _conf_str(_tools_web_search_conf().get("keenable_api_key"), "")
         return key or os.environ.get("KEENABLE_API_KEY", "").strip()
@@ -354,7 +366,7 @@ class WebSearch(BaseTool):
             return ToolResult.fail(
                 "Error: No search provider configured. "
                 "Configure one of BOCHA_API_KEY / zhipu_ai_api_key / qianfan_api_key / linkai_api_key / "
-                "deepseek_api_key / anysearch_api_key / SERPLY_API_KEY / TAVILY_API_KEY / OUTCRAWL_API_KEY / FIRECRAWL_API_KEY / SEARXNG_URL."
+                "deepseek_api_key / anysearch_api_key / SERPLY_API_KEY / TAVILY_API_KEY / OUTCRAWL_API_KEY / FIRECRAWL_API_KEY / SPECSTREAM_API_KEY / SEARXNG_URL."
             )
 
         # Always log the routing decision so multi-provider deployments can
@@ -374,6 +386,8 @@ class WebSearch(BaseTool):
                 return self._search_zhipu(query, count, freshness)
             if provider == "qianfan":
                 return self._search_qianfan(query, count, freshness)
+            if provider == "cowagent":
+                return self._search_cowagent(query, count, freshness, summary)
             if provider == "linkai":
                 return self._search_linkai(query, count, freshness)
             if provider == "deepseek":
@@ -388,6 +402,8 @@ class WebSearch(BaseTool):
                 return self._search_outcrawl(query, count)
             if provider == "firecrawl":
                 return self._search_firecrawl(query, count)
+            if provider == "specstream":
+                return self._search_specstream(query, count)
             if provider == "searxng":
                 return self._search_searxng(query, count)
             if provider == "keenable":
@@ -644,6 +660,54 @@ class WebSearch(BaseTool):
         return ToolResult.success({
             "query": query, "backend": "linkai",
             "total": 1, "count": 1, "results": [{"content": str(raw)}],
+        })
+
+    # ------------------------------------------------------------------
+    # CowAgent (POST {api_base}/search)
+    # ------------------------------------------------------------------
+
+    def _search_cowagent(self, query: str, count: int, freshness: str, summary: bool) -> ToolResult:
+        from models.cowagent_provider import resolve_cowagent_credentials
+        api_key, api_base = resolve_cowagent_credentials()
+        payload = {
+            "query": query,
+            "count": max(1, min(int(count or 10), 50)),
+            "freshness": freshness or "noLimit",
+            "summary": bool(summary),
+        }
+        logger.debug(f"[WebSearch] cowagent: query='{query}', count={payload['count']}")
+        resp = requests.post(
+            f"{api_base}/search",
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json=payload,
+            timeout=DEFAULT_TIMEOUT,
+        )
+        try:
+            data = resp.json()
+        except ValueError:
+            data = {}
+        if resp.status_code != 200:
+            err = data.get("error") if isinstance(data, dict) else None
+            msg = err.get("message") if isinstance(err, dict) else ""
+            if resp.status_code == 401:
+                return ToolResult.fail(f"Error: Invalid CowAgent API key. {msg}".rstrip())
+            return ToolResult.fail(f"Error: CowAgent API returned HTTP {resp.status_code}. {msg}".rstrip())
+
+        results = []
+        for p in (data.get("results") or []) if isinstance(data, dict) else []:
+            item = {
+                "title": p.get("title", ""),
+                "url": p.get("url", ""),
+                "snippet": p.get("snippet", ""),
+                "siteName": p.get("site_name", ""),
+                "datePublished": p.get("published_at", ""),
+            }
+            if p.get("summary"):
+                item["summary"] = p["summary"]
+            results.append(item)
+        return ToolResult.success({
+            "query": query, "backend": "cowagent",
+            "total": len(results), "count": len(results), "results": results,
         })
 
     # ------------------------------------------------------------------
@@ -1139,6 +1203,49 @@ class WebSearch(BaseTool):
             })
         return ToolResult.success({
             "query": query, "backend": "firecrawl",
+            "total": len(results), "count": len(results), "results": results,
+        })
+
+    # ------------------------------------------------------------------
+    # SpecStream
+    # ------------------------------------------------------------------
+
+    def _search_specstream(self, query: str, count: int) -> ToolResult:
+        api_key = _get_api_key("specstream")
+        url = "https://api.specstream.ai/v1/web-search"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Accept": "application/json",
+        }
+        # The API has no result-count parameter, so the list is trimmed here.
+        limit = max(1, min(int(count or 10), 20))
+
+        logger.debug(f"[WebSearch] specstream: query='{query}', limit={limit}")
+        resp = requests.get(url, headers=headers, params={"q": query}, timeout=DEFAULT_TIMEOUT)
+
+        if resp.status_code == 401:
+            return ToolResult.fail("Error: Invalid SpecStream API key.")
+        if resp.status_code == 402:
+            return ToolResult.fail("Error: SpecStream balance is empty. Add funds at https://specstream.ai")
+        if resp.status_code == 503:
+            retry_after = (resp.headers or {}).get("Retry-After")
+            suffix = f" Retry after {retry_after} seconds." if retry_after else ""
+            return ToolResult.fail(f"Error: SpecStream API is temporarily unavailable.{suffix}")
+        if resp.status_code != 200:
+            return ToolResult.fail(f"Error: SpecStream API returned HTTP {resp.status_code}: {resp.text[:200]}")
+
+        data = (resp.json() or {}).get("data") or {}
+        results = []
+        for it in (data.get("sources") or [])[:limit]:
+            results.append({
+                "title": it.get("title") or "",
+                "url": it.get("url") or "",
+                "snippet": it.get("snippet") or "",
+                "siteName": it.get("site") or "",
+                "datePublished": it.get("published") or "",
+            })
+        return ToolResult.success({
+            "query": query, "backend": "specstream",
             "total": len(results), "count": len(results), "results": results,
         })
 

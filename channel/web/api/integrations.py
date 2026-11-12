@@ -12,6 +12,11 @@ device on the same network.
 
 ``web_host`` is where the server listens. Changing it here moves the running
 server to the new address, so no restart is needed.
+
+In a managed deployment a reverse proxy is the only way in: the listen address is
+its to route to, and this machine's addresses reach no one, so neither is
+shown or changed here. A ``web_public_url`` set in the environment wins over
+config.json at every start, so it is shown but not edited either.
 """
 
 import ipaddress
@@ -31,6 +36,7 @@ from channel.web.core._common import (
     _require_auth,
     _write_config_file_for_write,
 )
+from common.deployment import is_desktop, is_managed
 
 _PUBLIC_URL_RE = re.compile(r"^https?://[A-Za-z0-9.\-\[\]:]+(:\d{1,5})?(/[A-Za-z0-9._~\-/]*)?$")
 # Interfaces VPNs, containers and VMs create; their addresses are not on the
@@ -155,16 +161,27 @@ def public_url() -> str:
     return (conf().get("web_public_url") or "").strip().rstrip("/")
 
 
+def _behind_auth_proxy() -> bool:
+    return is_managed()
+
+
+def _public_url_fixed() -> bool:
+    return bool((os.environ.get("WEB_PUBLIC_URL") or "").strip())
+
+
 def _state(host: str = None, port: int = None) -> dict:
     host = _listen["host"] if host is None else host
     port = port or _listen["port"]
+    proxied = _behind_auth_proxy()
     return {
         "status": "success",
         "public_url": public_url(),
-        "lan_urls": lan_urls(host, port),
+        "public_url_fixed": _public_url_fixed(),
+        "lan_urls": [] if proxied else lan_urls(host, port),
         "listen": {"host": host, "port": port},
+        "listen_fixed": proxied,
         # The desktop app owns its backend's port.
-        "port_fixed": os.environ.get("COW_DESKTOP") == "1",
+        "port_fixed": is_desktop(),
         "local_only": is_loopback_host(host),
         "password_set": _is_password_enabled(),
     }
@@ -188,6 +205,10 @@ class IntegrationsHandler:
         except ValueError:
             data = {}
         data = data if isinstance(data, dict) else {}
+        if "public_url" in data and _public_url_fixed():
+            return _error("public_url_fixed", "public_url_fixed")
+        if ("web_host" in data or "web_port" in data) and _behind_auth_proxy():
+            return _error("listen_fixed", "listen_fixed")
         if "public_url" in data:
             value = str(data.get("public_url") or "").strip().rstrip("/")
             if value and not _PUBLIC_URL_RE.match(value):
@@ -232,7 +253,7 @@ def _port_problem(host: str, port: int) -> str:
         return "invalid_port"
     if port == _listen["port"]:
         return ""
-    if os.environ.get("COW_DESKTOP") == "1":
+    if is_desktop():
         return "port_fixed"
     return "" if can_bind(host, port) else "port_in_use"
 

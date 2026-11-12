@@ -11,6 +11,7 @@ import time
 from common.log import logger
 from common import i18n
 from cli.config_json import deep_merge_dicts as _deep_merge_dicts, merge_duplicate_keys
+from common.deployment import is_desktop
 
 # All available config keys are listed in this dict (use lowercase keys).
 # The values here are placeholders only; the program does NOT read them.
@@ -263,6 +264,8 @@ available_setting = {
     "modelscope_base_url": "https://api-inference.modelscope.cn/v1/chat/completions",
     # LinkAI platform config
     "use_linkai": False,
+    "cowagent_api_key": "",
+    "cowagent_api_base": "",  # empty means const.COWAGENT_API_BASE_CN
     "linkai_api_key": "",
     "linkai_app_code": "",
     "linkai_api_base": "https://api.link-ai.tech",
@@ -294,6 +297,7 @@ available_setting = {
         "enabled": False,
     },
     "web_public_url": "",  # Address shown in API examples, share links and embed code; empty uses the page's own
+    "websites_base_url": "",  # Public URL prefix a static server exposes the Agent's websites/ dir at; empty disables published links
     "mcp_oauth_redirect_base": "",  # Base URL for MCP OAuth callback (e.g. http://your-ip:9899); empty uses local web console
     "agent": True,  # whether to enable Agent mode
     "agent_workspace": "~/cow",  # agent workspace path, used to store skills, memory, etc.
@@ -521,6 +525,8 @@ def _quarantine_corrupted_config(config_path):
 CONFIG_TO_ENV = {
     "open_ai_api_key": "OPENAI_API_KEY",
     "open_ai_api_base": "OPENAI_API_BASE",
+    "cowagent_api_key": "COWAGENT_API_KEY",
+    "cowagent_api_base": "COWAGENT_API_BASE",
     "linkai_api_key": "LINKAI_API_KEY",
     "linkai_api_base": "LINKAI_API_BASE",
     "claude_api_key": "CLAUDE_API_KEY",
@@ -598,7 +604,7 @@ def load_config():
     # deleting the file. Source deployments deliberately keep the original
     # behavior (raise): a developer editing config.json wants a clear error to
     # fix, not to have their file silently backed up and replaced by defaults.
-    desktop_mode = os.environ.get("COW_DESKTOP") == "1"
+    desktop_mode = is_desktop()
     try:
         config = Config(json.loads(config_str, object_pairs_hook=_merge_duplicate_keys))
     except ValueError as parse_err:
@@ -641,7 +647,7 @@ def load_config():
     # never silently tightened by an upgrade. Non-desktop (docker, source) is
     # untouched. Placed before the env override so AGENT_PERMISSION_MODE still
     # wins if explicitly set.
-    if os.environ.get("COW_DESKTOP") == "1" and config_path != user_config_path:
+    if is_desktop() and config_path != user_config_path:
         config["agent_permission_mode"] = "workspace-write"
 
     # override config with environment variables.
@@ -735,6 +741,13 @@ def load_config():
             if val:
                 os.environ[env_key] = str(val)
                 injected += 1
+
+    # Skill scripts only see the environment, so hand them the same base the
+    # runtime falls back to when cowagent_api_base is unset.
+    if config.get("cowagent_api_key") and not os.environ.get("COWAGENT_API_BASE"):
+        from models.cowagent_provider import default_cowagent_api_base
+        os.environ["COWAGENT_API_BASE"] = default_cowagent_api_base()
+        injected += 1
 
     injected += _sync_skill_config_to_env(config.get("skills", {}))
     injected += sync_image_generation_custom_provider_env(config)

@@ -17,6 +17,7 @@ from common.i18n import t as _t
 from models.bot import Bot
 from models.openai_compatible_bot import OpenAICompatibleBot
 from models.custom_provider import resolve_custom_credentials, resolve_custom_headers, parse_custom_bot_type
+from models.cowagent_provider import resolve_cowagent_credentials
 from models.chatgpt.chat_gpt_session import ChatGPTSession
 from models.openai.open_ai_image import OpenAIImage
 from models.session_manager import SessionManager
@@ -48,6 +49,8 @@ class ChatGPTBot(Bot, OpenAIImage, OpenAICompatibleBot):
             # with automatic fallback to the legacy custom_api_key/base fields.
             self._api_key, self._api_base, custom_model = resolve_custom_credentials(self._bot_type)
             extra_headers = resolve_custom_headers(self._bot_type)
+        elif self._bot_type == const.COWAGENT:
+            self._api_key, self._api_base = resolve_cowagent_credentials()
         else:
             self._api_key = conf().get("open_ai_api_key")
             self._api_base = conf().get("open_ai_api_base") or None
@@ -91,6 +94,9 @@ class ChatGPTBot(Bot, OpenAIImage, OpenAICompatibleBot):
             api_key = custom_key
             api_base = custom_base
             model = custom_model or conf().get("model", "gpt-3.5-turbo")
+        elif self._bot_type == const.COWAGENT:
+            api_key, api_base = resolve_cowagent_credentials()
+            model = conf().get("model", "gpt-3.5-turbo")
         else:
             api_key = conf().get("open_ai_api_key")
             api_base = conf().get("open_ai_api_base")
@@ -108,7 +114,10 @@ class ChatGPTBot(Bot, OpenAIImage, OpenAICompatibleBot):
 
     def _openai_api_type(self) -> str:
         """``open_ai_api_type`` applies to the OpenAI endpoint only; custom
-        providers keep the default routing."""
+        providers keep the default routing. The CowAgent API serves every
+        model, gpt-6 included, over Chat Completions."""
+        if self._bot_type == const.COWAGENT:
+            return responses_adapter.API_TYPE_CHAT
         is_custom, _ = parse_custom_bot_type(self._bot_type)
         if is_custom:
             return responses_adapter.API_TYPE_AUTO
@@ -227,6 +236,10 @@ class ChatGPTBot(Bot, OpenAIImage, OpenAICompatibleBot):
                 model = context.get("gpt_model") or custom_model or conf().get("model", "gpt-4o")
                 api_key = context.get("openai_api_key") or custom_key
                 api_base = custom_base
+            elif self._bot_type == const.COWAGENT:
+                cowagent_key, api_base = resolve_cowagent_credentials()
+                model = context.get("gpt_model") or conf().get("model", "gpt-4o")
+                api_key = context.get("openai_api_key") or cowagent_key
             else:
                 model = context.get("gpt_model") or conf().get("model", "gpt-4o")
                 api_key = context.get("openai_api_key") or conf().get("open_ai_api_key")

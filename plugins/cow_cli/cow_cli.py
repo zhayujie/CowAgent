@@ -856,7 +856,10 @@ class CowCliPlugin(Plugin):
 
         if key == "model" and old_bot_type:
             from common import const
-            if old_bot_type not in (const.CUSTOM,):
+            # Aggregators and custom providers keep the model id they are given;
+            # re-inferring would switch them onto a wrong key.
+            keep_bot = old_bot_type in (const.CUSTOM, const.COWAGENT, const.LINKAI) or old_bot_type.startswith("custom:")
+            if not keep_bot:
                 resolved = self._resolve_bot_type_for_model(str(new_val))
                 if resolved:
                     updates["bot_type"] = resolved

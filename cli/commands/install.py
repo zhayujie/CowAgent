@@ -66,14 +66,22 @@ def _get_glibc_version():
         return None
 
 
+_CHINA_MIRROR_KEYWORDS = ("tsinghua", "aliyun", "npmmirror", "douban", "ustc", "huawei", "tencentyun")
+
+
 def _is_china_network() -> bool:
+    # Containers usually set the mirror through the environment, not pip.conf.
+    for name in ("PIP_INDEX_URL", "UV_INDEX_URL", "UV_DEFAULT_INDEX", "NPM_CONFIG_REGISTRY"):
+        url = (os.environ.get(name) or "").lower()
+        if any(kw in url for kw in _CHINA_MIRROR_KEYWORDS):
+            return True
     try:
         out = subprocess.check_output(
             [sys.executable, "-m", "pip", "config", "get", "global.index-url"],
             stderr=subprocess.DEVNULL,
         )
         url = out.decode().strip().lower()
-        return any(kw in url for kw in ("tsinghua", "aliyun", "npmmirror", "douban", "ustc", "huawei", "tencentyun"))
+        return any(kw in url for kw in _CHINA_MIRROR_KEYWORDS)
     except Exception:
         return False
 
@@ -355,7 +363,7 @@ def run_install_browser(
 
     if _is_headless_linux() and not legacy_mode:
         ver = _version_tuple(installed or "")
-        if ver >= (1, 57, 0):
+        if ver >= (1, 52, 0):
             pw_args.append("--only-shell")
             stream("  (headless shell for Linux server)", None)
         else:

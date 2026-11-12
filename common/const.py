@@ -16,8 +16,14 @@ MOONSHOT = "moonshot"
 MiniMax = "minimax"
 DEEPSEEK = "deepseek"
 MIMO = "mimo"  # Xiaomi MiMo
+COWAGENT = "cowagent"  # CowAgent model API, OpenAI-compatible
 CUSTOM = "custom"  # custom OpenAI-compatible API, bot_type won't auto-switch on model change
 MODELSCOPE = "modelscope"
+
+# CowAgent model API sites. Accounts and keys are separate per site: a key
+# only works against the site that issued it.
+COWAGENT_API_BASE_CN = "https://api.cowagent.cn/v1"
+COWAGENT_API_BASE_GLOBAL = "https://api.cowagent.ai/v1"
 
 # Model list
 # Claude (Anthropic)

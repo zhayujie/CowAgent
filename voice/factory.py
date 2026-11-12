@@ -76,4 +76,8 @@ def create_voice(voice_type):
         from voice.custom.custom_voice import CustomVoice
 
         return CustomVoice(voice_type)
+    elif voice_type == "cowagent":
+        from voice.cowagent.cowagent_voice import CowAgentVoice
+
+        return CowAgentVoice()
     raise RuntimeError

@@ -100,6 +100,10 @@ function _renderPublicUrl() {
     if (!input) return;
     // Empty means detected automatically; show what is in use rather than a blank.
     input.value = integrationsPublicUrl || _consoleOrigin();
+    // Set by the environment, which overrides any edit at the next start.
+    const fixed = !!(integrationsListen && integrationsListen.public_url_fixed);
+    input.readOnly = fixed;
+    document.getElementById('cfg-public-url-save').classList.toggle('hidden', fixed);
     _renderListen();
 }
 
@@ -108,6 +112,8 @@ function _renderListen() {
     const row = document.getElementById('cfg-listen-row');
     const data = integrationsListen;
     if (!row || !data || !data.listen || !data.listen.port) return;
+    // Behind an auth proxy the proxy owns the address, and this machine's are no use to anyone.
+    if (data.listen_fixed) return row.classList.add('hidden');
     _renderListenFields(data.listen.host, data.listen.port);
     _renderListenStatus();
     row.classList.remove('hidden');
@@ -363,7 +369,14 @@ function renderSharesView() {
         return;
     }
 
-    if (!feature.web_password_set) {
+    if (feature.reason === 'public_url_required') {
+        banner.className = 'mb-3';
+        banner.innerHTML = `
+            <div class="share-callout items-center">
+                <i class="fas fa-globe" style="margin-top:0"></i>
+                <span class="flex-1">${escapeHtml(t('shares_need_public_url'))}</span>
+            </div>`;
+    } else if (feature.reason === 'web_password_required') {
         banner.className = 'mb-3';
         banner.innerHTML = `
             <div class="share-callout items-center">

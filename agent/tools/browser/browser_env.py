@@ -22,6 +22,8 @@ import sys
 import shutil
 from typing import Optional, Dict, Any
 
+from common import deployment
+
 # Playwright browser channels we accept for the "system-chrome" mode, in
 # preference order. "chrome" covers stable Google Chrome; "msedge" is the
 # Chromium-based Edge shipped on every Windows 10/11.
@@ -90,7 +92,7 @@ def is_desktop() -> bool:
     (frozen exe). Desktop users have no `cow` CLI, so onboarding must point them
     at the in-chat `/install-browser` command rather than a terminal command.
     """
-    return os.environ.get("COW_DESKTOP") == "1"
+    return deployment.is_desktop()
 
 
 def has_playwright_package() -> bool:

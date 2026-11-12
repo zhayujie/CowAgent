@@ -12,7 +12,6 @@ from __future__ import annotations
 import json
 import mimetypes
 import os
-import re
 import threading
 import time
 from collections import deque
@@ -21,7 +20,7 @@ from typing import Any, Deque, Dict, Iterable, Iterator, List, Optional
 from urllib.parse import quote
 
 from agent.guest import store
-from agent.guest.paths import PathGuard
+from agent.guest.paths import MENTION_RE, PathGuard
 from agent.guest.runtime import GuestTurn, get_service
 from agent.guest.share import ShareState
 from common.log import logger
@@ -29,7 +28,6 @@ from common.log import logger
 MAX_RUN_EVENTS = 4000
 RUN_RETENTION_SECONDS = 15 * 60
 FILE_LINK_TTL = 24 * 3600
-_VPATH_RE = re.compile(r"/(?:work|data|skills)/[^\s)\"'<>\]`*]+")
 
 
 @dataclass
@@ -66,7 +64,7 @@ def links(state: ShareState, session_id: str, guard: PathGuard, texts: Iterable[
     inline ``![chart](/work/chart.png)`` or a link to a file renders."""
     out: Dict[str, str] = {}
     for text in texts:
-        for match in _VPATH_RE.finditer(text or ""):
+        for match in MENTION_RE.finditer(text or ""):
             vpath = match.group(0).rstrip(".,;:!?")
             if vpath in out or len(out) >= 50:
                 continue

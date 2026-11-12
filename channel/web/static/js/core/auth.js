@@ -173,9 +173,11 @@ function initApp() {
             version: data.version || '',
             install_kind: data.install_kind || 'unknown',
             update_supported: !!data.update_supported,
-            unsupported_reason: data.unsupported_reason || ''
+            unsupported_reason: data.unsupported_reason || '',
+            manage_url: data.manage_url || ''
         };
         _setSidebarVersionLabel(APP_VERSION);
+        _applyManagedInstall();
     }).catch(() => {
         _setSidebarVersionLabel('');
     });

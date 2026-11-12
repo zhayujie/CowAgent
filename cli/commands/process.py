@@ -341,6 +341,12 @@ def self_restart():
 @click.pass_context
 def update(ctx):
     """Update CowAgent and restart."""
+    from cli.update_service import is_managed, manage_url
+
+    if is_managed():
+        url = manage_url()
+        click.echo("This install is updated by whoever runs it." + (f" Manage it at {url}" if url else ""), err=True)
+        sys.exit(1)
     root = get_project_root()
 
     # 1. Stop service first so git pull won't conflict with running code

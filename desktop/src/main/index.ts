@@ -1,4 +1,4 @@
-import { app, BrowserWindow, session, shell, ipcMain, dialog, nativeImage, Notification, systemPreferences, crashReporter, Menu, clipboard, net } from 'electron'
+import { app, BrowserWindow, screen, session, shell, ipcMain, dialog, nativeImage, Notification, systemPreferences, crashReporter, Menu, clipboard, net } from 'electron'
 import path from 'path'
 import fs from 'fs'
 import os from 'os'
@@ -234,11 +234,57 @@ const isWin = process.platform === 'win32'
 // Persisted window bounds
 const windowStateFile = () => path.join(app.getPath('userData'), 'window-state.json')
 
-function loadWindowState(): { width: number; height: number; x?: number; y?: number } {
+type WindowBounds = { width: number; height: number; x?: number; y?: number }
+
+// How much of the window must overlap a display's work area for the user to
+// still see it and drag it back.
+const MIN_VISIBLE_PX = 100
+
+// A disconnected monitor, a resolution/DPI change, Windows' minimized
+// (-32000, -32000), or a third-party tool parking the window far away can all
+// leave saved bounds off every display: the window is shown (the taskbar
+// previews it) yet clicking it reveals nothing.
+function isOnSomeDisplay(b: { x: number; y: number; width: number; height: number }): boolean {
+  return screen.getAllDisplays().some(({ workArea: wa }) => {
+    const w = Math.min(b.x + b.width, wa.x + wa.width) - Math.max(b.x, wa.x)
+    const h = Math.min(b.y + b.height, wa.y + wa.height) - Math.max(b.y, wa.y)
+    return w >= MIN_VISIBLE_PX && h >= MIN_VISIBLE_PX
+  })
+}
+
+// Clamp the size to the primary work area and drop an off-screen position so
+// Electron centers the window instead.
+function sanitizeWindowState(s: WindowBounds): WindowBounds {
+  const wa = screen.getPrimaryDisplay().workArea
+  const width = Math.min(Math.max(s.width, 900), wa.width)
+  const height = Math.min(Math.max(s.height, 600), wa.height)
+  if (typeof s.x !== 'number' || typeof s.y !== 'number') return { width, height }
+  if (!isOnSomeDisplay({ x: s.x, y: s.y, width, height })) return { width, height }
+  return { width, height, x: s.x, y: s.y }
+}
+
+// Pull a window that ended up off-screen (e.g. its monitor was unplugged while
+// running) back to the center of the primary display.
+function ensureWindowOnScreen(win: BrowserWindow) {
+  if (win.isDestroyed() || win.isMinimized() || win.isFullScreen()) return
+  const b = win.getBounds()
+  if (isOnSomeDisplay(b)) return
+  const wa = screen.getPrimaryDisplay().workArea
+  const width = Math.min(b.width, wa.width)
+  const height = Math.min(b.height, wa.height)
+  win.setBounds({
+    x: Math.round(wa.x + (wa.width - width) / 2),
+    y: Math.round(wa.y + (wa.height - height) / 2),
+    width,
+    height,
+  })
+}
+
+function loadWindowState(): WindowBounds {
   try {
     const raw = fs.readFileSync(windowStateFile(), 'utf-8')
     const s = JSON.parse(raw)
-    if (typeof s.width === 'number' && typeof s.height === 'number') return s
+    if (typeof s.width === 'number' && typeof s.height === 'number') return sanitizeWindowState(s)
   } catch {
     /* first run or unreadable */
   }
@@ -248,7 +294,10 @@ function loadWindowState(): { width: number; height: number; x?: number; y?: num
 function saveWindowState() {
   if (!mainWindow || mainWindow.isDestroyed()) return
   if (mainWindow.isMinimized() || mainWindow.isFullScreen()) return
-  const b = mainWindow.getBounds()
+  // Keep the restore size while maximized, and never persist an off-screen
+  // position, or the next launch would open there again.
+  const b = mainWindow.isMaximized() ? mainWindow.getNormalBounds() : mainWindow.getBounds()
+  if (!isOnSomeDisplay(b)) return
   try {
     fs.writeFileSync(windowStateFile(), JSON.stringify(b))
   } catch {
@@ -389,6 +438,18 @@ function createWindow() {
   mainWindow.on('move', persist)
   mainWindow.on('maximize', emitMaximizeState)
   mainWindow.on('unmaximize', emitMaximizeState)
+  // Every way of bringing the window up (tray, taskbar, second-instance,
+  // notification click) ends in a show event.
+  mainWindow.on('show', () => mainWindow && ensureWindowOnScreen(mainWindow))
+  const recheck = () => {
+    if (mainWindow?.isVisible()) ensureWindowOnScreen(mainWindow)
+  }
+  screen.on('display-removed', recheck)
+  screen.on('display-metrics-changed', recheck)
+  mainWindow.on('closed', () => {
+    screen.removeListener('display-removed', recheck)
+    screen.removeListener('display-metrics-changed', recheck)
+  })
 
   const rendererHtml = path.join(__dirname, '../renderer/index.html')
 

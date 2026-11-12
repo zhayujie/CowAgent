@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from agent.guest import branding, policy, store
+from common.deployment import is_managed
 from agent.guest.profile import (
     GuestProfile,
     load_profile,
@@ -42,9 +43,15 @@ def feature_status() -> Dict[str, Any]:
     settings = conf().get("guest_share") or {}
     enabled = isinstance(settings, dict) and settings.get("enabled") is True
     password_set = bool(str(conf().get("web_password", "") or ""))
+    auth_proxy = is_managed()
     reason = ""
     if not enabled:
         reason = "disabled"
+    elif auth_proxy:
+        # The proxy signs owners in, so visitors only get in at the public
+        # address, which the proxy opens to guest pages alone.
+        if not str(conf().get("web_public_url", "") or "").strip():
+            reason = "public_url_required"
     elif not password_set:
         # The console shares the port with the guest pages. Without a console
         # password every visitor could open the console and every management

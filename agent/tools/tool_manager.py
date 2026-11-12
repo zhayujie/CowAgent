@@ -331,17 +331,20 @@ class ToolManager:
         if os.path.exists(mcp_json_path):
             try:
                 with open(mcp_json_path, "r", encoding="utf-8") as f:
-                    data = _json.load(f)
-                # Must match service.load_servers: an empty {"mcpServers": {}}
-                # means no servers, not a server named "mcpServers".
-                raw = data.get("mcpServers")
-                if raw is None:
-                    raw = data.get("mcp_servers", data)
-                # DEBUG: with N agents this fires N times for the same shared
-                # mcp.json; the real boot is logged once at INFO further below.
-                logger.debug(f"[ToolManager] Loading MCP config from {mcp_json_path}")
-                from agent.tools.mcp.service import mcp_is_disabled
-                return [cfg for cfg in _normalize_mcp_configs(raw) if not mcp_is_disabled(cfg)]
+                    text = f.read()
+                # Must match service.load_servers: a blank file counts as absent.
+                if text.strip():
+                    data = _json.loads(text)
+                    # An empty {"mcpServers": {}} means no servers, not a server
+                    # named "mcpServers".
+                    raw = data.get("mcpServers")
+                    if raw is None:
+                        raw = data.get("mcp_servers", data)
+                    # DEBUG: with N agents this fires N times for the same shared
+                    # mcp.json; the real boot is logged once at INFO further below.
+                    logger.debug(f"[ToolManager] Loading MCP config from {mcp_json_path}")
+                    from agent.tools.mcp.service import mcp_is_disabled
+                    return [cfg for cfg in _normalize_mcp_configs(raw) if not mcp_is_disabled(cfg)]
             except Exception as e:
                 logger.warning(f"[ToolManager] Failed to read {mcp_json_path}: {e}, falling back to config.json")
 

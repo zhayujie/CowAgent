@@ -2,7 +2,7 @@
 
 可以根据需求设置入群欢迎、群聊拍一拍、退群等消息的自定义提示词，也支持为每个群设置对应的固定欢迎语。
 
-该插件也是用户根据需求开发自定义插件的示例插件，参考[插件开发说明](https://github.com/zhayujie/chatgpt-on-wechat/tree/master/plugins)
+该插件也是用户根据需求开发自定义插件的示例插件，参考[插件开发说明](https://github.com/zhayujie/CowAgent/tree/master/plugins)
 
 ## 插件配置
 
@@ -30,12 +30,12 @@
 
 注意：
 
- - 设置全局的用户进群固定欢迎语，可以在***项目根目录下***的`config.json`文件里，可以添加参数`"group_welcome_msg": "" `，参考 [#1482](https://github.com/zhayujie/chatgpt-on-wechat/pull/1482)
+ - 设置全局的用户进群固定欢迎语，可以在***项目根目录下***的`config.json`文件里，可以添加参数`"group_welcome_msg": "" `，参考 [#1482](https://github.com/zhayujie/CowAgent/pull/1482)
  - 为每个群设置固定的欢迎语，可以在`"group_welc_fixed_msg": {}`配置群聊名和对应的固定欢迎语，优先级高于全局固定欢迎语
  - 如果没有配置以上两个参数，则使用随机欢迎语，如需设定风格，语言等，修改`"group_welc_prompt": `即可
  - 如果使用LinkAI的服务，想在随机欢迎中结合LinkAI应用的设定，配置`"use_character_desc": true `
  - 实际 `config.json` 配置中应保证json格式，不应携带 '#' 及后面的注释
- - 如果是`docker`部署，可通过映射 `plugins/config.json` 到容器中来完成插件配置，参考[文档](https://github.com/zhayujie/chatgpt-on-wechat#3-%E6%8F%92%E4%BB%B6%E4%BD%BF%E7%94%A8)
+ - 如果是`docker`部署，可通过映射 `plugins/config.json` 到容器中来完成插件配置，参考[文档](https://github.com/zhayujie/CowAgent#3-%E6%8F%92%E4%BB%B6%E4%BD%BF%E7%94%A8)
 
 
 

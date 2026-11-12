@@ -85,6 +85,9 @@ _MODEL_PREFIX_TO_PROVIDER = [
     ("deepseek-", "DeepSeek"),
 ]
 
+# Vision model of the CowAgent API when the user has not pinned one.
+_COWAGENT_VISION_MODEL = "deepseek-v4.1-flash"
+
 # Model prefixes that natively belong to OpenAI / LinkAI (raw HTTP providers).
 _OPENAI_MODEL_PREFIXES = ("gpt-", "o1-", "o3-", "o4-", "chatgpt-")
 
@@ -94,6 +97,7 @@ _OPENAI_MODEL_PREFIXES = ("gpt-", "o1-", "o3-", "o4-", "chatgpt-")
 _PROVIDER_ID_TO_DISPLAY = {
     "openai": "OpenAI",
     "linkai": "LinkAI",
+    "cowagent": "CowAgent",
     "moonshot": "Moonshot",
     "doubao": "Doubao",
     "dashscope": "DashScope",
@@ -241,8 +245,8 @@ class Vision(BaseTool):
              and its API key is configured) — using the user-specified model
              name verbatim.
           2. Auto-discovery chain as fallback:
-               - use_linkai=true → [LinkAI, MainModel?, OtherModels…, OpenAI]
-               - default         → [MainModel?, OtherModels…, OpenAI, LinkAI]
+               - use_linkai=true → [LinkAI, MainModel?, OtherModels…, OpenAI, CowAgent]
+               - default         → [MainModel?, OtherModels…, OpenAI, CowAgent, LinkAI]
              MainModel is only included when the main bot is known to support
              vision (see _main_bot_supports_vision).
 
@@ -274,10 +278,12 @@ class Vision(BaseTool):
             self._append_provider(fallback, self._build_main_model_provider)
             self._append_other_model_providers(fallback, preferred_model=user_model)
             self._append_provider(fallback, lambda: self._build_openai_provider(user_model))
+            self._append_provider(fallback, self._build_cowagent_provider)
         else:
             self._append_provider(fallback, self._build_main_model_provider)
             self._append_other_model_providers(fallback, preferred_model=user_model)
             self._append_provider(fallback, lambda: self._build_openai_provider(user_model))
+            self._append_provider(fallback, self._build_cowagent_provider)
             self._append_provider(fallback, lambda: self._build_linkai_provider(user_model))
 
         for p in fallback:
@@ -399,6 +405,9 @@ class Vision(BaseTool):
             return [p] if p else None
         if provider_id == "linkai":
             p = self._build_linkai_provider(user_model)
+            return [p] if p else None
+        if provider_id == "cowagent":
+            p = self._build_cowagent_provider(user_model)
             return [p] if p else None
 
         # Discoverable bot-backed providers.
@@ -681,6 +690,22 @@ class Vision(BaseTool):
             api_base=self._ensure_v1(api_base),
             extra_headers=extra,
             model_override=preferred_model,
+        )
+
+    def _build_cowagent_provider(self, preferred_model: Optional[str] = None) -> Optional[VisionProvider]:
+        """The CowAgent API over Chat Completions. ``preferred_model`` is only
+        passed when the user pinned this provider: as a fallback link it uses
+        its own vision model, since a name meant for another vendor may not be
+        served here."""
+        from models.cowagent_provider import resolve_cowagent_credentials
+        api_key, api_base = resolve_cowagent_credentials()
+        if not api_key:
+            return None
+        return VisionProvider(
+            name="CowAgent",
+            api_key=api_key,
+            api_base=self._ensure_v1(api_base),
+            model_override=preferred_model or _COWAGENT_VISION_MODEL,
         )
 
     def _build_custom_provider(self, provider_id: str, preferred_model: Optional[str] = None) -> Optional[VisionProvider]:

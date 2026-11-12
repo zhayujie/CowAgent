@@ -18,6 +18,7 @@ from agent.tools.bash.decode import decode_output
 from agent.tools.utils.truncate import truncate_tail, format_size, DEFAULT_MAX_LINES, DEFAULT_MAX_BYTES
 from common.log import logger
 from common.utils import expand_path
+from common.deployment import is_desktop
 
 
 class _Cancelled(Exception):
@@ -91,7 +92,7 @@ SAFETY:
         self._description_template = self.description
         # Desktop runs on the user's own machine (often non-technical users),
         # so require explicit confirmation for destructive ops outside the workspace.
-        if os.environ.get("COW_DESKTOP") == "1":
+        if is_desktop():
             self._description_template = self._description_template.replace(
                 "- For destructive commands out of workspace ({cwd}), explain and confirm first",
                 "- For delete or destructive operations on files out of workspace ({cwd}), "

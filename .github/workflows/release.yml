@@ -42,7 +42,7 @@ jobs:
       matrix:
         include:
           - name: macOS arm64
-            os: macos-14
+            os: macos-15
             platform: mac
             arch: arm64
             eb_flags: --mac --arm64

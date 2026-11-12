@@ -7,6 +7,7 @@ from typing import Optional
 from urllib.parse import urlparse
 from common.log import logger
 from common.markdown_fence import transform_outside_fences
+from common.deployment import is_desktop
 
 def fsize(file):
     if isinstance(file, io.BytesIO):
@@ -308,7 +309,7 @@ def get_client_source() -> str:
     explicit = (os.environ.get("COW_CLIENT_SOURCE") or "").strip()
     if explicit:
         return explicit
-    if os.environ.get("COW_DESKTOP") == "1":
+    if is_desktop():
         return "desktop"
     return "open-source"
 

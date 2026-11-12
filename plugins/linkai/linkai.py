@@ -182,7 +182,7 @@ class LinkAI(Plugin):
                 is_open = False
             if not self.sum_config:
                 _set_reply_text(
-                    f"插件未启用summary功能，请参考以下链添加插件配置\n\nhttps://github.com/zhayujie/chatgpt-on-wechat/blob/master/plugins/linkai/README.md",
+                    f"插件未启用summary功能，请参考以下链添加插件配置\n\nhttps://github.com/zhayujie/CowAgent/blob/master/plugins/linkai/README.md",
                     e_context, level=ReplyType.INFO)
             else:
                 self.sum_config["enabled"] = is_open

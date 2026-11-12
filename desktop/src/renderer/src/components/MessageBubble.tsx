@@ -11,7 +11,7 @@ import FileCard from './FileCard'
 import { useLightboxStore } from './Lightbox'
 import AgentAvatar from './AgentAvatar'
 import Tooltip from './Tooltip'
-import { useAgentStore, findAgent } from '../store/agentStore'
+import { useAgentStore } from '../store/agentStore'
 import { useSessionSettingsStore, selectSharedConversation } from '../store/sessionSettingsStore'
 import { product } from '@product'
 
@@ -25,6 +25,10 @@ interface MessageBubbleProps {
   onMediaLoad?: () => void
   /** Seq of the question opening this turn, for the file cards it shows. */
   turnSeq?: number | null
+  /** Current UI language. Unused in the body: the bubble is memoized, and `t()`
+   *  reads a module global, so this prop is what makes a language switch
+   *  re-render it. */
+  lang?: string
 }
 
 function fmtTime(ts: number): string {
@@ -92,7 +96,9 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   // is what a lone default Agent has always worn.
   const activeAgentId = useAgentStore((s) => s.activeAgentId)
   const speakerId = (message.extras?.agent_id as string) || activeAgentId
-  const speaker = speakerId ? findAgent(speakerId) : undefined
+  // Subscribed rather than read once: a memoized bubble only re-renders on
+  // its own changes, so an edited name or avatar must reach it directly.
+  const speaker = useAgentStore((s) => (speakerId ? s.agents.find((a) => a.id === speakerId) : undefined))
   // In a group conversation several Agents answer, so each reply is labelled
   // with its speaker's name (as in the web console). A solo chat keeps the
   // plain bubble — the face alone says who it is.
@@ -329,4 +335,6 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   )
 }
 
-export default MessageBubble
+// Memoized: a streaming turn commits every frame, and re-rendering every
+// bubble of a long session on each commit froze the window.
+export default React.memo(MessageBubble)

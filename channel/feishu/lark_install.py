@@ -33,6 +33,8 @@ import tempfile
 import urllib.request
 import zipfile
 
+from common.deployment import is_desktop
+
 try:
     from common.log import logger
 except Exception:  # pragma: no cover - common may be unavailable in isolation
@@ -201,7 +203,7 @@ def ensure(allow_install: bool = True) -> None:
         raise _install_error()
 
     # Source / non-desktop installs get it from requirements.txt.
-    if os.environ.get("COW_DESKTOP") != "1":
+    if not is_desktop():
         raise _install_error()
 
     logger.warning(

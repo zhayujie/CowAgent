@@ -45,7 +45,7 @@ class Keyword(Plugin):
             self.handlers[Event.ON_HANDLE_CONTEXT] = self.on_handle_context
             logger.debug("[keyword] inited.")
         except Exception as e:
-            logger.warn("[keyword] init failed, ignore or see https://github.com/zhayujie/chatgpt-on-wechat/tree/master/plugins/keyword .")
+            logger.warn("[keyword] init failed, ignore or see https://github.com/zhayujie/CowAgent/tree/master/plugins/keyword .")
             raise e
 
     def on_handle_context(self, e_context: EventContext):

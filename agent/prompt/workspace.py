@@ -462,7 +462,7 @@ _RULE_TEMPLATE_ZH = """# RULE.md - 工作空间规则
 │   └── <子目录>/     # 按需创建，参考 index.md 已有分类
 │
 ├── skills/           # 技能
-├── websites/         # 网页产物
+├── websites/         # 网页及对外分享的文件
 └── tmp/              # 系统临时文件（自动管理，勿手动存放重要文件）
 ```
 
@@ -561,7 +561,7 @@ This folder is your home. Treat it well.
 │   └── <subdirs>/    # Created on demand, see existing categories in index.md
 │
 ├── skills/           # Skills
-├── websites/         # Web artifacts
+├── websites/         # Web pages and files to share
 └── tmp/              # System temp files (auto-managed, don't store important files here)
 ```
 

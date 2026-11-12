@@ -1,0 +1,132 @@
+---
+title: CowAgent
+description: "CowAgent 模型服务，一个 API Key 即可使用 DeepSeek、Claude、GPT、Gemini、Qwen 等主流模型。"
+---
+
+除文本对话外，同一个 Key 还能用于图像理解、图像生成、语音、向量和联网搜索。在 Web 控制台填写一次，下方各项能力即可直接使用。
+
+CowAgent 分为国内站和全球站两个站点，账号和 API Key 互不通用，Key 只能在签发它的站点使用：
+
+| 站点 | API Base | 控制台（创建 API Key） |
+| --- | --- | --- |
+| 国内站（默认） | `https://api.cowagent.cn/v1` | [cloud.cowagent.cn](https://cloud.cowagent.cn/keys) |
+| 全球站 | `https://api.cowagent.ai/v1` | [cloud.cowagent.ai](https://cloud.cowagent.ai/keys) |
+
+<Tip>
+  推荐在 Web 控制台「模型管理」页面配置：在 CowAgent 厂商弹窗中点击「国内站 / 全球站」即可切换 API Base，下方各项能力都会复用同一个 Key。
+</Tip>
+
+## 文本对话
+
+```json
+{
+  "bot_type": "cowagent",
+  "model": "deepseek-v4.1-flash",
+  "cowagent_api_key": "YOUR_API_KEY",
+  "cowagent_api_base": "https://api.cowagent.cn/v1"
+}
+```
+
+| 参数 | 说明 |
+| --- | --- |
+| `bot_type` | 设为 `cowagent` |
+| `cowagent_api_key` | 在 [国内站控制台](https://cloud.cowagent.cn/keys) 创建 |
+| `cowagent_api_base` | 国内站填 `https://api.cowagent.cn/v1`，全球站填 `https://api.cowagent.ai/v1`。不填时按界面语言选择：中文为国内站，其他语言为全球站 |
+| `model` | 填写下方模型 ID |
+
+可选模型：`deepseek-v4.1-flash`、`deepseek-v4-pro`、`deepseek-v4-flash`、`MiniMax-M3.1-Flash`、`MiniMax-M3`、`claude-opus-5-5`、`claude-sonnet-5-5`、`claude-haiku-5-5`、`claude-fable-5-1`、`gpt-6.1-terra`、`gpt-6.1-sol`、`gpt-6-luna`、`gpt-6-astra`、`gemini-4-argon`、`gemini-3.8-flash`、`glm-5.3-flash`、`glm-5.3`、`qwen3.8-flash`、`qwen3.8-max`、`qwen3.6-plus`、`doubao-seed-2-1-turbo`、`kimi-k3.1-pro`、`kimi-k3`。完整列表与价格以控制台为准。
+
+## 图像理解
+
+配置 Key 后无需额外配置：主模型支持图像输入时直接由主模型识图，否则 Vision 工具默认使用 `deepseek-v4.1-flash`。如需指定模型：
+
+```json
+{
+  "tools": {
+    "vision": {
+      "provider": "cowagent",
+      "model": "deepseek-v4.1-flash"
+    }
+  }
+}
+```
+
+支持图像输入的模型：`deepseek-v4.1-flash`、`MiniMax-M3.1-Flash`、`gpt-6-luna`、`gpt-6.1-terra`、`gpt-6.1-sol`、`gpt-6-astra`、`claude-fable-5-1`、`gemini-4-argon`、`glm-5.3-flash`、`qwen3.8-flash`、`qwen3.8-max`、`qwen3.6-plus`、`doubao-seed-2-1-turbo`。
+
+## 图像生成
+
+```json
+{
+  "skills": {
+    "image-generation": {
+      "provider": "cowagent",
+      "model": "gpt-image-2.5-flare"
+    }
+  }
+}
+```
+
+| 模型 ID | 说明 |
+| --- | --- |
+| `gpt-image-2.5-flare` | OpenAI，默认 |
+| `gpt-image-2.5-sunburst` | OpenAI，编辑精度更高 |
+| `gemini-3.1-flash-image` | Nano Banana 2 |
+| `gemini-3-pro-image` | Nano Banana Pro |
+| `seedream-5.0-pro` | 字节豆包 Seedream |
+| `seedream-5.0-lite` | 字节豆包 Seedream |
+
+## 语音识别
+
+```json
+{
+  "voice_to_text": "cowagent",
+  "voice_to_text_model": "seed-asr"
+}
+```
+
+## 语音合成
+
+```json
+{
+  "text_to_voice": "cowagent",
+  "text_to_voice_model": "seed-tts-2.0",
+  "tts_voice_id": "zh_female_vv_uranus_bigtts"
+}
+```
+
+| `tts_voice_id` | 音色 |
+| --- | --- |
+| `zh_female_vv_uranus_bigtts` | 中文 · 女声 · Vivi（默认） |
+| `zh_female_xiaohe_uranus_bigtts` | 中文 · 女声 · 小何 |
+| `zh_male_m191_uranus_bigtts` | 中文 · 男声 · 云舟 |
+| `zh_male_taocheng_uranus_bigtts` | 中文 · 男声 · 小天 |
+| `zh_male_liufei_uranus_bigtts` | 中文 · 男声 · 刘飞 |
+| `en_male_tim_uranus_bigtts` | 英文 · 男声 · Tim |
+| `en_female_dacey_uranus_bigtts` | 英文 · 女声 · Dacey |
+| `en_female_stokie_uranus_bigtts` | 英文 · 女声 · Stokie |
+
+## 向量
+
+```json
+{
+  "embedding_provider": "cowagent",
+  "embedding_model": "text-embedding-3-small"
+}
+```
+
+默认模型 `text-embedding-3-small`（1536 维）。修改 embedding 后需执行 `/memory rebuild-index` 命令重建索引。
+
+## 联网搜索
+
+配置 Key 后 [web_search](/zh/tools/web-search) 工具即可使用 CowAgent 搜索，无需额外配置。如需固定使用：
+
+```json
+{
+  "tools": {
+    "web_search": {
+      "strategy": "fixed",
+      "provider": "cowagent"
+    }
+  }
+}
+```
