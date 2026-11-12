@@ -19,16 +19,16 @@
   "navbar": {
     "links": [
       {
-        "label": "官网",
+        "label": "Website",
         "href": "https://cowagent.ai/"
       },
       {
-        "label": "下载",
+        "label": "Download",
         "href": "https://cowagent.ai/download/"
       },
       {
-        "label": "博客",
-        "href": "https://cowagent.ai/zh/blog/"
+        "label": "Blog",
+        "href": "https://cowagent.ai/blog/"
       },
       {
         "label": "GitHub",
@@ -110,6 +110,7 @@
                 "pages": [
                   "guide/quick-start",
                   "guide/desktop",
+                  "guide/cloud",
                   "guide/manual-install",
                   "guide/upgrade"
                 ]
@@ -355,15 +356,15 @@
           "links": [
             {
               "label": "官网",
-              "href": "https://cowagent.ai/?lang=zh"
+              "href": "https://cowagent.cn/"
             },
             {
               "label": "下载",
-              "href": "https://cowagent.ai/zh/download/"
+              "href": "https://cowagent.cn/zh/download/"
             },
             {
               "label": "博客",
-              "href": "https://cowagent.ai/zh/blog/"
+              "href": "https://cowagent.cn/zh/blog/"
             },
             {
               "label": "GitHub",
@@ -393,6 +394,7 @@
                 "pages": [
                   "zh/guide/quick-start",
                   "zh/guide/desktop",
+                  "zh/guide/cloud",
                   "zh/guide/manual-install",
                   "zh/guide/upgrade"
                 ]

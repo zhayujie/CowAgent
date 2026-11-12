@@ -17,17 +17,17 @@
   [<a href="../../README.md">English</a>] | [中文] | [<a href="README-Hant.md">繁體中文</a>] | [<a href="../ja/README.md">日本語</a>]
 </p>
 
-**CowAgent** 是一个开源的超级 AI 助理，能够主动思考和规划任务、操作计算机和外部资源、创造和执行 Skills、构建知识库与长期记忆、创建多智能体团队，并通过自主进化与你一同成长，是 Agent Harness 工程的最佳实践之一。
+**CowAgent** 是开源的 Personal Agent，属于你自己的超级 AI 助理：能主动规划任务，调用工具、技能与 MCP，通过长期记忆、知识库和自进化能力越用越懂你，同时也是开放可扩展的 Agent Harness。
 
-CowAgent 轻量、易部署、可扩展，自由接入主流大模型，覆盖微信、飞书、钉钉、企微、QQ、Telegram、Slack、网页等消息通道，7×24 运行于个人电脑或服务器中。
+CowAgent 支持多模型、多通道、多智能体，轻量且易于扩展，可接入微信、飞书、钉钉、企微、QQ、Telegram、Slack、网页等消息通道，7×24 小时运行于个人电脑或服务器中。
 
 <p align="center">
-  <a href="https://cowagent.ai/?lang=zh">🌐 官网</a> &nbsp;·&nbsp;
+  <a href="https://cowagent.cn/">🌐 官网</a> &nbsp;·&nbsp;
   <a href="https://docs.cowagent.ai/zh/">📖 文档中心</a> &nbsp;·&nbsp;
   <a href="https://docs.cowagent.ai/zh/guide/quick-start">🚀 快速开始</a> &nbsp;·&nbsp;
   <a href="https://skills.cowagent.ai/">🧩 技能广场</a> &nbsp;·&nbsp;
-  <a href="https://cowagent.ai/zh/download/">💻 下载客户端</a> &nbsp;·&nbsp;
-  <a href="https://link-ai.tech/cowagent/create?utm_source=cowagent&utm_medium=readme&utm_campaign=nav">☁️ 在线体验</a>
+  <a href="https://cowagent.cn/zh/download/">💻 下载客户端</a> &nbsp;·&nbsp;
+  <a href="https://cloud.cowagent.cn">☁️ 在线使用</a>
 </p>
 
 <br/>
@@ -37,7 +37,7 @@ CowAgent 轻量、易部署、可扩展，自由接入主流大模型，覆盖�
 <p align="center">
   <video src="https://github.com/user-attachments/assets/a2d8fb12-f294-42d6-a569-c4a6ceedab1d" controls muted playsinline width="720">
     你的浏览器无法播放该视频。
-    <a href="https://cowagent.ai/?lang=zh">前往官网观看演示 →</a>
+    <a href="https://cowagent.cn/">前往官网观看演示 →</a>
   </video>
 </p>
 
@@ -57,7 +57,7 @@ CowAgent 轻量、易部署、可扩展，自由接入主流大模型，覆盖�
 | [通道](https://docs.cowagent.ai/zh/channels) | 一个 Agent 同时接入 Web、微信、飞书、钉钉、企微、QQ、公众号、Telegram、Slack 等多个渠道 |
 | 多模态 | 文本、图片、语音、文件全消息类型支持，覆盖识别、生成、收发 |
 | [模型](https://docs.cowagent.ai/zh/models) | DeepSeek、Claude、Gemini、GPT、GLM、Qwen、Kimi、MiniMax、Doubao 等主流厂商，配置一行切换 |
-| [部署](https://docs.cowagent.ai/zh/guide/quick-start) | 一键脚本安装，Web 控制台统一管理；本地、Docker、服务器多种部署方式 |
+| [部署](https://docs.cowagent.ai/zh/guide/quick-start) | 一键脚本安装或桌面客户端，Web 控制台统一管理；支持本地、Docker、服务器多种部署方式 |
 
 <br/>
 
@@ -110,7 +110,9 @@ cow skill install <名称>           # 安装技能
 cow install-browser                # 安装浏览器工具
 ```
 
-> 💻 桌面客户端：前往 **[下载 CowAgent 桌面客户端](https://cowagent.ai/zh/download/)**（macOS / Windows），内置 Agent 运行环境，开箱即用。
+> 💻 桌面客户端：前往 **[下载 CowAgent 桌面客户端](https://cowagent.cn/zh/download/)**（macOS / Windows），内置 Agent 运行环境，开箱即用。
+
+> ☁️ 在线使用：不想自己部署，也可以直接 **[打开云端控制台](https://cloud.cowagent.cn)** 创建专属实例，内置模型服务，7×24 小时在线。
 
 <br/>
 
@@ -141,10 +143,13 @@ CowAgent 支持国内外主流厂商的大语言模型。**文本对话、图像
 | [豆包 Doubao](https://docs.cowagent.ai/zh/models/doubao) | doubao-seed-2.1 系列 | ✅ | ✅ | ✅ | | | ✅ |
 | [百度ERNIE](https://docs.cowagent.ai/zh/models/qianfan) | ernie-5.1 | ✅ | ✅ | | | | |
 | [小米 MiMo](https://docs.cowagent.ai/zh/models/mimo) | mimo-v2.6-pro / v2.6-flash | ✅ | ✅ | | ✅ | ✅ | |
-| [LinkAI](https://docs.cowagent.ai/zh/models/linkai) | 一个 Key 接入 100+ 模型 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| [CowAgent](https://docs.cowagent.ai/zh/models/cowagent) | 一个 Key 接入 DeepSeek / Claude / GPT 等 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| [LinkAI](https://docs.cowagent.ai/zh/models/linkai) | LinkAI 平台模型接入 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | [自定义](https://docs.cowagent.ai/zh/models/custom) | 本地模型 / 三方代理 | ✅ | | | | | |
 
 > 推荐通过 Web 控制台在线配置，无需手动编辑文件。手动配置请参考各厂商文档，详见 [模型概览](https://docs.cowagent.ai/zh/models)。
+
+> 不想分别申请各厂商 Key，也可以用 [CowAgent 模型服务](https://docs.cowagent.ai/zh/models/cowagent)，一个 Key 覆盖对话、图像、语音、向量和联网搜索。
 
 <br/>
 
@@ -286,9 +291,9 @@ CowAgent 支持国内外主流厂商的大语言模型。**文本对话、图像
 
 <a href="https://link-ai.tech/?utm_source=cowagent&utm_medium=readme&utm_campaign=enterprise" target="_blank"><img width="650" src="https://cdn.jsdelivr.net/gh/zhayujie/cowagent-assets@main/community/link-ai-intro.png" /></a>
 
-> [LinkAI](https://link-ai.tech/?utm_source=cowagent&utm_medium=readme&utm_campaign=enterprise) 是面向企业和个人的一站式 AI 智能体平台，为 CowAgent 提供云端托管和企业级支持：
+> [LinkAI](https://link-ai.tech/?utm_source=cowagent&utm_medium=readme&utm_campaign=enterprise) 是面向企业的一站式 AI 智能体平台，为 CowAgent 提供企业级托管与能力扩展：
 >
-> - **🚀 免部署在线运行**：无需服务器即可创建 [CowAgent 在线助理](https://link-ai.tech/cowagent/create?utm_source=cowagent&utm_medium=readme&utm_campaign=enterprise)，1 分钟拥有专属 Agent
+> - **🚀 团队托管**：无需自建服务器，为团队统一创建和管理 [Agent 助理](https://link-ai.tech/cowagent/create?utm_source=cowagent&utm_medium=readme&utm_campaign=enterprise)
 > - **🧠 Agent 基础设施**：聚合主流大模型、知识库、数据库、技能、工作流，提供开箱即用的 Agent 能力扩展
 > - **🏢 企业级协作**：提供团队协作、权限分级、审计日志、私有化部署等能力，让 Agent 安全落地企业场景
 
