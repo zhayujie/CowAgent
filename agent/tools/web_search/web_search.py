@@ -12,14 +12,15 @@
   - firecrawl (https://www.firecrawl.dev/?utm_source=cowagent&utm_medium=integration, context API for AI agents)
   - specstream (https://specstream.ai/docs/search-api, web search and page extraction API)
   - olostep (https://docs.olostep.com, web search, scraping and crawling API for AI agents)
+  - searchapi (https://www.searchapi.io, Google SERP API)
   - searxng (https://docs.searxng.org, self-hosted meta search engine)
   - keenable (https://keenable.ai, keyless tier behind an explicit opt-in)
 
 Provider selection
   - strategy 'auto' (default): pick the first configured provider in the
     canonical order [deepseek, bocha, qianfan, zhipu, cowagent, linkai, anysearch,
-    serply, tavily, outcrawl, firecrawl, specstream, olostep, searxng, keenable]. Keenable counts as configured with a
-    key or with the explicit `keenable_anonymous` opt-in (same contract as
+    serply, tavily, outcrawl, firecrawl, specstream, olostep, searchapi, searxng, keenable].
+    Keenable counts as configured with a key or with the explicit `keenable_anonymous` opt-in (same contract as
     `anysearch_anonymous`). When the caller passes an explicit `provider`
     it overrides the pick; an invalid/unconfigured one silently falls back
     to the auto order.
@@ -43,6 +44,7 @@ Credentials
   - firecrawl: tools.web_search.firecrawl_api_key  ->  env FIRECRAWL_API_KEY
   - specstream: tools.web_search.specstream_api_key  ->  env SPECSTREAM_API_KEY
   - olostep : tools.web_search.olostep_api_key  ->  env OLOSTEP_API_KEY
+  - searchapi: tools.web_search.searchapi_api_key  ->  env SEARCHAPI_API_KEY
   - searxng : tools.web_search.searxng_url     ->  env SEARXNG_URL
   - keenable: tools.web_search.keenable_api_key -> env KEENABLE_API_KEY (optional,
               only lifts the rate limits of the keyless public endpoint);
@@ -70,9 +72,9 @@ DEFAULT_TIMEOUT = 30
 # zhipu (strong on long-form articles), cowagent and linkai (aggregators),
 # anysearch, serply (global Google/Bing SERP, last since it isn't
 # benchmarked against the Chinese-market providers above), tavily, outcrawl,
-# firecrawl, specstream, olostep, searxng, keenable (global index, keyless tier behind an explicit
+# firecrawl, specstream, olostep, searchapi, searxng, keenable (global index, keyless tier behind an explicit
 # opt-in; placed last so any provider the user paid for wins).
-PROVIDER_ORDER = ("deepseek", "bocha", "qianfan", "zhipu", "cowagent", "linkai", "anysearch", "serply", "tavily", "outcrawl", "firecrawl", "specstream", "olostep", "searxng", "keenable")
+PROVIDER_ORDER = ("deepseek", "bocha", "qianfan", "zhipu", "cowagent", "linkai", "anysearch", "serply", "tavily", "outcrawl", "firecrawl", "specstream", "olostep", "searchapi", "searxng", "keenable")
 
 PROVIDER_LABELS = {
     "bocha":   "Bocha",
@@ -88,6 +90,7 @@ PROVIDER_LABELS = {
     "firecrawl": "Firecrawl",
     "specstream": "SpecStream",
     "olostep": "Olostep",
+    "searchapi": "SearchApi",
     "searxng": "SearXNG",
     "keenable": "Keenable",
 }
@@ -157,6 +160,9 @@ def _get_api_key(provider: str) -> str:
     if provider == "olostep":
         key = _conf_str(_tools_web_search_conf().get("olostep_api_key"), "")
         return key or os.environ.get("OLOSTEP_API_KEY", "").strip()
+    if provider == "searchapi":
+        key = _conf_str(_tools_web_search_conf().get("searchapi_api_key"), "")
+        return key or os.environ.get("SEARCHAPI_API_KEY", "").strip()
     if provider == "keenable":
         key = _conf_str(_tools_web_search_conf().get("keenable_api_key"), "")
         return key or os.environ.get("KEENABLE_API_KEY", "").strip()
@@ -372,7 +378,7 @@ class WebSearch(BaseTool):
             return ToolResult.fail(
                 "Error: No search provider configured. "
                 "Configure one of BOCHA_API_KEY / zhipu_ai_api_key / qianfan_api_key / linkai_api_key / "
-                "deepseek_api_key / anysearch_api_key / SERPLY_API_KEY / TAVILY_API_KEY / OUTCRAWL_API_KEY / FIRECRAWL_API_KEY / SPECSTREAM_API_KEY / OLOSTEP_API_KEY / SEARXNG_URL."
+                "deepseek_api_key / anysearch_api_key / SERPLY_API_KEY / TAVILY_API_KEY / OUTCRAWL_API_KEY / FIRECRAWL_API_KEY / SPECSTREAM_API_KEY / OLOSTEP_API_KEY / SEARCHAPI_API_KEY / SEARXNG_URL."
             )
 
         # Always log the routing decision so multi-provider deployments can
@@ -412,6 +418,8 @@ class WebSearch(BaseTool):
                 return self._search_specstream(query, count)
             if provider == "olostep":
                 return self._search_olostep(query, count)
+            if provider == "searchapi":
+                return self._search_searchapi(query, count)
             if provider == "searxng":
                 return self._search_searxng(query, count)
             if provider == "keenable":
@@ -1295,6 +1303,47 @@ class WebSearch(BaseTool):
             })
         return ToolResult.success({
             "query": query, "backend": "olostep",
+            "total": len(results), "count": len(results), "results": results,
+        })
+
+    # ------------------------------------------------------------------
+    # SearchApi
+    # ------------------------------------------------------------------
+
+    def _search_searchapi(self, query: str, count: int) -> ToolResult:
+        api_key = _get_api_key("searchapi")
+        url = "https://www.searchapi.io/api/v1/search"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Accept": "application/json",
+        }
+        # Google no longer honors a per-request result count, so the API
+        # returns one page (about 10 organic results) and the list is trimmed
+        # here. Only engine and q are sent; the key never travels in the URL.
+        limit = max(1, min(int(count or 10), 50))
+
+        logger.debug(f"[WebSearch] searchapi: query='{query}', limit={limit}")
+        resp = requests.get(url, headers=headers, params={"engine": "google", "q": query}, timeout=DEFAULT_TIMEOUT)
+
+        if resp.status_code == 401:
+            return ToolResult.fail("Error: Invalid SearchApi API key.")
+        if resp.status_code == 429:
+            return ToolResult.fail("Error: SearchApi rate limit reached.")
+        if resp.status_code != 200:
+            return ToolResult.fail(f"Error: SearchApi returned HTTP {resp.status_code}: {resp.text[:200]}")
+
+        data = resp.json() or {}
+        results = []
+        for it in (data.get("organic_results") or [])[:limit]:
+            results.append({
+                "title": it.get("title") or "",
+                "url": it.get("link") or "",
+                "snippet": it.get("snippet") or "",
+                "siteName": it.get("source") or "",
+                "datePublished": it.get("date") or "",
+            })
+        return ToolResult.success({
+            "query": query, "backend": "searchapi",
             "total": len(results), "count": len(results), "results": results,
         })
 

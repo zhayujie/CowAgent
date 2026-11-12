@@ -1,7 +1,7 @@
 # encoding:utf-8
 """
-Unit tests for the web_search tool, focused on the AnySearch, Serply and
-Keenable backends.
+Unit tests for the web_search tool, focused on the AnySearch, Serply,
+Keenable and SearchApi backends.
 
 Covers key resolution (config file + environment fallback), the canonical
 provider fallback order, result normalization into the unified output shape,
@@ -90,7 +90,7 @@ class TestProviderOrder(unittest.TestCase):
         self.assertEqual(
             web_search_module.PROVIDER_ORDER,
             ("deepseek", "bocha", "qianfan", "zhipu", "cowagent", "linkai", "anysearch", "serply", "tavily", "outcrawl", "firecrawl",
-             "specstream", "olostep", "searxng", "keenable"),
+             "specstream", "olostep", "searchapi", "searxng", "keenable"),
         )
 
     def test_web_console_provider_list_stays_in_sync(self):
@@ -135,6 +135,12 @@ class TestProviderOrder(unittest.TestCase):
         self.assertEqual(ModelsHandler._search_provider_key("olostep", cfg), "console-key")
         with patch.dict(os.environ, {"OLOSTEP_API_KEY": "env-key"}):
             self.assertEqual(ModelsHandler._search_provider_key("olostep", {}), "env-key")
+        cfg = {"tools": {"web_search": {"searchapi_api_key": "console-key"}}}
+        self.assertEqual(ModelsHandler._search_provider_key("searchapi", cfg), "console-key")
+        with patch.dict(os.environ, {"SEARCHAPI_API_KEY": "env-key"}):
+            self.assertEqual(ModelsHandler._search_provider_key("searchapi", {}), "env-key")
+        with patch.dict(os.environ, {"SEARCHAPI_API_KEY": ""}):
+            self.assertEqual(ModelsHandler._search_provider_key("searchapi", {}), "")
 
     def test_web_console_mirrors_keenable_opt_in(self):
         """The Search panel agrees with the tool: keenable is not configured
@@ -170,7 +176,7 @@ class TestProviderOrder(unittest.TestCase):
 _ALL_SEARCH_ENV = (
     "BOCHA_API_KEY", "ZHIPUAI_API_KEY", "QIANFAN_API_KEY", "LINKAI_API_KEY",
     "DEEPSEEK_API_KEY",
-    "ANYSEARCH_API_KEY", "SERPLY_API_KEY", "KEENABLE_API_KEY",
+    "ANYSEARCH_API_KEY", "SERPLY_API_KEY", "SEARCHAPI_API_KEY", "KEENABLE_API_KEY",
 )
 
 
@@ -949,6 +955,33 @@ class TestOlostepKeyResolution(unittest.TestCase):
             with patch.dict(os.environ, {"OLOSTEP_API_KEY": "env-key-456"}):
                 self.assertEqual(web_search_module._get_api_key("olostep"), "env-key-456")
             self.assertEqual(web_search_module._get_api_key("olostep"), "")
+class TestSearchapiKeyResolution(unittest.TestCase):
+    """The searchapi key lives under tools.web_search, falling back to env."""
+
+    def setUp(self):
+        self._prev_env = os.environ.get("SEARCHAPI_API_KEY")
+        os.environ.pop("SEARCHAPI_API_KEY", None)
+
+    def tearDown(self):
+        if self._prev_env is None:
+            os.environ.pop("SEARCHAPI_API_KEY", None)
+        else:
+            os.environ["SEARCHAPI_API_KEY"] = self._prev_env
+
+    def test_searchapi_key_from_tools_config(self):
+        """tools.web_search.searchapi_api_key is resolved, and wins over env."""
+        cfg = {"tools": {"web_search": {"searchapi_api_key": "test-key-123"}}}
+        with patch.object(web_search_module, "conf", lambda: cfg):
+            self.assertEqual(web_search_module._get_api_key("searchapi"), "test-key-123")
+            with patch.dict(os.environ, {"SEARCHAPI_API_KEY": "env-key-456"}):
+                self.assertEqual(web_search_module._get_api_key("searchapi"), "test-key-123")
+
+    def test_searchapi_key_env_fallback(self):
+        """Without a config value, SEARCHAPI_API_KEY is used; both empty -> ''."""
+        with patch.object(web_search_module, "conf", lambda: {}):
+            with patch.dict(os.environ, {"SEARCHAPI_API_KEY": "env-key-456"}):
+                self.assertEqual(web_search_module._get_api_key("searchapi"), "env-key-456")
+            self.assertEqual(web_search_module._get_api_key("searchapi"), "")
 
 
 class TestKeenableBackend(unittest.TestCase):
@@ -1348,6 +1381,8 @@ class TestSpecstreamBackend(unittest.TestCase):
 
 class TestOlostepBackend(unittest.TestCase):
     """Behaviour of WebSearch._search_olostep with a stubbed HTTP layer."""
+class TestSearchapiBackend(unittest.TestCase):
+    """Behaviour of WebSearch._search_searchapi with a stubbed HTTP layer."""
 
     def setUp(self):
         self.tool = web_search_module.WebSearch()
@@ -1415,6 +1450,88 @@ class TestOlostepBackend(unittest.TestCase):
                         patch.object(web_search_module.requests, "post",
                                      return_value=_fake_response(status_code)):
                     result = self.tool._search_olostep("q", 10)
+                self.assertEqual(result.status, "error")
+                self.assertIn(fragment, result.result)
+
+    def test_search_searchapi_maps_organic_results(self):
+        """organic_results items map to the unified output shape; the key
+        travels only as a Bearer token and the GET sends engine=google plus q
+        (no num: Google ignores it, the count is applied locally)."""
+        payload = {
+            "search_metadata": {"id": "search_test", "status": "Success"},
+            "search_parameters": {"engine": "google", "q": "cowagent", "hl": "en", "gl": "us"},
+            "search_information": {"query_displayed": "cowagent", "total_results": 94},
+            "organic_results": [
+                {"position": 1, "title": "T1", "link": "https://a.example/1", "source": "a.example",
+                 "domain": "a.example", "snippet": "s1", "date": "Feb 2, 2026"},
+                {"position": 2, "title": "T2", "link": "https://a.example/2", "source": "a.example",
+                 "domain": "a.example"},
+            ],
+            "related_searches": [],
+            "pagination": {"current": 1, "next": "https://www.searchapi.io/api/v1/search?engine=google&page=2&q=cowagent"},
+        }
+        with patch.object(web_search_module, "_get_api_key", return_value="test-key-123"), \
+                patch.object(web_search_module.requests, "get",
+                             return_value=_fake_response(200, payload)) as mock_get:
+            result = self.tool._search_searchapi("cowagent", 10)
+
+        self.assertEqual(result.status, "success")
+        self.assertEqual(result.result["backend"], "searchapi")
+        self.assertEqual(result.result["total"], 2)
+        self.assertEqual(result.result["count"], 2)
+        first, second = result.result["results"]
+        self.assertEqual(first, {
+            "title": "T1", "url": "https://a.example/1", "snippet": "s1",
+            "siteName": "a.example", "datePublished": "Feb 2, 2026",
+        })
+        self.assertEqual(second["snippet"], "")
+        self.assertEqual(second["datePublished"], "")
+        self.assertEqual(mock_get.call_args[0][0], "https://www.searchapi.io/api/v1/search")
+        headers = mock_get.call_args[1]["headers"]
+        self.assertEqual(headers["Authorization"], "Bearer test-key-123")
+        params = mock_get.call_args[1]["params"]
+        self.assertEqual(params, {"engine": "google", "q": "cowagent"})
+        self.assertNotIn("num", params)
+        self.assertNotIn("api_key", params)
+        self.assertNotIn("test-key-123", mock_get.call_args[0][0])
+
+    def test_search_searchapi_trims_to_count(self):
+        """Google ignores a result-count parameter: count is clamped into 1-50
+        and the organic list is cut locally; falsy -> 10."""
+        organic = [{"position": i + 1, "title": f"T{i}", "link": f"https://a.example/{i}"} for i in range(60)]
+        payload = {"organic_results": organic}
+        with patch.object(web_search_module, "_get_api_key", return_value="k"), \
+                patch.object(web_search_module.requests, "get",
+                             return_value=_fake_response(200, payload)):
+            for count, expected in ((50, 50), (99, 50), (0, 10), (None, 10), (5, 5)):
+                with self.subTest(count=count):
+                    result = self.tool._search_searchapi("q", count)
+                    self.assertEqual(len(result.result["results"]), expected)
+
+    def test_search_searchapi_empty_organic_results(self):
+        """A reply without organic_results is an empty success, not an error."""
+        payload = {"search_information": {"has_no_results_for": True}, "organic_results": []}
+        with patch.object(web_search_module, "_get_api_key", return_value="k"), \
+                patch.object(web_search_module.requests, "get",
+                             return_value=_fake_response(200, payload)):
+            result = self.tool._search_searchapi("q", 10)
+        self.assertEqual(result.status, "success")
+        self.assertEqual(result.result["results"], [])
+
+    def test_search_searchapi_error_status_mapping(self):
+        """401/429 map to specific messages; other statuses are generic and
+        carry the API's error body."""
+        cases = {
+            401: ({"error": "Invalid API key."}, "Invalid SearchApi API key"),
+            429: ({"error": "Too many requests."}, "rate limit reached"),
+            500: ({"error": "Internal server error."}, "HTTP 500"),
+        }
+        for status_code, (body, fragment) in cases.items():
+            with self.subTest(status_code=status_code):
+                with patch.object(web_search_module, "_get_api_key", return_value="k"), \
+                        patch.object(web_search_module.requests, "get",
+                                     return_value=_fake_response(status_code, body)):
+                    result = self.tool._search_searchapi("q", 10)
                 self.assertEqual(result.status, "error")
                 self.assertIn(fragment, result.result)
 
