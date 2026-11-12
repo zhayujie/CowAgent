@@ -456,6 +456,20 @@ class AgentStreamExecutor:
             f"{body}"
         )
 
+    @staticmethod
+    def _unrun_tool_result(tool_call: Dict, halted_by: str) -> Dict:
+        """Close a tool_use that never ran because a steer or cancel stopped the turn."""
+        if halted_by == "steer":
+            content = "Skipped because the user redirected the active task."
+        else:
+            content = "Error: Tool execution was interrupted"
+        return {
+            "type": "tool_result",
+            "tool_use_id": tool_call["id"],
+            "content": content,
+            "is_error": True,
+        }
+
     def _append_steering(
         self,
         updates: List[str],
@@ -467,12 +481,7 @@ class AgentStreamExecutor:
             return
         blocks = content_blocks if content_blocks is not None else []
         for tool_call in pending_tool_calls or []:
-            blocks.append({
-                "type": "tool_result",
-                "tool_use_id": tool_call["id"],
-                "content": "Skipped because the user redirected the active task.",
-                "is_error": True,
-            })
+            blocks.append(self._unrun_tool_result(tool_call, "steer"))
         blocks.append({"type": "text", "text": self._steering_text(updates)})
         if content_blocks is None:
             self.messages.append({"role": "user", "content": blocks})
@@ -1210,18 +1219,26 @@ class AgentStreamExecutor:
 
                 try:
                     already_run = self._run_parallel_calls(tool_calls)
-                    for tool_index, tool_call in enumerate(tool_calls):
+                    # A steer or cancel only stops calls that have not run yet.
+                    # Calls that already ran in parallel have done their work,
+                    # so they keep their real result even after the stop.
+                    halted_by = None
+                    steering_updates = []
+                    for tool_call in tool_calls:
                         if tool_call["id"] not in already_run:
-                            # Prefetched calls already carry their actual result or cancellation error.
-                            self._check_cancelled()
-                            steering_updates = self._drain_steering()
-                            if steering_updates:
-                                self._append_steering(
-                                    steering_updates,
-                                    pending_tool_calls=tool_calls[tool_index:],
-                                    content_blocks=tool_result_blocks,
-                                )
-                                break
+                            if halted_by is None:
+                                try:
+                                    self._check_cancelled()
+                                except AgentCancelledError:
+                                    halted_by = "cancel"
+                                else:
+                                    steering_updates = self._drain_steering()
+                                    if steering_updates:
+                                        halted_by = "steer"
+                            if halted_by is not None:
+                                tool_result_blocks.append(
+                                    self._unrun_tool_result(tool_call, halted_by))
+                                continue
                         if tool_call["id"] in already_run:
                             result = already_run[tool_call["id"]]
                         else:
@@ -1305,6 +1322,11 @@ class AgentStreamExecutor:
                             tool_result_block["is_error"] = True
                         
                         tool_result_blocks.append(tool_result_block)
+
+                    if halted_by == "steer":
+                        self._append_steering(steering_updates, content_blocks=tool_result_blocks)
+                    elif halted_by == "cancel":
+                        raise AgentCancelledError("agent cancelled by user")
                 
                 finally:
                     # CRITICAL: Always add tool_result to maintain message history integrity
@@ -2270,16 +2292,14 @@ class AgentStreamExecutor:
         return list(required) if isinstance(required, list) else []
 
     def _run_parallel_calls(self, tool_calls: List[Dict]) -> Dict[str, Dict[str, Any]]:
-        """Prefetch an all-parallel turn at once, keyed by call id.
+        """Start every parallel-safe call of this turn at once, keyed by call id.
 
         Tools otherwise run strictly in the order the model asked for them.
         That is the right default, but a model that splits independent work
         across several calls - the usual way of expressing it - would then have
         the second wait out the first. For a tool that declares itself
-        parallel_safe the wait buys nothing, so an all-parallel turn runs
-        together here and the loop below picks up the finished results in place.
-        Mixed turns stay sequential so steering and cancellation checks cannot
-        interrupt between results that have already finished concurrently.
+        parallel_safe the wait buys nothing, so those calls are run together
+        here and the loop below picks up the finished results in place.
 
         Each call gets its own copy of the tool: the loop drives tools by
         assigning `cancel_event` and `progress_callback` before a call and
@@ -2293,7 +2313,7 @@ class AgentStreamExecutor:
             call for call in tool_calls
             if getattr(self.tools.get(call["name"]), "parallel_safe", False)
         ]
-        if len(eligible) < 2 or len(eligible) != len(tool_calls):
+        if len(eligible) < 2:
             return {}
 
         logger.info(f"[Agent] Running {len(eligible)} tool calls in parallel")
