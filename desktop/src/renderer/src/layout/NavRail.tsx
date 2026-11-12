@@ -49,7 +49,7 @@ const SKILL_HUB_URL = 'https://skills.cowagent.ai/'
 // GitHub issues — where users report bugs / request features.
 const FEEDBACK_URL = 'https://github.com/zhayujie/CowAgent/issues'
 
-const websiteUrl = () => (getLang() === 'zh' ? 'https://cowagent.ai/zh' : 'https://cowagent.ai')
+const websiteUrl = () => (getLang() === 'zh' ? 'https://cowagent.cn' : 'https://cowagent.ai')
 const docsUrl = () => (getLang() === 'zh' ? 'https://docs.cowagent.ai/zh' : 'https://docs.cowagent.ai')
 
 const openExternal = (url: string) => {

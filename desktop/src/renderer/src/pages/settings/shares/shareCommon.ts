@@ -1,4 +1,5 @@
 import type { GuestShare, GuestShareConfig } from '../../../api/client'
+import { getLang } from '../../../i18n'
 
 export const SHARE_TOOLS = ['read', 'ls', 'search_files', 'write', 'edit', 'send', 'web_search', 'web_fetch', 'vision', 'time']
 export const SHARE_DEFAULT_TOOLS = ['read', 'ls', 'search_files', 'web_fetch', 'vision', 'time']
@@ -11,7 +12,7 @@ export const SHARE_COLORS = ['#14b8a6', '#3b82f6', '#6366f1', '#8b5cf6', '#ec489
 export const SHARE_LOGO_TYPES = ['image/png', 'image/jpeg', 'image/webp']
 export const SHARE_LOGO_MAX = 2 * 1024 * 1024
 export const SHARE_FOOTER_TEXT = 'Powered by CowAgent'
-export const SHARE_FOOTER_URL = 'https://cowagent.ai'
+export const shareFooterUrl = () => (getLang() === 'zh' ? 'https://cowagent.cn' : 'https://cowagent.ai')
 /** '' follows the visitor's browser. */
 export const SHARE_LANGUAGES = ['', 'zh', 'zh-Hant', 'en']
 export const SHARE_LANGUAGE_NAMES: Record<string, string> = { zh: '简体中文', 'zh-Hant': '繁體中文', en: 'English' }

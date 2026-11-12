@@ -26,7 +26,7 @@ const SHARE_COLORS = ['#14b8a6', '#3b82f6', '#6366f1', '#8b5cf6', '#ec4899', '#f
 const SHARE_LOGO_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
 const SHARE_LOGO_MAX = 2 * 1024 * 1024;
 const SHARE_FOOTER_TEXT = 'Powered by CowAgent';
-const SHARE_FOOTER_URL = 'https://cowagent.ai';
+const shareFooterUrl = () => (currentLang === 'zh' ? 'https://cowagent.cn' : 'https://cowagent.ai');
 // Labels are each language's own name; '' follows the visitor's browser.
 const SHARE_LANGUAGES = [
     { value: '', label: '' },
@@ -670,7 +670,7 @@ function _fillShareEditor(cfg, guestMd, passwordSet) {
     _renderShareColors();
     _setShareLogo(null, false);
     document.getElementById('share-ed-footer-text').value = brand.footer_text === undefined ? SHARE_FOOTER_TEXT : brand.footer_text;
-    document.getElementById('share-ed-footer-url').value = brand.footer_url === undefined ? SHARE_FOOTER_URL : brand.footer_url;
+    document.getElementById('share-ed-footer-url').value = brand.footer_url === undefined ? shareFooterUrl() : brand.footer_url;
 
     _initShareModelPicker(cfg.model ? `${cfg.provider || ''}|${cfg.model}` : '');
     // A new page speaks the console's language until the owner picks another.

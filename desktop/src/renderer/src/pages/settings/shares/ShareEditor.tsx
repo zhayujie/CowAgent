@@ -13,7 +13,7 @@ import {
   SHARE_DEFAULT_COLOR,
   SHARE_DEFAULT_QUOTA,
   SHARE_FOOTER_TEXT,
-  SHARE_FOOTER_URL,
+  shareFooterUrl,
   SHARE_LANGUAGES,
   SHARE_LANGUAGE_NAMES,
   SHARE_LOGO_MAX,
@@ -64,7 +64,7 @@ const ShareEditor: React.FC<Props> = ({ slug, focus, overview, defaultModel, onC
   const [refs, setRefs] = useState<{ path: string; note: string }[]>([])
   const [guestMd, setGuestMd] = useState('')
   const [footerText, setFooterText] = useState(SHARE_FOOTER_TEXT)
-  const [footerUrl, setFooterUrl] = useState(SHARE_FOOTER_URL)
+  const [footerUrl, setFooterUrl] = useState(shareFooterUrl)
   const [more, setMore] = useState(false)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -96,7 +96,7 @@ const ShareEditor: React.FC<Props> = ({ slug, focus, overview, defaultModel, onC
     setRefs((cfg.references || []).map((r) => ({ path: r.path || '', note: r.note || '' })))
     setGuestMd(md)
     setFooterText(brand.footer_text === undefined ? SHARE_FOOTER_TEXT : brand.footer_text)
-    setFooterUrl(brand.footer_url === undefined ? SHARE_FOOTER_URL : brand.footer_url)
+    setFooterUrl(brand.footer_url === undefined ? shareFooterUrl() : brand.footer_url)
     setMore(false)
     setError('')
     setSaving(false)

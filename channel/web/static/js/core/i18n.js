@@ -2551,6 +2551,8 @@ function applyI18n() {
     // Point the docs link to the locale-specific documentation site.
     const docsLink = document.getElementById('docs-link');
     if (docsLink) docsLink.href = currentLang === 'zh' ? 'https://docs.cowagent.ai/zh' : 'https://docs.cowagent.ai';
+    const websiteLink = document.getElementById('website-link');
+    if (websiteLink) websiteLink.href = currentLang === 'zh' ? 'https://cowagent.cn' : 'https://cowagent.ai';
     // Workspace panel content is rendered by JS, not data-i18n attributes.
     if (typeof relocalizeWorkspacePanel === 'function') relocalizeWorkspacePanel();
 }
