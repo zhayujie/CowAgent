@@ -1211,16 +1211,17 @@ class AgentStreamExecutor:
                 try:
                     already_run = self._run_parallel_calls(tool_calls)
                     for tool_index, tool_call in enumerate(tool_calls):
-                        # Honour cancel between tool invocations within the same turn
-                        self._check_cancelled()
-                        steering_updates = self._drain_steering()
-                        if steering_updates:
-                            self._append_steering(
-                                steering_updates,
-                                pending_tool_calls=tool_calls[tool_index:],
-                                content_blocks=tool_result_blocks,
-                            )
-                            break
+                        if tool_call["id"] not in already_run:
+                            # Prefetched calls already carry their actual result or cancellation error.
+                            self._check_cancelled()
+                            steering_updates = self._drain_steering()
+                            if steering_updates:
+                                self._append_steering(
+                                    steering_updates,
+                                    pending_tool_calls=tool_calls[tool_index:],
+                                    content_blocks=tool_result_blocks,
+                                )
+                                break
                         if tool_call["id"] in already_run:
                             result = already_run[tool_call["id"]]
                         else:
@@ -2269,14 +2270,16 @@ class AgentStreamExecutor:
         return list(required) if isinstance(required, list) else []
 
     def _run_parallel_calls(self, tool_calls: List[Dict]) -> Dict[str, Dict[str, Any]]:
-        """Start every parallel-safe call of this turn at once, keyed by call id.
+        """Prefetch an all-parallel turn at once, keyed by call id.
 
         Tools otherwise run strictly in the order the model asked for them.
         That is the right default, but a model that splits independent work
         across several calls - the usual way of expressing it - would then have
         the second wait out the first. For a tool that declares itself
-        parallel_safe the wait buys nothing, so those calls are run together
-        here and the loop below picks up the finished results in place.
+        parallel_safe the wait buys nothing, so an all-parallel turn runs
+        together here and the loop below picks up the finished results in place.
+        Mixed turns stay sequential so steering and cancellation checks cannot
+        interrupt between results that have already finished concurrently.
 
         Each call gets its own copy of the tool: the loop drives tools by
         assigning `cancel_event` and `progress_callback` before a call and
@@ -2290,7 +2293,7 @@ class AgentStreamExecutor:
             call for call in tool_calls
             if getattr(self.tools.get(call["name"]), "parallel_safe", False)
         ]
-        if len(eligible) < 2:
+        if len(eligible) < 2 or len(eligible) != len(tool_calls):
             return {}
 
         logger.info(f"[Agent] Running {len(eligible)} tool calls in parallel")
