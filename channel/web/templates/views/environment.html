@@ -1,0 +1,36 @@
+<section id="config-panel-environment" class="hidden env-manager bg-panel rounded-xl border border-slate-200 dark:border-white/10 p-6" aria-labelledby="env-heading">
+    <div class="env-heading mb-5">
+        <div class="env-title-group flex items-center gap-3 min-w-0">
+            <div class="w-9 h-9 rounded-lg bg-primary-50 dark:bg-primary-900/30 flex items-center justify-center flex-shrink-0"><i class="fas fa-key text-primary-500 text-sm" aria-hidden="true"></i></div>
+            <div class="min-w-0">
+                <div class="flex items-center gap-1.5">
+                    <h3 id="env-heading" class="font-semibold text-slate-800 dark:text-slate-100" data-i18n="env_title">环境变量</h3>
+                    <span class="cfg-tip" data-tip-key="env_help_hint" data-tip-float tabindex="0" data-i18n-aria-label="env_help" aria-label="使用提示"><i class="fas fa-circle-question" aria-hidden="true"></i></span>
+                </div>
+                <p class="text-xs text-slate-400 dark:text-slate-500 mt-0.5" data-i18n="env_description">永远不会获取真实内容，仅显示脱敏内容</p>
+            </div>
+        </div>
+        <button type="button" class="env-button px-4 py-2 rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-sm font-medium cursor-pointer transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed" onclick="openEnvEditor()"><i class="fas fa-plus text-xs" aria-hidden="true"></i><span data-i18n="env_add">新增变量</span></button>
+    </div>
+    <form id="env-editor" class="hidden env-editor" autocomplete="off" onsubmit="saveEnvVariable(event)">
+        <fieldset id="env-fields">
+            <h4 id="env-editor-title" class="font-semibold mb-3" data-i18n="env_add">新增变量</h4>
+            <div class="env-fields-grid">
+                <label><span data-i18n="env_key">变量名称</span><input id="env-key" class="env-input px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-white/5 text-sm text-slate-800 dark:text-slate-100 font-mono focus:outline-none focus:border-primary-500 transition-colors" required maxlength="128" pattern="[A-Za-z_][A-Za-z0-9_]*" spellcheck="false" autocomplete="off" placeholder="OPENAI_API_KEY" oninput="envKeyChanged()"></label>
+                <label><span data-i18n="env_value">值</span><div class="env-value-wrap"><input id="env-value" class="env-input px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-white/5 text-sm text-slate-800 dark:text-slate-100 font-mono focus:outline-none focus:border-primary-500 transition-colors" type="password" required maxlength="8192" autocomplete="new-password" spellcheck="false" data-i18n-placeholder="env_value_new" placeholder="请输入值"><button type="button" id="env-toggle" onclick="toggleEnvValue()" data-i18n-aria-label="env_show" aria-label="显示输入值" aria-pressed="false"><i class="fas fa-eye" aria-hidden="true"></i></button></div></label>
+            </div>
+            <p id="env-current" class="env-muted text-xs mt-2 font-mono"></p>
+            <p id="env-model-hint" class="env-model-hint hidden"><span data-i18n="env_model_hint">同名模型配置可能覆盖此值。</span> <button type="button" onclick="switchConfigTab('models')" data-i18n="env_model_settings">检查模型配置</button></p>
+            <div class="env-form-actions"><button type="button" class="env-button px-4 py-2 rounded-lg text-sm text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 cursor-pointer" onclick="clearEnvEditor()" data-i18n="env_cancel">取消</button><button type="submit" id="env-save" class="env-button px-4 py-2 rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-sm font-medium cursor-pointer transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed" data-i18n="env_save">保存</button></div>
+        </fieldset>
+    </form>
+    <div class="env-toolbar">
+        <label class="env-search"><i class="fas fa-magnifying-glass" aria-hidden="true"></i><input id="env-search" type="search" class="env-input px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-white/5 text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-primary-500 transition-colors" oninput="renderEnvVariables()" data-i18n-placeholder="env_search" data-i18n-aria-label="env_search" placeholder="搜索变量名称" aria-label="搜索变量名称"></label>
+        <div class="env-toolbar-actions">
+            <div id="env-feedback" class="env-feedback hidden" role="status" aria-live="polite"></div>
+            <button type="button" id="env-refresh" class="env-button px-3 py-2 rounded-lg border border-slate-200 dark:border-white/10 text-sm text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 cursor-pointer transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed" onclick="loadEnvView(true)"><i class="fas fa-rotate text-xs" aria-hidden="true"></i><span data-i18n="env_refresh">刷新</span></button>
+        </div>
+    </div>
+    <div class="env-table-head env-muted text-xs"><span data-i18n="env_key">变量名称</span><span data-i18n="env_preview">内容</span><span data-i18n="env_actions">操作</span></div>
+    <div id="env-list" aria-live="polite"></div>
+</section>
