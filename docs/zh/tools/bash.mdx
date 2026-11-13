@@ -3,7 +3,15 @@ title: bash - 终端
 description: "bash 工具在工作目录中执行终端命令并返回 stdout 和 stderr，自动注入 env_config 中配置的 API Key，适合安装依赖、运行代码与测试、部署服务和系统运维排查等场景。"
 ---
 
-在当前工作目录执行 Bash 命令，返回 stdout 和 stderr。`env_config` 中配置的 API Key 会自动注入到环境变量中。
+在当前工作目录执行终端命令，返回 stdout 和 stderr。工具名称保持为 `bash`，实际语法取决于服务端操作系统和命令解释器。`env_config` 中配置的 API Key 会自动注入到环境变量中。
+
+## Windows 命令解释器
+
+Windows 默认使用 CMD。可在 **能力 → 内置工具 → bash → 命令执行设置** 中选择 **PowerShell 7**。检测在运行 CowAgent 的服务端进行，需安装 `pwsh`（Windows PowerShell 5.1 不适用）；未检测到时不能保存该选项，执行时也不会自动回退 CMD。
+
+设置适用于当前实例的所有 Agent，保存在 `tools.bash.windows_shell` 中，可选值为 `cmd`（默认）或 `pwsh`。后续模型请求会刷新工具说明，并使用相应命令语法；已启动的后台任务继续使用原来的进程。Linux/macOS 保持原来的执行方式。
+
+PowerShell 7 使用无配置文件的非交互模式和 UTF-8 输出，环境变量使用 `$env:NAME`，空输出重定向使用 `$null`。脚本设置 `$ErrorActionPreference = 'Stop'`，cmdlet 错误会中止执行并返回非零退出码，原生命令的最终退出码也会保留。切换前后的命令语法不同，请勿直接复用 CMD 的 `%NAME%`、`>nul` 等写法。
 
 ## 依赖
 
