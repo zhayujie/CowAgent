@@ -3,7 +3,15 @@ title: bash - Terminal
 description: "The bash tool runs shell commands in the working directory and returns stdout and stderr, with API keys from env_config injected, for installing packages, running code, deploying and troubleshooting."
 ---
 
-Execute Bash commands in the current working directory, returns stdout and stderr. API keys configured via `env_config` are automatically injected into the environment.
+Execute terminal commands in the current working directory, returning stdout and stderr. The tool name remains `bash`; the command syntax depends on the server operating system and selected command interpreter. API keys configured via `env_config` are automatically injected into the environment.
+
+## Windows command interpreter
+
+Windows uses CMD by default. In **Capabilities → Built-in tools → bash → Command execution settings**, you can select **PowerShell 7**. Detection runs on the CowAgent execution server and requires `pwsh`; Windows PowerShell 5.1 is not supported. If PowerShell 7 is unavailable, the option cannot be saved and execution never silently falls back to CMD.
+
+The setting applies to all Agents in the current instance and is stored as `tools.bash.windows_shell`, with `cmd` (default) or `pwsh` as the available values. Subsequent model requests refresh the tool description and use the corresponding syntax; already-running background jobs keep their original process. Linux and macOS retain their existing behavior.
+
+PowerShell 7 runs non-interactively without a profile and uses UTF-8 output. Use `$env:NAME` for environment variables and `$null` for output redirection. The script sets `$ErrorActionPreference = 'Stop'`, so cmdlet errors stop execution and return a non-zero exit code; native command exit codes are preserved. Do not reuse CMD syntax such as `%NAME%` or `>nul` after switching interpreters.
 
 ## Dependencies
 
