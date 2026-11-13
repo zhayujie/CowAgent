@@ -46,7 +46,7 @@ from common.log import logger
 from common.media_download import MAX_FILE_BYTES, MAX_IMAGE_BYTES, download_bytes, download_to_file
 from common.singleton import singleton
 from config import conf
-from channel.feishu.domain import FEISHU_DOMAIN, LARK_DOMAIN
+from channel.feishu.domain import FEISHU_DOMAIN, LARK_DOMAIN, WRONG_DOMAIN_CODE, WS_ENDPOINT_PATH
 
 # Suppress verbose logs from Lark SDK
 logging.getLogger("Lark").setLevel(logging.WARNING)
@@ -363,26 +363,23 @@ class FeiShuChanel(ChatChannel):
             self._startup_webhook()
 
     def _detect_platform(self):
-        """Select the official API origin for this app's region."""
+        """Switch to open.larksuite.com when Feishu rejects this app's domain.
+
+        The token API cannot tell the platforms apart, since both domains can
+        issue a token for the same app. The websocket endpoint API answers
+        WRONG_DOMAIN_CODE on the wrong domain, in webhook mode too.
+        """
         if self.feishu_domain == LARK_DOMAIN:
             return
-        url = FEISHU_DOMAIN + "/open-apis/auth/v3/tenant_access_token/internal/"
         try:
             response = requests.post(
-                url=url,
-                json={"app_id": self.feishu_app_id, "app_secret": self.feishu_app_secret},
-                headers={"Content-Type": "application/json"}, timeout=(5, 10),
+                url=FEISHU_DOMAIN + WS_ENDPOINT_PATH,
+                json={"AppID": self.feishu_app_id, "AppSecret": self.feishu_app_secret},
+                timeout=(5, 10),
             )
-            code = response.json().get("code")
-            if code == 1000040351:
-                lark_response = requests.post(
-                    url=LARK_DOMAIN + "/open-apis/auth/v3/tenant_access_token/internal/",
-                    json={"app_id": self.feishu_app_id, "app_secret": self.feishu_app_secret},
-                    headers={"Content-Type": "application/json"}, timeout=(5, 10),
-                )
-                if lark_response.json().get("code") == 0:
-                    self.feishu_domain = LARK_DOMAIN
-                    logger.info("[FeiShu] International Lark app detected; using open.larksuite.com")
+            if response.json().get("code") == WRONG_DOMAIN_CODE:
+                self.feishu_domain = LARK_DOMAIN
+                logger.info("[FeiShu] International Lark app detected; using open.larksuite.com")
         except Exception as e:
             logger.warning(f"[FeiShu] Platform detection failed, keeping Feishu domain: {e}")
 
@@ -584,7 +581,9 @@ class FeiShuChanel(ChatChannel):
                     error_msg = str(e)
                     is_ssl_error = ("CERTIFICATE_VERIFY_FAILED" in error_msg
                                     or "certificate verify failed" in error_msg.lower())
-                    is_domain_error = "1000040351" in error_msg and "Incorrect domain name" in error_msg
+                    # The message text follows the request locale, so match the code only.
+                    is_domain_error = getattr(e, "code", None) == WRONG_DOMAIN_CODE \
+                        or error_msg.startswith(f"{WRONG_DOMAIN_CODE}:")
                     if is_domain_error and self.feishu_domain == FEISHU_DOMAIN:
                         self.feishu_domain = LARK_DOMAIN
                         logger.warning("[FeiShu] Feishu domain rejected; retrying websocket on open.larksuite.com")

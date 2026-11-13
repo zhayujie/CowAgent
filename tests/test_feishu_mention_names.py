@@ -152,7 +152,7 @@ def test_group_post_names_the_people_it_mentions(monkeypatch):
 
 def _group_post_with_file(monkeypatch, tmp_path, *elements):
     """A group post of these elements with report.pdf attached, and the file cache the channel uses."""
-    def download(message_id, key, resource_type, access_token, path, max_bytes):
+    def download(message_id, key, resource_type, access_token, path, max_bytes, domain=None):
         Path(path).write_bytes(b"data")
         return True
 

@@ -1,7 +1,7 @@
 """Platform discovery must use the WS endpoint: both token origins can succeed."""
 from unittest.mock import MagicMock, Mock, patch
 
-from channel.feishu.domain import FEISHU_DOMAIN, LARK_DOMAIN
+from channel.feishu.domain import FEISHU_DOMAIN, LARK_DOMAIN, WRONG_DOMAIN_CODE, WS_ENDPOINT_PATH
 from channel.feishu.feishu_channel import FeiShuChanel
 from channel.feishu.feishu_message import _download_resource
 from channel.feishu.feishu_static_card import upload_public_image_to_feishu
@@ -19,22 +19,22 @@ def _response(payload):
     return Mock(status_code=200, json=Mock(return_value=payload))
 
 
-def test_lark_discovery_even_when_domestic_token_succeeds():
+def test_lark_app_is_detected_through_the_ws_endpoint():
     channel = _channel()
     with patch("channel.feishu.feishu_channel.requests.post", side_effect=[
-        _response({"code": 0, "tenant_access_token": "shared-token"}),
-        _response({"code": 1000040351}),
-        _response({"code": 0}),
+        _response({"code": WRONG_DOMAIN_CODE, "msg": "Incorrect domain name"}),
         _response({"code": 0, "tenant_access_token": "lark-token"}),
     ]) as post:
-        assert channel.fetch_access_token() == "shared-token"
         channel._detect_platform()
         assert channel.feishu_domain == LARK_DOMAIN
         assert channel.fetch_access_token() == "lark-token"
+    probe = post.call_args_list[0].kwargs
+    assert probe["url"] == FEISHU_DOMAIN + WS_ENDPOINT_PATH
+    assert probe["json"] == {"AppID": "cli_test", "AppSecret": "secret"}
     assert post.call_args.kwargs["url"].startswith(LARK_DOMAIN)
 
 
-def test_domestic_discovery_does_not_probe_lark():
+def test_feishu_app_keeps_the_feishu_domain():
     channel = _channel()
     with patch("channel.feishu.feishu_channel.requests.post", return_value=_response({"code": 0})) as post:
         channel._detect_platform()
@@ -42,7 +42,7 @@ def test_domestic_discovery_does_not_probe_lark():
     assert post.call_count == 1
 
 
-def test_permission_error_does_not_switch_platform():
+def test_other_errors_do_not_switch_platform():
     channel = _channel()
     with patch("channel.feishu.feishu_channel.requests.post", return_value=_response({"code": 99991663})) as post:
         channel._detect_platform()
@@ -50,11 +50,16 @@ def test_permission_error_does_not_switch_platform():
     assert post.call_count == 1
 
 
+def test_a_failed_probe_keeps_the_feishu_domain():
+    channel = _channel()
+    with patch("channel.feishu.feishu_channel.requests.post", side_effect=ConnectionError("offline")):
+        channel._detect_platform()
+    assert channel.feishu_domain == FEISHU_DOMAIN
+
+
 def test_platform_is_per_instance():
     domestic, international = _channel(), _channel()
-    with patch("channel.feishu.feishu_channel.requests.post", side_effect=[
-        _response({"code": 1000040351}), _response({"code": 0}),
-    ]):
+    with patch("channel.feishu.feishu_channel.requests.post", return_value=_response({"code": WRONG_DOMAIN_CODE})):
         international._detect_platform()
     assert domestic.feishu_domain == FEISHU_DOMAIN
     assert international.feishu_domain == LARK_DOMAIN
@@ -89,6 +94,14 @@ def test_websocket_domain_mismatch_retries_without_backoff():
     channel, domains = _run_ws([RuntimeError("1000040351: Incorrect domain name"), None])
     assert domains == [FEISHU_DOMAIN, LARK_DOMAIN]
     channel._ws_stop_event.wait.assert_not_called()
+    channel.report_startup_error.assert_not_called()
+
+
+def test_websocket_domain_mismatch_is_matched_by_code_not_message():
+    from lark_oapi.ws.exception import ClientException
+
+    channel, domains = _run_ws([ClientException(WRONG_DOMAIN_CODE, "域名错误"), None])
+    assert domains == [FEISHU_DOMAIN, LARK_DOMAIN]
     channel.report_startup_error.assert_not_called()
 
 

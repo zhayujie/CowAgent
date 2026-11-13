@@ -3,19 +3,9 @@
 FEISHU_DOMAIN = "https://open.feishu.cn"
 LARK_DOMAIN = "https://open.larksuite.com"
 
+# Returned by the websocket endpoint API when an app is called on the other
+# platform's domain, e.g. an international Lark app on open.feishu.cn.
+WRONG_DOMAIN_CODE = 1000040351
 
-def resolve_feishu_domain(value=None):
-    """Resolve a platform name or official HTTPS API origin.
-
-    Restrict credential-bearing requests to the two supported platform origins;
-    a typo must not send an app secret or tenant token to an arbitrary host.
-    """
-    domain = (value or FEISHU_DOMAIN).strip().rstrip("/").lower()
-    aliases = {"feishu": FEISHU_DOMAIN, "lark": LARK_DOMAIN,
-               FEISHU_DOMAIN: FEISHU_DOMAIN, LARK_DOMAIN: LARK_DOMAIN}
-    if domain not in aliases:
-        raise ValueError(
-            "Unsupported Feishu/Lark API domain; expected https://open.feishu.cn "
-            "or https://open.larksuite.com"
-        )
-    return aliases[domain]
+# The SDK requests this endpoint to get the long-connection URL.
+WS_ENDPOINT_PATH = "/callback/ws/endpoint"

@@ -22,7 +22,7 @@ def _event(content):
 def _fake_download(monkeypatch, fail_keys=()):
     calls = []
 
-    def download(message_id, key, resource_type, access_token, path, max_bytes):
+    def download(message_id, key, resource_type, access_token, path, max_bytes, domain=None):
         calls.append((key, resource_type, path))
         if key in fail_keys:
             return False
