@@ -682,3 +682,48 @@ def test_build_graph_keeps_links_under_symlinked_knowledge_dir(tmp_path):
 
     edges = {(l["source"], l["target"]) for l in svc.build_graph()["links"]}
     assert edges == {("notes/a.md", "notes/b.md")}
+
+
+def test_windows_reserved_device_names_are_rejected(tmp_path):
+    # Path validation already rejects Windows-illegal punctuation; reserved
+    # device names (CON, NUL, COM1, ...) have to be rejected too, or a
+    # document or category that saves on POSIX fails or hits a device on Windows.
+    svc, _manager = service(tmp_path)
+
+    for path in ("CON.md", "nul.md", "COM1.md", "LPT9.md", "AUX.md"):
+        result = svc.dispatch("create_document", {"path": path, "content": "# x\n"})
+        assert result["code"] == 403, path
+        assert not (tmp_path / "knowledge" / path).exists(), path
+
+    for path in ("NUL", "con", "COM2"):
+        result = svc.dispatch("create_category", {"path": path})
+        assert result["code"] == 403, path
+        assert not (tmp_path / "knowledge" / path).exists(), path
+
+    result = svc.dispatch("create_document", {"path": "PRN/notes.md", "content": "# x\n"})
+    assert result["code"] == 403
+    assert not (tmp_path / "knowledge/PRN").exists()
+
+    assert svc.dispatch("create_category", {"path": "notes"})["payload"]["created"]
+    result = svc.dispatch("rename_category", {"path": "notes", "new_path": "PRN"})
+    assert result["code"] == 403
+    assert (tmp_path / "knowledge/notes").is_dir()
+    assert not (tmp_path / "knowledge/PRN").exists()
+
+    imported = svc.dispatch("import_documents", {
+        "target_category": "notes",
+        "files": [{"filename": "CON.md", "content": b"# x"}],
+        "conflict_strategy": "overwrite",
+    })
+    assert imported["code"] == 200
+    assert imported["payload"]["imported"] == 0
+    assert imported["payload"]["failed"] == 1
+    assert not (tmp_path / "knowledge/notes/CON.md").exists()
+
+    # Nearby ordinary names, including COM10 (not a reserved device), stay valid.
+    for path in ("console.md", "COM10.md"):
+        created = svc.dispatch("create_document", {"path": path, "content": "# ok\n"})
+        assert created["code"] == 200, path
+        assert (tmp_path / "knowledge" / path).read_text(encoding="utf-8") == "# ok\n"
+    category = svc.dispatch("create_category", {"path": "convention"})
+    assert category["payload"]["created"] is True
