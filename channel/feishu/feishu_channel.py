@@ -46,6 +46,7 @@ from common.log import logger
 from common.media_download import MAX_FILE_BYTES, MAX_IMAGE_BYTES, download_bytes, download_to_file
 from common.singleton import singleton
 from config import conf
+from channel.feishu.domain import FEISHU_DOMAIN, LARK_DOMAIN, WRONG_DOMAIN_CODE, WS_ENDPOINT_PATH
 
 # Suppress verbose logs from Lark SDK
 logging.getLogger("Lark").setLevel(logging.WARNING)
@@ -266,6 +267,9 @@ def _register_via_qr_in_terminal() -> bool:
 
 @singleton
 class FeiShuChanel(ChatChannel):
+    # Keep a class-level default for tests and legacy callers that construct an
+    # instance with __new__ and therefore bypass __init__.
+    feishu_domain = FEISHU_DOMAIN
     # Class-level defaults, read once at import for the legacy single-instance
     # case. The authoritative per-instance values are re-read in startup() via
     # self.cfg(), which prefers this instance's credential override when set.
@@ -296,6 +300,7 @@ class FeiShuChanel(ChatChannel):
         # time.sleep() is not usable here: it blocks for up to 60 seconds and
         # stop() must not wait that long.
         self._ws_stop_event = threading.Event()
+        self.feishu_domain = FEISHU_DOMAIN
         self._bot_open_id = None  # cached bot open_id for @-mention matching
         self._bot_open_id_fetched_at = 0.0  # last lookup attempt, for retry backoff
         # When this channel started serving. Set in startup(); 0 means "unknown",
@@ -335,6 +340,7 @@ class FeiShuChanel(ChatChannel):
         self.feishu_app_secret = self.cfg('feishu_app_secret')
         self.feishu_token = self.cfg('feishu_token')
         self.feishu_event_mode = self.cfg('feishu_event_mode', 'websocket')
+        self.feishu_domain = FEISHU_DOMAIN
 
         # 命令行启动场景：缺少凭据时尝试通过 lark.register_app 在终端弹二维码
         # 引导用户扫码创建应用。Web 控制台启动同样会走到这里，但控制台用户通常
@@ -349,11 +355,33 @@ class FeiShuChanel(ChatChannel):
                 self.report_startup_error(err)
                 return
 
+        self._detect_platform()
         self._fetch_bot_open_id()
         if self.feishu_event_mode == 'websocket':
             self._startup_websocket()
         else:
             self._startup_webhook()
+
+    def _detect_platform(self):
+        """Switch to open.larksuite.com when Feishu rejects this app's domain.
+
+        The token API cannot tell the platforms apart, since both domains can
+        issue a token for the same app. The websocket endpoint API answers
+        WRONG_DOMAIN_CODE on the wrong domain, in webhook mode too.
+        """
+        if self.feishu_domain == LARK_DOMAIN:
+            return
+        try:
+            response = requests.post(
+                url=FEISHU_DOMAIN + WS_ENDPOINT_PATH,
+                json={"AppID": self.feishu_app_id, "AppSecret": self.feishu_app_secret},
+                timeout=(5, 10),
+            )
+            if response.json().get("code") == WRONG_DOMAIN_CODE:
+                self.feishu_domain = LARK_DOMAIN
+                logger.info("[FeiShu] International Lark app detected; using open.larksuite.com")
+        except Exception as e:
+            logger.warning(f"[FeiShu] Platform detection failed, keeping Feishu domain: {e}")
 
     def _fetch_bot_open_id(self):
         """Fetch the bot's own open_id via API so we can match @-mentions without feishu_bot_name."""
@@ -364,7 +392,7 @@ class FeiShuChanel(ChatChannel):
                 logger.warning("[FeiShu] Cannot fetch bot info: no access_token")
                 return False
             headers = {"Authorization": "Bearer " + access_token}
-            resp = requests.get("https://open.feishu.cn/open-apis/bot/v3/info/", headers=headers, timeout=5)
+            resp = requests.get(self.feishu_domain + "/open-apis/bot/v3/info/", headers=headers, timeout=5)
             if resp.status_code == 200:
                 data = resp.json()
                 if data.get("code") == 0:
@@ -538,7 +566,8 @@ class FeiShuChanel(ChatChannel):
                         self.feishu_app_id,
                         self.feishu_app_secret,
                         event_handler=event_handler,
-                        log_level=lark.LogLevel.WARNING
+                        log_level=lark.LogLevel.WARNING,
+                        domain=self.feishu_domain,
                     )
                     self._ws_client = ws_client
                     logger.debug("[FeiShu] Websocket client starting...")
@@ -552,6 +581,13 @@ class FeiShuChanel(ChatChannel):
                     error_msg = str(e)
                     is_ssl_error = ("CERTIFICATE_VERIFY_FAILED" in error_msg
                                     or "certificate verify failed" in error_msg.lower())
+                    # The message text follows the request locale, so match the code only.
+                    is_domain_error = getattr(e, "code", None) == WRONG_DOMAIN_CODE \
+                        or error_msg.startswith(f"{WRONG_DOMAIN_CODE}:")
+                    if is_domain_error and self.feishu_domain == FEISHU_DOMAIN:
+                        self.feishu_domain = LARK_DOMAIN
+                        logger.warning("[FeiShu] Feishu domain rejected; retrying websocket on open.larksuite.com")
+                        continue
                     attempt += 1
                     if is_ssl_error and not ssl_verify_disabled:
                         logger.warning(f"[FeiShu] SSL error: {error_msg}, retrying with SSL verification disabled...")
@@ -643,7 +679,7 @@ class FeiShuChanel(ChatChannel):
 
         if is_group and feishu_msg.msg_id:
             url = (
-                "https://open.feishu.cn/open-apis/im/v1/messages/"
+                self.feishu_domain + "/open-apis/im/v1/messages/"
                 f"{feishu_msg.msg_id}/reply"
             )
             response = requests.post(
@@ -653,7 +689,7 @@ class FeiShuChanel(ChatChannel):
                 timeout=(5, 10),
             )
         else:
-            url = "https://open.feishu.cn/open-apis/im/v1/messages"
+            url = self.feishu_domain + "/open-apis/im/v1/messages"
             response = requests.post(
                 url,
                 headers=headers,
@@ -812,7 +848,8 @@ class FeiShuChanel(ChatChannel):
 
         # 构造飞书消息对象
         feishu_msg = FeishuMessage(
-            event, is_group=is_group, access_token=self.fetch_access_token(), bot_mention_keys=bot_mention_keys
+            event, is_group=is_group, access_token=self.fetch_access_token(), bot_mention_keys=bot_mention_keys,
+            domain=self.feishu_domain
         )
         if not feishu_msg:
             return
@@ -970,6 +1007,7 @@ class FeiShuChanel(ChatChannel):
                 lambda url: upload_public_image_to_feishu(
                     url,
                     access_token,
+                    domain=self.feishu_domain,
                 ),
             )
             msg_type, prepared_content_json = build_text_delivery(delivery_text)
@@ -1048,7 +1086,7 @@ class FeiShuChanel(ChatChannel):
 
         if can_reply:
             # 群聊中回复已有消息
-            url = f"https://open.feishu.cn/open-apis/im/v1/messages/{msg.msg_id}/reply"
+            url = f"{self.feishu_domain}/open-apis/im/v1/messages/{msg.msg_id}/reply"
             data = {
                 "msg_type": msg_type,
                 "content": content_json
@@ -1056,7 +1094,7 @@ class FeiShuChanel(ChatChannel):
             res = requests.post(url=url, headers=headers, json=data, timeout=(5, 10))
         else:
             # 发送新消息（私聊或群聊中无msg_id的情况，如定时任务）
-            url = "https://open.feishu.cn/open-apis/im/v1/messages"
+            url = self.feishu_domain + "/open-apis/im/v1/messages"
             params = {"receive_id_type": context.get("receive_id_type") or "open_id"}
             data = {
                 "receive_id": context.get("receiver"),
@@ -1229,7 +1267,7 @@ class FeiShuChanel(ChatChannel):
             """同步执行：创建卡片实体 → 发送消息。任意一步失败则 disabled=True 触发降级"""
             try:
                 # 步骤 1: 创建卡片实体
-                create_url = "https://open.feishu.cn/open-apis/cardkit/v1/cards"
+                create_url = self.feishu_domain + "/open-apis/cardkit/v1/cards"
                 create_body = {"type": "card_json", "data": _build_card_json()}
                 res = requests.post(
                     create_url, headers=headers, json=create_body, timeout=(5, 10)
@@ -1241,7 +1279,7 @@ class FeiShuChanel(ChatChannel):
                         f"(code={res_json.get('code')}, msg={res_json.get('msg')}). "
                         f"本次回复已自动降级为普通文本回复（一次性返回完整内容）。"
                         f"如需开启流式打字机效果与完整 Markdown 渲染，请到飞书开放平台 "
-                        f"https://open.feishu.cn/app 给机器人开通 cardkit:card:write 权限"
+                        f"{self.feishu_domain}/app 给机器人开通 cardkit:card:write 权限"
                         f"（创建与更新卡片）并重新发布版本，同时确保飞书客户端 >= 7.20。"
                     )
                     with lock:
@@ -1258,7 +1296,7 @@ class FeiShuChanel(ChatChannel):
                 can_reply = is_group and msg and hasattr(msg, "msg_id") and msg.msg_id
                 if can_reply:
                     send_url = (
-                        f"https://open.feishu.cn/open-apis/im/v1/messages/"
+                        f"{self.feishu_domain}/open-apis/im/v1/messages/"
                         f"{msg.msg_id}/reply"
                     )
                     send_body = {"msg_type": "interactive", "content": content_payload}
@@ -1266,7 +1304,7 @@ class FeiShuChanel(ChatChannel):
                         send_url, headers=headers, json=send_body, timeout=(5, 10)
                     )
                 else:
-                    send_url = "https://open.feishu.cn/open-apis/im/v1/messages"
+                    send_url = self.feishu_domain + "/open-apis/im/v1/messages"
                     params = {"receive_id_type": receive_id_type}
                     send_body = {
                         "receive_id": receiver,
@@ -1309,7 +1347,7 @@ class FeiShuChanel(ChatChannel):
             if not cid:
                 return
             url = (
-                f"https://open.feishu.cn/open-apis/cardkit/v1/cards/"
+                f"{self.feishu_domain}/open-apis/cardkit/v1/cards/"
                 f"{cid}/elements/{ELEMENT_ID}/content"
             )
             body = {
@@ -1333,7 +1371,7 @@ class FeiShuChanel(ChatChannel):
                 full_card = progress_state.build_card(streaming=streaming)
             if not cid:
                 return
-            put_url = f"https://open.feishu.cn/open-apis/cardkit/v1/cards/{cid}"
+            put_url = f"{self.feishu_domain}/open-apis/cardkit/v1/cards/{cid}"
             put_body = {
                 "card": {"type": "card_json", "data": json.dumps(full_card, ensure_ascii=False)},
                 "sequence": _next_sequence(),
@@ -1439,7 +1477,7 @@ class FeiShuChanel(ChatChannel):
                     init_busy = init_in_flight[0]
                 final_text = resolve_markdown_images(
                     final_text,
-                    lambda url: upload_public_image_to_feishu(url, access_token),
+                    lambda url: upload_public_image_to_feishu(url, access_token, domain=self.feishu_domain),
                 )
                 with lock:
                     # Collapse the accumulated text into current_text so the
@@ -1603,7 +1641,7 @@ class FeiShuChanel(ChatChannel):
             """同步执行：创建卡片实体 → 发送消息。任意一步失败则 disabled=True 触发降级"""
             try:
                 # 步骤 1: 创建卡片实体
-                create_url = "https://open.feishu.cn/open-apis/cardkit/v1/cards"
+                create_url = self.feishu_domain + "/open-apis/cardkit/v1/cards"
                 create_body = {"type": "card_json", "data": _build_card_json()}
                 res = requests.post(
                     create_url, headers=headers, json=create_body, timeout=(5, 10)
@@ -1615,7 +1653,7 @@ class FeiShuChanel(ChatChannel):
                         f"(code={res_json.get('code')}, msg={res_json.get('msg')}). "
                         f"本次回复已自动降级为普通文本回复（一次性返回完整内容）。"
                         f"如需开启流式打字机效果与完整 Markdown 渲染，请到飞书开放平台 "
-                        f"https://open.feishu.cn/app 给机器人开通 cardkit:card:write 权限"
+                        f"{self.feishu_domain}/app 给机器人开通 cardkit:card:write 权限"
                         f"（创建与更新卡片）并重新发布版本，同时确保飞书客户端 >= 7.20。"
                     )
                     with lock:
@@ -1632,7 +1670,7 @@ class FeiShuChanel(ChatChannel):
                 can_reply = is_group and msg and hasattr(msg, "msg_id") and msg.msg_id
                 if can_reply:
                     send_url = (
-                        f"https://open.feishu.cn/open-apis/im/v1/messages/"
+                        f"{self.feishu_domain}/open-apis/im/v1/messages/"
                         f"{msg.msg_id}/reply"
                     )
                     send_body = {"msg_type": "interactive", "content": content_payload}
@@ -1640,7 +1678,7 @@ class FeiShuChanel(ChatChannel):
                         send_url, headers=headers, json=send_body, timeout=(5, 10)
                     )
                 else:
-                    send_url = "https://open.feishu.cn/open-apis/im/v1/messages"
+                    send_url = self.feishu_domain + "/open-apis/im/v1/messages"
                     params = {"receive_id_type": receive_id_type}
                     send_body = {
                         "receive_id": receiver,
@@ -1683,7 +1721,7 @@ class FeiShuChanel(ChatChannel):
             if not cid:
                 return
             url = (
-                f"https://open.feishu.cn/open-apis/cardkit/v1/cards/"
+                f"{self.feishu_domain}/open-apis/cardkit/v1/cards/"
                 f"{cid}/elements/{ELEMENT_ID}/content"
             )
             body = {
@@ -1714,7 +1752,7 @@ class FeiShuChanel(ChatChannel):
             preview_text = final_text
             final_text = resolve_markdown_images(
                 final_text,
-                lambda url: upload_public_image_to_feishu(url, access_token),
+                lambda url: upload_public_image_to_feishu(url, access_token, domain=self.feishu_domain),
             )
 
             # 1) 通过整卡更新接口把 streaming_mode 关掉，并改写 summary
@@ -1737,7 +1775,7 @@ class FeiShuChanel(ChatChannel):
                     ],
                 },
             }
-            put_url = f"https://open.feishu.cn/open-apis/cardkit/v1/cards/{cid}"
+            put_url = f"{self.feishu_domain}/open-apis/cardkit/v1/cards/{cid}"
             put_body = {
                 "card": {"type": "card_json", "data": json.dumps(full_card, ensure_ascii=False)},
                 "sequence": _next_sequence(),
@@ -1886,7 +1924,7 @@ class FeiShuChanel(ChatChannel):
         return on_event
 
     def fetch_access_token(self) -> str:
-        url = "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal/"
+        url = self.feishu_domain + "/open-apis/auth/v3/tenant_access_token/internal/"
         headers = {
             "Content-Type": "application/json"
         }
@@ -1922,7 +1960,7 @@ class FeiShuChanel(ChatChannel):
                 return None
 
             # Upload directly from local file
-            upload_url = "https://open.feishu.cn/open-apis/im/v1/images"
+            upload_url = self.feishu_domain + "/open-apis/im/v1/images"
             data = {'image_type': 'message'}
             headers = {'Authorization': f'Bearer {access_token}'}
 
@@ -1954,7 +1992,7 @@ class FeiShuChanel(ChatChannel):
             return None
 
         suffix = utils.get_path_suffix(img_url)
-        upload_url = "https://open.feishu.cn/open-apis/im/v1/images"
+        upload_url = self.feishu_domain + "/open-apis/im/v1/images"
         data = {
             'image_type': 'message'
         }
@@ -2064,7 +2102,7 @@ class FeiShuChanel(ChatChannel):
             file_type_map = {'.mp4': 'mp4'}
             file_type = file_type_map.get(file_ext, 'mp4')
 
-            upload_url = "https://open.feishu.cn/open-apis/im/v1/files"
+            upload_url = self.feishu_domain + "/open-apis/im/v1/files"
             data = {
                 'file_type': file_type,
                 'file_name': file_name
@@ -2140,7 +2178,7 @@ class FeiShuChanel(ChatChannel):
                 upload_path = audio_path
 
         file_name = os.path.splitext(os.path.basename(upload_path))[0] + '.opus'
-        upload_url = "https://open.feishu.cn/open-apis/im/v1/files"
+        upload_url = self.feishu_domain + "/open-apis/im/v1/files"
         data = {'file_type': 'opus', 'file_name': file_name}
         headers = {'Authorization': f'Bearer {access_token}'}
 
@@ -2206,7 +2244,7 @@ class FeiShuChanel(ChatChannel):
             file_type = file_type_map.get(file_ext, 'stream')  # Default to stream for other types
 
             # Upload file to Feishu
-            upload_url = "https://open.feishu.cn/open-apis/im/v1/files"
+            upload_url = self.feishu_domain + "/open-apis/im/v1/files"
             data = {'file_type': file_type, 'file_name': file_name}
             headers = {'Authorization': f'Bearer {access_token}'}
 
@@ -2251,7 +2289,7 @@ class FeiShuChanel(ChatChannel):
             }
             file_type = file_type_map.get(file_ext, 'stream')
 
-            upload_url = "https://open.feishu.cn/open-apis/im/v1/files"
+            upload_url = self.feishu_domain + "/open-apis/im/v1/files"
             data = {'file_type': file_type, 'file_name': file_name}
             headers = {'Authorization': f'Bearer {access_token}'}
 

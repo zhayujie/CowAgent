@@ -8,11 +8,12 @@ import requests
 from common.log import logger
 from common import state_dir, utils
 from common.media_download import MAX_FILE_BYTES, MAX_IMAGE_BYTES, download_to_file
+from channel.feishu.domain import FEISHU_DOMAIN
 
 
-def _download_resource(message_id, key, resource_type, access_token, path, max_bytes) -> bool:
+def _download_resource(message_id, key, resource_type, access_token, path, max_bytes, domain=FEISHU_DOMAIN) -> bool:
     """Save one message resource (image / file / audio) to ``path``."""
-    url = f"https://open.feishu.cn/open-apis/im/v1/messages/{message_id}/resources/{key}"
+    url = f"{domain}/open-apis/im/v1/messages/{message_id}/resources/{key}"
     try:
         download_to_file(
             url, path, max_bytes, timeout=(5, 30),
@@ -67,11 +68,12 @@ class FeishuMessage(ChatMessage):
     # Message types __init__ can parse; anything else raises NotImplementedError.
     SUPPORTED_TYPES = ("text", "image", "post", "file", "audio")
 
-    def __init__(self, event: dict, is_group=False, access_token=None, bot_mention_keys=()):
+    def __init__(self, event: dict, is_group=False, access_token=None, bot_mention_keys=(), domain=FEISHU_DOMAIN):
         super().__init__(event)
         msg = event.get("message")
         sender = event.get("sender")
         self.access_token = access_token
+        self.domain = domain.rstrip("/")
         self.msg_id = msg.get("message_id")
         self.create_time = msg.get("create_time")
         self.is_group = is_group
@@ -94,7 +96,7 @@ class FeishuMessage(ChatMessage):
             # 下载图片到工作空间临时目录
             tmp_dir = str(state_dir.tmp_dir())
             image_path = os.path.join(tmp_dir, f"{safe_filename(image_key) or 'image'}.png")
-            if _download_resource(self.msg_id, image_key, "image", access_token, image_path, MAX_IMAGE_BYTES):
+            if _download_resource(self.msg_id, image_key, "image", access_token, image_path, MAX_IMAGE_BYTES, domain=self.domain):
                 logger.info(f"[FeiShu] Downloaded single image, key={image_key}, path={image_path}")
                 self.content = image_path
                 self.image_path = image_path  # 保存图片路径
@@ -201,7 +203,7 @@ class FeishuMessage(ChatMessage):
             failed_images = []
             for image_key in dict.fromkeys(image_keys):
                 image_path = os.path.join(tmp_dir, f"{safe_filename(image_key) or 'image'}.png")
-                if _download_resource(self.msg_id, image_key, "image", access_token, image_path, MAX_IMAGE_BYTES):
+                if _download_resource(self.msg_id, image_key, "image", access_token, image_path, MAX_IMAGE_BYTES, domain=self.domain):
                     self.image_paths[image_key] = image_path
                     self.attachments.append((image_path, "image"))
                     logger.info(f"[FeiShu] Image downloaded from post message, key={image_key}, path={image_path}")
@@ -223,7 +225,7 @@ class FeishuMessage(ChatMessage):
                     tmp_dir, f"{safe_filename(file_key) or file_type}" + (f".{suffix}" if suffix else "")
                 )
                 label = "视频" if file_type == "video" else "文件"
-                if _download_resource(self.msg_id, file_key, "file", access_token, file_path, MAX_FILE_BYTES):
+                if _download_resource(self.msg_id, file_key, "file", access_token, file_path, MAX_FILE_BYTES, domain=self.domain):
                     self.attachments.append((file_path, file_type))
                     content_parts.append(f"[{label}: {file_path}]")
                     logger.info(f"[FeiShu] {file_type} downloaded from post message, key={file_key}, path={file_path}")
@@ -250,7 +252,7 @@ class FeishuMessage(ChatMessage):
             )
 
             def _download_file():
-                _download_resource(self.msg_id, file_key, "file", access_token, self.content, MAX_FILE_BYTES)
+                _download_resource(self.msg_id, file_key, "file", access_token, self.content, MAX_FILE_BYTES, domain=self.domain)
             self._prepare_fn = _download_file
         elif msg_type == "audio":
             # 飞书用户发送的语音消息类型为 "audio"，文件为 opus 编码格式。
@@ -267,7 +269,7 @@ class FeishuMessage(ChatMessage):
 
             def _download_audio():
                 logger.info(f"[FeiShu] downloading audio: file_key={file_key}, msg_id={self.msg_id}")
-                if _download_resource(self.msg_id, file_key, "file", access_token, self.content, MAX_FILE_BYTES):
+                if _download_resource(self.msg_id, file_key, "file", access_token, self.content, MAX_FILE_BYTES, domain=self.domain):
                     logger.info(f"[FeiShu] audio saved to: {self.content}")
             self._prepare_fn = _download_audio
         else:
@@ -305,7 +307,7 @@ class FeishuMessage(ChatMessage):
         if not parent_id or not self.access_token:
             return ""
 
-        url = "https://open.feishu.cn/open-apis/im/v1/messages/{}".format(parent_id)
+        url = "{}/open-apis/im/v1/messages/{}".format(self.domain, parent_id)
         headers = {"Authorization": "Bearer " + self.access_token}
         try:
             response = requests.get(

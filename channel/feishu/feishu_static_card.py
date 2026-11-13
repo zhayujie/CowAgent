@@ -7,6 +7,7 @@ from urllib.parse import urljoin, urlparse
 
 import requests
 
+from channel.feishu.domain import FEISHU_DOMAIN
 from common.markdown_fence import transform_outside_fences
 
 _BLOCK_MARKDOWN = re.compile(
@@ -195,6 +196,7 @@ def upload_public_image_to_feishu(
     url: str,
     access_token: str,
     post=requests.post,
+    domain=FEISHU_DOMAIN,
 ) -> Optional[str]:
     """Download a public image and upload its bytes to Feishu."""
     payload, content_type = download_public_image(url)
@@ -206,7 +208,7 @@ def upload_public_image_to_feishu(
         "image/bmp": "bmp",
     }.get(content_type, "img")
     response = post(
-        "https://open.feishu.cn/open-apis/im/v1/images",
+        f"{domain}/open-apis/im/v1/images",
         headers={"Authorization": "Bearer " + access_token},
         data={"image_type": "message"},
         files={
