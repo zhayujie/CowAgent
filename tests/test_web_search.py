@@ -90,7 +90,7 @@ class TestProviderOrder(unittest.TestCase):
         self.assertEqual(
             web_search_module.PROVIDER_ORDER,
             ("deepseek", "bocha", "qianfan", "zhipu", "cowagent", "linkai", "anysearch", "serply", "tavily", "outcrawl", "firecrawl",
-             "specstream", "searxng", "keenable"),
+             "specstream", "olostep", "searxng", "keenable"),
         )
 
     def test_web_console_provider_list_stays_in_sync(self):
@@ -130,6 +130,11 @@ class TestProviderOrder(unittest.TestCase):
         self.assertEqual(ModelsHandler._search_provider_key("specstream", cfg), "console-key")
         with patch.dict(os.environ, {"SPECSTREAM_API_KEY": "env-key"}):
             self.assertEqual(ModelsHandler._search_provider_key("specstream", {}), "env-key")
+
+        cfg = {"tools": {"web_search": {"olostep_api_key": "console-key"}}}
+        self.assertEqual(ModelsHandler._search_provider_key("olostep", cfg), "console-key")
+        with patch.dict(os.environ, {"OLOSTEP_API_KEY": "env-key"}):
+            self.assertEqual(ModelsHandler._search_provider_key("olostep", {}), "env-key")
 
     def test_web_console_mirrors_keenable_opt_in(self):
         """The Search panel agrees with the tool: keenable is not configured
@@ -917,6 +922,35 @@ class TestSpecstreamKeyResolution(unittest.TestCase):
             self.assertEqual(web_search_module._get_api_key("specstream"), "")
 
 
+class TestOlostepKeyResolution(unittest.TestCase):
+    """The olostep key lives under tools.web_search, falling back to env."""
+
+    def setUp(self):
+        self._prev_env = os.environ.get("OLOSTEP_API_KEY")
+        os.environ.pop("OLOSTEP_API_KEY", None)
+
+    def tearDown(self):
+        if self._prev_env is None:
+            os.environ.pop("OLOSTEP_API_KEY", None)
+        else:
+            os.environ["OLOSTEP_API_KEY"] = self._prev_env
+
+    def test_olostep_key_from_tools_config(self):
+        """tools.web_search.olostep_api_key is resolved, and wins over env."""
+        cfg = {"tools": {"web_search": {"olostep_api_key": "test-key-123"}}}
+        with patch.object(web_search_module, "conf", lambda: cfg):
+            self.assertEqual(web_search_module._get_api_key("olostep"), "test-key-123")
+            with patch.dict(os.environ, {"OLOSTEP_API_KEY": "env-key-456"}):
+                self.assertEqual(web_search_module._get_api_key("olostep"), "test-key-123")
+
+    def test_olostep_key_env_fallback(self):
+        """Without a config value, OLOSTEP_API_KEY is used; both empty -> ''."""
+        with patch.object(web_search_module, "conf", lambda: {}):
+            with patch.dict(os.environ, {"OLOSTEP_API_KEY": "env-key-456"}):
+                self.assertEqual(web_search_module._get_api_key("olostep"), "env-key-456")
+            self.assertEqual(web_search_module._get_api_key("olostep"), "")
+
+
 class TestKeenableBackend(unittest.TestCase):
     """Behaviour of WebSearch._search_keenable with a stubbed HTTP layer."""
 
@@ -1310,6 +1344,79 @@ class TestSpecstreamBackend(unittest.TestCase):
             result = self.tool._search_specstream("q", 10)
         self.assertEqual(result.status, "error")
         self.assertIn("Retry after 7 seconds", result.result)
+
+
+class TestOlostepBackend(unittest.TestCase):
+    """Behaviour of WebSearch._search_olostep with a stubbed HTTP layer."""
+
+    def setUp(self):
+        self.tool = web_search_module.WebSearch()
+
+    def test_search_olostep_maps_links(self):
+        """result.links items map to the unified output shape, the key travels
+        as a Bearer token and the query in the POST json body."""
+        payload = {
+            "id": "search_test",
+            "object": "search",
+            "query": "cowagent",
+            "result": {
+                "links": [
+                    {"url": "https://a.example/1", "title": "T1", "description": "s1"},
+                    {"url": "https://a.example/2", "title": "T2", "description": None},
+                ],
+            },
+        }
+        with patch.object(web_search_module, "_get_api_key", return_value="test-key-123"), \
+                patch.object(web_search_module.requests, "post",
+                             return_value=_fake_response(200, payload)) as mock_post:
+            result = self.tool._search_olostep("cowagent", 10)
+
+        self.assertEqual(result.status, "success")
+        self.assertEqual(result.result["backend"], "olostep")
+        self.assertEqual(result.result["total"], 2)
+        first, second = result.result["results"]
+        self.assertEqual(first, {"title": "T1", "url": "https://a.example/1", "snippet": "s1"})
+        self.assertEqual(second["snippet"], "")
+        self.assertEqual(mock_post.call_args[0][0], "https://api.olostep.com/v1/searches")
+        self.assertEqual(mock_post.call_args[1]["headers"]["Authorization"], "Bearer test-key-123")
+        self.assertEqual(mock_post.call_args[1]["json"], {"query": "cowagent", "limit": 10})
+
+    def test_search_olostep_clamps_count(self):
+        """count is clamped into 1-25 (the API rejects more) and sent as
+        limit; falsy -> 10."""
+        with patch.object(web_search_module, "_get_api_key", return_value="k"), \
+                patch.object(web_search_module.requests, "post",
+                             return_value=_fake_response(200, {"result": {"links": []}})) as mock_post:
+            for count, expected in ((25, 25), (50, 25), (0, 10), (None, 10), (5, 5)):
+                with self.subTest(count=count):
+                    self.tool._search_olostep("q", count)
+                    self.assertEqual(mock_post.call_args[1]["json"]["limit"], expected)
+
+    def test_search_olostep_empty_links(self):
+        """A reply without links is an empty success, not an error."""
+        with patch.object(web_search_module, "_get_api_key", return_value="k"), \
+                patch.object(web_search_module.requests, "post",
+                             return_value=_fake_response(200, {"result": {"links": []}})):
+            result = self.tool._search_olostep("q", 10)
+        self.assertEqual(result.status, "success")
+        self.assertEqual(result.result["results"], [])
+
+    def test_search_olostep_error_status_mapping(self):
+        """401/402/429 map to specific messages; other statuses are generic."""
+        cases = {
+            401: "Invalid Olostep API key",
+            402: "out of credits",
+            429: "rate limit reached",
+            500: "HTTP 500",
+        }
+        for status_code, fragment in cases.items():
+            with self.subTest(status_code=status_code):
+                with patch.object(web_search_module, "_get_api_key", return_value="k"), \
+                        patch.object(web_search_module.requests, "post",
+                                     return_value=_fake_response(status_code)):
+                    result = self.tool._search_olostep("q", 10)
+                self.assertEqual(result.status, "error")
+                self.assertIn(fragment, result.result)
 
 
 class TestSearxngUrlResolution(unittest.TestCase):
