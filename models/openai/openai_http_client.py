@@ -25,6 +25,7 @@ Design goals:
 import hashlib
 import json
 import re
+import time
 import uuid
 from typing import Any, Dict, Generator, Optional
 from urllib.parse import urlparse
@@ -37,6 +38,15 @@ from common.deployment import is_desktop
 
 DEFAULT_API_BASE = "https://api.openai.com/v1"
 DEFAULT_TIMEOUT = 600  # seconds; matches old openai SDK default
+# Longest a stream may send only SSE comments (e.g. ": keep-alive") before we
+# give up. Each comment resets the per-read socket timeout, so without this an
+# overloaded endpoint can hold a turn open forever. Same cap as the other
+# providers (deepseek / moonshot / mimo / doubao / minimax / linkai / modelscope).
+STREAM_KEEPALIVE_MAX_SECONDS = 180
+
+
+class _KeepAliveOnlyStream(Exception):
+    """Raised when a stream has sent only comments for too long."""
 
 
 _APP_TITLE = "CowAgent"
@@ -507,6 +517,15 @@ class OpenAIHTTPClient:
                     )
                     continue
                 yield chunk
+        except _KeepAliveOnlyStream:
+            logger.error(
+                f"[OpenAIHTTP] Stream timeout: only keep-alive received for "
+                f"{STREAM_KEEPALIVE_MAX_SECONDS}s"
+            )
+            yield self._make_error_chunk(
+                504,
+                f"Stream timeout: only keep-alive received for {STREAM_KEEPALIVE_MAX_SECONDS}s",
+            )
         except requests.exceptions.ChunkedEncodingError as e:
             yield self._make_error_chunk(0, f"Stream interrupted: {e}")
         except requests.exceptions.RequestException as e:
@@ -534,15 +553,19 @@ class OpenAIHTTPClient:
 
         Yields each event's joined ``data`` string. The terminal sentinel
         ``[DONE]`` is yielded as a literal string so the caller can break.
+
+        Raises ``_KeepAliveOnlyStream`` once comment lines are all that has
+        arrived for longer than ``STREAM_KEEPALIVE_MAX_SECONDS``.
         """
         buf = b""
+        last_data_at = time.time()
         data_lines = []
         first_line = True
         skip_lf = False
         newline = re.compile(rb"\r\n|\r|\n")
 
         def consume_line(raw_line):
-            nonlocal first_line
+            nonlocal first_line, last_data_at
             # Only the stream's initial BOM is framing. Other Unicode line
             # separators are payload and must survive inside JSON strings.
             encoding = "utf-8-sig" if first_line else "utf-8"
@@ -553,7 +576,11 @@ class OpenAIHTTPClient:
                     event = "\n".join(data_lines)
                     data_lines.clear()
                     return event
-            elif not line.startswith(":"):
+            elif line.startswith(":"):
+                if time.time() - last_data_at > STREAM_KEEPALIVE_MAX_SECONDS:
+                    raise _KeepAliveOnlyStream()
+            else:
+                last_data_at = time.time()
                 field, _, value = line.partition(":")
                 if value.startswith(" "):
                     value = value[1:]
