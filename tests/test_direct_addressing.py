@@ -430,6 +430,10 @@ class TestTheAddressComesOffBeforeTheModelSeesIt:
     def test_someone_else_s_name_is_left_in_place(self, tmp_path):
         assert self._strip(tmp_path, "@Primary 你是谁") == "@Primary 你是谁"
 
+    @pytest.mark.parametrize("query", ["@ops.com 你是谁", "@opsx 你是谁", "@运营助手长 你是谁"])
+    def test_a_prefix_of_the_selected_speaker_is_not_an_address(self, tmp_path, query):
+        assert self._strip(tmp_path, query) == query
+
     def test_an_unknown_speaker_leaves_the_text_alone(self, tmp_path):
         assert self._strip(tmp_path, "@运营助手 你是谁", "ghost") == "@运营助手 你是谁"
 
