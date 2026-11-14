@@ -72,6 +72,20 @@ def test_strip_address_drops_the_boundary_punctuation():
     assert strip_address("@运维。", ["运维", "ops"]) == "@运维。"
 
 
+@pytest.mark.parametrize("query", ["@opsx hi", "@ops.com hi", "@ops-lead hi", "  @OPS_extra hi", "@运维主管 帮我查"])
+def test_strip_address_preserves_a_label_prefix(query):
+    from agent.team_addressing import strip_address
+
+    assert strip_address(query, ["ops", "运维"]) == query
+
+
+def test_strip_address_matches_the_longest_complete_label():
+    from agent.team_addressing import strip_address
+
+    assert strip_address("@ops-lead: hi", ["ops", "ops-lead"]) == "hi"
+    assert strip_address("@ops-leader hi", ["ops", "ops-lead"]) == "@ops-leader hi"
+
+
 def test_dot_is_not_a_boundary_to_keep_domain_names():
     # "@ops.com" must not resolve to the "ops" teammate; "." stays excluded.
     assert addressed_agent_id("@ops.com 你好", ROSTER) == ""

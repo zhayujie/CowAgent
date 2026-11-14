@@ -143,7 +143,7 @@ def strip_address(query: str, labels: List[str]) -> str:
     pattern = (
         r"^\s*@(?:"
         + "|".join(re.escape(label) for label in sorted(labels, key=len, reverse=True))
-        + r")[" + _SEPARATORS + r"]*"
+        + r")(?=[" + _SEPARATORS + r"]|$)[" + _SEPARATORS + r"]*"
     )
     stripped = re.sub(pattern, "", query, count=1, flags=re.IGNORECASE)
     return stripped if stripped.strip() else query
