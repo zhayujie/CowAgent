@@ -127,16 +127,13 @@ class SQLiteVectorBackend(VectorBackend):
         vectors = []
         for row in rows:
             try:
-                decoded = self._decode_embedding(row["embedding"])
-                vector = [float(value) for value in decoded] if decoded else []
-                if not all(math.isfinite(value) for value in vector):
-                    raise ValueError("embedding contains nonfinite values")
+                vector = self._decode_finite_vector(row["embedding"])
             except (ValueError, TypeError, OverflowError, struct.error) as exc:
                 from common.log import logger
 
                 logger.warning("[SQLiteVectorBackend] Skipping malformed embedding for chunk %s: %s", row["id"], exc)
                 continue
-            if not vector:
+            if len(vector) == 0:
                 continue
             if len(vector) != expected_dim:
                 from common.log import logger
@@ -242,6 +239,24 @@ class SQLiteVectorBackend(VectorBackend):
         if _HAS_NUMPY:
             return np.array(embedding, dtype=np.float32).tobytes()
         return struct.pack("{}f".format(len(embedding)), *embedding)
+
+    @classmethod
+    def _decode_finite_vector(cls, raw):
+        """Decode a stored embedding for scoring; raise ValueError on NaN or inf.
+
+        Blobs are checked as NumPy arrays: converting every value to a Python
+        float first took most of the search time on a large index.
+        """
+        if _HAS_NUMPY and isinstance(raw, (bytes, bytearray)):
+            vector = np.frombuffer(raw, dtype=np.float32)
+            if not np.isfinite(vector).all():
+                raise ValueError("embedding contains nonfinite values")
+            return vector
+        decoded = cls._decode_embedding(raw)
+        vector = [float(value) for value in decoded] if decoded else []
+        if not all(math.isfinite(value) for value in vector):
+            raise ValueError("embedding contains nonfinite values")
+        return vector
 
     @staticmethod
     def _decode_embedding(raw) -> Optional[List[float]]:
