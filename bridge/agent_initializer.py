@@ -318,6 +318,7 @@ class AgentInitializer:
                         filtered = self._attribute_history(filtered, reader)
                 if filtered:
                     with agent.messages_lock:
+                        agent._history_restored = True
                         agent.messages = filtered
                     logger.debug(
                         f"[AgentInitializer] Restored {len(filtered)} messages "
@@ -1328,19 +1329,24 @@ class AgentInitializer:
             try:
                 if not agent.memory_manager:
                     continue
-                dream_candidates.setdefault(
-                    agent.agent_id, agent.memory_manager.flush_manager
-                )
                 with agent.messages_lock:
+                    # A restored Feishu session may be visible to the timer
+                    # before its first turn binds the platform identity.
+                    if getattr(agent, "_history_restored", False) and not hasattr(agent, "_current_user_id"):
+                        continue
+                    user_id = getattr(agent, "_current_user_id", None)
                     messages = list(agent.messages)
+                flush_manager = agent.memory_manager.flush_manager
+                dream_key = (agent.agent_id, user_id)
+                dream_candidates.setdefault(dream_key, flush_manager)
                 if not messages:
                     continue
-                result = agent.memory_manager.flush_manager.create_daily_summary(messages)
+                result = flush_manager.create_daily_summary(messages, user_id=user_id)
                 if result:
                     flushed += 1
-                    t = agent.memory_manager.flush_manager._last_flush_thread
+                    t = flush_manager._last_flush_thread
                     if t:
-                        flush_threads.append(t)
+                        flush_threads.append((dream_key, t))
             except Exception as e:
                 logger.warning(f"[DailyFlush] Failed for session {label}: {e}")
 
@@ -1348,13 +1354,18 @@ class AgentInitializer:
             logger.info(f"[DailyFlush] Flushed {flushed}/{len(agents)} agent session(s)")
 
         # Wait for all flush threads to finish before dreaming
-        for t in flush_threads:
+        pending_dreams = set()
+        for dream_key, t in flush_threads:
             t.join(timeout=60)
+            if t.is_alive():
+                pending_dreams.add(dream_key)
 
         # Phase 2: Deep Dream — distill daily memories → MEMORY.md + dream diary
-        for agent_id, dream_candidate in dream_candidates.items():
+        for (agent_id, user_id), dream_candidate in dream_candidates.items():
+            if (agent_id, user_id) in pending_dreams:
+                continue
             try:
-                result = dream_candidate.deep_dream()
+                result = dream_candidate.deep_dream(user_id=user_id)
                 if result:
                     logger.info(
                         f"[DeepDream] Memory distillation completed for "

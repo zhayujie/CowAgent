@@ -143,11 +143,11 @@ def build_agent_system_prompt(
     if conf().get("knowledge", True):
         sections.extend(_build_knowledge_section(workspace_dir, language, project_dir))
 
-    # 4. Workspace (working environment description). Two of its blocks only
-    # hold when the context files were actually loaded, which sub agents skip.
+    # 4. Workspace (working environment description).
+    context_paths = [file.path for file in context_files or ()]
     sections.extend(
         _build_workspace_section(
-            workspace_dir, language, bool(context_files), project_dir=project_dir
+            workspace_dir, language, context_paths, project_dir=project_dir
         )
     )
 
@@ -725,15 +725,13 @@ def _build_docs_section(workspace_dir: str, language: str) -> List[str]:
 
 
 def _build_workspace_section(
-    workspace_dir: str, language: str, context_files_loaded: bool = True,
+    workspace_dir: str, language: str, context_paths: List[str],
     project_dir: Optional[str] = None,
 ) -> List[str]:
     """Build the workspace section.
 
-    ``context_files_loaded`` gates the two blocks that are only true for an
-    Agent serving a user directly. A sub agent gets neither the context files
-    nor a user to talk to, so telling it that AGENT.md is already loaded would
-    both misinform it and talk it out of reading the workspace rules itself.
+    ``context_paths`` lists the files injected into this prompt. An empty list
+    omits the file notice and direct-user communication guidance.
 
     ``project_dir`` switches the section to the dual-directory layout used when
     the user has pointed the session at a project: the *project* is the working
@@ -750,7 +748,7 @@ def _build_workspace_section(
 
     if normalized_project:
         return _build_project_workspace_section(
-            workspace_dir, normalized_project, language, context_files_loaded
+            workspace_dir, normalized_project, language, context_paths
         )
 
     if language == "en":
@@ -776,16 +774,19 @@ def _build_workspace_section(
             "4. **When unsure**: run `bash pwd` to confirm the current directory, or `ls .` to see where you are",
             "",
         ]
-        if context_files_loaded:
+        if context_paths:
+            file_notes = {
+                "AGENT.md": "- ✅ `AGENT.md`: loaded - your persona and soul; follow it strictly. When your name, personality or style changes, proactively `edit` this file",
+                "USER.md": "- ✅ `USER.md`: loaded - private user profile. Use `edit` to update the relevant details when the user changes their name or preferred form of address.",
+                "RULE.md": "- ✅ `RULE.md`: loaded - workspace guide and rules; follow them strictly",
+                "MEMORY.md": "- ✅ `MEMORY.md`: loaded - long-term memory index",
+            }
             lines += [
                 "**Important - files already auto-loaded**:",
                 "",
-                "The following files are **already auto-loaded** into the system prompt at session start, so you **don't need to read them again with the read tool**:",
+                "The following files are **already auto-loaded** into this system prompt, so you **don't need to read them again with the read tool**:",
                 "",
-                "- ✅ `AGENT.md`: loaded - your persona and soul; follow it strictly. When your name, personality or style changes, proactively `edit` this file",
-                "- ✅ `USER.md`: loaded - the user's identity info. When the user changes how they're addressed, their name, etc., `edit` this file",
-                "- ✅ `RULE.md`: loaded - workspace guide and rules; follow them strictly",
-                "- ✅ `MEMORY.md`: loaded - long-term memory index",
+                *(file_notes.get(path, f"- ✅ `{path}`") for path in context_paths),
                 "",
                 "**💬 Communication norms**:",
                 "",
@@ -819,16 +820,19 @@ def _build_workspace_section(
             "4. **不确定时**: 先用 `bash pwd` 确认当前目录，或用 `ls .` 查看当前位置",
             "",
         ]
-        if context_files_loaded:
+        if context_paths:
+            file_notes = {
+                "AGENT.md": "- ✅ `AGENT.md`: 已加载 - 你的人格和灵魂设定，请严格遵循。当你的名字、性格或交流风格发生变化时，主动用 `edit` 更新此文件",
+                "USER.md": "- ✅ `USER.md`: 已加载 - 私人用户档案。当用户修改姓名或称呼时，用 `edit` 更新对应内容。",
+                "RULE.md": "- ✅ `RULE.md`: 已加载 - 工作空间使用指南和规则，请严格遵循",
+                "MEMORY.md": "- ✅ `MEMORY.md`: 已加载 - 长期记忆索引",
+            }
             lines += [
                 "**重要说明 - 文件已自动加载**:",
                 "",
-                "以下文件在会话启动时**已经自动加载**到系统提示词中，你**无需再用 read 工具读取**：",
+                "以下文件**已自动加载**到本轮系统提示词中，你**无需再用 read 工具读取**：",
                 "",
-                "- ✅ `AGENT.md`: 已加载 - 你的人格和灵魂设定，请严格遵循。当你的名字、性格或交流风格发生变化时，主动用 `edit` 更新此文件",
-                "- ✅ `USER.md`: 已加载 - 用户的身份信息。当用户修改称呼、姓名等身份信息时，用 `edit` 更新此文件",
-                "- ✅ `RULE.md`: 已加载 - 工作空间使用指南和规则，请严格遵循",
-                "- ✅ `MEMORY.md`: 已加载 - 长期记忆索引",
+                *(file_notes.get(path, f"- ✅ `{path}`") for path in context_paths),
                 "",
                 "**💬 交流规范**:",
                 "",
@@ -849,7 +853,7 @@ def _build_workspace_section(
 
 
 def _build_project_workspace_section(
-    workspace_dir: str, project_dir: str, language: str, context_files_loaded: bool
+    workspace_dir: str, project_dir: str, language: str, context_paths: List[str]
 ) -> List[str]:
     """Workspace section for a session pointed at a project directory.
 
@@ -906,15 +910,17 @@ def _build_project_workspace_section(
             "",
         ]
 
-    if context_files_loaded:
+    if context_paths:
+        separator = ", " if language == "en" else "、"
+        loaded_files = separator.join(f"`{path}`" for path in context_paths)
         if language == "en":
             lines += [
-                "**Files already auto-loaded** (no need to `read` again): `AGENT.md`, `USER.md`, `RULE.md`, `MEMORY.md` (from the system directory).",
+                f"**Files already auto-loaded** (no need to `read` again): {loaded_files} (from the system directory).",
                 "",
             ]
         else:
             lines += [
-                "**已自动加载的文件**（无需再次 `read`）：`AGENT.md`、`USER.md`、`RULE.md`、`MEMORY.md`（来自系统目录）。",
+                f"**已自动加载的文件**（无需再次 `read`）：{loaded_files}（来自系统目录）。",
                 "",
             ]
 

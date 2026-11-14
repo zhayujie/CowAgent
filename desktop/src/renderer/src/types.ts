@@ -904,8 +904,8 @@ export type ModelsAction =
 
 export interface ChannelField {
   key: string
-  label: string
-  type: 'text' | 'secret' | 'number' | 'bool'
+  label: string | { zh: string; en: string; 'zh-Hant'?: string }
+  type: 'text' | 'secret' | 'number' | 'bool' | 'select'
   value?: string | number | boolean
   default?: string | number | boolean
 }
@@ -942,7 +942,7 @@ export interface ChannelsResponse {
   instances?: ChannelInfo[]
 }
 
-export type ChannelAction = 'save' | 'connect' | 'disconnect' | 'rename'
+export type ChannelAction = 'save' | 'connect' | 'disconnect' | 'rename' | 'lookup_owner'
 
 // ============================================================
 // Agents / team roster (multi-Agent mode)

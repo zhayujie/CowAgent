@@ -63,6 +63,9 @@ class Ls(BaseTool):
         
         # Resolve path
         absolute_path = self._resolve_path(path)
+        from agent.memory.identity import permits_memory_path
+        if not permits_memory_path(self, absolute_path):
+            return ToolResult.fail("Error: Access denied: private memory path")
         
         # Security check: Prevent accessing sensitive config directory
         env_config_dir = expand_path("~/.cow")

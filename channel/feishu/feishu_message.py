@@ -278,7 +278,9 @@ class FeishuMessage(ChatMessage):
         if self.ctype == ContextType.TEXT:
             self.quoted_content = self._fetch_quoted_content(msg.get("parent_id"))
 
-        self.from_user_id = sender.get("sender_id").get("open_id")
+        self.identity_app_id = event.get("app_id", "")
+        self.identity_tenant_key = sender.get("tenant_key", "")
+        self.from_user_id = (sender.get("sender_id") or {}).get("open_id")
         self.to_user_id = event.get("app_id")
         if is_group:
             # 群聊

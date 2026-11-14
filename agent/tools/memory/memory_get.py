@@ -108,6 +108,7 @@ class MemoryGetTool(BaseTool):
             # here, which is how such an Agent used to lose every knowledge
             # page it had just been told about (#3175 follow-up).
             allowed_roots = [workspace_dir]
+            knowledge_root = None
             if path.startswith('knowledge/'):
                 from common import state_dir
                 knowledge_root = state_dir.knowledge_dir(base=workspace_dir)
@@ -129,6 +130,20 @@ class MemoryGetTool(BaseTool):
             if not any(_contained(real_file, root) for root in allowed_roots):
                 return ToolResult.fail("Error: Access denied: path outside workspace")
             
+            scope = getattr(self, "allowed_memory_scope", None)
+            if scope:
+                if knowledge_root is not None:
+                    from config import conf
+                    allowed = conf().get("knowledge", True) and _contained(real_file, knowledge_root)
+                else:
+                    scoped_root = workspace_dir / "memory" / "users" / scope
+                    allowed = _contained(real_file, scoped_root)
+                if not allowed:
+                    return ToolResult.fail("Error: Access denied: memory outside current conversation scope")
+
+            from agent.memory.identity import permits_memory_path
+            if not permits_memory_path(self, file_path):
+                return ToolResult.fail("Error: Access denied: private memory path")
             if is_credential_path(str(file_path)):
                 return ToolResult.fail(DENIED_MESSAGE)
 

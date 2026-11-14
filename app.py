@@ -192,6 +192,8 @@ class ChannelManager:
         from channel.channel_instances import ChannelInstance
 
         if isinstance(entry, ChannelInstance):
+            if entry.channel_type == const.FEISHU and entry.legacy and not entry.credentials:
+                return entry.instance_id, entry.channel_type, {}
             return (
                 entry.instance_id,
                 entry.channel_type,
@@ -647,6 +649,7 @@ def _migrate_team_roster():
         from config import conf, get_data_root
 
         team.migrate(conf(), os.path.join(get_data_root(), "config.json"))
+        team.migrate_feishu_settings(conf(), os.path.join(get_data_root(), "config.json"))
     except Exception as e:
         # Never a reason not to start: read() still falls back to config.json.
         logger.warning(f"[App] Could not move the roster into its own file: {e}")

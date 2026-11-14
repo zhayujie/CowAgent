@@ -65,6 +65,9 @@ class Send(BaseTool):
         
         # Resolve path
         absolute_path = self._resolve_path(path)
+        from agent.memory.identity import permits_memory_path
+        if not permits_memory_path(self, absolute_path):
+            return ToolResult.fail("Error: Access denied: private memory path")
 
         # Same credential guard as the other file tools, checked before exists().
         if is_credential_path(absolute_path):

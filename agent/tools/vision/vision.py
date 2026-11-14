@@ -186,6 +186,9 @@ class Vision(BaseTool):
         # guard as the file tools; the resolved path also catches symlinks.
         if not image.startswith(("http://", "https://")):
             resolved = self._resolve_path(image)
+            from agent.memory.identity import permits_memory_path
+            if not permits_memory_path(self, resolved):
+                return ToolResult.fail("Error: Access denied: private memory path")
             if is_credential_path(resolved):
                 return ToolResult.fail(DENIED_MESSAGE)
 

@@ -19,7 +19,10 @@ first write migrates them and clears the old keys.
 
 from __future__ import annotations
 
+import hashlib
 import json
+from contextlib import contextmanager
+from threading import RLock
 from pathlib import Path
 from typing import Any, Dict, Iterable, Mapping, Optional
 
@@ -33,7 +36,15 @@ from common.utils import expand_path
 #: source of truth for inbound routing. It is opt-in: absent, channel startup
 #: falls back to ``channel_type`` + flat credentials in config.json, so a legacy
 #: single-Agent install keeps working untouched.
-TEAM_KEYS = ("agents", "default_agent_id", "channel_instances")
+_FEISHU_MIGRATION = "feishu_config_migration"
+TEAM_KEYS = ("agents", "default_agent_id", "channel_instances", _FEISHU_MIGRATION)
+_roster_lock = RLock()
+
+
+@contextmanager
+def roster_transaction():
+    with _roster_lock:
+        yield
 
 FILE_NAME = "team.json"
 
@@ -51,7 +62,7 @@ def _legacy(settings: Mapping[str, Any]) -> Dict[str, Any]:
     return {key: settings[key] for key in TEAM_KEYS if key in settings}
 
 
-def read(settings: Mapping[str, Any]) -> Dict[str, Any]:
+def read(settings: Mapping[str, Any], *, strict=False) -> Dict[str, Any]:
     """The roster keys, from the file if there is one.
 
     Falls back to ``config.json`` so an install that predates the file keeps
@@ -64,18 +75,24 @@ def read(settings: Mapping[str, Any]) -> Dict[str, Any]:
     except FileNotFoundError:
         return _legacy(settings)
     except OSError as e:
+        if strict:
+            raise
         logger.warning(f"[Roster] Cannot read {path}, using config.json: {e}")
         return _legacy(settings)
 
     try:
         data = json.loads(raw)
     except ValueError as e:
+        if strict:
+            raise
         # Better to fall back than to start with no Agents at all: the
         # registry would substitute a lone default and the console would
         # look like every Agent had been deleted.
         logger.error(f"[Roster] {path} is not valid JSON, using config.json: {e}")
         return _legacy(settings)
     if not isinstance(data, dict):
+        if strict:
+            raise ValueError("Team configuration must contain an object")
         logger.error(f"[Roster] {path} must contain an object, using config.json")
         return _legacy(settings)
     return {key: data[key] for key in TEAM_KEYS if key in data}
@@ -128,7 +145,8 @@ def compact(
     return stored
 
 
-def write(settings: Mapping[str, Any], roster: Mapping[str, Any]) -> Path:
+@roster_transaction()
+def write(settings: Mapping[str, Any], roster: Mapping[str, Any], *, strict=False) -> Path:
     """Replace the roster file atomically. Returns where it was written.
 
     Crossing into multi-Agent territory is the moment a legacy channel (its
@@ -147,7 +165,11 @@ def write(settings: Mapping[str, Any], roster: Mapping[str, Any]) -> Path:
     )
     if bootstrapped:
         payload["channel_instances"] = bootstrapped
-    write_text_atomic(path, json.dumps(payload, indent=4, ensure_ascii=False) + "\n")
+    contents = json.dumps(payload, indent=4, ensure_ascii=False) + "\n"
+    if strict:
+        write_text_atomic(path, contents, allow_in_place=False)
+    else:
+        write_text_atomic(path, contents)
     return path
 
 
@@ -159,18 +181,19 @@ def migrate(settings: Mapping[str, Any], config_path: Optional[Any] = None) -> O
     the thing the move is for. Waiting for an edit leaves that window open
     indefinitely and leaves two copies to wonder about in the meantime.
 
-    A single-Agent install has nothing to move and gets no file.
+    An install without a roster or explicit channel instances gets no file.
     """
     path = team_file(settings)
     if path.exists():
         return None
     legacy = _legacy(settings)
-    if not legacy.get("agents"):
+    if not legacy.get("agents") and not legacy.get("channel_instances"):
         return None
     roster = dict(legacy)
-    roster["agents"] = compact(
-        roster["agents"], settings, roster.get("default_agent_id") or ""
-    )
+    if roster.get("agents"):
+        roster["agents"] = compact(
+            roster["agents"], settings, roster.get("default_agent_id") or ""
+        )
     try:
         written = write(settings, roster)
     except OSError as e:
@@ -183,14 +206,14 @@ def migrate(settings: Mapping[str, Any], config_path: Optional[Any] = None) -> O
     return written
 
 
+@roster_transaction()
 def adopt_legacy_channels(settings: Mapping[str, Any]) -> Optional[Path]:
     """Fold legacy channels into a roster file that already exists.
 
     ``write`` carries them over, but only when something writes: a channel set
     up in ``config.json`` after the file appeared (an older build run against
     the same data) would otherwise run without a record, so the console cannot
-    show or manage it. Only ever adds records, and never touches a file it
-    cannot parse.
+    show or manage it. Leaves unreadable files alone.
     """
     path = team_file(settings)
     try:
@@ -200,12 +223,10 @@ def adopt_legacy_channels(settings: Mapping[str, Any]) -> Optional[Path]:
     if not isinstance(data, dict):
         return None
     roster = {key: data[key] for key in TEAM_KEYS if key in data}
-    existing = roster.get("channel_instances")
-    before = len(existing) if isinstance(existing, list) else 0
     from channel.channel_instances import bootstrap_legacy_instances
 
     after = bootstrap_legacy_instances(settings, roster, roster.get("default_agent_id") or "")
-    if len(after) <= before:
+    if not after or after == roster.get("channel_instances"):
         return None
     roster["channel_instances"] = after
     try:
@@ -213,8 +234,97 @@ def adopt_legacy_channels(settings: Mapping[str, Any]) -> Optional[Path]:
     except OSError as e:
         logger.warning(f"[Team] Could not add legacy channels to {path}: {e}")
         return None
-    logger.info(f"[Team] Added legacy channels to {written}")
+    logger.info(f"[Team] Applied legacy channel settings to {written}")
     return written
+
+
+@roster_transaction()
+def migrate_feishu_settings(settings, config_path):
+    """Persist instance settings before retiring their flat configuration."""
+    from channel.channel_instances import bootstrap_legacy_instances
+    from channel.feishu.owner_config import (
+        DEFAULT_MEMORY_MODE, LEGACY_OWNER_ID, LEGACY_SHARE_MEMORY, MEMORY_MODE,
+        OWNER_IDS, parse_owner_ids,
+    )
+
+    path = Path(config_path)
+    roster_path = team_file(settings)
+    try:
+        try:
+            source = json.loads(path.read_text(encoding="utf-8-sig"))
+        except FileNotFoundError:
+            source = {}
+        if not isinstance(source, dict):
+            raise ValueError("Config root must be an object")
+        try:
+            roster = json.loads(roster_path.read_text(encoding="utf-8-sig"))
+        except FileNotFoundError:
+            roster = _legacy(source)
+        if not isinstance(roster, dict):
+            raise ValueError("Team root must be an object")
+        if "channel_instances" in roster and not isinstance(roster["channel_instances"], list):
+            raise ValueError("Team channel_instances must be a list")
+
+        records = bootstrap_legacy_instances(settings, roster)
+        feishu = [record for record in records if record.get("channel_type") == "feishu"]
+        changed = bool(feishu) and records != roster.get("channel_instances")
+        for record in feishu:
+            credentials = record.get("credentials")
+            if not isinstance(credentials, dict):
+                credentials = record
+            if LEGACY_SHARE_MEMORY in credentials:
+                shared = credentials.pop(LEGACY_SHARE_MEMORY)
+                credentials.setdefault(MEMORY_MODE, "shared" if shared is True else DEFAULT_MEMORY_MODE)
+                changed = True
+
+        keys = (LEGACY_OWNER_ID, OWNER_IDS, LEGACY_SHARE_MEMORY)
+        legacy = {key: source[key] for key in keys if key in source}
+        app_id = source.get("feishu_app_id")
+        fingerprint = hashlib.sha256(json.dumps([app_id, legacy], sort_keys=True).encode()).hexdigest()
+        retire = bool(legacy) and roster.get(_FEISHU_MIGRATION) == fingerprint
+        if legacy and not retire:
+            matches = []
+            for record in feishu:
+                credentials = record.get("credentials")
+                credentials = credentials if isinstance(credentials, dict) else record
+                if app_id and credentials.get("feishu_app_id") == app_id:
+                    matches.append(credentials)
+            # A template's empty placeholders carry no app-specific state.
+            has_binding = bool(legacy.get(LEGACY_OWNER_ID) or legacy.get(OWNER_IDS) or
+                               legacy.get(LEGACY_SHARE_MEMORY) is True)
+            if len(matches) == 1:
+                credentials = matches[0]
+                try:
+                    if OWNER_IDS not in credentials:
+                        if OWNER_IDS in legacy:
+                            credentials[OWNER_IDS] = parse_owner_ids(legacy[OWNER_IDS])
+                        elif legacy.get(LEGACY_OWNER_ID):
+                            credentials[OWNER_IDS] = parse_owner_ids([legacy[LEGACY_OWNER_ID]])
+                    if legacy.get(LEGACY_SHARE_MEMORY) is True:
+                        credentials.setdefault(MEMORY_MODE, "shared")
+                    retire = changed = True
+                except ValueError:
+                    logger.warning("[Feishu] Invalid legacy Owner ID; review the old configuration")
+            elif has_binding:
+                logger.warning("[Feishu] Legacy Owner or memory settings require a unique App ID match")
+            else:
+                retire = True
+
+        if changed:
+            roster["channel_instances"] = records
+            if retire:
+                roster[_FEISHU_MIGRATION] = fingerprint
+            write(settings, roster, strict=True)
+        if retire:
+            current = json.loads(path.read_text(encoding="utf-8-sig"))
+            if current.get("feishu_app_id") == app_id and {k: current[k] for k in keys if k in current} == legacy:
+                for key in legacy:
+                    current.pop(key)
+                write_text_atomic(path, json.dumps(current, indent=4, ensure_ascii=False) + "\n", allow_in_place=False)
+                for key in legacy:
+                    settings.pop(key, None)
+    except (OSError, ValueError) as exc:
+        logger.warning(f"[Feishu] Could not finish channel settings migration ({type(exc).__name__}); will retry at startup")
 
 
 def retire_legacy(config_path: Optional[Path]) -> None:

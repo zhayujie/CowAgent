@@ -79,15 +79,10 @@ def _a_cloud_client(tmp_path, monkeypatch):
 
 
 def _the_feishu_setup(tmp_path, monkeypatch):
-    """Point the one-click setup at a config.json inside tmp_path.
-
-    It derives the path from its own module file three directories up, so
-    moving that is what moves the write, without ever touching the config.json
-    next to the real source tree.
-    """
+    """Give terminal registration a separate workspace and root config."""
     config_path, original = _an_existing_config(tmp_path)
-    monkeypatch.setattr(feishu_channel, "__file__", str(tmp_path / "a" / "b" / "feishu_channel.py"))
-    monkeypatch.setattr(feishu_channel, "conf", lambda: dict(ORIGINAL))
+    settings = {**ORIGINAL, "agent_workspace": str(tmp_path / "workspace")}
+    monkeypatch.setattr(feishu_channel, "conf", lambda: settings)
     return config_path, original
 
 
@@ -148,22 +143,28 @@ def test_a_cloud_save_lands_in_the_data_root(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 
 def test_the_feishu_setup_keeps_the_previous_config_when_the_save_fails(tmp_path, monkeypatch):
-    config_path, original = _the_feishu_setup(tmp_path, monkeypatch)
-    monkeypatch.setattr(json, "dump", _a_disk_that_fills_up_mid_write)
+    from agent import team
 
-    assert feishu_channel._persist_feishu_credentials("cli_x", "secret_x") is False
+    config_path, original = _the_feishu_setup(tmp_path, monkeypatch)
+
+    def fail_write(*args, **kwargs):
+        raise OSError(errno.ENOSPC, "disk full")
+    monkeypatch.setattr(team, "write_text_atomic", fail_write)
+
+    assert feishu_channel._persist_feishu_credentials("cli_x", "secret_x") is None
 
     assert config_path.read_text(encoding="utf-8") == original
-    assert _leftovers(tmp_path) == []
+    assert list((tmp_path / "workspace" / "agents").iterdir()) == []
 
 
 def test_the_feishu_setup_still_writes_when_nothing_goes_wrong(tmp_path, monkeypatch):
-    config_path, _ = _the_feishu_setup(tmp_path, monkeypatch)
+    config_path, original = _the_feishu_setup(tmp_path, monkeypatch)
 
-    assert feishu_channel._persist_feishu_credentials("cli_x", "secret_x") is True
+    instance = feishu_channel._persist_feishu_credentials("cli_x", "secret_x", "ou_scan")
 
-    saved = json.loads(config_path.read_text(encoding="utf-8"))
+    saved = instance.credentials
     assert saved["feishu_app_id"] == "cli_x"
     assert saved["feishu_app_secret"] == "secret_x"
-    assert saved["web_password"] == ORIGINAL["web_password"]
-    assert _leftovers(tmp_path) == []
+    assert saved["feishu_owner_open_ids"] == ["ou_scan"]
+    assert config_path.read_text(encoding="utf-8") == original
+    assert [path.name for path in (tmp_path / "workspace" / "agents").iterdir()] == ["team.json"]

@@ -296,8 +296,15 @@ function buildChannelFieldsHtml(chName, fields) {
     let html = '';
     fields.forEach(f => {
         const inputId = `ch-${chName}-${f.key}`;
+        const label = escapeHtml(localizedLabel(f.label));
         let inputHtml = '';
-        if (f.type === 'bool') {
+        if (f.type === 'select' && f.key === 'feishu_private_memory_mode') {
+            const selected = f.value || f.default;
+            const options = ['owner_workspace', 'per_user', 'shared'].map(value =>
+                `<option value="${value}" ${value === selected ? 'selected' : ''}>${escapeHtml(t(`feishu_memory_${value}`))}</option>`);
+            inputHtml = `<select id="${inputId}" data-field="${f.key}" data-ch="${chName}"
+                class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800">${options.join('')}</select>`;
+        } else if (f.type === 'bool') {
             const checked = f.value ? 'checked' : '';
             inputHtml = `<label class="relative inline-flex items-center cursor-pointer">
                 <input id="${inputId}" type="checkbox" ${checked} class="sr-only peer" data-field="${f.key}" data-ch="${chName}">
@@ -312,7 +319,7 @@ function buildChannelFieldsHtml(chName, fields) {
                        bg-slate-50 dark:bg-white/5 text-sm text-slate-800 dark:text-slate-100
                        focus:outline-none focus:border-primary-500 font-mono transition-colors
                        ${f.value ? 'cfg-key-masked' : ''}"
-                placeholder="${escapeHtml(f.label)}">`;
+                placeholder="${label}">`;
         } else {
             const inputType = f.type === 'number' ? 'number' : 'text';
             inputHtml = `<input id="${inputId}" type="${inputType}" value="${escapeHtml(String(f.value ?? f.default ?? ''))}"
@@ -320,10 +327,10 @@ function buildChannelFieldsHtml(chName, fields) {
                 class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600
                        bg-slate-50 dark:bg-white/5 text-sm text-slate-800 dark:text-slate-100
                        focus:outline-none focus:border-primary-500 font-mono transition-colors"
-                placeholder="${escapeHtml(f.label)}">`;
+                placeholder="${label}">`;
         }
         html += `<div>
-            <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">${escapeHtml(f.label)}</label>
+            <label for="${inputId}" class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">${label}</label>
             ${inputHtml}
         </div>`;
     });
@@ -360,7 +367,7 @@ function saveChannelConfig(chName, instanceId) {
     if (!card) return;
 
     const updates = {};
-    card.querySelectorAll('input[data-ch="' + iid + '"]').forEach(inp => {
+    card.querySelectorAll('[data-field][data-ch="' + iid + '"]').forEach(inp => {
         const key = inp.dataset.field;
         if (inp.type === 'checkbox') {
             updates[key] = inp.checked;
@@ -621,7 +628,7 @@ function submitAddChannel() {
 
     const fieldsContainer = document.getElementById('add-channel-fields');
     const updates = {};
-    fieldsContainer.querySelectorAll('input[data-ch="' + chName + '"]').forEach(inp => {
+    fieldsContainer.querySelectorAll('[data-field][data-ch="' + chName + '"]').forEach(inp => {
         const key = inp.dataset.field;
         if (inp.type === 'checkbox') {
             updates[key] = inp.checked;

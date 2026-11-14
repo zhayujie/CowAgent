@@ -72,6 +72,9 @@ class Write(BaseTool):
         try:
             # Resolve path (may raise PermissionError for protected locations)
             absolute_path = self._resolve_path(path)
+            from agent.memory.identity import permits_memory_path
+            if not permits_memory_path(self, absolute_path):
+                return ToolResult.fail("Error: Access denied: private memory path")
 
             # Create parent directory (if needed)
             parent_dir = os.path.dirname(absolute_path)
