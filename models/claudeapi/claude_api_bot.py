@@ -87,6 +87,52 @@ STREAM_STALL_SECONDS = 90
 _LOWER_EFFORT = {"max": "medium", "xhigh": "medium", "high": "medium", "medium": "low"}
 _MIN_THINKING_BUDGET = 1024
 
+# Thinking blocks must go back to the API unmodified and in their original
+# order, so the stream reports the response's block layout under this key.
+NATIVE_BLOCKS_KEY = "_claude_content_blocks"
+
+# Internal control tags the model occasionally writes into its visible text,
+# mostly on tool-heavy turns. Left in place they reach the user and, once in
+# the history, make later turns repeat them.
+_CONTROL_TAG_NAMES = ("thinking_mode", "reasoning_effort")
+_CONTROL_TAG_RE = re.compile(r"<(thinking_mode|reasoning_effort)>[^<>\n]{0,64}</\1>[ \t]*\n?")
+# An opening tag held longer than this without its closing tag is literal text.
+_CONTROL_TAG_MAX_LEN = 100
+
+
+def _strip_control_tags(text: str) -> str:
+    return _CONTROL_TAG_RE.sub("", text) if text and "<" in text else text
+
+
+class _ControlTagFilter:
+    """Strip control tags from streamed text, including tags split across deltas."""
+
+    def __init__(self):
+        self._pending = ""
+
+    def feed(self, text: str) -> str:
+        buf = _strip_control_tags(self._pending + (text or ""))
+        cut = self._held_from(buf)
+        self._pending = buf[cut:]
+        return buf[:cut]
+
+    def flush(self) -> str:
+        out, self._pending = self._pending, ""
+        return out
+
+    @staticmethod
+    def _held_from(buf: str) -> int:
+        """Index where a possibly incomplete control tag starts, else len(buf)."""
+        cut = len(buf)
+        for name in _CONTROL_TAG_NAMES:
+            start = buf.rfind(f"<{name}>")
+            if start != -1 and len(buf) - start <= _CONTROL_TAG_MAX_LEN:
+                cut = min(cut, start)
+        start = buf.rfind("<")
+        if start != -1 and any(f"<{name}>".startswith(buf[start:]) for name in _CONTROL_TAG_NAMES):
+            cut = min(cut, start)
+        return cut
+
 
 def _lower_thinking(params: dict) -> Optional[dict]:
     """Return params asking for less thinking, or None when it cannot go lower."""
@@ -699,6 +745,27 @@ class ClaudeAPIBot(Bot, OpenAIImage):
             return msg
         return {**msg, "content": cleaned}
 
+    @staticmethod
+    def _native_block_layout(native_blocks: dict) -> list:
+        """The response's blocks in order, or [] when it holds no signed thinking.
+
+        Thinking and redacted_thinking blocks are complete; text and tool_use
+        blocks carry only their type and mark where the agent's text and tool
+        calls go. Unsigned thinking cannot be sent back, so it is left out.
+        """
+        layout = []
+        signed = False
+        for index in sorted(native_blocks):
+            block = native_blocks[index]
+            if block.get("type") == "thinking":
+                if not block.get("signature"):
+                    continue
+                signed = True
+            elif block.get("type") == "redacted_thinking":
+                signed = True
+            layout.append(block)
+        return layout if signed else []
+
     def _handle_sync_response(self, request_params):
         """Handle synchronous Claude API response"""
         # Prepare headers
@@ -747,7 +814,7 @@ class ClaudeAPIBot(Bot, OpenAIImage):
         # Build message in OpenAI format
         message = {
             "role": "assistant",
-            "content": text_content
+            "content": _strip_control_tags(text_content)
         }
         if reasoning_content:
             message["reasoning_content"] = reasoning_content
@@ -817,6 +884,9 @@ class ClaudeAPIBot(Bot, OpenAIImage):
         # Track tool use state
         tool_uses_map = {}  # {index: {id, name, input}}
         current_tool_use_index = -1
+        # Every content block by index: thinking blocks in full, others by type.
+        native_blocks = {}
+        text_filter = _ControlTagFilter()
         stop_reason = None  # Track stop reason from Claude
         # Track token usage across the stream: Anthropic reports input_tokens on
         # the message_start event and (cumulative) output_tokens on message_delta.
@@ -826,6 +896,15 @@ class ClaudeAPIBot(Bot, OpenAIImage):
         usage_cache_write = 0
         usage_cache_read = 0
         watchdog = None
+
+        def text_chunk(content):
+            return {
+                "id": "",
+                "object": "chat.completion.chunk",
+                "created": int(time.time()),
+                "model": request_params["model"],
+                "choices": [{"index": 0, "delta": {"content": content}, "finish_reason": None}],
+            }
 
         try:
             # Make streaming HTTP request
@@ -895,7 +974,18 @@ class ClaudeAPIBot(Bot, OpenAIImage):
                             elif event_type == "content_block_start":
                                 # New content block
                                 block = event.get("content_block", {})
-                                if block.get("type") == "tool_use":
+                                block_type = block.get("type")
+                                if block_type == "thinking":
+                                    native_blocks[event.get("index", 0)] = {
+                                        "type": "thinking",
+                                        "thinking": block.get("thinking", ""),
+                                        "signature": block.get("signature", ""),
+                                    }
+                                elif block_type == "redacted_thinking":
+                                    native_blocks[event.get("index", 0)] = dict(block)
+                                elif block_type:
+                                    native_blocks[event.get("index", 0)] = {"type": block_type}
+                                if block_type == "tool_use":
                                     current_tool_use_index = event.get("index", 0)
                                     tool_uses_map[current_tool_use_index] = {
                                         "id": block.get("id", ""),
@@ -907,8 +997,15 @@ class ClaudeAPIBot(Bot, OpenAIImage):
                                 delta = event.get("delta", {})
                                 delta_type = delta.get("type")
 
-                                if delta_type == "thinking_delta":
+                                native = native_blocks.get(event.get("index", 0))
+                                if delta_type == "signature_delta":
+                                    if native and native.get("type") == "thinking":
+                                        native["signature"] += delta.get("signature", "")
+
+                                elif delta_type == "thinking_delta":
                                     thinking_text = delta.get("thinking", "")
+                                    if native and native.get("type") == "thinking":
+                                        native["thinking"] += thinking_text
                                     if thinking_text:
                                         yield {
                                             "choices": [{
@@ -922,25 +1019,28 @@ class ClaudeAPIBot(Bot, OpenAIImage):
                                         }
 
                                 elif delta_type == "text_delta":
-                                    content = delta.get("text", "")
-                                    yield {
-                                        "id": event.get("id", ""),
-                                        "object": "chat.completion.chunk",
-                                        "created": int(time.time()),
-                                        "model": request_params["model"],
-                                        "choices": [{
-                                            "index": 0,
-                                            "delta": {"content": content},
-                                            "finish_reason": None
-                                        }]
-                                    }
+                                    content = text_filter.feed(delta.get("text", ""))
+                                    if content:
+                                        yield text_chunk(content)
 
                                 elif delta_type == "input_json_delta":
                                     # Tool input accumulation
                                     if current_tool_use_index >= 0:
                                         tool_uses_map[current_tool_use_index]["input"] += delta.get("partial_json", "")
 
+                            elif event_type == "content_block_stop":
+                                tail = text_filter.flush()
+                                if tail:
+                                    yield text_chunk(tail)
+
                             elif event_type == "message_delta":
+                                tail = text_filter.flush()
+                                if tail:
+                                    yield text_chunk(tail)
+                                layout = self._native_block_layout(native_blocks)
+                                if layout:
+                                    yield {"choices": [{"index": 0, "delta": {NATIVE_BLOCKS_KEY: layout},
+                                                        "finish_reason": None}]}
                                 # Extract stop_reason from delta
                                 delta = event.get("delta", {})
                                 if "stop_reason" in delta:

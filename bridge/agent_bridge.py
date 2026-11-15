@@ -2157,8 +2157,9 @@ class AgentBridge:
         except Exception:
             thinking_enabled = False
 
-        messages_to_store = new_messages
-        if not thinking_enabled:
+        if thinking_enabled:
+            messages_to_store = self._unsign_thinking_blocks(new_messages)
+        else:
             messages_to_store = self._strip_thinking_blocks(new_messages)
 
         stored = False
@@ -2416,7 +2417,7 @@ class AgentBridge:
                 continue
             filtered_blocks = [
                 b for b in content
-                if not (isinstance(b, dict) and b.get("type") == "thinking")
+                if not (isinstance(b, dict) and b.get("type") in ("thinking", "redacted_thinking"))
             ]
             if len(filtered_blocks) == len(content):
                 cleaned.append(msg)
@@ -2424,6 +2425,41 @@ class AgentBridge:
                 new_msg = dict(msg)
                 new_msg["content"] = filtered_blocks
                 cleaned.append(new_msg)
+        return cleaned
+
+    @staticmethod
+    def _unsign_thinking_blocks(messages: list) -> list:
+        """Return a shallow copy of messages with signed thinking stored as plain reasoning.
+
+        A signature is only needed within the run that produced it, and its
+        reasoning is truncated for storage like any other, which would void it.
+        Unsigned thinking is never sent back to Claude, so drop the signature
+        and the opaque redacted_thinking blocks.
+        """
+        from agent.protocol.agent_stream import _truncate_reasoning_for_storage
+
+        cleaned = []
+        for msg in messages:
+            content = msg.get("content") if isinstance(msg, dict) and msg.get("role") == "assistant" else None
+            if not isinstance(content, list) or not any(
+                isinstance(b, dict) and (
+                    b.get("type") == "redacted_thinking"
+                    or (b.get("type") == "thinking" and "signature" in b)
+                )
+                for b in content
+            ):
+                cleaned.append(msg)
+                continue
+            blocks = []
+            for b in content:
+                if isinstance(b, dict) and b.get("type") == "redacted_thinking":
+                    continue
+                if isinstance(b, dict) and b.get("type") == "thinking" and "signature" in b:
+                    if not b.get("thinking"):
+                        continue
+                    b = {"type": "thinking", "thinking": _truncate_reasoning_for_storage(b["thinking"])}
+                blocks.append(b)
+            cleaned.append({**msg, "content": blocks})
         return cleaned
 
     def clear_session(self, session_id: str, agent_id: str = None):
