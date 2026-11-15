@@ -51,6 +51,30 @@ successful request ($0.75 per 1,000), so the backend stays opt-in; `"direct"`
 cloud-metadata URLs are rejected before any request is issued. Document
 URLs (PDF, Word, etc.) are always downloaded and parsed locally.
 
+## Olostep backend (opt-in)
+
+Set `tools.web_fetch.provider` to `"olostep"` to fetch through
+[Olostep's Scrape API](https://docs.olostep.com/features/scrapes) instead.
+Olostep renders the page in a browser and returns it as Markdown, so it also
+works on JavaScript-heavy sites.
+
+```json
+{
+  "tools": {
+    "web_fetch": {
+      "provider": "olostep"
+    }
+  }
+}
+```
+
+The backend uses the same key as the Olostep search provider,
+`tools.web_search.olostep_api_key` (or the `OLOSTEP_API_KEY` environment
+variable); create one in the [Olostep dashboard](https://www.olostep.com/dashboard/api-keys).
+Each scrape uses Olostep credits, so the backend stays opt-in. The SSRF guard
+still applies, and document URLs (PDF, Word, etc.) are still downloaded and
+parsed locally.
+
 <Note>
   `web_fetch` only retrieves static HTML. For pages that require JavaScript rendering (such as SPAs), use the `browser` tool instead.
 </Note>

@@ -52,6 +52,29 @@ HTTP/HTTPS URL の内容を取得します。Web ページからは可読テキ�
 されます。
 ドキュメント URL（PDF、Word など）は常にローカルでダウンロード・解析されます。
 
+## Olostep バックエンド（オプトイン）
+
+`tools.web_fetch.provider` を `"olostep"` に設定すると、
+[Olostep Scrape API](https://docs.olostep.com/features/scrapes) 経由で取得します。
+Olostep はブラウザでページを描画して Markdown として返すため、JavaScript
+中心のサイトにも対応できます。
+
+```json
+{
+  "tools": {
+    "web_fetch": {
+      "provider": "olostep"
+    }
+  }
+}
+```
+
+このバックエンドは Olostep 検索プロバイダーと同じキー
+`tools.web_search.olostep_api_key`（または `OLOSTEP_API_KEY` 環境変数）を使用します。
+キーは [Olostep ダッシュボード](https://www.olostep.com/dashboard/api-keys) で作成できます。
+取得ごとに Olostep のクレジットを消費するためオプトイン制です。SSRF ガードは引き続き適用され、
+ドキュメント URL（PDF、Word など）は引き続きローカルでダウンロード・解析されます。
+
 <Note>
   `web_fetch` は静的 HTML のみ取得できます。JavaScript レンダリングが必要なページ（SPA など）は `browser` ツールを使用してください。
 </Note>

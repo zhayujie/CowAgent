@@ -49,6 +49,27 @@ JavaScript 的站点）。
 SSRF 防护仍然生效：内网、回环及云元数据地址在请求发出前即被拒绝。
 文档链接（PDF、Word 等）始终在本地下载解析。
 
+## Olostep 后端（可选）
+
+将 `tools.web_fetch.provider` 设为 `"olostep"` 可改用
+[Olostep Scrape API](https://docs.olostep.com/features/scrapes) 抓取。Olostep
+在浏览器中渲染页面并返回 Markdown 内容，因此也适用于重度依赖 JavaScript 的站点。
+
+```json
+{
+  "tools": {
+    "web_fetch": {
+      "provider": "olostep"
+    }
+  }
+}
+```
+
+该后端复用 Olostep 搜索厂商的密钥 `tools.web_search.olostep_api_key`（或 `OLOSTEP_API_KEY`
+环境变量），可在 [Olostep 控制台](https://www.olostep.com/dashboard/api-keys) 创建。
+每次抓取消耗 Olostep 额度，因此保持为手动开启。SSRF 防护同样生效，文档链接（PDF、Word 等）
+仍在本地下载解析。
+
 <Note>
   `web_fetch` 只能获取静态 HTML 内容。如果页面需要 JavaScript 渲染（如 SPA 单页应用），请使用 `browser` 工具。
 </Note>

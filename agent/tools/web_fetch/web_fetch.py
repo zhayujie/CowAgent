@@ -8,6 +8,9 @@ Supports:
 - DeepSeek Fetch backend (opt-in via tools.web_fetch.provider="deepseek"):
   returns the page as Markdown through DeepSeek's official Fetch API
   (https://api-docs.deepseek.com/guides/search)
+- Olostep backend (opt-in via tools.web_fetch.provider="olostep"):
+  returns the rendered page as Markdown through Olostep's Scrape API
+  (https://docs.olostep.com/features/scrapes)
 """
 
 import os
@@ -30,6 +33,9 @@ from config import conf
 DEFAULT_TIMEOUT = 30
 # A slow sender never trips the per-read timeout, so a page read is capped as a whole.
 PAGE_READ_SECONDS = 60
+# Olostep waits about 55s for a scrape before it answers HTTP 504, so the
+# client waits a little longer than that to receive the 504.
+OLOSTEP_TIMEOUT = 60
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
 
 DEFAULT_HEADERS = {
@@ -92,13 +98,14 @@ def _conf_str(value, default: str = "") -> str:
 
 
 def _fetch_provider() -> str:
-    """The fetch backend: "direct" (default, fetch and parse locally) or
-    "deepseek" (DeepSeek's official Fetch API, returns the page as Markdown).
+    """The fetch backend: "direct" (default, fetch and parse locally),
+    "deepseek" (DeepSeek's official Fetch API, returns the page as Markdown)
+    or "olostep" (Olostep's Scrape API, returns the rendered page as Markdown).
     Unknown values fail loudly so a typo never silently changes backends."""
     provider = _conf_str(_tools_web_fetch_conf().get("provider"), "direct").lower()
-    if provider not in ("direct", "deepseek"):
+    if provider not in ("direct", "deepseek", "olostep"):
         raise ValueError(
-            f"Unknown tools.web_fetch.provider {provider!r}; expected 'direct' or 'deepseek'"
+            f"Unknown tools.web_fetch.provider {provider!r}; expected 'direct', 'deepseek' or 'olostep'"
         )
     return provider
 
@@ -107,6 +114,14 @@ def _deepseek_api_key() -> str:
     """The DeepSeek model key, which the Fetch API also accepts."""
     key = _conf_str(conf().get("deepseek_api_key"), "")
     return key or os.environ.get("DEEPSEEK_API_KEY", "").strip()
+
+
+def _olostep_api_key() -> str:
+    """The Olostep key of the web_search provider, which the Scrape API also accepts."""
+    tools_cfg = conf().get("tools") or {}
+    block = tools_cfg.get("web_search") or {} if isinstance(tools_cfg, dict) else {}
+    key = _conf_str(block.get("olostep_api_key") if isinstance(block, dict) else "", "")
+    return key or os.environ.get("OLOSTEP_API_KEY", "").strip()
 
 
 def _extract_charset_from_content_type(content_type: str) -> Optional[str]:
@@ -288,8 +303,8 @@ class WebFetch(BaseTool):
 
         # SSRF guard: reject URLs that resolve to private/loopback/link-local/
         # cloud-metadata addresses before any request is issued. Applies to
-        # both backends, including DeepSeek Fetch (the URL still leaves this
-        # machine's policy boundary via their API).
+        # every backend, including DeepSeek Fetch and Olostep (the URL still
+        # leaves this machine's policy boundary via their API).
         try:
             validate_url_safe(url)
         except ValueError as e:
@@ -305,6 +320,9 @@ class WebFetch(BaseTool):
 
         if provider == "deepseek":
             return self._fetch_deepseek(url)
+
+        if provider == "olostep":
+            return self._fetch_olostep(url)
 
         return self._fetch_webpage(url)
 
@@ -364,6 +382,59 @@ class WebFetch(BaseTool):
         content = data.get("content") or ""
         if not content.strip():
             return ToolResult.fail(f"Error: DeepSeek Fetch returned no content for URL: {url}")
+        return ToolResult.success(f"Title: {title}\n\nContent:\n{content}")
+
+    # ---- Olostep backend ----
+
+    def _fetch_olostep(self, url: str) -> ToolResult:
+        """Fetch a page as Markdown through Olostep's Scrape API.
+
+        Olostep renders the page in a browser, so it also reads JS-heavy
+        sites the direct backend cannot; billed per scrape, so it stays opt-in.
+        """
+        api_key = _olostep_api_key()
+        if not api_key:
+            return ToolResult.fail(
+                "Error: tools.web_fetch.provider is 'olostep' but no Olostep API key is configured. "
+                "Set tools.web_search.olostep_api_key or the OLOSTEP_API_KEY environment variable."
+            )
+
+        endpoint = "https://api.olostep.com/v1/scrapes"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        }
+        payload = {"url_to_scrape": url, "formats": ["markdown"]}
+        logger.debug(f"[WebFetch] olostep: url='{url}'")
+        try:
+            resp = requests.post(endpoint, headers=headers, json=payload, timeout=OLOSTEP_TIMEOUT)
+        except requests.Timeout:
+            return ToolResult.fail(f"Error: Olostep scrape request timed out after {OLOSTEP_TIMEOUT}s")
+        except requests.ConnectionError:
+            return ToolResult.fail("Error: Failed to connect to Olostep API")
+        except Exception as e:
+            logger.error(f"[WebFetch] Olostep scrape unexpected error: {e}", exc_info=True)
+            return ToolResult.fail(f"Error: Olostep scrape failed - {str(e)}")
+
+        if resp.status_code == 401:
+            return ToolResult.fail("Error: Invalid Olostep API key.")
+        if resp.status_code == 402:
+            return ToolResult.fail("Error: Olostep API key is invalid or out of credits. Check https://www.olostep.com/dashboard")
+        if resp.status_code == 429:
+            return ToolResult.fail("Error: Olostep API rate limit reached.")
+        if resp.status_code == 504:
+            return ToolResult.fail(
+                f"Error: Olostep could not finish scraping in time; the page may be slow or blocked. "
+                f"Retrying may help. URL: {url}"
+            )
+        if resp.status_code != 200:
+            return ToolResult.fail(f"Error: Olostep API returned HTTP {resp.status_code}: {resp.text[:200]}")
+
+        result = (resp.json() or {}).get("result") or {}
+        title = (result.get("page_metadata") or {}).get("title") or "Untitled"
+        content = result.get("markdown_content") or ""
+        if not content.strip():
+            return ToolResult.fail(f"Error: Olostep returned no content for URL: {url}")
         return ToolResult.success(f"Title: {title}\n\nContent:\n{content}")
 
     # ---- Safe request helper ----
