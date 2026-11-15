@@ -35,6 +35,14 @@ class KnowledgeService:
 
     PROTECTED_FILES = {"index.md", "log.md"}
     INVALID_NAME_RE = re.compile(r'[<>:"|?*\x00-\x1f]')
+    # Reserved Windows device names, including those with an extension
+    # (CON.md). INVALID_NAME_RE already rejects Windows-illegal punctuation;
+    # without this, create_document("CON.md") and create_category("NUL")
+    # succeed on POSIX and fail or open a device on Windows.
+    WINDOWS_RESERVED_NAME_RE = re.compile(
+        r'^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\..*)?$',
+        re.IGNORECASE,
+    )
     # An optional "— summary" suffix on an index line. Links are percent-encoded
     # by _link(), so the path never contains ")", which lets the summary be
     # matched non-greedily up to the end of the line.
@@ -68,13 +76,21 @@ class KnowledgeService:
         self._memory_manager = memory_manager
         self.reindex_in_background = reindex_in_background
 
+    def _is_invalid_name(self, part: str) -> bool:
+        return (
+            not part
+            or part in (".", "..")
+            or bool(self.INVALID_NAME_RE.search(part))
+            or bool(self.WINDOWS_RESERVED_NAME_RE.match(part))
+        )
+
     def _resolve_path(self, rel_path: str, *, kind: Optional[str] = None,
                       allow_missing: bool = True) -> tuple:
         if not isinstance(rel_path, str) or not rel_path.strip():
             raise ValueError("path is required")
         rel_path = rel_path.replace("\\", "/").strip("/")
         parts = rel_path.split("/")
-        if any(not p or p in (".", "..") or self.INVALID_NAME_RE.search(p) for p in parts):
+        if any(self._is_invalid_name(p) for p in parts):
             raise ValueError("invalid path")
         if kind == "document" and not rel_path.lower().endswith(".md"):
             raise ValueError("document path must end with .md")
@@ -335,7 +351,7 @@ class KnowledgeService:
         stem, ext = os.path.splitext(name)
         if ext.lower() not in self.IMPORT_EXTENSIONS:
             raise ValueError(f"unsupported file type: {ext or name}")
-        if not stem or stem in (".", "..") or self.INVALID_NAME_RE.search(stem):
+        if self._is_invalid_name(stem):
             raise ValueError("invalid filename")
         safe_name = f"{stem}.md"
         self._ensure_not_protected(safe_name)
