@@ -27,7 +27,13 @@ import type {RootStackParamList} from '../navigation/types';
 import type {PermissionMode} from '../protocol/resources';
 import {useConfigStore} from '../store/configStore';
 import {useOverviewStore} from '../store/overviewStore';
-import {activeServer, changingPassword, describeConnectError, useServerStore} from '../store/serverStore';
+import {
+  activeServer,
+  changingPassword,
+  describeConnectError,
+  useLocalServer,
+  useServerStore,
+} from '../store/serverStore';
 import {radius} from '../theme/palette';
 import {makeStyles, usePrefsStore, useTheme, type ThemeMode} from '../theme/theme';
 import {PASSWORD_MIN_LENGTH, PASSWORD_STRENGTH_TEXT, passwordStrength} from '../utils/passwordStrength';
@@ -73,6 +79,7 @@ export function SettingsScreen({navigation}: Props) {
   const loadConfig = useConfigStore(s => s.load);
   const updateConfig = useConfigStore(s => s.update);
   const server = activeServer();
+  const local = useLocalServer();
   const [confirmLogout, setConfirmLogout] = useState(false);
   const [sheet, setSheet] = useState<'permission' | 'password' | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -150,20 +157,25 @@ export function SettingsScreen({navigation}: Props) {
         <SettingRow icon={faPlug} title={tr('settings_mcp')} onPress={() => navigation.navigate('Mcp')} />
         <SettingRow icon={faBars} title={tr('settings_menu')} last onPress={() => navigation.navigate('MenuEditor')} />
 
-        <GroupLabel style={styles.group}>{tr('settings_group_access')}</GroupLabel>
-        <SettingRow icon={faGlobe} title={tr('settings_access_url')} onPress={() => navigation.navigate('Access')} />
-        <SettingRow
-          icon={faShareNodes}
-          title={tr('settings_guest_pages')}
-          onPress={() => navigation.navigate('GuestShares')}
-        />
-        <SettingRow
-          icon={faCode}
-          title={tr('settings_external_api')}
-          value={externalApi ? (externalApi.enabled ? tr('common_enabled') : tr('common_disabled')) : '…'}
-          onPress={() => navigation.navigate('ExternalApi')}
-          last
-        />
+        {/* The built-in agent listens on loopback only, so nothing outside this phone can reach it. */}
+        {!local && (
+          <>
+            <GroupLabel style={styles.group}>{tr('settings_group_access')}</GroupLabel>
+            <SettingRow icon={faGlobe} title={tr('settings_access_url')} onPress={() => navigation.navigate('Access')} />
+            <SettingRow
+              icon={faShareNodes}
+              title={tr('settings_guest_pages')}
+              onPress={() => navigation.navigate('GuestShares')}
+            />
+            <SettingRow
+              icon={faCode}
+              title={tr('settings_external_api')}
+              value={externalApi ? (externalApi.enabled ? tr('common_enabled') : tr('common_disabled')) : '…'}
+              onPress={() => navigation.navigate('ExternalApi')}
+              last
+            />
+          </>
+        )}
 
         <GroupLabel style={styles.group}>{tr('settings_group_appearance')}</GroupLabel>
         <View style={styles.modes}>
@@ -206,14 +218,18 @@ export function SettingsScreen({navigation}: Props) {
           title={tr('settings_default_permission')}
           value={permission ? PERMISSION_META[permission]?.name ?? permission : '…'}
           onPress={config ? () => setSheet('permission') : undefined}
+          last={local}
         />
-        <SettingRow
-          icon={faKey}
-          title={tr('settings_access_password')}
-          value={config ? (config.web_password_masked ? tr('common_configured') : tr('common_not_set')) : '…'}
-          onPress={config ? () => setSheet('password') : undefined}
-          last
-        />
+        {/* The app keeps the built-in agent's password itself and sets it on every start. */}
+        {!local && (
+          <SettingRow
+            icon={faKey}
+            title={tr('settings_access_password')}
+            value={config ? (config.web_password_masked ? tr('common_configured') : tr('common_not_set')) : '…'}
+            onPress={config ? () => setSheet('password') : undefined}
+            last
+          />
+        )}
         <Footnote>{tr('settings_permission_note')}</Footnote>
 
         <GroupLabel style={styles.group}>{tr('settings_group_system')}</GroupLabel>
@@ -227,8 +243,11 @@ export function SettingsScreen({navigation}: Props) {
         />
 
         <GroupLabel style={styles.group}>{tr('settings_group_server')}</GroupLabel>
-        <SettingRow title={tr('common_name')} value={server?.name ?? '-'} />
-        <SettingRow title={tr('settings_server_address')} value={server?.baseUrl.replace(/^https?:\/\//, '') ?? '-'} />
+        <SettingRow title={tr('common_name')} value={local ? tr('server_local') : server?.name ?? '-'} />
+        <SettingRow
+          title={tr('settings_server_address')}
+          value={local ? tr('server_local_meta') : server?.baseUrl.replace(/^https?:\/\//, '') ?? '-'}
+        />
         <SettingRow title={tr('settings_realtime')} value={tr(REALTIME_LABEL[realtimeStatus])} last />
 
         <GroupLabel style={styles.group}>{tr('settings_group_account')}</GroupLabel>

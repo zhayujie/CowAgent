@@ -11,6 +11,7 @@ import java.io.IOException
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.security.SecureRandom
+import java.util.Locale
 
 /**
  * The agent kernel running inside this app: the CowAgent Python backend in
@@ -49,15 +50,22 @@ object CowKernel {
     val py = Python.getInstance()
     val os = py.getModule("os")
     val environ = os["environ"]!!
-    mapOf(
+    val home = context.filesDir
+    val env = mutableMapOf(
       // The kernel keeps its workspace under ~/cow, like on a desktop.
-      "HOME" to context.filesDir.path,
+      "HOME" to home.path,
       "TMPDIR" to context.cacheDir.path,
       "COW_DEPLOYMENT" to "mobile",
-      "COW_DATA_DIR" to File(context.filesDir, ".cow").path,
+      "COW_DATA_DIR" to File(home, ".cow").path,
       "COW_WEB_PORT" to port.toString(),
       "WEB_PASSWORD" to password,
-    ).forEach { (key, value) -> environ.callAttr("__setitem__", key, value) }
+    )
+    // First launch only: later the app's Settings owns cow_lang via the API.
+    // Blank (ignored by the kernel) otherwise, as a restart keeps os.environ.
+    val firstRun = !File(home, ".cow/config.json").isFile
+    val lang = Locale.getDefault().language.lowercase(Locale.ROOT)
+    env["COW_LANG"] = if (!firstRun) "" else if (lang.startsWith("zh")) "zh" else "en"
+    env.forEach { (key, value) -> environ.callAttr("__setitem__", key, value) }
     py.getModule("sys")["path"]!!.callAttr("insert", 0, sources.path)
     os.callAttr("chdir", context.filesDir.path)
 

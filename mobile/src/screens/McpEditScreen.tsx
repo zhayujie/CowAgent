@@ -11,7 +11,7 @@ import {tr, trf} from '../i18n';
 import type {RootStackParamList} from '../navigation/types';
 import type {McpProbe, McpServer, McpTransport} from '../protocol/resources';
 import {MCP_TRANSPORT_LABEL, mcpTransport, useMcpStore} from '../store/mcpStore';
-import {describeConnectError} from '../store/serverStore';
+import {describeConnectError, useLocalServer} from '../store/serverStore';
 import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
 import {kvToObject, MCP_JSON_PLACEHOLDER, mcpServersToJson, objectToKv, parseMcpJson} from '../utils/mcp';
@@ -35,10 +35,15 @@ export function McpEditScreen({route, navigation}: Props) {
   const servers = useMcpStore(s => s.servers);
   const upsert = useMcpStore(s => s.upsert);
   const merge = useMcpStore(s => s.merge);
+  // The built-in agent cannot spawn processes, so it only reaches MCP servers over the network.
+  const local = useLocalServer();
 
   const [mode, setMode] = useState<Mode>('form');
   const [name, setName] = useState(original?.name ?? '');
-  const [type, setType] = useState<McpTransport>((original ? mcpTransport(original) : 'stdio') as McpTransport);
+  const [type, setType] = useState<McpTransport>(
+    (original ? mcpTransport(original) : local ? 'streamable-http' : 'stdio') as McpTransport,
+  );
+  const transports = local ? TRANSPORTS.filter(kind => kind !== 'stdio' || type === 'stdio') : TRANSPORTS;
   const [command, setCommand] = useState(original?.command ?? '');
   const [args, setArgs] = useState((original?.args ?? []).join('\n'));
   const [env, setEnv] = useState(objectToKv(original?.env));
@@ -276,7 +281,7 @@ export function McpEditScreen({route, navigation}: Props) {
 
               <Text style={styles.label}>{tr('mcp_field_transport')}</Text>
               <View style={styles.chips}>
-                {TRANSPORTS.map(kind => (
+                {transports.map(kind => (
                   <Chip key={kind} label={MCP_TRANSPORT_LABEL[kind]} active={type === kind} onPress={() => edited(setType)(kind)} />
                 ))}
               </View>

@@ -1,8 +1,8 @@
 import {create} from 'zustand';
-import {checkAuth, login, probeServer} from '../api/cowApi';
+import {checkAuth, login, probeServer, updateConfig} from '../api/cowApi';
 import {ApiError, http, normalizeBaseUrl} from '../api/http';
 import {DEFAULT_SERVER_NAME, DEFAULT_SERVER_URL} from '../config/defaults';
-import {tr, trf} from '../i18n';
+import {getLang, tr, trf, useLangStore} from '../i18n';
 import {LOCAL_SERVER_ID, startLocalKernel} from '../kernel/localKernel';
 import type {ServerEnvelope, ServerInfo} from '../protocol/envelope';
 import {realtime, type RealtimeStatus} from '../realtime/RealtimeClient';
@@ -176,6 +176,18 @@ async function signIn(
   await startRealtime(profile, token, s => useServerStore.setState({realtimeStatus: s}));
 }
 
+/**
+ * This app is the embedded kernel's only client, so the kernel's replies and
+ * logs follow the app's language, which only Settings pushes to other servers.
+ */
+async function syncKernelLanguage() {
+  const langs = useLangStore.getState();
+  if (!langs.hydrated) {
+    await langs.hydrate();
+  }
+  await updateConfig({cow_lang: getLang()}).catch(() => undefined);
+}
+
 /** Drop the active server's live state; its token stays, so switching back needs no password. */
 function leaveActive() {
   realtime.stop();
@@ -235,6 +247,9 @@ export const useServerStore = create<ServerState>((set, get) => ({
     http.setToken(token);
     set({hydrated: true, servers, activeId: active.id, authed: !!token});
     if (token) {
+      if (active.local) {
+        await syncKernelLanguage();
+      }
       await startRealtime(active, token, s => set({realtimeStatus: s}));
     }
   },
@@ -267,6 +282,8 @@ export const useServerStore = create<ServerState>((set, get) => ({
       leaveActive();
       try {
         await signIn(baseUrl, password, {id: LOCAL_SERVER_ID, local: true});
+        // Wait so the first reply already follows the app language.
+        await syncKernelLanguage();
       } catch (e) {
         set({activeId: LOCAL_SERVER_ID, authed: false});
         throw e;
@@ -335,4 +352,9 @@ export const useServerStore = create<ServerState>((set, get) => ({
 export function activeServer(): ServerProfile | undefined {
   const {servers, activeId} = useServerStore.getState();
   return servers.find(s => s.id === activeId);
+}
+
+/** Whether the active server is the kernel embedded in this app, which lacks some server features. */
+export function useLocalServer(): boolean {
+  return useServerStore(s => !!s.servers.find(x => x.id === s.activeId)?.local);
 }

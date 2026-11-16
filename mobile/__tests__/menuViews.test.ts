@@ -54,6 +54,24 @@ describe('menuSections', () => {
     expect(byKey('u1')).toMatchObject({kind: 'link', external: false});
     expect(byKey('u2')).toMatchObject({kind: 'link', external: true});
   });
+
+  it('leaves out channels on the built-in agent, which runs none', () => {
+    const withChannels: MenuDoc = {
+      groups: [
+        {
+          id: 'manage',
+          title: 'Manage',
+          items: [
+            {id: 'channels', type: 'builtin', view: 'channels', title: '', icon: ''},
+            {id: 'tasks', type: 'builtin', view: 'tasks', title: '', icon: ''},
+          ],
+        },
+      ],
+    };
+    const keys = (local: boolean) => menuSections(withChannels, local)[0].entries.map(e => e.key);
+    expect(keys(false)).toEqual(['channels', 'tasks']);
+    expect(keys(true)).toEqual(['tasks']);
+  });
 });
 
 describe('linkAsPage', () => {

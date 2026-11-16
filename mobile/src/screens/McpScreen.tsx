@@ -9,7 +9,7 @@ import {tr, trf} from '../i18n';
 import type {RootStackParamList} from '../navigation/types';
 import type {McpServer} from '../protocol/resources';
 import {MCP_STATUS, mcpTarget, useMcpStore} from '../store/mcpStore';
-import {describeConnectError} from '../store/serverStore';
+import {describeConnectError, useLocalServer} from '../store/serverStore';
 import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
 
@@ -26,6 +26,7 @@ export function McpScreen({navigation}: Props) {
   const insets = useSafeAreaInsets();
   const servers = useMcpStore(s => s.servers);
   const load = useMcpStore(s => s.load);
+  const local = useLocalServer();
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -74,6 +75,7 @@ export function McpScreen({navigation}: Props) {
         <Notice style={styles.notice}>
           <Text style={styles.strong}>{tr('mcp_notice_lead')}</Text>
           {tr('mcp_notice_rest')}
+          {local && `\n${tr('mcp_local_note')}`}
         </Notice>
         {!servers || !list.length ? (
           <EmptyState

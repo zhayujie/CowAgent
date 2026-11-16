@@ -141,11 +141,14 @@ export function menuItemIcon(item: MenuItem): IconDefinition {
   return item.type === 'url' ? faGlobe : faFileLines;
 }
 
-function entryOf(item: MenuItem): MenuEntry | null {
+/** Pages the kernel embedded in this app cannot back: it runs no IM channels. */
+const LOCAL_UNAVAILABLE_VIEWS = new Set(['channels']);
+
+function entryOf(item: MenuItem, local: boolean): MenuEntry | null {
   const icon = menuItemIcon(item);
   if (item.type === 'builtin') {
     const meta = BUILTIN_VIEWS[item.view];
-    if (!meta || item.hidden) {
+    if (!meta || item.hidden || (local && LOCAL_UNAVAILABLE_VIEWS.has(item.view))) {
       return null;
     }
     return {
@@ -177,13 +180,14 @@ export function linkAsPage(label: string, url: string): ChatFile {
   return {name: label || url, kind: 'html', rawUrl: url};
 }
 
-export function menuSections(doc: MenuDoc): MenuSection[] {
+/** `local`: the active server is the embedded kernel. */
+export function menuSections(doc: MenuDoc, local = false): MenuSection[] {
   return doc.groups
     .map(g => ({
       id: g.id,
       label: menuGroupLabel(g),
       hasChat: g.items.some(i => i.type === 'builtin' && i.view === 'chat'),
-      entries: g.items.map(entryOf).filter((e): e is MenuEntry => !!e),
+      entries: g.items.map(i => entryOf(i, local)).filter((e): e is MenuEntry => !!e),
     }))
     .filter(s => s.hasChat || s.entries.length);
 }

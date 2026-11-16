@@ -15,7 +15,7 @@ import {getScheduledTasks, runTaskNow, toggleScheduledTask} from '../api/cowApi'
 import {AgentAvatar} from '../components/AgentAvatar';
 import {Icon} from '../components/Icon';
 import {RunList} from '../components/RunList';
-import {ActionButton, ConfirmSheet, MONO, Toggle} from '../components/settings';
+import {ActionButton, ConfirmSheet, MONO, Notice, Toggle} from '../components/settings';
 import {Sheet, SHEET_DISMISS_MS} from '../components/Sheet';
 import {showToast, ToastHost} from '../components/Toast';
 import {SwipeTabs} from '../components/SwipeTabs';
@@ -24,7 +24,7 @@ import {tr, trf} from '../i18n';
 import type {RootStackParamList} from '../navigation/types';
 import type {ScheduledTask, TaskSchedule} from '../protocol/resources';
 import {useAgentStore} from '../store/agentStore';
-import {describeConnectError} from '../store/serverStore';
+import {describeConnectError, useLocalServer} from '../store/serverStore';
 import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
 import {fullTime} from '../utils/format';
@@ -65,6 +65,7 @@ export function TasksScreen({navigation}: Props) {
   const t = useTheme();
   const styles = useStyles();
   const insets = useSafeAreaInsets();
+  const local = useLocalServer();
   const [tab, setTab] = useState<Tab>('tasks');
   const [tasks, setTasks] = useState<ScheduledTask[]>([]);
   const [loading, setLoading] = useState(true);
@@ -185,6 +186,9 @@ export function TasksScreen({navigation}: Props) {
             data={tasks}
             keyExtractor={x => x.id}
             contentContainerStyle={[styles.list, {paddingBottom: insets.bottom + 24}]}
+            ListHeaderComponent={
+              local ? <Notice style={styles.localNote}>{tr('task_local_note')}</Notice> : null
+            }
             renderItem={({item}) => {
               const content = contentOf(item);
               const next = item.enabled ? fullTime(item.next_run_at ?? null) : '';
@@ -315,6 +319,7 @@ export function TasksScreen({navigation}: Props) {
 const useStyles = makeStyles(t => ({
   root: {flex: 1, backgroundColor: t.bg0},
   list: {paddingTop: 2, flexGrow: 1},
+  localNote: {marginHorizontal: 18, marginTop: 8, marginBottom: 4},
   headerActions: {flexDirection: 'row', alignItems: 'center', gap: 6},
   row: {
     marginHorizontal: 18,

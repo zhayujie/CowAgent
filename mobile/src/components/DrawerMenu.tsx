@@ -17,7 +17,7 @@ import type {SessionItem} from '../protocol/events';
 import {useAgentStore} from '../store/agentStore';
 import {useMenuStore} from '../store/menuStore';
 import {useOverviewStore} from '../store/overviewStore';
-import {activeServer, useServerStore} from '../store/serverStore';
+import {activeServer, useLocalServer, useServerStore} from '../store/serverStore';
 import {useSessionStore} from '../store/sessionStore';
 import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
@@ -72,7 +72,8 @@ export function DrawerMenu({
   const version = useOverviewStore(s => s.version);
   const realtime = useServerStore(s => s.realtimeStatus);
   const doc = useMenuStore(s => s.doc);
-  const sections = useMemo(() => menuSections(doc), [doc]);
+  const local = useLocalServer();
+  const sections = useMemo(() => menuSections(doc, local), [doc, local]);
   const server = activeServer();
   const host = server?.local ? tr('server_local') : (server?.baseUrl.replace(/^https?:\/\//, '') ?? '');
   const groups = useMemo(() => groupSessions(sessions.slice(0, RECENT_LIMIT)), [sessions]);

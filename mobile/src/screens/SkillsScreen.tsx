@@ -29,7 +29,16 @@ import {
 } from '../api/cowApi';
 import {AgentSheet} from '../components/AgentSheet';
 import {Icon} from '../components/Icon';
-import {ChoiceSheet, ConfirmSheet, FieldSheet, MONO, StatusTag, Toggle, type Choice} from '../components/settings';
+import {
+  ChoiceSheet,
+  ConfirmSheet,
+  FieldSheet,
+  MONO,
+  Notice,
+  StatusTag,
+  Toggle,
+  type Choice,
+} from '../components/settings';
 import {SHEET_DISMISS_MS} from '../components/Sheet';
 import {McpIcon, SkillIcon, ToolIcon} from '../components/SkillIcon';
 import {SkillInstallSheet} from '../components/SkillInstallSheet';
@@ -42,7 +51,7 @@ import type {RootStackParamList} from '../navigation/types';
 import type {Skill, SkillMarketSource, SkillPreview, ToolInfo} from '../protocol/resources';
 import {agentParam, useViewedAgent} from '../store/agentStore';
 import {MCP_STATUS, MCP_TRANSPORT_LABEL, mcpTarget, mcpTransport, useMcpStore} from '../store/mcpStore';
-import {describeConnectError} from '../store/serverStore';
+import {describeConnectError, useLocalServer} from '../store/serverStore';
 import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
 import {compareSkills, SKILL_SOURCE_LABEL, skillDescription, skillName, skillRefusal} from '../utils/skills';
@@ -103,6 +112,7 @@ export function SkillsScreen({navigation}: Props) {
   const insets = useSafeAreaInsets();
   const viewed = useViewedAgent('skills');
   const scope = agentParam(viewed.agentId);
+  const local = useLocalServer();
   const [tab, setTab] = useState<Tab>('skills');
   const [skills, setSkills] = useState<Skill[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -389,7 +399,10 @@ export function SkillsScreen({navigation}: Props) {
             contentContainerStyle={[styles.list, {paddingBottom: insets.bottom + 24}]}
             ListHeaderComponent={
               sorted.length ? (
-                <Text style={styles.summary}>{trf('skill_summary', {enabled: enabledCount, total: sorted.length})}</Text>
+                <>
+                  {local && <Notice style={styles.localNote}>{tr('skill_local_note')}</Notice>}
+                  <Text style={styles.summary}>{trf('skill_summary', {enabled: enabledCount, total: sorted.length})}</Text>
+                </>
               ) : null
             }
             ListFooterComponent={
@@ -595,6 +608,7 @@ function SectionHead({title, count, action}: {title: string; count?: number; act
 const useStyles = makeStyles(t => ({
   root: {flex: 1, backgroundColor: t.bg0},
   flex: {flex: 1},
+  localNote: {marginTop: 4, marginBottom: 8},
   list: {paddingTop: 4, flexGrow: 1},
   summary: {fontSize: 12, color: t.t4, paddingHorizontal: 18, paddingTop: 4, paddingBottom: 10, fontVariant: ['tabular-nums']},
   card: {

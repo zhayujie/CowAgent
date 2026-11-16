@@ -261,7 +261,7 @@ static NSDictionary *StartKernel(NSError **error)
     }
     NSString *certs = [NSBundle.mainBundle.resourcePath
         stringByAppendingPathComponent:@"python/app_packages/certifi/cacert.pem"];
-    NSDictionary *env = @{
+    NSMutableDictionary *env = [@{
       @"HOME" : home,
       @"TMPDIR" : NSTemporaryDirectory(),
       // OpenSSL finds no CA store on iOS; urllib-based HTTPS needs one.
@@ -270,7 +270,13 @@ static NSDictionary *StartKernel(NSError **error)
       @"COW_DATA_DIR" : [home stringByAppendingPathComponent:@".cow"],
       @"COW_WEB_PORT" : [NSString stringWithFormat:@"%d", port],
       @"WEB_PASSWORD" : password,
-    };
+    } mutableCopy];
+    // First launch only: later the app's Settings owns cow_lang via the API.
+    // Blank (ignored by the kernel) otherwise, as a restart keeps os.environ.
+    NSString *configPath = [home stringByAppendingPathComponent:@".cow/config.json"];
+    BOOL firstRun = ![NSFileManager.defaultManager fileExistsAtPath:configPath];
+    NSString *preferred = NSLocale.preferredLanguages.firstObject.lowercaseString ?: @"";
+    env[@"COW_LANG"] = !firstRun ? @"" : [preferred hasPrefix:@"zh"] ? @"zh" : @"en";
 
     NSThread *thread = [[NSThread alloc] initWithBlock:^{
       NSError *initError = nil;

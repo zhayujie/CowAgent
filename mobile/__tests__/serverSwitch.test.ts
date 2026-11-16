@@ -1,4 +1,6 @@
+import {updateConfig} from '../src/api/cowApi';
 import {http} from '../src/api/http';
+import {useLangStore} from '../src/i18n';
 import {startLocalKernel} from '../src/kernel/localKernel';
 import {secureStore} from '../src/storage/secureStore';
 import {useChatStore} from '../src/store/chatStore';
@@ -18,6 +20,7 @@ jest.mock('../src/api/cowApi', () => ({
   ...jest.requireActual('../src/api/cowApi'),
   probeServer: jest.fn(async () => ({auth_required: true, name: 'CowAgent'})),
   login: jest.fn(async () => 'local-token'),
+  updateConfig: jest.fn(async () => ({applied: {}})),
 }));
 
 const home: ServerProfile = {id: 'https://home.example', name: 'CowAgent', baseUrl: 'https://home.example', wsUrl: null};
@@ -66,8 +69,9 @@ it('stays on the current server when the built-in agent fails to start', async (
   expect(http.getToken()).toBe('home-token');
 });
 
-it('signs in to the built-in agent', async () => {
+it('signs in to the built-in agent and gives it the app language', async () => {
   jest.mocked(startLocalKernel).mockResolvedValue({baseUrl: 'http://127.0.0.1:4000', password: 'pw'});
+  useLangStore.getState().setLang('zh');
 
   await useServerStore.getState().switchTo('local');
 
@@ -75,6 +79,7 @@ it('signs in to the built-in agent', async () => {
   expect({activeId, authed}).toEqual({activeId: 'local', authed: true});
   expect(servers.find(s => s.id === 'local')).toMatchObject({local: true, baseUrl: 'http://127.0.0.1:4000'});
   expect(http.getToken()).toBe('local-token');
+  expect(updateConfig).toHaveBeenCalledWith({cow_lang: 'zh'});
 });
 
 it('goes back to the server left for the login screen without a password', async () => {
