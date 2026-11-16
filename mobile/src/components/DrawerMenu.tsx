@@ -12,7 +12,6 @@ import {Pressable, ScrollView, Text, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import type {ChatFile} from '../files/chatFile';
 import {tr, trf, type MessageKey} from '../i18n';
-import {LOCAL_SERVER_NAME} from '../kernel/localKernel';
 import {BUILTIN_VIEWS, menuSections, type MenuEntry, type MenuRoute} from '../navigation/menuViews';
 import type {SessionItem} from '../protocol/events';
 import {useAgentStore} from '../store/agentStore';
@@ -75,7 +74,7 @@ export function DrawerMenu({
   const doc = useMenuStore(s => s.doc);
   const sections = useMemo(() => menuSections(doc), [doc]);
   const server = activeServer();
-  const host = server?.local ? LOCAL_SERVER_NAME : (server?.baseUrl.replace(/^https?:\/\//, '') ?? '');
+  const host = server?.local ? tr('server_local') : (server?.baseUrl.replace(/^https?:\/\//, '') ?? '');
   const groups = useMemo(() => groupSessions(sessions.slice(0, RECENT_LIMIT)), [sessions]);
 
   const countOf = (view: string): number | string | undefined => {
@@ -214,13 +213,13 @@ export function DrawerMenu({
         </View>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="切换连接"
+          accessibilityLabel={tr('server_switch')}
           hitSlop={6}
           onPress={onSwitchServer}
           style={({pressed}) => [styles.serverChip, pressed && styles.pressed]}>
           <Icon icon={server?.local ? faMobileScreen : faServer} size={11} color={t.t3} />
           <Text style={styles.serverChipText} numberOfLines={1}>
-            {host || '未连接'}
+            {host || tr('menu_not_connected')}
           </Text>
           <Icon icon={faChevronDown} size={9} color={t.t4} />
         </Pressable>

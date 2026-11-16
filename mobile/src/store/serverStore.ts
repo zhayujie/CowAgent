@@ -3,7 +3,7 @@ import {checkAuth, login, probeServer} from '../api/cowApi';
 import {ApiError, http, normalizeBaseUrl} from '../api/http';
 import {DEFAULT_SERVER_NAME, DEFAULT_SERVER_URL} from '../config/defaults';
 import {tr, trf} from '../i18n';
-import {LOCAL_SERVER_ID, LOCAL_SERVER_NAME, startLocalKernel} from '../kernel/localKernel';
+import {LOCAL_SERVER_ID, startLocalKernel} from '../kernel/localKernel';
 import type {ServerEnvelope, ServerInfo} from '../protocol/envelope';
 import {realtime, type RealtimeStatus} from '../realtime/RealtimeClient';
 import {readJSON, removeKey, writeJSON} from '../storage/kv';
@@ -153,15 +153,12 @@ async function signIn(
 ) {
   const info: ServerInfo = await probeServer(baseUrl);
   if (!info.auth_required) {
-    throw new ApiError(
-      'server',
-      '该服务端未设置访问密码，为安全起见拒绝连接。请先在服务端配置 web_password',
-    );
+    throw new ApiError('server', tr('login_err_no_password'));
   }
   http.setBaseUrl(baseUrl);
   const token = await login(password);
   if (!token) {
-    throw new ApiError('server', '登录成功但服务端未返回 token，请升级 CowAgent');
+    throw new ApiError('server', tr('login_err_no_token'));
   }
   const {id} = identity;
   const profile: ServerProfile = {
@@ -269,7 +266,7 @@ export const useServerStore = create<ServerState>((set, get) => ({
       const {baseUrl, password} = await startLocalKernel();
       leaveActive();
       try {
-        await signIn(baseUrl, password, {id: LOCAL_SERVER_ID, name: LOCAL_SERVER_NAME, local: true});
+        await signIn(baseUrl, password, {id: LOCAL_SERVER_ID, local: true});
       } catch (e) {
         set({activeId: LOCAL_SERVER_ID, authed: false});
         throw e;

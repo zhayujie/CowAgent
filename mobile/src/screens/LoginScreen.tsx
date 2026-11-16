@@ -12,8 +12,8 @@ import {
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {isPublicCleartext} from '../api/http';
 import logo from '../assets/logo-mark.png';
-import {tr} from '../i18n';
-import {isLocalKernelAvailable, LOCAL_SERVER_ID, LOCAL_SERVER_NAME} from '../kernel/localKernel';
+import {tr, trf} from '../i18n';
+import {isLocalKernelAvailable, LOCAL_SERVER_ID} from '../kernel/localKernel';
 import {activeServer, describeConnectError, useServerStore} from '../store/serverStore';
 import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
@@ -26,7 +26,7 @@ export function LoginScreen() {
   const returnTo = useServerStore(s => s.returnTo);
   const returnHost = useServerStore(s => s.servers.find(p => p.id === s.returnTo)?.baseUrl);
   const returnLabel =
-    returnTo === LOCAL_SERVER_ID ? LOCAL_SERVER_NAME : returnHost?.replace(/^https?:\/\//, '');
+    returnTo === LOCAL_SERVER_ID ? tr('server_local') : returnHost?.replace(/^https?:\/\//, '');
   const [url, setUrl] = useState(() => activeServer()?.baseUrl ?? '');
   const [password, setPassword] = useState('');
   const [focus, setFocus] = useState<'url' | 'password' | null>(null);
@@ -77,9 +77,7 @@ export function LoginScreen() {
         <Text style={styles.eyebrow}>COWAGENT</Text>
         <Text style={styles.title}>{tr('login_heading')}</Text>
         <Text style={styles.lead}>
-          {isLocalKernelAvailable()
-            ? '直接在这台手机上运行，或者连接部署在服务器、电脑上的 CowAgent。'
-            : tr('login_lead')}
+          {isLocalKernelAvailable() ? tr('login_lead_local') : tr('login_lead')}
         </Text>
 
         {isLocalKernelAvailable() && (
@@ -92,11 +90,11 @@ export function LoginScreen() {
               {pending === 'local' ? (
                 <ActivityIndicator color={t.onAccent} />
               ) : (
-                <Text style={styles.buttonText}>在本机运行</Text>
+                <Text style={styles.buttonText}>{tr('login_run_local')}</Text>
               )}
             </Pressable>
-            <Text style={styles.footnote}>无需服务器，Agent 和数据都留在这台手机上，只需配置模型。</Text>
-            <Text style={styles.divider}>或连接服务器</Text>
+            <Text style={styles.footnote}>{tr('login_local_footnote')}</Text>
+            <Text style={styles.divider}>{tr('login_or_server')}</Text>
           </>
         )}
 
@@ -151,7 +149,7 @@ export function LoginScreen() {
             hitSlop={8}
             disabled={busy || !!pending}
             onPress={() => switchTo('back', returnTo)}>
-            <Text style={styles.back}>{pending === 'back' ? '正在返回…' : `返回 ${returnLabel}`}</Text>
+            <Text style={styles.back}>{pending === 'back' ? tr('login_going_back') : trf('login_back_to', {name: returnLabel})}</Text>
           </Pressable>
         )}
       </ScrollView>

@@ -2,7 +2,8 @@ import {faCheck, faMobileScreen, faPlus, faServer} from '@fortawesome/free-solid
 import type {IconDefinition} from '@fortawesome/fontawesome-svg-core';
 import React, {useEffect, useState} from 'react';
 import {ActivityIndicator, Pressable, Text, View} from 'react-native';
-import {isLocalKernelAvailable, LOCAL_SERVER_ID, LOCAL_SERVER_NAME} from '../kernel/localKernel';
+import {tr} from '../i18n';
+import {isLocalKernelAvailable, LOCAL_SERVER_ID} from '../kernel/localKernel';
 import {describeConnectError, useServerStore} from '../store/serverStore';
 import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
@@ -85,7 +86,7 @@ export function ServerSheet({visible, onClose}: {visible: boolean; onClose: () =
           removable && (
             <Pressable accessibilityRole="button" hitSlop={8} onPress={() => remove(id)}>
               <Text style={[styles.remove, confirmRemove === id && styles.removeConfirm]}>
-                {confirmRemove === id ? '确认移除' : '移除'}
+                {confirmRemove === id ? tr('server_remove_confirm') : tr('server_remove')}
               </Text>
             </Pressable>
           )
@@ -95,8 +96,8 @@ export function ServerSheet({visible, onClose}: {visible: boolean; onClose: () =
   };
 
   return (
-    <Sheet visible={visible} onClose={onClose} title="连接到">
-      {isLocalKernelAvailable() && row(LOCAL_SERVER_ID, faMobileScreen, LOCAL_SERVER_NAME, '在这台手机上运行', false)}
+    <Sheet visible={visible} onClose={onClose} title={tr('server_sheet_title')}>
+      {isLocalKernelAvailable() && row(LOCAL_SERVER_ID, faMobileScreen, tr('server_local'), tr('server_local_meta'), false)}
       {remotes.map(s => row(s.id, faServer, s.name, hostOf(s.baseUrl), true))}
       <Pressable
         accessibilityRole="button"
@@ -108,7 +109,7 @@ export function ServerSheet({visible, onClose}: {visible: boolean; onClose: () =
         <View style={styles.badge}>
           <Icon icon={faPlus} size={13} color={t.t3} />
         </View>
-        <Text style={styles.add}>连接新的服务器</Text>
+        <Text style={styles.add}>{tr('server_add')}</Text>
       </Pressable>
     </Sheet>
   );

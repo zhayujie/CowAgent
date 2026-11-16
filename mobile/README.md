@@ -84,7 +84,7 @@ android/ ios/  Native projects
 ## Built-in agent (Android)
 
 The Android app ships the CowAgent core and runs it on-device through Chaquopy (CPython 3.13, 64-bit ABIs only),
-so it works without a separate server. "在本机运行" on the login screen starts it; remote servers stay available.
+so it works without a separate server. "Run on this phone" on the login screen starts it; remote servers stay available.
 
 - `kernel/bundle.py` copies the core sources into the APK assets on every build; `kernel/requirements.txt` lists the
   Python packages bundled with them (binary wheels only).

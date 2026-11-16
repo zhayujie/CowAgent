@@ -1,4 +1,5 @@
 import {NativeModules} from 'react-native';
+import {tr} from '../i18n';
 
 /**
  * The agent kernel embedded in the app: the same CowAgent backend a server
@@ -12,7 +13,6 @@ interface NativeKernel {
 const native: NativeKernel | undefined = NativeModules.CowKernel;
 
 export const LOCAL_SERVER_ID = 'local';
-export const LOCAL_SERVER_NAME = '本机';
 
 /** First launch unpacks the sources and compiles them, which takes a while on slow phones. */
 const READY_TIMEOUT_MS = 90_000;
@@ -50,5 +50,5 @@ async function waitUntilReady(baseUrl: string) {
     }
     await new Promise<void>(resolve => setTimeout(resolve, 300));
   }
-  throw new Error('本机 Agent 启动超时');
+  throw new Error(tr('server_local_timeout'));
 }
