@@ -7,6 +7,7 @@ import {testMcpServer} from '../api/cowApi';
 import {ActionButton, ConfirmSheet, Footnote, MONO, SettingRow, StatusTag, SwitchRow} from '../components/settings';
 import {showToast, ToastHost} from '../components/Toast';
 import {EmptyState, GroupLabel, IconButton, PageHeader} from '../components/ui';
+import {tr, trf} from '../i18n';
 import type {RootStackParamList} from '../navigation/types';
 import type {McpProbe} from '../protocol/resources';
 import {MCP_STATUS, MCP_TRANSPORT_LABEL, mcpTransport, useMcpStore} from '../store/mcpStore';
@@ -33,7 +34,7 @@ export function McpDetailScreen({route, navigation}: Props) {
     return (
       <View style={styles.root}>
         <PageHeader title={route.params.name} onBack={navigation.goBack} />
-        <EmptyState title="这个服务已不存在" hint="可能已在别处删除" />
+        <EmptyState title={tr('mcp_gone')} hint={tr('mcp_gone_hint')} />
       </View>
     );
   }
@@ -59,7 +60,7 @@ export function McpDetailScreen({route, navigation}: Props) {
       const rest = omit(server, ['disabled']);
       await upsert(enabled ? rest : {...rest, disabled: true});
     } catch (e) {
-      showToast(`保存失败：${describeConnectError(e)}`);
+      showToast(trf('common_save_failed_detail', {error: describeConnectError(e)}));
     }
   };
 
@@ -71,7 +72,7 @@ export function McpDetailScreen({route, navigation}: Props) {
         right={
           <IconButton
             icon={faPen}
-            label="编辑"
+            label={tr('common_edit')}
             filled
             size={13}
             color={t.t1}
@@ -80,49 +81,62 @@ export function McpDetailScreen({route, navigation}: Props) {
         }
       />
       <ScrollView contentContainerStyle={{paddingBottom: insets.bottom + 32}}>
-        <GroupLabel style={styles.firstGroup}>连接</GroupLabel>
-        <SettingRow title="状态" right={<StatusTag label={status.label} on={status.on} />} />
-        <SettingRow title="方式" value={MCP_TRANSPORT_LABEL[transport] ?? transport} />
+        <GroupLabel style={styles.firstGroup}>{tr('mcp_connection')}</GroupLabel>
+        <SettingRow title={tr('mcp_status')} right={<StatusTag label={status.label} on={status.on} />} />
+        <SettingRow title={tr('mcp_transport')} value={MCP_TRANSPORT_LABEL[transport] ?? transport} />
         {stdio ? (
           <>
-            <SettingRow title="命令" value={server.command} mono />
+            <SettingRow title={tr('mcp_command')} value={server.command} mono />
             <SettingRow
-              title="参数"
+              title={tr('mcp_args')}
               detail={server.args?.length ? server.args.join(' ') : undefined}
-              value={server.args?.length ? `${server.args.length} 项` : '无'}
+              value={server.args?.length ? trf('mcp_item_count', {n: server.args.length}) : tr('mcp_none')}
             />
             {count(server.env) > 0 && (
-              <SettingRow title="环境变量" detail={Object.keys(server.env ?? {}).join('、')} value={`${count(server.env)} 项`} />
+              <SettingRow
+                title={tr('mcp_env')}
+                detail={Object.keys(server.env ?? {}).join(tr('mcp_list_sep'))}
+                value={trf('mcp_item_count', {n: count(server.env)})}
+              />
             )}
           </>
         ) : (
           <>
-            <SettingRow title="地址" detail={server.url} />
+            <SettingRow title={tr('mcp_url')} detail={server.url} />
             {count(server.headers) > 0 && (
-              <SettingRow title="请求头" detail={Object.keys(server.headers ?? {}).join('、')} value={`${count(server.headers)} 项`} />
+              <SettingRow
+                title={tr('mcp_headers')}
+                detail={Object.keys(server.headers ?? {}).join(tr('mcp_list_sep'))}
+                value={trf('mcp_item_count', {n: count(server.headers)})}
+              />
             )}
           </>
         )}
-        {!!server.tool_name_prefix && <SettingRow title="工具名前缀" value={String(server.tool_name_prefix)} mono />}
-        <SettingRow title="超时" value={server.timeout ? `${server.timeout} 秒` : '默认'} />
+        {!!server.tool_name_prefix && <SettingRow title={tr('mcp_prefix')} value={String(server.tool_name_prefix)} mono />}
+        <SettingRow
+          title={tr('mcp_timeout')}
+          value={server.timeout ? trf('mcp_seconds', {n: server.timeout}) : tr('mcp_default')}
+        />
         <SwitchRow
-          title="启用"
-          detail="停用后保留配置，Agent 不再加载它的工具"
+          title={tr('mcp_enable')}
+          detail={tr('mcp_enable_detail')}
           value={!server.disabled}
           onValueChange={toggle}
           last
         />
 
-        <GroupLabel style={styles.group}>工具</GroupLabel>
+        <GroupLabel style={styles.group}>{tr('mcp_tools')}</GroupLabel>
         <View style={styles.testWrap}>
-          <ActionButton label={probe ? '重新测试' : '测试连接'} loading={probing} onPress={test} />
+          <ActionButton label={probe ? tr('mcp_retest') : tr('mcp_test')} loading={probing} onPress={test} />
         </View>
         {probe && !probe.ok && (
           <Text style={styles.probeError}>
-            {probe.needs_auth ? '这个服务需要授权，请在网页控制台完成登录授权。' : `没有连上：${probe.error || '握手失败，检查命令、参数或地址'}`}
+            {probe.needs_auth
+              ? tr('mcp_needs_auth_console')
+              : trf('mcp_connect_failed_detail', {error: probe.error || tr('mcp_handshake_failed')})}
           </Text>
         )}
-        {probe?.ok && !probe.tools.length && <Text style={styles.probeNote}>连接成功，但这个服务没有提供工具。</Text>}
+        {probe?.ok && !probe.tools.length && <Text style={styles.probeNote}>{tr('mcp_no_tools')}</Text>}
         {probe?.ok &&
           probe.tools.map((tool, i) => (
             <View key={tool.name} style={[styles.tool, i === probe.tools.length - 1 && styles.toolLast]}>
@@ -134,18 +148,18 @@ export function McpDetailScreen({route, navigation}: Props) {
               )}
             </View>
           ))}
-        {!probe && <Footnote>测试只做一次握手并列出工具，不会写入配置，也不影响正在运行的连接。</Footnote>}
+        {!probe && <Footnote>{tr('mcp_test_footnote')}</Footnote>}
 
         <View style={styles.danger}>
-          <ActionButton label="删除这个服务" tone="danger" onPress={() => setConfirmDelete(true)} />
+          <ActionButton label={tr('mcp_delete_this')} tone="danger" onPress={() => setConfirmDelete(true)} />
         </View>
       </ScrollView>
 
       <ConfirmSheet
         visible={confirmDelete}
-        title={`删除 ${server.name}`}
-        message="删除后 Agent 不能再调用它提供的工具，从下一条消息开始生效。"
-        confirmLabel="删除"
+        title={trf('mcp_delete_title', {name: server.name})}
+        message={tr('mcp_delete_message')}
+        confirmLabel={tr('common_delete')}
         danger
         onConfirm={async () => {
           try {
@@ -154,7 +168,7 @@ export function McpDetailScreen({route, navigation}: Props) {
             navigation.goBack();
           } catch (e) {
             setConfirmDelete(false);
-            showToast(`删除失败：${describeConnectError(e)}`);
+            showToast(trf('common_delete_failed', {error: describeConnectError(e)}));
           }
         }}
         onClose={() => setConfirmDelete(false)}

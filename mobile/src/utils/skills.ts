@@ -1,19 +1,32 @@
+import {tr, type MessageKey} from '../i18n';
 import type {Skill} from '../protocol/resources';
 
 /** Built-in skills, in the order they lead the list. */
 export const BUILTIN_SKILLS = ['skill-creator', 'knowledge-wiki', 'image-generation'] as const;
 
 export const SKILL_SOURCE_LABEL: Record<string, string> = {
-  builtin: '内置',
-  custom: '自定义',
-  local: '本地上传',
-  linkai: '技能市场',
-  market: '技能市场',
+  get builtin() {
+    return tr('skill_src_builtin');
+  },
+  get custom() {
+    return tr('skill_src_custom');
+  },
+  get local() {
+    return tr('skill_src_local');
+  },
+  get linkai() {
+    return tr('skill_src_market');
+  },
+  get market() {
+    return tr('skill_src_market');
+  },
   cowhub: 'Cow Skill Hub',
   hub: 'Cow Skill Hub',
   github: 'GitHub',
   clawhub: 'ClawHub',
-  url: '链接安装',
+  get url() {
+    return tr('skill_src_url');
+  },
 };
 
 export function skillName(s: Pick<Skill, 'name' | 'display_name'>): string {
@@ -26,20 +39,21 @@ export function skillDescription(s: Pick<Skill, 'description' | 'display_descrip
 
 /** The server's refusals are fixed English phrases; these are the ones a person can act on. */
 export function skillRefusal(message: string): string | null {
-  const rules: [RegExp, string][] = [
-    [/no skills found/i, '没有找到技能：需要包含 SKILL.md 的目录、压缩包或单个 SKILL.md'],
-    [/latin letters or digits/i, '名称里需要有英文字母或数字，如 weather-report；中文可以写在前面作为显示名'],
-    [/already exists/i, '已有同名技能'],
-    [/description is required/i, '请填写描述，Agent 靠它判断什么时候使用这个技能'],
-    [/invalid skill name/i, '技能名只能包含英文字母、数字、- 和 _'],
-    [/invalid ClawHub/i, 'ClawHub 技能名格式不对'],
-    [/GitHub URL or owner\/repo/i, '请输入 GitHub 链接或 owner/repo'],
-    [/too large/i, '文件太大，上限 50 MB'],
-    [/preview expired/i, '预览已过期，请重新获取'],
-    [/cannot be deleted|read-only/i, '内置技能不能修改或删除'],
-    [/not found/i, '没有找到这个技能，可能已被删除'],
+  const rules: [RegExp, MessageKey][] = [
+    [/no skills found/i, 'skill_err_no_skills'],
+    [/latin letters or digits/i, 'skill_err_latin_name'],
+    [/already exists/i, 'skill_err_exists'],
+    [/description is required/i, 'skill_err_desc_required'],
+    [/invalid skill name/i, 'skill_err_invalid_name'],
+    [/invalid ClawHub/i, 'skill_err_invalid_clawhub'],
+    [/GitHub URL or owner\/repo/i, 'skill_err_github_url'],
+    [/too large/i, 'skill_err_too_large'],
+    [/preview expired/i, 'skill_err_preview_expired'],
+    [/cannot be deleted|read-only/i, 'skill_err_readonly'],
+    [/not found/i, 'skill_err_not_found'],
   ];
-  return rules.find(([re]) => re.test(message))?.[1] ?? null;
+  const key = rules.find(([re]) => re.test(message))?.[1];
+  return key ? tr(key) : null;
 }
 
 function builtinRank(s: Skill): number {
@@ -160,6 +174,10 @@ export function skillFileForReading(path: string, content: string): string {
   if (!fields.length) {
     return body;
   }
-  const table = ['| 字段 | 值 |', '| --- | --- |', ...fields.map(([k, v]) => `| \`${escapeCell(k)}\` | ${escapeCell(v)} |`)];
+  const table = [
+    `| ${tr('skill_fm_field')} | ${tr('skill_fm_value')} |`,
+    '| --- | --- |',
+    ...fields.map(([k, v]) => `| \`${escapeCell(k)}\` | ${escapeCell(v)} |`),
+  ];
   return `${table.join('\n')}\n\n${body}`;
 }

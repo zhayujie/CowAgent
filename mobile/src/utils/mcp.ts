@@ -1,3 +1,4 @@
+import {tr, trf} from '../i18n';
 import type {McpServer} from '../protocol/resources';
 
 export const MCP_JSON_PLACEHOLDER = JSON.stringify(
@@ -32,18 +33,18 @@ export function objectToKv(obj?: Record<string, string>): string {
 export function parseMcpJson(text: string): McpServer[] {
   const raw = (text || '').trim();
   if (!raw) {
-    throw new Error('先粘贴 MCP 配置');
+    throw new Error(tr('mcp_json_empty'));
   }
   let obj: unknown;
   try {
     obj = JSON.parse(raw);
   } catch (e) {
-    throw new Error(`JSON 格式不对：${e instanceof Error ? e.message : ''}`);
+    throw new Error(trf('mcp_json_invalid_detail', {error: e instanceof Error ? e.message : ''}));
   }
   const fromMap = (map: Record<string, unknown>) =>
     Object.entries(map).map(([name, cfg]) => {
       if (!cfg || typeof cfg !== 'object' || Array.isArray(cfg)) {
-        throw new Error(`「${name}」不是一个服务配置`);
+        throw new Error(trf('mcp_json_not_server', {name}));
       }
       return {...(cfg as Record<string, unknown>), name};
     });
@@ -57,17 +58,17 @@ export function parseMcpJson(text: string): McpServer[] {
       servers = fromMap(record.mcpServers as Record<string, unknown>);
     } else if ('command' in record || 'url' in record || 'serverUrl' in record) {
       if (!record.name) {
-        throw new Error('单个配置需要带上 "name" 字段');
+        throw new Error(tr('mcp_json_need_name'));
       }
       servers = [record];
     } else {
       servers = fromMap(record);
     }
   } else {
-    throw new Error('JSON 格式不对');
+    throw new Error(tr('mcp_json_invalid'));
   }
   if (!servers.length) {
-    throw new Error('里面没有找到服务');
+    throw new Error(tr('mcp_json_no_servers'));
   }
   return servers.map(server => {
     const cfg: Record<string, unknown> = {...server};

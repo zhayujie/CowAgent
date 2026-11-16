@@ -7,6 +7,7 @@ import {testMcpServer} from '../api/cowApi';
 import {Icon} from '../components/Icon';
 import {ActionButton, Footnote, MONO, Toggle} from '../components/settings';
 import {Chip, PageHeader, Segmented} from '../components/ui';
+import {tr, trf} from '../i18n';
 import type {RootStackParamList} from '../navigation/types';
 import type {McpProbe, McpServer, McpTransport} from '../protocol/resources';
 import {MCP_TRANSPORT_LABEL, mcpTransport, useMcpStore} from '../store/mcpStore';
@@ -62,11 +63,11 @@ export function McpEditScreen({route, navigation}: Props) {
   const fromForm = (): McpServer => {
     const trimmedName = name.trim();
     if (!trimmedName) {
-      throw new Error('先给服务起个名字');
+      throw new Error(tr('mcp_name_required'));
     }
     const seconds = timeout.trim() ? Number(timeout.trim()) : undefined;
     if (seconds !== undefined && (!Number.isInteger(seconds) || seconds <= 0)) {
-      throw new Error('超时需要是正整数秒');
+      throw new Error(tr('mcp_timeout_invalid'));
     }
     const kept = original ? omit(original, FORM_KEYS as (keyof McpServer)[]) : {};
     const cfg: McpServer = {...kept, name: trimmedName, type};
@@ -81,7 +82,7 @@ export function McpEditScreen({route, navigation}: Props) {
     }
     if (type === 'stdio') {
       if (!command.trim()) {
-        throw new Error('填写启动命令，如 npx 或 uvx');
+        throw new Error(tr('mcp_command_required'));
       }
       cfg.command = command.trim();
       const list = args
@@ -97,7 +98,7 @@ export function McpEditScreen({route, navigation}: Props) {
       }
     } else {
       if (!/^https?:\/\//i.test(url.trim())) {
-        throw new Error('地址需要以 http:// 或 https:// 开头');
+        throw new Error(tr('mcp_url_invalid'));
       }
       cfg.url = url.trim();
       const headerMap = kvToObject(headers);
@@ -114,12 +115,12 @@ export function McpEditScreen({route, navigation}: Props) {
   const read = (): McpServer[] => {
     const list = mode === 'json' ? parseMcpJson(json) : [fromForm()];
     if (originalName && list.length > 1) {
-      throw new Error('编辑时只能保留一个服务；要添加多个，请返回后点「添加」');
+      throw new Error(tr('mcp_edit_single'));
     }
     if (!originalName || list[0].name !== originalName) {
       const clash = list.filter(s => servers?.some(x => x.name === s.name)).map(s => s.name);
       if (clash.length) {
-        throw new Error(`已有同名服务：${clash.join('、')}`);
+        throw new Error(trf('mcp_name_exists', {names: clash.join(tr('mcp_list_sep'))}));
       }
     }
     return list;
@@ -160,7 +161,7 @@ export function McpEditScreen({route, navigation}: Props) {
         return;
       }
       if (parsed.length > 1) {
-        setResult({kind: 'error', text: `这里有 ${parsed.length} 个服务，表单一次只能编辑一个；可以直接在 JSON 里保存`});
+        setResult({kind: 'error', text: trf('mcp_json_multi_to_form', {n: parsed.length})});
         return;
       }
       const s = parsed[0];
@@ -212,7 +213,7 @@ export function McpEditScreen({route, navigation}: Props) {
         const probes = await probeAll(active);
         // A server waiting for authorization can only be authorized once it is saved.
         if (!probes.every(p => p.ok || p.needs_auth)) {
-          setResult({kind: 'probes', probes, note: '没有全部连上。检查后再试，或者直接点「仍然保存」'});
+          setResult({kind: 'probes', probes, note: tr('mcp_check_failed')});
           setSaveAnyway(true);
           return;
         }
@@ -257,12 +258,12 @@ export function McpEditScreen({route, navigation}: Props) {
 
   return (
     <View style={styles.root}>
-      <PageHeader title={original ? '编辑 MCP 服务' : '添加 MCP 服务'} onBack={navigation.goBack} />
+      <PageHeader title={original ? tr('mcp_edit_title') : tr('mcp_add')} onBack={navigation.goBack} />
       <Segmented
         value={mode}
         onChange={switchMode}
         options={[
-          {key: 'form', label: '表单'},
+          {key: 'form', label: tr('mcp_tab_form')},
           {key: 'json', label: 'JSON'},
         ]}
       />
@@ -270,40 +271,40 @@ export function McpEditScreen({route, navigation}: Props) {
         <ScrollView contentContainerStyle={[styles.body, {paddingBottom: insets.bottom + 32}]} keyboardShouldPersistTaps="handled">
           {mode === 'form' ? (
             <>
-              <Text style={styles.label}>名称</Text>
-              {input(name, setName, {placeholder: '例如 filesystem'})}
+              <Text style={styles.label}>{tr('common_name')}</Text>
+              {input(name, setName, {placeholder: tr('mcp_name_ph')})}
 
-              <Text style={styles.label}>连接方式</Text>
+              <Text style={styles.label}>{tr('mcp_field_transport')}</Text>
               <View style={styles.chips}>
-                {TRANSPORTS.map(tr => (
-                  <Chip key={tr} label={MCP_TRANSPORT_LABEL[tr]} active={type === tr} onPress={() => edited(setType)(tr)} />
+                {TRANSPORTS.map(kind => (
+                  <Chip key={kind} label={MCP_TRANSPORT_LABEL[kind]} active={type === kind} onPress={() => edited(setType)(kind)} />
                 ))}
               </View>
 
               {type === 'stdio' ? (
                 <>
-                  <Text style={styles.label}>命令</Text>
+                  <Text style={styles.label}>{tr('mcp_command')}</Text>
                   {input(command, setCommand, {placeholder: 'npx / uvx / python', mono: true})}
-                  <Text style={styles.label}>参数（每行一个）</Text>
+                  <Text style={styles.label}>{tr('mcp_field_args')}</Text>
                   {input(args, setArgs, {placeholder: '-y\n@modelcontextprotocol/server-github', mono: true, lines: 3})}
-                  <Text style={styles.label}>环境变量（每行 KEY=值）</Text>
+                  <Text style={styles.label}>{tr('mcp_field_env')}</Text>
                   {input(env, setEnv, {placeholder: 'API_KEY=your-key', mono: true, lines: 2})}
                 </>
               ) : (
                 <>
-                  <Text style={styles.label}>地址</Text>
+                  <Text style={styles.label}>{tr('mcp_url')}</Text>
                   {input(url, setUrl, {placeholder: 'https://mcp.example.com/mcp', mono: true})}
-                  <Text style={styles.label}>请求头（每行 KEY=值）</Text>
+                  <Text style={styles.label}>{tr('mcp_field_headers')}</Text>
                   {input(headers, setHeaders, {placeholder: 'Authorization=Bearer YOUR_API_KEY', mono: true, lines: 2})}
                 </>
               )}
 
               <View style={styles.switchRow}>
                 <View style={styles.flex}>
-                  <Text style={styles.switchTitle}>启用</Text>
-                  <Text style={styles.switchHint}>关闭后保留配置，Agent 不加载它的工具</Text>
+                  <Text style={styles.switchTitle}>{tr('mcp_enable')}</Text>
+                  <Text style={styles.switchHint}>{tr('mcp_enable_hint')}</Text>
                 </View>
-                <Toggle value={enabled} onValueChange={edited(setEnabled)} label="启用" />
+                <Toggle value={enabled} onValueChange={edited(setEnabled)} label={tr('mcp_enable')} />
               </View>
 
               <Pressable
@@ -314,18 +315,18 @@ export function McpEditScreen({route, navigation}: Props) {
                 <View style={advanced && styles.rotated}>
                   <Icon icon={faChevronRight} size={10} color={t.t3} />
                 </View>
-                <Text style={styles.advancedText}>高级选项</Text>
+                <Text style={styles.advancedText}>{tr('mcp_advanced')}</Text>
               </Pressable>
               {advanced && (
                 <>
-                  <Text style={styles.label}>超时（秒）</Text>
+                  <Text style={styles.label}>{tr('mcp_field_timeout')}</Text>
                   {input(timeout, setTimeoutValue, {placeholder: '30', numeric: true})}
-                  <Text style={styles.label}>工具名前缀</Text>
+                  <Text style={styles.label}>{tr('mcp_prefix')}</Text>
                   {input(prefix, setPrefix, {placeholder: 'myserver_', mono: true})}
                   {type !== 'stdio' && (
                     <>
                       <Text style={styles.label}>OAuth scope</Text>
-                      {input(scope, setScope, {placeholder: '留空使用服务默认值', mono: true})}
+                      {input(scope, setScope, {placeholder: tr('mcp_scope_ph'), mono: true})}
                     </>
                   )}
                 </>
@@ -333,9 +334,7 @@ export function McpEditScreen({route, navigation}: Props) {
             </>
           ) : (
             <>
-              <Text style={styles.jsonHint}>
-                粘贴 MCP 目录里给的配置即可，支持 {'{"mcpServers": {...}}'}、名称到配置的映射或配置列表，一次可以添加多个。
-              </Text>
+              <Text style={styles.jsonHint}>{trf('mcp_json_hint', {format: '{"mcpServers": {...}}'})}</Text>
               {input(json, setJson, {placeholder: MCP_JSON_PLACEHOLDER, mono: true, lines: 12})}
             </>
           )}
@@ -343,7 +342,7 @@ export function McpEditScreen({route, navigation}: Props) {
           {busy && (
             <View style={[styles.result, styles.resultInfo]}>
               <ActivityIndicator size="small" color={t.t3} />
-              <Text style={styles.resultText}>{busy === 'test' || !saveAnyway ? '正在连接，最长约 45 秒…' : '正在保存…'}</Text>
+              <Text style={styles.resultText}>{busy === 'test' || !saveAnyway ? tr('mcp_connecting') : tr('mcp_saving')}</Text>
             </View>
           )}
           {!busy && result?.kind === 'error' && (
@@ -354,9 +353,9 @@ export function McpEditScreen({route, navigation}: Props) {
           {!busy && result?.kind === 'probes' && <ProbeList probes={result.probes} note={result.note} />}
 
           <View style={styles.actions}>
-            <ActionButton label="测试连接" disabled={!!busy} onPress={test} style={styles.flex} />
+            <ActionButton label={tr('mcp_test')} disabled={!!busy} onPress={test} style={styles.flex} />
             <ActionButton
-              label={saveAnyway ? '仍然保存' : '保存'}
+              label={saveAnyway ? tr('mcp_save_anyway') : tr('common_save')}
               tone="primary"
               loading={busy === 'save'}
               disabled={!!busy}
@@ -364,7 +363,7 @@ export function McpEditScreen({route, navigation}: Props) {
               style={styles.flex}
             />
           </View>
-          <Footnote flush>保存前会先试连一次；保存后从下一条消息开始生效，不需要重启服务。</Footnote>
+          <Footnote flush>{tr('mcp_edit_footnote')}</Footnote>
         </ScrollView>
       </KeyboardAvoidingView>
     </View>
@@ -384,12 +383,12 @@ function ProbeList({probes, note}: {probes: Probe[]; note?: string}) {
             <Icon icon={p.ok ? faCircleCheck : faCircleXmark} size={13} color={p.ok ? t.accent : t.danger} />
             <Text style={styles.probeName} numberOfLines={1}>
               {probes.length > 1 ? `${p.name} · ` : ''}
-              {p.ok ? `连接成功，提供 ${p.tools.length} 个工具` : '没有连上'}
+              {p.ok ? trf('mcp_probe_ok', {n: p.tools.length}) : tr('mcp_probe_failed')}
             </Text>
           </View>
           {!p.ok && (
             <Text style={styles.probeDetail}>
-              {p.needs_auth ? '这个服务需要授权，保存后到网页控制台完成登录授权。' : p.error || '握手失败，检查命令、参数或地址'}
+              {p.needs_auth ? tr('mcp_needs_auth_save') : p.error || tr('mcp_handshake_failed')}
             </Text>
           )}
           {p.ok && p.tools.length > 0 && (
@@ -399,7 +398,7 @@ function ProbeList({probes, note}: {probes: Probe[]; note?: string}) {
                   {tool.name}
                 </Text>
               ))}
-              {p.tools.length > 24 && <Text style={styles.probeDetail}>等 {p.tools.length} 个</Text>}
+              {p.tools.length > 24 && <Text style={styles.probeDetail}>{trf('mcp_probe_more', {n: p.tools.length})}</Text>}
             </View>
           )}
         </View>
