@@ -20,6 +20,7 @@ import {QrLoginPanel, type QrConnected} from '../components/QrLoginPanel';
 import {ActionButton, ConfirmSheet, FieldSheet, MONO, Toggle} from '../components/settings';
 import {showToast, ToastHost} from '../components/Toast';
 import {EmptyState, PageHeader, Segmented} from '../components/ui';
+import {tr, trf} from '../i18n';
 import type {RootStackParamList} from '../navigation/types';
 import type {ChannelField, ChannelInfo, ChannelsResponse} from '../protocol/resources';
 import {useAgentStore} from '../store/agentStore';
@@ -123,11 +124,11 @@ export function ChannelScreen({navigation, route}: Props) {
   if (!data || !target) {
     return (
       <View style={styles.root}>
-        <PageHeader title="通道" onBack={navigation.goBack} />
+        <PageHeader title={tr('channel_title')} onBack={navigation.goBack} />
         <EmptyState
           loading={!data && !error}
-          title={data ? '这个通道已经断开' : '加载失败'}
-          hint={data ? '回到通道列表重新接入' : error ?? undefined}
+          title={data ? tr('channel_gone') : tr('common_load_failed')}
+          hint={data ? tr('channel_gone_hint') : error ?? undefined}
         />
       </View>
     );
@@ -143,13 +144,15 @@ export function ChannelScreen({navigation, route}: Props) {
 
   const connected = async ({instanceId, downloading}: QrConnected) => {
     await load();
-    showToast(downloading ? '已接入，首次启用要下载飞书组件，连上可能稍慢' : `${label}已接入`);
+    showToast(downloading ? tr('channel_connected_downloading') : trf('channel_connected_named', {name: label}));
     navigation.replace('Channel', {name: params.name, instanceId: multiAgent && multiType ? instanceId : undefined});
   };
 
   const submit = async (action: 'connect' | 'save') => {
     if (action === 'connect' && missing.length) {
-      setFormError(`还没填 ${missing.map(f => localized(f.label, f.key)).join('、')}`);
+      setFormError(
+        trf('channel_missing', {fields: missing.map(f => localized(f.label, f.key)).join(tr('channel_list_sep'))}),
+      );
       return;
     }
     setBusy(action);
@@ -164,9 +167,10 @@ export function ChannelScreen({navigation, route}: Props) {
       const fresh = useChannelStore.getState().data;
       const updated = fresh ? resolve(fresh, params) : undefined;
       setValues(initialValues(updated?.fields ?? fields));
-      showToast('已保存，通道会用新配置重新连接');
+      showToast(tr('channel_saved_reconnect'));
     } catch (e) {
-      setFormError(`${action === 'connect' ? '连接' : '保存'}失败：${describeConnectError(e)}`);
+      const vars = {error: describeConnectError(e)};
+      setFormError(trf(action === 'connect' ? 'channel_connect_failed' : 'common_save_failed_detail', vars));
     } finally {
       setBusy(null);
     }
@@ -177,11 +181,11 @@ export function ChannelScreen({navigation, route}: Props) {
       await channelAction('disconnect', params.name, undefined, multiAgent ? target.instance_id || undefined : undefined);
       setSheet(null);
       await load();
-      showToast(`已断开${channelTitle(target)}`);
+      showToast(trf('channel_disconnected_named', {name: channelTitle(target)}));
       navigation.goBack();
     } catch (e) {
       setSheet(null);
-      showToast(`断开失败：${describeConnectError(e)}`);
+      showToast(trf('channel_disconnect_failed', {error: describeConnectError(e)}));
     }
   };
 
@@ -205,7 +209,7 @@ export function ChannelScreen({navigation, route}: Props) {
     }
     setSheet(null);
     await Promise.all([load(), useAgentStore.getState().load().catch(() => undefined)]);
-    showToast('已更新，下一条消息起生效');
+    showToast(tr('channel_binding_updated'));
   };
 
   const form = (
@@ -228,12 +232,12 @@ export function ChannelScreen({navigation, route}: Props) {
       </View>
       {(hasMasked && !creating) || help ? (
         <Text style={styles.help}>
-          {[hasMasked && !creating ? '密钥留空表示不修改。' : '', help ?? ''].filter(Boolean).join('')}
+          {[hasMasked && !creating ? tr('channel_secret_keep') : '', help ?? ''].filter(Boolean).join('')}
         </Text>
       ) : null}
       {!!formError && <Text style={styles.formError}>{formError}</Text>}
       <ActionButton
-        label={creating ? '连接' : '保存'}
+        label={creating ? tr('channel_connect') : tr('common_save')}
         tone="primary"
         loading={!!busy}
         disabled={creating ? false : !dirty}
@@ -252,19 +256,27 @@ export function ChannelScreen({navigation, route}: Props) {
       <View style={styles.scanIcon}>
         <Icon icon={faQrcode} size={22} color={t.accent} />
       </View>
-      <Text style={styles.scanTitle}>{creating ? '扫码就能创建好机器人' : '扫码换一个新机器人'}</Text>
-      <Text style={styles.scanText}>
-        {creating
-          ? '用飞书 App 扫码授权，自动创建应用，权限和事件订阅都会配好，不用去开放平台手动设置。'
-          : '扫码会创建一个新的飞书机器人，并替换当前的 App ID 和 App Secret。'}
+      <Text style={styles.scanTitle}>
+        {creating ? tr('channel_feishu_scan_create') : tr('channel_feishu_scan_replace')}
       </Text>
-      <ActionButton label="一键创建飞书应用" tone="primary" onPress={() => setFeishuScanning(true)} style={styles.scanButton} />
+      <Text style={styles.scanText}>
+        {creating ? tr('channel_feishu_scan_create_desc') : tr('channel_feishu_scan_replace_desc')}
+      </Text>
+      <ActionButton
+        label={tr('channel_feishu_scan_btn')}
+        tone="primary"
+        onPress={() => setFeishuScanning(true)}
+        style={styles.scanButton}
+      />
     </View>
   );
 
   return (
     <View style={styles.root}>
-      <PageHeader title={creating ? `接入${label}` : channelTitle(target)} onBack={navigation.goBack} />
+      <PageHeader
+        title={creating ? trf('channel_add_named', {name: label}) : channelTitle(target)}
+        onBack={navigation.goBack}
+      />
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView
           contentContainerStyle={[styles.body, {paddingBottom: insets.bottom + 32}]}
@@ -277,7 +289,7 @@ export function ChannelScreen({navigation, route}: Props) {
               </Text>
               {creating ? (
                 <Text style={styles.identityMeta} numberOfLines={2}>
-                  {CHANNEL_BLURB[params.name] ?? '填写凭证后连接'}
+                  {CHANNEL_BLURB[params.name] ?? tr('channel_fill_credentials')}
                 </Text>
               ) : (
                 <View style={styles.statusLine}>
@@ -290,9 +302,18 @@ export function ChannelScreen({navigation, route}: Props) {
 
           {isInstance && !creating && (
             <View style={[styles.group, styles.section]}>
-              <InfoRow first title="名称" value={target.instance_name || '未命名'} onPress={() => setSheet('rename')} />
-              <InfoRow title="谁来回复" value={bindingSummary(target, nameOf)} onPress={() => setSheet('agents')} />
-              <InfoRow title="通道 ID" value={target.instance_id ?? ''} mono />
+              <InfoRow
+                first
+                title={tr('common_name')}
+                value={target.instance_name || tr('common_untitled')}
+                onPress={() => setSheet('rename')}
+              />
+              <InfoRow
+                title={tr('channel_who_replies')}
+                value={bindingSummary(target, nameOf)}
+                onPress={() => setSheet('agents')}
+              />
+              <InfoRow title={tr('channel_id')} value={target.instance_id ?? ''} mono />
             </View>
           )}
 
@@ -304,11 +325,11 @@ export function ChannelScreen({navigation, route}: Props) {
           {isWeixin && !creating && pending === 'starting' && (
             <View style={[styles.group, styles.section, styles.starting]}>
               <ActivityIndicator size="small" color={t.t3} />
-              <Text style={styles.startingText}>正在启动，通常几秒就好</Text>
+              <Text style={styles.startingText}>{tr('channel_starting_hint')}</Text>
             </View>
           )}
           {isWeixin && !creating && pending === 'none' && (
-            <Text style={styles.help}>微信已登录。退出登录或换号，先断开再重新接入。</Text>
+            <Text style={styles.help}>{tr('channel_weixin_logged_in')}</Text>
           )}
 
           {isFeishu ? (
@@ -323,8 +344,8 @@ export function ChannelScreen({navigation, route}: Props) {
                     }
                   }}
                   options={[
-                    {key: 'scan', label: '扫码创建'},
-                    {key: 'manual', label: '手动填写'},
+                    {key: 'scan', label: tr('channel_mode_scan')},
+                    {key: 'manual', label: tr('channel_mode_manual')},
                   ]}
                 />
               </View>
@@ -333,24 +354,29 @@ export function ChannelScreen({navigation, route}: Props) {
           ) : (
             !!fields.length && (
               <View style={styles.section}>
-                {!creating && <Text style={styles.sectionTitle}>连接配置</Text>}
+                {!creating && <Text style={styles.sectionTitle}>{tr('channel_config')}</Text>}
                 {form}
               </View>
             )
           )}
 
           {!creating && (
-            <ActionButton label="断开连接" tone="danger" onPress={() => setSheet('disconnect')} style={styles.disconnect} />
+            <ActionButton
+              label={tr('channel_disconnect')}
+              tone="danger"
+              onPress={() => setSheet('disconnect')}
+              style={styles.disconnect}
+            />
           )}
         </ScrollView>
       </KeyboardAvoidingView>
 
       <FieldSheet
         visible={sheet === 'rename'}
-        title="通道名称"
+        title={tr('channel_name')}
         initial={target.instance_name ?? ''}
-        placeholder={`如「${label}2」`}
-        hint="只用于区分同类型的多个机器人，不影响连接"
+        placeholder={trf('channel_name_placeholder', {name: label})}
+        hint={tr('channel_name_hint')}
         onSubmit={rename}
         onClose={() => setSheet(null)}
       />
@@ -362,13 +388,9 @@ export function ChannelScreen({navigation, route}: Props) {
       />
       <ConfirmSheet
         visible={sheet === 'disconnect'}
-        title={`断开${channelTitle(target)}`}
-        message={
-          isInstance
-            ? '这个机器人会停止接收消息，它的配置也会一起移除，之后要用需重新接入。'
-            : '通道会停止接收消息。凭证会保留，之后可以随时重新连接。'
-        }
-        confirmLabel="断开"
+        title={trf('channel_disconnect_named', {name: channelTitle(target)})}
+        message={isInstance ? tr('channel_disconnect_instance_msg') : tr('channel_disconnect_msg')}
+        confirmLabel={tr('channel_disconnect_short')}
         danger
         onConfirm={disconnect}
         onClose={() => setSheet(null)}
@@ -409,7 +431,7 @@ function FieldRow({
     ? String(field.value)
     : field.default !== undefined && field.default !== ''
       ? String(field.default)
-      : `填写 ${label}`;
+      : trf('channel_field_placeholder', {label});
   return (
     <View style={[styles.fieldRow, !first && styles.divider]}>
       <Text style={styles.fieldLabel}>{label}</Text>
@@ -432,7 +454,7 @@ function FieldRow({
         {secret && (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={revealed ? '隐藏' : '显示'}
+            accessibilityLabel={revealed ? tr('channel_hide') : tr('channel_show')}
             hitSlop={10}
             onPress={onReveal}
             style={styles.eye}>
@@ -474,7 +496,7 @@ function InfoRow({
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${title}，${value}`}
+      accessibilityLabel={trf('channel_a11y_pair', {title, value})}
       onPress={onPress}
       style={({pressed}) => [styles.infoRow, !first && styles.divider, pressed && styles.pressed]}>
       {body}

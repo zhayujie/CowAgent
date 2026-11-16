@@ -1,38 +1,39 @@
+import {localizedLabel, tr, trf} from '../i18n';
 import type {ChannelField, ChannelInfo, ChannelsResponse} from '../protocol/resources';
 
 export type ChannelPending = 'none' | 'scanning' | 'starting';
 
 /** One line on the picker: how the channel connects, so the choice is informed before tapping. */
 export const CHANNEL_BLURB: Record<string, string> = {
-  weixin: '扫码登录个人微信',
-  feishu: '扫码一键创建机器人，或填写应用凭证',
-  dingtalk: '填写钉钉应用的 Client ID 和 Secret',
-  wecom_bot: '企业微信智能机器人',
-  qq: 'QQ 开放平台机器人',
-  wechatcom_app: '企业微信自建应用，需要公网回调',
-  wechat_kf: '微信客服，需要公网回调',
-  wechatmp: '微信公众号，需要公网回调',
-  telegram: '填写 BotFather 给的 Bot Token',
-  slack: 'Socket Mode，需要 Bot 和 App 两个 Token',
-  discord: '填写 Developer Portal 里的 Bot Token',
+  get weixin() { return tr('channel_blurb_weixin'); },
+  get feishu() { return tr('channel_blurb_feishu'); },
+  get dingtalk() { return tr('channel_blurb_dingtalk'); },
+  get wecom_bot() { return tr('channel_blurb_wecom_bot'); },
+  get qq() { return tr('channel_blurb_qq'); },
+  get wechatcom_app() { return tr('channel_blurb_wechatcom_app'); },
+  get wechat_kf() { return tr('channel_blurb_wechat_kf'); },
+  get wechatmp() { return tr('channel_blurb_wechatmp'); },
+  get telegram() { return tr('channel_blurb_telegram'); },
+  get slack() { return tr('channel_blurb_slack'); },
+  get discord() { return tr('channel_blurb_discord'); },
 };
 
 /** Shown under the form where getting the credentials right is not obvious. */
 export const CHANNEL_HELP: Record<string, string> = {
-  feishu: '在飞书开放平台创建企业自建应用，开启机器人能力后，到「凭证与基础信息」复制 App ID 和 App Secret。',
-  dingtalk: '在钉钉开放平台创建应用并添加机器人，消息接收方式选 Stream 模式。',
-  wechatcom_app: '企业微信回调需要服务器能从公网访问到这里填的端口。',
-  wechat_kf: '微信客服回调需要服务器能从公网访问到这里填的端口。',
-  wechatmp: '公众号回调需要服务器能从公网访问到这里填的端口。',
-  telegram: '在 Telegram 里找 @BotFather，发送 /newbot 创建机器人后会拿到 Token。',
-  slack: '应用需要开启 Socket Mode。Bot Token 以 xoxb- 开头，App Token 以 xapp- 开头。',
-  discord: '记得在 Bot 设置里打开 Message Content Intent，否则收不到消息内容。',
+  get feishu() { return tr('channel_help_feishu'); },
+  get dingtalk() { return tr('channel_help_dingtalk'); },
+  get wechatcom_app() { return tr('channel_help_wechatcom_app'); },
+  get wechat_kf() { return tr('channel_help_wechat_kf'); },
+  get wechatmp() { return tr('channel_help_wechatmp'); },
+  get telegram() { return tr('channel_help_telegram'); },
+  get slack() { return tr('channel_help_slack'); },
+  get discord() { return tr('channel_help_discord'); },
 };
 
 const MASK_RE = /\*{2,}/;
 
 export const localized = (label: ChannelInfo['label'] | ChannelField['label'], fallback = '') =>
-  typeof label === 'string' ? label : label?.zh || label?.en || fallback;
+  localizedLabel(label, fallback);
 
 export const channelLabel = (c: ChannelInfo) => localized(c.label, c.name);
 
@@ -58,12 +59,12 @@ export function channelPending(c: ChannelInfo): ChannelPending {
 export function channelStatusLabel(c: ChannelInfo): string {
   const pending = channelPending(c);
   if (pending === 'scanning') {
-    return c.login_status === 'scanned' ? '已扫码，等待确认' : '等待扫码登录';
+    return c.login_status === 'scanned' ? tr('channel_status_scanned') : tr('channel_status_waiting_scan');
   }
   if (pending === 'starting') {
-    return '正在启动';
+    return tr('channel_status_starting');
   }
-  return c.active ? '已连接' : '未连接';
+  return c.active ? tr('channel_status_connected') : tr('channel_status_disconnected');
 }
 
 export const isMultiInstance = (data: ChannelsResponse, type: string) =>
@@ -136,9 +137,9 @@ export function bindingSummary(
   nameOf: (id: string) => string | undefined,
 ): string {
   if (!c.agent_id) {
-    return '跟随默认';
+    return tr('channel_binding_default');
   }
   const owner = nameOf(c.agent_id) ?? c.agent_id;
   const n = (c.members ?? []).length;
-  return n ? `${owner} 等 ${n + 1} 个` : owner;
+  return n ? trf('channel_binding_team', {owner, count: n + 1}) : owner;
 }

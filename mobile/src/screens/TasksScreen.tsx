@@ -20,6 +20,7 @@ import {Sheet, SHEET_DISMISS_MS} from '../components/Sheet';
 import {showToast, ToastHost} from '../components/Toast';
 import {SwipeTabs} from '../components/SwipeTabs';
 import {EmptyState, IconButton, PageHeader, Segmented} from '../components/ui';
+import {tr, trf} from '../i18n';
 import type {RootStackParamList} from '../navigation/types';
 import type {ScheduledTask, TaskSchedule} from '../protocol/resources';
 import {useAgentStore} from '../store/agentStore';
@@ -120,9 +121,9 @@ export function TasksScreen({navigation}: Props) {
     try {
       await runTaskNow(task.id, task.agent_id);
       setOpened(null);
-      showToast('已开始执行，结果会出现在执行记录里');
+      showToast(tr('task_run_started_hint'));
     } catch (e) {
-      showToast(`执行失败：${describeConnectError(e)}`);
+      showToast(trf('task_run_failed_detail', {error: describeConnectError(e)}));
     } finally {
       setRunning(false);
     }
@@ -137,9 +138,9 @@ export function TasksScreen({navigation}: Props) {
     setRunningId(task.id);
     try {
       await runTaskNow(task.id, task.agent_id);
-      showToast('已开始执行，结果会出现在执行记录里');
+      showToast(tr('task_run_started_hint'));
     } catch (e) {
-      showToast(`执行失败：${describeConnectError(e)}`);
+      showToast(trf('task_run_failed_detail', {error: describeConnectError(e)}));
     } finally {
       setRunningId('');
     }
@@ -151,12 +152,12 @@ export function TasksScreen({navigation}: Props) {
   return (
     <View style={styles.root}>
       <PageHeader
-        title="定时任务"
+        title={tr('task_title')}
         onBack={navigation.goBack}
         right={
           <View style={styles.headerActions}>
             {tab === 'tasks' && (
-              <IconButton label="刷新" onPress={() => load(true)} size={13}>
+              <IconButton label={tr('common_refresh')} onPress={() => load(true)} size={13}>
                 {refreshing ? (
                   <ActivityIndicator size="small" color={t.t2} />
                 ) : (
@@ -164,7 +165,7 @@ export function TasksScreen({navigation}: Props) {
                 )}
               </IconButton>
             )}
-            <IconButton icon={faPlus} label="新增任务" filled size={13} color={t.t1} onPress={() => edit()} />
+            <IconButton icon={faPlus} label={tr('task_new')} filled size={13} color={t.t1} onPress={() => edit()} />
           </View>
         }
       />
@@ -172,8 +173,8 @@ export function TasksScreen({navigation}: Props) {
         value={tab}
         onChange={setTab}
         options={[
-          {key: 'tasks', label: '任务', count: loading ? 0 : tasks.length, icon: faCalendarDays},
-          {key: 'runs', label: '执行记录', icon: faClockRotateLeft},
+          {key: 'tasks', label: tr('task_tab_tasks'), count: loading ? 0 : tasks.length, icon: faCalendarDays},
+          {key: 'runs', label: tr('task_runs'), icon: faClockRotateLeft},
         ]}
       />
       <SwipeTabs tabs={TABS} value={tab} onChange={setTab}>
@@ -196,7 +197,7 @@ export function TasksScreen({navigation}: Props) {
                   <View style={styles.titleLine}>
                     <View style={[styles.dot, item.enabled && styles.dotOn]} />
                     <Text style={[styles.name, !item.enabled && styles.off]} numberOfLines={1}>
-                      {item.name || content || '未命名任务'}
+                      {item.name || content || tr('task_untitled')}
                     </Text>
                     {!!owner && (
                       <View style={styles.owner}>
@@ -218,11 +219,11 @@ export function TasksScreen({navigation}: Props) {
                   <View style={styles.footLine}>
                     <Icon icon={faClock} size={11} color={t.t3} />
                     <Text style={styles.meta} numberOfLines={1}>
-                      下次执行：{next || (item.enabled ? '--' : '已暂停')}
+                      {trf('task_next_run', {time: next || (item.enabled ? '--' : tr('task_paused'))})}
                     </Text>
                     <Pressable
                       accessibilityRole="button"
-                      accessibilityLabel={`立即执行 ${item.name || '任务'}`}
+                      accessibilityLabel={trf('task_run_named', {name: item.name || tr('task_fallback_name')})}
                       disabled={runningId === item.id}
                       hitSlop={6}
                       onPress={() => setConfirmRun(item)}
@@ -236,7 +237,7 @@ export function TasksScreen({navigation}: Props) {
                     <Toggle
                       value={item.enabled}
                       onValueChange={v => toggle(item, v)}
-                      label={`启用 ${item.name || '任务'}`}
+                      label={trf('task_enable_named', {name: item.name || tr('task_fallback_name')})}
                     />
                   </View>
                 </Pressable>
@@ -246,8 +247,8 @@ export function TasksScreen({navigation}: Props) {
               <EmptyState
                 icon={error ? undefined : faCalendarDays}
                 loading={loading}
-                title={error ? '加载失败' : '还没有定时任务'}
-                hint={error ?? '在对话中告诉 Agent「每天 9 点提醒我…」即可创建，也可以点右上角新增'}
+                title={error ? tr('common_load_failed') : tr('task_empty')}
+                hint={error ?? tr('task_empty_hint')}
               />
             }
             refreshControl={
@@ -257,12 +258,16 @@ export function TasksScreen({navigation}: Props) {
         )}
       </SwipeTabs>
 
-      <Sheet visible={!!opened} onClose={() => setOpened(null)} title={opened?.name || '定时任务'}>
+      <Sheet visible={!!opened} onClose={() => setOpened(null)} title={opened?.name || tr('task_title')}>
         {opened && (
           <View style={styles.sheet}>
             <Text style={styles.sheetMeta}>
               {scheduleLabel(opened)}
-              {openedNext ? ` · 下次 ${openedNext}` : opened.enabled ? '' : ' · 已暂停'}
+              {openedNext
+                ? ` · ${trf('task_next_short', {time: openedNext})}`
+                : opened.enabled
+                  ? ''
+                  : ` · ${tr('task_paused')}`}
             </Text>
             {!!openedContent && (
               <Text style={styles.sheetContent} numberOfLines={8}>
@@ -270,19 +275,19 @@ export function TasksScreen({navigation}: Props) {
               </Text>
             )}
             <View style={styles.sheetActions}>
-              <ActionButton label="编辑" style={styles.flex} onPress={() => edit(opened)} />
+              <ActionButton label={tr('common_edit')} style={styles.flex} onPress={() => edit(opened)} />
               <ActionButton
-                label="执行记录"
+                label={tr('task_runs')}
                 icon={faClockRotateLeft}
                 style={styles.flex}
                 onPress={() => {
                   const task = opened;
                   setOpened(null);
-                  navigation.navigate('TaskRuns', {taskId: task.id, title: task.name || '执行记录'});
+                  navigation.navigate('TaskRuns', {taskId: task.id, title: task.name || tr('task_runs')});
                 }}
               />
               <ActionButton
-                label="立即执行"
+                label={tr('task_run_now')}
                 icon={faPlay}
                 tone="primary"
                 loading={running}
@@ -290,15 +295,15 @@ export function TasksScreen({navigation}: Props) {
                 onPress={() => runNow(opened)}
               />
             </View>
-            <Text style={styles.sheetNote}>立即执行会马上向已配置的通道和接收者发送内容，不影响原来的执行计划。</Text>
+            <Text style={styles.sheetNote}>{tr('task_run_now_note')}</Text>
           </View>
         )}
       </Sheet>
       <ConfirmSheet
         visible={!!confirmRun}
-        title="立即执行"
-        message="该任务会立即向已配置的通道和接收者发送内容。是否继续？"
-        confirmLabel="立即执行"
+        title={tr('task_run_now')}
+        message={tr('task_run_confirm')}
+        confirmLabel={tr('task_run_now')}
         onConfirm={runFromRow}
         onClose={() => setConfirmRun(null)}
       />

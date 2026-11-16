@@ -27,17 +27,26 @@ import {Sheet} from '../components/Sheet';
 import {showToast, ToastHost} from '../components/Toast';
 import {PageHeader} from '../components/ui';
 import {WheelColumn, WheelGroup} from '../components/WheelPicker';
+import {tr, trf, type MessageKey} from '../i18n';
 import type {RootStackParamList} from '../navigation/types';
 import type {ScheduleType, TaskAction, TaskActionType, TaskInstance, TaskRecipient, TaskSchedule} from '../protocol/resources';
 import {describeConnectError} from '../store/serverStore';
 import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
-import {daysAgo, fullTime, pad, startOfDay, toDate} from '../utils/format';
+import {dateVars, daysAgo, fullTime, pad, startOfDay, toDate} from '../utils/format';
 
 type Props = StackScreenProps<RootStackParamList, 'TaskEdit'>;
 type OpenSheet = 'schedule' | 'action' | 'instance' | 'recipient' | 'once' | 'delete' | 'run' | null;
 
-const WEEKDAY = ['日', '一', '二', '三', '四', '五', '六'];
+const WEEKDAY: MessageKey[] = [
+  'task_weekday_0',
+  'task_weekday_1',
+  'task_weekday_2',
+  'task_weekday_3',
+  'task_weekday_4',
+  'task_weekday_5',
+  'task_weekday_6',
+];
 const HOUR_ITEMS = Array.from({length: 24}, (_, i) => pad(i));
 const MINUTE_ITEMS = Array.from({length: 60}, (_, i) => pad(i));
 const DAYS_AHEAD = 366;
@@ -69,36 +78,36 @@ function parseOnce(value: string): Date {
 function dayLabel(d: Date, today: Date): string {
   const ahead = -daysAgo(d, today);
   if (ahead === 0) {
-    return '今天';
+    return tr('common_today');
   }
   if (ahead === 1) {
-    return '明天';
+    return tr('common_tomorrow');
   }
-  const base = `${d.getMonth() + 1}月${d.getDate()}日 周${WEEKDAY[d.getDay()]}`;
-  return d.getFullYear() === today.getFullYear() ? base : `${d.getFullYear()}年${base}`;
+  const vars = {...dateVars(d), weekday: tr(WEEKDAY[d.getDay()])};
+  return trf(d.getFullYear() === today.getFullYear() ? 'task_once_day' : 'task_once_day_year', vars);
 }
 
-const SCHED_TYPES: {key: ScheduleType; label: string}[] = [
-  {key: 'cron', label: 'Cron 表达式'},
-  {key: 'interval', label: '固定间隔'},
-  {key: 'once', label: '单次执行'},
+const schedTypes = (): {key: ScheduleType; label: string}[] => [
+  {key: 'cron', label: tr('task_sched_cron')},
+  {key: 'interval', label: tr('task_sched_interval')},
+  {key: 'once', label: tr('task_sched_once')},
 ];
-const ACTION_TYPES: {key: TaskActionType; label: string}[] = [
-  {key: 'send_message', label: '固定消息'},
-  {key: 'agent_task', label: 'AI 任务'},
+const actionTypes = (): {key: TaskActionType; label: string}[] => [
+  {key: 'send_message', label: tr('task_action_send')},
+  {key: 'agent_task', label: tr('task_action_agent')},
 ];
 
 const recipientInstance = (r: TaskRecipient) => r.instance_id || r.channel_type;
-const schedLabel = (type: ScheduleType) => SCHED_TYPES.find(x => x.key === type)?.label ?? type;
-const actionLabel = (type: TaskActionType) => ACTION_TYPES.find(x => x.key === type)?.label ?? type;
+const schedLabel = (type: ScheduleType) => schedTypes().find(x => x.key === type)?.label ?? type;
+const actionLabel = (type: TaskActionType) => actionTypes().find(x => x.key === type)?.label ?? type;
 
 function explain(e: unknown): string {
   const message = describeConnectError(e);
   if (/trusted directory/i.test(message)) {
-    return '这个接收人不在联系人里，请让 TA 先在这个通道给 Agent 发一条消息';
+    return tr('task_err_untrusted');
   }
   if (/next run time/i.test(message)) {
-    return '无法计算下次执行时间，请检查 Cron 表达式或执行时间（单次任务须晚于现在）';
+    return tr('task_err_next_run');
   }
   return message;
 }
@@ -202,16 +211,16 @@ export function TaskEditScreen({navigation, route}: Props) {
 
   const buildSchedule = (): TaskSchedule | string => {
     if (schedType === 'cron') {
-      return cron.trim() ? {type: 'cron', expression: cron.trim()} : '请填写 Cron 表达式';
+      return cron.trim() ? {type: 'cron', expression: cron.trim()} : tr('task_cron_required');
     }
     if (schedType === 'interval') {
       const seconds = Number(interval);
-      return Number.isInteger(seconds) && seconds >= 60 ? {type: 'interval', seconds} : '请填写间隔秒数（最小 60 秒）';
+      return Number.isInteger(seconds) && seconds >= 60 ? {type: 'interval', seconds} : tr('task_interval_required');
     }
     if (!runAt.trim()) {
-      return '请选择执行时间';
+      return tr('task_once_required');
     }
-    return parseOnce(runAt).getTime() > Date.now() ? {type: 'once', run_at: runAt.trim()} : '执行时间须晚于现在';
+    return parseOnce(runAt).getTime() > Date.now() ? {type: 'once', run_at: runAt.trim()} : tr('task_once_past');
   };
 
   const buildAction = (): TaskAction | string => {
@@ -229,10 +238,10 @@ export function TaskEditScreen({navigation, route}: Props) {
       };
     }
     if (!instanceId) {
-      return '请先选择通道';
+      return tr('task_instance_required');
     }
     if (!recipient) {
-      return '请先选择接收人';
+      return tr('task_recipient_required');
     }
     return {
       ...origAction,
@@ -248,7 +257,7 @@ export function TaskEditScreen({navigation, route}: Props) {
 
   const save = async () => {
     if (!name.trim()) {
-      setError('请填写任务名称');
+      setError(tr('task_name_required'));
       return;
     }
     const schedule = buildSchedule();
@@ -257,7 +266,7 @@ export function TaskEditScreen({navigation, route}: Props) {
       return;
     }
     if (!content.trim()) {
-      setError('请输入内容');
+      setError(tr('task_content_required'));
       return;
     }
     const action = buildAction();
@@ -274,7 +283,7 @@ export function TaskEditScreen({navigation, route}: Props) {
       } else {
         await createScheduledTask(draft);
       }
-      showToast(task ? '已保存' : '已创建');
+      showToast(task ? tr('common_saved') : tr('task_created'));
       navigation.goBack();
     } catch (e) {
       setError(explain(e));
@@ -291,11 +300,11 @@ export function TaskEditScreen({navigation, route}: Props) {
     try {
       await deleteScheduledTask(task);
       setSheet(null);
-      showToast('已删除');
+      showToast(tr('common_deleted'));
       navigation.goBack();
     } catch (e) {
       setSheet(null);
-      setError(`删除失败：${explain(e)}`);
+      setError(trf('common_delete_failed', {error: explain(e)}));
     } finally {
       setBusy(null);
     }
@@ -310,7 +319,7 @@ export function TaskEditScreen({navigation, route}: Props) {
     try {
       await runTaskNow(task.id, task.agent_id);
       setSheet(null);
-      showToast('任务已开始执行');
+      showToast(tr('task_run_started'));
     } catch (e) {
       setError(explain(e));
     } finally {
@@ -341,44 +350,45 @@ export function TaskEditScreen({navigation, route}: Props) {
       style={[styles.field, opts.mono && styles.mono, !!opts.lines && styles.multi]}
     />
   );
+  const contentLabel = actionType === 'send_message' ? tr('task_fixed_content') : tr('task_description');
 
   return (
     <View style={styles.root}>
-      <PageHeader title={task ? '编辑定时任务' : '新增定时任务'} onBack={navigation.goBack} />
+      <PageHeader title={task ? tr('task_edit_title') : tr('task_add_title')} onBack={navigation.goBack} />
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={[styles.body, {paddingBottom: insets.bottom + 32}]} keyboardShouldPersistTaps="handled">
-          <Text style={styles.label}>任务名称</Text>
-          {field(name, setName, {placeholder: '任务名称', label: '任务名称'})}
+          <Text style={styles.label}>{tr('task_name')}</Text>
+          {field(name, setName, {placeholder: tr('task_name'), label: tr('task_name')})}
 
           <View style={styles.switchRow}>
-            <Text style={styles.switchTitle}>启用任务</Text>
-            <Toggle value={enabled} onValueChange={setEnabled} label="启用任务" />
+            <Text style={styles.switchTitle}>{tr('task_enabled')}</Text>
+            <Toggle value={enabled} onValueChange={setEnabled} label={tr('task_enabled')} />
           </View>
 
           <SettingRow
-            title="调度类型"
+            title={tr('task_schedule_type')}
             value={schedLabel(schedType)}
             onPress={() => setSheet('schedule')}
             last
           />
           {schedType === 'cron' && (
             <>
-              <Text style={styles.label}>Cron 表达式</Text>
-              {field(cron, setCron, {placeholder: '0 9 * * *', mono: true, label: 'Cron 表达式'})}
-              <Text style={styles.hint}>格式: 分 时 日 月 周，例如 “0 9 * * *” 表示每天 9:00</Text>
+              <Text style={styles.label}>{tr('task_sched_cron')}</Text>
+              {field(cron, setCron, {placeholder: '0 9 * * *', mono: true, label: tr('task_sched_cron')})}
+              <Text style={styles.hint}>{tr('task_cron_hint')}</Text>
             </>
           )}
           {schedType === 'interval' && (
             <>
-              <Text style={styles.label}>间隔秒数</Text>
-              {field(interval, setInterval, {placeholder: '3600', numeric: true, label: '间隔秒数'})}
-              <Text style={styles.hint}>最小 60 秒，例如 3600 表示每小时执行一次</Text>
+              <Text style={styles.label}>{tr('task_interval_seconds')}</Text>
+              {field(interval, setInterval, {placeholder: '3600', numeric: true, label: tr('task_interval_seconds')})}
+              <Text style={styles.hint}>{tr('task_interval_hint')}</Text>
             </>
           )}
           {schedType === 'once' && (
             <SettingRow
-              title="执行时间"
-              value={runAt ? fullTime(runAt) : '请选择'}
+              title={tr('task_once_time')}
+              value={runAt ? fullTime(runAt) : tr('task_pick')}
               onPress={() => {
                 if (!runAt) {
                   setRunAt(formatOnce(defaultOnce()));
@@ -390,32 +400,36 @@ export function TaskEditScreen({navigation, route}: Props) {
           )}
 
           <SettingRow
-            title="任务类型"
+            title={tr('task_action_type')}
             value={actionLabel(actionType)}
             onPress={() => setSheet('action')}
             last
           />
           {isWebTask ? (
             <>
-              <SettingRow title="通道" value={origAction.channel_type || 'web'} last />
-              <SettingRow title="接收者" value={origAction.receiver_name || origAction.receiver || '--'} last />
-              <Text style={styles.hint}>通道与接收者创建后不可修改</Text>
+              <SettingRow title={tr('task_channel')} value={origAction.channel_type || 'web'} last />
+              <SettingRow
+                title={tr('task_receiver')}
+                value={origAction.receiver_name || origAction.receiver || '--'}
+                last
+              />
+              <Text style={styles.hint}>{tr('task_channel_locked')}</Text>
             </>
           ) : (
             <>
               <SettingRow
-                title="通道"
-                value={instance ? instance.name : instances ? '请选择通道' : '加载中...'}
+                title={tr('task_channel')}
+                value={instance ? instance.name : instances ? tr('task_instance_placeholder') : tr('common_loading')}
                 detail={loadError || undefined}
                 onPress={instances?.length ? () => setSheet('instance') : undefined}
                 last
               />
               {!!instanceId && (
                 <View style={styles.recipientHead}>
-                  <Text style={styles.recipientLabel}>接收人</Text>
+                  <Text style={styles.recipientLabel}>{tr('task_recipient')}</Text>
                   <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel="刷新接收人"
+                    accessibilityLabel={tr('task_recipient_refresh')}
                     disabled={refreshing}
                     onPress={refreshRecipients}
                     hitSlop={8}
@@ -430,40 +444,48 @@ export function TaskEditScreen({navigation, route}: Props) {
               )}
               {!!instanceId && (
                 <SettingRow
-                  title={recipient ? recipient.name || recipient.receiver : scoped.length ? '请选择接收人' : '该通道下暂无接收人'}
+                  title={
+                    recipient
+                      ? recipient.name || recipient.receiver
+                      : scoped.length
+                        ? tr('task_recipient_placeholder')
+                        : tr('task_recipient_none')
+                  }
                   detail={recipient ? recipient.receiver : undefined}
                   onPress={scoped.length ? () => setSheet('recipient') : undefined}
                   last
                 />
               )}
               {!!instanceId && !scoped.length && (
-                <Text style={styles.hint}>该通道下暂无接收人，请先在这个通道向智能体发送一条消息</Text>
+                <Text style={styles.hint}>{tr('task_recipient_empty_hint')}</Text>
               )}
               {!instances?.length && instances && (
-                <Text style={styles.hint}>暂无可用通道</Text>
+                <Text style={styles.hint}>{tr('task_instance_empty')}</Text>
               )}
             </>
           )}
 
-          <Text style={styles.label}>{actionType === 'send_message' ? '固定内容' : '任务描述'}</Text>
-          {field(content, setContent, {
-            placeholder: actionType === 'send_message' ? '固定内容' : '任务描述',
-            lines: 3,
-            label: actionType === 'send_message' ? '固定内容' : '任务描述',
-          })}
+          <Text style={styles.label}>{contentLabel}</Text>
+          {field(content, setContent, {placeholder: contentLabel, lines: 3, label: contentLabel})}
 
           {!!error && <Text style={styles.error}>{error}</Text>}
-          <ActionButton label="保存" tone="primary" loading={busy === 'save'} onPress={save} style={styles.submit} />
+          <ActionButton
+            label={tr('common_save')}
+            tone="primary"
+            loading={busy === 'save'}
+            onPress={save}
+            style={styles.submit}
+          />
           {!!task && (
             <View style={styles.rowActions}>
               <ActionButton
-                label="立即执行"
+                label={tr('task_run_now')}
                 icon={faPlay}
                 loading={busy === 'run'}
                 onPress={() => setSheet('run')}
                 style={styles.flex}
               />
-              <ActionButton label="删除" tone="danger" onPress={() => setSheet('delete')} style={styles.flex} />
+              <ActionButton label={tr('common_delete')} tone="danger" onPress={() => setSheet('delete')} style={styles.flex} />
             </View>
           )}
         </ScrollView>
@@ -471,8 +493,8 @@ export function TaskEditScreen({navigation, route}: Props) {
 
       <ChoiceSheet
         visible={sheet === 'schedule'}
-        title="调度类型"
-        options={SCHED_TYPES.map(x => ({key: x.key, label: x.label}))}
+        title={tr('task_schedule_type')}
+        options={schedTypes()}
         selected={schedType}
         onSelect={k => {
           setSchedType(k);
@@ -486,8 +508,8 @@ export function TaskEditScreen({navigation, route}: Props) {
       />
       <ChoiceSheet
         visible={sheet === 'action'}
-        title="任务类型"
-        options={ACTION_TYPES.map(x => ({key: x.key, label: x.label}))}
+        title={tr('task_action_type')}
+        options={actionTypes()}
         selected={actionType}
         onSelect={k => {
           setActionType(k);
@@ -498,7 +520,7 @@ export function TaskEditScreen({navigation, route}: Props) {
       />
       <ChoiceSheet
         visible={sheet === 'instance'}
-        title="通道"
+        title={tr('task_channel')}
         options={(instances ?? []).map(i => ({
           key: i.instance_id,
           label: i.name,
@@ -519,7 +541,7 @@ export function TaskEditScreen({navigation, route}: Props) {
       />
       <ChoiceSheet
         visible={sheet === 'recipient'}
-        title="接收人"
+        title={tr('task_recipient')}
         options={scoped.map(r => ({
           key: r.receiver,
           label: r.name || r.receiver,
@@ -535,18 +557,18 @@ export function TaskEditScreen({navigation, route}: Props) {
       />
       <ConfirmSheet
         visible={sheet === 'delete'}
-        title="删除"
-        message="确定删除该任务吗？此操作不可撤销。"
-        confirmLabel="删除"
+        title={tr('common_delete')}
+        message={tr('task_delete_confirm')}
+        confirmLabel={tr('common_delete')}
         danger
         onConfirm={remove}
         onClose={() => setSheet(null)}
       />
       <ConfirmSheet
         visible={sheet === 'run'}
-        title="立即执行"
-        message="该任务会立即向已配置的通道和接收者发送内容。是否继续？"
-        confirmLabel="立即执行"
+        title={tr('task_run_now')}
+        message={tr('task_run_confirm')}
+        confirmLabel={tr('task_run_now')}
         onConfirm={runNow}
         onClose={() => setSheet(null)}
       />
@@ -567,7 +589,7 @@ function OnceTimeSheet({
   onClose: () => void;
 }) {
   return (
-    <Sheet visible={visible} onClose={onClose} title="执行时间">
+    <Sheet visible={visible} onClose={onClose} title={tr('task_once_time')}>
       <OnceWheels
         value={value}
         onDone={v => {
@@ -601,13 +623,13 @@ function OnceWheels({value, onDone, onCancel}: {value: string; onDone: (value: s
   return (
     <View style={styles.sheetBody}>
       <WheelGroup>
-        <WheelColumn label="日期" items={dayItems} index={day} onChange={setDay} flex={2.2} />
-        <WheelColumn label="时" items={HOUR_ITEMS} index={hour} onChange={setHour} />
-        <WheelColumn label="分" items={MINUTE_ITEMS} index={minute} onChange={setMinute} />
+        <WheelColumn label={tr('task_wheel_date')} items={dayItems} index={day} onChange={setDay} flex={2.2} />
+        <WheelColumn label={tr('task_wheel_hour')} items={HOUR_ITEMS} index={hour} onChange={setHour} />
+        <WheelColumn label={tr('task_wheel_minute')} items={MINUTE_ITEMS} index={minute} onChange={setMinute} />
       </WheelGroup>
       <View style={styles.sheetActions}>
-        <ActionButton label="取消" onPress={onCancel} style={styles.flex} />
-        <ActionButton label="确定" tone="primary" onPress={done} style={styles.flex} />
+        <ActionButton label={tr('common_cancel')} onPress={onCancel} style={styles.flex} />
+        <ActionButton label={tr('common_confirm')} tone="primary" onPress={done} style={styles.flex} />
       </View>
     </View>
   );

@@ -5,12 +5,13 @@ import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {ActivityIndicator, Pressable, RefreshControl, SectionList, Text, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {deleteTaskRun, getTaskRuns} from '../api/cowApi';
+import {tr, trf} from '../i18n';
 import type {RootStackParamList} from '../navigation/types';
 import type {TaskRun} from '../protocol/resources';
 import {useAgentStore} from '../store/agentStore';
 import {describeConnectError} from '../store/serverStore';
 import {makeStyles, useTheme} from '../theme/theme';
-import {daysAgo, formatDuration, pad, toDate} from '../utils/format';
+import {dateVars, daysAgo, formatDuration, pad, toDate} from '../utils/format';
 import {AgentAvatar} from './AgentAvatar';
 import {Icon} from './Icon';
 import {ConfirmSheet} from './settings';
@@ -20,11 +21,11 @@ import {EmptyState} from './ui';
 const PAGE = 30;
 
 export const RUN_STATUS: Record<string, {label: string; tone: 'ok' | 'bad' | 'busy'}> = {
-  done: {label: '成功', tone: 'ok'},
-  success: {label: '成功', tone: 'ok'},
-  error: {label: '失败', tone: 'bad'},
-  failed: {label: '失败', tone: 'bad'},
-  running: {label: '执行中', tone: 'busy'},
+  done: {get label() { return tr('task_status_done'); }, tone: 'ok'},
+  success: {get label() { return tr('task_status_done'); }, tone: 'ok'},
+  error: {get label() { return tr('task_status_failed'); }, tone: 'bad'},
+  failed: {get label() { return tr('task_status_failed'); }, tone: 'bad'},
+  running: {get label() { return tr('task_status_running'); }, tone: 'busy'},
 };
 
 export const runStatus = (run: TaskRun) => RUN_STATUS[run.status] ?? {label: run.status, tone: 'busy' as const};
@@ -39,16 +40,16 @@ function dayTitle(d: Date | null, now = new Date()): string {
   }
   const diff = daysAgo(d, now);
   if (diff === 0) {
-    return '今天';
+    return tr('common_today');
   }
   if (diff === 1) {
-    return '昨天';
+    return tr('common_yesterday');
   }
-  const md = `${d.getMonth() + 1}月${d.getDate()}日`;
-  return d.getFullYear() === now.getFullYear() ? md : `${d.getFullYear()}年${md}`;
+  return trf(d.getFullYear() === now.getFullYear() ? 'common_month_day' : 'common_year_month_day', dateVars(d));
 }
 
-export const triggerLabel = (run: TaskRun) => (run.trigger === 'manual' ? '手动执行' : '定时触发');
+export const triggerLabel = (run: TaskRun) =>
+  run.trigger === 'manual' ? tr('task_trigger_manual') : tr('task_trigger_scheduled');
 
 /** Run history grouped by day; reloads whenever the screen regains focus so deletions show up. */
 export function RunList({taskId, header}: {taskId?: string; header?: React.ReactElement}) {
@@ -76,7 +77,7 @@ export function RunList({taskId, header}: {taskId?: string; header?: React.React
       setRuns(prev => (prev ? prev.filter(r => r.run_id !== run.run_id) : prev));
       count.current = Math.max(0, count.current - 1);
     } catch (e) {
-      showToast(`删除失败：${describeConnectError(e)}`);
+      showToast(trf('common_delete_failed', {error: describeConnectError(e)}));
     } finally {
       setDeleting(null);
     }
@@ -164,13 +165,13 @@ export function RunList({taskId, header}: {taskId?: string; header?: React.React
                 <Text style={[styles.status, {color: statusColor}]}>{status.label}</Text>
               </View>
               <Text style={styles.name} numberOfLines={1}>
-                {item.task_name || item.task_id || '定时任务'}
+                {item.task_name || item.task_id || tr('task_title')}
               </Text>
               {!!owner && <AgentAvatar agent={owner} isDefault={owner.id === defaultId} size={16} />}
               <Text style={styles.trigger}>{triggerLabel(item)}</Text>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="删除执行记录"
+                accessibilityLabel={tr('task_run_delete_title')}
                 hitSlop={8}
                 onPress={() => setDeleting(item)}
                 style={({pressed}) => pressed && styles.pressed}>
@@ -182,12 +183,12 @@ export function RunList({taskId, header}: {taskId?: string; header?: React.React
                 {body}
               </Text>
             )}
-            {!body && !failed && <Text style={styles.noOutput}>无输出内容</Text>}
+            {!body && !failed && <Text style={styles.noOutput}>{tr('task_run_no_output')}</Text>}
             <View style={styles.metaLine}>
               <Icon icon={faClock} size={11} color={t.t4} />
               <Text style={styles.meta}>
                 {d ? `${pad(d.getHours())}:${pad(d.getMinutes())}` : '--'}
-                {duration ? ` · 耗时 ${duration}` : ''}
+                {duration ? ` · ${trf('task_run_duration', {duration})}` : ''}
               </Text>
             </View>
           </Pressable>
@@ -200,8 +201,8 @@ export function RunList({taskId, header}: {taskId?: string; header?: React.React
         <EmptyState
           icon={error ? undefined : faClockRotateLeft}
           loading={!runs && !error}
-          title={error ? '加载失败' : '暂无执行记录'}
-          hint={error ?? '任务执行后，成功与失败的记录都会显示在这里'}
+          title={error ? tr('common_load_failed') : tr('task_runs_empty')}
+          hint={error ?? tr('task_runs_empty_hint')}
         />
       }
       refreshControl={
@@ -220,9 +221,9 @@ export function RunList({taskId, header}: {taskId?: string; header?: React.React
     />
     <ConfirmSheet
       visible={!!deleting}
-      title="删除执行记录"
-      message="确定删除这条执行记录吗？此操作不可恢复。"
-      confirmLabel="删除"
+      title={tr('task_run_delete_title')}
+      message={tr('task_run_delete_confirm')}
+      confirmLabel={tr('common_delete')}
       danger
       onConfirm={remove}
       onClose={() => setDeleting(null)}
