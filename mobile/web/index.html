@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>CowAgent Mobile (Web Preview)</title>
+    <style>
+      html, body { height: 100%; margin: 0; background: #d0d7de; overflow: hidden; }
+      /* Pages sliding in from off screen would widen the document, so touch browsers zoom the
+         viewport out mid-transition; the stack's mobile viewport fix then pins body to that height. */
+      body { height: 100% !important; }
+      /* Native text inputs draw no focus ring; match that in the browser. */
+      input, textarea { outline: none; }
+      /* Phones use fading overlay indicators; desktop scrollbars eat layout width. */
+      body * { scrollbar-width: none; }
+      body *::-webkit-scrollbar { display: none; }
+      #root {
+        display: flex;
+        height: 100%;
+        overflow: hidden;
+        max-width: 430px;
+        margin: 0 auto;
+        background: #fff;
+        box-shadow: 0 0 24px rgba(0, 0, 0, 0.15);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./index.tsx"></script>
+  </body>
+</html>

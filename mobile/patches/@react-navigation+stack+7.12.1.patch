@@ -1,0 +1,83 @@
+diff --git a/node_modules/@react-navigation/stack/lib/module/utils/gestureActivationCriteria.js b/node_modules/@react-navigation/stack/lib/module/utils/gestureActivationCriteria.js
+index b0488bd..4b8e794 100644
+--- a/node_modules/@react-navigation/stack/lib/module/utils/gestureActivationCriteria.js
++++ b/node_modules/@react-navigation/stack/lib/module/utils/gestureActivationCriteria.js
+@@ -7,6 +7,8 @@ import { getInvertedMultiplier } from "./getInvertedMultiplier.js";
+  */
+ const GESTURE_RESPONSE_DISTANCE_HORIZONTAL = 50;
+ const GESTURE_RESPONSE_DISTANCE_VERTICAL = 135;
++// Gesture handler 2 drops minOffset*/maxDelta* without a word, which leaves a pan that wins every
++// drag in any direction, so the criteria are written in the offsets it still reads.
+ export const gestureActivationCriteria = ({
+   direction,
+   gestureDirection,
+@@ -17,8 +19,8 @@ export const gestureActivationCriteria = ({
+   const distance = gestureResponseDistance !== undefined ? gestureResponseDistance : gestureDirection === 'vertical' || gestureDirection === 'vertical-inverted' ? GESTURE_RESPONSE_DISTANCE_VERTICAL : GESTURE_RESPONSE_DISTANCE_HORIZONTAL;
+   if (gestureDirection === 'vertical') {
+     return {
+-      maxDeltaX: 15,
+-      minOffsetY: 5,
++      failOffsetX: [-15, 15],
++      activeOffsetY: 5,
+       hitSlop: {
+         bottom: -layout.height + distance
+       },
+@@ -26,8 +28,8 @@ export const gestureActivationCriteria = ({
+     };
+   } else if (gestureDirection === 'vertical-inverted') {
+     return {
+-      maxDeltaX: 15,
+-      minOffsetY: -5,
++      failOffsetX: [-15, 15],
++      activeOffsetY: -5,
+       hitSlop: {
+         top: -layout.height + distance
+       },
+@@ -36,10 +38,14 @@ export const gestureActivationCriteria = ({
+   } else {
+     const hitSlop = -layout.width + distance;
+     const invertedMultiplier = getInvertedMultiplier(gestureDirection, direction === 'rtl');
++    // Swiping back from anywhere on a page must not take over a vertical scroll that drifts sideways.
++    const wide = distance > GESTURE_RESPONSE_DISTANCE_HORIZONTAL;
++    const minOffset = wide ? 16 : 5;
++    const maxDeltaY = wide ? 10 : 20;
+     if (invertedMultiplier === 1) {
+       return {
+-        minOffsetX: 5,
+-        maxDeltaY: 20,
++        activeOffsetX: minOffset,
++        failOffsetY: [-maxDeltaY, maxDeltaY],
+         hitSlop: {
+           right: hitSlop
+         },
+@@ -47,8 +53,8 @@ export const gestureActivationCriteria = ({
+       };
+     } else {
+       return {
+-        minOffsetX: -5,
+-        maxDeltaY: 20,
++        activeOffsetX: -minOffset,
++        failOffsetY: [-maxDeltaY, maxDeltaY],
+         hitSlop: {
+           left: hitSlop
+         },
+diff --git a/node_modules/@react-navigation/stack/lib/module/views/GestureHandler.harmony.js b/node_modules/@react-navigation/stack/lib/module/views/GestureHandler.harmony.js
+new file mode 100644
+index 0000000..c40da4c
+--- /dev/null
++++ b/node_modules/@react-navigation/stack/lib/module/views/GestureHandler.harmony.js
+@@ -0,0 +1,4 @@
++"use strict";
++
++// HarmonyOS has a gesture-handler port; without this file Metro falls back to the no-op web stub.
++export * from "./GestureHandlerNative.js";
+diff --git a/node_modules/@react-navigation/stack/lib/module/views/GestureHandler.web.js b/node_modules/@react-navigation/stack/lib/module/views/GestureHandler.web.js
+new file mode 100644
+index 0000000..24d041a
+--- /dev/null
++++ b/node_modules/@react-navigation/stack/lib/module/views/GestureHandler.web.js
+@@ -0,0 +1,4 @@
++"use strict";
++
++// The stock web build ships a no-op pan handler; gesture-handler works on web, so swipe-back can too.
++export * from "./GestureHandlerNative.js";

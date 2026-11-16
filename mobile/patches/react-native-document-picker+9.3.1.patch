@@ -1,0 +1,59 @@
+diff --git a/node_modules/react-native-document-picker/android/src/main/java/com/reactnativedocumentpicker/RNDocumentPickerModule.java b/node_modules/react-native-document-picker/android/src/main/java/com/reactnativedocumentpicker/RNDocumentPickerModule.java
+index 5001525..c415906 100644
+--- a/node_modules/react-native-document-picker/android/src/main/java/com/reactnativedocumentpicker/RNDocumentPickerModule.java
++++ b/node_modules/react-native-document-picker/android/src/main/java/com/reactnativedocumentpicker/RNDocumentPickerModule.java
+@@ -18,7 +18,6 @@ import androidx.annotation.NonNull;
+ import com.facebook.react.bridge.ActivityEventListener;
+ import com.facebook.react.bridge.Arguments;
+ import com.facebook.react.bridge.BaseActivityEventListener;
+-import com.facebook.react.bridge.GuardedResultAsyncTask;
+ import com.facebook.react.bridge.Promise;
+ import com.facebook.react.bridge.ReactApplicationContext;
+ import com.facebook.react.bridge.ReactContext;
+@@ -229,32 +228,32 @@ public class RNDocumentPickerModule extends NativeDocumentPickerSpec {
+     }
+   }
+ 
+-  private static class ProcessDataTask extends GuardedResultAsyncTask<ReadableArray> {
++  // GuardedResultAsyncTask was removed in React Native 0.82.
++  private static class ProcessDataTask {
+     private final WeakReference<Context> weakContext;
+     private final List<Uri> uris;
+     private final String copyTo;
+     private final Promise promise;
+ 
+     protected ProcessDataTask(ReactContext reactContext, List<Uri> uris, String copyTo, Promise promise) {
+-      super(reactContext.getExceptionHandler());
+       this.weakContext = new WeakReference<>(reactContext.getApplicationContext());
+       this.uris = uris;
+       this.copyTo = copyTo;
+       this.promise = promise;
+     }
+ 
+-    @Override
+-    protected ReadableArray doInBackgroundGuarded() {
+-      WritableArray results = Arguments.createArray();
+-      for (Uri uri : uris) {
+-        results.pushMap(getMetadata(uri));
+-      }
+-      return results;
+-    }
+-
+-    @Override
+-    protected void onPostExecuteGuarded(ReadableArray readableArray) {
+-      promise.resolve(readableArray);
++    void execute() {
++      new Thread(() -> {
++        try {
++          WritableArray results = Arguments.createArray();
++          for (Uri uri : uris) {
++            results.pushMap(getMetadata(uri));
++          }
++          promise.resolve(results);
++        } catch (Exception e) {
++          promise.reject(E_UNEXPECTED_EXCEPTION, e.getLocalizedMessage(), e);
++        }
++      }, "RNDocumentPicker").start();
+     }
+ 
+     private WritableMap getMetadata(Uri uri) {
