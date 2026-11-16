@@ -58,6 +58,7 @@ gesture-handler, reanimated, worklets, screens and svg do not support autolinkin
 ```
 src/
   config/      Default server URL, timeouts and other constants
+  i18n/        zh/en copy (one messages file per area) and tr()/trf()/localizedLabel()
   protocol/    Message types shared with the server (SSE events, WS envelope)
   api/         HTTP client, CowAgent API, SSE reader
   realtime/    Shared WebSocket client (hello/ack/reconnect/dedup) and chat stream subscriptions
@@ -79,6 +80,13 @@ android/ ios/  Native projects
 - The server does not implement `/api/info` or the shared WebSocket `/ws` yet. On a 404 the client falls back to
   `/api/health` + `/auth/check`, and the chat stream uses the existing SSE `/stream` (resumable with `after_seq`).
   Once the server ships `/ws`, the client switches automatically when `/api/info` returns a `ws_url`, with no app changes.
+
+## Languages
+
+The UI ships in Chinese and English. The first launch follows the system language (zh-* gets Chinese, anything
+else English); after that the choice in Settings is kept on the device and also written to the server's `cow_lang`,
+the same as the desktop client. Copy lives in `src/i18n/messages/<area>.ts`. Call `tr()` / `trf()` only while
+rendering or handling an event, never at module top level: modules load before the saved language is read.
 
 ## Known limitations / TODO
 

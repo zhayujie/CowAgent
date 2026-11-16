@@ -42,6 +42,7 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import type {IconDefinition} from '@fortawesome/fontawesome-svg-core';
 import {fileFromPayload, type ChatFile} from '../files/chatFile';
+import {tr, type MessageKey} from '../i18n';
 import type {MenuDoc, MenuItem} from '../protocol/resources';
 import {menuGroupLabel} from '../store/menuStore';
 
@@ -56,17 +57,28 @@ export type MenuRoute =
   | 'Tasks'
   | 'Logs';
 
+type BuiltinView = {label: string; icon: IconDefinition; route: MenuRoute};
+
+/** `label` is a getter so it follows the current language. */
+const builtin = (key: MessageKey, icon: IconDefinition, route: MenuRoute): BuiltinView => ({
+  get label() {
+    return tr(key);
+  },
+  icon,
+  route,
+});
+
 /** Built-in pages of the shared menu this app has a screen for; others (desktop-only) are skipped. */
-export const BUILTIN_VIEWS: Record<string, {label: string; icon: IconDefinition; route: MenuRoute}> = {
-  artifacts: {label: '产物中心', icon: faFolderOpen, route: 'Artifacts'},
-  agents: {label: 'Agent 与团队', icon: faAddressCard, route: 'Agents'},
-  config: {label: '设置', icon: faSliders, route: 'Settings'},
-  skills: {label: '技能', icon: faLightbulb, route: 'Skills'},
-  memory: {label: '记忆', icon: faBookmark, route: 'Memory'},
-  knowledge: {label: '知识库', icon: faNewspaper, route: 'Knowledge'},
-  channels: {label: '通道', icon: faPaperPlane, route: 'Channels'},
-  tasks: {label: '定时任务', icon: faClock, route: 'Tasks'},
-  logs: {label: '日志', icon: faRectangleList, route: 'Logs'},
+export const BUILTIN_VIEWS: Record<string, BuiltinView> = {
+  artifacts: builtin('menu_artifacts', faFolderOpen, 'Artifacts'),
+  agents: builtin('menu_agents', faAddressCard, 'Agents'),
+  config: builtin('menu_config', faSliders, 'Settings'),
+  skills: builtin('menu_skills', faLightbulb, 'Skills'),
+  memory: builtin('menu_memory', faBookmark, 'Memory'),
+  knowledge: builtin('menu_knowledge', faNewspaper, 'Knowledge'),
+  channels: builtin('menu_channels', faPaperPlane, 'Channels'),
+  tasks: builtin('menu_tasks', faClock, 'Tasks'),
+  logs: builtin('menu_logs', faRectangleList, 'Logs'),
 };
 
 /** Same names as MENU_ICONS in the web console's core/menu.js. */

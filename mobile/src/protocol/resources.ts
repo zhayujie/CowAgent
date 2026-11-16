@@ -399,6 +399,8 @@ export type ConfigUpdates = Partial<{
   subagent_enabled: boolean;
   agent_permission_mode: PermissionMode;
   web_password: string;
+  /** Server-side language for agent replies, logs and the CLI. */
+  cow_lang: 'zh' | 'en';
 }>;
 
 export interface CatalogModel {

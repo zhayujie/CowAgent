@@ -2,6 +2,7 @@ import {createStackNavigator} from '@react-navigation/stack';
 import React, {useMemo} from 'react';
 import {ActivityIndicator, Platform, StyleSheet, View} from 'react-native';
 import {newSessionId} from '../api/cowApi';
+import {useLangStore} from '../i18n';
 import {AccessScreen} from '../screens/AccessScreen';
 import {AgentDetailScreen} from '../screens/AgentDetailScreen';
 import {AgentFileScreen} from '../screens/AgentFileScreen';
@@ -52,11 +53,12 @@ export function RootNavigator() {
   const fullBackSwipe = useFullBackSwipe();
   const hydrated = useServerStore(s => s.hydrated);
   const prefsHydrated = usePrefsStore(s => s.hydrated);
+  const langHydrated = useLangStore(s => s.hydrated);
   const authed = useServerStore(s => s.authed);
   // A fresh chat for every sign-in; the last one's session lives on the server signed out of.
   const initialSessionId = useMemo(newSessionId, [authed]);
 
-  if (!hydrated || !prefsHydrated) {
+  if (!hydrated || !prefsHydrated || !langHydrated) {
     return (
       <View style={[styles.splash, {backgroundColor: t.bg0}]}>
         <ActivityIndicator color={t.t3} />

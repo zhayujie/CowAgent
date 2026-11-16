@@ -1,3 +1,4 @@
+import {getLang, tr} from '../i18n';
 import type {ServerInfo} from '../protocol/envelope';
 import type {
   HistoryPage,
@@ -505,7 +506,7 @@ export async function probeChatApi(apiKey: string, message: string): Promise<Cha
     return {
       status: 0,
       ms: Date.now() - started,
-      error: controller.signal.aborted ? '请求超时' : e instanceof Error ? e.message : String(e),
+      error: controller.signal.aborted ? tr('common_request_timeout') : e instanceof Error ? e.message : String(e),
     };
   } finally {
     clearTimeout(timer);
@@ -796,7 +797,7 @@ export async function importKnowledge(files: PickedFile[], targetCategory: strin
 }
 
 export async function getChannels() {
-  return http.request<ChannelsResponse>('/api/channels?lang=zh');
+  return http.request<ChannelsResponse>(`/api/channels?lang=${getLang()}`);
 }
 
 export type ChannelAction = 'save' | 'connect' | 'disconnect';
