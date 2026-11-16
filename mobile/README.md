@@ -82,8 +82,9 @@ android/ ios/  Native projects
 
 ## Known limitations / TODO
 
-- `storage/secureStore.ts` is an AsyncStorage development implementation. Before release it must be backed by
-  Keychain, Keystore and the HarmonyOS Asset Store Kit.
+- Device tokens live in the iOS Keychain / Android Keystore (`storage/secureStore.ts`); tokens saved by earlier
+  builds move there on first launch. HarmonyOS still keeps them in plain app storage
+  (`storage/secureStore.harmony.ts`) until an Asset Store Kit module lands. The browser preview always does.
 - Not integrated yet: FlashList, MMKV, network status, push notifications.
 
 ## Scripts

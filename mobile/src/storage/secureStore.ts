@@ -1,22 +1,32 @@
-import {readJSON, removeKey, writeJSON} from './kv';
+import * as Keychain from 'react-native-keychain';
+import {migratingStore, plainStore, type SecureStore} from './plainStore';
+
+export type {SecureStore} from './plainStore';
+
+const service = (key: string) => `ai.cowagent.secure.${key}`;
 
 /**
- * Storage for credentials (device tokens).
- *
- * Release builds must back this with iOS Keychain, Android Keystore and
- * HarmonyOS Asset Store Kit. The AsyncStorage implementation below keeps
- * tokens in plain app storage and is only acceptable during development.
+ * iOS Keychain / Android Keystore. Items stay on this device: no iCloud sync,
+ * no restore onto another phone, and readable only after the first unlock.
  */
-export interface SecureStore {
-  get(key: string): Promise<string | null>;
-  set(key: string, value: string): Promise<void>;
-  remove(key: string): Promise<void>;
-}
-
-const devStore: SecureStore = {
-  get: key => readJSON<string | null>(`secure:${key}`, null),
-  set: (key, value) => writeJSON(`secure:${key}`, value),
-  remove: key => removeKey(`secure:${key}`),
+const keychainStore: SecureStore = {
+  async get(key) {
+    const item = await Keychain.getGenericPassword({service: service(key)});
+    return item ? item.password : null;
+  },
+  async set(key, value) {
+    const saved = await Keychain.setGenericPassword(key, value, {
+      service: service(key),
+      accessible: Keychain.ACCESSIBLE.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY,
+      storage: Keychain.STORAGE_TYPE.AES_GCM_NO_AUTH,
+    });
+    if (!saved) {
+      throw new Error('Keychain refused the item');
+    }
+  },
+  async remove(key) {
+    await Keychain.resetGenericPassword({service: service(key)});
+  },
 };
 
-export const secureStore: SecureStore = devStore;
+export const secureStore: SecureStore = migratingStore(keychainStore, plainStore);

@@ -41,6 +41,7 @@
     "react-native-document-picker": "9.3.1",
     "react-native-gesture-handler": "2.30.0",
     "react-native-image-picker": "8.3.1",
+    "react-native-keychain": "11.0.0",
     "react-native-marked": "8.3.2",
     "react-native-permissions": "5.4.2",
     "react-native-reanimated": "4.2.1",
