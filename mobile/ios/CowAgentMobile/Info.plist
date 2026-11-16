@@ -41,6 +41,8 @@
 	<string>用于按住说话，把语音转成文字发给 Agent</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>从相册选择图片作为附件发给 Agent</string>
+	<key>RCTNewArchEnabled</key>
+	<true/>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIRequiredDeviceCapabilities</key>

@@ -14,6 +14,14 @@ if linkage != nil
   use_frameworks! :linkage => linkage.to_sym
 end
 
+# Python for iOS and the packages the embedded agent kernel needs, built into
+# build/cow-python. Set COW_PYTHON if python3.13 isn't on PATH.
+pre_install do |_installer|
+  python = ENV['COW_PYTHON'] || 'python3.13'
+  script = File.expand_path('../kernel/ios_prepare.py', __dir__)
+  system(python, script) or raise "Preparing the embedded kernel failed: #{python} #{script}"
+end
+
 target 'CowAgentMobile' do
   config = use_native_modules!
 

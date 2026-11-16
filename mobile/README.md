@@ -8,7 +8,7 @@ Mobile client for CowAgent. One React Native 0.82 codebase, plus RNOH (React Nat
 | --- | --- |
 | All | Node ≥ 20.19.4 (`nvm install 22` / `nvm use 22` recommended) |
 | Android | JDK 17, Android SDK (compileSdk 36, minSdk 24), NDK 27.1, Python 3.13 on the build machine (`-PcowPython=<path>` if it is not `python3.13` on PATH) |
-| iOS | macOS with Xcode 16+, CocoaPods |
+| iOS | macOS with Xcode 16+, CocoaPods, Python 3.13 on the build machine (`COW_PYTHON=<path>` if it is not `python3.13` on PATH) |
 | HarmonyOS | DevEco Studio 6.x (target SDK 6.0.0(20), compatible with 5.0.0(12)), a device or emulator |
 
 ## Quick start
@@ -81,17 +81,27 @@ android/ ios/  Native projects
   `/api/health` + `/auth/check`, and the chat stream uses the existing SSE `/stream` (resumable with `after_seq`).
   Once the server ships `/ws`, the client switches automatically when `/api/info` returns a `ws_url`, with no app changes.
 
-## Built-in agent (Android)
+## Built-in agent
 
-The Android app ships the CowAgent core and runs it on-device through Chaquopy (CPython 3.13, 64-bit ABIs only),
-so it works without a separate server. "Run on this phone" on the login screen starts it; remote servers stay available.
+The app ships the CowAgent core and runs it on-device with an embedded CPython 3.13, so it works without a separate
+server. "Run on this phone" on the login screen starts it; remote servers stay available.
 
-- `kernel/bundle.py` copies the core sources into the APK assets on every build; `kernel/requirements.txt` lists the
-  Python packages bundled with them (binary wheels only).
-- `android/app/src/main/java/ai/cowagent/app/kernel/` extracts the sources to app storage, starts the web channel
-  on a free loopback port with a random password, and exposes `start()` to JS as `NativeModules.CowKernel`.
+- `kernel/bundle.py` copies the core sources into the app on every build; `kernel/requirements.txt` lists the
+  Python packages bundled with them.
+- The native `CowKernel` module copies the sources to app storage, starts the web channel on a free loopback port
+  with a random password, and exposes `start()` to JS as `NativeModules.CowKernel`.
 - The core runs with `COW_DEPLOYMENT=mobile`: web channel only, loopback only, no plugins, no `bash` / `browser`
-  tools and no stdio MCP servers. Data and workspace live under the app's private files directory.
+  tools and no stdio MCP servers. Data and workspace live in the app's private storage.
+
+Android embeds Python through Chaquopy (64-bit ABIs only); the module is in
+`android/app/src/main/java/ai/cowagent/app/kernel/`.
+
+iOS embeds BeeWare's [Python-Apple-support](https://github.com/beeware/Python-Apple-support) build; the module is
+`ios/CowAgentMobile/CowKernel.m`. `pod install` runs `kernel/ios_prepare.py`, which downloads the pinned
+`Python.xcframework` into `ios/build/cow-python` and installs the requirements for device and simulator, compiling
+packages that have no iOS wheel. The "Bundle Embedded Kernel" build phase then copies the standard library,
+packages and core sources into the app. Rerun `pod install` after changing `kernel/requirements.txt`. Python's
+output goes to the system log (subsystem `ai.cowagent.app`, category `kernel`).
 
 ## Languages
 
@@ -102,7 +112,7 @@ rendering or handling an event, never at module top level: modules load before t
 
 ## Known limitations / TODO
 
-- The built-in agent is Android only for now; iOS needs the same embedding (Python framework + native module).
+- The iOS simulator build of the built-in agent targets Apple silicon Macs only.
 - Device tokens live in the iOS Keychain / Android Keystore (`storage/secureStore.ts`); tokens saved by earlier
   builds move there on first launch. HarmonyOS still keeps them in plain app storage
   (`storage/secureStore.harmony.ts`) until an Asset Store Kit module lands. The browser preview always does.

@@ -9,9 +9,27 @@
 /* Begin PBXBuildFile section */
 		0C80B921A6F3F58F76C31292 /* libPods-CowAgentMobile.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 5DCACB8F33CDC322A6C60F78 /* libPods-CowAgentMobile.a */; };
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
+		16E04128D9ABACFA56A3DA64 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */; };
+		1A7CF4D4EC71B1CB6BFEE593 /* Python.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = A225B396E5B9994DB8D00F2B /* Python.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		25D4EB80D4E9774B5B2734D8 /* Python.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = A225B396E5B9994DB8D00F2B /* Python.xcframework */; };
 		761780ED2CA45674006654EE /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EC2CA45674006654EE /* AppDelegate.swift */; };
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
+		FD5F07978E133B4055451057 /* CowKernel.m in Sources */ = {isa = PBXBuildFile; fileRef = 850A7F5F9184E4CFBAA246E1 /* CowKernel.m */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		7EDB68FCC29B086EAED306B8 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				1A7CF4D4EC71B1CB6BFEE593 /* Python.xcframework in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		13B07F961A680F5B00A75B9A /* CowAgentMobile.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CowAgentMobile.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -23,6 +41,8 @@
 		5DCACB8F33CDC322A6C60F78 /* libPods-CowAgentMobile.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-CowAgentMobile.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		761780EC2CA45674006654EE /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = CowAgentMobile/AppDelegate.swift; sourceTree = "<group>"; };
 		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = CowAgentMobile/LaunchScreen.storyboard; sourceTree = "<group>"; };
+		850A7F5F9184E4CFBAA246E1 /* CowKernel.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = CowKernel.m; path = CowAgentMobile/CowKernel.m; sourceTree = "<group>"; };
+		A225B396E5B9994DB8D00F2B /* Python.xcframework */ = {isa = PBXFileReference; includeInIndex = 1; name = Python.xcframework; path = "build/cow-python/Python.xcframework"; sourceTree = SOURCE_ROOT; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
@@ -32,6 +52,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				0C80B921A6F3F58F76C31292 /* libPods-CowAgentMobile.a in Frameworks */,
+				25D4EB80D4E9774B5B2734D8 /* Python.xcframework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -46,6 +67,7 @@
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */,
 				13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */,
+				850A7F5F9184E4CFBAA246E1 /* CowKernel.m */,
 			);
 			name = CowAgentMobile;
 			sourceTree = "<group>";
@@ -55,6 +77,7 @@
 			children = (
 				ED297162215061F000B7C4FE /* JavaScriptCore.framework */,
 				5DCACB8F33CDC322A6C60F78 /* libPods-CowAgentMobile.a */,
+				A225B396E5B9994DB8D00F2B /* Python.xcframework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -108,9 +131,11 @@
 				13B07F871A680F5B00A75B9A /* Sources */,
 				13B07F8C1A680F5B00A75B9A /* Frameworks */,
 				13B07F8E1A680F5B00A75B9A /* Resources */,
+				046FADB8966E82072E8E99A0 /* Bundle Embedded Kernel */,
 				00DD1BFF1BD5951E006B06BC /* Bundle React Native code and images */,
 				00EEFC60759A1932668264C0 /* [CP] Embed Pods Frameworks */,
 				E235C05ADACE081382539298 /* [CP] Copy Pods Resources */,
+				7EDB68FCC29B086EAED306B8 /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
@@ -159,6 +184,7 @@
 			files = (
 				81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */,
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
+				16E04128D9ABACFA56A3DA64 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -197,6 +223,25 @@
 			shellPath = /bin/sh;
 			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-CowAgentMobile/Pods-CowAgentMobile-frameworks.sh\"\n";
 			showEnvVarsInLog = 0;
+		};
+		046FADB8966E82072E8E99A0 /* Bundle Embedded Kernel */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Bundle Embedded Kernel";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -e\n# Python's standard library and packages plus the agent kernel sources.\n# build/cow-python comes from mobile/kernel/ios_prepare.py (run by pod install).\nSUPPORT=build/cow-python\nPACKAGES=\"$PROJECT_DIR/$SUPPORT/app_packages$EFFECTIVE_PLATFORM_NAME\"\nif [ ! -d \"$PACKAGES\" ]; then\n  echo \"error: Python for the embedded kernel is missing. Run pod install.\" >&2\n  exit 1\nfi\nsource \"$PROJECT_DIR/$SUPPORT/Python.xcframework/build/utils.sh\"\nrsync -a --delete --exclude .cow-stamp \"$PACKAGES/\" \"$CODESIGNING_FOLDER_PATH/python/app_packages/\"\ninstall_python \"$SUPPORT/Python.xcframework\" python/app_packages\n/usr/bin/python3 \"$PROJECT_DIR/../kernel/bundle.py\" \"$CODESIGNING_FOLDER_PATH/cow-kernel\"\n";
 		};
 		C38B50BA6285516D6DCD4F65 /* [CP] Check Pods Manifest.lock */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -245,6 +290,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				761780ED2CA45674006654EE /* AppDelegate.swift in Sources */,
+				FD5F07978E133B4055451057 /* CowKernel.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -271,7 +317,7 @@
 					"-ObjC",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "ai.cowagent.app";
+				PRODUCT_BUNDLE_IDENTIFIER = ai.cowagent.app;
 				PRODUCT_NAME = CowAgentMobile;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
@@ -298,7 +344,7 @@
 					"-ObjC",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "ai.cowagent.app";
+				PRODUCT_BUNDLE_IDENTIFIER = ai.cowagent.app;
 				PRODUCT_NAME = CowAgentMobile;
 				SWIFT_VERSION = 5.0;
 				VERSIONING_SYSTEM = "apple-generic";
@@ -374,7 +420,10 @@
 					"-DFOLLY_CFG_NO_COROUTINES=1",
 					"-DFOLLY_HAVE_CLOCK_GETTIME=1",
 				);
+				REACT_NATIVE_PATH = "${PODS_ROOT}/../../node_modules/react-native";
 				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) DEBUG";
+				USE_HERMES = true;
 			};
 			name = Debug;
 		};
@@ -439,7 +488,9 @@
 					"-DFOLLY_CFG_NO_COROUTINES=1",
 					"-DFOLLY_HAVE_CLOCK_GETTIME=1",
 				);
+				REACT_NATIVE_PATH = "${PODS_ROOT}/../../node_modules/react-native";
 				SDKROOT = iphoneos;
+				USE_HERMES = true;
 				VALIDATE_PRODUCT = YES;
 			};
 			name = Release;
