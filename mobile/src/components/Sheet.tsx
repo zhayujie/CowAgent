@@ -3,6 +3,7 @@ import {KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, View
 import Animated, {Easing, useAnimatedStyle, useSharedValue, withTiming} from 'react-native-reanimated';
 import {scheduleOnRN} from 'react-native-worklets';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import {tr} from '../i18n';
 import {radius} from '../theme/palette';
 import {makeStyles} from '../theme/theme';
 
@@ -57,7 +58,7 @@ export function Sheet({
         style={styles.root}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <Animated.View style={[StyleSheet.absoluteFill, styles.scrim, scrim]}>
-          <Pressable style={styles.fill} onPress={onClose} accessibilityLabel="关闭" />
+          <Pressable style={styles.fill} onPress={onClose} accessibilityLabel={tr('common_close')} />
         </Animated.View>
         <Animated.View
           onLayout={e => setPanelHeight(e.nativeEvent.layout.height + 40)}

@@ -15,6 +15,7 @@ import {ToastHost} from '../components/Toast';
 import {Chip, IconButton} from '../components/ui';
 import {type ChatFile, fileHttpError, viewUrlOf} from '../files/chatFile';
 import {downloadFile, MEDIA_KINDS, openInBrowser} from '../files/openFile';
+import {tr, trf} from '../i18n';
 import {EDGE_ONLY, useFullBackSwipe} from '../navigation/gestures';
 import type {RootStackParamList} from '../navigation/types';
 import {radius} from '../theme/palette';
@@ -69,12 +70,12 @@ export function FilePreviewScreen({route, navigation}: Props) {
     }
     if (live) {
       if (!viewUrlOf(file)) {
-        setError(isPage ? '这个网页没有安全的预览地址，无法打开' : '没有可打开的地址');
+        setError(isPage ? tr('file_page_no_preview') : tr('file_no_url'));
       }
       return;
     }
     if ((file.size ?? 0) > MAX_FETCH_BYTES) {
-      setError(`文件较大（${formatBytes(file.size)}），请在浏览器中打开`);
+      setError(trf('file_too_large', {size: formatBytes(file.size)}));
       return;
     }
     let alive = true;
@@ -89,7 +90,7 @@ export function FilePreviewScreen({route, navigation}: Props) {
       .catch(e => {
         if (alive) {
           const message = e instanceof Error ? e.message : String(e);
-          setError(/network request failed|failed to fetch/i.test(message) ? '连不上服务器，请检查网络后重试' : message);
+          setError(/network request failed|failed to fetch/i.test(message) ? tr('file_network_error') : message);
         }
       });
     return () => {
@@ -115,21 +116,21 @@ export function FilePreviewScreen({route, navigation}: Props) {
   if (unsupported) {
     body = (
       <View style={styles.failed}>
-        <Text style={styles.failedTitle}>这种格式暂不支持在 App 内预览</Text>
+        <Text style={styles.failedTitle}>{tr('file_unsupported_title')}</Text>
         <Text style={styles.failedHint}>{[file.name, meta].filter(Boolean).join('\n')}</Text>
         <View style={styles.failedActions}>
-          <Chip label="下载" active onPress={() => downloadFile(file)} />
+          <Chip label={tr('file_download')} active onPress={() => downloadFile(file)} />
         </View>
       </View>
     );
   } else if (error) {
     body = (
       <View style={styles.failed}>
-        <Text style={styles.failedTitle}>没能打开这个文件</Text>
+        <Text style={styles.failedTitle}>{tr('file_open_failed_title')}</Text>
         <Text style={styles.failedHint}>{error}</Text>
         <View style={styles.failedActions}>
-          <Chip label="重试" active onPress={retry} />
-          <Chip label="在浏览器中打开" onPress={() => openInBrowser(file)} />
+          <Chip label={tr('common_retry')} active onPress={retry} />
+          <Chip label={tr('file_open_in_browser')} onPress={() => openInBrowser(file)} />
         </View>
       </View>
     );
@@ -171,22 +172,20 @@ export function FilePreviewScreen({route, navigation}: Props) {
         scrollEventThrottle={32}
         contentContainerStyle={[styles.body, {paddingBottom: insets.bottom + 32}]}>
         {file.kind === 'markdown' ? (
-          <Markdown value={shown || '_（空文件）_'} />
+          <Markdown value={shown || `_${tr('file_empty')}_`} />
         ) : (
           <ScrollView horizontal={file.kind === 'csv' || file.kind === 'code'} showsHorizontalScrollIndicator={false}>
             {file.kind === 'code' && shown ? (
               <CodeText code={shown} lang={languageOf(file.name)} style={styles.code} />
             ) : (
               <Text selectable style={styles.code}>
-                {shown || '（空文件）'}
+                {shown || tr('file_empty')}
               </Text>
             )}
           </ScrollView>
         )}
         {tooLong && (
-          <Text style={styles.note}>
-            文件较大，这里只显示前 {MAX_PREVIEW_CHARS.toLocaleString()} 字。完整内容请在浏览器中打开。
-          </Text>
+          <Text style={styles.note}>{trf('file_truncated_note', {count: MAX_PREVIEW_CHARS.toLocaleString()})}</Text>
         )}
       </ScrollView>
     );
@@ -195,7 +194,14 @@ export function FilePreviewScreen({route, navigation}: Props) {
   return (
     <View style={styles.root}>
       <View style={[styles.top, {paddingTop: insets.top + 6}]}>
-        <IconButton icon={faChevronLeft} label="返回" onPress={navigation.goBack} filled size={13} color={t.t1} />
+        <IconButton
+          icon={faChevronLeft}
+          label={tr('common_back')}
+          onPress={navigation.goBack}
+          filled
+          size={13}
+          color={t.t1}
+        />
         <View style={styles.heading} accessibilityRole="header">
           <Text style={styles.title} numberOfLines={1} ellipsizeMode="middle">
             {file.name}
@@ -207,9 +213,9 @@ export function FilePreviewScreen({route, navigation}: Props) {
           )}
         </View>
         <View style={styles.panes}>
-          <IconButton icon={faDownload} label="下载" onPress={() => downloadFile(file)} size={14} />
+          <IconButton icon={faDownload} label={tr('file_download')} onPress={() => downloadFile(file)} size={14} />
           <View style={styles.panesDivider} />
-          <IconButton icon={faEllipsis} label="更多操作" onPress={() => setActing(true)} size={15} />
+          <IconButton icon={faEllipsis} label={tr('ui_more_actions')} onPress={() => setActing(true)} size={15} />
         </View>
         <View style={[styles.edge, (live || scrolled) && !error && styles.edgeShown]} />
         <LoadBar active={loading} progress={live ? progress : undefined} />

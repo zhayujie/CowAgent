@@ -1,6 +1,7 @@
 import {faCheck, faTriangleExclamation} from '@fortawesome/free-solid-svg-icons';
 import React, {useEffect, useState} from 'react';
 import {Pressable, ScrollView, Text, View} from 'react-native';
+import {tr, trf} from '../i18n';
 import type {SkillPreview} from '../protocol/resources';
 import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
@@ -56,13 +57,16 @@ export function SkillInstallSheet({
   };
 
   return (
-    <Sheet visible={!!preview} onClose={busy ? () => undefined : onClose} title={multi ? `找到 ${skills.length} 个技能` : '安装技能'}>
+    <Sheet
+      visible={!!preview}
+      onClose={busy ? () => undefined : onClose}
+      title={multi ? trf('skill_install_found', {n: skills.length}) : tr('skill_install_title')}>
       <ScrollView style={styles.list} contentContainerStyle={styles.listBody}>
         {skills.map(s => {
           const on = selected.has(s.name);
           const meta = [
             s.source ? SKILL_SOURCE_LABEL[s.source] ?? s.source : null,
-            s.file_count ? `${s.file_count} 个文件` : null,
+            s.file_count ? trf('skill_file_count', {n: s.file_count}) : null,
             s.size ? formatBytes(s.size) : null,
           ].filter(Boolean);
           return (
@@ -91,7 +95,7 @@ export function SkillInstallSheet({
                 {s.exists && (
                   <View style={styles.warn}>
                     <Icon icon={faTriangleExclamation} size={11} color={t.kind.image[1]} />
-                    <Text style={[styles.warnText, {color: t.kind.image[1]}]}>已安装同名技能，会被覆盖</Text>
+                    <Text style={[styles.warnText, {color: t.kind.image[1]}]}>{tr('skill_install_exists')}</Text>
                   </View>
                 )}
               </View>
@@ -101,9 +105,9 @@ export function SkillInstallSheet({
       </ScrollView>
       {!!error && <Text style={styles.error}>{error}</Text>}
       <View style={styles.actions}>
-        <ActionButton label="取消" disabled={busy} onPress={onClose} style={styles.flex} />
+        <ActionButton label={tr('common_cancel')} disabled={busy} onPress={onClose} style={styles.flex} />
         <ActionButton
-          label={multi ? `安装 ${selected.size} 个` : '安装'}
+          label={multi ? trf('skill_install_n', {n: selected.size}) : tr('skill_install')}
           tone="primary"
           loading={busy}
           disabled={!selected.size}

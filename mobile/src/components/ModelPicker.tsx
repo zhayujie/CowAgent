@@ -1,6 +1,7 @@
 import {faCheck, faMagnifyingGlass} from '@fortawesome/free-solid-svg-icons';
 import React, {useMemo, useState} from 'react';
 import {Pressable, ScrollView, Text, TextInput, View} from 'react-native';
+import {localizedLabel, tr, trf} from '../i18n';
 import type {CatalogModel, ProviderEntry} from '../protocol/resources';
 import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
@@ -12,7 +13,7 @@ import {GroupLabel} from './ui';
 const SEARCH_THRESHOLD = 10;
 
 export const labelText = (label: string | {zh?: string; en?: string} | undefined, fallback: string) =>
-  typeof label === 'string' ? label : label?.zh || label?.en || fallback;
+  localizedLabel(label, fallback);
 
 export function modelsOf(p: ProviderEntry): CatalogModel[] {
   return p.effective?.length ? p.effective : p.models.map(name => ({name}));
@@ -21,14 +22,14 @@ export function modelsOf(p: ProviderEntry): CatalogModel[] {
 export function describeModel(m: CatalogModel): string {
   const parts: string[] = [];
   if (m.context_window) {
-    parts.push(`上下文 ${formatTokens(m.context_window)}`);
+    parts.push(trf('settings_model_context', {n: formatTokens(m.context_window)}));
   }
   const caps = m.capabilities ?? [];
   if (caps.includes('vision')) {
-    parts.push('识图');
+    parts.push(tr('settings_model_vision'));
   }
   if (caps.includes('video')) {
-    parts.push('视频');
+    parts.push(tr('settings_model_video'));
   }
   return parts.join(' · ');
 }
@@ -104,7 +105,7 @@ export function ModelPicker({
           <TextInput
             value={query}
             onChangeText={setQuery}
-            placeholder="搜索模型"
+            placeholder={tr('settings_search_models')}
             placeholderTextColor={t.t3}
             selectionColor={t.accent}
             cursorColor={t.accent}
@@ -115,8 +116,8 @@ export function ModelPicker({
         </View>
       )}
       <ScrollView style={styles.scroll} keyboardShouldPersistTaps="handled">
-        {!usable.length && <Text style={styles.empty}>还没有配置好的模型厂商，先在「模型厂商」里填入 API Key</Text>}
-        {!!usable.length && !groups.length && <Text style={styles.empty}>没有匹配的模型</Text>}
+        {!usable.length && <Text style={styles.empty}>{tr('settings_no_ready_vendor')}</Text>}
+        {!!usable.length && !groups.length && <Text style={styles.empty}>{tr('settings_no_matching_model')}</Text>}
         {groups.map(({provider, models}) => (
           <View key={provider.id} style={styles.group}>
             <GroupLabel style={styles.groupLabel}>{labelText(provider.label, provider.id)}</GroupLabel>

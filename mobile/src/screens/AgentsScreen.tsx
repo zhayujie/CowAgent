@@ -7,6 +7,7 @@ import {AgentAvatar} from '../components/AgentAvatar';
 import {Icon} from '../components/Icon';
 import {Footnote} from '../components/settings';
 import {EmptyState, PageHeader} from '../components/ui';
+import {tr, trf} from '../i18n';
 import type {RootStackParamList} from '../navigation/types';
 import type {AgentProfile} from '../protocol/resources';
 import {useAgentStore} from '../store/agentStore';
@@ -23,7 +24,7 @@ export function agentModelLabel(agent: AgentProfile, globalModel?: string): stri
   if (agent.model) {
     return agent.model;
   }
-  return globalModel ? `跟随全局 · ${globalModel}` : '跟随全局';
+  return globalModel ? trf('agent_follow_global_model', {model: globalModel}) : tr('agent_follow_global');
 }
 
 export function AgentsScreen({navigation}: Props) {
@@ -64,7 +65,7 @@ export function AgentsScreen({navigation}: Props) {
 
   return (
     <View style={styles.root}>
-      <PageHeader title="Agent 与团队" count={roster.length || undefined} onBack={navigation.goBack} />
+      <PageHeader title={tr('agent_title')} count={roster.length || undefined} onBack={navigation.goBack} />
       <ScrollView
         contentContainerStyle={[styles.body, {paddingBottom: insets.bottom + 32}]}
         refreshControl={
@@ -82,24 +83,35 @@ export function AgentsScreen({navigation}: Props) {
         {readOnly && !bannerClosed && (
           <View style={styles.banner}>
             <Text style={styles.bannerText} numberOfLines={1}>
-              <Text style={styles.bannerStrong}>只读模式</Text>
+              <Text style={styles.bannerStrong}>{tr('agent_read_only')}</Text>
               <Text style={styles.bannerDot}> · </Text>
-              不能写入文件或执行命令
+              {tr('agent_read_only_desc')}
             </Text>
-            <Pressable hitSlop={10} accessibilityLabel="关闭提示" onPress={() => setBannerClosed(true)}>
+            <Pressable hitSlop={10} accessibilityLabel={tr('agent_dismiss_banner')} onPress={() => setBannerClosed(true)}>
               <Text style={styles.bannerClose}>×</Text>
             </Pressable>
           </View>
         )}
 
         {!sorted.length ? (
-          <EmptyState loading={!loaded} title={error ? '加载失败' : '还没有 Agent'} hint={error ?? undefined} />
+          <EmptyState
+            loading={!loaded}
+            title={error ? tr('common_load_failed') : tr('agent_empty')}
+            hint={error ?? undefined}
+          />
         ) : (
           sorted.map(agent => {
             const isDefault = agent.id === defaultId;
             const archived = agent.enabled === false;
-            const tag = archived ? '已归档' : agent.id === currentId ? '在用' : isDefault ? '默认' : '';
-            const skills = agent.skills == null ? '全部' : String(agent.skills.length);
+            const inUse = !archived && agent.id === currentId;
+            const tag = archived
+              ? tr('agent_archived')
+              : inUse
+                ? tr('agent_in_use')
+                : isDefault
+                  ? tr('agent_default_badge')
+                  : '';
+            const skills = agent.skills == null ? tr('common_all') : String(agent.skills.length);
             return (
               <Pressable
                 key={agent.id}
@@ -117,8 +129,8 @@ export function AgentsScreen({navigation}: Props) {
                     </Text>
                   </View>
                   {!!tag && (
-                    <View style={[styles.tag, tag === '在用' && styles.tagOn]}>
-                      <Text style={[styles.tagText, tag === '在用' && styles.tagTextOn]}>{tag}</Text>
+                    <View style={[styles.tag, inUse && styles.tagOn]}>
+                      <Text style={[styles.tagText, inUse && styles.tagTextOn]}>{tag}</Text>
                     </View>
                   )}
                 </View>
@@ -129,13 +141,16 @@ export function AgentsScreen({navigation}: Props) {
                 )}
                 <View style={styles.meta}>
                   <Text style={styles.metaText}>
-                    技能 <Text style={styles.metaValue}>{skills}</Text>
+                    {tr('agent_skills')} <Text style={styles.metaValue}>{skills}</Text>
                   </Text>
                   <Text style={styles.metaText}>
-                    知识库 <Text style={styles.metaValue}>{agent.knowledge_mode === 'own' ? '独立' : '共享'}</Text>
+                    {tr('agent_knowledge')}{' '}
+                    <Text style={styles.metaValue}>
+                      {agent.knowledge_mode === 'own' ? tr('agent_knowledge_own') : tr('agent_knowledge_shared')}
+                    </Text>
                   </Text>
                   <Text style={[styles.metaText, styles.metaFlex]} numberOfLines={1}>
-                    {isDefault ? '主工作空间' : basename(agent.workspace) || agent.id}
+                    {isDefault ? tr('agent_main_workspace') : basename(agent.workspace) || agent.id}
                   </Text>
                   <Icon icon={faChevronRight} size={10} color={t.t4} />
                 </View>
@@ -144,9 +159,9 @@ export function AgentsScreen({navigation}: Props) {
           })
         )}
         {sorted.length > 1 && (
-          <Footnote>团队会话中，主 Agent 负责接收消息，可以把任务委派给其他成员；委派对象沿用发起方的权限。</Footnote>
+          <Footnote>{tr('agent_team_note')}</Footnote>
         )}
-        {sorted.length > 0 && <Footnote>新建 Agent、上传头像和调整技能请在网页控制台操作。</Footnote>}
+        {sorted.length > 0 && <Footnote>{tr('agent_web_console_note')}</Footnote>}
       </ScrollView>
     </View>
   );

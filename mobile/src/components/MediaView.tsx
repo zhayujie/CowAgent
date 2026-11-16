@@ -2,6 +2,7 @@ import React, {useMemo} from 'react';
 import {Platform, StyleSheet} from 'react-native';
 import {WebView, type WebViewMessageEvent} from 'react-native-webview';
 import {fileHttpError} from '../files/chatFile';
+import {tr} from '../i18n';
 import {useTheme} from '../theme/theme';
 
 export type MediaKind = 'pdf' | 'video' | 'audio';
@@ -92,7 +93,7 @@ export function MediaView({
     if (e.nativeEvent.data === 'ready') {
       onReady?.();
     } else if (e.nativeEvent.data === 'error') {
-      onError?.(kind === 'pdf' ? 'PDF 加载失败，可能是网络不通或文件已损坏' : '这个文件加载失败');
+      onError?.(kind === 'pdf' ? tr('media_pdf_failed') : tr('media_load_failed'));
     }
   };
 
@@ -107,7 +108,7 @@ export function MediaView({
       onMessage={onMessage}
       onLoadProgress={e => onProgress?.(e.nativeEvent.progress)}
       onLoadEnd={() => 'uri' in source && onReady?.()}
-      onError={e => onError?.(e.nativeEvent.description || '页面加载失败')}
+      onError={e => onError?.(e.nativeEvent.description || tr('media_page_failed'))}
       onHttpError={e => onError?.(fileHttpError(e.nativeEvent.statusCode))}
       style={[styles.web, {backgroundColor: kind === 'video' ? '#000' : t.bg0}]}
     />

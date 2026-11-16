@@ -5,6 +5,7 @@ import {Pressable, RefreshControl, ScrollView, Text, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Footnote, Notice, StatusTag} from '../components/settings';
 import {EmptyState, GroupLabel, IconButton, PageHeader} from '../components/ui';
+import {tr, trf} from '../i18n';
 import type {RootStackParamList} from '../navigation/types';
 import type {McpServer} from '../protocol/resources';
 import {MCP_STATUS, mcpTarget, useMcpStore} from '../store/mcpStore';
@@ -43,18 +44,18 @@ export function McpScreen({navigation}: Props) {
 
   const list = servers ?? [];
   const groups: {label: string; items: McpServer[]}[] = [
-    {label: '已连接', items: list.filter(s => s.status === 'ready')},
-    {label: '未连接', items: list.filter(s => s.status !== 'ready' && s.status !== 'disabled')},
-    {label: '已停用', items: list.filter(s => s.status === 'disabled')},
+    {label: tr('mcp_group_connected'), items: list.filter(s => s.status === 'ready')},
+    {label: tr('mcp_group_disconnected'), items: list.filter(s => s.status !== 'ready' && s.status !== 'disabled')},
+    {label: tr('mcp_status_disabled'), items: list.filter(s => s.status === 'disabled')},
   ].filter(g => g.items.length);
 
   return (
     <View style={styles.root}>
       <PageHeader
-        title="MCP 服务"
+        title={tr('mcp_title')}
         count={servers ? list.length : undefined}
         onBack={navigation.goBack}
-        right={<IconButton icon={faPlus} label="添加 MCP 服务" onPress={() => navigation.navigate('McpEdit')} />}
+        right={<IconButton icon={faPlus} label={tr('mcp_add')} onPress={() => navigation.navigate('McpEdit')} />}
       />
       <ScrollView
         contentContainerStyle={[styles.body, {paddingBottom: insets.bottom + 32}]}
@@ -71,13 +72,14 @@ export function McpScreen({navigation}: Props) {
           />
         }>
         <Notice style={styles.notice}>
-          <Text style={styles.strong}>MCP 让 Agent 接入外部系统</Text>，比如数据库、内网文档、浏览器。保存后从下一条消息开始生效，不需要重启服务。
+          <Text style={styles.strong}>{tr('mcp_notice_lead')}</Text>
+          {tr('mcp_notice_rest')}
         </Notice>
         {!servers || !list.length ? (
           <EmptyState
             loading={!servers && !error}
-            title={error ? '加载失败' : '还没有 MCP 服务'}
-            hint={error ?? '点右上角添加一个，填好命令或地址后可以先测试连接'}
+            title={error ? tr('common_load_failed') : tr('mcp_empty')}
+            hint={error ?? tr('mcp_empty_hint')}
           />
         ) : (
           groups.map(g => (
@@ -89,7 +91,7 @@ export function McpScreen({navigation}: Props) {
                   <Pressable
                     key={s.name}
                     accessibilityRole="button"
-                    accessibilityLabel={`${s.name}，${status.label}`}
+                    accessibilityLabel={trf('mcp_row_a11y', {name: s.name, status: status.label})}
                     onPress={() => navigation.navigate('McpDetail', {name: s.name})}
                     style={({pressed}) => [styles.row, pressed && styles.pressed]}>
                     <View style={styles.mark}>
@@ -110,7 +112,7 @@ export function McpScreen({navigation}: Props) {
             </View>
           ))
         )}
-        {!!list.length && <Footnote>每个服务单独连接，一个连不上不影响其他服务和内置工具。</Footnote>}
+        {!!list.length && <Footnote>{tr('mcp_footnote_isolated')}</Footnote>}
       </ScrollView>
     </View>
   );

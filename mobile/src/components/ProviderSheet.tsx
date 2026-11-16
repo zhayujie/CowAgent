@@ -1,6 +1,7 @@
 import React, {useEffect, useState} from 'react';
 import {ScrollView, Text, TextInput, View} from 'react-native';
 import {saveCustomCatalog, setCustomProvider, setProviderCredential} from '../api/cowApi';
+import {tr} from '../i18n';
 import type {CatalogModel, ProviderEntry} from '../protocol/resources';
 import {describeConnectError} from '../store/serverStore';
 import {radius} from '../theme/palette';
@@ -105,12 +106,12 @@ export function ProviderSheet({
           label="API Key"
           value={key}
           onChangeText={setKey}
-          placeholder={provider?.api_key_masked ? compactMask(provider.api_key_masked) : '粘贴 API Key'}
+          placeholder={provider?.api_key_masked ? compactMask(provider.api_key_masked) : tr('settings_paste_api_key')}
           secure
         />
         {hasBase && (
           <Field
-            label="接口地址"
+            label={tr('settings_api_base')}
             value={base}
             onChangeText={setBase}
             placeholder={provider?.api_base_placeholder || provider?.api_base_default || 'https://'}
@@ -119,10 +120,10 @@ export function ProviderSheet({
           />
         )}
         <Text style={[styles.hint, !!error && styles.error]}>
-          {error ?? (provider?.configured ? '留空表示保留当前 Key，只改接口地址。' : 'Key 只保存在你的 CowAgent 服务端。')}
+          {error ?? (provider?.configured ? tr('settings_key_keep_hint') : tr('settings_key_local_hint'))}
         </Text>
         <ActionButton
-          label="保存"
+          label={tr('common_save')}
           tone="primary"
           loading={busy}
           disabled={!key.trim() && !baseChanged}
@@ -181,11 +182,11 @@ export function CustomProviderSheet({
   const save = async () => {
     const list = splitModels(models);
     if (!name.trim()) {
-      setError('请填写名称');
+      setError(tr('settings_need_name'));
       return;
     }
     if (!/^https?:\/\//i.test(base.trim())) {
-      setError('接口地址需要以 http:// 或 https:// 开头');
+      setError(tr('settings_api_base_invalid'));
       return;
     }
     setBusy(true);
@@ -213,25 +214,37 @@ export function CustomProviderSheet({
   };
 
   return (
-    <Sheet visible={!!target} onClose={onClose} title={editing ? '编辑自定义厂商' : '添加自定义厂商'}>
+    <Sheet
+      visible={!!target}
+      onClose={onClose}
+      title={editing ? tr('settings_edit_custom_vendor') : tr('settings_add_custom_vendor')}>
       <ScrollView style={styles.scroll} keyboardShouldPersistTaps="handled">
         <View style={styles.body}>
-          <Field label="名称" value={name} onChangeText={setName} placeholder="如「公司网关」" />
-          <Field label="接口地址" value={base} onChangeText={setBase} placeholder="https://…/v1" mono url />
+          <Field label={tr('common_name')} value={name} onChangeText={setName} placeholder={tr('settings_custom_name_ph')} />
+          <Field label={tr('settings_api_base')} value={base} onChangeText={setBase} placeholder="https://…/v1" mono url />
           <Field
             label="API Key"
             value={key}
             onChangeText={setKey}
-            placeholder={editing?.api_key_masked ? compactMask(editing.api_key_masked) : '没有可留空'}
+            placeholder={editing?.api_key_masked ? compactMask(editing.api_key_masked) : tr('settings_optional_key_ph')}
             secure
           />
-          <Field label="模型" value={models} onChangeText={setModels} placeholder="模型 ID，多个用逗号分隔" mono />
-          <Text style={[styles.hint, !!error && styles.error]}>
-            {error ?? '接口需遵循 OpenAI API 协议。第一个模型作为默认模型。'}
-          </Text>
-          <ActionButton label="保存" tone="primary" loading={busy} onPress={save} style={styles.button} />
+          <Field
+            label={tr('settings_model')}
+            value={models}
+            onChangeText={setModels}
+            placeholder={tr('settings_models_ph')}
+            mono
+          />
+          <Text style={[styles.hint, !!error && styles.error]}>{error ?? tr('settings_custom_vendor_hint')}</Text>
+          <ActionButton label={tr('common_save')} tone="primary" loading={busy} onPress={save} style={styles.button} />
           {!!editing && (
-            <ActionButton label="删除厂商" tone="danger" onPress={() => onDelete(editing)} style={styles.deleteButton} />
+            <ActionButton
+              label={tr('settings_delete_vendor')}
+              tone="danger"
+              onPress={() => onDelete(editing)}
+              style={styles.deleteButton}
+            />
           )}
         </View>
       </ScrollView>

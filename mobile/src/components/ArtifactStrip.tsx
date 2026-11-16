@@ -11,6 +11,7 @@ import {Image, StyleSheet, View} from 'react-native';
 import {serverUrl} from '../api/cowApi';
 import {type ChatFile, fileFromPayload} from '../files/chatFile';
 import {openFile} from '../files/openFile';
+import {tr} from '../i18n';
 import type {Artifact} from '../protocol/events';
 import type {Palette} from '../theme/palette';
 import {useTheme} from '../theme/theme';
@@ -48,11 +49,21 @@ export const KIND_ICON: Record<KindGroup, IconDefinition> = {
 };
 
 export const KIND_LABEL: Record<KindGroup, string> = {
-  web: '网页',
-  doc: '文档',
-  image: '图片',
-  media: '音视频',
-  other: '文件',
+  get web() {
+    return tr('artifact_kind_web');
+  },
+  get doc() {
+    return tr('artifact_kind_doc');
+  },
+  get image() {
+    return tr('artifact_kind_image');
+  },
+  get media() {
+    return tr('artifact_kind_media');
+  },
+  get other() {
+    return tr('artifact_kind_other');
+  },
 };
 
 export function artifactFile(a: Artifact): ChatFile | null {

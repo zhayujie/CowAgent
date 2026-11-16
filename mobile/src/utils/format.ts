@@ -1,3 +1,5 @@
+import {tr, trf} from '../i18n';
+
 export const pad = (n: number) => String(n).padStart(2, '0');
 
 export const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
@@ -22,21 +24,31 @@ export function daysAgo(d: Date, now = new Date()): number {
   return Math.round((startOfDay(now) - startOfDay(d)) / 86_400_000);
 }
 
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** Date parts for the `{year}` `{month}` `{monthName}` `{day}` placeholders of the date keys. */
+export const dateVars = (d: Date) => ({
+  year: d.getFullYear(),
+  month: d.getMonth() + 1,
+  monthName: MONTH_NAMES[d.getMonth()],
+  day: d.getDate(),
+});
+
 export function dayLabel(d: Date, now = new Date()): string {
   const diff = daysAgo(d, now);
   if (diff === 0) {
-    return '今天';
+    return tr('common_today');
   }
   if (diff === 1) {
-    return '昨天';
+    return tr('common_yesterday');
   }
   if (diff < 7) {
-    return '本周';
+    return tr('common_this_week');
   }
   if (d.getFullYear() === now.getFullYear()) {
-    return `${d.getMonth() + 1} 月`;
+    return trf('common_month_label', dateVars(d));
   }
-  return `${d.getFullYear()} 年`;
+  return trf('common_year_label', dateVars(d));
 }
 
 export function clockTime(value: number | string | null | undefined): string {
@@ -55,7 +67,7 @@ export function shortTime(value: number | string | null | undefined, now = new D
     return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
   }
   if (diff === 1) {
-    return '昨天';
+    return tr('common_yesterday');
   }
   if (d.getFullYear() === now.getFullYear()) {
     return `${d.getMonth() + 1}/${d.getDate()}`;
@@ -63,7 +75,7 @@ export function shortTime(value: number | string | null | undefined, now = new D
   return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
 }
 
-/** Full stamp for details: 今天 14:20 / 10月21日 09:00. */
+/** Full stamp for details: 今天 14:20 / 10月21日 09:00 (Today 14:20 / Oct 21 09:00). */
 export function fullTime(value: number | string | null | undefined, now = new Date()): string {
   const d = toDate(value);
   if (!d) {
@@ -72,16 +84,17 @@ export function fullTime(value: number | string | null | undefined, now = new Da
   const hm = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
   const diff = daysAgo(d, now);
   if (diff === 0) {
-    return `今天 ${hm}`;
+    return trf('common_today_at', {time: hm});
   }
   if (diff === -1) {
-    return `明天 ${hm}`;
+    return trf('common_tomorrow_at', {time: hm});
   }
   if (diff === 1) {
-    return `昨天 ${hm}`;
+    return trf('common_yesterday_at', {time: hm});
   }
-  const md = `${d.getMonth() + 1}月${d.getDate()}日`;
-  return d.getFullYear() === now.getFullYear() ? `${md} ${hm}` : `${d.getFullYear()}年${md}`;
+  return d.getFullYear() === now.getFullYear()
+    ? `${trf('common_month_day', dateVars(d))} ${hm}`
+    : trf('common_year_month_day', dateVars(d));
 }
 
 export function formatBytes(size: number | undefined): string {
@@ -187,16 +200,16 @@ export function formatSeconds(seconds: number): string {
 export function greeting(now = new Date()): string {
   const h = now.getHours();
   if (h < 5) {
-    return '夜深了';
+    return tr('common_greeting_night');
   }
   if (h < 11) {
-    return '早上好';
+    return tr('common_greeting_morning');
   }
   if (h < 13) {
-    return '中午好';
+    return tr('common_greeting_noon');
   }
   if (h < 18) {
-    return '下午好';
+    return tr('common_greeting_afternoon');
   }
-  return '晚上好';
+  return tr('common_greeting_evening');
 }

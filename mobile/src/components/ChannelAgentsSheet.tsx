@@ -1,5 +1,6 @@
 import React, {useEffect, useState} from 'react';
 import {Pressable, ScrollView, Text, View} from 'react-native';
+import {tr} from '../i18n';
 import {useAgentStore} from '../store/agentStore';
 import {radius} from '../theme/palette';
 import {makeStyles} from '../theme/theme';
@@ -52,12 +53,19 @@ export function ChannelAgentsSheet({
   };
 
   return (
-    <Sheet visible={visible} onClose={onClose} title="谁来回复">
-      <Text style={styles.note}>先选的负责接收消息，之后选的作为成员，可以被它委派任务。都不选就交给默认智能体。</Text>
+    <Sheet visible={visible} onClose={onClose} title={tr('channel_who_replies')}>
+      <Text style={styles.note}>{tr('channel_agents_note')}</Text>
       <ScrollView style={styles.list} bounces={false}>
         {agents.map(agent => {
           const order = picked.indexOf(agent.id);
-          const role = order === 0 ? '接收消息' : order > 0 ? '成员' : agent.id === defaultId ? '默认智能体' : '';
+          const role =
+            order === 0
+              ? tr('channel_role_receiver')
+              : order > 0
+                ? tr('channel_role_member')
+                : agent.id === defaultId
+                  ? tr('channel_role_default')
+                  : '';
           return (
             <Pressable
               key={agent.id}
@@ -78,11 +86,11 @@ export function ChannelAgentsSheet({
             </Pressable>
           );
         })}
-        {!agents.length && <Text style={styles.note}>还没有可选的智能体</Text>}
+        {!agents.length && <Text style={styles.note}>{tr('channel_agents_empty')}</Text>}
       </ScrollView>
       {!!error && <Text style={styles.error}>{error}</Text>}
       <View style={styles.footer}>
-        <ActionButton label="保存" tone="primary" loading={busy} onPress={save} />
+        <ActionButton label={tr('common_save')} tone="primary" loading={busy} onPress={save} />
       </View>
     </Sheet>
   );

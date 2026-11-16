@@ -17,6 +17,7 @@ import {
   useImageViewer,
   viewInArtifacts,
 } from '../files/openFile';
+import {tr, trf} from '../i18n';
 import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
 import {copyText} from '../utils/clipboard';
@@ -29,7 +30,7 @@ import {showToast} from './Toast';
 
 /** What a tap on the card will do, so the reader knows before tapping. */
 function openLabel(f: ChatFile): string {
-  return canPreviewInApp(f) ? '预览' : '查看';
+  return canPreviewInApp(f) ? tr('file_preview') : tr('file_view');
 }
 
 function fileSubtitle(f: ChatFile): string {
@@ -45,7 +46,7 @@ export function FileCard({file}: {file: ChatFile}) {
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`${openLabel(file)} ${file.name}`}
-        accessibilityHint="长按查看更多操作"
+        accessibilityHint={tr('file_long_press_hint')}
         onPress={() => openFile(file)}
         onLongPress={() => setActing(true)}
         delayLongPress={350}
@@ -61,11 +62,19 @@ export function FileCard({file}: {file: ChatFile}) {
         </View>
         <View style={styles.cardActions}>
           {canPreviewInApp(file) && (
-            <CardAction icon={faEye} label={`预览 ${file.name}`} onPress={() => openFile(file)} />
+            <CardAction icon={faEye} label={trf('file_preview_named', {name: file.name})} onPress={() => openFile(file)} />
           )}
-          <CardAction icon={faDownload} label={`下载 ${file.name}`} onPress={() => downloadFile(file)} />
+          <CardAction
+            icon={faDownload}
+            label={trf('file_download_named', {name: file.name})}
+            onPress={() => downloadFile(file)}
+          />
           {!!file.path && (
-            <CardAction icon={faLayerGroup} label={`在产物中查看 ${file.name}`} onPress={() => viewInArtifacts(file)} />
+            <CardAction
+              icon={faLayerGroup}
+              label={trf('file_view_in_artifacts_named', {name: file.name})}
+              onPress={() => viewInArtifacts(file)}
+            />
           )}
         </View>
       </Pressable>
@@ -130,8 +139,8 @@ export function InlineImage({file}: {file: ChatFile}) {
     <>
       <Pressable
         accessibilityRole="imagebutton"
-        accessibilityLabel={`查看图片 ${file.name}`}
-        accessibilityHint="长按查看更多操作"
+        accessibilityLabel={trf('file_view_image_named', {name: file.name})}
+        accessibilityHint={tr('file_long_press_hint')}
         onPress={() => useImageViewer.getState().show(file)}
         onLongPress={() => setActing(true)}
         delayLongPress={350}
@@ -168,23 +177,23 @@ export function FileSheet({
   };
   const copy = async () => {
     const ok = await copyText(file.path ?? file.relPath ?? file.name);
-    showToast(ok ? '已复制路径' : '复制失败');
+    showToast(ok ? tr('file_path_copied') : tr('file_copy_failed'));
   };
   return (
     <Sheet visible={visible} onClose={onClose} title={file.name}>
       {!inPreview && canPreviewInApp(file) && (
-        <SheetRow icon={faEye} label="预览" onPress={then(() => openFile(file))} />
+        <SheetRow icon={faEye} label={tr('file_preview')} onPress={then(() => openFile(file))} />
       )}
-      <SheetRow icon={faDownload} label="下载" onPress={then(() => downloadFile(file))} />
+      <SheetRow icon={faDownload} label={tr('file_download')} onPress={then(() => downloadFile(file))} />
       <SheetRow
         icon={faArrowUpRightFromSquare}
-        label="在浏览器中打开"
+        label={tr('file_open_in_browser')}
         onPress={then(() => openInBrowser(file))}
       />
       {!!file.path && (
-        <SheetRow icon={faLayerGroup} label="在产物中查看" onPress={then(() => viewInArtifacts(file))} />
+        <SheetRow icon={faLayerGroup} label={tr('file_view_in_artifacts')} onPress={then(() => viewInArtifacts(file))} />
       )}
-      {!!(file.path || file.relPath) && <SheetRow icon={faCopy} label="复制路径" onPress={then(copy)} />}
+      {!!(file.path || file.relPath) && <SheetRow icon={faCopy} label={tr('file_copy_path')} onPress={then(copy)} />}
     </Sheet>
   );
 }

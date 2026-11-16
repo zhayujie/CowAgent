@@ -10,6 +10,7 @@ import {
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
+import {tr, trf} from '../i18n';
 import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
 import {Icon} from './Icon';
@@ -138,7 +139,7 @@ export function InfoRow({
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={value ? `${title}，${value}` : title}
+      accessibilityLabel={value ? trf('settings_a11y_title_value', {title, value}) : title}
       onPress={onPress}
       onLongPress={onLongPress}
       style={({pressed}) => [styles.row, !first && styles.divider, pressed && styles.pressed]}>
@@ -203,7 +204,7 @@ export function InputRow({
         {secure && (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={revealed ? '隐藏' : '显示'}
+            accessibilityLabel={revealed ? tr('settings_hide') : tr('settings_show')}
             hitSlop={10}
             onPress={() => setRevealed(v => !v)}
             style={styles.eye}>

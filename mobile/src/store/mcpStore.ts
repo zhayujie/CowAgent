@@ -1,5 +1,6 @@
 import {create} from 'zustand';
 import {getMcpServers, saveMcpServers} from '../api/cowApi';
+import {tr} from '../i18n';
 import type {McpServer} from '../protocol/resources';
 import {resetOnSignOut} from './reset';
 
@@ -61,16 +62,43 @@ export const useMcpStore = create<McpState>((set, get) => ({
 resetOnSignOut(useMcpStore);
 
 export const MCP_STATUS: Record<string, {label: string; on?: boolean}> = {
-  ready: {label: '在线', on: true},
-  pending: {label: '连接中'},
-  failed: {label: '连接失败'},
-  needs_auth: {label: '需要授权'},
-  disabled: {label: '已停用'},
-  idle: {label: '未启动'},
+  ready: {
+    get label() {
+      return tr('mcp_status_ready');
+    },
+    on: true,
+  },
+  pending: {
+    get label() {
+      return tr('mcp_status_pending');
+    },
+  },
+  failed: {
+    get label() {
+      return tr('mcp_status_failed');
+    },
+  },
+  needs_auth: {
+    get label() {
+      return tr('mcp_status_needs_auth');
+    },
+  },
+  disabled: {
+    get label() {
+      return tr('mcp_status_disabled');
+    },
+  },
+  idle: {
+    get label() {
+      return tr('mcp_status_idle');
+    },
+  },
 };
 
 export const MCP_TRANSPORT_LABEL: Record<string, string> = {
-  stdio: '本地命令',
+  get stdio() {
+    return tr('mcp_transport_stdio');
+  },
   sse: 'SSE',
   'streamable-http': 'Streamable HTTP',
 };

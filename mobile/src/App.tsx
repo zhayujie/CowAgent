@@ -1,9 +1,16 @@
-import {DarkTheme, DefaultTheme, NavigationContainer, type Theme} from '@react-navigation/native';
-import React, {useEffect, useMemo} from 'react';
+import {
+  DarkTheme,
+  DefaultTheme,
+  NavigationContainer,
+  type NavigationState,
+  type Theme,
+} from '@react-navigation/native';
+import React, {useEffect, useMemo, useRef} from 'react';
 import {StatusBar, StyleSheet} from 'react-native';
 import {GestureHandlerRootView} from 'react-native-gesture-handler';
 import {SafeAreaProvider} from 'react-native-safe-area-context';
 import {ImageViewerHost} from './components/FileViews';
+import {useLangStore} from './i18n';
 import {navigationRef} from './navigation/ref';
 import {RootNavigator} from './navigation/RootNavigator';
 import {useServerStore} from './store/serverStore';
@@ -11,9 +18,14 @@ import {usePrefsStore, useTheme} from './theme/theme';
 
 export default function App() {
   const t = useTheme();
+  const lang = useLangStore(s => s.lang);
+  // Text is resolved during render, so switching language remounts the tree;
+  // the navigation state is carried over so the user stays where they were.
+  const navState = useRef<NavigationState | undefined>(undefined);
 
   useEffect(() => {
     usePrefsStore.getState().hydrate();
+    useLangStore.getState().hydrate();
     useServerStore.getState().hydrate();
   }, []);
 
@@ -39,10 +51,18 @@ export default function App() {
           barStyle={t.isDark ? 'light-content' : 'dark-content'}
           backgroundColor={t.bg0}
         />
-        <NavigationContainer ref={navigationRef} theme={navTheme}>
-          <RootNavigator />
-        </NavigationContainer>
-        <ImageViewerHost />
+        <React.Fragment key={lang}>
+          <NavigationContainer
+            ref={navigationRef}
+            theme={navTheme}
+            initialState={navState.current}
+            onStateChange={state => {
+              navState.current = state;
+            }}>
+            <RootNavigator />
+          </NavigationContainer>
+          <ImageViewerHost />
+        </React.Fragment>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

@@ -12,6 +12,7 @@ import {
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {isPublicCleartext} from '../api/http';
 import logo from '../assets/logo-mark.png';
+import {tr} from '../i18n';
 import {isLocalKernelAvailable, LOCAL_SERVER_ID, LOCAL_SERVER_NAME} from '../kernel/localKernel';
 import {activeServer, describeConnectError, useServerStore} from '../store/serverStore';
 import {radius} from '../theme/palette';
@@ -74,11 +75,11 @@ export function LoginScreen() {
         keyboardShouldPersistTaps="handled">
         <Image source={logo} style={styles.logo} />
         <Text style={styles.eyebrow}>COWAGENT</Text>
-        <Text style={styles.title}>连接你的 Agent</Text>
+        <Text style={styles.title}>{tr('login_heading')}</Text>
         <Text style={styles.lead}>
           {isLocalKernelAvailable()
             ? '直接在这台手机上运行，或者连接部署在服务器、电脑上的 CowAgent。'
-            : '输入部署在服务器或电脑上的 CowAgent 地址，用访问密码登录。'}
+            : tr('login_lead')}
         </Text>
 
         {isLocalKernelAvailable() && (
@@ -99,7 +100,7 @@ export function LoginScreen() {
           </>
         )}
 
-        <Text style={styles.label}>服务器地址</Text>
+        <Text style={styles.label}>{tr('login_server_url')}</Text>
         <TextInput
           style={[styles.input, focus === 'url' && styles.inputFocused]}
           value={url}
@@ -115,16 +116,16 @@ export function LoginScreen() {
           returnKeyType="next"
         />
         {isPublicCleartext(url) && (
-          <Text style={styles.warning}>这是公网上的 http 地址，密码和登录凭证会明文传输，建议改用 https。</Text>
+          <Text style={styles.warning}>{tr('login_cleartext_warning')}</Text>
         )}
-        <Text style={styles.label}>访问密码</Text>
+        <Text style={styles.label}>{tr('login_password')}</Text>
         <TextInput
           style={[styles.input, focus === 'password' && styles.inputFocused]}
           value={password}
           onChangeText={setPassword}
           onFocus={() => setFocus('password')}
           onBlur={() => setFocus(null)}
-          placeholder="服务端配置的 web_password"
+          placeholder={tr('login_password_placeholder')}
           placeholderTextColor={t.t4}
           selectionColor={t.accent}
           secureTextEntry
@@ -140,10 +141,10 @@ export function LoginScreen() {
           {busy ? (
             <ActivityIndicator color={t.onAccent} />
           ) : (
-            <Text style={[styles.buttonText, disabled && styles.buttonTextOff]}>连接</Text>
+            <Text style={[styles.buttonText, disabled && styles.buttonTextOff]}>{tr('login_connect')}</Text>
           )}
         </Pressable>
-        <Text style={styles.footnote}>密码只在这次登录时使用，之后这台设备用独立凭证访问。</Text>
+        <Text style={styles.footnote}>{tr('login_footnote')}</Text>
         {!!returnTo && !!returnLabel && (
           <Pressable
             accessibilityRole="button"

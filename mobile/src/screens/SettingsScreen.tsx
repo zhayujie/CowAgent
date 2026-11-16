@@ -19,6 +19,7 @@ import {Pressable, RefreshControl, ScrollView, Text, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {PERMISSION_META} from '../components/ComposerSheets';
 import {Icon} from '../components/Icon';
+import {tr, trf, useLangStore, type Lang, type MessageKey} from '../i18n';
 import {ChoiceSheet, FieldSheet, Footnote, SettingRow} from '../components/settings';
 import {showToast, ToastHost} from '../components/Toast';
 import {GroupLabel, PageHeader} from '../components/ui';
@@ -33,19 +34,25 @@ import {PASSWORD_MIN_LENGTH, PASSWORD_STRENGTH_TEXT, passwordStrength} from '../
 
 type Props = StackScreenProps<RootStackParamList, 'Settings'>;
 
-const MODES: {key: ThemeMode; label: string; icon: typeof faSun}[] = [
-  {key: 'system', label: '跟随系统', icon: faCircleHalfStroke},
-  {key: 'light', label: '浅色', icon: faSun},
-  {key: 'dark', label: '深色', icon: faMoon},
+const MODES: {key: ThemeMode; label: MessageKey; icon: typeof faSun}[] = [
+  {key: 'system', label: 'settings_theme_system', icon: faCircleHalfStroke},
+  {key: 'light', label: 'settings_theme_light', icon: faSun},
+  {key: 'dark', label: 'settings_theme_dark', icon: faMoon},
 ];
 
 const REALTIME_LABEL = {
-  idle: '未启用，使用 SSE',
-  connecting: '连接中',
-  open: '已连接',
-  closed: '已断开，等待重连',
-  revoked: '设备已被撤销',
-} as const;
+  idle: 'settings_realtime_idle',
+  connecting: 'settings_realtime_connecting',
+  open: 'settings_realtime_open',
+  closed: 'settings_realtime_closed',
+  revoked: 'settings_realtime_revoked',
+} as const satisfies Record<string, MessageKey>;
+
+/** Each language names itself, so a wrong pick can always be undone. */
+const LANGS: {key: Lang; label: string}[] = [
+  {key: 'zh', label: '简体中文'},
+  {key: 'en', label: 'English'},
+];
 
 const PERMISSION_ORDER = Object.keys(PERMISSION_META) as PermissionMode[];
 
@@ -55,6 +62,8 @@ export function SettingsScreen({navigation}: Props) {
   const insets = useSafeAreaInsets();
   const mode = usePrefsStore(s => s.mode);
   const setMode = usePrefsStore(s => s.setMode);
+  const lang = useLangStore(s => s.lang);
+  const setLang = useLangStore(s => s.setLang);
   const realtimeStatus = useServerStore(s => s.realtimeStatus);
   const logout = useServerStore(s => s.logout);
   const relogin = useServerStore(s => s.relogin);
@@ -86,15 +95,15 @@ export function SettingsScreen({navigation}: Props) {
     }
     try {
       await updateConfig({agent_permission_mode: next});
-      showToast(`新会话默认：${PERMISSION_META[next].name}`);
+      showToast(trf('settings_permission_default_toast', {name: PERMISSION_META[next].name}));
     } catch (e) {
-      showToast(`保存失败：${describeConnectError(e)}`);
+      showToast(trf('common_save_failed_detail', {error: describeConnectError(e)}));
     }
   };
 
   const changePassword = async (value: string) => {
     if (passwordStrength(value) === 'short') {
-      throw new Error(`密码至少 ${PASSWORD_MIN_LENGTH} 位`);
+      throw new Error(trf('settings_pwd_min', {min: PASSWORD_MIN_LENGTH}));
     }
     await changingPassword(
       (async () => {
@@ -102,44 +111,61 @@ export function SettingsScreen({navigation}: Props) {
         await relogin(value, res.auth_token);
       })(),
     );
-    showToast('访问密码已更新，其他设备需要用新密码重新登录');
+    showToast(tr('settings_pwd_updated'));
+  };
+
+  const changeLanguage = (next: Lang) => {
+    if (next === lang) {
+      return;
+    }
+    setLang(next);
+    // Agent replies, logs and the CLI follow the server's cow_lang; best effort like the desktop client.
+    updateConfig({cow_lang: next}).catch(() => undefined);
   };
 
   const loading = !config;
   return (
     <View style={styles.root}>
-      <PageHeader title="设置" onBack={navigation.goBack} />
+      <PageHeader title={tr('settings_title')} onBack={navigation.goBack} />
       <ScrollView
         contentContainerStyle={[styles.body, {paddingBottom: insets.bottom + 32}]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={t.t3} colors={[t.green]} />}>
-        <GroupLabel style={styles.firstGroup}>常用</GroupLabel>
+        <GroupLabel style={styles.firstGroup}>{tr('settings_group_common')}</GroupLabel>
         <SettingRow
           icon={faMicrochip}
-          title="模型与接口"
-          value={config?.model || (loading ? '…' : '未配置')}
+          title={tr('settings_models')}
+          value={config?.model || (loading ? '…' : tr('common_not_configured'))}
           onPress={() => navigation.navigate('Models')}
         />
         <SettingRow
           icon={faGaugeHigh}
-          title="Agent 运行"
-          value={config ? `${config.agent_max_steps} 步 · ${config.agent_max_context_turns} 轮` : '…'}
+          title={tr('settings_runtime')}
+          value={
+            config
+              ? trf('settings_runtime_value', {steps: config.agent_max_steps, turns: config.agent_max_context_turns})
+              : '…'
+          }
           onPress={() => navigation.navigate('Runtime')}
         />
-        <SettingRow icon={faPlug} title="MCP 服务" onPress={() => navigation.navigate('Mcp')} />
-        <SettingRow icon={faBars} title="菜单" last onPress={() => navigation.navigate('MenuEditor')} />
+        <SettingRow icon={faPlug} title={tr('settings_mcp')} onPress={() => navigation.navigate('Mcp')} />
+        <SettingRow icon={faBars} title={tr('settings_menu')} last onPress={() => navigation.navigate('MenuEditor')} />
 
-        <GroupLabel style={styles.group}>对外访问</GroupLabel>
-        <SettingRow icon={faGlobe} title="访问地址" onPress={() => navigation.navigate('Access')} />
-        <SettingRow icon={faShareNodes} title="访客页面" onPress={() => navigation.navigate('GuestShares')} />
+        <GroupLabel style={styles.group}>{tr('settings_group_access')}</GroupLabel>
+        <SettingRow icon={faGlobe} title={tr('settings_access_url')} onPress={() => navigation.navigate('Access')} />
+        <SettingRow
+          icon={faShareNodes}
+          title={tr('settings_guest_pages')}
+          onPress={() => navigation.navigate('GuestShares')}
+        />
         <SettingRow
           icon={faCode}
-          title="开放对话 API"
-          value={externalApi ? (externalApi.enabled ? '已开启' : '未开启') : '…'}
+          title={tr('settings_external_api')}
+          value={externalApi ? (externalApi.enabled ? tr('common_enabled') : tr('common_disabled')) : '…'}
           onPress={() => navigation.navigate('ExternalApi')}
           last
         />
 
-        <GroupLabel style={styles.group}>外观</GroupLabel>
+        <GroupLabel style={styles.group}>{tr('settings_group_appearance')}</GroupLabel>
         <View style={styles.modes}>
           {MODES.map(m => {
             const active = mode === m.key;
@@ -151,56 +177,73 @@ export function SettingsScreen({navigation}: Props) {
                 onPress={() => setMode(m.key)}
                 style={[styles.mode, active && styles.modeActive]}>
                 <Icon icon={m.icon} size={15} color={active ? t.accent : t.t3} />
-                <Text style={[styles.modeText, active && styles.modeTextActive]}>{m.label}</Text>
+                <Text style={[styles.modeText, active && styles.modeTextActive]}>{tr(m.label)}</Text>
               </Pressable>
             );
           })}
         </View>
 
-        <GroupLabel style={styles.group}>安全</GroupLabel>
+        <GroupLabel style={styles.group}>{tr('settings_language')}</GroupLabel>
+        <View style={styles.modes}>
+          {LANGS.map(l => {
+            const active = lang === l.key;
+            return (
+              <Pressable
+                key={l.key}
+                accessibilityRole="radio"
+                accessibilityState={{selected: active}}
+                onPress={() => changeLanguage(l.key)}
+                style={[styles.mode, active && styles.modeActive]}>
+                <Text style={[styles.modeText, active && styles.modeTextActive]}>{l.label}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        <GroupLabel style={styles.group}>{tr('settings_group_security')}</GroupLabel>
         <SettingRow
           icon={faShieldHalved}
-          title="默认权限"
+          title={tr('settings_default_permission')}
           value={permission ? PERMISSION_META[permission]?.name ?? permission : '…'}
           onPress={config ? () => setSheet('permission') : undefined}
         />
         <SettingRow
           icon={faKey}
-          title="访问密码"
-          value={config ? (config.web_password_masked ? '已设置' : '未设置') : '…'}
+          title={tr('settings_access_password')}
+          value={config ? (config.web_password_masked ? tr('common_configured') : tr('common_not_set')) : '…'}
           onPress={config ? () => setSheet('password') : undefined}
           last
         />
-        <Footnote>新会话默认使用该权限，单个会话可在输入框下方单独调整。</Footnote>
+        <Footnote>{tr('settings_permission_note')}</Footnote>
 
-        <GroupLabel style={styles.group}>系统</GroupLabel>
-        <SettingRow icon={faTerminal} title="日志" onPress={() => navigation.navigate('Logs')} />
+        <GroupLabel style={styles.group}>{tr('settings_group_system')}</GroupLabel>
+        <SettingRow icon={faTerminal} title={tr('settings_logs')} onPress={() => navigation.navigate('Logs')} />
         <SettingRow
           icon={faArrowsRotate}
-          title="版本更新"
+          title={tr('settings_version')}
           value={version ? `v${version}` : undefined}
           onPress={() => navigation.navigate('Version')}
           last
         />
 
-        <GroupLabel style={styles.group}>服务器</GroupLabel>
-        <SettingRow title="名称" value={server?.name ?? '-'} />
-        <SettingRow title="地址" value={server?.baseUrl.replace(/^https?:\/\//, '') ?? '-'} />
-        <SettingRow title="实时通道" value={REALTIME_LABEL[realtimeStatus]} last />
+        <GroupLabel style={styles.group}>{tr('settings_group_server')}</GroupLabel>
+        <SettingRow title={tr('common_name')} value={server?.name ?? '-'} />
+        <SettingRow title={tr('settings_server_address')} value={server?.baseUrl.replace(/^https?:\/\//, '') ?? '-'} />
+        <SettingRow title={tr('settings_realtime')} value={tr(REALTIME_LABEL[realtimeStatus])} last />
 
-        <GroupLabel style={styles.group}>账号</GroupLabel>
+        <GroupLabel style={styles.group}>{tr('settings_group_account')}</GroupLabel>
         <Pressable
           accessibilityRole="button"
           onPress={() => (confirmLogout ? logout() : setConfirmLogout(true))}
           style={({pressed}) => [styles.logout, pressed && styles.logoutPressed]}>
-          <Text style={styles.logoutText}>{confirmLogout ? '再点一次，退出登录' : '退出登录'}</Text>
+          <Text style={styles.logoutText}>{confirmLogout ? tr('settings_logout_confirm') : tr('settings_logout')}</Text>
         </Pressable>
-        <Footnote>退出后这台设备不再保存访问凭证，下次需要重新输入访问密码。</Footnote>
+        <Footnote>{tr('settings_logout_note')}</Footnote>
       </ScrollView>
 
       <ChoiceSheet
         visible={sheet === 'permission'}
-        title="新会话默认权限"
+        title={tr('settings_permission_sheet_title')}
         options={PERMISSION_ORDER.filter(m => !config || config.permission_modes.includes(m)).map(m => ({
           key: m,
           label: PERMISSION_META[m].name,
@@ -208,17 +251,17 @@ export function SettingsScreen({navigation}: Props) {
           icon: PERMISSION_META[m].icon,
         }))}
         selected={permission}
-        note="已单独设置过权限的会话不受影响。"
+        note={tr('settings_permission_sheet_note')}
         onSelect={pickPermission}
         onClose={() => setSheet(null)}
       />
       <FieldSheet
         visible={sheet === 'password'}
-        title="修改访问密码"
-        placeholder="输入新密码"
+        title={tr('settings_change_password')}
+        placeholder={tr('settings_new_password_ph')}
         secure
         allowEmpty={false}
-        hint={`至少 ${PASSWORD_MIN_LENGTH} 位。改完后网页控制台和其他设备都需要用新密码重新登录，这台手机会自动保持登录。手机端连接要求服务端保留访问密码，这里不能清空。`}
+        hint={trf('settings_password_hint', {min: PASSWORD_MIN_LENGTH})}
         describe={v => {
           const s = passwordStrength(v);
           return {text: PASSWORD_STRENGTH_TEXT[s], tone: s === 'strong' ? 'ok' : s === 'medium' ? 'warn' : 'danger'};

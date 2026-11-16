@@ -1,5 +1,6 @@
 import {create} from 'zustand';
 import {getMenu, saveMenu} from '../api/cowApi';
+import {tr, type MessageKey} from '../i18n';
 import type {MenuDoc, MenuGroup, MenuItem} from '../protocol/resources';
 import {readJSON, removeKey, writeJSON} from '../storage/kv';
 import {resetOnSignOut} from './reset';
@@ -12,7 +13,11 @@ const MENU_DEFAULT: {id: string; views: string[]}[] = [
 ];
 const MENU_DEFAULT_HIDDEN = new Set(['artifacts']);
 export const MENU_REQUIRED = new Set(['chat', 'config']);
-const GROUP_LABELS: Record<string, string> = {chat: '对话', manage: '管理', monitor: '监控'};
+const GROUP_LABELS: Record<string, MessageKey> = {
+  chat: 'menu_group_chat',
+  manage: 'menu_group_manage',
+  monitor: 'menu_group_monitor',
+};
 
 const CACHE_KEY = 'menu:saved';
 
@@ -50,7 +55,7 @@ export function menuMerge(saved: MenuDoc | null): MenuDoc {
 }
 
 export function menuGroupLabel(group: MenuGroup): string {
-  return group.title || GROUP_LABELS[group.id] || '未命名分组';
+  return group.title || tr(GROUP_LABELS[group.id] ?? 'menu_group_untitled');
 }
 
 interface MenuState {

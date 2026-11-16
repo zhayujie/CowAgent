@@ -3,6 +3,7 @@ import type {IconDefinition} from '@fortawesome/fontawesome-svg-core';
 import React, {useState, type ReactNode} from 'react';
 import {ActivityIndicator, Pressable, Text, View, type StyleProp, type ViewStyle} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import {tr, trf} from '../i18n';
 import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
 import {Icon} from './Icon';
@@ -99,12 +100,12 @@ export function PageHeader({
   );
   return (
     <View style={[styles.pageHeader, {paddingTop: insets.top + 6}]}>
-      <IconButton icon={faChevronLeft} label="返回" onPress={onBack} filled size={13} color={t.t1} />
+      <IconButton icon={faChevronLeft} label={tr('common_back')} onPress={onBack} filled size={13} color={t.t1} />
       <View style={[styles.pageTitleWrap, {top: insets.top + 6, left: 14 + inset, right: 14 + inset}]} pointerEvents="box-none">
         {onTitlePress ? (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={subtitle ? `${title}，${subtitle}，点按切换` : title}
+            accessibilityLabel={subtitle ? trf('ui_title_switch_a11y', {title, subtitle}) : title}
             hitSlop={6}
             onPress={onTitlePress}
             style={({pressed}) => [styles.pageTitleButton, pressed && styles.pageTitlePressed]}>

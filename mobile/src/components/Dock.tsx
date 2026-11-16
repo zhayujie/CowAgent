@@ -20,6 +20,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import {tr, trf} from '../i18n';
 import type {Recording} from '../media/types';
 import type {PermissionMode} from '../protocol/resources';
 import type {PendingAttachment} from '../store/composerStore';
@@ -162,7 +163,7 @@ export const Dock = forwardRef<TextInput | null, Props>(function DockInner(
         <View style={styles.toolbar}>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="添加图片、文件"
+            accessibilityLabel={tr('composer_attach_a11y')}
             onPress={onOpenAttach}
             hitSlop={4}
             style={({pressed}) => [styles.tool, pressed && styles.toolPressed]}>
@@ -171,7 +172,9 @@ export const Dock = forwardRef<TextInput | null, Props>(function DockInner(
 
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={`本次会话模型：${model === undefined ? '加载中' : model || '未配置'}`}
+            accessibilityLabel={trf('composer_model_a11y', {
+              name: model === undefined ? tr('composer_loading') : model || tr('common_not_configured'),
+            })}
             onPress={onOpenModel}
             hitSlop={4}
             style={({pressed}) => [styles.tool, modelPinned && styles.toolPinned, pressed && styles.toolPressed]}>
@@ -180,7 +183,7 @@ export const Dock = forwardRef<TextInput | null, Props>(function DockInner(
 
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={`本次会话权限：${perm?.name ?? '加载中'}`}
+            accessibilityLabel={trf('composer_permission_a11y', {name: perm?.name ?? tr('composer_loading')})}
             onPress={onOpenPermission}
             hitSlop={4}
             style={({pressed}) => [styles.tool, permissionPinned && styles.toolPinned, pressed && styles.toolPressed]}>
@@ -191,7 +194,7 @@ export const Dock = forwardRef<TextInput | null, Props>(function DockInner(
 
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={voiceMode ? '切换到键盘输入' : '切换到语音输入'}
+            accessibilityLabel={voiceMode ? tr('composer_to_keyboard') : tr('composer_to_voice')}
             onPress={toggleVoice}
             hitSlop={4}
             style={({pressed}) => [styles.tool, pressed && styles.toolPressed]}>
@@ -201,7 +204,7 @@ export const Dock = forwardRef<TextInput | null, Props>(function DockInner(
           {busy ? (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="停止生成"
+              accessibilityLabel={tr('composer_stop')}
               onPress={onStop}
               hitSlop={6}
               style={({pressed}) => [styles.send, styles.stop, pressed && styles.stopPressed]}>
@@ -211,7 +214,7 @@ export const Dock = forwardRef<TextInput | null, Props>(function DockInner(
             !voiceMode && (
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={uploading ? '附件上传中' : '发送'}
+                accessibilityLabel={uploading ? tr('composer_uploading_a11y') : tr('composer_send')}
                 onPress={submit}
                 disabled={!canSend}
                 hitSlop={6}
@@ -249,7 +252,7 @@ function AttachmentChip({
   const remove = (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`移除 ${item.name}`}
+      accessibilityLabel={trf('composer_remove_attachment', {name: item.name})}
       onPress={onRemove}
       hitSlop={8}
       style={styles.remove}>
@@ -260,7 +263,10 @@ function AttachmentChip({
   if (item.kind === 'image') {
     return (
       <View style={styles.thumbWrap}>
-        <Pressable disabled={!failed} onPress={onRetry} accessibilityLabel={failed ? '上传失败，点按重试' : item.name}>
+        <Pressable
+          disabled={!failed}
+          onPress={onRetry}
+          accessibilityLabel={failed ? tr('composer_upload_failed_retry') : item.name}>
           <Image source={{uri: item.localUri}} style={styles.thumb} resizeMethod="resize" />
           {item.status !== 'done' && (
             <View style={[styles.thumbVeil, failed && styles.thumbVeilError]}>
@@ -277,11 +283,11 @@ function AttachmentChip({
     );
   }
 
-  let sub = (item.name.split('.').pop() ?? '').toUpperCase() || '文件';
+  let sub = (item.name.split('.').pop() ?? '').toUpperCase() || tr('chat_attachment_file');
   if (item.status === 'uploading') {
-    sub = '上传中…';
+    sub = tr('composer_uploading');
   } else if (failed) {
-    sub = '上传失败，点按重试';
+    sub = tr('composer_upload_failed_retry');
   }
   return (
     <View style={styles.thumbWrap}>

@@ -12,7 +12,8 @@ const webOrigin = (globalThis as {location?: {origin?: string}}).location?.origi
 // prefilling an address that cannot resolve.
 export const DEFAULT_SERVER_URL = Platform.OS === 'web' && webOrigin ? webOrigin : '';
 
-export const DEFAULT_SERVER_NAME = '云服务器';
+// Empty means the localized "cloud server" name.
+export const DEFAULT_SERVER_NAME = '';
 
 export const HTTP_TIMEOUT_MS = 15_000;
 

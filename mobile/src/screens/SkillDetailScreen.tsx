@@ -11,6 +11,7 @@ import {ActionButton, ConfirmSheet, Notice, SwitchRow} from '../components/setti
 import {SkillIcon} from '../components/SkillIcon';
 import {showToast, ToastHost} from '../components/Toast';
 import {EmptyState, GroupLabel, IconButton, PageHeader} from '../components/ui';
+import {tr, trf} from '../i18n';
 import type {RootStackParamList} from '../navigation/types';
 import type {Skill, SkillFile} from '../protocol/resources';
 import {describeConnectError} from '../store/serverStore';
@@ -63,7 +64,7 @@ export function SkillDetailScreen({route, navigation}: Props) {
     return (
       <View style={styles.root}>
         <PageHeader title={title} onBack={navigation.goBack} />
-        <EmptyState title={error ? '加载失败' : '这个技能已不存在'} hint={error ?? '可能已在别处删除'} />
+        <EmptyState title={error ? tr('common_load_failed') : tr('skill_gone')} hint={error ?? tr('skill_gone_hint')} />
       </View>
     );
   }
@@ -80,7 +81,7 @@ export function SkillDetailScreen({route, navigation}: Props) {
   const deletable = skill.deletable !== false && !shipped;
   const desc = skillDescription(skill);
   const tags = [
-    shipped ? '内置' : skill.source ? SKILL_SOURCE_LABEL[skill.source] ?? skill.source : null,
+    shipped ? tr('skill_src_builtin') : skill.source ? SKILL_SOURCE_LABEL[skill.source] ?? skill.source : null,
     skill.version ? `v${skill.version}` : null,
     skill.display_name && skill.display_name !== skill.name ? skill.name : null,
   ].filter(Boolean) as string[];
@@ -91,7 +92,7 @@ export function SkillDetailScreen({route, navigation}: Props) {
       await setSkillEnabled(skill.name, enabled, agentId);
     } catch (e) {
       setSkill({...skill, enabled: !enabled});
-      showToast(`${enabled ? '启用' : '停用'}失败：${skillErrorText(e)}`);
+      showToast(trf(enabled ? 'skill_enable_failed' : 'skill_disable_failed', {error: skillErrorText(e)}));
     }
   };
 
@@ -107,7 +108,7 @@ export function SkillDetailScreen({route, navigation}: Props) {
       return;
     }
     if (!file.text) {
-      showToast('这个文件不是文本，手机上无法预览');
+      showToast(tr('skill_file_not_text'));
       return;
     }
     navigation.navigate('SkillFile', {
@@ -127,7 +128,7 @@ export function SkillDetailScreen({route, navigation}: Props) {
           shipped ? null : (
             <IconButton
               icon={faPen}
-              label="编辑 SKILL.md"
+              label={tr('skill_edit_md')}
               filled
               size={13}
               color={t.t1}
@@ -166,25 +167,27 @@ export function SkillDetailScreen({route, navigation}: Props) {
           </View>
         </View>
         <Text style={[styles.desc, !desc && styles.dim]} selectable>
-          {desc || '没有描述'}
+          {desc || tr('skill_no_desc')}
         </Text>
 
         <View style={styles.switchWrap}>
           <SwitchRow
-            title="启用"
-            detail="停用后 Agent 不会再使用这个技能，文件保留"
+            title={tr('skill_enable')}
+            detail={tr('skill_enable_detail')}
             value={skill.enabled}
             onValueChange={toggle}
             last
           />
         </View>
-        {shipped && <Notice style={styles.notice}>内置技能随安装包更新，每次启动都会恢复原样，所以只能查看，不能修改或删除。</Notice>}
+        {shipped && <Notice style={styles.notice}>{tr('skill_builtin_notice')}</Notice>}
 
-        <GroupLabel style={styles.group}>{files ? `文件 · ${files.filter(f => !f.is_dir).length}` : '文件'}</GroupLabel>
+        <GroupLabel style={styles.group}>
+          {files ? trf('skill_files_count', {n: files.filter(f => !f.is_dir).length}) : tr('skill_files')}
+        </GroupLabel>
         {!files ? (
           <EmptyState loading title="" />
         ) : !files.length ? (
-          <Text style={styles.note}>没有读到文件列表</Text>
+          <Text style={styles.note}>{tr('skill_files_empty')}</Text>
         ) : (
           <View style={styles.tree}>
             {visibleFiles.map((f, i) => {
@@ -221,16 +224,16 @@ export function SkillDetailScreen({route, navigation}: Props) {
 
         {deletable && (
           <View style={styles.danger}>
-            <ActionButton label="删除这个技能" tone="danger" onPress={() => setConfirmDelete(true)} />
+            <ActionButton label={tr('skill_delete_this')} tone="danger" onPress={() => setConfirmDelete(true)} />
           </View>
         )}
       </ScrollView>
 
       <ConfirmSheet
         visible={confirmDelete}
-        title="删除技能"
-        message={`「${skillName(skill)}」和它目录里的所有文件都会被删除，Agent 也不能再使用它。`}
-        confirmLabel="删除"
+        title={tr('skill_delete_title')}
+        message={trf('skill_delete_message', {name: skillName(skill)})}
+        confirmLabel={tr('common_delete')}
         danger
         onConfirm={async () => {
           try {
@@ -239,7 +242,7 @@ export function SkillDetailScreen({route, navigation}: Props) {
             navigation.goBack();
           } catch (e) {
             setConfirmDelete(false);
-            showToast(`删除失败：${skillErrorText(e)}`);
+            showToast(trf('common_delete_failed', {error: skillErrorText(e)}));
           }
         }}
         onClose={() => setConfirmDelete(false)}

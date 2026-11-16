@@ -2,6 +2,7 @@ import React, {useEffect, useImperativeHandle, useMemo, useRef, useState, type R
 import {BackHandler, PanResponder, Platform, Pressable, StyleSheet, useWindowDimensions} from 'react-native';
 import Animated, {Easing, useAnimatedStyle, useSharedValue, withTiming} from 'react-native-reanimated';
 import {scheduleOnRN} from 'react-native-worklets';
+import {tr} from '../i18n';
 import {makeStyles} from '../theme/theme';
 
 const EASE = Easing.bezier(0.22, 0.61, 0.36, 1);
@@ -115,7 +116,7 @@ export function SlideDrawer({
   return (
     <>
       <Animated.View {...pan.panHandlers} style={[StyleSheet.absoluteFill, styles.scrim, scrim]}>
-        <Pressable style={styles.fill} onPress={onClose} accessibilityLabel="关闭菜单" />
+        <Pressable style={styles.fill} onPress={onClose} accessibilityLabel={tr('ui_close_menu')} />
       </Animated.View>
       <Animated.View {...pan.panHandlers} style={[styles.panel, {width}, slide]}>
         {children}

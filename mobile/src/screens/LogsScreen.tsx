@@ -8,6 +8,7 @@ import type {EventStreamHandle} from '../api/sse';
 import {Icon} from '../components/Icon';
 import {MONO} from '../components/settings';
 import {Chip, EmptyState, IconButton, PageHeader} from '../components/ui';
+import {tr, trf, type MessageKey} from '../i18n';
 import type {RootStackParamList} from '../navigation/types';
 import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
@@ -20,11 +21,17 @@ type Filter = 'all' | 'warning' | 'error';
 
 const MAX_ENTRIES = 500;
 const LINE = /^\[(DEBUG|INFO|WARNING|ERROR|CRITICAL)\]\[\d{4}-\d\d-\d\d (\d\d:\d\d:\d\d)\]\[([^\]]+)\] - ([\s\S]*)$/;
-const LEVEL_LABEL: Record<Level, string> = {DEBUG: '调试', INFO: '信息', WARNING: '警告', ERROR: '错误', CRITICAL: '严重', '': ''};
-const FILTERS: {key: Filter; label: string}[] = [
-  {key: 'all', label: '全部'},
-  {key: 'warning', label: '警告'},
-  {key: 'error', label: '错误'},
+const LEVEL_LABEL: Record<Exclude<Level, ''>, MessageKey> = {
+  DEBUG: 'settings_log_debug',
+  INFO: 'settings_log_info',
+  WARNING: 'settings_log_warning',
+  ERROR: 'settings_log_error',
+  CRITICAL: 'settings_log_critical',
+};
+const FILTERS: {key: Filter; label: MessageKey}[] = [
+  {key: 'all', label: 'common_all'},
+  {key: 'warning', label: 'settings_log_warning'},
+  {key: 'error', label: 'settings_log_error'},
 ];
 
 let nextId = 0;
@@ -134,7 +141,7 @@ export function LogsScreen({navigation}: Props) {
           {!!item.time && <Text style={styles.time}>{item.time}</Text>}
           {!!item.level && (
             <Text style={[styles.level, item.level === 'WARNING' && styles.levelWarn, loud && styles.levelError]}>
-              {LEVEL_LABEL[item.level]}
+              {tr(LEVEL_LABEL[item.level])}
             </Text>
           )}
           {!!item.source && (
@@ -151,21 +158,32 @@ export function LogsScreen({navigation}: Props) {
   };
 
   const status =
-    state === 'live' ? (paused ? `已暂停${pending ? ` · 新增 ${pending} 条` : ''}` : '实时') : state === 'connecting' ? '连接中' : '已断开';
+    state === 'live'
+      ? paused
+        ? `${tr('settings_log_paused')}${pending ? ` · ${trf('settings_log_new', {n: pending})}` : ''}`
+        : tr('settings_log_live')
+      : state === 'connecting'
+        ? tr('settings_realtime_connecting')
+        : tr('settings_log_disconnected');
 
   return (
     <View style={styles.root}>
       <PageHeader
-        title="日志"
+        title={tr('settings_logs')}
         onBack={navigation.goBack}
         right={
-          <IconButton icon={paused ? faPlay : faPause} label={paused ? '继续' : '暂停'} onPress={togglePause} size={13} />
+          <IconButton
+            icon={paused ? faPlay : faPause}
+            label={paused ? tr('settings_log_resume') : tr('settings_log_pause')}
+            onPress={togglePause}
+            size={13}
+          />
         }
       />
       <View style={styles.bar}>
         <View style={styles.chips}>
           {FILTERS.map(f => (
-            <Chip key={f.key} label={f.label} active={filter === f.key} onPress={() => setFilter(f.key)} />
+            <Chip key={f.key} label={tr(f.label)} active={filter === f.key} onPress={() => setFilter(f.key)} />
           ))}
         </View>
         <View style={styles.status}>
@@ -177,7 +195,7 @@ export function LogsScreen({navigation}: Props) {
       {state === 'closed' && (
         <Pressable onPress={connect} style={({pressed}) => [styles.banner, pressed && styles.pressed]}>
           <Text style={styles.bannerText} numberOfLines={2}>
-            日志连接已断开{error ? `（${error}）` : ''}，点这里重新连接
+            {error ? trf('settings_log_closed_detail', {error}) : tr('settings_log_closed')}
           </Text>
         </Pressable>
       )}
@@ -195,29 +213,33 @@ export function LogsScreen({navigation}: Props) {
         ListEmptyComponent={
           <EmptyState
             loading={state === 'connecting' && !entries.length}
-            title={filter === 'all' ? '暂无日志' : `最近没有${filter === 'warning' ? '警告' : '错误'}`}
-            hint={filter === 'all' ? undefined : `只在最近 ${MAX_ENTRIES} 条日志里查找`}
+            title={
+              filter === 'all'
+                ? tr('settings_log_empty')
+                : filter === 'warning'
+                  ? tr('settings_log_no_warnings')
+                  : tr('settings_log_no_errors')
+            }
+            hint={filter === 'all' ? undefined : trf('settings_log_search_scope', {n: MAX_ENTRIES})}
           />
         }
-        ListFooterComponent={
-          <Text style={styles.head}>打开时回放最近 200 行，之后实时追加，最多保留 {MAX_ENTRIES} 条</Text>
-        }
+        ListFooterComponent={<Text style={styles.head}>{trf('settings_log_footer', {n: MAX_ENTRIES})}</Text>}
       />
 
       {!atBottom && !!data.length && (
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="回到最新"
+          accessibilityLabel={tr('settings_log_jump_latest')}
           onPress={() => list.current?.scrollToOffset({offset: 0, animated: true})}
           style={({pressed}) => [styles.jump, {bottom: insets.bottom + 62}, pressed && styles.pressed]}>
           <Icon icon={faArrowDown} size={12} color={t.t1} />
-          <Text style={styles.jumpText}>最新</Text>
+          <Text style={styles.jumpText}>{tr('settings_log_latest')}</Text>
         </Pressable>
       )}
 
       <View style={[styles.footer, {paddingBottom: insets.bottom + 10}]}>
         <Pressable accessibilityRole="link" hitSlop={8} onPress={() => Linking.openURL(logDownloadUrl()).catch(() => undefined)}>
-          <Text style={styles.footerLink}>下载完整日志</Text>
+          <Text style={styles.footerLink}>{tr('settings_log_download')}</Text>
         </Pressable>
       </View>
     </View>

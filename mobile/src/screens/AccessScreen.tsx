@@ -11,6 +11,7 @@ import {ConfirmSheet, FieldSheet, Notice} from '../components/settings';
 import {SHEET_DISMISS_MS} from '../components/Sheet';
 import {showToast, ToastHost} from '../components/Toast';
 import {EmptyState, PageHeader} from '../components/ui';
+import {tr, trf} from '../i18n';
 import type {RootStackParamList} from '../navigation/types';
 import type {IntegrationsState} from '../protocol/resources';
 import {activeServer, describeConnectError} from '../store/serverStore';
@@ -32,10 +33,18 @@ function hostOf(url: string): string {
 }
 
 const LISTEN_FAILURES: Record<string, string> = {
-  invalid_host: '请填写 IP 地址，如 127.0.0.1 或 0.0.0.0',
-  password_required: '允许其他设备访问前，需先设置访问密码',
-  unavailable_host: '电脑上没有这个 IP 地址',
-  failed: '无法在新地址启动，已恢复原地址',
+  get invalid_host() {
+    return tr('access_listen_invalid_host');
+  },
+  get password_required() {
+    return tr('access_listen_password_required');
+  },
+  get unavailable_host() {
+    return tr('access_listen_unavailable_host');
+  },
+  get failed() {
+    return tr('access_listen_failed');
+  },
 };
 
 function listenFailure(e: unknown): string {
@@ -72,8 +81,8 @@ export function AccessScreen({navigation}: Props) {
   if (!state) {
     return (
       <View style={styles.root}>
-        <PageHeader title="访问地址" onBack={navigation.goBack} />
-        <EmptyState loading={!error} title="加载失败" hint={error ?? undefined} />
+        <PageHeader title={tr('access_title')} onBack={navigation.goBack} />
+        <EmptyState loading={!error} title={tr('common_load_failed')} hint={error ?? undefined} />
       </View>
     );
   }
@@ -92,11 +101,11 @@ export function AccessScreen({navigation}: Props) {
   const savePublic = async (value: string) => {
     const url = value.replace(/\/+$/, '');
     if (url && !PUBLIC_URL_RE.test(url)) {
-      throw new Error('请填写以 http:// 或 https:// 开头的地址');
+      throw new Error(tr('access_public_url_invalid'));
     }
     await savePublicUrl(url);
     await load();
-    showToast(url ? '展示地址已保存' : '已恢复自动识别');
+    showToast(tr(url ? 'access_public_url_saved' : 'access_public_url_auto_restored'));
   };
 
   const requestHost = (next: string) => {
@@ -104,7 +113,7 @@ export function AccessScreen({navigation}: Props) {
       return;
     }
     if (!isLoopback(next) && !state.password_set) {
-      showToast('允许其他设备访问前，需先设置访问密码');
+      showToast(tr('access_listen_password_required'));
       return;
     }
     setPendingHost(next);
@@ -125,13 +134,13 @@ export function AccessScreen({navigation}: Props) {
         try {
           const fresh = await getIntegrations();
           setState(fresh);
-          showToast(fresh.listen.host === next ? '已生效' : LISTEN_FAILURES.failed);
+          showToast(fresh.listen.host === next ? tr('access_listen_applied') : LISTEN_FAILURES.failed);
           return;
         } catch {
           await sleep(500);
         }
       }
-      showToast('暂时连不上服务，稍后下拉刷新看看');
+      showToast(tr('access_listen_unreachable'));
     } catch (e) {
       showToast(listenFailure(e));
     } finally {
@@ -140,48 +149,53 @@ export function AccessScreen({navigation}: Props) {
   };
 
   const copy = async (url: string) => {
-    showToast((await copyText(url)) ? '已复制' : '复制失败');
+    showToast(tr((await copyText(url)) ? 'common_copied' : 'access_copy_failed'));
   };
 
   return (
     <View style={styles.root}>
-      <PageHeader title="访问地址" subtitle="对外展示的地址，以及服务监听的地址" onBack={navigation.goBack} />
+      <PageHeader title={tr('access_title')} subtitle={tr('access_subtitle')} onBack={navigation.goBack} />
       <ScrollView
         contentContainerStyle={{paddingBottom: insets.bottom + 32}}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={t.t3} colors={[t.green]} />}>
-        <Section footer="用于接口地址、分享链接和嵌入代码，仅供展示；留空则自动识别。">
-          <InfoRow first title="展示地址" value={state.public_url || '自动识别'} mono={!!state.public_url} onPress={() => setSheet('url')} />
+        <Section footer={tr('access_public_url_footer')}>
+          <InfoRow
+            first
+            title={tr('access_public_url')}
+            value={state.public_url || tr('access_auto_detect')}
+            mono={!!state.public_url}
+            onPress={() => setSheet('url')}
+          />
         </Section>
 
         <Section
-          title="监听地址"
+          title={tr('access_listen_host')}
           action={moving ? <ActivityIndicator size="small" color={t.t3} /> : undefined}
-          footer={
-            state.port_fixed
-              ? `端口 ${state.listen.port} 由桌面客户端管理。`
-              : `端口 ${state.listen.port}。修改端口会断开这台手机的连接，请在电脑上操作。`
-          }>
+          footer={trf(state.port_fixed ? 'access_port_fixed' : 'access_port_hint', {port: state.listen.port})}>
           <OptionRow
             first
-            title="仅本机可访问"
-            hint={remote && preset !== LOCAL ? '这台手机通过网络连接，切换后将无法访问，请在电脑上操作' : LOCAL}
+            title={tr('access_listen_local')}
+            hint={remote && preset !== LOCAL ? tr('access_listen_local_remote_hint') : LOCAL}
             selected={preset === LOCAL}
-            onPress={() => (remote ? showToast('切换后这台手机将无法访问，请在电脑上操作') : requestHost(LOCAL))}
+            onPress={() => (remote ? showToast(tr('access_lockout')) : requestHost(LOCAL))}
           />
-          <OptionRow title="所有网卡" hint={`${ALL}，允许局域网内的其他设备访问`} selected={preset === ALL} onPress={() => requestHost(ALL)} />
           <OptionRow
-            title="自定义"
-            hint={preset === 'custom' ? host : '只在指定的本机 IP 上监听'}
+            title={tr('access_listen_all')}
+            hint={trf('access_listen_all_hint', {host: ALL})}
+            selected={preset === ALL}
+            onPress={() => requestHost(ALL)}
+          />
+          <OptionRow
+            title={tr('access_listen_custom')}
+            hint={preset === 'custom' ? host : tr('access_listen_custom_hint')}
             selected={preset === 'custom'}
             onPress={() => setSheet('custom')}
           />
         </Section>
-        {!state.password_set && (
-          <Notice style={styles.notice}>还没有设置访问密码，暂时不能开放给其他设备。先在「设置 › 访问密码」里设置一个。</Notice>
-        )}
+        {!state.password_set && <Notice style={styles.notice}>{tr('access_no_password_notice')}</Notice>}
 
         {!!state.lan_urls.length && (
-          <Section title="本机地址" footer="同一局域网内的设备可以用这些地址连接，点按复制。">
+          <Section title={tr('access_lan_urls')} footer={tr('access_lan_urls_footer')}>
             {state.lan_urls.map((url, i) => (
               <InfoRow
                 key={url}
@@ -197,10 +211,10 @@ export function AccessScreen({navigation}: Props) {
 
       <FieldSheet
         visible={sheet === 'url'}
-        title="展示地址"
+        title={tr('access_public_url')}
         initial={state.public_url}
         placeholder="https://cow.example.com"
-        hint="留空则自动识别"
+        hint={tr('access_public_url_hint')}
         keyboardType="url"
         mono
         onSubmit={savePublic}
@@ -208,10 +222,10 @@ export function AccessScreen({navigation}: Props) {
       />
       <FieldSheet
         visible={sheet === 'custom'}
-        title="自定义监听地址"
+        title={tr('access_custom_title')}
         initial={preset === 'custom' ? host : ''}
-        placeholder="电脑上的 IP 地址"
-        hint="127.0.0.1 仅本机可访问，0.0.0.0 允许其他设备访问"
+        placeholder={tr('access_custom_placeholder')}
+        hint={tr('access_custom_hint')}
         keyboardType="numeric"
         mono
         allowEmpty={false}
@@ -220,7 +234,7 @@ export function AccessScreen({navigation}: Props) {
             throw new Error(LISTEN_FAILURES.invalid_host);
           }
           if (remote && isLoopback(value)) {
-            throw new Error('切换后这台手机将无法访问，请在电脑上操作');
+            throw new Error(tr('access_lockout'));
           }
           setTimeout(() => requestHost(value), SHEET_DISMISS_MS);
         }}
@@ -228,9 +242,9 @@ export function AccessScreen({navigation}: Props) {
       />
       <ConfirmSheet
         visible={!!pendingHost}
-        title="切换监听地址"
-        message={`服务将改为监听 ${pendingHost ?? ''}，连接会短暂断开，几秒后自动恢复。`}
-        confirmLabel="保存并生效"
+        title={tr('access_switch_title')}
+        message={trf('access_switch_message', {host: pendingHost ?? ''})}
+        confirmLabel={tr('access_switch_confirm')}
         onConfirm={move}
         onClose={() => setPendingHost(null)}
       />

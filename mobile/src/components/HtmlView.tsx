@@ -2,6 +2,7 @@ import React from 'react';
 import {Linking, StyleSheet} from 'react-native';
 import {WebView, type WebViewNavigation} from 'react-native-webview';
 import {fileHttpError} from '../files/chatFile';
+import {tr} from '../i18n';
 import {useTheme} from '../theme/theme';
 
 const originOf = (url: string) => /^(https?:\/\/[^/]+)/i.exec(url)?.[1]?.toLowerCase() ?? '';
@@ -39,7 +40,7 @@ export function HtmlView({
       setSupportMultipleWindows={false}
       onLoadProgress={e => onProgress?.(e.nativeEvent.progress)}
       onLoadEnd={() => onReady?.()}
-      onError={e => onError?.(e.nativeEvent.description || '页面加载失败')}
+      onError={e => onError?.(e.nativeEvent.description || tr('media_page_failed'))}
       onHttpError={e => onError?.(fileHttpError(e.nativeEvent.statusCode))}
       style={[styles.web, {backgroundColor: t.bg0}]}
     />

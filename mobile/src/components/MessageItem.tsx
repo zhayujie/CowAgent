@@ -20,6 +20,7 @@ import Animated, {
   withRepeat,
   withTiming,
 } from 'react-native-reanimated';
+import {tr, trf, type MessageKey} from '../i18n';
 import {useAgentStore} from '../store/agentStore';
 import type {
   AttachmentKind,
@@ -80,7 +81,7 @@ function UserTurn({message}: {message: ChatMessage}) {
             <Pressable
               key={`${img.path}-${i}`}
               accessibilityRole="imagebutton"
-              accessibilityLabel={`查看图片 ${img.name}`}
+              accessibilityLabel={trf('chat_view_image', {name: img.name})}
               onPress={() => setViewing(img.previewUri ?? null)}>
               {single ? (
                 <FittedImage uri={img.previewUri as string} />
@@ -101,12 +102,12 @@ function UserTurn({message}: {message: ChatMessage}) {
             <Text style={styles.userFileName} numberOfLines={1} ellipsizeMode="middle">
               {f.name}
             </Text>
-            <Text style={styles.userFileSub}>{ATTACHMENT_LABEL[f.kind]}</Text>
+            <Text style={styles.userFileSub}>{tr(ATTACHMENT_LABEL[f.kind])}</Text>
           </View>
         </View>
       ))}
       {message.transcribing ? (
-        <View style={[styles.userBubble, styles.userBubbleWait]} accessibilityLabel="正在识别语音">
+        <View style={[styles.userBubble, styles.userBubbleWait]} accessibilityLabel={tr('chat_transcribing')}>
           <ActivityIndicator size="small" color={t.onAccent} />
         </View>
       ) : (
@@ -153,12 +154,12 @@ function FittedImage({uri}: {uri: string}) {
   return <Image source={{uri}} style={[styles.userImageSingle, {width, height}]} resizeMethod="resize" />;
 }
 
-const ATTACHMENT_LABEL: Record<AttachmentKind, string> = {
-  image: '图片',
-  video: '视频',
-  directory: '目录',
-  file: '文件',
-  workspace_ref: '工作空间文件',
+const ATTACHMENT_LABEL: Record<AttachmentKind, MessageKey> = {
+  image: 'chat_attachment_image',
+  video: 'chat_attachment_video',
+  directory: 'chat_attachment_directory',
+  file: 'chat_attachment_file',
+  workspace_ref: 'chat_attachment_workspace_ref',
 };
 
 /** The Agent behind a reply; untagged replies belong to the conversation's own Agent. */
@@ -217,9 +218,13 @@ function AssistantTurn({message, labelled}: {message: ChatMessage; labelled: boo
                   hitSlop={6}
                   style={styles.fold}>
                   <Text style={styles.foldText}>
-                    {showAll ? `共 ${steps.length} 个步骤` : `前面还有 ${steps.length - FOLD_KEEP} 个步骤`}
+                    {showAll
+                      ? trf('chat_steps_total', {n: steps.length})
+                      : trf('chat_steps_hidden', {n: steps.length - FOLD_KEEP})}
                   </Text>
-                  <Text style={styles.foldAction}>{showAll ? '收起' : '展开全部'}</Text>
+                  <Text style={styles.foldAction}>
+                    {showAll ? tr('chat_steps_collapse') : tr('chat_steps_show_all')}
+                  </Text>
                 </Pressable>
               )}
               {foldedFiles.map(step => (
@@ -254,7 +259,7 @@ function AssistantTurn({message, labelled}: {message: ChatMessage; labelled: boo
           {message.cancelled && (
             <View style={styles.status}>
               <Icon icon={faStop} size={9} color={t.t3} />
-              <Text style={styles.statusText}>已停止生成</Text>
+              <Text style={styles.statusText}>{tr('chat_stopped')}</Text>
             </View>
           )}
           {!!message.error && <Text style={styles.error}>{message.error}</Text>}
@@ -329,7 +334,7 @@ function Thinking({text, seconds, live}: {text: string; seconds?: number; live: 
       style={({pressed}) => [styles.thinking, pressed && styles.pressed]}>
       <View style={styles.stepHead}>
         <Icon icon={faLightbulb} size={11} color={t.kind.image[1]} />
-        <Text style={styles.stepTitle}>{live ? '正在思考' : '思考过程'}</Text>
+        <Text style={styles.stepTitle}>{live ? tr('chat_thinking_live') : tr('chat_thinking_done')}</Text>
         {live ? (
           <Dots size={3} />
         ) : (
@@ -395,14 +400,14 @@ function ToolCard({step}: {step: ToolStep}) {
   const open =
     userOpen ?? (running ? !!step.progress || !!step.substeps?.length : !!step.keepOpen);
   const failed = step.status === 'error';
-  const label = step.handoff ? `转交给 ${step.handoff}` : step.name;
+  const label = step.handoff ? trf('chat_handoff_to', {name: step.handoff}) : step.name;
   const subCount = step.substeps?.length ?? 0;
   return (
     <View>
       <Pressable
         accessibilityRole="button"
         accessibilityState={{expanded: open}}
-        accessibilityLabel={`${label}，${open ? '收起' : '查看'}输入输出`}
+        accessibilityLabel={trf(open ? 'chat_tool_collapse_a11y' : 'chat_tool_expand_a11y', {label})}
         onPress={() => setUserOpen(!open)}
         hitSlop={{top: 4, bottom: 4}}
         style={({pressed}) => [styles.toolHead, pressed && styles.pressed]}>
@@ -471,9 +476,7 @@ function Pre({text, error}: {text: string; error?: boolean}) {
         {cut ? `${text.slice(0, DETAIL_MAX_CHARS)}…` : text}
       </Text>
       {cut && (
-        <Text style={styles.preNote}>
-          仅显示前 {DETAIL_MAX_CHARS} 字，共 {text.length} 字
-        </Text>
+        <Text style={styles.preNote}>{trf('chat_output_truncated', {max: DETAIL_MAX_CHARS, total: text.length})}</Text>
       )}
     </ScrollView>
   );
@@ -547,7 +550,7 @@ function MetaLine({message}: {message: ChatMessage}) {
   if (u && total) {
     parts.push(`${formatCount(total)} tokens`);
     if (u.prompt_tokens && u.prompt_cache_hit_tokens) {
-      parts.push(`缓存命中 ${Math.round((u.prompt_cache_hit_tokens * 100) / u.prompt_tokens)}%`);
+      parts.push(trf('chat_cache_hit', {pct: Math.round((u.prompt_cache_hit_tokens * 100) / u.prompt_tokens)}));
     }
   }
   if (!parts.length) {

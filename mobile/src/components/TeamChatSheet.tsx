@@ -2,6 +2,7 @@ import {faCircle} from '@fortawesome/free-regular-svg-icons';
 import {faCircleCheck} from '@fortawesome/free-solid-svg-icons';
 import React, {useEffect, useState} from 'react';
 import {Pressable, ScrollView, Text, View} from 'react-native';
+import {tr, trf} from '../i18n';
 import {useAgentStore} from '../store/agentStore';
 import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
@@ -50,14 +51,12 @@ export function TeamChatSheet({
   };
 
   return (
-    <Sheet visible={visible} onClose={onClose} title="多智能体对话">
+    <Sheet visible={visible} onClose={onClose} title={tr('chat_team_title')}>
       {agents.length < 2 ? (
-        <Text style={styles.hint}>
-          多智能体对话至少需要两个 Agent。目前只有一个，请先到网页控制台的「Agent 与团队」新建一个。
-        </Text>
+        <Text style={styles.hint}>{tr('chat_team_need_two')}</Text>
       ) : (
         <>
-          <Text style={styles.hint}>选择参与这次对话的 Agent，第一个选中的是主 Agent，负责接收消息并把任务分给其他成员。</Text>
+          <Text style={styles.hint}>{tr('chat_team_hint')}</Text>
           <ScrollView style={styles.list} bounces={false}>
             {agents.map(agent => {
               const rank = chosen.indexOf(agent.id);
@@ -67,7 +66,7 @@ export function TeamChatSheet({
                   key={agent.id}
                   accessibilityRole="checkbox"
                   accessibilityState={{checked: on}}
-                  accessibilityLabel={rank === 0 ? `${agent.name}，主 Agent` : agent.name}
+                  accessibilityLabel={rank === 0 ? trf('chat_team_owner_a11y', {name: agent.name}) : agent.name}
                   onPress={() => toggle(agent.id)}
                   style={({pressed}) => [styles.row, on && styles.rowOn, pressed && styles.pressed]}>
                   <AgentAvatar agent={agent} isDefault={agent.id === defaultId} size={32} />
@@ -81,16 +80,16 @@ export function TeamChatSheet({
                       </Text>
                     )}
                   </View>
-                  {rank === 0 && <Text style={styles.owner}>主 Agent</Text>}
+                  {rank === 0 && <Text style={styles.owner}>{tr('chat_main_agent')}</Text>}
                   <Icon icon={on ? faCircleCheck : faCircle} size={18} color={on ? t.accent : t.t4} />
                 </Pressable>
               );
             })}
           </ScrollView>
           <Text style={[styles.status, tried && chosen.length < 2 && styles.statusBad]}>
-            {chosen.length < 2 ? '至少选择两个 Agent' : `已选 ${chosen.length} 个`}
+            {chosen.length < 2 ? tr('chat_team_min') : trf('chat_team_selected', {n: chosen.length})}
           </Text>
-          <ActionButton label="开始对话" tone="primary" disabled={chosen.length < 2} onPress={start} />
+          <ActionButton label={tr('chat_team_start')} tone="primary" disabled={chosen.length < 2} onPress={start} />
         </>
       )}
     </Sheet>

@@ -12,6 +12,7 @@ import {
 import type {IconDefinition} from '@fortawesome/fontawesome-svg-core';
 import React, {useMemo, useState} from 'react';
 import {ActivityIndicator, Pressable, ScrollView, Text, TextInput, View} from 'react-native';
+import {localizedLabel, tr, trf} from '../i18n';
 import type {ModelProvider, PermissionMode, SessionSettings} from '../protocol/resources';
 import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
@@ -27,21 +28,39 @@ export const PERMISSION_META: Record<
 > = {
   'full-access': {
     icon: faLockOpen,
-    name: '全部可访问',
-    short: '全部访问',
-    desc: '不加限制，可修改任意位置',
+    get name() {
+      return tr('composer_perm_full_access');
+    },
+    get short() {
+      return tr('composer_perm_full_access_short');
+    },
+    get desc() {
+      return tr('composer_perm_full_access_desc');
+    },
   },
   'workspace-write': {
     icon: faShieldHalved,
-    name: '工作区可写',
-    short: '工作区',
-    desc: '在当前工作空间内自由读写，空间之外的写入会被拒绝',
+    get name() {
+      return tr('composer_perm_workspace_write');
+    },
+    get short() {
+      return tr('composer_perm_workspace_write_short');
+    },
+    get desc() {
+      return tr('composer_perm_workspace_write_desc');
+    },
   },
   'read-only': {
     icon: faEye,
-    name: '只读',
-    short: '只读',
-    desc: '只能查看和分析，不修改任何文件',
+    get name() {
+      return tr('composer_perm_read_only');
+    },
+    get short() {
+      return tr('composer_perm_read_only_short');
+    },
+    get desc() {
+      return tr('composer_perm_read_only_desc');
+    },
   },
 };
 
@@ -73,12 +92,12 @@ export function AttachSheet({
   const styles = useStyles();
   const full = remaining <= 0;
   const tiles: {key: AttachSource; icon: IconDefinition; label: string}[] = [
-    {key: 'photos', icon: faImage, label: '相册'},
-    ...(canTakePhoto ? [{key: 'camera' as const, icon: faCamera, label: '拍照'}] : []),
-    {key: 'files', icon: faFolderOpen, label: '文件'},
+    {key: 'photos', icon: faImage, label: tr('composer_attach_photos')},
+    ...(canTakePhoto ? [{key: 'camera' as const, icon: faCamera, label: tr('composer_attach_camera')}] : []),
+    {key: 'files', icon: faFolderOpen, label: tr('composer_attach_files')},
   ];
   return (
-    <Sheet visible={visible} onClose={onClose} title="添加">
+    <Sheet visible={visible} onClose={onClose} title={tr('common_add')}>
       <View style={styles.tiles}>
         {tiles.map(tile => (
           <Pressable
@@ -96,7 +115,7 @@ export function AttachSheet({
         ))}
       </View>
       <Text style={styles.note}>
-        {full ? '附件已满，先移除一些再添加' : `单条消息最多 9 个附件，还可以添加 ${remaining} 个`}
+        {full ? tr('composer_attach_full') : trf('composer_attach_remaining', {n: remaining})}
       </Text>
 
       <View style={styles.divider} />
@@ -110,9 +129,9 @@ export function AttachSheet({
           <Icon icon={faWandMagicSparkles} size={14} color={t.accent} />
         </View>
         <View style={styles.rowBody}>
-          <Text style={styles.rowName}>优化输入</Text>
+          <Text style={styles.rowName}>{tr('composer_optimize')}</Text>
           <Text style={styles.rowDesc}>
-            {canOptimize ? '把口语化的描述整理成清晰、完整的指令' : '先输入一些内容再来优化'}
+            {canOptimize ? tr('composer_optimize_desc') : tr('composer_optimize_empty')}
           </Text>
         </View>
         {optimizing && <Dots />}
@@ -121,8 +140,7 @@ export function AttachSheet({
   );
 }
 
-const providerLabel = (p: ModelProvider) =>
-  typeof p.label === 'string' ? p.label : p.label?.zh || p.label?.en || p.id;
+const providerLabel = (p: ModelProvider) => localizedLabel(p.label, p.id);
 
 export function ModelSheet({
   visible,
@@ -161,7 +179,7 @@ export function ModelSheet({
         setQuery('');
         onClose();
       }}
-      title="本次会话模型">
+      title={tr('composer_model_title')}>
       {!state ? (
         <View style={styles.loading}>
           <ActivityIndicator color={t.t3} />
@@ -177,9 +195,10 @@ export function ModelSheet({
               <Icon icon={faMicrochip} size={13} color={t.t2} />
             </View>
             <View style={styles.rowBody}>
-              <Text style={styles.rowName}>跟随默认</Text>
+              <Text style={styles.rowName}>{tr('composer_model_follow_default')}</Text>
               <Text style={styles.rowDesc} numberOfLines={1}>
-                {state.agent ? 'Agent 默认' : '全局默认'} · {fallback?.model || '未配置'}
+                {state.agent ? tr('composer_model_agent_default') : tr('composer_model_global_default')} ·{' '}
+                {fallback?.model || tr('common_not_configured')}
               </Text>
             </View>
             {!pinned && <Icon icon={faCheck} size={13} color={t.accent} />}
@@ -191,7 +210,7 @@ export function ModelSheet({
               <TextInput
                 value={query}
                 onChangeText={setQuery}
-                placeholder="搜索模型"
+                placeholder={tr('composer_model_search')}
                 placeholderTextColor={t.t3}
                 selectionColor={t.accent}
                 cursorColor={t.accent}
@@ -203,8 +222,8 @@ export function ModelSheet({
           )}
 
           <ScrollView style={styles.scroll} keyboardShouldPersistTaps="handled">
-            {!total && <Text style={styles.empty}>还没有可选的模型，请先在 Web 控制台配置模型厂商</Text>}
-            {!!total && !filtered.length && <Text style={styles.empty}>没有匹配的模型</Text>}
+            {!total && <Text style={styles.empty}>{tr('composer_model_none')}</Text>}
+            {!!total && !filtered.length && <Text style={styles.empty}>{tr('composer_model_no_match')}</Text>}
             {filtered.map(p => (
               <View key={p.id} style={styles.group}>
                 <GroupLabel style={styles.groupLabel}>{providerLabel(p)}</GroupLabel>
@@ -221,7 +240,7 @@ export function ModelSheet({
                       <Text style={[styles.modelName, active && styles.modelActive]} numberOfLines={1}>
                         {m}
                       </Text>
-                      {current && !pinned && <Text style={styles.tag}>默认</Text>}
+                      {current && !pinned && <Text style={styles.tag}>{tr('chat_default')}</Text>}
                       {active && <Icon icon={faCheck} size={13} color={t.accent} />}
                     </Pressable>
                   );
@@ -252,7 +271,7 @@ export function PermissionSheet({
   const modes = state?.modes?.length ? state.modes : PERMISSION_ORDER;
   const pinned = state?.source === 'session';
   return (
-    <Sheet visible={visible} onClose={onClose} title="本次会话权限">
+    <Sheet visible={visible} onClose={onClose} title={tr('composer_perm_title')}>
       {!state ? (
         <View style={styles.loading}>
           <ActivityIndicator color={t.t3} />
@@ -283,8 +302,8 @@ export function PermissionSheet({
           })}
           <Text style={styles.note}>
             {pinned
-              ? `已为本次会话单独设置。再点一次当前项可恢复跟随全局（${PERMISSION_META[state.global]?.name ?? state.global}）`
-              : '当前跟随全局设置，选择后只对本次会话生效'}
+              ? trf('composer_perm_pinned_note', {name: PERMISSION_META[state.global]?.name ?? state.global})
+              : tr('composer_perm_follow_note')}
           </Text>
         </>
       )}

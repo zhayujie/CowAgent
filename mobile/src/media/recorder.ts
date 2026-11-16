@@ -7,6 +7,7 @@ import AudioRecorderPlayer, {
   OutputFormatAndroidType,
   type AudioSet,
 } from 'react-native-audio-recorder-player';
+import {tr} from '../i18n';
 import type {Recording} from './types';
 
 export type RecorderTick = (elapsedMs: number, level: number | null) => void;
@@ -41,14 +42,14 @@ async function ensurePermission() {
   if (Platform.OS === 'android') {
     const res = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.RECORD_AUDIO);
     if (res !== PermissionsAndroid.RESULTS.GRANTED) {
-      throw new MicPermissionError('没有麦克风权限');
+      throw new MicPermissionError(tr('media_mic_denied'));
     }
   } else if ((Platform.OS as string) === 'harmony') {
     // On HarmonyOS this resolves to the ohos build, which knows HARMONY permissions.
     const perms = require('react-native-permissions');
     const res = await perms.request(perms.PERMISSIONS.HARMONY.MICROPHONE);
     if (res !== perms.RESULTS.GRANTED) {
-      throw new MicPermissionError('没有麦克风权限');
+      throw new MicPermissionError(tr('media_mic_denied'));
     }
   }
   // iOS prompts on its own the first time the recorder starts.
@@ -62,7 +63,7 @@ export async function startRecording(onTick: RecorderTick): Promise<void> {
   try {
     await player.startRecorder(target, AUDIO_SET, true);
   } catch (e) {
-    throw Platform.OS === 'ios' ? new MicPermissionError('没有麦克风权限') : e;
+    throw Platform.OS === 'ios' ? new MicPermissionError(tr('media_mic_denied')) : e;
   }
   startedAt = Date.now();
   await player.setSubscriptionDuration(0.08).catch(() => undefined);

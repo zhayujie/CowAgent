@@ -36,6 +36,7 @@ import {SkillInstallSheet} from '../components/SkillInstallSheet';
 import {showToast, ToastHost} from '../components/Toast';
 import {SwipeTabs} from '../components/SwipeTabs';
 import {EmptyState, IconButton, PageHeader, Segmented} from '../components/ui';
+import {tr, trf} from '../i18n';
 import {pickDocuments} from '../media/picker';
 import type {RootStackParamList} from '../navigation/types';
 import type {Skill, SkillMarketSource, SkillPreview, ToolInfo} from '../protocol/resources';
@@ -63,31 +64,32 @@ const MCP_POLL_MS = 1500;
 const MCP_POLL_MAX_MS = 120_000;
 const UPLOAD_MAX_BYTES = 50 * 1024 * 1024;
 
-const MARKET: Record<SkillMarketSource, {title: string; placeholder: string; hint: string}> = {
-  hub: {
-    title: '从 Cow Skill Hub 安装',
-    placeholder: '技能名，如 weather',
-    hint: '在 skills.cowagent.ai 找到技能后填它的名称，安装前会先列出内容供确认',
-  },
-  github: {
-    title: '从 GitHub 安装',
-    placeholder: 'https://github.com/owner/repo',
-    hint: '仓库、子目录链接或 owner/repo；仓库里有多个技能时可以挑着装',
-  },
-  clawhub: {
-    title: '从 ClawHub 安装',
-    placeholder: '技能名，如 owner/skill',
-    hint: '填 ClawHub 上的技能名，安装前会先列出内容供确认',
-  },
-};
+const market = (source: SkillMarketSource): {title: string; placeholder: string; hint: string} =>
+  ({
+    hub: {
+      title: tr('skill_market_hub_title'),
+      placeholder: tr('skill_market_hub_ph'),
+      hint: tr('skill_market_hub_hint'),
+    },
+    github: {
+      title: tr('skill_market_github_title'),
+      placeholder: 'https://github.com/owner/repo',
+      hint: tr('skill_market_github_hint'),
+    },
+    clawhub: {
+      title: tr('skill_market_clawhub_title'),
+      placeholder: tr('skill_market_clawhub_ph'),
+      hint: tr('skill_market_clawhub_hint'),
+    },
+  })[source];
 
-const ADD_OPTIONS: Choice<AddKey>[] = [
-  {key: 'create', label: '新建技能', desc: '填写名称、描述和说明，直接写一个', icon: faPenToSquare},
-  {key: 'hub', label: 'Cow Skill Hub', desc: '按名称安装技能广场里的技能', icon: faStore},
-  {key: 'github', label: 'GitHub', desc: '仓库或子目录链接，也可以写 owner/repo', icon: faCodeBranch},
-  {key: 'clawhub', label: 'ClawHub', desc: '按名称安装 ClawHub 上的技能', icon: faPaw},
-  {key: 'upload', label: '上传文件', desc: '从手机选择 .zip 压缩包或 SKILL.md', icon: faFileArrowUp},
-  {key: 'browse', label: '浏览技能广场', desc: '在浏览器里打开 skills.cowagent.ai', icon: faCompass},
+const addOptions = (): Choice<AddKey>[] => [
+  {key: 'create', label: tr('skill_create'), desc: tr('skill_create_desc'), icon: faPenToSquare},
+  {key: 'hub', label: 'Cow Skill Hub', desc: tr('skill_hub_desc'), icon: faStore},
+  {key: 'github', label: 'GitHub', desc: tr('skill_github_desc'), icon: faCodeBranch},
+  {key: 'clawhub', label: 'ClawHub', desc: tr('skill_clawhub_desc'), icon: faPaw},
+  {key: 'upload', label: tr('skill_upload'), desc: tr('skill_upload_desc'), icon: faFileArrowUp},
+  {key: 'browse', label: tr('skill_browse_hub'), desc: tr('skill_browse_hub_desc'), icon: faCompass},
 ];
 
 export function skillErrorText(e: unknown): string {
@@ -213,7 +215,7 @@ export function SkillsScreen({navigation}: Props) {
       await setSkillEnabled(skill.name, enabled, scope);
     } catch (e) {
       flip(!enabled);
-      showToast(`${enabled ? '启用' : '停用'}失败：${skillErrorText(e)}`);
+      showToast(trf(enabled ? 'skill_enable_failed' : 'skill_disable_failed', {error: skillErrorText(e)}));
     }
   };
 
@@ -240,14 +242,14 @@ export function SkillsScreen({navigation}: Props) {
       return;
     }
     if (files.reduce((n, f) => n + (f.size ?? 0), 0) > UPLOAD_MAX_BYTES) {
-      showToast('文件太大，上限 50 MB');
+      showToast(tr('skill_err_too_large'));
       return;
     }
-    showToast('正在上传…');
+    showToast(tr('skill_uploading'));
     try {
       setPreview(await uploadSkill(files, scope));
     } catch (e) {
-      showToast(`上传失败：${skillErrorText(e)}`);
+      showToast(trf('skill_upload_failed', {error: skillErrorText(e)}));
     }
   };
 
@@ -262,7 +264,9 @@ export function SkillsScreen({navigation}: Props) {
       throw new Error(skillErrorText(e));
     }
     setPreview(null);
-    showToast(installed.length ? `已安装 ${installed.join('、')}` : '已安装');
+    showToast(
+      installed.length ? trf('skill_installed_names', {names: installed.join(tr('skill_list_sep'))}) : tr('skill_installed'),
+    );
     await loadSkills();
   };
 
@@ -277,11 +281,11 @@ export function SkillsScreen({navigation}: Props) {
     try {
       await deleteSkill(skill.name, scope);
       setSheet(null);
-      showToast('已删除');
+      showToast(tr('common_deleted'));
       await loadSkills();
     } catch (e) {
       setSheet(null);
-      showToast(`删除失败：${skillErrorText(e)}`);
+      showToast(trf('common_delete_failed', {error: skillErrorText(e)}));
     }
   };
 
@@ -293,7 +297,7 @@ export function SkillsScreen({navigation}: Props) {
       runUpload();
     } else if (key === 'browse') {
       setSheet(null);
-      Linking.openURL(SKILL_HUB_URL).catch(() => showToast('无法打开浏览器'));
+      Linking.openURL(SKILL_HUB_URL).catch(() => showToast(tr('skill_open_browser_failed')));
     } else {
       next({kind: 'market', source: key});
     }
@@ -302,12 +306,16 @@ export function SkillsScreen({navigation}: Props) {
   const openSkill = (skill: Skill) => navigation.navigate('SkillDetail', {name: skill.name, agentId: scope});
 
   const renderSkill = ({item}: {item: Skill}) => {
-    const tag = item.ships_with_install ? '内置' : item.source && item.source !== 'custom' ? SKILL_SOURCE_LABEL[item.source] ?? item.source : null;
+    const tag = item.ships_with_install
+      ? tr('skill_src_builtin')
+      : item.source && item.source !== 'custom'
+        ? SKILL_SOURCE_LABEL[item.source] ?? item.source
+        : null;
     const desc = skillDescription(item);
     return (
       <Pressable
         accessibilityRole="button"
-        accessibilityHint="长按查看更多操作"
+        accessibilityHint={tr('skill_long_press_hint')}
         onPress={() => openSkill(item)}
         onLongPress={() => setSheet({kind: 'skill', skill: item})}
         style={({pressed}) => [styles.card, pressed && styles.cardPressed]}>
@@ -321,10 +329,10 @@ export function SkillsScreen({navigation}: Props) {
             {!!item.version && <Text style={styles.version}>v{item.version}</Text>}
           </View>
           <Text style={[styles.cardDesc, !desc && styles.dim]} numberOfLines={2}>
-            {desc || '没有描述'}
+            {desc || tr('skill_no_desc')}
           </Text>
         </View>
-        <Toggle value={item.enabled} onValueChange={v => toggle(item, v)} label={`启用 ${skillName(item)}`} />
+        <Toggle value={item.enabled} onValueChange={v => toggle(item, v)} label={trf('skill_enable_label', {name: skillName(item)})} />
       </Pressable>
     );
   };
@@ -337,10 +345,10 @@ export function SkillsScreen({navigation}: Props) {
   const skillSheet = sheet?.kind === 'skill' ? sheet.skill : null;
   const skillOptions: Choice<'open' | 'edit' | 'delete'>[] = skillSheet
     ? [
-        {key: 'open', label: '查看详情和文件', icon: faFileLines},
-        ...(skillSheet.ships_with_install ? [] : [{key: 'edit' as const, label: '编辑 SKILL.md', icon: faPenToSquare}]),
+        {key: 'open', label: tr('skill_opt_open'), icon: faFileLines},
+        ...(skillSheet.ships_with_install ? [] : [{key: 'edit' as const, label: tr('skill_edit_md'), icon: faPenToSquare}]),
         ...(skillSheet.deletable !== false && !skillSheet.ships_with_install
-          ? [{key: 'delete' as const, label: '删除', icon: faTrashCan}]
+          ? [{key: 'delete' as const, label: tr('common_delete'), icon: faTrashCan}]
           : []),
       ]
     : [];
@@ -348,14 +356,14 @@ export function SkillsScreen({navigation}: Props) {
   return (
     <View style={styles.root}>
       <PageHeader
-        title="技能"
+        title={tr('skill_title')}
         subtitle={viewed.multi ? viewed.agent?.name ?? viewed.agentId ?? undefined : undefined}
         onTitlePress={viewed.multi ? () => setSheet({kind: 'agent'}) : undefined}
         onBack={navigation.goBack}
         right={
           <IconButton
             icon={faPlus}
-            label={tab === 'skills' ? '添加技能' : '添加 MCP 服务'}
+            label={tab === 'skills' ? tr('skill_add') : tr('mcp_add')}
             filled
             size={13}
             color={t.t1}
@@ -367,8 +375,8 @@ export function SkillsScreen({navigation}: Props) {
         value={tab}
         onChange={setTab}
         options={[
-          {key: 'skills', label: '技能', count: skills?.length || undefined},
-          {key: 'tools', label: '工具', count: toolCount || undefined},
+          {key: 'skills', label: tr('skill_title'), count: skills?.length || undefined},
+          {key: 'tools', label: tr('skill_tab_tools'), count: toolCount || undefined},
         ]}
       />
 
@@ -381,9 +389,7 @@ export function SkillsScreen({navigation}: Props) {
             contentContainerStyle={[styles.list, {paddingBottom: insets.bottom + 24}]}
             ListHeaderComponent={
               sorted.length ? (
-                <Text style={styles.summary}>
-                  已启用 {enabledCount} / {sorted.length}，停用的技能 Agent 不会使用
-                </Text>
+                <Text style={styles.summary}>{trf('skill_summary', {enabled: enabledCount, total: sorted.length})}</Text>
               ) : null
             }
             ListFooterComponent={
@@ -393,7 +399,7 @@ export function SkillsScreen({navigation}: Props) {
                   onPress={() => Linking.openURL(SKILL_HUB_URL).catch(() => undefined)}
                   style={({pressed}) => [styles.hubLink, pressed && styles.cardPressed]}>
                   <Icon icon={faCompass} size={12} color={t.t3} />
-                  <Text style={styles.hubText}>去 Cow Skill Hub 发现更多技能</Text>
+                  <Text style={styles.hubText}>{tr('skill_hub_link')}</Text>
                   <Icon icon={faArrowUpRightFromSquare} size={10} color={t.t4} />
                 </Pressable>
               ) : null
@@ -401,8 +407,8 @@ export function SkillsScreen({navigation}: Props) {
             ListEmptyComponent={
               <EmptyState
                 loading={!skills && !error}
-                title={error ? '加载失败' : '还没有技能'}
-                hint={error ?? '点右上角 + 新建一个，或者从 Skill Hub、GitHub 安装'}
+                title={error ? tr('common_load_failed') : tr('skill_empty')}
+                hint={error ?? tr('skill_empty_hint')}
               />
             }
             refreshControl={refreshControl}
@@ -410,12 +416,14 @@ export function SkillsScreen({navigation}: Props) {
         ) : (
           <ScrollView contentContainerStyle={[styles.list, {paddingBottom: insets.bottom + 32}]} refreshControl={refreshControl}>
             <SectionHead
-              title="内置工具"
+              title={tr('skill_builtin_tools')}
               count={tools?.length}
               action={
                 (tools?.length ?? 0) > TOOLS_COLLAPSED ? (
                   <Pressable hitSlop={8} onPress={() => setToolsOpen(v => !v)} style={styles.headLink}>
-                    <Text style={styles.headLinkText}>{toolsOpen ? '收起' : `全部 ${tools?.length}`}</Text>
+                    <Text style={styles.headLinkText}>
+                      {toolsOpen ? tr('skill_collapse') : trf('skill_show_all', {n: tools?.length ?? 0})}
+                    </Text>
                     <View style={toolsOpen && styles.flipped}>
                       <Icon icon={faChevronDown} size={9} color={t.t3} />
                     </View>
@@ -424,9 +432,11 @@ export function SkillsScreen({navigation}: Props) {
               }
             />
             {!tools ? (
-              <Text style={styles.sectionNote}>{toolsError ? `加载失败：${toolsError}` : '加载中…'}</Text>
+              <Text style={styles.sectionNote}>
+                {toolsError ? trf('common_load_failed_detail', {error: toolsError}) : tr('common_loading')}
+              </Text>
             ) : !tools.length ? (
-              <Text style={styles.sectionNote}>没有可用的内置工具</Text>
+              <Text style={styles.sectionNote}>{tr('skill_no_tools')}</Text>
             ) : (
               <View style={styles.group}>
                 {visibleTools.map((tool, i) => {
@@ -444,7 +454,7 @@ export function SkillsScreen({navigation}: Props) {
                           {tool.name}
                         </Text>
                         <Text style={styles.rowDesc} numberOfLines={open ? undefined : 2}>
-                          {tool.description || '没有描述'}
+                          {tool.description || tr('skill_no_desc')}
                         </Text>
                       </View>
                     </Pressable>
@@ -454,23 +464,25 @@ export function SkillsScreen({navigation}: Props) {
             )}
 
             <SectionHead
-              title="MCP 服务"
+              title={tr('mcp_title')}
               count={servers ? mcpList.length : undefined}
               action={
                 <Pressable hitSlop={8} onPress={() => navigation.navigate('McpEdit')} style={styles.addButton}>
                   <Icon icon={faPlus} size={10} color={t.accent} />
-                  <Text style={styles.addText}>添加</Text>
+                  <Text style={styles.addText}>{tr('common_add')}</Text>
                 </Pressable>
               }
             />
-            {!!mcpError && <Text style={[styles.sectionNote, styles.errorText]}>加载失败：{mcpError}</Text>}
+            {!!mcpError && (
+              <Text style={[styles.sectionNote, styles.errorText]}>{trf('common_load_failed_detail', {error: mcpError})}</Text>
+            )}
             {!servers ? (
-              !mcpError && <Text style={styles.sectionNote}>加载中…</Text>
+              !mcpError && <Text style={styles.sectionNote}>{tr('common_loading')}</Text>
             ) : !mcpList.length ? (
               <Pressable onPress={() => navigation.navigate('McpEdit')} style={({pressed}) => [styles.emptyBox, pressed && styles.rowPressed]}>
                 <McpIcon />
-                <Text style={styles.emptyTitle}>还没有 MCP 服务</Text>
-                <Text style={styles.emptyHint}>接入数据库、内网文档、浏览器等外部系统，Agent 就能调用它们提供的工具</Text>
+                <Text style={styles.emptyTitle}>{tr('mcp_empty')}</Text>
+                <Text style={styles.emptyHint}>{tr('mcp_empty_hint_tools')}</Text>
               </Pressable>
             ) : (
               <View style={styles.group}>
@@ -481,7 +493,7 @@ export function SkillsScreen({navigation}: Props) {
                     <Pressable
                       key={s.name}
                       accessibilityRole="button"
-                      accessibilityLabel={`${s.name}，${status.label}`}
+                      accessibilityLabel={trf('mcp_row_a11y', {name: s.name, status: status.label})}
                       onPress={() => navigation.navigate('McpDetail', {name: s.name})}
                       style={({pressed}) => [styles.groupRow, styles.center, i > 0 && styles.groupDivider, pressed && styles.rowPressed]}>
                       <McpIcon off={s.status === 'disabled'} />
@@ -503,28 +515,32 @@ export function SkillsScreen({navigation}: Props) {
                 })}
               </View>
             )}
-            <Text style={styles.footnote}>
-              MCP 服务保存后从下一条消息开始生效，不需要重启。每个服务单独连接，一个连不上不影响其他服务和内置工具。
-            </Text>
+            <Text style={styles.footnote}>{tr('mcp_tools_footnote')}</Text>
           </ScrollView>
         )}
       </SwipeTabs>
 
-      <ChoiceSheet visible={sheet?.kind === 'add'} title="添加技能" options={ADD_OPTIONS} onSelect={onAdd} onClose={() => setSheet(null)} />
+      <ChoiceSheet
+        visible={sheet?.kind === 'add'}
+        title={tr('skill_add')}
+        options={addOptions()}
+        onSelect={onAdd}
+        onClose={() => setSheet(null)}
+      />
       <FieldSheet
         visible={sheet?.kind === 'market'}
-        title={sheet?.kind === 'market' ? MARKET[sheet.source].title : ''}
-        placeholder={sheet?.kind === 'market' ? MARKET[sheet.source].placeholder : ''}
-        hint={sheet?.kind === 'market' ? MARKET[sheet.source].hint : undefined}
+        title={sheet?.kind === 'market' ? market(sheet.source).title : ''}
+        placeholder={sheet?.kind === 'market' ? market(sheet.source).placeholder : ''}
+        hint={sheet?.kind === 'market' ? market(sheet.source).hint : undefined}
         mono
         allowEmpty={false}
-        submitLabel="获取"
+        submitLabel={tr('skill_fetch')}
         onSubmit={v => (sheet?.kind === 'market' ? fetchPreview(sheet.source, v) : undefined)}
         onClose={() => setSheet(null)}
       />
       <ChoiceSheet
         visible={sheet?.kind === 'skill'}
-        title={skillSheet ? skillName(skillSheet) : '技能'}
+        title={skillSheet ? skillName(skillSheet) : tr('skill_title')}
         options={skillOptions}
         onSelect={key => {
           if (!skillSheet) {
@@ -544,9 +560,9 @@ export function SkillsScreen({navigation}: Props) {
       />
       <ConfirmSheet
         visible={sheet?.kind === 'delete'}
-        title="删除技能"
-        message={sheet?.kind === 'delete' ? `「${skillName(sheet.skill)}」和它目录里的所有文件都会被删除，Agent 也不能再使用它。` : ''}
-        confirmLabel="删除"
+        title={tr('skill_delete_title')}
+        message={sheet?.kind === 'delete' ? trf('skill_delete_message', {name: skillName(sheet.skill)}) : ''}
+        confirmLabel={tr('common_delete')}
         danger
         onConfirm={() => (sheet?.kind === 'delete' ? remove(sheet.skill) : undefined)}
         onClose={() => setSheet(null)}
@@ -554,7 +570,7 @@ export function SkillsScreen({navigation}: Props) {
       <SkillInstallSheet preview={preview} onInstall={install} onClose={closePreview} />
       <AgentSheet
         visible={sheet?.kind === 'agent'}
-        title="查看哪个 Agent 的技能"
+        title={tr('skill_agent_pick')}
         selectedId={viewed.agentId}
         onSelect={switchAgent}
         onClose={() => setSheet(null)}

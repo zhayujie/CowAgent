@@ -11,6 +11,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import {scheduleOnRN} from 'react-native-worklets';
+import {tr} from '../i18n';
 import {makeStyles} from '../theme/theme';
 
 const BREATHE = {duration: 900, easing: Easing.inOut(Easing.quad)};
@@ -61,7 +62,7 @@ export function PreviewSkeleton({visible, overlay}: {visible: boolean; overlay?:
   return (
     <Animated.View
       pointerEvents={visible ? 'auto' : 'none'}
-      accessibilityLabel="正在加载"
+      accessibilityLabel={tr('ui_loading')}
       style={[overlay ? styles.overlay : styles.inline, fade]}>
       <Animated.View style={[styles.lines, breathe]}>
         {LINES.map((w, i) => (w ? <View key={i} style={[styles.line, {width: w}]} /> : <View key={i} style={styles.gap} />))}

@@ -8,6 +8,7 @@ import {runDuration, runStatus, triggerLabel} from '../components/RunList';
 import {ActionButton, ConfirmSheet, Kpis, SettingRow} from '../components/settings';
 import {showToast, ToastHost} from '../components/Toast';
 import {EmptyState, GroupLabel, PageHeader} from '../components/ui';
+import {localizedLabel, tr, trf} from '../i18n';
 import type {RootStackParamList} from '../navigation/types';
 import type {TaskRun} from '../protocol/resources';
 import {useAgentStore} from '../store/agentStore';
@@ -49,8 +50,7 @@ export function TaskRunScreen({route, navigation}: Props) {
     getChannels()
       .then(res => {
         const c = res.channels.find(x => x.name === type);
-        const label = typeof c?.label === 'string' ? c.label : c?.label?.zh || c?.label?.en;
-        setChannelName(label || null);
+        setChannelName(localizedLabel(c?.label) || null);
       })
       .catch(() => undefined);
   }, [run?.channel_type]);
@@ -58,8 +58,8 @@ export function TaskRunScreen({route, navigation}: Props) {
   if (!run) {
     return (
       <View style={styles.root}>
-        <PageHeader title="执行详情" onBack={navigation.goBack} />
-        <EmptyState loading={!error} title="加载失败" hint={error ?? undefined} />
+        <PageHeader title={tr('task_run_detail')} onBack={navigation.goBack} />
+        <EmptyState loading={!error} title={tr('common_load_failed')} hint={error ?? undefined} />
       </View>
     );
   }
@@ -72,26 +72,26 @@ export function TaskRunScreen({route, navigation}: Props) {
 
   return (
     <View style={styles.root}>
-      <PageHeader title={run.task_name || '执行详情'} onBack={navigation.goBack} />
+      <PageHeader title={run.task_name || tr('task_run_detail')} onBack={navigation.goBack} />
       <ScrollView contentContainerStyle={{paddingBottom: insets.bottom + 32}}>
         <View style={styles.kpis}>
           <Kpis
             items={[
-              {value: status.label, label: '状态'},
-              {value: duration || '-', label: '耗时'},
+              {value: status.label, label: tr('task_run_status')},
+              {value: duration || '-', label: tr('task_run_elapsed')},
             ]}
           />
         </View>
 
-        <SettingRow title="开始时间" value={fullTime(run.started_at)} />
-        <SettingRow title="触发方式" value={triggerLabel(run)} />
-        {!!run.channel_type && <SettingRow title="通道" value={channelName ?? run.channel_type} />}
-        {!!agent && <SettingRow title="智能体" value={agent.name || agent.id} />}
-        <SettingRow title="记录 ID" value={run.run_id.slice(0, 12)} mono last />
+        <SettingRow title={tr('task_run_started_at')} value={fullTime(run.started_at)} />
+        <SettingRow title={tr('task_run_trigger')} value={triggerLabel(run)} />
+        {!!run.channel_type && <SettingRow title={tr('task_channel')} value={channelName ?? run.channel_type} />}
+        {!!agent && <SettingRow title={tr('task_run_agent')} value={agent.name || agent.id} />}
+        <SettingRow title={tr('task_run_id')} value={run.run_id.slice(0, 12)} mono last />
 
         {failed && !!run.error && (
           <>
-            <GroupLabel style={styles.group}>错误信息</GroupLabel>
+            <GroupLabel style={styles.group}>{tr('task_run_error')}</GroupLabel>
             <View style={styles.errorBox}>
               <Text style={styles.errorText} selectable>
                 {run.error}
@@ -101,13 +101,13 @@ export function TaskRunScreen({route, navigation}: Props) {
         )}
 
         <View style={styles.outputHead}>
-          <GroupLabel style={styles.outputLabel}>发送内容</GroupLabel>
+          <GroupLabel style={styles.outputLabel}>{tr('task_run_output')}</GroupLabel>
           {!!output && (
             <Pressable
               hitSlop={8}
-              onPress={async () => showToast((await copyText(output)) ? '已复制' : '复制失败')}
+              onPress={async () => showToast((await copyText(output)) ? tr('common_copied') : tr('task_copy_failed'))}
               style={styles.copy}>
-              <Text style={styles.link}>复制</Text>
+              <Text style={styles.link}>{tr('common_copy')}</Text>
             </Pressable>
           )}
         </View>
@@ -115,22 +115,22 @@ export function TaskRunScreen({route, navigation}: Props) {
           {output ? (
             <Markdown value={output} />
           ) : detailLoaded ? (
-            <Text style={styles.none}>（无内容）</Text>
+            <Text style={styles.none}>{tr('task_run_no_content')}</Text>
           ) : (
             <ActivityIndicator color={t.t3} />
           )}
         </View>
 
         <View style={styles.danger}>
-          <ActionButton label="删除这条记录" tone="danger" onPress={() => setConfirmDelete(true)} />
+          <ActionButton label={tr('task_run_delete')} tone="danger" onPress={() => setConfirmDelete(true)} />
         </View>
       </ScrollView>
 
       <ConfirmSheet
         visible={confirmDelete}
-        title="删除执行记录"
-        message="删除后无法恢复，不影响任务本身和已经发出的内容。"
-        confirmLabel="删除"
+        title={tr('task_run_delete_title')}
+        message={tr('task_run_delete_note')}
+        confirmLabel={tr('common_delete')}
         danger
         onConfirm={async () => {
           try {
@@ -139,7 +139,7 @@ export function TaskRunScreen({route, navigation}: Props) {
             navigation.goBack();
           } catch (e) {
             setConfirmDelete(false);
-            showToast(`删除失败：${describeConnectError(e)}`);
+            showToast(trf('common_delete_failed', {error: describeConnectError(e)}));
           }
         }}
         onClose={() => setConfirmDelete(false)}

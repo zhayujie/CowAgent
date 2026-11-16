@@ -9,6 +9,7 @@ import {Icon} from '../components/Icon';
 import {Sheet} from '../components/Sheet';
 import {Tile} from '../components/SkillIcon';
 import {EmptyState, IconButton, PageHeader} from '../components/ui';
+import {tr, trf} from '../i18n';
 import type {RootStackParamList} from '../navigation/types';
 import type {ChannelInfo} from '../protocol/resources';
 import {useAgentStore} from '../store/agentStore';
@@ -75,30 +76,37 @@ export function ChannelsScreen({navigation}: Props) {
   return (
     <View style={styles.root}>
       <PageHeader
-        title="通道"
+        title={tr('channel_list_title')}
         count={connected.length || undefined}
         onBack={navigation.goBack}
         right={
           available.length ? (
-            <IconButton icon={faPlus} label="接入通道" filled size={13} color={t.t1} onPress={() => setPicking(true)} />
+            <IconButton
+              icon={faPlus}
+              label={tr('channel_add')}
+              filled
+              size={13}
+              color={t.t1}
+              onPress={() => setPicking(true)}
+            />
           ) : undefined
         }
       />
       {!data ? (
-        <EmptyState loading={!error} title="加载失败" hint={error ?? undefined} />
+        <EmptyState loading={!error} title={tr('common_load_failed')} hint={error ?? undefined} />
       ) : (
         <ScrollView
           contentContainerStyle={[styles.body, {paddingBottom: insets.bottom + 32}]}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={t.t3} colors={[t.green]} />}>
           {connected.length ? (
             <>
-              <SectionHead title="已接入" />
+              <SectionHead title={tr('channel_section_connected')} />
               <View style={styles.group}>
                 {connected.map((c, i) => {
                   const pending = channelPending(c);
                   const binding = data.multi_agent && c.instance_id ? bindingSummary(c, nameOf) : '';
                   return (
-                    <Row key={channelKey(c)} first={i === 0} onPress={() => open(c)} label={`${channelTitle(c)}，${channelStatusLabel(c)}`}>
+                    <Row key={channelKey(c)} first={i === 0} onPress={() => open(c)} label={trf('channel_a11y_pair', {title: channelTitle(c), value: channelStatusLabel(c)})}>
                       <ChannelIcon name={c.name} />
                       <View style={styles.rowText}>
                         <View style={styles.titleLine}>
@@ -123,17 +131,21 @@ export function ChannelsScreen({navigation}: Props) {
           ) : (
             <View style={styles.hero}>
               <Tile icon={faTowerBroadcast} tone="accent" size={52} />
-              <Text style={styles.heroTitle}>还没有接入通道</Text>
-              <Text style={styles.heroHint}>接入后，在微信、飞书、钉钉里发消息，就能直接和 Agent 对话</Text>
+              <Text style={styles.heroTitle}>{tr('channel_empty')}</Text>
+              <Text style={styles.heroHint}>{tr('channel_empty_hint')}</Text>
             </View>
           )}
 
           {!!available.length && (
             <>
-              <SectionHead title={connected.length ? '还可以接入' : '选择一个开始'} />
+              <SectionHead title={connected.length ? tr('channel_section_more') : tr('channel_section_start')} />
               <View style={styles.group}>
                 {available.map((c, i) => (
-                  <Row key={c.name} first={i === 0} onPress={() => add(c)} label={`接入${channelLabel(c)}`}>
+                  <Row
+                    key={c.name}
+                    first={i === 0}
+                    onPress={() => add(c)}
+                    label={trf('channel_add_named', {name: channelLabel(c)})}>
                     <ChannelIcon name={c.name} />
                     <View style={styles.rowText}>
                       <Text style={styles.rowTitle} numberOfLines={1}>
@@ -150,11 +162,11 @@ export function ChannelsScreen({navigation}: Props) {
               </View>
             </>
           )}
-          <Text style={styles.footnote}>通道运行在服务端，手机锁屏或断网都不影响消息收发。</Text>
+          <Text style={styles.footnote}>{tr('channel_footnote')}</Text>
         </ScrollView>
       )}
 
-      <Sheet visible={picking} onClose={() => setPicking(false)} title="接入通道">
+      <Sheet visible={picking} onClose={() => setPicking(false)} title={tr('channel_add')}>
         <ScrollView style={styles.pickList} bounces={false}>
           {available.map(c => (
             <Pressable

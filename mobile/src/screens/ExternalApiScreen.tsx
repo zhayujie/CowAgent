@@ -15,6 +15,7 @@ import {
 } from '../components/settings';
 import {showToast, ToastHost} from '../components/Toast';
 import {Chip, EmptyState, GroupLabel, PageHeader} from '../components/ui';
+import {tr, trf} from '../i18n';
 import type {RootStackParamList} from '../navigation/types';
 import {useConfigStore} from '../store/configStore';
 import {describeConnectError} from '../store/serverStore';
@@ -78,7 +79,7 @@ export function ExternalApiScreen({navigation}: Props) {
   const [lang, setLang] = useState<Lang>('curl');
   const [confirmRegen, setConfirmRegen] = useState(false);
   const [toggling, setToggling] = useState(false);
-  const [message, setMessage] = useState('你好，用一句话介绍你自己');
+  const [message, setMessage] = useState(() => tr('extapi_default_message'));
   const [probing, setProbing] = useState(false);
   const [probe, setProbe] = useState<ChatApiProbe | null>(null);
 
@@ -89,8 +90,8 @@ export function ExternalApiScreen({navigation}: Props) {
   if (!state) {
     return (
       <View style={styles.root}>
-        <PageHeader title="开放对话 API" onBack={navigation.goBack} />
-        <EmptyState loading={!error} title="加载失败" hint={error ?? undefined} />
+        <PageHeader title={tr('extapi_title')} onBack={navigation.goBack} />
+        <EmptyState loading={!error} title={tr('common_load_failed')} hint={error ?? undefined} />
       </View>
     );
   }
@@ -103,14 +104,14 @@ export function ExternalApiScreen({navigation}: Props) {
     try {
       await setExternalApi(on ? 'enable' : 'disable');
     } catch (e) {
-      showToast(`操作失败：${describeConnectError(e)}`);
+      showToast(trf('extapi_action_failed', {error: describeConnectError(e)}));
     } finally {
       setToggling(false);
     }
   };
 
   const copy = async (text: string, what: string) => {
-    showToast((await copyText(text)) ? `已复制${what}` : '当前环境不支持复制，请长按文本手动选择');
+    showToast((await copyText(text)) ? trf('common_copied_what', {what}) : tr('extapi_copy_unsupported'));
   };
 
   const runProbe = async () => {
@@ -122,13 +123,14 @@ export function ExternalApiScreen({navigation}: Props) {
 
   return (
     <View style={styles.root}>
-      <PageHeader title="开放对话 API" onBack={navigation.goBack} />
+      <PageHeader title={tr('extapi_title')} onBack={navigation.goBack} />
       <ScrollView contentContainerStyle={{paddingBottom: insets.bottom + 32}} keyboardShouldPersistTaps="handled">
         <Notice style={styles.notice}>
-          <Text style={styles.strong}>接口兼容 OpenAI 格式</Text>，其他应用可以像调用模型一样调用你的 Agent。关闭后密钥仍保留，重新开启即可继续使用。
+          <Text style={styles.strong}>{tr('extapi_notice_strong')}</Text>
+          {tr('extapi_notice_rest')}
         </Notice>
         <SwitchRow
-          title="启用对话 API"
+          title={tr('extapi_enable')}
           value={state.enabled}
           disabled={toggling}
           onValueChange={toggle}
@@ -137,105 +139,112 @@ export function ExternalApiScreen({navigation}: Props) {
 
         {!!key && (
           <>
-            <GroupLabel style={styles.group}>API 密钥</GroupLabel>
+            <GroupLabel style={styles.group}>{tr('extapi_key')}</GroupLabel>
             <SettingRow
               title={revealed ? key : mask(key)}
-              detail={revealed ? '点按隐藏' : '点按显示完整密钥'}
+              detail={tr(revealed ? 'extapi_tap_hide' : 'extapi_tap_reveal')}
               mono
               onPress={() => setRevealed(v => !v)}
               chevron={false}
               right={
-                <Pressable accessibilityRole="button" hitSlop={8} onPress={() => copy(key, '密钥')}>
-                  <Text style={styles.link}>复制</Text>
+                <Pressable accessibilityRole="button" hitSlop={8} onPress={() => copy(key, tr('extapi_what_key'))}>
+                  <Text style={styles.link}>{tr('common_copy')}</Text>
                 </Pressable>
               }
             />
-            <SettingRow title="重新生成密钥" detail="旧密钥会立即失效" onPress={() => setConfirmRegen(true)} last />
-
-            <GroupLabel style={styles.group}>调用信息</GroupLabel>
             <SettingRow
-              title="对话接口"
+              title={tr('extapi_regenerate_key')}
+              detail={tr('extapi_regenerate_hint')}
+              onPress={() => setConfirmRegen(true)}
+              last
+            />
+
+            <GroupLabel style={styles.group}>{tr('extapi_call_info')}</GroupLabel>
+            <SettingRow
+              title={tr('extapi_chat_endpoint')}
               value="/v1/chat/completions"
               mono
-              onPress={() => copy(`${base}/chat/completions`, '接口地址')}
+              onPress={() => copy(`${base}/chat/completions`, tr('extapi_what_endpoint'))}
               chevron={false}
             />
-            <SettingRow title="模型列表" value="/v1/models" mono chevron={false} last />
+            <SettingRow title={tr('extapi_models')} value="/v1/models" mono chevron={false} last />
 
-            <GroupLabel style={styles.group}>调用示例</GroupLabel>
+            <GroupLabel style={styles.group}>{tr('extapi_examples')}</GroupLabel>
             <View style={styles.langs}>
               {LANGS.map(l => (
                 <Chip key={l.key} label={l.label} active={lang === l.key} onPress={() => setLang(l.key)} />
               ))}
               <View style={styles.flex} />
-              <Pressable accessibilityRole="button" hitSlop={8} onPress={() => copy(example(lang, base, key), '示例代码')}>
-                <Text style={styles.link}>复制</Text>
+              <Pressable
+                accessibilityRole="button"
+                hitSlop={8}
+                onPress={() => copy(example(lang, base, key), tr('extapi_what_example'))}>
+                <Text style={styles.link}>{tr('common_copy')}</Text>
               </Pressable>
             </View>
             <CodeBlock text={example(lang, base, revealed ? key : mask(key))} />
-            <Footnote>
-              不传 conversation_id 时每次请求自带完整上下文，服务端不保留；传入 conversation_id 则由服务端保存这段对话的历史。
-            </Footnote>
+            <Footnote>{tr('extapi_context_note')}</Footnote>
           </>
         )}
 
         {state.enabled && !!key && (
           <>
-            <GroupLabel style={styles.group}>接口调试</GroupLabel>
+            <GroupLabel style={styles.group}>{tr('extapi_debug')}</GroupLabel>
             <View style={styles.probe}>
               <TextInput
                 value={message}
                 onChangeText={setMessage}
-                placeholder="发一句话试试"
+                placeholder={tr('extapi_probe_placeholder')}
                 placeholderTextColor={t.t4}
                 selectionColor={t.accent}
                 cursorColor={t.accent}
                 multiline
                 style={styles.probeInput}
               />
-              <ActionButton label="发送测试请求" tone="primary" loading={probing} onPress={runProbe} />
+              <ActionButton label={tr('extapi_probe_send')} tone="primary" loading={probing} onPress={runProbe} />
             </View>
             {probe && (
               <>
                 <SettingRow
-                  title="状态"
-                  value={probe.status ? `${probe.status}${probe.status === 200 ? ' OK' : ''}` : '未连通'}
+                  title={tr('extapi_status')}
+                  value={probe.status ? `${probe.status}${probe.status === 200 ? ' OK' : ''}` : tr('extapi_unreachable')}
                 />
-                <SettingRow title="耗时" value={formatDuration(probe.ms)} />
+                <SettingRow title={tr('extapi_latency')} value={formatDuration(probe.ms)} />
                 {!!probe.usage && (
                   <SettingRow
                     title="Token"
-                    value={`输入 ${formatCount(probe.usage.prompt_tokens ?? 0)} · 输出 ${formatCount(
-                      probe.usage.completion_tokens ?? 0,
-                    )}`}
+                    value={trf('extapi_tokens', {
+                      input: formatCount(probe.usage.prompt_tokens ?? 0),
+                      output: formatCount(probe.usage.completion_tokens ?? 0),
+                    })}
                   />
                 )}
                 <View style={styles.reply}>
-                  <Text style={styles.replyLabel}>{probe.error ? '错误信息' : '回复'}</Text>
+                  <Text style={styles.replyLabel}>{tr(probe.error ? 'extapi_error' : 'extapi_reply')}</Text>
                   <Text style={styles.replyText} selectable numberOfLines={12}>
-                    {probe.error ?? probe.reply ?? '（空回复）'}
+                    {probe.error ?? probe.reply ?? tr('extapi_empty_reply')}
                   </Text>
                 </View>
               </>
             )}
-            <Footnote>测试请求会真实调用一次 Agent，计入模型用量。</Footnote>
+            <Footnote>{tr('extapi_probe_note')}</Footnote>
           </>
         )}
       </ScrollView>
 
       <ConfirmSheet
         visible={confirmRegen}
-        title="重新生成密钥"
-        message="旧密钥会立即失效，正在使用它的调用方需要换成新密钥。"
-        confirmLabel="重新生成"
+        title={tr('extapi_regenerate_key')}
+        message={tr('extapi_regenerate_message')}
+        confirmLabel={tr('extapi_regenerate')}
         danger
         onConfirm={async () => {
           try {
             await setExternalApi('regenerate');
             setRevealed(true);
-            showToast('已生成新密钥');
+            showToast(tr('extapi_regenerated'));
           } catch (e) {
-            showToast(`操作失败：${describeConnectError(e)}`);
+            showToast(trf('extapi_action_failed', {error: describeConnectError(e)}));
           } finally {
             setConfirmRegen(false);
           }

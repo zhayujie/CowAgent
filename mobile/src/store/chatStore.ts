@@ -9,6 +9,7 @@ import {
   mergeFile,
   sameFile,
 } from '../files/chatFile';
+import {tr} from '../i18n';
 import type {
   HistoryMessage,
   Role,
@@ -660,7 +661,7 @@ export const useChatStore = create<ChatState>((set, get) => {
         patch(sessionId, messageId, m => ({
           ...m,
           streaming: false,
-          error: event.message ?? event.content ?? '生成失败',
+          error: event.message ?? event.content ?? tr('chat_generate_failed'),
         }));
         break;
       default:

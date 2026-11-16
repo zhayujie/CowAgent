@@ -2,6 +2,7 @@ import type {StackScreenProps} from '@react-navigation/stack';
 import React, {useCallback, useMemo} from 'react';
 import {readSkillFile, writeSkillFile} from '../api/cowApi';
 import {DocPage, type DocSource} from '../components/DocPage';
+import {tr} from '../i18n';
 import type {RootStackParamList} from '../navigation/types';
 import {skillFileForReading} from '../utils/skills';
 
@@ -16,12 +17,12 @@ export function SkillFileScreen({route, navigation}: Props) {
       load: async () => {
         const res = await readSkillFile(name, path, agentId);
         const readonlyReason = res.ships_with_install
-          ? '内置技能随安装包更新，只能查看'
+          ? tr('skill_ro_builtin')
           : res.truncated
-            ? '文件过大，只能查看'
+            ? tr('skill_ro_too_large')
             : res.lossy
-              ? '含有无法识别的字符，只能查看'
-              : '这个文件只能查看';
+              ? tr('skill_ro_lossy')
+              : tr('skill_ro_default');
         return {
           content: res.content,
           mtime: res.mtime,

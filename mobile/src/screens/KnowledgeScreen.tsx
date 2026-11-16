@@ -27,6 +27,7 @@ import {SHEET_DISMISS_MS} from '../components/Sheet';
 import {showToast, ToastHost} from '../components/Toast';
 import {SwipeTabs} from '../components/SwipeTabs';
 import {EmptyState, IconButton, PageHeader, Segmented} from '../components/ui';
+import {tr, trf} from '../i18n';
 import {pickDocuments} from '../media/picker';
 import type {RootStackParamList} from '../navigation/types';
 import type {KnowledgeGraph as GraphData, KnowledgeTree} from '../protocol/resources';
@@ -71,16 +72,16 @@ type SheetState =
 function actionError(e: unknown): string {
   const msg = e instanceof ApiError ? e.message : '';
   if (/already exists/i.test(msg)) {
-    return '已有同名的分类或文档';
+    return tr('knowledge_err_exists');
   }
   if (/not empty/i.test(msg)) {
-    return '分类里还有文档';
+    return tr('knowledge_err_not_empty');
   }
   if (/invalid|outside|traversal/i.test(msg)) {
-    return '名称不合法，只能用字母、数字、中文、- 和 _，层级用 / 分隔';
+    return tr('knowledge_err_invalid_name');
   }
   if (/too large/i.test(msg)) {
-    return '文件太大';
+    return tr('knowledge_err_too_large');
   }
   return describeConnectError(e);
 }
@@ -220,7 +221,7 @@ export function KnowledgeScreen({navigation}: Props) {
   const needCategory = (purpose: 'doc' | 'import') => {
     if (!categories.length) {
       next({kind: 'newCategory'});
-      showToast('先建一个分类，文档都放在分类里');
+      showToast(tr('knowledge_need_category'));
       return;
     }
     next({kind: 'pickCategory', purpose});
@@ -240,30 +241,30 @@ export function KnowledgeScreen({navigation}: Props) {
     }
     const ok = files.filter(f => isImportable(f.name));
     if (!ok.length) {
-      showToast('只能导入 .md 和 .txt 文件');
+      showToast(tr('knowledge_import_only_md_txt'));
       return;
     }
-    showToast(`正在导入 ${ok.length} 个文件…`);
+    showToast(trf('knowledge_importing_n', {n: ok.length}));
     try {
       const res = await importKnowledge(ok, category, scope);
-      const parts = [`导入 ${res.imported} 篇`];
+      const parts = [trf('knowledge_import_imported', {n: res.imported})];
       if (res.skipped) {
-        parts.push(`跳过 ${res.skipped}`);
+        parts.push(trf('knowledge_import_skipped', {n: res.skipped}));
       }
       if (res.failed || ok.length < files.length) {
-        parts.push(`失败 ${res.failed + files.length - ok.length}`);
+        parts.push(trf('knowledge_import_failed_n', {n: res.failed + files.length - ok.length}));
       }
-      showToast(parts.join('，'));
+      showToast(parts.join(tr('knowledge_import_sep')));
       await reload();
     } catch (e) {
-      showToast(`导入失败：${actionError(e)}`);
+      showToast(trf('knowledge_import_failed', {error: actionError(e)}));
     }
   };
 
   const createCategory = async (value: string, parent?: string) => {
     const name = value.replace(/^\/+|\/+$/g, '');
     if (!name) {
-      throw new Error('请输入分类名');
+      throw new Error(tr('knowledge_category_name_required'));
     }
     const path = parent ? `${parent}/${name}` : name;
     try {
@@ -272,12 +273,12 @@ export function KnowledgeScreen({navigation}: Props) {
         scope,
       );
       if (!res.created) {
-        throw new Error('这个分类已经存在');
+        throw new Error(tr('knowledge_category_exists'));
       }
     } catch (e) {
       throw new Error(e instanceof ApiError ? actionError(e) : (e as Error).message);
     }
-    showToast('分类已创建');
+    showToast(tr('knowledge_category_created'));
     await reload();
   };
 
@@ -308,12 +309,12 @@ export function KnowledgeScreen({navigation}: Props) {
         scope,
       );
       if (res.moved === false) {
-        throw new Error('分类不存在了，下拉刷新看看');
+        throw new Error(tr('knowledge_category_gone'));
       }
     } catch (e) {
       throw new Error(e instanceof ApiError ? actionError(e) : (e as Error).message);
     }
-    showToast('已重命名');
+    showToast(tr('knowledge_renamed'));
     await reload();
   };
 
@@ -321,11 +322,11 @@ export function KnowledgeScreen({navigation}: Props) {
     try {
       await knowledgeAction({action: 'delete_category', payload: {path, confirm: true}}, scope);
       setSheet(null);
-      showToast('分类已删除');
+      showToast(tr('knowledge_category_deleted'));
       await reload();
     } catch (e) {
       setSheet(null);
-      showToast(`删除失败：${actionError(e)}`);
+      showToast(trf('common_delete_failed', {error: actionError(e)}));
     }
   };
 
@@ -337,10 +338,16 @@ export function KnowledgeScreen({navigation}: Props) {
         scope,
       );
       const r = res.results?.[0];
-      showToast(r?.moved ? `已移动到 ${target}` : r?.reason === 'target_exists' ? '目标分类里已有同名文档' : '移动失败');
+      showToast(
+        r?.moved
+          ? trf('knowledge_moved_to', {target})
+          : r?.reason === 'target_exists'
+            ? tr('knowledge_move_target_exists')
+            : tr('knowledge_move_failed'),
+      );
       await reload();
     } catch (e) {
-      showToast(`移动失败：${actionError(e)}`);
+      showToast(trf('knowledge_move_failed_detail', {error: actionError(e)}));
     }
   };
 
@@ -348,18 +355,20 @@ export function KnowledgeScreen({navigation}: Props) {
     try {
       await knowledgeAction({action: 'delete_documents', payload: {paths: [path]}}, scope);
       setSheet(null);
-      showToast('已删除');
+      showToast(tr('common_deleted'));
       await reload();
     } catch (e) {
       setSheet(null);
-      showToast(`删除失败：${actionError(e)}`);
+      showToast(trf('common_delete_failed', {error: actionError(e)}));
     }
   };
 
   const pages = tree?.stats?.pages ?? 0;
   const shared = viewed.multi && !viewed.isDefault && viewed.agent?.knowledge_mode === 'shared';
   const statsLine = tree
-    ? [`${pages} 篇`, formatBytes(tree.stats?.size ?? 0), shared ? '与默认 Agent 共用' : null].filter(Boolean).join(' · ')
+    ? [trf('knowledge_pages_count', {n: pages}), formatBytes(tree.stats?.size ?? 0), shared ? tr('knowledge_shared_with_default') : null]
+        .filter(Boolean)
+        .join(' · ')
     : '';
 
   const renderRow = ({item}: {item: Row}) => {
@@ -374,7 +383,7 @@ export function KnowledgeScreen({navigation}: Props) {
           <Text style={styles.catCount}>{item.total}</Text>
           <IconButton
             icon={faEllipsis}
-            label={`${item.path} 的操作`}
+            label={trf('knowledge_category_actions', {path: item.path})}
             size={13}
             color={t.t3}
             onPress={() => setSheet({kind: 'category', path: item.path, total: item.total})}
@@ -383,13 +392,13 @@ export function KnowledgeScreen({navigation}: Props) {
       );
     }
     if (item.kind === 'empty') {
-      return <Text style={[styles.emptyCat, {paddingLeft: 10 + item.depth * 16 + 22}]}>空分类</Text>;
+      return <Text style={[styles.emptyCat, {paddingLeft: 10 + item.depth * 16 + 22}]}>{tr('knowledge_empty_category')}</Text>;
     }
     const locked = isProtectedPage(item.path);
     return (
       <Pressable
         accessibilityRole="button"
-        accessibilityHint={locked ? undefined : '长按可移动或删除'}
+        accessibilityHint={locked ? undefined : tr('knowledge_doc_row_hint')}
         onPress={() => openDoc(item.path, item.title)}
         onLongPress={locked ? undefined : () => setSheet({kind: 'doc', path: item.path, title: item.title})}
         style={({pressed}) => [styles.docRow, indent, pressed && styles.rowPressed]}>
@@ -399,7 +408,7 @@ export function KnowledgeScreen({navigation}: Props) {
             {item.title}
           </Text>
           <Text style={styles.docMeta} numberOfLines={1}>
-            {[item.name, formatBytes(item.size), locked ? 'Agent 维护' : null].filter(Boolean).join(' · ')}
+            {[item.name, formatBytes(item.size), locked ? tr('knowledge_agent_maintained') : null].filter(Boolean).join(' · ')}
           </Text>
         </View>
         <Icon icon={faChevronRight} size={10} color={t.t4} />
@@ -408,34 +417,43 @@ export function KnowledgeScreen({navigation}: Props) {
   };
 
   const createOptions: Choice<'category' | 'doc' | 'import'>[] = [
-    {key: 'doc', label: '新建文档', desc: '在某个分类里写一篇新页面', icon: faFileCirclePlus},
-    {key: 'category', label: '新建分类', desc: '用 / 分隔可以建多级，如 research/ai', icon: faFolderPlus},
-    {key: 'import', label: '导入文件', desc: '从手机选择 .md 或 .txt 文件', icon: faFileImport},
+    {key: 'doc', label: tr('knowledge_new_doc'), desc: tr('knowledge_new_doc_desc'), icon: faFileCirclePlus},
+    {key: 'category', label: tr('knowledge_new_category'), desc: tr('knowledge_new_category_desc'), icon: faFolderPlus},
+    {key: 'import', label: tr('knowledge_import'), desc: tr('knowledge_import_desc'), icon: faFileImport},
   ];
 
   const categoryOptions: Choice<'doc' | 'import' | 'sub' | 'rename' | 'delete'>[] = [
-    {key: 'doc', label: '在这里新建文档', icon: faFileCirclePlus},
-    {key: 'import', label: '导入文件到这里', icon: faFileImport},
-    {key: 'sub', label: '新建子分类', icon: faFolderPlus},
-    {key: 'rename', label: '重命名或移动', icon: faPen},
-    {key: 'delete', label: '删除分类', icon: faTrashCan},
+    {key: 'doc', label: tr('knowledge_new_doc_here'), icon: faFileCirclePlus},
+    {key: 'import', label: tr('knowledge_import_here'), icon: faFileImport},
+    {key: 'sub', label: tr('knowledge_new_subcategory'), icon: faFolderPlus},
+    {key: 'rename', label: tr('knowledge_rename_or_move'), icon: faPen},
+    {key: 'delete', label: tr('knowledge_delete_category'), icon: faTrashCan},
   ];
 
   return (
     <View style={styles.root}>
       <PageHeader
-        title="知识库"
+        title={tr('knowledge_title')}
         subtitle={viewed.multi ? viewed.agent?.name ?? viewed.agentId ?? undefined : undefined}
         onTitlePress={viewed.multi ? () => setSheet({kind: 'agent'}) : undefined}
         onBack={navigation.goBack}
-        right={<IconButton icon={faPlus} label="新建" filled size={13} color={t.t1} onPress={() => setSheet({kind: 'create'})} />}
+        right={
+          <IconButton
+            icon={faPlus}
+            label={tr('common_create')}
+            filled
+            size={13}
+            color={t.t1}
+            onPress={() => setSheet({kind: 'create'})}
+          />
+        }
       />
       <Segmented
         value={tab}
         onChange={setTab}
         options={[
-          {key: 'docs', label: '文档', count: pages || undefined},
-          {key: 'graph', label: '图谱'},
+          {key: 'docs', label: tr('knowledge_tab_docs'), count: pages || undefined},
+          {key: 'graph', label: tr('knowledge_tab_graph')},
         ]}
       />
       <SwipeTabs tabs={TABS} value={tab} onChange={setTab} enabled={tab === 'docs'}>
@@ -447,7 +465,7 @@ export function KnowledgeScreen({navigation}: Props) {
                 <TextInput
                   value={search}
                   onChangeText={setSearch}
-                  placeholder="搜索标题或文件名"
+                  placeholder={tr('knowledge_search_placeholder')}
                   placeholderTextColor={t.t4}
                   selectionColor={t.accent}
                   cursorColor={t.accent}
@@ -456,7 +474,7 @@ export function KnowledgeScreen({navigation}: Props) {
                   style={styles.searchInput}
                 />
                 {!!search && (
-                  <Pressable accessibilityLabel="清除搜索" hitSlop={8} onPress={() => setSearch('')}>
+                  <Pressable accessibilityLabel={tr('knowledge_clear_search')} hitSlop={8} onPress={() => setSearch('')}>
                     <Icon icon={faXmark} size={12} color={t.t3} />
                   </Pressable>
                 )}
@@ -474,19 +492,14 @@ export function KnowledgeScreen({navigation}: Props) {
                   loading={!tree && !error}
                   title={
                     error
-                      ? '加载失败'
+                      ? tr('common_load_failed')
                       : search
-                        ? '没有匹配的文档'
+                        ? tr('knowledge_no_match')
                         : tree?.enabled === false
-                          ? '知识库功能已关闭'
-                          : '知识库是空的'
+                          ? tr('knowledge_disabled')
+                          : tr('knowledge_empty')
                   }
-                  hint={
-                    error ??
-                    (search
-                      ? undefined
-                      : '点右上角 + 新建分类和文档、导入文件，或者在对话里把资料发给 Agent，说「存进知识库」')
-                  }
+                  hint={error ?? (search ? undefined : tr('knowledge_empty_hint'))}
                 />
               }
               refreshControl={
@@ -499,22 +512,26 @@ export function KnowledgeScreen({navigation}: Props) {
         ) : (
           <EmptyState
             loading={!graph && !graphError}
-            title={graphError ? '加载失败' : '还没有可以画成图谱的页面'}
-            hint={graphError ?? '页面之间用 Markdown 链接互相引用，就会在这里连成网'}
+            title={graphError ? tr('common_load_failed') : tr('knowledge_graph_empty')}
+            hint={graphError ?? tr('knowledge_graph_empty_hint')}
           />
         )}
       </SwipeTabs>
 
       <ChoiceSheet
         visible={sheet?.kind === 'create'}
-        title="新建"
+        title={tr('common_create')}
         options={createOptions}
         onSelect={key => (key === 'category' ? next({kind: 'newCategory'}) : needCategory(key))}
         onClose={() => setSheet(null)}
       />
       <ChoiceSheet
         visible={sheet?.kind === 'pickCategory'}
-        title={sheet?.kind === 'pickCategory' && sheet.purpose === 'import' ? '导入到哪个分类' : '新文档放在哪个分类'}
+        title={
+          sheet?.kind === 'pickCategory' && sheet.purpose === 'import'
+            ? tr('knowledge_pick_import_category')
+            : tr('knowledge_pick_doc_category')
+        }
         options={categories.map(c => ({key: c, label: c}))}
         onSelect={c =>
           sheet?.kind === 'pickCategory' && sheet.purpose === 'import' ? runImport(c) : next({kind: 'newDoc', category: c})
@@ -523,27 +540,35 @@ export function KnowledgeScreen({navigation}: Props) {
       />
       <FieldSheet
         visible={sheet?.kind === 'newCategory'}
-        title={sheet?.kind === 'newCategory' && sheet.parent ? `在 ${sheet.parent} 下新建分类` : '新建分类'}
-        placeholder={sheet?.kind === 'newCategory' && sheet.parent ? '子分类名' : '如 research 或 research/ai'}
-        hint="用 / 分隔可以一次建多级"
+        title={
+          sheet?.kind === 'newCategory' && sheet.parent
+            ? trf('knowledge_new_category_in', {parent: sheet.parent})
+            : tr('knowledge_new_category')
+        }
+        placeholder={
+          sheet?.kind === 'newCategory' && sheet.parent
+            ? tr('knowledge_subcategory_placeholder')
+            : tr('knowledge_category_placeholder')
+        }
+        hint={tr('knowledge_category_field_hint')}
         allowEmpty={false}
-        submitLabel="创建"
+        submitLabel={tr('knowledge_create')}
         onSubmit={v => createCategory(v, sheet?.kind === 'newCategory' ? sheet.parent : undefined)}
         onClose={() => setSheet(null)}
       />
       <FieldSheet
         visible={sheet?.kind === 'newDoc'}
-        title={sheet?.kind === 'newDoc' ? `在 ${sheet.category} 里新建文档` : '新建文档'}
-        placeholder="文件名，如 my-note"
-        hint="会以 .md 保存，并带上摘要 / 关键点 / 参考的模板，创建后直接进入编辑"
+        title={sheet?.kind === 'newDoc' ? trf('knowledge_new_doc_in', {category: sheet.category}) : tr('knowledge_new_doc')}
+        placeholder={tr('knowledge_doc_name_placeholder')}
+        hint={tr('knowledge_doc_name_hint')}
         allowEmpty={false}
-        submitLabel="创建并编辑"
+        submitLabel={tr('knowledge_create_and_edit')}
         onSubmit={v => (sheet?.kind === 'newDoc' ? createDoc(v, sheet.category) : undefined)}
         onClose={() => setSheet(null)}
       />
       <ChoiceSheet
         visible={sheet?.kind === 'category'}
-        title={sheet?.kind === 'category' ? sheet.path : '分类'}
+        title={sheet?.kind === 'category' ? sheet.path : tr('knowledge_category')}
         options={categoryOptions}
         onSelect={key => {
           if (sheet?.kind !== 'category') {
@@ -566,34 +591,34 @@ export function KnowledgeScreen({navigation}: Props) {
       />
       <FieldSheet
         visible={sheet?.kind === 'rename'}
-        title="重命名分类"
+        title={tr('knowledge_rename_category')}
         initial={sheet?.kind === 'rename' ? sheet.path : ''}
-        hint="改写路径即可移动，如把 notes 改成 archive/notes；里面的文档会一起搬过去"
+        hint={tr('knowledge_rename_hint')}
         allowEmpty={false}
         onSubmit={v => (sheet?.kind === 'rename' ? renameCategory(v, sheet.path) : undefined)}
         onClose={() => setSheet(null)}
       />
       <ConfirmSheet
         visible={sheet?.kind === 'deleteCategory'}
-        title="删除分类"
+        title={tr('knowledge_delete_category')}
         message={
           sheet?.kind === 'deleteCategory'
             ? sheet.total
-              ? `「${sheet.path}」和里面的 ${sheet.total} 篇文档会一起删除，Agent 也将检索不到它们。`
-              : `「${sheet.path}」是空分类，删除后可以随时再建。`
+              ? trf('knowledge_delete_category_msg', {path: sheet.path, n: sheet.total})
+              : trf('knowledge_delete_empty_category_msg', {path: sheet.path})
             : ''
         }
-        confirmLabel="删除"
+        confirmLabel={tr('common_delete')}
         danger
         onConfirm={() => (sheet?.kind === 'deleteCategory' ? deleteCategory(sheet.path) : undefined)}
         onClose={() => setSheet(null)}
       />
       <ChoiceSheet
         visible={sheet?.kind === 'doc'}
-        title={sheet?.kind === 'doc' ? sheet.title : '文档'}
+        title={sheet?.kind === 'doc' ? sheet.title : tr('knowledge_doc')}
         options={[
-          {key: 'move', label: '移动到其他分类', icon: faArrowRightArrowLeft},
-          {key: 'delete', label: '删除', icon: faTrashCan},
+          {key: 'move', label: tr('knowledge_move_to_other'), icon: faArrowRightArrowLeft},
+          {key: 'delete', label: tr('common_delete'), icon: faTrashCan},
         ]}
         onSelect={key => {
           if (sheet?.kind !== 'doc') {
@@ -604,7 +629,7 @@ export function KnowledgeScreen({navigation}: Props) {
           if (key === 'move') {
             if (!categories.some(c => c !== here)) {
               setSheet(null);
-              showToast('没有其他分类可以移动过去');
+              showToast(tr('knowledge_no_other_category'));
               return;
             }
             next({kind: 'move', path, title});
@@ -616,7 +641,7 @@ export function KnowledgeScreen({navigation}: Props) {
       />
       <ChoiceSheet
         visible={sheet?.kind === 'move'}
-        title="移动到"
+        title={tr('knowledge_move_to')}
         options={categories
           .filter(c => sheet?.kind !== 'move' || !sheet.path.startsWith(`${c}/`) || sheet.path.slice(c.length + 1).includes('/'))
           .map(c => ({key: c, label: c}))}
@@ -625,16 +650,16 @@ export function KnowledgeScreen({navigation}: Props) {
       />
       <ConfirmSheet
         visible={sheet?.kind === 'deleteDoc'}
-        title="删除文档"
-        message={sheet?.kind === 'deleteDoc' ? `「${sheet.title}」会从知识库中删除，Agent 也将检索不到它。` : ''}
-        confirmLabel="删除"
+        title={tr('knowledge_delete_doc')}
+        message={sheet?.kind === 'deleteDoc' ? trf('knowledge_delete_doc_msg', {title: sheet.title}) : ''}
+        confirmLabel={tr('common_delete')}
         danger
         onConfirm={() => (sheet?.kind === 'deleteDoc' ? deleteDoc(sheet.path) : undefined)}
         onClose={() => setSheet(null)}
       />
       <AgentSheet
         visible={sheet?.kind === 'agent'}
-        title="查看哪个 Agent 的知识库"
+        title={tr('knowledge_pick_agent')}
         selectedId={viewed.agentId}
         onSelect={switchAgent}
         onClose={() => setSheet(null)}

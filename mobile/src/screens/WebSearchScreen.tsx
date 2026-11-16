@@ -9,6 +9,7 @@ import {compactMask, ProviderSheet} from '../components/ProviderSheet';
 import {FieldSheet, StatusTag} from '../components/settings';
 import {showToast, ToastHost} from '../components/Toast';
 import {EmptyState, PageHeader} from '../components/ui';
+import {tr, trf} from '../i18n';
 import type {RootStackParamList} from '../navigation/types';
 import type {ModelsState, ProviderEntry, SearchProviderMeta} from '../protocol/resources';
 import {describeConnectError} from '../store/serverStore';
@@ -19,15 +20,15 @@ type Props = StackScreenProps<RootStackParamList, 'WebSearch'>;
 
 function providerDetail(p: SearchProviderMeta): string {
   if (!p.configured) {
-    return searchEditor(p) === 'vendor' ? '与同名模型厂商共用 API Key' : '未配置';
+    return searchEditor(p) === 'vendor' ? tr('settings_search_shared_key') : tr('common_not_configured');
   }
   if (p.anonymous) {
-    return '匿名模式';
+    return tr('settings_anonymous_mode');
   }
   if (p.needs_url) {
-    return p.url_masked || '已配置';
+    return p.url_masked || tr('settings_configured');
   }
-  return p.api_key_masked ? compactMask(p.api_key_masked) : '已配置';
+  return p.api_key_masked ? compactMask(p.api_key_masked) : tr('settings_configured');
 }
 
 export function WebSearchScreen({navigation}: Props) {
@@ -57,8 +58,8 @@ export function WebSearchScreen({navigation}: Props) {
   if (!data || !search) {
     return (
       <View style={styles.root}>
-        <PageHeader title="联网搜索" onBack={navigation.goBack} />
-        <EmptyState loading={!error} title="加载失败" hint={error ?? '服务端没有返回搜索配置'} />
+        <PageHeader title={tr('settings_web_search')} onBack={navigation.goBack} />
+        <EmptyState loading={!error} title={tr('common_load_failed')} hint={error ?? tr('settings_search_missing')} />
       </View>
     );
   }
@@ -78,16 +79,16 @@ export function WebSearchScreen({navigation}: Props) {
     try {
       await setSearchStrategy(strategy, provider);
       await load();
-      showToast(strategy === 'auto' ? '已改为自动选择' : '已保存');
+      showToast(strategy === 'auto' ? tr('settings_search_auto_saved') : tr('common_saved'));
     } catch (e) {
-      showToast(`保存失败：${describeConnectError(e)}`);
+      showToast(trf('common_save_failed_detail', {error: describeConnectError(e)}));
     }
   };
 
   const chooseFixed = () => {
     const target = configured.find(p => p.id === fixedId) ?? configured[0];
     if (!target) {
-      showToast('先配置一个搜索厂商');
+      showToast(tr('settings_search_need_vendor'));
       return;
     }
     saveStrategy('fixed', target.id);
@@ -101,10 +102,13 @@ export function WebSearchScreen({navigation}: Props) {
     }
     const entry = data.providers.find(x => x.id === p.id);
     if (!entry) {
-      showToast('找不到对应的模型厂商');
+      showToast(tr('settings_vendor_not_found'));
       return;
     }
-    setVendor({provider: entry, note: kind === 'deepseek' ? searchHelp('deepseek') : '搜索与这个模型厂商共用 API Key'});
+    setVendor({
+      provider: entry,
+      note: kind === 'deepseek' ? searchHelp('deepseek') : tr('settings_search_vendor_note'),
+    });
   };
 
   const saveKey = async (value: string) => {
@@ -114,19 +118,19 @@ export function WebSearchScreen({navigation}: Props) {
     }
     if (p.needs_url) {
       if (!/^https?:\/\//i.test(value)) {
-        throw new Error('请填写以 http:// 或 https:// 开头的地址');
+        throw new Error(tr('settings_url_invalid'));
       }
       await setSearchCredential(p.id, {url: value});
     } else if (!value) {
       if (!searchAllowsAnonymous(p.id)) {
-        throw new Error('请填写 API Key');
+        throw new Error(tr('settings_need_api_key'));
       }
       await setSearchCredential(p.id, {api_key: '', anonymous: true});
     } else {
       await setSearchCredential(p.id, {api_key: value});
     }
     await load();
-    showToast(`${labelText(p.label, p.id)} 已保存`);
+    showToast(trf('settings_named_saved', {name: labelText(p.label, p.id)}));
   };
 
   const renderProvider = (p: SearchProviderMeta, i: number) => (
@@ -135,35 +139,50 @@ export function WebSearchScreen({navigation}: Props) {
       first={i === 0}
       title={labelText(p.label, p.id)}
       hint={providerDetail(p)}
-      right={<StatusTag label={p.configured ? (p.anonymous ? '匿名' : '已配置') : '未配置'} on={p.configured} />}
+      right={
+        <StatusTag
+          label={
+            p.configured
+              ? p.anonymous
+                ? tr('settings_anonymous')
+                : tr('settings_configured')
+              : tr('common_not_configured')
+          }
+          on={p.configured}
+        />
+      }
       onPress={() => open(p)}
     />
   );
 
   return (
     <View style={styles.root}>
-      <PageHeader title="联网搜索" subtitle="实时网页检索，用于搜索工具" onBack={navigation.goBack} />
+      <PageHeader title={tr('settings_web_search')} subtitle={tr('settings_search_subtitle')} onBack={navigation.goBack} />
       <ScrollView
         contentContainerStyle={{paddingBottom: insets.bottom + 32}}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={t.t3} colors={[t.green]} />}>
-        <Section title="策略">
+        <Section title={tr('settings_strategy')}>
           <OptionRow
             first
-            title="自动"
-            hint={current && search.strategy === 'auto' ? `当前使用 ${labelText(current.label, current.id)}` : '从已配置的厂商中自动选择'}
+            title={tr('settings_auto')}
+            hint={
+              current && search.strategy === 'auto'
+                ? trf('settings_currently_using', {name: labelText(current.label, current.id)})
+                : tr('settings_search_auto_hint')
+            }
             selected={search.strategy !== 'fixed'}
             onPress={() => search.strategy === 'fixed' && saveStrategy('auto')}
           />
           <OptionRow
-            title="指定"
-            hint="始终使用下面选定的一个厂商"
+            title={tr('settings_search_fixed')}
+            hint={tr('settings_search_fixed_hint')}
             selected={search.strategy === 'fixed'}
             onPress={() => search.strategy !== 'fixed' && chooseFixed()}
           />
         </Section>
 
         {search.strategy === 'fixed' && !!configured.length && (
-          <Section title="使用的厂商" footer="只能指定已配置的厂商">
+          <Section title={tr('settings_search_used_vendor')} footer={tr('settings_search_fixed_footer')}>
             {configured.map((p, i) => (
               <OptionRow
                 key={p.id}
@@ -176,9 +195,9 @@ export function WebSearchScreen({navigation}: Props) {
           </Section>
         )}
 
-        {!!configured.length && <Section title="已配置">{configured.map(renderProvider)}</Section>}
+        {!!configured.length && <Section title={tr('settings_configured')}>{configured.map(renderProvider)}</Section>}
         {!!missing.length && (
-          <Section title="可添加" footer="点按厂商填写密钥。AnySearch 和 Keenable 留空即可匿名使用。">
+          <Section title={tr('settings_search_addable')} footer={tr('settings_search_addable_footer')}>
             {missing.map(renderProvider)}
           </Section>
         )}
@@ -186,15 +205,21 @@ export function WebSearchScreen({navigation}: Props) {
 
       <FieldSheet
         visible={!!keyTarget}
-        title={keyTarget ? `${labelText(keyTarget.label, keyTarget.id)}${keyTarget.needs_url ? ' 实例地址' : ' API Key'}` : ''}
+        title={
+          keyTarget
+            ? trf(keyTarget.needs_url ? 'settings_instance_url_title' : 'settings_api_key_title', {
+                name: labelText(keyTarget.label, keyTarget.id),
+              })
+            : ''
+        }
         placeholder={
           keyTarget?.needs_url
             ? keyTarget.url_masked || 'https://searx.example.com'
             : keyTarget?.api_key_masked
               ? compactMask(keyTarget.api_key_masked)
               : keyTarget && searchAllowsAnonymous(keyTarget.id)
-                ? '留空使用匿名模式'
-                : '粘贴 API Key'
+                ? tr('settings_anonymous_ph')
+                : tr('settings_paste_api_key')
         }
         hint={keyTarget ? searchHelp(keyTarget.id) : undefined}
         secure={!keyTarget?.needs_url}
@@ -211,7 +236,7 @@ export function WebSearchScreen({navigation}: Props) {
         onSaved={async () => {
           setVendor(null);
           await load();
-          showToast('已保存');
+          showToast(tr('common_saved'));
         }}
       />
       <ToastHost bottom={insets.bottom + 28} />

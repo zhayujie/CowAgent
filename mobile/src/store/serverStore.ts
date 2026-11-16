@@ -2,6 +2,7 @@ import {create} from 'zustand';
 import {checkAuth, login, probeServer} from '../api/cowApi';
 import {ApiError, http, normalizeBaseUrl} from '../api/http';
 import {DEFAULT_SERVER_NAME, DEFAULT_SERVER_URL} from '../config/defaults';
+import {tr, trf} from '../i18n';
 import {LOCAL_SERVER_ID, LOCAL_SERVER_NAME, startLocalKernel} from '../kernel/localKernel';
 import type {ServerEnvelope, ServerInfo} from '../protocol/envelope';
 import {realtime, type RealtimeStatus} from '../realtime/RealtimeClient';
@@ -101,17 +102,17 @@ export function describeConnectError(e: unknown): string {
   if (e instanceof ApiError) {
     switch (e.kind) {
       case 'timeout':
-        return '连接超时，请检查地址和网络';
+        return tr('login_err_timeout');
       case 'network':
-        return '无法连接：域名解析失败、证书无效或端口不通';
+        return tr('login_err_network');
       case 'unauthorized':
-        return '访问密码错误或登录已失效';
+        return tr('login_err_unauthorized');
       case 'invalid_response':
-        return '对方不是 CowAgent 服务';
+        return tr('login_err_not_cow');
       case 'server':
         return e.message;
       default:
-        return `服务器返回错误（${e.status ?? '未知'}）`;
+        return trf('login_err_server_status', {status: e.status ?? tr('common_unknown')});
     }
   }
   return e instanceof Error ? e.message : String(e);
@@ -203,7 +204,15 @@ export const useServerStore = create<ServerState>((set, get) => ({
     if (servers.length === 0 && DEFAULT_SERVER_URL) {
       const baseUrl = normalizeBaseUrl(DEFAULT_SERVER_URL);
       servers = [
-        {id: serverIdFor(baseUrl), name: DEFAULT_SERVER_NAME, baseUrl, wsUrl: null},
+        {
+          id: serverIdFor(baseUrl),
+          // Resolved on read: the saved language may load after this, and a switch keeps the store.
+          get name() {
+            return DEFAULT_SERVER_NAME || tr('access_default_server_name');
+          },
+          baseUrl,
+          wsUrl: null,
+        },
       ];
     }
     const activeId = saved.activeId ?? servers[0]?.id;
@@ -243,7 +252,7 @@ export const useServerStore = create<ServerState>((set, get) => ({
     const profile = activeServer();
     const token = issued || (await login(password));
     if (!profile || !token) {
-      throw new ApiError('server', '重新登录失败，请退出后用新密码登录');
+      throw new ApiError('server', tr('login_err_relogin'));
     }
     await secureStore.set(tokenKey(profile.id), token);
     http.setToken(token);

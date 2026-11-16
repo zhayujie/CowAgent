@@ -13,6 +13,7 @@ import {
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
+import {tr, trf} from '../i18n';
 import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
 import {Icon} from './Icon';
@@ -85,7 +86,7 @@ export function SettingRow({
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={value ? `${title}，${value}` : title}
+      accessibilityLabel={value ? trf('settings_a11y_title_value', {title, value}) : title}
       onPress={onPress}
       onLongPress={onLongPress}
       style={({pressed}) => [styles.row, last && styles.rowLast, pressed && styles.rowPressed]}>
@@ -262,7 +263,7 @@ export function FieldSheet({
   multiline,
   mono,
   allowEmpty = true,
-  submitLabel = '保存',
+  submitLabel,
   describe,
   onSubmit,
   onClose,
@@ -339,7 +340,7 @@ export function FieldSheet({
           !!hint && <Text style={styles.sheetHint}>{hint}</Text>
         )}
         <ActionButton
-          label={submitLabel}
+          label={submitLabel ?? tr('common_save')}
           tone="primary"
           loading={busy}
           disabled={!allowEmpty && !value.trim()}
@@ -439,7 +440,7 @@ export function ConfirmSheet({
       <View style={styles.sheetBody}>
         <Text style={styles.confirmText}>{message}</Text>
         <View style={styles.confirmActions}>
-          <ActionButton label="取消" onPress={onClose} style={styles.flex} />
+          <ActionButton label={tr('common_cancel')} onPress={onClose} style={styles.flex} />
           <ActionButton
             label={confirmLabel}
             tone={danger ? 'danger' : 'primary'}

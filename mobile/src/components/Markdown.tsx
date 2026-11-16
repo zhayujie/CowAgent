@@ -22,6 +22,7 @@ import {
   splitFilePaths,
 } from '../files/chatFile';
 import {openFileRef, openLink, useImageViewer} from '../files/openFile';
+import {trf} from '../i18n';
 import type {Palette} from '../theme/palette';
 import {useTheme} from '../theme/theme';
 import {languageOf} from '../utils/highlight';
@@ -66,7 +67,7 @@ class ChatRenderer extends Renderer {
             <Text
               key={`f${i}`}
               accessibilityRole="link"
-              accessibilityLabel={`打开文件 ${p.path}`}
+              accessibilityLabel={trf('file_open_named', {path: p.path})}
               onPress={() => openFileRef(p.path)}
               style={[styles.fileChip, {color: t.accent, backgroundColor: t.accentSoft}]}>
               {` ${fileBaseName(p.path)} `}
@@ -101,7 +102,7 @@ class ChatRenderer extends Renderer {
         key={this.getKey()}
         selectable
         accessibilityRole="link"
-        accessibilityLabel={`打开文件 ${path}`}
+        accessibilityLabel={trf('file_open_named', {path})}
         onPress={() => openFileRef(path)}
         style={[codeStyle, styles.codeLink, {color: this.t.accent}]}>
         {text}
@@ -338,7 +339,7 @@ function ReplyImage({file, maxWidth}: {file: ChatFile; maxWidth: number}) {
   if (failed) {
     return (
       <Text style={[styles.imageMissing, {color: t.t3}]} numberOfLines={1}>
-        [图片无法加载：{file.name}]
+        {trf('file_image_missing', {name: file.name})}
       </Text>
     );
   }
@@ -351,7 +352,7 @@ function ReplyImage({file, maxWidth}: {file: ChatFile; maxWidth: number}) {
   return (
     <Pressable
       accessibilityRole="imagebutton"
-      accessibilityLabel={`查看图片 ${file.name}`}
+      accessibilityLabel={trf('file_view_image_named', {name: file.name})}
       onPress={() => useImageViewer.getState().show(file)}
       style={styles.imageWrap}>
       <Image

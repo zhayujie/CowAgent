@@ -2,6 +2,7 @@ import {faArrowUpRightFromSquare, faCheck, faRotateRight} from '@fortawesome/fre
 import React, {useEffect, useRef, useState} from 'react';
 import {ActivityIndicator, Image, Linking, Pressable, Text, View} from 'react-native';
 import {channelAction, getChannels, getFeishuRegister, getWeixinQr, pollFeishuRegister, pollWeixinQr} from '../api/cowApi';
+import {tr, trf} from '../i18n';
 import {describeConnectError} from '../store/serverStore';
 import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
@@ -21,24 +22,26 @@ const POLL_MS = 2000;
 const PENDING_TRIES = 15;
 const QR_SIZE = 188;
 
-const COPY: Record<Provider, {loading: string; waiting: string; scanned: string; tip: string; success: string; fail: string}> = {
-  weixin: {
-    loading: '正在获取二维码…',
-    waiting: '用微信扫一扫登录',
-    scanned: '已扫码，请在手机上确认',
-    tip: '二维码约 2 分钟过期，过期后自动换新',
-    success: '登录成功，正在启动通道…',
-    fail: '获取二维码失败',
-  },
-  feishu: {
-    loading: '正在生成二维码…',
-    waiting: '用飞书扫码授权',
-    scanned: '用飞书扫码授权',
-    tip: '授权后自动创建机器人，权限和事件订阅都已配好',
-    success: '机器人已创建，正在连接…',
-    fail: '接入失败',
-  },
-};
+type Copy = {loading: string; waiting: string; scanned: string; tip: string; success: string; fail: string};
+
+const copyOf = (provider: Provider): Copy =>
+  provider === 'weixin'
+    ? {
+        loading: tr('qr_weixin_loading'),
+        waiting: tr('qr_weixin_waiting'),
+        scanned: tr('qr_weixin_scanned'),
+        tip: tr('qr_weixin_tip'),
+        success: tr('qr_weixin_success'),
+        fail: tr('qr_weixin_fail'),
+      }
+    : {
+        loading: tr('qr_feishu_loading'),
+        waiting: tr('qr_feishu_waiting'),
+        scanned: tr('qr_feishu_waiting'),
+        tip: tr('qr_feishu_tip'),
+        success: tr('qr_feishu_success'),
+        fail: tr('qr_feishu_fail'),
+      };
 
 /**
  * Fetches a login QR, polls it and connects the channel once confirmed.
@@ -58,7 +61,7 @@ export function QrLoginPanel({
 }) {
   const t = useTheme();
   const styles = useStyles();
-  const copy = COPY[provider];
+  const copy = copyOf(provider);
   const instanceArg = newInstance ? '' : instanceId || undefined;
   const [phase, setPhase] = useState<Phase>('loading');
   const [qr, setQr] = useState('');
@@ -95,7 +98,7 @@ export function QrLoginPanel({
         done.current({instanceId: res.instance_id, downloading: res.downloading});
       }
     } catch (e) {
-      fail(`连接失败：${describeConnectError(e)}`);
+      fail(trf('channel_connect_failed', {error: describeConnectError(e)}));
     }
   };
 
@@ -190,7 +193,7 @@ export function QrLoginPanel({
         pollWeixin();
       }
     } catch (e) {
-      fail(`${copy.fail}：${describeConnectError(e)}`);
+      fail(trf('qr_fail_detail', {fail: copy.fail, error: describeConnectError(e)}));
     }
   };
 
@@ -224,9 +227,9 @@ export function QrLoginPanel({
       if (status === 'done') {
         await connect({feishu_app_id: res.app_id, feishu_app_secret: res.app_secret});
       } else if (status === 'expired') {
-        fail('二维码已过期');
+        fail(tr('qr_expired'));
       } else if (status === 'denied') {
-        fail('授权被拒绝');
+        fail(tr('qr_denied'));
       } else if (status === 'error') {
         fail(res.message || copy.fail);
       } else {
@@ -250,7 +253,7 @@ export function QrLoginPanel({
       setPhase('waiting');
       pollFeishu();
     } catch (e) {
-      fail(`${copy.fail}：${describeConnectError(e)}`);
+      fail(trf('qr_fail_detail', {fail: copy.fail, error: describeConnectError(e)}));
     }
   };
 
@@ -279,8 +282,8 @@ export function QrLoginPanel({
     return (
       <View style={[styles.panel, styles.quiet]}>
         <ActivityIndicator color={t.t3} />
-        <Text style={styles.muted}>{phase === 'loading' ? copy.loading : '正在下载飞书组件…'}</Text>
-        {phase === 'downloading' && <Text style={styles.tip}>首次接入需要下载约 1 MB，完成后自动继续</Text>}
+        <Text style={styles.muted}>{phase === 'loading' ? copy.loading : tr('qr_downloading')}</Text>
+        {phase === 'downloading' && <Text style={styles.tip}>{tr('qr_downloading_tip')}</Text>}
       </View>
     );
   }
@@ -305,7 +308,7 @@ export function QrLoginPanel({
           onPress={start}
           style={({pressed}) => [styles.retry, pressed && styles.pressed]}>
           <Icon icon={faRotateRight} size={12} color={t.t1} />
-          <Text style={styles.retryText}>重试</Text>
+          <Text style={styles.retryText}>{tr('common_retry')}</Text>
         </Pressable>
       </View>
     );
@@ -318,7 +321,7 @@ export function QrLoginPanel({
         {qr ? (
           <Image
             source={{uri: qr}}
-            accessibilityLabel={provider === 'weixin' ? '微信登录二维码' : '飞书授权二维码'}
+            accessibilityLabel={provider === 'weixin' ? tr('qr_weixin_image') : tr('qr_feishu_image')}
             style={[styles.qr, scanned && styles.qrFaded]}
             resizeMode="contain"
           />
@@ -341,7 +344,7 @@ export function QrLoginPanel({
           accessibilityRole="link"
           onPress={() => Linking.openURL(link).catch(() => undefined)}
           style={({pressed}) => [styles.open, pressed && styles.pressed]}>
-          <Text style={styles.openText}>在飞书中打开</Text>
+          <Text style={styles.openText}>{tr('qr_open_feishu')}</Text>
           <Icon icon={faArrowUpRightFromSquare} size={11} color={t.accent} />
         </Pressable>
       )}

@@ -11,6 +11,7 @@ import React, {useMemo} from 'react';
 import {Pressable, ScrollView, Text, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import type {ChatFile} from '../files/chatFile';
+import {tr, trf, type MessageKey} from '../i18n';
 import {LOCAL_SERVER_NAME} from '../kernel/localKernel';
 import {BUILTIN_VIEWS, menuSections, type MenuEntry, type MenuRoute} from '../navigation/menuViews';
 import type {SessionItem} from '../protocol/events';
@@ -30,9 +31,9 @@ export type DrawerRoute = 'Sessions' | MenuRoute;
 /** "chat" lists conversations only; "features" lists every other menu page. */
 export type DrawerMode = 'features' | 'chat';
 
-const MODES: {key: DrawerMode; label: string}[] = [
-  {key: 'features', label: '功能'},
-  {key: 'chat', label: '对话'},
+const MODES: {key: DrawerMode; label: MessageKey}[] = [
+  {key: 'features', label: 'menu_mode_features'},
+  {key: 'chat', label: 'menu_chat'},
 ];
 
 const RECENT_LIMIT = 30;
@@ -129,25 +130,30 @@ export function DrawerMenu({
           onPress={onNewChat}
           style={({pressed}) => [styles.newChat, pressed && styles.pressed]}>
           <Icon icon={faPenToSquare} size={14} color={t.accent} />
-          <Text style={styles.newChatText}>新对话</Text>
+          <Text style={styles.newChatText}>{tr('menu_new_chat')}</Text>
         </Pressable>
         <Pressable
           accessibilityRole="button"
           onPress={onNewTeamChat}
           style={({pressed}) => [styles.newChat, pressed && styles.pressed]}>
           <Icon icon={faUserGroup} size={13} color={t.accent} />
-          <Text style={styles.newChatText}>多智能体对话</Text>
+          <Text style={styles.newChatText}>{tr('menu_new_team_chat')}</Text>
         </Pressable>
       </View>
       <View style={styles.chatLinks}>
-        <Item icon={faComments} label="全部会话" count={total || undefined} onPress={() => onNavigate('Sessions')} />
+        <Item
+          icon={faComments}
+          label={tr('menu_all_sessions')}
+          count={total || undefined}
+          onPress={() => onNavigate('Sessions')}
+        />
         <Item
           icon={BUILTIN_VIEWS.artifacts.icon}
           label={BUILTIN_VIEWS.artifacts.label}
           count={countOf('artifacts')}
           onPress={() => onNavigate('Artifacts')}
         />
-        <Item icon={faCircleUser} label="切换 Agent" onPress={onSwitchAgent} />
+        <Item icon={faCircleUser} label={tr('menu_switch_agent')} onPress={onSwitchAgent} />
       </View>
 
       {groups.map(g => (
@@ -157,18 +163,18 @@ export function DrawerMenu({
             <Item
               key={s.session_id}
               icon={faMessage}
-              label={s.title || '未命名对话'}
-              count={g.title === '昨天' ? clockTime(s.last_active) : shortTime(s.last_active)}
+              label={s.title || tr('menu_untitled_chat')}
+              count={g.key === 'yesterday' ? clockTime(s.last_active) : shortTime(s.last_active)}
               active={s.session_id === currentSessionId}
               onPress={() => onOpenSession(s)}
             />
           ))}
         </React.Fragment>
       ))}
-      {!groups.length && <Text style={styles.empty}>还没有对话，发一条消息就会出现在这里</Text>}
+      {!groups.length && <Text style={styles.empty}>{tr('menu_no_chats')}</Text>}
       {total > RECENT_LIMIT && (
         <Pressable accessibilityRole="button" hitSlop={6} onPress={() => onNavigate('Sessions')} style={styles.more}>
-          <Text style={styles.moreText}>查看全部 {total} 个对话</Text>
+          <Text style={styles.moreText}>{trf('menu_view_all', {n: total})}</Text>
         </Pressable>
       )}
     </>
@@ -201,7 +207,7 @@ export function DrawerMenu({
                 accessibilityState={{selected: active}}
                 onPress={() => onModeChange(m.key)}
                 style={[styles.switchItem, active && styles.switchItemActive]}>
-                <Text style={[styles.switchText, active && styles.switchTextActive]}>{m.label}</Text>
+                <Text style={[styles.switchText, active && styles.switchTextActive]}>{tr(m.label)}</Text>
               </Pressable>
             );
           })}
@@ -237,12 +243,12 @@ export function DrawerMenu({
         </View>
         <View style={styles.footerText}>
           <Text style={styles.serverName} numberOfLines={1}>
-            {host || '未连接'}
+            {host || tr('menu_not_connected')}
           </Text>
           <View style={styles.statusRow}>
             <View style={[styles.statusDot, realtime === 'closed' && styles.statusDotOff]} />
             <Text style={styles.serverStatus}>
-              {realtime === 'closed' ? '重新连接中' : '已连接'}
+              {realtime === 'closed' ? tr('menu_reconnecting') : tr('menu_connected')}
               {version ? ` · v${version}` : ''}
             </Text>
           </View>

@@ -1,3 +1,5 @@
+import {tr, trf} from '../i18n';
+
 export type PasswordStrength = 'short' | 'weak' | 'medium' | 'strong';
 
 export const PASSWORD_MIN_LENGTH = 6;
@@ -28,8 +30,16 @@ export function passwordStrength(pwd: string): PasswordStrength {
 }
 
 export const PASSWORD_STRENGTH_TEXT: Record<PasswordStrength, string> = {
-  short: `至少 ${PASSWORD_MIN_LENGTH} 位`,
-  weak: '强度：弱，加长一些，混用大小写字母、数字和符号',
-  medium: '强度：中',
-  strong: '强度：强',
+  get short() {
+    return trf('settings_pwd_short', {min: PASSWORD_MIN_LENGTH});
+  },
+  get weak() {
+    return tr('settings_pwd_weak');
+  },
+  get medium() {
+    return tr('settings_pwd_medium');
+  },
+  get strong() {
+    return tr('settings_pwd_strong');
+  },
 };

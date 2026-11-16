@@ -1,5 +1,6 @@
 import React from 'react';
 import {StyleSheet, View} from 'react-native';
+import {tr} from '../i18n';
 
 export type MediaKind = 'pdf' | 'video' | 'audio';
 
@@ -15,7 +16,7 @@ export function MediaView({
   onError?: (message: string) => void;
   onReady?: () => void;
 }) {
-  const failed = () => onError?.('这个文件加载失败');
+  const failed = () => onError?.(tr('media_load_failed'));
   if (kind === 'pdf') {
     // No sandbox: a sandboxed frame keeps Chrome's PDF viewer from loading.
     return (

@@ -58,6 +58,7 @@ gesture-handler, reanimated, worklets, screens and svg do not support autolinkin
 ```
 src/
   config/      Default server URL, timeouts and other constants
+  i18n/        zh/en copy (one messages file per area) and tr()/trf()/localizedLabel()
   protocol/    Message types shared with the server (SSE events, WS envelope)
   api/         HTTP client, CowAgent API, SSE reader
   realtime/    Shared WebSocket client (hello/ack/reconnect/dedup) and chat stream subscriptions
@@ -91,6 +92,13 @@ so it works without a separate server. "在本机运行" on the login screen sta
   on a free loopback port with a random password, and exposes `start()` to JS as `NativeModules.CowKernel`.
 - The core runs with `COW_DEPLOYMENT=mobile`: web channel only, loopback only, no plugins, no `bash` / `browser`
   tools and no stdio MCP servers. Data and workspace live under the app's private files directory.
+
+## Languages
+
+The UI ships in Chinese and English. The first launch follows the system language (zh-* gets Chinese, anything
+else English); after that the choice in Settings is kept on the device and also written to the server's `cow_lang`,
+the same as the desktop client. Copy lives in `src/i18n/messages/<area>.ts`. Call `tr()` / `trf()` only while
+rendering or handling an event, never at module top level: modules load before the saved language is read.
 
 ## Known limitations / TODO
 

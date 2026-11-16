@@ -1,4 +1,5 @@
 import {authedUrl, resolveWorkspacePath, serverFileUrl, serverUrl} from '../api/cowApi';
+import {tr, trf} from '../i18n';
 import type {FilePayload, StreamEvent} from '../protocol/events';
 import {FILE_EXTENSIONS, kindFromName} from '../utils/format';
 
@@ -138,12 +139,12 @@ export function viewUrlOf(f: ChatFile): string {
 /** What a failed file request means to the reader. */
 export function fileHttpError(status: number): string {
   if (status === 404) {
-    return '文件已不存在，可能被移动或删除了';
+    return tr('file_http_gone');
   }
   if (status === 401 || status === 403) {
-    return '没有权限读取这个文件';
+    return tr('file_http_denied');
   }
-  return `服务器暂时无法提供这个文件（HTTP ${status}）`;
+  return trf('file_http_other', {status});
 }
 
 /** A path or link a reply mentions, resolved into something the app can open. */
