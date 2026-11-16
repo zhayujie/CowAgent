@@ -23,6 +23,7 @@ import {ChoiceSheet, ConfirmSheet, MONO, Notice, Toggle, type Choice} from '../c
 import {SHEET_DISMISS_MS} from '../components/Sheet';
 import {showToast, ToastHost} from '../components/Toast';
 import {EmptyState, IconButton, PageHeader} from '../components/ui';
+import {tr, trf, type MessageKey} from '../i18n';
 import type {RootStackParamList} from '../navigation/types';
 import type {GuestShare, GuestSharesOverview} from '../protocol/resources';
 import {activeServer, describeConnectError} from '../store/serverStore';
@@ -43,30 +44,18 @@ export function describeShareError(e: unknown): string {
   return describeConnectError(e);
 }
 
-const CONFIRMS: Record<Risky, {title: string; label: string; message: (name: string) => string}> = {
-  'reset-link': {
-    title: '重置链接',
-    label: '重置',
-    message: name => `重置后「${name}」的旧链接和嵌入代码立即失效，正在对话的访客也会断开。`,
-  },
-  disable: {
-    title: '停用',
-    label: '停用',
-    message: name => `停用后「${name}」的链接暂时无法访问，可以随时重新启用。`,
-  },
-  delete: {
-    title: '删除',
-    label: '删除',
-    message: name => `「${name}」的配置、访客文件和对话记录都会被删除，且无法恢复。`,
-  },
+const CONFIRMS: Record<Risky, {title: MessageKey; label: MessageKey; message: MessageKey}> = {
+  'reset-link': {title: 'share_reset_link', label: 'share_reset', message: 'share_reset_link_confirm'},
+  disable: {title: 'share_disable', label: 'share_disable', message: 'share_disable_confirm'},
+  delete: {title: 'common_delete', label: 'common_delete', message: 'share_delete_confirm'},
 };
 
-const DONE: Record<string, string> = {
-  confirm: '已确认',
-  'reset-link': '链接已重置',
-  disable: '已停用',
-  enable: '已启用',
-  delete: '已删除',
+const DONE: Record<string, MessageKey> = {
+  confirm: 'share_done_confirm',
+  'reset-link': 'share_done_reset_link',
+  disable: 'share_done_disable',
+  enable: 'share_done_enable',
+  delete: 'common_deleted',
 };
 
 export function GuestSharesScreen({navigation}: Props) {
@@ -100,8 +89,8 @@ export function GuestSharesScreen({navigation}: Props) {
   if (!data) {
     return (
       <View style={styles.root}>
-        <PageHeader title="访客页面" onBack={navigation.goBack} />
-        <EmptyState loading={!error} title="加载失败" hint={error ?? undefined} />
+        <PageHeader title={tr('share_title')} onBack={navigation.goBack} />
+        <EmptyState loading={!error} title={tr('common_load_failed')} hint={error ?? undefined} />
       </View>
     );
   }
@@ -138,18 +127,18 @@ export function GuestSharesScreen({navigation}: Props) {
         replace((await guestShareAction(share.slug, action)).share);
       }
       setConfirm(null);
-      showToast(DONE[action]);
+      showToast(tr(DONE[action]));
     } catch (e) {
       showToast(describeShareError(e));
     }
   };
 
   const copy = async (url: string) => {
-    showToast((await copyText(url)) ? '链接已复制' : '复制失败');
+    showToast(tr((await copyText(url)) ? 'share_link_copied' : 'access_copy_failed'));
   };
 
   const open = (url: string) => {
-    Linking.openURL(url).catch(() => showToast('无法打开链接'));
+    Linking.openURL(url).catch(() => showToast(tr('share_open_failed')));
   };
 
   const edit = (share: GuestShare, focus?: 'password') => navigation.navigate('GuestShareEdit', {slug: share.slug, focus});
@@ -157,18 +146,23 @@ export function GuestSharesScreen({navigation}: Props) {
   const menuOptions = (share: GuestShare): Choice<MenuKey>[] => {
     const url = shareUrl(share, base);
     return [
-      {key: 'edit', label: '编辑', icon: faPen},
+      {key: 'edit', label: tr('common_edit'), icon: faPen},
       ...(url
         ? [
-            {key: 'copy' as const, label: '复制链接', icon: faCopy},
-            {key: 'open' as const, label: '在浏览器打开', icon: faArrowUpRightFromSquare},
-            {key: 'reset-link' as const, label: '重置链接', desc: '旧链接和嵌入代码立即失效', icon: faArrowRotateRight},
+            {key: 'copy' as const, label: tr('share_copy_link'), icon: faCopy},
+            {key: 'open' as const, label: tr('share_open_browser'), icon: faArrowUpRightFromSquare},
+            {
+              key: 'reset-link' as const,
+              label: tr('share_reset_link'),
+              desc: tr('share_reset_link_desc'),
+              icon: faArrowRotateRight,
+            },
           ]
         : []),
       share.disabled
-        ? {key: 'enable' as const, label: '启用', icon: faCirclePlay}
-        : {key: 'disable' as const, label: '停用', desc: '链接暂时无法访问', icon: faCirclePause},
-      {key: 'delete', label: '删除', icon: faTrashCan},
+        ? {key: 'enable' as const, label: tr('share_enable'), icon: faCirclePlay}
+        : {key: 'disable' as const, label: tr('share_disable'), desc: tr('share_disable_desc'), icon: faCirclePause},
+      {key: 'delete', label: tr('common_delete'), icon: faTrashCan},
     ];
   };
 
@@ -195,28 +189,28 @@ export function GuestSharesScreen({navigation}: Props) {
   return (
     <View style={styles.root}>
       <PageHeader
-        title="访客页面"
-        subtitle="把 Agent 分享成独立的对话页面"
+        title={tr('share_title')}
+        subtitle={tr('share_subtitle')}
         onBack={navigation.goBack}
         right={
           feature.enabled ? (
-            <IconButton icon={faPlus} label="新建访客页面" onPress={() => navigation.navigate('GuestShareEdit', {})} />
+            <IconButton icon={faPlus} label={tr('share_new')} onPress={() => navigation.navigate('GuestShareEdit', {})} />
           ) : undefined
         }
       />
       <ScrollView
         contentContainerStyle={{paddingBottom: insets.bottom + 32}}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={t.t3} colors={[t.green]} />}>
-        <Section footer="访客无需登录，打开链接即可和 Agent 对话，也可以嵌入你的网站。">
+        <Section footer={tr('share_feature_footer')}>
           <InfoRow
             first
-            title="启用访客页面"
-            right={<Toggle value={feature.enabled} onValueChange={toggleFeature} label="启用访客页面" />}
+            title={tr('share_feature_enable')}
+            right={<Toggle value={feature.enabled} onValueChange={toggleFeature} label={tr('share_feature_enable')} />}
           />
         </Section>
 
         {feature.enabled && !feature.web_password_set && (
-          <Notice style={styles.notice}>还没有设置访问密码，访客页面暂不可用。先在「设置 › 访问密码」里设置一个。</Notice>
+          <Notice style={styles.notice}>{tr('share_need_password')}</Notice>
         )}
 
         {feature.enabled &&
@@ -239,8 +233,8 @@ export function GuestSharesScreen({navigation}: Props) {
             onPress={() => navigation.navigate('GuestShareEdit', {})}
             style={({pressed}) => [styles.blank, pressed && styles.pressed]}>
             <Icon icon={faPlus} size={14} color={t.accent} />
-            <Text style={styles.blankTitle}>新建访客页面</Text>
-            <Text style={styles.blankHint}>选好模型、写一句欢迎语，就能把链接发给别人</Text>
+            <Text style={styles.blankTitle}>{tr('share_new')}</Text>
+            <Text style={styles.blankHint}>{tr('share_blank_hint')}</Text>
           </Pressable>
         )}
       </ScrollView>
@@ -254,9 +248,16 @@ export function GuestSharesScreen({navigation}: Props) {
       />
       <ConfirmSheet
         visible={!!confirm}
-        title={confirm ? `${CONFIRMS[confirm.action].title}「${confirm.share.name || confirm.share.slug}」` : ''}
-        message={confirm ? CONFIRMS[confirm.action].message(confirm.share.name || confirm.share.slug) : ''}
-        confirmLabel={confirm ? CONFIRMS[confirm.action].label : ''}
+        title={
+          confirm
+            ? trf('share_confirm_title', {
+                action: tr(CONFIRMS[confirm.action].title),
+                name: confirm.share.name || confirm.share.slug,
+              })
+            : ''
+        }
+        message={confirm ? trf(CONFIRMS[confirm.action].message, {name: confirm.share.name || confirm.share.slug}) : ''}
+        confirmLabel={confirm ? tr(CONFIRMS[confirm.action].label) : ''}
         danger
         onConfirm={() => (confirm ? run(confirm.share, confirm.action) : undefined)}
         onClose={() => setConfirm(null)}
@@ -294,7 +295,7 @@ function ShareCard({
     <View style={styles.card}>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`编辑 ${name}`}
+        accessibilityLabel={trf('share_edit_name', {name})}
         onPress={() => onEdit()}
         style={({pressed}) => [styles.cardHead, pressed && styles.pressed]}>
         <View style={[styles.mark, {backgroundColor: color}]}>
@@ -309,19 +310,29 @@ function ShareCard({
             <Text style={[styles.statusText, live ? styles.on : warn ? styles.warn : styles.off]}>{STATUS_LABEL[share.status]}</Text>
           </View>
         </View>
-        <IconButton icon={faEllipsis} label={`${name} 的更多操作`} onPress={onMenu} />
+        <IconButton icon={faEllipsis} label={trf('share_more_actions', {name})} onPress={onMenu} />
       </Pressable>
 
       <View style={[styles.link, !(url && live) && styles.linkDim]}>
         <Text style={styles.linkText} numberOfLines={1} selectable={!!url}>
-          {url || '确认后生成链接'}
+          {url || tr('share_no_link')}
         </Text>
         {!!url && (
           <>
-            <Pressable accessibilityRole="button" accessibilityLabel="复制链接" hitSlop={8} onPress={() => onCopy(url)} style={styles.linkButton}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={tr('share_copy_link')}
+              hitSlop={8}
+              onPress={() => onCopy(url)}
+              style={styles.linkButton}>
               <Icon icon={faCopy} size={13} color={t.t2} />
             </Pressable>
-            <Pressable accessibilityRole="button" accessibilityLabel="打开" hitSlop={8} onPress={() => onOpen(url)} style={styles.linkButton}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={tr('common_open')}
+              hitSlop={8}
+              onPress={() => onOpen(url)}
+              style={styles.linkButton}>
               <Icon icon={faArrowUpRightFromSquare} size={12} color={t.t2} />
             </Pressable>
           </>
@@ -338,17 +349,17 @@ function ShareCard({
 
       {(share.status === 'unconfirmed' || pending.length > 0) && (
         <Callout
-          text={pending.length ? '配置文件的改动放宽了访客权限，确认后生效：' : '这个访客页面是在配置文件中创建的，确认后才会生成链接。'}
+          text={tr(pending.length ? 'share_pending' : 'share_unconfirmed')}
           items={pending}
-          action="确认生效"
+          action={tr('share_confirm_apply')}
           icon={faCircleCheck}
           onPress={onConfirm}
         />
       )}
       {share.status === 'password_missing' && (
-        <Callout text="已开启访问密码但还没有设置，访客暂时无法进入。" action="设置密码" onPress={() => onEdit('password')} />
+        <Callout text={tr('share_password_missing')} action={tr('share_set_password')} onPress={() => onEdit('password')} />
       )}
-      {!!share.notices?.length && <Callout text="配置提示" items={share.notices} quiet />}
+      {!!share.notices?.length && <Callout text={tr('share_notices')} items={share.notices} quiet />}
     </View>
   );
 }

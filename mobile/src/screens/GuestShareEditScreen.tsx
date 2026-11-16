@@ -10,6 +10,7 @@ import {labelText} from '../components/ModelPicker';
 import {ActionButton, Toggle} from '../components/settings';
 import {showToast} from '../components/Toast';
 import {Chip, EmptyState, PageHeader} from '../components/ui';
+import {tr, trf} from '../i18n';
 import type {RootStackParamList} from '../navigation/types';
 import type {GuestShare, GuestSharesOverview} from '../protocol/resources';
 import {useConfigStore} from '../store/configStore';
@@ -22,6 +23,7 @@ import {
   SHARE_DEFAULT_COLOR,
   SHARE_LANGUAGES,
   SHARE_MAX_QUESTIONS,
+  SHARE_PASSWORD_MIN,
   SHARE_TOOLS,
   toggleIn,
   TOOL_LABEL,
@@ -33,7 +35,7 @@ import {describeShareError} from './GuestSharesScreen';
 type Props = StackScreenProps<RootStackParamList, 'GuestShareEdit'>;
 
 const referenceLabel = (r: {agent: string; category: string}) => {
-  const kb = r.agent ? `${r.agent} · 知识库` : '知识库';
+  const kb = r.agent ? `${r.agent} · ${tr('share_ref_kb')}` : tr('share_ref_kb');
   return r.category ? `${kb} / ${r.category}` : kb;
 };
 
@@ -75,7 +77,7 @@ export function GuestShareEditScreen({navigation, route}: Props) {
   }, [slug]);
 
   const modelOptions = useMemo<PickerOption[]>(() => {
-    const options: PickerOption[] = [{value: '', label: '默认模型', hint: defaultModel || undefined}];
+    const options: PickerOption[] = [{value: '', label: tr('share_default_model'), hint: defaultModel || undefined}];
     const seen = new Set<string>();
     for (const p of overview?.models ?? []) {
       for (const m of p.models ?? []) {
@@ -89,19 +91,19 @@ export function GuestShareEditScreen({navigation, route}: Props) {
     return options;
   }, [overview, defaultModel, draft?.model]);
 
-  const title = slug ? '编辑访客页面' : '新建访客页面';
+  const title = tr(slug ? 'share_edit_title' : 'share_new');
   if (!draft || !overview) {
     return (
       <View style={styles.root}>
         <PageHeader title={title} onBack={navigation.goBack} />
-        <EmptyState loading={!loadError} title="加载失败" hint={loadError ?? undefined} />
+        <EmptyState loading={!loadError} title={tr('common_load_failed')} hint={loadError ?? undefined} />
       </View>
     );
   }
 
   const set = (patch: Partial<ShareDraft>) => setDraft({...draft, ...patch});
   const passwordSet = !!share?.password_set;
-  const modelLabel = draft.model ? draft.model.slice(draft.model.indexOf('|') + 1) : '默认模型';
+  const modelLabel = draft.model ? draft.model.slice(draft.model.indexOf('|') + 1) : tr('share_default_model');
   const skills = [
     ...overview.skills.filter(s => !s.needs_shell || draft.skills.includes(s.name)).map(s => s.name),
     ...draft.skills.filter(name => !overview.skills.some(s => s.name === name)),
@@ -136,7 +138,7 @@ export function GuestShareEditScreen({navigation, route}: Props) {
       if (draft.passwordRequired && draft.password) {
         await setGuestSharePassword(saved.slug, draft.password);
       }
-      showToast(slug ? '已保存' : '已创建');
+      showToast(tr(slug ? 'common_saved' : 'share_created'));
       navigation.goBack();
     } catch (e) {
       setError(describeShareError(e));
@@ -146,29 +148,46 @@ export function GuestShareEditScreen({navigation, route}: Props) {
 
   return (
     <View style={styles.root}>
-      <PageHeader title={title} subtitle={share ? share.name || share.slug : '访客无需登录，打开链接即可对话'} onBack={navigation.goBack} />
+      <PageHeader
+        title={title}
+        subtitle={share ? share.name || share.slug : tr('share_new_desc')}
+        onBack={navigation.goBack}
+      />
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={{paddingBottom: insets.bottom + 32}} keyboardShouldPersistTaps="handled">
-          <Section title="基本信息">
-            <InputRow first label="名称" value={draft.name} onChangeText={name => set({name})} placeholder="访客看到的标题，例如「产品咨询」" autoFocus={!slug} />
-            <InfoRow title="模型" value={modelLabel} mono={!!draft.model} onPress={() => setModelSheet(true)} />
-            <InputRow label="欢迎语" value={draft.welcome} onChangeText={welcome => set({welcome})} placeholder="访客打开链接时看到的第一句话" multiline />
+          <Section title={tr('share_section_basic')}>
+            <InputRow
+              first
+              label={tr('common_name')}
+              value={draft.name}
+              onChangeText={name => set({name})}
+              placeholder={tr('share_name_ph')}
+              autoFocus={!slug}
+            />
+            <InfoRow title={tr('share_model')} value={modelLabel} mono={!!draft.model} onPress={() => setModelSheet(true)} />
+            <InputRow
+              label={tr('share_welcome')}
+              value={draft.welcome}
+              onChangeText={welcome => set({welcome})}
+              placeholder={tr('share_welcome_ph')}
+              multiline
+            />
           </Section>
 
           <Section
-            title={`引导问题 ${draft.questions.length}/${SHARE_MAX_QUESTIONS}`}
-            footer="显示在欢迎页，访客点击即可提问">
+            title={trf('share_questions_count', {n: draft.questions.length, max: SHARE_MAX_QUESTIONS})}
+            footer={tr('share_questions_tip')}>
             {draft.questions.map((q, i) => (
               <InputRow
                 key={i}
                 first={i === 0}
                 value={q}
                 onChangeText={v => set({questions: draft.questions.map((x, j) => (j === i ? v : x))})}
-                placeholder="输入一个问题"
+                placeholder={tr('share_question_ph')}
                 right={
                   <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel="删除这个问题"
+                    accessibilityLabel={tr('share_remove_question')}
                     hitSlop={10}
                     onPress={() => set({questions: draft.questions.filter((_, j) => j !== i)})}
                     style={styles.remove}>
@@ -183,48 +202,54 @@ export function GuestShareEditScreen({navigation, route}: Props) {
                 onPress={() => set({questions: [...draft.questions, '']})}
                 style={({pressed}) => [styles.addRow, !!draft.questions.length && styles.divider, pressed && styles.pressed]}>
                 <Icon icon={faPlus} size={11} color={t.accent} />
-                <Text style={styles.addText}>添加问题</Text>
+                <Text style={styles.addText}>{tr('share_add_question')}</Text>
               </Pressable>
             )}
           </Section>
 
-          <Section title="访问控制">
+          <Section title={tr('share_section_access')}>
             <InfoRow
               first
-              title="访问密码"
-              hint={draft.passwordRequired ? undefined : '未开启，任何拿到链接的人都能访问'}
+              title={tr('share_password')}
+              hint={draft.passwordRequired ? undefined : tr('share_password_off')}
               right={
-                <Toggle value={draft.passwordRequired} onValueChange={passwordRequired => set({passwordRequired})} label="访问密码" />
+                <Toggle
+                  value={draft.passwordRequired}
+                  onValueChange={passwordRequired => set({passwordRequired})}
+                  label={tr('share_password')}
+                />
               }
             />
             {draft.passwordRequired && (
               <InputRow
                 value={draft.password}
                 onChangeText={password => set({password})}
-                placeholder={passwordSet ? '已设置，留空则不修改' : '至少 6 位，不要与访问密码相同'}
+                placeholder={
+                  passwordSet ? tr('share_password_keep') : trf('share_password_new', {min: SHARE_PASSWORD_MIN})
+                }
                 secure
                 mono
                 autoFocus={focus === 'password'}
               />
             )}
             <InputRow
-              label="每人每日提问"
+              label={tr('share_quota')}
               value={draft.quota}
               onChangeText={quota => set({quota: quota.replace(/[^\d]/g, '')})}
-              placeholder="0 表示不限制"
+              placeholder={tr('share_quota_ph')}
               keyboardType="number-pad"
             />
             <InputRow
-              label="有效期至"
+              label={tr('share_expires')}
               value={draft.expires}
               onChangeText={expires => set({expires})}
-              placeholder="留空表示长期有效，如 2026-12-31"
+              placeholder={tr('share_expires_ph')}
               keyboardType="numbers-and-punctuation"
               mono
             />
           </Section>
 
-          <Section title="主题色" footer="用于按钮、访客消息气泡和嵌入网页的对话入口">
+          <Section title={tr('share_color')} footer={tr('share_color_tip')}>
             <View style={styles.swatches}>
               {['', ...SHARE_COLORS].map(c => {
                 const active = draft.color === c;
@@ -232,7 +257,7 @@ export function GuestShareEditScreen({navigation, route}: Props) {
                   <Pressable
                     key={c || 'default'}
                     accessibilityRole="radio"
-                    accessibilityLabel={c || '默认'}
+                    accessibilityLabel={c || tr('share_color_default')}
                     accessibilityState={{selected: active}}
                     onPress={() => set({color: c})}
                     style={[styles.swatch, {backgroundColor: c || SHARE_DEFAULT_COLOR}, active && styles.swatchActive]}>
@@ -246,8 +271,8 @@ export function GuestShareEditScreen({navigation, route}: Props) {
           <Section style={styles.moreSection}>
             <InfoRow
               first
-              title="更多设置"
-              hint="工具、技能、参考资料、访客规则、语言、页脚"
+              title={tr('share_more')}
+              hint={tr('share_more_desc')}
               right={<Icon icon={more ? faChevronUp : faChevronDown} size={11} color={t.t3} />}
               onPress={() => setMore(v => !v)}
             />
@@ -255,7 +280,7 @@ export function GuestShareEditScreen({navigation, route}: Props) {
 
           {more && (
             <>
-              <Section title="可用工具" footer="写入类工具只作用于每位访客自己的临时目录">
+              <Section title={tr('share_tools')} footer={tr('share_tools_tip')}>
                 <View style={styles.chips}>
                   {SHARE_TOOLS.map(id => (
                     <Chip key={id} label={TOOL_LABEL[id] ?? id} active={draft.tools.includes(id)} onPress={() => set({tools: toggleIn(draft.tools, id)})} />
@@ -263,7 +288,7 @@ export function GuestShareEditScreen({navigation, route}: Props) {
                 </View>
               </Section>
 
-              <Section title="技能" footer="访客无法执行命令，依赖命令或脚本的技能不在可选范围内">
+              <Section title={tr('share_skills')} footer={tr('share_skills_tip')}>
                 {skills.length ? (
                   <View style={styles.chips}>
                     {skills.map(name => (
@@ -271,11 +296,11 @@ export function GuestShareEditScreen({navigation, route}: Props) {
                     ))}
                   </View>
                 ) : (
-                  <Text style={styles.empty}>没有可供访客使用的技能</Text>
+                  <Text style={styles.empty}>{tr('share_skills_empty')}</Text>
                 )}
               </Section>
 
-              <Section title="参考资料" footer="访客的 Agent 可以只读访问这些目录，访客看不到真实路径。其他目录请在电脑上添加">
+              <Section title={tr('share_refs')} footer={tr('share_refs_tip')}>
                 {references.length ? (
                   <View style={styles.chips}>
                     {references.map(r => (
@@ -288,41 +313,60 @@ export function GuestShareEditScreen({navigation, route}: Props) {
                     ))}
                   </View>
                 ) : (
-                  <Text style={styles.empty}>知识库里还没有可选的分类</Text>
+                  <Text style={styles.empty}>{tr('share_refs_empty')}</Text>
                 )}
               </Section>
 
-              <Section title="访客规则" footer="写入 Agent 的系统提示词：你是谁、为谁服务、能回答什么、超出范围怎么回复。留空则只遵循平台默认规则">
+              <Section title={tr('share_rules')} footer={tr('share_rules_tip')}>
                 <InputRow
                   first
                   value={draft.rules}
                   onChangeText={rules => set({rules})}
-                  placeholder="例如：你是 CowAgent 的智能助手，帮助开发者解答安装、配置和使用问题，回答简洁友好。"
+                  placeholder={tr('share_rules_ph')}
                   multiline
                 />
               </Section>
 
-              <Section title="语言" footer="页面界面和 Agent 系统提示词使用的语言">
+              <Section title={tr('share_language')} footer={tr('share_language_tip')}>
                 {SHARE_LANGUAGES.map((l, i) => (
                   <OptionRow key={l.value || 'auto'} first={i === 0} title={l.label} selected={draft.language === l.value} onPress={() => set({language: l.value})} />
                 ))}
               </Section>
 
-              <Section title="页脚">
-                <InputRow first label="页脚文字" value={draft.footerText} onChangeText={footerText => set({footerText})} placeholder="留空则不显示" />
-                <InputRow label="页脚链接" value={draft.footerUrl} onChangeText={footerUrl => set({footerUrl})} placeholder="https://，留空则不加链接" keyboardType="url" mono />
+              <Section title={tr('share_footer')}>
+                <InputRow
+                  first
+                  label={tr('share_footer_text')}
+                  value={draft.footerText}
+                  onChangeText={footerText => set({footerText})}
+                  placeholder={tr('share_footer_text_ph')}
+                />
+                <InputRow
+                  label={tr('share_footer_url')}
+                  value={draft.footerUrl}
+                  onChangeText={footerUrl => set({footerUrl})}
+                  placeholder={tr('share_footer_url_ph')}
+                  keyboardType="url"
+                  mono
+                />
               </Section>
             </>
           )}
 
           {!!error && <Text style={styles.error}>{error}</Text>}
-          <ActionButton label={slug ? '保存' : '创建'} tone="primary" loading={saving} onPress={save} style={styles.save} />
+          <ActionButton
+            label={tr(slug ? 'common_save' : 'share_create')}
+            tone="primary"
+            loading={saving}
+            onPress={save}
+            style={styles.save}
+          />
         </ScrollView>
       </KeyboardAvoidingView>
 
       <PickerSheet
         visible={modelSheet}
-        title="模型"
+        title={tr('share_model')}
         options={modelOptions}
         selected={draft.model}
         onSelect={model => {

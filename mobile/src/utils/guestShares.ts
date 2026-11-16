@@ -1,3 +1,4 @@
+import {getLang, tr, trf} from '../i18n';
 import type {GuestShare, GuestShareConfig, GuestShareStatus} from '../protocol/resources';
 
 export const SHARE_TOOLS = ['read', 'ls', 'search_files', 'write', 'edit', 'send', 'web_search', 'web_fetch', 'vision', 'time'];
@@ -12,31 +13,67 @@ const FOOTER_TEXT = 'Powered by CowAgent';
 const FOOTER_URL = 'https://cowagent.ai';
 
 export const TOOL_LABEL: Record<string, string> = {
-  read: '读取文件',
-  ls: '浏览目录',
-  search_files: '搜索文件',
-  write: '写入文件',
-  edit: '编辑文件',
-  send: '发送文件',
-  web_search: '联网搜索',
-  web_fetch: '读取网页',
-  vision: '图片理解',
-  time: '当前时间',
+  get read() {
+    return tr('share_tool_read');
+  },
+  get ls() {
+    return tr('share_tool_ls');
+  },
+  get search_files() {
+    return tr('share_tool_search_files');
+  },
+  get write() {
+    return tr('share_tool_write');
+  },
+  get edit() {
+    return tr('share_tool_edit');
+  },
+  get send() {
+    return tr('share_tool_send');
+  },
+  get web_search() {
+    return tr('share_tool_web_search');
+  },
+  get web_fetch() {
+    return tr('share_tool_web_fetch');
+  },
+  get vision() {
+    return tr('share_tool_vision');
+  },
+  get time() {
+    return tr('share_tool_time');
+  },
 };
 
+// Language names stay in their own language.
 export const SHARE_LANGUAGES: {value: string; label: string}[] = [
-  {value: '', label: '跟随访客浏览器'},
+  {
+    value: '',
+    get label() {
+      return tr('share_language_auto');
+    },
+  },
   {value: 'zh', label: '简体中文'},
   {value: 'zh-Hant', label: '繁體中文'},
   {value: 'en', label: 'English'},
 ];
 
 export const STATUS_LABEL: Record<GuestShareStatus, string> = {
-  active: '运行中',
-  unconfirmed: '待确认',
-  password_missing: '缺少密码',
-  disabled: '已停用',
-  expired: '已过期',
+  get active() {
+    return tr('share_status_active');
+  },
+  get unconfirmed() {
+    return tr('share_status_unconfirmed');
+  },
+  get password_missing() {
+    return tr('share_status_password_missing');
+  },
+  get disabled() {
+    return tr('share_status_disabled');
+  },
+  get expired() {
+    return tr('share_status_expired');
+  },
 };
 
 export const shareConfig = (share: GuestShare): GuestShareConfig => share.effective_config || share.file_config || {};
@@ -50,12 +87,12 @@ export function shareChips(share: GuestShare): string[] {
   const refs = cfg.references ?? [];
   const origins = cfg.access?.allowed_origins ?? [];
   return [
-    cfg.access?.password_required ? '需要密码' : '公开访问',
-    quota ? `每人每日 ${quota} 次` : '提问不限次数',
-    `${(cfg.tools ?? []).length} 个工具`,
-    ...(refs.length ? [`${refs.length} 份参考资料`] : []),
-    ...(cfg.expires_at ? [`有效期至 ${cfg.expires_at.slice(0, 10)}`] : []),
-    ...(origins.length ? [`${origins.length} 个嵌入网站`] : []),
+    tr(cfg.access?.password_required ? 'share_chip_password' : 'share_chip_public'),
+    quota ? trf('share_chip_quota', {n: quota}) : tr('share_chip_unlimited'),
+    trf('share_chip_tools', {n: (cfg.tools ?? []).length}),
+    ...(refs.length ? [trf('share_chip_refs', {n: refs.length})] : []),
+    ...(cfg.expires_at ? [trf('share_chip_expires', {date: cfg.expires_at.slice(0, 10)})] : []),
+    ...(origins.length ? [trf('share_chip_embed', {n: origins.length})] : []),
   ];
 }
 
@@ -79,11 +116,11 @@ export interface ShareDraft {
   footerUrl: string;
 }
 
-/** A new page starts in Chinese with two starter questions, like the console. */
+/** A new page starts in the app's language with two starter questions, like the console. */
 export function draftFromConfig(share: GuestShare | null, cfg: GuestShareConfig, rules: string): ShareDraft {
   const brand = cfg.branding ?? {};
   const quota = cfg.limits?.daily_messages;
-  const language = share ? cfg.language ?? '' : 'zh';
+  const language = share ? cfg.language ?? '' : getLang();
   return {
     name: cfg.name ?? '',
     language: SHARE_LANGUAGES.some(l => l.value === language) ? language : '',
@@ -105,7 +142,7 @@ export function draftFromConfig(share: GuestShare | null, cfg: GuestShareConfig,
 }
 
 export const newShareDraft = () =>
-  draftFromConfig(null, {suggested_questions: ['你能帮我做什么？', '怎么快速上手？']}, '');
+  draftFromConfig(null, {suggested_questions: [tr('share_default_q1'), tr('share_default_q2')]}, '');
 
 function validDate(s: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) {
@@ -118,24 +155,24 @@ function validDate(s: string): boolean {
 /** The first problem that blocks saving, or null. */
 export function validateDraft(d: ShareDraft, passwordSet: boolean): string | null {
   if (!d.name.trim()) {
-    return '请填写名称';
+    return tr('share_name_required');
   }
   if (d.passwordRequired && d.password && d.password.length < SHARE_PASSWORD_MIN) {
-    return `访问密码至少 ${SHARE_PASSWORD_MIN} 位`;
+    return trf('share_password_short', {min: SHARE_PASSWORD_MIN});
   }
   if (d.passwordRequired && !d.password && !passwordSet) {
-    return '请设置访问密码';
+    return tr('share_password_required');
   }
   const q = d.quota.trim();
   if (q && (!/^\d+$/.test(q) || !Number.isSafeInteger(Number(q)))) {
-    return '提问次数需要是不小于 0 的整数';
+    return tr('share_quota_invalid');
   }
   if (d.expires.trim() && !validDate(d.expires.trim())) {
-    return '有效期请按 2026-12-31 的格式填写';
+    return tr('share_expires_invalid');
   }
   const url = d.footerUrl.trim();
   if (url && !/^https?:\/\/[^\s<>"']+$/i.test(url)) {
-    return '页脚链接需要以 http:// 或 https:// 开头';
+    return tr('share_footer_url_invalid');
   }
   return null;
 }
@@ -166,10 +203,18 @@ export function buildShareConfig(d: ShareDraft, raw: GuestShareConfig | undefine
 
 /** The share API answers in English; keyed by reason code, else by message. */
 const FAILURES: Record<string, string> = {
-  console_password: '访客页面的密码不能与「设置 › 访问密码」相同',
-  'Password must be at least 6 characters.': `访问密码至少 ${SHARE_PASSWORD_MIN} 位`,
-  'A profile with this id already exists.': '已有同名的访客页面，换个名称试试',
-  'Not found': '这个访客页面不存在或已被删除',
+  get console_password() {
+    return tr('share_err_console_password');
+  },
+  get 'Password must be at least 6 characters.'() {
+    return trf('share_password_short', {min: SHARE_PASSWORD_MIN});
+  },
+  get 'A profile with this id already exists.'() {
+    return tr('share_err_exists');
+  },
+  get 'Not found'() {
+    return tr('share_err_not_found');
+  },
 };
 
 export const shareFailure = (reason: string | undefined, message: string) =>
