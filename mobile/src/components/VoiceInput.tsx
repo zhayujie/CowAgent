@@ -1,6 +1,7 @@
 import React, {useMemo, useRef} from 'react';
 import {PanResponder, StyleSheet, Text, View} from 'react-native';
 import {create} from 'zustand';
+import {tr, trf} from '../i18n';
 import {cancelRecording, startRecording, stopRecording} from '../media/recorder';
 import type {Recording} from '../media/types';
 import {radius} from '../theme/palette';
@@ -54,7 +55,7 @@ function begin(onRecorded: (rec: Recording) => void) {
     e => {
       holding = false;
       useVoiceStore.setState(IDLE);
-      showToast(e instanceof Error ? e.message : '无法开始录音');
+      showToast(e instanceof Error ? e.message : tr('voice_start_failed'));
       return false;
     },
   );
@@ -86,7 +87,7 @@ async function finish(onRecorded: (rec: Recording) => void, forceCancel = false)
   const rec = await stopRecording();
   useVoiceStore.setState(IDLE);
   if (!rec || rec.durationMs < MIN_MS) {
-    showToast('说话时间太短');
+    showToast(tr('voice_too_short'));
     return;
   }
   onRecorded(rec);
@@ -122,18 +123,18 @@ export function HoldToTalk({disabled, onRecorded}: {disabled: boolean; onRecorde
   );
 
   const recording = phase === 'recording';
-  let label = '按住 说话';
+  let label = tr('voice_hold_to_talk');
   if (disabled && phase === 'idle') {
-    label = '等待回复完成…';
+    label = tr('voice_wait_reply');
   } else if (recording) {
-    label = cancelArmed ? '松开 取消' : '松开 发送';
+    label = cancelArmed ? tr('voice_release_cancel') : tr('voice_release_send');
   }
 
   return (
     <View
       {...responder.panHandlers}
       accessibilityRole="button"
-      accessibilityLabel="按住说话，松开发送，上滑取消"
+      accessibilityLabel={tr('voice_pad_a11y')}
       style={[
         styles.pad,
         recording && styles.padActive,
@@ -173,11 +174,11 @@ export function VoiceOverlay() {
           ))}
         </View>
         <Text style={[styles.clock, cancelArmed && styles.clockCancel]}>
-          {left <= 10 ? `还可以说 ${left} 秒` : formatClock(elapsed)}
+          {left <= 10 ? trf('voice_seconds_left', {n: left}) : formatClock(elapsed)}
         </Text>
       </View>
       <Text style={[styles.hint, cancelArmed && {color: t.danger}]}>
-        {cancelArmed ? '松开手指，取消发送' : '松开发送，上滑取消'}
+        {cancelArmed ? tr('voice_hint_cancel') : tr('voice_hint_send')}
       </Text>
     </View>
   );

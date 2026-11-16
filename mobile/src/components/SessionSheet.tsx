@@ -2,6 +2,7 @@ import {faPlus} from '@fortawesome/free-solid-svg-icons';
 import React, {useCallback, useEffect, useState} from 'react';
 import {ActivityIndicator, Pressable, ScrollView, Text, View} from 'react-native';
 import {clearContext, compactContext, getContextUsage} from '../api/cowApi';
+import {tr, trf} from '../i18n';
 import type {AgentBadge, ContextUsage} from '../protocol/resources';
 import {agentParam, useAgentStore} from '../store/agentStore';
 import {useSessionSettingsStore} from '../store/sessionSettingsStore';
@@ -77,7 +78,7 @@ export function SessionSheet({
 
   const act = async (kind: Exclude<Busy, null>) => {
     if (replying) {
-      showToast('正在生成回复，请等回复结束后再操作');
+      showToast(tr('chat_busy_wait'));
       return;
     }
     setBusy(kind);
@@ -87,14 +88,20 @@ export function SessionSheet({
         if (res.usage) {
           setUsage(res.usage);
         }
-        showToast(res.ok && res.compacted_turns > 0 ? `已压缩 ${res.compacted_turns} 轮较早的对话` : '当前上下文较短，无需压缩');
+        showToast(
+          res.ok && res.compacted_turns > 0
+            ? trf('session_compacted', {n: res.compacted_turns})
+            : tr('session_compact_noop'),
+        );
       } else {
         await clearContext(sessionId, agentParam(agentId));
-        showToast('已清除上下文，之后的回复不再参考之前的内容');
+        showToast(tr('session_context_cleared'));
         await loadUsage();
       }
     } catch (e) {
-      showToast(`${kind === 'compact' ? '压缩' : '清除'}失败：${describeConnectError(e)}`);
+      showToast(
+        trf(kind === 'compact' ? 'session_compact_failed' : 'session_clear_failed', {error: describeConnectError(e)}),
+      );
     } finally {
       setBusy(null);
     }
@@ -102,7 +109,9 @@ export function SessionSheet({
 
   const memberIds = team?.members.map(m => m.id) ?? [];
   const changeMembers = (ids: string[]) =>
-    setMembers(sessionId, agentId, ids).catch(e => showToast(`保存失败：${describeConnectError(e)}`));
+    setMembers(sessionId, agentId, ids).catch(e =>
+      showToast(trf('common_save_failed_detail', {error: describeConnectError(e)})),
+    );
   const addable = team?.candidates.filter(c => !memberIds.includes(c.id)) ?? [];
   const shownAddable = showAll ? addable : addable.slice(0, CANDIDATE_PREVIEW);
 
@@ -111,19 +120,19 @@ export function SessionSheet({
   const pct = limit ? Math.min(100, Math.round((used / limit) * 100)) : 0;
   const parts = usage?.breakdown
     ? [
-        {key: 'system', label: '系统提示词', value: usage.breakdown.system, color: t.t3},
-        {key: 'tools', label: '工具和技能', value: usage.breakdown.tools, color: t.t2},
-        {key: 'history', label: '对话历史', value: usage.breakdown.history, color: t.accent},
+        {key: 'system', label: tr('session_ctx_system'), value: usage.breakdown.system, color: t.t3},
+        {key: 'tools', label: tr('session_ctx_tools'), value: usage.breakdown.tools, color: t.t2},
+        {key: 'history', label: tr('session_ctx_history'), value: usage.breakdown.history, color: t.accent},
       ]
     : [];
 
   return (
-    <Sheet visible={visible} onClose={onClose} title="当前对话">
+    <Sheet visible={visible} onClose={onClose} title={tr('session_current')}>
       <ScrollView style={styles.scroll} contentContainerStyle={styles.body} bounces={false}>
         {!isNew && (
           <View style={styles.block}>
             <View style={styles.blockHead}>
-              <Text style={styles.blockTitle}>上下文用量</Text>
+              <Text style={styles.blockTitle}>{tr('session_ctx_title')}</Text>
               {usage?.available && (
                 <Text style={styles.blockValue}>
                   {formatTokens(used)} / {formatTokens(limit)}
@@ -134,7 +143,7 @@ export function SessionSheet({
             {!usage && !usageError ? (
               <ActivityIndicator style={styles.loading} color={t.t3} />
             ) : !usage?.available ? (
-              <Text style={styles.muted}>{usageError ? '无法获取上下文用量' : '当前对话暂无上下文'}</Text>
+              <Text style={styles.muted}>{usageError ? tr('session_ctx_error') : tr('session_ctx_empty')}</Text>
             ) : (
               <>
                 <View style={styles.bar}>
@@ -156,22 +165,36 @@ export function SessionSheet({
                   ))}
                 </View>
                 {(usage.estimated || usage.restored) && (
-                  <Text style={styles.note}>{usage.restored ? '数据来自上次运行' : '估算值，以模型实际计算为准'}</Text>
+                  <Text style={styles.note}>
+                    {usage.restored ? tr('session_ctx_restored') : tr('session_ctx_estimated')}
+                  </Text>
                 )}
               </>
             )}
             <View style={styles.actions}>
-              <ActionChip label="压缩" hint="总结较早的对话" loading={busy === 'compact'} disabled={!!busy} onPress={() => act('compact')} />
-              <ActionChip label="清除" hint="从这里重新开始" loading={busy === 'clear'} disabled={!!busy} onPress={() => act('clear')} />
+              <ActionChip
+                label={tr('session_compact')}
+                hint={tr('session_compact_hint')}
+                loading={busy === 'compact'}
+                disabled={!!busy}
+                onPress={() => act('compact')}
+              />
+              <ActionChip
+                label={tr('session_clear')}
+                hint={tr('session_clear_hint')}
+                loading={busy === 'clear'}
+                disabled={!!busy}
+                onPress={() => act('clear')}
+              />
             </View>
           </View>
         )}
 
         {!team && multiAgent && (
           <View style={styles.block}>
-            <Text style={styles.blockTitle}>会话成员</Text>
+            <Text style={styles.blockTitle}>{tr('session_members')}</Text>
             {teamError ? (
-              <Text style={styles.note}>成员加载失败，请稍后重新打开</Text>
+              <Text style={styles.note}>{tr('session_members_failed')}</Text>
             ) : (
               <ActivityIndicator style={styles.loading} color={t.t3} />
             )}
@@ -180,27 +203,27 @@ export function SessionSheet({
         {!!team && (team.candidates.length > 0 || team.members.length > 0) && (
           <View style={styles.block}>
             <View style={styles.blockHead}>
-              <Text style={styles.blockTitle}>会话成员</Text>
-              <Text style={styles.blockValue}>{1 + team.members.length} 位</Text>
+              <Text style={styles.blockTitle}>{tr('session_members')}</Text>
+              <Text style={styles.blockValue}>{trf('session_member_count', {n: 1 + team.members.length})}</Text>
             </View>
-            <MemberRow agent={team.owner} isDefault={team.owner.id === defaultId} tag="主 Agent" />
+            <MemberRow agent={team.owner} isDefault={team.owner.id === defaultId} tag={tr('chat_main_agent')} />
             {team.members.map(m => (
               <MemberRow
                 key={m.id}
                 agent={m}
                 isDefault={m.id === defaultId}
-                tag={m.available === false ? '不可用' : undefined}
+                tag={m.available === false ? tr('session_member_unavailable') : undefined}
                 onRemove={() => changeMembers(memberIds.filter(id => id !== m.id))}
               />
             ))}
             {addable.length > 0 && (
               <>
-                <Text style={styles.subLabel}>可以添加</Text>
+                <Text style={styles.subLabel}>{tr('session_can_add')}</Text>
                 {shownAddable.map(c => (
                   <Pressable
                     key={c.id}
                     accessibilityRole="button"
-                    accessibilityLabel={`把 ${c.name} 添加到这个会话`}
+                    accessibilityLabel={trf('session_add_member_a11y', {name: c.name})}
                     onPress={() => changeMembers([...memberIds, c.id])}
                     style={({pressed}) => [styles.member, pressed && styles.pressed]}>
                     <AgentAvatar agent={c} isDefault={c.id === defaultId} size={28} />
@@ -209,28 +232,30 @@ export function SessionSheet({
                     </Text>
                     <View style={styles.addButton}>
                       <Icon icon={faPlus} size={9} color={t.accent} />
-                      <Text style={styles.add}>添加</Text>
+                      <Text style={styles.add}>{tr('common_add')}</Text>
                     </View>
                   </Pressable>
                 ))}
                 {addable.length > shownAddable.length && (
                   <Pressable accessibilityRole="button" hitSlop={6} onPress={() => setShowAll(true)} style={styles.more}>
-                    <Text style={styles.moreText}>还有 {addable.length - shownAddable.length} 个 Agent</Text>
+                    <Text style={styles.moreText}>
+                      {trf('session_more_agents', {n: addable.length - shownAddable.length})}
+                    </Text>
                   </Pressable>
                 )}
               </>
             )}
-            <Text style={styles.note}>主 Agent 接收消息，可以把任务委派给成员；成员沿用主 Agent 的权限。</Text>
+            <Text style={styles.note}>{tr('session_members_note')}</Text>
           </View>
         )}
 
         {!isNew && (
           <View style={styles.links}>
             <Pressable accessibilityRole="button" onPress={onRename} style={({pressed}) => [styles.link, pressed && styles.pressed]}>
-              <Text style={styles.linkText}>重命名</Text>
+              <Text style={styles.linkText}>{tr('common_rename')}</Text>
             </Pressable>
             <Pressable accessibilityRole="button" onPress={onDelete} style={({pressed}) => [styles.link, pressed && styles.pressed]}>
-              <Text style={[styles.linkText, styles.danger]}>删除对话</Text>
+              <Text style={[styles.linkText, styles.danger]}>{tr('session_delete')}</Text>
             </Pressable>
           </View>
         )}
@@ -259,8 +284,12 @@ function MemberRow({
       </Text>
       {!!tag && <Text style={styles.memberTag}>{tag}</Text>}
       {!!onRemove && (
-        <Pressable accessibilityRole="button" accessibilityLabel={`把 ${agent.name} 移出这个会话`} hitSlop={8} onPress={onRemove}>
-          <Text style={styles.remove}>移出</Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={trf('session_remove_member_a11y', {name: agent.name})}
+          hitSlop={8}
+          onPress={onRemove}>
+          <Text style={styles.remove}>{tr('session_remove_member')}</Text>
         </Pressable>
       )}
     </View>

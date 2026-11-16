@@ -16,6 +16,7 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Icon} from '../components/Icon';
 import {Sheet} from '../components/Sheet';
 import {EmptyState, GroupLabel, PageHeader} from '../components/ui';
+import {tr, trf} from '../i18n';
 import type {RootStackParamList} from '../navigation/types';
 import type {SessionItem} from '../protocol/events';
 import {useAgentStore} from '../store/agentStore';
@@ -56,7 +57,7 @@ export function SessionsScreen({navigation}: Props) {
 
   return (
     <View style={styles.root}>
-      <PageHeader title="全部会话" count={total || undefined} onBack={navigation.goBack} />
+      <PageHeader title={tr('session_all_title')} count={total || undefined} onBack={navigation.goBack} />
       <SectionList
         sections={sections}
         keyExtractor={s => s.session_id}
@@ -87,8 +88,8 @@ export function SessionsScreen({navigation}: Props) {
         ListEmptyComponent={
           <EmptyState
             loading={loading}
-            title={error ? '加载失败' : '还没有对话'}
-            hint={error ?? '回到对话页说点什么，记录会出现在这里'}
+            title={error ? tr('common_load_failed') : tr('session_empty')}
+            hint={error ?? tr('session_empty_hint')}
           />
         }
         ListFooterComponent={
@@ -114,21 +115,21 @@ function SessionRow({
   onLongPress: () => void;
 }) {
   const styles = useStyles();
-  const meta = [showAgent ? session.agent?.name : null, `${session.msg_count} 条消息`]
+  const meta = [showAgent ? session.agent?.name : null, trf('session_msg_count', {n: session.msg_count})]
     .filter(Boolean)
     .join(' · ');
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityState={{selected: active}}
-      accessibilityHint="长按可置顶、重命名或删除"
+      accessibilityHint={tr('session_row_hint')}
       onPress={onPress}
       onLongPress={onLongPress}
       delayLongPress={350}
       style={({pressed}) => [styles.row, active && styles.rowActive, pressed && !active && styles.rowPressed]}>
       <View style={styles.rowText}>
         <Text style={[styles.title, active && styles.titleActive]} numberOfLines={1}>
-          {session.title || '未命名对话'}
+          {session.title || tr('session_untitled')}
         </Text>
         <Text style={styles.meta} numberOfLines={1}>
           {meta}
@@ -165,7 +166,7 @@ function SessionActions({session, onClose}: {session: SessionItem | null; onClos
   };
 
   return (
-    <Sheet visible={!!session} onClose={onClose} title={session?.title || '未命名对话'}>
+    <Sheet visible={!!session} onClose={onClose} title={session?.title || tr('session_untitled')}>
       {mode === 'rename' ? (
         <View style={styles.renameBox}>
           <TextInput
@@ -174,7 +175,7 @@ function SessionActions({session, onClose}: {session: SessionItem | null; onClos
             autoFocus
             selectTextOnFocus
             maxLength={60}
-            placeholder="对话名称"
+            placeholder={tr('session_name_placeholder')}
             placeholderTextColor={t.t3}
             selectionColor={t.accent}
             style={styles.renameInput}
@@ -186,20 +187,20 @@ function SessionActions({session, onClose}: {session: SessionItem | null; onClos
             disabled={!title.trim()}
             onPress={() => session && run(() => store.rename(session, title.trim()))}
             style={({pressed}) => [styles.renameSave, !title.trim() && styles.disabled, pressed && styles.renameSavePressed]}>
-            <Text style={styles.renameSaveText}>保存</Text>
+            <Text style={styles.renameSaveText}>{tr('common_save')}</Text>
           </Pressable>
         </View>
       ) : (
         <>
           <Action
             icon={faThumbtack}
-            label={session?.pinned ? '取消置顶' : '置顶'}
+            label={session?.pinned ? tr('session_unpin') : tr('session_pin')}
             onPress={() => session && run(() => store.setPinned(session, !session.pinned))}
           />
-          <Action icon={faPenToSquare} label="重命名" onPress={() => setMode('rename')} />
+          <Action icon={faPenToSquare} label={tr('common_rename')} onPress={() => setMode('rename')} />
           <Action
             icon={faTrashCan}
-            label={mode === 'confirmDelete' ? '再点一次，永久删除' : '删除'}
+            label={mode === 'confirmDelete' ? tr('session_confirm_delete') : tr('common_delete')}
             danger
             onPress={() =>
               mode === 'confirmDelete'

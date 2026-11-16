@@ -1,6 +1,7 @@
 import {faCheck} from '@fortawesome/free-solid-svg-icons';
 import React from 'react';
 import {Pressable, Text, View} from 'react-native';
+import {tr} from '../i18n';
 import {useAgentStore} from '../store/agentStore';
 import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
@@ -14,7 +15,7 @@ export function AgentSheet({
   onClose,
   onSelect,
   onManage,
-  title = '同 Agent 开启新对话',
+  title = tr('chat_agent_sheet_title'),
   selectedId,
 }: {
   visible: boolean;
@@ -50,7 +51,7 @@ export function AgentSheet({
                 {agent.name}
               </Text>
               <Text style={styles.meta} numberOfLines={1}>
-                {isDefault ? '默认' : '工作空间'} · {basename(agent.workspace) || agent.id}
+                {isDefault ? tr('chat_default') : tr('chat_agent_workspace')} · {basename(agent.workspace) || agent.id}
               </Text>
             </View>
             {selected && <Icon icon={faCheck} size={13} color={t.accent} />}
@@ -60,7 +61,7 @@ export function AgentSheet({
       {!!onManage && (
         <View style={styles.footer}>
           <Pressable accessibilityRole="button" hitSlop={8} onPress={onManage}>
-            <Text style={styles.manage}>管理 Agent</Text>
+            <Text style={styles.manage}>{tr('chat_agent_manage')}</Text>
           </Pressable>
         </View>
       )}

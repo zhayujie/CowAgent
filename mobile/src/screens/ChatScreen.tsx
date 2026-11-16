@@ -42,6 +42,7 @@ import {Burger, IconButton} from '../components/ui';
 import {VoiceOverlay} from '../components/VoiceInput';
 import type {ChatFile} from '../files/chatFile';
 import {openFile} from '../files/openFile';
+import {tr, trf} from '../i18n';
 import {canTakePhoto, pickDocuments, pickPhotos, takePhoto} from '../media/picker';
 import type {Recording} from '../media/types';
 import {linkAsPage} from '../navigation/menuViews';
@@ -200,7 +201,7 @@ export function ChatScreen({route, navigation}: Props) {
     (label: string, url: string, external: boolean) => {
       setDrawerOpen(false);
       if (external) {
-        Linking.openURL(serverUrl(url)).catch(() => showToast('无法打开这个链接'));
+        Linking.openURL(serverUrl(url)).catch(() => showToast(tr('chat_link_open_failed')));
         return;
       }
       navigation.navigate('FilePreview', {file: linkAsPage(label, url)});
@@ -215,7 +216,7 @@ export function ChatScreen({route, navigation}: Props) {
       try {
         await useSessionSettingsStore.getState().setMembers(sid, owner, members);
       } catch (e) {
-        showToast(`创建多智能体对话失败：${errorText(e)}`);
+        showToast(trf('chat_team_create_failed', {error: errorText(e)}));
         return;
       }
       if (owner !== useAgentStore.getState().currentId) {
@@ -279,7 +280,7 @@ export function ChatScreen({route, navigation}: Props) {
         if (voice) {
           chat.removeMessage(sessionId, voice.replaceId);
         }
-        showToast('另一个对话还在回复，结束后再发送');
+        showToast(tr('chat_other_replying'));
         return false;
       }
       usePrefsStore.getState().markOnboarded();
@@ -311,10 +312,10 @@ export function ChatScreen({route, navigation}: Props) {
           return;
         }
         chat.removeMessage(sessionId, placeholder);
-        showToast('没有听清，请再说一次');
+        showToast(tr('voice_not_heard'));
       } catch (e) {
         chat.removeMessage(sessionId, placeholder);
-        showToast(`语音识别失败：${errorText(e)}`);
+        showToast(trf('voice_failed', {error: errorText(e)}));
       }
     },
     [sessionId, send, toBottom],
@@ -341,7 +342,7 @@ export function ChatScreen({route, navigation}: Props) {
             .getState()
             .add(files, sessionId, useAgentStore.getState().currentId);
           if (skipped) {
-            showToast(`单条消息最多 ${MAX_ATTACHMENTS} 个附件，已忽略 ${skipped} 个`);
+            showToast(trf('chat_attach_skipped', {max: MAX_ATTACHMENTS, n: skipped}));
           }
         } catch (e) {
           showToast(errorText(e));
@@ -368,10 +369,10 @@ export function ChatScreen({route, navigation}: Props) {
         setDraft(optimized);
         setAttachOpen(false);
       } else {
-        showToast('没有可优化的地方');
+        showToast(tr('composer_optimize_noop'));
       }
     } catch (e) {
-      showToast(`优化失败：${errorText(e)}`);
+      showToast(trf('composer_optimize_failed', {error: errorText(e)}));
     } finally {
       setOptimizing(false);
     }
@@ -383,7 +384,7 @@ export function ChatScreen({route, navigation}: Props) {
       if (!useSessionSettingsStore.getState().bySession[sessionId]) {
         loadSettings().catch(e => {
           open(false);
-          showToast(`读取会话设置失败：${errorText(e)}`);
+          showToast(trf('session_settings_load_failed', {error: errorText(e)}));
         });
       }
     },
@@ -396,7 +397,7 @@ export function ChatScreen({route, navigation}: Props) {
       useSessionSettingsStore
         .getState()
         .setModel(sessionId, useAgentStore.getState().currentId, choice)
-        .catch(e => showToast(`切换模型失败：${errorText(e)}`));
+        .catch(e => showToast(trf('composer_model_switch_failed', {error: errorText(e)})));
     },
     [sessionId],
   );
@@ -407,7 +408,7 @@ export function ChatScreen({route, navigation}: Props) {
       useSessionSettingsStore
         .getState()
         .setPermission(sessionId, useAgentStore.getState().currentId, mode)
-        .catch(e => showToast(`切换权限失败：${errorText(e)}`));
+        .catch(e => showToast(trf('composer_perm_switch_failed', {error: errorText(e)})));
     },
     [sessionId],
   );
@@ -435,7 +436,7 @@ export function ChatScreen({route, navigation}: Props) {
   const renameSession = useCallback(
     async (title: string) => {
       await useSessionStore.getState().rename(sessionItem(), title.trim());
-      showToast('已重命名');
+      showToast(tr('session_renamed'));
     },
     [sessionItem],
   );
@@ -447,7 +448,7 @@ export function ChatScreen({route, navigation}: Props) {
       startNewChat();
     } catch (e) {
       setDeleteOpen(false);
-      showToast(`删除失败：${errorText(e)}`);
+      showToast(trf('common_delete_failed', {error: errorText(e)}));
     }
   }, [sessionItem, startNewChat]);
 
@@ -505,16 +506,19 @@ export function ChatScreen({route, navigation}: Props) {
         <View style={[styles.top, {paddingTop: insets.top + 6}]}>
           <View style={styles.topLeft}>
             <View style={styles.panes}>
-              <IconButton label="功能" onPress={() => openDrawer('features')}>
+              <IconButton label={tr('chat_features')} onPress={() => openDrawer('features')}>
                 <Burger />
               </IconButton>
               <View style={styles.panesDivider} />
-              <IconButton icon={faComments} label="对话列表" onPress={() => openDrawer('chat')} size={15} />
+              <IconButton icon={faComments} label={tr('chat_session_list')} onPress={() => openDrawer('chat')} size={15} />
             </View>
           </View>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={`当前 Agent：${agent?.name ?? 'CowAgent'}${teamSize ? `，另有 ${teamSize} 位成员` : ''}，点按选择 Agent 开启新对话`}
+            accessibilityLabel={trf('chat_agent_a11y', {
+              name: agent?.name ?? 'CowAgent',
+              team: teamSize ? trf('chat_agent_a11y_team', {n: teamSize}) : '',
+            })}
             onPress={() => setAgentSheetOpen(true)}
             style={({pressed}) => [styles.agent, pressed && styles.agentPressed]}>
             <AgentAvatar
@@ -534,10 +538,10 @@ export function ChatScreen({route, navigation}: Props) {
           </Pressable>
           <View style={styles.topRight}>
             {(!empty || agentCount > 1) && (
-              <IconButton icon={faEllipsis} label="当前对话" onPress={() => setSessionOpen(true)} size={15} />
+              <IconButton icon={faEllipsis} label={tr('session_current')} onPress={() => setSessionOpen(true)} size={15} />
             )}
             {!empty && (
-              <IconButton icon={faPenToSquare} label="新对话" onPress={startNewChat} filled size={14} />
+              <IconButton icon={faPenToSquare} label={tr('session_new')} onPress={startNewChat} filled size={14} />
             )}
           </View>
         </View>
@@ -577,7 +581,7 @@ export function ChatScreen({route, navigation}: Props) {
                 <Animated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(120)} style={styles.toBottom}>
                   <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel={unread ? '有新消息，回到最新' : '回到最新消息'}
+                    accessibilityLabel={unread ? tr('chat_back_to_latest_unread') : tr('chat_back_to_latest')}
                     onPress={toBottom}
                     hitSlop={8}
                     style={({pressed}) => [styles.toBottomButton, pressed && styles.agentPressed]}>
@@ -591,7 +595,7 @@ export function ChatScreen({route, navigation}: Props) {
           <Dock
             text={draft}
             onChangeText={setDraft}
-            placeholder={empty ? '问点什么…' : '继续追问…'}
+            placeholder={empty ? tr('composer_placeholder_empty') : tr('composer_placeholder_followup')}
             busy={busy}
             onSend={sendText}
             onStop={() => {
@@ -684,21 +688,19 @@ export function ChatScreen({route, navigation}: Props) {
         />
         <FieldSheet
           visible={renameOpen}
-          title="重命名对话"
+          title={tr('session_rename_title')}
           initial={sessionItem().title}
-          placeholder="对话标题"
+          placeholder={tr('session_title_placeholder')}
           onSubmit={renameSession}
           onClose={() => setRenameOpen(false)}
         />
         <ConfirmSheet
           visible={deleteOpen}
-          title="删除这个对话"
+          title={tr('session_delete_title')}
           message={
-            (settings?.team?.members.length ?? 0) > 0
-              ? '团队会话会同步清理所有成员的记录，删除后无法恢复。'
-              : '对话记录会一并删除，无法恢复。'
+            (settings?.team?.members.length ?? 0) > 0 ? tr('session_delete_team_msg') : tr('session_delete_msg')
           }
-          confirmLabel="删除"
+          confirmLabel={tr('common_delete')}
           danger
           onConfirm={deleteSession}
           onClose={() => setDeleteOpen(false)}
