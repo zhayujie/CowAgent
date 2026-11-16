@@ -12,6 +12,7 @@ import {ChoiceSheet, ConfirmSheet, Footnote, SettingRow, StatusTag, SwitchRow} f
 import {SHEET_DISMISS_MS} from '../components/Sheet';
 import {showToast, ToastHost} from '../components/Toast';
 import {EmptyState, GroupLabel, PageHeader} from '../components/ui';
+import {tr, trf} from '../i18n';
 import type {RootStackParamList} from '../navigation/types';
 import type {CapabilityKey, FallbackLink, ModelsState, ProviderEntry} from '../protocol/resources';
 import {useConfigStore} from '../store/configStore';
@@ -33,13 +34,13 @@ function searchSummary(state: ModelsState): string {
   }
   const configured = search.providers.filter(p => p.configured);
   if (!configured.length) {
-    return '未配置';
+    return tr('common_not_configured');
   }
   if (search.strategy === 'fixed') {
     const fixed = search.providers.find(p => p.id === (search.fixed_provider || search.current_provider));
-    return fixed ? labelText(fixed.label, fixed.id) : '指定';
+    return fixed ? labelText(fixed.label, fixed.id) : tr('settings_search_fixed');
   }
-  return `自动 · ${configured.length} 个可用`;
+  return trf('settings_search_auto_count', {n: configured.length});
 }
 
 export function ModelsScreen({navigation}: Props) {
@@ -79,8 +80,8 @@ export function ModelsScreen({navigation}: Props) {
   if (!state) {
     return (
       <View style={styles.root}>
-        <PageHeader title="模型与接口" onBack={navigation.goBack} />
-        <EmptyState loading={!error} title="加载失败" hint={error ?? undefined} />
+        <PageHeader title={tr('settings_models')} onBack={navigation.goBack} />
+        <EmptyState loading={!error} title={tr('common_load_failed')} hint={error ?? undefined} />
       </View>
     );
   }
@@ -110,9 +111,9 @@ export function ModelsScreen({navigation}: Props) {
       await setChatModel(pick.provider, pick.model);
       await load();
       reloadConfig().catch(() => undefined);
-      showToast(`主模型已切换为 ${pick.model}，从下一条消息开始生效`);
+      showToast(trf('settings_model_switched', {model: pick.model}));
     } catch (e) {
-      showToast(`切换失败：${describeConnectError(e)}`);
+      showToast(trf('settings_switch_failed', {error: describeConnectError(e)}));
     }
   };
 
@@ -121,7 +122,7 @@ export function ModelsScreen({navigation}: Props) {
       await setChatFallback(enabled && chain.length > 0, chain);
       await load();
     } catch (e) {
-      showToast(`保存失败：${describeConnectError(e)}`);
+      showToast(trf('common_save_failed_detail', {error: describeConnectError(e)}));
     }
   };
 
@@ -145,47 +146,47 @@ export function ModelsScreen({navigation}: Props) {
       await deleteCustomProvider(target.custom_id);
       setRemoving(null);
       await load();
-      showToast('已删除');
+      showToast(tr('common_deleted'));
     } catch (e) {
-      showToast(`删除失败：${describeConnectError(e)}`);
+      showToast(trf('common_delete_failed', {error: describeConnectError(e)}));
     }
   };
 
   const linkActions = [
-    ...(linkIndex ? [{key: 'up' as const, label: '上移', icon: faArrowUp}] : []),
+    ...(linkIndex ? [{key: 'up' as const, label: tr('settings_move_up'), icon: faArrowUp}] : []),
     ...(linkIndex !== null && linkIndex < fallback.chain.length - 1
-      ? [{key: 'down' as const, label: '下移', icon: faArrowDown}]
+      ? [{key: 'down' as const, label: tr('settings_move_down'), icon: faArrowDown}]
       : []),
-    {key: 'remove' as const, label: '移除', icon: faTrashCan},
+    {key: 'remove' as const, label: tr('settings_remove'), icon: faTrashCan},
   ];
 
   return (
     <View style={styles.root}>
-      <PageHeader title="模型与接口" onBack={navigation.goBack} />
+      <PageHeader title={tr('settings_models')} onBack={navigation.goBack} />
       <ScrollView
         contentContainerStyle={{paddingBottom: insets.bottom + 32}}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={t.t3} colors={[t.green]} />}>
-        <GroupLabel style={styles.firstGroup}>主模型</GroupLabel>
+        <GroupLabel style={styles.firstGroup}>{tr('settings_primary_model')}</GroupLabel>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`主模型 ${primary.model}，点按切换`}
+          accessibilityLabel={trf('settings_primary_a11y', {model: primary.model})}
           onPress={() => setPicker('chat')}
           style={({pressed}) => [styles.primary, pressed && styles.pressed]}>
           <View style={styles.primaryText}>
             <Text style={styles.primaryName} numberOfLines={1}>
-              {primary.model || '未配置'}
+              {primary.model || tr('common_not_configured')}
             </Text>
             <Text style={styles.primaryMeta} numberOfLines={1}>
               {[providerName(primary.provider), primaryInfo ? describeModel(primaryInfo) : ''].filter(Boolean).join(' · ')}
             </Text>
           </View>
-          <Text style={styles.switchText}>切换</Text>
+          <Text style={styles.switchText}>{tr('settings_switch')}</Text>
         </Pressable>
 
-        <GroupLabel style={styles.group}>备用模型</GroupLabel>
+        <GroupLabel style={styles.group}>{tr('settings_fallback_models')}</GroupLabel>
         <SwitchRow
-          title="主模型失败时自动切换"
-          detail={fallback.chain.length ? '按下面的顺序依次尝试，点按调整顺序' : '先添加至少一个备用模型'}
+          title={tr('settings_fallback_auto')}
+          detail={fallback.chain.length ? tr('settings_fallback_order_hint') : tr('settings_fallback_need_one')}
           value={fallback.enabled}
           disabled={!fallback.chain.length}
           onValueChange={v => saveChain(v, fallback.chain)}
@@ -194,12 +195,12 @@ export function ModelsScreen({navigation}: Props) {
           <SettingRow
             key={`${item.provider}/${item.model}`}
             title={item.model}
-            detail={`第 ${i + 1} 备选 · ${providerName(item.provider)}`}
+            detail={trf('settings_fallback_nth', {n: i + 1, provider: providerName(item.provider)})}
             onPress={() => setLinkIndex(i)}
             right={
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={`移除 ${item.model}`}
+                accessibilityLabel={trf('settings_remove_what', {model: item.model})}
                 hitSlop={10}
                 onPress={() => saveChain(fallback.enabled, fallback.chain.filter((_, j) => j !== i))}
                 style={styles.remove}>
@@ -213,10 +214,10 @@ export function ModelsScreen({navigation}: Props) {
           onPress={() => setPicker('fallback')}
           style={({pressed}) => [styles.add, pressed && styles.pressedText]}>
           <Icon icon={faPlus} size={11} color={t.accent} />
-          <Text style={styles.addText}>添加备用模型</Text>
+          <Text style={styles.addText}>{tr('settings_add_fallback')}</Text>
         </Pressable>
 
-        <GroupLabel style={styles.group}>其他能力</GroupLabel>
+        <GroupLabel style={styles.group}>{tr('settings_other_capabilities')}</GroupLabel>
         {capabilities.map(key => (
           <SettingRow
             key={key}
@@ -227,20 +228,31 @@ export function ModelsScreen({navigation}: Props) {
         ))}
         {!!state.capabilities.search && (
           <SettingRow
-            title="联网搜索"
+            title={tr('settings_web_search')}
             value={searchSummary(state)}
             onPress={() => navigation.navigate('WebSearch')}
             last
           />
         )}
 
-        <GroupLabel style={styles.group}>模型厂商</GroupLabel>
+        <GroupLabel style={styles.group}>{tr('settings_vendors')}</GroupLabel>
         {builtins.map(p => (
           <SettingRow
             key={p.id}
             title={labelText(p.label, p.id)}
-            detail={p.configured ? (p.api_key_masked ? compactMask(p.api_key_masked) : '已接入') : '填入 API Key 后可用'}
-            right={<StatusTag label={p.configured ? '已配置' : '未配置'} on={p.configured} />}
+            detail={
+              p.configured
+                ? p.api_key_masked
+                  ? compactMask(p.api_key_masked)
+                  : tr('settings_vendor_connected')
+                : tr('settings_vendor_need_key')
+            }
+            right={
+              <StatusTag
+                label={p.configured ? tr('settings_configured') : tr('common_not_configured')}
+                on={p.configured}
+              />
+            }
             onPress={p.api_key_field ? () => setEditing(p) : undefined}
             chevron={false}
           />
@@ -249,8 +261,8 @@ export function ModelsScreen({navigation}: Props) {
           <SettingRow
             key={p.id}
             title={p.custom_name || labelText(p.label, p.id)}
-            detail={p.api_base || '自定义接口'}
-            right={<StatusTag label="自定义" on={p.configured} />}
+            detail={p.api_base || tr('settings_custom_api')}
+            right={<StatusTag label={tr('settings_custom')} on={p.configured} />}
             onPress={() => setCustom(p)}
             chevron={false}
           />
@@ -260,14 +272,14 @@ export function ModelsScreen({navigation}: Props) {
           onPress={() => setCustom('new')}
           style={({pressed}) => [styles.add, pressed && styles.pressedText]}>
           <Icon icon={faPlus} size={11} color={t.accent} />
-          <Text style={styles.addText}>添加自定义厂商</Text>
+          <Text style={styles.addText}>{tr('settings_add_custom_vendor')}</Text>
         </Pressable>
-        <Footnote>切换主模型不会打断进行中的回复，从下一条消息开始生效。自定义厂商可接入任何兼容 OpenAI 协议的接口。</Footnote>
+        <Footnote>{tr('settings_models_note')}</Footnote>
       </ScrollView>
 
       <ModelPicker
         visible={picker === 'chat'}
-        title="主模型"
+        title={tr('settings_primary_model')}
         providers={providers}
         selected={primary}
         onSelect={pickChat}
@@ -275,7 +287,7 @@ export function ModelsScreen({navigation}: Props) {
       />
       <ModelPicker
         visible={picker === 'fallback'}
-        title="添加备用模型"
+        title={tr('settings_add_fallback')}
         providers={providers}
         exclude={[primary, ...fallback.chain]}
         onSelect={pick => {
@@ -297,7 +309,7 @@ export function ModelsScreen({navigation}: Props) {
         onSaved={async () => {
           setEditing(null);
           await load();
-          showToast('已保存');
+          showToast(tr('common_saved'));
         }}
       />
       <CustomProviderSheet
@@ -306,7 +318,7 @@ export function ModelsScreen({navigation}: Props) {
         onSaved={async name => {
           setCustom(null);
           await load();
-          showToast(`${name} 已保存`);
+          showToast(trf('settings_named_saved', {name}));
         }}
         onDelete={p => {
           setCustom(null);
@@ -315,9 +327,9 @@ export function ModelsScreen({navigation}: Props) {
       />
       <ConfirmSheet
         visible={!!removing}
-        title={`删除${removing?.custom_name ?? '自定义厂商'}`}
-        message="厂商的接口地址、Key 和模型列表都会移除；正在用它的能力需要重新选择厂商。"
-        confirmLabel="删除"
+        title={trf('settings_delete_what', {name: removing?.custom_name ?? tr('settings_custom_vendor')})}
+        message={tr('settings_delete_vendor_msg')}
+        confirmLabel={tr('common_delete')}
         danger
         onConfirm={removeCustom}
         onClose={() => setRemoving(null)}

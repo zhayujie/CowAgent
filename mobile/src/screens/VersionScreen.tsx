@@ -7,6 +7,7 @@ import {Markdown} from '../components/Markdown';
 import {ActionButton, ConfirmSheet, Footnote, Kpis, Notice} from '../components/settings';
 import {showToast, ToastHost} from '../components/Toast';
 import {GroupLabel, PageHeader} from '../components/ui';
+import {tr, trf, type MessageKey} from '../i18n';
 import type {RootStackParamList} from '../navigation/types';
 import type {UpdateCheck, UpdateStatus, VersionInfo} from '../protocol/resources';
 import {useOverviewStore} from '../store/overviewStore';
@@ -16,14 +17,19 @@ import {fullTime} from '../utils/format';
 
 type Props = StackScreenProps<RootStackParamList, 'Version'>;
 
-const STEP_LABEL: Record<string, string> = {
-  starting: '准备更新',
-  git_pull: '拉取最新代码',
-  install_deps: '安装依赖',
-  install_cli: '重装 CLI',
-  self_check: '检查新代码',
-  restart: '重启服务',
-  done: '完成',
+const STEP_LABEL: Record<string, MessageKey> = {
+  starting: 'settings_step_starting',
+  git_pull: 'settings_step_git_pull',
+  install_deps: 'settings_step_install_deps',
+  install_cli: 'settings_step_install_cli',
+  self_check: 'settings_step_self_check',
+  restart: 'settings_step_restart',
+  done: 'common_done',
+};
+
+const stepLabel = (step?: string): string | undefined => {
+  const key = STEP_LABEL[step ?? ''];
+  return key ? tr(key) : undefined;
 };
 
 const POLL_MS = 2000;
@@ -33,13 +39,13 @@ const POLL_LIMIT = 90;
 function unsupportedHint(info: VersionInfo | null): string {
   switch (info?.install_kind) {
     case 'packaged':
-      return '桌面客户端由应用自带的更新器升级，不需要在这里操作。';
+      return tr('settings_update_packaged');
     case 'docker':
-      return 'Docker 部署请在服务器上执行 docker compose pull，再执行 docker compose up -d。';
+      return tr('settings_update_docker');
     case 'git':
-      return '当前服务运行在 Windows 上，网页无法替它重启。请在服务器终端执行 cow update。';
+      return tr('settings_update_windows');
     default:
-      return '当前安装方式不支持在线更新，请在服务器终端执行 cow update，或按安装方式手动升级。';
+      return tr('settings_update_unsupported');
   }
 }
 
@@ -112,7 +118,7 @@ export function VersionScreen({navigation}: Props) {
           setInfo(fresh);
         }
         useOverviewStore.getState().load().catch(() => undefined);
-        showToast('更新完成');
+        showToast(tr('settings_update_done'));
         runCheck();
         return;
       }
@@ -120,7 +126,7 @@ export function VersionScreen({navigation}: Props) {
         return;
       }
       if (polls.current >= POLL_LIMIT) {
-        setStatus({state: 'failed', message: '等待服务重启超时，请到服务器上确认运行状态'});
+        setStatus({state: 'failed', message: tr('settings_update_timeout')});
         return;
       }
       poll();
@@ -149,15 +155,19 @@ export function VersionScreen({navigation}: Props) {
 
   return (
     <View style={styles.root}>
-      <PageHeader title="版本更新" onBack={navigation.goBack} />
+      <PageHeader title={tr('settings_version')} onBack={navigation.goBack} />
       <ScrollView contentContainerStyle={{paddingBottom: insets.bottom + 32}}>
         <View style={styles.kpis}>
           <Kpis
             items={[
-              {value: current ? `v${current}` : '-', label: '当前版本'},
+              {value: current ? `v${current}` : '-', label: tr('settings_current_version')},
               {
                 value: latest ? `v${tagVersion(latest.tag)}` : checking ? '…' : '-',
-                label: hasUpdate ? '有新版本' : check ? '已是最新版本' : '最新版本',
+                label: hasUpdate
+                  ? tr('settings_new_version')
+                  : check
+                    ? tr('settings_up_to_date')
+                    : tr('settings_latest_version'),
               },
             ]}
           />
@@ -166,39 +176,47 @@ export function VersionScreen({navigation}: Props) {
         <View style={styles.actions}>
           {hasUpdate && supported ? (
             <ActionButton
-              label={busy ? '正在更新…' : '立即更新'}
+              label={busy ? tr('settings_updating') : tr('settings_update_now')}
               tone="primary"
               loading={busy}
               disabled={busy}
               onPress={() => setConfirm(true)}
             />
           ) : (
-            <ActionButton label={checking ? '正在检查…' : '检查更新'} loading={checking} onPress={runCheck} />
+            <ActionButton
+              label={checking ? tr('settings_checking') : tr('settings_check_update')}
+              loading={checking}
+              onPress={runCheck}
+            />
           )}
         </View>
 
         {!!status && status.state !== 'idle' && (
           <Text style={[styles.status, status.state === 'failed' && styles.statusBad]}>
             {status.state === 'failed'
-              ? `更新失败：${status.message || STEP_LABEL[status.step ?? ''] || '未知错误'}`
+              ? trf('settings_update_failed', {
+                  error: status.message || stepLabel(status.step) || tr('settings_unknown_error'),
+                })
               : status.state === 'success'
-                ? '更新完成，服务已重启'
+                ? tr('settings_update_success')
                 : status.state === 'restarting'
-                  ? '服务重启中，正在重新连接…'
-                  : `正在更新 · ${STEP_LABEL[status.step ?? ''] ?? status.step ?? ''}`}
+                  ? tr('settings_restarting')
+                  : trf('settings_updating_step', {step: stepLabel(status.step) ?? status.step ?? ''})}
           </Text>
         )}
-        {!!checkError && <Text style={[styles.status, styles.statusBad]}>检查更新失败：{checkError}</Text>}
+        {!!checkError && (
+          <Text style={[styles.status, styles.statusBad]}>{trf('settings_check_failed', {error: checkError})}</Text>
+        )}
         {hasUpdate && !supported && <Notice style={styles.notice}>{unsupportedHint(info)}</Notice>}
 
         {releases.length > 0 && (
           <>
-            <GroupLabel style={styles.group}>版本说明</GroupLabel>
+            <GroupLabel style={styles.group}>{tr('settings_release_notes')}</GroupLabel>
             {releases.map(r => {
               const notes = releaseNotes(r.body ?? '');
               const links = [
-                notes.zhUrl ? {label: '中文说明', url: notes.zhUrl} : null,
-                r.html_url ? {label: '在 GitHub 查看', url: r.html_url} : null,
+                notes.zhUrl ? {label: tr('settings_zh_notes'), url: notes.zhUrl} : null,
+                r.html_url ? {label: tr('settings_view_on_github'), url: r.html_url} : null,
               ].filter((l): l is {label: string; url: string} => !!l);
               return (
                 <View key={r.tag} style={styles.release}>
@@ -208,7 +226,11 @@ export function VersionScreen({navigation}: Props) {
                     </Text>
                     {!!r.published_at && <Text style={styles.releaseDate}>{fullTime(r.published_at)}</Text>}
                   </View>
-                  {notes.markdown ? <Markdown value={notes.markdown} /> : <Text style={styles.none}>没有填写说明</Text>}
+                  {notes.markdown ? (
+                    <Markdown value={notes.markdown} />
+                  ) : (
+                    <Text style={styles.none}>{tr('settings_no_notes')}</Text>
+                  )}
                   {links.length > 0 && (
                     <View style={styles.links}>
                       {links.map(l => (
@@ -223,14 +245,14 @@ export function VersionScreen({navigation}: Props) {
             })}
           </>
         )}
-        <Footnote>检查更新会访问 GitHub 获取发布信息；更新会拉取最新代码并重启服务，期间对话会短暂中断。</Footnote>
+        <Footnote>{tr('settings_version_note')}</Footnote>
       </ScrollView>
 
       <ConfirmSheet
         visible={confirm}
-        title={`更新到 v${tagVersion(latest?.tag)}`}
-        message="将拉取最新代码并重启服务，正在进行的对话会被打断。确认继续？"
-        confirmLabel="立即更新"
+        title={trf('settings_update_to', {version: tagVersion(latest?.tag)})}
+        message={tr('settings_update_confirm')}
+        confirmLabel={tr('settings_update_now')}
         onConfirm={begin}
         onClose={() => setConfirm(false)}
       />

@@ -7,6 +7,7 @@ import {InfoRow, InputRow, OptionRow, PickerSheet, Section} from '../components/
 import {ActionButton, Notice} from '../components/settings';
 import {showToast, ToastHost} from '../components/Toast';
 import {EmptyState, PageHeader} from '../components/ui';
+import {tr, trf} from '../i18n';
 import type {RootStackParamList} from '../navigation/types';
 import type {CapabilityPick, ModelsState, VoiceReplyMode} from '../protocol/resources';
 import {describeConnectError} from '../store/serverStore';
@@ -88,7 +89,7 @@ export function CapabilityScreen({navigation, route}: Props) {
     return (
       <View style={styles.root}>
         <PageHeader title={meta.title} onBack={navigation.goBack} />
-        <EmptyState loading={!error} title="加载失败" hint={error ?? '服务端没有返回这项能力'} />
+        <EmptyState loading={!error} title={tr('common_load_failed')} hint={error ?? tr('settings_cap_missing')} />
       </View>
     );
   }
@@ -129,10 +130,10 @@ export function CapabilityScreen({navigation, route}: Props) {
     setMode(next);
     try {
       await setVoiceReplyMode(next);
-      showToast(next === 'off' ? '已关闭语音回复' : '语音回复模式已保存');
+      showToast(next === 'off' ? tr('settings_voice_reply_off_toast') : tr('settings_voice_reply_saved'));
     } catch (e) {
       setMode(prev);
-      showToast(`保存失败：${describeConnectError(e)}`);
+      showToast(trf('common_save_failed_detail', {error: describeConnectError(e)}));
     }
   };
 
@@ -145,10 +146,10 @@ export function CapabilityScreen({navigation, route}: Props) {
         model: finalModel,
         ...(key === 'tts' ? {voice: draft.voice} : {}),
       });
-      showToast('已保存');
+      showToast(tr('common_saved'));
       await load();
     } catch (e) {
-      showToast(`保存失败：${describeConnectError(e)}`);
+      showToast(trf('common_save_failed_detail', {error: describeConnectError(e)}));
     } finally {
       setSaving(false);
     }
@@ -156,15 +157,17 @@ export function CapabilityScreen({navigation, route}: Props) {
 
   const autoHint =
     !draft.provider && pick.fallback_provider
-      ? `当前使用 ${[providerLabel(data, pick.fallback_provider), pick.fallback_model].filter(Boolean).join(' · ')}`
+      ? trf('settings_currently_using', {
+          name: [providerLabel(data, pick.fallback_provider), pick.fallback_model].filter(Boolean).join(' · '),
+        })
       : meta.emptyDesc;
 
   const modelSection = !!draft.provider && (
     <Section
-      title="模型"
+      title={tr('settings_model')}
       footer={
         key === 'embedding'
-          ? `${pick.current_dim ? `当前维度 ${pick.current_dim}。` : ''}切换向量模型后，已有索引将失效，需要重建。`
+          ? `${pick.current_dim ? trf('settings_embedding_dim', {dim: pick.current_dim}) : ''}${tr('settings_embedding_rebuild')}`
           : undefined
       }>
       {typedOnly ? (
@@ -172,11 +175,17 @@ export function CapabilityScreen({navigation, route}: Props) {
           first
           value={draft.typed}
           onChangeText={typed => setDraft({...draft, typed})}
-          placeholder="填写模型 ID"
+          placeholder={tr('settings_model_id_ph')}
           mono
         />
       ) : models.length > INLINE_MODELS && !draft.typing ? (
-        <InfoRow first title="模型" value={draft.model || '请选择'} mono onPress={() => setSheet('model')} />
+        <InfoRow
+          first
+          title={tr('settings_model')}
+          value={draft.model || tr('settings_please_select')}
+          mono
+          onPress={() => setSheet('model')}
+        />
       ) : (
         models.map((m, i) => (
           <OptionRow
@@ -191,19 +200,24 @@ export function CapabilityScreen({navigation, route}: Props) {
         ))
       )}
       {!typedOnly && models.length > INLINE_MODELS && draft.typing && (
-        <InfoRow first title="从列表选择" onPress={() => setSheet('model')} />
+        <InfoRow first title={tr('settings_pick_from_list')} onPress={() => setSheet('model')} />
       )}
       {!typedOnly && meta.freeModel && (
         <OptionRow
           first={!models.length}
-          title="自定义"
-          hint="列表里没有时，手动填写模型 ID"
+          title={tr('settings_custom')}
+          hint={tr('settings_custom_model_hint')}
           selected={draft.typing}
           onPress={() => setDraft({...draft, typing: true})}
         />
       )}
       {!typedOnly && draft.typing && (
-        <InputRow value={draft.typed} onChangeText={typed => setDraft({...draft, typed})} placeholder="填写模型 ID" mono />
+        <InputRow
+          value={draft.typed}
+          onChangeText={typed => setDraft({...draft, typed})}
+          placeholder={tr('settings_model_id_ph')}
+          mono
+        />
       )}
     </Section>
   );
@@ -213,10 +227,10 @@ export function CapabilityScreen({navigation, route}: Props) {
       <PageHeader title={meta.title} subtitle={meta.blurb} onBack={navigation.goBack} />
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={{paddingBottom: insets.bottom + 32}} keyboardShouldPersistTaps="handled">
-          {locked && <Notice style={styles.notice}>{pick.note || '这项能力由当前主模型决定，不能单独设置。'}</Notice>}
+          {locked && <Notice style={styles.notice}>{pick.note || tr('settings_cap_locked')}</Notice>}
 
           {key === 'tts' && (
-            <Section title="语音回复" footer="决定何时以语音回复用户">
+            <Section title={tr('settings_voice_reply')} footer={tr('settings_voice_reply_footer')}>
               {REPLY_MODES.map((m, i) => (
                 <OptionRow key={m.value} first={i === 0} title={m.label} selected={mode === m.value} onPress={() => saveMode(m.value)} />
               ))}
@@ -225,7 +239,7 @@ export function CapabilityScreen({navigation, route}: Props) {
 
           {showChoice && !locked && (
             <>
-              <Section title="厂商" footer={providers.length ? undefined : '还没有能提供这项能力的厂商，先在「模型厂商」里填入 API Key'}>
+              <Section title={tr('settings_vendor')} footer={providers.length ? undefined : tr('settings_no_vendor_for_cap')}>
                 {!!meta.emptyLabel && (
                   <OptionRow first title={meta.emptyLabel} hint={autoHint} selected={!draft.provider} onPress={() => chooseProvider('')} />
                 )}
@@ -234,7 +248,7 @@ export function CapabilityScreen({navigation, route}: Props) {
                     key={id}
                     first={!meta.emptyLabel && i === 0}
                     title={providerLabel(data, id)}
-                    hint={data.providers.find(p => p.id === id)?.configured === false ? '未配置 API Key' : undefined}
+                    hint={data.providers.find(p => p.id === id)?.configured === false ? tr('settings_no_api_key') : undefined}
                     selected={draft.provider === id}
                     onPress={() => chooseProvider(id)}
                   />
@@ -242,11 +256,11 @@ export function CapabilityScreen({navigation, route}: Props) {
               </Section>
               {modelSection}
               {key === 'tts' && !!draft.provider && !!voices.length && (
-                <Section title="音色">
+                <Section title={tr('settings_voice')}>
                   <InfoRow
                     first
-                    title="音色"
-                    value={draft.voice || '请选择'}
+                    title={tr('settings_voice')}
+                    value={draft.voice || tr('settings_please_select')}
                     hint={voices.find(v => v.value === draft.voice)?.hint}
                     onPress={() => setSheet('voice')}
                   />
@@ -254,7 +268,7 @@ export function CapabilityScreen({navigation, route}: Props) {
               )}
               {!!pick.note && <Notice style={styles.notice}>{pick.note}</Notice>}
               <ActionButton
-                label="保存"
+                label={tr('common_save')}
                 tone="primary"
                 loading={saving}
                 disabled={!dirty || (!!draft.provider && !finalModel)}
@@ -268,7 +282,7 @@ export function CapabilityScreen({navigation, route}: Props) {
 
       <PickerSheet
         visible={sheet === 'model'}
-        title="选择模型"
+        title={tr('settings_select_model')}
         options={models}
         selected={draft.typing ? undefined : draft.model}
         mono
@@ -277,7 +291,7 @@ export function CapabilityScreen({navigation, route}: Props) {
       />
       <PickerSheet
         visible={sheet === 'voice'}
-        title="选择音色"
+        title={tr('settings_select_voice')}
         options={voices}
         selected={draft.voice}
         onSelect={voice => {

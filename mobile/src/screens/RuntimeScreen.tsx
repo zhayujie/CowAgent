@@ -5,6 +5,7 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {ChoiceSheet, FieldSheet, Footnote, SettingRow, SwitchRow} from '../components/settings';
 import {showToast, ToastHost} from '../components/Toast';
 import {EmptyState, GroupLabel, PageHeader} from '../components/ui';
+import {tr, trf, type MessageKey} from '../i18n';
 import type {RootStackParamList} from '../navigation/types';
 import type {ConfigUpdates, GlobalConfig, ReasoningMeta} from '../protocol/resources';
 import {useConfigStore} from '../store/configStore';
@@ -16,22 +17,10 @@ type Props = StackScreenProps<RootStackParamList, 'Runtime'>;
 
 type NumberKey = 'agent_max_context_tokens' | 'agent_max_context_turns' | 'agent_max_steps';
 
-const NUMBER_FIELDS: Record<NumberKey, {title: string; hint: string; min: number}> = {
-  agent_max_context_tokens: {
-    title: '最大上下文 Token',
-    hint: '上下文输入预算上限，达到后会压缩历史以控制成本；仍不会超过当前模型窗口。填 0 表示不限制、跟随模型窗口。',
-    min: 0,
-  },
-  agent_max_context_turns: {
-    title: '最大记忆轮次',
-    hint: '一问一答为一轮，超过后会智能压缩处理。',
-    min: 1,
-  },
-  agent_max_steps: {
-    title: '最大执行步数',
-    hint: '单次对话中 Agent 最多调用工具的次数。',
-    min: 1,
-  },
+const NUMBER_FIELDS: Record<NumberKey, {title: MessageKey; hint: MessageKey; min: number}> = {
+  agent_max_context_tokens: {title: 'settings_max_tokens', hint: 'settings_max_tokens_hint', min: 0},
+  agent_max_context_turns: {title: 'settings_max_turns', hint: 'settings_max_turns_hint', min: 1},
+  agent_max_steps: {title: 'settings_max_steps', hint: 'settings_max_steps_hint', min: 1},
 };
 
 /** The provider the console keys efforts by: LinkAI routing wins over the vendor. */
@@ -62,15 +51,15 @@ export function RuntimeScreen({navigation}: Props) {
     try {
       await update(updates);
     } catch (e) {
-      showToast(`保存失败：${describeConnectError(e)}`);
+      showToast(trf('common_save_failed_detail', {error: describeConnectError(e)}));
     }
   };
 
   if (!config) {
     return (
       <View style={styles.root}>
-        <PageHeader title="Agent 运行" onBack={navigation.goBack} />
-        <EmptyState loading={!error} title="加载失败" hint={error ?? undefined} />
+        <PageHeader title={tr('settings_runtime')} onBack={navigation.goBack} />
+        <EmptyState loading={!error} title={tr('common_load_failed')} hint={error ?? undefined} />
       </View>
     );
   }
@@ -84,70 +73,70 @@ export function RuntimeScreen({navigation}: Props) {
 
   return (
     <View style={styles.root}>
-      <PageHeader title="Agent 运行" onBack={navigation.goBack} />
+      <PageHeader title={tr('settings_runtime')} onBack={navigation.goBack} />
       <ScrollView contentContainerStyle={{paddingBottom: insets.bottom + 32}}>
-        <GroupLabel style={styles.firstGroup}>上下文</GroupLabel>
+        <GroupLabel style={styles.firstGroup}>{tr('settings_group_context')}</GroupLabel>
         <SettingRow
-          title="最大上下文 Token"
-          detail="达到后压缩历史，0 为跟随模型窗口"
-          value={tokens ? formatCount(tokens) : '跟随模型'}
+          title={tr('settings_max_tokens')}
+          detail={tr('settings_max_tokens_detail')}
+          value={tokens ? formatCount(tokens) : tr('settings_follow_model')}
           onPress={() => setEditing('agent_max_context_tokens')}
         />
         <SettingRow
-          title="最大记忆轮次"
-          detail="一问一答为一轮"
-          value={`${config.agent_max_context_turns} 轮`}
+          title={tr('settings_max_turns')}
+          detail={tr('settings_max_turns_detail')}
+          value={trf('settings_turns_value', {n: config.agent_max_context_turns})}
           onPress={() => setEditing('agent_max_context_turns')}
         />
         <SettingRow
-          title="最大执行步数"
-          detail="单次对话最多调用工具的次数"
-          value={`${config.agent_max_steps} 步`}
+          title={tr('settings_max_steps')}
+          detail={tr('settings_max_steps_detail')}
+          value={trf('settings_steps_value', {n: config.agent_max_steps})}
           onPress={() => setEditing('agent_max_steps')}
           last
         />
 
-        <GroupLabel style={styles.group}>思考</GroupLabel>
+        <GroupLabel style={styles.group}>{tr('settings_group_thinking')}</GroupLabel>
         <SwitchRow
-          title="深度思考"
-          detail={`当前模型 ${config.model || '未配置'}`}
+          title={tr('settings_thinking')}
+          detail={trf('settings_current_model', {model: config.model || tr('common_not_configured')})}
           value={config.enable_thinking}
           onValueChange={v => save({enable_thinking: v})}
           last={!config.enable_thinking || !effortOptions.length}
         />
         {config.enable_thinking && effortOptions.length > 0 && (
           <SettingRow
-            title="思考强度"
-            detail="按当前模型厂商支持的取值发送"
+            title={tr('settings_effort')}
+            detail={tr('settings_effort_detail')}
             value={effortOptions.find(o => o.value === effort)?.label ?? effort}
             onPress={() => setEffortOpen(true)}
             last
           />
         )}
 
-        <GroupLabel style={styles.group}>协作与成长</GroupLabel>
+        <GroupLabel style={styles.group}>{tr('settings_group_collab')}</GroupLabel>
         <SwitchRow
-          title="子 Agent"
-          detail="把可独立完成的任务交给子 Agent 并行执行，只把结论带回主对话"
+          title={tr('settings_subagent')}
+          detail={tr('settings_subagent_detail')}
           value={config.subagent_enabled}
           onValueChange={v => save({subagent_enabled: v})}
         />
         <SwitchRow
-          title="自主进化"
-          detail="会话空闲后自动复盘，沉淀记忆、优化技能、处理未完成事项"
+          title={tr('settings_evolution')}
+          detail={tr('settings_evolution_detail')}
           value={config.self_evolution_enabled}
           onValueChange={v => save({self_evolution_enabled: v})}
           last
         />
-        <Footnote>保存后立即生效，不会清空已有会话。和网页控制台的「Agent 配置」是同一份设置。</Footnote>
+        <Footnote>{tr('settings_runtime_note')}</Footnote>
       </ScrollView>
 
       <FieldSheet
         visible={!!editing}
-        title={field?.title ?? ''}
+        title={field ? tr(field.title) : ''}
         initial={editing ? String(config[editing]) : ''}
         keyboardType="number-pad"
-        hint={field?.hint}
+        hint={field ? tr(field.hint) : undefined}
         allowEmpty={false}
         onSubmit={async raw => {
           if (!editing || !field) {
@@ -155,7 +144,7 @@ export function RuntimeScreen({navigation}: Props) {
           }
           const value = Number(raw);
           if (!Number.isInteger(value) || value < field.min) {
-            throw new Error(field.min ? `请输入不小于 ${field.min} 的整数` : '请输入 0 或正整数');
+            throw new Error(field.min ? trf('settings_int_min', {min: field.min}) : tr('settings_int_nonneg'));
           }
           await update({[editing]: value});
         }}
@@ -163,10 +152,10 @@ export function RuntimeScreen({navigation}: Props) {
       />
       <ChoiceSheet
         visible={effortOpen}
-        title="思考强度"
+        title={tr('settings_effort')}
         options={effortOptions.map(o => ({key: o.value, label: o.label}))}
         selected={effort}
-        note="只对当前模型生效，换模型后按各自的设置。"
+        note={tr('settings_effort_note')}
         onSelect={value => {
           setEffortOpen(false);
           save({reasoning_effort_by_model: {[effortKey]: value}});

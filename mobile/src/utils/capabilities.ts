@@ -1,3 +1,4 @@
+import {localizedLabel, tr, trf, type MessageKey} from '../i18n';
 import type {
   CapabilityKey,
   CapabilityPick,
@@ -23,11 +24,7 @@ export const providerLabel = (data: ModelsState | null, id: string): string => {
   if (!id) {
     return '';
   }
-  const label = data?.providers.find(p => p.id === id)?.label;
-  if (!label) {
-    return id;
-  }
-  return typeof label === 'string' ? label : label.zh || label.en || id;
+  return localizedLabel(data?.providers.find(p => p.id === id)?.label, id);
 };
 
 interface CapabilityMeta {
@@ -40,39 +37,71 @@ interface CapabilityMeta {
   freeModel?: boolean;
 }
 
+/** Copy is looked up through getters so it follows the current language. */
+function capabilityMeta(
+  title: MessageKey,
+  blurb: MessageKey,
+  empty?: {label: MessageKey; desc: MessageKey},
+  freeModel?: boolean,
+): CapabilityMeta {
+  return {
+    get title() {
+      return tr(title);
+    },
+    get blurb() {
+      return tr(blurb);
+    },
+    get emptyLabel() {
+      return empty ? tr(empty.label) : undefined;
+    },
+    get emptyDesc() {
+      return empty ? tr(empty.desc) : undefined;
+    },
+    ...(freeModel ? {freeModel} : {}),
+  };
+}
+
 export const CAPABILITY_META: Record<CapabilityKey, CapabilityMeta> = {
-  vision: {
-    title: '图像理解',
-    blurb: '识别图片内容，用于图像识别工具',
-    emptyLabel: '自动',
-    emptyDesc: '按已配置的厂商自动选择',
-  },
-  image: {
-    title: '图像生成',
-    blurb: '生成图片，用于图像生成技能',
-    emptyLabel: '自动',
-    emptyDesc: '按已配置的厂商自动选择',
-  },
-  asr: {
-    title: '语音识别',
-    blurb: '语音转文字',
-    emptyLabel: '自动',
-    emptyDesc: '跟随主模型的厂商',
-    freeModel: true,
-  },
-  tts: {title: '语音合成', blurb: '文字转语音'},
-  embedding: {
-    title: '向量',
-    blurb: '用于记忆与知识的向量化检索',
-    emptyLabel: '不启用',
-    emptyDesc: '记忆与知识不做向量检索',
-  },
+  vision: capabilityMeta('settings_cap_vision', 'settings_cap_vision_blurb', {
+    label: 'settings_auto',
+    desc: 'settings_cap_auto_desc',
+  }),
+  image: capabilityMeta('settings_cap_image', 'settings_cap_image_blurb', {
+    label: 'settings_auto',
+    desc: 'settings_cap_auto_desc',
+  }),
+  asr: capabilityMeta(
+    'settings_cap_asr',
+    'settings_cap_asr_blurb',
+    {label: 'settings_auto', desc: 'settings_cap_asr_auto_desc'},
+    true,
+  ),
+  tts: capabilityMeta('settings_cap_tts', 'settings_cap_tts_blurb'),
+  embedding: capabilityMeta('settings_cap_embedding', 'settings_cap_embedding_blurb', {
+    label: 'settings_cap_embedding_off',
+    desc: 'settings_cap_embedding_off_desc',
+  }),
 };
 
 export const REPLY_MODES: {value: VoiceReplyMode; label: string}[] = [
-  {value: 'off', label: '关闭'},
-  {value: 'voice_if_voice', label: '仅当用户发语音时'},
-  {value: 'always', label: '始终语音回复'},
+  {
+    value: 'off',
+    get label() {
+      return tr('settings_reply_off');
+    },
+  },
+  {
+    value: 'voice_if_voice',
+    get label() {
+      return tr('settings_reply_if_voice');
+    },
+  },
+  {
+    value: 'always',
+    get label() {
+      return tr('settings_reply_always');
+    },
+  },
 ];
 
 /**
@@ -128,10 +157,10 @@ export function capabilitySummary(data: ModelsState, key: CapabilityKey): string
     return '';
   }
   if (key === 'tts' && pick.reply_mode === 'off') {
-    return '关闭';
+    return tr('settings_reply_off');
   }
   if (!pick.current_provider) {
-    return CAPABILITY_META[key].emptyLabel ?? '未配置';
+    return CAPABILITY_META[key].emptyLabel ?? tr('common_not_configured');
   }
   const vendor = providerLabel(data, pick.current_provider);
   return pick.current_model ? `${vendor} · ${pick.current_model}` : vendor;
@@ -157,22 +186,33 @@ export function searchEditor(p: SearchProviderMeta): SearchEditor {
 /** AnySearch and Keenable work without a key. */
 export const searchAllowsAnonymous = (id: string) => id === 'anysearch' || id === 'keenable';
 
-const SEARCH_HELP: Record<string, string> = {
-  bocha: '前往博查开放平台创建 API Key',
-  anysearch: '前往 anysearch.com 控制台创建 API Key，留空则用匿名模式（每日有免费额度）',
-  serply: '前往 serply.io 控制台创建 API Key',
-  tavily: '前往 tavily.com 控制台创建 API Key',
-  outcrawl: '前往 outcrawl.ai 控制台创建 API Key',
-  firecrawl: '前往 firecrawl.dev 控制台创建 API Key',
-  specstream: '前往 specstream.ai 控制台创建 API Key',
-  olostep: '前往 olostep.com 控制台创建 API Key',
-  searchapi: '前往 searchapi.io 控制台创建 API Key',
-  keenable: '留空则用匿名模式；填入密钥可提升频率上限，前往 keenable.ai 获取',
-  searxng: '自托管 SearXNG 实例的地址，无需 API Key',
-  deepseek: '与 DeepSeek 模型共用同一组 API Key 和 API Base，修改后模型调用也会生效',
+const SEARCH_HELP: Record<string, MessageKey> = {
+  bocha: 'settings_search_help_bocha',
+  anysearch: 'settings_search_help_anysearch',
+  keenable: 'settings_search_help_keenable',
+  searxng: 'settings_search_help_searxng',
+  deepseek: 'settings_search_help_deepseek',
 };
 
-export const searchHelp = (id: string) => SEARCH_HELP[id] ?? '';
+/** Vendors whose help just points at their console. */
+const SEARCH_CONSOLES: Record<string, string> = {
+  serply: 'serply.io',
+  tavily: 'tavily.com',
+  outcrawl: 'outcrawl.ai',
+  firecrawl: 'firecrawl.dev',
+  specstream: 'specstream.ai',
+  olostep: 'olostep.com',
+  searchapi: 'searchapi.io',
+};
+
+export const searchHelp = (id: string): string => {
+  const site = SEARCH_CONSOLES[id];
+  if (site) {
+    return trf('settings_search_help_console', {site});
+  }
+  const key = SEARCH_HELP[id];
+  return key ? tr(key) : '';
+};
 
 /** Order fallback links by moving one up or down; out-of-range moves are no-ops. */
 export function moveItem<T>(list: T[], index: number, delta: -1 | 1): T[] {
