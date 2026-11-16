@@ -28,6 +28,7 @@ from channel.web.core._common import (
     _can_reveal_in_file_manager,
     _is_path_allowed,
     _get_preview_secret,
+    _get_query_token,
     _get_upload_dir,
     _is_within_directory,
     _raw_web_input,
@@ -38,6 +39,61 @@ from channel.web.core._common import (
 from channel.web.core.channel import WebChannel
 from common.log import logger
 from common.utils import constant_time_equals
+
+
+_RANGE_RE = re.compile(r"^bytes=(\d*)-(\d*)$")
+
+# Types a browser runs scripts in when the file is opened directly. Agents
+# write files from untrusted input, and such a page would otherwise run as the
+# console's origin.
+_ACTIVE_TYPES = {"text/html", "application/xhtml+xml", "image/svg+xml", "text/xml", "application/xml"}
+_PAGE_SANDBOX = "sandbox allow-scripts allow-popups allow-forms allow-modals"
+
+
+def _sandbox_active_content(content_type: str) -> None:
+    """Give script-capable files an opaque origin; non-HTML ones get no scripts at all.
+
+    A `?token=` stays readable from `location` even inside the sandbox, so a
+    page opened with one gets no scripts either.
+    """
+    ct = content_type.split(";")[0].strip().lower()
+    if ct not in _ACTIVE_TYPES and not ct.endswith("+xml"):
+        return
+    scripts = ct == "text/html" and not _get_query_token()
+    web.header('X-Content-Type-Options', 'nosniff')
+    web.header('Content-Security-Policy', _PAGE_SANDBOX if scripts else "sandbox")
+
+
+def _file_body(path: str) -> bytes:
+    """The file, or the one byte range the request asks for.
+
+    Media players seek, and on phones even start some MP4s, with Range
+    requests; without 206 answers a video can only be played straight
+    through. Multi-range requests are rare enough to get the whole file.
+    """
+    size = os.path.getsize(path)
+    web.header('Accept-Ranges', 'bytes')
+    env = web.ctx.get('env') or {}
+    m = _RANGE_RE.match((env.get('HTTP_RANGE') or '').strip())
+    if not m or not (m.group(1) or m.group(2)):
+        with open(path, 'rb') as f:
+            return f.read()
+    first, last = m.groups()
+    if first:
+        start = int(first)
+        end = min(int(last), size - 1) if last else size - 1
+    else:
+        start, end = max(size - int(last), 0), size - 1
+    if start >= size or start > end:
+        web.ctx.status = '416 Range Not Satisfiable'
+        web.header('Content-Range', f'bytes */{size}')
+        return b''
+    web.ctx.status = '206 Partial Content'
+    web.header('Content-Range', f'bytes {start}-{end}/{size}')
+    web.header('Content-Length', str(end - start + 1))
+    with open(path, 'rb') as f:
+        f.seek(start)
+        return f.read(end - start + 1)
 
 
 def _decode_dir_token(token: str) -> str:
@@ -194,8 +250,8 @@ class UploadsHandler:
             content_type = mimetypes.guess_type(full_path)[0] or "application/octet-stream"
             web.header('Content-Type', content_type)
             web.header('Cache-Control', 'public, max-age=86400')
-            with open(full_path, 'rb') as f:
-                return f.read()
+            _sandbox_active_content(content_type)
+            return _file_body(full_path)
         except web.HTTPError:
             raise
         except Exception as e:
@@ -229,8 +285,8 @@ class FileServeHandler:
             # twice within an artifact URL's timestamp second. Revalidate the
             # current bytes instead of hiding an update behind an hour of cache.
             web.header('Cache-Control', 'no-cache')
-            with open(file_path, 'rb') as f:
-                return f.read()
+            _sandbox_active_content(content_type)
+            return _file_body(file_path)
         except web.HTTPError:
             raise
         except Exception as e:
@@ -390,13 +446,11 @@ class PreviewHandler:
                 # file:// (or the Vite dev server), so 'self' would block its
                 # preview iframe outright. The sandbox is what carries the
                 # security guarantee; framing alone reveals nothing extra.
-                web.header(
-                    'Content-Security-Policy',
-                    "sandbox allow-scripts allow-popups allow-forms allow-modals",
-                )
-            with open(full_path, 'rb') as f:
-                data = f.read()
-            return _inject_preview_chrome(data) if is_html else data
+                web.header('Content-Security-Policy', _PAGE_SANDBOX)
+                with open(full_path, 'rb') as f:
+                    return _inject_preview_chrome(f.read())
+            _sandbox_active_content(content_type)
+            return _file_body(full_path)
         except web.HTTPError:
             raise
         except Exception as e:
