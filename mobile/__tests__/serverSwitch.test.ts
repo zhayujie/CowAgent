@@ -7,6 +7,7 @@ import {useServerStore, type ServerProfile} from '../src/store/serverStore';
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock'),
 );
+jest.mock('react-native-keychain', () => ({}));
 
 jest.mock('../src/kernel/localKernel', () => ({
   ...jest.requireActual('../src/kernel/localKernel'),
