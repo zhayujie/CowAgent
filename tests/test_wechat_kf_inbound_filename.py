@@ -108,3 +108,42 @@ def test_the_image_branch_is_unchanged(tmp_path, monkeypatch):
     assert msg.ctype == ContextType.IMAGE
     assert Path(msg.content) == tmp_path / (MEDIA_ID + ".jpg")
     assert Path(msg.content).read_bytes() == b"payload"
+
+
+@pytest.mark.parametrize(
+    "disposition",
+    [
+        'attachment; filename="CON.txt"',
+        'attachment; filename="nul"',
+        'attachment; filename="COM1.md"',
+        'attachment; filename="LPT9.pdf"',
+        'attachment; filename="AUX"',
+        "attachment; filename*=UTF-8''PRN.doc",
+    ],
+)
+def test_a_windows_reserved_device_name_falls_back_to_the_media_id(tmp_path, monkeypatch, disposition):
+    # wechat_kf uses the reduced name as the entire path component. A reserved
+    # device name must be treated as unusable so the write lands on media_id
+    # instead of CON/NUL/COM1 on Windows.
+    msg = _message(tmp_path, monkeypatch, disposition)
+    msg.prepare()
+
+    assert Path(msg.content) == tmp_path / MEDIA_ID
+    assert Path(msg.content).read_bytes() == b"payload"
+    written = {path.name for path in tmp_path.iterdir()}
+    assert written == {MEDIA_ID}
+
+
+@pytest.mark.parametrize(
+    "disposition,expected",
+    [
+        ('attachment; filename="console.txt"', "console.txt"),
+        ('attachment; filename="COM10.md"', "COM10.md"),
+    ],
+)
+def test_nearby_ordinary_names_are_still_kept(tmp_path, monkeypatch, disposition, expected):
+    msg = _message(tmp_path, monkeypatch, disposition)
+    msg.prepare()
+
+    assert Path(msg.content) == tmp_path / expected
+    assert Path(msg.content).read_bytes() == b"payload"
