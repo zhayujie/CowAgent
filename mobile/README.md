@@ -95,9 +95,9 @@ so it works without a separate server. "在本机运行" on the login screen sta
 ## Known limitations / TODO
 
 - The built-in agent is Android only for now; iOS needs the same embedding (Python framework + native module).
-
-- `storage/secureStore.ts` is an AsyncStorage development implementation. Before release it must be backed by
-  Keychain, Keystore and the HarmonyOS Asset Store Kit.
+- Device tokens live in the iOS Keychain / Android Keystore (`storage/secureStore.ts`); tokens saved by earlier
+  builds move there on first launch. HarmonyOS still keeps them in plain app storage
+  (`storage/secureStore.harmony.ts`) until an Asset Store Kit module lands. The browser preview always does.
 - Not integrated yet: FlashList, MMKV, network status, push notifications.
 
 ## Scripts

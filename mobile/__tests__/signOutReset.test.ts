@@ -7,6 +7,7 @@ import {useSessionStore} from '../src/store/sessionStore';
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock'),
 );
+jest.mock('react-native-keychain', () => ({}));
 
 it("drops the last server's data and stops its stream", () => {
   const unsubscribe = jest.fn();
