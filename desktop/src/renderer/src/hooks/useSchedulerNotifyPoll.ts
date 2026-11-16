@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import apiClient from '../api/client'
 import { notifyScheduledRun } from '../lib/taskNotify'
+import { useUnreadStore } from '../store/unreadStore'
 
 // Poll the GLOBAL runs ledger for scheduled executions, independent of which
 // session is active. usePushPoll only watches the currently open session, so a
@@ -102,4 +103,5 @@ function maybeNotify(run: {
   // user is. usePushPoll deliberately skips notifying for scheduler pushes so
   // this is the single source of scheduler notifications (no double-fire).
   notifyScheduledRun(sid, run.task_name || '', run.output_preview || '')
+  useUnreadStore.getState().mark(sid)
 }

@@ -25,7 +25,6 @@ import { useSessionStore, sessionOwner } from '../store/sessionStore'
 import { useAgentStore } from '../store/agentStore'
 import { useWorkspaceStore } from '../store/workspaceStore'
 import { startNewChat } from '../lib/newChat'
-import { PREFILL_EVENT } from '../store/draftStore'
 import { followingAfterUserScroll, shouldApplyBottomScroll, shouldFollowContentChange, shouldShowScrollToBottom } from '../lib/chatScroll'
 
 interface ChatPageProps {
@@ -107,13 +106,6 @@ const ChatPage: React.FC<ChatPageProps> = ({ baseUrl }) => {
   const inputResetRef = useRef<ChatInputHandle>(null)
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
-
-  // Text handed over by another surface (e.g. "create a theme with the Agent").
-  useEffect(() => {
-    const onPrefill = (e: Event) => inputResetRef.current?.((e as CustomEvent<string>).detail, [])
-    window.addEventListener(PREFILL_EVENT, onPrefill)
-    return () => window.removeEventListener(PREFILL_EVENT, onPrefill)
-  }, [])
 
   // The Agents page can hand the user straight into a group chat: it navigates
   // here with ?team=1 to pop the group-chat picker over the conversation. Clear

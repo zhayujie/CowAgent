@@ -83,8 +83,8 @@ const ThemeAddModal: React.FC<{
     if (!(await useWorkspaceStore.getState().guardUnsavedEdit())) return
     const dir = (await window.electronAPI?.getThemesDir?.()) || '~/cow/system/themes'
     onClose()
-    startNewChat()
-    prefillChatInput(tf('theme_agent_prompt', { dir }))
+    const sid = startNewChat()
+    prefillChatInput(sid, tf('theme_agent_prompt', { dir }))
     navigate('/')
   }
 

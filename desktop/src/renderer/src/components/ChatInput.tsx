@@ -14,7 +14,7 @@ import { t } from '../i18n'
 import { product } from '@product'
 import type { Attachment, WorkspaceEntry, AgentBadge } from '../types'
 import AgentAvatar from './AgentAvatar'
-import { chatDraft } from '../store/draftStore'
+import { getDraft, setDraft, PREFILL_EVENT } from '../store/draftStore'
 import apiClient from '../api/client'
 import { PaperPlaneIcon } from './icons'
 import { WORKSPACE_DRAG_TYPE } from './FileTree'
@@ -61,11 +61,15 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
   { onSend, onNewChat, onStop, onClearContext, isStreaming, sessionId, onAdjustContext, onToast },
   ref
 ) {
-  // Restore the draft saved in `chatDraft` on mount (lazy init: the very first
-  // render must already show it, otherwise the write-through effect below would
+  // Restore this session's draft on mount (lazy init: the very first render
+  // must already show it, otherwise the write-through effect below would
   // overwrite the saved draft with the initial empty state).
-  const [text, setText] = useState(() => chatDraft.text)
-  const [attachments, setAttachments] = useState(() => chatDraft.attachments)
+  const [text, setText] = useState(() => getDraft(sessionId).text)
+  const [attachments, setAttachments] = useState(() => getDraft(sessionId).attachments)
+  // Session the input currently holds the draft of. Lags `sessionId` by one
+  // effect on a switch, so the write-through never files text under the wrong
+  // conversation.
+  const draftSidRef = useRef(sessionId)
   // Show the Agent picker only when the install runs a team. Single-Agent
   // clients never see it, keeping the composer row identical to before.
   const multiAgent = useAgentStore(selectMultiAgent)
@@ -317,14 +321,47 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Write the input through to `chatDraft` on every change so it survives this
-  // component unmounting when the user navigates to another page (chat route
-  // unmounts ChatPage; see store/draftStore.ts). Sending clears the input, which
+  // Switching conversations swaps in the draft of the one being opened; what
+  // was typed in the previous one is already saved under its id.
+  useEffect(() => {
+    if (draftSidRef.current === sessionId) return
+    draftSidRef.current = sessionId
+    const draft = getDraft(sessionId)
+    setText(draft.text)
+    setAttachments(draft.attachments)
+    setSlashOpen(false)
+    closeMention()
+    requestAnimationFrame(() => autoSize(textareaRef.current))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId])
+
+  // Write the input through to the session's draft on every change so it
+  // survives switching sessions, navigating to another page (the chat route
+  // unmounts ChatPage) and restarting. Sending clears the input, which
   // therefore also clears the saved draft.
   useEffect(() => {
-    chatDraft.text = text
-    chatDraft.attachments = attachments
+    setDraft(draftSidRef.current, { text, attachments })
   }, [text, attachments])
+
+  // Text handed over by another surface (e.g. "create a theme with the Agent").
+  // A prefill for another session is already in its draft and loads on switch.
+  useEffect(() => {
+    const onPrefill = (e: Event) => {
+      const { sid, text: prefill } = (e as CustomEvent<{ sid: string; text: string }>).detail
+      if (sid !== draftSidRef.current) return
+      setText(prefill)
+      setAttachments([])
+      requestAnimationFrame(() => {
+        const el = textareaRef.current
+        if (el) {
+          el.focus()
+          autoSize(el)
+        }
+      })
+    }
+    window.addEventListener(PREFILL_EVENT, onPrefill)
+    return () => window.removeEventListener(PREFILL_EVENT, onPrefill)
+  }, [])
 
   // Allow the parent to load a draft (e.g. when editing a past user message).
   useImperativeHandle(ref, () => (draft: string, atts: Attachment[]) => {
