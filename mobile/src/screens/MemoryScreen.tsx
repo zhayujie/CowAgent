@@ -9,13 +9,14 @@ import {AgentSheet} from '../components/AgentSheet';
 import {Icon} from '../components/Icon';
 import {SwipeTabs} from '../components/SwipeTabs';
 import {EmptyState, GroupLabel, PageHeader, Segmented} from '../components/ui';
+import {tr, trf, type MessageKey} from '../i18n';
 import type {RootStackParamList} from '../navigation/types';
 import type {MemoryCategory, MemoryFile} from '../protocol/resources';
 import {agentParam, useViewedAgent} from '../store/agentStore';
 import {describeConnectError} from '../store/serverStore';
 import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
-import {formatBytes, shortTime, toDate} from '../utils/format';
+import {dateVars, formatBytes, shortTime, toDate} from '../utils/format';
 
 type Props = StackScreenProps<RootStackParamList, 'Memory'>;
 type Tab = 'memory' | 'evolution';
@@ -23,25 +24,25 @@ const TABS: readonly Tab[] = ['memory', 'evolution'];
 
 const PAGE_SIZE = 50;
 
-const TYPE_LABEL: Record<string, string> = {evolution: '自我进化', dream: '梦境日记'};
+const TYPE_LABEL: Record<string, MessageKey> = {evolution: 'memory_evolution', dream: 'memory_dream'};
 
 function fileTitle(f: MemoryFile): string {
   if (f.type === 'global') {
-    return '长期记忆';
+    return tr('memory_long_term');
   }
   const d = toDate(f.filename.replace(/\.md$/, ''));
-  return d ? `${d.getFullYear()} 年 ${d.getMonth() + 1} 月 ${d.getDate()} 日` : f.filename.replace(/\.md$/, '');
+  return d ? trf('memory_date', dateVars(d)) : f.filename.replace(/\.md$/, '');
 }
 
 function sectionsOf(tab: Tab, files: MemoryFile[]) {
   if (tab === 'evolution') {
-    return files.length ? [{title: '按日期', data: files}] : [];
+    return files.length ? [{title: tr('memory_by_date'), data: files}] : [];
   }
   const global = files.filter(f => f.type === 'global');
   const daily = files.filter(f => f.type !== 'global');
   return [
-    ...(global.length ? [{title: '长期', data: global}] : []),
-    ...(daily.length ? [{title: '每日', data: daily}] : []),
+    ...(global.length ? [{title: tr('memory_section_long'), data: global}] : []),
+    ...(daily.length ? [{title: tr('memory_section_daily'), data: daily}] : []),
   ];
 }
 
@@ -135,7 +136,7 @@ export function MemoryScreen({navigation}: Props) {
   return (
     <View style={styles.root}>
       <PageHeader
-        title="记忆"
+        title={tr('memory_title')}
         subtitle={viewed.multi ? viewed.agent?.name ?? viewed.agentId ?? undefined : undefined}
         onTitlePress={viewed.multi ? () => setAgentSheet(true) : undefined}
         onBack={navigation.goBack}
@@ -144,8 +145,8 @@ export function MemoryScreen({navigation}: Props) {
         value={tab}
         onChange={setTab}
         options={[
-          {key: 'memory', label: '记忆', count: lists.memory?.total},
-          {key: 'evolution', label: '自我进化', count: lists.evolution?.total},
+          {key: 'memory', label: tr('memory_title'), count: lists.memory?.total},
+          {key: 'evolution', label: tr('memory_evolution'), count: lists.evolution?.total},
         ]}
       />
       <SwipeTabs tabs={TABS} value={tab} onChange={setTab}>
@@ -166,11 +167,11 @@ export function MemoryScreen({navigation}: Props) {
                     {fileTitle(item)}
                   </Text>
                   {!!TYPE_LABEL[item.type] && (
-                    <Text style={[styles.badge, item.type === 'dream' && styles.badgeDream]}>{TYPE_LABEL[item.type]}</Text>
+                    <Text style={[styles.badge, item.type === 'dream' && styles.badgeDream]}>{tr(TYPE_LABEL[item.type])}</Text>
                   )}
                 </View>
                 <Text style={styles.meta} numberOfLines={1}>
-                  {[item.filename, formatBytes(item.size), `更新于 ${shortTime(item.updated_at)}`].join(' · ')}
+                  {[item.filename, formatBytes(item.size), trf('memory_updated_at', {time: shortTime(item.updated_at)})].join(' · ')}
                 </Text>
               </View>
               <Icon icon={faChevronRight} size={10} color={t.t4} />
@@ -182,13 +183,10 @@ export function MemoryScreen({navigation}: Props) {
           ListEmptyComponent={
             <EmptyState
               loading={!list && !error}
-              title={error ? '加载失败' : tab === 'memory' ? '还没有记忆' : '还没有进化记录'}
-              hint={
-                error ??
-                (tab === 'memory'
-                  ? '对话中值得记住的事，会被自动整理成长期记忆和每日记忆'
-                  : 'Agent 从对话中总结的经验和夜间整理的梦境日记会出现在这里')
+              title={
+                error ? tr('common_load_failed') : tab === 'memory' ? tr('memory_empty') : tr('memory_evolution_empty')
               }
+              hint={error ?? (tab === 'memory' ? tr('memory_empty_hint') : tr('memory_evolution_empty_hint'))}
             />
           }
           refreshControl={
@@ -203,7 +201,7 @@ export function MemoryScreen({navigation}: Props) {
       </SwipeTabs>
       <AgentSheet
         visible={agentSheet}
-        title="查看哪个 Agent 的记忆"
+        title={tr('memory_pick_agent')}
         selectedId={viewed.agentId}
         onSelect={switchAgent}
         onClose={() => setAgentSheet(false)}

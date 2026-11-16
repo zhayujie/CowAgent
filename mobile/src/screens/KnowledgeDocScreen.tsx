@@ -6,6 +6,7 @@ import {DocPage, type DocSource} from '../components/DocPage';
 import {ChoiceSheet, ConfirmSheet} from '../components/settings';
 import {SHEET_DISMISS_MS} from '../components/Sheet';
 import {showToast} from '../components/Toast';
+import {tr, trf} from '../i18n';
 import type {RootStackParamList} from '../navigation/types';
 import {describeConnectError} from '../store/serverStore';
 import {flattenCategories, isProtectedPage, linkCandidates, stripDuplicateH1} from '../utils/knowledge';
@@ -28,7 +29,7 @@ export function KnowledgeDocScreen({route, navigation}: Props) {
           content: res.content,
           mtime: res.mtime,
           editable: res.editable,
-          readonlyReason: isProtectedPage(res.path) ? '由 Agent 自动维护，只能查看' : '文件过大，只能查看',
+          readonlyReason: isProtectedPage(res.path) ? tr('knowledge_readonly_protected') : tr('knowledge_readonly_large'),
         };
       },
       save: async (content, mtime) => {
@@ -57,7 +58,7 @@ export function KnowledgeDocScreen({route, navigation}: Props) {
             return;
           }
         }
-        showToast('链接的文档不存在');
+        showToast(tr('knowledge_link_missing'));
       })();
       return true;
     },
@@ -77,7 +78,7 @@ export function KnowledgeDocScreen({route, navigation}: Props) {
         .filter(p => p !== category);
       if (!paths.length) {
         setSheet(null);
-        showToast('没有其他分类可以移动过去');
+        showToast(tr('knowledge_no_other_category'));
         return;
       }
       setCategories(paths);
@@ -97,13 +98,13 @@ export function KnowledgeDocScreen({route, navigation}: Props) {
       );
       const r = res.results?.[0];
       if (!r?.moved || !r.target) {
-        showToast(r?.reason === 'target_exists' ? '目标分类里已有同名文档' : '移动失败');
+        showToast(r?.reason === 'target_exists' ? tr('knowledge_move_target_exists') : tr('knowledge_move_failed'));
         return;
       }
-      showToast(`已移动到 ${target}`);
+      showToast(trf('knowledge_moved_to', {target}));
       navigation.setParams({path: r.target, edit: false});
     } catch (e) {
-      showToast(`移动失败：${describeConnectError(e)}`);
+      showToast(trf('knowledge_move_failed_detail', {error: describeConnectError(e)}));
     }
   };
 
@@ -111,11 +112,11 @@ export function KnowledgeDocScreen({route, navigation}: Props) {
     try {
       await knowledgeAction({action: 'delete_documents', payload: {paths: [path]}}, agentId);
       setSheet(null);
-      showToast('已删除');
+      showToast(tr('common_deleted'));
       navigation.goBack();
     } catch (e) {
       setSheet(null);
-      showToast(`删除失败：${describeConnectError(e)}`);
+      showToast(trf('common_delete_failed', {error: describeConnectError(e)}));
     }
   };
 
@@ -135,26 +136,26 @@ export function KnowledgeDocScreen({route, navigation}: Props) {
       />
       <ChoiceSheet
         visible={sheet === 'more'}
-        title="文档"
+        title={tr('knowledge_doc')}
         options={[
-          {key: 'move', label: '移动到其他分类', icon: faArrowRightArrowLeft},
-          {key: 'delete', label: '删除', icon: faTrashCan},
+          {key: 'move', label: tr('knowledge_move_to_other'), icon: faArrowRightArrowLeft},
+          {key: 'delete', label: tr('common_delete'), icon: faTrashCan},
         ]}
         onSelect={key => (key === 'move' ? pickMove() : next('delete'))}
         onClose={() => setSheet(null)}
       />
       <ChoiceSheet
         visible={sheet === 'move'}
-        title="移动到"
+        title={tr('knowledge_move_to')}
         options={categories.map(c => ({key: c, label: c}))}
         onSelect={move}
         onClose={() => setSheet(null)}
       />
       <ConfirmSheet
         visible={sheet === 'delete'}
-        title="删除文档"
-        message={`「${title}」会从知识库中删除，Agent 也将检索不到它。`}
-        confirmLabel="删除"
+        title={tr('knowledge_delete_doc')}
+        message={trf('knowledge_delete_doc_msg', {title})}
+        confirmLabel={tr('common_delete')}
         danger
         onConfirm={remove}
         onClose={() => setSheet(null)}

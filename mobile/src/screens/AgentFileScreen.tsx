@@ -9,6 +9,7 @@ import {EditActions} from '../components/DocPage';
 import {MONO} from '../components/settings';
 import {showToast, ToastHost} from '../components/Toast';
 import {EmptyState, PageHeader} from '../components/ui';
+import {tr, trf} from '../i18n';
 import type {RootStackParamList} from '../navigation/types';
 import {describeConnectError} from '../store/serverStore';
 import {makeStyles, useTheme} from '../theme/theme';
@@ -62,12 +63,12 @@ export function AgentFileScreen({route, navigation}: Props) {
       const res = await saveAgentFile(agentId, name, draft, file.revision);
       setFile({content: res.content ?? draft, revision: res.revision});
       setEditing(false);
-      showToast('已保存');
+      showToast(tr('common_saved'));
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) {
         setStale(true);
       } else {
-        showToast(`保存失败：${describeConnectError(e)}`);
+        showToast(trf('common_save_failed_detail', {error: describeConnectError(e)}));
       }
     } finally {
       setSaving(false);
@@ -94,11 +95,11 @@ export function AgentFileScreen({route, navigation}: Props) {
       </View>
       {stale && (
         <Pressable onPress={load} style={styles.stale}>
-          <Text style={styles.staleText}>文件已在别处修改，没有保存。点这里同步最新版本，编辑框里的内容会保留，再保存会覆盖别处的修改。</Text>
+          <Text style={styles.staleText}>{tr('agent_file_stale')}</Text>
         </Pressable>
       )}
       {!file ? (
-        <EmptyState loading={!error} title="加载失败" hint={error ?? undefined} />
+        <EmptyState loading={!error} title={tr('common_load_failed')} hint={error ?? undefined} />
       ) : editing ? (
         <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <TextInput
@@ -111,7 +112,7 @@ export function AgentFileScreen({route, navigation}: Props) {
             textAlignVertical="top"
             selectionColor={t.accent}
             cursorColor={t.accent}
-            placeholder="用 Markdown 书写"
+            placeholder={tr('agent_file_placeholder')}
             placeholderTextColor={t.t4}
             style={[styles.editor, {paddingBottom: insets.bottom + 24}]}
           />
@@ -121,7 +122,7 @@ export function AgentFileScreen({route, navigation}: Props) {
           {file.content.trim() ? (
             <Markdown value={file.content} />
           ) : (
-            <EmptyState title="还没有内容" hint="点右侧的笔形图标开始写" />
+            <EmptyState title={tr('agent_file_empty')} hint={tr('agent_file_empty_hint')} />
           )}
         </ScrollView>
       )}

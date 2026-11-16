@@ -1,3 +1,4 @@
+import {tr, trf} from '../i18n';
 import type {KnowledgeDir, KnowledgeFile, KnowledgeTree} from '../protocol/resources';
 
 /** index.md is regenerated from the tree and log.md is the Agent's journal; the server refuses edits to both. */
@@ -113,18 +114,18 @@ export function stripDuplicateH1(content: string, title: string): string {
 }
 
 export function docTemplate(name: string): string {
-  const title = name.replace(/\.md$/i, '') || '未命名';
-  return `# ${title}\n\n## 摘要\n\n\n## 关键点\n\n- \n\n## 参考\n\n`;
+  const title = name.replace(/\.md$/i, '') || tr('common_untitled');
+  return trf('knowledge_doc_template', {title});
 }
 
 /** A file name for a new page: `.md` added when missing, anything else refused. */
 export function pageFileName(input: string): string {
   const name = input.trim().replace(/[\\/]/g, '-');
   if (!name) {
-    throw new Error('请输入文件名');
+    throw new Error(tr('knowledge_filename_required'));
   }
   if (/\.[^.]+$/.test(name) && !/\.md$/i.test(name)) {
-    throw new Error('知识库页面只能是 .md 文件');
+    throw new Error(tr('knowledge_md_only'));
   }
   return /\.md$/i.test(name) ? name : `${name}.md`;
 }

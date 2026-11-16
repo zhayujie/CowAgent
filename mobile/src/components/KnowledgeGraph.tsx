@@ -11,6 +11,7 @@ import {
   type LayoutChangeEvent,
 } from 'react-native';
 import Svg, {Circle, G, Line, Text as SvgText} from 'react-native-svg';
+import {tr, trf} from '../i18n';
 import type {KnowledgeGraph as GraphData} from '../protocol/resources';
 import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
@@ -430,9 +431,13 @@ export function KnowledgeGraph({data, onOpen}: {data: GraphData; onOpen: (id: st
             </Svg>
           </View>
           <View style={styles.zoom}>
-            <ZoomButton icon={faPlus} label="放大" onPress={() => zoomBy(1.4)} />
-            <ZoomButton icon={faMinus} label="缩小" onPress={() => zoomBy(1 / 1.4)} />
-            <ZoomButton icon={faCompress} label="适应屏幕" onPress={() => setView(fitView(layout.nodes, size.w, size.h))} />
+            <ZoomButton icon={faPlus} label={tr('knowledge_zoom_in')} onPress={() => zoomBy(1.4)} />
+            <ZoomButton icon={faMinus} label={tr('knowledge_zoom_out')} onPress={() => zoomBy(1 / 1.4)} />
+            <ZoomButton
+              icon={faCompress}
+              label={tr('knowledge_zoom_fit')}
+              onPress={() => setView(fitView(layout.nodes, size.w, size.h))}
+            />
           </View>
           {picked ? (
             <View style={styles.card}>
@@ -442,14 +447,15 @@ export function KnowledgeGraph({data, onOpen}: {data: GraphData; onOpen: (id: st
                   {picked.label}
                 </Text>
                 <Text style={styles.cardMeta} numberOfLines={1}>
-                  {picked.category === 'root' ? '根目录' : picked.category} · {picked.degree} 条关联
+                  {picked.category === 'root' ? tr('knowledge_root') : picked.category} ·{' '}
+                  {trf('knowledge_links', {n: picked.degree})}
                 </Text>
               </View>
               <Pressable
                 accessibilityRole="button"
                 onPress={() => onOpen(picked.id, picked.label)}
                 style={({pressed}) => [styles.open, pressed && styles.pressed]}>
-                <Text style={styles.openText}>打开</Text>
+                <Text style={styles.openText}>{tr('common_open')}</Text>
               </Pressable>
             </View>
           ) : (
@@ -458,7 +464,7 @@ export function KnowledgeGraph({data, onOpen}: {data: GraphData; onOpen: (id: st
                 {layout.categories.map(c => (
                   <View key={c} style={styles.legendItem}>
                     <View style={[styles.legendDot, {backgroundColor: layout.color(c)}]} />
-                    <Text style={styles.legendText}>{c === 'root' ? '根目录' : c}</Text>
+                    <Text style={styles.legendText}>{c === 'root' ? tr('knowledge_root') : c}</Text>
                   </View>
                 ))}
               </ScrollView>

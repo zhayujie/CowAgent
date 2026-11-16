@@ -2,6 +2,7 @@ import type {StackScreenProps} from '@react-navigation/stack';
 import React, {useMemo} from 'react';
 import {getMemoryContent, readWorkspaceText, writeWorkspaceText} from '../api/cowApi';
 import {DocPage, type DocSource} from '../components/DocPage';
+import {tr} from '../i18n';
 import type {RootStackParamList} from '../navigation/types';
 import type {MemoryCategory} from '../protocol/resources';
 
@@ -29,17 +30,17 @@ export function MemoryDocScreen({route, navigation}: Props) {
         const meta = await getMemoryContent(filename, category, agentId);
         relPath = meta.rel_path ?? null;
         if (!relPath) {
-          return {content: meta.content, mtime: null, editable: false, readonlyReason: '服务端版本较旧，只能查看'};
+          return {content: meta.content, mtime: null, editable: false, readonlyReason: tr('memory_readonly_old_server')};
         }
         const text = await readWorkspaceText(relPath, agentId).catch(() => null);
         if (!text) {
-          return {content: meta.content, mtime: null, editable: false, readonlyReason: '暂时无法编辑这个文件，只能查看'};
+          return {content: meta.content, mtime: null, editable: false, readonlyReason: tr('memory_readonly_unavailable')};
         }
         return {
           content: text.content,
           mtime: text.mtime,
           editable: text.editable,
-          readonlyReason: text.editable ? undefined : '文件过大或含有无法识别的字符，只能查看',
+          readonlyReason: text.editable ? undefined : tr('memory_readonly_unreadable'),
         };
       },
       save: async (content, mtime) => {
