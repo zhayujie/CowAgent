@@ -1,0 +1,20 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": ""
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": ""
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "CowAgent"
+    },
+    {
+      "name": "microphone_reason",
+      "value": "用于按住说话，把语音转成文字发给 Agent"
+    }
+  ]
+}
