@@ -1,4 +1,5 @@
 /// <reference lib="dom" />
+import {tr} from '../i18n';
 import type {PickedFile} from './types';
 
 export type RecorderTick = (elapsedMs: number, level: number | null) => void;
@@ -26,13 +27,13 @@ function teardown(s: Session) {
 
 export async function startRecording(onTick: RecorderTick): Promise<void> {
   if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
-    throw new Error('当前浏览器不支持录音');
+    throw new Error(tr('media_record_unsupported'));
   }
   let stream: MediaStream;
   try {
     stream = await navigator.mediaDevices.getUserMedia({audio: true});
   } catch {
-    throw new MicPermissionError('没有麦克风权限');
+    throw new MicPermissionError(tr('media_mic_denied'));
   }
   const mimeType = PREFERRED.find(m => MediaRecorder.isTypeSupported(m));
   const recorder = new MediaRecorder(stream, mimeType ? {mimeType} : undefined);

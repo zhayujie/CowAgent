@@ -5,6 +5,7 @@ import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {ApiError} from '../api/http';
+import {tr, trf} from '../i18n';
 import type {RootStackParamList} from '../navigation/types';
 import {describeConnectError} from '../store/serverStore';
 import {radius} from '../theme/palette';
@@ -57,12 +58,12 @@ export function EditActions({
 }) {
   const styles = useStyles();
   if (!editing) {
-    return editable ? <DocButton icon={faPen} label="编辑" onPress={onEdit} /> : null;
+    return editable ? <DocButton icon={faPen} label={tr('common_edit')} onPress={onEdit} /> : null;
   }
   return (
     <View style={styles.actions}>
-      <DocButton primary icon={faFloppyDisk} label="保存" busy={saving} onPress={onSave} />
-      <DocButton icon={faRotateLeft} label="放弃修改" disabled={saving} onPress={onCancel} />
+      <DocButton primary icon={faFloppyDisk} label={tr('common_save')} busy={saving} onPress={onSave} />
+      <DocButton icon={faRotateLeft} label={tr('ui_discard_changes')} disabled={saving} onPress={onCancel} />
     </View>
   );
 }
@@ -196,7 +197,7 @@ export function DocPage({
       setDoc(res);
       setStale(false);
     } catch (e) {
-      showToast(`同步失败：${describeConnectError(e)}`);
+      showToast(trf('ui_sync_failed', {error: describeConnectError(e)}));
     }
   };
 
@@ -214,20 +215,21 @@ export function DocPage({
       setDoc({...doc, content: draft, mtime});
       setEditing(false);
       setStale(false);
-      showToast('已保存');
+      showToast(tr('common_saved'));
       onSaved?.();
     } catch (e) {
       if (isConflict(e)) {
         setStale(true);
       } else {
-        showToast(`保存失败：${describeConnectError(e)}`);
+        showToast(trf('common_save_failed_detail', {error: describeConnectError(e)}));
       }
     } finally {
       setSaving(false);
     }
   };
 
-  const headerAction = doc && !editing && onMore ? <IconButton icon={faEllipsis} label="更多操作" onPress={onMore} /> : null;
+  const headerAction =
+    doc && !editing && onMore ? <IconButton icon={faEllipsis} label={tr('ui_more_actions')} onPress={onMore} /> : null;
 
   const metaLine = doc && !doc.editable && doc.readonlyReason ? doc.readonlyReason : meta;
 
@@ -253,13 +255,11 @@ export function DocPage({
       )}
       {stale && (
         <Pressable onPress={resync} style={styles.stale}>
-          <Text style={styles.staleText}>
-            文件已在别处修改（可能是 Agent 刚写入），没有保存。点这里同步最新版本，编辑框里的内容会保留，再保存会覆盖别处的修改。
-          </Text>
+          <Text style={styles.staleText}>{tr('ui_doc_stale')}</Text>
         </Pressable>
       )}
       {!doc ? (
-        <EmptyState loading={!error} title="加载失败" hint={error ?? undefined} />
+        <EmptyState loading={!error} title={tr('common_load_failed')} hint={error ?? undefined} />
       ) : editing ? (
         <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <TextInput
@@ -272,7 +272,7 @@ export function DocPage({
             textAlignVertical="top"
             selectionColor={t.accent}
             cursorColor={t.accent}
-            placeholder="用 Markdown 书写"
+            placeholder={tr('ui_doc_placeholder')}
             placeholderTextColor={t.t4}
             style={[styles.editor, {paddingBottom: insets.bottom + 24}]}
           />
@@ -282,15 +282,15 @@ export function DocPage({
           {doc.content.trim() ? (
             <Markdown value={transform ? transform(doc.content) : doc.content} onLink={onLink} />
           ) : (
-            <EmptyState title="还没有内容" hint={doc.editable ? '点右侧的笔形图标开始写' : undefined} />
+            <EmptyState title={tr('ui_doc_empty')} hint={doc.editable ? tr('ui_doc_empty_hint') : undefined} />
           )}
         </ScrollView>
       )}
       <ConfirmSheet
         visible={!!leaving}
-        title="放弃修改"
-        message="编辑框里还有没保存的内容，离开后就找不回来了。"
-        confirmLabel="放弃"
+        title={tr('ui_discard_changes')}
+        message={tr('ui_discard_message')}
+        confirmLabel={tr('ui_discard')}
         danger
         onConfirm={() => {
           const go = leaving;

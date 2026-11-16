@@ -12,6 +12,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {scheduleOnRN} from 'react-native-worklets';
+import {tr} from '../i18n';
 import {Icon} from './Icon';
 
 const MAX_SCALE = 5;
@@ -227,7 +228,7 @@ export function ImageViewer({
         <GestureDetector gesture={gesture}>
           <View
             style={StyleSheet.absoluteFill}
-            accessibilityLabel="图片，双指或双击放大，下拉或单击关闭"
+            accessibilityLabel={tr('media_image_a11y')}
             onLayout={e => {
               stageW.value = e.nativeEvent.layout.width;
               stageH.value = e.nativeEvent.layout.height;
@@ -257,14 +258,14 @@ export function ImageViewer({
           <Text style={styles.title} numberOfLines={1}>
             {title ?? ''}
           </Text>
-          <Round icon={faXmark} label="关闭" onPress={onClose} />
+          <Round icon={faXmark} label={tr('common_close')} onPress={onClose} />
         </Animated.View>
         {(onDownload || onOpen) && (
           <Animated.View
             pointerEvents="box-none"
             style={[styles.bottom, {paddingBottom: insets.bottom + 16}, fadeStyle]}>
-            {onDownload && <Pill icon={faDownload} label="下载" onPress={onDownload} />}
-            {onOpen && <Pill icon={faArrowUpRightFromSquare} label="浏览器打开" onPress={onOpen} />}
+            {onDownload && <Pill icon={faDownload} label={tr('file_download')} onPress={onDownload} />}
+            {onOpen && <Pill icon={faArrowUpRightFromSquare} label={tr('media_open_in_browser')} onPress={onOpen} />}
           </Animated.View>
         )}
       </GestureHandlerRootView>

@@ -29,6 +29,7 @@ import {SwipeTabs} from '../components/SwipeTabs';
 import {ToastHost} from '../components/Toast';
 import {Chip, EmptyState, GroupLabel, IconButton, PageHeader} from '../components/ui';
 import {downloadFile, openInBrowser} from '../files/openFile';
+import {tr, trf} from '../i18n';
 import type {RootStackParamList} from '../navigation/types';
 import type {Artifact} from '../protocol/events';
 import {useAgentStore} from '../store/agentStore';
@@ -38,14 +39,14 @@ import {dayLabel, shortTime, toDate} from '../utils/format';
 
 type Props = StackScreenProps<RootStackParamList, 'Artifacts'>;
 
-const FILTERS: {key: string; label: string}[] = [
-  {key: '', label: '全部'},
-  {key: 'web', label: '网页'},
-  {key: 'doc', label: '文档'},
-  {key: 'image', label: '图片'},
-  {key: 'media', label: '音视频'},
+const filters = (): {key: string; label: string}[] => [
+  {key: '', label: tr('common_all')},
+  {key: 'web', label: tr('artifact_filter_web')},
+  {key: 'doc', label: tr('artifact_filter_doc')},
+  {key: 'image', label: tr('artifact_filter_image')},
+  {key: 'media', label: tr('artifact_filter_media')},
 ];
-const FILTER_KEYS = FILTERS.map(f => f.key);
+const FILTER_KEYS = ['', 'web', 'doc', 'image', 'media'];
 const PAGE = 60;
 
 interface Group {
@@ -72,10 +73,10 @@ function groupArtifacts(items: Artifact[]): Group[] {
     }
     (isCard(a) ? g.cards : g.rows).push(a);
   };
-  pinned.forEach(a => push('置顶', a));
+  pinned.forEach(a => push(tr('artifact_pinned'), a));
   rest.forEach(a => {
     const d = toDate(a.created_at);
-    push(d ? dayLabel(d) : '更早', a);
+    push(d ? dayLabel(d) : tr('artifact_earlier'), a);
   });
   return groups;
 }
@@ -181,7 +182,7 @@ export function ArtifactsScreen({navigation, route}: Props) {
               value={query}
               onChangeText={setQuery}
               autoFocus
-              placeholder="搜索文件名"
+              placeholder={tr('artifact_search_placeholder')}
               placeholderTextColor={t.t3}
               selectionColor={t.accent}
               style={styles.searchInput}
@@ -195,17 +196,22 @@ export function ArtifactsScreen({navigation, route}: Props) {
               setQuery('');
             }}
             hitSlop={8}>
-            <Text style={styles.searchCancel}>取消</Text>
+            <Text style={styles.searchCancel}>{tr('common_cancel')}</Text>
           </Pressable>
         </View>
       ) : (
         <PageHeader
-          title="产物"
+          title={tr('artifact_title')}
           count={loading ? undefined : `${items.length}${hasMore ? '+' : ''}`}
           onBack={navigation.goBack}
           right={
             focus ? undefined : (
-              <IconButton icon={faMagnifyingGlass} label="搜索" onPress={() => setSearching(true)} size={14} />
+              <IconButton
+                icon={faMagnifyingGlass}
+                label={tr('common_search')}
+                onPress={() => setSearching(true)}
+                size={14}
+              />
             )
           }
         />
@@ -215,9 +221,9 @@ export function ArtifactsScreen({navigation, route}: Props) {
         <View style={styles.focusBar}>
           <Icon icon={faLocationCrosshairs} size={12} color={t.accent} />
           <Text style={styles.focusText} numberOfLines={1} ellipsizeMode="middle">
-            定位到 {focus.name}
+            {trf('artifact_focus_on', {name: focus.name})}
           </Text>
-          <Chip label="查看全部" onPress={() => setFocus(null)} />
+          <Chip label={tr('artifact_view_all')} onPress={() => setFocus(null)} />
         </View>
       ) : (
         <View>
@@ -225,7 +231,7 @@ export function ArtifactsScreen({navigation, route}: Props) {
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.filters}>
-            {FILTERS.map(f => (
+            {filters().map(f => (
               <Chip key={f.key || 'all'} label={f.label} active={kind === f.key} onPress={() => setKind(f.key)} />
             ))}
           </ScrollView>
@@ -257,14 +263,22 @@ export function ArtifactsScreen({navigation, route}: Props) {
           {loading || items.length === 0 ? (
             <EmptyState
               loading={loading}
-              title={error ? '加载失败' : focus ? '产物中心里没有这个文件' : query ? '没有匹配的文件' : '还没有产物'}
+              title={
+                error
+                  ? tr('common_load_failed')
+                  : focus
+                  ? tr('artifact_focus_missing')
+                  : query
+                  ? tr('artifact_no_match')
+                  : tr('artifact_empty_title')
+              }
               hint={
                 error ??
                 (focus
-                  ? '它可能不在 Agent 的工作空间里，或已被删除'
+                  ? tr('artifact_focus_missing_hint')
                   : query
-                  ? '换个关键词试试'
-                  : '对话里生成的网页、文档和图片会自动收进这里')
+                  ? tr('artifact_no_match_hint')
+                  : tr('artifact_empty_hint'))
               }
             />
           ) : (
@@ -300,18 +314,18 @@ export function ArtifactsScreen({navigation, route}: Props) {
 
       <Sheet visible={!!acting} onClose={() => setActing(null)} title={acting?.title || acting?.file_name}>
         {!!acting?.can_jump && (
-          <SheetAction icon={faMessage} label="回到所在对话" onPress={() => acting && jumpTo(acting)} />
+          <SheetAction icon={faMessage} label={tr('artifact_jump')} onPress={() => acting && jumpTo(acting)} />
         )}
         <SheetAction
           icon={faThumbtack}
-          label={acting?.pinned_at ? '取消置顶' : '置顶'}
+          label={acting?.pinned_at ? tr('artifact_unpin') : tr('artifact_pin')}
           onPress={() => acting && togglePin(acting)}
         />
         {!!actingFile && (
           <>
             <SheetAction
               icon={faDownload}
-              label="下载"
+              label={tr('file_download')}
               onPress={() => {
                 setActing(null);
                 downloadFile(actingFile);
@@ -319,7 +333,7 @@ export function ArtifactsScreen({navigation, route}: Props) {
             />
             <SheetAction
               icon={faArrowUpRightFromSquare}
-              label="在浏览器中打开"
+              label={tr('file_open_in_browser')}
               onPress={() => {
                 setActing(null);
                 openInBrowser(actingFile);
@@ -368,7 +382,7 @@ function ArtifactCard({
         )}
         {!!a.pinned_at && (
           <View style={styles.pin}>
-            <Text style={styles.pinText}>置顶</Text>
+            <Text style={styles.pinText}>{tr('artifact_pinned')}</Text>
           </View>
         )}
       </View>

@@ -2,6 +2,7 @@ import {Linking, Platform} from 'react-native';
 import {create} from 'zustand';
 import {showToast} from '../components/Toast';
 import {serverUrl} from '../api/cowApi';
+import {tr} from '../i18n';
 import {navigationRef} from '../navigation/ref';
 import {useAgentStore} from '../store/agentStore';
 import {useChatStore} from '../store/chatStore';
@@ -36,15 +37,15 @@ export const useImageViewer = create<{
 
 function openUrl(url: string) {
   if (!url) {
-    showToast('没有可打开的地址');
+    showToast(tr('file_no_url'));
     return;
   }
-  Linking.openURL(url).catch(() => showToast('无法打开这个文件'));
+  Linking.openURL(url).catch(() => showToast(tr('file_cannot_open')));
 }
 
 /** Runs `then` with a page that is safe to render, once its preview link is known. */
 function sandboxed(f: ChatFile, then: (page: ChatFile) => void) {
-  withPreview(f).then(page => (page ? then(page) : showToast('无法安全打开这个网页')));
+  withPreview(f).then(page => (page ? then(page) : showToast(tr('file_page_unsafe'))));
 }
 
 export function openInBrowser(f: ChatFile) {
@@ -114,7 +115,7 @@ export function openLink(href: string) {
   }
   const url = href.startsWith('/') ? serverUrl(href) : href.trim();
   if (!SAFE_LINK.test(url)) {
-    showToast('不支持打开这类链接');
+    showToast(tr('file_link_unsupported'));
     return;
   }
   openUrl(url);
@@ -124,7 +125,7 @@ export function openLink(href: string) {
 export async function openFileRef(ref: string) {
   const sessionId = useChatStore.getState().currentSessionId ?? undefined;
   const agentId = useAgentStore.getState().currentId ?? undefined;
-  const slow = setTimeout(() => showToast('正在查找文件…'), 400);
+  const slow = setTimeout(() => showToast(tr('file_finding')), 400);
   try {
     const f = await resolveFile(ref, sessionId, agentId);
     if (f) {
@@ -136,5 +137,5 @@ export async function openFileRef(ref: string) {
   } finally {
     clearTimeout(slow);
   }
-  showToast('找不到这个文件');
+  showToast(tr('file_not_found'));
 }

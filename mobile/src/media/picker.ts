@@ -1,4 +1,5 @@
 import {Platform} from 'react-native';
+import {tr} from '../i18n';
 import type {PickedFile} from './types';
 
 type ImagePickerModule = typeof import('react-native-image-picker');
@@ -43,13 +44,13 @@ function fromAssets(
 
 function ensureOk(res: {errorCode?: string; errorMessage?: string}) {
   if (res.errorCode === 'permission') {
-    throw new Error('没有访问权限，请在系统设置里允许');
+    throw new Error(tr('media_permission_denied'));
   }
   if (res.errorCode === 'camera_unavailable') {
-    throw new Error('这台设备没有可用的相机');
+    throw new Error(tr('media_no_camera'));
   }
   if (res.errorCode) {
-    throw new Error(res.errorMessage || '无法打开');
+    throw new Error(res.errorMessage || tr('media_cannot_open'));
   }
 }
 
