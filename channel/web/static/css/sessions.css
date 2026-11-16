@@ -324,6 +324,17 @@
 }
 .session-group-project:hover .session-group-actions { opacity: 1; }
 .session-group-project:hover .session-group-count { visibility: hidden; }
+/* A collapsed project with a running or unread session inside. */
+.session-group-project.has-activity .session-group-count::before {
+    content: '';
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    margin-right: 6px;
+    vertical-align: 1px;
+    border-radius: 50%;
+    background: rgb(var(--cw-primary-400));
+}
 .session-group-action {
     border: none;
     background: transparent;
@@ -412,6 +423,32 @@
     padding-right: 20px;
 }
 .session-item:hover .session-title { padding-right: 0; }
+/* Trailing status (running / finished unseen / unsent draft). Sits in the
+   title's resting right gap and gives way to the action buttons on hover. */
+.session-status {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    pointer-events: none;
+}
+.session-status:empty,
+.session-item:hover .session-status,
+.session-item:has(.session-title-input) .session-status { display: none; }
+.session-status[data-status="running"] { color: rgb(var(--cw-primary-400)); }
+.session-status[data-status="draft"] { color: #9ca3af; font-size: 10px; }
+.dark .session-status[data-status="draft"] { color: #737373; }
+.session-status-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: rgb(var(--cw-primary-400));
+}
 /* Under a multi-project list, sessions indent so their leading icon lines up
    with the folder icon of the project header above them. The session icon sits
    in a centered 16px box, so it needs a touch less left padding than the raw
