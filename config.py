@@ -11,7 +11,7 @@ import time
 from common.log import logger
 from common import i18n
 from cli.config_json import deep_merge_dicts as _deep_merge_dicts, merge_duplicate_keys
-from common.deployment import is_desktop
+from common.deployment import is_app_bundled
 
 # All available config keys are listed in this dict (use lowercase keys).
 # The values here are placeholders only; the program does NOT read them.
@@ -330,7 +330,7 @@ available_setting = {
     # Default permission mode for sessions that have not picked one of their own:
     # "read-only" | "workspace-write" | "full-access". Kept at full-access so an
     # existing install behaves exactly as before an upgrade. Only a fresh desktop
-    # client (COW_DESKTOP=1 with no config.json yet) is tightened to the stricter
+    # or mobile client (no config.json yet) is tightened to the stricter
     # workspace-write in load_config(); docker/source stay at full-access.
     "agent_permission_mode": "full-access",
     # In-process sub agents: the Agent hands a self-contained task to a
@@ -597,18 +597,18 @@ def load_config():
     # otherwise silently drop all but the last occurrence.
     #
     # Self-heal a corrupted user config.json instead of crashing on startup —
-    # but ONLY for the packaged desktop client (COW_DESKTOP=1). A truncated or
+    # but ONLY for the packaged desktop and mobile clients. A truncated or
     # invalid file (e.g. a bad write during a previous update) would otherwise
-    # make json.loads raise and strand the desktop app on "Initialization
+    # make json.loads raise and strand the app on "Initialization
     # Failed" forever, with no way for an end user to recover short of manually
     # deleting the file. Source deployments deliberately keep the original
     # behavior (raise): a developer editing config.json wants a clear error to
     # fix, not to have their file silently backed up and replaced by defaults.
-    desktop_mode = is_desktop()
+    bundled_mode = is_app_bundled()
     try:
         config = Config(json.loads(config_str, object_pairs_hook=_merge_duplicate_keys))
     except ValueError as parse_err:
-        if not desktop_mode or config_path != user_config_path:
+        if not bundled_mode or config_path != user_config_path:
             # Source run, or the bundled template itself is broken (a packaging
             # bug we can't heal by falling back further) — surface it.
             raise
@@ -639,7 +639,7 @@ def load_config():
     # upgrade, so normalize it into the current shape before anything reads it.
     _migrate_chat_fallback(config)
 
-    # Fresh desktop installs default to the stricter "workspace-write"; every
+    # Fresh desktop and mobile installs default to the stricter "workspace-write"; every
     # other case keeps the template's "full-access". A packaged client only
     # lacks config.json on its very first launch (config_path fell back to the
     # bundled template) — once the user configures anything (e.g. a model) the
@@ -647,7 +647,7 @@ def load_config():
     # never silently tightened by an upgrade. Non-desktop (docker, source) is
     # untouched. Placed before the env override so AGENT_PERMISSION_MODE still
     # wins if explicitly set.
-    if is_desktop() and config_path != user_config_path:
+    if is_app_bundled() and config_path != user_config_path:
         config["agent_permission_mode"] = "workspace-write"
 
     # override config with environment variables.

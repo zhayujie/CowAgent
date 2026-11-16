@@ -1,11 +1,17 @@
 import {faCircleUser, faComments, faMessage, faPenToSquare} from '@fortawesome/free-regular-svg-icons';
-import {faArrowUpRightFromSquare, faUserGroup} from '@fortawesome/free-solid-svg-icons';
+import {
+  faArrowUpRightFromSquare,
+  faChevronDown,
+  faMobileScreen,
+  faServer,
+  faUserGroup,
+} from '@fortawesome/free-solid-svg-icons';
 import type {IconDefinition} from '@fortawesome/fontawesome-svg-core';
 import React, {useMemo} from 'react';
-import {Image, Pressable, ScrollView, Text, View} from 'react-native';
+import {Pressable, ScrollView, Text, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import logo from '../assets/logo-mark.png';
 import type {ChatFile} from '../files/chatFile';
+import {LOCAL_SERVER_NAME} from '../kernel/localKernel';
 import {BUILTIN_VIEWS, menuSections, type MenuEntry, type MenuRoute} from '../navigation/menuViews';
 import type {SessionItem} from '../protocol/events';
 import {useAgentStore} from '../store/agentStore';
@@ -42,6 +48,7 @@ export function DrawerMenu({
   onOpenFile,
   onOpenLink,
   onSwitchAgent,
+  onSwitchServer,
 }: {
   mode: DrawerMode;
   onModeChange: (mode: DrawerMode) => void;
@@ -53,6 +60,7 @@ export function DrawerMenu({
   onOpenFile: (file: ChatFile) => void;
   onOpenLink: (label: string, url: string, external: boolean) => void;
   onSwitchAgent: () => void;
+  onSwitchServer: () => void;
 }) {
   const t = useTheme();
   const styles = useStyles();
@@ -66,7 +74,7 @@ export function DrawerMenu({
   const doc = useMenuStore(s => s.doc);
   const sections = useMemo(() => menuSections(doc), [doc]);
   const server = activeServer();
-  const host = server?.baseUrl.replace(/^https?:\/\//, '') ?? '';
+  const host = server?.local ? LOCAL_SERVER_NAME : (server?.baseUrl.replace(/^https?:\/\//, '') ?? '');
   const groups = useMemo(() => groupSessions(sessions.slice(0, RECENT_LIMIT)), [sessions]);
 
   const countOf = (view: string): number | string | undefined => {
@@ -198,7 +206,18 @@ export function DrawerMenu({
             );
           })}
         </View>
-        <Image source={logo} style={styles.logo} accessibilityLabel="CowAgent" />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="切换连接"
+          hitSlop={6}
+          onPress={onSwitchServer}
+          style={({pressed}) => [styles.serverChip, pressed && styles.pressed]}>
+          <Icon icon={server?.local ? faMobileScreen : faServer} size={11} color={t.t3} />
+          <Text style={styles.serverChipText} numberOfLines={1}>
+            {host || '未连接'}
+          </Text>
+          <Icon icon={faChevronDown} size={9} color={t.t4} />
+        </Pressable>
       </View>
 
       <ScrollView
@@ -305,7 +324,18 @@ const useStyles = makeStyles(t => ({
   },
   switchText: {fontSize: 14, color: t.t3},
   switchTextActive: {color: t.t1, fontWeight: '600'},
-  logo: {width: 24, height: 24, marginRight: 4},
+  serverChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    maxWidth: 130,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: t.line1,
+  },
+  serverChipText: {flexShrink: 1, fontSize: 13, color: t.t2},
   scroll: {flex: 1},
   scrollBody: {paddingHorizontal: 10, paddingTop: 12, paddingBottom: 12},
   newRow: {flexDirection: 'row', gap: 8},

@@ -53,8 +53,9 @@ export function RootNavigator() {
   const hydrated = useServerStore(s => s.hydrated);
   const prefsHydrated = usePrefsStore(s => s.hydrated);
   const authed = useServerStore(s => s.authed);
-  // A fresh chat for every sign-in; the last one's session lives on the server signed out of.
-  const initialSessionId = useMemo(newSessionId, [authed]);
+  const activeId = useServerStore(s => s.activeId);
+  // A fresh chat for every sign-in or server switch; the last one's session lives on the server left.
+  const initialSessionId = useMemo(newSessionId, [authed, activeId]);
 
   if (!hydrated || !prefsHydrated) {
     return (
@@ -66,6 +67,8 @@ export function RootNavigator() {
 
   return (
     <Stack.Navigator
+      // Switching servers rebuilds the stack, so no page keeps showing the previous server's data.
+      key={authed ? `server:${activeId}` : 'login'}
       // On Android's new architecture a push can detach the page underneath while the new one is still
       // sliding over it, so the old page vanishes halfway. Pages below stay attached instead; on the web
       // the screens package drops each page's layout when detaching is off, so it keeps the default there.

@@ -2,9 +2,10 @@ import {create} from 'zustand';
 import {checkAuth, login, probeServer} from '../api/cowApi';
 import {ApiError, http, normalizeBaseUrl} from '../api/http';
 import {DEFAULT_SERVER_NAME, DEFAULT_SERVER_URL} from '../config/defaults';
+import {LOCAL_SERVER_ID, LOCAL_SERVER_NAME, startLocalKernel} from '../kernel/localKernel';
 import type {ServerEnvelope, ServerInfo} from '../protocol/envelope';
 import {realtime, type RealtimeStatus} from '../realtime/RealtimeClient';
-import {readJSON, writeJSON} from '../storage/kv';
+import {readJSON, removeKey, writeJSON} from '../storage/kv';
 import {secureStore} from '../storage/secureStore';
 import {resetServerData} from './reset';
 
@@ -13,6 +14,8 @@ export interface ServerProfile {
   name: string;
   baseUrl: string;
   wsUrl: string | null;
+  /** The kernel embedded in this app; its address may change between launches. */
+  local?: boolean;
 }
 
 interface PersistedServers {
@@ -34,6 +37,16 @@ interface ServerState {
    * send none, so the new password logs in again.
    */
   relogin: (password: string, issued?: string) => Promise<void>;
+  /** Server to go back to from the login screen opened by `addServer`. */
+  returnTo: string | null;
+  /**
+   * Make a saved server active; one without a stored token lands on the login screen.
+   * `LOCAL_SERVER_ID` starts the embedded kernel and signs in to it.
+   */
+  switchTo: (id: string) => Promise<void>;
+  /** Open the login screen for another server, keeping the current one's token. */
+  addServer: () => void;
+  removeServer: (id: string) => Promise<void>;
   logout: () => Promise<void>;
   /** After a 401: sign out only once the server confirms the token is really dead. */
   expireIfSignedOut: () => Promise<void>;
@@ -132,12 +145,54 @@ async function startRealtime(
   });
 }
 
+async function signIn(
+  baseUrl: string,
+  password: string,
+  identity: {id: string; name?: string; local?: boolean},
+) {
+  const info: ServerInfo = await probeServer(baseUrl);
+  if (!info.auth_required) {
+    throw new ApiError(
+      'server',
+      '该服务端未设置访问密码，为安全起见拒绝连接。请先在服务端配置 web_password',
+    );
+  }
+  http.setBaseUrl(baseUrl);
+  const token = await login(password);
+  if (!token) {
+    throw new ApiError('server', '登录成功但服务端未返回 token，请升级 CowAgent');
+  }
+  const {id} = identity;
+  const profile: ServerProfile = {
+    id,
+    name: identity.name ?? info.name ?? baseUrl,
+    baseUrl,
+    wsUrl: info.ws_url ?? null,
+    ...(identity.local ? {local: true} : {}),
+  };
+  const servers = [profile, ...useServerStore.getState().servers.filter(s => s.id !== id)];
+  await secureStore.set(tokenKey(id), token);
+  await persist(servers, id);
+  http.setToken(token);
+  useServerStore.setState({servers, activeId: id, authed: true, returnTo: null});
+  await startRealtime(profile, token, s => useServerStore.setState({realtimeStatus: s}));
+}
+
+/** Drop the active server's live state; its token stays, so switching back needs no password. */
+function leaveActive() {
+  realtime.stop();
+  http.setToken(null);
+  resetServerData();
+  useServerStore.setState({realtimeStatus: 'idle'});
+}
+
 export const useServerStore = create<ServerState>((set, get) => ({
   hydrated: false,
   servers: [],
   activeId: null,
   authed: false,
   realtimeStatus: 'idle',
+  returnTo: null,
 
   hydrate: async () => {
     const saved = await readJSON<PersistedServers>(SERVERS_KEY, {
@@ -152,10 +207,22 @@ export const useServerStore = create<ServerState>((set, get) => ({
       ];
     }
     const activeId = saved.activeId ?? servers[0]?.id;
-    const active = servers.find(s => s.id === activeId) ?? servers[0];
+    let active = servers.find(s => s.id === activeId) ?? servers[0];
     if (!active) {
       set({hydrated: true, servers, activeId: null, authed: false});
       return;
+    }
+    if (active.local) {
+      try {
+        const {baseUrl} = await startLocalKernel();
+        const moved: ServerProfile = {...active, baseUrl};
+        servers = servers.map(s => (s.id === moved.id ? moved : s));
+        active = moved;
+        await persist(servers, active.id);
+      } catch {
+        set({hydrated: true, servers, activeId: active.id, authed: false});
+        return;
+      }
     }
     http.setBaseUrl(active.baseUrl);
     const token = await secureStore.get(tokenKey(active.id));
@@ -168,32 +235,8 @@ export const useServerStore = create<ServerState>((set, get) => ({
 
   connect: async (rawUrl, password) => {
     const baseUrl = normalizeBaseUrl(rawUrl);
-    const info: ServerInfo = await probeServer(baseUrl);
-    if (!info.auth_required) {
-      throw new ApiError(
-        'server',
-        '该服务端未设置访问密码，为安全起见拒绝连接。请先在服务端配置 web_password',
-      );
-    }
-    http.setBaseUrl(baseUrl);
-    const token = await login(password);
-    if (!token) {
-      throw new ApiError('server', '登录成功但服务端未返回 token，请升级 CowAgent');
-    }
     const id = serverIdFor(baseUrl);
-    const existing = get().servers.find(s => s.id === id);
-    const profile: ServerProfile = {
-      id,
-      name: existing?.name ?? info.name ?? baseUrl,
-      baseUrl,
-      wsUrl: info.ws_url ?? null,
-    };
-    const servers = [profile, ...get().servers.filter(s => s.id !== id)];
-    await secureStore.set(tokenKey(id), token);
-    await persist(servers, id);
-    http.setToken(token);
-    set({servers, activeId: id, authed: true});
-    await startRealtime(profile, token, s => set({realtimeStatus: s}));
+    await signIn(baseUrl, password, {id, name: get().servers.find(s => s.id === id)?.name});
   },
 
   relogin: async (password, issued) => {
@@ -207,6 +250,56 @@ export const useServerStore = create<ServerState>((set, get) => ({
     await startRealtime(profile, token, s => set({realtimeStatus: s}));
   },
 
+  switchTo: async id => {
+    const {activeId, authed, servers} = get();
+    if (id === activeId && authed) {
+      return;
+    }
+    if (id === LOCAL_SERVER_ID) {
+      // Started before leaving, so a kernel that fails to come up keeps the current server.
+      const {baseUrl, password} = await startLocalKernel();
+      leaveActive();
+      try {
+        await signIn(baseUrl, password, {id: LOCAL_SERVER_ID, name: LOCAL_SERVER_NAME, local: true});
+      } catch (e) {
+        set({activeId: LOCAL_SERVER_ID, authed: false});
+        throw e;
+      }
+      return;
+    }
+    const target = servers.find(s => s.id === id);
+    if (!target) {
+      return;
+    }
+    const token = await secureStore.get(tokenKey(id));
+    leaveActive();
+    http.setBaseUrl(target.baseUrl);
+    http.setToken(token);
+    await persist(servers, id);
+    set({activeId: id, authed: !!token, returnTo: null});
+    if (token) {
+      await startRealtime(target, token, s => set({realtimeStatus: s}));
+    }
+  },
+
+  addServer: () => {
+    const {activeId} = get();
+    leaveActive();
+    set({authed: false, activeId: null, returnTo: activeId});
+  },
+
+  removeServer: async id => {
+    const {servers, activeId} = get();
+    if (id === activeId) {
+      return;
+    }
+    const rest = servers.filter(s => s.id !== id);
+    await secureStore.remove(tokenKey(id));
+    await removeKey(seqKey(id));
+    await persist(rest, activeId);
+    set({servers: rest});
+  },
+
   logout: async () => {
     const {activeId} = get();
     realtime.stop();
@@ -214,7 +307,7 @@ export const useServerStore = create<ServerState>((set, get) => ({
       await secureStore.remove(tokenKey(activeId));
     }
     http.setToken(null);
-    set({authed: false, realtimeStatus: 'idle'});
+    set({authed: false, realtimeStatus: 'idle', returnTo: null});
     resetServerData();
   },
 

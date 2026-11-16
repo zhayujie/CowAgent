@@ -32,6 +32,7 @@ import {DrawerMenu, type DrawerMode, type DrawerRoute} from '../components/Drawe
 import {Icon} from '../components/Icon';
 import {Intro} from '../components/Intro';
 import {MessageItem} from '../components/MessageItem';
+import {ServerSheet} from '../components/ServerSheet';
 import {SessionSheet} from '../components/SessionSheet';
 import {SHEET_DISMISS_MS} from '../components/Sheet';
 import {ConfirmSheet, FieldSheet} from '../components/settings';
@@ -92,6 +93,7 @@ export function ChatScreen({route, navigation}: Props) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerMode, setDrawerMode] = useState<DrawerMode>('chat');
   const [agentSheetOpen, setAgentSheetOpen] = useState(false);
+  const [serverSheetOpen, setServerSheetOpen] = useState(false);
   const [teamSheetOpen, setTeamSheetOpen] = useState(false);
   const [attachOpen, setAttachOpen] = useState(false);
   const [modelOpen, setModelOpen] = useState(false);
@@ -636,8 +638,14 @@ export function ChatScreen({route, navigation}: Props) {
               setDrawerOpen(false);
               setAgentSheetOpen(true);
             }}
+            onSwitchServer={() => {
+              setDrawerOpen(false);
+              setServerSheetOpen(true);
+            }}
           />
         </SlideDrawer>
+
+        <ServerSheet visible={serverSheetOpen} onClose={() => setServerSheetOpen(false)} />
 
         <TeamChatSheet visible={teamSheetOpen} onClose={() => setTeamSheetOpen(false)} onStart={startTeamChat} />
 

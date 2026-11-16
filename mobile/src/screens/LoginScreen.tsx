@@ -12,6 +12,7 @@ import {
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {isPublicCleartext} from '../api/http';
 import logo from '../assets/logo-mark.png';
+import {isLocalKernelAvailable, LOCAL_SERVER_ID, LOCAL_SERVER_NAME} from '../kernel/localKernel';
 import {activeServer, describeConnectError, useServerStore} from '../store/serverStore';
 import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
@@ -21,12 +22,18 @@ export function LoginScreen() {
   const styles = useStyles();
   const insets = useSafeAreaInsets();
   const connect = useServerStore(s => s.connect);
+  const returnTo = useServerStore(s => s.returnTo);
+  const returnHost = useServerStore(s => s.servers.find(p => p.id === s.returnTo)?.baseUrl);
+  const returnLabel =
+    returnTo === LOCAL_SERVER_ID ? LOCAL_SERVER_NAME : returnHost?.replace(/^https?:\/\//, '');
   const [url, setUrl] = useState(() => activeServer()?.baseUrl ?? '');
   const [password, setPassword] = useState('');
   const [focus, setFocus] = useState<'url' | 'password' | null>(null);
   const [busy, setBusy] = useState(false);
+  // Sign-ins that need no form input: the built-in agent, or going back to the server left.
+  const [pending, setPending] = useState<'local' | 'back' | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const disabled = busy || !url || !password;
+  const disabled = busy || !!pending || !url || !password;
 
   const submit = async () => {
     if (disabled) {
@@ -43,6 +50,21 @@ export function LoginScreen() {
     }
   };
 
+  const switchTo = async (kind: 'local' | 'back', id: string) => {
+    if (busy || pending) {
+      return;
+    }
+    setPending(kind);
+    setError(null);
+    try {
+      await useServerStore.getState().switchTo(id);
+    } catch (e) {
+      setError(describeConnectError(e));
+    } finally {
+      setPending(null);
+    }
+  };
+
   return (
     <KeyboardAvoidingView
       style={styles.root}
@@ -53,7 +75,29 @@ export function LoginScreen() {
         <Image source={logo} style={styles.logo} />
         <Text style={styles.eyebrow}>COWAGENT</Text>
         <Text style={styles.title}>连接你的 Agent</Text>
-        <Text style={styles.lead}>输入部署在服务器或电脑上的 CowAgent 地址，用访问密码登录。</Text>
+        <Text style={styles.lead}>
+          {isLocalKernelAvailable()
+            ? '直接在这台手机上运行，或者连接部署在服务器、电脑上的 CowAgent。'
+            : '输入部署在服务器或电脑上的 CowAgent 地址，用访问密码登录。'}
+        </Text>
+
+        {isLocalKernelAvailable() && (
+          <>
+            <Pressable
+              accessibilityRole="button"
+              disabled={busy || !!pending}
+              onPress={() => switchTo('local', LOCAL_SERVER_ID)}
+              style={({pressed}) => [styles.button, styles.localButton, pressed && styles.buttonPressed]}>
+              {pending === 'local' ? (
+                <ActivityIndicator color={t.onAccent} />
+              ) : (
+                <Text style={styles.buttonText}>在本机运行</Text>
+              )}
+            </Pressable>
+            <Text style={styles.footnote}>无需服务器，Agent 和数据都留在这台手机上，只需配置模型。</Text>
+            <Text style={styles.divider}>或连接服务器</Text>
+          </>
+        )}
 
         <Text style={styles.label}>服务器地址</Text>
         <TextInput
@@ -100,6 +144,15 @@ export function LoginScreen() {
           )}
         </Pressable>
         <Text style={styles.footnote}>密码只在这次登录时使用，之后这台设备用独立凭证访问。</Text>
+        {!!returnTo && !!returnLabel && (
+          <Pressable
+            accessibilityRole="button"
+            hitSlop={8}
+            disabled={busy || !!pending}
+            onPress={() => switchTo('back', returnTo)}>
+            <Text style={styles.back}>{pending === 'back' ? '正在返回…' : `返回 ${returnLabel}`}</Text>
+          </Pressable>
+        )}
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -145,9 +198,12 @@ const useStyles = makeStyles(t => ({
     justifyContent: 'center',
     backgroundColor: t.green,
   },
+  localButton: {marginTop: 0},
+  divider: {fontSize: 12, color: t.t3, marginTop: 30, marginBottom: 14, letterSpacing: 0.2},
   buttonOff: {backgroundColor: t.bg3},
   buttonPressed: {backgroundColor: t.greenDeep},
   buttonText: {fontSize: 16, fontWeight: '600', color: t.onAccent},
   buttonTextOff: {color: t.t3},
   footnote: {fontSize: 12, lineHeight: 18, color: t.t4, marginTop: 14},
+  back: {fontSize: 14, color: t.accent, marginTop: 28, textAlign: 'center'},
 }));

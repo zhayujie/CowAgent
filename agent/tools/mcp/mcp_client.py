@@ -18,7 +18,7 @@ import urllib.error
 from typing import Optional
 
 from common.log import logger
-from common.deployment import is_desktop
+from common.deployment import is_desktop, is_mobile
 
 
 # System env vars a stdio MCP subprocess legitimately needs to run
@@ -225,6 +225,11 @@ class McpClient:
         self.last_error = None
         try:
             if self.transport == "stdio":
+                if is_mobile():
+                    # The mobile app cannot spawn local processes.
+                    self.last_error = "stdio MCP servers are not supported on mobile; use a remote (SSE / Streamable HTTP) server"
+                    logger.warning(f"[MCP:{self.name}] {self.last_error}")
+                    return False
                 return self._init_stdio()
             elif self.transport == "sse":
                 return self._init_sse()

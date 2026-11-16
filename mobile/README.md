@@ -7,7 +7,7 @@ Mobile client for CowAgent. One React Native 0.82 codebase, plus RNOH (React Nat
 | Platform | Needs |
 | --- | --- |
 | All | Node ≥ 20.19.4 (`nvm install 22` / `nvm use 22` recommended) |
-| Android | JDK 17, Android SDK (compileSdk 36, minSdk 24), NDK 27.1 |
+| Android | JDK 17, Android SDK (compileSdk 36, minSdk 24), NDK 27.1, Python 3.13 on the build machine (`-PcowPython=<path>` if it is not `python3.13` on PATH) |
 | iOS | macOS with Xcode 16+, CocoaPods |
 | HarmonyOS | DevEco Studio 6.x (target SDK 6.0.0(20), compatible with 5.0.0(12)), a device or emulator |
 
@@ -80,7 +80,21 @@ android/ ios/  Native projects
   `/api/health` + `/auth/check`, and the chat stream uses the existing SSE `/stream` (resumable with `after_seq`).
   Once the server ships `/ws`, the client switches automatically when `/api/info` returns a `ws_url`, with no app changes.
 
+## Built-in agent (Android)
+
+The Android app ships the CowAgent core and runs it on-device through Chaquopy (CPython 3.13, 64-bit ABIs only),
+so it works without a separate server. "在本机运行" on the login screen starts it; remote servers stay available.
+
+- `kernel/bundle.py` copies the core sources into the APK assets on every build; `kernel/requirements.txt` lists the
+  Python packages bundled with them (binary wheels only).
+- `android/app/src/main/java/ai/cowagent/app/kernel/` extracts the sources to app storage, starts the web channel
+  on a free loopback port with a random password, and exposes `start()` to JS as `NativeModules.CowKernel`.
+- The core runs with `COW_DEPLOYMENT=mobile`: web channel only, loopback only, no plugins, no `bash` / `browser`
+  tools and no stdio MCP servers. Data and workspace live under the app's private files directory.
+
 ## Known limitations / TODO
+
+- The built-in agent is Android only for now; iOS needs the same embedding (Python framework + native module).
 
 - `storage/secureStore.ts` is an AsyncStorage development implementation. Before release it must be backed by
   Keychain, Keystore and the HarmonyOS Asset Store Kit.

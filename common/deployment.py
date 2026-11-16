@@ -3,6 +3,9 @@
 - ``source``: a checkout its user runs and updates with git (the default).
 - ``desktop``: the packaged desktop app, which owns the backend's port,
   password and updates.
+- ``mobile``: the backend embedded in the mobile app. Like ``desktop`` the app
+  owns port, password and updates; it also runs in-process on loopback only,
+  with no shell, subprocesses or IM channels.
 - ``docker``: a container its user runs and updates with docker compose.
 - ``managed``: updated by whoever runs it, never by itself.
 
@@ -12,7 +15,7 @@ and still count.
 
 import os
 
-DEPLOYMENTS = ("source", "desktop", "docker", "managed")
+DEPLOYMENTS = ("source", "desktop", "mobile", "docker", "managed")
 
 
 def deployment() -> str:
@@ -28,6 +31,16 @@ def deployment() -> str:
 
 def is_desktop() -> bool:
     return deployment() == "desktop"
+
+
+def is_mobile() -> bool:
+    return deployment() == "mobile"
+
+
+def is_app_bundled() -> bool:
+    """The backend ships inside a client app (desktop or mobile), which owns
+    its port, password and updates and renders its own UI."""
+    return deployment() in ("desktop", "mobile")
 
 
 def is_managed() -> bool:

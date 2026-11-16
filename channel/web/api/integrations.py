@@ -36,7 +36,7 @@ from channel.web.core._common import (
     _require_auth,
     _write_config_file_for_write,
 )
-from common.deployment import is_desktop, is_managed
+from common.deployment import is_app_bundled, is_managed, is_mobile
 
 _PUBLIC_URL_RE = re.compile(r"^https?://[A-Za-z0-9.\-\[\]:]+(:\d{1,5})?(/[A-Za-z0-9._~\-/]*)?$")
 # Interfaces VPNs, containers and VMs create; their addresses are not on the
@@ -165,6 +165,12 @@ def _behind_auth_proxy() -> bool:
     return is_managed()
 
 
+def _listen_fixed() -> bool:
+    """Whether host and port are not the owner's to change: an auth proxy
+    forwards to a fixed address, and the mobile app only serves itself."""
+    return _behind_auth_proxy() or is_mobile()
+
+
 def _public_url_fixed() -> bool:
     return bool((os.environ.get("WEB_PUBLIC_URL") or "").strip())
 
@@ -179,9 +185,9 @@ def _state(host: str = None, port: int = None) -> dict:
         "public_url_fixed": _public_url_fixed(),
         "lan_urls": [] if proxied else lan_urls(host, port),
         "listen": {"host": host, "port": port},
-        "listen_fixed": proxied,
-        # The desktop app owns its backend's port.
-        "port_fixed": is_desktop(),
+        "listen_fixed": _listen_fixed(),
+        # The desktop and mobile apps own their backend's port.
+        "port_fixed": is_app_bundled(),
         "local_only": is_loopback_host(host),
         "password_set": _is_password_enabled(),
     }
@@ -207,7 +213,7 @@ class IntegrationsHandler:
         data = data if isinstance(data, dict) else {}
         if "public_url" in data and _public_url_fixed():
             return _error("public_url_fixed", "public_url_fixed")
-        if ("web_host" in data or "web_port" in data) and _behind_auth_proxy():
+        if ("web_host" in data or "web_port" in data) and _listen_fixed():
             return _error("listen_fixed", "listen_fixed")
         if "public_url" in data:
             value = str(data.get("public_url") or "").strip().rstrip("/")
@@ -253,7 +259,7 @@ def _port_problem(host: str, port: int) -> str:
         return "invalid_port"
     if port == _listen["port"]:
         return ""
-    if is_desktop():
+    if is_app_bundled():
         return "port_fixed"
     return "" if can_bind(host, port) else "port_in_use"
 

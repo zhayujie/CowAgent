@@ -1,6 +1,7 @@
 apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
+apply plugin: "com.chaquo.python"
 
 /**
  * This is the configuration block to customize your React Native Android app.
@@ -73,6 +74,35 @@ def enableProguardInReleaseBuilds = false
 def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
 
 /**
+ * The embedded agent kernel: the same Python code a server runs, copied by
+ * mobile/kernel/bundle.py into the app's assets and started by CowKernelModule.
+ * Building needs Python 3.13 on the build machine (Chaquopy requires the app's
+ * major.minor); point -PcowPython at it if it isn't `python3.13` on PATH.
+ */
+def cowPython = (findProperty("cowPython") ?: "python3.13").toString()
+def kernelDir = file("../../kernel")
+def kernelAssetsDir = layout.buildDirectory.dir("generated/cow-kernel/assets").get().asFile
+
+chaquopy {
+    defaultConfig {
+        version = "3.13"
+        buildPython(cowPython)
+        pip {
+            install("-r", new File(kernelDir, "requirements.txt").path)
+        }
+    }
+}
+
+def bundleCowKernel = tasks.register("bundleCowKernel", Exec) {
+    description = "Copies the agent kernel sources into the app assets."
+    outputs.dir(kernelAssetsDir)
+    // A plain copy of ~400 files: cheaper to redo than to track every source.
+    outputs.upToDateWhen { false }
+    commandLine cowPython, new File(kernelDir, "bundle.py").path, new File(kernelAssetsDir, "cow-kernel").path
+}
+preBuild.dependsOn(bundleCowKernel)
+
+/**
  * Release signing key, from ~/.gradle/gradle.properties or the environment, never this repo:
  * COW_RELEASE_STORE_FILE, COW_RELEASE_STORE_PASSWORD, COW_RELEASE_KEY_ALIAS, COW_RELEASE_KEY_PASSWORD.
  * Without them release builds fall back to the public debug key, which anyone can sign
@@ -97,6 +127,15 @@ android {
         // Minutes since 1970: every build is newer than the last, so phone installers update in place.
         versionCode((int) (System.currentTimeMillis() / 60000L))
         versionName "1.0"
+        ndk {
+            // The embedded Python runtime (3.12+) only ships 64-bit builds.
+            abiFilters "arm64-v8a", "x86_64"
+        }
+    }
+    sourceSets {
+        main {
+            assets.srcDirs += kernelAssetsDir
+        }
     }
     signingConfigs {
         debug {
