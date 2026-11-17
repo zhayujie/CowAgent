@@ -15,6 +15,7 @@ const SRC = path.join(__dirname, '..', 'src');
 /** Chinese that must stay as is: language names, and markers or release text the server sends. */
 const ALLOWED: Record<string, string[]> = {
   'screens/SettingsScreen.tsx': ['简体中文'],
+  'screens/LoginScreen.tsx': ['中文'],
   'utils/guestShares.ts': ['简体中文', '繁體中文'],
   'screens/VersionScreen.tsx': ['中文'],
   'store/chatStore.ts': [

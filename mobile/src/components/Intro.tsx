@@ -6,12 +6,13 @@ import {
   faMessage,
   faWindowMaximize,
 } from '@fortawesome/free-regular-svg-icons';
-import {faChevronRight} from '@fortawesome/free-solid-svg-icons';
+import {faChevronRight, faMicrochip} from '@fortawesome/free-solid-svg-icons';
 import type {IconDefinition} from '@fortawesome/fontawesome-svg-core';
 import React from 'react';
 import {Pressable, ScrollView, Text, View} from 'react-native';
 import {tr} from '../i18n';
 import type {SessionItem} from '../protocol/events';
+import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
 import {greeting, shortTime} from '../utils/format';
 import {Icon} from './Icon';
@@ -31,12 +32,16 @@ export function Intro({
   recent,
   onPick,
   onOpenSession,
+  onSetupModel,
 }: {
   firstRun: boolean;
   recent: SessionItem[];
   onPick: (text: string) => void;
   onOpenSession: (session: SessionItem) => void;
+  /** Set while chat has no usable model; shows the card leading to model setup. */
+  onSetupModel?: () => void;
 }) {
+  const t = useTheme();
   const styles = useStyles();
   const showRecent = !firstRun && recent.length > 0;
 
@@ -52,6 +57,24 @@ export function Intro({
       <Text style={styles.lead}>
         {firstRun ? tr('chat_intro_lead_first') : tr('chat_intro_lead_back')}
       </Text>
+
+      {onSetupModel && (
+        <Pressable
+          accessibilityRole="button"
+          onPress={onSetupModel}
+          style={({pressed}) => [styles.setup, pressed && styles.pickPressed]}>
+          <View style={styles.setupIcon}>
+            <Icon icon={faMicrochip} size={15} color={t.onAccent} />
+          </View>
+          <View style={styles.setupText}>
+            <Text style={styles.setupTitle}>{tr('connect_setup_model_title')}</Text>
+            <Text style={styles.setupDesc}>{tr('connect_setup_model_desc')}</Text>
+          </View>
+          <View style={styles.setupAction}>
+            <Text style={styles.setupActionText}>{tr('connect_setup_model_action')}</Text>
+          </View>
+        </Pressable>
+      )}
 
       <View style={styles.picks}>
         {showRecent
@@ -112,6 +135,30 @@ const useStyles = makeStyles(t => ({
   title: {fontSize: 26, lineHeight: 36, fontWeight: '600', letterSpacing: -0.7, color: t.t1},
   lead: {fontSize: 14, lineHeight: 23, color: t.t2, marginTop: 10, letterSpacing: 0.1},
   picks: {marginTop: 26, borderBottomWidth: 1, borderBottomColor: t.line1},
+  setup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 24,
+    padding: 14,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: t.accentLine,
+    backgroundColor: t.accentSoft,
+  },
+  setupIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: t.green,
+  },
+  setupText: {flex: 1},
+  setupTitle: {fontSize: 15, fontWeight: '600', color: t.t1},
+  setupDesc: {fontSize: 12, lineHeight: 18, color: t.t2, marginTop: 3},
+  setupAction: {paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999, backgroundColor: t.green},
+  setupActionText: {fontSize: 13, fontWeight: '600', color: t.onAccent},
   pick: {
     flexDirection: 'row',
     alignItems: 'center',

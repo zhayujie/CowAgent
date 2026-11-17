@@ -59,6 +59,7 @@ import type {
 import {appendFile, type PickedFile} from '../media/types';
 import {omit} from '../utils/object';
 import {ApiError, http, normalizeBaseUrl} from './http';
+import {deviceInfo} from './pairing';
 import {openEventStream, type EventStreamHandle} from './sse';
 
 interface AuthCheck {
@@ -116,7 +117,7 @@ export async function checkAuth() {
 export async function login(password: string): Promise<string | null> {
   const res = await http.request<{status: string; token?: string}>(
     '/auth/login',
-    {body: {password}, anonymous: true},
+    {body: {password, device: deviceInfo()}, anonymous: true},
   );
   return res.token ?? null;
 }

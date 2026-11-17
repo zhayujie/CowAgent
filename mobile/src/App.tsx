@@ -10,6 +10,7 @@ import {StatusBar, StyleSheet} from 'react-native';
 import {GestureHandlerRootView} from 'react-native-gesture-handler';
 import {SafeAreaProvider} from 'react-native-safe-area-context';
 import {ImageViewerHost} from './components/FileViews';
+import {PairLinkHost} from './components/PairFlow';
 import {useLangStore} from './i18n';
 import {navigationRef} from './navigation/ref';
 import {RootNavigator} from './navigation/RootNavigator';
@@ -19,6 +20,7 @@ import {usePrefsStore, useTheme} from './theme/theme';
 export default function App() {
   const t = useTheme();
   const lang = useLangStore(s => s.lang);
+  const hydrated = useServerStore(s => s.hydrated);
   // Text is resolved during render, so switching language remounts the tree;
   // the navigation state is carried over so the user stays where they were.
   const navState = useRef<NavigationState | undefined>(undefined);
@@ -62,6 +64,7 @@ export default function App() {
             <RootNavigator />
           </NavigationContainer>
           <ImageViewerHost />
+          {hydrated && <PairLinkHost />}
         </React.Fragment>
       </SafeAreaProvider>
     </GestureHandlerRootView>

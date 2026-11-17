@@ -22,6 +22,17 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleSignature</key>
 	<string>????</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>cowagent</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>cowagent</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
@@ -34,7 +45,7 @@
 		<true/>
 	</dict>
 	<key>NSCameraUsageDescription</key>
-	<string>拍照后作为附件发给 Agent</string>
+	<string>扫码连接电脑，或拍照后作为附件发给 Agent</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>连接部署在局域网电脑上的 CowAgent 服务</string>
 	<key>NSMicrophoneUsageDescription</key>

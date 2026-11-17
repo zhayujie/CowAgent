@@ -17,8 +17,11 @@ import type {StackScreenProps} from '@react-navigation/stack';
 import React, {useEffect, useState} from 'react';
 import {Pressable, RefreshControl, ScrollView, Text, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import {http} from '../api/http';
+import {isDeviceToken} from '../api/pairing';
 import {PERMISSION_META} from '../components/ComposerSheets';
 import {Icon} from '../components/Icon';
+import {ServerSheet} from '../components/ServerSheet';
 import {tr, trf, useLangStore, type Lang, type MessageKey} from '../i18n';
 import {ChoiceSheet, FieldSheet, Footnote, SettingRow} from '../components/settings';
 import {showToast, ToastHost} from '../components/Toast';
@@ -83,6 +86,7 @@ export function SettingsScreen({navigation}: Props) {
   const [confirmLogout, setConfirmLogout] = useState(false);
   const [sheet, setSheet] = useState<'permission' | 'password' | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [serverSheet, setServerSheet] = useState(false);
 
   useEffect(() => {
     loadConfig().catch(() => undefined);
@@ -248,7 +252,18 @@ export function SettingsScreen({navigation}: Props) {
           title={tr('settings_server_address')}
           value={local ? tr('server_local_meta') : server?.baseUrl.replace(/^https?:\/\//, '') ?? '-'}
         />
-        <SettingRow title={tr('settings_realtime')} value={tr(REALTIME_LABEL[realtimeStatus])} last />
+        <SettingRow
+          title={tr('connect_method')}
+          value={
+            local
+              ? tr('connect_method_local')
+              : (server?.via ?? (isDeviceToken(http.getToken()) ? 'pairing' : 'password')) === 'pairing'
+                ? tr('connect_method_device')
+                : tr('connect_method_password')
+          }
+        />
+        <SettingRow title={tr('settings_realtime')} value={tr(REALTIME_LABEL[realtimeStatus])} />
+        <SettingRow title={tr('server_switch')} onPress={() => setServerSheet(true)} last />
 
         <GroupLabel style={styles.group}>{tr('settings_group_account')}</GroupLabel>
         <Pressable
@@ -288,6 +303,7 @@ export function SettingsScreen({navigation}: Props) {
         onSubmit={changePassword}
         onClose={() => setSheet(null)}
       />
+      <ServerSheet visible={serverSheet} onClose={() => setServerSheet(false)} />
       <ToastHost bottom={insets.bottom + 28} />
     </View>
   );

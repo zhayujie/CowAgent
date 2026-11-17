@@ -38,6 +38,7 @@
     "react": "19.1.1",
     "react-native": "0.82.1",
     "react-native-audio-recorder-player": "3.6.14",
+    "react-native-camera-kit": "18.0.1",
     "react-native-document-picker": "9.3.1",
     "react-native-gesture-handler": "2.30.0",
     "react-native-image-picker": "8.3.1",

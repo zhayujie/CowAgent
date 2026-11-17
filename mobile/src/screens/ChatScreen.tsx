@@ -1,5 +1,6 @@
 import {faComments} from '@fortawesome/free-regular-svg-icons';
 import {faArrowDown, faChevronDown, faEllipsis, faPlus} from '@fortawesome/free-solid-svg-icons';
+import {useFocusEffect} from '@react-navigation/native';
 import type {StackScreenProps} from '@react-navigation/stack';
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {
@@ -18,7 +19,7 @@ import {
 import {Gesture, GestureDetector} from 'react-native-gesture-handler';
 import Animated, {FadeIn, FadeOut} from 'react-native-reanimated';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import {newSessionId, optimizePrompt, serverUrl, transcribeVoice} from '../api/cowApi';
+import {getModels, newSessionId, optimizePrompt, serverUrl, transcribeVoice} from '../api/cowApi';
 import {AgentAvatar} from '../components/AgentAvatar';
 import {AgentSheet} from '../components/AgentSheet';
 import {
@@ -59,6 +60,7 @@ import {useSessionSettingsStore} from '../store/sessionSettingsStore';
 import {useSessionStore} from '../store/sessionStore';
 import {radius} from '../theme/palette';
 import {makeStyles, usePrefsStore, useTheme} from '../theme/theme';
+import {chatModelReady} from '../utils/capabilities';
 
 type Props = StackScreenProps<RootStackParamList, 'Chat'>;
 
@@ -110,6 +112,21 @@ export function ChatScreen({route, navigation}: Props) {
     useSessionStore.getState().refresh();
     useOverviewStore.getState().load().catch(() => undefined);
   }, []);
+
+  // Checked again on every return, so the card goes away once a model is set up.
+  const [modelMissing, setModelMissing] = useState(false);
+  useFocusEffect(
+    useCallback(() => {
+      let live = true;
+      getModels().then(
+        state => live && setModelMissing(!chatModelReady(state)),
+        () => undefined,
+      );
+      return () => {
+        live = false;
+      };
+    }, []),
+  );
 
   // Anyone with history has already used the product; the guide is for strangers only.
   useEffect(() => {
@@ -562,6 +579,7 @@ export function ChatScreen({route, navigation}: Props) {
                 recent={recent}
                 onPick={sendText}
                 onOpenSession={openSession}
+                onSetupModel={modelMissing ? () => navigation.navigate('Models') : undefined}
               />
             )
           ) : (

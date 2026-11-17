@@ -14,6 +14,22 @@ export interface Option {
   hint?: string;
 }
 
+/**
+ * Whether chat has a model to answer with: a provider and model picked, and
+ * that provider's key set. A default config can name a model with no key.
+ */
+export function chatModelReady(state: ModelsState): boolean {
+  const chat = state.capabilities?.chat;
+  if (!chat?.current_provider || !chat.current_model) {
+    return false;
+  }
+  // A server that doesn't list providers can't say; don't nag about it.
+  if (!state.providers) {
+    return true;
+  }
+  return !!state.providers.find(p => p.id === chat.current_provider)?.configured;
+}
+
 export const toOption = (o: ModelOption): Option => (typeof o === 'string' ? {value: o} : o);
 
 export const toOptions = (list?: ModelOption[]): Option[] => (list ?? []).map(toOption);

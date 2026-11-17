@@ -1,4 +1,4 @@
-import {Platform} from 'react-native';
+import {PermissionsAndroid, Platform} from 'react-native';
 import {tr} from '../i18n';
 import type {PickedFile} from './types';
 
@@ -74,6 +74,14 @@ export async function takePhoto(): Promise<PickedFile[]> {
   const picker = imagePicker();
   if (!picker) {
     return [];
+  }
+  // The manifest declares CAMERA (for scanning pairing codes), and then the
+  // system camera intent also requires the permission to be granted.
+  if (Platform.OS === 'android') {
+    const granted = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.CAMERA);
+    if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+      throw new Error(tr('media_permission_denied'));
+    }
   }
   const res = await picker.launchCamera({
     mediaType: 'photo',

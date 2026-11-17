@@ -1,6 +1,7 @@
 import {create} from 'zustand';
 import {checkAuth, login, probeServer, updateConfig} from '../api/cowApi';
 import {ApiError, http, normalizeBaseUrl} from '../api/http';
+import {isDeviceToken, redeem, revokeToken, type PairTarget} from '../api/pairing';
 import {DEFAULT_SERVER_NAME, DEFAULT_SERVER_URL} from '../config/defaults';
 import {getLang, tr, trf, useLangStore} from '../i18n';
 import {LOCAL_SERVER_ID, startLocalKernel} from '../kernel/localKernel';
@@ -17,6 +18,8 @@ export interface ServerProfile {
   wsUrl: string | null;
   /** The kernel embedded in this app; its address may change between launches. */
   local?: boolean;
+  /** How this device signed in; profiles saved before pairing existed have none. */
+  via?: 'pairing' | 'password';
 }
 
 interface PersistedServers {
@@ -32,6 +35,8 @@ interface ServerState {
   realtimeStatus: RealtimeStatus;
   hydrate: () => Promise<void>;
   connect: (rawUrl: string, password: string) => Promise<void>;
+  /** Redeem a pairing code for a token of this device's own and switch to that server. */
+  pair: (target: PairTarget) => Promise<void>;
   /**
    * Tokens are signed with the password, so changing it needs a fresh one.
    * `issued` is the token the password change itself returned; older servers
@@ -45,8 +50,10 @@ interface ServerState {
    * `LOCAL_SERVER_ID` starts the embedded kernel and signs in to it.
    */
   switchTo: (id: string) => Promise<void>;
+  /** Whether the login screen opens on the address form rather than the welcome step. */
+  loginForm: boolean;
   /** Open the login screen for another server, keeping the current one's token. */
-  addServer: () => void;
+  addServer: (form?: boolean) => void;
   removeServer: (id: string) => Promise<void>;
   logout: () => Promise<void>;
   /** After a 401: sign out only once the server confirms the token is really dead. */
@@ -118,6 +125,25 @@ export function describeConnectError(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
+export function describePairError(e: unknown): string {
+  if (e instanceof ApiError) {
+    const reason = e.body?.reason;
+    if (reason === 'invalid_code') {
+      return tr('connect_err_invalid_code');
+    }
+    if (reason === 'locked') {
+      return trf('connect_err_locked', {s: Number(e.body?.retry_after) || 60});
+    }
+    if (reason === 'pairing_unsupported') {
+      return tr('connect_err_unsupported');
+    }
+    if (e.kind === 'network' || e.kind === 'timeout') {
+      return tr('connect_err_unreachable');
+    }
+  }
+  return describeConnectError(e);
+}
+
 async function persist(servers: ServerProfile[], activeId: string | null) {
   await writeJSON(SERVERS_KEY, {servers, activeId} satisfies PersistedServers);
 }
@@ -160,19 +186,26 @@ async function signIn(
   if (!token) {
     throw new ApiError('server', tr('login_err_no_token'));
   }
-  const {id} = identity;
-  const profile: ServerProfile = {
-    id,
-    name: identity.name ?? info.name ?? baseUrl,
-    baseUrl,
-    wsUrl: info.ws_url ?? null,
-    ...(identity.local ? {local: true} : {}),
-  };
-  const servers = [profile, ...useServerStore.getState().servers.filter(s => s.id !== id)];
-  await secureStore.set(tokenKey(id), token);
-  await persist(servers, id);
+  await activate(
+    {
+      id: identity.id,
+      name: identity.name ?? info.name ?? baseUrl,
+      baseUrl,
+      wsUrl: info.ws_url ?? null,
+      ...(identity.local ? {local: true} : {via: 'password' as const}),
+    },
+    token,
+  );
+}
+
+/** Save a server with the token just issued for it and make it the active one. */
+async function activate(profile: ServerProfile, token: string) {
+  const servers = [profile, ...useServerStore.getState().servers.filter(s => s.id !== profile.id)];
+  await secureStore.set(tokenKey(profile.id), token);
+  await persist(servers, profile.id);
+  http.setBaseUrl(profile.baseUrl);
   http.setToken(token);
-  useServerStore.setState({servers, activeId: id, authed: true, returnTo: null});
+  useServerStore.setState({servers, activeId: profile.id, authed: true, returnTo: null});
   await startRealtime(profile, token, s => useServerStore.setState({realtimeStatus: s}));
 }
 
@@ -203,6 +236,7 @@ export const useServerStore = create<ServerState>((set, get) => ({
   authed: false,
   realtimeStatus: 'idle',
   returnTo: null,
+  loginForm: false,
 
   hydrate: async () => {
     const saved = await readJSON<PersistedServers>(SERVERS_KEY, {
@@ -259,7 +293,27 @@ export const useServerStore = create<ServerState>((set, get) => ({
     await signIn(baseUrl, password, {id, name: get().servers.find(s => s.id === id)?.name});
   },
 
+  pair: async target => {
+    const result = await redeem(target);
+    const id = serverIdFor(result.baseUrl);
+    const previous = await secureStore.get(tokenKey(id));
+    if (get().authed) {
+      leaveActive();
+    }
+    const wsUrl = get().servers.find(s => s.id === id)?.wsUrl ?? null;
+    await activate({id, name: result.name, baseUrl: result.baseUrl, wsUrl, via: 'pairing'}, result.token);
+    // Paired again: the token this device held before is of no use to anyone now.
+    if (isDeviceToken(previous) && previous !== result.token) {
+      revokeToken(result.baseUrl, previous!);
+    }
+  },
+
   relogin: async (password, issued) => {
+    // The server keeps the device token that changed the password; only an
+    // older server's password-signed token needs replacing.
+    if (isDeviceToken(http.getToken())) {
+      return;
+    }
     const profile = activeServer();
     const token = issued || (await login(password));
     if (!profile || !token) {
@@ -298,16 +352,16 @@ export const useServerStore = create<ServerState>((set, get) => ({
     http.setBaseUrl(target.baseUrl);
     http.setToken(token);
     await persist(servers, id);
-    set({activeId: id, authed: !!token, returnTo: null});
+    set({activeId: id, authed: !!token, returnTo: null, loginForm: false});
     if (token) {
       await startRealtime(target, token, s => set({realtimeStatus: s}));
     }
   },
 
-  addServer: () => {
+  addServer: form => {
     const {activeId} = get();
     leaveActive();
-    set({authed: false, activeId: null, returnTo: activeId});
+    set({authed: false, activeId: null, returnTo: activeId, loginForm: !!form});
   },
 
   removeServer: async id => {
@@ -316,6 +370,11 @@ export const useServerStore = create<ServerState>((set, get) => ({
       return;
     }
     const rest = servers.filter(s => s.id !== id);
+    const target = servers.find(s => s.id === id);
+    const token = await secureStore.get(tokenKey(id));
+    if (target && token && !target.local) {
+      revokeToken(target.baseUrl, token);
+    }
     await secureStore.remove(tokenKey(id));
     await removeKey(seqKey(id));
     await persist(rest, activeId);
@@ -324,13 +383,18 @@ export const useServerStore = create<ServerState>((set, get) => ({
 
   logout: async () => {
     const {activeId} = get();
+    const server = activeServer();
+    const token = http.getToken();
     realtime.stop();
     if (activeId) {
       await secureStore.remove(tokenKey(activeId));
     }
     http.setToken(null);
-    set({authed: false, realtimeStatus: 'idle', returnTo: null});
+    set({authed: false, realtimeStatus: 'idle', returnTo: null, loginForm: false});
     resetServerData();
+    if (server && token && !server.local) {
+      revokeToken(server.baseUrl, token);
+    }
   },
 
   expireIfSignedOut: async () => {
