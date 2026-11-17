@@ -1,5 +1,5 @@
-import {faComments, faPenToSquare} from '@fortawesome/free-regular-svg-icons';
-import {faArrowDown, faChevronDown, faEllipsis} from '@fortawesome/free-solid-svg-icons';
+import {faComments} from '@fortawesome/free-regular-svg-icons';
+import {faArrowDown, faChevronDown, faEllipsis, faPlus} from '@fortawesome/free-solid-svg-icons';
 import type {StackScreenProps} from '@react-navigation/stack';
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {
@@ -543,7 +543,7 @@ export function ChatScreen({route, navigation}: Props) {
               <IconButton icon={faEllipsis} label={tr('session_current')} onPress={() => setSessionOpen(true)} size={15} />
             )}
             {!empty && (
-              <IconButton icon={faPenToSquare} label={tr('session_new')} onPress={startNewChat} filled size={14} />
+              <IconButton icon={faPlus} label={tr('session_new')} onPress={startNewChat} filled size={14} />
             )}
           </View>
         </View>
@@ -757,7 +757,8 @@ const useStyles = makeStyles(t => ({
   agentName: {fontSize: 15, fontWeight: '500', letterSpacing: -0.2, color: t.t1, flexShrink: 1},
   body: {flex: 1},
   center: {flex: 1, alignItems: 'center', justifyContent: 'center'},
-  list: {paddingTop: 20, paddingBottom: 8},
+  // The list is inverted: flex-end is the visual top, so a short conversation starts there.
+  list: {flexGrow: 1, justifyContent: 'flex-end', paddingTop: 20, paddingBottom: 8},
   toBottom: {position: 'absolute', alignSelf: 'center', bottom: 10},
   toBottomButton: {
     width: 36,

@@ -2,8 +2,10 @@ import type {IconDefinition} from '@fortawesome/fontawesome-svg-core';
 import {
   faChevronRight,
   faCheck,
+  faCircleExclamation,
   faCircleNotch,
   faGear,
+  faHourglassHalf,
   faLightbulb,
   faMinus,
   faShare,
@@ -195,7 +197,7 @@ function AssistantTurn({message, labelled}: {message: ChatMessage; labelled: boo
     !!message.streaming && !message.content && last?.kind === 'thinking' ? last.id : null;
   const waiting = !!message.streaming && !message.content && !steps.length;
   const hasAnswer =
-    !!message.content || !!files.length || !!message.cancelled || !!message.error;
+    !!message.content || !!files.length || !!message.cancelled || !!message.runState || !!message.error;
 
   return (
     <View style={styles.assistantRow}>
@@ -260,6 +262,18 @@ function AssistantTurn({message, labelled}: {message: ChatMessage; labelled: boo
             <View style={styles.status}>
               <Icon icon={faStop} size={9} color={t.t3} />
               <Text style={styles.statusText}>{tr('chat_stopped')}</Text>
+            </View>
+          )}
+          {!message.cancelled && message.runState && (
+            <View style={styles.status}>
+              <Icon
+                icon={message.runState === 'running' ? faHourglassHalf : faCircleExclamation}
+                size={9}
+                color={t.t3}
+              />
+              <Text style={styles.statusText}>
+                {tr(message.runState === 'running' ? 'chat_still_running' : 'chat_interrupted')}
+              </Text>
             </View>
           )}
           {!!message.error && <Text style={styles.error}>{message.error}</Text>}
