@@ -31,6 +31,7 @@ export function SettingRow({
   icon,
   title,
   detail,
+  fullDetail,
   value,
   onPress,
   onLongPress,
@@ -43,6 +44,8 @@ export function SettingRow({
   icon?: IconDefinition;
   title: string;
   detail?: string;
+  /** Show the whole detail instead of cutting it at two lines. */
+  fullDetail?: boolean;
   value?: string;
   onPress?: () => void;
   onLongPress?: () => void;
@@ -66,7 +69,7 @@ export function SettingRow({
           {title}
         </Text>
         {!!detail && (
-          <Text style={styles.rowDetail} numberOfLines={2}>
+          <Text style={styles.rowDetail} numberOfLines={fullDetail ? undefined : 2}>
             {detail}
           </Text>
         )}
@@ -128,6 +131,7 @@ export function SwitchRow({
   icon,
   title,
   detail,
+  fullDetail,
   value,
   onValueChange,
   disabled,
@@ -136,6 +140,7 @@ export function SwitchRow({
   icon?: IconDefinition;
   title: string;
   detail?: string;
+  fullDetail?: boolean;
   value: boolean;
   onValueChange: (value: boolean) => void;
   disabled?: boolean;
@@ -146,6 +151,7 @@ export function SwitchRow({
       icon={icon}
       title={title}
       detail={detail}
+      fullDetail={fullDetail}
       dim={disabled}
       last={last}
       right={<Toggle value={value} onValueChange={onValueChange} disabled={disabled} label={title} />}

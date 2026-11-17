@@ -78,19 +78,22 @@ export function RuntimeScreen({navigation}: Props) {
         <GroupLabel style={styles.firstGroup}>{tr('settings_group_context')}</GroupLabel>
         <SettingRow
           title={tr('settings_max_tokens')}
-          detail={tr('settings_max_tokens_detail')}
+          detail={tr('settings_max_tokens_hint')}
+          fullDetail
           value={tokens ? formatCount(tokens) : tr('settings_follow_model')}
           onPress={() => setEditing('agent_max_context_tokens')}
         />
         <SettingRow
           title={tr('settings_max_turns')}
-          detail={tr('settings_max_turns_detail')}
+          detail={tr('settings_max_turns_hint')}
+          fullDetail
           value={trf('settings_turns_value', {n: config.agent_max_context_turns})}
           onPress={() => setEditing('agent_max_context_turns')}
         />
         <SettingRow
           title={tr('settings_max_steps')}
-          detail={tr('settings_max_steps_detail')}
+          detail={tr('settings_max_steps_hint')}
+          fullDetail
           value={trf('settings_steps_value', {n: config.agent_max_steps})}
           onPress={() => setEditing('agent_max_steps')}
           last
@@ -108,6 +111,7 @@ export function RuntimeScreen({navigation}: Props) {
           <SettingRow
             title={tr('settings_effort')}
             detail={tr('settings_effort_detail')}
+            fullDetail
             value={effortOptions.find(o => o.value === effort)?.label ?? effort}
             onPress={() => setEffortOpen(true)}
             last
@@ -118,12 +122,14 @@ export function RuntimeScreen({navigation}: Props) {
         <SwitchRow
           title={tr('settings_subagent')}
           detail={tr('settings_subagent_detail')}
+          fullDetail
           value={config.subagent_enabled}
           onValueChange={v => save({subagent_enabled: v})}
         />
         <SwitchRow
           title={tr('settings_evolution')}
           detail={tr('settings_evolution_detail')}
+          fullDetail
           value={config.self_evolution_enabled}
           onValueChange={v => save({self_evolution_enabled: v})}
           last
