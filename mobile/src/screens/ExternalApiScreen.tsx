@@ -9,10 +9,12 @@ import {showToast, ToastHost} from '../components/Toast';
 import {Chip, EmptyState, GroupLabel, PageHeader} from '../components/ui';
 import {getLang, tr, trf, type MessageKey} from '../i18n';
 import type {RootStackParamList} from '../navigation/types';
+import type {IntegrationsState} from '../protocol/resources';
 import {useConfigStore} from '../store/configStore';
 import {describeConnectError} from '../store/serverStore';
 import {makeStyles} from '../theme/theme';
 import {copyText} from '../utils/clipboard';
+import {integrationBase} from '../utils/integrations';
 
 type Props = StackScreenProps<RootStackParamList, 'ExternalApi'>;
 
@@ -83,15 +85,11 @@ export function ExternalApiScreen({navigation}: Props) {
   if (confirm) {
     shown.current = confirm;
   }
-  // Where outside callers reach this server, as the console works it out.
-  const [publicBase, setPublicBase] = useState('');
+  const [access, setAccess] = useState<IntegrationsState | null>(null);
 
   useEffect(() => {
     load().catch(() => undefined);
-    getIntegrations().then(
-      access => setPublicBase(access.public_url || access.lan_urls[0] || ''),
-      () => undefined,
-    );
+    getIntegrations().then(setAccess, () => undefined);
   }, [load]);
 
   if (!state) {
@@ -103,7 +101,7 @@ export function ExternalApiScreen({navigation}: Props) {
     );
   }
 
-  const base = `${(publicBase || http.getBaseUrl()).replace(/\/+$/, '')}/v1`;
+  const base = `${integrationBase(access, http.getBaseUrl())}/v1`;
   const key = state.api_key;
   const sheet = CONFIRM[shown.current];
 
