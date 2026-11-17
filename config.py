@@ -283,6 +283,8 @@ available_setting = {
     "web_host": "",  # Web console bind address; empty means auto
     "web_port": 9899,
     "web_password": "",  # Web console password; empty means no authentication required
+    "web_allowed_hosts": [],  # Host names served while web_password is empty, besides localhost, IPs and web_public_url
+    "web_allowed_origins": [],  # Other sites allowed to send write requests, e.g. "https://my.dashboard.com"
     "web_https_enabled": False,  # Serve the web console over HTTPS directly; needs web_ssl_certfile + web_ssl_keyfile
     "web_ssl_certfile": "",  # PEM certificate file for direct HTTPS (full chain recommended)
     "web_ssl_keyfile": "",  # PEM private key file for direct HTTPS

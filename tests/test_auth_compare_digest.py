@@ -24,9 +24,13 @@ PREVIEW_SECRET = b"preview-secret-for-tests"
 NON_ASCII = "\u00e9" * 64
 
 
+AUTH_SECRET = b"auth-secret-for-tests"
+
+
 def _token(password: str, ts: int) -> str:
     ts_hex = format(ts, "x")
-    return ts_hex, hmac.new(password.encode(), ts_hex.encode(), hashlib.sha256).hexdigest()
+    pw_tag = hmac.new(AUTH_SECRET, password.encode(), hashlib.sha256).hexdigest()[:16]
+    return ts_hex, hmac.new(AUTH_SECRET, f"{ts_hex}.{pw_tag}".encode(), hashlib.sha256).hexdigest()
 
 
 # --- the helper itself -------------------------------------------------------
@@ -65,6 +69,7 @@ def core(monkeypatch):
     from channel.web.core import _common
 
     monkeypatch.setattr(_common, "_get_web_password", lambda: PASSWORD)
+    monkeypatch.setattr(_common, "_get_auth_secret", lambda: AUTH_SECRET)
     monkeypatch.setattr(_common, "_session_expire_seconds", lambda: 86400)
     return _common
 

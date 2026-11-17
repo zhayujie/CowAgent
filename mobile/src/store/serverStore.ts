@@ -225,31 +225,30 @@ export const useServerStore = create<ServerState>((set, get) => ({
       ];
     }
     const activeId = saved.activeId ?? servers[0]?.id;
-    let active = servers.find(s => s.id === activeId) ?? servers[0];
+    const active = servers.find(s => s.id === activeId) ?? servers[0];
     if (!active) {
       set({hydrated: true, servers, activeId: null, authed: false});
       return;
     }
     if (active.local) {
+      // Signed in afresh on every launch: the native side keeps the password,
+      // and a token from an earlier run may no longer verify.
       try {
-        const {baseUrl} = await startLocalKernel();
-        const moved: ServerProfile = {...active, baseUrl};
-        servers = servers.map(s => (s.id === moved.id ? moved : s));
-        active = moved;
-        await persist(servers, active.id);
+        const {baseUrl, password} = await startLocalKernel();
+        await signIn(baseUrl, password, {id: active.id, name: active.name, local: true});
+        await syncKernelLanguage();
       } catch {
         set({hydrated: true, servers, activeId: active.id, authed: false});
         return;
       }
+      set({hydrated: true});
+      return;
     }
     http.setBaseUrl(active.baseUrl);
     const token = await secureStore.get(tokenKey(active.id));
     http.setToken(token);
     set({hydrated: true, servers, activeId: active.id, authed: !!token});
     if (token) {
-      if (active.local) {
-        await syncKernelLanguage();
-      }
       await startRealtime(active, token, s => set({realtimeStatus: s}));
     }
   },

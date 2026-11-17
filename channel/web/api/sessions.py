@@ -1014,7 +1014,6 @@ class HistoryHandler:
     def GET(self):
         _require_auth()
         web.header('Content-Type', 'application/json; charset=utf-8')
-        web.header('Access-Control-Allow-Origin', '*')
         try:
             params = web.input(session_id='', page='1', page_size='20', agent_id='', until_seq='')
             session_id = params.session_id.strip()
@@ -1093,7 +1092,6 @@ class UserMessagesHandler:
     def GET(self):
         _require_auth()
         web.header('Content-Type', 'application/json; charset=utf-8')
-        web.header('Access-Control-Allow-Origin', '*')
         try:
             params = web.input(session_id='', agent_id='')
             session_id = params.session_id.strip()
@@ -1116,7 +1114,6 @@ class MessageDeleteHandler:
     def POST(self):
         _require_auth()
         web.header('Content-Type', 'application/json; charset=utf-8')
-        web.header('Access-Control-Allow-Origin', '*')
         try:
             data = json.loads(web.data())
             agent_id = _request_agent_id(data)

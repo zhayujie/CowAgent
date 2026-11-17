@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {updateConfig} from '../src/api/cowApi';
 import {http} from '../src/api/http';
 import {useLangStore} from '../src/i18n';
@@ -80,6 +81,22 @@ it('signs in to the built-in agent and gives it the app language', async () => {
   expect(servers.find(s => s.id === 'local')).toMatchObject({local: true, baseUrl: 'http://127.0.0.1:4000'});
   expect(http.getToken()).toBe('local-token');
   expect(updateConfig).toHaveBeenCalledWith({cow_lang: 'zh'});
+});
+
+it('signs in to the built-in agent afresh on launch instead of reusing an old token', async () => {
+  const local: ServerProfile = {id: 'local', name: 'Phone', baseUrl: 'http://127.0.0.1:3000', wsUrl: null, local: true};
+  await AsyncStorage.setItem('cow:servers', JSON.stringify({servers: [local, home], activeId: 'local'}));
+  await secureStore.set('token:local', 'stale-token');
+  jest.mocked(startLocalKernel).mockResolvedValue({baseUrl: 'http://127.0.0.1:4000', password: 'pw'});
+  useServerStore.setState({hydrated: false, servers: [], activeId: null, authed: false});
+
+  await useServerStore.getState().hydrate();
+
+  const {hydrated, activeId, authed, servers} = useServerStore.getState();
+  expect({hydrated, activeId, authed}).toEqual({hydrated: true, activeId: 'local', authed: true});
+  expect(servers.find(s => s.id === 'local')).toMatchObject({name: 'Phone', baseUrl: 'http://127.0.0.1:4000'});
+  expect(http.getToken()).toBe('local-token');
+  expect(await secureStore.get('token:local')).toBe('local-token');
 });
 
 it('goes back to the server left for the login screen without a password', async () => {

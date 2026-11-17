@@ -34,8 +34,9 @@ plugins/banwords/lib/__pycache__
 !plugins/linkai
 !plugins/cow_cli
 client_config.json
-# HMAC key for signing /preview URLs; generated per install.
+# HMAC keys for signing /preview URLs and console sessions; generated per install.
 .preview_secret
+.auth_secret
 ref/
 **/.dev.vars
 .cursor/

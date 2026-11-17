@@ -1636,8 +1636,10 @@ class WebChannel(ChatChannel):
 
         from channel.web.core.tls import resolve_tls_config
 
+        from channel.web.core.request_guard import guard_requests
+
         # Build WSGI app with middleware (same as runsimple but without print)
-        func = web.httpserver.StaticMiddleware(app.wsgifunc())
+        func = guard_requests(web.httpserver.StaticMiddleware(app.wsgifunc()))
         func = web.httpserver.LogMiddleware(func)
 
         # The app shells probe and load the console over plain http.

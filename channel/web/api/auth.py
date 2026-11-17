@@ -4,10 +4,7 @@ The console's own password check plus the redirect target an MCP server
 sends the user back to after authorising it.
 """
 
-import hashlib
-import hmac
 import json
-import time
 
 import web
 
@@ -15,6 +12,7 @@ from agent.guest.access import LoginLimiter
 from channel.web.core._common import (
     _check_auth,
     _client_ip,
+    _create_auth_token,
     _get_web_password,
     _is_password_enabled,
     _session_expire_seconds,
@@ -32,17 +30,6 @@ _login_limiter = LoginLimiter()
 def _limiter_scope(client: str) -> str:
     local = client in ("::1", "::ffff:127.0.0.1", "localhost") or client.startswith("127.")
     return "console-local" if local else "console"
-
-
-def _create_auth_token():
-    """Create a stateless signed token: ``<timestamp_hex>.<hmac_hex>``."""
-    ts = format(int(time.time()), "x")
-    sig = hmac.new(
-        _get_web_password().encode(),
-        ts.encode(),
-        hashlib.sha256,
-    ).hexdigest()
-    return f"{ts}.{sig}"
 
 
 class McpOAuthCallbackHandler:

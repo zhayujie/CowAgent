@@ -47,13 +47,14 @@ VIDEO_EXTENSIONS = {".mp4", ".webm", ".avi", ".mov", ".mkv"}
 MAX_LOCAL_IMPORT_BYTES = 512 * 1024 * 1024
 
 
-def _is_loopback_request() -> bool:
+def _is_loopback_request(env: Optional[dict] = None) -> bool:
     """True when the current request came straight from this machine.
 
     A request that went through a reverse proxy carries forwarding headers even
     if the proxy itself sits on localhost, so those disqualify it.
     """
-    env = getattr(web.ctx, "env", {}) or {}
+    if env is None:
+        env = getattr(web.ctx, "env", {}) or {}
     if env.get("HTTP_X_FORWARDED_FOR") or env.get("HTTP_X_REAL_IP"):
         return False
     addr = (env.get("REMOTE_ADDR") or "").strip()
@@ -75,7 +76,7 @@ def _can_reveal_in_file_manager() -> bool:
     return bool(has_display and shutil.which("xdg-open"))
 
 
-def _desktop_token_matches() -> bool:
+def _desktop_token_matches(env: Optional[dict] = None) -> bool:
     """Whether the request carries the secret the desktop shell handed us.
 
     The shell generates a random token per launch and passes it in via
@@ -87,7 +88,8 @@ def _desktop_token_matches() -> bool:
     expected = os.environ.get("COW_DESKTOP_TOKEN", "")
     if not expected:
         return False
-    env = getattr(web.ctx, "env", {}) or {}
+    if env is None:
+        env = getattr(web.ctx, "env", {}) or {}
     provided = env.get("HTTP_X_COW_DESKTOP_TOKEN", "")
     return bool(provided) and constant_time_equals(provided, expected)
 
@@ -297,11 +299,31 @@ def _session_expire_seconds():
     return int(conf().get("web_session_expire_days", 30)) * 86400
 
 
+def _auth_signature(ts_hex: str) -> str:
+    """Signature of a session token issued at ``ts_hex``.
+
+    Keyed by a random secret rather than the password, so a token that leaks
+    (a sniffed request, a log line) can't be used to guess the password
+    offline. A tag of the password is signed in, so changing the password
+    still signs every session out.
+    """
+    secret = _get_auth_secret()
+    password = _get_web_password().encode("utf-8", "surrogatepass")
+    pw_tag = hmac.new(secret, password, hashlib.sha256).hexdigest()[:16]
+    return hmac.new(secret, f"{ts_hex}.{pw_tag}".encode(), hashlib.sha256).hexdigest()
+
+
+def _create_auth_token() -> str:
+    """Create a stateless signed token: ``<timestamp_hex>.<signature_hex>``."""
+    ts_hex = format(int(time.time()), "x")
+    return f"{ts_hex}.{_auth_signature(ts_hex)}"
+
+
 def _verify_auth_token(token):
     """Verify a signed token is valid and not expired.
 
-    The token is derived from the password, so it survives server restarts
-    and automatically invalidates when the password changes.
+    Stateless, so it survives server restarts; it stops working when the
+    password changes.
     """
     if not token or "." not in token:
         return False
@@ -312,12 +334,7 @@ def _verify_auth_token(token):
         return False
     if time.time() - ts > _session_expire_seconds():
         return False
-    expected = hmac.new(
-        _get_web_password().encode(),
-        ts_hex.encode(),
-        hashlib.sha256,
-    ).hexdigest()
-    return constant_time_equals(sig, expected)
+    return constant_time_equals(sig, _auth_signature(ts_hex))
 
 
 def _get_bearer_token():
@@ -456,8 +473,42 @@ def _get_workspace_root(session_id: str = None, agent_id: str = None) -> str:
     return get_agent_registry().get(agent_id).workspace
 
 
-_PREVIEW_SECRET = None
-_PREVIEW_SECRET_LOCK = threading.Lock()
+_SECRETS = {}
+_SECRETS_LOCK = threading.Lock()
+
+
+def _persistent_secret(filename: str) -> bytes:
+    """A random secret kept in the data root, created on first use.
+
+    It must survive restarts, or everything signed with it stops verifying.
+    """
+    secret = _SECRETS.get(filename)
+    if secret is not None:
+        return secret
+    with _SECRETS_LOCK:
+        secret = _SECRETS.get(filename)
+        if secret is not None:
+            return secret
+        path = os.path.join(get_data_root(), filename)
+        value = None
+        try:
+            if os.path.isfile(path):
+                with open(path, "r", encoding="utf-8") as f:
+                    value = (f.read() or "").strip() or None
+        except Exception as e:
+            logger.warning(f"[WebChannel] Could not read {filename}: {e}")
+        if not value:
+            value = uuid.uuid4().hex + uuid.uuid4().hex
+            try:
+                fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                    f.write(value)
+                os.chmod(path, 0o600)
+            except Exception as e:
+                logger.warning(f"[WebChannel] Could not persist {filename}: {e}")
+        secret = value.encode()
+        _SECRETS[filename] = secret
+        return secret
 
 
 def _get_preview_secret() -> bytes:
@@ -467,32 +518,14 @@ def _get_preview_secret() -> bytes:
     Preview URLs can't rely on the auth cookie: the preview iframe is sandboxed
     without `allow-same-origin`, so its subresource requests come from an opaque
     origin and Chrome withholds the SameSite=Lax cookie. The signature in the
-    URL is what authorizes the request instead, so it must survive restarts.
+    URL is what authorizes the request instead.
     """
-    global _PREVIEW_SECRET
-    if _PREVIEW_SECRET is not None:
-        return _PREVIEW_SECRET
-    with _PREVIEW_SECRET_LOCK:
-        if _PREVIEW_SECRET is not None:
-            return _PREVIEW_SECRET
-        path = os.path.join(get_data_root(), ".preview_secret")
-        secret = None
-        try:
-            if os.path.isfile(path):
-                with open(path, "r", encoding="utf-8") as f:
-                    secret = (f.read() or "").strip() or None
-        except Exception as e:
-            logger.warning(f"[WebChannel] Could not read preview secret: {e}")
-        if not secret:
-            secret = uuid.uuid4().hex + uuid.uuid4().hex
-            try:
-                with open(path, "w", encoding="utf-8") as f:
-                    f.write(secret)
-                os.chmod(path, 0o600)
-            except Exception as e:
-                logger.warning(f"[WebChannel] Could not persist preview secret: {e}")
-        _PREVIEW_SECRET = secret.encode()
-        return _PREVIEW_SECRET
+    return _persistent_secret(".preview_secret")
+
+
+def _get_auth_secret() -> bytes:
+    """Stable secret used to sign console session tokens."""
+    return _persistent_secret(".auth_secret")
 
 
 def _encode_dir_token(dir_path: str) -> str:
