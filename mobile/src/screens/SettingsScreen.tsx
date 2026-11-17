@@ -8,7 +8,6 @@ import {
   faGlobe,
   faKey,
   faMicrochip,
-  faPlug,
   faShareNodes,
   faShieldHalved,
   faTerminal,
@@ -154,7 +153,6 @@ export function SettingsScreen({navigation}: Props) {
           }
           onPress={() => navigation.navigate('Runtime')}
         />
-        <SettingRow icon={faPlug} title={tr('settings_mcp')} onPress={() => navigation.navigate('Mcp')} />
         <SettingRow icon={faBars} title={tr('settings_menu')} last onPress={() => navigation.navigate('MenuEditor')} />
 
         {/* The built-in agent listens on loopback only, so nothing outside this phone can reach it. */}

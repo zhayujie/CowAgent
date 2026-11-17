@@ -41,7 +41,6 @@ export type RootStackParamList = {
   GuestShares: undefined;
   /** No `slug` creates a page; `focus` jumps to the password field. */
   GuestShareEdit: {slug?: string; focus?: 'password'};
-  Mcp: undefined;
   McpDetail: {name: string};
   McpEdit: {name?: string} | undefined;
   Logs: undefined;

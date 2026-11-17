@@ -22,7 +22,6 @@ import {LoginScreen} from '../screens/LoginScreen';
 import {LogsScreen} from '../screens/LogsScreen';
 import {McpDetailScreen} from '../screens/McpDetailScreen';
 import {McpEditScreen} from '../screens/McpEditScreen';
-import {McpScreen} from '../screens/McpScreen';
 import {MemoryDocScreen} from '../screens/MemoryDocScreen';
 import {MemoryScreen} from '../screens/MemoryScreen';
 import {MenuEditorScreen} from '../screens/MenuEditorScreen';
@@ -125,7 +124,6 @@ export function RootNavigator() {
           <Stack.Screen name="Access" component={AccessScreen} />
           <Stack.Screen name="GuestShares" component={GuestSharesScreen} />
           <Stack.Screen name="GuestShareEdit" component={GuestShareEditScreen} />
-          <Stack.Screen name="Mcp" component={McpScreen} />
           <Stack.Screen name="McpDetail" component={McpDetailScreen} />
           <Stack.Screen name="McpEdit" component={McpEditScreen} />
           <Stack.Screen name="Logs" component={LogsScreen} />

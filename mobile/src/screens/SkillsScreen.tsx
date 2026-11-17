@@ -486,6 +486,7 @@ export function SkillsScreen({navigation}: Props) {
                 </Pressable>
               }
             />
+            {local && <Notice style={styles.localNote}>{tr('mcp_local_note')}</Notice>}
             {!!mcpError && (
               <Text style={[styles.sectionNote, styles.errorText]}>{trf('common_load_failed_detail', {error: mcpError})}</Text>
             )}
