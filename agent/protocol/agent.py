@@ -522,9 +522,12 @@ class Agent:
         """
         if not text:
             return 0
-        # Count non-ASCII characters (CJK, emoji, etc.)
-        non_ascii = sum(1 for c in text if ord(c) > 127)
-        ascii_count = len(text) - non_ascii
+        # Count non-ASCII characters (CJK, emoji, etc.). encode() with
+        # errors="ignore" keeps exactly the code points up to 127 and runs in
+        # C: the whole history is estimated on every LLM call, and a
+        # per-character Python loop took ~50 ms per million characters.
+        ascii_count = len(text.encode("ascii", "ignore"))
+        non_ascii = len(text) - ascii_count
         # CJK chars: ~1.5 tokens each; ASCII: ~0.25 tokens per char
         return int(non_ascii * 1.5 + ascii_count * 0.25) + 1
 
