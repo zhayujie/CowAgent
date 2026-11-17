@@ -15,6 +15,7 @@ The boundaries under test, roughly in the order a request meets them:
 import json
 import os
 import shutil
+import sys
 
 import pytest
 import web
@@ -612,6 +613,27 @@ def test_integrations_report_where_the_server_listens(guest_env, monkeypatch):
     data = json.loads(app.request("/api/integrations", headers={"Cookie": cookie}).data)
     assert data["local_only"] is False and data["lan_urls"] == ["http://192.168.1.30:9876"]
     assert data["listen_fixed"] is False and data["public_url_fixed"] is False
+
+
+def test_lan_ips_fall_back_to_routed_probes_without_a_lan_interface(monkeypatch):
+    from channel.web.api import integrations as integrations_api
+
+    monkeypatch.setattr(integrations_api, "_interface_ips", lambda: ["169.254.3.4", "198.18.0.1"])
+    monkeypatch.setattr(integrations_api, "_routed_ips", lambda: ["10.0.0.8", "192.168.31.171", "10.0.0.8"])
+    assert integrations_api._lan_ips() == ["192.168.31.171", "10.0.0.8"]
+
+    monkeypatch.setattr(integrations_api, "_interface_ips", lambda: ["10.1.2.3"])
+    assert integrations_api._lan_ips() == ["10.1.2.3"]
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="lists Windows network adapters")
+def test_windows_adapters_are_listed_as_ipv4_addresses():
+    import ipaddress
+
+    from channel.web.api import integrations as integrations_api
+
+    for ip in integrations_api._windows_ips():
+        assert ipaddress.ip_address(ip).version == 4
 
 
 def test_behind_an_auth_proxy_the_listen_address_is_hidden_and_fixed(guest_env, monkeypatch):

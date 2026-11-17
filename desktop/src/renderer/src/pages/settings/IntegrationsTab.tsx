@@ -11,12 +11,13 @@ const LISTEN_PRESETS = ['127.0.0.1', '0.0.0.0']
 const PUBLIC_URL_RE = /^https?:\/\/[^\s/?#]+(\/[^\s?#]*)?$/i
 const LOCAL_HOST_RE = /^(localhost|127\.|::1$)/
 
-/** LAN addresses, preferring what the OS reports for real interfaces over the backend's guess. */
+/** LAN addresses as the backend reports them, so the web console and mobile app
+ *  show the same ones; the OS's own list only when the backend found none. */
 async function lanUrls(state: IntegrationsState): Promise<string[]> {
   if (state.local_only || !state.listen?.port) return []
+  if (state.lan_urls?.length) return state.lan_urls
   const ips = (await window.electronAPI?.getLanAddresses?.().catch(() => [])) || []
-  const urls = ips.map((ip) => `http://${ip}:${state.listen.port}`)
-  return Array.from(new Set([...urls, ...(state.lan_urls || [])]))
+  return ips.map((ip) => `http://${ip}:${state.listen.port}`)
 }
 
 const IntegrationsTab: React.FC<{
