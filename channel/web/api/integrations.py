@@ -110,7 +110,8 @@ def _routed_ips() -> List[str]:
             continue
     try:
         found += socket.gethostbyname_ex(socket.gethostname())[2]
-    except OSError:
+    # Older Pythons on Windows fail to decode a non-ASCII computer name here.
+    except (OSError, UnicodeError):
         pass
     return found
 
