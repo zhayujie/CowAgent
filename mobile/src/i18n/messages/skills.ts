@@ -2,6 +2,7 @@ const zh = {
   // skills list
   skill_title: '技能',
   skill_tab_tools: '工具',
+  skill_tab_mcp: 'MCP',
   skill_add: '添加技能',
   skill_create: '新建技能',
   skill_create_desc: '填写名称、描述和说明，直接写一个',
@@ -39,9 +40,6 @@ const zh = {
   skill_hub_link: '去 Cow Skill Hub 发现更多技能',
   skill_empty: '还没有技能',
   skill_empty_hint: '点右上角 + 新建一个，或者从 Skill Hub、GitHub 安装',
-  skill_builtin_tools: '内置工具',
-  skill_collapse: '收起',
-  skill_show_all: '全部 {n}',
   skill_no_tools: '没有可用的内置工具',
   skill_delete_title: '删除技能',
   skill_delete_message: '「{name}」和它目录里的所有文件都会被删除，Agent 也不能再使用它。',
@@ -106,7 +104,6 @@ const zh = {
   skill_install_n: '安装 {n} 个',
 
   // mcp
-  mcp_title: 'MCP 服务',
   mcp_add: '添加 MCP 服务',
   mcp_edit_title: '编辑 MCP 服务',
   mcp_empty: '还没有 MCP 服务',
@@ -193,6 +190,7 @@ const en: Record<keyof typeof zh, string> = {
   // skills list
   skill_title: 'Skills',
   skill_tab_tools: 'Tools',
+  skill_tab_mcp: 'MCP',
   skill_add: 'Add skill',
   skill_create: 'New skill',
   skill_create_desc: 'Write one with a name, description and instructions',
@@ -230,9 +228,6 @@ const en: Record<keyof typeof zh, string> = {
   skill_hub_link: 'Find more skills on Cow Skill Hub',
   skill_empty: 'No skills yet',
   skill_empty_hint: 'Tap + at the top right to write one, or install from Skill Hub or GitHub',
-  skill_builtin_tools: 'Built-in tools',
-  skill_collapse: 'Show less',
-  skill_show_all: 'All {n}',
   skill_no_tools: 'No built-in tools available',
   skill_delete_title: 'Delete skill',
   skill_delete_message: '"{name}" and every file in its folder will be deleted, and the agent can no longer use it.',
@@ -299,7 +294,6 @@ const en: Record<keyof typeof zh, string> = {
   skill_install_n: 'Install {n}',
 
   // mcp
-  mcp_title: 'MCP servers',
   mcp_add: 'Add MCP server',
   mcp_edit_title: 'Edit MCP server',
   mcp_empty: 'No MCP servers yet',

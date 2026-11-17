@@ -1,4 +1,4 @@
-import {faChevronRight} from '@fortawesome/free-solid-svg-icons';
+import {faChevronRight, faPlus} from '@fortawesome/free-solid-svg-icons';
 import type {StackScreenProps} from '@react-navigation/stack';
 import React, {useCallback, useEffect, useState} from 'react';
 import {Pressable, RefreshControl, ScrollView, Text, View} from 'react-native';
@@ -6,7 +6,7 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {AgentAvatar} from '../components/AgentAvatar';
 import {Icon} from '../components/Icon';
 import {Footnote} from '../components/settings';
-import {EmptyState, PageHeader} from '../components/ui';
+import {EmptyState, IconButton, PageHeader} from '../components/ui';
 import {tr, trf} from '../i18n';
 import type {RootStackParamList} from '../navigation/types';
 import type {AgentProfile} from '../protocol/resources';
@@ -65,7 +65,21 @@ export function AgentsScreen({navigation}: Props) {
 
   return (
     <View style={styles.root}>
-      <PageHeader title={tr('agent_title')} count={roster.length || undefined} onBack={navigation.goBack} />
+      <PageHeader
+        title={tr('agent_title')}
+        count={roster.length || undefined}
+        onBack={navigation.goBack}
+        right={
+          <IconButton
+            icon={faPlus}
+            label={tr('agent_create')}
+            filled
+            size={13}
+            color={t.t1}
+            onPress={() => navigation.navigate('AgentCreate')}
+          />
+        }
+      />
       <ScrollView
         contentContainerStyle={[styles.body, {paddingBottom: insets.bottom + 32}]}
         refreshControl={
@@ -161,7 +175,6 @@ export function AgentsScreen({navigation}: Props) {
         {sorted.length > 1 && (
           <Footnote>{tr('agent_team_note')}</Footnote>
         )}
-        {sorted.length > 0 && <Footnote>{tr('agent_web_console_note')}</Footnote>}
       </ScrollView>
     </View>
   );

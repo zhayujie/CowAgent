@@ -70,6 +70,23 @@ export async function pickPhotos(): Promise<PickedFile[]> {
   return res.didCancel ? [] : fromAssets(res.assets);
 }
 
+/** One image, scaled down to stay well under the server's 2 MiB avatar limit. */
+export async function pickAvatar(): Promise<PickedFile | null> {
+  const picker = imagePicker();
+  if (!picker) {
+    return (await pickDocuments(true))[0] ?? null;
+  }
+  const res = await picker.launchImageLibrary({
+    mediaType: 'photo',
+    selectionLimit: 1,
+    quality: 0.8,
+    maxWidth: 512,
+    maxHeight: 512,
+  });
+  ensureOk(res);
+  return res.didCancel ? null : fromAssets(res.assets)[0] ?? null;
+}
+
 export async function takePhoto(): Promise<PickedFile[]> {
   const picker = imagePicker();
   if (!picker) {

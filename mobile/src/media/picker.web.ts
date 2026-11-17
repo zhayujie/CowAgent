@@ -43,5 +43,7 @@ function chooseFiles(accept: string, capture?: string): Promise<PickedFile[]> {
 }
 
 export const pickPhotos = () => chooseFiles('image/*');
+export const pickAvatar = async (): Promise<PickedFile | null> =>
+  (await chooseFiles('image/png,image/jpeg,image/webp,image/gif'))[0] ?? null;
 export const takePhoto = () => chooseFiles('image/*', 'environment');
 export const pickDocuments = (imagesOnly = false) => chooseFiles(imagesOnly ? 'image/*' : '*/*');

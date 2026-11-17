@@ -43,7 +43,7 @@ const zh = {
   settings_change_password: '修改访问密码',
   settings_new_password_ph: '输入新密码',
   settings_password_hint:
-    '至少 {min} 位。改完后网页控制台和其他设备都需要用新密码重新登录，这台手机会自动保持登录。手机端连接要求服务端保留访问密码，这里不能清空。',
+    '至少 {min} 位。改完后其他设备需要用新密码重新登录，这台手机会自动保持登录。手机端连接要求服务端保留访问密码，这里不能清空。',
 
   // Password strength
   settings_pwd_short: '至少 {min} 位',
@@ -287,7 +287,7 @@ const zh = {
   menu_web: '网页',
   menu_file_missing: '文件不存在',
   menu_file: '文件',
-  menu_note: '菜单和网页控制台共用一份，改完两端同步。点自定义入口可以重命名或移除；调整顺序和分组请在网页控制台操作。',
+  menu_note: '点自定义入口可以重命名或移除。',
   menu_add: '添加产物或链接',
   menu_add_artifact: '添加产物',
   menu_add_artifact_desc: '把生成的网页或 Markdown 文档放进菜单',
@@ -306,10 +306,10 @@ const zh = {
   menu_added: '已添加到菜单',
   menu_title_ph: '入口名称',  menu_remove: '从菜单移除',
   menu_remove_title: '移除「{name}」？',
-  menu_remove_msg: '只移除菜单入口，文件或网页本身不受影响。网页控制台的菜单也会同步。',
+  menu_remove_msg: '只移除菜单入口，文件或网页本身不受影响。',
   menu_removed: '已从菜单移除',
   menu_reset_title: '恢复默认菜单',
-  menu_reset_msg: '自定义的分组、排序和入口都会清除，网页控制台也会一起恢复。',
+  menu_reset_msg: '自定义的分组、排序和入口都会清除。',
   menu_reset: '恢复默认',
   menu_reset_done: '已恢复默认菜单',
   menu_reset_failed: '恢复失败：{error}',
@@ -371,7 +371,7 @@ const en: Record<keyof typeof zh, string> = {
   settings_change_password: 'Change access password',
   settings_new_password_ph: 'Enter a new password',
   settings_password_hint:
-    "At least {min} characters. The web console and other devices will need to sign in again with the new password; this phone stays signed in. The mobile app needs the server to keep a password, so it can't be cleared here.",
+    "At least {min} characters. Other devices will need to sign in again with the new password; this phone stays signed in. The mobile app needs the server to keep a password, so it can't be cleared here.",
 
   // Password strength
   settings_pwd_short: 'At least {min} characters',
@@ -621,8 +621,7 @@ const en: Record<keyof typeof zh, string> = {
   menu_web: 'Web page',
   menu_file_missing: 'File missing',
   menu_file: 'File',
-  menu_note:
-    'The menu is shared with the web console and stays in sync. Tap a custom entry to rename or remove it; reorder or regroup in the web console.',
+  menu_note: 'Tap a custom entry to rename or remove it.',
   menu_add: 'Add artifact or link',
   menu_add_artifact: 'Add artifact',
   menu_add_artifact_desc: 'Put a generated web page or Markdown document in the menu',
@@ -641,10 +640,10 @@ const en: Record<keyof typeof zh, string> = {
   menu_added: 'Added to the menu',
   menu_title_ph: 'Entry name',  menu_remove: 'Remove from menu',
   menu_remove_title: 'Remove "{name}"?',
-  menu_remove_msg: 'Only the menu entry goes; the file or web page itself is untouched. The web console menu updates too.',
+  menu_remove_msg: 'Only the menu entry goes; the file or web page itself is untouched.',
   menu_removed: 'Removed from the menu',
   menu_reset_title: 'Restore default menu',
-  menu_reset_msg: 'Custom groups, order and entries will be cleared, in the web console too.',
+  menu_reset_msg: 'Custom groups, order and entries will be cleared.',
   menu_reset: 'Restore default',
   menu_reset_done: 'Default menu restored',
   menu_reset_failed: 'Restore failed: {error}',

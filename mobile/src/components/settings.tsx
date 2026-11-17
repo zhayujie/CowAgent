@@ -5,6 +5,7 @@ import {
   ActivityIndicator,
   Platform,
   Pressable,
+  ScrollView,
   Switch,
   Text,
   TextInput,
@@ -386,28 +387,30 @@ export function ChoiceSheet<K extends string>({
   const styles = useStyles();
   return (
     <Sheet visible={visible} onClose={onClose} title={title}>
-      {options.map(o => {
-        const active = o.key === selected;
-        return (
-          <Pressable
-            key={o.key}
-            accessibilityRole="button"
-            accessibilityState={{selected: active}}
-            onPress={() => onSelect(o.key)}
-            style={({pressed}) => [styles.choice, pressed && styles.rowPressed]}>
-            {o.icon && (
-              <View style={[styles.choiceIcon, active && styles.choiceIconActive]}>
-                <Icon icon={o.icon} size={13} color={active ? t.accent : t.t2} />
+      <ScrollView style={styles.choiceList} bounces={false} keyboardShouldPersistTaps="handled">
+        {options.map(o => {
+          const active = o.key === selected;
+          return (
+            <Pressable
+              key={o.key}
+              accessibilityRole="button"
+              accessibilityState={{selected: active}}
+              onPress={() => onSelect(o.key)}
+              style={({pressed}) => [styles.choice, pressed && styles.rowPressed]}>
+              {o.icon && (
+                <View style={[styles.choiceIcon, active && styles.choiceIconActive]}>
+                  <Icon icon={o.icon} size={13} color={active ? t.accent : t.t2} />
+                </View>
+              )}
+              <View style={styles.rowText}>
+                <Text style={styles.choiceName}>{o.label}</Text>
+                {!!o.desc && <Text style={styles.choiceDesc}>{o.desc}</Text>}
               </View>
-            )}
-            <View style={styles.rowText}>
-              <Text style={styles.choiceName}>{o.label}</Text>
-              {!!o.desc && <Text style={styles.choiceDesc}>{o.desc}</Text>}
-            </View>
-            {active && <Icon icon={faCheck} size={13} color={t.accent} />}
-          </Pressable>
-        );
-      })}
+              {active && <Icon icon={faCheck} size={13} color={t.accent} />}
+            </Pressable>
+          );
+        })}
+      </ScrollView>
       {!!note && <Text style={styles.choiceNote}>{note}</Text>}
     </Sheet>
   );
@@ -574,6 +577,7 @@ const useStyles = makeStyles(t => ({
   choiceIconActive: {backgroundColor: t.accentSoft},
   choiceName: {fontSize: 15, fontWeight: '500', color: t.t1},
   choiceDesc: {fontSize: 12, lineHeight: 17, color: t.t3, marginTop: 3},
+  choiceList: {flexGrow: 0, flexShrink: 1},
   choiceNote: {fontSize: 12, lineHeight: 18, color: t.t4, paddingHorizontal: 12, paddingTop: 8, paddingBottom: 4},
   confirmText: {fontSize: 14, lineHeight: 22, color: t.t2, paddingBottom: 16},
   confirmActions: {flexDirection: 'row', gap: 10, paddingBottom: 4},

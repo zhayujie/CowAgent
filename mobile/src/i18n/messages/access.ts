@@ -195,7 +195,7 @@ const zh = {
   share_skills_tip: '访客无法执行命令，依赖命令或脚本的技能不在可选范围内',
   share_skills_empty: '没有可供访客使用的技能',
   share_refs: '参考资料',
-  share_refs_tip: '访客的 Agent 可以只读访问这些目录，访客看不到真实路径。其他目录请在电脑上添加',
+  share_refs_tip: '访客的 Agent 可以只读访问这些目录，访客看不到真实路径。',
   share_refs_empty: '知识库里还没有可选的分类',
   share_rules: '访客规则',
   share_rules_tip:
@@ -412,8 +412,7 @@ const en: Record<keyof typeof zh, string> = {
   share_skills_tip: 'Visitors cannot run commands, so skills that rely on commands or scripts are not offered',
   share_skills_empty: 'No skills visitors can use',
   share_refs: 'References',
-  share_refs_tip:
-    "The visitor's Agent may read these folders; visitors never see the real paths. Add other folders on the computer",
+  share_refs_tip: "The visitor's Agent may read these folders; visitors never see the real paths.",
   share_refs_empty: 'No knowledge base categories to pick yet',
   share_rules: 'Guest rules',
   share_rules_tip:

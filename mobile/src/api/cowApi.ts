@@ -263,7 +263,7 @@ export async function getAgents() {
 }
 
 export type AgentPatch = Partial<
-  Pick<AgentProfile, 'name' | 'description' | 'enabled'> & {
+  Pick<AgentProfile, 'name' | 'description' | 'enabled' | 'skills'> & {
     model: string;
     bot_type: string;
     make_default: boolean;
@@ -274,6 +274,32 @@ export async function updateAgent(agentId: string, patch: AgentPatch, revision?:
   return http.request<{revision?: string}>('/api/agents', {
     body: {action: 'update', id: agentId, revision, ...patch},
   });
+}
+
+/** Symlink vs own knowledge directory; not a roster revision edit. */
+export async function setAgentKnowledgeMode(agentId: string, mode: 'shared' | 'own') {
+  return http.request<{status?: string}>('/api/agents', {
+    body: {action: 'set_knowledge_mode', id: agentId, mode},
+  });
+}
+
+/** A blank `cloneFrom` starts from scratch; otherwise persona, skills and knowledge are copied. */
+export async function createAgent(fields: {id: string; name: string; description: string; cloneFrom?: string}) {
+  return http.request<{revision?: string}>('/api/agents', {
+    body: {
+      action: 'create',
+      id: fields.id,
+      name: fields.name,
+      description: fields.description,
+      clone_from: fields.cloneFrom || null,
+    },
+  });
+}
+
+export async function uploadAgentAvatar(agentId: string, file: PickedFile) {
+  const form = new FormData();
+  appendFile(form, 'avatar', file);
+  return http.upload<{revision?: string}>(`/api/agents/${encodeURIComponent(agentId)}/avatar`, form);
 }
 
 const agentFilePath = (agentId: string, name: AgentCoreFile) =>
