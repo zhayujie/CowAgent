@@ -1,0 +1,236 @@
+/* Instances and devices: the switcher under the sidebar brand, its menu,
+   and the Settings > Devices tab. The menu shares the always-dark look of
+   the footer menu (.update-menu). */
+
+/* ---- Switcher (second line of the brand) ---- */
+.instance-switcher {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    max-width: 100%;
+    margin-left: -4px;
+    padding: 1px 4px;
+    border-radius: 5px;
+    font-size: 12px;
+    line-height: 16px;
+    color: #737373;
+    background: transparent;
+    cursor: pointer;
+    transition: background 0.12s ease, color 0.12s ease;
+}
+.instance-switcher:hover,
+.instance-switcher[aria-expanded="true"] { background: rgba(255, 255, 255, 0.06); color: #d4d4d4; }
+.instance-switcher-dot {
+    flex-shrink: 0;
+    width: 6px;
+    height: 6px;
+    border-radius: 9999px;
+    background: #525252;
+}
+.instance-switcher.is-remote { color: #a3a3a3; }
+.instance-switcher.is-remote .instance-switcher-dot {
+    background: rgb(var(--cw-primary-400));
+    box-shadow: 0 0 0 3px rgb(var(--cw-primary-400) / 0.18);
+}
+.instance-switcher-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.instance-switcher-chevron { flex-shrink: 0; font-size: 8px; opacity: 0.7; }
+
+/* ---- Menu ---- */
+.instance-menu {
+    position: fixed;
+    z-index: 61;
+    width: 248px;
+    padding: 5px;
+    border-radius: 10px;
+    background: #171717;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 8px 30px -6px rgba(0, 0, 0, 0.5), 0 2px 8px -2px rgba(0, 0, 0, 0.4);
+    animation: slashMenuIn 0.15s ease-out;
+}
+.instance-menu.hidden { display: none; }
+.instance-menu-head {
+    padding: 6px 9px 4px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #6b6b6b;
+}
+#instance-menu-list { max-height: 300px; overflow-y: auto; }
+.instance-menu-item {
+    width: 100%;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 5px 9px;
+    border-radius: 7px;
+    color: #d4d4d4;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.12s ease, color 0.12s ease;
+}
+.instance-menu-item:hover { background: rgba(255, 255, 255, 0.06); color: #fff; }
+.instance-menu-icon {
+    position: relative;
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    border-radius: 7px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    color: #a3a3a3;
+    background: rgba(255, 255, 255, 0.06);
+}
+.instance-menu-item.is-active .instance-menu-icon { color: rgb(var(--cw-primary-300)); background: rgb(var(--cw-primary-500) / 0.16); }
+.instance-menu-icon .instance-dot { position: absolute; right: -2px; bottom: -2px; box-shadow: 0 0 0 2px #171717; }
+.instance-menu-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.instance-menu-name { font-size: 13px; line-height: 17px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.instance-menu-sub { font-size: 11px; line-height: 14px; color: #737373; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.instance-menu-check { flex-shrink: 0; font-size: 11px; color: rgb(var(--cw-primary-300)); }
+
+/* ---- Status dots ---- */
+.instance-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 9999px;
+    background: #a3a3a3;
+}
+.instance-dot.is-online { background: #10b981; }
+.instance-dot.is-offline { background: #a3a3a3; }
+.instance-dot.is-checking { background: #a3a3a3; animation: instanceDotPulse 1.2s ease-in-out infinite; }
+@keyframes instanceDotPulse { 50% { opacity: 0.35; } }
+
+/* ---- Settings > Devices ---- */
+.dev-scope {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    border-radius: 12px;
+    border: 1px solid rgb(var(--cw-primary-500) / 0.18);
+    background: rgb(var(--cw-primary-500) / 0.05);
+}
+.dev-scope:empty { display: none; }
+.dev-scope-icon {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    border-radius: 9px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    color: #fff;
+    background: rgb(var(--cw-primary-500));
+}
+.dev-method {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px;
+    border-radius: 12px;
+    background: rgb(100 116 139 / 0.06);
+}
+.dark .dev-method { background: rgba(255, 255, 255, 0.03); }
+.dev-method-icon {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    border-radius: 9px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    color: rgb(var(--cw-primary-500));
+    background: rgb(var(--cw-panel));
+    box-shadow: 0 1px 2px rgb(15 23 42 / 0.06);
+}
+.dark .dev-method-icon { background: rgba(255, 255, 255, 0.06); box-shadow: none; }
+.dev-cmd {
+    padding: 1px 6px;
+    border-radius: 5px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px;
+    color: rgb(var(--cw-slate-600));
+    background: rgb(100 116 139 / 0.12);
+}
+.dark .dev-cmd { color: #d4d4d4; background: rgba(255, 255, 255, 0.08); }
+.dev-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 8px;
+    border-radius: 9999px;
+    font-size: 11px;
+    line-height: 16px;
+    color: rgb(var(--cw-slate-500));
+    background: rgb(100 116 139 / 0.1);
+    white-space: nowrap;
+}
+.dark .dev-chip { color: #a3a3a3; background: rgba(255, 255, 255, 0.06); }
+.dev-chip.is-primary { color: rgb(var(--cw-primary-600)); background: rgb(var(--cw-primary-500) / 0.12); }
+.dark .dev-chip.is-primary { color: rgb(var(--cw-primary-300)); background: rgb(var(--cw-primary-500) / 0.16); }
+.dev-chip.is-online { color: #059669; background: rgb(16 185 129 / 0.12); }
+.dark .dev-chip.is-online { color: #34d399; background: rgb(16 185 129 / 0.14); }
+
+.dev-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 8px;
+    margin: 0 -8px;
+    border-radius: 10px;
+    transition: background 0.12s ease;
+}
+.dev-row:hover { background: rgb(100 116 139 / 0.06); }
+.dark .dev-row:hover { background: rgba(255, 255, 255, 0.03); }
+.dev-row-icon {
+    position: relative;
+    flex-shrink: 0;
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    color: rgb(var(--cw-slate-500));
+    background: rgb(100 116 139 / 0.1);
+}
+.dark .dev-row-icon { color: #a3a3a3; background: rgba(255, 255, 255, 0.06); }
+.dev-row.is-current .dev-row-icon,
+.dev-row.is-active .dev-row-icon { color: rgb(var(--cw-primary-500)); background: rgb(var(--cw-primary-500) / 0.12); }
+.dev-row-icon .instance-dot { position: absolute; right: -2px; bottom: -2px; box-shadow: 0 0 0 2px rgb(var(--cw-panel)); }
+.dev-row-actions { display: flex; align-items: center; gap: 2px; opacity: 0; transition: opacity 0.12s ease; }
+.dev-row:hover .dev-row-actions,
+.dev-row:focus-within .dev-row-actions { opacity: 1; }
+@media (hover: none) { .dev-row-actions { opacity: 1; } }
+.dev-name-input {
+    width: 100%;
+    max-width: 260px;
+    padding: 2px 6px;
+    margin: -3px 0 -3px -7px;
+    border-radius: 6px;
+    border: 1px solid rgb(var(--cw-primary-500));
+    background: transparent;
+    font-size: 14px;
+    outline: none;
+}
+
+.dev-code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 28px;
+    letter-spacing: 0.18em;
+    line-height: 1.1;
+}
+.dev-pair-ring {
+    position: relative;
+    width: 176px;
+    height: 176px;
+    flex-shrink: 0;
+}
+.dev-pair-ring img { width: 100%; height: 100%; border-radius: 12px; background: #fff; padding: 8px; }

@@ -2,6 +2,8 @@
 
 RootHandler and ChatHandler both serve the console shell -- every in-app
 path renders the same page and the frontend router takes it from there.
+InstanceWorkerHandler serves the service worker the console uses to work on
+another instance.
 AssetsHandler serves everything under static/, and decides what may be
 cached immutably.
 """
@@ -38,6 +40,21 @@ class HealthHandler:
         web.header('Content-Type', 'application/json; charset=utf-8')
         web.header('Cache-Control', 'no-store')
         return json.dumps({"status": "ok"})
+
+
+class InstanceWorkerHandler:
+    """The service worker that carries the console's requests to another
+    instance once the user switches to one. Served from the root so its scope
+    covers every path the console calls; never cached, so a new version takes
+    over on the next load."""
+
+    def GET(self):
+        web_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(web_dir, 'static', 'instance-sw.js'), 'rb') as f:
+            body = f.read()
+        web.header('Content-Type', 'application/javascript; charset=utf-8')
+        web.header('Cache-Control', 'no-cache')
+        return body
 
 
 class ChatHandler:

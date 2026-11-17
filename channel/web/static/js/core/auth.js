@@ -126,6 +126,7 @@ function showLoginScreen() {
 }
 
 function handleLogout() {
+    if (instanceActive()) return instanceSignOut();
     fetch('/auth/logout', {
         method: 'POST'
     }).then(r => r.json()).then(data => {
@@ -145,7 +146,8 @@ window.fetch = function(...args) {
         if (response.status === 401) {
             const url = typeof args[0] === 'string' ? args[0] : (args[0]?.url || '');
             if (!url.startsWith('/auth/')) {
-                showLoginScreen();
+                if (instanceActive()) instanceAuthLost();
+                else showLoginScreen();
             }
         }
         return response;

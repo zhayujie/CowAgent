@@ -60,7 +60,7 @@ from channel.web.api.openai_compat import (  # noqa: F401
     OpenAIChatCompletionsHandler, OpenAIModelsHandler,
 )
 from channel.web.api.pages import (  # noqa: F401
-    AssetsHandler, ChatHandler, HealthHandler, RootHandler,
+    AssetsHandler, ChatHandler, HealthHandler, InstanceWorkerHandler, RootHandler,
 )
 from channel.web.api.scheduler import (  # noqa: F401
     SchedulerCreateHandler, SchedulerDeleteHandler, SchedulerHandler,
@@ -118,6 +118,7 @@ URLS = (
     '/api/devices', 'DevicesHandler',
     '/api/devices/revoke_others', 'DevicesRevokeOthersHandler',
     '/api/devices/(d_[0-9a-f]+)', 'DeviceHandler',
+    '/instance-sw.js', 'InstanceWorkerHandler',
     '/message', 'MessageHandler',
     '/upload', 'UploadHandler',
     '/uploads/(.*)', 'UploadsHandler',

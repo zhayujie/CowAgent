@@ -14,7 +14,13 @@
                             hover:opacity-80 transition-opacity duration-150">
                 <div class="sidebar-brand-text flex flex-col min-w-0">
                     <span class="text-white font-semibold text-sm truncate">CowAgent</span>
-                    <span class="text-neutral-500 text-xs" data-i18n="console">控制台</span>
+                    <!-- Which instance the console is driving; opens the switcher. -->
+                    <button type="button" id="instance-switcher" class="instance-switcher"
+                            onclick="toggleInstanceMenu(event)" aria-haspopup="menu" aria-controls="instance-menu" aria-expanded="false">
+                        <span class="instance-switcher-dot" aria-hidden="true"></span>
+                        <span id="instance-switcher-label" class="instance-switcher-label"></span>
+                        <i class="fas fa-chevron-down instance-switcher-chevron" aria-hidden="true"></i>
+                    </button>
                 </div>
             </div>
 
@@ -163,6 +169,21 @@
                     <span class="color-theme-name" data-i18n="theme_add">自定义主题…</span>
                 </button>
             </div>
+        </div>
+        <!-- Instance switcher under the brand. Outside the sidebar so its
+             overflow can't clip it; instances.js places it. -->
+        <div id="instance-menu" class="instance-menu hidden" role="menu" aria-labelledby="instance-switcher">
+            <div class="instance-menu-head" data-i18n="instances_title">实例</div>
+            <div id="instance-menu-list"></div>
+            <div class="color-theme-divider"></div>
+            <button type="button" class="update-menu-item" role="menuitem" onclick="openInstanceAdd()">
+                <span class="update-menu-icon"><i class="fas fa-plus"></i></span>
+                <span class="update-menu-label" data-i18n="instances_add_ellipsis">连接到其他实例…</span>
+            </button>
+            <button type="button" class="update-menu-item" role="menuitem" onclick="openInstanceManager()">
+                <span class="update-menu-icon"><i class="fas fa-sliders"></i></span>
+                <span class="update-menu-label" data-i18n="instances_manage_ellipsis">管理实例…</span>
+            </button>
         </div>
         <!-- Close the groups the user folded last time before the first paint,
              so they don't flash open and then animate shut. -->

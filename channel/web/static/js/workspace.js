@@ -318,7 +318,7 @@ async function wsRenderPreview(meta, target) {
         // No allow-same-origin: the generated page runs in an opaque origin and
         // cannot reach the console's storage or auth cookie.
         frame.setAttribute('sandbox', 'allow-scripts allow-popups allow-forms allow-modals');
-        frame.src = previewUrl;
+        frame.src = instanceUrl(previewUrl);
         body.appendChild(frame);
         return;
     }
@@ -402,7 +402,7 @@ function downloadPreviewFile() {
 
 /** Whether the server can open this machine's file manager for the user. */
 function wsCanReveal() {
-    return !!(typeof appConfig !== 'undefined' && appConfig && appConfig.can_reveal_files);
+    return !!(typeof appConfig !== 'undefined' && appConfig && appConfig.can_reveal_files) && !instanceActive();
 }
 
 /** Show a file in the system file manager. Resolves when the OS was asked to. */

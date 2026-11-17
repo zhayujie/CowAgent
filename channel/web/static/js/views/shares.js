@@ -60,18 +60,19 @@ let shareLogoPreview = '';
 // Public address
 // =====================================================================
 /** The origin links and examples are shown with: the owner's public address
- *  when set, else the address this console was opened on, swapped for the
- *  local network address when that is only reachable from this machine. */
+ *  when set, else the address of the instance the console drives, swapped
+ *  for the local network address when that is only reachable from its own
+ *  machine. */
 function integrationBaseUrl() {
     return (integrationsPublicUrl || _consoleOrigin()).replace(/\/+$/, '');
 }
 
 function _consoleOrigin() {
-    return (_isLoopback(_pageHost()) && integrationsLanUrl) || location.origin;
+    return (_isLoopback(_pageHost()) && integrationsLanUrl) || instanceOrigin();
 }
 
 function _pageHost() {
-    return location.hostname.replace(/^\[|\]$/g, '');
+    return new URL(instanceOrigin()).hostname.replace(/^\[|\]$/g, '');
 }
 
 function _isLoopback(host) {
@@ -113,7 +114,8 @@ function _renderListen() {
     const data = integrationsListen;
     if (!row || !data || !data.listen || !data.listen.port) return;
     // Behind an auth proxy the proxy owns the address, and this machine's are no use to anyone.
-    if (data.listen_fixed) return row.classList.add('hidden');
+    // Moving another instance would cut the connection this console runs on.
+    if (data.listen_fixed || instanceActive()) return row.classList.add('hidden');
     _renderListenFields(data.listen.host, data.listen.port);
     _renderListenStatus();
     row.classList.remove('hidden');
@@ -1073,7 +1075,7 @@ function _openSharePreview(share, color) {
     panel.innerHTML = '';
     if (window.matchMedia('(min-width: 1024px)').matches) {
         const frame = document.createElement('iframe');
-        frame.src = `${location.origin}/share/${share.share_token}?embed=1`;
+        frame.src = `${instanceOrigin()}/share/${share.share_token}?embed=1`;
         frame.title = share.name || share.slug;
         panel.appendChild(frame);
     }
