@@ -204,7 +204,7 @@ const zh = {
   settings_subagent_detail: '把可独立完成的任务交给子 Agent，多个任务并行执行，只把结论带回主对话',
   settings_evolution: '自主进化',
   settings_evolution_detail: '会话空闲后自动复盘，沉淀记忆、优化技能、处理未完成事项',
-  settings_runtime_note: '保存后立即生效，不会清空已有会话。和网页控制台的「Agent 配置」是同一份设置。',
+  settings_runtime_note: '保存后立即生效，不会清空已有会话。',
   settings_int_min: '请输入不小于 {min} 的整数',
   settings_int_nonneg: '请输入 0 或正整数',
   settings_effort_note: '只对当前模型生效，换模型后按各自的设置。',
@@ -535,8 +535,7 @@ const en: Record<keyof typeof zh, string> = {
   settings_subagent_detail: 'Hand self-contained tasks to sub agents, which run in parallel and report back only their conclusions',
   settings_evolution: 'Self-evolution',
   settings_evolution_detail: 'Review automatically when idle: consolidate memory, refine skills, finish pending tasks',
-  settings_runtime_note:
-    'Applies right after saving, without clearing existing chats. Same settings as "Agent Configuration" in the web console.',
+  settings_runtime_note: 'Applies right after saving, without clearing existing chats.',
   settings_int_min: 'Enter a whole number of at least {min}',
   settings_int_nonneg: 'Enter 0 or a positive whole number',
   settings_effort_note: 'Applies to the current model only; each model keeps its own setting.',
