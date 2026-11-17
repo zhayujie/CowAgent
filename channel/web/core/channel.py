@@ -1699,7 +1699,9 @@ class WebChannel(ChatChannel):
             self._http_server = server
             server.prepare()
         from channel.web.api.integrations import record_listen
+        from channel.web.core import local_control
         record_listen(host, port, scheme)
+        local_control.publish(host, port, scheme)
         self._serve_loopback(build, host, port)
         SERVING.set()
         _log_startup_banner(scheme)
@@ -1724,6 +1726,7 @@ class WebChannel(ChatChannel):
                 return
             host, port = server.bind_addr[:2]
             record_listen(host, port, scheme)
+            local_control.publish(host, port, scheme)
             self._serve_loopback(build, host, port)
             if (host, port) == target and on_bound:
                 try:
@@ -1805,6 +1808,8 @@ class WebChannel(ChatChannel):
             server.stop()
 
     def stop(self):
+        from channel.web.core import local_control
+        local_control.withdraw()
         self._stop_loopback()
         if self._http_server:
             try:

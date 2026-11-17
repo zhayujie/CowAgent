@@ -28,6 +28,10 @@ from channel.web.api.chat import (  # noqa: F401
     CancelHandler, MessageHandler, PollHandler, StreamHandler,
 )
 from channel.web.api.config import ConfigHandler, ExternalApiHandler  # noqa: F401
+from channel.web.api.devices import (  # noqa: F401
+    AuthPairHandler, DeviceHandler, DevicesHandler, DevicesRevokeOthersHandler,
+    PairingHandler, PairingStatusHandler, WellKnownHandler,
+)
 from channel.web.api.files import (  # noqa: F401
     FileRevealHandler, FileServeHandler, PreviewHandler, UploadHandler, UploadsHandler,
     VoiceAsrHandler, VoiceTtsHandler,
@@ -107,6 +111,13 @@ URLS = (
     '/auth/login', 'AuthLoginHandler',
     '/auth/check', 'AuthCheckHandler',
     '/auth/logout', 'AuthLogoutHandler',
+    '/auth/pair', 'AuthPairHandler',
+    '/.well-known/cowagent', 'WellKnownHandler',
+    '/api/pairing', 'PairingHandler',
+    '/api/pairing/(p_[0-9a-f]+)', 'PairingStatusHandler',
+    '/api/devices', 'DevicesHandler',
+    '/api/devices/revoke_others', 'DevicesRevokeOthersHandler',
+    '/api/devices/(d_[0-9a-f]+)', 'DeviceHandler',
     '/message', 'MessageHandler',
     '/upload', 'UploadHandler',
     '/uploads/(.*)', 'UploadsHandler',

@@ -369,15 +369,53 @@ def _get_query_token():
         return ""
 
 
+def _get_cookie_token():
+    return web.cookies().get("cow_auth_token", "") or ""
+
+
 def _check_auth():
     """Return True if request is authenticated or password not enabled."""
     if not _is_password_enabled():
         return True
-    if _verify_auth_token(web.cookies().get("cow_auth_token", "")):
-        return True
-    if _verify_auth_token(_get_bearer_token()):
-        return True
-    return _verify_auth_token(_get_query_token())
+    for token in (_get_cookie_token(), _get_bearer_token(), _get_query_token()):
+        if _verify_auth_token(token) or _verify_device_token(token):
+            return True
+    return False
+
+
+def _current_device_token() -> str:
+    """The device token this request signed in with, if any."""
+    from channel.web.core import devices
+
+    for token in (_get_bearer_token(), _get_query_token(), _get_cookie_token()):
+        if token.startswith(devices.TOKEN_PREFIX):
+            return token
+    return ""
+
+
+def _verify_device_token(token: str) -> bool:
+    from channel.web.core import devices
+
+    if not token or not token.startswith(devices.TOKEN_PREFIX):
+        return False
+    return devices.verify(token, ip=_client_ip()) is not None
+
+
+def _qr_data_uri(data: str) -> str:
+    """A QR code as a PNG data URI, or "" without the qrcode package."""
+    try:
+        import qrcode as qr_lib
+    except ImportError:
+        return ""
+    import io
+
+    qr = qr_lib.QRCode(error_correction=qr_lib.constants.ERROR_CORRECT_L, box_size=6, border=2)
+    qr.add_data(data)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
 
 
 def _require_auth():
@@ -387,7 +425,7 @@ def _require_auth():
         # request is otherwise invisible in run.log, which makes client bugs —
         # e.g. an endpoint that forgets the Authorization header — undiagnosable.
         offered = []
-        if web.cookies().get("cow_auth_token", ""):
+        if _get_cookie_token():
             offered.append("cookie")
         if _get_bearer_token():
             offered.append("bearer")

@@ -302,12 +302,21 @@ class ConfigHandler:
                     logger.warning(f"[WebChannel] Failed to apply runtime limits: {limits_err}")
 
             result = {"status": "success", "applied": applied, "warning": password_warning}
-            # A new password voids every token signed with the old one, the
-            # caller's included; hand it one for the new password so the
-            # client that made the change stays signed in.
-            if applied.get("web_password"):
-                from channel.web.api.auth import _create_auth_token
-                result["auth_token"] = _create_auth_token()
+            # A new password signs out everyone who got in with the old one;
+            # devices that were paired never knew it and stay. The caller
+            # keeps its device, or gets one if it had none (no password
+            # before, or an old session token).
+            if applied.get("web_password") and applied["web_password"] != old_password:
+                from channel.web.api.devices import current_device_id, issue_password_device
+                from channel.web.core import devices
+
+                current = current_device_id()
+                removed = devices.remove_where(
+                    lambda d: d.get("via") == "password" and d.get("id") != current)
+                if removed:
+                    logger.info(f"[WebChannel] Password changed, signed out {removed} device(s)")
+                if not current:
+                    result["auth_token"] = issue_password_device(data.get("device"))
             return json.dumps(result, ensure_ascii=False)
         except Exception as e:
             logger.error(f"Error updating config: {e}")

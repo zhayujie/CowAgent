@@ -37,6 +37,10 @@ client_config.json
 # HMAC keys for signing /preview URLs and console sessions; generated per install.
 .preview_secret
 .auth_secret
+# Paired devices; generated per install.
+/devices.json
+# Address and key of the running console, for `cow pair`.
+/console.json
 ref/
 **/.dev.vars
 .cursor/
