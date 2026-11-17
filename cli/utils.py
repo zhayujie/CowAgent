@@ -54,12 +54,15 @@ def get_builtin_skills_dir() -> str:
     return os.path.join(get_project_root(), "skills")
 
 
-def _config_json_path() -> str:
-    # Mirrors config.get_data_root(): the desktop build keeps config.json in
+def get_data_root() -> str:
+    # Mirrors config.get_data_root(): the desktop build keeps its data in
     # COW_DATA_DIR, outside the read-only app bundle.
     data_dir = os.environ.get("COW_DATA_DIR")
-    root = os.path.expanduser(data_dir) if data_dir else get_project_root()
-    return os.path.join(root, "config.json")
+    return os.path.expanduser(data_dir) if data_dir else get_project_root()
+
+
+def _config_json_path() -> str:
+    return os.path.join(get_data_root(), "config.json")
 
 
 def load_config_json() -> dict:
