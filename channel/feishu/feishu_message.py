@@ -78,6 +78,8 @@ class FeishuMessage(ChatMessage):
         self.create_time = msg.get("create_time")
         self.is_group = is_group
         self.quoted_content = ""
+        # Attachments belonging to this message, including downloaded quoted images.
+        self.attachments = []
         msg_type = msg.get("message_type")
         # Who each mention key in a group message stands for; bot_mention_keys
         # are the bot's own. Direct messages are left as they are.
@@ -192,7 +194,8 @@ class FeishuMessage(ChatMessage):
             # a question, so the channel still caches its files until one comes.
             self.post_text = "\n".join(p for i, p in enumerate(text_parts) if i not in mention_parts).strip()
             # (local_path, file_type) of every successfully downloaded attachment
-            self.attachments = []
+            # Keep any quoted-image attachments collected before parsing this post.
+            self.attachments = list(getattr(self, "attachments", []))
             tmp_dir = str(state_dir.tmp_dir())
             text = "\n".join(text_parts).strip()
             content_parts = [text] if text else []
@@ -276,7 +279,9 @@ class FeishuMessage(ChatMessage):
             raise NotImplementedError("Unsupported message type: Type:{} ".format(msg_type))
 
         if self.ctype == ContextType.TEXT:
-            self.quoted_content = self._fetch_quoted_content(msg.get("parent_id"))
+            quoted = self._fetch_quoted_content(msg.get("parent_id"))
+            self.quoted_content = quoted["text"]
+            self.attachments.extend(quoted["attachments"])
 
         self.from_user_id = sender.get("sender_id").get("open_id")
         self.to_user_id = event.get("app_id")
@@ -302,10 +307,11 @@ class FeishuMessage(ChatMessage):
             )
         )
 
-    def _fetch_quoted_content(self, parent_id: str) -> str:
-        """Fetch one parent message, degrading to an empty quote on failure."""
+    def _fetch_quoted_content(self, parent_id: str) -> dict:
+        """Fetch quoted text and download quoted images for the current turn."""
+        result = {"text": "", "attachments": []}
         if not parent_id or not self.access_token:
-            return ""
+            return result
 
         url = "{}/open-apis/im/v1/messages/{}".format(self.domain, parent_id)
         headers = {"Authorization": "Bearer " + self.access_token}
@@ -322,32 +328,35 @@ class FeishuMessage(ChatMessage):
                     parent_id,
                     response.status_code,
                 )
-                return ""
+                return result
             body = response.json()
             items = (body.get("data") or {}).get("items") or []
             if body.get("code") != 0 or not items:
-                return ""
-            return self._extract_quoted_text(items[0])
+                return result
+            return self._extract_quoted_content(items[0], parent_id)
         except Exception as exc:
             logger.warning(
                 "[FeiShu] quoted message fetch error, parent_id=%s: %s",
                 parent_id,
                 exc,
             )
-            return ""
+            return result
 
-    @staticmethod
-    def _extract_quoted_text(item: dict) -> str:
+    def _extract_quoted_content(self, item: dict, parent_id: str) -> dict:
         msg_type = item.get("msg_type")
         raw_content = (item.get("body") or {}).get("content") or ""
         try:
             content = json.loads(raw_content)
         except (TypeError, ValueError):
-            return ""
+            return {"text": "", "attachments": []}
 
-        if msg_type == "text":
-            return str(content.get("text") or "").strip()
-        if msg_type == "post":
+        image_keys = []
+        if msg_type == "image":
+            image_key = content.get("image_key")
+            if image_key:
+                image_keys.append(image_key)
+            parts = []
+        elif msg_type == "post":
             # Some message-history payloads wrap post content in a locale key.
             if "content" not in content:
                 localized = next(
@@ -356,7 +365,6 @@ class FeishuMessage(ChatMessage):
                 )
                 if localized:
                     content = localized
-
             parts = []
             title = str(content.get("title") or "").strip()
             if title:
@@ -374,15 +382,30 @@ class FeishuMessage(ChatMessage):
                     elif tag == "a" and text:
                         href = str(element.get("href") or "").strip()
                         parts.append("{} ({})".format(text, href) if href else text)
-                    elif tag == "img":
-                        parts.append("[Image]")
-            return "\n".join(parts).strip()
-        if msg_type == "image":
-            return "[Image]"
-        if msg_type == "file":
-            return "[File: {}]".format(content.get("file_name") or "file")
-        if msg_type == "audio":
-            return "[Audio]"
-        if msg_type == "media":
-            return "[Video: {}]".format(content.get("file_name") or "video")
-        return ""
+                    elif tag == "img" and element.get("image_key"):
+                        image_keys.append(element["image_key"])
+        elif msg_type == "text":
+            return {"text": str(content.get("text") or "").strip(), "attachments": []}
+        elif msg_type == "file":
+            return {"text": "[File: {}]".format(content.get("file_name") or "file"), "attachments": []}
+        elif msg_type == "audio":
+            return {"text": "[Audio]", "attachments": []}
+        elif msg_type == "media":
+            return {"text": "[Video: {}]".format(content.get("file_name") or "video"), "attachments": []}
+        else:
+            return {"text": "", "attachments": []}
+
+        attachments = []
+        tmp_dir = str(state_dir.tmp_dir())
+        for image_key in dict.fromkeys(image_keys):
+            image_path = os.path.join(
+                tmp_dir, f"quoted_{safe_filename(parent_id)}_{safe_filename(image_key) or 'image'}.png"
+            )
+            if _download_resource(parent_id, image_key, "image", self.access_token, image_path,
+                                  MAX_IMAGE_BYTES, domain=self.domain):
+                attachments.append((image_path, "image"))
+                parts.append(f"[图片: {image_path}]")
+                logger.info("[FeiShu] Downloaded quoted image, key=%s, path=%s", image_key, image_path)
+            else:
+                parts.append(f"[引用图片下载失败: {image_key}]")
+        return {"text": "\n".join(parts).strip(), "attachments": attachments}
