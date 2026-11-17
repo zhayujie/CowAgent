@@ -106,15 +106,44 @@ SAFETY:
         self.description = self._description_template.replace("{cwd}", self.cwd)
 
     def _render_shell_description(self):
-        if self._IS_WIN and self.windows_shell == "pwsh":
-            self._description_template = re.sub(
-                r"PLATFORM: Windows.*?\n",
-                "PLATFORM: Windows (PowerShell 7 / pwsh). Use PowerShell syntax: $env:NAME for environment variables, single or double quoted strings, $null for redirection, and Select-String for text search. Do not use cmd %VAR%, >nul, or Unix-only commands. Commands run without a profile, with UTF-8 output and $ErrorActionPreference='Stop'; cmdlet errors stop execution and return a nonzero exit code. Native process failures return their exit code.\\n",
-                self._description_template,
+        if not self._IS_WIN:
+            return
+
+        if self.windows_shell == "pwsh":
+            platform = (
+                "PLATFORM: Windows (PowerShell 7 / pwsh). Use PowerShell syntax: "
+                "$env:NAME for environment variables, single or double quoted strings, "
+                "$null for redirection, and Select-String for text search. Do not use "
+                "cmd %VAR%, >nul, or Unix-only commands. Commands run without a profile, "
+                "with UTF-8 output and $ErrorActionPreference='Stop'; cmdlet errors stop "
+                "execution and return a nonzero exit code. Native process failures return "
+                "their exit code.\n"
             )
             self._description_template = self._description_template.replace(
                 "Use $VAR_NAME directly.", "Use $env:VAR_NAME."
             )
+        else:
+            platform = (
+                "PLATFORM: Windows (cmd.exe), not Bash, WSL, PowerShell, or Windows Terminal. "
+                "Use cmd.exe syntax: double quotes (single quotes are literal), `>nul 2>&1` "
+                "instead of `/dev/null`, `&&` instead of `;`, and `findstr /I \"pattern\"` "
+                "without grep-style `-i`/`-e` flags. Do not invoke `bash script.sh` or use "
+                "Unix-only commands such as grep, head, tail, sed, or awk. Use the "
+                "search_files tool for file/content search and Python for portable scripting.\n"
+            )
+
+        if re.search(r"PLATFORM: Windows.*?\n", self._description_template):
+            self._description_template = re.sub(
+                r"PLATFORM: Windows.*?\n", lambda _match: platform,
+                self._description_template,
+            )
+        else:
+            self._description_template = self._description_template.replace(
+                "ENVIRONMENT:", platform + "ENVIRONMENT:", 1
+            )
+        self._description_template = self._description_template.replace(
+            "Execute a bash command", "Execute a command"
+        )
 
     def runtime_shell_notice(self):
         """Current host syntax, repeated in the request despite older tool history."""
