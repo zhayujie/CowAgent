@@ -57,7 +57,6 @@ const zh = {
   common_greeting_noon: '中午好',
   common_greeting_afternoon: '下午好',
   common_greeting_evening: '晚上好',
-  common_request_timeout: '请求超时',
 };
 
 const en: Record<keyof typeof zh, string> = {
@@ -119,7 +118,6 @@ const en: Record<keyof typeof zh, string> = {
   common_greeting_noon: 'Good afternoon',
   common_greeting_afternoon: 'Good afternoon',
   common_greeting_evening: 'Good evening',
-  common_request_timeout: 'Request timed out',
 };
 
 export default {zh, en};

@@ -22,7 +22,7 @@ const zh = {
   settings_group_access: '对外访问',
   settings_access_url: '访问地址',
   settings_guest_pages: '访客页面',
-  settings_external_api: '开放对话 API',
+  settings_external_api: '对话 API',
   settings_group_appearance: '外观',
   settings_group_security: '安全',
   settings_default_permission: '默认权限',

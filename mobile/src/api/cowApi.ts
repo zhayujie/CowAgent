@@ -1,4 +1,4 @@
-import {getLang, tr} from '../i18n';
+import {getLang} from '../i18n';
 import type {ServerInfo} from '../protocol/envelope';
 import type {
   HistoryPage,
@@ -467,50 +467,6 @@ export async function getExternalApi() {
 
 export async function setExternalApi(action: 'enable' | 'disable' | 'regenerate') {
   return http.request<ExternalApiState>('/api/external_api', {body: {action}});
-}
-
-export interface ChatApiProbe {
-  status: number;
-  ms: number;
-  reply?: string;
-  error?: string;
-  usage?: {prompt_tokens?: number; completion_tokens?: number};
-}
-
-/** One real call to the OpenAI-compatible endpoint, authenticated by its own key. */
-export async function probeChatApi(apiKey: string, message: string): Promise<ChatApiProbe> {
-  const started = Date.now();
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 120_000);
-  try {
-    const res = await fetch(http.url('/v1/chat/completions'), {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}`},
-      body: JSON.stringify({messages: [{role: 'user', content: message}]}),
-      credentials: 'omit',
-      signal: controller.signal,
-    });
-    const data = (await res.json().catch(() => ({}))) as {
-      choices?: {message?: {content?: string}}[];
-      usage?: ChatApiProbe['usage'];
-      error?: {message?: string};
-    };
-    return {
-      status: res.status,
-      ms: Date.now() - started,
-      reply: data.choices?.[0]?.message?.content,
-      usage: data.usage,
-      error: res.ok ? undefined : data.error?.message || `HTTP ${res.status}`,
-    };
-  } catch (e) {
-    return {
-      status: 0,
-      ms: Date.now() - started,
-      error: controller.signal.aborted ? tr('common_request_timeout') : e instanceof Error ? e.message : String(e),
-    };
-  } finally {
-    clearTimeout(timer);
-  }
 }
 
 /** Each Agent keeps its own mcp.json; `agentId` undefined reads the default Agent's. */
