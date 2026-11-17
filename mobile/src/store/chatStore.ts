@@ -13,6 +13,7 @@ import {tr} from '../i18n';
 import type {
   HistoryMessage,
   Role,
+  RunState,
   StreamEvent,
   Usage,
 } from '../protocol/events';
@@ -100,6 +101,8 @@ export interface ChatMessage {
   usage?: Usage;
   streaming?: boolean;
   cancelled?: boolean;
+  /** A replayed reply that never reached its answer. */
+  runState?: RunState;
   error?: string;
 }
 
@@ -107,6 +110,8 @@ interface ActiveRequest {
   sessionId: string;
   requestId: string | null;
   unsubscribe: (() => void) | null;
+  /** Ends the turn on screen at once; the server stops it on its own time. */
+  stop?: () => void;
 }
 
 /** One request's bubbles. A teammate taking the floor opens a bubble of its own. */
@@ -237,9 +242,11 @@ function fromHistoryMessage(m: HistoryMessage, index: number): ChatMessage[] {
     return [{id, role: 'user', content: text, attachments}];
   }
   const raw = m.steps ?? [];
+  const runState = m.run_state;
   let lastContent = -1;
+  // A reply without its answer has no final text: every text it wrote stays a step.
   raw.forEach((s, i) => {
-    if (s.type === 'content') {
+    if (s.type === 'content' && !runState) {
       lastContent = i;
     }
   });
@@ -291,9 +298,9 @@ function fromHistoryMessage(m: HistoryMessage, index: number): ChatMessage[] {
   });
   const cancelled = CANCEL_MARKER.test(m.content);
   const answer = m.content || (lastContent >= 0 ? (raw[lastContent] as {content: string}).content : '');
-  const content = cancelled ? '' : answer;
+  const content = cancelled || runState ? '' : answer;
   const files = (m.artifacts ?? []).map(fileFromPayload).filter((f): f is ChatFile => !!f);
-  if (!bubbles.length || steps.length || content.trim() || files.length || cancelled) {
+  if (!bubbles.length || steps.length || content.trim() || files.length || cancelled || runState) {
     bubbles.push({
       id,
       role: 'assistant',
@@ -302,6 +309,7 @@ function fromHistoryMessage(m: HistoryMessage, index: number): ChatMessage[] {
       files: files.length ? files : undefined,
       usage: m.usage,
       cancelled,
+      runState,
       speaker,
     });
   }
@@ -386,8 +394,8 @@ async function expandDelegations(messages: ChatMessage[], depth = 0): Promise<Ch
     if (replay[replay.length - 1].peer) {
       bubbles.push({...m, id: `${m.id}-d${bubbles.length}`, delegate: undefined});
     } else {
-      // What the delegating Agent was handed, files included.
-      bubbles[bubbles.length - 1] = {...tail, content: m.content};
+      // What the delegating Agent was handed, files included; being an answer, the turn did finish.
+      bubbles[bubbles.length - 1] = {...tail, content: m.content, runState: undefined};
     }
     return bubbles;
   });
@@ -738,15 +746,10 @@ export const useChatStore = create<ChatState>((set, get) => {
         current: botMsg.id,
         floor: botMsg.speaker ? [botMsg.speaker] : [],
       };
-      set(s => ({
-        messages: {
-          ...s.messages,
-          [sessionId]: [...(s.messages[sessionId] ?? []).filter(m => m.id !== opts.replaceId), userMsg, botMsg],
-        },
-        active: {sessionId, requestId: null, unsubscribe: null},
-      }));
-
       let settled = false;
+      // Stopped by the user: the turn is over on screen while the server winds down.
+      let stopped = false;
+      let unsubscribe: (() => void) | null = null;
       const finish = () => {
         if (settled) {
           return;
@@ -776,6 +779,24 @@ export const useChatStore = create<ChatState>((set, get) => {
           },
         }));
       };
+      const stop = () => {
+        if (settled) {
+          return;
+        }
+        stopped = true;
+        // Left open, a late event would write into whatever server is signed in by then.
+        unsubscribe?.();
+        patch(sessionId, turn.current, m => ({...m, cancelled: true}));
+        finish();
+      };
+
+      set(s => ({
+        messages: {
+          ...s.messages,
+          [sessionId]: [...(s.messages[sessionId] ?? []).filter(m => m.id !== opts.replaceId), userMsg, botMsg],
+        },
+        active: {sessionId, requestId: null, unsubscribe: null, stop},
+      }));
 
       try {
         const res = await sendMessage(sessionId, text, agentParam(agentId), {
@@ -786,6 +807,13 @@ export const useChatStore = create<ChatState>((set, get) => {
           })),
           isVoice: opts.voice,
         });
+        // Stopped before the server named the request: cancel it now, show nothing of it.
+        if (stopped) {
+          if (res.request_id) {
+            cancelRequest(res.request_id, sessionId).catch(() => undefined);
+          }
+          return;
+        }
         // Signed out while the message was posting: nothing is left to stream into.
         if (get().active?.sessionId !== sessionId) {
           return;
@@ -799,7 +827,7 @@ export const useChatStore = create<ChatState>((set, get) => {
           turn.floor[0] = {id: res.speaker};
           patch(sessionId, botMsg.id, m => ({...m, speaker: turn.floor[0]}));
         }
-        const unsubscribe = subscribeChat(res.request_id, {
+        unsubscribe = subscribeChat(res.request_id, {
           onEvent: event => {
             applyEvent(turn, event);
             // The answer is stored; with auto TTS on, `stream_end` waits up to a
@@ -827,6 +855,9 @@ export const useChatStore = create<ChatState>((set, get) => {
           active: s.active && {...s.active, requestId: res.request_id, unsubscribe},
         }));
       } catch (e) {
+        if (stopped) {
+          return;
+        }
         patch(sessionId, botMsg.id, m => ({
           ...m,
           error: e instanceof Error ? e.message : String(e),
@@ -837,10 +868,13 @@ export const useChatStore = create<ChatState>((set, get) => {
 
     cancel: async () => {
       const active = get().active;
-      if (!active?.requestId) {
+      if (!active) {
         return;
       }
-      await cancelRequest(active.requestId, active.sessionId);
+      active.stop?.();
+      if (active.requestId) {
+        await cancelRequest(active.requestId, active.sessionId);
+      }
     },
   };
 });

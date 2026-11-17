@@ -153,8 +153,12 @@ export interface HistoryMessage {
   artifacts?: FilePayload[];
   /** `agent_id` names the Agent that answered, which matters in a shared conversation. */
   extras?: {agent_id?: string};
+  /** Set on an assistant turn without a final answer: still running, or failed / cut off. */
+  run_state?: RunState;
   _seq?: number;
 }
+
+export type RunState = 'running' | 'interrupted';
 
 export interface HistoryPage {
   messages: HistoryMessage[];

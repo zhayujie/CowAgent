@@ -20,6 +20,7 @@ const GROUP_LABELS: Record<string, MessageKey> = {
 };
 
 const CACHE_KEY = 'menu:saved';
+const ARTIFACTS_HIDDEN_KEY = 'menu:artifacts-hidden';
 
 const defaultItem = (view: string): MenuItem => ({
   id: view,
@@ -62,15 +63,43 @@ interface MenuState {
   doc: MenuDoc;
   /** Whether a layout has been saved at all; an unsaved menu is the built-in one. */
   customised: boolean;
+  /** This device hides Artifacts from its drawer; the shared menu's flag is the web console's. */
+  artifactsHidden: boolean;
+  setArtifactsHidden: (hidden: boolean) => void;
   load: () => Promise<void>;
   setHidden: (view: string, hidden: boolean) => Promise<void>;
+  /** Renames a custom entry (a pinned file or a link). */
+  renameItem: (id: string, title: string) => Promise<void>;
+  /** Takes an entry out of the menu; a pinned file itself stays where it is. */
+  removeItem: (id: string) => Promise<void>;
+  /** Appends a custom entry (a file or a link) to a group. */
+  addItem: (groupId: string, item: CustomMenuItem) => Promise<void>;
   reset: () => Promise<void>;
 }
+
+export type CustomMenuItem = Exclude<MenuItem, {type: 'builtin'}>;
+
+/** Same shape as the web console's ids (`_meId`), which the server checks. */
+export const newMenuItemId = () => `m_${Math.random().toString(36).slice(2, 10)}`;
 
 export const useMenuStore = create<MenuState>((set, get) => {
   const apply = (saved: MenuDoc | null) => {
     set({doc: menuMerge(saved), customised: !!saved});
     writeJSON(CACHE_KEY, saved).catch(() => undefined);
+  };
+
+  /** Shows the edit at once and saves it; a save the server refuses puts the menu back. */
+  const commit = async (edit: (items: MenuItem[], group: MenuGroup) => MenuItem[]) => {
+    const before = get().doc;
+    const doc: MenuDoc = {groups: before.groups.map(g => ({...g, items: edit(g.items, g)}))};
+    set({doc});
+    try {
+      const res = await saveMenu(doc);
+      apply(res.menu);
+    } catch (e) {
+      set({doc: before});
+      throw e;
+    }
   };
 
   readJSON<MenuDoc | null>(CACHE_KEY, null)
@@ -80,33 +109,34 @@ export const useMenuStore = create<MenuState>((set, get) => {
       }
     })
     .catch(() => undefined);
+  readJSON<boolean>(ARTIFACTS_HIDDEN_KEY, false)
+    .then(hidden => set({artifactsHidden: hidden}))
+    .catch(() => undefined);
 
   return {
     doc: menuMerge(null),
     customised: false,
+    artifactsHidden: false,
+
+    setArtifactsHidden: hidden => {
+      set({artifactsHidden: hidden});
+      writeJSON(ARTIFACTS_HIDDEN_KEY, hidden).catch(() => undefined);
+    },
 
     load: async () => {
       const res = await getMenu();
       apply(res.menu);
     },
 
-    setHidden: async (view, hidden) => {
-      const before = get().doc;
-      const doc: MenuDoc = {
-        groups: before.groups.map(g => ({
-          ...g,
-          items: g.items.map(i => (i.type === 'builtin' && i.view === view ? {...i, hidden} : i)),
-        })),
-      };
-      set({doc});
-      try {
-        const res = await saveMenu(doc);
-        apply(res.menu);
-      } catch (e) {
-        set({doc: before});
-        throw e;
-      }
-    },
+    setHidden: (view, hidden) =>
+      commit(items => items.map(i => (i.type === 'builtin' && i.view === view ? {...i, hidden} : i))),
+
+    renameItem: (id, title) =>
+      commit(items => items.map(i => (i.id === id && i.type !== 'builtin' ? {...i, title} : i))),
+
+    removeItem: id => commit(items => items.filter(i => i.id !== id || i.type === 'builtin')),
+
+    addItem: (groupId, item) => commit((items, group) => (group.id === groupId ? [...items, item] : items)),
 
     reset: async () => {
       const res = await saveMenu(null);

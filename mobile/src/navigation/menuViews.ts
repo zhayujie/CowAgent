@@ -180,14 +180,60 @@ export function linkAsPage(label: string, url: string): ChatFile {
   return {name: label || url, kind: 'html', rawUrl: url};
 }
 
-/** `local`: the active server is the embedded kernel. */
-export function menuSections(doc: MenuDoc, local = false): MenuSection[] {
-  return doc.groups
-    .map(g => ({
-      id: g.id,
-      label: menuGroupLabel(g),
-      hasChat: g.items.some(i => i.type === 'builtin' && i.view === 'chat'),
-      entries: g.items.map(i => entryOf(i, local)).filter((e): e is MenuEntry => !!e),
-    }))
-    .filter(s => s.hasChat || s.entries.length);
+/**
+ * The web console keeps Artifacts hidden in its chat group; this app lists it
+ * right below Knowledge, wherever and however the shared menu has it, behind a
+ * switch kept on the device.
+ */
+const PINNED_VIEW = 'artifacts';
+const PINNED_GROUP = 'manage';
+
+const hasChatPage = (items: MenuItem[]) => items.some(i => i.type === 'builtin' && i.view === 'chat');
+
+/** The entry Artifacts follows. */
+export const isPinnedAnchor = (item: MenuItem) => item.type === 'builtin' && item.view === 'knowledge';
+
+/**
+ * Where Artifacts is listed: Knowledge's group, else Manage, else the first
+ * group without the chat page (first in those); null opens a Manage section.
+ */
+export function pinnedGroupId(doc: MenuDoc): string | null {
+  const home =
+    doc.groups.find(g => g.items.some(isPinnedAnchor)) ??
+    doc.groups.find(g => g.id === PINNED_GROUP) ??
+    doc.groups.find(g => !hasChatPage(g.items));
+  return home?.id ?? null;
+}
+
+export const pinnedGroupLabel = () => menuGroupLabel({id: PINNED_GROUP, title: '', items: []});
+
+/** The shared menu's own Artifacts entry, which this app lists in its place instead. */
+export const isPinnedMenuItem = (item: MenuItem) => item.type === 'builtin' && item.view === PINNED_VIEW;
+
+/** `local`: the active server is the embedded kernel. `showPinned`: this device's switch for Artifacts. */
+export function menuSections(doc: MenuDoc, local = false, showPinned = true): MenuSection[] {
+  const pinned = showPinned
+    ? entryOf({id: PINNED_VIEW, type: 'builtin', view: PINNED_VIEW, title: '', icon: ''}, local)
+    : null;
+  const homeId = pinned ? pinnedGroupId(doc) : null;
+  const sections: MenuSection[] = doc.groups.map(g => {
+    const items = g.items.filter(i => !isPinnedMenuItem(i));
+    const home = pinned && g.id === homeId ? pinned : null;
+    const entries: MenuEntry[] = home && !items.some(isPinnedAnchor) ? [home] : [];
+    items.forEach(i => {
+      const entry = entryOf(i, local);
+      if (entry) {
+        entries.push(entry);
+      }
+      // Even when Knowledge itself is hidden, Artifacts keeps its place.
+      if (home && isPinnedAnchor(i)) {
+        entries.push(home);
+      }
+    });
+    return {id: g.id, label: menuGroupLabel(g), hasChat: hasChatPage(g.items), entries};
+  });
+  if (pinned && homeId === null) {
+    sections.push({id: PINNED_GROUP, label: pinnedGroupLabel(), hasChat: false, entries: [pinned]});
+  }
+  return sections.filter(s => s.hasChat || s.entries.length);
 }

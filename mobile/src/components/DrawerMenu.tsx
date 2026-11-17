@@ -1,8 +1,9 @@
-import {faCircleUser, faComments, faMessage, faPenToSquare} from '@fortawesome/free-regular-svg-icons';
+import {faCircleUser, faComments, faMessage} from '@fortawesome/free-regular-svg-icons';
 import {
   faArrowUpRightFromSquare,
   faChevronDown,
   faMobileScreen,
+  faPlus,
   faServer,
   faUserGroup,
 } from '@fortawesome/free-solid-svg-icons';
@@ -12,7 +13,7 @@ import {Pressable, ScrollView, Text, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import type {ChatFile} from '../files/chatFile';
 import {tr, trf, type MessageKey} from '../i18n';
-import {BUILTIN_VIEWS, menuSections, type MenuEntry, type MenuRoute} from '../navigation/menuViews';
+import {menuSections, type MenuEntry, type MenuRoute} from '../navigation/menuViews';
 import type {SessionItem} from '../protocol/events';
 import {useAgentStore} from '../store/agentStore';
 import {useMenuStore} from '../store/menuStore';
@@ -72,8 +73,9 @@ export function DrawerMenu({
   const version = useOverviewStore(s => s.version);
   const realtime = useServerStore(s => s.realtimeStatus);
   const doc = useMenuStore(s => s.doc);
+  const artifactsHidden = useMenuStore(s => s.artifactsHidden);
   const local = useLocalServer();
-  const sections = useMemo(() => menuSections(doc, local), [doc, local]);
+  const sections = useMemo(() => menuSections(doc, local, !artifactsHidden), [doc, local, artifactsHidden]);
   const server = activeServer();
   const host = server?.local ? tr('server_local') : (server?.baseUrl.replace(/^https?:\/\//, '') ?? '');
   const groups = useMemo(() => groupSessions(sessions.slice(0, RECENT_LIMIT)), [sessions]);
@@ -129,7 +131,7 @@ export function DrawerMenu({
           accessibilityRole="button"
           onPress={onNewChat}
           style={({pressed}) => [styles.newChat, pressed && styles.pressed]}>
-          <Icon icon={faPenToSquare} size={14} color={t.accent} />
+          <Icon icon={faPlus} size={14} color={t.accent} />
           <Text style={styles.newChatText}>{tr('menu_new_chat')}</Text>
         </Pressable>
         <Pressable
@@ -146,12 +148,6 @@ export function DrawerMenu({
           label={tr('menu_all_sessions')}
           count={total || undefined}
           onPress={() => onNavigate('Sessions')}
-        />
-        <Item
-          icon={BUILTIN_VIEWS.artifacts.icon}
-          label={BUILTIN_VIEWS.artifacts.label}
-          count={countOf('artifacts')}
-          onPress={() => onNavigate('Artifacts')}
         />
         <Item icon={faCircleUser} label={tr('menu_switch_agent')} onPress={onSwitchAgent} />
       </View>
@@ -180,7 +176,7 @@ export function DrawerMenu({
     </>
   );
 
-  // The chat group may also hold pages such as Artifacts; those belong with the features, unlabelled on top.
+  // The chat group may also hold custom pages; those belong with the features, unlabelled on top.
   const featuresBody = sections
     .filter(section => section.entries.length)
     .map((section, i) => (
