@@ -101,12 +101,12 @@ const WorkspacePanel: React.FC = () => {
   // on what is in the text area, which reads as a bug. Hide them instead.
   const showFileActions = onFile && !editing
   const showEditButton = showFileActions && !current.is_dir && isEditable(current.kind)
-  const canReveal = showFileActions && !!current.abs_path && !!window.electronAPI?.revealPath
+  const canReveal = showFileActions && !!current.abs_path && !!window.electronAPI?.revealPath && !apiClient.isRemote()
 
   const openExternally = () => {
     if (!current) return
     // Desktop can hand the file to the OS default app; fall back to the browser.
-    if (current.abs_path && window.electronAPI?.openPath) {
+    if (current.abs_path && window.electronAPI?.openPath && !apiClient.isRemote()) {
       window.electronAPI.openPath(current.abs_path)
       return
     }

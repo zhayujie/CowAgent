@@ -1,3 +1,4 @@
+import { activeInstance, deviceInfo, updateInstance, type Instance } from './instances'
 import type {
   ConfigData,
   ChannelInfo,
@@ -68,6 +69,39 @@ export interface IntegrationsState {
   port_fixed?: boolean
   local_only: boolean
   password_set: boolean
+}
+
+export interface PairingCode {
+  pairing_id: string
+  /** Short code to type, as XXXX-XXXX. */
+  code: string
+  expires_in: number
+  urls: string[]
+  link: string
+  qr_image: string
+  password_set: boolean
+}
+
+export interface PairedDevice {
+  id: string
+  name: string
+  platform: string
+  app_version: string
+  created_at: number
+  last_seen_at: number
+  /** How it signed in: a pairing code or the access password. */
+  via?: 'pairing' | 'password'
+  /** The web page it calls from, for a browser console on another address. */
+  origin?: string
+  last_ip?: string
+  online?: boolean
+}
+
+export interface DeviceList {
+  devices: PairedDevice[]
+  /** The device making this request, empty when it isn't one (e.g. this app on its own backend). */
+  current: string
+  instance?: { name: string; version: string }
 }
 
 export type GuestShareStatus = 'active' | 'unconfirmed' | 'password_missing' | 'disabled' | 'expired'
@@ -161,24 +195,49 @@ export interface UploadResult {
 const AUTH_TOKEN_KEY = 'cow_auth_token'
 
 class ApiClient {
-  private baseUrl = 'http://127.0.0.1:9876'
+  private localBaseUrl = 'http://127.0.0.1:9876'
   // Bearer token for web_password-protected backends. The desktop renderer
   // runs from a file:// origin, where cross-origin cookies to http://127.0.0.1
   // aren't sent reliably, so we authenticate via an Authorization header
   // instead. Persisted in localStorage so it survives reloads.
-  private authToken: string | null =
+  private localToken: string | null =
     typeof localStorage !== 'undefined' ? localStorage.getItem(AUTH_TOKEN_KEY) : null
+  // Another computer or server this window drives instead of its own backend.
+  // Fixed for the window's lifetime: switching reloads.
+  private readonly instance: Instance | null = activeInstance()
 
+  private get baseUrl(): string {
+    return this.instance ? this.instance.url : this.localBaseUrl
+  }
+
+  private get authToken(): string | null {
+    return this.instance ? this.instance.token || null : this.localToken
+  }
+
+  /** The backend this app started; requests go elsewhere while an instance is active. */
   setBaseUrl(url: string) {
-    this.baseUrl = url
+    this.localBaseUrl = url
   }
 
   getBaseUrl() {
     return this.baseUrl
   }
 
+  getInstance(): Instance | null {
+    return this.instance
+  }
+
+  isRemote(): boolean {
+    return !!this.instance
+  }
+
   setAuthToken(token: string | null) {
-    this.authToken = token
+    if (this.instance) {
+      this.instance.token = token || ''
+      updateInstance(this.instance.id, { token: this.instance.token })
+      return
+    }
+    this.localToken = token
     try {
       if (token) localStorage.setItem(AUTH_TOKEN_KEY, token)
       else localStorage.removeItem(AUTH_TOKEN_KEY)
@@ -484,6 +543,10 @@ class ApiClient {
   // Whether the backend runs on this machine. Only then does a local file path
   // mean anything to it; a remote backend must receive the bytes.
   private isLoopbackBackend(): boolean {
+    // A paired instance is another installation even on a loopback address
+    // (an SSH tunnel, a second copy): it gets neither this machine's desktop
+    // token nor its file paths.
+    if (this.instance) return false
     try {
       const host = new URL(this.baseUrl).hostname
       return host === '127.0.0.1' || host === 'localhost' || host === '[::1]' || host === '::1'
@@ -869,6 +932,32 @@ class ApiClient {
   /** Saves web_host; the server restarts on it right after answering. */
   async saveListenHost(host: string): Promise<ApiResult & IntegrationsState & { reason?: string }> {
     return this.request('/api/integrations', { method: 'PUT', body: JSON.stringify({ web_host: host }) })
+  }
+
+  /** `baseUrl` is an address this side knows reaches the server, offered to the phone first. */
+  async createPairing(baseUrl = ''): Promise<ApiResult & PairingCode & { reason?: string }> {
+    return this.request('/api/pairing', { method: 'POST', body: JSON.stringify({ base_url: baseUrl }) })
+  }
+
+  async getPairing(id: string): Promise<ApiResult & { state: 'pending' | 'paired' | 'expired'; device?: PairedDevice }> {
+    return this.request(`/api/pairing/${encodeURIComponent(id)}`)
+  }
+
+  async listDevices(): Promise<ApiResult & DeviceList> {
+    return this.request('/api/devices')
+  }
+
+  async renameDevice(id: string, name: string): Promise<ApiResult & { device?: PairedDevice }> {
+    return this.request(`/api/devices/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ name }) })
+  }
+
+  async removeDevice(id: string): Promise<ApiResult> {
+    return this.request(`/api/devices/${encodeURIComponent(id)}`, { method: 'DELETE' })
+  }
+
+  /** Signs out every device but the one asking. */
+  async revokeOtherDevices(): Promise<ApiResult & { removed?: number }> {
+    return this.request('/api/devices/revoke_others', { method: 'POST' })
   }
 
   /** Guest pages belong to the instance, not an Agent, and their errors carry a reason code. */
@@ -1631,7 +1720,7 @@ class ApiClient {
   async authLogin(password: string): Promise<ApiResult & { token?: string; reason?: string; retry_after?: number }> {
     const res = await this.request<ApiResult & { token?: string; reason?: string; retry_after?: number }>('/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ password }),
+      body: JSON.stringify({ password, device: await deviceInfo() }),
     })
     if (res.status === 'success' && res.token) {
       this.setAuthToken(res.token)
@@ -1640,9 +1729,24 @@ class ApiClient {
   }
 
   async authLogout(): Promise<ApiResult> {
-    this.setAuthToken(null)
-    return this.request('/auth/logout', { method: 'POST' })
+    // Sent with the token still attached, so the server drops this device.
+    try {
+      return await this.request('/auth/logout', { method: 'POST' })
+    } finally {
+      this.setAuthToken(null)
+    }
   }
+}
+
+/** LAN addresses of the backend, preferring what the OS reports for real
+ *  interfaces over the backend's guess; only this machine's backend can use
+ *  this machine's interfaces. */
+export async function lanUrls(state: IntegrationsState): Promise<string[]> {
+  if (state.local_only || !state.listen?.port) return []
+  if (apiClient.isRemote()) return state.lan_urls || []
+  const ips = (await window.electronAPI?.getLanAddresses?.().catch(() => [])) || []
+  const urls = ips.map((ip) => `http://${ip}:${state.listen.port}`)
+  return Array.from(new Set([...urls, ...(state.lan_urls || [])]))
 }
 
 export const apiClient = new ApiClient()

@@ -32,6 +32,7 @@ import { usePlatform } from '../hooks/usePlatform'
 import { useUpdateStore, hasPendingUpdate, hasAvailableUpdate } from '../store/updateStore'
 import UpdateBanner from '../components/UpdateBanner'
 import Tooltip from '../components/Tooltip'
+import InstanceSwitcher from '../components/instances/InstanceSwitcher'
 import { useMenuStore } from '../store/menuStore'
 import { groupLabel, itemIcon, itemLabel, itemRoute, itemShows } from '../lib/menu'
 import { product } from '@product'
@@ -203,6 +204,7 @@ const NavRail: React.FC<NavRailProps> = ({ onLangChange }) => {
 
       {/* Content area carries the right divider, starting below the titlebar */}
       <div className="flex-1 flex flex-col min-h-0 border-r border-default">
+      <InstanceSwitcher collapsed={collapsed} />
       {/* Nav items */}
       <nav className="flex-1 overflow-y-auto px-2 py-2">
         {sections.map(({ group, items }, index) => (

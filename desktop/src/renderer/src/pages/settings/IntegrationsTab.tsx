@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { ArrowRight, Globe } from 'lucide-react'
 import { t } from '../../i18n'
-import apiClient, { type IntegrationsState } from '../../api/client'
+import apiClient, { lanUrls, type IntegrationsState } from '../../api/client'
 import ChatApiCard, { CopyButton } from './ChatApiCard'
 import GuestSharesCard from './shares/GuestSharesCard'
 import { askConfirm } from '../../store/confirmStore'
@@ -10,14 +10,6 @@ import { Btn, Card, Dropdown, Field, TextInput } from './primitives'
 const LISTEN_PRESETS = ['127.0.0.1', '0.0.0.0']
 const PUBLIC_URL_RE = /^https?:\/\/[^\s/?#]+(\/[^\s?#]*)?$/i
 const LOCAL_HOST_RE = /^(localhost|127\.|::1$)/
-
-/** LAN addresses, preferring what the OS reports for real interfaces over the backend's guess. */
-async function lanUrls(state: IntegrationsState): Promise<string[]> {
-  if (state.local_only || !state.listen?.port) return []
-  const ips = (await window.electronAPI?.getLanAddresses?.().catch(() => [])) || []
-  const urls = ips.map((ip) => `http://${ip}:${state.listen.port}`)
-  return Array.from(new Set([...urls, ...(state.lan_urls || [])]))
-}
 
 const IntegrationsTab: React.FC<{
   baseUrl: string

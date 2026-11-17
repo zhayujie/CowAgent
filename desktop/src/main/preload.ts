@@ -24,6 +24,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     }
   },
   getLanAddresses: () => ipcRenderer.invoke('get-lan-addresses') as Promise<string[]>,
+  getHostName: () => ipcRenderer.invoke('get-host-name') as Promise<string>,
   restartBackend: () => ipcRenderer.invoke('restart-backend'),
   selectDirectory: () => ipcRenderer.invoke('select-directory'),
   selectFile: (filters?: Electron.FileFilter[]) => ipcRenderer.invoke('select-file', filters),

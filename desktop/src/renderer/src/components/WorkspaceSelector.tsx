@@ -221,13 +221,16 @@ const WorkspaceSelector: React.FC<WorkspaceSelectorProps> = ({ sessionId }) => {
 
           {/* Divider between the project list and the open/new-project actions. */}
           <div className="my-1 mx-1.5 border-t border-default" />
-          <button
-            onClick={openProject}
-            className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left cursor-pointer transition-colors hover:bg-surface-2 text-content"
-          >
-            <FolderOpen size={14} className="shrink-0 text-content-tertiary" />
-            <span className="flex-1 min-w-0 text-[13px] truncate">{t('ws_sel_open')}</span>
-          </button>
+          {/* The folder picker browses this computer, not the instance being driven. */}
+          {!apiClient.isRemote() && (
+            <button
+              onClick={openProject}
+              className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left cursor-pointer transition-colors hover:bg-surface-2 text-content"
+            >
+              <FolderOpen size={14} className="shrink-0 text-content-tertiary" />
+              <span className="flex-1 min-w-0 text-[13px] truncate">{t('ws_sel_open')}</span>
+            </button>
+          )}
           <button
             onClick={openNewDialog}
             className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left cursor-pointer transition-colors hover:bg-surface-2 text-content"

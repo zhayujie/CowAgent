@@ -687,6 +687,8 @@ function setupIPC() {
 
   ipcMain.handle('get-lan-addresses', () => listLanAddresses())
 
+  ipcMain.handle('get-host-name', () => os.hostname().replace(/\.(local|lan|home)$/i, ''))
+
   ipcMain.handle('restart-backend', async () => {
     await pythonBackend?.restart()
     return true
