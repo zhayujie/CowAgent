@@ -82,8 +82,6 @@ def test_godcmd_starts_with_an_empty_config_object(tmp_path, monkeypatch):
 
     assert plugin.password == ""
     assert plugin.admin_users == []
-    # Six unambiguous symbols (see _generate_temp_password): the old 4-digit
-    # form was brute-forceable over IM within hours of a first run.
     alphabet = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"
     assert plugin.temp_password and len(plugin.temp_password) == 6
     assert all(c in alphabet for c in plugin.temp_password)

@@ -181,12 +181,7 @@ _TEMP_PASSWORD_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"
 
 
 def _generate_temp_password(length: int = 6) -> str:
-    """A temp admin password for first runs with no password configured.
-
-    The old form was 4 digits — ~5k combinations, brute-forceable over IM
-    within hours now that nothing else gates #auth. secrets over this
-    alphabet is ~31^6 (~8.9e8) and pronounceable enough to copy.
-    """
+    """A temp admin password for first runs with no password configured."""
     return "".join(secrets.choice(_TEMP_PASSWORD_ALPHABET) for _ in range(length))
 
 
@@ -236,10 +231,9 @@ class Godcmd(Plugin):
         self.password = gconf["password"]
         self.admin_users = gconf["admin_users"]
         global_config["admin_users"] = self.admin_users
-        # Failure lockout for #auth, reusing the guest-share limiter design:
-        # per-client and (across clients) per-plugin caps with timed locks, so
-        # a temp password cannot be brute-forced by re-sending IM messages.
-        self._auth_limiter = LoginLimiter()
+        # Per-sender lockout only: a plugin-wide cap would let anyone lock
+        # the real admin out of #auth.
+        self._auth_limiter = LoginLimiter(per_profile=False)
         self.isrunning = True  # 机器人是否运行中
 
         self.handlers[Event.ON_HANDLE_CONTEXT] = self.on_handle_context
@@ -495,19 +489,18 @@ class Godcmd(Plugin):
         if len(args) != 1:
             return False, "请提供口令"
 
-        # Wrong passwords lock the sender (and, past the distributed cap, the
-        # plugin) for a while — see LoginLimiter. Without this the temp
-        # password was guessable at IM speed.
         wait = self._auth_limiter.locked_for("godcmd", userid)
         if wait:
             return False, f"尝试次数过多，请 {wait} 秒后再试"
 
         password = args[0]
         if password == self.password:
+            self._auth_limiter.succeeded("godcmd", userid)
             self.admin_users.append(userid)
             global_config["admin_users"].append(userid)
             return True, "认证成功"
-        elif password == self.temp_password:
+        elif self.temp_password and password.upper() == self.temp_password:
+            self._auth_limiter.succeeded("godcmd", userid)
             self.admin_users.append(userid)
             global_config["admin_users"].append(userid)
             return True, "认证成功，请尽快设置口令"

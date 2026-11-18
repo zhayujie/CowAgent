@@ -1,13 +1,10 @@
 # encoding:utf-8
 """Godcmd #auth must not be brute-forceable at IM speed.
 
-With the default empty password the plugin boots with a temp password. It
-used to be 4 digits (~5k combinations) and authenticate() had no failure
-limit, so an attacker could simply re-send #auth guesses and expect to hit
-it within hours of a first run — and admin unlocks #installp (arbitrary
-repo clone + pip install). These tests pin both halves of the hardening:
-a secrets-based unambiguous alphabet, and the LoginLimiter lockout on the
-authenticate path (same design as the guest-share password gate).
+Admin unlocks #installp (repo clone + pip install), so the temp password is
+drawn with secrets from an unambiguous alphabet and wrong guesses lock the
+sender out for a while. The lock is per sender only, so other senders
+cannot lock the real admin out.
 """
 import os
 import sys
@@ -39,7 +36,7 @@ class _Base(unittest.TestCase):
         plugin.password = "real-password"
         plugin.temp_password = "TPWD23"
         plugin.admin_users = []
-        plugin._auth_limiter = LoginLimiter()
+        plugin._auth_limiter = LoginLimiter(per_profile=False)
         # authenticate() appends into global_config; keep tests hermetic.
         patcher = patch.dict(godcmd.global_config, {"admin_users": []}, clear=False)
         patcher.start()
@@ -81,6 +78,32 @@ class TestAuthenticateLockout(_Base):
             plugin.authenticate("attacker", ["wrong"], False, False)
         ok, msg = plugin.authenticate("someone-else", ["real-password"], False, False)
         self.assertTrue(ok)
+
+    def test_many_senders_failing_do_not_lock_out_the_admin(self):
+        plugin = self._plugin()
+        for i in range(40):
+            for _ in range(4):
+                plugin.authenticate(f"attacker-{i}", ["wrong"], False, False)
+        ok, _ = plugin.authenticate("admin", ["real-password"], False, False)
+        self.assertTrue(ok)
+
+    def test_a_success_clears_earlier_failures(self):
+        plugin = self._plugin()
+        for _ in range(4):
+            plugin.authenticate("admin", ["wrong"], False, False)
+        ok, _ = plugin.authenticate("admin", ["real-password"], False, False)
+        self.assertTrue(ok)
+        plugin.admin_users.clear()
+        for _ in range(4):
+            plugin.authenticate("admin", ["wrong"], False, False)
+        ok, _ = plugin.authenticate("admin", ["real-password"], False, False)
+        self.assertTrue(ok, "failures from before the success still counted")
+
+    def test_the_temp_password_is_case_insensitive(self):
+        plugin = self._plugin()
+        ok, msg = plugin.authenticate("admin", ["tpwd23"], False, False)
+        self.assertTrue(ok)
+        self.assertIn("请尽快设置口令", msg)
 
     def test_a_correct_password_success_without_prior_failures(self):
         plugin = self._plugin()
