@@ -301,6 +301,27 @@ _BACKTICK_RE = re.compile(r"(?<!\\)`([^`]*)`")
 
 # ``<(cmd)`` / ``>(cmd)``: shlex emits ``<(`` as a plain token.
 _PROCESS_SUBST_CHARS = frozenset({"<", ">"})
+
+# Wrapper options whose value is a separate token; unskipped, the value would
+# be read as the wrapped command. ``env -S`` is left out: its value is the
+# command itself.
+_WRAPPER_VALUE_OPTIONS = {
+    "env": frozenset({"-u", "--unset", "-C", "--chdir"}),
+    "time": frozenset({"-f", "--format", "-o", "--output"}),
+    "timeout": frozenset({"-s", "--signal", "-k", "--kill-after"}),
+    "nice": frozenset({"-n", "--adjustment"}),
+    "ionice": frozenset({"-c", "--class", "-n", "--classdata", "-p", "--pid"}),
+    "stdbuf": frozenset({"-i", "-o", "-e", "--input", "--output", "--error"}),
+    "xargs": frozenset({
+        "-I", "-n", "-P", "-d", "-L", "-s", "-E", "-a",
+        "--replace", "--max-args", "--max-procs", "--delimiter",
+        "--max-lines", "--max-chars", "--eof", "--arg-file",
+    }),
+    "watch": frozenset({"-n", "--interval"}),
+}
+
+# ``timeout``'s mandatory duration operand, e.g. ``10`` or ``1.5h``.
+_TIMEOUT_DURATION_RE = re.compile(r"^\d+(?:\.\d+)?[smhd]?$", re.IGNORECASE)
 # Placeholder for a substitution passed as an argument; neither gate reads it.
 _SUBSTITUTION = "\x00"
 
@@ -430,8 +451,11 @@ def _command_name(tokens: Sequence[str]) -> Tuple[Optional[str], List[str]]:
         if name.endswith(".exe"):
             name = name[:-4]
         if name in _WRAPPER_COMMANDS:
+            value_options = _WRAPPER_VALUE_OPTIONS.get(name, ())
             args = args[1:]
             while args and args[0].startswith("-"):
+                args = args[2:] if args[0] in value_options else args[1:]
+            if name == "timeout" and args and _TIMEOUT_DURATION_RE.match(args[0]):
                 args = args[1:]
             continue
         return name, args[1:]
