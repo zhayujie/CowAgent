@@ -197,7 +197,7 @@ export function ModelsScreen({navigation}: Props) {
             title={item.model}
             detail={trf('settings_fallback_nth', {n: i + 1, provider: providerName(item.provider)})}
             onPress={() => setLinkIndex(i)}
-            right={
+            action={
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={trf('settings_remove_what', {model: item.model})}

@@ -91,38 +91,40 @@ export function ServerSheet({visible, onClose}: {visible: boolean; onClose: () =
 
   const row = (id: string, icon: IconDefinition, name: string, meta: string, removable: boolean) => {
     const selected = id === activeId;
+    const busy = pending === id;
+    // Two sibling buttons: on the web a button inside a button is invalid HTML.
     return (
-      <Pressable
-        key={id}
-        accessibilityRole="button"
-        accessibilityState={{selected, busy: pending === id}}
-        onPress={() => select(id)}
-        style={({pressed}) => [styles.row, selected && styles.rowActive, pressed && styles.pressed]}>
-        <View style={[styles.badge, selected && styles.badgeActive]}>
-          <Icon icon={icon} size={14} color={selected ? t.accent : t.t3} />
-        </View>
-        <View style={styles.text}>
-          <Text style={styles.name} numberOfLines={1}>
-            {name}
-          </Text>
-          <Text style={styles.meta} numberOfLines={1}>
-            {meta}
-          </Text>
-        </View>
-        {pending === id ? (
-          <ActivityIndicator size="small" color={t.t3} />
-        ) : selected ? (
-          <Icon icon={faCheck} size={13} color={t.accent} />
-        ) : (
-          removable && (
-            <Pressable accessibilityRole="button" hitSlop={8} onPress={() => remove(id)}>
-              <Text style={[styles.remove, confirmRemove === id && styles.removeConfirm]}>
-                {confirmRemove === id ? tr('server_remove_confirm') : tr('server_remove')}
-              </Text>
-            </Pressable>
-          )
+      <View key={id} style={[styles.row, selected && styles.rowActive]}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{selected, busy}}
+          onPress={() => select(id)}
+          style={({pressed}) => [styles.rowMain, pressed && styles.pressed]}>
+          <View style={[styles.badge, selected && styles.badgeActive]}>
+            <Icon icon={icon} size={14} color={selected ? t.accent : t.t3} />
+          </View>
+          <View style={styles.text}>
+            <Text style={styles.name} numberOfLines={1}>
+              {name}
+            </Text>
+            <Text style={styles.meta} numberOfLines={1}>
+              {meta}
+            </Text>
+          </View>
+          {busy ? (
+            <ActivityIndicator size="small" color={t.t3} />
+          ) : (
+            selected && <Icon icon={faCheck} size={13} color={t.accent} />
+          )}
+        </Pressable>
+        {removable && !selected && !busy && (
+          <Pressable accessibilityRole="button" hitSlop={8} onPress={() => remove(id)} style={styles.removeButton}>
+            <Text style={[styles.remove, confirmRemove === id && styles.removeConfirm]}>
+              {confirmRemove === id ? tr('server_remove_confirm') : tr('server_remove')}
+            </Text>
+          </Pressable>
         )}
-      </Pressable>
+      </View>
     );
   };
 
@@ -184,15 +186,17 @@ export function ServerSheet({visible, onClose}: {visible: boolean; onClose: () =
 const useStyles = makeStyles(t => ({
   group: {fontSize: 11, fontWeight: '600', letterSpacing: 1.2, color: t.t4, paddingHorizontal: 12, marginBottom: 4},
   groupSpaced: {marginTop: 14},
-  row: {
+  row: {flexDirection: 'row', alignItems: 'center', borderRadius: radius.md},
+  rowActive: {backgroundColor: t.bg2},
+  rowMain: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
     paddingHorizontal: 12,
     paddingVertical: 11,
-    borderRadius: radius.md,
   },
-  rowActive: {backgroundColor: t.bg2},
+  removeButton: {paddingRight: 12},
   pressed: {opacity: 0.7},
   badge: {
     width: 34,

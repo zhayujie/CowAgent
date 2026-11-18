@@ -653,3 +653,49 @@ export interface MenuDoc {
   version?: number;
   groups: MenuGroup[];
 }
+
+/** A client signed in to the server, with a pairing code or the password. Times are epoch seconds. */
+export interface PairedDevice {
+  id: string;
+  name: string;
+  platform: string;
+  app_version: string;
+  created_at: number;
+  last_seen_at: number;
+  via?: 'pairing' | 'password';
+  /** The web page that paired it from another origin. */
+  origin?: string;
+  last_ip?: string;
+  online?: boolean;
+}
+
+/** The server as a device. */
+export interface DeviceInstance {
+  id: string;
+  name: string;
+  version: string;
+}
+
+/** `GET /api/devices`. */
+export interface DeviceList {
+  devices: PairedDevice[];
+  /** This app's own entry; empty when signed in some other way. */
+  current: string;
+  instance: DeviceInstance;
+  password_set: boolean;
+  /** False when the hosting platform manages access; `manage_url` then leads there. */
+  pairing_available: boolean;
+  manage_url: string;
+}
+
+/** `POST /api/pairing`: a code another device can redeem for its own token. */
+export interface PairingCode {
+  pairing_id: string;
+  code: string;
+  expires_in: number;
+  urls: string[];
+  link: string;
+  qr_image?: string;
+  password_set: boolean;
+  instance: DeviceInstance;
+}

@@ -52,7 +52,7 @@ export function isPublicCleartext(raw: string): boolean {
 }
 
 export interface RequestOptions {
-  method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   body?: unknown;
   timeoutMs?: number;
   /** Skip the Authorization header, e.g. for probing an unknown address. */

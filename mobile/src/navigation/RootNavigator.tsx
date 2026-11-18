@@ -14,6 +14,7 @@ import {CapabilityScreen} from '../screens/CapabilityScreen';
 import {ChannelScreen} from '../screens/ChannelScreen';
 import {ChannelsScreen} from '../screens/ChannelsScreen';
 import {ChatScreen} from '../screens/ChatScreen';
+import {DevicesScreen} from '../screens/DevicesScreen';
 import {ExternalApiScreen} from '../screens/ExternalApiScreen';
 import {FilePreviewScreen} from '../screens/FilePreviewScreen';
 import {GuestShareEditScreen} from '../screens/GuestShareEditScreen';
@@ -126,6 +127,7 @@ export function RootNavigator() {
           <Stack.Screen name="Runtime" component={RuntimeScreen} />
           <Stack.Screen name="ExternalApi" component={ExternalApiScreen} />
           <Stack.Screen name="Access" component={AccessScreen} />
+          <Stack.Screen name="Devices" component={DevicesScreen} />
           <Stack.Screen name="GuestShares" component={GuestSharesScreen} />
           <Stack.Screen name="GuestShareEdit" component={GuestShareEditScreen} />
           <Stack.Screen name="McpDetail" component={McpDetailScreen} />

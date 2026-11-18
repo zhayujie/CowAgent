@@ -152,7 +152,7 @@ export function ExternalApiScreen({navigation}: Props) {
               title={base}
               mono
               chevron={false}
-              right={
+              action={
                 <Pressable accessibilityRole="button" hitSlop={8} onPress={() => copy(base, tr('extapi_base_url'))}>
                   <Text style={styles.link}>{tr('common_copy')}</Text>
                 </Pressable>
@@ -167,7 +167,7 @@ export function ExternalApiScreen({navigation}: Props) {
               mono
               onPress={() => setRevealed(v => !v)}
               chevron={false}
-              right={
+              action={
                 <Pressable accessibilityRole="button" hitSlop={8} onPress={() => copy(key, 'API Key')}>
                   <Text style={styles.link}>{tr('common_copy')}</Text>
                 </Pressable>

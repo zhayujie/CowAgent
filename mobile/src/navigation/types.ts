@@ -40,6 +40,7 @@ export type RootStackParamList = {
   Runtime: undefined;
   ExternalApi: undefined;
   Access: undefined;
+  Devices: undefined;
   GuestShares: undefined;
   /** No `slug` creates a page; `focus` jumps to the password field. */
   GuestShareEdit: {slug?: string; focus?: 'password'};
