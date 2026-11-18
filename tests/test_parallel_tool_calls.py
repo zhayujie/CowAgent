@@ -95,8 +95,8 @@ def test_ordinary_tools_keep_running_in_order():
 
 
 def test_a_mixed_turn_still_runs_its_parallel_calls_together():
-    """An ordinary call in the same turn must not serialise the parallel ones;
-    it is left to the loop, which runs it in order."""
+    """An ordinary call after the parallel ones must not serialise them; it
+    is left to the loop, which runs it once they are done."""
     parallel_tool = _SlowParallelTool()
     ordinary_tool = _SlowTool()
     executor = _executor(parallel_tool)
@@ -346,18 +346,18 @@ def test_cancel_keeps_completed_prefetched_result() -> None:
 
 
 def _mixed_calls() -> list[dict[str, Any]]:
-    """Two parallel calls with an ordinary call between them."""
+    """Two parallel calls followed by an ordinary call."""
     return [
         {"id": "call_0", "name": "slow_parallel", "arguments": {"tag": "t0"}},
-        {"id": "call_1", "name": "slow", "arguments": {"tag": "t1"}},
-        {"id": "call_2", "name": "slow_parallel", "arguments": {"tag": "t2"}},
+        {"id": "call_1", "name": "slow_parallel", "arguments": {"tag": "t1"}},
+        {"id": "call_2", "name": "slow", "arguments": {"tag": "t2"}},
     ]
 
 
 def _prefetched_results() -> dict[str, dict[str, Any]]:
     return {
         call_id: {"status": "success", "result": f"done {call_id}", "execution_time": 0.01}
-        for call_id in ("call_0", "call_2")
+        for call_id in ("call_0", "call_1")
     }
 
 
@@ -426,10 +426,10 @@ def test_steer_in_a_mixed_turn_skips_only_the_call_that_never_ran() -> None:
     assert executor.run_stream("start") == "redirected answer"
     blocks = _tool_result_blocks(executor)
     assert blocks["call_0"]["content"] == "done call_0"
-    assert blocks["call_2"]["content"] == "done call_2"
-    assert not blocks["call_0"].get("is_error") and not blocks["call_2"].get("is_error")
-    assert blocks["call_1"]["is_error"] is True
-    assert blocks["call_1"]["content"].startswith("Skipped")
+    assert blocks["call_1"]["content"] == "done call_1"
+    assert not blocks["call_0"].get("is_error") and not blocks["call_1"].get("is_error")
+    assert blocks["call_2"]["is_error"] is True
+    assert blocks["call_2"]["content"].startswith("Skipped")
 
 
 def test_cancel_in_a_mixed_turn_keeps_the_calls_that_already_ran() -> None:
@@ -445,6 +445,6 @@ def test_cancel_in_a_mixed_turn_keeps_the_calls_that_already_ran() -> None:
     executor.run_stream("start")
     blocks = _tool_result_blocks(executor)
     assert blocks["call_0"]["content"] == "done call_0"
-    assert blocks["call_2"]["content"] == "done call_2"
-    assert blocks["call_1"]["is_error"] is True
-    assert "interrupted" in blocks["call_1"]["content"]
+    assert blocks["call_1"]["content"] == "done call_1"
+    assert blocks["call_2"]["is_error"] is True
+    assert "interrupted" in blocks["call_2"]["content"]
