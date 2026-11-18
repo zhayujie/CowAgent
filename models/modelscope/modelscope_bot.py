@@ -473,6 +473,16 @@ class ModelScopeBot(Bot):
             # No drawing intent, proceed with normal tool call flow
             session_id = kwargs.get('session_id', 'default_session')
             session = self.sessions.session_query("", session_id)
+
+            # The agent passes its system prompt as `system=`; put it in the
+            # message list instead of sending it as an unknown request field.
+            system_prompt = kwargs.pop("system", None)
+            messages = list(messages)
+            if system_prompt:
+                if not messages or messages[0].get("role") != "system":
+                    messages.insert(0, {"role": "system", "content": system_prompt})
+                else:
+                    messages[0] = {"role": "system", "content": system_prompt}
             session.messages = messages
             
             args = self.args.copy()
