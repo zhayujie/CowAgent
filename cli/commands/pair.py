@@ -19,7 +19,7 @@ from urllib.parse import urlsplit
 
 import click
 
-from cli.utils import get_cli_language, get_data_root
+from cli.utils import get_cli_language, get_device_dir
 
 POLL_SECONDS = 2
 
@@ -31,7 +31,7 @@ class _Unreachable(Exception):
 def _read_runtime() -> Optional[dict]:
     from cli.commands.process import _is_pid_alive
 
-    path = os.path.join(get_data_root(), "console.json")
+    path = os.path.join(get_device_dir(), "console.json")
     try:
         with open(path, encoding="utf-8") as f:
             info = json.load(f)

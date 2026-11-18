@@ -22,7 +22,7 @@ def core(tmp_path, monkeypatch):
     from channel.web.core import _common
 
     password = {"value": PASSWORD}
-    monkeypatch.setattr(_common, "get_data_root", lambda: str(tmp_path))
+    monkeypatch.setattr(_common, "get_device_dir", lambda: str(tmp_path))
     monkeypatch.setattr(_common, "_SECRETS", {})
     monkeypatch.setattr(_common, "_get_web_password", lambda: password["value"])
     monkeypatch.setattr(_common, "_session_expire_seconds", lambda: 86400)
@@ -55,11 +55,11 @@ def test_secret_survives_a_restart(core):
 def test_a_new_secret_signs_sessions_out(core, tmp_path):
     token = core._create_auth_token()
     core._SECRETS.clear()
-    os.remove(tmp_path / ".auth_secret")
+    os.remove(tmp_path / "auth_secret")
     assert core._verify_auth_token(token) is False
 
 
 def test_secret_file_is_private(core, tmp_path):
     core._create_auth_token()
-    mode = stat.S_IMODE(os.stat(tmp_path / ".auth_secret").st_mode)
+    mode = stat.S_IMODE(os.stat(tmp_path / "auth_secret").st_mode)
     assert mode == 0o600

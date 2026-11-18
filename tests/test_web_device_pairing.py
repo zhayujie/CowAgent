@@ -115,8 +115,32 @@ def test_the_device_id_survives_a_restart(env):
     identity.reset()
     _, again = _call(_app(), "/.well-known/cowagent")
     assert first["id"] == again["id"]
-    with open(env / ".device_id", encoding="utf-8") as f:
+    with open(env / "device" / "device_id", encoding="utf-8") as f:
         assert f.read().strip() == first["id"]
+
+
+def test_a_source_deployment_keeps_device_state_out_of_the_project(tmp_path, monkeypatch):
+    monkeypatch.delenv("COW_DATA_DIR", raising=False)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    path = config.get_device_dir()
+    assert path == os.path.join(str(tmp_path), ".cow", "device")
+    assert stat.S_IMODE(os.stat(path).st_mode) == 0o700
+    assert not path.startswith(config.get_root())
+
+
+def test_the_agent_file_tools_refuse_the_device_directory(env):
+    from agent.tools.edit.edit import Edit
+    from agent.tools.read.read import Read
+    from agent.tools.write.write import Write
+    from channel.web.core import devices
+
+    devices.add("Phone", "ios")
+    listed = os.path.join(str(env), "device", "devices.json")
+    assert Read().execute({"path": listed}).status == "error"
+    assert Write().execute({"path": listed, "content": "{}"}).status == "error"
+    assert Edit().execute({"path": listed, "oldText": "Phone", "newText": "Mine"}).status == "error"
+    assert Write().execute({"path": os.path.join(str(env), "device", "auth_secret"), "content": "x"}).status == "error"
+    assert "Phone" in open(listed, encoding="utf-8").read()
 
 
 def test_a_platform_can_supply_the_id_and_name(env, monkeypatch):
@@ -337,7 +361,7 @@ def test_wrong_codes_lock_the_client_out(env):
 def test_store_keeps_hashes_only_and_is_private(env):
     app = _app()
     _, paired = _pair(app, _owner_token(app))
-    path = os.path.join(str(env), "devices.json")
+    path = os.path.join(str(env), "device", "devices.json")
     raw = open(path, encoding="utf-8").read()
     secret = paired["token"].rsplit(".", 1)[1]
     assert secret not in raw and "sha256:" in raw
@@ -510,7 +534,7 @@ def test_last_use_is_written_sparingly(env, monkeypatch):
     from channel.web.core import devices
 
     device, token = devices.add("Phone", "ios")
-    path = os.path.join(str(env), "devices.json")
+    path = os.path.join(str(env), "device", "devices.json")
     before = os.stat(path).st_mtime_ns
     writes = []
     monkeypatch.setattr(devices, "_save", lambda doc: writes.append(doc))

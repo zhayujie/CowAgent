@@ -4,9 +4,9 @@ A device token is ``cowd.<id>.<secret>``. Only a hash of the secret is kept,
 so the file gives away nothing usable, and removing a device stops its token
 at once without signing anyone else out. Both ways in end here: redeeming a
 pairing code and signing in with the password, so the list is the full answer
-to "who can drive this machine". The list lives in the data root beside the
-session secret rather than in the workspace, which the agent itself reads and
-writes.
+to "who can drive this machine". The list lives in the device directory beside
+the session secret, which the agent's file tools refuse to read or write: a
+line added here would be a way in.
 
 A device paired from a web page on another origin remembers that origin: the
 page may then call this server across origins, and only with that device's
@@ -24,7 +24,7 @@ from urllib.parse import urlsplit
 
 from common.log import logger
 from common.utils import constant_time_equals
-from config import conf, get_data_root
+from config import conf, get_device_dir
 
 TOKEN_PREFIX = "cowd."
 MAX_DEVICES = 50
@@ -45,7 +45,7 @@ _active: dict = {}
 
 
 def _path() -> str:
-    return os.path.join(get_data_root(), "devices.json")
+    return os.path.join(get_device_dir(), "devices.json")
 
 
 def _hash(secret: str) -> str:
