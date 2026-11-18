@@ -81,15 +81,39 @@ def _reply_texts(content: str, steps: List[Dict[str, Any]]) -> List[str]:
     return [content] + [s.get("content") or "" for s in steps if s.get("type") == "content"]
 
 
+# Sweep the per-IP buckets once the dict grows past this size: the rebuild
+# keeps only buckets with a live hit, bounding memory to the distinct clients
+# seen within a window instead of every client the process has ever seen.
+_IP_HITS_SWEEP_THRESHOLD = 1024
+
+
 class GuestPages:
     def __init__(self):
         self._lock = threading.Lock()
         self._runs: Dict[str, GuestRun] = {}
         self._ip_hits: Dict[str, Deque[float]] = {}
 
+    def _sweep_expired(self, now: float, window: float) -> None:
+        """Drop buckets with no hit inside *window* (caller holds the lock).
+
+        Keys are client IPs — and behind a reverse proxy _client_ip() trusts
+        X-Forwarded-For — so the key space is attacker-chosen. Expired hits
+        were only popped when the same key came back, so one-shot keys stayed
+        pinned for the process lifetime. All allow_ip callers share the 60s
+        default window, so sweeping with the caller's window drops nothing
+        that is still live.
+        """
+        if len(self._ip_hits) < _IP_HITS_SWEEP_THRESHOLD:
+            return
+        self._ip_hits = {
+            ip: hits for ip, hits in self._ip_hits.items()
+            if hits and now - hits[-1] <= window
+        }
+
     def allow_ip(self, ip: str, limit: int, window: float = 60.0) -> bool:
         now = time.time()
         with self._lock:
+            self._sweep_expired(now, window)
             hits = self._ip_hits.setdefault(ip, deque())
             while hits and now - hits[0] > window:
                 hits.popleft()

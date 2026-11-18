@@ -20,6 +20,13 @@ MAX_FAILURES_PER_PROFILE = 30
 PROFILE_WINDOW_SECONDS = 3600
 PROFILE_LOCK_SECONDS = 900
 
+# Rebuild the per-client dicts once they grow past this size, keeping only
+# live buckets. The password endpoints are unauthenticated and the keys carry
+# client ids an attacker forges, so without a sweep every distinct attacker
+# key pins a bucket (or an expired lock entry) for the process lifetime.
+# _profile stays unswept: it is keyed by profile slug, a small fixed set.
+_CLIENT_SWEEP_THRESHOLD = 1024
+
 
 class LoginLimiter:
     def __init__(self, per_profile: bool = True):
@@ -37,9 +44,23 @@ class LoginLimiter:
             until = max(self._client_locked.get((slug, client), 0), self._profile_locked.get(slug, 0))
         return max(0, int(until - now + 0.999))
 
+    def _sweep_expired(self, now: float) -> None:
+        """Drop stale per-client state (caller holds the lock)."""
+        if len(self._client) < _CLIENT_SWEEP_THRESHOLD:
+            return
+        self._client = {
+            key: hits for key, hits in self._client.items()
+            if hits and now - hits[-1] <= CLIENT_LOCK_SECONDS
+        }
+        self._client_locked = {
+            key: until for key, until in self._client_locked.items()
+            if until > now
+        }
+
     def failed(self, slug: str, client: str, now: float = None) -> None:
         now = now or time.time()
         with self._lock:
+            self._sweep_expired(now)
             key = (slug, client)
             hits = self._client.setdefault(key, deque())
             while hits and now - hits[0] > CLIENT_LOCK_SECONDS:
