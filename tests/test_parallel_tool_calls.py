@@ -123,6 +123,29 @@ def test_a_lone_call_is_left_to_the_caller():
     assert tool.instances == []
 
 
+def test_parallel_calls_do_not_cross_an_ordinary_call():
+    tool = _SlowParallelTool()
+    executor = _executor(tool)
+    executor.tools["slow"] = _SlowTool()
+    calls = _calls(tool.name, 4)
+    calls.insert(2, {"id": "barrier", "name": "slow", "arguments": {"tag": "barrier"}})
+
+    results = executor._run_parallel_calls(calls)
+
+    assert set(results) == {"call_0", "call_1"}
+    assert len(tool.instances) == 2
+
+
+def test_an_ordinary_first_call_prevents_prefetch():
+    tool = _SlowParallelTool()
+    executor = _executor(tool)
+    executor.tools["slow"] = _SlowTool()
+    calls = [{"id": "write", "name": "slow", "arguments": {"tag": "write"}}] + _calls(tool.name, 2)
+
+    assert executor._run_parallel_calls(calls) == {}
+    assert tool.instances == []
+
+
 def test_a_failing_call_does_not_take_its_siblings_down():
     class _Flaky(_SlowParallelTool):
         def execute(self, params):
@@ -345,6 +368,50 @@ def _tool_result_blocks(executor: AgentStreamExecutor) -> dict[str, dict[str, An
         for block in (message.get("content") or [])
         if isinstance(block, dict) and block.get("type") == "tool_result"
     }
+
+
+def test_parallel_readers_see_the_preceding_write(tmp_path):
+    path = tmp_path / "report.txt"
+    path.write_text("old content", encoding="utf-8")
+    rendezvous = threading.Barrier(2, timeout=3)
+    executed = []
+
+    class Writer(BaseTool):
+        name = "write_report"
+        params = {"type": "object", "properties": {}}
+
+        def execute(self, params):
+            path.write_text("new content", encoding="utf-8")
+            executed.append("write")
+            return ToolResult.success("written")
+
+    class Reader(BaseTool):
+        name = "review_report"
+        parallel_safe = True
+        params = {"type": "object", "properties": {}}
+
+        def execute(self, params):
+            rendezvous.wait()
+            executed.append("read")
+            return ToolResult.success(path.read_text(encoding="utf-8"))
+
+    class OrderedExecutor(_PrefetchedExecutor):
+        _run_parallel_calls = AgentStreamExecutor._run_parallel_calls
+
+    calls = [
+        {"id": "write", "name": "write_report", "arguments": {}},
+        {"id": "read_1", "name": "review_report", "arguments": {}},
+        {"id": "read_2", "name": "review_report", "arguments": {}},
+    ]
+    executor = OrderedExecutor([("", calls), ("done", [])], SteerInbox(), {})
+    executor.tools = {tool.name: tool for tool in (Writer(), Reader())}
+
+    assert executor.run_stream("update and review") == "done"
+
+    blocks = _tool_result_blocks(executor)
+    assert executed == ["write", "read", "read"]
+    assert blocks["read_1"]["content"] == "new content"
+    assert blocks["read_2"]["content"] == "new content"
 
 
 def test_steer_in_a_mixed_turn_skips_only_the_call_that_never_ran() -> None:
