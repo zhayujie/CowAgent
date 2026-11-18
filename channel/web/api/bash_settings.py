@@ -21,13 +21,18 @@ def _shell_status():
 def _settings_payload():
     tools = conf().get("tools") or {}
     shell = (tools.get("bash") or {}).get("windows_shell", "cmd")
-    status = _shell_status()
+    is_windows = sys.platform == "win32"
+    pwsh = (
+        _shell_status()["pwsh"]
+        if is_windows
+        else {"available": False, "path": None, "version": None}
+    )
     return {
         "status": "success",
-        "platform": "windows" if sys.platform == "win32" else sys.platform,
+        "platform": "windows" if is_windows else sys.platform,
         "windows_shell": shell,
-        "effective_shell": shell if sys.platform == "win32" else "sh",
-        "pwsh": status["pwsh"],
+        "effective_shell": shell if is_windows else "sh",
+        "pwsh": pwsh,
         "scope": "instance",
     }
 

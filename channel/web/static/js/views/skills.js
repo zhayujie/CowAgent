@@ -164,7 +164,9 @@ async function loadBashEnvironment() {
         const data = await response.json();
         if (!response.ok || data.status !== 'success') throw new Error(data.message || t('tools_load_failed'));
         bashSettingsState = data;
-        if (label) label.textContent = `${t('bash_settings_environment')}: ${data.effective_shell}`;
+        const footer = label && label.closest('.flex.items-center.justify-between');
+        if (footer) footer.hidden = data.platform !== 'windows';
+        if (label && data.platform === 'windows') label.textContent = `${t('bash_settings_environment')}: ${data.effective_shell}`;
         const button = document.getElementById('bash-open-settings');
         if (button) button.hidden = data.platform !== 'windows';
         return data;

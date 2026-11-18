@@ -58,8 +58,11 @@ def test_missing_pwsh_rejected_but_cmd_can_be_restored(settings, monkeypatch):
 
 def test_non_windows_host_rejects_windows_selection(settings, monkeypatch):
     monkeypatch.setattr(api.sys, "platform", "linux")
+    monkeypatch.setattr(api, "_shell_status", lambda: pytest.fail("must not probe pwsh"))
     assert post(monkeypatch, {"windows_shell": "pwsh"})["code"] == "unsupported_platform"
-    assert json.loads(api.BashSettingsHandler().GET())["effective_shell"] == "sh"
+    payload = json.loads(api.BashSettingsHandler().GET())
+    assert payload["effective_shell"] == "sh"
+    assert payload["pwsh"]["available"] is False
 
 
 def test_failed_disk_write_leaves_live_configuration_untouched(settings, monkeypatch):
