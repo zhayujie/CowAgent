@@ -1,14 +1,9 @@
 # encoding:utf-8
-"""The #installp repo URL must not escape the plugins directory.
+"""#installp must clone inside ./plugins and only run pip when needed.
 
-The repo-name regex group flows straight into os.path.join("./plugins", ...).
-A crafted URL can carry a slash in that segment: an absolute form
-(https://github.com/o//tmp/pwn.git — join then drops the ./plugins prefix)
-or a traversal form (https://github.com/a/../../pwn.git) cloned anywhere on
-disk the process can write. The clone is followed by a pip install of the
-cloned requirements, so a bad directory also means running attacker-chosen
-code. These tests pin the plain-name requirement and that pip only runs for
-repos that actually ship a requirements.txt.
+The clone directory comes from the repo URL, and the clone is followed by a
+pip install of its requirements, so a crafted URL must not choose a directory
+outside ./plugins. pip only runs when the repo ships a requirements.txt.
 """
 import os
 import sys
@@ -26,93 +21,74 @@ from plugins.plugin_manager import PluginManager
 _PluginManager = PluginManager.__wrapped__
 
 
-class _FakePorcelain(types.SimpleNamespace):
+def _fake_dulwich(clone=None, pull=None):
     """Stand-in for dulwich.porcelain; dulwich itself need not be installed."""
+    porcelain = types.SimpleNamespace(clone=clone or (lambda *a, **k: None),
+                                      pull=pull or (lambda *a, **k: None))
+    module = types.ModuleType("dulwich")
+    module.porcelain = porcelain
+    return patch.dict(sys.modules, {"dulwich": module, "dulwich.porcelain": porcelain})
 
-    def __init__(self, clone=None, pull=None):
-        super().__init__(clone=clone or (lambda *a, **k: None),
-                         pull=pull or (lambda *a, **k: None))
 
-
-class TestInstallPluginTraversal(unittest.TestCase):
+class TestInstallPluginDirectory(unittest.TestCase):
 
     def setUp(self):
         self.pm = object.__new__(_PluginManager)
-        self.calls = []
-        fake = _FakePorcelain(clone=lambda repo, dirname, **k: self.calls.append(dirname))
-        pkg_calls = []
-        self.pkg_calls = pkg_calls
-        module = types.ModuleType("dulwich")
-        module.porcelain = fake
-        import builtins
-        real_import = builtins.__import__
+        self.clones = []
+        self.pip_calls = []
+        for p in (
+            _fake_dulwich(clone=lambda repo, dirname, **k: self.clones.append(dirname)),
+            patch.object(pkgmgr, "check_dulwich", lambda: None),
+            patch.object(pkgmgr, "install_requirements", lambda path: self.pip_calls.append(path) or 0),
+        ):
+            p.start()
+            self.addCleanup(p.stop)
 
-        def _import(name, *args, **kwargs):
-            if name == "dulwich":
-                return module
-            if name == "dulwich.porcelain":
-                return fake
-            return real_import(name, *args, **kwargs)
-
-        enter = patch("builtins.__import__", side_effect=_import)
-        enter_pip = patch.object(pkgmgr, "check_dulwich", lambda: None)
-        enter_req = patch.object(pkgmgr, "install_requirements",
-                                 lambda path: pkg_calls.append(path) or 0)
-        enter.start()
-        enter_pip.start()
-        enter_req.start()
-        self.addCleanup(lambda: (enter.stop(), enter_pip.stop(), enter_req.stop()))
-
-    def test_traversal_url_is_rejected_without_cloning(self):
-        ok, msg = self.pm.install_plugin("https://github.com/a/../../pwn.git")
-        self.assertFalse(ok)
-        self.assertIn("不合法", msg)
-        self.assertEqual(self.calls, [], "clone ran for a traversal URL")
-
-    def test_absolute_path_url_is_rejected_without_cloning(self):
-        ok, msg = self.pm.install_plugin("https://github.com/o//tmp/pwn.git")
-        self.assertFalse(ok)
-        self.assertEqual(self.calls, [], "clone ran for an absolute-path URL")
-
-    def test_dot_names_are_rejected(self):
-        ok, _ = self.pm.install_plugin("https://github.com/a/...git"
-                                       .replace("...git", "..git"))
-        self.assertFalse(ok)
-
-    def test_a_normal_repo_clones_inside_plugins(self):
+    def _install(self, url):
         with tempfile.TemporaryDirectory() as tmp:
             cwd = os.getcwd()
             os.chdir(tmp)
             try:
                 os.makedirs("plugins", exist_ok=True)
-                ok, _ = self.pm.install_plugin("https://github.com/someone/nice-plugin.git")
+                return self.pm.install_plugin(url)
             finally:
                 os.chdir(cwd)
+
+    def test_a_traversal_url_clones_inside_plugins(self):
+        ok, _ = self._install("https://github.com/a/../../pwn.git")
         self.assertTrue(ok)
-        self.assertEqual(self.calls, [os.path.join("./plugins", "nice-plugin")])
-        # No requirements.txt was shipped: pip must not have run at all.
-        self.assertEqual(self.pkg_calls, [])
+        self.assertEqual(self.clones, [os.path.join("./plugins", "pwn")])
+
+    def test_an_absolute_path_url_clones_inside_plugins(self):
+        ok, _ = self._install("https://github.com/o//tmp/pwn.git")
+        self.assertTrue(ok)
+        self.assertEqual(self.clones, [os.path.join("./plugins", "pwn")])
+
+    def test_a_subgroup_url_uses_the_repo_name(self):
+        ok, _ = self._install("https://gitlab.com/group/sub/my-plugin.git")
+        self.assertTrue(ok)
+        self.assertEqual(self.clones, [os.path.join("./plugins", "my-plugin")])
+
+    def test_dot_names_are_rejected(self):
+        ok, msg = self._install("https://github.com/a/...git")
+        self.assertFalse(ok)
+        self.assertIn("不合法", msg)
+        self.assertEqual(self.clones, [])
+
+    def test_a_normal_repo_skips_pip_without_requirements(self):
+        ok, _ = self._install("https://github.com/someone/nice-plugin.git")
+        self.assertTrue(ok)
+        self.assertEqual(self.clones, [os.path.join("./plugins", "nice-plugin")])
+        self.assertEqual(self.pip_calls, [])
 
 
-class TestInstallRequirementsOnlyWhenPresent(unittest.TestCase):
+class TestUpdatePluginRequirements(unittest.TestCase):
 
     def setUp(self):
         self.pm = object.__new__(_PluginManager)
-        self.pkg_calls = []
-        self.pull_calls = []
+        self.pip_calls = []
 
-    def _update_plugin(self, with_requirements):
-        fake = _FakePorcelain(pull=lambda dirname, *a, **k: self.pull_calls.append(dirname))
-        module = types.ModuleType("dulwich")
-        module.porcelain = fake
-        import builtins
-        real_import = builtins.__import__
-
-        def _import(name, *args, **kwargs):
-            if name.startswith("dulwich"):
-                return module
-            return real_import(name, *args, **kwargs)
-
+    def _update_plugin(self, with_requirements, pip_status=0):
         with tempfile.TemporaryDirectory() as tmp:
             plugin_dir = os.path.join(tmp, "MYPLUGIN")
             os.makedirs(plugin_dir)
@@ -120,22 +96,27 @@ class TestInstallRequirementsOnlyWhenPresent(unittest.TestCase):
                 with open(os.path.join(plugin_dir, "requirements.txt"), "w") as f:
                     f.write("click\n")
             self.pm.plugins = {"MYPLUGIN": types.SimpleNamespace(path=plugin_dir)}
-            with patch("builtins.__import__", side_effect=_import), \
+            with _fake_dulwich(), \
                     patch.object(pkgmgr, "check_dulwich", lambda: None), \
                     patch.object(pkgmgr, "install_requirements",
-                                 lambda path: self.pkg_calls.append(path) or 0):
+                                 lambda path: self.pip_calls.append(path) or pip_status):
                 return self.pm.update_plugin("MYPLUGIN")
 
     def test_update_skips_pip_when_no_requirements(self):
         ok, _ = self._update_plugin(with_requirements=False)
         self.assertTrue(ok)
-        self.assertEqual(self.pkg_calls, [])
+        self.assertEqual(self.pip_calls, [])
 
     def test_update_installs_requirements_when_present(self):
         ok, _ = self._update_plugin(with_requirements=True)
         self.assertTrue(ok)
-        self.assertEqual(len(self.pkg_calls), 1)
-        self.assertTrue(self.pkg_calls[0].endswith("requirements.txt"))
+        self.assertEqual(len(self.pip_calls), 1)
+        self.assertTrue(self.pip_calls[0].endswith("requirements.txt"))
+
+    def test_a_failed_pip_install_is_reported(self):
+        ok, msg = self._update_plugin(with_requirements=True, pip_status=1)
+        self.assertFalse(ok)
+        self.assertIn("依赖安装失败", msg)
 
 
 if __name__ == "__main__":

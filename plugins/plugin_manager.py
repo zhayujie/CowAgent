@@ -393,22 +393,14 @@ class PluginManager:
             except Exception as e:
                 logger.error("Failed to install plugin, {}".format(e))
                 return False, "安装插件失败，请检查仓库地址是否正确"
-        # The repo-name segment reaches os.path.join as a directory name.
-        # Reject anything that is not a plain name: a crafted URL like
-        # https://github.com/o//tmp/pwn.git (absolute path, join drops the
-        # prefix) or https://github.com/a/../../pwn.git (traversal) would
-        # otherwise clone outside ./plugins — and the clone is followed by a
-        # pip install of whatever it contains.
-        repo_name = match.group(4)
-        if repo_name != os.path.basename(repo_name) or repo_name in (".", "..") \
-                or not re.match(r"^[A-Za-z0-9_.-]+$", repo_name):
+        # Only the last path segment names the clone directory, so subgroup
+        # URLs still work and nothing can point it outside ./plugins.
+        repo_name = match.group(4).rsplit("/", 1)[-1]
+        if repo_name in (".", "..") or not re.match(r"^[A-Za-z0-9_.-]+$", repo_name):
             return False, "安装插件失败，仓库地址不合法"
         dirname = os.path.join("./plugins", repo_name)
         try:
             repo = porcelain.clone(repo, dirname, checkout=True)
-            # Only install what the repo actually ships: calling pip on a
-            # missing requirements path just spews errors (and some pip
-            # versions raise SystemExit, which is not caught above).
             requirements_path = os.path.join(dirname, "requirements.txt")
             if os.path.exists(requirements_path):
                 logger.info("detect requirements.txt，installing...")
@@ -446,8 +438,6 @@ class PluginManager:
         dirname = self.plugins[name].path
         try:
             porcelain.pull(dirname, "origin")
-            # Same shape as install_plugin: pip only when the file exists,
-            # and a failed install must not report success.
             requirements_path = os.path.join(dirname, "requirements.txt")
             if os.path.exists(requirements_path):
                 logger.info("detect requirements.txt，installing...")
