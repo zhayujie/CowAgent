@@ -22,7 +22,8 @@ PROFILE_LOCK_SECONDS = 900
 
 
 class LoginLimiter:
-    def __init__(self):
+    def __init__(self, per_profile: bool = True):
+        self._per_profile = per_profile
         self._lock = threading.Lock()
         self._client: Dict[Tuple[str, str], Deque[float]] = {}
         self._client_locked: Dict[Tuple[str, str], float] = {}
@@ -47,6 +48,8 @@ class LoginLimiter:
             if len(hits) >= MAX_FAILURES_PER_CLIENT:
                 self._client_locked[key] = now + CLIENT_LOCK_SECONDS
                 hits.clear()
+            if not self._per_profile:
+                return
             profile_hits = self._profile.setdefault(slug, deque())
             while profile_hits and now - profile_hits[0] > PROFILE_WINDOW_SECONDS:
                 profile_hits.popleft()
