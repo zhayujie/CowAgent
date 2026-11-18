@@ -1256,7 +1256,7 @@ class AgentStreamExecutor:
                     # so they keep their real result even after the stop.
                     halted_by = None
                     steering_updates = []
-                    for tool_call in tool_calls:
+                    for call_index, tool_call in enumerate(tool_calls):
                         if tool_call["id"] not in already_run:
                             if halted_by is None:
                                 try:
@@ -1271,6 +1271,11 @@ class AgentStreamExecutor:
                                 tool_result_blocks.append(
                                     self._unrun_tool_result(tool_call, halted_by))
                                 continue
+                            # Ordinary calls are ordering barriers. Only start
+                            # the next parallel batch after preceding calls and
+                            # the cancel/steer checkpoint have completed.
+                            if call_index:
+                                already_run.update(self._run_parallel_calls(tool_calls[call_index:]))
                         if tool_call["id"] in already_run:
                             result = already_run[tool_call["id"]]
                         else:
@@ -2335,7 +2340,7 @@ class AgentStreamExecutor:
         return list(required) if isinstance(required, list) else []
 
     def _run_parallel_calls(self, tool_calls: List[Dict]) -> Dict[str, Dict[str, Any]]:
-        """Start every parallel-safe call of this turn at once, keyed by call id.
+        """Start the leading parallel-safe batch, keyed by call id.
 
         Tools otherwise run strictly in the order the model asked for them.
         That is the right default, but a model that splits independent work
@@ -2343,6 +2348,7 @@ class AgentStreamExecutor:
         the second wait out the first. For a tool that declares itself
         parallel_safe the wait buys nothing, so those calls are run together
         here and the loop below picks up the finished results in place.
+        An ordinary call ends the batch: later calls must not run before it.
 
         Each call gets its own copy of the tool: the loop drives tools by
         assigning `cancel_event` and `progress_callback` before a call and
@@ -2352,10 +2358,11 @@ class AgentStreamExecutor:
         The wait polls `cancel_event`, so a cancel returns control without
         waiting for the slowest call; each tool keeps its own timeout.
         """
-        eligible = [
-            call for call in tool_calls
-            if getattr(self.tools.get(call["name"]), "parallel_safe", False)
-        ]
+        eligible = []
+        for call in tool_calls:
+            if not getattr(self.tools.get(call["name"]), "parallel_safe", False):
+                break
+            eligible.append(call)
         if len(eligible) < 2:
             return {}
 
