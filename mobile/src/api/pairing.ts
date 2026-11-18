@@ -15,14 +15,44 @@ export interface PairResult {
   baseUrl: string;
   token: string;
   name: string;
+  /** The id the device answers discovery with; its token goes nowhere else. */
+  instanceId: string;
 }
 
 /** Answer of `GET /.well-known/cowagent`. */
 export interface Discovery {
   type: string;
   protocol: number;
+  id?: string;
   version?: string;
   auth?: {required: boolean; methods: string[]};
+}
+
+/**
+ * Why an address isn't a CowAgent this app can pair with, as `body.reason`
+ * of the ApiError thrown: unreachable / timeout / login (a sign-in gateway in
+ * front) / outdated (CowAgent from before pairing) / not_cowagent /
+ * pairing_unavailable (access managed by the platform running it).
+ */
+export type DiscoverFailure = 'unreachable' | 'timeout' | 'login' | 'outdated' | 'not_cowagent' | 'pairing_unavailable';
+
+function failure(reason: DiscoverFailure, baseUrl: string, status?: number): ApiError {
+  const kind = reason === 'unreachable' ? 'network' : reason === 'timeout' ? 'timeout' : 'server';
+  return new ApiError(kind, reason, status, {reason, host: baseUrl.replace(/^https?:\/\//, '')});
+}
+
+// When several addresses fail, report the one that says the most.
+const FAILURE_RANK: DiscoverFailure[] = ['pairing_unavailable', 'not_cowagent', 'outdated', 'login', 'timeout', 'unreachable'];
+
+function rank(e: unknown): number {
+  const reason = e instanceof ApiError ? (e.body?.reason as DiscoverFailure) : undefined;
+  const i = reason ? FAILURE_RANK.indexOf(reason) : -1;
+  return i < 0 ? FAILURE_RANK.length : i;
+}
+
+/** Whether discovery came from the device a token was issued by; pairings from before ids are trusted. */
+export function sameDevice(instanceId: string | undefined, info: Discovery | null): boolean {
+  return !instanceId || (!!info && info.id === instanceId);
 }
 
 export const DEVICE_TOKEN_PREFIX = 'cowd.';
@@ -96,15 +126,38 @@ export function deviceInfo(): {name: string; platform: string} {
   }
 }
 
-export async function discover(baseUrl: string): Promise<Discovery> {
+/** What answers at `baseUrl`, or an ApiError whose `body.reason` says why nothing usable does. */
+export async function discover(baseUrl: string, timeoutMs = DISCOVER_TIMEOUT_MS): Promise<Discovery> {
   const client = new HttpClient();
   client.setBaseUrl(baseUrl);
-  const info = await client.request<Discovery>('/.well-known/cowagent', {
-    anonymous: true,
-    timeoutMs: DISCOVER_TIMEOUT_MS,
-  });
+  let info: Discovery;
+  try {
+    info = await client.request<Discovery>('/.well-known/cowagent', {anonymous: true, timeoutMs});
+  } catch (e) {
+    if (!(e instanceof ApiError)) {
+      throw failure('unreachable', baseUrl);
+    }
+    if (e.kind === 'network') {
+      throw failure('unreachable', baseUrl);
+    }
+    if (e.kind === 'timeout') {
+      throw failure('timeout', baseUrl);
+    }
+    if (e.kind === 'unauthorized') {
+      throw failure('login', baseUrl, e.status);
+    }
+    if (e.status === 404) {
+      // A CowAgent from before pairing answers, just not at the discovery path.
+      const old = await client
+        .request<{auth_required?: boolean}>('/auth/check', {anonymous: true, timeoutMs})
+        .then(r => !!r && 'auth_required' in r)
+        .catch(() => false);
+      throw failure(old ? 'outdated' : 'not_cowagent', baseUrl, 404);
+    }
+    throw failure('not_cowagent', baseUrl, e.status);
+  }
   if (info?.type !== 'instance') {
-    throw new ApiError('invalid_response', 'Not a CowAgent server');
+    throw failure('not_cowagent', baseUrl, 200);
   }
   return info;
 }
@@ -117,30 +170,48 @@ export async function redeem(target: PairTarget): Promise<PairResult> {
   let lastError: unknown = new ApiError('network', 'No address to try');
   for (const raw of target.urls) {
     const baseUrl = normalizeBaseUrl(raw);
+    let info: Discovery;
     try {
-      await discover(baseUrl);
+      info = await discover(baseUrl);
     } catch (e) {
-      // A server from before pairing answers, just not at the discovery path.
-      const tooOld = e instanceof ApiError && e.status === 404;
-      lastError = tooOld ? new ApiError('server', 'Pairing unsupported', 404, {reason: 'pairing_unsupported'}) : e;
+      if (rank(e) < rank(lastError)) {
+        lastError = e;
+      }
       continue;
+    }
+    if (Array.isArray(info.auth?.methods) && !info.auth.methods.includes('pairing')) {
+      throw failure('pairing_unavailable', baseUrl);
     }
     const client = new HttpClient();
     client.setBaseUrl(baseUrl);
-    const res = await client.request<{token: string; instance?: {name?: string}}>('/auth/pair', {
+    const res = await client.request<{token: string; instance?: {id?: string; name?: string}}>('/auth/pair', {
       body: {code: target.code, device: deviceInfo()},
       anonymous: true,
     });
     if (!res.token) {
       throw new ApiError('invalid_response', 'The server returned no token');
     }
-    return {baseUrl, token: res.token, name: res.instance?.name || baseUrl.replace(/^https?:\/\//, '')};
+    return {
+      baseUrl,
+      token: res.token,
+      name: res.instance?.name || baseUrl.replace(/^https?:\/\//, ''),
+      instanceId: res.instance?.id || info.id || '',
+    };
   }
   throw lastError;
 }
 
-/** Tell a server this device is signing out, so a device token is revoked there. Best effort. */
-export async function revokeToken(baseUrl: string, token: string): Promise<void> {
+/**
+ * Tell a server this device is signing out, so a device token is revoked there.
+ * Best effort, and only once the address is confirmed to lead to `instanceId`.
+ */
+export async function revokeToken(baseUrl: string, token: string, instanceId?: string): Promise<void> {
+  if (instanceId) {
+    const info = await discover(baseUrl).catch(() => null);
+    if (!sameDevice(instanceId, info)) {
+      return;
+    }
+  }
   const client = new HttpClient();
   client.setBaseUrl(baseUrl);
   client.setToken(token);

@@ -1,9 +1,17 @@
 import {create} from 'zustand';
 import {checkAuth, login, probeServer, updateConfig} from '../api/cowApi';
 import {ApiError, http, normalizeBaseUrl} from '../api/http';
-import {isDeviceToken, redeem, revokeToken, type PairTarget} from '../api/pairing';
+import {
+  discover,
+  isDeviceToken,
+  redeem,
+  revokeToken,
+  sameDevice,
+  type DiscoverFailure,
+  type PairTarget,
+} from '../api/pairing';
 import {DEFAULT_SERVER_NAME, DEFAULT_SERVER_URL} from '../config/defaults';
-import {getLang, tr, trf, useLangStore} from '../i18n';
+import {getLang, tr, trf, useLangStore, type MessageKey} from '../i18n';
 import {LOCAL_SERVER_ID, startLocalKernel} from '../kernel/localKernel';
 import type {ServerEnvelope, ServerInfo} from '../protocol/envelope';
 import {realtime, type RealtimeStatus} from '../realtime/RealtimeClient';
@@ -20,6 +28,8 @@ export interface ServerProfile {
   local?: boolean;
   /** How this device signed in; profiles saved before pairing existed have none. */
   via?: 'pairing' | 'password';
+  /** The id the server answers discovery with; its token goes nowhere else. */
+  instanceId?: string;
 }
 
 interface PersistedServers {
@@ -33,6 +43,8 @@ interface ServerState {
   activeId: string | null;
   authed: boolean;
   realtimeStatus: RealtimeStatus;
+  /** Why the login screen took over from a signed-in server, shown there once. */
+  problem: string | null;
   hydrate: () => Promise<void>;
   connect: (rawUrl: string, password: string) => Promise<void>;
   /** Redeem a pairing code for a token of this device's own and switch to that server. */
@@ -125,17 +137,27 @@ export function describeConnectError(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
+const DISCOVER_FAILURES: Record<DiscoverFailure, MessageKey> = {
+  unreachable: 'connect_err_unreachable_host',
+  timeout: 'connect_err_timeout',
+  login: 'connect_err_login',
+  outdated: 'connect_err_outdated',
+  not_cowagent: 'connect_err_not_cowagent',
+  pairing_unavailable: 'connect_err_pairing_unavailable',
+};
+
 export function describePairError(e: unknown): string {
   if (e instanceof ApiError) {
-    const reason = e.body?.reason;
+    const reason = String(e.body?.reason ?? '');
     if (reason === 'invalid_code') {
       return tr('connect_err_invalid_code');
     }
     if (reason === 'locked') {
       return trf('connect_err_locked', {s: Number(e.body?.retry_after) || 60});
     }
-    if (reason === 'pairing_unsupported') {
-      return tr('connect_err_unsupported');
+    const key = DISCOVER_FAILURES[reason as DiscoverFailure];
+    if (key) {
+      return trf(key, {host: String(e.body?.host ?? ''), status: e.status ?? '?'});
     }
     if (e.kind === 'network' || e.kind === 'timeout') {
       return tr('connect_err_unreachable');
@@ -146,6 +168,66 @@ export function describePairError(e: unknown): string {
 
 async function persist(servers: ServerProfile[], activeId: string | null) {
   await writeJSON(SERVERS_KEY, {servers, activeId} satisfies PersistedServers);
+}
+
+/**
+ * Hold the token back unless the server's address still leads to the device
+ * that issued it. Pairings from before devices had ids take the first id seen.
+ */
+function guardIdentity(profile: ServerProfile, confirmed = false) {
+  if (profile.local) {
+    http.setIdentityCheck(null);
+    return;
+  }
+  http.setIdentityCheck(async () => {
+    let info;
+    try {
+      info = await discover(profile.baseUrl, 8000);
+    } catch (e) {
+      const reason = e instanceof ApiError ? e.body?.reason : undefined;
+      if (reason === 'unreachable' || reason === 'timeout') {
+        return 'unreachable';
+      }
+      // Something answers there, but not as CowAgent.
+      onWrongDevice(profile);
+      return 'wrong_device';
+    }
+    const known = currentProfile(profile.id)?.instanceId ?? profile.instanceId;
+    if (!sameDevice(known, info)) {
+      onWrongDevice(profile);
+      return 'wrong_device';
+    }
+    if (!known && info.id) {
+      adoptInstanceId(profile.id, info.id);
+    }
+    return 'ok';
+  }, confirmed);
+}
+
+function currentProfile(id: string): ServerProfile | undefined {
+  return useServerStore.getState().servers.find(s => s.id === id);
+}
+
+function adoptInstanceId(id: string, instanceId: string) {
+  const {servers, activeId} = useServerStore.getState();
+  const next = servers.map(s => (s.id === id ? {...s, instanceId} : s));
+  useServerStore.setState({servers: next});
+  persist(next, activeId).catch(() => undefined);
+}
+
+/** The active server's address now answers as another machine: step out to the login screen. */
+function onWrongDevice(profile: ServerProfile) {
+  const {activeId, authed} = useServerStore.getState();
+  if (activeId !== profile.id || !authed) {
+    return;
+  }
+  leaveActive();
+  useServerStore.setState({
+    authed: false,
+    returnTo: null,
+    loginForm: false,
+    problem: trf('connect_err_wrong_device', {name: profile.name}),
+  });
 }
 
 async function startRealtime(
@@ -163,6 +245,7 @@ async function startRealtime(
   realtime.start({
     url,
     token,
+    confirm: async () => (await http.confirmIdentity()) === 'ok',
     lastSeq,
     onEnvelope: envelope => envelopeHandlers.forEach(h => h(envelope)),
     onSeqCommitted: seq => {
@@ -205,7 +288,9 @@ async function activate(profile: ServerProfile, token: string) {
   await persist(servers, profile.id);
   http.setBaseUrl(profile.baseUrl);
   http.setToken(token);
-  useServerStore.setState({servers, activeId: profile.id, authed: true, returnTo: null});
+  // Just paired or signed in there.
+  guardIdentity(profile, true);
+  useServerStore.setState({servers, activeId: profile.id, authed: true, returnTo: null, problem: null});
   await startRealtime(profile, token, s => useServerStore.setState({realtimeStatus: s}));
 }
 
@@ -235,6 +320,7 @@ export const useServerStore = create<ServerState>((set, get) => ({
   activeId: null,
   authed: false,
   realtimeStatus: 'idle',
+  problem: null,
   returnTo: null,
   loginForm: false,
 
@@ -281,6 +367,7 @@ export const useServerStore = create<ServerState>((set, get) => ({
     http.setBaseUrl(active.baseUrl);
     const token = await secureStore.get(tokenKey(active.id));
     http.setToken(token);
+    guardIdentity(active);
     set({hydrated: true, servers, activeId: active.id, authed: !!token});
     if (token) {
       await startRealtime(active, token, s => set({realtimeStatus: s}));
@@ -301,10 +388,13 @@ export const useServerStore = create<ServerState>((set, get) => ({
       leaveActive();
     }
     const wsUrl = get().servers.find(s => s.id === id)?.wsUrl ?? null;
-    await activate({id, name: result.name, baseUrl: result.baseUrl, wsUrl, via: 'pairing'}, result.token);
+    await activate(
+      {id, name: result.name, baseUrl: result.baseUrl, wsUrl, via: 'pairing', instanceId: result.instanceId || undefined},
+      result.token,
+    );
     // Paired again: the token this device held before is of no use to anyone now.
     if (isDeviceToken(previous) && previous !== result.token) {
-      revokeToken(result.baseUrl, previous!);
+      revokeToken(result.baseUrl, previous!, result.instanceId);
     }
   },
 
@@ -351,8 +441,9 @@ export const useServerStore = create<ServerState>((set, get) => ({
     leaveActive();
     http.setBaseUrl(target.baseUrl);
     http.setToken(token);
+    guardIdentity(target);
     await persist(servers, id);
-    set({activeId: id, authed: !!token, returnTo: null, loginForm: false});
+    set({activeId: id, authed: !!token, returnTo: null, loginForm: false, problem: null});
     if (token) {
       await startRealtime(target, token, s => set({realtimeStatus: s}));
     }
@@ -373,7 +464,7 @@ export const useServerStore = create<ServerState>((set, get) => ({
     const target = servers.find(s => s.id === id);
     const token = await secureStore.get(tokenKey(id));
     if (target && token && !target.local) {
-      revokeToken(target.baseUrl, token);
+      revokeToken(target.baseUrl, token, target.instanceId);
     }
     await secureStore.remove(tokenKey(id));
     await removeKey(seqKey(id));
@@ -393,7 +484,7 @@ export const useServerStore = create<ServerState>((set, get) => ({
     set({authed: false, realtimeStatus: 'idle', returnTo: null, loginForm: false});
     resetServerData();
     if (server && token && !server.local) {
-      revokeToken(server.baseUrl, token);
+      revokeToken(server.baseUrl, token, server.instanceId);
     }
   },
 
@@ -411,6 +502,18 @@ export const useServerStore = create<ServerState>((set, get) => ({
     }
   },
 }));
+
+/** Takes the name the active server goes by now, renamed there or from another client. */
+export function noteServerName(name: string | undefined) {
+  const profile = activeServer();
+  if (!name || !profile || profile.local || profile.name === name) {
+    return;
+  }
+  const {servers, activeId} = useServerStore.getState();
+  const next = servers.map(s => (s.id === profile.id ? {...s, name} : s));
+  useServerStore.setState({servers: next});
+  persist(next, activeId).catch(() => undefined);
+}
 
 export function activeServer(): ServerProfile | undefined {
   const {servers, activeId} = useServerStore.getState();

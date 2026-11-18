@@ -59,9 +59,24 @@ export interface RequestOptions {
   anonymous?: boolean;
 }
 
+const IDENTITY_TTL_MS = 60_000;
+
+export type IdentityResult = 'ok' | 'unreachable' | 'wrong_device';
+
+interface IdentityGate {
+  check: () => Promise<IdentityResult>;
+  ok: boolean;
+  at: number;
+  pending: Promise<IdentityResult> | null;
+}
+
 export class HttpClient {
   private baseUrl = '';
   private token: string | null = null;
+  // The address of a server can come to lead to another machine; the token
+  // goes only where the device that issued it still answers. A check holds
+  // for a minute, and until a request finds the address silent.
+  private identity: IdentityGate | null = null;
 
   setBaseUrl(url: string) {
     this.baseUrl = normalizeBaseUrl(url);
@@ -75,12 +90,60 @@ export class HttpClient {
     this.token = token;
   }
 
+  /**
+   * How to confirm the address still leads to the token's device; null trusts it.
+   * `confirmed` when the caller has just seen that device answer there.
+   */
+  setIdentityCheck(check: (() => Promise<IdentityResult>) | null, confirmed = false) {
+    this.identity = check ? {check, ok: confirmed, at: confirmed ? Date.now() : 0, pending: null} : null;
+  }
+
+  /** Whether the token may go to the address now, checking again once the last check is stale. */
+  confirmIdentity(force = false): Promise<IdentityResult> {
+    const gate = this.identity;
+    if (!gate) {
+      return Promise.resolve('ok');
+    }
+    if (!force && gate.at && Date.now() - gate.at < IDENTITY_TTL_MS) {
+      return Promise.resolve(gate.ok ? 'ok' : 'wrong_device');
+    }
+    if (!gate.pending) {
+      gate.pending = gate
+        .check()
+        .catch(() => 'unreachable' as const)
+        .then(result => {
+          if (this.identity === gate && result !== 'unreachable') {
+            gate.ok = result === 'ok';
+            gate.at = Date.now();
+          }
+          return result;
+        })
+        .finally(() => {
+          gate.pending = null;
+        });
+    }
+    return gate.pending;
+  }
+
   getToken(): string | null {
     return this.token;
   }
 
+  /** The token for an address built synchronously: only once its device has been confirmed. */
+  confirmedToken(): string | null {
+    return this.identity && !this.identity.ok ? null : this.token;
+  }
+
   authHeaders(): Record<string, string> {
-    return this.token ? {Authorization: `Bearer ${this.token}`} : {};
+    const token = this.confirmedToken();
+    return token ? {Authorization: `Bearer ${token}`} : {};
+  }
+
+  private async sendableHeaders(): Promise<Record<string, string>> {
+    if (!this.token) {
+      return {};
+    }
+    return (await this.confirmIdentity()) === 'ok' ? {Authorization: `Bearer ${this.token}`} : {};
   }
 
   url(path: string): string {
@@ -88,12 +151,13 @@ export class HttpClient {
   }
 
   async request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
+    const auth = opts.anonymous ? {} : await this.sendableHeaders();
     return this.send<T>(path, opts.timeoutMs, {
       method: opts.method ?? (opts.body === undefined ? 'GET' : 'POST'),
       headers: {
         'Content-Type': 'application/json',
         Accept: 'application/json',
-        ...(opts.anonymous ? {} : this.authHeaders()),
+        ...auth,
       },
       body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
     });
@@ -101,9 +165,10 @@ export class HttpClient {
 
   /** POST a multipart form; fetch sets the boundary, so no Content-Type here. */
   async upload<T>(path: string, form: FormData, timeoutMs = 120_000): Promise<T> {
+    const auth = await this.sendableHeaders();
     return this.send<T>(path, timeoutMs, {
       method: 'POST',
-      headers: {Accept: 'application/json', ...this.authHeaders()},
+      headers: {Accept: 'application/json', ...auth},
       body: form,
     });
   }
@@ -120,6 +185,10 @@ export class HttpClient {
       // cookie jar would hand it to every page the WebView opens on this server.
       res = await fetch(this.url(path), {...init, credentials: 'omit', signal: controller.signal});
     } catch (e) {
+      if (this.identity) {
+        this.identity.ok = false;
+        this.identity.at = 0;
+      }
       if (controller.signal.aborted) {
         throw new ApiError('timeout', 'Request timed out');
       }

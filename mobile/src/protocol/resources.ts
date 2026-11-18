@@ -361,6 +361,8 @@ export interface ReasoningMeta {
 
 /** `GET /config`: the console's basic settings tab. */
 export interface GlobalConfig {
+  /** The server as a device: its id and the name every client shows for it. */
+  device?: {id: string; name: string};
   model: string;
   bot_type: string;
   use_linkai: boolean;

@@ -2,6 +2,7 @@ import {create} from 'zustand';
 import {getConfig, getExternalApi, setExternalApi, updateConfig} from '../api/cowApi';
 import type {ConfigUpdates, ExternalApiState, GlobalConfig} from '../protocol/resources';
 import {resetOnSignOut} from './reset';
+import {noteServerName} from './serverStore';
 
 interface ConfigState {
   config: GlobalConfig | null;
@@ -27,6 +28,9 @@ export const useConfigStore = create<ConfigState>((set, get) => ({
       externalApi: external.status === 'fulfilled' ? external.value : s.externalApi,
       error: config.status === 'rejected' ? message(config.reason) : null,
     }));
+    if (config.status === 'fulfilled') {
+      noteServerName(config.value.device?.name);
+    }
   },
 
   update: async updates => {

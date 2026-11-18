@@ -320,7 +320,7 @@ export async function saveAgentFile(agentId: string, name: AgentCoreFile, conten
 /** Uploaded avatars are served behind auth, so the token rides in the query. */
 export function agentAvatarUrl(agent: {id: string; avatar_rev?: string}): string {
   return http.url(
-    `/api/agents/${encodeURIComponent(agent.id)}/avatar?${query({v: agent.avatar_rev, token: http.getToken()})}`,
+    `/api/agents/${encodeURIComponent(agent.id)}/avatar?${query({v: agent.avatar_rev, token: http.confirmedToken()})}`,
   );
 }
 
@@ -543,7 +543,7 @@ export function openLogStream(onEvent: (event: LogEvent) => void, onClose: (erro
 }
 
 export function logDownloadUrl(): string {
-  return http.url(`/api/logs/download?${query({token: http.getToken()})}`);
+  return http.url(`/api/logs/download?${query({token: http.confirmedToken()})}`);
 }
 
 export async function getTaskRuns(opts: {taskId?: string; limit?: number; offset?: number} = {}) {
@@ -848,7 +848,7 @@ export function serverUrl(path: string): string {
  * platform, so the token rides in the query string, which the server accepts.
  */
 export function serverFileUrl(filePath: string): string {
-  const token = http.getToken();
+  const token = http.confirmedToken();
   return http.url(`/api/file?${query({path: filePath, token})}`);
 }
 
@@ -857,7 +857,7 @@ export function authedUrl(path: string): string {
   if (/^https?:\/\//i.test(path)) {
     return path;
   }
-  const token = http.getToken();
+  const token = http.confirmedToken();
   if (!token) {
     return http.url(path);
   }

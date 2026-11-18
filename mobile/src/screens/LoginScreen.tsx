@@ -1,6 +1,6 @@
 import {faChevronLeft, faChevronRight, faMobileScreen, faQrcode} from '@fortawesome/free-solid-svg-icons';
 import type {IconDefinition} from '@fortawesome/fontawesome-svg-core';
-import React, {useState} from 'react';
+import React, {useEffect, useState} from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -63,7 +63,13 @@ export function LoginScreen() {
   // Sign-ins that need no form input: the built-in agent, or going back to the server left.
   const [pending, setPending] = useState<'local' | 'back' | null>(null);
   const [formBusy, setFormBusy] = useState(false);
-  const [formError, setFormError] = useState<string | null>(null);
+  // A server that stepped aside (e.g. another machine now at its address) says why, once.
+  const [formError, setFormError] = useState<string | null>(() => useServerStore.getState().problem);
+  useEffect(() => {
+    if (useServerStore.getState().problem) {
+      useServerStore.setState({problem: null});
+    }
+  }, []);
   const pairing = usePairAction();
   const busy = formBusy || pairing.busy || !!pending;
   const error = formError || pairing.error;

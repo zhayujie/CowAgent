@@ -77,7 +77,8 @@ export function DrawerMenu({
   const local = useLocalServer();
   const sections = useMemo(() => menuSections(doc, local, !artifactsHidden), [doc, local, artifactsHidden]);
   const server = activeServer();
-  const host = server?.local ? tr('server_local') : (server?.baseUrl.replace(/^https?:\/\//, '') ?? '');
+  // Servers go by the name they gave themselves; the address is only a fallback.
+  const host = server?.local ? tr('server_local') : server?.name || (server?.baseUrl.replace(/^https?:\/\//, '') ?? '');
   const groups = useMemo(() => groupSessions(sessions.slice(0, RECENT_LIMIT)), [sessions]);
 
   const countOf = (view: string): number | string | undefined => {

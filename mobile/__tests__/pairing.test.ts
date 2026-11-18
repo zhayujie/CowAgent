@@ -34,7 +34,8 @@ beforeEach(async () => {
   await secureStore.set(`token:${home.id}`, 'home-token');
   http.setBaseUrl(home.baseUrl);
   http.setToken('home-token');
-  useServerStore.setState({servers: [home], activeId: home.id, authed: true, returnTo: null});
+  http.setIdentityCheck(null);
+  useServerStore.setState({servers: [home], activeId: home.id, authed: true, returnTo: null, problem: null});
 });
 
 describe('parsePairLink', () => {
@@ -74,7 +75,7 @@ it('pairs at the first address that answers and switches to it with the device t
     'http://10.0.0.5:9899/.well-known/cowagent': () => 'offline',
     'http://192.168.1.20:9899/.well-known/cowagent': discovery,
     'http://192.168.1.20:9899/auth/pair': () => ({
-      body: {status: 'success', token: 'cowd.d_1.secret', instance: {name: 'MacBook'}},
+      body: {status: 'success', token: 'cowd.d_1.secret', instance: {id: 'dev_mac', name: 'MacBook'}},
     }),
   });
 
@@ -82,7 +83,7 @@ it('pairs at the first address that answers and switches to it with the device t
 
   const {servers, activeId, authed} = useServerStore.getState();
   expect({activeId, authed}).toEqual({activeId: 'http://192.168.1.20:9899', authed: true});
-  expect(servers[0]).toMatchObject({name: 'MacBook', baseUrl: 'http://192.168.1.20:9899'});
+  expect(servers[0]).toMatchObject({name: 'MacBook', baseUrl: 'http://192.168.1.20:9899', instanceId: 'dev_mac'});
   expect(http.getToken()).toBe('cowd.d_1.secret');
   expect(await secureStore.get('token:http://192.168.1.20:9899')).toBe('cowd.d_1.secret');
   const pair = calls.find(c => c.url.endsWith('/auth/pair'))!;
@@ -107,7 +108,7 @@ it('keeps the current server when the code is refused', async () => {
 });
 
 it('tells a server from before pairing apart from a wrong address', async () => {
-  mockFetch({'http://192.168.1.20:9899/auth/check': () => ({body: {}})});
+  mockFetch({'http://192.168.1.20:9899/auth/check': () => ({body: {auth_required: true}})});
 
   const err = await useServerStore
     .getState()
@@ -116,10 +117,110 @@ it('tells a server from before pairing apart from a wrong address', async () => 
 
   expect(describePairError(err)).toContain('不支持配对');
   expect(useServerStore.getState()).toMatchObject({activeId: home.id, authed: true});
+
+  mockFetch({});
+  const other = await useServerStore
+    .getState()
+    .pair({code: 'ABCD-EFGH', urls: ['http://192.168.1.20:9899']})
+    .catch(e => e);
+  expect(describePairError(other)).toBe('192.168.1.20:9899 上有服务在响应（HTTP 404），但不是 CowAgent。请检查端口是否填对');
+});
+
+it('says why an address is no CowAgent to pair with', async () => {
+  const pairAt = async (route: Route) => {
+    mockFetch({'http://192.168.1.20:9899/.well-known/cowagent': route});
+    const err = await useServerStore
+      .getState()
+      .pair({code: 'ABCD-EFGH', urls: ['http://192.168.1.20:9899']})
+      .catch(e => e);
+    return describePairError(err);
+  };
+  expect(await pairAt(() => 'offline')).toContain('连不上 192.168.1.20:9899');
+  expect(await pairAt(() => ({status: 401, body: {}}))).toContain('需要先登录');
+  expect(await pairAt(() => ({body: {hello: 'world'}}))).toContain('不是 CowAgent');
+  expect(
+    await pairAt(() => ({body: {type: 'instance', protocol: 1, auth: {required: true, methods: ['password']}}})),
+  ).toContain('不支持配对码');
+});
+
+it('reports the most telling failure among the addresses tried', async () => {
+  mockFetch({
+    'http://192.168.1.20:9899/.well-known/cowagent': () => ({body: {hello: 'world'}}),
+    'https://192.168.1.20:9899/.well-known/cowagent': () => 'offline',
+  });
+  const err = await useServerStore
+    .getState()
+    .pair({code: 'ABCD-EFGH', urls: addressCandidates('192.168.1.20:9899')})
+    .catch(e => e);
+  expect(describePairError(err)).toContain('不是 CowAgent');
 });
 
 it('explains an address that never answered', () => {
   expect(describePairError(new ApiError('network', 'x'))).toContain('同一网络');
+});
+
+describe('a token goes only to the device that issued it', () => {
+  const office: ServerProfile = {
+    id: 'http://192.168.1.30:9899',
+    name: 'Office',
+    baseUrl: 'http://192.168.1.30:9899',
+    wsUrl: null,
+    via: 'pairing',
+    instanceId: 'dev_office',
+  };
+  const answer = (id: string) => () => ({body: {type: 'instance', protocol: 1, id}});
+
+  beforeEach(async () => {
+    await secureStore.set(`token:${office.id}`, 'cowd.d_9.office');
+    useServerStore.setState({servers: [home, office]});
+  });
+
+  it('sends it once the address answers with the same id', async () => {
+    const calls = mockFetch({
+      'http://192.168.1.30:9899/.well-known/cowagent': answer('dev_office'),
+      'http://192.168.1.30:9899/api/ping': () => ({body: {status: 'success'}}),
+    });
+    await useServerStore.getState().switchTo(office.id);
+    await http.request('/api/ping');
+
+    const ping = calls.find(c => c.url.endsWith('/api/ping'))!;
+    expect((ping.init.headers as Record<string, string>).Authorization).toBe('Bearer cowd.d_9.office');
+    expect((calls.find(c => c.url.endsWith('/.well-known/cowagent'))!.init.headers as Record<string, string>).Authorization).toBeUndefined();
+  });
+
+  it('holds it back from another device at the same address and leaves', async () => {
+    const calls = mockFetch({
+      'http://192.168.1.30:9899/.well-known/cowagent': answer('dev_stranger'),
+      'http://192.168.1.30:9899/api/ping': () => ({status: 401, body: {}}),
+    });
+    await useServerStore.getState().switchTo(office.id);
+    await http.request('/api/ping').catch(() => undefined);
+
+    expect(calls.some(c => JSON.stringify(c.init.headers ?? {}).includes('cowd.d_9.office'))).toBe(false);
+    expect(useServerStore.getState()).toMatchObject({authed: false, activeId: office.id});
+    expect(useServerStore.getState().problem).toContain('Office');
+    expect(await secureStore.get(`token:${office.id}`)).toBe('cowd.d_9.office');
+  });
+
+  it('takes the first id seen for a pairing from before ids', async () => {
+    useServerStore.setState({servers: [home, {...office, instanceId: undefined}]});
+    mockFetch({
+      'http://192.168.1.30:9899/.well-known/cowagent': answer('dev_office'),
+      'http://192.168.1.30:9899/api/ping': () => ({body: {status: 'success'}}),
+    });
+    await useServerStore.getState().switchTo(office.id);
+    await http.request('/api/ping');
+
+    expect(useServerStore.getState().servers.find(s => s.id === office.id)?.instanceId).toBe('dev_office');
+  });
+
+  it('does not sign out at an address now held by another device', async () => {
+    const calls = mockFetch({'http://192.168.1.30:9899/.well-known/cowagent': answer('dev_stranger')});
+    await useServerStore.getState().removeServer(office.id);
+    await new Promise(r => setTimeout(r, 0));
+
+    expect(calls.some(c => c.url.endsWith('/auth/logout'))).toBe(false);
+  });
 });
 
 it('revokes a device token on sign out', async () => {

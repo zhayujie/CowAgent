@@ -10,6 +10,8 @@ export type RealtimeStatus = 'idle' | 'connecting' | 'open' | 'closed' | 'revoke
 export interface RealtimeConfig {
   url: string;
   token: string;
+  /** Whether the token may go to this address right now; checked before every hello. */
+  confirm?: () => Promise<boolean>;
   /** Highest envelope seq already handled; the server replays anything newer. */
   lastSeq: number;
   onEnvelope: (envelope: ServerEnvelope) => void;
@@ -96,7 +98,17 @@ export class RealtimeClient {
     const socket = new WebSocket(config.url);
     this.socket = socket;
 
-    socket.onopen = () => {
+    socket.onopen = async () => {
+      if (config.confirm && !(await config.confirm().catch(() => false))) {
+        // onclose follows and schedules the reconnect.
+        if (this.socket === socket) {
+          socket.close();
+        }
+        return;
+      }
+      if (this.socket !== socket) {
+        return;
+      }
       this.lastMessageAt = Date.now();
       this.send({
         type: 'hello',
