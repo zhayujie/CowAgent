@@ -465,7 +465,10 @@ class WebSearch(BaseTool):
             msg = data.get("msg") or "Unknown error"
             return ToolResult.fail(f"Error: bocha API error (code={api_code}): {msg}")
 
-        pages = (data.get("data") or {}).get("webPages", {}).get("value", []) or []
+        # The API returns "webPages": null for queries with no results; the
+        # `.get("webPages", {})` default only covers a *missing* key, so an
+        # explicit null must fall back too (same pattern as _search_linkai).
+        pages = ((data.get("data") or {}).get("webPages") or {}).get("value", []) or []
         results = []
         for p in pages:
             item = {
@@ -478,7 +481,7 @@ class WebSearch(BaseTool):
             if p.get("summary"):
                 item["summary"] = p["summary"]
             results.append(item)
-        total = (data.get("data") or {}).get("webPages", {}).get("totalEstimatedMatches", len(results))
+        total = ((data.get("data") or {}).get("webPages") or {}).get("totalEstimatedMatches", len(results))
         return ToolResult.success({
             "query": query, "backend": "bocha",
             "total": total, "count": len(results), "results": results,
