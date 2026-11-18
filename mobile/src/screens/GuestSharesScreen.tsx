@@ -13,7 +13,7 @@ import {
 import {useFocusEffect} from '@react-navigation/native';
 import type {StackScreenProps} from '@react-navigation/stack';
 import React, {useCallback, useState} from 'react';
-import {Linking, Pressable, RefreshControl, ScrollView, Text, View} from 'react-native';
+import {Pressable, RefreshControl, ScrollView, Text, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {deleteGuestShare, getGuestShares, getIntegrations, guestShareAction, setGuestSharesEnabled} from '../api/cowApi';
 import {ApiError} from '../api/http';
@@ -24,6 +24,7 @@ import {SHEET_DISMISS_MS} from '../components/Sheet';
 import {showToast, ToastHost} from '../components/Toast';
 import {EmptyState, IconButton, PageHeader} from '../components/ui';
 import {tr, trf, type MessageKey} from '../i18n';
+import {openWebPage} from '../navigation/openWeb';
 import type {RootStackParamList} from '../navigation/types';
 import type {GuestShare, GuestSharesOverview} from '../protocol/resources';
 import {activeServer, describeConnectError} from '../store/serverStore';
@@ -139,7 +140,7 @@ export function GuestSharesScreen({navigation}: Props) {
   };
 
   const open = (url: string) => {
-    Linking.openURL(url).catch(() => showToast(tr('share_open_failed')));
+    openWebPage(url);
   };
 
   const edit = (share: GuestShare, focus?: 'password') => navigation.navigate('GuestShareEdit', {slug: share.slug, focus});

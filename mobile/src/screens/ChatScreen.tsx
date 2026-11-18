@@ -8,7 +8,6 @@ import {
   FlatList,
   Keyboard,
   KeyboardAvoidingView,
-  Linking,
   Platform,
   Pressable,
   Text,
@@ -48,6 +47,7 @@ import {tr, trf} from '../i18n';
 import {canTakePhoto, pickDocuments, pickPhotos, takePhoto} from '../media/picker';
 import type {Recording} from '../media/types';
 import {linkAsPage} from '../navigation/menuViews';
+import {openWebPage} from '../navigation/openWeb';
 import type {RootStackParamList} from '../navigation/types';
 import type {SessionItem} from '../protocol/events';
 import type {PermissionMode} from '../protocol/resources';
@@ -221,7 +221,7 @@ export function ChatScreen({route, navigation}: Props) {
     (label: string, url: string, external: boolean) => {
       setDrawerOpen(false);
       if (external) {
-        Linking.openURL(serverUrl(url)).catch(() => showToast(tr('chat_link_open_failed')));
+        openWebPage(serverUrl(url), label);
         return;
       }
       navigation.navigate('FilePreview', {file: linkAsPage(label, url)});

@@ -1,8 +1,9 @@
-import {Linking, Platform} from 'react-native';
+import {Linking, NativeModules, PermissionsAndroid, Platform} from 'react-native';
 import {create} from 'zustand';
 import {showToast} from '../components/Toast';
 import {serverUrl} from '../api/cowApi';
-import {tr} from '../i18n';
+import {tr, trf, type MessageKey} from '../i18n';
+import {openWebPage} from '../navigation/openWeb';
 import {navigationRef} from '../navigation/ref';
 import {useAgentStore} from '../store/agentStore';
 import {useChatStore} from '../store/chatStore';
@@ -35,7 +36,8 @@ export const useImageViewer = create<{
   close: () => set({file: null}),
 }));
 
-function openUrl(url: string) {
+/** Only where nothing native can save: the system keeps the file. */
+function saveWithSystem(url: string) {
   if (!url) {
     showToast(tr('file_no_url'));
     return;
@@ -48,17 +50,83 @@ function sandboxed(f: ChatFile, then: (page: ChatFile) => void) {
   withPreview(f).then(page => (page ? then(page) : showToast(tr('file_page_unsafe'))));
 }
 
-export function openInBrowser(f: ChatFile) {
+/** The file as the web view shows it, which handles formats the preview screen does not. */
+export function openAsWebPage(f: ChatFile) {
   if (isUnsandboxedPage(f)) {
-    sandboxed(f, openInBrowser);
+    sandboxed(f, openAsWebPage);
     return;
   }
-  openUrl(viewUrlOf(f));
+  // Asked from the full-screen picture, which would otherwise stay over the page.
+  useImageViewer.getState().close();
+  openWebPage(viewUrlOf(f), f.name);
 }
 
-/** Saves through the browser: a phone hands the link to the system, which keeps the file. */
+/** Where a native save put the file; null when the user backed out of the iOS share sheet. */
+type SavedTo = 'downloads' | 'photos' | 'files' | 'other' | null;
+
+/**
+ * Native saving, http(s) only: Android queues the system downloader into Downloads,
+ * iOS downloads first and then offers the share sheet. Both settle once the file is kept.
+ */
+const systemDownloads: {save(url: string, fileName: string): Promise<SavedTo>} | undefined =
+  NativeModules.CowDownloads;
+
+const savesNatively = (url: string) => !!systemDownloads && /^https?:/i.test(url);
+
+const SAVED_TOAST: Partial<Record<NonNullable<SavedTo>, MessageKey>> = {
+  downloads: 'file_saved_downloads',
+  photos: 'file_saved_photos',
+  files: 'file_saved_files',
+};
+
+/** An empty `fileName` leaves the name to the native side, which can read the server's on iOS. */
+async function saveToDownloads(url: string, name: string, fileName = name) {
+  // Writing to the shared Downloads folder needs this permission before Android 10.
+  if (Platform.OS === 'android' && typeof Platform.Version === 'number' && Platform.Version < 29) {
+    const result = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE);
+    if (result !== PermissionsAndroid.RESULTS.GRANTED) {
+      showToast(tr('file_download_no_permission'));
+      return;
+    }
+  }
+  showToast(trf('file_download_started', {name}));
+  try {
+    const savedTo = await systemDownloads!.save(url, fileName);
+    const key = savedTo ? SAVED_TOAST[savedTo] : undefined;
+    if (key) {
+      showToast(tr(key));
+    }
+  } catch {
+    showToast(tr('file_download_failed'));
+  }
+}
+
+/** A link the server answers with a file, such as the full log or a download inside a web page. */
+export function downloadUrl(url: string, name?: string) {
+  if (!savesNatively(url)) {
+    saveWithSystem(url);
+    return;
+  }
+  if (name) {
+    saveToDownloads(url, name);
+    return;
+  }
+  let shown = url.split(/[?#]/)[0].split('/').pop() || '';
+  try {
+    shown = decodeURIComponent(shown);
+  } catch {
+    // Kept as sent.
+  }
+  saveToDownloads(url, shown || tr('file_download'), '');
+}
+
+/** Saved natively on Android and iOS, through an anchor on the web, and by the system elsewhere. */
 export function downloadFile(f: ChatFile) {
   const url = rawUrlOf(f);
+  if (savesNatively(url)) {
+    saveToDownloads(url, f.name);
+    return;
+  }
   if (Platform.OS === 'web' && url && typeof document !== 'undefined') {
     const a = document.createElement('a');
     a.href = url;
@@ -71,12 +139,12 @@ export function downloadFile(f: ChatFile) {
     a.remove();
     return;
   }
-  // The system browser renders HTML rather than saving it.
+  // A browser renders HTML rather than saving it.
   if (f.kind === 'html') {
-    openInBrowser(f);
+    openAsWebPage(f);
     return;
   }
-  openUrl(url);
+  saveWithSystem(url);
 }
 
 /** One tap on a file: it always opens in the app; formats it cannot render get a page to save them from. */
@@ -99,6 +167,8 @@ export function openFile(f: ChatFile) {
 /** The artifacts page, narrowed to this one file. */
 export function viewInArtifacts(f: ChatFile) {
   if (f.path && navigationRef.isReady()) {
+    // Asked from the full-screen picture, which would otherwise stay over the page.
+    useImageViewer.getState().close();
     navigationRef.navigate('Artifacts', {focusPath: f.path, focusName: f.name});
   }
 }
@@ -106,7 +176,7 @@ export function viewInArtifacts(f: ChatFile) {
 /** Reply text is model output; other schemes could launch apps or run `javascript:` on web. */
 const SAFE_LINK = /^(https?:|mailto:|tel:)/i;
 
-/** A link inside a reply: a file on the server opens like a file card, the web in the browser. */
+/** A link inside a reply: a file on the server opens like a file card, the web in the app's web page. */
 export function openLink(href: string) {
   const ref = serverFileRef(href);
   if (ref) {
@@ -118,7 +188,7 @@ export function openLink(href: string) {
     showToast(tr('file_link_unsupported'));
     return;
   }
-  openUrl(url);
+  openWebPage(url);
 }
 
 /** A file a reply only names: find it on the server, then open it like any other. */

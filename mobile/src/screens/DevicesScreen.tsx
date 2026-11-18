@@ -15,7 +15,7 @@ import {
 import type {IconDefinition} from '@fortawesome/fontawesome-svg-core';
 import type {StackScreenProps} from '@react-navigation/stack';
 import React, {useCallback, useEffect, useRef, useState} from 'react';
-import {ActivityIndicator, Image, Linking, RefreshControl, ScrollView, Text, View} from 'react-native';
+import {ActivityIndicator, Image, RefreshControl, ScrollView, Text, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {
   createPairing,
@@ -33,7 +33,6 @@ import {
   ChoiceSheet,
   ConfirmSheet,
   FieldSheet,
-  Footnote,
   MONO,
   Notice,
   SettingRow,
@@ -43,6 +42,7 @@ import {SHEET_DISMISS_MS, Sheet} from '../components/Sheet';
 import {showToast, ToastHost} from '../components/Toast';
 import {EmptyState, GroupLabel, PageHeader} from '../components/ui';
 import {tr, trf} from '../i18n';
+import {openWebPage} from '../navigation/openWeb';
 import type {RootStackParamList} from '../navigation/types';
 import type {DeviceList, PairedDevice, PairingCode} from '../protocol/resources';
 import {describeConnectError, noteServerName, useServerStore} from '../store/serverStore';
@@ -353,7 +353,7 @@ export function DevicesScreen({navigation}: Props) {
           <Notice>
             {tr('devices_pairing_managed')}
             {!!manageUrl && (
-              <Text style={styles.link} onPress={() => Linking.openURL(manageUrl).catch(() => undefined)}>
+              <Text style={styles.link} onPress={() => openWebPage(manageUrl)}>
                 {'  '}
                 {tr('devices_open_manage')}
               </Text>
@@ -404,7 +404,6 @@ export function DevicesScreen({navigation}: Props) {
             last
           />
         )}
-        <Footnote>{tr('devices_in_tip')}</Footnote>
       </ScrollView>
 
       <Sheet visible={pairOpen} onClose={closePairing} title={tr('devices_let_connect')}>

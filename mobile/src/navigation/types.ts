@@ -19,6 +19,8 @@ export type RootStackParamList = {
   /** `edit` opens straight into the editor, as a freshly created page does. */
   KnowledgeDoc: {path: string; title: string; agentId?: string; edit?: boolean};
   FilePreview: {file: ChatFile};
+  /** Any http(s) page; `title` shows until the page names itself. */
+  WebPage: {url: string; title?: string};
   Tasks: undefined;
   /** Without `task` the form creates a new one. */
   TaskEdit: {task?: ScheduledTask} | undefined;

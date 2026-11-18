@@ -22,11 +22,12 @@ import {
   splitFilePaths,
 } from '../files/chatFile';
 import {openFileRef, openLink, useImageViewer} from '../files/openFile';
-import {trf} from '../i18n';
+import {tr, trf} from '../i18n';
 import type {Palette} from '../theme/palette';
 import {useTheme} from '../theme/theme';
 import {languageOf} from '../utils/highlight';
 import {CodeText} from './CodeText';
+import {FileSheet} from './FileViews';
 
 const MONO = Platform.select({ios: 'Menlo', default: 'monospace'});
 // Web preview renders inside a phone-sized frame (see web/index.html).
@@ -314,11 +315,12 @@ export const Markdown = memo(MarkdownImpl);
 
 const REPLY_IMAGE_MAX_H = 360;
 
-/** A picture inside a reply's text, at its own proportions; a tap shows it full screen. */
+/** A picture inside a reply's text, at its own proportions; a tap shows it full screen, a long press offers the rest. */
 function ReplyImage({file, maxWidth}: {file: ChatFile; maxWidth: number}) {
   const t = useTheme();
   const uri = rawUrlOf(file);
   const [size, setSize] = useState<{w: number; h: number} | null>(null);
+  const [acting, setActing] = useState(false);
   const [failed, setFailed] = useState(!uri);
   useEffect(() => {
     let alive = true;
@@ -350,19 +352,25 @@ function ReplyImage({file, maxWidth}: {file: ChatFile; maxWidth: number}) {
     height = REPLY_IMAGE_MAX_H;
   }
   return (
-    <Pressable
-      accessibilityRole="imagebutton"
-      accessibilityLabel={trf('file_view_image_named', {name: file.name})}
-      onPress={() => useImageViewer.getState().show(file)}
-      style={styles.imageWrap}>
-      <Image
-        source={{uri}}
-        style={[styles.image, {width, height, backgroundColor: t.bg2}]}
-        resizeMode="contain"
-        resizeMethod="resize"
-        onError={() => setFailed(true)}
-      />
-    </Pressable>
+    <>
+      <Pressable
+        accessibilityRole="imagebutton"
+        accessibilityLabel={trf('file_view_image_named', {name: file.name})}
+        accessibilityHint={tr('file_long_press_hint')}
+        onPress={() => useImageViewer.getState().show(file)}
+        onLongPress={() => setActing(true)}
+        delayLongPress={350}
+        style={styles.imageWrap}>
+        <Image
+          source={{uri}}
+          style={[styles.image, {width, height, backgroundColor: t.bg2}]}
+          resizeMode="contain"
+          resizeMethod="resize"
+          onError={() => setFailed(true)}
+        />
+      </Pressable>
+      <FileSheet file={file} visible={acting} onClose={() => setActing(false)} />
+    </>
   );
 }
 

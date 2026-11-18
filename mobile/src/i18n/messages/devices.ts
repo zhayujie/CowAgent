@@ -5,7 +5,6 @@ const zh = {
   devices_rename_server_hint: '所有连上它的设备都显示这个名称，留空则用电脑名',
   devices_rename_device: '修改名称',
   devices_connected: '已连接的设备',
-  devices_in_tip: '连上的设备拥有全部权限，可以执行命令、读写文件，只和信任的设备配对。移除后立即断开。',
   devices_let_connect: '让其他设备连接',
   devices_pairing_managed: '访问由所在平台管理，不支持配对码',
   devices_open_manage: '前往管理',
@@ -51,8 +50,6 @@ const en: Record<keyof typeof zh, string> = {
   devices_rename_server_hint: "Every device connected to it shows this name. Leave empty to use the computer's name",
   devices_rename_device: 'Rename',
   devices_connected: 'Connected devices',
-  devices_in_tip:
-    'A connected device has full access, including running commands and reading or writing files. Only pair devices you trust. Removing one cuts it off at once.',
   devices_let_connect: 'Let a device connect',
   devices_pairing_managed: 'Access is managed by the hosting platform. Pairing codes are off',
   devices_open_manage: 'Open',

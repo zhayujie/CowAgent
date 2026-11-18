@@ -26,6 +26,8 @@ const AUDIO_SET = {
   AVSampleRateKeyIOS: 16000,
   AVNumberOfChannelsKeyIOS: 1,
   AVEncoderAudioQualityKeyIOS: AVEncoderAudioQualityIOSType.medium,
+  // Left unset it is 128 kbps, which AAC can't encode at 16 kHz mono, and the recorder won't start.
+  AVEncoderBitRateKeyIOS: 32000,
   AudioSourceHarmony: 1,
   AudioMimeHarmony: 'audio/mp4a-latm',
   AudioFileFormatHarmony: 'm4a',
@@ -63,7 +65,9 @@ export async function startRecording(onTick: RecorderTick): Promise<void> {
   try {
     await player.startRecorder(target, AUDIO_SET, true);
   } catch (e) {
-    throw Platform.OS === 'ios' ? new MicPermissionError(tr('media_mic_denied')) : e;
+    // iOS asks for the microphone inside startRecorder and rejects with this message when refused.
+    const denied = Platform.OS === 'ios' && /permission/i.test(e instanceof Error ? e.message : String(e));
+    throw denied ? new MicPermissionError(tr('media_mic_denied')) : new Error(tr('voice_start_failed'));
   }
   startedAt = Date.now();
   await player.setSubscriptionDuration(0.08).catch(() => undefined);

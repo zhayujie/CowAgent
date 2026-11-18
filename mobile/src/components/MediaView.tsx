@@ -26,7 +26,16 @@ const literal = (v: unknown) => JSON.stringify(v).replace(/</g, '\\u003c');
 
 const PAGE_HEAD =
   '<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=5">' +
-  '<style>html,body{margin:0;height:100%}</style>';
+  '<style>html,body{margin:0;height:100%;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}</style>';
+
+/** A finger held still on the page posts `longpress`; the web view hides touches from React Native. */
+const LONG_PRESS_SCRIPT = `<script>(function(){var timer=null,x=0,y=0;
+function clear(){if(timer){clearTimeout(timer);timer=null;}}
+document.addEventListener('touchstart',function(e){clear();if(e.touches.length!==1)return;x=e.touches[0].clientX;y=e.touches[0].clientY;
+timer=setTimeout(function(){timer=null;window.ReactNativeWebView.postMessage('longpress');},500);},{passive:true});
+document.addEventListener('touchmove',function(e){var p=e.touches[0];if(p&&(Math.abs(p.clientX-x)>10||Math.abs(p.clientY-y)>10))clear();},{passive:true});
+document.addEventListener('touchend',clear);document.addEventListener('touchcancel',clear);
+document.addEventListener('contextmenu',function(e){e.preventDefault();});})();</script>`;
 
 function mediaPage(uri: string, kind: 'video' | 'audio', dark: boolean): string {
   const bg = kind === 'video' || dark ? '#000' : '#fff';
@@ -36,7 +45,7 @@ function mediaPage(uri: string, kind: 'video' | 'audio', dark: boolean): string 
       : `<audio src=${literal(uri)} controls preload="metadata" style="width:86%"></audio>`;
   return `<!doctype html><html><head>${PAGE_HEAD}<style>body{display:flex;align-items:center;justify-content:center;background:${bg}}</style></head><body>${tag}
 <script>(function(){var el=document.querySelector('video,audio'),post=function(m){window.ReactNativeWebView.postMessage(m);};
-el.addEventListener('loadedmetadata',function(){post('ready');});el.addEventListener('error',function(){post('error');});})();</script></body></html>`;
+el.addEventListener('loadedmetadata',function(){post('ready');});el.addEventListener('error',function(){post('error');});})();</script>${LONG_PRESS_SCRIPT}</body></html>`;
 }
 
 /**
@@ -63,7 +72,7 @@ function next(){n+=1;if(n>doc.numPages)return;doc.getPage(n).then(function(page)
 var base=page.getViewport({scale:1}),vp=page.getViewport({scale:document.body.clientWidth/base.width*scale});
 var c=document.createElement('canvas');c.width=vp.width;c.height=vp.height;box.appendChild(c);
 return page.render({canvasContext:c.getContext('2d'),viewport:vp}).promise;}).then(function(){if(n===1)post('ready');next();});}
-next();}).catch(function(){post('error');});})();</script></body></html>`;
+next();}).catch(function(){post('error');});})();</script>${LONG_PRESS_SCRIPT}</body></html>`;
 }
 
 /** A PDF, video or audio file played inside the app instead of handed to the system. */
@@ -73,12 +82,15 @@ export function MediaView({
   onError,
   onProgress,
   onReady,
+  onLongPress,
 }: {
   uri: string;
   kind: MediaKind;
   onError?: (message: string) => void;
   onProgress?: (fraction: number) => void;
   onReady?: () => void;
+  /** Not on iOS PDFs, which load as the file itself rather than a page of ours. */
+  onLongPress?: () => void;
 }) {
   const t = useTheme();
   const source = useMemo(() => {
@@ -92,6 +104,8 @@ export function MediaView({
   const onMessage = (e: WebViewMessageEvent) => {
     if (e.nativeEvent.data === 'ready') {
       onReady?.();
+    } else if (e.nativeEvent.data === 'longpress') {
+      onLongPress?.();
     } else if (e.nativeEvent.data === 'error') {
       onError?.(kind === 'pdf' ? tr('media_pdf_failed') : tr('media_load_failed'));
     }

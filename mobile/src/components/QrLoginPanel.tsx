@@ -1,8 +1,9 @@
 import {faArrowUpRightFromSquare, faCheck, faRotateRight} from '@fortawesome/free-solid-svg-icons';
 import React, {useEffect, useRef, useState} from 'react';
-import {ActivityIndicator, Image, Linking, Pressable, Text, View} from 'react-native';
+import {ActivityIndicator, Image, Pressable, Text, View} from 'react-native';
 import {channelAction, getChannels, getFeishuRegister, getWeixinQr, pollFeishuRegister, pollWeixinQr} from '../api/cowApi';
 import {tr, trf} from '../i18n';
+import {openWebPage} from '../navigation/openWeb';
 import {describeConnectError} from '../store/serverStore';
 import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
@@ -342,7 +343,7 @@ export function QrLoginPanel({
       {!!link && (
         <Pressable
           accessibilityRole="link"
-          onPress={() => Linking.openURL(link).catch(() => undefined)}
+          onPress={() => openWebPage(link)}
           style={({pressed}) => [styles.open, pressed && styles.pressed]}>
           <Text style={styles.openText}>{tr('qr_open_feishu')}</Text>
           <Icon icon={faArrowUpRightFromSquare} size={11} color={t.accent} />

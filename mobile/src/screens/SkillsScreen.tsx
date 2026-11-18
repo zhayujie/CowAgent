@@ -14,7 +14,7 @@ import {
 import {useFocusEffect} from '@react-navigation/native';
 import type {StackScreenProps} from '@react-navigation/stack';
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
-import {FlatList, Linking, Pressable, RefreshControl, ScrollView, Text, View} from 'react-native';
+import {FlatList, Pressable, RefreshControl, ScrollView, Text, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {
   confirmSkillInstall,
@@ -45,6 +45,7 @@ import {SwipeTabs} from '../components/SwipeTabs';
 import {EmptyState, IconButton, PageHeader, Segmented} from '../components/ui';
 import {tr, trf} from '../i18n';
 import {pickDocuments} from '../media/picker';
+import {openWebPage} from '../navigation/openWeb';
 import type {RootStackParamList} from '../navigation/types';
 import type {Skill, SkillMarketSource, SkillPreview, ToolInfo} from '../protocol/resources';
 import {MCP_STATUS, MCP_TRANSPORT_LABEL, mcpTarget, mcpTransport, useMcpStore} from '../store/mcpStore';
@@ -280,7 +281,7 @@ export function SkillsScreen({navigation}: Props) {
       runUpload();
     } else if (key === 'browse') {
       setSheet(null);
-      Linking.openURL(SKILL_HUB_URL).catch(() => showToast(tr('skill_open_browser_failed')));
+      openWebPage(SKILL_HUB_URL);
     } else {
       next({kind: 'market', source: key});
     }
@@ -381,7 +382,7 @@ export function SkillsScreen({navigation}: Props) {
               sorted.length ? (
                 <Pressable
                   accessibilityRole="link"
-                  onPress={() => Linking.openURL(SKILL_HUB_URL).catch(() => undefined)}
+                  onPress={() => openWebPage(SKILL_HUB_URL)}
                   style={({pressed}) => [styles.hubLink, pressed && styles.cardPressed]}>
                   <Icon icon={faCompass} size={12} color={t.t3} />
                   <Text style={styles.hubText}>{tr('skill_hub_link')}</Text>

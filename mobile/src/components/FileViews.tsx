@@ -13,7 +13,7 @@ import {
   canPreviewInApp,
   downloadFile,
   openFile,
-  openInBrowser,
+  openAsWebPage,
   useImageViewer,
   viewInArtifacts,
 } from '../files/openFile';
@@ -188,7 +188,7 @@ export function FileSheet({
       <SheetRow
         icon={faArrowUpRightFromSquare}
         label={tr('file_open_in_browser')}
-        onPress={then(() => openInBrowser(file))}
+        onPress={then(() => openAsWebPage(file))}
       />
       {!!file.path && (
         <SheetRow icon={faLayerGroup} label={tr('file_view_in_artifacts')} onPress={then(() => viewInArtifacts(file))} />
@@ -218,14 +218,18 @@ function SheetRow({icon, label, onPress}: {icon: IconDefinition; label: string; 
 export function ImageViewerHost() {
   const file = useImageViewer(s => s.file);
   const close = useImageViewer(s => s.close);
+  const [acting, setActing] = useState(false);
+  useEffect(() => setActing(false), [file]);
   return (
     <ImageViewer
       uri={file ? rawUrlOf(file) : null}
       title={file?.name}
       onClose={close}
       onDownload={file ? () => downloadFile(file) : undefined}
-      onOpen={file ? () => openInBrowser(file) : undefined}
-    />
+      onOpen={file ? () => openAsWebPage(file) : undefined}
+      onLongPress={() => setActing(true)}>
+      {file && <FileSheet file={file} visible={acting} onClose={() => setActing(false)} inPreview />}
+    </ImageViewer>
   );
 }
 
