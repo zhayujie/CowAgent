@@ -95,8 +95,8 @@ def _check(func):
             logger.info("DingTalk message {} already received, ignore".format(msgId))
             return
         self.receivedMsgs[msgId] = True
-        create_time = cmsg.create_time  # 消息时间戳
-        if conf().get("hot_reload") == True and int(create_time) < int(time.time()) - 60:  # 跳过1分钟前的历史消息
+        create_time = cmsg.create_time  # 消息时间戳（毫秒，见 process() 的 /1000 换算）
+        if conf().get("hot_reload") == True and int(create_time) / 1000 < time.time() - 60:  # 跳过1分钟前的历史消息
             logger.debug("[DingTalk] History message {} skipped".format(msgId))
             return
         if cmsg.my_msg and not cmsg.is_group:
