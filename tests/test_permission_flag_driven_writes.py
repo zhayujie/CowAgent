@@ -138,3 +138,43 @@ def test_an_unparsable_line_still_fails_closed_in_read_only():
     # Unchanged behaviour, kept so a future parser change cannot quietly turn
     # this into a fail-open path.
     assert not _read_only("echo 'unterminated").allowed
+
+
+# --- ``timeout``: the mandatory duration must not mask the wrapped command --
+
+TIMEOUT_WRAPPED_WRITES = [
+    # The duration operand used to be classified as the command name, so the
+    # wrapped write was never checked.
+    "timeout 10 cp a.txt /etc/b.txt",
+    "timeout 1m rm /etc/passwd",
+    "timeout 10 cat a.txt > /etc/b.txt",
+]
+
+TIMEOUT_WRAPPED_READS = [
+    "timeout 10 cat a.txt",
+    "timeout 2.5s cat a.txt",
+    "timeout --preserve-status 5 grep -r foo .",
+]
+
+
+@pytest.mark.parametrize("command", TIMEOUT_WRAPPED_WRITES)
+def test_read_only_refuses_a_write_behind_timeout(command):
+    decision = _read_only(command)
+    assert not decision.allowed, f"{command!r} was allowed to write"
+
+
+@pytest.mark.parametrize("command", TIMEOUT_WRAPPED_READS)
+def test_read_only_still_allows_a_read_behind_timeout(command):
+    assert _read_only(command).allowed
+
+
+def test_workspace_write_refuses_a_write_behind_timeout():
+    assert not _workspace_write("timeout 10 cp a.txt /etc/b.txt").allowed
+
+
+def test_workspace_write_refuses_escalation_behind_timeout():
+    assert not _workspace_write("timeout 10 sudo rm -rf /").allowed
+
+
+def test_workspace_write_allows_a_workspace_write_behind_timeout():
+    assert _workspace_write("timeout 10 cp a.txt b.txt").allowed

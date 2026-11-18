@@ -301,6 +301,12 @@ _BACKTICK_RE = re.compile(r"(?<!\\)`([^`]*)`")
 
 # ``<(cmd)`` / ``>(cmd)``: shlex emits ``<(`` as a plain token.
 _PROCESS_SUBST_CHARS = frozenset({"<", ">"})
+
+# ``timeout`` takes a mandatory duration operand before the command it wraps.
+# It is a bare value like ``10`` or ``1.5h`` (not a flag), so the flag-skip
+# loop in ``_command_name`` stops on it and it would otherwise be classified
+# as the command name, leaving the wrapped command unchecked.
+_TIMEOUT_DURATION_RE = re.compile(r"^\d+(?:\.\d+)?[smhd]?$", re.IGNORECASE)
 # Placeholder for a substitution passed as an argument; neither gate reads it.
 _SUBSTITUTION = "\x00"
 
@@ -432,6 +438,9 @@ def _command_name(tokens: Sequence[str]) -> Tuple[Optional[str], List[str]]:
         if name in _WRAPPER_COMMANDS:
             args = args[1:]
             while args and args[0].startswith("-"):
+                args = args[1:]
+            if name == "timeout" and args and _TIMEOUT_DURATION_RE.match(args[0]):
+                # Skip the mandatory duration so the wrapped command gets checked.
                 args = args[1:]
             continue
         return name, args[1:]
