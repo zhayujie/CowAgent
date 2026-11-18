@@ -136,11 +136,6 @@ def pair(url, no_wait):
                 "This instance only listens on 127.0.0.1, so no other device can reach it.\n"
                 "Set web_password in config.json (it then listens on all interfaces) and run `cow restart`."),
                 fg="yellow"))
-        elif res.get("reason") == "pairing_unavailable":
-            click.echo(click.style(_t(
-                "这台设备的访问由运行它的平台管理，请在平台的控制台里连接其他设备。",
-                "Access to this device is managed by the platform running it; connect other devices from that platform's console."),
-                fg="yellow"))
         else:
             click.echo(click.style(res.get("message") or _t("创建配对码失败", "Couldn't create a pairing code"),
                                    fg="red"))

@@ -18,9 +18,7 @@ const DEVICES_BTN = 'px-3 py-1.5 rounded-lg border border-slate-200 dark:border-
 
 let devicesList = [];
 let devicesCurrent = '';
-let devicesInstance = null;  // { id, name, version }
-let devicesPairingAvailable = true;
-let devicesManageUrl = '';
+let devicesInstance = null;  // { id, name, version, managed }
 let devicesNet = null;       // /api/integrations: public_url, lan_urls, password_set
 let devicesLoadFailed = false;
 let devicePairing = null;    // { pairing_id, code, link, urls, qr_image, expiresAt, expired }
@@ -54,8 +52,6 @@ function _loadDevices() {
         devicesList = data.devices || [];
         devicesCurrent = data.current || '';
         devicesInstance = data.instance || null;
-        devicesPairingAvailable = data.pairing_available !== false;
-        devicesManageUrl = data.manage_url || '';
         devicesLoadFailed = false;
         if (devicesInstance) instanceNoteDevice(devicesInstance);
     }).catch(() => {
@@ -107,8 +103,8 @@ function renderDevicesSelf() {
     const info = devicesInstance || {};
     const name = devicesRenaming === 'self'
         ? _devicesNameInput(_devicesName(), "onSelfRenameKey(event)", 'commitSelfRename()')
-        : `<span class="truncate">${escapeHtml(_devicesName())}</span>
-           ${_devicesIconBtn('fas fa-pen', 'devices_rename_device', 'startSelfRename()')}`;
+        : `<span class="truncate">${escapeHtml(_devicesName())}</span>`
+            + (info.managed ? '' : _devicesIconBtn('fas fa-pen', 'devices_rename_device', 'startSelfRename()'));
     const sub = [
         t(remote ? 'devices_operating_remote' : 'devices_this_device'),
         remote ? _instanceHost(remote.url) : '',
@@ -153,10 +149,11 @@ function _renameSelf(name) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name }),
     }).then(r => r.json()).then(data => {
-        if (data.status !== 'success') throw new Error();
+        if (data.status !== 'success') throw new Error(data.message || '');
         devicesInstance = data.instance;
         instanceNoteDevice(data.instance);
-    }).catch(() => _shareToast(t('devices_rename_failed').replace('{name}', name))).finally(_loadDevices);
+    }).catch(() => _shareToast(t('devices_rename_failed').replace('{name}', name)))
+        .finally(_loadDevices);
 }
 
 // ---------------------------------------------------------------------------
@@ -192,7 +189,7 @@ function renderDevicesOut() {
             : needsPairing
                 ? `<button onclick="openInstanceAdd({url: '${escapeHtml(item.url)}', replaceId: '${id}'})" class="${DEVICES_BTN} hover:bg-slate-50 dark:hover:bg-white/5">${escapeHtml(t('devices_repair'))}</button>`
                 : `<button onclick="switchInstance('${id}')" class="${DEVICES_BTN} hover:border-primary-500 hover:text-primary-600 dark:hover:text-primary-400">${escapeHtml(t('devices_switch'))}</button>`;
-        const tools = (item.token && !needsPairing ? _devicesIconBtn('fas fa-pen', 'devices_rename_device', `startOutRename('${id}')`) : '')
+        const tools = (item.token && !needsPairing && !item.managed ? _devicesIconBtn('fas fa-pen', 'devices_rename_device', `startOutRename('${id}')`) : '')
             + _devicesIconBtn('far fa-trash-can', 'devices_forget', `confirmForgetInstance('${id}')`);
         return `
             <div class="dev-row${on ? ' is-active' : ''}">
@@ -244,7 +241,7 @@ function _devicesHost() {
 
 function _devicesReachable() {
     const net = devicesNet;
-    if (!net) return true;
+    if (!net || (devicesInstance && devicesInstance.managed)) return true;
     let publicHost = '';
     try { publicHost = net.public_url ? new URL(net.public_url).hostname.replace(/^\[|\]$/g, '') : ''; } catch (e) {}
     return !!((publicHost && !_isLoopback(publicHost)) || (net.lan_urls || []).length || !_isLoopback(_devicesHost()));
@@ -262,13 +259,9 @@ function _devicesHintAction(label, onclick) {
 /** Why another device can't connect yet, or that it could but without a password. */
 function _devicesNotice() {
     const muted = 'text-slate-500 dark:text-slate-400';
-    if (!devicesPairingAvailable) {
-        const link = devicesManageUrl
-            ? ` <a href="${escapeHtml(devicesManageUrl)}" target="_blank" rel="noopener" class="ml-1 text-primary-500 hover:underline">${escapeHtml(t('devices_open_manage'))}</a>` : '';
-        return _devicesHint('fa-circle-info', muted, t('devices_pairing_managed'), link);
-    }
     const net = devicesNet;
-    if (!net) return '';
+    // Whoever runs a managed instance controls how it is reached.
+    if (!net || (devicesInstance && devicesInstance.managed)) return '';
     if (!_devicesReachable()) {
         return _devicesHint('fa-circle-info', muted, t('devices_local_only'),
             _devicesHintAction(t('shares_go_settings'), "switchConfigTab('integrations')"));
@@ -286,12 +279,11 @@ function renderDevicesIn() {
     if (title) title.textContent = remote ? t('devices_in_title_remote').replace('{name}', _devicesName()) : t('devices_in_title');
     const btn = document.getElementById('devices-pair-btn');
     if (btn) {
-        btn.classList.toggle('hidden', !devicesPairingAvailable);
         btn.disabled = !_devicesReachable();
         btn.onclick = devicePairing ? cancelDevicePairing : startDevicePairing;
         btn.className = `px-4 py-2 rounded-lg text-sm font-medium cursor-pointer transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed ${
             devicePairing ? 'border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5'
-                          : 'bg-primary-500 hover:bg-primary-600 text-white'}${devicesPairingAvailable ? '' : ' hidden'}`;
+                          : 'bg-primary-500 hover:bg-primary-600 text-white'}`;
         btn.innerHTML = devicePairing
             ? `<i class="fas fa-xmark mr-1.5"></i>${escapeHtml(t('devices_cancel'))}`
             : `<i class="fas fa-qrcode mr-1.5"></i>${escapeHtml(t('devices_let_connect'))}`;
@@ -317,8 +309,7 @@ function startDevicePairing() {
     }).then(r => r.json()).then(data => {
         if (data.status !== 'success') {
             if (btn) btn.disabled = false;
-            const known = { local_only: 'devices_local_only', pairing_unavailable: 'devices_pairing_managed' }[data.reason];
-            _shareToast(known ? t(known) : (data.message || t('devices_pair_failed')));
+            _shareToast(data.reason === 'local_only' ? t('devices_local_only') : (data.message || t('devices_pair_failed')));
             return;
         }
         devicePairing = { ...data, expiresAt: Date.now() + data.expires_in * 1000 };

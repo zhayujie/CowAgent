@@ -4,7 +4,6 @@ import {
   ArrowRight,
   ArrowRightLeft,
   Clock,
-  ExternalLink,
   Globe,
   HelpCircle,
   Info,
@@ -238,8 +237,6 @@ const DevicesTab: React.FC<{
         devices: data.devices || [],
         current: data.current || '',
         instance: data.instance,
-        pairing_available: data.pairing_available,
-        manage_url: data.manage_url,
       })
       noteDevice(data.instance)
       setLoadFailed(false)
@@ -325,8 +322,10 @@ const DevicesTab: React.FC<{
 
   // ---- devices connected to the one in use --------------------------------
 
-  const pairingOff = list?.pairing_available === false
-  const reachable = !!instance || !net || openElsewhere(net.public_url) || lan.length > 0
+  // Whoever runs a managed device controls how it is reached and what it is called.
+  const managed = !!list?.instance?.managed
+  const reachable = !!instance || managed || !net || openElsewhere(net.public_url) || lan.length > 0
+  const accessNotice = !!net && !managed && (!reachable || !net.password_set)
   const devices = list?.devices || []
   const current = list?.current || ''
 
@@ -335,13 +334,7 @@ const DevicesTab: React.FC<{
     try {
       const data = await apiClient.createPairing(instance ? instance.url : lan[0] || '')
       if (data.status !== 'success') {
-        notice(
-          data.reason === 'local_only'
-            ? t('devices_local_only')
-            : data.reason === 'pairing_unavailable'
-              ? t('devices_pairing_managed')
-              : data.message || t('devices_pair_failed'),
-        )
+        notice(data.reason === 'local_only' ? t('devices_local_only') : data.message || t('devices_pair_failed'))
         return
       }
       setPairing({ ...data, expiresAt: Date.now() + data.expires_in * 1000 })
@@ -486,7 +479,7 @@ const DevicesTab: React.FC<{
             ) : (
               <>
                 <span className="text-sm font-semibold text-content truncate">{name}</span>
-                {list?.instance && (
+                {list?.instance && !managed && (
                   <IconAction label={t('devices_rename_device')} onClick={() => setRenaming('self')}>
                     <Pencil size={12} />
                   </IconAction>
@@ -578,7 +571,7 @@ const DevicesTab: React.FC<{
                     </Btn>
                   )}
                   <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
-                    {item.token && st !== 'other' && (
+                    {item.token && st !== 'other' && !item.managed && (
                       <IconAction label={t('devices_rename_device')} onClick={() => setRenaming(`out:${item.id}`)}>
                         <Pencil size={13} />
                       </IconAction>
@@ -613,41 +606,29 @@ const DevicesTab: React.FC<{
                 {t('devices_revoke_others')}
               </Btn>
             )}
-            {!pairingOff && (
-              <Btn
-                variant={pairing ? 'ghost' : 'primary'}
-                disabled={pairBusy || (!pairing && !reachable)}
-                onClick={() => (pairing ? setPairing(null) : void startPairing())}
-                className={BTN_SM}
-              >
-                <span className="inline-flex items-center gap-1.5">
-                  {pairBusy ? (
-                    <Loader2 size={13} className="animate-spin" />
-                  ) : pairing ? (
-                    <X size={13} />
-                  ) : (
-                    <QrCode size={13} />
-                  )}
-                  {pairing ? t('devices_cancel') : t('devices_let_connect')}
-                </span>
-              </Btn>
-            )}
+            <Btn
+              variant={pairing ? 'ghost' : 'primary'}
+              disabled={pairBusy || (!pairing && !reachable)}
+              onClick={() => (pairing ? setPairing(null) : void startPairing())}
+              className={BTN_SM}
+            >
+              <span className="inline-flex items-center gap-1.5">
+                {pairBusy ? (
+                  <Loader2 size={13} className="animate-spin" />
+                ) : pairing ? (
+                  <X size={13} />
+                ) : (
+                  <QrCode size={13} />
+                )}
+                {pairing ? t('devices_cancel') : t('devices_let_connect')}
+              </span>
+            </Btn>
           </div>
         }
       >
-        {pairingOff ? (
-          <Notice>
-            {t('devices_pairing_managed')}
-            {list?.manage_url && (
-              <GoLink onClick={() => window.open(list.manage_url, '_blank')}>
-                {t('devices_open_manage')}
-                <ExternalLink size={11} />
-              </GoLink>
-            )}
-          </Notice>
-        ) : (
+        {accessNotice && (
           <>
-            {net && !reachable && (
+            {!reachable && (
               <Notice>
                 {t('devices_local_only')}
                 <GoLink onClick={onGoToIntegrations}>
@@ -656,7 +637,7 @@ const DevicesTab: React.FC<{
                 </GoLink>
               </Notice>
             )}
-            {net && reachable && !net.password_set && (
+            {reachable && !net?.password_set && (
               <Notice tone="warning">
                 {t('devices_no_password')}
                 <GoLink onClick={onGoToPassword}>
@@ -753,7 +734,7 @@ const DevicesTab: React.FC<{
           </div>
         )}
 
-        <div className={pairingOff || pairing || (net && (!reachable || !net.password_set)) ? 'mt-4' : ''}>
+        <div className={pairing || accessNotice ? 'mt-4' : ''}>
           {loadFailed && !devices.length ? (
             <p className="py-6 text-center text-sm text-content-tertiary">{t('devices_load_failed')}</p>
           ) : !list ? (

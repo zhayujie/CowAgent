@@ -17,6 +17,8 @@ export interface Instance {
   /** The id the device answers discovery with; its token goes nowhere else. */
   instance_id?: string
   version: string
+  /** Named by whoever runs it, so clients don't offer a rename. */
+  managed?: boolean
   added_at: number
 }
 

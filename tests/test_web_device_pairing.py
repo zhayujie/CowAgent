@@ -26,8 +26,7 @@ def env(tmp_path, monkeypatch):
     from channel.web.core import _common, devices, identity, pairing
 
     monkeypatch.setenv("COW_DATA_DIR", str(tmp_path))
-    monkeypatch.delenv("COW_DEVICE_ID", raising=False)
-    monkeypatch.delenv("COW_DEVICE_NAME", raising=False)
+    monkeypatch.delenv("COW_DEPLOYMENT", raising=False)
     monkeypatch.setitem(config.conf(), "web_password", PASSWORD)
     monkeypatch.setitem(config.conf(), "web_public_url", "")
     monkeypatch.setitem(config.conf(), "device_name", "")
@@ -143,14 +142,15 @@ def test_the_agent_file_tools_refuse_the_device_directory(env):
     assert "Phone" in open(listed, encoding="utf-8").read()
 
 
-def test_a_platform_can_supply_the_id_and_name(env, monkeypatch):
-    monkeypatch.setenv("COW_DEVICE_ID", "inst-7f3a9c")
-    monkeypatch.setenv("COW_DEVICE_NAME", "Team assistant")
+def test_the_id_and_name_come_from_the_device_directory_and_config(env, monkeypatch):
+    (env / "device").mkdir(exist_ok=True)
+    (env / "device" / "device_id").write_text("ins-7f3a9c")
+    monkeypatch.setitem(config.conf(), "device_name", "Team assistant")
     app = _app()
     _, found = _call(app, "/.well-known/cowagent")
-    assert found["id"] == "inst-7f3a9c"
+    assert found["id"] == "ins-7f3a9c"
     _, listed = _call(app, "/api/devices", token=_owner_token(app))
-    assert listed["instance"]["id"] == "inst-7f3a9c"
+    assert listed["instance"]["id"] == "ins-7f3a9c"
     assert listed["instance"]["name"] == "Team assistant"
 
 
@@ -174,6 +174,23 @@ def test_the_name_defaults_to_the_computers_and_can_be_changed(env, monkeypatch)
 
     _, reset = _call(app, "/api/device", "PATCH", {"name": ""}, token=owner)
     assert reset["instance"]["name"] == "Studio Mac"
+    assert reset["instance"]["managed"] is False
+
+
+def test_a_managed_deployment_says_so_and_works_the_same(env, monkeypatch):
+    monkeypatch.setenv("COW_DEPLOYMENT", "managed")
+    monkeypatch.setitem(config.conf(), "web_password", "")
+    monkeypatch.setitem(config.conf(), "device_name", "Team assistant")
+    app = _app()
+    _, listed = _call(app, "/api/devices")
+    assert listed["instance"] == {**listed["instance"], "name": "Team assistant", "managed": True}
+    _, found = _call(app, "/.well-known/cowagent")
+    assert found["auth"]["methods"] == ["password", "pairing"]
+    _, created = _call(app, "/api/pairing", "POST", {"base_url": "https://agent.example.com"})
+    assert created["status"] == "success"
+    # Whoever runs it names it through the same call.
+    _, renamed = _call(app, "/api/device", "PATCH", {"name": "Sales assistant"})
+    assert renamed["instance"]["name"] == "Sales assistant"
 
 
 def test_container_hostnames_are_not_shown_as_names(env, monkeypatch):
@@ -186,25 +203,6 @@ def test_container_hostnames_are_not_shown_as_names(env, monkeypatch):
     identity.reset()
     monkeypatch.setattr(identity.socket, "gethostname", lambda: "nas.local")
     assert identity.device_name() == "nas"
-
-
-def test_pairing_is_off_behind_an_auth_proxy(env, monkeypatch):
-    from channel.web.api import devices as devices_api
-
-    app = _app()
-    owner = _owner_token(app)
-    _, created = _call(app, "/api/pairing", "POST", {}, token=owner)
-    monkeypatch.setattr(devices_api, "_behind_auth_proxy", lambda: True)
-
-    _, found = _call(app, "/.well-known/cowagent")
-    assert found["auth"]["methods"] == ["password"]
-    _, refused = _call(app, "/api/pairing", "POST", {}, token=owner)
-    assert refused["reason"] == "pairing_unavailable"
-    # A code made before the switch can't be redeemed either.
-    res, body = _call(app, "/auth/pair", "POST", {"code": created["code"], "device": {"name": "x"}})
-    assert body["status"] == "error"
-    _, listed = _call(app, "/api/devices", token=owner)
-    assert listed["pairing_available"] is False
 
 
 def test_creating_a_code_needs_a_signed_in_client(env):

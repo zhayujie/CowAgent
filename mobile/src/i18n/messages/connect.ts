@@ -36,7 +36,6 @@ const zh = {
   connect_err_timeout: '{host} 一直没有响应。可能被防火墙拦截，或手机和电脑不在同一网络',
   connect_err_login: '{host} 需要先登录才能访问（前面可能有一层登录网关），无法用配对码直接连接',
   connect_err_not_cowagent: '{host} 上有服务在响应（HTTP {status}），但不是 CowAgent。请检查端口是否填对',
-  connect_err_pairing_unavailable: '{host} 的访问由运行它的平台管理，不支持配对码连接',
   connect_err_wrong_device: '「{name}」的地址上现在是另一台设备。为了安全，没有向它发送登录凭证。请确认地址后重新配对',
   connect_err_unreachable: '连不上这台电脑。请确认手机和电脑在同一网络，且电脑上的 CowAgent 正在运行',
   connect_confirm_title: '连接到这个 CowAgent？',
@@ -93,7 +92,6 @@ const en: Record<keyof typeof zh, string> = {
   connect_err_timeout: '{host} did not answer. A firewall may be blocking it, or the phone and computer are on different networks',
   connect_err_login: '{host} wants you to sign in first (there may be a sign-in gateway in front), so a pairing code cannot connect to it',
   connect_err_not_cowagent: 'Something answers at {host} (HTTP {status}), but it is not CowAgent. Check the port',
-  connect_err_pairing_unavailable: 'Access to {host} is managed by the platform running it, so pairing codes are off',
   connect_err_wrong_device: 'A different device now answers at the address of "{name}". For safety, no credentials were sent to it. Check the address and pair again',
   connect_err_unreachable:
     "Can't reach the computer. Make sure the phone and computer are on the same network and CowAgent is running",
