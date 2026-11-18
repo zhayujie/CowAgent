@@ -1424,6 +1424,17 @@ class CowCliPlugin(Plugin):
         if not name:
             return _t("请指定技能名称: /skill info <名称>", "Please specify a skill name: /skill info <name>")
 
+        # The name comes from chat and is joined into a path below: without
+        # this check, "/skill info ../../.." (or an absolute path) reads and
+        # echoes any SKILL.md on disk. _skill_uninstall already rejects the
+        # same input; info must not be the gap in the fence.
+        from cli.commands.skill import SkillInstallError, _check_skill_name
+
+        try:
+            _check_skill_name(name)
+        except SkillInstallError as e:
+            return _t(f"无法查看: {e}", f"Cannot view: {e}")
+
         from cli.utils import get_skills_dir, get_builtin_skills_dir
 
         skills_dir = get_skills_dir(agent_id)
