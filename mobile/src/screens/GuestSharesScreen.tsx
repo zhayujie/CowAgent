@@ -31,6 +31,7 @@ import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
 import {copyText} from '../utils/clipboard';
 import {SHARE_DEFAULT_COLOR, shareChips, shareConfig, shareFailure, shareUrl, STATUS_LABEL} from '../utils/guestShares';
+import {integrationBase} from '../utils/integrations';
 
 type Props = StackScreenProps<RootStackParamList, 'GuestShares'>;
 
@@ -73,7 +74,7 @@ export function GuestSharesScreen({navigation}: Props) {
     try {
       const [overview, access] = await Promise.all([getGuestShares(), getIntegrations().catch(() => null)]);
       setData(overview);
-      setBase(access?.public_url || access?.lan_urls[0] || activeServer()?.baseUrl || '');
+      setBase(integrationBase(access, activeServer()?.baseUrl ?? ''));
       setError(null);
     } catch (e) {
       setError(describeConnectError(e));

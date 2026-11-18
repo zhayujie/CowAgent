@@ -17,6 +17,7 @@ import type {IntegrationsState} from '../protocol/resources';
 import {activeServer, describeConnectError} from '../store/serverStore';
 import {makeStyles, useTheme} from '../theme/theme';
 import {copyText} from '../utils/clipboard';
+import {hostOf, integrationBase, isLoopback} from '../utils/integrations';
 
 type Props = StackScreenProps<RootStackParamList, 'Access'>;
 
@@ -24,13 +25,6 @@ const LOCAL = '127.0.0.1';
 const ALL = '0.0.0.0';
 const PUBLIC_URL_RE = /^https?:\/\/[^\s/?#]+(\/[^\s?#]*)?$/i;
 const IPV4_RE = /^(\d{1,3}\.){3}\d{1,3}$/;
-
-const isLoopback = (host: string) => host === 'localhost' || host === '::1' || host.startsWith('127.');
-
-function hostOf(url: string): string {
-  const m = /^[a-z]+:\/\/(\[[^\]]+\]|[^/:?#]+)/i.exec(url);
-  return m ? m[1].replace(/^\[|\]$/g, '') : '';
-}
 
 const LISTEN_FAILURES: Record<string, string> = {
   get invalid_host() {
@@ -90,7 +84,9 @@ export function AccessScreen({navigation}: Props) {
   const host = state.listen.host;
   const preset = host === LOCAL || host === 'localhost' ? LOCAL : host === ALL || host === '::' ? ALL : 'custom';
   // A phone reaching the server over the network would lock itself out by moving it to loopback.
-  const remote = !isLoopback(hostOf(activeServer()?.baseUrl ?? ''));
+  const connected = activeServer()?.baseUrl ?? '';
+  const remote = !isLoopback(hostOf(connected));
+  const detected = integrationBase({public_url: '', lan_urls: state.lan_urls}, connected);
 
   const refresh = async () => {
     setRefreshing(true);
@@ -162,8 +158,9 @@ export function AccessScreen({navigation}: Props) {
           <InfoRow
             first
             title={tr('access_public_url')}
-            value={state.public_url || tr('access_auto_detect')}
-            mono={!!state.public_url}
+            hint={state.public_url ? undefined : tr('access_auto_detect')}
+            value={state.public_url || detected}
+            mono
             onPress={() => setSheet('url')}
           />
         </Section>
@@ -213,7 +210,7 @@ export function AccessScreen({navigation}: Props) {
         visible={sheet === 'url'}
         title={tr('access_public_url')}
         initial={state.public_url}
-        placeholder="https://cow.example.com"
+        placeholder={detected || 'https://cow.example.com'}
         hint={tr('access_public_url_hint')}
         keyboardType="url"
         mono

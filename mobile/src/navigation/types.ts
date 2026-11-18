@@ -30,7 +30,10 @@ export type RootStackParamList = {
   Channel: {name: string; instanceId?: string; add?: boolean};
   Settings: undefined;
   Agents: undefined;
+  AgentCreate: undefined;
   AgentDetail: {agentId: string};
+  /** Per-Agent skill subset, matching the desktop Agents › Skills tab. */
+  AgentSkills: {agentId: string};
   AgentFile: {agentId: string; name: AgentCoreFile};
   Models: undefined;
   Capability: {key: CapabilityKey};
@@ -41,7 +44,6 @@ export type RootStackParamList = {
   GuestShares: undefined;
   /** No `slug` creates a page; `focus` jumps to the password field. */
   GuestShareEdit: {slug?: string; focus?: 'password'};
-  Mcp: undefined;
   McpDetail: {name: string};
   McpEdit: {name?: string} | undefined;
   Logs: undefined;

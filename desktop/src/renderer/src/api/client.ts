@@ -1738,15 +1738,14 @@ class ApiClient {
   }
 }
 
-/** LAN addresses of the backend, preferring what the OS reports for real
- *  interfaces over the backend's guess; only this machine's backend can use
- *  this machine's interfaces. */
+/** LAN addresses as the backend reports them, so the web console and mobile app
+ *  show the same ones; this machine's own list only when the backend found none
+ *  and is this machine's. */
 export async function lanUrls(state: IntegrationsState): Promise<string[]> {
   if (state.local_only || !state.listen?.port) return []
-  if (apiClient.isRemote()) return state.lan_urls || []
+  if (state.lan_urls?.length || apiClient.isRemote()) return state.lan_urls || []
   const ips = (await window.electronAPI?.getLanAddresses?.().catch(() => [])) || []
-  const urls = ips.map((ip) => `http://${ip}:${state.listen.port}`)
-  return Array.from(new Set([...urls, ...(state.lan_urls || [])]))
+  return ips.map((ip) => `http://${ip}:${state.listen.port}`)
 }
 
 export const apiClient = new ApiClient()

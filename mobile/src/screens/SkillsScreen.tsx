@@ -1,6 +1,5 @@
 import {
   faArrowUpRightFromSquare,
-  faChevronDown,
   faChevronRight,
   faCodeBranch,
   faCompass,
@@ -14,7 +13,7 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import {useFocusEffect} from '@react-navigation/native';
 import type {StackScreenProps} from '@react-navigation/stack';
-import React, {useCallback, useEffect, useMemo, useRef, useState, type ReactNode} from 'react';
+import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {FlatList, Linking, Pressable, RefreshControl, ScrollView, Text, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {
@@ -57,8 +56,8 @@ import {makeStyles, useTheme} from '../theme/theme';
 import {compareSkills, SKILL_SOURCE_LABEL, skillDescription, skillName, skillRefusal} from '../utils/skills';
 
 type Props = StackScreenProps<RootStackParamList, 'Skills'>;
-type Tab = 'skills' | 'tools';
-const TABS: readonly Tab[] = ['skills', 'tools'];
+type Tab = 'skills' | 'tools' | 'mcp';
+const TABS: readonly Tab[] = ['skills', 'tools', 'mcp'];
 type SheetState =
   | {kind: 'add'}
   | {kind: 'market'; source: SkillMarketSource}
@@ -68,7 +67,6 @@ type SheetState =
 type AddKey = 'create' | SkillMarketSource | 'upload' | 'browse';
 
 export const SKILL_HUB_URL = 'https://skills.cowagent.ai/';
-const TOOLS_COLLAPSED = 6;
 const MCP_POLL_MS = 1500;
 const MCP_POLL_MAX_MS = 120_000;
 const UPLOAD_MAX_BYTES = 50 * 1024 * 1024;
@@ -120,7 +118,6 @@ export function SkillsScreen({navigation}: Props) {
   const [toolsError, setToolsError] = useState<string | null>(null);
   const [mcpError, setMcpError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [toolsOpen, setToolsOpen] = useState(false);
   const [openTool, setOpenTool] = useState<string | null>(null);
   const [sheet, setSheet] = useState<SheetState | null>(null);
   const [preview, setPreview] = useState<SkillPreview | null>(null);
@@ -196,7 +193,7 @@ export function SkillsScreen({navigation}: Props) {
 
   const refresh = async () => {
     setRefreshing(true);
-    await Promise.all(tab === 'skills' ? [loadSkills()] : [loadTools(), reloadMcp()]);
+    await (tab === 'skills' ? loadSkills() : tab === 'tools' ? loadTools() : reloadMcp());
     setRefreshing(false);
   };
 
@@ -348,8 +345,6 @@ export function SkillsScreen({navigation}: Props) {
   };
 
   const mcpList = servers ?? [];
-  const visibleTools = toolsOpen ? tools ?? [] : (tools ?? []).slice(0, TOOLS_COLLAPSED);
-  const toolCount = (tools?.length ?? 0) + mcpList.length;
   const refreshControl = <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={t.t3} colors={[t.green]} />;
 
   const skillSheet = sheet?.kind === 'skill' ? sheet.skill : null;
@@ -371,14 +366,16 @@ export function SkillsScreen({navigation}: Props) {
         onTitlePress={viewed.multi ? () => setSheet({kind: 'agent'}) : undefined}
         onBack={navigation.goBack}
         right={
-          <IconButton
-            icon={faPlus}
-            label={tab === 'skills' ? tr('skill_add') : tr('mcp_add')}
-            filled
-            size={13}
-            color={t.t1}
-            onPress={() => (tab === 'skills' ? setSheet({kind: 'add'}) : navigation.navigate('McpEdit'))}
-          />
+          tab === 'tools' ? undefined : (
+            <IconButton
+              icon={faPlus}
+              label={tab === 'skills' ? tr('skill_add') : tr('mcp_add')}
+              filled
+              size={13}
+              color={t.t1}
+              onPress={() => (tab === 'skills' ? setSheet({kind: 'add'}) : navigation.navigate('McpEdit'))}
+            />
+          )
         }
       />
       <Segmented
@@ -386,7 +383,8 @@ export function SkillsScreen({navigation}: Props) {
         onChange={setTab}
         options={[
           {key: 'skills', label: tr('skill_title'), count: skills?.length || undefined},
-          {key: 'tools', label: tr('skill_tab_tools'), count: toolCount || undefined},
+          {key: 'tools', label: tr('skill_tab_tools'), count: tools?.length || undefined},
+          {key: 'mcp', label: tr('skill_tab_mcp'), count: servers?.length || undefined},
         ]}
       />
 
@@ -426,24 +424,8 @@ export function SkillsScreen({navigation}: Props) {
             }
             refreshControl={refreshControl}
           />
-        ) : (
+        ) : tab === 'tools' ? (
           <ScrollView contentContainerStyle={[styles.list, {paddingBottom: insets.bottom + 32}]} refreshControl={refreshControl}>
-            <SectionHead
-              title={tr('skill_builtin_tools')}
-              count={tools?.length}
-              action={
-                (tools?.length ?? 0) > TOOLS_COLLAPSED ? (
-                  <Pressable hitSlop={8} onPress={() => setToolsOpen(v => !v)} style={styles.headLink}>
-                    <Text style={styles.headLinkText}>
-                      {toolsOpen ? tr('skill_collapse') : trf('skill_show_all', {n: tools?.length ?? 0})}
-                    </Text>
-                    <View style={toolsOpen && styles.flipped}>
-                      <Icon icon={faChevronDown} size={9} color={t.t3} />
-                    </View>
-                  </Pressable>
-                ) : null
-              }
-            />
             {!tools ? (
               <Text style={styles.sectionNote}>
                 {toolsError ? trf('common_load_failed_detail', {error: toolsError}) : tr('common_loading')}
@@ -451,8 +433,8 @@ export function SkillsScreen({navigation}: Props) {
             ) : !tools.length ? (
               <Text style={styles.sectionNote}>{tr('skill_no_tools')}</Text>
             ) : (
-              <View style={styles.group}>
-                {visibleTools.map((tool, i) => {
+              <View style={[styles.group, styles.groupTop]}>
+                {tools.map((tool, i) => {
                   const open = openTool === tool.name;
                   return (
                     <Pressable
@@ -475,30 +457,25 @@ export function SkillsScreen({navigation}: Props) {
                 })}
               </View>
             )}
-
-            <SectionHead
-              title={tr('mcp_title')}
-              count={servers ? mcpList.length : undefined}
-              action={
-                <Pressable hitSlop={8} onPress={() => navigation.navigate('McpEdit')} style={styles.addButton}>
-                  <Icon icon={faPlus} size={10} color={t.accent} />
-                  <Text style={styles.addText}>{tr('common_add')}</Text>
-                </Pressable>
-              }
-            />
+          </ScrollView>
+        ) : (
+          <ScrollView contentContainerStyle={[styles.list, {paddingBottom: insets.bottom + 32}]} refreshControl={refreshControl}>
+            {local && <Notice style={styles.localNote}>{tr('mcp_local_note')}</Notice>}
             {!!mcpError && (
               <Text style={[styles.sectionNote, styles.errorText]}>{trf('common_load_failed_detail', {error: mcpError})}</Text>
             )}
             {!servers ? (
               !mcpError && <Text style={styles.sectionNote}>{tr('common_loading')}</Text>
             ) : !mcpList.length ? (
-              <Pressable onPress={() => navigation.navigate('McpEdit')} style={({pressed}) => [styles.emptyBox, pressed && styles.rowPressed]}>
+              <Pressable
+                onPress={() => navigation.navigate('McpEdit')}
+                style={({pressed}) => [styles.emptyBox, styles.groupTop, pressed && styles.rowPressed]}>
                 <McpIcon />
                 <Text style={styles.emptyTitle}>{tr('mcp_empty')}</Text>
                 <Text style={styles.emptyHint}>{tr('mcp_empty_hint_tools')}</Text>
               </Pressable>
             ) : (
-              <View style={styles.group}>
+              <View style={[styles.group, styles.groupTop]}>
                 {mcpList.map((s, i) => {
                   const status = MCP_STATUS[s.status ?? 'idle'] ?? MCP_STATUS.idle;
                   const transport = mcpTransport(s);
@@ -593,21 +570,8 @@ export function SkillsScreen({navigation}: Props) {
   );
 }
 
-function SectionHead({title, count, action}: {title: string; count?: number; action?: ReactNode}) {
-  const styles = useStyles();
-  return (
-    <View style={styles.sectionHead}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      {!!count && <Text style={styles.sectionCount}>{count}</Text>}
-      <View style={styles.flex} />
-      {action}
-    </View>
-  );
-}
-
 const useStyles = makeStyles(t => ({
   root: {flex: 1, backgroundColor: t.bg0},
-  flex: {flex: 1},
   localNote: {marginTop: 4, marginBottom: 8},
   list: {paddingTop: 4, flexGrow: 1},
   summary: {fontSize: 12, color: t.t4, paddingHorizontal: 18, paddingTop: 4, paddingBottom: 10, fontVariant: ['tabular-nums']},
@@ -642,35 +606,9 @@ const useStyles = makeStyles(t => ({
   version: {fontSize: 10.5, color: t.t4, fontVariant: ['tabular-nums']},
   hubLink: {flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, paddingVertical: 16},
   hubText: {fontSize: 13, color: t.t3},
-  sectionHead: {flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 18, marginTop: 14, marginBottom: 10, minHeight: 24},
-  sectionTitle: {fontSize: 12, fontWeight: '600', letterSpacing: 0.6, color: t.t3},
-  sectionCount: {
-    minWidth: 20,
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: 999,
-    overflow: 'hidden',
-    textAlign: 'center',
-    fontSize: 11,
-    color: t.t3,
-    backgroundColor: t.bg2,
-    fontVariant: ['tabular-nums'],
-  },
   sectionNote: {fontSize: 13, color: t.t3, paddingHorizontal: 18, paddingVertical: 6},
   errorText: {color: t.danger},
-  headLink: {flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 2},
-  headLinkText: {fontSize: 12, color: t.t3},
-  flipped: {transform: [{rotate: '180deg'}]},
-  addButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: radius.sm,
-    backgroundColor: t.accentSoft,
-  },
-  addText: {fontSize: 12, fontWeight: '600', color: t.accent},
+  groupTop: {marginTop: 8},
   group: {
     marginHorizontal: 14,
     borderRadius: radius.md,

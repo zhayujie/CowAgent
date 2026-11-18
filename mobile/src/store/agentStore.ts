@@ -1,6 +1,6 @@
 import {useCallback, useEffect, useState} from 'react';
 import {create} from 'zustand';
-import {getAgents, updateAgent, type AgentPatch} from '../api/cowApi';
+import {getAgents, setAgentKnowledgeMode, updateAgent, type AgentPatch} from '../api/cowApi';
 import {ApiError} from '../api/http';
 import type {AgentProfile} from '../protocol/resources';
 import {readJSON, writeJSON} from '../storage/kv';
@@ -19,6 +19,8 @@ interface AgentState {
   select: (agentId: string) => void;
   /** Applies a roster edit; on a stale revision reloads once and retries. */
   update: (agentId: string, patch: AgentPatch) => Promise<void>;
+  /** Shared vs own knowledge directory for a non-default Agent. */
+  setKnowledgeMode: (agentId: string, mode: 'shared' | 'own') => Promise<void>;
 }
 
 const CURRENT_KEY = 'agent:current';
@@ -58,6 +60,11 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       await get().load();
       await updateAgent(agentId, patch, get().revision);
     }
+    await get().load();
+  },
+
+  setKnowledgeMode: async (agentId, mode) => {
+    await setAgentKnowledgeMode(agentId, mode);
     await get().load();
   },
 }));

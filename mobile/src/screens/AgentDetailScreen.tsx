@@ -5,7 +5,15 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {getModels, newSessionId} from '../api/cowApi';
 import {AgentAvatar} from '../components/AgentAvatar';
 import {ModelPicker} from '../components/ModelPicker';
-import {ActionButton, ConfirmSheet, FieldSheet, Footnote, SettingRow, SwitchRow} from '../components/settings';
+import {
+  ActionButton,
+  ChoiceSheet,
+  ConfirmSheet,
+  FieldSheet,
+  SettingRow,
+  SwitchRow,
+  type Choice,
+} from '../components/settings';
 import {showToast, ToastHost} from '../components/Toast';
 import {EmptyState, GroupLabel, PageHeader} from '../components/ui';
 import {tr, trf} from '../i18n';
@@ -19,6 +27,11 @@ import {copyText} from '../utils/clipboard';
 import {agentModelLabel} from './AgentsScreen';
 
 type Props = StackScreenProps<RootStackParamList, 'AgentDetail'>;
+
+const KNOWLEDGE_OPTIONS = (): Choice<'shared' | 'own'>[] => [
+  {key: 'shared', label: tr('agent_knowledge_shared'), desc: tr('agent_knowledge_shared_desc')},
+  {key: 'own', label: tr('agent_knowledge_own'), desc: tr('agent_knowledge_own_desc')},
+];
 
 export const CORE_FILE_META: {name: AgentCoreFile; label: string}[] = [
   {
@@ -57,11 +70,14 @@ export function AgentDetailScreen({route, navigation}: Props) {
   const defaultId = useAgentStore(s => s.defaultId);
   const currentId = useAgentStore(s => s.currentId);
   const update = useAgentStore(s => s.update);
+  const setKnowledgeMode = useAgentStore(s => s.setKnowledgeMode);
   const globalModel = useConfigStore(s => s.config?.model);
   const [editing, setEditing] = useState<Editing>(null);
   const [providers, setProviders] = useState<ProviderEntry[] | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [confirmDefault, setConfirmDefault] = useState(false);
+  const [knowledgeSheet, setKnowledgeSheet] = useState(false);
+  const [knowledgeBusy, setKnowledgeBusy] = useState(false);
 
   if (!agent) {
     return (
@@ -160,10 +176,15 @@ export function AgentDetailScreen({route, navigation}: Props) {
           title={tr('agent_knowledge')}
           value={agent.knowledge_mode === 'own' ? tr('agent_knowledge_own') : tr('agent_knowledge_shared')}
           detail={agent.knowledge_mode === 'own' ? tr('agent_knowledge_own_desc') : tr('agent_knowledge_shared_desc')}
+          // The default Agent's knowledge directory is the shared library; only members can switch.
+          onPress={isDefault || knowledgeBusy ? undefined : () => setKnowledgeSheet(true)}
+          chevron={!isDefault}
         />
         <SettingRow
           title={tr('agent_skills')}
           value={agent.skills == null ? tr('agent_skills_all') : trf('agent_skills_count', {n: agent.skills.length})}
+          onPress={() => navigation.navigate('AgentSkills', {agentId: agent.id})}
+          chevron
           last
         />
 
@@ -209,7 +230,6 @@ export function AgentDetailScreen({route, navigation}: Props) {
           onPress={async () => showToast((await copyText(agent.id)) ? tr('agent_id_copied') : tr('agent_copy_failed'))}
         />
         <SettingRow title={tr('agent_workspace')} detail={agent.workspace} last />
-        <Footnote>{tr('agent_detail_web_note')}</Footnote>
       </ScrollView>
 
       <FieldSheet
@@ -270,6 +290,28 @@ export function AgentDetailScreen({route, navigation}: Props) {
           }
         }}
         onClose={() => setConfirmDefault(false)}
+      />
+      <ChoiceSheet
+        visible={knowledgeSheet}
+        title={tr('agent_knowledge')}
+        selected={agent.knowledge_mode === 'own' ? 'own' : 'shared'}
+        options={KNOWLEDGE_OPTIONS()}
+        onSelect={async mode => {
+          setKnowledgeSheet(false);
+          if (mode === (agent.knowledge_mode === 'own' ? 'own' : 'shared')) {
+            return;
+          }
+          setKnowledgeBusy(true);
+          try {
+            await setKnowledgeMode(agent.id, mode);
+            showToast(tr('common_saved'));
+          } catch (e) {
+            showToast(trf('agent_knowledge_failed', {error: describeConnectError(e)}));
+          } finally {
+            setKnowledgeBusy(false);
+          }
+        }}
+        onClose={() => setKnowledgeSheet(false)}
       />
       <ToastHost bottom={insets.bottom + 28} />
     </View>

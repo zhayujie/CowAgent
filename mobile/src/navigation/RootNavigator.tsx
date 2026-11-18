@@ -4,8 +4,10 @@ import {ActivityIndicator, Platform, StyleSheet, View} from 'react-native';
 import {newSessionId} from '../api/cowApi';
 import {useLangStore} from '../i18n';
 import {AccessScreen} from '../screens/AccessScreen';
+import {AgentCreateScreen} from '../screens/AgentCreateScreen';
 import {AgentDetailScreen} from '../screens/AgentDetailScreen';
 import {AgentFileScreen} from '../screens/AgentFileScreen';
+import {AgentSkillsScreen} from '../screens/AgentSkillsScreen';
 import {AgentsScreen} from '../screens/AgentsScreen';
 import {ArtifactsScreen} from '../screens/ArtifactsScreen';
 import {CapabilityScreen} from '../screens/CapabilityScreen';
@@ -22,7 +24,6 @@ import {LoginScreen} from '../screens/LoginScreen';
 import {LogsScreen} from '../screens/LogsScreen';
 import {McpDetailScreen} from '../screens/McpDetailScreen';
 import {McpEditScreen} from '../screens/McpEditScreen';
-import {McpScreen} from '../screens/McpScreen';
 import {MemoryDocScreen} from '../screens/MemoryDocScreen';
 import {MemoryScreen} from '../screens/MemoryScreen';
 import {MenuEditorScreen} from '../screens/MenuEditorScreen';
@@ -115,7 +116,9 @@ export function RootNavigator() {
           <Stack.Screen name="Channel" component={ChannelScreen} />
           <Stack.Screen name="Settings" component={SettingsScreen} />
           <Stack.Screen name="Agents" component={AgentsScreen} />
+          <Stack.Screen name="AgentCreate" component={AgentCreateScreen} />
           <Stack.Screen name="AgentDetail" component={AgentDetailScreen} />
+          <Stack.Screen name="AgentSkills" component={AgentSkillsScreen} />
           <Stack.Screen name="AgentFile" component={AgentFileScreen} />
           <Stack.Screen name="Models" component={ModelsScreen} />
           <Stack.Screen name="Capability" component={CapabilityScreen} />
@@ -125,7 +128,6 @@ export function RootNavigator() {
           <Stack.Screen name="Access" component={AccessScreen} />
           <Stack.Screen name="GuestShares" component={GuestSharesScreen} />
           <Stack.Screen name="GuestShareEdit" component={GuestShareEditScreen} />
-          <Stack.Screen name="Mcp" component={McpScreen} />
           <Stack.Screen name="McpDetail" component={McpDetailScreen} />
           <Stack.Screen name="McpEdit" component={McpEditScreen} />
           <Stack.Screen name="Logs" component={LogsScreen} />
