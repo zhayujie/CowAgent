@@ -615,7 +615,9 @@ class McpClient:
                         f"[MCP:{self.name}] No endpoint event within "
                         f"{_SSE_DISCOVERY_TIMEOUT}s of opening the SSE stream"
                     )
-                line = raw_line.decode("utf-8").rstrip("\n\r")
+                # errors="replace" to match _sse_read_loop: a stray byte in the
+                # endpoint event must not fail server initialization.
+                line = raw_line.decode("utf-8", errors="replace").rstrip("\n\r")
                 if line.startswith("data:"):
                     data = line[len("data:"):].strip()
                     # Some servers send JSON with a "uri" or plain path
@@ -1114,7 +1116,9 @@ class McpClient:
                     f"[MCP:{self.name}] streamable-http SSE response read "
                     f"timed out after {effective}s"
                 )
-            line = raw_line.decode("utf-8").rstrip("\n\r")
+            # errors="replace" to match _sse_read_loop: one stray byte in a
+            # stream must not fail the whole tools/call.
+            line = raw_line.decode("utf-8", errors="replace").rstrip("\n\r")
             if line == "":
                 # End of an SSE event, attempt to parse accumulated data
                 if data_buf:
