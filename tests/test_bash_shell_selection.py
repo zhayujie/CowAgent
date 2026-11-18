@@ -104,12 +104,18 @@ def test_request_system_tracks_shell_without_accumulating(monkeypatch, tmp_path)
     tool = Bash({'cwd': str(tmp_path)})
     executor = Executor(agent=SimpleNamespace(), model=Model(), system_prompt='base',
                         tools=[tool], messages=[], max_turns=2)
-    for selected in ('cmd', 'pwsh', 'cmd'):
+    for selected in ('cmd', 'pwsh', 'cmd', 'cmd'):
         state['tools']['bash']['windows_shell'] = selected
         executor._call_llm_stream(retry_on_empty=False)
         system = requests[-1].system
-        assert system.count('CURRENT COMMAND ENVIRONMENT:') == 1
-        assert ('Use $env:NAME' if selected == 'pwsh' else 'Use %NAME%') in system
+        has_notice = 'CURRENT COMMAND ENVIRONMENT:' in system
+        if selected == 'pwsh':
+            assert has_notice and 'Use $env:NAME' in system
+        elif selected == 'cmd' and requests.index(requests[-1]) == 2:
+            assert has_notice and 'Use %NAME%' in system
+        else:
+            assert not has_notice
+        assert system.count('CURRENT COMMAND ENVIRONMENT:') <= 1
         assert executor.system_prompt == 'base'
 
 

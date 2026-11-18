@@ -96,6 +96,7 @@ SAFETY:
             )
             self.windows_shell = "cmd"
             self.config["windows_shell"] = "cmd"
+        self._shell_changed = False
         self._description_template = type(self).description
         self._render_shell_description()
         # Desktop runs on the user's own machine (often non-technical users),
@@ -150,8 +151,12 @@ SAFETY:
         )
 
     def runtime_shell_notice(self):
-        """Current host syntax, repeated in the request despite older tool history."""
+        """Return a notice for PowerShell or a shell change, not default CMD."""
         if not self._IS_WIN:
+            return ""
+        changed = self._shell_changed
+        self._shell_changed = False
+        if self.windows_shell == "cmd" and not changed:
             return ""
         if self.windows_shell == "pwsh":
             return ("CURRENT COMMAND ENVIRONMENT: bash executes PowerShell 7 (pwsh). "
@@ -171,6 +176,7 @@ SAFETY:
             selected = "cmd"
         if selected == self.windows_shell:
             return
+        self._shell_changed = True
         self.windows_shell = selected
         self.config["windows_shell"] = selected
         self._description_template = type(self).description
