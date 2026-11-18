@@ -46,8 +46,17 @@ READ_ONLY_WRITES = [
     # sed's `w` command writes the named file from inside the script
     "sed -e 'w written.txt' in.txt",
     "sed -e 's/a/b/;w written.txt' in.txt",
+    # GNU sed's `s` command carries the same `w` as a flag after the third
+    # delimiter, where the `w`-command pattern cannot see it; the path may
+    # follow `w` without whitespace, and the `w` command itself may too
+    "sed 's/a/b/w stolen.txt' in.txt",
+    "sed 's#a#b#gw stolen.txt' in.txt",
+    "sed 's/a/b/w/stolen.txt' in.txt",
+    "sed 'w/tmp/stolen' in.txt",
     # awk can hand a string to the shell
     "awk 'BEGIN{system(\"rm -f victim\")}'",
+    # `printf` redirects exactly like `print`
+    "awk 'BEGIN{printf \"x\" > \"stolen.txt\"}'",
     # the redirect scan does not catch it when it is piped or sequenced
     "find . -name '*.log' -delete | cat",
     "sort -o out.txt in.txt && echo done",
@@ -99,6 +108,9 @@ WORKSPACE_WRITE_DENY = [
     "xxd -r /etc/dump.hex /etc/out.bin",
     "sed -i s/a/b/ /etc/f.txt",
     "sed -e 'w /etc/written.txt' in.txt",
+    "sed 's/a/b/w /etc/stolen.txt' in.txt",
+    "sed 's/a/b/w ../stolen.txt' in.txt",
+    "awk 'BEGIN{printf \"x\" > \"/etc/stolen.txt\"}' in.txt",
     "sed -i.bak s/a/b/ /etc/f.txt",
     "sort -uo /etc/out.txt in.txt",
     "fd . /etc -x rm",
@@ -114,6 +126,8 @@ WORKSPACE_WRITE_OK = [
     "find . -name '*.log' -delete",
     "sed -i s/a/b/ f.txt",
     "sed -e 'w written.txt' in.txt",
+    "sed 's/a/b/w written.txt' in.txt",
+    "awk 'BEGIN{printf \"x\" > \"written.txt\"}' in.txt",
     # reading outside it always worked and must keep working
     "cat /etc/hostname",
     "ls -la /etc",
