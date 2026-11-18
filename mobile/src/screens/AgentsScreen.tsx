@@ -15,7 +15,6 @@ import {useConfigStore} from '../store/configStore';
 import {describeConnectError} from '../store/serverStore';
 import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
-import {basename} from '../utils/format';
 
 type Props = StackScreenProps<RootStackParamList, 'Agents'>;
 
@@ -163,9 +162,7 @@ export function AgentsScreen({navigation}: Props) {
                       {agent.knowledge_mode === 'own' ? tr('agent_knowledge_own') : tr('agent_knowledge_shared')}
                     </Text>
                   </Text>
-                  <Text style={[styles.metaText, styles.metaFlex]} numberOfLines={1}>
-                    {isDefault ? tr('agent_main_workspace') : basename(agent.workspace) || agent.id}
-                  </Text>
+                  <View style={styles.metaFlex} />
                   <Icon icon={faChevronRight} size={10} color={t.t4} />
                 </View>
               </Pressable>
@@ -233,5 +230,5 @@ const useStyles = makeStyles(t => ({
   },
   metaText: {fontSize: 12, color: t.t4},
   metaValue: {color: t.t2, fontWeight: '500'},
-  metaFlex: {flex: 1, textAlign: 'right'},
+  metaFlex: {flex: 1},
 }));

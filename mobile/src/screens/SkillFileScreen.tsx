@@ -9,13 +9,13 @@ import {skillFileForReading} from '../utils/skills';
 type Props = StackScreenProps<RootStackParamList, 'SkillFile'>;
 
 export function SkillFileScreen({route, navigation}: Props) {
-  const {name, path, title, agentId, edit} = route.params;
+  const {name, path, title, edit} = route.params;
   const file = path || 'SKILL.md';
 
   const source = useMemo<DocSource>(
     () => ({
       load: async () => {
-        const res = await readSkillFile(name, path, agentId);
+        const res = await readSkillFile(name, path);
         const readonlyReason = res.ships_with_install
           ? tr('skill_ro_builtin')
           : res.truncated
@@ -31,11 +31,11 @@ export function SkillFileScreen({route, navigation}: Props) {
         };
       },
       save: async (content, mtime) => {
-        const res = await writeSkillFile(name, path, content, mtime, agentId);
+        const res = await writeSkillFile(name, path, content, mtime);
         return res.mtime;
       },
     }),
-    [name, path, agentId],
+    [name, path],
   );
 
   const transform = useCallback((content: string) => skillFileForReading(file, content), [file]);

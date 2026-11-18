@@ -496,7 +496,7 @@ export async function setExternalApi(action: 'enable' | 'disable' | 'regenerate'
   return http.request<ExternalApiState>('/api/external_api', {body: {action}});
 }
 
-/** Each Agent keeps its own mcp.json; `agentId` undefined reads the default Agent's. */
+/** mcp.json is shared unless an Agent has its own; `agentId` undefined reads the default Agent's. */
 export async function getMcpServers(agentId?: string) {
   return http.request<{servers: McpServer[]; path?: string}>(`/api/mcp/servers?${query({agent_id: agentId})}`);
 }

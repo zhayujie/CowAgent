@@ -8,11 +8,10 @@ export type RootStackParamList = {
   /** `focusPath` narrows the list to one file, as "view in artifacts" from a reply does. */
   Artifacts: {focusPath?: string; focusName?: string} | undefined;
   Skills: undefined;
-  /** `agentId` is the request-ready id: undefined for the default Agent. */
-  SkillDetail: {name: string; agentId?: string};
+  SkillDetail: {name: string};
   /** `path` is a file inside the skill's directory; omitted, its SKILL.md. */
-  SkillFile: {name: string; path?: string; title: string; agentId?: string; edit?: boolean};
-  SkillCreate: {agentId?: string};
+  SkillFile: {name: string; path?: string; title: string; edit?: boolean};
+  SkillCreate: undefined;
   Memory: undefined;
   Knowledge: undefined;
   /** `agentId` is the request-ready id: undefined for the default Agent. */

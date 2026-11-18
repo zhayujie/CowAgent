@@ -228,8 +228,8 @@ export function AgentDetailScreen({route, navigation}: Props) {
           value={agent.id}
           mono
           onPress={async () => showToast((await copyText(agent.id)) ? tr('agent_id_copied') : tr('agent_copy_failed'))}
+          last
         />
-        <SettingRow title={tr('agent_workspace')} detail={agent.workspace} last />
       </ScrollView>
 
       <FieldSheet

@@ -43,7 +43,6 @@ const zh = {
   skill_no_tools: '没有可用的内置工具',
   skill_delete_title: '删除技能',
   skill_delete_message: '「{name}」和它目录里的所有文件都会被删除，Agent 也不能再使用它。',
-  skill_agent_pick: '查看哪个 Agent 的技能',
   // sources
   skill_src_builtin: '内置',
   skill_src_custom: '自定义',
@@ -231,7 +230,6 @@ const en: Record<keyof typeof zh, string> = {
   skill_no_tools: 'No built-in tools available',
   skill_delete_title: 'Delete skill',
   skill_delete_message: '"{name}" and every file in its folder will be deleted, and the agent can no longer use it.',
-  skill_agent_pick: 'Show skills for which agent',
   // sources
   skill_src_builtin: 'Built-in',
   skill_src_custom: 'Custom',
