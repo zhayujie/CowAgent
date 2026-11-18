@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { t } from '../i18n'
 import { product } from '@product'
@@ -28,6 +28,10 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ baseUrl, onLangChange }) =>
         ? 'models'
         : 'basic'
   const [tab, setTab] = useState<Tab>(initial)
+  // A deep link followed while Settings is already open.
+  useEffect(() => {
+    if (requested) setTab(initial)
+  }, [requested]) // eslint-disable-line react-hooks/exhaustive-deps
   const [focusPassword, setFocusPassword] = useState(false)
 
   const switchTab = (next: Tab) => {

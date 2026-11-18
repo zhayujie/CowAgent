@@ -21,9 +21,8 @@ import { initUpdateListener } from './store/updateStore'
 import { useOnboardingStore } from './store/onboardingStore'
 import OnboardingWizard from './components/OnboardingWizard'
 import AddInstanceDialog from './components/instances/AddInstanceDialog'
-import ManageInstancesDialog from './components/instances/ManageInstancesDialog'
 import RemoteProblem, { type RemoteProblemReason } from './components/instances/RemoteProblem'
-import { checkRemote } from './store/instanceStore'
+import { checkRemote, useInstanceStore } from './store/instanceStore'
 import apiClient from './api/client'
 import { t } from './i18n'
 import ChatPage from './pages/ChatPage'
@@ -154,6 +153,27 @@ const App: React.FC = () => {
     })
     return () => apiClient.onUnauthorized(null)
   }, [authState, instance])
+
+  // The address of the device driven from here now answers as another one:
+  // its token has been held back, and the app steps aside.
+  useEffect(() => {
+    if (!instance || authState !== 'ok') return
+    apiClient.onWrongDevice(() => {
+      setRemoteProblem('wrong_device')
+      setAuthState('checking')
+    })
+    return () => apiClient.onWrongDevice(null)
+  }, [authState, instance])
+
+  // The name the device in use goes by, for the switcher.
+  const noteDevice = useInstanceStore((s) => s.noteDevice)
+  useEffect(() => {
+    if (!ready || authState !== 'ok') return
+    apiClient
+      .getConfig()
+      .then((data) => noteDevice(data.device))
+      .catch(() => {})
+  }, [ready, authState, baseUrl, noteDevice])
 
   // First-run check: once the backend is ready, decide whether to show the
   // onboarding wizard. It's config-driven — shown whenever the chat model isn't
@@ -303,7 +323,6 @@ const App: React.FC = () => {
       <Lightbox />
       <ConfirmDialog />
       <AddInstanceDialog />
-      <ManageInstancesDialog />
       <MenuEditor />
       <NavRail onLangChange={handleLangChange} />
 

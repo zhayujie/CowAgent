@@ -1,28 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { CheckCircle2, Link2, Loader2, Server, X } from 'lucide-react'
-import { t, tf } from '../../i18n'
-import { InstanceError, normalizeInstanceUrl, parsePairLink, type Instance } from '../../api/instances'
+import { t } from '../../i18n'
+import { addressCandidates, parsePairLink, type Instance } from '../../api/instances'
 import { useInstanceStore } from '../../store/instanceStore'
 import { Btn, TextInput } from '../../pages/settings/primitives'
+import { failureText } from './failure'
 
-function failureText(e: unknown): string {
-  const err = e instanceof InstanceError ? e : new InstanceError('unreachable')
-  switch (err.reason) {
-    case 'self':
-      return t('instances_err_self')
-    case 'not_instance':
-      return t('instances_err_not_instance')
-    case 'code_invalid':
-      return t('instances_err_code_invalid')
-    case 'locked':
-      return tf('instances_err_locked', { n: Math.max(1, Math.ceil(err.retryAfter / 60)) })
-    default:
-      return t('instances_err_unreachable')
-  }
-}
-
-/** Joins another computer or server with the address and one-time code it shows. */
+/** Joins another CowAgent device with the address and one-time code it shows. */
 const AddInstanceDialog: React.FC = () => {
   const request = useInstanceStore((s) => s.addRequest)
   const close = useInstanceStore((s) => s.closeAdd)
@@ -75,12 +60,12 @@ const AddInstanceDialog: React.FC = () => {
   const submit = async (e?: React.FormEvent) => {
     e?.preventDefault()
     if (busy) return
-    const typed = normalizeInstanceUrl(url)
+    const typed = addressCandidates(url)
     const typedCode = code.trim()
-    if (!typed) return setError(t('instances_err_url'))
-    if (!typedCode) return setError(t('instances_err_code'))
+    if (!typed.length) return setError(t('devices_err_url'))
+    if (!typedCode) return setError(t('devices_err_code'))
     const linked = link && link.code === typedCode
-    const candidates = linked ? [typed, ...link.urls.filter((u) => u !== typed)] : [typed]
+    const candidates = linked ? [...typed, ...link.urls.filter((u) => !typed.includes(u))] : typed
     setBusy(true)
     setError('')
     try {
@@ -115,14 +100,14 @@ const AddInstanceDialog: React.FC = () => {
               <CheckCircle2 size={24} />
             </div>
             <h3 className="mt-4 text-base font-semibold text-content">
-              {t('instances_added')} · {added.name}
+              {t('devices_added')} · {added.name}
             </h3>
             <p className="mt-1 text-xs font-mono text-content-tertiary">{added.url}</p>
-            <p className="mt-3 text-sm text-content-secondary leading-relaxed">{t('instances_added_hint')}</p>
+            <p className="mt-3 text-sm text-content-secondary leading-relaxed">{t('devices_added_hint')}</p>
             <div className="mt-6 flex justify-center gap-2">
-              <Btn onClick={close}>{t('instances_later')}</Btn>
+              <Btn onClick={close}>{t('devices_later')}</Btn>
               <Btn variant="primary" onClick={goThere} autoFocus>
-                {t('instances_switch_now')}
+                {t('devices_switch_now')}
               </Btn>
             </div>
           </div>
@@ -133,8 +118,8 @@ const AddInstanceDialog: React.FC = () => {
                 <Server size={17} />
               </div>
               <div className="min-w-0 flex-1">
-                <h3 className="font-semibold text-content">{t('instances_add')}</h3>
-                <p className="text-xs text-content-tertiary mt-0.5">{t('instances_add_desc')}</p>
+                <h3 className="font-semibold text-content">{t('devices_add_title')}</h3>
+                <p className="text-xs text-content-tertiary mt-0.5">{t('devices_add_desc')}</p>
               </div>
               <button
                 type="button"
@@ -148,16 +133,16 @@ const AddInstanceDialog: React.FC = () => {
 
             <div className="px-5 pt-4 pb-5 space-y-4">
               <p className="text-xs leading-relaxed text-content-secondary bg-surface-2 rounded-lg px-3 py-2.5">
-                {t('instances_add_hint')}
+                {t('devices_add_hint')}
               </p>
               <label className="block">
-                <span className="block text-xs font-medium text-content-secondary mb-1.5">{t('instances_address')}</span>
+                <span className="block text-xs font-medium text-content-secondary mb-1.5">{t('devices_addr')}</span>
                 <TextInput
                   ref={urlRef}
                   value={url}
                   disabled={busy}
                   spellCheck={false}
-                  placeholder={t('instances_address_placeholder')}
+                  placeholder={t('devices_addr_placeholder')}
                   className="font-mono"
                   onChange={(e) => {
                     if (!takeLink(e.target.value)) setUrl(e.target.value)
@@ -167,7 +152,7 @@ const AddInstanceDialog: React.FC = () => {
               {linked ? (
                 <div className="flex items-center gap-2 text-xs text-accent bg-accent-soft rounded-lg px-3 py-2.5">
                   <Link2 size={13} className="flex-shrink-0" />
-                  {t('instances_link_detected')}
+                  {t('devices_link_detected')}
                 </div>
               ) : (
                 <label className="block">
@@ -196,7 +181,7 @@ const AddInstanceDialog: React.FC = () => {
               <Btn type="submit" variant="primary" disabled={busy}>
                 <span className="inline-flex items-center gap-1.5">
                   {busy && <Loader2 size={14} className="animate-spin" />}
-                  {busy ? t('instances_connecting') : t('instances_connect')}
+                  {busy ? t('devices_connecting') : t('devices_connect')}
                 </span>
               </Btn>
             </div>

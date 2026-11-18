@@ -679,6 +679,8 @@ export interface ProviderMeta {
 export interface ConfigData {
   use_agent: boolean
   title: string
+  /** This CowAgent device: its id and the name other devices show for it. */
+  device?: { id: string; name: string }
   model: string
   bot_type: string
   use_linkai: boolean

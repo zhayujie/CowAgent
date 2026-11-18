@@ -1,6 +1,6 @@
 /**
- * Instances this app can drive besides the one it starts itself: CowAgent
- * running on another computer or server, joined with a one-time pairing code.
+ * Other CowAgent devices this app can drive besides the one it starts itself,
+ * joined with a one-time pairing code made on that device.
  *
  * Plain storage helpers with no app imports, so the API client can read the
  * active instance at startup. Switching reloads the window, which makes every
@@ -14,10 +14,18 @@ export interface Instance {
   url: string
   /** Device token issued by the instance; empty once it stops working. */
   token: string
-  device_id: string
+  /** The id the device answers discovery with; its token goes nowhere else. */
+  instance_id?: string
   version: string
   added_at: number
-  custom_name?: boolean
+}
+
+/** What /.well-known/cowagent says, without credentials. */
+export interface Discovery {
+  type: 'instance'
+  id?: string
+  version?: string
+  auth?: { required?: boolean; methods?: string[] }
 }
 
 interface InstancesDoc {
@@ -45,9 +53,59 @@ export class InstanceError extends Error {
   constructor(
     readonly reason: string,
     readonly retryAfter = 0,
+    readonly host = '',
+    readonly status = 0,
   ) {
     super(reason)
   }
+}
+
+function fetchWithin(url: string, init: RequestInit, timeout: number): Promise<Response> {
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), timeout)
+  return fetch(url, { cache: 'no-store', credentials: 'omit', ...init, signal: ctrl.signal }).finally(() =>
+    clearTimeout(timer),
+  )
+}
+
+/**
+ * Discovery at `base`, or an InstanceError saying why there is none:
+ * unreachable / timeout / blocked (answers, but not to this app) / login (a
+ * sign-in gateway) / outdated (CowAgent from before devices) / not_cowagent.
+ */
+export async function diagnoseInstance(base: string, timeout = 6000): Promise<Discovery> {
+  const host = instanceHost(base)
+  let res: Response
+  try {
+    res = await fetchWithin(`${base}/.well-known/cowagent`, {}, timeout)
+  } catch (e) {
+    if ((e as Error)?.name === 'AbortError') throw new InstanceError('timeout', 0, host)
+    // An answer withheld for lack of CORS only shows as an opaque response.
+    const answered = await fetchWithin(`${base}/`, { mode: 'no-cors' }, 4000).then(
+      () => true,
+      () => false,
+    )
+    throw new InstanceError(answered ? 'blocked' : 'unreachable', 0, host)
+  }
+  const body = await res.json().catch(() => null)
+  if (body && body.type === 'instance') return body as Discovery
+  if (res.status === 401 || res.status === 403 || body?.error === 'unauthorized') {
+    throw new InstanceError('login', 0, host)
+  }
+  if (res.status === 404) {
+    const old = await fetchWithin(`${base}/auth/check`, {}, 4000)
+      .then((r) => r.json())
+      .then((b) => !!b && 'auth_required' in b)
+      .catch(() => false)
+    if (old) throw new InstanceError('outdated', 0, host)
+  }
+  throw new InstanceError('not_cowagent', 0, host, res.status)
+}
+
+/** Whether discovery came from the device that issued `item`'s token.
+ *  Pairings from before devices had ids carry none and are taken on trust. */
+export function sameDevice(item: Pick<Instance, 'instance_id'>, info: Discovery | null): boolean {
+  return !item.instance_id || (!!info && info.id === item.instance_id)
 }
 
 /** How this app introduces itself when signing in to an instance. */
@@ -104,16 +162,23 @@ export function newInstanceId(): string {
   return 'i_' + Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
 }
 
-export function normalizeInstanceUrl(value: string): string {
+export function normalizeInstanceUrl(value: string, scheme = 'http'): string {
   let text = (value || '').trim()
   if (!text) return ''
-  if (!/^https?:\/\//i.test(text)) text = `http://${text}`
+  if (!/^https?:\/\//i.test(text)) text = `${scheme}://${text}`
   try {
     const url = new URL(text)
     return `${url.protocol}//${url.host}`
   } catch {
     return ''
   }
+}
+
+/** Addresses to try for what was typed: as given, or http then https without a scheme. */
+export function addressCandidates(typed: string): string[] {
+  const text = (typed || '').trim()
+  if (/^https?:\/\//i.test(text)) return [normalizeInstanceUrl(text)].filter(Boolean)
+  return [normalizeInstanceUrl(text, 'http'), normalizeInstanceUrl(text, 'https')].filter(Boolean)
 }
 
 export function instanceHost(url: string): string {
@@ -130,7 +195,7 @@ export function parsePairLink(text: string): { code: string; urls: string[] } | 
   if (!/^cowagent:\/\/pair\?/i.test(value)) return null
   const params = new URLSearchParams(value.slice(value.indexOf('?') + 1))
   const code = params.get('c') || ''
-  const urls = params.getAll('u').map(normalizeInstanceUrl).filter(Boolean)
+  const urls = params.getAll('u').map((u) => normalizeInstanceUrl(u)).filter(Boolean)
   return code && urls.length ? { code, urls } : null
 }
 

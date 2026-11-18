@@ -1,21 +1,27 @@
 import React, { useState } from 'react'
-import { KeyRound, Laptop, Loader2, PlugZap, RotateCw, ServerOff } from 'lucide-react'
+import { KeyRound, Laptop, Loader2, PlugZap, RotateCw, ServerOff, ShieldAlert } from 'lucide-react'
 import { t, tf } from '../../i18n'
-import type { Instance } from '../../api/instances'
-import { useInstanceStore } from '../../store/instanceStore'
+import { InstanceError, instanceHost, type Instance } from '../../api/instances'
+import { useInstanceStore, type RemoteProblemReason } from '../../store/instanceStore'
 import { usePlatform } from '../../hooks/usePlatform'
 import WindowControls from '../../layout/WindowControls'
 import { Btn } from '../../pages/settings/primitives'
+import { failureText } from './failure'
 
-export type RemoteProblemReason = 'unreachable' | 'auth_lost' | 'not_instance'
+export type { RemoteProblemReason }
 
 const ICONS: Record<RemoteProblemReason, React.ReactNode> = {
   unreachable: <PlugZap size={26} />,
   auth_lost: <KeyRound size={26} />,
-  not_instance: <ServerOff size={26} />,
+  wrong_device: <ShieldAlert size={26} />,
+  not_cowagent: <ServerOff size={26} />,
+  outdated: <ServerOff size={26} />,
 }
 
-/** Shown instead of the app when the instance it drives can't be used. */
+// Reasons with words of their own; the rest are explained by the connect error.
+const WORDED = new Set<RemoteProblemReason>(['unreachable', 'auth_lost', 'wrong_device'])
+
+/** Shown instead of the app when the device it drives can't be used. */
 const RemoteProblem: React.FC<{
   instance: Instance
   reason: RemoteProblemReason
@@ -35,6 +41,13 @@ const RemoteProblem: React.FC<{
     }
   }
 
+  const worded = WORDED.has(reason)
+  const title = tf(worded ? `devices_problem_${reason}_title` : 'devices_problem_other_title', { name: instance.name })
+  const body = worded
+    ? t(`devices_problem_${reason}`)
+    : failureText(new InstanceError(reason, 0, instanceHost(instance.url)))
+  const repair = reason === 'auth_lost' || reason === 'wrong_device'
+
   return (
     <div className="h-screen w-screen flex flex-col bg-base text-content">
       <div className="titlebar-drag h-[44px] flex-shrink-0 flex items-center justify-end px-2">
@@ -49,28 +62,26 @@ const RemoteProblem: React.FC<{
           >
             {ICONS[reason]}
           </div>
-          <h2 className="mt-5 text-lg font-semibold text-content">
-            {tf(`instances_problem_${reason}_title`, { name: instance.name })}
-          </h2>
+          <h2 className="mt-5 text-lg font-semibold text-content">{title}</h2>
           <p className="mt-1 text-xs font-mono text-content-tertiary">{instance.url}</p>
-          <p className="mt-3 text-sm text-content-secondary leading-relaxed">{t(`instances_problem_${reason}`)}</p>
+          <p className="mt-3 text-sm text-content-secondary leading-relaxed">{body}</p>
           <div className="mt-7 flex flex-col gap-2">
-            {reason === 'auth_lost' ? (
+            {repair ? (
               <Btn variant="primary" onClick={() => openAdd({ url: instance.url, replaceId: instance.id })}>
-                {t('instances_repair')}
+                {t('devices_repair')}
               </Btn>
             ) : (
               <Btn variant="primary" onClick={() => void retry()} disabled={retrying}>
                 <span className="inline-flex items-center justify-center gap-1.5">
                   {retrying ? <Loader2 size={14} className="animate-spin" /> : <RotateCw size={14} />}
-                  {t('instances_retry')}
+                  {t('devices_retry')}
                 </span>
               </Btn>
             )}
             <Btn onClick={() => switchTo('')}>
               <span className="inline-flex items-center justify-center gap-1.5">
                 <Laptop size={14} />
-                {t('instances_back_local')}
+                {t('devices_back_local')}
               </span>
             </Btn>
           </div>
