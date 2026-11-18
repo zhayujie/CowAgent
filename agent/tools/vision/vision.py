@@ -180,11 +180,8 @@ class Vision(BaseTool):
         if not question:
             return ToolResult.fail("Error: 'question' parameter is required")
 
-        # Local files get the same credential guard as the file tools
-        # (agent.tools.utils.credentials): vision base64-encodes the file and
-        # sends it to a third-party API, which surfaces its contents at least
-        # as broadly as a read. Without this, a workspace symlink was enough
-        # to hand ~/.cow/.env to an external provider.
+        # The file is sent to an external API, so it gets the same credential
+        # guard as the file tools; the resolved path also catches symlinks.
         if not image.startswith(("http://", "https://")):
             resolved = self._resolve_path(image)
             if is_credential_path(resolved):

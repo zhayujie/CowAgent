@@ -1,15 +1,13 @@
 # encoding:utf-8
 """The vision tool must apply the shared credential-path guard.
 
-read/edit/write/send/memory_get all refuse ~/.cow/.env (and symlinks to it,
-issue #2913), but vision was left out — and vision surfaces file contents
-more broadly than any of them: it base64-encodes the bytes and sends them to
-a third-party Vision API. A workspace symlink was enough to exfiltrate every
-API key to an external provider. These tests pin the guard on vision too.
+read/edit/write/send/memory_get all refuse ~/.cow/.env and symlinks to it.
+Vision sends the file bytes to an external API, so it needs the same guard.
 
 HOME is redirected to a temp dir so the real credential file is never read.
 """
 import os
+import shutil
 import sys
 import tempfile
 import unittest
@@ -54,7 +52,7 @@ class _TempHomeCase(unittest.TestCase):
                 os.environ.pop(name, None)
             else:
                 os.environ[name] = value
-        tempfile.tempdir = None
+        shutil.rmtree(self.tmp, ignore_errors=True)
 
     def _run(self, image):
         vision = Vision({"cwd": self.workspace})
