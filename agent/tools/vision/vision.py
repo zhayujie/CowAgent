@@ -28,6 +28,7 @@ from typing import Any, Dict, List, Optional
 import requests
 
 from agent.tools.base_tool import BaseTool, ToolResult
+from agent.tools.utils.credentials import DENIED_MESSAGE, is_credential_path
 from agent.tools.utils.url_safety import validate_url_safe, safe_get
 from common import const
 from common.log import logger
@@ -178,6 +179,16 @@ class Vision(BaseTool):
             return ToolResult.fail("Error: 'image' parameter is required")
         if not question:
             return ToolResult.fail("Error: 'question' parameter is required")
+
+        # Local files get the same credential guard as the file tools
+        # (agent.tools.utils.credentials): vision base64-encodes the file and
+        # sends it to a third-party API, which surfaces its contents at least
+        # as broadly as a read. Without this, a workspace symlink was enough
+        # to hand ~/.cow/.env to an external provider.
+        if not image.startswith(("http://", "https://")):
+            resolved = self._resolve_path(image)
+            if is_credential_path(resolved):
+                return ToolResult.fail(DENIED_MESSAGE)
 
         providers = self._resolve_providers()
         if not providers:
