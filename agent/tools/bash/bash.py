@@ -91,7 +91,11 @@ SAFETY:
         # re-rendered when the working directory changes (e.g. opening a project).
         self.windows_shell = self.config.get("windows_shell", "cmd")
         if self.windows_shell not in ("cmd", "pwsh"):
-            raise ValueError("windows_shell must be cmd or pwsh")
+            logger.warning(
+                "Invalid windows_shell %r; falling back to cmd", self.windows_shell
+            )
+            self.windows_shell = "cmd"
+            self.config["windows_shell"] = "cmd"
         self._description_template = type(self).description
         self._render_shell_description()
         # Desktop runs on the user's own machine (often non-technical users),

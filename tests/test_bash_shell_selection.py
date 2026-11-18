@@ -11,6 +11,22 @@ from agent.tools.bash.bash import Bash
 from agent.tools.bash import background, shell
 
 
+@pytest.mark.parametrize("value", ["powershell", "", None, 42])
+def test_invalid_shell_config_falls_back_to_cmd(monkeypatch, tmp_path, caplog, value):
+    monkeypatch.setattr(Bash, '_IS_WIN', True)
+    tool = Bash({'cwd': str(tmp_path), 'windows_shell': value})
+    assert tool.windows_shell == 'cmd'
+    assert 'cmd.exe' in tool.description
+    assert "falling back to cmd" in caplog.text
+
+
+def test_invalid_shell_config_falls_back_on_non_windows(monkeypatch, tmp_path):
+    monkeypatch.setattr(Bash, '_IS_WIN', False)
+    tool = Bash({'cwd': str(tmp_path), 'windows_shell': 'powershell'})
+    assert tool.windows_shell == 'cmd'
+    assert tool.description
+
+
 def test_default_stays_cmd(monkeypatch, tmp_path):
     monkeypatch.setattr(Bash, '_IS_WIN', True)
     tool = Bash({'cwd': str(tmp_path)})
