@@ -25,6 +25,11 @@ def test_recursive_force_root_is_flagged(command):
     assert Bash._get_safety_warning(None, command) == DESTROY_ROOT
 
 
+@pytest.mark.parametrize("command", ["Stop-Computer", "Restart-Computer -Force"])
+def test_powershell_power_controls_are_warned(command):
+    assert Bash._get_safety_warning(None, command) == "This command will shut down or restart the system"
+
+
 @pytest.mark.parametrize("command", ["rm -f /", "rm --recursive /", "rm -rf /tmp/x"])
 def test_partial_flags_or_subdir_not_flagged(command):
     assert Bash._get_safety_warning(None, command) == ""

@@ -697,7 +697,7 @@ SAFETY:
             return "This command can destroy disk data"
 
         # Power control - match only as a standalone word (\b enforces word boundary)
-        if re.search(r'\b(shutdown|reboot|halt|poweroff)\b', command.lower()):
+        if re.search(r'\b(shutdown|reboot|halt|poweroff|stop-computer|restart-computer)\b', command.lower()):
             return "This command will shut down or restart the system"
 
         return ""

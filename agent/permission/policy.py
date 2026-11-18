@@ -169,6 +169,8 @@ _READ_ONLY_COMMANDS = frozenset({
     "git",
     # windows shell
     "dir", "findstr", "where", "ver", "systeminfo", "tasklist", "chdir", "cd",
+    # PowerShell read-only cmdlets
+    "get-content", "get-childitem", "select-string",
 })
 
 # Allowlisted read-only commands that write a file through a flag rather than
@@ -259,6 +261,10 @@ _PATH_MUTATING_COMMANDS = frozenset({
     "shred", "ln", "mkdir", "touch", "chmod", "chown", "chgrp", "chflags",
     "tee", "sed", "zip", "unzip", "tar", "gzip", "gunzip", "del", "erase",
     "move", "copy", "ren", "rename", "md", "rd",
+    # PowerShell cmdlets and static .NET file writers. Their named path
+    # parameters are extracted separately by _workspace_write_paths.
+    "remove-item", "set-content", "out-file", "copy-item", "move-item",
+    "new-item", "[io.file]::writealltext", "[system.io.file]::writealltext",
     # Allowlisted text tools whose write form is a flag rather than a redirect.
     "find", "fd", "sort", "xxd", "awk",
 })
@@ -266,17 +272,23 @@ _PATH_MUTATING_COMMANDS = frozenset({
 # For these only the destination (last positional) is written; reading a source
 # from outside the workspace is fine.
 _DESTINATION_ONLY_COMMANDS = frozenset({
-    "cp", "copy", "rsync", "install", "ln", "unzip", "tar", "zip",
+    "cp", "copy", "copy-item", "rsync", "install", "ln", "unzip", "tar", "zip",
 })
 
 # When their last operand is a directory, the sources land inside it by name.
 _INTO_DIRECTORY_COMMANDS = frozenset({
-    "mv", "move", "cp", "copy", "rsync", "install", "ln",
+    "mv", "move", "move-item", "cp", "copy", "copy-item", "rsync", "install", "ln",
 })
 
 # Privilege escalation is out of scope for every gated mode.
 _ESCALATION_COMMANDS = frozenset({"sudo", "doas", "su", "runas", "pkexec"})
 
+# PowerShell can start an elevated child without spelling `runas` as the
+# command. Refuse the explicit Verb=RunAs form in every gated mode.
+_PWSH_ELEVATION_RE = re.compile(
+    r"(?is)\bStart-Process\b(?:(?![;&|\n]).)*?\s-Verb\s+(?:['\"]?RunAs['\"]?)(?:\s|$)"
+)
+_PWSH_PATH_PARAMETERS = frozenset({"-path", "-literalpath", "-destination", "-filepath"})
 # Wrappers that run another command; the real command follows.
 _WRAPPER_COMMANDS = frozenset({
     "env", "nohup", "time", "timeout", "nice", "ionice", "stdbuf", "xargs",
@@ -741,6 +753,10 @@ def _check_bash_read_only(args: Dict[str, Any]) -> Decision:
             "confirmed read-only.",
             READ_ONLY,
         )
+    if _PWSH_ELEVATION_RE.search(command) or re.search(
+        r"(?is)\bstart-process\b(?:(?![;&|\n]).)*?-verb\s*:\s*['\"]?runas\b", command
+    ):
+        return _deny("'Start-Process -Verb RunAs' escalates privileges.", READ_ONLY)
 
     for tokens in segments:
         real_targets = [t for t in _redirect_targets(tokens) if t not in _NULL_SINKS]
@@ -834,8 +850,45 @@ def _check_git_read_only(args: Sequence[str]) -> Decision:
     return ALLOW
 
 
+def _powershell_named_paths(
+    args: Sequence[str], parameters: Optional[Iterable[str]] = None,
+) -> List[str]:
+    """Extract PowerShell path values from named path parameters."""
+    selected = frozenset(p.lower() for p in (parameters or _PWSH_PATH_PARAMETERS))
+    paths: List[str] = []
+    i = 0
+    while i < len(args):
+        token = args[i]
+        lower = token.lower()
+        for parameter in selected:
+            if lower == parameter and i + 1 < len(args):
+                paths.append(args[i + 1])
+                i += 2
+                break
+            if lower.startswith(parameter + ":"):
+                paths.append(token.split(":", 1)[1].strip("'\""))
+                i += 1
+                break
+        else:
+            i += 1
+    return [path for path in paths if path]
+
+
+def _powershell_static_writer_path(command: str) -> Optional[str]:
+    match = re.search(r"(?is)\[(?:system\.)?io\.file\]::writealltext\s*\(\s*(['\"])(.*?)\1", command)
+    return match.group(2) if match else None
+
+
 def _workspace_write_paths(name: str, args: Sequence[str]) -> List[str]:
     """Paths a path-mutating command writes, including flag-driven forms."""
+    if name == "copy-item":
+        return _powershell_named_paths(args, {"-destination"})
+    if name == "move-item":
+        return _powershell_named_paths(args, {"-path", "-literalpath", "-destination"})
+    if name in {"remove-item", "set-content", "out-file", "new-item"}:
+        return _powershell_named_paths(args)
+    if name in {"[io.file]::writealltext", "[system.io.file]::writealltext"}:
+        return []
     if name == "sort":
         paths = []
         for i, arg in enumerate(args):
@@ -879,6 +932,21 @@ def _check_bash_workspace_write(
         # This mode is explicitly best effort, so an unparsable line goes to the
         # shell rather than blocking work that is probably fine.
         return ALLOW
+    if _PWSH_ELEVATION_RE.search(command) or re.search(
+        r"(?is)\bstart-process\b(?:(?![;&|\n]).)*?-verb\s*:\s*['\"]?runas\b", command
+    ):
+        return _deny("'Start-Process -Verb RunAs' escalates privileges.", WORKSPACE_WRITE)
+    if re.search(r"(?is)\[(?:system\.)?io\.file\]::writealltext\s*\(", command):
+        static_writer_path = _powershell_static_writer_path(command)
+        if not static_writer_path:
+            return _deny("'[IO.File]::WriteAllText' has a dynamic path that cannot be checked.", WORKSPACE_WRITE)
+        if _is_protected(static_writer_path, protected, cwd):
+            return _deny_protected(static_writer_path)
+        if not _inside_roots(static_writer_path, roots, cwd):
+            return _deny(
+                f"'[IO.File]::WriteAllText' would change '{static_writer_path}', outside the writable area ({_roots_hint(roots)}).",
+                WORKSPACE_WRITE,
+            )
 
     for tokens in segments:
         for target in _redirect_targets(tokens):
@@ -904,17 +972,23 @@ def _check_bash_workspace_write(
             continue
 
         paths = _workspace_write_paths(name, rest)
+        if name in {"remove-item", "set-content", "out-file", "copy-item", "move-item", "new-item"} and not paths:
+            return _deny(f"'{name}' has no statically checkable destination path.", WORKSPACE_WRITE)
         if name == "dd":
             paths = [a.split("=", 1)[1] for a in rest if a.startswith("of=")]
         hit = _protected_operand(name, paths, protected, cwd)
         if hit:
             return _deny_protected(hit)
-        if name in _DESTINATION_ONLY_COMMANDS:
+        if name in _DESTINATION_ONLY_COMMANDS and name not in {"copy-item", "move-item"}:
             paths = paths[-1:] if len(paths) > 1 else []
 
         for path in paths:
             if not path or path in _NULL_SINKS:
                 continue
+            if name in {"remove-item", "set-content", "out-file", "copy-item", "move-item", "new-item"} and any(
+                marker in path for marker in ("$", "`", "$(", "(")
+            ):
+                return _deny(f"'{name}' has a dynamic path that cannot be checked.", WORKSPACE_WRITE)
             if not _inside_roots(path, roots, cwd):
                 return _deny(
                     f"'{name}' would change '{path}', outside the writable area "

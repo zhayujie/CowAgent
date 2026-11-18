@@ -51,6 +51,7 @@ READ_ONLY_WRITES = [
     # the redirect scan does not catch it when it is piped or sequenced
     "find . -name '*.log' -delete | cat",
     "sort -o out.txt in.txt && echo done",
+    "Start-Process cmd.exe -Verb RunAs",
 ]
 
 # --- what must keep working ----------------------------------------------
@@ -73,6 +74,9 @@ READ_ONLY_OK = [
     "sed -n '1,10p' in.txt",
     "sed 's/a/b/' in.txt",
     "awk '{print $1}' f.txt",
+    "Get-Content -LiteralPath C:/outside.txt",
+    "Get-ChildItem -Path C:/outside",
+    "Select-String -Path C:/outside.txt -Pattern x",
 ]
 
 
@@ -106,6 +110,15 @@ WORKSPACE_WRITE_DENY = [
     "rm /etc/passwd",
     "cp a.txt /etc/b.txt",
     "cat a.txt > /etc/b.txt",
+    "Set-Content -Path /outside.txt -Value x",
+    "Out-File -FilePath /outside.txt -InputObject x",
+    "Remove-Item -LiteralPath /outside.txt",
+    "New-Item -Path /outside.txt",
+    "Copy-Item -Path inside.txt -Destination /outside.txt",
+    "Move-Item -Path inside.txt -Destination /outside.txt",
+    "Move-Item -Path /outside.txt -Destination inside.txt",
+    "[IO.File]::WriteAllText('/outside.txt', 'x')",
+    "[IO.File]::WriteAllText($path, 'x')",
 ]
 
 WORKSPACE_WRITE_OK = [
@@ -116,6 +129,14 @@ WORKSPACE_WRITE_OK = [
     "sed -e 'w written.txt' in.txt",
     # reading outside it always worked and must keep working
     "cat /etc/hostname",
+    "Set-Content -Path out.txt -Value x",
+    "Out-File -FilePath out.txt -InputObject x",
+    "Remove-Item -LiteralPath out.txt",
+    "New-Item -Path out.txt",
+    "Copy-Item -Path /etc/hosts -Destination copy.txt",
+    "Move-Item -Path move-source.txt -Destination moved.txt",
+    "[IO.File]::WriteAllText('out.txt', 'x')",
+    "Move-Item -Path inside.txt -Destination moved.txt",
     "ls -la /etc",
     "find . -name '*.log'",
     "fd foo /etc",
@@ -132,6 +153,15 @@ def test_workspace_write_refuses_a_write_outside_the_roots(command):
 @pytest.mark.parametrize("command", WORKSPACE_WRITE_OK)
 def test_workspace_write_allows_inside_the_roots(command):
     assert _workspace_write(command).allowed
+
+
+@pytest.mark.parametrize("command", [
+    "Start-Process cmd.exe -Verb RunAs",
+    "start-process -FilePath powershell.exe -Verb:RunAs",
+    "Start-Process powershell.exe -Verb 'RunAs'",
+])
+def test_workspace_write_refuses_powershell_elevation(command):
+    assert not _workspace_write(command).allowed
 
 
 def test_an_unparsable_line_still_fails_closed_in_read_only():
