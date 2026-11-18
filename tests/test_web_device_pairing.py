@@ -466,6 +466,36 @@ def test_setting_the_first_password_keeps_the_caller_signed_in(env, monkeypatch)
     assert _call(app, "/api/sessions", token=body["auth_token"])[0].status.startswith("200")
 
 
+def test_the_first_password_signs_out_devices_paired_while_open(env, monkeypatch):
+    monkeypatch.setitem(config.conf(), "web_password", "")
+    app = _app()
+    _, phone = _pair(app, "")
+    assert phone["status"] == "success"
+    _, body = _call(app, "/config", "POST", {"updates": {"web_password": "first-password-1"}})
+    assert _call(app, "/api/sessions", token=body["auth_token"])[0].status.startswith("200")
+    assert _call(app, "/api/sessions", token=phone["token"])[0].status.startswith("401")
+
+
+@pytest.mark.parametrize("headers, seen", [
+    ({"HTTP_X_FORWARDED_FOR": "1.2.3.4, 203.0.113.9"}, "203.0.113.9"),
+    ({"HTTP_X_FORWARDED_FOR": "1.2.3.4, 203.0.113.9", "HTTP_X_REAL_IP": "198.51.100.7"}, "198.51.100.7"),
+    ({}, "127.0.0.1"),
+])
+def test_the_client_address_is_what_the_local_proxy_saw(monkeypatch, headers, seen):
+    from channel.web.core import _common
+
+    monkeypatch.setattr(web, "ctx", web.storage(env={"REMOTE_ADDR": "127.0.0.1", **headers}))
+    assert _common._client_ip() == seen
+
+
+def test_forwarding_headers_from_elsewhere_are_ignored(monkeypatch):
+    from channel.web.core import _common
+
+    monkeypatch.setattr(web, "ctx", web.storage(env={"REMOTE_ADDR": "192.168.1.50",
+                                                     "HTTP_X_REAL_IP": "10.0.0.1"}))
+    assert _common._client_ip() == "192.168.1.50"
+
+
 def test_an_unused_device_lapses(env, monkeypatch):
     from channel.web.core import devices
 

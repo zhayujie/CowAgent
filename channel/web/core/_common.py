@@ -237,11 +237,13 @@ def _client_ip() -> str:
     env = getattr(web.ctx, "env", {}) or {}
     addr = (env.get("REMOTE_ADDR") or "").strip()
     # Forwarding headers are only believed from a proxy on this machine;
-    # anyone else could set them to dodge the per-client limits.
+    # anyone else could set them to dodge the per-client limits. Even then
+    # only what the proxy wrote counts: X-Real-IP, or the last X-Forwarded-For
+    # hop, since proxies append to whatever the client sent.
     if addr in ("::1", "::ffff:127.0.0.1") or addr.startswith("127."):
-        forwarded = (env.get("HTTP_X_FORWARDED_FOR") or "").split(",")[0].strip()
         real = (env.get("HTTP_X_REAL_IP") or "").strip()
-        return forwarded or real or addr
+        forwarded = (env.get("HTTP_X_FORWARDED_FOR") or "").split(",")[-1].strip()
+        return real or forwarded or addr
     return addr or "unknown"
 
 
