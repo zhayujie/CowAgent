@@ -472,7 +472,10 @@ class SchedulerTool(BaseTool):
                 # Support relative times such as "+5s", "+10m", "+1h", "+1d".
                 if schedule_value.startswith("+"):
                     import re
-                    match = re.match(r'\+(\d+)([smhd])', schedule_value)
+                    # fullmatch, not match: a prefix match silently truncated
+                    # "+1h30m" to "+1h" (firing an hour early) and "+30minutes"
+                    # to "+30m"; malformed input must fail loudly instead.
+                    match = re.fullmatch(r'\+(\d+)([smhd])', schedule_value)
                     if not match:
                         logger.error(
                             f"[SchedulerTool] Invalid relative time format: {schedule_value}"
