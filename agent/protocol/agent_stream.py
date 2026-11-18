@@ -68,6 +68,9 @@ _ACTIVE_RUN_MODELS: contextvars.ContextVar = contextvars.ContextVar(
 
 # Word-bounded so "4000" / "40096" are not read as HTTP 400.
 _RE_HTTP_400 = re.compile(r"\b400\b")
+# Same treatment for the rate-limit status: "1429" / "4294967295" are counts,
+# not HTTP 429.
+_RE_HTTP_429 = re.compile(r"\b429\b")
 
 _CONTEXT_OVERFLOW_MARKERS = (
     "context length exceeded", "maximum context length", "prompt is too long",
@@ -2052,8 +2055,12 @@ class AgentStreamExecutor:
                         "Sorry, something went wrong with the earlier conversation. I've reset the current context (your history is kept) — please send your message again.",
                     ))
             
-            # Check if error is rate limit (429)
-            is_rate_limit = '429' in error_str_lower or 'rate limit' in error_str_lower
+            # Check if error is rate limit (429). Word-bounded for the same
+            # reason as _RE_HTTP_400 above: a bare '429' substring also
+            # matches token/byte counts such as 1429 or 4294967295, which
+            # would misroute a retryable timeout into fallback switching and
+            # the long rate-limit backoff.
+            is_rate_limit = bool(_RE_HTTP_429.search(error_str_lower)) or 'rate limit' in error_str_lower
             
             # Check if error is retryable (timeout, connection, server busy, etc.)
             is_retryable = any(keyword in error_str_lower for keyword in _RETRYABLE_MARKERS)
