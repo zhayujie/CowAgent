@@ -34,7 +34,12 @@ def write_json_atomic(path, data, indent: int = 4, ensure_ascii: bool = False) -
     _replace(path, lambda f: json.dump(data, f, indent=indent, ensure_ascii=ensure_ascii))
 
 
-def _replace(path, write, encoding: str = "utf-8", newline=None) -> None:
+def write_bytes_atomic(path, data: bytes) -> None:
+    """Byte-level sibling of ``write_text_atomic`` (pickle, media, ...)."""
+    _replace(path, lambda f: f.write(data), binary=True)
+
+
+def _replace(path, write, encoding: str = "utf-8", newline=None, binary: bool = False) -> None:
     # Resolve symlinks so the link keeps pointing at the updated file instead
     # of being swapped for a regular one.
     target = os.path.realpath(os.fspath(path))
@@ -51,16 +56,24 @@ def _replace(path, write, encoding: str = "utf-8", newline=None) -> None:
             if not stat.S_ISREG(target_stat.st_mode):
                 raise OSError(errno.EINVAL, "target is not a regular file", target)
             mode = stat.S_IMODE(target_stat.st_mode)
+        # encoding/newline are text-mode options; in binary mode both are None.
         f = open(
-            tmp_path, "w", encoding=encoding, newline=newline,
+            tmp_path, "wb" if binary else "w",
+            encoding=None if binary else encoding,
+            newline=None if binary else newline,
             opener=lambda name, flags: os.open(name, flags | os.O_EXCL, mode),
         )
     except OSError as e:
         if not _can_write_in_place(e, target):
             raise
-        buffer = io.StringIO()
-        write(buffer)
-        _write_in_place(target, buffer.getvalue(), encoding, e, newline)
+        if binary:
+            buffer = io.BytesIO()
+            write(buffer)
+            _write_bytes_in_place(target, buffer.getvalue(), e)
+        else:
+            buffer = io.StringIO()
+            write(buffer)
+            _write_in_place(target, buffer.getvalue(), encoding, e, newline)
         return
     try:
         with f:
@@ -73,10 +86,16 @@ def _replace(path, write, encoding: str = "utf-8", newline=None) -> None:
         except OSError as e:
             if not _can_write_in_place(e, target):
                 raise
-            # Copy what is already on disk, line endings included.
-            with open(tmp_path, "r", encoding=encoding, newline="") as src:
-                text = src.read()
-            _write_in_place(target, text, encoding, e, "")
+            # Copy what is already on disk, byte-exact in binary mode,
+            # line endings included in text mode.
+            if binary:
+                with open(tmp_path, "rb") as src:
+                    data = src.read()
+                _write_bytes_in_place(target, data, e)
+            else:
+                with open(tmp_path, "r", encoding=encoding, newline="") as src:
+                    text = src.read()
+                _write_in_place(target, text, encoding, e, "")
             _remove_quietly(tmp_path)
     except BaseException:
         _remove_quietly(tmp_path)
@@ -102,6 +121,16 @@ def _write_in_place(target: str, text: str, encoding: str, cause: OSError, newli
     logger.warning(f"[AtomicWrite] Cannot replace {target} ({cause}), writing in place")
     with open(target, "wb") as f:
         f.write(encoded)
+        f.flush()
+        os.fsync(f.fileno())
+
+
+def _write_bytes_in_place(target: str, data: bytes, cause: OSError) -> None:
+    from common.log import logger
+
+    logger.warning(f"[AtomicWrite] Cannot replace {target} ({cause}), writing in place")
+    with open(target, "wb") as f:
+        f.write(data)
         f.flush()
         os.fsync(f.fileno())
 
