@@ -22,6 +22,7 @@ from channel.web.core._common import (
     _require_auth,
     _write_config_file_for_write,
 )
+from channel.web.core import identity
 from channel.web.core.providers import (
     PROVIDER_MODELS,
     legacy_custom_in_use,
@@ -144,6 +145,7 @@ class ConfigHandler:
                 "status": "success",
                 "use_agent": use_agent,
                 "title": title,
+                "device": {"id": identity.device_id(), "name": identity.device_name()},
                 "model": local_config.get("model", ""),
                 "bot_type": "openai" if local_config.get("bot_type") == "chatGPT" else local_config.get("bot_type", ""),
                 "use_linkai": bool(local_config.get("use_linkai", False)),

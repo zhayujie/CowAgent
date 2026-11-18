@@ -29,7 +29,7 @@ from channel.web.api.chat import (  # noqa: F401
 )
 from channel.web.api.config import ConfigHandler, ExternalApiHandler  # noqa: F401
 from channel.web.api.devices import (  # noqa: F401
-    AuthPairHandler, DeviceHandler, DevicesHandler, DevicesRevokeOthersHandler,
+    AuthPairHandler, DeviceHandler, DeviceSelfHandler, DevicesHandler, DevicesRevokeOthersHandler,
     PairingHandler, PairingStatusHandler, WellKnownHandler,
 )
 from channel.web.api.files import (  # noqa: F401
@@ -116,6 +116,7 @@ URLS = (
     '/api/pairing', 'PairingHandler',
     '/api/pairing/(p_[0-9a-f]+)', 'PairingStatusHandler',
     '/api/devices', 'DevicesHandler',
+    '/api/device', 'DeviceSelfHandler',
     '/api/devices/revoke_others', 'DevicesRevokeOthersHandler',
     '/api/devices/(d_[0-9a-f]+)', 'DeviceHandler',
     '/instance-sw.js', 'InstanceWorkerHandler',

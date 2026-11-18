@@ -1,4 +1,4 @@
-"""cow pair - Connect another device to this instance from the terminal.
+"""cow pair - Let another device connect to this one, from the terminal.
 
 For servers without a screen: prints a one-time code, a link and a QR code
 that the app, the desktop client or another web console redeems, the same as
@@ -136,6 +136,11 @@ def pair(url, no_wait):
                 "This instance only listens on 127.0.0.1, so no other device can reach it.\n"
                 "Set web_password in config.json (it then listens on all interfaces) and run `cow restart`."),
                 fg="yellow"))
+        elif res.get("reason") == "pairing_unavailable":
+            click.echo(click.style(_t(
+                "这台设备的访问由运行它的平台管理，请在平台的控制台里连接其他设备。",
+                "Access to this device is managed by the platform running it; connect other devices from that platform's console."),
+                fg="yellow"))
         else:
             click.echo(click.style(res.get("message") or _t("创建配对码失败", "Couldn't create a pairing code"),
                                    fg="red"))
@@ -149,11 +154,10 @@ def pair(url, no_wait):
         title += f" (v{instance['version']})"
 
     click.echo("")
-    click.echo(click.style(_t(f"连接新设备 · {title}", f"Connect a device · {title}"), bold=True))
+    click.echo(click.style(_t(f"让其他设备连接 · {title}", f"Let another device connect · {title}"), bold=True))
     _print_qr(res.get("link") or "")
-    click.echo(_t("  用 CowAgent App 扫码；或在桌面端、网页控制台「连接到其他实例」中输入：",
-                  "  Scan with the CowAgent app, or enter in the desktop app or a web console under "
-                  "\"Connect to another instance\":"))
+    click.echo(_t("  用 CowAgent App 扫码；或在另一台设备的「连接其他设备」中输入：",
+                  "  Scan with the CowAgent app, or enter on the other device under \"Connect to a device\":"))
     label_addr, label_code = _t("地址", "Address"), _t("配对码", "Code")
     width = max(_width(label_addr), _width(label_code)) + 2
     for i, address in enumerate(urls):

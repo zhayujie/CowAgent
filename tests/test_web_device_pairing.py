@@ -23,11 +23,15 @@ PASSWORD = "owner-secret-pass"
 @pytest.fixture
 def env(tmp_path, monkeypatch):
     from channel.web.api import devices as devices_api
-    from channel.web.core import _common, devices, pairing
+    from channel.web.core import _common, devices, identity, pairing
 
     monkeypatch.setenv("COW_DATA_DIR", str(tmp_path))
+    monkeypatch.delenv("COW_DEVICE_ID", raising=False)
+    monkeypatch.delenv("COW_DEVICE_NAME", raising=False)
     monkeypatch.setitem(config.conf(), "web_password", PASSWORD)
     monkeypatch.setitem(config.conf(), "web_public_url", "")
+    monkeypatch.setitem(config.conf(), "device_name", "")
+    identity.reset()
     monkeypatch.setattr(_common, "_SECRETS", {})
     monkeypatch.setattr(devices, "_cache", None)
     monkeypatch.setattr(devices, "_active", {})
@@ -36,6 +40,7 @@ def env(tmp_path, monkeypatch):
     devices_api._pair_limiter.reset("pair")
     yield tmp_path
     pairing.reset()
+    identity.reset()
 
 
 def _app():
@@ -51,6 +56,7 @@ def _app():
         "/api/pairing", "PairingHandler",
         "/api/pairing/(p_[0-9a-f]+)", "PairingStatusHandler",
         "/api/devices", "DevicesHandler",
+        "/api/device", "DeviceSelfHandler",
         "/api/devices/revoke_others", "DevicesRevokeOthersHandler",
         "/api/devices/(d_[0-9a-f]+)", "DeviceHandler",
         "/api/sessions", "SessionsHandler",
@@ -97,7 +103,84 @@ def test_discovery_says_what_answered_without_credentials(env):
     assert res.status.startswith("200")
     assert body["type"] == "instance" and body["protocol"] == 1
     assert body["auth"]["required"] is True
+    assert body["auth"]["methods"] == ["password", "pairing"]
+    assert body["id"].startswith("dev_")
     assert "name" not in body
+
+
+def test_the_device_id_survives_a_restart(env):
+    from channel.web.core import identity
+
+    _, first = _call(_app(), "/.well-known/cowagent")
+    identity.reset()
+    _, again = _call(_app(), "/.well-known/cowagent")
+    assert first["id"] == again["id"]
+    with open(env / ".device_id", encoding="utf-8") as f:
+        assert f.read().strip() == first["id"]
+
+
+def test_a_platform_can_supply_the_id_and_name(env, monkeypatch):
+    monkeypatch.setenv("COW_DEVICE_ID", "inst-7f3a9c")
+    monkeypatch.setenv("COW_DEVICE_NAME", "Team assistant")
+    app = _app()
+    _, found = _call(app, "/.well-known/cowagent")
+    assert found["id"] == "inst-7f3a9c"
+    _, listed = _call(app, "/api/devices", token=_owner_token(app))
+    assert listed["instance"]["id"] == "inst-7f3a9c"
+    assert listed["instance"]["name"] == "Team assistant"
+
+
+def test_the_name_defaults_to_the_computers_and_can_be_changed(env, monkeypatch):
+    from channel.web.core import identity
+
+    monkeypatch.setattr(identity, "_system_name", "Studio Mac")
+    app = _app()
+    owner = _owner_token(app)
+    _, listed = _call(app, "/api/devices", token=owner)
+    assert listed["instance"]["name"] == "Studio Mac"
+
+    res, _ = _call(app, "/api/device", "PATCH", {"name": "Office"})
+    assert res.status.startswith("401")
+    _, renamed = _call(app, "/api/device", "PATCH", {"name": "  Office \n server  "}, token=owner)
+    assert renamed["instance"]["name"] == "Office server"
+    with open(env / "config.json", encoding="utf-8") as f:
+        assert json.load(f)["device_name"] == "Office server"
+    _, created = _call(app, "/api/pairing", "POST", {}, token=owner)
+    assert created["instance"]["name"] == "Office server"
+
+    _, reset = _call(app, "/api/device", "PATCH", {"name": ""}, token=owner)
+    assert reset["instance"]["name"] == "Studio Mac"
+
+
+def test_container_hostnames_are_not_shown_as_names(env, monkeypatch):
+    from channel.web.core import identity
+
+    monkeypatch.setattr(identity.sys, "platform", "linux")
+    monkeypatch.setattr(identity, "_linux_pretty_name", lambda: "")
+    monkeypatch.setattr(identity.socket, "gethostname", lambda: "3f9a1c2b7d4e")
+    assert identity.device_name() == "CowAgent"
+    identity.reset()
+    monkeypatch.setattr(identity.socket, "gethostname", lambda: "nas.local")
+    assert identity.device_name() == "nas"
+
+
+def test_pairing_is_off_behind_an_auth_proxy(env, monkeypatch):
+    from channel.web.api import devices as devices_api
+
+    app = _app()
+    owner = _owner_token(app)
+    _, created = _call(app, "/api/pairing", "POST", {}, token=owner)
+    monkeypatch.setattr(devices_api, "_behind_auth_proxy", lambda: True)
+
+    _, found = _call(app, "/.well-known/cowagent")
+    assert found["auth"]["methods"] == ["password"]
+    _, refused = _call(app, "/api/pairing", "POST", {}, token=owner)
+    assert refused["reason"] == "pairing_unavailable"
+    # A code made before the switch can't be redeemed either.
+    res, body = _call(app, "/auth/pair", "POST", {"code": created["code"], "device": {"name": "x"}})
+    assert body["status"] == "error"
+    _, listed = _call(app, "/api/devices", token=owner)
+    assert listed["pairing_available"] is False
 
 
 def test_creating_a_code_needs_a_signed_in_client(env):
@@ -122,6 +205,13 @@ def test_loopback_page_address_is_not_offered(env):
     app = _app()
     _, created = _call(app, "/api/pairing", "POST", {"base_url": "http://127.0.0.1:9899"},
                        token=_owner_token(app))
+    assert created["urls"] == ["http://192.168.1.20:9899"]
+
+
+def test_loopback_public_url_is_not_offered(env, monkeypatch):
+    monkeypatch.setitem(config.conf(), "web_public_url", "http://127.0.0.1:9899")
+    app = _app()
+    _, created = _call(app, "/api/pairing", "POST", {}, token=_owner_token(app))
     assert created["urls"] == ["http://192.168.1.20:9899"]
 
 

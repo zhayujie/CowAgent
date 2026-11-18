@@ -1,15 +1,18 @@
 """Pairing other devices with this instance, and every device signed in.
 
 A signed-in client, or ``cow pair`` on a server without a screen, creates a
-one-time code and shows it as a QR code; the new device redeems it at /auth/pair for a token of its own, which can be revoked
-on its own later. Signing in with the password issues the same kind of token,
-so the device list covers every client. /.well-known/cowagent lets a client
-confirm what it reached before asking for credentials.
+one-time code and shows it as a QR code; the new device redeems it at
+/auth/pair for a token of its own, which can be revoked on its own later.
+Signing in with the password issues the same kind of token, so the device list
+covers every client. /.well-known/cowagent tells a client what it reached, and
+which device, before it hands over any credential.
+
+Behind an auth proxy only requests the proxy let through arrive here, so a
+code another device redeems would never reach this server: pairing is off.
 """
 
 import json
 import re
-import socket
 from typing import Tuple
 from urllib.parse import urlencode, urlsplit
 
@@ -19,12 +22,13 @@ from agent.guest.access import LoginLimiter
 from channel.web.api.integrations import (
     _behind_auth_proxy, is_loopback_host, lan_urls, public_url,
 )
-from channel.web.core import devices, local_control, pairing
+from channel.web.core import devices, identity, local_control, pairing
 from channel.web.core._common import (
     _client_ip, _current_device_token, _is_password_enabled, _qr_data_uri,
     _require_auth, _session_expire_seconds,
 )
 from channel.web.core.request_guard import cross_site_origin
+from common.deployment import manage_url
 from common.log import logger
 
 PROTOCOL_VERSION = 1
@@ -53,19 +57,16 @@ def _version() -> str:
         return ""
 
 
-def instance_name() -> str:
-    name = socket.gethostname() or ""
-    if name.endswith(".local"):
-        name = name[: -len(".local")]
-    return name or "CowAgent"
-
-
 def _instance() -> dict:
-    return {"name": instance_name(), "version": _version()}
+    return {"id": identity.device_id(), "name": identity.device_name(), "version": _version()}
 
 
-def _usable_origin(url: str) -> str:
-    """``url`` reduced to its origin if another device could open it."""
+def pairing_available() -> bool:
+    return not _behind_auth_proxy()
+
+
+def _usable(url: str, origin_only: bool = False) -> str:
+    """``url`` if another device could open it, else empty."""
     try:
         parts = urlsplit(str(url or "").strip())
     except ValueError:
@@ -74,12 +75,14 @@ def _usable_origin(url: str) -> str:
         return ""
     if is_loopback_host(parts.hostname) or parts.hostname.endswith(".localhost"):
         return ""
-    return f"{parts.scheme}://{parts.netloc}"
+    if origin_only:
+        return f"{parts.scheme}://{parts.netloc}"
+    return url.strip()
 
 
 def pairing_urls(seen_at: str = "") -> list:
     """Addresses worth trying from another device, most likely first."""
-    candidates = [public_url(), _usable_origin(seen_at)]
+    candidates = [_usable(public_url()), _usable(seen_at, origin_only=True)]
     if not _behind_auth_proxy():
         candidates += lan_urls()
     urls = []
@@ -156,10 +159,12 @@ class WellKnownHandler:
         return _json({
             "type": "instance",
             "protocol": PROTOCOL_VERSION,
+            # The id, not the name: anyone on the network can ask.
+            "id": identity.device_id(),
             "version": _version(),
             "auth": {
                 "required": _is_password_enabled(),
-                "methods": ["password", "pairing"],
+                "methods": ["password", "pairing"] if pairing_available() else ["password"],
             },
         })
 
@@ -173,6 +178,8 @@ def _require_owner():
 class PairingHandler:
     def POST(self):
         _require_owner()
+        if not pairing_available():
+            return _error("Access to this instance is managed by the platform running it", "pairing_unavailable")
         try:
             data = json.loads(web.data() or b"{}")
         except Exception:
@@ -219,7 +226,7 @@ class AuthPairHandler:
         if wait:
             return _json({"status": "error", "reason": "locked", "retry_after": wait,
                           "message": f"Too many attempts. Try again in {wait} seconds."})
-        p = pairing.claim(str(data.get("code") or ""))
+        p = pairing.claim(str(data.get("code") or "")) if pairing_available() else None
         if p is None:
             _pair_limiter.failed("pair", client)
             logger.warning(f"[Devices] Invalid pairing code from {client}")
@@ -245,7 +252,26 @@ class DevicesHandler:
             "current": current_device_id(),
             "instance": _instance(),
             "password_set": _is_password_enabled(),
+            "pairing_available": pairing_available(),
+            "manage_url": "" if pairing_available() else manage_url(),
         })
+
+
+class DeviceSelfHandler:
+    """This device's own name, which every client shows."""
+
+    def PATCH(self):
+        _require_auth()
+        try:
+            data = json.loads(web.data() or b"{}")
+        except Exception:
+            data = {}
+        from channel.web.api.integrations import save_config_values
+
+        # Empty goes back to the computer's name.
+        save_config_values({"device_name": identity.clean_name(data.get("name"))})
+        logger.info(f"[Devices] This device is now called {identity.device_name()}")
+        return _json({"status": "success", "instance": _instance()})
 
 
 class DevicesRevokeOthersHandler:

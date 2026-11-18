@@ -39,6 +39,7 @@ client_config.json
 .auth_secret
 # Paired devices; generated per install.
 /devices.json
+.device_id
 # Address and key of the running console, for `cow pair`.
 /console.json
 ref/

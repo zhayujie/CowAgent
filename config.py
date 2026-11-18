@@ -299,6 +299,7 @@ available_setting = {
         "enabled": False,
     },
     "web_public_url": "",  # Address shown in API examples, share links and embed code; empty uses the page's own
+    "device_name": "",  # Name other devices show for this one; empty uses the computer's name
     "websites_base_url": "",  # Public URL prefix a static server exposes the Agent's websites/ dir at; empty disables published links
     "mcp_oauth_redirect_base": "",  # Base URL for MCP OAuth callback (e.g. http://your-ip:9899); empty uses local web console
     "agent": True,  # whether to enable Agent mode
