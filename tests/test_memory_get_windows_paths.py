@@ -54,6 +54,15 @@ def test_drive_letter_absolute_path_is_not_prefixed(tmp_path):
     assert "memory/C:" not in str(result.result)
 
 
+def test_a_leading_slash_is_not_prefixed_under_ntpath(tmp_path):
+    tool = _tool(tmp_path)
+    # ntpath.isabs('/x') is False on Python 3.13+, so the slash check must stay.
+    with patch.object(os.path, "isabs", ntpath.isabs):
+        result = tool.execute({"path": "/srv/notes.md"})
+
+    assert "memory/" not in str(result.result)
+
+
 def test_posix_behaviour_is_unchanged(tmp_path):
     tool = _tool(tmp_path)
     (tmp_path / "memory").mkdir()

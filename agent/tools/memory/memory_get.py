@@ -87,20 +87,17 @@ class MemoryGetTool(BaseTool):
             
             # Auto-prepend memory/ if not present and not absolute path
             # Exceptions: MEMORY.md in root, knowledge/ files at workspace root.
-            # Normalize separators first: on Windows the model may echo
-            # 'memory\\x.md', and os.path.isabs (not startswith('/')) is what
-            # recognizes 'C:\\...' — otherwise both were misprefixed into
-            # 'memory/C:\\...' and reported as missing files.
+            # On Windows the model may send 'memory\\x.md' or 'C:\\...';
+            # ntpath.isabs('/x') is False, so a leading '/' is checked too.
             norm_path = path.replace('\\', '/')
             if (
                 not norm_path.startswith('memory/')
                 and not norm_path.startswith('knowledge/')
+                and not norm_path.startswith('/')
                 and not os.path.isabs(path)
                 and norm_path != 'MEMORY.md'
             ):
                 norm_path = f'memory/{norm_path}'
-            # Forward slashes resolve on Windows too, and keep the workspace
-            # store consistent instead of growing both separator styles.
             path = norm_path
             
             # Roots this path may legitimately resolve under. A "knowledge/"
