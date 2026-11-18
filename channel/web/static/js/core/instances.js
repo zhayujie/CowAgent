@@ -1,24 +1,28 @@
-/* Instances this browser can switch the console to.
+/* Other CowAgent devices this browser can switch the console to.
 
-   The console page always comes from the server that served it; switching to
-   another instance routes its backend calls there through /instance-sw.js,
-   with the device token that instance issued when this browser was paired.
-   The list lives in this browser only. Classic script sharing the global
-   scope; only declarations run at load time. boot.js calls instanceBoot()
-   before anything talks to the backend. */
+   The console page always comes from the device that served it; switching to
+   another device routes its backend calls there through /instance-sw.js,
+   with the token that device issued when this browser was paired. Before the
+   token goes anywhere, the address has to answer with the id of the device
+   that issued it. The list lives in this browser only; names come from the
+   devices themselves. Classic script sharing the global scope; only
+   declarations run at load time. boot.js calls instanceBoot() before
+   anything talks to the backend. */
 
 const INSTANCES_KEY = 'cow_instances';
+const INSTANCE_LOCAL_KEY = 'cow_local_device';
+const INSTANCE_SWITCHER_KEY = 'cow_device_switcher';
 const INSTANCE_WORKER = '/instance-sw.js';
 const INSTANCE_CACHE = 'cow-instance';
 const INSTANCE_CACHE_KEY = '/__cow_instance__';
 const INSTANCE_RELOAD_FLAG = 'cow_instance_reload';
-// What the console remembers about the data of the instance it talks to.
-// Each instance keeps its own copy, so switching back lands where it was.
+// What the console remembers about the data of the device it talks to.
+// Each device keeps its own copy, so switching back lands where it was.
 const INSTANCE_SCOPED_KEYS = ['cow_active_agent', 'cow_default_agent', 'cow_memory_agent', 'cow_knowledge_agent',
     'cow_menu_cache', 'cow_collapsed_projects', 'cow_notified_run_ids', 'cow_manual_run_origin'];
 const INSTANCE_SCOPED_PREFIXES = ['cow_session_id'];
 
-const instanceStatus = {};   // id -> 'checking' | 'online' | 'offline'
+const instanceStatus = {};   // id -> 'checking' | 'online' | 'offline' | 'other'
 let instanceMenuOpen = false;
 let instanceAddState = null; // { phase, error, instance }
 
@@ -45,13 +49,13 @@ function instanceList() {
     return _instancesRead().items;
 }
 
-/** The remote instance the console is switched to, or null on this one. */
+/** The remote device the console is switched to, or null on the one that served it. */
 function instanceActive() {
     const state = _instancesRead();
     return state.items.find(i => i.id === state.active) || null;
 }
 
-/** Origin of the instance answering the console's backend calls. */
+/** Origin of the device answering the console's backend calls. */
 function instanceOrigin() {
     const active = instanceActive();
     return active ? active.url : location.origin;
@@ -68,15 +72,31 @@ function instanceSupported() {
     return !!(window.isSecureContext && 'serviceWorker' in navigator && 'caches' in window);
 }
 
-/** The instance that served this page goes by its address: the browser has no other name for it. */
+/** Name of the device that served this page, as it last told us. */
 function instanceLocalName() {
+    try {
+        const saved = JSON.parse(localStorage.getItem(INSTANCE_LOCAL_KEY) || '{}');
+        if (saved.name) return saved.name;
+    } catch (_) {}
     return location.host;
 }
 
-function _instanceNormalizeUrl(value) {
+/** /config's `device` for the device the console drives: the name every client shows. */
+function instanceNoteDevice(device) {
+    if (!device || !device.name) return;
+    const active = instanceActive();
+    if (active) {
+        if (active.name !== device.name) _instanceUpdate(active.id, { name: device.name });
+    } else {
+        localStorage.setItem(INSTANCE_LOCAL_KEY, JSON.stringify({ name: device.name, id: device.id || '' }));
+    }
+    _instancesChanged();
+}
+
+function _instanceNormalizeUrl(value, scheme) {
     let text = String(value || '').trim();
     if (!text) return '';
-    if (!/^https?:\/\//i.test(text)) text = `http://${text}`;
+    if (!/^https?:\/\//i.test(text)) text = `${scheme || 'http'}://${text}`;
     try {
         const url = new URL(text);
         return `${url.protocol}//${url.host}`;
@@ -85,10 +105,76 @@ function _instanceNormalizeUrl(value) {
     }
 }
 
+function _instanceHost(url) {
+    try { return new URL(url).host; } catch (_) { return url || ''; }
+}
+
 function _instanceId() {
     const bytes = new Uint8Array(6);
     crypto.getRandomValues(bytes);
     return 'i_' + Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// ---------------------------------------------------------------------------
+// What answers at an address
+// ---------------------------------------------------------------------------
+
+function _instanceFetch(url, init, timeout) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeout);
+    return fetch(url, { cache: 'no-store', credentials: 'omit', ...init, signal: ctrl.signal })
+        .finally(() => clearTimeout(timer));
+}
+
+function _instanceLoopback(url) {
+    const host = (() => { try { return new URL(url).hostname; } catch (_) { return ''; } })();
+    return host === 'localhost' || host === '[::1]' || host.startsWith('127.');
+}
+
+/** Discovery at `base` ('' for the device the console is routed to), or
+    throws { reason, host, status } saying why there is none:
+    unreachable / timeout / blocked / login / outdated / not_cowagent /
+    mixed / wrong_device. */
+async function instanceDiagnose(base, timeout) {
+    const host = base ? _instanceHost(base) : '';
+    if (base && location.protocol === 'https:' && base.startsWith('http:') && !_instanceLoopback(base)) {
+        throw { reason: 'mixed', host };
+    }
+    let res;
+    try {
+        res = await _instanceFetch(`${base}/.well-known/cowagent`, {}, timeout || 6000);
+    } catch (err) {
+        if (err && err.name === 'AbortError') throw { reason: 'timeout', host };
+        if (!base) throw { reason: 'unreachable', host };
+        // An answer the browser withholds (no CORS) only shows as an opaque response.
+        const answered = await _instanceFetch(`${base}/`, { mode: 'no-cors' }, 4000).then(() => true, () => false);
+        throw { reason: answered ? 'blocked' : 'unreachable', host };
+    }
+    const body = await res.json().catch(() => null);
+    if (body && body.type === 'instance') return body;
+    if (body && body.reason === 'instance_unreachable') throw { reason: 'unreachable', host };
+    if (body && body.reason === 'wrong_device') throw { reason: 'wrong_device', host };
+    if (res.status === 401 || res.status === 403 || (body && body.error === 'unauthorized')) throw { reason: 'login', host };
+    if (res.status === 404 && base) {
+        const old = await _instanceFetch(`${base}/auth/check`, {}, 4000)
+            .then(r => r.json()).then(b => !!b && 'auth_required' in b).catch(() => false);
+        if (old) throw { reason: 'outdated', host };
+    }
+    throw { reason: 'not_cowagent', host, status: res.status };
+}
+
+/** One sentence for a failed connection, from instanceDiagnose's reason. */
+function instanceErrorText(err) {
+    const reason = (err && err.reason) || 'unreachable';
+    const key = `devices_err_${reason}`;
+    const text = t(key) === key ? t('devices_err_unreachable') : t(key);
+    return text.replace('{host}', (err && err.host) || '').replace('{status}', (err && err.status) || '');
+}
+
+/** True when the device at item.url is still the one that issued its token.
+    Pairings from before devices had ids carry none and are taken on trust. */
+function _instanceSameDevice(item, info) {
+    return !item.instance_id || (!!info && info.id === item.instance_id);
 }
 
 // ---------------------------------------------------------------------------
@@ -107,7 +193,8 @@ function _instanceTell(worker, message, timeout) {
 
 async function _instanceRoute(item) {
     const cache = await caches.open(INSTANCE_CACHE);
-    await cache.put(INSTANCE_CACHE_KEY, new Response(JSON.stringify({ url: item.url, token: item.token }),
+    await cache.put(INSTANCE_CACHE_KEY, new Response(
+        JSON.stringify({ url: item.url, token: item.token, id: item.instance_id || '' }),
         { headers: { 'Content-Type': 'application/json' } }));
     const reg = await navigator.serviceWorker.register(INSTANCE_WORKER, { scope: '/' });
     await navigator.serviceWorker.ready;
@@ -143,13 +230,14 @@ function _instanceSwapScoped(fromId, toId) {
     localStorage.removeItem(stash);
 }
 
-/** Point the console at another instance ('' for this one) and reload. */
+/** Point the console at another device ('' for the one that served it) and reload. */
 async function switchInstance(id) {
+    closeInstanceMenu();
     const state = _instancesRead();
     id = id || '';
     if (state.active === id) return;
     const item = state.items.find(i => i.id === id);
-    if (id && (!item || !item.token)) return openInstanceAdd(item ? { url: item.url } : {});
+    if (id && (!item || !item.token)) return openInstanceAdd(item ? { url: item.url, replaceId: item.id } : {});
     if (id && !instanceSupported()) return showInstanceProblem({ reason: 'insecure' });
     _instanceSwapScoped(state.active, id);
     state.active = id;
@@ -168,6 +256,7 @@ function forgetInstance(id) {
     if (!item) return;
     localStorage.removeItem(`cow_instance_state:${id}`);
     state.items = state.items.filter(i => i.id !== id);
+    delete instanceStatus[id];
     if (state.active === id) {
         _instanceSwapScoped(id, '');
         localStorage.removeItem(`cow_instance_state:${id}`);
@@ -182,37 +271,43 @@ function forgetInstance(id) {
 
 function _instancesChanged() {
     renderInstanceSwitcher();
-    renderInstanceManager();
-    if (typeof renderDevicesScope === 'function') renderDevicesScope();
+    if (typeof renderDevicesPage === 'function') renderDevicesPage();
+}
+
+/** Give this browser's token back to the device, if the address still leads to it. */
+async function _instanceRelease(item) {
+    if (!item.token) return;
+    try {
+        const info = await instanceDiagnose(item.url, 4000);
+        if (!_instanceSameDevice(item, info)) return;
+        await fetch(`${item.url}/auth/logout`, { method: 'POST', headers: { Authorization: `Bearer ${item.token}` } });
+    } catch (_) {}
 }
 
 function confirmForgetInstance(id) {
     const item = instanceList().find(i => i.id === id);
     if (!item) return;
     showConfirmDialog({
-        title: t('instances_remove'),
-        message: t('instances_remove_confirm').replace('{name}', item.name),
-        okText: t('instances_remove'),
+        title: t('devices_forget'),
+        message: t('devices_forget_confirm').replace('{name}', item.name),
+        okText: t('devices_forget'),
         tone: 'danger',
         onConfirm: () => {
-            // Give the device up on the other side too; it may be gone already.
-            if (item.token) {
-                fetch(`${item.url}/auth/logout`, { method: 'POST', headers: { Authorization: `Bearer ${item.token}` } })
-                    .catch(() => {});
-            }
+            // Give the token up on the other side too; it may be gone already.
+            _instanceRelease(item);
             forgetInstance(id);
         },
     });
 }
 
-/** Sign this browser out of the active remote instance and come back here. */
+/** Sign this browser out of the active remote device and come back here. */
 function instanceSignOut() {
     const item = instanceActive();
     if (!item) return;
     showConfirmDialog({
-        title: t('instances_sign_out'),
-        message: t('instances_sign_out_confirm').replace('{name}', item.name),
-        okText: t('instances_sign_out'),
+        title: t('devices_disconnect'),
+        message: t('devices_disconnect_confirm').replace('{name}', item.name),
+        okText: t('devices_disconnect'),
         tone: 'danger',
         onConfirm: () => {
             fetch('/auth/logout', { method: 'POST' }).catch(() => {}).finally(() => forgetInstance(item.id));
@@ -220,25 +315,34 @@ function instanceSignOut() {
     });
 }
 
+/** Rename a device this browser connects to, on that device itself. */
+async function renameInstance(id, name) {
+    const item = instanceList().find(i => i.id === id);
+    name = String(name || '').trim();
+    if (!item || !name || name === item.name) return;
+    try {
+        const info = await instanceDiagnose(item.url, 5000);
+        if (!_instanceSameDevice(item, info)) throw { reason: 'wrong_device', host: _instanceHost(item.url) };
+        const res = await fetch(`${item.url}/api/device`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${item.token}` },
+            body: JSON.stringify({ name }),
+        });
+        const data = await res.json();
+        if (data.status !== 'success') throw { reason: 'refused' };
+        _instanceUpdate(id, { name: data.instance.name });
+    } catch (err) {
+        _shareToast(err && err.reason && err.reason !== 'refused'
+            ? instanceErrorText(err) : t('devices_rename_failed').replace('{name}', item.name));
+    }
+    _instancesChanged();
+}
+
 // ---------------------------------------------------------------------------
 // Boot
 // ---------------------------------------------------------------------------
 
-/** What answers at an address, without credentials. */
-function instanceProbe(base, timeout) {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), timeout || 6000);
-    return fetch(`${base || ''}/.well-known/cowagent`, { signal: ctrl.signal, cache: 'no-store' })
-        .then(r => r.json().catch(() => ({})))
-        .then(body => {
-            if (body && body.reason === 'instance_unreachable') throw { reason: 'unreachable' };
-            if (!body || body.type !== 'instance') throw { reason: 'not_instance' };
-            return body;
-        }, () => { throw { reason: 'unreachable' }; })
-        .finally(() => clearTimeout(timer));
-}
-
-/** Resolves once the console's backend calls reach the active instance. */
+/** Resolves once the console's backend calls reach the active device. */
 function instanceBoot() {
     const item = instanceActive();
     renderInstanceSwitcher();
@@ -246,6 +350,7 @@ function instanceBoot() {
         if (e.key !== INSTANCES_KEY) return;
         const now = instanceActive();
         if ((now ? now.id : '') !== (item ? item.id : '')) location.reload();
+        else renderInstanceSwitcher();
     });
     if (!item) {
         // A worker left routing (another tab switched back, storage cleared)
@@ -267,11 +372,16 @@ function instanceBoot() {
             throw { reason: 'no_worker' };
         }
         sessionStorage.removeItem(INSTANCE_RELOAD_FLAG);
-        return instanceProbe('', 8000);
+        return instanceDiagnose('', 8000);
     }, () => { throw { reason: 'no_worker' }; }).then(info => {
-        if (info.version && info.version !== item.version) {
-            item.version = info.version;
-            _instanceUpdate(item.id, { version: info.version });
+        const patch = {};
+        if (info.version && info.version !== item.version) patch.version = info.version;
+        // Paired before devices had ids: remember this one from now on.
+        if (!item.instance_id && info.id) patch.instance_id = info.id;
+        if (Object.keys(patch).length) {
+            Object.assign(item, patch);
+            _instanceUpdate(item.id, patch);
+            if (patch.instance_id) _instanceRoute(item).catch(() => {});
         }
         instanceStatus[item.id] = 'online';
         return item;
@@ -286,7 +396,7 @@ function _instanceUpdate(id, patch) {
     _instancesWrite(state);
 }
 
-/** The active instance no longer accepts this browser's token. */
+/** The active device no longer accepts this browser's token. */
 function instanceAuthLost() {
     const item = instanceActive();
     if (!item) return;
@@ -294,19 +404,26 @@ function instanceAuthLost() {
     showInstanceProblem({ reason: 'auth_lost' });
 }
 
+const INSTANCE_PROBLEMS = ['unreachable', 'auth_lost', 'insecure', 'no_worker', 'wrong_device'];
+
 function showInstanceProblem(err) {
     const overlay = document.getElementById('instance-overlay');
     if (!overlay) return;
     const item = instanceActive();
-    const reason = (err && err.reason) || 'unreachable';
+    let reason = (err && err.reason) || 'unreachable';
+    if (reason === 'timeout') reason = 'unreachable';
     const name = item ? item.name : '';
-    const icons = { auth_lost: 'fa-user-lock', insecure: 'fa-shield-halved', no_worker: 'fa-plug-circle-xmark', not_instance: 'fa-circle-question' };
-    document.getElementById('instance-overlay-icon').className = `fas ${icons[reason] || 'fa-plug-circle-exclamation'} text-xl text-amber-500`;
-    document.getElementById('instance-overlay-title').textContent = t(`instances_problem_${reason}_title`).replace('{name}', name);
-    document.getElementById('instance-overlay-message').textContent = t(`instances_problem_${reason}`).replace('{name}', name);
+    const own = INSTANCE_PROBLEMS.includes(reason);
+    const icons = { auth_lost: 'fa-user-lock', insecure: 'fa-shield-halved', no_worker: 'fa-plug-circle-xmark', wrong_device: 'fa-user-secret' };
+    document.getElementById('instance-overlay-icon').className = `fas ${icons[reason] || (own ? 'fa-plug-circle-exclamation' : 'fa-circle-question')} text-xl text-amber-500`;
+    document.getElementById('instance-overlay-title').textContent = t(`devices_problem_${own ? reason : 'other'}_title`).replace('{name}', name);
+    document.getElementById('instance-overlay-message').textContent = own
+        ? t(`devices_problem_${reason}`).replace('{name}', name)
+        : instanceErrorText({ ...err, host: item ? _instanceHost(item.url) : '' });
     document.getElementById('instance-overlay-url').textContent = item ? item.url : '';
-    document.getElementById('instance-overlay-retry').classList.toggle('hidden', reason === 'auth_lost' || reason === 'insecure');
-    document.getElementById('instance-overlay-repair').classList.toggle('hidden', reason !== 'auth_lost');
+    document.getElementById('instance-overlay-retry').classList.toggle('hidden', ['auth_lost', 'insecure', 'wrong_device'].includes(reason));
+    document.getElementById('instance-overlay-repair').classList.toggle('hidden', !['auth_lost', 'wrong_device'].includes(reason));
+    overlay.dataset.reason = reason;
     overlay.classList.remove('hidden');
 }
 
@@ -317,8 +434,9 @@ function instanceOverlayRetry() {
 
 function instanceOverlayRepair() {
     const item = instanceActive();
-    document.getElementById('instance-overlay').classList.add('hidden');
-    openInstanceAdd(item ? { url: item.url, replaceId: item.id, problem: 'auth_lost' } : {});
+    const overlay = document.getElementById('instance-overlay');
+    overlay.classList.add('hidden');
+    openInstanceAdd(item ? { url: item.url, replaceId: item.id, problem: overlay.dataset.reason || 'auth_lost' } : {});
 }
 
 function instanceOverlayBack() {
@@ -330,18 +448,45 @@ function instanceOverlayBack() {
 // Sidebar switcher
 // ---------------------------------------------------------------------------
 
+/** Hidden from the menu editor; never while the console drives another device. */
+function instanceSwitcherHidden() {
+    return localStorage.getItem(INSTANCE_SWITCHER_KEY) === 'hidden';
+}
+
+function setInstanceSwitcherHidden(hidden) {
+    if (hidden) localStorage.setItem(INSTANCE_SWITCHER_KEY, 'hidden');
+    else localStorage.removeItem(INSTANCE_SWITCHER_KEY);
+    document.documentElement.classList.toggle('device-switcher-off', hidden);
+}
+
 function renderInstanceSwitcher() {
     const label = document.getElementById('instance-switcher-label');
     if (!label) return;
     const active = instanceActive();
-    label.textContent = active ? active.name : instanceLocalName();
-    document.getElementById('instance-switcher')?.classList.toggle('is-remote', !!active);
+    const name = active ? active.name : instanceLocalName();
+    label.textContent = name;
+    document.getElementById('instance-switcher-sub').textContent = active
+        ? t('devices_operating_remote') : t('devices_this_device');
+    document.getElementById('instance-switcher-icon').className = `fas ${active ? 'fa-server' : 'fa-laptop'}`;
+    const button = document.getElementById('instance-switcher');
+    button.classList.toggle('is-remote', !!active);
+    // A hover tip only on the rail, where the name itself is hidden.
+    if (typeof isSidebarCollapsed === 'function' && isSidebarCollapsed()) button.setAttribute('data-tooltip', name);
+    else button.removeAttribute('data-tooltip');
+    document.documentElement.classList.toggle('device-remote', !!active);
     if (instanceMenuOpen) _renderInstanceMenu();
 }
 
 function _instanceDot(id) {
     const status = id ? (instanceStatus[id] || 'checking') : 'online';
-    return `<span class="instance-dot is-${status}"></span>`;
+    return `<span class="instance-dot is-${status === 'other' ? 'offline' : status}"></span>`;
+}
+
+/** Second line for a device this browser connects to. */
+function _instanceSub(item) {
+    if (!item.token) return t('devices_needs_pairing');
+    if (instanceStatus[item.id] === 'other') return t('devices_status_other');
+    return _instanceHost(item.url);
 }
 
 function _renderInstanceMenu() {
@@ -358,26 +503,22 @@ function _renderInstanceMenu() {
                     ${on ? '<i class="fas fa-check instance-menu-check"></i>' : ''}
                 </button>`;
     };
-    const remote = instanceList().map(i => row(i.id, i.name, i.token ? _instanceHost(i.url) : t('instances_needs_pairing'), 'fa-server'));
-    box.innerHTML = row('', instanceLocalName(), t('instances_this_page'), 'fa-house') + remote.join('');
+    const remote = instanceList().map(i => row(i.id, i.name, _instanceSub(i), 'fa-server'));
+    box.innerHTML = row('', instanceLocalName(), t('devices_this_device'), 'fa-laptop') + remote.join('');
 }
 
-function _instanceHost(url) {
-    try { return new URL(url).host; } catch (_) { return url; }
-}
-
-/** Check whether each saved instance answers, for the status dots. */
+/** Check whether each saved device answers, and is still the same device. */
 function refreshInstanceStatus() {
     const active = instanceActive();
     instanceList().forEach(item => {
         if (active && item.id === active.id) { instanceStatus[item.id] = 'online'; return; }
         instanceStatus[item.id] = instanceStatus[item.id] || 'checking';
-        instanceProbe(item.url, 4000)
-            .then(() => { instanceStatus[item.id] = 'online'; })
+        instanceDiagnose(item.url, 4000)
+            .then(info => { instanceStatus[item.id] = _instanceSameDevice(item, info) ? 'online' : 'other'; })
             .catch(() => { instanceStatus[item.id] = 'offline'; })
             .finally(() => {
                 if (instanceMenuOpen) _renderInstanceMenu();
-                renderInstanceManager();
+                if (typeof renderDevicesPage === 'function') renderDevicesPage();
             });
     });
 }
@@ -386,15 +527,17 @@ function toggleInstanceMenu(e) {
     if (e) e.stopPropagation();
     if (instanceMenuOpen) return closeInstanceMenu();
     const menu = document.getElementById('instance-menu');
-    const anchor = document.querySelector('#sidebar .sidebar-brand');
+    const anchor = document.getElementById('instance-switcher');
     if (!menu || !anchor) return;
     instanceMenuOpen = true;
     _renderInstanceMenu();
     const rect = anchor.getBoundingClientRect();
-    menu.style.left = `${rect.left + 8}px`;
-    menu.style.top = `${rect.bottom + 4}px`;
+    const rail = typeof isSidebarCollapsed === 'function' && isSidebarCollapsed() && window.innerWidth >= 1024;
+    menu.style.left = `${rail ? rect.right + 8 : rect.left}px`;
+    menu.style.top = `${rail ? rect.top : rect.bottom + 4}px`;
+    menu.style.width = `${Math.max(rail ? 0 : rect.width, 248)}px`;
     menu.classList.remove('hidden');
-    document.getElementById('instance-switcher')?.setAttribute('aria-expanded', 'true');
+    anchor.setAttribute('aria-expanded', 'true');
     refreshInstanceStatus();
     setTimeout(() => {
         document.addEventListener('click', _instanceMenuOutside);
@@ -418,106 +561,13 @@ function _instanceMenuEscape(e) {
     if (e.key === 'Escape') closeInstanceMenu();
 }
 
-// ---------------------------------------------------------------------------
-// Managing the list
-// ---------------------------------------------------------------------------
-
-let instanceManageRenaming = '';
-
-function openInstanceManager() {
+function openDevicesSettings() {
     closeInstanceMenu();
-    instanceManageRenaming = '';
-    document.getElementById('instance-manage-overlay')?.classList.remove('hidden');
-    renderInstanceManager();
-    refreshInstanceStatus();
-    document.addEventListener('keydown', _instanceManagerEscape);
-}
-
-function closeInstanceManager() {
-    instanceManageRenaming = '';
-    document.getElementById('instance-manage-overlay')?.classList.add('hidden');
-    document.removeEventListener('keydown', _instanceManagerEscape);
-}
-
-function _instanceManagerEscape(e) {
-    if (e.key === 'Escape' && !instanceManageRenaming) closeInstanceManager();
-}
-
-function renderInstanceManager() {
-    const overlay = document.getElementById('instance-manage-overlay');
-    const box = document.getElementById('instance-manage-list');
-    if (!overlay || !box || overlay.classList.contains('hidden')) return;
-    const active = instanceActive();
-    const items = instanceList();
-    const sep = '<span class="mx-1.5 text-slate-300 dark:text-slate-600">·</span>';
-    const btn = 'px-3 py-1.5 rounded-lg border border-slate-200 dark:border-white/10 text-xs font-medium text-slate-600 dark:text-slate-300 cursor-pointer transition-colors';
-    const row = (item) => {
-        const id = item ? item.id : '';
-        const on = (active ? active.id : '') === id;
-        const status = item ? (item.token ? (instanceStatus[id] || 'checking') : 'offline') : 'online';
-        const statusText = !item ? '' : !item.token ? t('instances_needs_pairing')
-            : status === 'online' ? t('instances_online') : status === 'offline' ? t('instances_offline') : t('instances_checking');
-        const sub = (item ? [_instanceHost(item.url), item.version ? `v${item.version}` : '', statusText] : [t('instances_this_page')])
-            .filter(Boolean).map(escapeHtml).join(sep);
-        const name = item && instanceManageRenaming === id
-            ? `<input id="instance-rename-input" class="dev-name-input text-slate-800 dark:text-slate-100" maxlength="60" value="${escapeHtml(item.name)}"
-                      onkeydown="onInstanceRenameKey(event, '${id}')" onblur="commitInstanceRename('${id}')">`
-            : `<span class="truncate">${escapeHtml(item ? item.name : instanceLocalName())}</span>`;
-        const action = on
-            ? `<span class="dev-chip is-primary"><i class="fas fa-check text-[9px]"></i>${escapeHtml(t('instances_current'))}</span>`
-            : item && !item.token
-                ? `<button onclick="closeInstanceManager(); openInstanceAdd({url: '${escapeHtml(item.url)}', replaceId: '${id}'})" class="${btn} hover:bg-slate-50 dark:hover:bg-white/5">${escapeHtml(t('instances_repair'))}</button>`
-                : `<button onclick="switchInstance('${id}')" class="${btn} hover:border-primary-500 hover:text-primary-600 dark:hover:text-primary-400">${escapeHtml(t('instances_switch'))}</button>`;
-        const tools = item ? `
-                <button class="cfg-api-btn" onclick="startInstanceRename('${id}')" data-tooltip="${escapeHtml(t('instances_rename'))}" data-tip-float><i class="fas fa-pen text-xs"></i></button>
-                <button class="cfg-api-btn" onclick="confirmForgetInstance('${id}')" data-tooltip="${escapeHtml(t('instances_remove'))}" data-tip-float><i class="far fa-trash-can text-xs"></i></button>` : '';
-        return `
-            <div class="dev-row${on ? ' is-active' : ''}">
-                <div class="dev-row-icon"><i class="fas ${item ? 'fa-server' : 'fa-house'}"></i><span class="instance-dot is-${status}"></span></div>
-                <div class="min-w-0 flex-1">
-                    <div class="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200 min-w-0">${name}</div>
-                    <div class="mt-0.5 text-xs text-slate-400 dark:text-slate-500 truncate">${sub}</div>
-                </div>
-                <div class="dev-row-actions${item ? '' : ' invisible'}">${tools}</div>
-                <div class="flex-shrink-0">${action}</div>
-            </div>`;
-    };
-    const insecure = instanceSupported() ? '' : `
-        <div class="mb-3 flex items-start gap-2 text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 rounded-lg px-3 py-2.5">
-            <i class="fas fa-shield-halved mt-0.5"></i><span>${escapeHtml(t('instances_problem_insecure'))}</span></div>`;
-    const empty = items.length ? '' : `
-        <div class="mt-2 mb-3 rounded-xl border border-dashed border-slate-200 dark:border-white/10 px-4 py-5 text-center">
-            <div class="text-sm text-slate-500 dark:text-slate-400">${escapeHtml(t('instances_empty_title'))}</div>
-            <p class="mt-1 text-xs leading-relaxed text-slate-400 dark:text-slate-500">${escapeHtml(t('instances_empty'))}</p>
-        </div>`;
-    box.innerHTML = `${insecure}<div class="divide-y divide-slate-100 dark:divide-white/5">${row(null)}${items.map(row).join('')}</div>${empty}`;
-    if (instanceManageRenaming) {
-        const input = document.getElementById('instance-rename-input');
-        if (input) { input.focus(); input.select(); }
-    }
-}
-
-function startInstanceRename(id) {
-    instanceManageRenaming = id;
-    renderInstanceManager();
-}
-
-function onInstanceRenameKey(e, id) {
-    if (e.key === 'Enter') { e.preventDefault(); commitInstanceRename(id); }
-    if (e.key === 'Escape') { e.stopPropagation(); instanceManageRenaming = ''; renderInstanceManager(); }
-}
-
-function commitInstanceRename(id) {
-    if (instanceManageRenaming !== id) return;
-    const input = document.getElementById('instance-rename-input');
-    const name = (input ? input.value : '').trim();
-    instanceManageRenaming = '';
-    if (name) _instanceUpdate(id, { name, custom_name: true });
-    _instancesChanged();
+    navigateTo('config', 'devices');
 }
 
 // ---------------------------------------------------------------------------
-// Adding an instance
+// Connecting to another device
 // ---------------------------------------------------------------------------
 
 /** cowagent://pair?v=1&c=<secret>&u=<url>... as { code, urls }, or null. */
@@ -526,8 +576,15 @@ function _instanceParseLink(text) {
     if (!/^cowagent:\/\/pair\?/i.test(value)) return null;
     const params = new URLSearchParams(value.slice(value.indexOf('?') + 1));
     const code = params.get('c') || '';
-    const urls = params.getAll('u').map(_instanceNormalizeUrl).filter(Boolean);
+    const urls = params.getAll('u').map(u => _instanceNormalizeUrl(u)).filter(Boolean);
     return code && urls.length ? { code, urls } : null;
+}
+
+/** Addresses to try for what the user typed: as given, or http then https without a scheme. */
+function _instanceCandidates(typed) {
+    const text = String(typed || '').trim();
+    if (/^https?:\/\//i.test(text)) return [_instanceNormalizeUrl(text)].filter(Boolean);
+    return [_instanceNormalizeUrl(text, 'http'), _instanceNormalizeUrl(text, 'https')].filter(Boolean);
 }
 
 function openInstanceAdd(opts) {
@@ -578,8 +635,8 @@ function _renderInstanceAdd() {
     const busy = s.phase === 'connecting';
     btn.disabled = busy || !instanceSupported();
     btn.innerHTML = busy
-        ? `<i class="fas fa-spinner fa-spin mr-1.5"></i>${escapeHtml(t('instances_connecting'))}`
-        : escapeHtml(t('instances_connect'));
+        ? `<i class="fas fa-spinner fa-spin mr-1.5"></i>${escapeHtml(t('devices_connecting'))}`
+        : escapeHtml(t('devices_connect'));
     const linked = !!(s.link && document.getElementById('instance-add-code').value === s.link.code);
     document.getElementById('instance-add-code-row').classList.toggle('hidden', linked);
     document.getElementById('instance-add-linked').classList.toggle('hidden', !linked);
@@ -589,36 +646,43 @@ function _renderInstanceAdd() {
     }
 }
 
+// Which failure says the most about an address list: one that reached
+// something beats one that reached nothing.
+const INSTANCE_ERROR_RANK = ['unreachable', 'timeout', 'mixed', 'blocked', 'not_cowagent', 'login', 'outdated', 'pairing_unavailable'];
+
 async function submitInstanceAdd(e) {
     if (e) e.preventDefault();
     const s = instanceAddState;
     if (!s || s.phase === 'connecting') return;
-    const typedUrl = _instanceNormalizeUrl(document.getElementById('instance-add-url').value);
+    const typed = document.getElementById('instance-add-url').value;
     const code = document.getElementById('instance-add-code').value.trim();
     const linked = s.link && code === s.link.code;
-    const candidates = linked ? [typedUrl, ...s.link.urls.filter(u => u !== typedUrl)] : [typedUrl];
-    if (!typedUrl) return _instanceAddFail(t('instances_err_url'));
-    if (!code) return _instanceAddFail(t('instances_err_code'));
-    if (candidates.some(u => u === location.origin)) return _instanceAddFail(t('instances_err_self'));
+    const own = _instanceCandidates(typed);
+    const candidates = linked ? [...own, ...s.link.urls.filter(u => !own.includes(u))] : own;
+    if (!candidates.length) return _instanceAddFail(t('devices_err_url'));
+    if (!code) return _instanceAddFail(t('devices_err_code'));
+    if (candidates.some(u => u === location.origin)) return _instanceAddFail(t('devices_err_self'));
     s.phase = 'connecting';
     s.error = '';
     _renderInstanceAdd();
 
     let url = '';
-    let probeError = null;
+    let found = null;
+    let failure = null;
     for (const candidate of candidates) {
         try {
-            await instanceProbe(candidate, 6000);
+            const info = await instanceDiagnose(candidate, 6000);
+            if (info.auth && Array.isArray(info.auth.methods) && !info.auth.methods.includes('pairing')) {
+                throw { reason: 'pairing_unavailable', host: _instanceHost(candidate) };
+            }
             url = candidate;
+            found = info;
             break;
         } catch (err) {
-            probeError = probeError && probeError.reason === 'not_instance' ? probeError : err;
+            if (!failure || INSTANCE_ERROR_RANK.indexOf(err.reason) > INSTANCE_ERROR_RANK.indexOf(failure.reason)) failure = err;
         }
     }
-    if (!url) {
-        return _instanceAddFail(t(probeError && probeError.reason === 'not_instance'
-            ? 'instances_err_not_instance' : 'instances_err_unreachable'));
-    }
+    if (!url) return _instanceAddFail(instanceErrorText(failure));
 
     let data;
     try {
@@ -629,14 +693,14 @@ async function submitInstanceAdd(e) {
         });
         data = await res.json();
     } catch (_) {
-        return _instanceAddFail(t('instances_err_unreachable'));
+        return _instanceAddFail(instanceErrorText({ reason: 'unreachable', host: _instanceHost(url) }));
     }
     if (data.status !== 'success') {
         if (data.reason === 'locked') {
             const mins = Math.max(1, Math.ceil((data.retry_after || 60) / 60));
-            return _instanceAddFail(t('instances_err_locked').replace('{n}', mins));
+            return _instanceAddFail(t('devices_err_locked').replace('{n}', mins));
         }
-        return _instanceAddFail(t('instances_err_code_invalid'));
+        return _instanceAddFail(t('devices_err_code_invalid'));
     }
 
     const info = data.instance || {};
@@ -645,10 +709,12 @@ async function submitInstanceAdd(e) {
     const patch = {
         url,
         token: data.token,
-        name: (item && item.custom_name) ? item.name : (info.name || _instanceHost(url)),
+        name: info.name || _instanceHost(url),
         version: info.version || '',
+        instance_id: info.id || found.id || '',
     };
     if (item) {
+        delete item.custom_name;
         Object.assign(item, patch);
     } else {
         item = { id: _instanceId(), ...patch };
@@ -656,6 +722,8 @@ async function submitInstanceAdd(e) {
     }
     _instancesWrite(state);
     instanceStatus[item.id] = 'online';
+    // The worker may still hold the old id for this device.
+    if (state.active === item.id) await _instanceRoute(item).catch(() => {});
     s.phase = 'done';
     s.instance = item;
     _renderInstanceAdd();

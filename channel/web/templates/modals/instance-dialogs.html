@@ -1,4 +1,4 @@
-    <!-- Add Instance Modal: pair this browser with CowAgent on another machine -->
+    <!-- Connect to another device: pair this browser with CowAgent elsewhere -->
     <div id="instance-add-overlay" class="fixed inset-0 bg-black/50 z-[200] hidden flex items-center justify-center"
          onclick="if (event.target === this) closeInstanceAdd()">
         <div class="bg-panel rounded-2xl border border-slate-200 dark:border-white/10 shadow-xl w-full max-w-md mx-4 overflow-hidden">
@@ -6,23 +6,23 @@
                 <div class="p-6">
                     <div class="flex items-center gap-3 mb-5">
                         <div class="w-10 h-10 rounded-xl bg-primary-50 dark:bg-primary-900/20 flex items-center justify-center flex-shrink-0">
-                            <i class="fas fa-server text-primary-500"></i>
+                            <i class="fas fa-link text-primary-500"></i>
                         </div>
                         <div class="min-w-0">
-                            <h3 class="font-semibold text-slate-800 dark:text-slate-100 text-base" data-i18n="instances_add">连接到其他实例</h3>
-                            <p class="text-xs text-slate-400 dark:text-slate-500 mt-0.5" data-i18n="instances_add_desc">连接另一台电脑或服务器上的 CowAgent</p>
+                            <h3 class="font-semibold text-slate-800 dark:text-slate-100 text-base" data-i18n="devices_add_title">连接其他设备</h3>
+                            <p class="text-xs text-slate-400 dark:text-slate-500 mt-0.5" data-i18n="devices_add_desc">连接另一台电脑或服务器上的 CowAgent</p>
                         </div>
                     </div>
 
                     <div id="instance-add-form" class="space-y-4">
                         <div id="instance-add-insecure" class="hidden flex items-start gap-2 text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 rounded-lg px-3 py-2.5">
                             <i class="fas fa-shield-halved mt-0.5"></i>
-                            <span data-i18n="instances_problem_insecure">当前页面不是通过 localhost 或 HTTPS 打开的，浏览器不允许在这里切换实例。</span>
+                            <span data-i18n="devices_problem_insecure">当前页面不是通过 localhost 或 HTTPS 打开的，浏览器不允许在这里切换设备。</span>
                         </div>
                         <div>
-                            <label for="instance-add-url" class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5" data-i18n="instances_address">地址</label>
+                            <label for="instance-add-url" class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5" data-i18n="devices_addr">地址</label>
                             <input id="instance-add-url" type="text" spellcheck="false" oninput="onInstanceAddInput(event)"
-                                   data-i18n-placeholder="instances_address_placeholder" placeholder="http://192.168.1.10:9899"
+                                   data-i18n-placeholder="devices_addr_placeholder" placeholder="http://192.168.1.10:9899"
                                    class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600
                                           bg-slate-50 dark:bg-[#1A1A1A] text-sm font-mono text-slate-800 dark:text-slate-100
                                           focus:outline-none focus:border-primary-500 transition-colors">
@@ -36,10 +36,10 @@
                                           focus:outline-none focus:border-primary-500 transition-colors">
                         </div>
                         <div id="instance-add-linked" class="hidden flex items-center gap-2 text-xs text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20 rounded-lg px-3 py-2.5">
-                            <i class="fas fa-link"></i><span data-i18n="instances_link_detected">已识别配对链接，直接连接即可</span>
+                            <i class="fas fa-link"></i><span data-i18n="devices_link_detected">已识别配对链接，直接连接即可</span>
                         </div>
-                        <p class="text-xs leading-relaxed text-slate-400 dark:text-slate-500" data-i18n="instances_add_hint">
-                            在对方的「设备」设置中点击「生成配对码」，或在服务器终端运行 cow pair；也可以直接粘贴配对链接。
+                        <p class="text-xs leading-relaxed text-slate-400 dark:text-slate-500" data-i18n="devices_add_hint">
+                            在对方的「设置 › 设备」里点「让其他设备连接我」，就能拿到配对码。服务器上运行 cow pair 也可以，或者直接粘贴配对链接。
                         </p>
                         <p id="instance-add-error" class="hidden text-xs text-red-500"></p>
                     </div>
@@ -48,11 +48,11 @@
                         <div class="w-12 h-12 mx-auto rounded-full bg-emerald-50 dark:bg-emerald-900/30 flex items-center justify-center mb-3">
                             <i class="fas fa-check text-emerald-500 text-lg"></i>
                         </div>
-                        <div class="text-sm text-slate-500 dark:text-slate-400" data-i18n="instances_added">已连接</div>
+                        <div class="text-sm text-slate-500 dark:text-slate-400" data-i18n="devices_added">已连接</div>
                         <div id="instance-add-done-name" class="mt-1 font-semibold text-slate-800 dark:text-slate-100"></div>
                         <div id="instance-add-done-url" class="mt-0.5 text-xs font-mono text-slate-400 dark:text-slate-500"></div>
-                        <p class="mt-4 text-xs leading-relaxed text-slate-400 dark:text-slate-500" data-i18n="instances_added_hint">
-                            这个浏览器已出现在对方的设备列表中，对方随时可以移除它。
+                        <p class="mt-4 text-xs leading-relaxed text-slate-400 dark:text-slate-500" data-i18n="devices_added_hint">
+                            对方可以随时在「连接我的设备」里移除你。
                         </p>
                     </div>
                 </div>
@@ -68,45 +68,18 @@
                 <div id="instance-add-done-actions" class="hidden flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-100 dark:border-white/5">
                     <button type="button" onclick="closeInstanceAdd()"
                             class="px-4 py-2 rounded-lg border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300 text-sm font-medium
-                                   hover:bg-slate-50 dark:hover:bg-white/5 cursor-pointer transition-colors duration-150" data-i18n="instances_later">稍后</button>
+                                   hover:bg-slate-50 dark:hover:bg-white/5 cursor-pointer transition-colors duration-150" data-i18n="devices_later">稍后</button>
                     <button type="button" onclick="instanceAddSwitch()"
                             class="px-4 py-2 rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-sm font-medium
                                    cursor-pointer transition-colors duration-150">
-                        <i class="fas fa-arrow-right-arrow-left mr-1.5"></i><span data-i18n="instances_switch_now">切换过去</span>
+                        <i class="fas fa-arrow-right-arrow-left mr-1.5"></i><span data-i18n="devices_switch_now">切换过去</span>
                     </button>
                 </div>
             </form>
         </div>
     </div>
 
-    <!-- Manage Instances Modal: the instances this browser can switch to.
-         Below the confirm dialog, which asks before removing one. -->
-    <div id="instance-manage-overlay" class="fixed inset-0 bg-black/50 z-[150] hidden flex items-center justify-center"
-         onclick="if (event.target === this) closeInstanceManager()">
-        <div class="bg-panel rounded-2xl border border-slate-200 dark:border-white/10 shadow-xl w-full max-w-xl mx-4 overflow-hidden flex flex-col max-h-[85vh]">
-            <div class="flex items-start gap-3 px-6 pt-6 pb-4">
-                <div class="w-10 h-10 rounded-xl bg-primary-50 dark:bg-primary-900/20 flex items-center justify-center flex-shrink-0">
-                    <i class="fas fa-arrow-right-arrow-left text-primary-500"></i>
-                </div>
-                <div class="min-w-0 flex-1">
-                    <h3 class="font-semibold text-slate-800 dark:text-slate-100 text-base" data-i18n="instances_manage_title">管理实例</h3>
-                    <p class="text-xs leading-relaxed text-slate-400 dark:text-slate-500 mt-0.5" data-i18n="instances_manage_desc">这个浏览器可以切换到的 CowAgent，列表只保存在本浏览器中</p>
-                </div>
-                <button type="button" onclick="closeInstanceManager()" class="cfg-api-btn -mr-2 -mt-1" aria-label="Close"><i class="fas fa-xmark"></i></button>
-            </div>
-            <div id="instance-manage-list" class="px-6 pb-2 overflow-y-auto"></div>
-            <div class="flex items-center justify-between gap-3 px-6 py-4 border-t border-slate-100 dark:border-white/5">
-                <p class="text-xs text-slate-400 dark:text-slate-500 min-w-0" data-i18n="instances_manage_foot">在对方生成配对码后连接</p>
-                <button type="button" onclick="closeInstanceManager(); openInstanceAdd()"
-                        class="px-4 py-2 rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-sm font-medium flex-shrink-0
-                               cursor-pointer transition-colors duration-150">
-                    <i class="fas fa-plus mr-1.5"></i><span data-i18n="instances_add">连接到其他实例</span>
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <!-- The instance the console is switched to can't be used right now -->
+    <!-- The device the console is switched to can't be used right now -->
     <div id="instance-overlay" class="fixed inset-0 z-[190] hidden flex items-center justify-center bg-slate-50/95 dark:bg-[#111]/95 backdrop-blur-sm">
         <div class="bg-panel rounded-2xl border border-slate-200 dark:border-white/10 shadow-xl w-full max-w-sm mx-4 p-7 text-center">
             <div class="w-14 h-14 mx-auto rounded-2xl bg-amber-50 dark:bg-amber-900/20 flex items-center justify-center mb-4">
@@ -118,16 +91,16 @@
             <div class="mt-6 flex flex-col gap-2">
                 <button id="instance-overlay-retry" onclick="instanceOverlayRetry()"
                         class="w-full px-4 py-2 rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-sm font-medium cursor-pointer transition-colors duration-150">
-                    <i class="fas fa-rotate-right mr-1.5"></i><span data-i18n="instances_retry">重试</span>
+                    <i class="fas fa-rotate-right mr-1.5"></i><span data-i18n="devices_retry">重试</span>
                 </button>
                 <button id="instance-overlay-repair" onclick="instanceOverlayRepair()"
                         class="hidden w-full px-4 py-2 rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-sm font-medium cursor-pointer transition-colors duration-150">
-                    <i class="fas fa-link mr-1.5"></i><span data-i18n="instances_repair">重新配对</span>
+                    <i class="fas fa-link mr-1.5"></i><span data-i18n="devices_repair">重新配对</span>
                 </button>
                 <button onclick="instanceOverlayBack()"
                         class="w-full px-4 py-2 rounded-lg border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300 text-sm font-medium
                                hover:bg-slate-50 dark:hover:bg-white/5 cursor-pointer transition-colors duration-150">
-                    <i class="fas fa-house mr-1.5"></i><span data-i18n="instances_back_local">切回原实例</span>
+                    <i class="fas fa-laptop mr-1.5"></i><span data-i18n="devices_back_local">切回本设备</span>
                 </button>
             </div>
         </div>

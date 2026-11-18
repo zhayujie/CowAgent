@@ -142,6 +142,13 @@ html.menu-pending #sidebar-nav { visibility: hidden; }
 .dark .me-group-input:hover { border-color: rgba(255, 255, 255, 0.1); }
 .dark .me-group-input:focus { background: rgb(var(--cw-canvas)); }
 .me-items { min-height: 12px; padding: 0 8px 8px; }
+.me-pinned { margin-bottom: 12px; padding: 8px; border: 1px dashed rgb(var(--cw-slate-200)); border-radius: 12px; }
+.dark .me-pinned { border-color: rgba(255, 255, 255, 0.1); }
+.me-pinned .me-handle { cursor: default; }
+.me-icon-static { display: inline-flex; align-items: center; justify-content: center; cursor: default; }
+.me-icon-static:hover { border-color: rgb(var(--cw-slate-200)); color: rgb(var(--cw-slate-600)); }
+.me-pinned-title { font-size: 13.5px; color: rgb(var(--cw-slate-800)); }
+.dark .me-pinned-title { color: rgb(var(--cw-slate-100)); }
 
 .me-item {
     display: flex;

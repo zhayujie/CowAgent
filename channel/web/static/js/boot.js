@@ -10,6 +10,7 @@ requestAuthGatedStart(() => {
     fetch('/config').then(r => r.json()).then(data => {
         if (data.status === 'success') {
             appConfig = data;
+            instanceNoteDevice(data.device);
             const title = data.title || 'CowAgent';
             document.getElementById('welcome-title').textContent = title;
             initConfigView(data);

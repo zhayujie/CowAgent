@@ -1,39 +1,52 @@
-/* Instances and devices: the switcher under the sidebar brand, its menu,
-   and the Settings > Devices tab. The menu shares the always-dark look of
-   the footer menu (.update-menu). */
+/* Devices: the switcher at the top of the sidebar, its menu, and the
+   Settings > Devices tab. The menu shares the always-dark look of the footer
+   menu (.update-menu). */
 
-/* ---- Switcher (second line of the brand) ---- */
-.instance-switcher {
+/* ---- Switcher (top of the sidebar, like the desktop app's) ---- */
+.device-switcher-wrap { padding: 10px 12px 0; flex-shrink: 0; }
+/* Hidden from the menu editor, but never while another device is driven. */
+html.device-switcher-off:not(.device-remote) .device-switcher-wrap { display: none; }
+.device-switcher {
+    width: 100%;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 8px;
+    border-radius: 10px;
+    color: #d4d4d4;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.12s ease;
+}
+.device-switcher:hover,
+.device-switcher[aria-expanded="true"] { background: rgba(255, 255, 255, 0.06); }
+.device-switcher-icon {
+    position: relative;
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
     display: inline-flex;
     align-items: center;
-    gap: 5px;
-    max-width: 100%;
-    margin-left: -4px;
-    padding: 1px 4px;
-    border-radius: 5px;
+    justify-content: center;
     font-size: 12px;
-    line-height: 16px;
-    color: #737373;
-    background: transparent;
-    cursor: pointer;
-    transition: background 0.12s ease, color 0.12s ease;
+    color: rgb(var(--cw-primary-300));
+    background: rgb(var(--cw-primary-500) / 0.16);
 }
-.instance-switcher:hover,
-.instance-switcher[aria-expanded="true"] { background: rgba(255, 255, 255, 0.06); color: #d4d4d4; }
-.instance-switcher-dot {
-    flex-shrink: 0;
-    width: 6px;
-    height: 6px;
-    border-radius: 9999px;
-    background: #525252;
+.device-switcher.is-remote .device-switcher-icon { color: #fff; background: rgb(var(--cw-primary-500)); }
+.device-switcher-text { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
+.device-switcher-name { font-size: 13px; font-weight: 500; color: #e5e5e5; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.device-switcher-sub { font-size: 11px; color: #737373; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.device-switcher.is-remote .device-switcher-sub { color: rgb(var(--cw-primary-300)); }
+.device-switcher-chevron { flex-shrink: 0; font-size: 11px; color: #737373; }
+.device-switcher:hover .device-switcher-chevron { color: #a3a3a3; }
+@media (min-width: 1024px) {
+    html.sidebar-collapsed .device-switcher-wrap { padding: 10px 12px 0; }
+    html.sidebar-collapsed .device-switcher { height: 40px; justify-content: center; padding: 0; gap: 0; }
+    html.sidebar-collapsed .device-switcher-text,
+    html.sidebar-collapsed .device-switcher-chevron { display: none; }
 }
-.instance-switcher.is-remote { color: #a3a3a3; }
-.instance-switcher.is-remote .instance-switcher-dot {
-    background: rgb(var(--cw-primary-400));
-    box-shadow: 0 0 0 3px rgb(var(--cw-primary-400) / 0.18);
-}
-.instance-switcher-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.instance-switcher-chevron { flex-shrink: 0; font-size: 8px; opacity: 0.7; }
 
 /* ---- Menu ---- */
 .instance-menu {
@@ -105,60 +118,31 @@
 @keyframes instanceDotPulse { 50% { opacity: 0.35; } }
 
 /* ---- Settings > Devices ---- */
-.dev-scope {
+.dev-self {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 10px 14px;
+    gap: 14px;
+    padding: 14px 18px;
     border-radius: 12px;
-    border: 1px solid rgb(var(--cw-primary-500) / 0.18);
-    background: rgb(var(--cw-primary-500) / 0.05);
-}
-.dev-scope:empty { display: none; }
-.dev-scope-icon {
-    flex-shrink: 0;
-    width: 32px;
-    height: 32px;
-    border-radius: 9px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 13px;
-    color: #fff;
-    background: rgb(var(--cw-primary-500));
-}
-.dev-method {
-    display: flex;
-    align-items: flex-start;
-    gap: 12px;
-    padding: 14px;
-    border-radius: 12px;
-    background: rgb(100 116 139 / 0.06);
-}
-.dark .dev-method { background: rgba(255, 255, 255, 0.03); }
-.dev-method-icon {
-    flex-shrink: 0;
-    width: 32px;
-    height: 32px;
-    border-radius: 9px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 14px;
-    color: rgb(var(--cw-primary-500));
+    border: 1px solid rgb(var(--cw-slate-200));
     background: rgb(var(--cw-panel));
-    box-shadow: 0 1px 2px rgb(15 23 42 / 0.06);
 }
-.dark .dev-method-icon { background: rgba(255, 255, 255, 0.06); box-shadow: none; }
-.dev-cmd {
-    padding: 1px 6px;
-    border-radius: 5px;
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 11px;
-    color: rgb(var(--cw-slate-600));
-    background: rgb(100 116 139 / 0.12);
+.dark .dev-self { border-color: rgba(255, 255, 255, 0.1); }
+.dev-self:empty { display: none; }
+.dev-self.is-remote { border-color: rgb(var(--cw-primary-500) / 0.35); background: rgb(var(--cw-primary-500) / 0.05); }
+.dev-self-icon {
+    flex-shrink: 0;
+    width: 40px;
+    height: 40px;
+    border-radius: 11px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    color: rgb(var(--cw-primary-500));
+    background: rgb(var(--cw-primary-500) / 0.12);
 }
-.dark .dev-cmd { color: #d4d4d4; background: rgba(255, 255, 255, 0.08); }
+.dev-self.is-remote .dev-self-icon { color: #fff; background: rgb(var(--cw-primary-500)); }
 .dev-chip {
     display: inline-flex;
     align-items: center;
@@ -205,6 +189,21 @@
 .dev-row.is-current .dev-row-icon,
 .dev-row.is-active .dev-row-icon { color: rgb(var(--cw-primary-500)); background: rgb(var(--cw-primary-500) / 0.12); }
 .dev-row-icon .instance-dot { position: absolute; right: -2px; bottom: -2px; box-shadow: 0 0 0 2px rgb(var(--cw-panel)); }
+.dev-icon-btn {
+    flex-shrink: 0;
+    width: 26px;
+    height: 26px;
+    border-radius: 7px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    color: rgb(var(--cw-slate-400));
+    cursor: pointer;
+    transition: color 0.12s ease, background 0.12s ease;
+}
+.dev-icon-btn:hover { color: rgb(var(--cw-slate-600)); background: rgb(100 116 139 / 0.1); }
+.dark .dev-icon-btn:hover { color: rgb(var(--cw-slate-200)); background: rgba(255, 255, 255, 0.08); }
 .dev-row-actions { display: flex; align-items: center; gap: 2px; opacity: 0; transition: opacity 0.12s ease; }
 .dev-row:hover .dev-row-actions,
 .dev-row:focus-within .dev-row-actions { opacity: 1; }

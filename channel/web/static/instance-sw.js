@@ -6,6 +6,13 @@
    only with that token (see request_guard.cors_origin), so nothing here
    relies on the browser sending cookies across sites.
 
+   Before the token goes anywhere, the open discovery path has to answer with
+   the id of the device this browser paired with: an address can be handed
+   to another machine, and a token sent there is a token given away. A check
+   holds for a minute, and until the address stops answering: a device that
+   goes away and comes back, or another that takes its address, is checked
+   again before the next request.
+
    Registered by core/instances.js while another instance is active; the
    target lives in CacheStorage so a restarted worker finds it again. Served
    from the site root so its scope covers every backend path. */
@@ -23,7 +30,11 @@ const CAPABILITY_PREFIXES = ['/preview/', '/share/'];
 const DOCUMENT_CSP = 'sandbox allow-scripts allow-popups allow-forms allow-modals allow-downloads';
 const DOCUMENT_HEADERS = ['Content-Type', 'Content-Disposition', 'Content-Length', 'Last-Modified', 'Cache-Control'];
 
-let target;   // { url, token } | null once read; undefined until then
+const VERIFY_TTL_MS = 60 * 1000;
+
+let target;   // { url, token, id } | null once read; undefined until then
+let verified = null;  // { at, state } of the last check against the current target
+let verifying = null; // the check in flight, shared by concurrent requests
 
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
@@ -32,6 +43,7 @@ self.addEventListener('message', (event) => {
     const type = event.data && event.data.type;
     if (type === 'config') {
         target = undefined;
+        verified = null;
         event.waitUntil(readTarget().then(() => reply(event, { type: 'config-ok' })));
     }
 });
@@ -69,6 +81,11 @@ async function route(req, url) {
     const to = await readTarget();
     if (!to) return fetch(req);
     const remote = to.url + url.pathname + url.search;
+    const check = await verify(to);
+    if (check === 'unreachable') return unreachable();
+    if (check !== 'ok') return wrongDevice(check);
+    // Discovery is open; no reason to send the token there.
+    if (url.pathname.startsWith('/.well-known/')) return forward(req, remote, '');
     if (req.mode === 'navigate') {
         const capability = CAPABILITY_PREFIXES.some((p) => url.pathname.startsWith(p));
         return capability ? Response.redirect(remote, 302) : openDocument(remote, to.token);
@@ -78,9 +95,33 @@ async function route(req, url) {
     return forward(req, remote, to.token);
 }
 
+// 'ok', 'unreachable', or what answered instead of the paired device. A
+// pairing made before devices had ids carries none and is let through; the
+// page records the id on its first visit.
+async function verify(to) {
+    if (!to.id) return 'ok';
+    if (verified && Date.now() - verified.at < VERIFY_TTL_MS) return verified.state;
+    if (!verifying) verifying = check(to).finally(() => { verifying = null; });
+    return verifying;
+}
+
+async function check(to) {
+    let body;
+    try {
+        const res = await fetch(`${to.url}/.well-known/cowagent`, { mode: 'cors', credentials: 'omit', cache: 'no-store' });
+        body = await res.json().catch(() => null);
+    } catch (_) {
+        return 'unreachable';
+    }
+    const state = body && body.type === 'instance' && body.id === to.id ? 'ok'
+        : { reason: 'wrong_device', found: body && body.type === 'instance' ? 'instance' : 'other' };
+    if (target === to) verified = { at: Date.now(), state };
+    return state;
+}
+
 async function forward(req, remote, token) {
     const headers = new Headers(req.headers);
-    headers.set('Authorization', `Bearer ${token}`);
+    if (token) headers.set('Authorization', `Bearer ${token}`);
     const init = {
         method: req.method,
         headers,
@@ -94,7 +135,8 @@ async function forward(req, remote, token) {
         return await fetch(remote, init);
     } catch (err) {
         if (req.signal && req.signal.aborted) throw err;
-        return (await tokenRefused(token)) ? refused() : unreachable();
+        verified = null;
+        return token && (await tokenRefused(token)) ? refused() : unreachable();
     }
 }
 
@@ -102,16 +144,18 @@ async function forward(req, remote, token) {
 // like a dead network. Tell them apart: the instance still answers the open
 // discovery path, but not an authenticated call with this token.
 async function tokenRefused(token) {
-    const base = target && target.url;
-    if (!base) return false;
+    const to = target;
+    if (!to) return false;
     try {
-        const res = await fetch(`${base}/.well-known/cowagent`, { mode: 'cors', credentials: 'omit', cache: 'no-store' });
-        if (!res.ok) return false;
+        const res = await fetch(`${to.url}/.well-known/cowagent`, { mode: 'cors', credentials: 'omit', cache: 'no-store' });
+        const body = await res.json().catch(() => null);
+        // Only ask the device that issued the token.
+        if (!body || body.type !== 'instance' || (to.id && body.id !== to.id)) return false;
     } catch (_) {
         return false;
     }
     try {
-        await fetch(`${base}/auth/check`, {
+        await fetch(`${to.url}/auth/check`, {
             headers: { Authorization: `Bearer ${token}` }, mode: 'cors', credentials: 'omit', cache: 'no-store',
         });
         return false;
@@ -125,6 +169,7 @@ async function openDocument(remote, token) {
     try {
         res = await fetch(remote, { headers: { Authorization: `Bearer ${token}` }, mode: 'cors', credentials: 'omit' });
     } catch (_) {
+        verified = null;
         return (await tokenRefused(token)) ? refused() : unreachable();
     }
     const headers = new Headers({ 'Content-Security-Policy': DOCUMENT_CSP, 'X-Content-Type-Options': 'nosniff' });
@@ -145,6 +190,16 @@ function refused() {
         message: 'The instance no longer accepts this device.',
     });
     return new Response(body, { status: 401, headers: { 'Content-Type': 'application/json' } });
+}
+
+function wrongDevice(found) {
+    const body = JSON.stringify({
+        status: 'error',
+        reason: 'wrong_device',
+        found: found.found,
+        message: 'A different device now answers at this address; the token was not sent.',
+    });
+    return new Response(body, { status: 409, headers: { 'Content-Type': 'application/json', 'X-Cow-Device-Problem': 'wrong_device' } });
 }
 
 function unreachable() {

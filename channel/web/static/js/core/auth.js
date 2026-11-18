@@ -143,6 +143,10 @@ window.handleLogout = handleLogout;
 const _originalFetch = window.fetch;
 window.fetch = function(...args) {
     return _originalFetch.apply(this, args).then(response => {
+        // The routing worker found another device at the switched-to address.
+        if (response.status === 409 && response.headers.get('X-Cow-Device-Problem')) {
+            showInstanceProblem({ reason: response.headers.get('X-Cow-Device-Problem') });
+        }
         if (response.status === 401) {
             const url = typeof args[0] === 'string' ? args[0] : (args[0]?.url || '');
             if (!url.startsWith('/auth/')) {

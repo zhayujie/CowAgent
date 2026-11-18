@@ -572,6 +572,11 @@
 .cfg-tip-floating.show {
     opacity: 1;
 }
+.cfg-tip-floating.is-wrap {
+    max-width: 280px;
+    white-space: pre-line;
+    line-height: 1.55;
+}
 
 
 /* ============================================================

@@ -12,6 +12,9 @@
 const ME_DEFAULT_VIEWS = new Set(MENU_DEFAULT.flatMap(g => g.views));
 
 let meDraft = null;
+// The device switcher is not part of the shared menu: whether it shows is
+// this browser's choice (core/instances.js).
+let meSwitcherHidden = false;
 let meDragging = null;
 let mePopAnchor = null;
 let meArtTimer = null;
@@ -36,6 +39,7 @@ function _meFind(id) {
 /** Open the editor; `options.add` puts a new entry in the first group, ready to place. */
 function menuEditorOpen(options) {
     meDraft = JSON.parse(JSON.stringify(menuDoc));
+    meSwitcherHidden = instanceSwitcherHidden();
     let focusId = (options && options.focus) || '';
     if (options && options.add) {
         const item = Object.assign({ id: _meId('m_'), title: '', icon: '' }, options.add);
@@ -83,7 +87,23 @@ function _meError(text) {
 // ---------------------------------------------------------------------
 
 function _meRender() {
-    document.getElementById('menu-editor-body').innerHTML = meDraft.groups.map(_meGroupHTML).join('');
+    document.getElementById('menu-editor-body').innerHTML = _meSwitcherHTML() + meDraft.groups.map(_meGroupHTML).join('');
+}
+
+function _meSwitcherHTML() {
+    const tip = meSwitcherHidden ? 'menu_show' : 'menu_hide';
+    return `<div class="me-pinned">
+        <div class="me-item${meSwitcherHidden ? ' is-hidden' : ''}">
+            <span class="me-handle"></span>
+            <span class="me-icon me-icon-static"><i class="fas fa-laptop"></i></span>
+            <div class="me-main">
+                <span class="me-pinned-title">${escapeHtml(t('devices_switcher'))}</span>
+                <span class="me-sub">${escapeHtml(t('devices_switcher_desc'))}</span>
+            </div>
+            <button class="me-btn me-btn-icon" data-act="switcher" title="${escapeHtml(t(tip))}">
+                <i class="fas ${meSwitcherHidden ? 'fa-eye-slash' : 'fa-eye'}"></i></button>
+        </div>
+    </div>`;
 }
 
 function _meGroupHTML(group) {
@@ -175,7 +195,10 @@ function _meOnClick(e) {
     const row = btn.closest('.me-item');
     const found = row && _meFind(row.dataset.iid);
 
-    if ((act === 'add' || act === 'icon') && mePopAnchor === btn) {
+    if (act === 'switcher') {
+        meSwitcherHidden = !meSwitcherHidden;
+        _meRender();
+    } else if ((act === 'add' || act === 'icon') && mePopAnchor === btn) {
         _meClosePop();
     } else if (act === 'add') {
         _meOpenAddPop(btn, group);
@@ -444,6 +467,7 @@ function _mePost(menu) {
         .then(data => {
             if (data.status !== 'success') throw new Error(data.message || t('menu_save_failed'));
             menuApply(data.menu);
+            setInstanceSwitcherHidden(meSwitcherHidden);
             menuEditorClose();
             // The page on screen may be the entry just removed.
             if (currentView === 'custom' && !menuFind(menuCustomId)) navigateTo('chat');

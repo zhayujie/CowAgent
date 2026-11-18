@@ -1,32 +1,41 @@
-/* Settings > Devices, all about the instance the console drives: a line
-   naming it, connecting one more device to it (the one-time code), and the
-   devices that may reach it. Which instance this browser drives is the
-   switcher's business (core/instances.js). Classic script sharing the global
-   scope. */
+/* Settings > Devices. A CowAgent device connects to other devices, and other
+   devices connect to it; the page shows both, around the device the console
+   drives:
+   - this device: its name, which every client shows, and changing it;
+   - devices this browser connects to (core/instances.js keeps that list);
+   - devices that connect to this one: the one-time code that lets one more
+     in, and the ones already allowed.
+   A pairing code is always made on the device being connected to and
+   entered on the one connecting. Classic script sharing the global scope. */
 
 const DEVICE_ICONS = {
     ios: 'fab fa-apple', android: 'fab fa-android', harmony: 'fas fa-mobile-screen-button',
     desktop: 'fas fa-desktop', web: 'fas fa-globe', other: 'fas fa-circle-nodes',
 };
 const DEVICES_REFRESH_MS = 30000;
+const DEVICES_SEP = '<span class="mx-1.5 text-slate-300 dark:text-slate-600">·</span>';
+const DEVICES_BTN = 'px-3 py-1.5 rounded-lg border border-slate-200 dark:border-white/10 text-xs font-medium text-slate-600 dark:text-slate-300 cursor-pointer transition-colors';
 
 let devicesList = [];
 let devicesCurrent = '';
-let devicesInstance = null;  // { name, version }
+let devicesInstance = null;  // { id, name, version }
+let devicesPairingAvailable = true;
+let devicesManageUrl = '';
 let devicesNet = null;       // /api/integrations: public_url, lan_urls, password_set
 let devicesLoadFailed = false;
 let devicePairing = null;    // { pairing_id, code, link, urls, qr_image, expiresAt, expired }
 let devicePairTimer = null;
 let devicesRefreshTimer = null;
-let devicesRenaming = '';
+let devicesRenaming = '';    // 'self', an outgoing item id, or an incoming device id
 
 function loadDevicesView() {
     _loadDevices();
     fetch('/api/integrations').then(r => r.json()).then(data => {
         if (data.status === 'success') devicesNet = data;
-        renderDevicesInstance();
+        renderDevicesPage();
     }).catch(() => {});
-    renderDevicesInstance();
+    renderDevicesPage();
+    refreshInstanceStatus();
     clearInterval(devicesRefreshTimer);
     devicesRefreshTimer = setInterval(() => {
         if (document.getElementById('config-panel-devices')?.offsetParent === null) return stopDevicesView();
@@ -45,134 +54,252 @@ function _loadDevices() {
         devicesList = data.devices || [];
         devicesCurrent = data.current || '';
         devicesInstance = data.instance || null;
+        devicesPairingAvailable = data.pairing_available !== false;
+        devicesManageUrl = data.manage_url || '';
         devicesLoadFailed = false;
+        if (devicesInstance) instanceNoteDevice(devicesInstance);
     }).catch(() => {
         devicesLoadFailed = true;
-    }).finally(() => {
-        renderDevicesInstance();
-        renderDevicesList();
-    });
+    }).finally(renderDevicesPage);
 }
 
-// ---------------------------------------------------------------------------
-// This instance
-// ---------------------------------------------------------------------------
-
-/** Host of the instance the console drives, as _isLoopback expects it. */
-function _devicesHost() {
-    return new URL(instanceOrigin()).hostname.replace(/^\[|\]$/g, '');
+function renderDevicesPage() {
+    if (!document.getElementById('config-panel-devices')) return;
+    renderDevicesSelf();
+    renderDevicesOut();
+    renderDevicesIn();
 }
 
-/** Why another device can't join yet, or that it could but without a password. */
-function _devicesNotice() {
-    const net = devicesNet;
-    if (!net) return '';
-    if (!_devicesReachable()) return _devicesHint('fa-circle-info', 'text-slate-500 dark:text-slate-400', t('devices_local_only'));
-    if (!net.password_set) return _devicesHint('fa-triangle-exclamation', 'text-amber-600 dark:text-amber-400', t('devices_no_password'), true);
-    return '';
-}
-
-function _devicesReachable() {
-    const net = devicesNet;
-    if (!net) return true;
-    return !!(net.public_url || (net.lan_urls || []).length || !_isLoopback(_devicesHost()));
-}
-
-function _devicesHint(icon, tone, text, passwordLink) {
-    return `<div class="flex items-start gap-2 text-xs ${tone} bg-slate-50 dark:bg-white/5 rounded-lg px-3 py-2.5">`
-        + `<i class="fas ${icon} mt-0.5"></i><span>${escapeHtml(text)}`
-        + (passwordLink ? ` <button class="ml-1 text-primary-500 hover:underline cursor-pointer" onclick="goToConsolePassword()">${escapeHtml(t('shares_go_settings'))}</button>` : '')
-        + '</span></div>';
-}
-
-/** What the instance the console drives calls itself. */
+/** What the device the console drives calls itself. */
 function _devicesName() {
     const remote = instanceActive();
     return (devicesInstance && devicesInstance.name) || (remote ? remote.name : instanceLocalName());
 }
 
-function renderDevicesInstance() {
-    renderDevicesScope();
-    renderDevicesConnect();
-    const desc = document.getElementById('devices-connected-desc');
-    if (desc) desc.textContent = t('devices_connected_desc').replace('{name}', _devicesName());
+function _devicesFocusRename(id) {
+    if (devicesRenaming !== id) return;
+    const input = document.getElementById('device-rename-input');
+    if (input) { input.focus(); input.select(); }
 }
 
-/** The line naming the instance everything on this page applies to. */
-function renderDevicesScope() {
-    const box = document.getElementById('devices-scope');
+function _devicesNameInput(value, onKey, onBlur) {
+    return `<input id="device-rename-input" class="dev-name-input text-slate-800 dark:text-slate-100" maxlength="60" value="${escapeHtml(value)}"
+                   onkeydown="${onKey}" onblur="${onBlur}">`;
+}
+
+function _devicesRenameKey(e, cancel) {
+    if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); }
+    if (e.key === 'Escape') { e.stopPropagation(); devicesRenaming = ''; cancel(); }
+}
+
+function _devicesIconBtn(icon, tipKey, onclick) {
+    return `<button class="dev-icon-btn" onclick="${onclick}" data-tooltip="${escapeHtml(t(tipKey))}" data-tip-float><i class="${icon}"></i></button>`;
+}
+
+// ---------------------------------------------------------------------------
+// This device
+// ---------------------------------------------------------------------------
+
+function renderDevicesSelf() {
+    const box = document.getElementById('devices-self');
     if (!box) return;
     const remote = instanceActive();
     const info = devicesInstance || {};
-    const online = devicesList.filter(d => d.online).length;
-    const chips = [
-        remote ? `<span class="dev-chip is-primary">${escapeHtml(t('devices_instance_remote'))}</span>` : '',
-        info.version ? `<span class="dev-chip">v${escapeHtml(info.version)}</span>` : '',
-        online ? `<span class="dev-chip is-online"><span class="instance-dot is-online" style="width:6px;height:6px"></span>${escapeHtml(t('devices_online_count').replace('{n}', online))}</span>` : '',
-    ].join('');
+    const name = devicesRenaming === 'self'
+        ? _devicesNameInput(_devicesName(), "onSelfRenameKey(event)", 'commitSelfRename()')
+        : `<span class="truncate">${escapeHtml(_devicesName())}</span>
+           ${_devicesIconBtn('fas fa-pen', 'devices_rename_device', 'startSelfRename()')}`;
+    const sub = [
+        t(remote ? 'devices_operating_remote' : 'devices_this_device'),
+        remote ? _instanceHost(remote.url) : '',
+        info.version ? `v${info.version}` : '',
+    ].filter(Boolean).map(escapeHtml).join(DEVICES_SEP);
+    box.classList.toggle('is-remote', !!remote);
     box.innerHTML = `
-        <div class="dev-scope-icon"><i class="fas ${remote ? 'fa-server' : 'fa-house'}"></i></div>
+        <div class="dev-self-icon"><i class="fas ${remote ? 'fa-server' : 'fa-laptop'}"></i></div>
         <div class="min-w-0 flex-1">
-            <div class="text-[11px] leading-4 text-slate-400 dark:text-slate-500">${escapeHtml(t('devices_scope_label'))}</div>
-            <div class="flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0">
-                <span class="text-sm font-semibold text-slate-800 dark:text-slate-100 truncate">${escapeHtml(_devicesName())}</span>
-                <span class="font-mono text-xs text-slate-400 dark:text-slate-500 truncate">${escapeHtml(_instanceHost(instanceOrigin()))}</span>
-                ${chips}
-            </div>
+            <div class="flex items-center gap-1 min-w-0 text-base font-semibold text-slate-800 dark:text-slate-100">${name}</div>
+            <div class="mt-0.5 text-xs text-slate-400 dark:text-slate-500 truncate">${sub}</div>
         </div>
-        <button onclick="openInstanceManager()"
-                class="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-white/10 text-xs font-medium text-slate-600 dark:text-slate-300 flex-shrink-0
-                       hover:bg-slate-50 dark:hover:bg-white/5 cursor-pointer transition-colors duration-150">
-            <i class="fas fa-arrow-right-arrow-left mr-1.5"></i>${escapeHtml(t('devices_scope_switch'))}
-        </button>`;
+        ${remote ? `<button onclick="switchInstance('')" class="${DEVICES_BTN} flex-shrink-0 hover:bg-slate-50 dark:hover:bg-white/5">
+            <i class="fas fa-laptop mr-1.5"></i>${escapeHtml(t('devices_back_local'))}</button>` : ''}`;
+    _devicesFocusRename('self');
 }
 
-function renderDevicesConnect() {
-    const box = document.getElementById('devices-connect-card');
+function startSelfRename() {
+    devicesRenaming = 'self';
+    renderDevicesSelf();
+}
+
+function onSelfRenameKey(e) {
+    _devicesRenameKey(e, renderDevicesSelf);
+}
+
+function commitSelfRename() {
+    if (devicesRenaming !== 'self') return;
+    const input = document.getElementById('device-rename-input');
+    const name = (input ? input.value : '').trim();
+    devicesRenaming = '';
+    if (!name || name === _devicesName()) return renderDevicesSelf();
+    _renameSelf(name);
+}
+
+/** Rename the device the console drives, on that device. */
+function _renameSelf(name) {
+    if (devicesInstance) devicesInstance.name = name;
+    renderDevicesSelf();
+    fetch('/api/device', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+    }).then(r => r.json()).then(data => {
+        if (data.status !== 'success') throw new Error();
+        devicesInstance = data.instance;
+        instanceNoteDevice(data.instance);
+    }).catch(() => _shareToast(t('devices_rename_failed').replace('{name}', name))).finally(_loadDevices);
+}
+
+// ---------------------------------------------------------------------------
+// Devices this browser connects to
+// ---------------------------------------------------------------------------
+
+function renderDevicesOut() {
+    const box = document.getElementById('devices-out-list');
     if (!box) return;
-    const notice = _devicesNotice();
-    const method = (icon, title, text) => `
-        <div class="dev-method">
-            <div class="dev-method-icon"><i class="fas ${icon}"></i></div>
-            <div class="min-w-0">
-                <div class="text-sm font-medium text-slate-700 dark:text-slate-200">${escapeHtml(title)}</div>
-                <div class="mt-0.5 text-xs leading-relaxed text-slate-400 dark:text-slate-500">${escapeHtml(text)}</div>
-            </div>
-        </div>`;
-    const cli = escapeHtml(t('devices_cli_hint')).replace('{cmd}', '<code class="dev-cmd">cow pair</code>');
-    box.innerHTML = `
-        <div class="flex flex-col sm:flex-row sm:items-center gap-3">
-            <div class="flex items-center gap-3 min-w-0 flex-1">
-                <div class="w-9 h-9 rounded-lg bg-primary-50 dark:bg-primary-900/20 flex items-center justify-center flex-shrink-0">
-                    <i class="fas fa-qrcode text-primary-500 text-sm"></i>
+    const items = instanceList();
+    const active = instanceActive();
+    const insecure = instanceSupported() ? ''
+        : _devicesHint('fa-shield-halved', 'text-amber-600 dark:text-amber-400', t('devices_problem_insecure'));
+    if (!items.length) {
+        box.innerHTML = `${insecure}
+            <div class="py-6 text-center text-sm text-slate-400 dark:text-slate-500">${escapeHtml(t('devices_out_empty'))}</div>`;
+        return;
+    }
+    const row = (item) => {
+        const id = item.id;
+        const on = !!active && active.id === id;
+        const st = instanceStatus[id] || 'checking';
+        const status = !item.token ? 'offline' : on ? 'online' : st === 'other' ? 'offline' : st;
+        const statusText = !item.token ? t('devices_needs_pairing') : t(`devices_status_${on ? 'online' : st}`);
+        const sub = [_instanceHost(item.url), item.version ? `v${item.version}` : '', statusText]
+            .filter(Boolean).map(escapeHtml).join(DEVICES_SEP);
+        const name = devicesRenaming === id
+            ? _devicesNameInput(item.name, `onOutRenameKey(event, '${id}')`, `commitOutRename('${id}')`)
+            : `<span class="truncate">${escapeHtml(item.name)}</span>`;
+        const needsPairing = !item.token || st === 'other';
+        const action = on
+            ? `<span class="dev-chip is-primary"><i class="fas fa-check text-[9px]"></i>${escapeHtml(t('devices_current'))}</span>`
+            : needsPairing
+                ? `<button onclick="openInstanceAdd({url: '${escapeHtml(item.url)}', replaceId: '${id}'})" class="${DEVICES_BTN} hover:bg-slate-50 dark:hover:bg-white/5">${escapeHtml(t('devices_repair'))}</button>`
+                : `<button onclick="switchInstance('${id}')" class="${DEVICES_BTN} hover:border-primary-500 hover:text-primary-600 dark:hover:text-primary-400">${escapeHtml(t('devices_switch'))}</button>`;
+        const tools = (item.token && !needsPairing ? _devicesIconBtn('fas fa-pen', 'devices_rename_device', `startOutRename('${id}')`) : '')
+            + _devicesIconBtn('far fa-trash-can', 'devices_forget', `confirmForgetInstance('${id}')`);
+        return `
+            <div class="dev-row${on ? ' is-active' : ''}">
+                <div class="dev-row-icon"><i class="fas fa-server"></i><span class="instance-dot is-${status}"></span></div>
+                <div class="min-w-0 flex-1">
+                    <div class="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200 min-w-0">${name}</div>
+                    <div class="mt-0.5 text-xs ${st === 'other' && item.token ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400 dark:text-slate-500'} truncate">${sub}</div>
                 </div>
-                <div class="min-w-0">
-                    <h3 class="font-semibold text-slate-800 dark:text-slate-100">${escapeHtml(t('devices_connect_title'))}</h3>
-                    <p class="text-xs text-slate-400 dark:text-slate-500 mt-0.5">${escapeHtml(t('devices_connect_desc').replace('{name}', _devicesName()))}</p>
-                </div>
-            </div>
-            <button id="devices-pair-btn" onclick="${devicePairing ? 'cancelDevicePairing()' : 'startDevicePairing()'}"
-                    ${_devicesReachable() ? '' : 'disabled'}
-                    class="self-start sm:self-center px-4 py-2 rounded-lg text-sm font-medium flex-shrink-0 cursor-pointer transition-colors duration-150
-                           disabled:opacity-50 disabled:cursor-not-allowed
-                           ${devicePairing ? 'border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5'
-                                           : 'bg-primary-500 hover:bg-primary-600 text-white'}">
-                ${devicePairing
-                    ? `<i class="fas fa-xmark mr-1.5"></i>${escapeHtml(t('devices_cancel'))}`
-                    : `<i class="fas fa-qrcode mr-1.5"></i>${escapeHtml(t('devices_add'))}`}
-            </button>
-        </div>
-        ${notice ? `<div class="mt-4">${notice}</div>` : ''}
-        <div id="devices-pairing" class="${devicePairing ? 'mt-5' : 'hidden'}"></div>
-        ${devicePairing ? '' : `
-        <div class="mt-5 grid sm:grid-cols-2 gap-3">
-            ${method('fa-mobile-screen-button', t('devices_method_app_title'), t('devices_method_app'))}
-            ${method('fa-desktop', t('devices_method_other_title'), t('devices_method_other'))}
-        </div>
-        <p class="mt-4 flex items-center gap-2 text-xs text-slate-400 dark:text-slate-500">
-            <i class="fas fa-terminal text-[10px]"></i><span>${cli}</span>
-        </p>`}`;
+                <div class="dev-row-actions">${tools}</div>
+                <div class="flex-shrink-0">${action}</div>
+            </div>`;
+    };
+    box.innerHTML = `${insecure}<div class="divide-y divide-slate-100 dark:divide-white/5">${items.map(row).join('')}</div>`;
+    _devicesFocusRename(devicesRenaming);
+}
+
+function startOutRename(id) {
+    devicesRenaming = id;
+    renderDevicesOut();
+}
+
+function onOutRenameKey(e, id) {
+    _devicesRenameKey(e, renderDevicesOut);
+}
+
+function commitOutRename(id) {
+    if (devicesRenaming !== id) return;
+    const input = document.getElementById('device-rename-input');
+    const name = (input ? input.value : '').trim();
+    devicesRenaming = '';
+    renderDevicesOut();
+    const active = instanceActive();
+    // The active device is the one this page talks to anyway.
+    if (active && active.id === id) {
+        if (name && name !== active.name) _renameSelf(name);
+        return;
+    }
+    renameInstance(id, name);
+}
+
+// ---------------------------------------------------------------------------
+// Devices that connect to this one
+// ---------------------------------------------------------------------------
+
+/** Host of the device the console drives, as _isLoopback expects it. */
+function _devicesHost() {
+    return new URL(instanceOrigin()).hostname.replace(/^\[|\]$/g, '');
+}
+
+function _devicesReachable() {
+    const net = devicesNet;
+    if (!net) return true;
+    let publicHost = '';
+    try { publicHost = net.public_url ? new URL(net.public_url).hostname.replace(/^\[|\]$/g, '') : ''; } catch (e) {}
+    return !!((publicHost && !_isLoopback(publicHost)) || (net.lan_urls || []).length || !_isLoopback(_devicesHost()));
+}
+
+function _devicesHint(icon, tone, text, extra) {
+    return `<div class="mb-3 flex items-start gap-2 text-xs leading-relaxed ${tone} bg-slate-50 dark:bg-white/5 rounded-lg px-3 py-2">`
+        + `<i class="fas ${icon} mt-0.5"></i><span>${escapeHtml(text)}${extra || ''}</span></div>`;
+}
+
+function _devicesHintAction(label, onclick) {
+    return ` <button class="ml-1 text-primary-500 hover:underline cursor-pointer" onclick="${onclick}">${escapeHtml(label)}</button>`;
+}
+
+/** Why another device can't connect yet, or that it could but without a password. */
+function _devicesNotice() {
+    const muted = 'text-slate-500 dark:text-slate-400';
+    if (!devicesPairingAvailable) {
+        const link = devicesManageUrl
+            ? ` <a href="${escapeHtml(devicesManageUrl)}" target="_blank" rel="noopener" class="ml-1 text-primary-500 hover:underline">${escapeHtml(t('devices_open_manage'))}</a>` : '';
+        return _devicesHint('fa-circle-info', muted, t('devices_pairing_managed'), link);
+    }
+    const net = devicesNet;
+    if (!net) return '';
+    if (!_devicesReachable()) {
+        return _devicesHint('fa-circle-info', muted, t('devices_local_only'),
+            _devicesHintAction(t('shares_go_settings'), "switchConfigTab('integrations')"));
+    }
+    if (!net.password_set) {
+        return _devicesHint('fa-triangle-exclamation', 'text-amber-600 dark:text-amber-400', t('devices_no_password'),
+            _devicesHintAction(t('shares_go_settings'), 'goToConsolePassword()'));
+    }
+    return '';
+}
+
+function renderDevicesIn() {
+    const remote = instanceActive();
+    const title = document.getElementById('devices-in-title');
+    if (title) title.textContent = remote ? t('devices_in_title_remote').replace('{name}', _devicesName()) : t('devices_in_title');
+    const btn = document.getElementById('devices-pair-btn');
+    if (btn) {
+        btn.classList.toggle('hidden', !devicesPairingAvailable);
+        btn.disabled = !_devicesReachable();
+        btn.onclick = devicePairing ? cancelDevicePairing : startDevicePairing;
+        btn.className = `px-4 py-2 rounded-lg text-sm font-medium cursor-pointer transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed ${
+            devicePairing ? 'border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5'
+                          : 'bg-primary-500 hover:bg-primary-600 text-white'}${devicesPairingAvailable ? '' : ' hidden'}`;
+        btn.innerHTML = devicePairing
+            ? `<i class="fas fa-xmark mr-1.5"></i>${escapeHtml(t('devices_cancel'))}`
+            : `<i class="fas fa-qrcode mr-1.5"></i>${escapeHtml(t('devices_let_connect'))}`;
+    }
+    const notice = document.getElementById('devices-in-notice');
+    if (notice) notice.innerHTML = _devicesNotice();
     renderDevicePairing();
+    renderDevicesList();
 }
 
 // ---------------------------------------------------------------------------
@@ -190,11 +317,12 @@ function startDevicePairing() {
     }).then(r => r.json()).then(data => {
         if (data.status !== 'success') {
             if (btn) btn.disabled = false;
-            _shareToast(data.reason === 'local_only' ? t('devices_local_only') : (data.message || t('devices_pair_failed')));
+            const known = { local_only: 'devices_local_only', pairing_unavailable: 'devices_pairing_managed' }[data.reason];
+            _shareToast(known ? t(known) : (data.message || t('devices_pair_failed')));
             return;
         }
         devicePairing = { ...data, expiresAt: Date.now() + data.expires_in * 1000 };
-        renderDevicesInstance();
+        renderDevicesIn();
         _pollDevicePairing();
     }).catch(() => {
         if (btn) btn.disabled = false;
@@ -205,7 +333,7 @@ function startDevicePairing() {
 function cancelDevicePairing() {
     devicePairing = null;
     clearTimeout(devicePairTimer);
-    renderDevicesInstance();
+    renderDevicesIn();
 }
 
 function _pollDevicePairing() {
@@ -224,7 +352,7 @@ function _pollDevicePairing() {
                 const name = (data.device && data.device.name) || '';
                 devicePairing = null;
                 _shareToast(t('devices_paired').replace('{name}', name));
-                renderDevicesInstance();
+                renderDevicesIn();
                 _loadDevices();
                 return;
             }
@@ -260,7 +388,7 @@ function renderDevicePairing() {
     const urls = (p.urls || []).map(u => `<div class="font-mono text-xs text-slate-600 dark:text-slate-300 break-all">${escapeHtml(u)}</div>`).join('');
     const step = (n, text) => `<li class="flex gap-2.5"><span class="w-5 h-5 rounded-full bg-primary-500/10 text-primary-600 dark:text-primary-400 text-[11px] font-semibold flex items-center justify-center flex-shrink-0">${n}</span><span>${escapeHtml(text)}</span></li>`;
     box.innerHTML = `
-        <div class="flex flex-col md:flex-row gap-6 p-5 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50/70 dark:bg-white/[0.03]">
+        <div class="flex flex-col md:flex-row gap-6 p-5 mb-3 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50/70 dark:bg-white/[0.03]">
             <div class="dev-pair-ring self-center md:self-start">
                 ${qr}
                 ${p.expired ? `<button onclick="startDevicePairing()" class="absolute inset-0 m-auto w-28 h-9 rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-xs font-medium cursor-pointer shadow">${escapeHtml(t('devices_regenerate'))}</button>` : ''}
@@ -294,7 +422,7 @@ function renderDevicePairing() {
 }
 
 // ---------------------------------------------------------------------------
-// Signed-in devices
+// Devices allowed in
 // ---------------------------------------------------------------------------
 
 function _deviceSeen(d) {
@@ -320,14 +448,7 @@ function renderDevicesList() {
         return;
     }
     if (!devicesList.length) {
-        box.innerHTML = `
-            <div class="py-8 text-center">
-                <div class="w-11 h-11 mx-auto rounded-xl bg-slate-100 dark:bg-white/5 flex items-center justify-center mb-3">
-                    <i class="fas fa-mobile-screen-button text-slate-400"></i>
-                </div>
-                <p class="text-sm text-slate-500 dark:text-slate-400">${escapeHtml(t('devices_empty'))}</p>
-                <p class="text-xs text-slate-400 dark:text-slate-500 mt-1">${escapeHtml(t('devices_empty_hint'))}</p>
-            </div>`;
+        box.innerHTML = `<div class="py-6 text-center text-sm text-slate-400 dark:text-slate-500">${escapeHtml(t('devices_empty'))}</div>`;
         return;
     }
     const sorted = [...devicesList].sort((a, b) =>
@@ -335,10 +456,7 @@ function renderDevicesList() {
         || (b.online - a.online)
         || ((b.last_seen_at || b.created_at || 0) - (a.last_seen_at || a.created_at || 0)));
     box.innerHTML = `<div class="divide-y divide-slate-100 dark:divide-white/5">${sorted.map(_deviceRow).join('')}</div>`;
-    if (devicesRenaming) {
-        const input = document.getElementById('device-rename-input');
-        if (input) { input.focus(); input.select(); }
-    }
+    _devicesFocusRename(devicesRenaming);
 }
 
 function _deviceRow(d) {
@@ -350,11 +468,10 @@ function _deviceRow(d) {
         d.app_version ? `v${d.app_version}` : '',
         d.origin ? t('devices_from_page').replace('{origin}', _instanceHost(d.origin)) : '',
         d.last_ip || '',
-    ].filter(Boolean).map(escapeHtml).join('<span class="mx-1.5 text-slate-300 dark:text-slate-600">·</span>');
+    ].filter(Boolean).map(escapeHtml).join(DEVICES_SEP);
     const seen = _deviceSeen(d);
     const name = devicesRenaming === d.id
-        ? `<input id="device-rename-input" class="dev-name-input text-slate-800 dark:text-slate-100" maxlength="60" value="${escapeHtml(d.name)}"
-                  onkeydown="onDeviceRenameKey(event, '${d.id}')" onblur="commitDeviceRename('${d.id}')">`
+        ? _devicesNameInput(d.name, `onDeviceRenameKey(event, '${d.id}')`, `commitDeviceRename('${d.id}')`)
         : `<span class="truncate">${escapeHtml(d.name)}</span>`;
     const badges = (current ? `<span class="dev-chip is-primary">${escapeHtml(t('devices_this'))}</span>` : '')
         + (d.online && !current ? `<span class="dev-chip is-online">${escapeHtml(t('devices_online'))}</span>` : '');
@@ -367,9 +484,9 @@ function _deviceRow(d) {
             </div>
             <div class="hidden sm:block text-xs ${d.online ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'} whitespace-nowrap">${escapeHtml(seen)}</div>
             <div class="dev-row-actions">
-                <button class="cfg-api-btn" onclick="startDeviceRename('${d.id}')" data-tooltip="${escapeHtml(t('devices_rename'))}" data-tip-float><i class="fas fa-pen text-xs"></i></button>
-                <button class="cfg-api-btn" onclick="removeDevice('${d.id}')" data-tooltip="${escapeHtml(t(current ? 'devices_sign_out_here' : 'devices_remove'))}" data-tip-float>
-                    <i class="${current ? 'fas fa-right-from-bracket' : 'far fa-trash-can'} text-xs"></i></button>
+                ${_devicesIconBtn('fas fa-pen', 'devices_rename_device', `startDeviceRename('${d.id}')`)}
+                ${_devicesIconBtn(current ? 'fas fa-right-from-bracket' : 'far fa-trash-can',
+                    current ? 'devices_sign_out_here' : 'devices_remove', `removeDevice('${d.id}')`)}
             </div>
         </div>`;
 }
@@ -380,8 +497,7 @@ function startDeviceRename(id) {
 }
 
 function onDeviceRenameKey(e, id) {
-    if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); }
-    if (e.key === 'Escape') { devicesRenaming = ''; renderDevicesList(); }
+    _devicesRenameKey(e, renderDevicesList);
 }
 
 function commitDeviceRename(id) {
