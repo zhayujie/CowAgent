@@ -4,8 +4,7 @@ The bocha API answers no-result queries with "webPages": null. A
 `.get("webPages", {})` default only covers a *missing* key, so the null
 form fell straight into `.get("value")` on None and the whole search came
 back as "Error: Search failed - 'NoneType' object has no attribute 'get'"
-instead of an empty result list. _search_linkai already uses the
-`(raw.get("webPages") or {})` form; these tests pin the same for bocha.
+instead of an empty result list.
 """
 import sys
 import unittest

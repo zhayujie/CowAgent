@@ -465,9 +465,7 @@ class WebSearch(BaseTool):
             msg = data.get("msg") or "Unknown error"
             return ToolResult.fail(f"Error: bocha API error (code={api_code}): {msg}")
 
-        # The API returns "webPages": null for queries with no results; the
-        # `.get("webPages", {})` default only covers a *missing* key, so an
-        # explicit null must fall back too (same pattern as _search_linkai).
+        # No-result queries come back with "webPages": null, not a missing key.
         pages = ((data.get("data") or {}).get("webPages") or {}).get("value", []) or []
         results = []
         for p in pages:
