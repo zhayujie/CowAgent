@@ -1491,6 +1491,9 @@ class FeiShuChanel(ChatChannel):
                     _create_and_send_card()
                     with lock:
                         if disabled[0]:
+                            # The card never went out: undo the streamed flag
+                            # so send() falls back to the plain text reply.
+                            context["feishu_streamed"] = False
                             return
 
                 _drain_push_queue()
@@ -1898,6 +1901,12 @@ class FeiShuChanel(ChatChannel):
                         final_text = partial or "_(已中止)_"
                         _stream_update_text(final_text)
                         _close_streaming_mode(final_text)
+                    else:
+                        # No card was ever created, so nothing has been
+                        # delivered: undo the streamed flag so chat_channel's
+                        # send() still delivers the text reply (the documented
+                        # degradation, see the docstring above).
+                        context["feishu_streamed"] = False
                     push_queue.put(None)
                     return
 
@@ -1913,6 +1922,9 @@ class FeiShuChanel(ChatChannel):
                     _create_and_send_card()
                     with lock:
                         if disabled[0]:
+                            # The card never went out: undo the streamed flag
+                            # so send() falls back to the plain text reply.
+                            context["feishu_streamed"] = False
                             return
 
                 _drain_push_queue()
