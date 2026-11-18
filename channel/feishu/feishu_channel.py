@@ -44,6 +44,7 @@ from common import state_dir, utils
 from common.expired_dict import ExpiredDict
 from common.log import logger
 from common.media_download import MAX_FILE_BYTES, MAX_IMAGE_BYTES, download_bytes, download_to_file
+from common.media_duration import get_video_duration_ms
 from common.singleton import singleton
 from config import conf
 from channel.feishu.domain import FEISHU_DOMAIN, LARK_DOMAIN, WRONG_DOMAIN_CODE, WS_ENDPOINT_PATH
@@ -2016,40 +2017,16 @@ class FeiShuChanel(ChatChannel):
     def _get_video_duration(self, file_path: str) -> int:
         """
         获取视频时长（毫秒）
-        
+
         Args:
             file_path: 视频文件路径
-        
+
         Returns:
             视频时长（毫秒），如果获取失败返回0
         """
-        try:
-            import subprocess
-
-            # 使用 ffprobe 获取视频时长
-            cmd = [
-                'ffprobe',
-                '-v', 'error',
-                '-show_entries', 'format=duration',
-                '-of', 'default=noprint_wrappers=1:nokey=1',
-                file_path
-            ]
-
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
-            if result.returncode == 0:
-                duration_seconds = float(result.stdout.strip())
-                duration_ms = int(duration_seconds * 1000)
-                logger.info(f"[FeiShu] Video duration: {duration_seconds:.2f}s ({duration_ms}ms)")
-                return duration_ms
-            else:
-                logger.warning(f"[FeiShu] Failed to get video duration via ffprobe: {result.stderr}")
-                return 0
-        except FileNotFoundError:
-            logger.warning("[FeiShu] ffprobe not found, video duration will be 0. Install ffmpeg to fix this.")
-            return 0
-        except Exception as e:
-            logger.warning(f"[FeiShu] Failed to get video duration: {e}")
-            return 0
+        # ffprobe probing lives in common.media_duration now (DingTalk needs
+        # the same answer); kept as a method for the existing call sites.
+        return get_video_duration_ms(file_path)
 
     def _upload_video_url(self, video_url, access_token):
         """
