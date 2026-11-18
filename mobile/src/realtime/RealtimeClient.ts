@@ -19,6 +19,13 @@ export interface RealtimeConfig {
   onStatus: (status: RealtimeStatus) => void;
 }
 
+/** React Native's WebSocket takes request headers; the DOM typings in scope don't know that. */
+type NativeWebSocket = new (
+  url: string,
+  protocols: string | string[] | null,
+  options: {headers: Record<string, string>},
+) => WebSocket;
+
 const PING_INTERVAL_MS = 25_000;
 const IDLE_TIMEOUT_MS = 60_000;
 const ACK_DELAY_MS = 500;
@@ -36,6 +43,7 @@ export class RealtimeClient {
   private lastSeq = 0;
   private pendingAck = 0;
   private attempts = 0;
+  private connectSeq = 0;
   private lastMessageAt = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private ackTimer: ReturnType<typeof setTimeout> | null = null;
@@ -95,17 +103,30 @@ export class RealtimeClient {
     this.clearReconnect();
     this.closeSocket();
     this.setStatus('connecting');
-    const socket = new WebSocket(config.url);
-    this.socket = socket;
-
-    socket.onopen = async () => {
-      if (config.confirm && !(await config.confirm().catch(() => false))) {
-        // onclose follows and schedules the reconnect.
-        if (this.socket === socket) {
-          socket.close();
-        }
+    // The token also goes on the upgrade request, where a proxy in front can check it, so the
+    // address is confirmed before connecting rather than once the socket is open.
+    const seq = this.connectSeq;
+    const confirmed = config.confirm ? config.confirm().catch(() => false) : Promise.resolve(true);
+    confirmed.then(ok => {
+      if (seq !== this.connectSeq || this.config !== config) {
         return;
       }
+      if (ok) {
+        this.connect(config);
+      } else {
+        this.setStatus('closed');
+        this.scheduleReconnect();
+      }
+    });
+  }
+
+  private connect(config: RealtimeConfig) {
+    const socket = new (WebSocket as unknown as NativeWebSocket)(config.url, null, {
+      headers: {Authorization: `Bearer ${config.token}`},
+    });
+    this.socket = socket;
+
+    socket.onopen = () => {
       if (this.socket !== socket) {
         return;
       }
@@ -239,6 +260,8 @@ export class RealtimeClient {
   }
 
   private closeSocket() {
+    // Drops a connect still waiting on its confirmation.
+    this.connectSeq += 1;
     const socket = this.socket;
     this.socket = null;
     if (socket) {
