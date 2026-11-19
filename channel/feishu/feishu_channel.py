@@ -1477,6 +1477,9 @@ class FeiShuChanel(ChatChannel):
                     _create_and_send_card()
                     with lock:
                         if disabled[0]:
+                            # The card never went out: undo the streamed flag
+                            # so send() falls back to the plain text reply.
+                            context["feishu_streamed"] = False
                             return
 
                 _drain_push_queue()
@@ -1878,6 +1881,11 @@ class FeiShuChanel(ChatChannel):
                     # Cancelled path: finalize the in-flight card with
                     # partial output (or a short marker if empty); drop
                     # stale final_response to avoid duplicating last turn.
+                    # has_card can be False here because a tool turn's card
+                    # was already finalized in message_end (card_id reset) —
+                    # that text has been delivered, so clearing the streamed
+                    # flag would make send() deliver it a second time. The
+                    # flag stays.
                     if has_card:
                         _drain_push_queue()
                         partial = (pending_text or "").rstrip()
@@ -1899,6 +1907,9 @@ class FeiShuChanel(ChatChannel):
                     _create_and_send_card()
                     with lock:
                         if disabled[0]:
+                            # The card never went out: undo the streamed flag
+                            # so send() falls back to the plain text reply.
+                            context["feishu_streamed"] = False
                             return
 
                 _drain_push_queue()
