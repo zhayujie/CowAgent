@@ -1,16 +1,20 @@
-import {faMoon, faSun} from '@fortawesome/free-regular-svg-icons';
 import {
   faArrowsRotate,
   faBars,
-  faCircleHalfStroke,
+  faChevronRight,
   faCode,
+  faCommentDots,
   faGaugeHigh,
   faGlobe,
   faKey,
+  faLaptop,
   faMicrochip,
+  faMobileScreen,
+  faServer,
   faShareNodes,
   faShieldHalved,
   faTerminal,
+  faUserShield,
 } from '@fortawesome/free-solid-svg-icons';
 import type {StackScreenProps} from '@react-navigation/stack';
 import React, {useEffect, useState} from 'react';
@@ -22,9 +26,10 @@ import {PERMISSION_META} from '../components/ComposerSheets';
 import {Icon} from '../components/Icon';
 import {ServerSheet} from '../components/ServerSheet';
 import {tr, trf, useLangStore, type Lang, type MessageKey} from '../i18n';
-import {ChoiceSheet, ConfirmSheet, FieldSheet, Footnote, SettingRow} from '../components/settings';
+import {ChoiceSheet, ConfirmSheet, FieldSheet, SettingCard, SettingRow} from '../components/settings';
 import {showToast, ToastHost} from '../components/Toast';
-import {GroupLabel, PageHeader} from '../components/ui';
+import {PageHeader} from '../components/ui';
+import {openWebPage} from '../navigation/openWeb';
 import type {RootStackParamList} from '../navigation/types';
 import type {PermissionMode} from '../protocol/resources';
 import {useConfigStore} from '../store/configStore';
@@ -42,10 +47,10 @@ import {PASSWORD_MIN_LENGTH, PASSWORD_STRENGTH_TEXT, passwordStrength} from '../
 
 type Props = StackScreenProps<RootStackParamList, 'Settings'>;
 
-const MODES: {key: ThemeMode; label: MessageKey; icon: typeof faSun}[] = [
-  {key: 'system', label: 'settings_theme_system', icon: faCircleHalfStroke},
-  {key: 'light', label: 'settings_theme_light', icon: faSun},
-  {key: 'dark', label: 'settings_theme_dark', icon: faMoon},
+const MODES: {key: ThemeMode; label: MessageKey}[] = [
+  {key: 'system', label: 'settings_theme_system'},
+  {key: 'light', label: 'settings_theme_light'},
+  {key: 'dark', label: 'settings_theme_dark'},
 ];
 
 const REALTIME_LABEL = {
@@ -63,6 +68,8 @@ const LANGS: {key: Lang; label: string}[] = [
 ];
 
 const PERMISSION_ORDER = Object.keys(PERMISSION_META) as PermissionMode[];
+
+const REPO_URL = 'https://github.com/zhayujie/CowAgent';
 
 export function SettingsScreen({navigation}: Props) {
   const t = useTheme();
@@ -133,6 +140,23 @@ export function SettingsScreen({navigation}: Props) {
     updateConfig({cow_lang: next}).catch(() => undefined);
   };
 
+  const serverName = local ? tr('server_local') : server?.name ?? '-';
+  const serverMeta = local
+    ? tr('server_local_meta')
+    : `${server?.baseUrl.replace(/^https?:\/\//, '') ?? '-'} · ${
+        (server?.via ?? (isDeviceToken(http.getToken()) ? 'pairing' : 'password')) === 'pairing'
+          ? tr('connect_method_device')
+          : tr('connect_method_password')
+      }`;
+  const realtimeLabel = tr(REALTIME_LABEL[realtimeStatus]);
+  const realtimeColor = {
+    idle: t.t4,
+    connecting: t.kind.image[1],
+    open: t.green,
+    closed: t.danger,
+    revoked: t.danger,
+  }[realtimeStatus];
+
   const loading = !config;
   return (
     <View style={styles.root}>
@@ -140,29 +164,62 @@ export function SettingsScreen({navigation}: Props) {
       <ScrollView
         contentContainerStyle={[styles.body, {paddingBottom: insets.bottom + 32}]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={t.t3} colors={[t.green]} />}>
-        <GroupLabel style={styles.firstGroup}>{tr('settings_group_common')}</GroupLabel>
-        <SettingRow
-          icon={faMicrochip}
-          title={tr('settings_models')}
-          value={config?.model || (loading ? '…' : tr('common_not_configured'))}
-          onPress={() => navigation.navigate('Models')}
-        />
-        <SettingRow
-          icon={faGaugeHigh}
-          title={tr('settings_runtime')}
-          value={
-            config
-              ? trf('settings_runtime_value', {steps: config.agent_max_steps, turns: config.agent_max_context_turns})
-              : '…'
-          }
-          onPress={() => navigation.navigate('Runtime')}
-        />
-        <SettingRow icon={faBars} title={tr('settings_menu')} last onPress={() => navigation.navigate('MenuEditor')} />
+        <SettingCard>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={trf('settings_connection_a11y', {name: serverName, meta: serverMeta, status: realtimeLabel})}
+            onPress={() => setServerSheet(true)}
+            style={({pressed}) => [styles.server, pressed && styles.pressed]}>
+            <View style={styles.serverIcon}>
+              <Icon icon={local ? faMobileScreen : faServer} size={16} color={t.accent} />
+            </View>
+            <View style={styles.serverText}>
+              <Text style={styles.serverName} numberOfLines={1}>
+                {serverName}
+              </Text>
+              <Text style={styles.serverMeta} numberOfLines={1}>
+                {serverMeta}
+              </Text>
+              <View style={styles.realtime}>
+                <View style={[styles.dot, {backgroundColor: realtimeColor}]} />
+                <Text style={styles.realtimeText} numberOfLines={1}>
+                  {realtimeLabel}
+                </Text>
+              </View>
+            </View>
+            <Icon icon={faChevronRight} size={10} color={t.t4} />
+          </Pressable>
+        </SettingCard>
 
-        {/* The built-in agent listens on loopback only, so nothing outside this phone can reach it. */}
+        <SettingCard style={styles.group}>
+          <SettingRow
+            icon={faMicrochip}
+            title={tr('settings_models')}
+            value={config?.model || (loading ? '…' : tr('common_not_configured'))}
+            onPress={() => navigation.navigate('Models')}
+          />
+          <SettingRow
+            icon={faGaugeHigh}
+            title={tr('settings_runtime')}
+            value={
+              config
+                ? trf('settings_runtime_value', {steps: config.agent_max_steps, turns: config.agent_max_context_turns})
+                : '…'
+            }
+            onPress={() => navigation.navigate('Runtime')}
+          />
+          <SettingRow
+            icon={faShieldHalved}
+            title={tr('settings_default_permission')}
+            value={permission ? PERMISSION_META[permission]?.name ?? permission : '…'}
+            onPress={config ? () => setSheet('permission') : undefined}
+            last
+          />
+        </SettingCard>
+
+        {/* The built-in agent listens on loopback only and keeps its own password, so none of this applies. */}
         {!local && (
-          <>
-            <GroupLabel style={styles.group}>{tr('settings_group_access')}</GroupLabel>
+          <SettingCard style={styles.group}>
             <SettingRow icon={faGlobe} title={tr('settings_access_url')} onPress={() => navigation.navigate('Access')} />
             <SettingRow
               icon={faShareNodes}
@@ -174,105 +231,52 @@ export function SettingsScreen({navigation}: Props) {
               title={tr('settings_external_api')}
               value={externalApi ? (externalApi.enabled ? tr('common_enabled') : tr('common_disabled')) : '…'}
               onPress={() => navigation.navigate('ExternalApi')}
+            />
+            <SettingRow icon={faLaptop} title={tr('devices_title')} onPress={() => navigation.navigate('Devices')} />
+            <SettingRow
+              icon={faKey}
+              title={tr('settings_access_password')}
+              value={config ? (config.web_password_masked ? tr('common_configured') : tr('common_not_set')) : '…'}
+              onPress={config ? () => setSheet('password') : undefined}
               last
             />
-          </>
+          </SettingCard>
         )}
 
-        <GroupLabel style={styles.group}>{tr('settings_group_appearance')}</GroupLabel>
-        <View style={styles.modes}>
-          {MODES.map(m => {
-            const active = mode === m.key;
-            return (
-              <Pressable
-                key={m.key}
-                accessibilityRole="radio"
-                accessibilityState={{selected: active}}
-                onPress={() => setMode(m.key)}
-                style={[styles.mode, active && styles.modeActive]}>
-                <Icon icon={m.icon} size={15} color={active ? t.accent : t.t3} />
-                <Text style={[styles.modeText, active && styles.modeTextActive]}>{tr(m.label)}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
+        <SettingCard style={styles.group}>
+          <Segmented
+            title={tr('settings_theme')}
+            options={MODES.map(m => ({key: m.key, label: tr(m.label)}))}
+            value={mode}
+            onChange={setMode}
+          />
+          <Segmented title={tr('settings_language')} options={LANGS} value={lang} onChange={changeLanguage} />
+          <SettingRow icon={faBars} title={tr('settings_menu')} onPress={() => navigation.navigate('MenuEditor')} last />
+        </SettingCard>
 
-        <GroupLabel style={styles.group}>{tr('settings_language')}</GroupLabel>
-        <View style={styles.modes}>
-          {LANGS.map(l => {
-            const active = lang === l.key;
-            return (
-              <Pressable
-                key={l.key}
-                accessibilityRole="radio"
-                accessibilityState={{selected: active}}
-                onPress={() => changeLanguage(l.key)}
-                style={[styles.mode, active && styles.modeActive]}>
-                <Text style={[styles.modeText, active && styles.modeTextActive]}>{l.label}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
-
-        <GroupLabel style={styles.group}>{tr('settings_group_security')}</GroupLabel>
-        <SettingRow
-          icon={faShieldHalved}
-          title={tr('settings_default_permission')}
-          value={permission ? PERMISSION_META[permission]?.name ?? permission : '…'}
-          onPress={config ? () => setSheet('permission') : undefined}
-          last={local}
-        />
-        {/* The app keeps the built-in agent's password itself and sets it on every start. */}
-        {!local && (
+        <SettingCard style={styles.group}>
+          <SettingRow icon={faUserShield} title={tr('perm_title')} onPress={() => navigation.navigate('Permissions')} />
+          <SettingRow icon={faTerminal} title={tr('settings_logs')} onPress={() => navigation.navigate('Logs')} />
           <SettingRow
-            icon={faKey}
-            title={tr('settings_access_password')}
-            value={config ? (config.web_password_masked ? tr('common_configured') : tr('common_not_set')) : '…'}
-            onPress={config ? () => setSheet('password') : undefined}
+            icon={faArrowsRotate}
+            title={tr('settings_version')}
+            value={version ? `v${version}` : undefined}
+            onPress={() => navigation.navigate('Version')}
+          />
+          <SettingRow
+            icon={faCommentDots}
+            title={tr('settings_feedback')}
+            onPress={() => openWebPage(`${REPO_URL}/issues`)}
             last
           />
-        )}
-        <Footnote>{tr('settings_permission_note')}</Footnote>
+        </SettingCard>
 
-        <GroupLabel style={styles.group}>{tr('settings_group_system')}</GroupLabel>
-        <SettingRow icon={faTerminal} title={tr('settings_logs')} onPress={() => navigation.navigate('Logs')} />
-        <SettingRow
-          icon={faArrowsRotate}
-          title={tr('settings_version')}
-          value={version ? `v${version}` : undefined}
-          onPress={() => navigation.navigate('Version')}
-          last
-        />
-
-        <GroupLabel style={styles.group}>{tr('settings_group_server')}</GroupLabel>
-        <SettingRow title={tr('common_name')} value={local ? tr('server_local') : server?.name ?? '-'} />
-        <SettingRow
-          title={tr('settings_server_address')}
-          value={local ? tr('server_local_meta') : server?.baseUrl.replace(/^https?:\/\//, '') ?? '-'}
-        />
-        <SettingRow
-          title={tr('connect_method')}
-          value={
-            local
-              ? tr('connect_method_local')
-              : (server?.via ?? (isDeviceToken(http.getToken()) ? 'pairing' : 'password')) === 'pairing'
-                ? tr('connect_method_device')
-                : tr('connect_method_password')
-          }
-        />
-        <SettingRow title={tr('settings_realtime')} value={tr(REALTIME_LABEL[realtimeStatus])} />
-        <SettingRow title={tr('server_switch')} onPress={() => setServerSheet(true)} last={local} />
-        {/* Nothing outside this phone can reach the built-in agent, so it has no other devices. */}
-        {!local && <SettingRow title={tr('devices_title')} onPress={() => navigation.navigate('Devices')} last />}
-
-        <GroupLabel style={styles.group}>{tr('settings_group_account')}</GroupLabel>
         <Pressable
           accessibilityRole="button"
           onPress={() => setConfirmLogout(true)}
-          style={({pressed}) => [styles.logout, pressed && styles.logoutPressed]}>
+          style={({pressed}) => [styles.logout, pressed && styles.pressed]}>
           <Text style={styles.logoutText}>{tr('settings_logout')}</Text>
         </Pressable>
-        <Footnote>{tr('settings_logout_note')}</Footnote>
       </ScrollView>
 
       <ChoiceSheet
@@ -318,32 +322,88 @@ export function SettingsScreen({navigation}: Props) {
   );
 }
 
+/** A card row whose value is picked in place from a few short options. */
+function Segmented<K extends string>({
+  title,
+  options,
+  value,
+  onChange,
+}: {
+  title: string;
+  options: {key: K; label: string}[];
+  value: K;
+  onChange: (key: K) => void;
+}) {
+  const styles = useStyles();
+  return (
+    <View style={styles.segRow}>
+      <Text style={styles.segTitle} numberOfLines={1}>
+        {title}
+      </Text>
+      <View style={styles.seg} accessibilityRole="radiogroup" accessibilityLabel={title}>
+        {options.map(o => {
+          const active = o.key === value;
+          return (
+            <Pressable
+              key={o.key}
+              accessibilityRole="radio"
+              accessibilityState={{selected: active}}
+              onPress={() => onChange(o.key)}
+              style={[styles.segItem, active && styles.segItemActive]}>
+              <Text style={[styles.segText, active && styles.segTextActive]} numberOfLines={1}>
+                {o.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
 const useStyles = makeStyles(t => ({
   root: {flex: 1, backgroundColor: t.bg0},
-  body: {paddingTop: 4},
-  firstGroup: {marginTop: 8},
-  group: {marginTop: 26},
-  modes: {flexDirection: 'row', gap: 8, paddingHorizontal: 18},
-  mode: {
-    flex: 1,
+  body: {paddingTop: 8},
+  group: {marginTop: 14},
+  pressed: {opacity: 0.6},
+  server: {flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingVertical: 14},
+  serverIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.sm,
     alignItems: 'center',
-    gap: 8,
-    paddingVertical: 14,
-    borderRadius: radius.md,
-    backgroundColor: t.bg1,
-    borderWidth: 1,
-    borderColor: t.line1,
+    justifyContent: 'center',
+    backgroundColor: t.accentSoft,
   },
-  modeActive: {backgroundColor: t.accentSoft, borderColor: t.accentLine},
-  modeText: {fontSize: 13, color: t.t2},
-  modeTextActive: {color: t.t1, fontWeight: '600'},
+  serverText: {flex: 1, minWidth: 0},
+  serverName: {fontSize: 16, fontWeight: '600', color: t.t1, letterSpacing: -0.2},
+  serverMeta: {fontSize: 12, color: t.t3, marginTop: 3},
+  realtime: {flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6},
+  dot: {width: 6, height: 6, borderRadius: 3},
+  realtimeText: {fontSize: 12, color: t.t3},
+  segRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    minHeight: 52,
+    marginHorizontal: 14,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: t.line1,
+  },
+  segTitle: {flex: 1, fontSize: 15, color: t.t1, letterSpacing: -0.1},
+  seg: {flexBasis: 228, flexShrink: 1, flexDirection: 'row', padding: 3, borderRadius: radius.sm, backgroundColor: t.bg2},
+  segItem: {flex: 1, alignItems: 'center', paddingVertical: 6, borderRadius: radius.xs},
+  segItemActive: {backgroundColor: t.accentSoft},
+  segText: {fontSize: 13, color: t.t3},
+  segTextActive: {color: t.accent, fontWeight: '600'},
   logout: {
-    marginHorizontal: 18,
+    marginTop: 14,
+    marginHorizontal: 16,
     paddingVertical: 14,
     alignItems: 'center',
     borderRadius: radius.md,
     backgroundColor: t.dangerSoft,
   },
-  logoutPressed: {opacity: 0.7},
   logoutText: {fontSize: 15, fontWeight: '500', color: t.danger},
 }));

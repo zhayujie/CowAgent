@@ -29,6 +29,7 @@ import {MemoryDocScreen} from '../screens/MemoryDocScreen';
 import {MemoryScreen} from '../screens/MemoryScreen';
 import {MenuEditorScreen} from '../screens/MenuEditorScreen';
 import {ModelsScreen} from '../screens/ModelsScreen';
+import {PermissionsScreen} from '../screens/PermissionsScreen';
 import {RuntimeScreen} from '../screens/RuntimeScreen';
 import {SessionsScreen} from '../screens/SessionsScreen';
 import {SettingsScreen} from '../screens/SettingsScreen';
@@ -127,6 +128,7 @@ export function RootNavigator() {
           <Stack.Screen name="Capability" component={CapabilityScreen} />
           <Stack.Screen name="WebSearch" component={WebSearchScreen} />
           <Stack.Screen name="Runtime" component={RuntimeScreen} />
+          <Stack.Screen name="Permissions" component={PermissionsScreen} />
           <Stack.Screen name="ExternalApi" component={ExternalApiScreen} />
           <Stack.Screen name="Access" component={AccessScreen} />
           <Stack.Screen name="Devices" component={DevicesScreen} />

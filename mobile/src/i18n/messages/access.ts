@@ -47,7 +47,7 @@ const zh = {
   login_err_server_status: '服务器返回错误（{status}）',
   login_err_no_password: '该服务端未设置访问密码，为安全起见拒绝连接。请先在服务端配置 web_password',
   login_err_no_token: '登录成功但服务端未返回 token，请升级 CowAgent',
-  login_err_relogin: '重新登录失败，请退出后用新密码登录',
+  login_err_relogin: '重新登录失败，请断开连接后用新密码登录',
   login_back_to: '返回 {name}',
   login_going_back: '正在返回…',
   server_local: '本机',
@@ -252,7 +252,7 @@ const en: Record<keyof typeof zh, string> = {
   login_err_no_password:
     'This server has no access password, so the connection was refused for safety. Set web_password on the server first',
   login_err_no_token: 'Signed in, but the server returned no token. Please upgrade CowAgent',
-  login_err_relogin: 'Signing in again failed. Sign out and sign in with the new password',
+  login_err_relogin: 'Signing in again failed. Disconnect and sign in with the new password',
   login_back_to: 'Back to {name}',
   login_going_back: 'Going back…',
   server_local: 'This phone',

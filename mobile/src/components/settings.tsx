@@ -1,6 +1,6 @@
 import {faCheck, faChevronRight} from '@fortawesome/free-solid-svg-icons';
 import type {IconDefinition} from '@fortawesome/fontawesome-svg-core';
-import React, {useEffect, useState, type ReactNode} from 'react';
+import React, {createContext, useContext, useEffect, useState, type ReactNode} from 'react';
 import {
   ActivityIndicator,
   Platform,
@@ -26,6 +26,18 @@ export const MONO = Platform.select({
   web: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
   default: undefined,
 });
+
+const InCard = createContext(false);
+
+/** A rounded surface holding related rows. */
+export function SettingCard({children, style}: {children: ReactNode; style?: StyleProp<ViewStyle>}) {
+  const styles = useStyles();
+  return (
+    <View style={[styles.card, style]}>
+      <InCard.Provider value>{children}</InCard.Provider>
+    </View>
+  );
+}
 
 /** One line of a settings list: title, optional detail below, value and chevron on the right. */
 export function SettingRow({
@@ -62,6 +74,7 @@ export function SettingRow({
 }) {
   const t = useTheme();
   const styles = useStyles();
+  const inCard = useContext(InCard);
   const head = (
     <>
       {icon && (
@@ -90,7 +103,7 @@ export function SettingRow({
   const arrow = <Icon icon={faChevronRight} size={10} color={t.t4} />;
   if (!onPress && !onLongPress) {
     return (
-      <View style={[styles.row, last && styles.rowLast]}>
+      <View style={[styles.row, inCard && styles.rowInCard, last && styles.rowLast]}>
         {head}
         {action}
         {chevron && arrow}
@@ -101,7 +114,7 @@ export function SettingRow({
   // On the web a button inside a button is invalid HTML, so an action splits the row into sibling buttons.
   if (action) {
     return (
-      <View style={[styles.row, styles.rowSplit, last && styles.rowLast]}>
+      <View style={[styles.row, inCard && styles.rowInCard, styles.rowSplit, last && styles.rowLast]}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={a11yLabel}
@@ -130,7 +143,7 @@ export function SettingRow({
       accessibilityLabel={a11yLabel}
       onPress={onPress}
       onLongPress={onLongPress}
-      style={({pressed}) => [styles.row, last && styles.rowLast, pressed && styles.rowPressed]}>
+      style={({pressed}) => [styles.row, inCard && styles.rowInCard, last && styles.rowLast, pressed && styles.rowPressed]}>
       {head}
       {chevron && arrow}
     </Pressable>
@@ -512,7 +525,16 @@ const useStyles = makeStyles(t => ({
     borderBottomWidth: 1,
     borderBottomColor: t.line1,
   },
+  rowInCard: {marginHorizontal: 14},
   rowLast: {borderBottomWidth: 0},
+  card: {
+    marginHorizontal: 16,
+    borderRadius: radius.md,
+    backgroundColor: t.bg1,
+    borderWidth: 1,
+    borderColor: t.line1,
+    overflow: 'hidden',
+  },
   rowSplit: {paddingVertical: 0},
   rowArrow: {alignSelf: 'stretch', justifyContent: 'center', paddingLeft: 6},
   rowMain: {flex: 1, minWidth: 0, minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12},

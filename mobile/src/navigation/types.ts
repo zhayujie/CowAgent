@@ -40,6 +40,7 @@ export type RootStackParamList = {
   Capability: {key: CapabilityKey};
   WebSearch: undefined;
   Runtime: undefined;
+  Permissions: undefined;
   ExternalApi: undefined;
   Access: undefined;
   Devices: undefined;

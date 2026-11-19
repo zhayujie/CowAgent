@@ -1,5 +1,6 @@
 #include "RNOH/PackageProvider.h"
 #include "RNOHPackagesFactory.h"
+#include "CowNativePackage.h"
 #include "generated/RNOHGeneratedPackage.h"
 #include "ReanimatedPackage.h"
 #include "ReanimatedWorkletPackage.h"
@@ -21,5 +22,6 @@ std::vector<std::shared_ptr<Package>> PackageProvider::getPackages(
   packages.push_back(std::make_shared<ReanimatedPackage>(ctx));
   packages.push_back(std::make_shared<RnohReactNativeHarmonyScreensPackage>(ctx));
   packages.push_back(std::make_shared<SVGPackage>(ctx));
+  packages.push_back(std::make_shared<CowNativePackage>(ctx));
   return packages;
 }
