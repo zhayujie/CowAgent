@@ -189,11 +189,29 @@ _XXD_VALUE_FLAGS = frozenset({"-c", "-cols", "-g", "-groupsize", "-l", "-len",
                               "-n", "-name", "-o", "-offset", "-s", "-seek"})
 
 # `sed` also writes through its `w` command (`sed -e 'w out.txt' in.txt`), which
-# takes a bare path inside the script rather than a flag.
-_SED_WRITE_COMMAND_RE = re.compile(r"(?:^|[;{}])\s*w\s+\S")
+# takes a bare path inside the script rather than a flag. The path may follow
+# `w` with or without whitespace (`w out.txt`, `wout.txt`) and is captured as
+# group 1 so workspace-write can root-check the real destination.
+_SED_WRITE_COMMAND_RE = re.compile(r"(?:^|[;{}])\s*w\s*(\S+)")
+# GNU sed's `s` command has a `w` flag with the same effect. The `w` sits after
+# the third delimiter of the substitution (`sed 's/a/b/w out.txt' in.txt`),
+# where the `w`-command pattern above cannot see it. Each s-command field may
+# contain escaped characters (including the delimiter, as in `s/http:\/\//x/`),
+# so the fields are matched as `(?:\\.|(?!\1)[^\\])*` rather than with lazy
+# dot-all — which crossed `;` and matched unrelated script parts like
+# `s/a/b/;s/x/w/`. The lookbehind admits address prefixes (`1,3s/...`) and
+# catches the empty-pattern form `s//b/w f` as well.
+_SED_S_WRITE_RE = re.compile(
+    r"(?<![A-Za-z])s([^\w\s\\])(?:\\.|(?!\1)[^\\])*\1(?:\\.|(?!\1)[^\\])*\1"
+    r"[gpiImMe0-9]*w\s*(\S+)"
+)
 
 # awk can hand a string to the shell, which makes any statement a write.
-_AWK_SHELL_RE = re.compile(r"\bsystem\s*\(|\bgetline\b[^\n]*\||\bprint\b[^\n]*>\s*\"")
+# `printf` is included alongside `print`: it has the same `> "file"` redirect.
+_AWK_SHELL_RE = re.compile(r"\bsystem\s*\(|\bgetline\b[^\n]*\||\bprint[f]?\b[^\n]*>\s*\"")
+# An awk `> "dest"` redirect names its destination inside the quoted script, so
+# workspace-write has to pull it out of the script text rather than the argv.
+_AWK_REDIRECT_RE = re.compile(r">\s*\"([^\"]+)\"")
 
 # git sub-commands that only read the repository.
 _GIT_READ_SUBCOMMANDS = frozenset({
@@ -743,7 +761,11 @@ def _read_only_write_form(
             return arg
 
     if name == "sed":
-        if any(_SED_WRITE_COMMAND_RE.search(a) for a in args if not a.startswith("-")):
+        if any(
+            _SED_WRITE_COMMAND_RE.search(a) or _SED_S_WRITE_RE.search(a)
+            for a in args
+            if not a.startswith("-")
+        ):
             return "w"
     elif name == "xxd" and _xxd_output(args):
         return _xxd_output(args)[0]
@@ -871,21 +893,33 @@ def _workspace_write_paths(name: str, args: Sequence[str]) -> List[str]:
         return [p for p in paths if p]
 
     if name == "sed":
-        # A `w` command names its destination inside the script text.
-        found = [f.group(0).split()[1:]
-                 for f in (_SED_WRITE_COMMAND_RE.search(a) for a in args
+        # A `w` command (or GNU `s///w` flag) names its destination inside the
+        # script text. Both patterns capture the destination last, so
+        # ``lastindex`` picks it regardless of which one matched. The result is
+        # a list: callers iterate it.
+        found = [f.group(f.lastindex)
+                 for f in (_SED_WRITE_COMMAND_RE.search(a) or _SED_S_WRITE_RE.search(a)
+                           for a in args
                            if not a.startswith("-")) if f]
-        return found[0] if found else _positional_paths(args)
+        return [found[0]] if found else _positional_paths(args)
 
     if name == "xxd":
         return _xxd_output(args)
 
     if name in ("find", "fd", "awk"):
         # Their write forms act on whatever they match, so the search roots
-        # must stay inside the workspace.
+        # must stay inside the workspace. awk's `> "dest"` redirect hides the
+        # destination inside the script, so extract it from there too.
         if _read_only_write_form(name, args) is None:
             return []
-        return _positional_paths(args)
+        paths = _positional_paths(args)
+        if name == "awk":
+            for a in args:
+                if a.startswith("-"):
+                    continue
+                for m in _AWK_REDIRECT_RE.finditer(a):
+                    paths.append(m.group(1))
+        return paths
 
     return _positional_paths(args)
 
