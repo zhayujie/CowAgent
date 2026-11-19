@@ -328,6 +328,23 @@ class BrowserTool(BaseTool):
         result = service.navigate(url, timeout=timeout)
         if "error" in result:
             return ToolResult.fail(result["error"])
+        # page.goto follows redirects, so the page it landed on is checked too.
+        # On a refusal the browser leaves it, or the next snapshot would read it.
+        final_url = result.get("url") or ""
+        if (
+            final_url
+            and final_url != url
+            and final_url.split(":", 1)[0].lower() in ("http", "https")
+            and not self._allow_private_targets()
+        ):
+            try:
+                self._validate_url_safe(final_url)
+            except ValueError as e:
+                try:
+                    service.navigate("about:blank")
+                except Exception:
+                    pass
+                return ToolResult.fail(f"Error: {e}")
         # Auto-snapshot after navigation so the agent gets page content in one call
         snapshot_text = service.snapshot()
         return ToolResult.success(
