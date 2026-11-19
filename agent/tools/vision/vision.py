@@ -28,6 +28,7 @@ from typing import Any, Dict, List, Optional
 import requests
 
 from agent.tools.base_tool import BaseTool, ToolResult
+from agent.tools.utils.credentials import DENIED_MESSAGE, is_credential_path
 from agent.tools.utils.url_safety import validate_url_safe, safe_get
 from common import const
 from common.log import logger
@@ -171,13 +172,22 @@ class Vision(BaseTool):
         return True
 
     def execute(self, args: Dict[str, Any]) -> ToolResult:
-        image = args.get("image", "").strip()
-        question = args.get("question", "").strip()
+        # Explicit nulls keep the key present, so the dict defaults never
+        # apply; `or` also covers them.
+        image = (args.get("image") or "").strip()
+        question = (args.get("question") or "").strip()
 
         if not image:
             return ToolResult.fail("Error: 'image' parameter is required")
         if not question:
             return ToolResult.fail("Error: 'question' parameter is required")
+
+        # The file is sent to an external API, so it gets the same credential
+        # guard as the file tools; the resolved path also catches symlinks.
+        if not image.startswith(("http://", "https://")):
+            resolved = self._resolve_path(image)
+            if is_credential_path(resolved):
+                return ToolResult.fail(DENIED_MESSAGE)
 
         providers = self._resolve_providers()
         if not providers:

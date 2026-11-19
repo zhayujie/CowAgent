@@ -9,12 +9,12 @@ description: テキストから画像生成 / 画像編集 / 複数画像融合�
 
 | プロバイダー | モデル / エイリアス | 特徴 |
 | --- | --- | --- |
-| OpenAI | `gpt-image-2.5-flare`、`gpt-image-2.5-sunburst`、`gpt-image-2`、`gpt-image-1` | 汎用テキスト→画像、高品質、`quality` で画質制御に対応 |
+| OpenAI | `gpt-image-2.6-flare`（デフォルト）、`gpt-image-2.6-sunburst`、`gpt-image-2.5-flare`、`gpt-image-2.5-sunburst`、`gpt-image-2`、`gpt-image-1` | 汎用テキスト→画像、高品質、`quality` で画質制御に対応 |
 | Gemini Nano Banana | `nano-banana-2`、`nano-banana-pro`、`nano-banana` | `gemini-3.1-flash`、`gemini-3-pro`、`gemini-2.5-flash` の画像バージョン |
 | Seedream（Volcengine Ark） | `seedream-5.0-lite`、`seedream-4.5` | ネイティブ 2K–4K、最大 14 枚の画像融合 |
 | Qwen（DashScope） | `qwen-image-2.0`、`qwen-image-2.0-pro` | 中国語のレイアウトや画像とテキストの融合に強い |
 | MiniMax | `image-01` | シンプルで高速 |
-| CowAgent | `gpt-image-2.5-flare`、`gpt-image-2.5-sunburst`、`gemini-3.1-flash-image`、`gemini-3-pro-image`、`seedream-5.0-pro`、`seedream-5.0-lite` | OpenAI 互換 API、対話用の Key を共用 |
+| CowAgent | `gpt-image-2.6-flare`、`gpt-image-2.6-sunburst`、`gemini-nano-banana-2.1`、`gpt-image-2.5-flare`、`gpt-image-2.5-sunburst`、`gemini-3.1-flash-image`、`gemini-3-pro-image`、`seedream-5.0-pro`、`seedream-5.0-lite` | OpenAI 互換 API、対話用の Key を共用 |
 | LinkAI | 任意のモデル | 統一ゲートウェイ、フォールバック用途 |
 
 ## モデル選択
@@ -78,12 +78,12 @@ description: テキストから画像生成 / 画像編集 / 複数画像融合�
 | --- | --- | --- | --- | --- |
 | `prompt` | string | はい | — | 画像の説明 |
 | `image_url` | string / list | いいえ | null | 編集用の入力画像。ローカルパスまたは URL。リスト指定で複数画像融合 |
-| `quality` | string | いいえ | auto | `low` / `medium` / `high`、一部のプロバイダーのみ対応 |
+| `quality` | string | いいえ | auto（`gpt-image-2.6` シリーズは `high`） | `low` / `medium` / `high`、一部のプロバイダーのみ対応 |
 | `size` | string | いいえ | auto | `512` / `1K` / `2K` / `3K` / `4K`、またはピクセル値（例：`1024x1024`） |
 | `aspect_ratio` | string | いいえ | null | `1:1` / `3:2` / `2:3` / `16:9` / `9:16` / `21:9`。Gemini は `1:4` / `4:1` / `1:8` / `8:1` にも対応 |
 
 <Warning>
-  **品質が高いほど、解像度が大きいほど、時間とコストが高くなります。** 日常の対話ではデフォルト（`auto`）または `quality=low` + `size=1K` で十分で、約 20 秒で生成されます。ポスター制作や明示的に高解像度が必要な場合のみ `high` + `2K/4K` を使用してください。1〜5 分かかる場合があります。
+  **品質が高いほど、解像度が大きいほど、時間とコストが高くなります。** `gpt-image-2.6` シリーズはデフォルトで `high` 画質を使用します。速度やコストを優先する場合は `quality=low` + `size=1K` を指定すると約 20 秒で生成されます。`high` + `2K/4K` は 1〜5 分かかる場合があります。
 </Warning>
 
 ## よくある使い方

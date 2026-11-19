@@ -124,6 +124,7 @@ function sendMessage() {
     resetComposerHeight();
     pendingAttachments = [];
     renderAttachmentPreview();
+    saveComposerDraft();
     sendBtn.disabled = true;
     if (typeof resetTurnArtifacts === 'function') resetTurnArtifacts();
 
@@ -276,6 +277,7 @@ function startSSE(requestId, loadingEl, timestamp, replayItems, resume) {
     const isActive = () => ownerSession === sessionId && ownerAgent === activeAgentId;
     sessionActiveRequest[ownerKey] = requestId;
     updateEditButtonsState();
+    refreshSessionStatus();
     // Per-request event buffer used to rebuild the bubble on re-attach.
     const buffer = streamBuffers[requestId] || { items: [], timestamp };
     streamBuffers[requestId] = buffer;
@@ -283,6 +285,7 @@ function startSSE(requestId, loadingEl, timestamp, replayItems, resume) {
         if (sessionActiveRequest[ownerKey] === requestId) {
             delete sessionActiveRequest[ownerKey];
             updateEditButtonsState();
+            refreshSessionStatus();
         }
         delete streamBuffers[requestId];
     };
@@ -927,8 +930,12 @@ function startSSE(requestId, loadingEl, timestamp, replayItems, resume) {
                 if (!isSchedulerRequest(requestId)) {
                     notifyTaskFinished(ownerSession, 'done', item.content, ownerAgent);
                 }
+                markSessionUnread(ownerSession, ownerAgent);
             } else if (item.type === 'error') {
-                if (!cancelled && !mainDone && !isSchedulerRequest(requestId)) notifyTaskFinished(ownerSession, 'error', '', ownerAgent);
+                if (!cancelled && !mainDone) {
+                    markSessionUnread(ownerSession, ownerAgent);
+                    if (!isSchedulerRequest(requestId)) notifyTaskFinished(ownerSession, 'error', '', ownerAgent);
+                }
             } else if (
                 item.type === 'voice_attach'
                 && item.url
@@ -1075,6 +1082,7 @@ function startPolling() {
                     if (welcomeScreen) welcomeScreen.remove();
                     addBotMessage(data.content, new Date(data.timestamp * 1000), rid);
                     scrollChatToBottom();
+                    markSessionUnread(sessionId, activeAgentId);
                     // Scheduler executions are notified by the global runs poll
                     // (maybeNotifyScheduledRun) — it forces a notice across ALL
                     // sessions, including this one and manual "run now", and

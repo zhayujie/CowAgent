@@ -56,7 +56,9 @@ class Ls(BaseTool):
         :param args: Listing parameters
         :return: Directory contents or error
         """
-        path = args.get("path", ".").strip()
+        # `{"path": null}` has the key present, so the dict default never
+        # applies; `or` also covers the explicit null.
+        path = (args.get("path") or ".").strip()
         limit = _coerce_limit(args.get("limit"))
         
         # Resolve path

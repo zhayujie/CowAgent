@@ -364,6 +364,7 @@ function _renderSessionList() {
             group.items.forEach(s => container.appendChild(_sessionItemEl(s, indentItems)));
         }
     });
+    refreshSessionStatus();
 }
 
 function _toggleProjectCollapse(key) {
@@ -490,6 +491,7 @@ function _sessionItemEl(s, indent) {
     item.innerHTML = `
         ${face}
         <span class="session-title" title="${escapeHtml(title)}">${escapeHtml(title)}</span>
+        <span class="session-status"></span>
         <button class="session-pin" onclick="event.stopPropagation(); toggleSessionPin('${sid}', '${owner}')"
                 title="${escapeHtml(t(s.pinned ? 'unpin_session' : 'pin_session'))}">
             <i class="fas fa-thumbtack"></i>
@@ -502,6 +504,7 @@ function _sessionItemEl(s, indent) {
         </button>
     `;
     item.addEventListener('click', () => switchSession(s.session_id, ownerId || undefined));
+    applySessionStatus(item);
     return item;
 }
 
@@ -602,6 +605,7 @@ function _reattachStream(sid) {
         if (oldEs) { try { oldEs.close(); } catch (_) {} delete activeStreams[requestId]; }
         delete streamBuffers[requestId];
         delete sessionActiveRequest[key];
+        refreshSessionStatus();
         resetSendBtnSendMode();
         return false;
     }
@@ -633,7 +637,10 @@ function switchSession(newSessionId, agentId) {
     }
     if (newSessionId === sessionId) {
         if (currentView !== 'chat') navigateTo('chat');
+        // An Agent switch can land on the same session id of another Agent.
+        swapComposerDraft();
         renderComposerIdentity();
+        clearViewingUnread();
         return;
     }
 
@@ -648,6 +655,7 @@ function switchSession(newSessionId, agentId) {
     // Switching back re-attaches and resumes live streaming.
 
     sessionId = newSessionId;
+    swapComposerDraft();
     updateEditButtonsState();
     localStorage.setItem(activeSessionStorageKey(), sessionId);
     refreshWorkspaceSelector();
@@ -684,6 +692,7 @@ function switchSession(newSessionId, agentId) {
     if (_isMobileView()) closeSessionPanel();
     if (currentView !== 'chat') navigateTo('chat');
     renderComposerIdentity();
+    clearViewingUnread();
 }
 
 // In-place rename a session title: replace the title <span> with an <input>,
@@ -777,14 +786,16 @@ function deleteSession(sid, agentId) {
                 if (data.status !== 'success') return;
                 if (!deletingCurrent) {
                     loadSessionList();
-                    return;
-                }
-                if (next) {
+                } else if (next) {
                     switchSession(next.sessionId, next.agentId);
                     loadSessionList();
                 } else {
                     newChat(false);
                 }
+                // After the switch, which files the composer under the
+                // deleted session on its way out.
+                dropSessionDraft(sid, owner);
+                clearSessionUnread(sid, owner);
             })
             .catch(() => {});
     });

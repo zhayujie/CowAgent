@@ -4,6 +4,7 @@ The console's own password check plus the redirect target an MCP server
 sends the user back to after authorising it.
 """
 
+import html
 import json
 
 import web
@@ -47,6 +48,15 @@ class McpOAuthCallbackHandler:
         params = web.input(code="", state="", error="", error_description="")
 
         def _page(title: str, message: str) -> str:
+            # This page is reachable without a session by design (the OAuth
+            # `state` param is the secret), and `error` / `error_description`
+            # come straight from the query string while `server_name` comes
+            # from mcp.json — all attacker-controllable text rendered into the
+            # console's origin. Escape both fields so a crafted callback URL
+            # cannot run script here (e.g. same-origin fetches with the
+            # victim's session cookie).
+            title = html.escape(title)
+            message = html.escape(message)
             return (
                 "<!doctype html><html><head><meta charset='utf-8'>"
                 "<meta name='viewport' content='width=device-width,initial-scale=1'>"

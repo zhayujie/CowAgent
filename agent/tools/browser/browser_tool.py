@@ -274,7 +274,7 @@ class BrowserTool(BaseTool):
         )
 
     def execute(self, args: Dict[str, Any]) -> ToolResult:
-        action = args.get("action", "").strip().lower()
+        action = (args.get("action") or "").strip().lower()
         if not action:
             return ToolResult.fail("Error: 'action' parameter is required")
 
@@ -307,7 +307,7 @@ class BrowserTool(BaseTool):
     # ------------------------------------------------------------------
 
     def _do_navigate(self, args: Dict[str, Any]) -> ToolResult:
-        url = args.get("url", "").strip()
+        url = (args.get("url") or "").strip()
         if not url:
             return ToolResult.fail("Error: 'url' is required for navigate action")
         # Only auto-prepend https:// for bare hosts; preserve file://, about:, data:, etc.
@@ -328,6 +328,23 @@ class BrowserTool(BaseTool):
         result = service.navigate(url, timeout=timeout)
         if "error" in result:
             return ToolResult.fail(result["error"])
+        # page.goto follows redirects, so the page it landed on is checked too.
+        # On a refusal the browser leaves it, or the next snapshot would read it.
+        final_url = result.get("url") or ""
+        if (
+            final_url
+            and final_url != url
+            and final_url.split(":", 1)[0].lower() in ("http", "https")
+            and not self._allow_private_targets()
+        ):
+            try:
+                self._validate_url_safe(final_url)
+            except ValueError as e:
+                try:
+                    service.navigate("about:blank")
+                except Exception:
+                    pass
+                return ToolResult.fail(f"Error: {e}")
         # Auto-snapshot after navigation so the agent gets page content in one call
         snapshot_text = service.snapshot()
         return ToolResult.success(
@@ -408,7 +425,7 @@ class BrowserTool(BaseTool):
         return ToolResult.success(f"Navigated forward to: {result['url']}")
 
     def _do_get_text(self, args: Dict[str, Any]) -> ToolResult:
-        selector = args.get("selector", "").strip()
+        selector = (args.get("selector") or "").strip()
         if not selector:
             return ToolResult.fail("Error: 'selector' is required for get_text action")
         result = self._get_service().get_text(selector)
@@ -417,7 +434,7 @@ class BrowserTool(BaseTool):
         return ToolResult.success(result["text"])
 
     def _do_press(self, args: Dict[str, Any]) -> ToolResult:
-        key = args.get("key", "").strip()
+        key = (args.get("key") or "").strip()
         if not key:
             return ToolResult.fail("Error: 'key' is required for press action")
         result = self._get_service().press(key)
@@ -426,7 +443,7 @@ class BrowserTool(BaseTool):
         return ToolResult.success(f"Pressed key: {key}")
 
     def _do_evaluate(self, args: Dict[str, Any]) -> ToolResult:
-        script = args.get("script", "").strip()
+        script = (args.get("script") or "").strip()
         if not script:
             return ToolResult.fail("Error: 'script' is required for evaluate action")
         result = self._get_service().evaluate(script)

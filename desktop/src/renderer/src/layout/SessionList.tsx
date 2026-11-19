@@ -12,11 +12,16 @@ import {
   Folder,
   House,
   GripVertical,
+  Loader2,
+  PenLine,
 } from 'lucide-react'
 import { t, getLang } from '../i18n'
 import { useSessionStore, DEFAULT_SPACE_KEY } from '../store/sessionStore'
 import { useUIStore } from '../store/uiStore'
 import { useWorkspaceStore } from '../store/workspaceStore'
+import { useChatStore } from '../store/chatStore'
+import { useUnreadStore } from '../store/unreadStore'
+import { clearDraft, useDraftIds } from '../store/draftStore'
 import { usePlatform } from '../hooks/usePlatform'
 import type { SessionItem } from '../types'
 import apiClient from '../api/client'
@@ -180,6 +185,19 @@ const SessionList: React.FC = () => {
   const [deleteSessionTarget, setDeleteSessionTarget] = useState<SessionItem | null>(null)
   const [busy, setBusy] = useState(false)
   const activeRef = useRef<HTMLDivElement>(null)
+  const unread = useUnreadStore((s) => s.unread)
+  const drafts = useDraftIds((s) => s.ids)
+  // Sessions with a reply in progress, as a joined string so streamed deltas
+  // (which update the chat store every frame) don't re-render the list.
+  const runningKey = useChatStore((s) =>
+    Object.keys(s.sessions)
+      .filter((id) => {
+        const r = s.sessions[id]
+        return r.isStreaming || r.messages[r.messages.length - 1]?.runState === 'running'
+      })
+      .join('\n')
+  )
+  const running = useMemo(() => new Set(runningKey ? runningKey.split('\n') : []), [runningKey])
 
   useEffect(() => {
     loadSessions(1)
@@ -359,6 +377,9 @@ const SessionList: React.FC = () => {
 
         {groups.map((group) => {
           const isCollapsed = group.isProject && collapsed.has(group.key)
+          // A collapsed group hints that something inside is running or new.
+          const hiddenActivity =
+            isCollapsed && group.items.some((s) => running.has(s.session_id) || unread[s.session_id])
           return (
             <div key={group.key} className="mb-1.5">
               {group.isProject ? (
@@ -420,6 +441,9 @@ const SessionList: React.FC = () => {
                   <span className="flex-1 min-w-0 truncate text-[12px] font-medium text-content-secondary">
                     {group.label}
                   </span>
+                  {hiddenActivity && (
+                    <span className="shrink-0 w-1.5 h-1.5 rounded-full bg-accent group-hover/header:invisible" />
+                  )}
                   <span className="ml-auto text-[11px] text-content-disabled tabular-nums group-hover/header:invisible">
                     {group.items.length}
                   </span>
@@ -469,6 +493,11 @@ const SessionList: React.FC = () => {
                 group.items.map((s) => {
                   const isActive = s.session_id === activeId
                   const isEditing = editingId === s.session_id
+                  const isRunning = running.has(s.session_id)
+                  const isUnread = !isRunning && !!unread[s.session_id]
+                  // The open conversation's draft is right there in the composer.
+                  const hasDraft = !isRunning && !isUnread && !isActive && !!drafts[s.session_id]
+                  const hasStatus = isRunning || isUnread || hasDraft
                   return (
                     <div
                       key={s.session_id}
@@ -508,7 +537,9 @@ const SessionList: React.FC = () => {
                             </span>
                           )}
                           <span
-                            className={`flex-1 min-w-0 truncate text-[13px] pr-5 group-hover:pr-0 ${
+                            className={`flex-1 min-w-0 truncate text-[13px] ${
+                              hasStatus && s.pinned ? 'pr-9' : 'pr-5'
+                            } group-hover:pr-0 ${
                               isActive ? 'text-accent font-medium' : 'text-content-secondary'
                             }`}
                           >
@@ -571,11 +602,30 @@ const SessionList: React.FC = () => {
                           </IconBtn>
                         </div>
                       )}
-                      {s.pinned && !isEditing && (
-                        <Pin
-                          size={11}
-                          className="absolute right-2 top-1/2 -translate-y-1/2 text-accent fill-accent pointer-events-none group-hover:hidden"
-                        />
+                      {/* Trailing status: run state, then the pin at the far
+                          right. Gives way to the action buttons on hover. */}
+                      {!isEditing && (hasStatus || s.pinned) && (
+                        <span className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-2 pointer-events-none group-hover:hidden">
+                          {isRunning ? (
+                            <Loader2
+                              size={12}
+                              aria-label={t('session_running')}
+                              className="animate-spin text-accent"
+                            />
+                          ) : isUnread ? (
+                            <span
+                              aria-label={t('session_unread')}
+                              className="w-2 h-2 mx-0.5 rounded-full bg-accent"
+                            />
+                          ) : hasDraft ? (
+                            <PenLine
+                              size={12}
+                              aria-label={t('session_draft')}
+                              className="text-content-tertiary"
+                            />
+                          ) : null}
+                          {s.pinned && <Pin size={11} className="text-accent fill-accent" />}
+                        </span>
                       )}
                     </div>
                   )
@@ -645,7 +695,12 @@ const SessionList: React.FC = () => {
             <Btn
               variant="danger"
               onClick={async () => {
-                if (deleteSessionTarget) await remove(deleteSessionTarget.session_id)
+                if (deleteSessionTarget) {
+                  const sid = deleteSessionTarget.session_id
+                  await remove(sid)
+                  clearDraft(sid)
+                  useUnreadStore.getState().clear(sid)
+                }
                 setDeleteSessionTarget(null)
               }}
             >

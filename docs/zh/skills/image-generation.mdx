@@ -9,12 +9,12 @@ description: "image-generation 技能支持文生图、图生图和多图融合�
 
 | 厂商 | 模型 / 别名 | 特点 |
 | --- | --- | --- |
-| OpenAI | `gpt-image-2.5-flare`、`gpt-image-2.5-sunburst`、`gpt-image-2`、`gpt-image-1` | 通用文生图，高质量，支持 `quality` 控制画质 |
+| OpenAI | `gpt-image-2.6-flare`（默认）、`gpt-image-2.6-sunburst`、`gpt-image-2.5-flare`、`gpt-image-2.5-sunburst`、`gpt-image-2`、`gpt-image-1` | 通用文生图，高质量，支持 `quality` 控制画质 |
 | Gemini Nano Banana | `nano-banana-2`、`nano-banana-pro`、`nano-banana` | 对应 `gemini-3.1-flash`、`gemini-3-pro`、`gemini-2.5-flash` 的图像版本 |
 | Seedream（火山方舟） | `seedream-5.0-lite`、`seedream-4.5` | 原生 2K–4K，最多 14 张图融合 |
 | Qwen（百炼） | `qwen-image-2.0`、`qwen-image-2.0-pro` | 擅长中文排版和图文融合 |
 | MiniMax | `image-01` | 简单快速 |
-| CowAgent | `gpt-image-2.5-flare`、`gpt-image-2.5-sunburst`、`gemini-3.1-flash-image`、`gemini-3-pro-image`、`seedream-5.0-pro`、`seedream-5.0-lite` | OpenAI 兼容接口，复用对话的 Key |
+| CowAgent | `gpt-image-2.6-flare`、`gpt-image-2.6-sunburst`、`gemini-nano-banana-2.1`、`gpt-image-2.5-flare`、`gpt-image-2.5-sunburst`、`gemini-3.1-flash-image`、`gemini-3-pro-image`、`seedream-5.0-pro`、`seedream-5.0-lite` | OpenAI 兼容接口，复用对话的 Key |
 | LinkAI | 任意模型 | 统一网关，作为兜底 |
 
 ## 模型选择
@@ -78,12 +78,12 @@ description: "image-generation 技能支持文生图、图生图和多图融合�
 | --- | --- | --- | --- | --- |
 | `prompt` | string | 是 | — | 图像描述 |
 | `image_url` | string / list | 否 | null | 编辑用的输入图，本地路径或 URL；传列表为多图融合 |
-| `quality` | string | 否 | auto | `low` / `medium` / `high`，仅部分厂商支持 |
+| `quality` | string | 否 | auto（`gpt-image-2.6` 系列为 `high`） | `low` / `medium` / `high`，仅部分厂商支持 |
 | `size` | string | 否 | auto | `512` / `1K` / `2K` / `3K` / `4K`，或像素值如 `1024x1024` |
 | `aspect_ratio` | string | 否 | null | `1:1` / `3:2` / `2:3` / `16:9` / `9:16` / `21:9`；Gemini 还支持 `1:4` / `4:1` / `1:8` / `8:1` |
 
 <Warning>
-  **质量越高、分辨率越大，耗时和成本越高。** 日常对话用默认（`auto`）或 `quality=low` + `size=1K` 即可，约 20 秒出图；做海报或明确要高清时再上 `high` + `2K/4K`，可能需要 1–5 分钟。
+  **质量越高、分辨率越大，耗时和成本越高。** `gpt-image-2.6` 系列默认使用 `high` 画质；追求速度或成本时可指定 `quality=low` + `size=1K`，约 20 秒出图；`high` + `2K/4K` 可能需要 1–5 分钟。
 </Warning>
 
 ## 常见用法

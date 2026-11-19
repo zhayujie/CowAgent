@@ -154,7 +154,7 @@ def start(command: str, cwd: str, env: dict, temp_script: Optional[str] = None) 
     owner = _owner_key()
     process = subprocess.Popen(
         command,
-        shell=True,
+        shell=isinstance(command, str),
         cwd=cwd,
         stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE,

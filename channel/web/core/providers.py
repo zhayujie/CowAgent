@@ -22,7 +22,7 @@ _RECOMMENDED_MODELS = [
     const.MINIMAX_M3_1_FLASH, const.MINIMAX_M3, const.MINIMAX_M2_7_HIGHSPEED, const.MINIMAX_M2_7,
     # claude-opus-5-5 is the Claude default; claude-sonnet-5-5 / claude-haiku-5-5 follow right after it.
     const.CLAUDE_OPUS_5_5, const.CLAUDE_SONNET_5_5, const.CLAUDE_HAIKU_5_5, const.CLAUDE_OPUS_5, const.CLAUDE_SONNET_5, const.CLAUDE_FABLE_5_1, const.CLAUDE_FABLE_5, const.CLAUDE_4_8_OPUS, const.CLAUDE_4_7_OPUS, const.CLAUDE_4_6_SONNET, const.CLAUDE_4_6_OPUS,
-    const.GPT_61_TERRA, const.GPT_61_SOL, const.GPT_6_LUNA, const.GPT_6_SOL, const.GPT_6_ASTRA, const.GPT_56_LUNA, const.GPT_56_TERRA, const.GPT_56_SOL, const.GPT_55, const.GPT_54, const.GPT_54_MINI, const.GPT_54_NANO, const.GPT_5, const.GPT_41, const.GPT_4o,
+    const.GPT_62_SOL, const.GPT_62_ASTRA, const.GPT_61_TERRA, const.GPT_61_SOL, const.GPT_6_LUNA, const.GPT_6_SOL, const.GPT_6_ASTRA, const.GPT_56_LUNA, const.GPT_56_TERRA, const.GPT_56_SOL, const.GPT_55, const.GPT_54, const.GPT_54_MINI, const.GPT_54_NANO, const.GPT_5, const.GPT_41, const.GPT_4o,
     const.GEMINI_4_ARGON, const.GEMINI_38_FLASH, const.GEMINI_37_FLASH, const.GEMINI_36_FLASH, const.GEMINI_35_FLASH, const.GEMINI_31_FLASH_LITE_PRE, const.GEMINI_31_PRO_PRE, const.GEMINI_3_FLASH_PRE,
     const.GLM_5_3_FLASH, const.GLM_5_3, const.GLM_5_2, const.GLM_5_1, const.GLM_5_TURBO, const.GLM_5, const.GLM_4_7,
     const.QWEN38_FLASH, const.QWEN38_MAX, const.QWEN37_PLUS, const.QWEN37_MAX, const.QWEN36_PLUS,
@@ -37,8 +37,8 @@ _RECOMMENDED_MODELS = [
 _COWAGENT_MODELS = [
     "deepseek-v4.1-flash", "deepseek-v4-pro", "deepseek-v4-flash",
     "MiniMax-M3.1-Flash", "MiniMax-M3",
-    "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "claude-fable-5-1",
-    "gpt-6.1-terra", "gpt-6.1-sol", "gpt-6-luna", "gpt-6-astra",
+    "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "claude-fable-5-2", "claude-fable-5-1",
+    "gpt-6.2-sol", "gpt-6.2-astra", "gpt-6.1-terra", "gpt-6.1-sol", "gpt-6-luna", "gpt-6-astra",
     "gemini-4-argon", "gemini-3.8-flash",
     "glm-5.3-flash", "glm-5.3",
     "qwen3.8-flash", "qwen3.8-max", "qwen3.6-plus",
@@ -80,7 +80,7 @@ PROVIDER_MODELS = OrderedDict([
         "api_base_key": "open_ai_api_base",
         "api_base_default": "https://api.openai.com/v1",
         "api_base_placeholder": _PLACEHOLDER_V1,
-        "models": [const.GPT_61_TERRA, const.GPT_61_SOL, const.GPT_6_LUNA, const.GPT_6_SOL, const.GPT_6_ASTRA, const.GPT_56_LUNA, const.GPT_56_TERRA, const.GPT_56_SOL, const.GPT_55, const.GPT_54, const.GPT_54_MINI, const.GPT_54_NANO, const.GPT_5, const.GPT_41, const.GPT_4o],
+        "models": [const.GPT_62_SOL, const.GPT_62_ASTRA, const.GPT_61_TERRA, const.GPT_61_SOL, const.GPT_6_LUNA, const.GPT_6_SOL, const.GPT_6_ASTRA, const.GPT_56_LUNA, const.GPT_56_TERRA, const.GPT_56_SOL, const.GPT_55, const.GPT_54, const.GPT_54_MINI, const.GPT_54_NANO, const.GPT_5, const.GPT_41, const.GPT_4o],
     }),
     ("gemini", {
         "label": "Gemini",

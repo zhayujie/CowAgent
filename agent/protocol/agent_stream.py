@@ -68,6 +68,9 @@ _ACTIVE_RUN_MODELS: contextvars.ContextVar = contextvars.ContextVar(
 
 # Word-bounded so "4000" / "40096" are not read as HTTP 400.
 _RE_HTTP_400 = re.compile(r"\b400\b")
+# Same treatment for the rate-limit status: "1429" / "4294967295" are counts,
+# not HTTP 429.
+_RE_HTTP_429 = re.compile(r"\b429\b")
 
 _CONTEXT_OVERFLOW_MARKERS = (
     "context length exceeded", "maximum context length", "prompt is too long",
@@ -85,11 +88,24 @@ _MESSAGE_FORMAT_MARKERS = (
 
 
 # Transient failures (timeouts, overload, 429 / 5xx) worth retrying unchanged.
-_RETRYABLE_MARKERS = (
+# Status codes are matched word-bounded so token or byte counts such as 15000
+# don't read as a 500.
+_RETRYABLE_TEXT_MARKERS = (
     'timeout', 'timed out', 'connection', 'network',
     'rate limit', 'overloaded', 'unavailable', 'busy', 'retry',
-    '429', '500', '502', '503', '504', '512',
 )
+_RETRYABLE_STATUS_RES = tuple(
+    re.compile(rf"\b{code}\b") for code in ('429', '500', '502', '503', '504', '512')
+)
+
+
+def _is_retryable_error(error_str_lower: str) -> bool:
+    """True if the error text marks a transient failure worth retrying."""
+    return (
+        any(keyword in error_str_lower for keyword in _RETRYABLE_TEXT_MARKERS)
+        or any(rx.search(error_str_lower) for rx in _RETRYABLE_STATUS_RES)
+    )
+
 
 # Image references the channels append to the user query, e.g. "[图片: tmp/a.png]".
 _IMAGE_MARKER_RE = re.compile(r"\[(?:图片|Image):\s*([^\]]+)\]")
@@ -245,6 +261,8 @@ def build_tools_schema(tools: list) -> list:
     """
     tools_schema = []
     for tool in tools or []:
+        if tool.name == "bash" and callable(getattr(tool, "refresh_runtime_config", None)):
+            tool.refresh_runtime_config()
         input_schema = tool.params
         try:
             dynamic = (tool.get_json_schema() or {}).get("parameters") or {}
@@ -893,10 +911,14 @@ class AgentStreamExecutor:
         Check if tool has failed too many times consecutively or called repeatedly with same args
         
         Returns:
-            (should_stop, reason, is_critical)
+            (should_stop, reason, is_critical, repetition_block)
             - should_stop: Whether to stop tool execution
             - reason: Reason for stopping
             - is_critical: Whether to abort entire conversation (True for 8+ failures)
+            - repetition_block: True when the block fired on the identical-call
+              repetition rule — the tool itself was working (results already
+              returned), so the caller must not record the blocked attempt as
+              a tool failure. Failure-based blocks keep recording.
         """
         args_hash = self._hash_args(args)
         
@@ -911,7 +933,7 @@ class AgentStreamExecutor:
         
         # Stop at 5 consecutive calls with same args (whether success or failure)
         if same_args_calls >= 5:
-            return True, f"工具 '{tool_name}' 使用相同参数已被调用 {same_args_calls} 次，停止执行以防止无限循环。如果需要查看配置，结果已在之前的调用中返回。", False
+            return True, f"工具 '{tool_name}' 使用相同参数已被调用 {same_args_calls} 次，停止执行以防止无限循环。如果需要查看配置，结果已在之前的调用中返回。", False, True
         
         # Count consecutive failures for same tool + args
         same_args_failures = 0
@@ -925,7 +947,7 @@ class AgentStreamExecutor:
                 break  # Different tool or args, stop counting
         
         if same_args_failures >= 3:
-            return True, f"工具 '{tool_name}' 使用相同参数连续失败 {same_args_failures} 次，停止执行以防止无限循环", False
+            return True, f"工具 '{tool_name}' 使用相同参数连续失败 {same_args_failures} 次，停止执行以防止无限循环", False, False
         
         # Count consecutive failures for same tool (any args)
         same_tool_failures = 0
@@ -943,13 +965,13 @@ class AgentStreamExecutor:
             return True, _t(
                 "抱歉，我没能完成这个任务。可能是我理解有误或者当前方法不太合适。\n\n建议你：\n• 换个方式描述需求试试\n• 把任务拆分成更小的步骤\n• 或者换个思路来解决",
                 "Sorry, I couldn't complete this task. I may have misunderstood, or my current approach isn't quite right.\n\nYou could try:\n• Rephrasing your request\n• Breaking the task into smaller steps\n• Taking a different approach",
-            ), True
+            ), True, False
         
         # Warning at 6 failures
         if same_tool_failures >= 6:
-            return True, f"工具 '{tool_name}' 连续失败 {same_tool_failures} 次（使用不同参数），停止执行以防止无限循环", False
+            return True, f"工具 '{tool_name}' 连续失败 {same_tool_failures} 次（使用不同参数），停止执行以防止无限循环", False, False
         
-        return False, "", False
+        return False, "", False, False
     
     def _record_tool_result(self, tool_name: str, args: dict, success: bool):
         """Record tool execution result for failure tracking"""
@@ -1150,30 +1172,25 @@ class AgentStreamExecutor:
                         if turn > 1:
                             logger.info("[Agent] Requesting explicit response from LLM...")
                             
-                            # Remember position so we can remove the injected prompt later
-                            prompt_insert_idx = len(self.messages)
-                            
                             # 添加一条消息，明确要求回复用户
-                            self.messages.append({
+                            prompt_msg = {
                                 "role": "user",
                                 "content": [{
                                     "type": "text",
                                     "text": self._explicit_response_prompt()
                                 }]
-                            })
-                            
-                            # 再调用一次 LLM
-                            assistant_msg, tool_calls, stop_reason = self._call_llm_stream(retry_on_empty=False)
-                            final_response = assistant_msg
-                            
-                            # Remove the injected prompt from history so it doesn't
-                            # appear as a user message in persisted conversations.
-                            # _call_llm_stream may have appended an assistant message
-                            # after the prompt, so we locate and remove only the prompt.
-                            if (prompt_insert_idx < len(self.messages)
-                                    and self.messages[prompt_insert_idx].get("role") == "user"):
-                                self.messages.pop(prompt_insert_idx)
+                            }
+                            self.messages.append(prompt_msg)
+
+                            # The prompt must never reach persisted history, even
+                            # when the call raises. Removed by identity: retries and
+                            # compaction can rebuild messages around it.
+                            try:
+                                assistant_msg, tool_calls, stop_reason = self._call_llm_stream(retry_on_empty=False)
+                            finally:
+                                self.messages[:] = [m for m in self.messages if m is not prompt_msg]
                                 logger.debug("[Agent] Removed injected explicit-response prompt from message history")
+                            final_response = assistant_msg
                             
                             # If LLM responded with tool_calls instead of text, fall through
                             # to the tool execution path below (don't break the loop).
@@ -1253,7 +1270,7 @@ class AgentStreamExecutor:
                     # so they keep their real result even after the stop.
                     halted_by = None
                     steering_updates = []
-                    for tool_call in tool_calls:
+                    for call_index, tool_call in enumerate(tool_calls):
                         if tool_call["id"] not in already_run:
                             if halted_by is None:
                                 try:
@@ -1268,6 +1285,11 @@ class AgentStreamExecutor:
                                 tool_result_blocks.append(
                                     self._unrun_tool_result(tool_call, halted_by))
                                 continue
+                            # Ordinary calls are ordering barriers. Only start
+                            # the next parallel batch after preceding calls and
+                            # the cancel/steer checkpoint have completed.
+                            if call_index:
+                                already_run.update(self._run_parallel_calls(tool_calls[call_index:]))
                         if tool_call["id"] in already_run:
                             result = already_run[tool_call["id"]]
                         else:
@@ -1777,6 +1799,16 @@ class AgentStreamExecutor:
         # except Exception:
         #     pass
 
+        # Refresh a request-local host notice as well as the tool schema: earlier
+        # successful commands in retained history may use the previous shell.
+        request_system = self.system_prompt
+        bash_tool = (self.tools or {}).get("bash")
+        notice_fn = getattr(bash_tool, "runtime_shell_notice", None)
+        if callable(notice_fn):
+            notice = notice_fn()
+            if notice:
+                request_system = f"{request_system or ''}\n\n{notice}"
+
         # Create request
         request = LLMRequest(
             messages=messages,
@@ -1784,7 +1816,7 @@ class AgentStreamExecutor:
             stream=True,
             tools=tools_schema,
             max_tokens=self._catalog_max_output_tokens(),
-            system=self.system_prompt  # Pass system prompt separately for Claude API
+            system=request_system  # Pass system prompt separately for Claude API
         )
 
         self._emit_event("message_start", {"role": "assistant"})
@@ -1983,7 +2015,7 @@ class AgentStreamExecutor:
             # The model may not accept images after all. Retry without them before
             # the classification below, which could read the rejection as a broken
             # history and reset the context; the vision tool still covers the images.
-            if sent_images and not any(m in error_str_lower for m in _RETRYABLE_MARKERS):
+            if sent_images and not _is_retryable_error(error_str_lower):
                 self._run_images_disabled = True
                 logger.warning(f"[Agent] Request with attached images failed, retrying without them: {e}")
                 return self._call_llm_stream(
@@ -2052,11 +2084,15 @@ class AgentStreamExecutor:
                         "Sorry, something went wrong with the earlier conversation. I've reset the current context (your history is kept) — please send your message again.",
                     ))
             
-            # Check if error is rate limit (429)
-            is_rate_limit = '429' in error_str_lower or 'rate limit' in error_str_lower
+            # Check if error is rate limit (429). Word-bounded for the same
+            # reason as _RE_HTTP_400 above: a bare '429' substring also
+            # matches token/byte counts such as 1429 or 4294967295, which
+            # would misroute a retryable timeout into fallback switching and
+            # the long rate-limit backoff.
+            is_rate_limit = bool(_RE_HTTP_429.search(error_str_lower)) or 'rate limit' in error_str_lower
             
             # Check if error is retryable (timeout, connection, server busy, etc.)
-            is_retryable = any(keyword in error_str_lower for keyword in _RETRYABLE_MARKERS)
+            is_retryable = _is_retryable_error(error_str_lower)
             
             # A fallback link gets a single attempt. Giving every link the
             # primary's full retry budget would multiply the wait by the chain
@@ -2328,7 +2364,7 @@ class AgentStreamExecutor:
         return list(required) if isinstance(required, list) else []
 
     def _run_parallel_calls(self, tool_calls: List[Dict]) -> Dict[str, Dict[str, Any]]:
-        """Start every parallel-safe call of this turn at once, keyed by call id.
+        """Start the leading parallel-safe batch, keyed by call id.
 
         Tools otherwise run strictly in the order the model asked for them.
         That is the right default, but a model that splits independent work
@@ -2336,6 +2372,7 @@ class AgentStreamExecutor:
         the second wait out the first. For a tool that declares itself
         parallel_safe the wait buys nothing, so those calls are run together
         here and the loop below picks up the finished results in place.
+        An ordinary call ends the batch: later calls must not run before it.
 
         Each call gets its own copy of the tool: the loop drives tools by
         assigning `cancel_event` and `progress_callback` before a call and
@@ -2345,10 +2382,11 @@ class AgentStreamExecutor:
         The wait polls `cancel_event`, so a cancel returns control without
         waiting for the slowest call; each tool keeps its own timeout.
         """
-        eligible = [
-            call for call in tool_calls
-            if getattr(self.tools.get(call["name"]), "parallel_safe", False)
-        ]
+        eligible = []
+        for call in tool_calls:
+            if not getattr(self.tools.get(call["name"]), "parallel_safe", False):
+                break
+            eligible.append(call)
         if len(eligible) < 2:
             return {}
 
@@ -2473,11 +2511,19 @@ class AgentStreamExecutor:
             return result
 
         # Check for consecutive failures (retry protection)
-        should_stop, stop_reason, is_critical = self._check_consecutive_failures(tool_name, arguments)
+        should_stop, stop_reason, is_critical, repetition_block = self._check_consecutive_failures(tool_name, arguments)
         if should_stop:
             logger.error(f"🛑 {stop_reason}")
-            self._record_tool_result(tool_name, arguments, False)
-            
+            # A repetition block is the guardrail stopping a loop of *working*
+            # calls — the results are already in the context — so the blocked
+            # attempt is not a tool failure (same principle as the permission
+            # refusal above). Recorded as one, a stubborn model's blocked
+            # retries stacked into the 8-failure critical abort even though
+            # every real execution had succeeded. Failure-based blocks keep
+            # recording, so genuine failures still escalate.
+            if not repetition_block:
+                self._record_tool_result(tool_name, arguments, False)
+
             if is_critical:
                 # Critical failure - abort entire conversation
                 result = {
@@ -2616,6 +2662,10 @@ class AgentStreamExecutor:
             mode = agent.effective_permission_mode()
             if mode == FULL_ACCESS:
                 return None
+            # The bash tool runs cmd or pwsh on Windows, which parse paths and
+            # aliases differently from a POSIX shell.
+            bash_tool = (getattr(self, "tools", None) or {}).get("bash")
+            shell = getattr(bash_tool, "windows_shell", None) if getattr(bash_tool, "_IS_WIN", False) else None
             decision = check_tool_call(
                 mode,
                 tool_name,
@@ -2623,6 +2673,7 @@ class AgentStreamExecutor:
                 cwd=agent.effective_cwd(),
                 write_roots=agent.write_roots(),
                 protected_paths=agent.protected_paths(),
+                shell=shell,
             )
             return None if decision.allowed else decision.reason
         except Exception as e:

@@ -99,14 +99,16 @@ def test_transient_failure_then_connect_keeps_tls_verification(monkeypatch):
     assert reported == ["dns timeout"]
 
 
-def test_certificate_error_disables_verification_once_and_retries_immediately(monkeypatch):
+def test_certificate_error_keeps_verification_and_says_how_to_fix_it(monkeypatch):
     cert_error = ssl.SSLError("[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed")
     verified, stop, reported = _run(
         monkeypatch, [cert_error, cert_error, None])
 
-    assert verified == [True, False, False]
-    assert stop.timeouts == [5]
+    assert verified == [True, True, True]
+    assert ssl.create_default_context.__module__ == "ssl"
+    assert stop.timeouts == [5, 10]
     assert len(reported) == 1
+    assert "SSL_CERT_FILE" in reported[0]
 
 
 def test_stop_during_backoff_exits_loop(monkeypatch):

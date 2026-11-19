@@ -140,6 +140,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('open-session', handler)
     return () => ipcRenderer.removeListener('open-session', handler)
   },
+  setUnreadBadge: (count: number) => ipcRenderer.send('set-unread-badge', count),
 
   platform: process.platform,
   // OS UI language (e.g. "zh-CN"), read synchronously so the renderer can pick

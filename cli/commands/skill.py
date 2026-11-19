@@ -29,6 +29,14 @@ from cli.utils import (
 )
 
 
+
+def _media_download():
+    """The shared bounded downloader, imported late: an installed CLI only
+    reaches ``common`` once _ensure_project_on_path() has found the project."""
+    _ensure_project_on_path()
+    from common import media_download
+    return media_download
+
 # ======================================================================
 # Public types for the core install API (used by CLI and chat plugin)
 # ======================================================================
@@ -176,14 +184,11 @@ def _download_repo_zip(spec: str, branch: str = "main", host: str = "github", ti
         req_timeout = timeout
     else:
         req_timeout = (min(timeout, 5), timeout)
-    resp = requests.get(zip_url, timeout=req_timeout, allow_redirects=True)
-    resp.raise_for_status()
-
     tmp_dir = tempfile.mkdtemp(prefix="cow-skill-")
     try:
         zip_path = os.path.join(tmp_dir, "repo.zip")
-        with open(zip_path, "wb") as f:
-            f.write(resp.content)
+        md = _media_download()
+        md.download_to_file(zip_url, zip_path, md.MAX_FILE_BYTES, timeout=req_timeout)
 
         extract_dir = os.path.join(tmp_dir, "extracted")
         with zipfile.ZipFile(zip_path, "r") as zf:
@@ -227,10 +232,8 @@ def _download_github_dir(owner, repo, branch, subpath, dest_dir):
             dl_url = item.get("download_url")
             if not dl_url:
                 continue
-            file_resp = requests.get(dl_url, timeout=30)
-            file_resp.raise_for_status()
-            with open(local_path, "wb") as f:
-                f.write(file_resp.content)
+            md = _media_download()
+            md.download_to_file(dl_url, local_path, md.MAX_FILE_BYTES, timeout=30)
         elif item["type"] == "dir":
             os.makedirs(local_path, exist_ok=True)
             child_subpath = item["path"]
@@ -464,12 +467,12 @@ def _install_url(url: str, result: InstallResult, agent_id: str = None):
     """Install a skill from a direct SKILL.md URL."""
     result.messages.append(f"Downloading SKILL.md from {url} ...")
     try:
-        resp = requests.get(url, timeout=30)
-        resp.raise_for_status()
+        md = _media_download()
+        raw = md.download_bytes(url, md.MAX_FILE_BYTES, timeout=30)
     except Exception as e:
         raise SkillInstallError(f"Failed to download SKILL.md: {e}")
 
-    content = resp.text
+    content = raw.decode("utf-8", errors="replace")
     fm = _parse_skill_frontmatter(content)
     skill_name = fm.get("name")
     if not skill_name:
@@ -507,21 +510,20 @@ def _install_archive_url(url: str, result: InstallResult, agent_id: str = None):
 
     result.messages.append(f"Downloading archive from {url} ...")
     try:
-        resp = requests.get(url, timeout=30, allow_redirects=True)
-        resp.raise_for_status()
+        md = _media_download()
+        content = md.download_bytes(url, md.MAX_FILE_BYTES, timeout=30)
     except Exception as e:
         raise SkillInstallError(f"Failed to download archive: {e}")
 
     skills_dir = _target_skills_dir(agent_id)
     os.makedirs(skills_dir, exist_ok=True)
 
-    content_type = resp.headers.get("Content-Type", "")
     lower_url = url.lower()
 
-    if lower_url.endswith((".tar.gz", ".tgz")) or "gzip" in content_type:
-        _install_targz_bytes(resp.content, fallback_name, skills_dir, result, agent_id=agent_id)
+    if lower_url.endswith((".tar.gz", ".tgz")) or content[:2] == b"\x1f\x8b":
+        _install_targz_bytes(content, fallback_name, skills_dir, result, agent_id=agent_id)
     else:
-        _install_zip_bytes(resp.content, fallback_name, skills_dir, result=result, source_label="url", agent_id=agent_id)
+        _install_zip_bytes(content, fallback_name, skills_dir, result=result, source_label="url", agent_id=agent_id)
 
 
 def _install_targz_bytes(content: bytes, name: str, skills_dir: str, result: InstallResult, agent_id: str = None, source_label: str = "url"):
@@ -1510,8 +1512,8 @@ def _install_github(spec, result: InstallResult, subpath=None, skill_name=None, 
     repo_root = None
     try:
         tmp_dir, repo_root = _download_repo_zip(spec, branch, timeout=timeout)
-    except Exception:
-        result.messages.append("Zip download failed, falling back to Contents API...")
+    except Exception as e:
+        result.messages.append(f"Zip download failed ({e}), falling back to Contents API...")
 
     if repo_root:
         try:

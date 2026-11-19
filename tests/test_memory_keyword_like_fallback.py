@@ -37,3 +37,35 @@ def test_ascii_query_uses_like_when_fts_index_is_broken(storage):
     results = storage.search_keyword("invoice")
 
     assert [r.path for r in results] == ["memory/shared/finance.md"]
+
+
+def test_the_best_matching_chunk_survives_a_small_limit(storage):
+    """Ranking must happen before the LIMIT, not after.
+
+    The multi-word chunk sits last in scan order; with LIMIT applied to an
+    unordered scan and a limit smaller than the match count, it never reached
+    the Python-side scoring and single-word matches filled the results.
+    """
+    for i in range(8):
+        storage.save_chunk(MemoryChunk(
+            id=f"noise-{i}", user_id=None, scope="shared", source="memory",
+            path=f"memory/shared/noise-{i}.md", start_line=1, end_line=1,
+            text=f"Note {i} mentions receipt only.", embedding=None, hash=f"hn{i}",
+        ))
+    storage.save_chunk(MemoryChunk(
+        id="best", user_id=None, scope="shared", source="memory",
+        path="memory/shared/best.md", start_line=1, end_line=1,
+        text="The receipt and the filed folder are stored together.",
+        embedding=None, hash="hbest",
+    ))
+    storage.conn.commit()
+    storage.conn.execute("DROP TABLE IF EXISTS chunks_fts")
+    storage.conn.commit()
+    storage.trigram_fts5_available = False
+
+    results = storage._search_like("receipt filed", None, ["shared"], 5)
+
+    assert results, "the LIKE fallback found nothing"
+    assert results[0].path == "memory/shared/best.md", (
+        "the two-word match was cut by the storage-order LIMIT"
+    )

@@ -10,6 +10,7 @@ OpenAI → Gemini → Seedream → Qwen → MiniMax → CowAgent → LinkAI; mis
 are skipped, and the provider that natively owns the requested model is
 promoted to the front of the queue):
 
+    - gpt-image-2.6-flare / gpt-image-2.6-sunburst → OpenAI
     - gpt-image-2.5-flare / gpt-image-2.5-sunburst → OpenAI
     - gpt-image-2 / gpt-image-1                    → OpenAI
     - nano-banana / gemini-*-image-*               → Gemini
@@ -252,15 +253,28 @@ class ImageProvider(ABC):
         ...
 
 
+# Model families whose `quality` defaults to "high" when the caller omits it.
+_HIGH_QUALITY_DEFAULT_PREFIXES = ("gpt-image-2.6",)
+
+
+def _default_quality(model: str, quality: str | None) -> str | None:
+    if quality:
+        return quality
+    if (model or "").lower().startswith(_HIGH_QUALITY_DEFAULT_PREFIXES):
+        return "high"
+    return None
+
+
 # ---------------------------------------------------------------------------
 # OpenAI-compatible provider
-# (gpt-image-2.5-flare, gpt-image-2.5-sunburst, gpt-image-2, gpt-image-1)
+# (gpt-image-2.6-flare, gpt-image-2.6-sunburst, gpt-image-2.5-flare,
+#  gpt-image-2.5-sunburst, gpt-image-2, gpt-image-1)
 # ---------------------------------------------------------------------------
 
 class OpenAIProvider(ImageProvider):
     """Provider for OpenAI Image API (generations + edits)."""
 
-    DEFAULT_MODEL = "gpt-image-2.5-flare"
+    DEFAULT_MODEL = "gpt-image-2.6-flare"
 
     def __init__(self, api_key: str, api_base: str, model: str):
         self.api_key = api_key
@@ -346,6 +360,7 @@ class OpenAIProvider(ImageProvider):
         aspect_ratio: str | None = None,
         output_dir: str = ".",
     ) -> list[str]:
+        quality = _default_quality(self.model, quality)
         # OpenAI Images API expects pixel size like 1024x1024.
         resolved = resolve_size(size, aspect_ratio) if (size or aspect_ratio) else None
         if image_url:
@@ -417,7 +432,7 @@ class OpenAIProvider(ImageProvider):
 class LinkAIProvider(ImageProvider):
     """Provider for LinkAI unified image generation API."""
 
-    DEFAULT_MODEL = "gpt-image-2.5-flare"
+    DEFAULT_MODEL = "gpt-image-2.6-flare"
 
     def __init__(self, api_key: str, api_base: str, model: str):
         self.api_key = api_key
@@ -434,6 +449,7 @@ class LinkAIProvider(ImageProvider):
         aspect_ratio: str | None = None,
         output_dir: str = ".",
     ) -> list[str]:
+        quality = _default_quality(self.model, quality)
         url = f"{self.api_base}/v1/images/generations"
         payload: dict = {
             "model": self.model,

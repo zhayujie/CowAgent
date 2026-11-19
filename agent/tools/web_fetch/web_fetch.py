@@ -293,7 +293,9 @@ class WebFetch(BaseTool):
         self.cwd = self.config.get("cwd", os.getcwd())
 
     def execute(self, args: Dict[str, Any]) -> ToolResult:
-        url = args.get("url", "").strip()
+        # `{"url": null}` has the key present, so the dict default never
+        # applies; `or` also covers the explicit null.
+        url = (args.get("url") or "").strip()
         if not url:
             return ToolResult.fail("Error: 'url' parameter is required")
 

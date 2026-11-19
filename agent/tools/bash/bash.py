@@ -89,7 +89,16 @@ SAFETY:
         self.safety_mode = self.config.get("safety_mode", True)
         # Keep the template with the {cwd} placeholder so the description can be
         # re-rendered when the working directory changes (e.g. opening a project).
-        self._description_template = self.description
+        self.windows_shell = self.config.get("windows_shell", "cmd")
+        if self.windows_shell not in ("cmd", "pwsh"):
+            logger.warning(
+                "Invalid windows_shell %r; falling back to cmd", self.windows_shell
+            )
+            self.windows_shell = "cmd"
+            self.config["windows_shell"] = "cmd"
+        self._shell_changed = False
+        self._description_template = type(self).description
+        self._render_shell_description()
         # Desktop runs on the user's own machine (often non-technical users),
         # so require explicit confirmation for destructive ops outside the workspace.
         if is_desktop():
@@ -99,6 +108,86 @@ SAFETY:
                 "be cautious and confirm with the user before executing, unless the user explicitly requested it",
             )
         # Show the concrete workspace path so the model knows what "the workspace" is
+        self.description = self._description_template.replace("{cwd}", self.cwd)
+
+    def _render_shell_description(self):
+        if not self._IS_WIN:
+            return
+
+        if self.windows_shell == "pwsh":
+            platform = (
+                "PLATFORM: Windows (PowerShell 7 / pwsh). Use PowerShell syntax: "
+                "$env:NAME for environment variables, single or double quoted strings, "
+                "$null for redirection, and Select-String for text search. Do not use "
+                "cmd %VAR%, >nul, or Unix-only commands. Commands run without a profile, "
+                "with UTF-8 output and $ErrorActionPreference='Stop'; cmdlet errors stop "
+                "execution and return a nonzero exit code. Native process failures return "
+                "their exit code.\n"
+            )
+            self._description_template = self._description_template.replace(
+                "Use $VAR_NAME directly.", "Use $env:VAR_NAME."
+            )
+        else:
+            platform = (
+                "PLATFORM: Windows (cmd.exe), not Bash, WSL, PowerShell, or Windows Terminal. "
+                "Use cmd.exe syntax: double quotes (single quotes are literal), `>nul 2>&1` "
+                "instead of `/dev/null`, `&&` instead of `;`, and `findstr /I \"pattern\"` "
+                "without grep-style `-i`/`-e` flags. Do not invoke `bash script.sh` or use "
+                "Unix-only commands such as grep, head, tail, sed, or awk. Use the "
+                "search_files tool for file/content search and Python for portable scripting.\n"
+            )
+
+        if re.search(r"PLATFORM: Windows.*?\n", self._description_template):
+            self._description_template = re.sub(
+                r"PLATFORM: Windows.*?\n", lambda _match: platform,
+                self._description_template,
+            )
+        else:
+            self._description_template = self._description_template.replace(
+                "ENVIRONMENT:", platform + "ENVIRONMENT:", 1
+            )
+        self._description_template = self._description_template.replace(
+            "Execute a bash command", "Execute a command"
+        )
+
+    def runtime_shell_notice(self):
+        """Return a notice for PowerShell or a shell change, not default CMD."""
+        if not self._IS_WIN:
+            return ""
+        changed = self._shell_changed
+        self._shell_changed = False
+        if self.windows_shell == "cmd" and not changed:
+            return ""
+        if self.windows_shell == "pwsh":
+            notice = ("CURRENT COMMAND ENVIRONMENT: bash executes PowerShell 7 (pwsh). "
+                      "Use $env:NAME for environment variables, never %NAME%.")
+            if changed:
+                notice += (" Earlier CMD commands in this conversation belong to an old setting; "
+                           "generate all new commands using PowerShell syntax.")
+            return notice
+        return ("CURRENT COMMAND ENVIRONMENT: bash executes Windows cmd.exe. "
+                "Use %NAME% for environment variables, never $env:NAME. "
+                "Earlier PowerShell commands in this conversation belong to an old setting; "
+                "generate all new commands using CMD syntax.")
+
+    def refresh_runtime_config(self):
+        """Refresh at schema construction, so syntax and execution change together."""
+        from config import conf
+        selected = conf().get("tools", {}).get("bash", {}).get("windows_shell", "cmd")
+        if selected not in ("cmd", "pwsh"):
+            selected = "cmd"
+        if selected == self.windows_shell:
+            return
+        self._shell_changed = True
+        self.windows_shell = selected
+        self.config["windows_shell"] = selected
+        self._description_template = type(self).description
+        self._render_shell_description()
+        if is_desktop():
+            self._description_template = self._description_template.replace(
+                "- For destructive commands out of workspace ({cwd}), explain and confirm first",
+                "- For delete or destructive operations on files out of workspace ({cwd}), be cautious and confirm with the user before executing, unless the user explicitly requested it",
+            )
         self.description = self._description_template.replace("{cwd}", self.cwd)
 
     def set_cwd(self, cwd: str) -> None:
@@ -225,14 +314,22 @@ SAFETY:
             user_command = command
             if self._IS_WIN:
                 env["PYTHONIOENCODING"] = "utf-8"
-                command = self._convert_env_vars_for_windows(command, dotenv_vars)
-                user_command = command
+                if self.windows_shell == "pwsh":
+                    from agent.tools.bash.shell import prepare_pwsh
+                    # Convert only known injected shorthand, not PowerShell locals.
+                    for name in sorted(dotenv_vars, key=len, reverse=True):
+                        command = re.sub(r'\$' + re.escape(name) + r'\b', lambda m, n=name: '$env:' + n, command)
+                    user_command = command
+                    command, temp_script_path = prepare_pwsh(command)
+                else:
+                    command = self._convert_env_vars_for_windows(command, dotenv_vars)
+                    user_command = command
                 # cmd.exe stops at the first line feed and at ~8191 chars, so
                 # multi-line or long `python -c "..."` code is silently cut off.
                 # Spill the inline code into a temp .py file instead.
-                if len(command) > self._WIN_CMD_SAFE_LEN or "\n" in command or "\r" in command:
+                if self.windows_shell == "cmd" and (len(command) > self._WIN_CMD_SAFE_LEN or "\n" in command or "\r" in command):
                     command, temp_script_path = self._rewrite_python_c(command)
-                if command and not command.strip().lower().startswith("chcp"):
+                if self.windows_shell == "cmd" and command and not command.strip().lower().startswith("chcp"):
                     command = f"chcp 65001 >nul 2>&1 & {command}"
 
             if run_in_background:
@@ -277,7 +374,7 @@ SAFETY:
             logger.debug(f"[Bash] Stderr length: {len(result.stderr)}")
             
             # Workaround for exit code 126 with no output
-            if result.returncode == 126 and not result.stdout and not result.stderr:
+            if isinstance(command, str) and result.returncode == 126 and not result.stdout and not result.stderr:
                 logger.warning("[Bash] Exit 126 with no output - trying alternative execution method")
                 # Try using argument list instead of shell=True
                 import shlex
@@ -370,10 +467,12 @@ SAFETY:
                     output_text += f"\n\n[Showing lines {start_line}-{end_line} of {truncation.total_lines} ({format_size(DEFAULT_MAX_BYTES)} limit). Full output: {temp_file_path}]"
 
             # Check exit code
-            is_error, note = exit_codes.interpret(user_command, result.returncode)
+            is_error, note = ((result.returncode != 0, None) if self._IS_WIN and self.windows_shell == "pwsh"
+                              else exit_codes.interpret(user_command, result.returncode))
             if is_error:
                 output_text += f"\n\nCommand exited with code {result.returncode}"
-                hint = self._windows_failure_hint(user_command)
+                hint = ("PowerShell 7 syntax: use $env:NAME, $null, and Select-String; cmdlet errors stop execution."
+                        if self._IS_WIN and self.windows_shell == "pwsh" else self._windows_failure_hint(user_command))
                 if hint:
                     output_text += f"\n\n{hint}"
                 return ToolResult.fail({
@@ -467,7 +566,7 @@ SAFETY:
     def _run_streaming(self, command: str, timeout: int, env: dict, dotenv_vars: dict):
         process = subprocess.Popen(
             command,
-            shell=True,
+            shell=isinstance(command, str),
             cwd=self.cwd,
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
@@ -610,7 +709,7 @@ SAFETY:
             return "This command can destroy disk data"
 
         # Power control - match only as a standalone word (\b enforces word boundary)
-        if re.search(r'\b(shutdown|reboot|halt|poweroff)\b', command.lower()):
+        if re.search(r'\b(shutdown|reboot|halt|poweroff|stop-computer|restart-computer)\b', command.lower()):
             return "This command will shut down or restart the system"
 
         return ""

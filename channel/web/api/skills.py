@@ -43,7 +43,7 @@ class ToolsHandler:
             lang = i18n.get_language()
             for name, cls in tm.tool_classes.items():
                 try:
-                    instance = cls()
+                    instance = tm.create_tool(name) if name == "bash" else cls()
                     desc = instance.description
                     if lang == i18n.ZH_HANT and desc:
                         desc = i18n.to_traditional(desc)

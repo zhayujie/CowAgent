@@ -7,9 +7,11 @@ running a whole sub agent, which needs a live model.
 import os
 import sys
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -99,6 +101,90 @@ class SubagentRunRecordTest(unittest.TestCase):
         store = runner._open_run(self._parent(), "child-1", _template())
         self.assertEqual(self.store.get_run("child-1")["parent_run_id"], "")
         runner._close_run(store, "child-1", {"status": "completed"})
+
+    def _stopped_run(self, *, cancel=False, late_error=False, slow_open=False):
+        entered = threading.Event()
+        release = threading.Event()
+        worker_finished = threading.Event()
+        stop = threading.Event()
+        results = []
+        failures = []
+        original_open = runner._open_run
+        original_one = runner._run_one
+
+        def open_run(*args):
+            if slow_open:
+                entered.set()
+                release.wait(5)
+            return original_open(*args)
+
+        class Child:
+            def run_stream(self, *args, **kwargs):
+                entered.set()
+                release.wait(5)
+                if late_error:
+                    raise RuntimeError("late failure")
+                return "late answer"
+
+        def run_one(*args):
+            try:
+                return original_one(*args)
+            finally:
+                worker_finished.set()
+
+        def supervise():
+            try:
+                results.extend(runner.run_tasks(
+                    self._parent(), [runner.SubagentTask("test")],
+                    {"general-purpose": _template()},
+                    runner.SubagentSettings(timeout_seconds=5 if cancel else 0.2),
+                    cancel_event=stop,
+                ))
+            except Exception as exc:
+                failures.append(exc)
+
+        with patch.object(runner, "_open_run", open_run), \
+                patch.object(runner, "_build_child", return_value=Child()), \
+                patch.object(runner, "_run_one", run_one):
+            supervisor = threading.Thread(target=supervise)
+            supervisor.start()
+            try:
+                self.assertTrue(entered.wait(3))
+                if cancel:
+                    stop.set()
+                supervisor.join(3)
+                self.assertFalse(supervisor.is_alive())
+                self.assertEqual(failures, [])
+                self.assertEqual(results[0]["status"], "cancelled" if cancel else "timeout")
+                if not slow_open:
+                    row = self.store.list_runs()[0]
+                    self.assertEqual(row["status"], "cancelled" if cancel else "timeout")
+                    self.assertEqual(row["error"], results[0]["error"])
+                    self.assertIsNotNone(row["ended_at"])
+                release.set()
+                self.assertTrue(worker_finished.wait(3))
+                row_after = self.store.list_runs()[0]
+                self.assertEqual(row_after["status"], "cancelled" if cancel else "timeout")
+                self.assertEqual(row_after["error"], results[0]["error"])
+                self.assertIsNotNone(row_after["ended_at"])
+                if not slow_open:
+                    self.assertEqual(row_after, row)
+            finally:
+                release.set()
+                supervisor.join(3)
+                worker_finished.wait(3)
+
+    def test_timeout_is_persisted_before_worker_returns(self):
+        self._stopped_run()
+
+    def test_late_exception_does_not_replace_timeout(self):
+        self._stopped_run(late_error=True)
+
+    def test_parent_cancel_is_persisted_before_worker_returns(self):
+        self._stopped_run(cancel=True)
+
+    def test_timeout_while_opening_run_is_not_lost(self):
+        self._stopped_run(slow_open=True)
 
 
 if __name__ == "__main__":

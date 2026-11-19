@@ -11,6 +11,7 @@ one and flows into the existing git_reset_hard rollback.
 """
 
 import subprocess
+import sys
 
 import pytest
 
@@ -77,6 +78,8 @@ def test_self_check_gets_the_import_ceiling(monkeypatch):
 
 
 def test_a_healthy_run_passes_through_unchanged(tmp_path):
-    proc = update_service._run(["python", "-c", "print('ok')"], cwd=str(tmp_path), timeout=30)
+    # sys.executable, not a bare "python": modern macOS/Homebrew and many
+    # Linux distros ship no `python` shim, and this test really spawns one.
+    proc = update_service._run([sys.executable, "-c", "print('ok')"], cwd=str(tmp_path), timeout=30)
     assert proc.returncode == 0
     assert proc.stdout.strip() == "ok"

@@ -811,12 +811,18 @@ class ToolManager:
         """
         tool_class = self.tool_classes.get(name)
         if tool_class:
-            # Create a new instance
-            tool_instance = tool_class()
-
-            # Apply configuration if available
-            if hasattr(self, 'tool_configs') and name in self.tool_configs:
-                tool_instance.config = self.tool_configs[name]
+            # Bash needs its selected backend before rendering its description.
+            # Read the instance-wide shell value live: managers may predate a save.
+            if name == "bash":
+                tool_config = dict(getattr(self, "tool_configs", {}).get(name) or {})
+                live_bash = (conf().get("tools") or {}).get("bash") or {}
+                if "windows_shell" in live_bash:
+                    tool_config["windows_shell"] = live_bash["windows_shell"]
+                tool_instance = tool_class(tool_config)
+            else:
+                tool_instance = tool_class()
+                if hasattr(self, 'tool_configs') and name in self.tool_configs:
+                    tool_instance.config = self.tool_configs[name]
 
             return tool_instance
 
@@ -836,7 +842,7 @@ class ToolManager:
         result = {}
         for name, tool_class in self.tool_classes.items():
             # Create a temporary instance to get schema
-            temp_instance = tool_class()
+            temp_instance = self.create_tool(name) if name == "bash" else tool_class()
             result[name] = {
                 "description": temp_instance.description,
                 "parameters": temp_instance.get_json_schema()

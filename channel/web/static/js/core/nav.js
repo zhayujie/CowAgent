@@ -45,6 +45,7 @@ function _switchToView(viewId) {
     const leavingAgents = currentView === 'agents' && viewId !== 'agents';
     currentView = viewId;
     menuSyncActive();
+    if (viewId === 'chat' && typeof clearViewingUnread === 'function') clearViewingUnread();
     // The Agent detail is a fixed drawer, so it would otherwise hang over
     // whatever view you navigate to. It only belongs to the Agent Team page.
     if (viewId !== 'agents') closeAgentDetail();

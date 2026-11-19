@@ -76,6 +76,7 @@ function maybeNotifyScheduledRun(run) {
     if (run.status && run.status !== 'done') return;
     const sid = run.session_id;
     if (!sid) return;
+    markSessionUnread(sid, run.agent_id || '');
 
     // Manual "run now": route the notification back to the tab the user clicked
     // in. Only the originating tab has _manualRunOrigin[task_id] set, so other

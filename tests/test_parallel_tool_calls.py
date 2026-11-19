@@ -45,7 +45,7 @@ def _executor(tool):
     executor.agent = None
     executor.cancel_event = None
     executor._record_tool_result = lambda *a, **kw: None
-    executor._check_consecutive_failures = lambda *a, **kw: (False, None, False)
+    executor._check_consecutive_failures = lambda *a, **kw: (False, None, False, False)
     executor._emit_event = lambda *a, **kw: None
     return executor
 
@@ -95,8 +95,8 @@ def test_ordinary_tools_keep_running_in_order():
 
 
 def test_a_mixed_turn_still_runs_its_parallel_calls_together():
-    """An ordinary call in the same turn must not serialise the parallel ones;
-    it is left to the loop, which runs it in order."""
+    """An ordinary call after the parallel ones must not serialise them; it
+    is left to the loop, which runs it once they are done."""
     parallel_tool = _SlowParallelTool()
     ordinary_tool = _SlowTool()
     executor = _executor(parallel_tool)
@@ -120,6 +120,29 @@ def test_a_lone_call_is_left_to_the_caller():
     executor = _executor(tool)
 
     assert executor._run_parallel_calls(_calls(tool.name, 1)) == {}
+    assert tool.instances == []
+
+
+def test_parallel_calls_do_not_cross_an_ordinary_call():
+    tool = _SlowParallelTool()
+    executor = _executor(tool)
+    executor.tools["slow"] = _SlowTool()
+    calls = _calls(tool.name, 4)
+    calls.insert(2, {"id": "barrier", "name": "slow", "arguments": {"tag": "barrier"}})
+
+    results = executor._run_parallel_calls(calls)
+
+    assert set(results) == {"call_0", "call_1"}
+    assert len(tool.instances) == 2
+
+
+def test_an_ordinary_first_call_prevents_prefetch():
+    tool = _SlowParallelTool()
+    executor = _executor(tool)
+    executor.tools["slow"] = _SlowTool()
+    calls = [{"id": "write", "name": "slow", "arguments": {"tag": "write"}}] + _calls(tool.name, 2)
+
+    assert executor._run_parallel_calls(calls) == {}
     assert tool.instances == []
 
 
@@ -323,18 +346,18 @@ def test_cancel_keeps_completed_prefetched_result() -> None:
 
 
 def _mixed_calls() -> list[dict[str, Any]]:
-    """Two parallel calls with an ordinary call between them."""
+    """Two parallel calls followed by an ordinary call."""
     return [
         {"id": "call_0", "name": "slow_parallel", "arguments": {"tag": "t0"}},
-        {"id": "call_1", "name": "slow", "arguments": {"tag": "t1"}},
-        {"id": "call_2", "name": "slow_parallel", "arguments": {"tag": "t2"}},
+        {"id": "call_1", "name": "slow_parallel", "arguments": {"tag": "t1"}},
+        {"id": "call_2", "name": "slow", "arguments": {"tag": "t2"}},
     ]
 
 
 def _prefetched_results() -> dict[str, dict[str, Any]]:
     return {
         call_id: {"status": "success", "result": f"done {call_id}", "execution_time": 0.01}
-        for call_id in ("call_0", "call_2")
+        for call_id in ("call_0", "call_1")
     }
 
 
@@ -345,6 +368,50 @@ def _tool_result_blocks(executor: AgentStreamExecutor) -> dict[str, dict[str, An
         for block in (message.get("content") or [])
         if isinstance(block, dict) and block.get("type") == "tool_result"
     }
+
+
+def test_parallel_readers_see_the_preceding_write(tmp_path):
+    path = tmp_path / "report.txt"
+    path.write_text("old content", encoding="utf-8")
+    rendezvous = threading.Barrier(2, timeout=3)
+    executed = []
+
+    class Writer(BaseTool):
+        name = "write_report"
+        params = {"type": "object", "properties": {}}
+
+        def execute(self, params):
+            path.write_text("new content", encoding="utf-8")
+            executed.append("write")
+            return ToolResult.success("written")
+
+    class Reader(BaseTool):
+        name = "review_report"
+        parallel_safe = True
+        params = {"type": "object", "properties": {}}
+
+        def execute(self, params):
+            rendezvous.wait()
+            executed.append("read")
+            return ToolResult.success(path.read_text(encoding="utf-8"))
+
+    class OrderedExecutor(_PrefetchedExecutor):
+        _run_parallel_calls = AgentStreamExecutor._run_parallel_calls
+
+    calls = [
+        {"id": "write", "name": "write_report", "arguments": {}},
+        {"id": "read_1", "name": "review_report", "arguments": {}},
+        {"id": "read_2", "name": "review_report", "arguments": {}},
+    ]
+    executor = OrderedExecutor([("", calls), ("done", [])], SteerInbox(), {})
+    executor.tools = {tool.name: tool for tool in (Writer(), Reader())}
+
+    assert executor.run_stream("update and review") == "done"
+
+    blocks = _tool_result_blocks(executor)
+    assert executed == ["write", "read", "read"]
+    assert blocks["read_1"]["content"] == "new content"
+    assert blocks["read_2"]["content"] == "new content"
 
 
 def test_steer_in_a_mixed_turn_skips_only_the_call_that_never_ran() -> None:
@@ -359,10 +426,10 @@ def test_steer_in_a_mixed_turn_skips_only_the_call_that_never_ran() -> None:
     assert executor.run_stream("start") == "redirected answer"
     blocks = _tool_result_blocks(executor)
     assert blocks["call_0"]["content"] == "done call_0"
-    assert blocks["call_2"]["content"] == "done call_2"
-    assert not blocks["call_0"].get("is_error") and not blocks["call_2"].get("is_error")
-    assert blocks["call_1"]["is_error"] is True
-    assert blocks["call_1"]["content"].startswith("Skipped")
+    assert blocks["call_1"]["content"] == "done call_1"
+    assert not blocks["call_0"].get("is_error") and not blocks["call_1"].get("is_error")
+    assert blocks["call_2"]["is_error"] is True
+    assert blocks["call_2"]["content"].startswith("Skipped")
 
 
 def test_cancel_in_a_mixed_turn_keeps_the_calls_that_already_ran() -> None:
@@ -378,6 +445,6 @@ def test_cancel_in_a_mixed_turn_keeps_the_calls_that_already_ran() -> None:
     executor.run_stream("start")
     blocks = _tool_result_blocks(executor)
     assert blocks["call_0"]["content"] == "done call_0"
-    assert blocks["call_2"]["content"] == "done call_2"
-    assert blocks["call_1"]["is_error"] is True
-    assert "interrupted" in blocks["call_1"]["content"]
+    assert blocks["call_1"]["content"] == "done call_1"
+    assert blocks["call_2"]["is_error"] is True
+    assert "interrupted" in blocks["call_2"]["content"]

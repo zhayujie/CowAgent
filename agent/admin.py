@@ -434,6 +434,11 @@ class AgentAdminService:
             destination = Path(workspace)
             self._reject_overlapping_workspace(destination, registry, sanctioned)
 
+            # A workspace pointing at an existing *file* would otherwise blow
+            # up below with a bare NotADirectoryError from iterdir() instead
+            # of the guided AgentAdminError the API layer maps for the console.
+            if destination.exists() and not destination.is_dir():
+                raise AgentAdminError("workspace must be a directory")
             if destination.exists() and any(destination.iterdir()):
                 raise AgentAdminError("workspace must be empty for a new agent")
 

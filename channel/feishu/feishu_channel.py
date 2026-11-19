@@ -14,7 +14,6 @@
 import json
 import logging
 import os
-import ssl
 import threading
 import time
 # -*- coding=utf-8 -*-
@@ -44,6 +43,7 @@ from common import state_dir, utils
 from common.expired_dict import ExpiredDict
 from common.log import logger
 from common.media_download import MAX_FILE_BYTES, MAX_IMAGE_BYTES, download_bytes, download_to_file
+from common.media_duration import get_video_duration_ms
 from common.singleton import singleton
 from config import conf
 from channel.feishu.domain import FEISHU_DOMAIN, LARK_DOMAIN, WRONG_DOMAIN_CODE, WS_ENDPOINT_PATH
@@ -523,14 +523,6 @@ class FeiShuChanel(ChatChannel):
         def start_client_with_retry():
             """Run ws client in this thread with its own event loop to avoid conflicts."""
             import asyncio
-            import ssl as ssl_module
-            original_create_default_context = ssl_module.create_default_context
-
-            def create_unverified_context(*args, **kwargs):
-                context = original_create_default_context(*args, **kwargs)
-                context.check_hostname = False
-                context.verify_mode = ssl.CERT_NONE
-                return context
 
             # lark_oapi.ws.client keeps its event loop in a module-level global,
             # and Client.start() / _select() / _ping_loop() all reference it. A
@@ -553,12 +545,8 @@ class FeiShuChanel(ChatChannel):
             # recover on its own and the channel would stay deaf.
             #
             # Backoff: 5s -> 10s -> 20s -> 40s -> 60s (capped).
-            # The ssl patch is process-wide, so only a certificate error may
-            # switch to unverified TLS (once, retried immediately); any other
-            # failure must leave verification untouched.
             attempt = 0
             backoff = 5
-            ssl_verify_disabled = False
             error_reported = False
             while True:
                 try:
@@ -589,15 +577,14 @@ class FeiShuChanel(ChatChannel):
                         logger.warning("[FeiShu] Feishu domain rejected; retrying websocket on open.larksuite.com")
                         continue
                     attempt += 1
-                    if is_ssl_error and not ssl_verify_disabled:
-                        logger.warning(f"[FeiShu] SSL error: {error_msg}, retrying with SSL verification disabled...")
-                        ssl_module.create_default_context = create_unverified_context
-                        ssl_module._create_unverified_context = create_unverified_context
-                        ssl_verify_disabled = True
-                        continue
+                    if is_ssl_error:
+                        error_msg = (
+                            f"{error_msg} (TLS certificate verification failed; if this network "
+                            "uses a TLS-intercepting proxy, point SSL_CERT_FILE or SSL_CERT_DIR at its CA)"
+                        )
                     logger.error(
                         "[FeiShu] Websocket client error (attempt %d, retry in %ds): %s"
-                        % (attempt, backoff, e), exc_info=not error_reported)
+                        % (attempt, backoff, error_msg), exc_info=not error_reported)
                     if not error_reported:
                         # wait_startup() only sees the first result, so report
                         # now and keep retrying in the background.
@@ -1491,6 +1478,9 @@ class FeiShuChanel(ChatChannel):
                     _create_and_send_card()
                     with lock:
                         if disabled[0]:
+                            # The card never went out: undo the streamed flag
+                            # so send() falls back to the plain text reply.
+                            context["feishu_streamed"] = False
                             return
 
                 _drain_push_queue()
@@ -1892,6 +1882,11 @@ class FeiShuChanel(ChatChannel):
                     # Cancelled path: finalize the in-flight card with
                     # partial output (or a short marker if empty); drop
                     # stale final_response to avoid duplicating last turn.
+                    # has_card can be False here because a tool turn's card
+                    # was already finalized in message_end (card_id reset) —
+                    # that text has been delivered, so clearing the streamed
+                    # flag would make send() deliver it a second time. The
+                    # flag stays.
                     if has_card:
                         _drain_push_queue()
                         partial = (pending_text or "").rstrip()
@@ -1913,6 +1908,9 @@ class FeiShuChanel(ChatChannel):
                     _create_and_send_card()
                     with lock:
                         if disabled[0]:
+                            # The card never went out: undo the streamed flag
+                            # so send() falls back to the plain text reply.
+                            context["feishu_streamed"] = False
                             return
 
                 _drain_push_queue()
@@ -2016,40 +2014,14 @@ class FeiShuChanel(ChatChannel):
     def _get_video_duration(self, file_path: str) -> int:
         """
         获取视频时长（毫秒）
-        
+
         Args:
             file_path: 视频文件路径
-        
+
         Returns:
             视频时长（毫秒），如果获取失败返回0
         """
-        try:
-            import subprocess
-
-            # 使用 ffprobe 获取视频时长
-            cmd = [
-                'ffprobe',
-                '-v', 'error',
-                '-show_entries', 'format=duration',
-                '-of', 'default=noprint_wrappers=1:nokey=1',
-                file_path
-            ]
-
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
-            if result.returncode == 0:
-                duration_seconds = float(result.stdout.strip())
-                duration_ms = int(duration_seconds * 1000)
-                logger.info(f"[FeiShu] Video duration: {duration_seconds:.2f}s ({duration_ms}ms)")
-                return duration_ms
-            else:
-                logger.warning(f"[FeiShu] Failed to get video duration via ffprobe: {result.stderr}")
-                return 0
-        except FileNotFoundError:
-            logger.warning("[FeiShu] ffprobe not found, video duration will be 0. Install ffmpeg to fix this.")
-            return 0
-        except Exception as e:
-            logger.warning(f"[FeiShu] Failed to get video duration: {e}")
-            return 0
+        return get_video_duration_ms(file_path)
 
     def _upload_video_url(self, video_url, access_token):
         """

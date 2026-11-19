@@ -442,6 +442,21 @@ def test_duplicate_or_nonempty_workspace_is_rejected_without_config_change(admin
     assert (occupied / "keep.txt").read_text(encoding="utf-8") == "keep"
 
 
+def test_a_workspace_pointing_at_a_file_is_rejected_as_admin_error(admin):
+    """iterdir() on a file path raises a bare NotADirectoryError otherwise,
+    which the console surfaces as "[Errno 20] Not a directory" instead of an
+    actionable message."""
+    service, root, config_path = admin
+    not_a_dir = root / "plan.md"
+    not_a_dir.write_text("not a directory", encoding="utf-8")
+    before = config_path.read_text(encoding="utf-8")
+
+    with pytest.raises(AgentAdminError, match="workspace must be a directory"):
+        service.create_agent("research", "Research", str(not_a_dir))
+
+    assert config_path.read_text(encoding="utf-8") == before
+
+
 def test_a_concurrent_unrelated_setting_survives_a_roster_write(admin):
     """The console writes one config file from several pages.
 

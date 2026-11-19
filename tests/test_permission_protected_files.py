@@ -28,6 +28,9 @@ def _check(ws, tool, args, mode=WORKSPACE_WRITE):
     ("bash", {"command": "cp /tmp/x/mcp.json ."}),
     ("bash", {"command": "mv /tmp/x/session_prefs.json ./"}),
     ("bash", {"command": "sed -i s/a/b/ mcp.json"}),
+    ("bash", {"command": "Set-Content mcp.json x"}),
+    ("bash", {"command": "Copy-Item source.txt mcp.json"}),
+    ("bash", {"command": "Rename-Item mcp.json backup.json"}),
 ])
 def test_protected_files_are_refused(ws, tool, args):
     decision = _check(ws, tool, args)

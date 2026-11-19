@@ -57,8 +57,10 @@ function createMd() {
             }
         };
     }
+    // typographer stays off: it rewrites the text itself, turning `(c)` into ©,
+    // `cd ..` into `cd …` and straight quotes into curly ones.
     const md = mdFactory({
-        html: false, breaks: true, linkify: true, typographer: true,
+        html: false, breaks: true, linkify: true, typographer: false,
         highlight: function(str, lang) {
             if (lang && hljsLib.getLanguage(lang)) {
                 try { return hljsLib.highlight(str, { language: lang }).value; } catch (_) {}

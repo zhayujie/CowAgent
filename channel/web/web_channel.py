@@ -28,6 +28,7 @@ from channel.web.api.chat import (  # noqa: F401
     CancelHandler, MessageHandler, PollHandler, StreamHandler,
 )
 from channel.web.api.config import ConfigHandler, ExternalApiHandler  # noqa: F401
+from channel.web.api.bash_settings import BashSettingsHandler  # noqa: F401
 from channel.web.api.devices import (  # noqa: F401
     AuthPairHandler, DeviceHandler, DeviceSelfHandler, DevicesHandler, DevicesRevokeOthersHandler,
     PairingHandler, PairingStatusHandler, WellKnownHandler,
@@ -108,6 +109,7 @@ URLS = (
     # Guest share visitor pages (/share/<token>) and the owner's share API.
     *GUEST_URLS,
     '/api/integrations', 'IntegrationsHandler',
+    '/api/tools/bash/settings', 'BashSettingsHandler',
     '/auth/login', 'AuthLoginHandler',
     '/auth/check', 'AuthCheckHandler',
     '/auth/logout', 'AuthLogoutHandler',

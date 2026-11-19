@@ -84,6 +84,9 @@ export interface ElectronAPI {
   // onOpenSession with the session id.
   notify?: (payload: { title?: string; body?: string; sessionId?: string; silent?: boolean; force?: boolean }) => Promise<boolean>
   onOpenSession?: (callback: (sessionId: string) => void) => () => void
+  // Number of conversations with unseen results, shown as a badge on the
+  // taskbar (Windows) / Dock (macOS) icon; 0 clears it.
+  setUnreadBadge?: (count: number) => void
   platform: string
   // OS UI language (e.g. "zh-CN"); used to default the language on first run.
   systemLocale?: string

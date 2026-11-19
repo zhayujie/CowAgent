@@ -118,7 +118,12 @@ class MemoryChunk:
 
 @dataclass
 class SearchResult:
-    """Search result with score and snippet"""
+    """Search result with score and snippet.
+
+    ``chunk_id`` is the storage-level chunk identity: hard-split pieces of one
+    long line share (path, start_line, end_line) but have distinct ids, so any
+    per-chunk keying (fusion dedup, hit bookkeeping) must use the id.
+    """
     path: str
     start_line: int
     end_line: int
@@ -126,6 +131,7 @@ class SearchResult:
     snippet: str
     source: str
     user_id: Optional[str] = None
+    chunk_id: Optional[str] = None
 
 
 class MemoryStorage:
@@ -822,8 +828,13 @@ class MemoryStorage:
         
         return self._row_to_chunk(row)
 
-    def record_hits(self, keys: List[Tuple[str, int, int]]):
-        """Count one retrieval hit per chunk key (path, start_line, end_line).
+    def record_hits(self, keys: List[Tuple[Optional[str], str, int, int]]):
+        """Count one retrieval hit per chunk key.
+
+        Keys are fusion keys ``(chunk_id, path, start_line, end_line)``: the
+        id pins the exact chunk, so hard-split sibling pieces of one line no
+        longer all get credited for a hit that matched a single piece. A
+        missing id falls back to the positional triple.
 
         Called from the search path, so it stays a single small transaction
         that only touches the matched rows. Callers are expected to wrap it in
@@ -831,32 +842,48 @@ class MemoryStorage:
         """
         if not keys:
             return
+        by_id = [key[0] for key in keys if key[0]]
+        triples = [key[1:] for key in keys if not key[0]]
         with self._lock:
             try:
-                self.conn.executemany(
-                    "UPDATE chunks SET hit_count = hit_count + 1, "
-                    "last_hit_at = strftime('%s', 'now') "
-                    "WHERE path = ? AND start_line = ? AND end_line = ?",
-                    [(path, start_line, end_line) for path, start_line, end_line in keys],
-                )
+                if by_id:
+                    self.conn.executemany(
+                        "UPDATE chunks SET hit_count = hit_count + 1, "
+                        "last_hit_at = strftime('%s', 'now') WHERE id = ?",
+                        [(chunk_id,) for chunk_id in by_id],
+                    )
+                if triples:
+                    self.conn.executemany(
+                        "UPDATE chunks SET hit_count = hit_count + 1, "
+                        "last_hit_at = strftime('%s', 'now') "
+                        "WHERE path = ? AND start_line = ? AND end_line = ?",
+                        triples,
+                    )
                 self.conn.commit()
             except Exception:
                 self.conn.rollback()
                 raise
 
     def get_hit_stats(
-        self, keys: List[Tuple[str, int, int]]
-    ) -> Dict[Tuple[str, int, int], Tuple[int, Optional[int]]]:
-        """Read (hit_count, last_hit_at) per chunk key; absent keys are omitted."""
-        stats: Dict[Tuple[str, int, int], Tuple[int, Optional[int]]] = {}
-        for path, start_line, end_line in keys:
-            row = self.conn.execute(
-                "SELECT hit_count, last_hit_at FROM chunks "
-                "WHERE path = ? AND start_line = ? AND end_line = ? LIMIT 1",
-                (path, start_line, end_line),
-            ).fetchone()
+        self, keys: List[Tuple[Optional[str], str, int, int]]
+    ) -> Dict[Tuple[Optional[str], str, int, int], Tuple[int, Optional[int]]]:
+        """Read (hit_count, last_hit_at) per fusion key; absent keys are omitted."""
+        stats: Dict[Tuple[Optional[str], str, int, int], Tuple[int, Optional[int]]] = {}
+        for key in keys:
+            chunk_id, path, start_line, end_line = key
+            if chunk_id:
+                row = self.conn.execute(
+                    "SELECT hit_count, last_hit_at FROM chunks WHERE id = ? LIMIT 1",
+                    (chunk_id,),
+                ).fetchone()
+            else:
+                row = self.conn.execute(
+                    "SELECT hit_count, last_hit_at FROM chunks "
+                    "WHERE path = ? AND start_line = ? AND end_line = ? LIMIT 1",
+                    (path, start_line, end_line),
+                ).fetchone()
             if row:
-                stats[(path, start_line, end_line)] = (
+                stats[key] = (
                     int(row["hit_count"] or 0),
                     row["last_hit_at"],
                 )
@@ -891,6 +918,7 @@ class MemoryStorage:
                 snippet=self._truncate_text(match.metadata["text"], 500),
                 source=match.metadata["source"],
                 user_id=match.metadata.get("user_id"),
+                chunk_id=match.id,
             )
             for match in matches
         ]
@@ -999,7 +1027,8 @@ class MemoryStorage:
                     score=self._bm25_rank_to_score(row['rank']),
                     snippet=self._truncate_text(row['text'], 500),
                     source=row['source'],
-                    user_id=row['user_id']
+                    user_id=row['user_id'],
+                    chunk_id=row['id'],
                 )
                 for row in rows
             ]
@@ -1022,7 +1051,15 @@ class MemoryStorage:
         tokens (3+ chars) so it can serve as a true safety net for any query.
         """
         # Keep CJK runs separate from adjacent words, as in the trigram query.
-        cjk_words = _RE_CJK_WORDS.findall(query)
+        # Long CJK runs must not be matched as one exact substring here
+        # either: split them into the same overlapping shingles the trigram
+        # query uses, so a differently-phrased memory can still hit.
+        cjk_words = []
+        for run in _RE_CJK_WORDS.findall(query):
+            if len(run) >= 4:
+                cjk_words.extend(run[i:i + 3] for i in range(len(run) - 2))
+            else:
+                cjk_words.append(run)
         word_text = _RE_CONTAINS_CJK.sub(' ', query)
         words = cjk_words + [t for t in re.findall(r'\w+', word_text) if len(t) >= 3]
         if not words:
@@ -1038,25 +1075,44 @@ class MemoryStorage:
             params.append(f'%{word.lower()}%')
         
         where_clause = ' OR '.join(like_conditions)
-        params.extend(scopes)
-        
+
+        columns = "id, path, start_line, end_line, text, source, user_id"
+        # With several words, rank by how many each row matches before the
+        # LIMIT, or the best rows can be cut. Ordering forces a full scan, so a
+        # single word keeps the early-exit LIMIT: every row ranks the same.
+        if len(words) > 1:
+            score_expr = " + ".join(
+                "(CASE WHEN LOWER(text) LIKE ? THEN 1 ELSE 0 END)" for _ in words
+            )
+            select = f"SELECT {columns}, ({score_expr}) AS matched_words"
+            order_by = "ORDER BY matched_words DESC"
+            score_params = [f'%{word.lower()}%' for word in words]
+        else:
+            select = f"SELECT {columns}"
+            order_by = ""
+            score_params = []
+
         if user_id:
             sql_query = f"""
-                SELECT * FROM chunks
+                {select}
+                FROM chunks
                 WHERE ({where_clause})
                 AND scope IN ({scope_placeholders})
                 AND (scope = 'shared' OR user_id = ?)
+                {order_by}
                 LIMIT ?
             """
-            params.extend([user_id, limit])
+            params = score_params + params + scopes + [user_id, limit]
         else:
             sql_query = f"""
-                SELECT * FROM chunks
+                {select}
+                FROM chunks
                 WHERE ({where_clause})
                 AND scope IN ({scope_placeholders})
+                {order_by}
                 LIMIT ?
             """
-            params.append(limit)
+            params = score_params + params + scopes + [limit]
         
         try:
             rows = self.conn.execute(sql_query, params).fetchall()
@@ -1078,7 +1134,8 @@ class MemoryStorage:
                     score=score,
                     snippet=self._truncate_text(row['text'], 500),
                     source=row['source'],
-                    user_id=row['user_id']
+                    user_id=row['user_id'],
+                    chunk_id=row['id'],
                 ))
             results.sort(key=lambda r: r.score, reverse=True)
             return results
@@ -1241,14 +1298,32 @@ class MemoryStorage:
         Build FTS5 MATCH query for the trigram tokenizer.
         Extracts CJK sequences (including single characters) and Unicode words,
         joining them with AND so all terms must appear in the matched chunk.
+
+        A CJK run of 4+ characters is additionally split into overlapping
+        3-character shingles joined with OR: quoting the whole run demanded
+        the exact contiguous substring, so a natural-language query
+        ("怎么配置微信机器人") returned nothing for a memory phrased differently
+        ("如何配置微信机器人") even though the two share most of their
+        trigrams. The shingle OR keeps recall, and BM25 ranks documents that
+        share more shingles higher, so precision survives through ranking.
         """
         tokens = _RE_TRIGRAM_TOKENS.findall(raw_query)
         tokens = [t for t in tokens if t]
         if not tokens:
             return None
-        # Escape embedded double-quotes (FTS5 uses "" inside quoted phrases)
-        quoted = [f'"{t.replace(chr(34), chr(34)*2)}"' for t in tokens]
-        return ' AND '.join(quoted)
+
+        def _quote(text: str) -> str:
+            # Escape embedded double-quotes (FTS5 uses "" inside quoted phrases)
+            return f'"{text.replace(chr(34), chr(34) * 2)}"'
+
+        terms = []
+        for token in tokens:
+            if _RE_CONTAINS_CJK.search(token) and len(token) >= 4:
+                shingles = [token[i:i + 3] for i in range(len(token) - 2)]
+                terms.append("(" + " OR ".join(_quote(sh) for sh in shingles) + ")")
+            else:
+                terms.append(_quote(token))
+        return ' AND '.join(terms)
 
     def _search_fts5_trigram(
         self,
@@ -1299,7 +1374,8 @@ class MemoryStorage:
                     score=self._bm25_rank_to_score(row['rank']),
                     snippet=self._truncate_text(row['text'], 500),
                     source=row['source'],
-                    user_id=row['user_id']
+                    user_id=row['user_id'],
+                    chunk_id=row['id'],
                 )
                 for row in rows
             ]

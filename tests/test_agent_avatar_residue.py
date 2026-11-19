@@ -49,7 +49,7 @@ def _get_avatar(agent_id):
     from channel.web.api import agents as agents_module
     web = pytest.importorskip("web")
     headers = {}
-    env = type("env", (), {"REQUEST_METHOD": "GET", "PATH_INFO": "/api/agents/%s/avatar" % agent_id})()
+    env = {"REQUEST_METHOD": "GET", "PATH_INFO": "/api/agents/%s/avatar" % agent_id}
     ctx = type("Ctx", (), {"status": "200 OK", "headers": {}, "env": env})()
     real_ctx, real_header = web.ctx, web.header
     web.ctx, web.header = ctx, headers.__setitem__

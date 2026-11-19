@@ -95,7 +95,9 @@ GPT_54 = "gpt-5.4"  # GPT-5.4 - Agent recommended model
 GPT_54_MINI = "gpt-5.4-mini"
 GPT_54_NANO = "gpt-5.4-nano"
 GPT_55 = "gpt-5.5"  # GPT-5.5 - top-tier (expensive), not default
-GPT_61_TERRA = "gpt-6.1-terra"  # GPT-6.1 Terra - default model for GPT (Responses API)
+GPT_62_SOL = "gpt-6.2-sol"      # GPT-6.2 Sol - default model for GPT (Responses API)
+GPT_62_ASTRA = "gpt-6.2-astra"  # GPT-6.2 Astra - most intelligent flagship (Responses API, higher cost)
+GPT_61_TERRA = "gpt-6.1-terra"  # GPT-6.1 Terra - fast and efficient (Responses API)
 GPT_61_SOL = "gpt-6.1-sol"      # GPT-6.1 Sol - flagship (Responses API)
 GPT_6_LUNA = "gpt-6-luna"       # GPT-6 Luna (Responses API)
 GPT_6_SOL = "gpt-6-sol"         # GPT-6 Sol (Responses API)
@@ -251,7 +253,7 @@ MODEL_LIST = [
               GPT4_TURBO, GPT4_TURBO_PREVIEW, GPT4_TURBO_01_25, GPT4_TURBO_11_06, GPT4_TURBO_04_09,
               GPT_4o, GPT_4O_0806, GPT_4o_MINI,
               GPT_41, GPT_41_MINI, GPT_41_NANO,
-              GPT_61_TERRA, GPT_61_SOL, GPT_6_LUNA, GPT_6_SOL, GPT_6_ASTRA,
+              GPT_62_SOL, GPT_62_ASTRA, GPT_61_TERRA, GPT_61_SOL, GPT_6_LUNA, GPT_6_SOL, GPT_6_ASTRA,
               GPT_56_LUNA, GPT_56_TERRA, GPT_56_SOL,
               GPT_5, GPT_5_MINI, GPT_5_NANO,
               GPT_54, GPT_55, GPT_54_MINI, GPT_54_NANO,

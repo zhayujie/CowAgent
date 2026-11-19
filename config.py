@@ -447,9 +447,19 @@ class Config(dict):
         try:
             # SECURITY: pickle.dump output should only be loaded by this same
             # process. See note on load_user_datas() above.
-            with open(os.path.join(get_appdata_dir(), "user_datas.pkl"), "wb") as f:
-                pickle.dump(self.user_datas, f)
-                logger.info("[Config] User datas saved.")
+            #
+            # Serialize fully in memory and swap the file atomically. This
+            # runs on SIGTERM, and the update relay SIGKILLs the process a
+            # fixed grace period later (cli/commands/process.py) — a pickle
+            # truncated mid-dump would make load_user_datas fall back to {}
+            # on the next start and silently wipe all plugin/session user data.
+            from common.atomic_write import write_bytes_atomic
+
+            write_bytes_atomic(
+                os.path.join(get_appdata_dir(), "user_datas.pkl"),
+                pickle.dumps(self.user_datas),
+            )
+            logger.info("[Config] User datas saved.")
         except Exception as e:
             logger.info("[Config] User datas error: {}".format(e))
 

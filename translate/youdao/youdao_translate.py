@@ -42,7 +42,7 @@ class YoudaoTranslator(Translator):
         self.app_key = conf().get("youdao_translate_app_key")
         self.app_secret = conf().get("youdao_translate_app_secret")
         if not self.app_key or not self.app_secret:
-            raise Exception("youdao translate app_key or app_secret not set")
+            raise ValueError("youdao translate app_key or app_secret not set")
 
     def translate(self, query: str, from_lang: str = "", to_lang: str = "en") -> str:
         if not query:
@@ -73,7 +73,7 @@ class YoudaoTranslator(Translator):
 
         error_code = result.get("errorCode", "0")
         if error_code != "0":
-            raise Exception(
+            raise RuntimeError(
                 "youdao translate error: code={}, msg={}".format(
                     error_code, result.get("msg", "")
                 )
@@ -81,7 +81,7 @@ class YoudaoTranslator(Translator):
 
         translations = result.get("translation") or []
         if not translations:
-            raise Exception("youdao translate returned empty translation")
+            raise RuntimeError("youdao translate returned empty translation")
         return "\n".join(translations)
 
     def _build_sign(self, query: str, salt: str, curtime: str) -> str:

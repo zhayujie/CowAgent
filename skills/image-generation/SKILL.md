@@ -20,12 +20,12 @@ Generate and edit images using AI models. The script automatically picks a backe
 
 Supported models (passed via `model` only when the user asks for a specific one):
 
-- **OpenAI** — `gpt-image-2.5-flare` (recommended default: best quality/latency trade-off), `gpt-image-2.5-sunburst` (highest editing precision), `gpt-image-2`, `gpt-image-1`
+- **OpenAI** — `gpt-image-2.6-flare` (recommended default), `gpt-image-2.6-sunburst`, `gpt-image-2.5-flare`, `gpt-image-2.5-sunburst`, `gpt-image-2`, `gpt-image-1`
 - **Gemini Nano Banana** — `nano-banana-2`, `nano-banana-pro`, `nano-banana`
 - **Seedream (Volcengine Ark)** — `seedream-5.0-lite`, `seedream-4.5`
 - **Qwen (DashScope)** — `qwen-image-2.0`, `qwen-image-2.0-pro`
 - **MiniMax** — `image-01`
-- **CowAgent** — `gpt-image-2.5-flare`, `gpt-image-2.5-sunburst`, `gemini-3.1-flash-image`, `gemini-3-pro-image`, `seedream-5.0-pro`, `seedream-5.0-lite`
+- **CowAgent** — `gpt-image-2.6-flare`, `gpt-image-2.6-sunburst`, `gemini-nano-banana-2.1`, `gpt-image-2.5-flare`, `gpt-image-2.5-sunburst`, `gemini-3.1-flash-image`, `gemini-3-pro-image`, `seedream-5.0-pro`, `seedream-5.0-lite`
 
 ## Usage
 
@@ -45,11 +45,11 @@ Images are saved to the workspace (or the open project dir) under `images/`, so 
 |-----------|------|----------|---------|-------------|
 | `prompt` | string | yes | — | Image description |
 | `image_url` | string / list | no | null | Input image(s) for editing: local file path or URL. Multi-image fusion is supported (pass a list) |
-| `quality` | string | no | auto | `low` / `medium` / `high` (only some backends honour this) |
+| `quality` | string | no | auto (`high` for `gpt-image-2.6-*`) | `low` / `medium` / `high` (only some backends honour this) |
 | `size` | string | no | auto | `512` / `1K` / `2K` / `3K` / `4K`, or pixel value (`1024x1024`) |
 | `aspect_ratio` | string | no | null | `1:1` / `3:2` / `2:3` / `16:9` / `9:16` / `21:9` (some backends also support extreme ratios like `1:4` / `8:1`) |
 
-**Higher `quality` and larger `size` cost more and run slower.** In normal cases, when the user does not explicitly specify, `low` or `medium` is sufficient. Only use `high` when the user asks for it.
+**Higher `quality` and larger `size` cost more and run slower.** Omit `quality` unless the user explicitly asks for a level; the script then applies the model's default. Pass `low` / `medium` only when the user asks for a faster or cheaper result.
 
 ### Example — generate
 
@@ -117,5 +117,5 @@ If the script returns an error after trying all configured backends, **do NOT re
 ### Notes
 
 - HTTP timeout is 300s — high-resolution generation can take over 200s.
-- Omit `quality` / `size` to let the model pick automatically (`auto`).
+- Omit `quality` / `size` to use the defaults (`gpt-image-2.6-*` uses `high` quality, other models pick automatically).
 - Input images for editing are auto-compressed to ≤ 4MB / longest edge ≤ 4096px.

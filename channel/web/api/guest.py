@@ -425,6 +425,15 @@ class GuestVoiceHandler:
             _fail(404, "Voice input is not available.", "voice_unavailable")
         if not get_pages().allow_ip(f"asr:{_client_ip()}", 20):
             _fail(429, "Too many requests, please wait a moment.", "rate_limited")
+        # Same pre-check as the upload handler: reject on the declared length
+        # before multipart parsing, which otherwise spills the oversized body
+        # into disk-backed temp files before the byte limit ever sees it.
+        try:
+            declared = int(web.ctx.env.get("CONTENT_LENGTH") or 0)
+        except ValueError:
+            declared = 0
+        if declared > self.MAX_BYTES + 64 * 1024:
+            _fail(413, "Audio is too large.", "too_large")
         try:
             params = _multipart_lists(self.MAX_PARTS)
             file_obj = _first_value(params, "file")

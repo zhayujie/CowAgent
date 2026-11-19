@@ -136,12 +136,110 @@ function loadToolsSection() {
                     <span class="block font-medium text-sm text-slate-700 dark:text-slate-200 font-mono truncate">${escapeHtml(tool.name)}</span>
                     <p class="text-xs text-slate-400 dark:text-slate-500 mt-1 line-clamp-2">${escapeHtml(tool.description || '--')}</p>
                 </div>`;
+            if (tool.name === 'bash') {
+                const footer = document.createElement('div');
+                footer.className = 'flex items-center justify-between mt-3 text-xs text-slate-500';
+                footer.innerHTML = `<span id="bash-environment-label"></span><button type="button" class="text-blue-500" id="bash-open-settings">${escapeHtml(t('bash_settings_title'))}</button>`;
+                card.querySelector('.flex-1').appendChild(footer);
+                footer.querySelector('button').addEventListener('click', openBashSettings);
+            }
             listEl.appendChild(card);
         });
         listEl.classList.remove('hidden');
         applyToolsCollapse();
         toolsLoaded = true;
+        loadBashEnvironment().catch(() => {});
     }).catch(() => showEmpty('tools_load_failed'));
+}
+
+// Execution-host settings. Read afresh whenever the dialog opens.
+let bashSettingsState = null;
+let bashSettingsBusy = false;
+let bashSettingsFocus = null;
+
+async function loadBashEnvironment() {
+    const label = document.getElementById('bash-environment-label');
+    try {
+        const response = await fetch('/api/tools/bash/settings');
+        const data = await response.json();
+        if (!response.ok || data.status !== 'success') throw new Error(data.message || t('tools_load_failed'));
+        bashSettingsState = data;
+        const footer = label && label.closest('.flex.items-center.justify-between');
+        if (footer) footer.hidden = data.platform !== 'windows';
+        if (label && data.platform === 'windows') label.textContent = `${t('bash_settings_environment')}: ${data.effective_shell}`;
+        const button = document.getElementById('bash-open-settings');
+        if (button) button.hidden = data.platform !== 'windows';
+        return data;
+    } catch (error) {
+        if (label) label.textContent = t('tools_load_failed');
+        throw error;
+    }
+}
+
+function updateBashSaveState() {
+    const selected = document.querySelector('input[name="bash-shell"]:checked');
+    const state = bashSettingsState;
+    document.getElementById('bash-settings-save').disabled = bashSettingsBusy || !state || state.platform !== 'windows' || !selected || selected.value === state.windows_shell || (selected.value === 'pwsh' && !state.pwsh.available);
+}
+
+function closeBashSettings() {
+    if (bashSettingsBusy) return;
+    document.getElementById('bash-settings-overlay').classList.add('hidden');
+    if (bashSettingsFocus) bashSettingsFocus.focus();
+}
+
+async function openBashSettings() {
+    bashSettingsFocus = document.activeElement;
+    const overlay = document.getElementById('bash-settings-overlay');
+    overlay.classList.remove('hidden');
+    const errorEl = document.getElementById('bash-settings-error');
+    errorEl.textContent = '';
+    bashSettingsState = null;
+    updateBashSaveState();
+    document.getElementById('bash-settings-close').onclick = closeBashSettings;
+    document.getElementById('bash-settings-cancel').onclick = closeBashSettings;
+    overlay.onclick = event => { if (event.target === overlay) closeBashSettings(); };
+    overlay.onkeydown = event => {
+        if (event.key === 'Escape') closeBashSettings();
+        if (event.key === 'Tab') {
+            const nodes = [...overlay.querySelectorAll('button:not(:disabled), input:not(:disabled), a:not(.hidden)')];
+            const first = nodes[0], last = nodes[nodes.length - 1];
+            if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+            else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+        }
+    };
+    document.getElementById('bash-settings-close').focus();
+    document.getElementById('bash-settings-save').onclick = saveBashSettings;
+    try {
+        const data = await loadBashEnvironment();
+        document.getElementById('bash-settings-platform').textContent = `${t('bash_settings_environment')}: ${data.platform} / ${data.effective_shell}`;
+        document.querySelectorAll('input[name="bash-shell"]').forEach(radio => {
+            radio.checked = radio.value === data.windows_shell;
+            radio.disabled = data.platform !== 'windows' || (radio.value === 'pwsh' && !data.pwsh.available);
+            radio.onchange = updateBashSaveState;
+        });
+        document.getElementById('bash-settings-detection').textContent = data.pwsh.available ? `PowerShell ${data.pwsh.version}` : t('bash_settings_missing');
+        document.getElementById('bash-settings-install').classList.toggle('hidden', data.pwsh.available);
+        updateBashSaveState();
+    } catch (error) { errorEl.textContent = error.message; }
+}
+
+async function saveBashSettings() {
+    const selected = document.querySelector('input[name="bash-shell"]:checked');
+    if (!selected || bashSettingsBusy) return;
+    bashSettingsBusy = true;
+    updateBashSaveState();
+    const errorEl = document.getElementById('bash-settings-error');
+    errorEl.textContent = '';
+    try {
+        const response = await fetch('/api/tools/bash/settings', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({windows_shell: selected.value}) });
+        const data = await response.json();
+        if (!response.ok || data.status !== 'success') throw new Error(data.code === 'pwsh_unavailable' ? t('bash_settings_missing') : (data.message || t('tools_load_failed')));
+        bashSettingsBusy = false;
+        closeBashSettings();
+        await loadBashEnvironment();
+    } catch (error) { errorEl.textContent = error.message; }
+    finally { bashSettingsBusy = false; updateBashSaveState(); }
 }
 
 // ---------------------------------------------------------------------
