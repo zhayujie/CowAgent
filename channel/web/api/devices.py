@@ -6,9 +6,6 @@ one-time code and shows it as a QR code; the new device redeems it at
 Signing in with the password issues the same kind of token, so the device list
 covers every client. /.well-known/cowagent tells a client what it reached, and
 which device, before it hands over any credential.
-
-Behind an auth proxy only requests the proxy let through arrive here, so a
-code another device redeems would never reach this server: pairing is off.
 """
 
 import json
@@ -19,16 +16,14 @@ from urllib.parse import urlencode, urlsplit
 import web
 
 from agent.guest.access import LoginLimiter
-from channel.web.api.integrations import (
-    _behind_auth_proxy, is_loopback_host, lan_urls, public_url,
-)
+from channel.web.api.integrations import is_loopback_host, lan_urls, public_url
 from channel.web.core import devices, identity, local_control, pairing
 from channel.web.core._common import (
     _client_ip, _current_device_token, _is_password_enabled, _qr_data_uri,
     _require_auth, _session_expire_seconds,
 )
 from channel.web.core.request_guard import cross_site_origin
-from common.deployment import manage_url
+from common.deployment import is_managed
 from common.log import logger
 
 PROTOCOL_VERSION = 1
@@ -58,11 +53,9 @@ def _version() -> str:
 
 
 def _instance() -> dict:
-    return {"id": identity.device_id(), "name": identity.device_name(), "version": _version()}
-
-
-def pairing_available() -> bool:
-    return not _behind_auth_proxy()
+    # A managed instance is named by whoever runs it, so clients don't offer a rename.
+    return {"id": identity.device_id(), "name": identity.device_name(), "version": _version(),
+            "managed": is_managed()}
 
 
 def _usable(url: str, origin_only: bool = False) -> str:
@@ -82,9 +75,7 @@ def _usable(url: str, origin_only: bool = False) -> str:
 
 def pairing_urls(seen_at: str = "") -> list:
     """Addresses worth trying from another device, most likely first."""
-    candidates = [_usable(public_url()), _usable(seen_at, origin_only=True)]
-    if not _behind_auth_proxy():
-        candidates += lan_urls()
+    candidates = [_usable(public_url()), _usable(seen_at, origin_only=True)] + lan_urls()
     urls = []
     for url in candidates:
         url = (url or "").rstrip("/")
@@ -164,7 +155,7 @@ class WellKnownHandler:
             "version": _version(),
             "auth": {
                 "required": _is_password_enabled(),
-                "methods": ["password", "pairing"] if pairing_available() else ["password"],
+                "methods": ["password", "pairing"],
             },
         })
 
@@ -178,8 +169,6 @@ def _require_owner():
 class PairingHandler:
     def POST(self):
         _require_owner()
-        if not pairing_available():
-            return _error("Access to this instance is managed by the platform running it", "pairing_unavailable")
         try:
             data = json.loads(web.data() or b"{}")
         except Exception:
@@ -226,7 +215,7 @@ class AuthPairHandler:
         if wait:
             return _json({"status": "error", "reason": "locked", "retry_after": wait,
                           "message": f"Too many attempts. Try again in {wait} seconds."})
-        p = pairing.claim(str(data.get("code") or "")) if pairing_available() else None
+        p = pairing.claim(str(data.get("code") or ""))
         if p is None:
             _pair_limiter.failed("pair", client)
             logger.warning(f"[Devices] Invalid pairing code from {client}")
@@ -252,8 +241,6 @@ class DevicesHandler:
             "current": current_device_id(),
             "instance": _instance(),
             "password_set": _is_password_enabled(),
-            "pairing_available": pairing_available(),
-            "manage_url": "" if pairing_available() else manage_url(),
         })
 
 

@@ -138,9 +138,6 @@ it('says why an address is no CowAgent to pair with', async () => {
   expect(await pairAt(() => 'offline')).toContain('连不上 192.168.1.20:9899');
   expect(await pairAt(() => ({status: 401, body: {}}))).toContain('需要先登录');
   expect(await pairAt(() => ({body: {hello: 'world'}}))).toContain('不是 CowAgent');
-  expect(
-    await pairAt(() => ({body: {type: 'instance', protocol: 1, auth: {required: true, methods: ['password']}}})),
-  ).toContain('不支持配对码');
 });
 
 it('reports the most telling failure among the addresses tried', async () => {

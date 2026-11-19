@@ -109,6 +109,8 @@ export interface DeviceSelf {
   id: string
   name: string
   version?: string
+  /** Named and reached the way whoever runs it decides; clients don't offer a rename. */
+  managed?: boolean
 }
 
 export interface DeviceList {
@@ -116,10 +118,6 @@ export interface DeviceList {
   /** The device making this request, empty when it isn't one (e.g. this app on its own backend). */
   current: string
   instance?: DeviceSelf
-  /** False behind an auth proxy, where pairing codes can't work. */
-  pairing_available?: boolean
-  /** Where the platform running it manages access, when pairing is off. */
-  manage_url?: string
 }
 
 export type GuestShareStatus = 'active' | 'unconfirmed' | 'password_missing' | 'disabled' | 'expired'
@@ -1037,11 +1035,6 @@ class ApiClient {
 
   async removeDevice(id: string): Promise<ApiResult> {
     return this.request(`/api/devices/${encodeURIComponent(id)}`, { method: 'DELETE' })
-  }
-
-  /** Signs out every device but the one asking. */
-  async revokeOtherDevices(): Promise<ApiResult & { removed?: number }> {
-    return this.request('/api/devices/revoke_others', { method: 'POST' })
   }
 
   /** Guest pages belong to the instance, not an Agent, and their errors carry a reason code. */

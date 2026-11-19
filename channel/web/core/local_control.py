@@ -1,6 +1,6 @@
 """Lets commands run on this machine, such as ``cow pair``, reach the console.
 
-While serving, the console keeps a file in the data directory holding the
+While serving, the console keeps a file in the device directory holding the
 address it answers on and a random key, readable by this user only. A command
 reads the file and sends the key back. Whoever can read the file already
 controls this account, config.json included, so the key grants nothing new;
@@ -14,7 +14,7 @@ from typing import Optional
 
 from common.log import logger
 from common.utils import constant_time_equals
-from config import get_data_root
+from config import get_device_dir
 
 FILE_NAME = "console.json"
 HEADER = "HTTP_X_COW_LOCAL_KEY"
@@ -24,7 +24,7 @@ _host = ""
 
 
 def path() -> str:
-    return os.path.join(get_data_root(), FILE_NAME)
+    return os.path.join(get_device_dir(), FILE_NAME)
 
 
 def _connect_host(host: str) -> str:

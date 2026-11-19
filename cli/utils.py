@@ -61,6 +61,11 @@ def get_data_root() -> str:
     return os.path.expanduser(data_dir) if data_dir else get_project_root()
 
 
+def get_device_dir() -> str:
+    # Mirrors config.get_device_dir(), without creating it.
+    return os.path.join(os.path.expanduser(os.environ.get("COW_DATA_DIR") or "~/.cow"), "device")
+
+
 def _config_json_path() -> str:
     return os.path.join(get_data_root(), "config.json")
 

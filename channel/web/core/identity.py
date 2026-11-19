@@ -3,12 +3,11 @@
 The id lets a client confirm that the address it saved still leads to the
 device it paired with before handing over that device's token: a LAN address
 can be given to another machine, and a token sent there is a token given away.
-It is random, kept in the data root, and not a secret.
+It is random, kept in the device directory, and not a secret.
 
 The name is the owner's to change (``device_name`` in config.json) and every
 client shows the same one. Until it is set, it is the computer's own name as
-the system shows it to people. A platform running the instance for someone can
-supply both through COW_DEVICE_ID and COW_DEVICE_NAME.
+the system shows it to people.
 """
 
 import os
@@ -22,10 +21,10 @@ from typing import Optional
 
 from common.deployment import is_mobile
 from common.log import logger
-from config import conf, get_data_root
+from config import conf, get_device_dir
 
 NAME_MAX = 60
-_ID_FILE = ".device_id"
+_ID_FILE = "device_id"
 _ID_RE = re.compile(r"^[A-Za-z0-9_.:-]{4,80}$")
 # Container runtimes name the host after the container id.
 _CONTAINER_HOST_RE = re.compile(r"^[0-9a-f]{12}([0-9a-f]{52})?$")
@@ -46,11 +45,7 @@ def device_id() -> str:
     with _lock:
         if _id is not None:
             return _id
-        supplied = (os.environ.get("COW_DEVICE_ID") or "").strip()
-        if _ID_RE.match(supplied):
-            _id = supplied
-            return _id
-        path = os.path.join(get_data_root(), _ID_FILE)
+        path = os.path.join(get_device_dir(), _ID_FILE)
         value = ""
         try:
             if os.path.isfile(path):
@@ -116,10 +111,7 @@ def system_name() -> str:
 
 
 def device_name() -> str:
-    return (clean_name(conf().get("device_name"))
-            or clean_name(os.environ.get("COW_DEVICE_NAME"))
-            or system_name()
-            or "CowAgent")
+    return clean_name(conf().get("device_name")) or system_name() or "CowAgent"
 
 
 def reset() -> None:

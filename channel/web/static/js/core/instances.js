@@ -86,7 +86,10 @@ function instanceNoteDevice(device) {
     if (!device || !device.name) return;
     const active = instanceActive();
     if (active) {
-        if (active.name !== device.name) _instanceUpdate(active.id, { name: device.name });
+        const managed = !!device.managed;
+        if (active.name !== device.name || !!active.managed !== managed) {
+            _instanceUpdate(active.id, { name: device.name, managed });
+        }
     } else {
         localStorage.setItem(INSTANCE_LOCAL_KEY, JSON.stringify({ name: device.name, id: device.id || '' }));
     }
@@ -332,8 +335,9 @@ async function renameInstance(id, name) {
         if (data.status !== 'success') throw { reason: 'refused' };
         _instanceUpdate(id, { name: data.instance.name });
     } catch (err) {
-        _shareToast(err && err.reason && err.reason !== 'refused'
-            ? instanceErrorText(err) : t('devices_rename_failed').replace('{name}', item.name));
+        const reason = err && err.reason;
+        _shareToast(reason && reason !== 'refused' ? instanceErrorText(err)
+            : t('devices_rename_failed').replace('{name}', item.name));
     }
     _instancesChanged();
 }
@@ -648,7 +652,7 @@ function _renderInstanceAdd() {
 
 // Which failure says the most about an address list: one that reached
 // something beats one that reached nothing.
-const INSTANCE_ERROR_RANK = ['unreachable', 'timeout', 'mixed', 'blocked', 'not_cowagent', 'login', 'outdated', 'pairing_unavailable'];
+const INSTANCE_ERROR_RANK = ['unreachable', 'timeout', 'mixed', 'blocked', 'not_cowagent', 'login', 'outdated'];
 
 async function submitInstanceAdd(e) {
     if (e) e.preventDefault();
@@ -672,9 +676,6 @@ async function submitInstanceAdd(e) {
     for (const candidate of candidates) {
         try {
             const info = await instanceDiagnose(candidate, 6000);
-            if (info.auth && Array.isArray(info.auth.methods) && !info.auth.methods.includes('pairing')) {
-                throw { reason: 'pairing_unavailable', host: _instanceHost(candidate) };
-            }
             url = candidate;
             found = info;
             break;
@@ -712,6 +713,7 @@ async function submitInstanceAdd(e) {
         name: info.name || _instanceHost(url),
         version: info.version || '',
         instance_id: info.id || found.id || '',
+        managed: !!info.managed,
     };
     if (item) {
         delete item.custom_name;

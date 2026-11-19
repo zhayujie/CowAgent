@@ -62,7 +62,7 @@ interface InstanceState {
   openAdd: (request?: AddInstanceRequest) => void
   closeAdd: () => void
   /** Takes in what the device this app talks to says about itself. */
-  noteDevice: (device?: { id?: string; name?: string } | null) => void
+  noteDevice: (device?: { id?: string; name?: string; managed?: boolean } | null) => void
   setSwitcherHidden: (hidden: boolean) => void
   /** Renames another device on that device, so every client sees the new name. */
   renameRemote: (id: string, name: string) => Promise<void>
@@ -175,9 +175,11 @@ export const useInstanceStore = create<InstanceState>((set, get) => {
       if (!device?.name) return
       const active = apiClient.getInstance()
       if (active) {
-        if (active.name !== device.name) {
+        const managed = !!device.managed
+        if (active.name !== device.name || !!active.managed !== managed) {
           active.name = device.name
-          updateInstance(active.id, { name: device.name })
+          active.managed = managed
+          updateInstance(active.id, { name: device.name, managed })
           set({ items: readInstances().items })
         }
         return
@@ -234,17 +236,13 @@ export const useInstanceStore = create<InstanceState>((set, get) => {
         }
       }
       if (!url || !found) throw failure || new InstanceError('unreachable')
-      const methods = found.auth?.methods
-      if (Array.isArray(methods) && !methods.includes('pairing')) {
-        throw new InstanceError('pairing_unavailable', 0, instanceHost(url))
-      }
 
       let data: {
         status?: string
         reason?: string
         retry_after?: number
         token?: string
-        instance?: { id?: string; name?: string; version?: string }
+        instance?: { id?: string; name?: string; version?: string; managed?: boolean }
       }
       try {
         const res = await fetch(`${url}/auth/pair`, {
@@ -268,6 +266,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => {
         url,
         token: data.token,
         instance_id: info.id || found.id || '',
+        managed: !!info.managed,
         name: info.name || instanceHost(url),
         version: info.version || found.version || '',
       }

@@ -31,10 +31,9 @@ export interface Discovery {
 /**
  * Why an address isn't a CowAgent this app can pair with, as `body.reason`
  * of the ApiError thrown: unreachable / timeout / login (a sign-in gateway in
- * front) / outdated (CowAgent from before pairing) / not_cowagent /
- * pairing_unavailable (access managed by the platform running it).
+ * front) / outdated (CowAgent from before pairing) / not_cowagent.
  */
-export type DiscoverFailure = 'unreachable' | 'timeout' | 'login' | 'outdated' | 'not_cowagent' | 'pairing_unavailable';
+export type DiscoverFailure = 'unreachable' | 'timeout' | 'login' | 'outdated' | 'not_cowagent';
 
 function failure(reason: DiscoverFailure, baseUrl: string, status?: number): ApiError {
   const kind = reason === 'unreachable' ? 'network' : reason === 'timeout' ? 'timeout' : 'server';
@@ -42,7 +41,7 @@ function failure(reason: DiscoverFailure, baseUrl: string, status?: number): Api
 }
 
 // When several addresses fail, report the one that says the most.
-const FAILURE_RANK: DiscoverFailure[] = ['pairing_unavailable', 'not_cowagent', 'outdated', 'login', 'timeout', 'unreachable'];
+const FAILURE_RANK: DiscoverFailure[] = ['not_cowagent', 'outdated', 'login', 'timeout', 'unreachable'];
 
 function rank(e: unknown): number {
   const reason = e instanceof ApiError ? (e.body?.reason as DiscoverFailure) : undefined;
@@ -178,9 +177,6 @@ export async function redeem(target: PairTarget): Promise<PairResult> {
         lastError = e;
       }
       continue;
-    }
-    if (Array.isArray(info.auth?.methods) && !info.auth.methods.includes('pairing')) {
-      throw failure('pairing_unavailable', baseUrl);
     }
     const client = new HttpClient();
     client.setBaseUrl(baseUrl);

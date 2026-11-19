@@ -976,6 +976,20 @@ def get_data_root():
     return get_root()
 
 
+def get_device_dir(create: bool = True):
+    """Directory for who this install is and who may sign in to it: its device
+    id, the paired devices, the session key and the running console's local key.
+
+    It sits under COW_DATA_DIR when set and under ~/.cow otherwise, never in the
+    data root of a source deployment, which is the project directory itself.
+    """
+    data_dir = os.environ.get("COW_DATA_DIR")
+    path = os.path.join(os.path.expanduser(data_dir or "~/.cow"), "device")
+    if create:
+        os.makedirs(path, mode=0o700, exist_ok=True)
+    return path
+
+
 def read_file(path):
     with open(path, mode="r", encoding="utf-8-sig") as f:
         return f.read()

@@ -18,6 +18,7 @@ from agent.permission import (
 )
 from channel.web.core._common import (
     _can_reveal_in_file_manager,
+    _is_password_enabled,
     _read_config_file_for_write,
     _require_auth,
     _write_config_file_for_write,
@@ -145,7 +146,8 @@ class ConfigHandler:
                 "status": "success",
                 "use_agent": use_agent,
                 "title": title,
-                "device": {"id": identity.device_id(), "name": identity.device_name()},
+                "device": {"id": identity.device_id(), "name": identity.device_name(),
+                           "managed": is_managed()},
                 "model": local_config.get("model", ""),
                 "bot_type": "openai" if local_config.get("bot_type") == "chatGPT" else local_config.get("bot_type", ""),
                 "use_linkai": bool(local_config.get("use_linkai", False)),
@@ -241,6 +243,7 @@ class ConfigHandler:
             file_cfg = _read_config_file_for_write()
             # Capture old password before updating
             old_password = file_cfg.get("web_password", "") if "web_password" in applied else ""
+            was_open = not _is_password_enabled()
             file_cfg.update(applied)
             # Merged rather than assigned: the UI sends the one switch it owns,
             # and the rest of the section is the user's to keep.
@@ -305,16 +308,18 @@ class ConfigHandler:
 
             result = {"status": "success", "applied": applied, "warning": password_warning}
             # A new password signs out everyone who got in with the old one;
-            # devices that were paired never knew it and stay. The caller
-            # keeps its device, or gets one if it had none (no password
-            # before, or an old session token).
+            # devices that were paired never knew it and stay. The first
+            # password signs out every device: without one, anybody who
+            # reached the console could have paired. The caller keeps its
+            # device, or gets one if it had none (no password before, or an
+            # old session token).
             if applied.get("web_password") and applied["web_password"] != old_password:
                 from channel.web.api.devices import current_device_id, issue_password_device
                 from channel.web.core import devices
 
                 current = current_device_id()
                 removed = devices.remove_where(
-                    lambda d: d.get("via") == "password" and d.get("id") != current)
+                    lambda d: d.get("id") != current and (was_open or d.get("via") == "password"))
                 if removed:
                     logger.info(f"[WebChannel] Password changed, signed out {removed} device(s)")
                 if not current:

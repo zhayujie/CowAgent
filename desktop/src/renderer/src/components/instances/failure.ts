@@ -10,7 +10,6 @@ const KNOWN = new Set([
   'login',
   'outdated',
   'not_cowagent',
-  'pairing_unavailable',
   'wrong_device',
 ])
 

@@ -19,7 +19,7 @@ from urllib.parse import urlsplit
 
 import click
 
-from cli.utils import get_cli_language, get_data_root
+from cli.utils import get_cli_language, get_device_dir
 
 POLL_SECONDS = 2
 
@@ -31,7 +31,7 @@ class _Unreachable(Exception):
 def _read_runtime() -> Optional[dict]:
     from cli.commands.process import _is_pid_alive
 
-    path = os.path.join(get_data_root(), "console.json")
+    path = os.path.join(get_device_dir(), "console.json")
     try:
         with open(path, encoding="utf-8") as f:
             info = json.load(f)
@@ -135,11 +135,6 @@ def pair(url, no_wait):
                 "在 config.json 中设置 web_password（设置后默认监听所有网卡），然后执行 cow restart。",
                 "This instance only listens on 127.0.0.1, so no other device can reach it.\n"
                 "Set web_password in config.json (it then listens on all interfaces) and run `cow restart`."),
-                fg="yellow"))
-        elif res.get("reason") == "pairing_unavailable":
-            click.echo(click.style(_t(
-                "这台设备的访问由运行它的平台管理，请在平台的控制台里连接其他设备。",
-                "Access to this device is managed by the platform running it; connect other devices from that platform's console."),
                 fg="yellow"))
         else:
             click.echo(click.style(res.get("message") or _t("创建配对码失败", "Couldn't create a pairing code"),

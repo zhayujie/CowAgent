@@ -36,7 +36,7 @@ from channel.chat_message import ChatMessage
 from common.channel_registry import get_channel_manager
 from common.log import logger
 from common.utils import constant_time_equals
-from config import conf, get_data_root, read_config_template
+from config import conf, get_data_root, get_device_dir, read_config_template
 
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg"}
@@ -237,11 +237,13 @@ def _client_ip() -> str:
     env = getattr(web.ctx, "env", {}) or {}
     addr = (env.get("REMOTE_ADDR") or "").strip()
     # Forwarding headers are only believed from a proxy on this machine;
-    # anyone else could set them to dodge the per-client limits.
+    # anyone else could set them to dodge the per-client limits. Even then
+    # only what the proxy wrote counts: X-Real-IP, or the last X-Forwarded-For
+    # hop, since proxies append to whatever the client sent.
     if addr in ("::1", "::ffff:127.0.0.1") or addr.startswith("127."):
-        forwarded = (env.get("HTTP_X_FORWARDED_FOR") or "").split(",")[0].strip()
         real = (env.get("HTTP_X_REAL_IP") or "").strip()
-        return forwarded or real or addr
+        forwarded = (env.get("HTTP_X_FORWARDED_FOR") or "").split(",")[-1].strip()
+        return real or forwarded or addr
     return addr or "unknown"
 
 
@@ -515,19 +517,19 @@ _SECRETS = {}
 _SECRETS_LOCK = threading.Lock()
 
 
-def _persistent_secret(filename: str) -> bytes:
-    """A random secret kept in the data root, created on first use.
+def _persistent_secret(path: str) -> bytes:
+    """A random secret kept in a file, created on first use.
 
     It must survive restarts, or everything signed with it stops verifying.
     """
-    secret = _SECRETS.get(filename)
+    filename = os.path.basename(path)
+    secret = _SECRETS.get(path)
     if secret is not None:
         return secret
     with _SECRETS_LOCK:
-        secret = _SECRETS.get(filename)
+        secret = _SECRETS.get(path)
         if secret is not None:
             return secret
-        path = os.path.join(get_data_root(), filename)
         value = None
         try:
             if os.path.isfile(path):
@@ -545,7 +547,7 @@ def _persistent_secret(filename: str) -> bytes:
             except Exception as e:
                 logger.warning(f"[WebChannel] Could not persist {filename}: {e}")
         secret = value.encode()
-        _SECRETS[filename] = secret
+        _SECRETS[path] = secret
         return secret
 
 
@@ -558,12 +560,12 @@ def _get_preview_secret() -> bytes:
     origin and Chrome withholds the SameSite=Lax cookie. The signature in the
     URL is what authorizes the request instead.
     """
-    return _persistent_secret(".preview_secret")
+    return _persistent_secret(os.path.join(get_data_root(), ".preview_secret"))
 
 
 def _get_auth_secret() -> bytes:
     """Stable secret used to sign console session tokens."""
-    return _persistent_secret(".auth_secret")
+    return _persistent_secret(os.path.join(get_device_dir(), "auth_secret"))
 
 
 def _encode_dir_token(dir_path: str) -> str:

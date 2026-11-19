@@ -143,7 +143,6 @@ const DISCOVER_FAILURES: Record<DiscoverFailure, MessageKey> = {
   login: 'connect_err_login',
   outdated: 'connect_err_outdated',
   not_cowagent: 'connect_err_not_cowagent',
-  pairing_unavailable: 'connect_err_pairing_unavailable',
 };
 
 export function describePairError(e: unknown): string {

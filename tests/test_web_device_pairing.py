@@ -26,8 +26,7 @@ def env(tmp_path, monkeypatch):
     from channel.web.core import _common, devices, identity, pairing
 
     monkeypatch.setenv("COW_DATA_DIR", str(tmp_path))
-    monkeypatch.delenv("COW_DEVICE_ID", raising=False)
-    monkeypatch.delenv("COW_DEVICE_NAME", raising=False)
+    monkeypatch.delenv("COW_DEPLOYMENT", raising=False)
     monkeypatch.setitem(config.conf(), "web_password", PASSWORD)
     monkeypatch.setitem(config.conf(), "web_public_url", "")
     monkeypatch.setitem(config.conf(), "device_name", "")
@@ -115,18 +114,43 @@ def test_the_device_id_survives_a_restart(env):
     identity.reset()
     _, again = _call(_app(), "/.well-known/cowagent")
     assert first["id"] == again["id"]
-    with open(env / ".device_id", encoding="utf-8") as f:
+    with open(env / "device" / "device_id", encoding="utf-8") as f:
         assert f.read().strip() == first["id"]
 
 
-def test_a_platform_can_supply_the_id_and_name(env, monkeypatch):
-    monkeypatch.setenv("COW_DEVICE_ID", "inst-7f3a9c")
-    monkeypatch.setenv("COW_DEVICE_NAME", "Team assistant")
+def test_a_source_deployment_keeps_device_state_out_of_the_project(tmp_path, monkeypatch):
+    monkeypatch.delenv("COW_DATA_DIR", raising=False)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    path = config.get_device_dir()
+    assert path == os.path.join(str(tmp_path), ".cow", "device")
+    assert stat.S_IMODE(os.stat(path).st_mode) == 0o700
+    assert not path.startswith(config.get_root())
+
+
+def test_the_agent_file_tools_refuse_the_device_directory(env):
+    from agent.tools.edit.edit import Edit
+    from agent.tools.read.read import Read
+    from agent.tools.write.write import Write
+    from channel.web.core import devices
+
+    devices.add("Phone", "ios")
+    listed = os.path.join(str(env), "device", "devices.json")
+    assert Read().execute({"path": listed}).status == "error"
+    assert Write().execute({"path": listed, "content": "{}"}).status == "error"
+    assert Edit().execute({"path": listed, "oldText": "Phone", "newText": "Mine"}).status == "error"
+    assert Write().execute({"path": os.path.join(str(env), "device", "auth_secret"), "content": "x"}).status == "error"
+    assert "Phone" in open(listed, encoding="utf-8").read()
+
+
+def test_the_id_and_name_come_from_the_device_directory_and_config(env, monkeypatch):
+    (env / "device").mkdir(exist_ok=True)
+    (env / "device" / "device_id").write_text("ins-7f3a9c")
+    monkeypatch.setitem(config.conf(), "device_name", "Team assistant")
     app = _app()
     _, found = _call(app, "/.well-known/cowagent")
-    assert found["id"] == "inst-7f3a9c"
+    assert found["id"] == "ins-7f3a9c"
     _, listed = _call(app, "/api/devices", token=_owner_token(app))
-    assert listed["instance"]["id"] == "inst-7f3a9c"
+    assert listed["instance"]["id"] == "ins-7f3a9c"
     assert listed["instance"]["name"] == "Team assistant"
 
 
@@ -150,6 +174,23 @@ def test_the_name_defaults_to_the_computers_and_can_be_changed(env, monkeypatch)
 
     _, reset = _call(app, "/api/device", "PATCH", {"name": ""}, token=owner)
     assert reset["instance"]["name"] == "Studio Mac"
+    assert reset["instance"]["managed"] is False
+
+
+def test_a_managed_deployment_says_so_and_works_the_same(env, monkeypatch):
+    monkeypatch.setenv("COW_DEPLOYMENT", "managed")
+    monkeypatch.setitem(config.conf(), "web_password", "")
+    monkeypatch.setitem(config.conf(), "device_name", "Team assistant")
+    app = _app()
+    _, listed = _call(app, "/api/devices")
+    assert listed["instance"] == {**listed["instance"], "name": "Team assistant", "managed": True}
+    _, found = _call(app, "/.well-known/cowagent")
+    assert found["auth"]["methods"] == ["password", "pairing"]
+    _, created = _call(app, "/api/pairing", "POST", {"base_url": "https://agent.example.com"})
+    assert created["status"] == "success"
+    # Whoever runs it names it through the same call.
+    _, renamed = _call(app, "/api/device", "PATCH", {"name": "Sales assistant"})
+    assert renamed["instance"]["name"] == "Sales assistant"
 
 
 def test_container_hostnames_are_not_shown_as_names(env, monkeypatch):
@@ -162,25 +203,6 @@ def test_container_hostnames_are_not_shown_as_names(env, monkeypatch):
     identity.reset()
     monkeypatch.setattr(identity.socket, "gethostname", lambda: "nas.local")
     assert identity.device_name() == "nas"
-
-
-def test_pairing_is_off_behind_an_auth_proxy(env, monkeypatch):
-    from channel.web.api import devices as devices_api
-
-    app = _app()
-    owner = _owner_token(app)
-    _, created = _call(app, "/api/pairing", "POST", {}, token=owner)
-    monkeypatch.setattr(devices_api, "_behind_auth_proxy", lambda: True)
-
-    _, found = _call(app, "/.well-known/cowagent")
-    assert found["auth"]["methods"] == ["password"]
-    _, refused = _call(app, "/api/pairing", "POST", {}, token=owner)
-    assert refused["reason"] == "pairing_unavailable"
-    # A code made before the switch can't be redeemed either.
-    res, body = _call(app, "/auth/pair", "POST", {"code": created["code"], "device": {"name": "x"}})
-    assert body["status"] == "error"
-    _, listed = _call(app, "/api/devices", token=owner)
-    assert listed["pairing_available"] is False
 
 
 def test_creating_a_code_needs_a_signed_in_client(env):
@@ -337,7 +359,7 @@ def test_wrong_codes_lock_the_client_out(env):
 def test_store_keeps_hashes_only_and_is_private(env):
     app = _app()
     _, paired = _pair(app, _owner_token(app))
-    path = os.path.join(str(env), "devices.json")
+    path = os.path.join(str(env), "device", "devices.json")
     raw = open(path, encoding="utf-8").read()
     secret = paired["token"].rsplit(".", 1)[1]
     assert secret not in raw and "sha256:" in raw
@@ -466,6 +488,36 @@ def test_setting_the_first_password_keeps_the_caller_signed_in(env, monkeypatch)
     assert _call(app, "/api/sessions", token=body["auth_token"])[0].status.startswith("200")
 
 
+def test_the_first_password_signs_out_devices_paired_while_open(env, monkeypatch):
+    monkeypatch.setitem(config.conf(), "web_password", "")
+    app = _app()
+    _, phone = _pair(app, "")
+    assert phone["status"] == "success"
+    _, body = _call(app, "/config", "POST", {"updates": {"web_password": "first-password-1"}})
+    assert _call(app, "/api/sessions", token=body["auth_token"])[0].status.startswith("200")
+    assert _call(app, "/api/sessions", token=phone["token"])[0].status.startswith("401")
+
+
+@pytest.mark.parametrize("headers, seen", [
+    ({"HTTP_X_FORWARDED_FOR": "1.2.3.4, 203.0.113.9"}, "203.0.113.9"),
+    ({"HTTP_X_FORWARDED_FOR": "1.2.3.4, 203.0.113.9", "HTTP_X_REAL_IP": "198.51.100.7"}, "198.51.100.7"),
+    ({}, "127.0.0.1"),
+])
+def test_the_client_address_is_what_the_local_proxy_saw(monkeypatch, headers, seen):
+    from channel.web.core import _common
+
+    monkeypatch.setattr(web, "ctx", web.storage(env={"REMOTE_ADDR": "127.0.0.1", **headers}))
+    assert _common._client_ip() == seen
+
+
+def test_forwarding_headers_from_elsewhere_are_ignored(monkeypatch):
+    from channel.web.core import _common
+
+    monkeypatch.setattr(web, "ctx", web.storage(env={"REMOTE_ADDR": "192.168.1.50",
+                                                     "HTTP_X_REAL_IP": "10.0.0.1"}))
+    assert _common._client_ip() == "192.168.1.50"
+
+
 def test_an_unused_device_lapses(env, monkeypatch):
     from channel.web.core import devices
 
@@ -480,7 +532,7 @@ def test_last_use_is_written_sparingly(env, monkeypatch):
     from channel.web.core import devices
 
     device, token = devices.add("Phone", "ios")
-    path = os.path.join(str(env), "devices.json")
+    path = os.path.join(str(env), "device", "devices.json")
     before = os.stat(path).st_mtime_ns
     writes = []
     monkeypatch.setattr(devices, "_save", lambda doc: writes.append(doc))
