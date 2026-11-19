@@ -269,6 +269,16 @@ class ApiClient {
     return { path: url, options: opts }
   }
 
+  // The renderer is a file:// page, so a password-less backend sees its writes
+  // as cross-site and only lets them through with the desktop shell's token.
+  private async authHeaders(): Promise<Record<string, string>> {
+    const desktopToken = this.isLoopbackBackend() ? await this.getDesktopToken() : ''
+    return {
+      ...(desktopToken ? { 'X-Cow-Desktop-Token': desktopToken } : {}),
+      ...(this.authToken ? { Authorization: `Bearer ${this.authToken}` } : {}),
+    }
+  }
+
   private async request<T>(path: string, rawOptions?: RequestInit): Promise<T> {
     const { path: url, options } = this.carryAgent(path, rawOptions)
     const res = await fetch(`${this.baseUrl}${url}`, {
@@ -278,7 +288,7 @@ class ApiClient {
       credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
-        ...(this.authToken ? { Authorization: `Bearer ${this.authToken}` } : {}),
+        ...(await this.authHeaders()),
         ...options?.headers,
       },
     })
@@ -322,7 +332,7 @@ class ApiClient {
           method: 'POST',
           body: formData,
           credentials: 'include',
-          headers: this.authToken ? { Authorization: `Bearer ${this.authToken}` } : undefined,
+          headers: await this.authHeaders(),
         })
         if (!res.ok) {
           this.noteStatus(res)
@@ -869,7 +879,7 @@ class ApiClient {
       credentials: 'include',
       headers: {
         ...(body !== undefined && !isForm ? { 'Content-Type': 'application/json' } : {}),
-        ...(this.authToken ? { Authorization: `Bearer ${this.authToken}` } : {}),
+        ...(await this.authHeaders()),
       },
       body: body === undefined ? undefined : isForm ? (body as FormData) : JSON.stringify(body),
     })

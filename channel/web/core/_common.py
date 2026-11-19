@@ -27,7 +27,7 @@ import uuid
 from collections import deque
 from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 import web
 
@@ -352,10 +352,48 @@ def _get_query_token():
         return ""
 
 
+_STATE_CHANGING_METHODS = ("POST", "PUT", "PATCH", "DELETE")
+
+
+def _is_cross_site_request() -> bool:
+    env = getattr(web.ctx, "env", {}) or {}
+    site = (env.get("HTTP_SEC_FETCH_SITE") or "").strip().lower()
+    if site:
+        return site in ("cross-site", "same-site")
+    # Browsers without Sec-Fetch-* still send Origin on a cross-origin write.
+    origin = (env.get("HTTP_ORIGIN") or "").strip()
+    if not origin:
+        return False
+    try:
+        netloc = urlsplit(origin).netloc.lower() if origin != "null" else ""
+    except ValueError:
+        return True
+    hosts = {
+        (env.get("HTTP_HOST") or "").strip().lower(),
+        (env.get("HTTP_X_FORWARDED_HOST") or "").split(",")[0].strip().lower(),
+    }
+    return not netloc or netloc not in hosts
+
+
+def _passwordless_write_blocked() -> bool:
+    """Whether a password-less console must refuse this request.
+
+    Without a password any page the operator visits could POST to the console
+    and drive the agent, so writes from another site are refused. The desktop
+    renderer runs from file:// and proves itself with its spawn token instead.
+    """
+    env = getattr(web.ctx, "env", {}) or {}
+    if (env.get("REQUEST_METHOD") or "GET").upper() not in _STATE_CHANGING_METHODS:
+        return False
+    if _desktop_token_matches():
+        return False
+    return _is_cross_site_request()
+
+
 def _check_auth():
     """Return True if request is authenticated or password not enabled."""
     if not _is_password_enabled():
-        return True
+        return not _passwordless_write_blocked()
     if _verify_auth_token(web.cookies().get("cow_auth_token", "")):
         return True
     if _verify_auth_token(_get_bearer_token()):
@@ -366,6 +404,16 @@ def _check_auth():
 def _require_auth():
     """Raise 401 if not authenticated. Call at the top of protected handlers."""
     if not _check_auth():
+        if not _is_password_enabled():
+            logger.warning(
+                "[WebChannel] 403 cross-site write refused: %s %s (origin: %s)",
+                web.ctx.env.get("REQUEST_METHOD", "?"),
+                web.ctx.env.get("PATH_INFO", "?"),
+                web.ctx.env.get("HTTP_ORIGIN", "") or "none",
+            )
+            raise web.HTTPError("403 Forbidden",
+                                {"Content-Type": "application/json; charset=utf-8"},
+                                json.dumps({"status": "error", "message": "Cross-site request refused"}))
         # Log which credential the caller offered (never the value). A rejected
         # request is otherwise invisible in run.log, which makes client bugs —
         # e.g. an endpoint that forgets the Authorization header — undiagnosable.
