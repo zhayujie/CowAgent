@@ -2628,6 +2628,10 @@ class AgentStreamExecutor:
             mode = agent.effective_permission_mode()
             if mode == FULL_ACCESS:
                 return None
+            # The bash tool runs cmd or pwsh on Windows, which parse paths and
+            # aliases differently from a POSIX shell.
+            bash_tool = (getattr(self, "tools", None) or {}).get("bash")
+            shell = getattr(bash_tool, "windows_shell", None) if getattr(bash_tool, "_IS_WIN", False) else None
             decision = check_tool_call(
                 mode,
                 tool_name,
@@ -2635,6 +2639,7 @@ class AgentStreamExecutor:
                 cwd=agent.effective_cwd(),
                 write_roots=agent.write_roots(),
                 protected_paths=agent.protected_paths(),
+                shell=shell,
             )
             return None if decision.allowed else decision.reason
         except Exception as e:

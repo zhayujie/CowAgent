@@ -7,8 +7,10 @@ on:
       - "agent/tools/bash/**"
       - "agent/tools/tool_manager.py"
       - "agent/protocol/agent_stream.py"
+      - "agent/permission/**"
       - "channel/web/api/bash_settings.py"
       - "tests/test_bash*.py"
+      - "tests/test_permission_powershell.py"
       - "tests/test_web_bash_settings.py"
       - ".github/workflows/test-windows-bash.yml"
 
@@ -33,4 +35,4 @@ jobs:
           python -m pip install -r requirements.txt
 
       - name: Run Windows shell and settings tests
-        run: python -m pytest tests/test_bash_streaming.py tests/test_bash_shell_selection.py tests/test_bash_config_propagation.py tests/test_web_bash_settings.py -v
+        run: python -m pytest tests/test_bash_streaming.py tests/test_bash_shell_selection.py tests/test_bash_config_propagation.py tests/test_web_bash_settings.py tests/test_permission_powershell.py -v

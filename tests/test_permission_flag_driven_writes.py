@@ -8,8 +8,8 @@ from agent.permission.policy import READ_ONLY, WORKSPACE_WRITE, check_tool_call
 WORKSPACE = "H:/ws"
 
 
-def _read_only(command):
-    return check_tool_call(READ_ONLY, "bash", {"command": command})
+def _read_only(command, shell=None):
+    return check_tool_call(READ_ONLY, "bash", {"command": command}, shell=shell)
 
 
 def _workspace_write(command):
@@ -74,9 +74,17 @@ READ_ONLY_OK = [
     "sed -n '1,10p' in.txt",
     "sed 's/a/b/' in.txt",
     "awk '{print $1}' f.txt",
+]
+
+PWSH_READ_ONLY_OK = [
     "Get-Content -LiteralPath C:/outside.txt",
     "Get-ChildItem -Path C:/outside",
     "Select-String -Path C:/outside.txt -Pattern x",
+    "gc C:/outside.txt",
+    "gci C:/outside",
+    "sls -Path C:/outside.txt -Pattern x",
+    "Get-Item C:/outside.txt",
+    "Test-Path C:/outside.txt",
 ]
 
 
@@ -91,6 +99,17 @@ def test_read_only_refuses_a_write_hidden_behind_a_flag(command):
 @pytest.mark.parametrize("command", READ_ONLY_OK)
 def test_read_only_still_allows_the_reading_forms(command):
     assert _read_only(command).allowed
+
+
+@pytest.mark.parametrize("command", PWSH_READ_ONLY_OK)
+def test_powershell_read_commands_are_only_allowlisted_for_pwsh(command):
+    assert _read_only(command, shell="pwsh").allowed
+    for shell in (None, "cmd"):
+        assert not _read_only(command, shell=shell).allowed
+
+    name, args = command.split(maxsplit=1)
+    assert not _read_only(f"{name}.exe {args}", shell="pwsh").allowed
+    assert not _read_only(fr".\{name}.exe {args}", shell="pwsh").allowed
 
 
 # --- workspace-write: the same commands, confined to the workspace --------
@@ -119,6 +138,33 @@ WORKSPACE_WRITE_DENY = [
     "Move-Item -Path /outside.txt -Destination inside.txt",
     "[IO.File]::WriteAllText('/outside.txt', 'x')",
     "[IO.File]::WriteAllText($path, 'x')",
+    "ri -LiteralPath /outside.txt",
+    "cpi -Path inside.txt -Destination /outside.txt",
+    "mi -Path inside.txt -Destination /outside.txt",
+    "ni -Path /outside.txt",
+    "sc -Path /outside.txt -Value x",
+    "Add-Content -Path /outside.txt -Value x",
+    "Clear-Content -LiteralPath /outside.txt",
+    "Rename-Item -Path /outside.txt -NewName renamed.txt",
+    "Tee-Object -FilePath /outside.txt -InputObject x",
+    "Expand-Archive -Path archive.zip -DestinationPath /outside",
+    "[IO.File]::WriteAllBytes('/outside.bin', $bytes)",
+    "[IO.File]::AppendAllText('/outside.txt', 'x')",
+    "[IO.File]::WriteAllLines('/outside.txt', $lines)",
+    "[IO.File]::AppendAllText($path, 'x')",
+    "Remove-Item /outside.txt -Recurse",
+    "Set-Content /outside.txt hi",
+    "Add-Content /outside.txt hi",
+    "Clear-Content /outside.txt",
+    "New-Item /outside.txt -ItemType File",
+    "Copy-Item inside.txt /outside.txt",
+    "Move-Item /outside.txt inside.txt",
+    "Move-Item inside.txt /outside.txt",
+    "Rename-Item /outside.txt renamed.txt",
+    "Tee-Object /outside.txt",
+    "Expand-Archive archive.zip /outside",
+    "Remove-Item -Recurse",
+    "Set-Content -Value hi",
 ]
 
 WORKSPACE_WRITE_OK = [
@@ -135,7 +181,19 @@ WORKSPACE_WRITE_OK = [
     "New-Item -Path out.txt",
     "Copy-Item -Path /etc/hosts -Destination copy.txt",
     "Move-Item -Path move-source.txt -Destination moved.txt",
+    "Remove-Item ./build -Recurse",
+    "Set-Content notes.txt hi",
+    "Copy-Item /etc/hosts copy.txt",
+    "Move-Item move-source.txt moved.txt",
+    "Add-Content notes.txt hi",
+    "Clear-Content notes.txt",
+    "Rename-Item old.txt new.txt",
+    "Tee-Object notes.txt",
+    "Expand-Archive archive.zip extracted",
     "[IO.File]::WriteAllText('out.txt', 'x')",
+    "[IO.File]::WriteAllBytes('out.bin', $bytes)",
+    "[IO.File]::AppendAllText('out.txt', 'x')",
+    "[IO.File]::WriteAllLines('out.txt', $lines)",
     "Move-Item -Path inside.txt -Destination moved.txt",
     "ls -la /etc",
     "find . -name '*.log'",
