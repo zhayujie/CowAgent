@@ -1,13 +1,9 @@
 """Rate-limiter buckets must not pin the process-wide dicts forever.
 
-GuestPages._ip_hits and LoginLimiter._client keyed by client IP/id only ever
-shrank via popleft when the *same* key came back — an attacker (or just a
-long tail of one-shot visitors) rotating keys left an empty bucket behind
-forever, so the dicts grew monotonically for the process lifetime. The
-password and guest endpoints are unauthenticated, and behind a reverse proxy
-the key comes from X-Forwarded-For, so the key space is attacker-chosen.
-Both classes now sweep once the dicts pass a threshold; these tests pin the
-sweep keeping live buckets and dropping dead ones.
+GuestPages._ip_hits and LoginLimiter._client are keyed by client IP/id, and
+behind a reverse proxy the key comes from X-Forwarded-For, so the key space is
+attacker-chosen. Once a dict passes its threshold it is swept, keeping live
+buckets and dropping dead ones.
 """
 import os
 import sys
@@ -41,9 +37,9 @@ class TestGuestPagesSweep(unittest.TestCase):
         self.assertLess(len(pages._ip_hits), 5, "stale buckets survived the sweep")
 
     def test_the_sweep_is_amortized_once_per_interval(self):
-        # Review follow-up: rebuilding on every call under a flood is CPU
-        # amplification under the global lock. A second over-threshold call
-        # inside the interval must not sweep; one after it must.
+        # Sweeping on every call under a flood would burn CPU under the global
+        # lock: a second over-threshold call inside the interval must not
+        # sweep, one after it must.
         now = time.time()
         pages = GuestPages()
         pages._ip_hits = {f"msg:1.2.3.{i}": deque([now - 120]) for i in range(_IP_HITS_SWEEP_THRESHOLD + 8)}
