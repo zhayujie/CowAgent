@@ -45,7 +45,7 @@ class BaiduTranslator(Translator):
                 # instance. Report the status and the body instead of letting a
                 # decode error take over, which is what the Youdao translator's
                 # raise_for_status() achieves for the sibling implementation.
-                raise ConnectionError(f"baidu translate HTTP {r.status_code}: {r.text[:200]}")
+                raise RuntimeError(f"baidu translate HTTP {r.status_code}: {r.text[:200]}")
             errcode = result.get("error_code", "52000")
             if errcode != "52000":
                 if errcode == "52001" or errcode == "52002":
