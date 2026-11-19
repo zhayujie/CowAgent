@@ -17,6 +17,8 @@ logs/
 /workspace
 config.yaml
 user_datas.pkl
+workspace-migration.json
+workspace-migration-result.json
 chatgpt_tool_hub/
 plugins/**/
 !plugins/bdunit

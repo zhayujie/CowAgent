@@ -15,6 +15,7 @@ from typing import Dict, Iterable, List, Mapping, Optional
 
 from agent import team
 from agent.registry import AgentProfile, AgentRegistry
+from common.cow_paths import default_workspace
 from common.log import logger
 from common.utils import expand_path
 
@@ -189,7 +190,7 @@ class AgentAdminService:
     def _instance_root(settings: Mapping) -> Path:
         return Path(
             AgentAdminService._normalise_workspace(
-                settings.get("agent_workspace") or "~/cow"
+                settings.get("agent_workspace") or default_workspace()
             )
         )
 

@@ -147,16 +147,28 @@ function _wsAttr(p) { return String(p || '').replace(/\\/g, '\\\\').replace(/'/g
 // ------- Folder picker modal (open an existing project) -------
 let _fpCurrent = '';   // absolute path currently listed
 let _fpBound = false;  // one-time listener binding guard
+let _fpOnPick = null;  // async (path) => true to close the picker
 
 function wsSelOpenProjectDialog() {
     _wsSelHide();
+    openFolderPicker({
+        title: t('ws_sel_open'),
+        openText: t('ws_sel_open_here'),
+        onPick: (path) => _wsSelApply('/api/projects/select', { session: sessionId, project_dir: path }),
+    });
+}
+
+// The server-side folder picker, shared with other views (e.g. the settings
+// workspace location card). It lists folders on the machine running the agent.
+function openFolderPicker({ title, openText, hint, start, onPick }) {
     _fpBindOnce();
-    const overlay = document.getElementById('folder-picker-overlay');
+    _fpOnPick = onPick;
+    document.getElementById('folder-picker-title').textContent = title || t('ws_sel_open');
     document.getElementById('folder-picker-cancel').textContent = t('channels_cancel') || t('ws_sel_up');
-    document.getElementById('folder-picker-open').textContent = t('ws_sel_open_here');
-    document.getElementById('folder-picker-hint').textContent = t('ws_sel_dblclick_hint');
-    overlay.classList.remove('hidden');
-    _fpBrowse('');  // '' => backend starts at ~
+    document.getElementById('folder-picker-open').textContent = openText || t('ws_sel_open_here');
+    document.getElementById('folder-picker-hint').textContent = hint || t('ws_sel_dblclick_hint');
+    document.getElementById('folder-picker-overlay').classList.remove('hidden');
+    _fpBrowse(start || '');  // '' => backend starts at ~
 }
 
 function _fpBindOnce() {
@@ -167,8 +179,8 @@ function _fpBindOnce() {
     document.getElementById('folder-picker-cancel').addEventListener('click', close);
     overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
     document.getElementById('folder-picker-open').addEventListener('click', async () => {
-        if (!_fpCurrent) return;
-        const ok = await _wsSelApply('/api/projects/select', { session: sessionId, project_dir: _fpCurrent });
+        if (!_fpCurrent || !_fpOnPick) return;
+        const ok = await _fpOnPick(_fpCurrent);
         if (ok) close();
     });
 }

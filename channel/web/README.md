@@ -316,7 +316,7 @@ auth), see `tests/test_web_console_routing.py`.
 |---|---|
 | `chat/state.js` | Session and streaming state, history loading, attachments, `agent_id` injection into `fetch` |
 | `chat/context-usage.js` | Usage popover on the clear-context button and compaction |
-| `chat/workspace-selector.js` | Project selector above the input and the file picker dialog |
+| `chat/workspace-selector.js` | Project selector above the input, the file picker dialog, and `openFolderPicker()` for the server-side folder dialog |
 | `chat/session-settings.js` | Per-session permission mode and model: the two chips under the input |
 | `chat/composer-input.js` | Drag-and-drop upload, paste, slash command menu, input key handling |
 | `chat/message-actions.js` | Voice messages, copy, editing a sent message |
@@ -333,6 +333,7 @@ auth), see `tests/test_web_console_routing.py`.
 | `views/sessions.js` | Session history panel: list, pin, rename, project grouping |
 | `views/agents.js` | Agent list, detail drawer, avatars, core files |
 | `views/config.js` | Basic settings tab |
+| `views/workspace-location.js` | Workspace location card in the basic settings tab: pick a folder, schedule the move, restart |
 | `views/models.js` | Models tab: vendors, capability cards, fallback chain, model catalog |
 | `views/models-custom-provider.js` | Add/edit dialog for custom OpenAI-compatible providers |
 | `views/channels.js` | Channel list, binding and configuration |

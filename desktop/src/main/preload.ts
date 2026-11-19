@@ -140,6 +140,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener('open-session', handler)
   },
 
+  // Workspace location (Settings): inspect, check and move the Agent
+  // workspace. Applying one ends with relaunchForWorkspaceLocation.
+  getWorkspaceLocation: () => ipcRenderer.invoke('workspace-location-info'),
+  getWorkspaceUsage: () => ipcRenderer.invoke('workspace-location-usage'),
+  pickWorkspaceLocation: (title?: string) => ipcRenderer.invoke('workspace-location-pick', title),
+  checkWorkspaceLocation: (parent: string) => ipcRenderer.invoke('workspace-location-check', parent),
+  applyWorkspaceLocation: (opts: { parent: string; keepLink: boolean }) =>
+    ipcRenderer.invoke('workspace-location-apply', opts),
+  relaunchForWorkspaceLocation: () => ipcRenderer.invoke('workspace-location-relaunch'),
+  onWorkspaceMigrationProgress: (callback: (progress: unknown) => void) => {
+    const handler = (_event: unknown, progress: unknown) => callback(progress)
+    ipcRenderer.on('workspace-location-progress', handler)
+    return () => ipcRenderer.removeListener('workspace-location-progress', handler)
+  },
+
   platform: process.platform,
   // OS UI language (e.g. "zh-CN"), read synchronously so the renderer can pick
   // a default language on first run. Falls back to '' if unavailable.

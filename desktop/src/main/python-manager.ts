@@ -7,6 +7,7 @@ import fs from 'fs'
 import http from 'http'
 import net from 'net'
 import crypto from 'crypto'
+import { workspaceLocationEnv } from './workspace-location'
 
 // Writable data dir for the packaged app (config.json, run.log, user data).
 // Lives in the user's home so it survives app updates and avoids writing into
@@ -788,6 +789,7 @@ export class PythonBackend extends EventEmitter {
       // COW_DESKTOP enables the lighter desktop runtime (no plugins, no MCP).
       // COW_DATA_DIR (packaged only) redirects writable data to ~/.cow so the
       // app bundle stays read-only; dev runs omit it and keep using the repo.
+      // COW_DEFAULT_WORKSPACE carries the workspace location the user picked.
       env: {
         ...process.env,
         // Recover the user's real PATH (login shell + common bin dirs) so the
@@ -801,6 +803,7 @@ export class PythonBackend extends EventEmitter {
         COW_WEB_PORT: String(this.port),
         COW_DESKTOP_TOKEN: this.desktopToken,
         ...(bundled ? { COW_DATA_DIR } : {}),
+        ...workspaceLocationEnv(),
         ...this.appConfigEnv(),
         COW_CLIENT_VERSION: app.getVersion(),
       },
@@ -845,7 +848,8 @@ export class PythonBackend extends EventEmitter {
         }
       }
       this.emit('log', `Python process exited with code ${code}`)
-      if (!wasReady && code !== 0 && code !== null) {
+      // A forced stop (taskkill /F) exits non-zero too; that is not a crash.
+      if (!wasReady && !this.shuttingDown && code !== 0 && code !== null) {
         this.fail('backend_crashed', this.withLastError(`The app exited during startup (code ${code})`))
         return
       }
@@ -1012,6 +1016,20 @@ export class PythonBackend extends EventEmitter {
         // already gone — ignore
       }
     }
+  }
+
+  /**
+   * Stop the backend and wait for its process to exit, so it no longer holds
+   * files in the workspace. Used before the workspace is moved.
+   */
+  async stopAndWait(timeoutMs = 8000): Promise<void> {
+    const proc = this.process
+    const exited =
+      proc && proc.exitCode === null && proc.signalCode === null
+        ? new Promise<void>((resolve) => proc.once('exit', () => resolve()))
+        : Promise.resolve()
+    this.stopSync()
+    await Promise.race([exited, new Promise<void>((resolve) => setTimeout(resolve, timeoutMs))])
   }
 
   async restart(): Promise<void> {
