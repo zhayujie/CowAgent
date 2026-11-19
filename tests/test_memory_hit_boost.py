@@ -37,11 +37,11 @@ def test_off_by_default_keeps_order(tmp_path):
 def test_frequent_hits_reorder_near_ties_within_the_cap(tmp_path):
     storage = _storage(tmp_path)
     for _ in range(8):
-        storage.record_hits([("b.md", 1, 2)])
+        storage.record_hits([(None, "b.md", 1, 2)])
     boosted = _manager(storage, 0.05)._apply_hit_boost(_results())
     assert [r.path for r in boosted] == ["b.md", "a.md"]
     assert boosted[0].score <= 0.48 * 1.25
-    assert storage.get_hit_stats([("b.md", 1, 2)])[("b.md", 1, 2)][0] == 8
+    assert storage.get_hit_stats([(None, "b.md", 1, 2)])[(None, "b.md", 1, 2)][0] == 8
 
 
 def test_old_chunks_table_gains_the_hit_columns(tmp_path):

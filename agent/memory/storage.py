@@ -118,7 +118,12 @@ class MemoryChunk:
 
 @dataclass
 class SearchResult:
-    """Search result with score and snippet"""
+    """Search result with score and snippet.
+
+    ``chunk_id`` is the storage-level chunk identity: hard-split pieces of one
+    long line share (path, start_line, end_line) but have distinct ids, so any
+    per-chunk keying (fusion dedup, hit bookkeeping) must use the id.
+    """
     path: str
     start_line: int
     end_line: int
@@ -126,6 +131,7 @@ class SearchResult:
     snippet: str
     source: str
     user_id: Optional[str] = None
+    chunk_id: Optional[str] = None
 
 
 class MemoryStorage:
@@ -822,8 +828,13 @@ class MemoryStorage:
         
         return self._row_to_chunk(row)
 
-    def record_hits(self, keys: List[Tuple[str, int, int]]):
-        """Count one retrieval hit per chunk key (path, start_line, end_line).
+    def record_hits(self, keys: List[Tuple[Optional[str], str, int, int]]):
+        """Count one retrieval hit per chunk key.
+
+        Keys are fusion keys ``(chunk_id, path, start_line, end_line)``: the
+        id pins the exact chunk, so hard-split sibling pieces of one line no
+        longer all get credited for a hit that matched a single piece. A
+        missing id falls back to the positional triple.
 
         Called from the search path, so it stays a single small transaction
         that only touches the matched rows. Callers are expected to wrap it in
@@ -831,32 +842,48 @@ class MemoryStorage:
         """
         if not keys:
             return
+        by_id = [key[0] for key in keys if key[0]]
+        triples = [key[1:] for key in keys if not key[0]]
         with self._lock:
             try:
-                self.conn.executemany(
-                    "UPDATE chunks SET hit_count = hit_count + 1, "
-                    "last_hit_at = strftime('%s', 'now') "
-                    "WHERE path = ? AND start_line = ? AND end_line = ?",
-                    [(path, start_line, end_line) for path, start_line, end_line in keys],
-                )
+                if by_id:
+                    self.conn.executemany(
+                        "UPDATE chunks SET hit_count = hit_count + 1, "
+                        "last_hit_at = strftime('%s', 'now') WHERE id = ?",
+                        [(chunk_id,) for chunk_id in by_id],
+                    )
+                if triples:
+                    self.conn.executemany(
+                        "UPDATE chunks SET hit_count = hit_count + 1, "
+                        "last_hit_at = strftime('%s', 'now') "
+                        "WHERE path = ? AND start_line = ? AND end_line = ?",
+                        triples,
+                    )
                 self.conn.commit()
             except Exception:
                 self.conn.rollback()
                 raise
 
     def get_hit_stats(
-        self, keys: List[Tuple[str, int, int]]
-    ) -> Dict[Tuple[str, int, int], Tuple[int, Optional[int]]]:
-        """Read (hit_count, last_hit_at) per chunk key; absent keys are omitted."""
-        stats: Dict[Tuple[str, int, int], Tuple[int, Optional[int]]] = {}
-        for path, start_line, end_line in keys:
-            row = self.conn.execute(
-                "SELECT hit_count, last_hit_at FROM chunks "
-                "WHERE path = ? AND start_line = ? AND end_line = ? LIMIT 1",
-                (path, start_line, end_line),
-            ).fetchone()
+        self, keys: List[Tuple[Optional[str], str, int, int]]
+    ) -> Dict[Tuple[Optional[str], str, int, int], Tuple[int, Optional[int]]]:
+        """Read (hit_count, last_hit_at) per fusion key; absent keys are omitted."""
+        stats: Dict[Tuple[Optional[str], str, int, int], Tuple[int, Optional[int]]] = {}
+        for key in keys:
+            chunk_id, path, start_line, end_line = key
+            if chunk_id:
+                row = self.conn.execute(
+                    "SELECT hit_count, last_hit_at FROM chunks WHERE id = ? LIMIT 1",
+                    (chunk_id,),
+                ).fetchone()
+            else:
+                row = self.conn.execute(
+                    "SELECT hit_count, last_hit_at FROM chunks "
+                    "WHERE path = ? AND start_line = ? AND end_line = ? LIMIT 1",
+                    (path, start_line, end_line),
+                ).fetchone()
             if row:
-                stats[(path, start_line, end_line)] = (
+                stats[key] = (
                     int(row["hit_count"] or 0),
                     row["last_hit_at"],
                 )
@@ -891,6 +918,7 @@ class MemoryStorage:
                 snippet=self._truncate_text(match.metadata["text"], 500),
                 source=match.metadata["source"],
                 user_id=match.metadata.get("user_id"),
+                chunk_id=match.id,
             )
             for match in matches
         ]
@@ -999,7 +1027,8 @@ class MemoryStorage:
                     score=self._bm25_rank_to_score(row['rank']),
                     snippet=self._truncate_text(row['text'], 500),
                     source=row['source'],
-                    user_id=row['user_id']
+                    user_id=row['user_id'],
+                    chunk_id=row['id'],
                 )
                 for row in rows
             ]
@@ -1105,7 +1134,8 @@ class MemoryStorage:
                     score=score,
                     snippet=self._truncate_text(row['text'], 500),
                     source=row['source'],
-                    user_id=row['user_id']
+                    user_id=row['user_id'],
+                    chunk_id=row['id'],
                 ))
             results.sort(key=lambda r: r.score, reverse=True)
             return results
@@ -1344,7 +1374,8 @@ class MemoryStorage:
                     score=self._bm25_rank_to_score(row['rank']),
                     snippet=self._truncate_text(row['text'], 500),
                     source=row['source'],
-                    user_id=row['user_id']
+                    user_id=row['user_id'],
+                    chunk_id=row['id'],
                 )
                 for row in rows
             ]
