@@ -356,7 +356,7 @@ class TerminalChannel(ChatChannel):
                 context["on_event"] = renderer.handle_event
                 self.produce(context)
             else:
-                raise Exception("context is None")
+                raise RuntimeError("context is None")
 
     def _shutdown(self):
         """Restore terminal state and terminate the whole process.
