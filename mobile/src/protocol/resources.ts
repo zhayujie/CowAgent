@@ -674,6 +674,8 @@ export interface DeviceInstance {
   id: string;
   name: string;
   version: string;
+  /** Run and named by whoever hosts it: no rename here. */
+  managed?: boolean;
 }
 
 /** `GET /api/devices`. */
@@ -683,9 +685,6 @@ export interface DeviceList {
   current: string;
   instance: DeviceInstance;
   password_set: boolean;
-  /** False when the hosting platform manages access; `manage_url` then leads there. */
-  pairing_available: boolean;
-  manage_url: string;
 }
 
 /** `POST /api/pairing`: a code another device can redeem for its own token. */

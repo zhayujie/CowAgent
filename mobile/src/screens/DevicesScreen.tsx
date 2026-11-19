@@ -24,7 +24,6 @@ import {
   removeDevice,
   renameDevice,
   renameInstance,
-  revokeOtherDevices,
 } from '../api/cowApi';
 import {ApiError, http} from '../api/http';
 import {Icon} from '../components/Icon';
@@ -42,7 +41,6 @@ import {SHEET_DISMISS_MS, Sheet} from '../components/Sheet';
 import {showToast, ToastHost} from '../components/Toast';
 import {EmptyState, GroupLabel, PageHeader} from '../components/ui';
 import {tr, trf} from '../i18n';
-import {openWebPage} from '../navigation/openWeb';
 import type {RootStackParamList} from '../navigation/types';
 import type {DeviceList, PairedDevice, PairingCode} from '../protocol/resources';
 import {describeConnectError, noteServerName, useServerStore} from '../store/serverStore';
@@ -55,7 +53,7 @@ type Props = StackScreenProps<RootStackParamList, 'Devices'>;
 
 type Pairing = PairingCode & {expiresAt: number; expired?: boolean};
 type MenuKey = 'rename' | 'remove' | 'signout';
-type Confirm = {kind: 'remove' | 'signout'; device: PairedDevice} | {kind: 'revoke'; n: number};
+type Confirm = {kind: 'remove' | 'signout'; device: PairedDevice};
 
 const REFRESH_MS = 30_000;
 const PAIR_POLL_MS = 2_000;
@@ -146,8 +144,6 @@ export function DevicesScreen({navigation}: Props) {
       const reason = e instanceof ApiError ? e.body?.reason : undefined;
       if (reason === 'local_only') {
         setLocalOnly(true);
-      } else if (reason === 'pairing_unavailable') {
-        load();
       } else {
         showToast(trf('devices_pair_failed', {error: describeConnectError(e)}));
       }
@@ -234,8 +230,6 @@ export function DevicesScreen({navigation}: Props) {
 
   const current = list?.current ?? '';
   const devices = list ? sortDevices(list.devices, current) : [];
-  const others = devices.filter(d => d.id !== current).length;
-  const canRevoke = !!current && others > 0;
 
   const onMenu = (key: MenuKey) => {
     const device = menu;
@@ -277,14 +271,8 @@ export function DevicesScreen({navigation}: Props) {
         await logout();
         return;
       }
-      if (c.kind === 'remove') {
-        await removeDevice(c.device.id);
-        setList(l => l && {...l, devices: l.devices.filter(d => d.id !== c.device.id)});
-      } else {
-        const res = await revokeOtherDevices();
-        showToast(trf('devices_revoked', {n: res.removed ?? 0}));
-        load();
-      }
+      await removeDevice(c.device.id);
+      setList(l => l && {...l, devices: l.devices.filter(d => d.id !== c.device.id)});
     } catch (e) {
       showToast(trf('devices_remove_failed', {error: describeConnectError(e)}));
     } finally {
@@ -296,13 +284,6 @@ export function DevicesScreen({navigation}: Props) {
     const c = confirmShown;
     if (!c) {
       return {title: '', message: '', ok: ''};
-    }
-    if (c.kind === 'revoke') {
-      return {
-        title: tr('devices_revoke_others'),
-        message: trf('devices_revoke_others_confirm', {n: c.n}),
-        ok: tr('devices_revoke_others'),
-      };
     }
     if (c.kind === 'signout') {
       return {
@@ -327,8 +308,8 @@ export function DevicesScreen({navigation}: Props) {
     );
   }
 
-  const pairingOff = !list.pairing_available;
-  const manageUrl = list.manage_url;
+  // A managed instance is named and reached the way whoever runs it set up.
+  const managed = !!list.instance.managed;
   const menuIsCurrent = !!menuShown && menuShown.id === current;
 
   return (
@@ -342,31 +323,17 @@ export function DevicesScreen({navigation}: Props) {
           icon={faServer}
           title={list.instance.name}
           detail={list.instance.version ? `CowAgent v${list.instance.version}` : undefined}
-          onPress={() => setRenaming('server')}
+          onPress={managed ? undefined : () => setRenaming('server')}
           last
         />
 
         <GroupLabel style={styles.group}>
           {devices.length ? `${tr('devices_connected')} (${devices.length})` : tr('devices_connected')}
         </GroupLabel>
-        {pairingOff ? (
-          <Notice>
-            {tr('devices_pairing_managed')}
-            {!!manageUrl && (
-              <Text style={styles.link} onPress={() => openWebPage(manageUrl)}>
-                {'  '}
-                {tr('devices_open_manage')}
-              </Text>
-            )}
-          </Notice>
-        ) : (
-          <>
-            {localOnly && <Notice>{tr('devices_local_only')}</Notice>}
-            {!list.password_set && <Notice>{tr('devices_no_password')}</Notice>}
-          </>
-        )}
+        {!managed && localOnly && <Notice>{tr('devices_local_only')}</Notice>}
+        {!managed && !list.password_set && <Notice>{tr('devices_no_password')}</Notice>}
 
-        {!pairingOff && <SettingRow icon={faQrcode} title={tr('devices_let_connect')} onPress={openPairing} />}
+        <SettingRow icon={faQrcode} title={tr('devices_let_connect')} onPress={openPairing} />
 
         {!devices.length ? (
           <View style={styles.empty}>
@@ -391,18 +358,10 @@ export function DevicesScreen({navigation}: Props) {
                   ) : undefined
                 }
                 onPress={() => setMenu(d)}
-                last={i === devices.length - 1 && !canRevoke}
+                last={i === devices.length - 1}
               />
             );
           })
-        )}
-        {canRevoke && (
-          <SettingRow
-            icon={faRightFromBracket}
-            title={tr('devices_revoke_others')}
-            onPress={() => setConfirm({kind: 'revoke', n: others})}
-            last
-          />
         )}
       </ScrollView>
 
@@ -557,7 +516,6 @@ const useStyles = makeStyles(t => ({
   body: {paddingTop: 4},
   firstGroup: {marginTop: 8},
   group: {marginTop: 26},
-  link: {fontWeight: '500', color: t.accent},
   empty: {alignItems: 'center', gap: 10, paddingVertical: 28},
   emptyText: {fontSize: 13, color: t.t3},
   sheetScroll: {flexGrow: 0, flexShrink: 1},

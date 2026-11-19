@@ -862,10 +862,6 @@ export async function removeDevice(id: string) {
   return http.request(`/api/devices/${encodeURIComponent(id)}`, {method: 'DELETE'});
 }
 
-export async function revokeOtherDevices() {
-  return http.request<{removed: number}>('/api/devices/revoke_others', {body: {}});
-}
-
 /** `baseUrl` is the address this app reaches the server at, offered to the other device among the LAN ones. */
 export async function createPairing(baseUrl: string) {
   return http.request<PairingCode>('/api/pairing', {body: {base_url: baseUrl}});
