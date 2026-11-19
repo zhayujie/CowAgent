@@ -1022,7 +1022,15 @@ class MemoryStorage:
         tokens (3+ chars) so it can serve as a true safety net for any query.
         """
         # Keep CJK runs separate from adjacent words, as in the trigram query.
-        cjk_words = _RE_CJK_WORDS.findall(query)
+        # Long CJK runs must not be matched as one exact substring here
+        # either: split them into the same overlapping shingles the trigram
+        # query uses, so a differently-phrased memory can still hit.
+        cjk_words = []
+        for run in _RE_CJK_WORDS.findall(query):
+            if len(run) >= 4:
+                cjk_words.extend(run[i:i + 3] for i in range(len(run) - 2))
+            else:
+                cjk_words.append(run)
         word_text = _RE_CONTAINS_CJK.sub(' ', query)
         words = cjk_words + [t for t in re.findall(r'\w+', word_text) if len(t) >= 3]
         if not words:
@@ -1241,14 +1249,32 @@ class MemoryStorage:
         Build FTS5 MATCH query for the trigram tokenizer.
         Extracts CJK sequences (including single characters) and Unicode words,
         joining them with AND so all terms must appear in the matched chunk.
+
+        A CJK run of 4+ characters is additionally split into overlapping
+        3-character shingles joined with OR: quoting the whole run demanded
+        the exact contiguous substring, so a natural-language query
+        ("怎么配置微信机器人") returned nothing for a memory phrased differently
+        ("如何配置微信机器人") even though the two share most of their
+        trigrams. The shingle OR keeps recall, and BM25 ranks documents that
+        share more shingles higher, so precision survives through ranking.
         """
         tokens = _RE_TRIGRAM_TOKENS.findall(raw_query)
         tokens = [t for t in tokens if t]
         if not tokens:
             return None
-        # Escape embedded double-quotes (FTS5 uses "" inside quoted phrases)
-        quoted = [f'"{t.replace(chr(34), chr(34)*2)}"' for t in tokens]
-        return ' AND '.join(quoted)
+
+        def _quote(text: str) -> str:
+            # Escape embedded double-quotes (FTS5 uses "" inside quoted phrases)
+            return f'"{text.replace(chr(34), chr(34) * 2)}"'
+
+        terms = []
+        for token in tokens:
+            if _RE_CONTAINS_CJK.search(token) and len(token) >= 4:
+                shingles = [token[i:i + 3] for i in range(len(token) - 2)]
+                terms.append("(" + " OR ".join(_quote(sh) for sh in shingles) + ")")
+            else:
+                terms.append(_quote(token))
+        return ' AND '.join(terms)
 
     def _search_fts5_trigram(
         self,
