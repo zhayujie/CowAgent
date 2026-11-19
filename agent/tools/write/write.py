@@ -54,7 +54,7 @@ class Write(BaseTool):
         :param args: Contains file path and content
         :return: Operation result
         """
-        path = args.get("path", "").strip()
+        path = (args.get("path") or "").strip()
         content = args.get("content", "")
         
         if not path:

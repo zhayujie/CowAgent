@@ -172,8 +172,10 @@ class Vision(BaseTool):
         return True
 
     def execute(self, args: Dict[str, Any]) -> ToolResult:
-        image = args.get("image", "").strip()
-        question = args.get("question", "").strip()
+        # Explicit nulls keep the key present, so the dict defaults never
+        # apply; `or` also covers them.
+        image = (args.get("image") or "").strip()
+        question = (args.get("question") or "").strip()
 
         if not image:
             return ToolResult.fail("Error: 'image' parameter is required")

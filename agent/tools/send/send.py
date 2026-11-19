@@ -52,7 +52,7 @@ class Send(BaseTool):
         :param args: Contains file path and optional message
         :return: File metadata for channel to send
         """
-        path = args.get("path", "").strip()
+        path = (args.get("path") or "").strip()
         message = args.get("message", "")
         
         if not path:
