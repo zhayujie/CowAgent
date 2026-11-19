@@ -20,6 +20,16 @@ MAX_FAILURES_PER_PROFILE = 30
 PROFILE_WINDOW_SECONDS = 3600
 PROFILE_LOCK_SECONDS = 900
 
+# Rebuild the per-client dicts once they grow past this size, keeping only
+# live buckets. The password endpoints are unauthenticated and the keys carry
+# client ids an attacker forges, so without a sweep every distinct attacker
+# key pins a bucket (or an expired lock entry) for the process lifetime.
+# _profile stays unswept: it is keyed by profile slug, a small fixed set.
+_CLIENT_SWEEP_THRESHOLD = 1024
+# At most one rebuild per interval: without it a flood turns the sweep into
+# per-call CPU amplification under the global lock.
+_CLIENT_SWEEP_INTERVAL = 60.0
+
 
 class LoginLimiter:
     def __init__(self, per_profile: bool = True):
@@ -29,6 +39,7 @@ class LoginLimiter:
         self._client_locked: Dict[Tuple[str, str], float] = {}
         self._profile: Dict[str, Deque[float]] = {}
         self._profile_locked: Dict[str, float] = {}
+        self._last_sweep = 0.0
 
     def locked_for(self, slug: str, client: str, now: float = None) -> int:
         """Seconds until ``client`` may try a password on ``slug`` again (0 = now)."""
@@ -37,9 +48,27 @@ class LoginLimiter:
             until = max(self._client_locked.get((slug, client), 0), self._profile_locked.get(slug, 0))
         return max(0, int(until - now + 0.999))
 
+    def _sweep_expired(self, now: float) -> None:
+        """Drop stale per-client state (caller holds the lock), at most once
+        per interval (see _CLIENT_SWEEP_INTERVAL)."""
+        if len(self._client) < _CLIENT_SWEEP_THRESHOLD:
+            return
+        if now - self._last_sweep < _CLIENT_SWEEP_INTERVAL:
+            return
+        self._last_sweep = now
+        self._client = {
+            key: hits for key, hits in self._client.items()
+            if hits and now - hits[-1] <= CLIENT_LOCK_SECONDS
+        }
+        self._client_locked = {
+            key: until for key, until in self._client_locked.items()
+            if until > now
+        }
+
     def failed(self, slug: str, client: str, now: float = None) -> None:
         now = now or time.time()
         with self._lock:
+            self._sweep_expired(now)
             key = (slug, client)
             hits = self._client.setdefault(key, deque())
             while hits and now - hits[0] > CLIENT_LOCK_SECONDS:
