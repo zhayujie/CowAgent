@@ -1,5 +1,6 @@
 import threading
 import time
+from types import SimpleNamespace
 
 import pytest
 
@@ -572,6 +573,64 @@ def test_no_live_source_leaves_the_mode_alone():
     assert result.status == "success"
     _, context, _ = bridge.calls[0]
     assert "delegated_permission_mode" not in context
+
+
+class _BlockingBridge(FakeBridge):
+    """A teammate whose turn blocks until its cancel event fires."""
+
+    def __init__(self):
+        super().__init__()
+        self.turn_started = threading.Event()
+
+    def agent_reply(self, query, context=None, on_event=None):
+        from agent.protocol import get_cancel_registry
+
+        registry = get_cancel_registry()
+        key = f"research::{context['request_id']}"
+        event = registry.get_event(key)
+        self.turn_started.set()
+        assert event is not None, "the delegated run registered no cancel event"
+        import time as _time
+        started = _time.monotonic()
+        while _time.monotonic() - started < 10:
+            if event.is_set():
+                return SimpleNamespace(type="text", content="stopped")
+            _time.sleep(0.01)
+        return SimpleNamespace(type="text", content="ran to the end")
+
+
+def test_stop_on_the_source_run_cancels_the_delegated_turn():
+    # The executor sets tool.cancel_event before running tools; a user Stop
+    # on the source run must reach the teammate's turn (the sub-agent path
+    # already forwards its parent's event — see test_subagent_parent_cancel).
+    bridge = _BlockingBridge()
+    tool = _tool(bridge=bridge)
+    parent_cancel = threading.Event()
+    tool.cancel_event = parent_cancel
+
+    result_box = []
+    thread = threading.Thread(
+        target=lambda: result_box.append(
+            tool.execute({"agent_id": "research", "task": "long job"})
+        ),
+        daemon=True,
+    )
+    thread.start()
+
+    assert bridge.turn_started.wait(5), "the delegated turn never started"
+    parent_cancel.set()
+    thread.join(5)
+
+    assert not thread.is_alive(), "the delegation outlived the parent's Stop"
+    assert "ran to the end" not in str(getattr(result_box[0], "result", ""))
+
+
+def test_a_delegation_without_a_parent_event_runs_normally():
+    tool = _tool(bridge=FakeBridge())
+
+    result = tool.execute({"agent_id": "research", "task": "quick job"})
+
+    assert result.status == "success"
 
 
 def test_a_failing_lookup_does_not_break_the_delegation():
