@@ -41,7 +41,8 @@ interface ChatState {
   getSession: (sid: string) => SessionRuntime
   ensureSession: (sid: string) => void
 
-  send: (sid: string, text: string, attachments: Attachment[]) => Promise<void>
+  /** `display` is shown for the turn instead of `text`, which the agent still gets. */
+  send: (sid: string, text: string, attachments: Attachment[], display?: string) => Promise<void>
   cancel: (sid: string) => Promise<void>
   regenerate: (sid: string, botMessageId: string) => Promise<void>
   editUserMessage: (sid: string, messageId: string) => { text: string; attachments: Attachment[] } | null
@@ -261,6 +262,7 @@ function historyToMessage(m: HistoryMessage): ChatMessage {
       id: uid('user'),
       role: 'user',
       content: text,
+      display: m.display || undefined,
       timestamp: m.created_at,
       userSeq: m._seq,
       attachments,
@@ -431,6 +433,55 @@ export const useChatStore = create<ChatState>((set, get) => {
       closeStream()
     }
 
+    // Deltas, reasoning and tool progress arrive one token or line per event,
+    // often in bursts. Each commit is a synchronous store update that
+    // re-renders the conversation, so a long session streaming its thinking
+    // froze the window until the burst was over. They are buffered and
+    // committed at most once per frame.
+    let pendingText = ''
+    let pendingTarget = ''
+    let pendingReasoning = ''
+    let pendingReasoningTarget = ''
+    // tool_progress replaces a card's result, so only the latest per card counts.
+    const pendingProgress = new Map<string, string | undefined>()
+    let flushFrame: number | null = null
+    const flushDeltas = () => {
+      if (flushFrame !== null) {
+        cancelAnimationFrame(flushFrame)
+        flushFrame = null
+      }
+      if (pendingReasoning) {
+        const text = pendingReasoning
+        pendingReasoning = ''
+        updateMsg(sid, pendingReasoningTarget, (m) => ({ ...m, reasoning: (m.reasoning || '') + text }))
+      }
+      if (pendingText) {
+        const text = pendingText
+        pendingText = ''
+        updateMsg(sid, pendingTarget, (m) => ({ ...m, content: m.content + text }))
+      }
+      if (pendingProgress.size) {
+        const progress = new Map(pendingProgress)
+        pendingProgress.clear()
+        const hit = (s: MessageStep) =>
+          s.type === 'tool' && !!s.id && progress.has(s.id)
+        patchMessages(sid, (msgs) =>
+          msgs.map((m) =>
+            (m.steps || []).some(hit)
+              ? { ...m, steps: m.steps!.map((s) => (hit(s) ? { ...s, result: progress.get(s.id!) } : s)) }
+              : m
+          )
+        )
+      }
+    }
+    const scheduleFlush = () => {
+      if (flushFrame !== null) return
+      flushFrame = requestAnimationFrame(() => {
+        flushFrame = null
+        flushDeltas()
+      })
+    }
+
     es.onmessage = (event) => {
       let data: StreamEvent
       try {
@@ -438,17 +489,30 @@ export const useChatStore = create<ChatState>((set, get) => {
       } catch {
         return // keepalive
       }
+      // Every other event may read or replace the bubble's content.
+      if (data.type !== 'delta' && data.type !== 'reasoning' && data.type !== 'tool_progress') flushDeltas()
       // Stopped: nothing more is said, but a step already running still ends.
       if (detached() && (data.type === 'delta' || data.type === 'reasoning')) return
 
       switch (data.type) {
-        case 'reasoning':
-          updateMsg(sid, speaking(), (m) => ({ ...m, reasoning: (m.reasoning || '') + (data.content || '') }))
+        case 'reasoning': {
+          const target = speaking()
+          // Commit buffered answer text first so the two never reorder.
+          if (pendingText || target !== pendingReasoningTarget) flushDeltas()
+          pendingReasoningTarget = target
+          pendingReasoning += data.content || ''
+          scheduleFlush()
           break
+        }
 
-        case 'delta':
-          updateMsg(sid, speaking(), (m) => ({ ...m, content: m.content + (data.content || '') }))
+        case 'delta': {
+          const target = speaking()
+          if (pendingReasoning || target !== pendingTarget) flushDeltas()
+          pendingTarget = target
+          pendingText += data.content || ''
+          scheduleFlush()
           break
+        }
 
         // A teammate given work answers as itself: its reply, reasoning and
         // tool calls arrive as the same events as anyone's, bracketed by this
@@ -519,12 +583,9 @@ export const useChatStore = create<ChatState>((set, get) => {
           break
 
         case 'tool_progress':
-          updateCard(data.tool_call_id, (m) => ({
-            ...m,
-            steps: (m.steps || []).map((s) =>
-              s.type === 'tool' && s.id === data.tool_call_id ? { ...s, result: data.content } : s
-            ),
-          }))
+          if (!data.tool_call_id) break
+          pendingProgress.set(data.tool_call_id, data.content)
+          scheduleFlush()
           break
 
         case 'tool_end':
@@ -716,6 +777,7 @@ export const useChatStore = create<ChatState>((set, get) => {
     }
 
     es.onerror = () => {
+      flushDeltas()
       // Stream closed (often the normal end after `done`/tail). Finalize.
       if (ended) finishStream()
       else dropStream()
@@ -740,11 +802,12 @@ export const useChatStore = create<ChatState>((set, get) => {
       if (!get().sessions[sid]) patchSession(sid, { ...EMPTY })
     },
 
-    send: async (sid, text, attachments) => {
+    send: async (sid, text, attachments, display) => {
       const userMsg: ChatMessage = {
         id: uid('user'),
         role: 'user',
         content: text,
+        display: display || undefined,
         timestamp: Date.now() / 1000,
         attachments: attachments.length ? attachments : undefined,
       }
@@ -776,6 +839,7 @@ export const useChatStore = create<ChatState>((set, get) => {
           attachments: attachments.length ? attachments : undefined,
           agentId: owner || undefined,
           speakerAgentId: addressed && addressed !== owner ? addressed : undefined,
+          display: display || undefined,
         })
         // The server is the authority on who took the turn; repaint the live
         // bubble if it resolved the mention differently than we guessed.
@@ -792,7 +856,7 @@ export const useChatStore = create<ChatState>((set, get) => {
           updateMsg(sid, botId, (m) => ({ ...m, content: res.inline_reply || '', isStreaming: false }))
           patchSession(sid, { isStreaming: false })
         } else {
-          updateMsg(sid, botId, (m) => ({ ...m, error: 'send failed', isStreaming: false }))
+          updateMsg(sid, botId, (m) => ({ ...m, error: res.message || 'send failed', isStreaming: false }))
           patchSession(sid, { isStreaming: false })
         }
       } catch (err) {
@@ -857,7 +921,7 @@ export const useChatStore = create<ChatState>((set, get) => {
       // drop the user+bot messages locally from idx-? : remove from the user msg onward
       const userIdx = s.messages.indexOf(userMsg)
       patchMessages(sid, (msgs) => msgs.slice(0, userIdx))
-      await get().send(sid, userMsg.content, userMsg.attachments || [])
+      await get().send(sid, userMsg.content, userMsg.attachments || [], userMsg.display)
     },
 
     editUserMessage: (sid, messageId) => {

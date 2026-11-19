@@ -103,6 +103,29 @@ const App: React.FC = () => {
     }
   }, [backend.status, backend.baseUrl])
 
+  // A token can stop working while the app is open (the password was changed
+  // in a browser, or it expired). Confirm with the backend before showing the
+  // login screen: a request sent just before this client changed the password
+  // fails with the old token even though the new one is already in place.
+  useEffect(() => {
+    if (authState !== 'ok') return
+    let checking = false
+    apiClient.onUnauthorized(() => {
+      if (checking) return
+      checking = true
+      apiClient
+        .authCheck()
+        .then((res) => {
+          if (res.auth_required && !res.authenticated) setAuthState('need_login')
+        })
+        .catch(() => {})
+        .finally(() => {
+          checking = false
+        })
+    })
+    return () => apiClient.onUnauthorized(null)
+  }, [authState])
+
   // First-run check: once the backend is ready, decide whether to show the
   // onboarding wizard. It's config-driven — shown whenever the chat model isn't
   // configured (and not dismissed earlier this session); no persisted flag.

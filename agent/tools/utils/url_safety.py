@@ -13,12 +13,47 @@ link-local (incl. the 169.254.169.254 cloud-metadata endpoint) and otherwise
 reserved addresses are rejected, for both IPv4 and IPv6.
 """
 
+import contextvars
 import ipaddress
 import os
 import socket
+from contextlib import contextmanager
+from typing import Iterable, Optional
 from urllib.parse import urlparse
 
 import requests
+
+# Set by strict_url_guard() for the code running inside it: SSRF protection is
+# forced on there, and hosts may be further limited to an allowlist.
+_STRICT_GUARD: contextvars.ContextVar = contextvars.ContextVar("cow_strict_url_guard", default=None)
+
+
+@contextmanager
+def strict_url_guard(allowed_domains: Optional[Iterable[str]] = None):
+    """Force SSRF protection for the calls made inside this block.
+
+    ``allowed_domains`` (when non-empty) also restricts every URL, redirect
+    hops included, to those hosts and their subdomains. Used for callers that
+    act on behalf of someone less trusted than the person running the
+    instance, regardless of the instance-wide SSRF setting.
+    """
+    domains = tuple(d.strip().lower().lstrip(".") for d in (allowed_domains or ()) if d and d.strip())
+    token = _STRICT_GUARD.set({"domains": domains})
+    try:
+        yield
+    finally:
+        _STRICT_GUARD.reset(token)
+
+
+def host_allowed(hostname: str, domains: Iterable[str]) -> bool:
+    """Whether ``hostname`` is one of ``domains`` or a subdomain of one."""
+    host = (hostname or "").strip().lower().rstrip(".")
+    if not host:
+        return False
+    for domain in domains:
+        if host == domain or host.endswith("." + domain):
+            return True
+    return False
 
 
 def _ssrf_protection_enabled() -> bool:
@@ -28,6 +63,8 @@ def _ssrf_protection_enabled() -> bool:
     global config; any failure to read config is treated as "disabled" so
     the guard never breaks normal fetching.
     """
+    if _STRICT_GUARD.get() is not None:
+        return True
     env = os.getenv("WEB_SECURITY_SSRF_PROTECTION")
     if env is not None:
         return env.strip().lower() in ("1", "true", "yes", "on")
@@ -47,6 +84,10 @@ def _is_blocked_ip(ip: "ipaddress._BaseAddress") -> bool:
         or ip.is_reserved
         or ip.is_multicast
         or ip.is_unspecified
+        # Anything else outside the public range, e.g. the 100.64.0.0/10
+        # shared address space, which is_private does not cover and which
+        # hosts Alibaba Cloud's 100.100.100.200 metadata service.
+        or not ip.is_global
     )
 
 
@@ -66,13 +107,26 @@ def assert_public_ip(ip_str: str) -> None:
         )
 
 
+def _ip_literal(hostname: str):
+    """The address when ``hostname`` is written as an IP, otherwise None."""
+    try:
+        return ipaddress.ip_address(hostname)
+    except ValueError:
+        return None
+
+
 def validate_url_safe(url: str) -> None:
     """Reject URLs that target private/loopback/link-local addresses (SSRF guard).
 
-    No-op when SSRF protection is disabled (the default). When enabled,
-    resolves the hostname to its IP address(es) and blocks any that fall
-    into non-public ranges. Also rejects URLs with no host, non-HTTP(S)
-    schemes, or hosts that fail DNS resolution.
+    No-op when SSRF protection is disabled (the default). When enabled:
+
+    - A host on ``strict_url_guard``'s domain allowlist is trusted by name.
+      Local DNS is not consulted: proxies often return a synthetic address
+      for every name, which is not the host the request will reach.
+    - Any other host is resolved and every address must be public.
+    - A URL whose host is a literal non-public IP is always refused.
+
+    Also rejects URLs with no host or a non-HTTP(S) scheme.
 
     Raises:
         ValueError: if the URL targets a disallowed address.
@@ -88,8 +142,24 @@ def validate_url_safe(url: str) -> None:
     if not hostname:
         raise ValueError("URL has no hostname")
 
+    guard = _STRICT_GUARD.get()
+    ip = _ip_literal(hostname)
+    if ip is not None:
+        if _is_blocked_ip(ip):
+            raise ValueError(
+                f"URL resolves to a non-public address ({hostname}), "
+                f"request blocked for security"
+            )
+        if guard and guard["domains"] and not host_allowed(hostname, guard["domains"]):
+            raise ValueError(f"Host {hostname} is not in the allowed domain list")
+        return
+
+    if guard and guard["domains"]:
+        if not host_allowed(hostname, guard["domains"]):
+            raise ValueError(f"Host {hostname} is not in the allowed domain list")
+        return
+
     try:
-        # Resolve all addresses for the hostname.
         addr_infos = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
     except socket.gaierror:
         raise ValueError(f"Cannot resolve hostname: {hostname}")

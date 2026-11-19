@@ -117,7 +117,7 @@ def test_feishu_still_sends_a_plain_file(monkeypatch):
     uploads = []
     ch = _feishu_channel(monkeypatch, posts)
     ch._upload_video_url = lambda *a: uploads.append(a)
-    ch._upload_file_url = lambda url, token: "fk-2"
+    ch._upload_file_url = lambda url, token, file_name="": "fk-2"
 
     ch.send(Reply(ReplyType.FILE, "file:///srv/cow/notes.txt"), _feishu_context())
 

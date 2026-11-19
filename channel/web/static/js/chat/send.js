@@ -24,23 +24,7 @@ async function regenerateResponse(botMsgEl) {
     // (because /message will create a fresh user message + new bot reply)
     // Must await to ensure delete completes before /message is sent
     const userSeq = prevEl.dataset.seq;
-    if (userSeq) {
-        try {
-            const resp = await fetch('/api/messages/delete', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    session_id: sessionId, 
-                    user_seq: parseInt(userSeq),
-                    delete_user: true
-                })
-            });
-            const data = await resp.json();
-            if (data.status === 'success') console.log(`Deleted ${data.deleted} old messages`);
-        } catch (err) {
-            console.error('Failed to delete old messages:', err);
-        }
-    }
+    if (userSeq && !await deletePersistedMessage(userSeq, { delete_user: true })) return;
 
     // Remove both the old user message and bot message from DOM
     if (prevEl.parentNode) prevEl.parentNode.removeChild(prevEl);
@@ -77,7 +61,7 @@ async function regenerateResponse(botMsgEl) {
                     addBotMessage(data.inline_reply, new Date());
                 } else if (data.stream) {
                     setSendBtnCancelMode(data.request_id);
-                    startSSE(data.request_id, loadingEl, timestamp, null);
+                    startSSE(data.request_id, loadingEl, timestamp);
                 } else {
                     loadingContainers[data.request_id] = loadingEl;
                 }
@@ -171,6 +155,11 @@ function sendMessage() {
             if (data.status === 'success') {
                 rememberLiveSpeaker(data);
                 setLoadingSpeaker(loadingEl, data.request_id);
+                // Title on acceptance, not on the reply's "done": a session the
+                // user leaves mid-reply stops rendering, and would never be titled.
+                if (titleInfo && !data.inline_reply) {
+                    generateSessionTitle(titleInfo.sid, titleInfo.userMsg, '');
+                }
                 if (data.inline_reply) {
                     // Channel handled synchronously (e.g. /cancel fast-path);
                     // render as a bot bubble and skip SSE entirely.
@@ -178,7 +167,7 @@ function sendMessage() {
                     addBotMessage(data.inline_reply, new Date());
                 } else if (data.stream) {
                     setSendBtnCancelMode(data.request_id);
-                    startSSE(data.request_id, loadingEl, timestamp, titleInfo);
+                    startSSE(data.request_id, loadingEl, timestamp);
                 } else {
                     loadingContainers[data.request_id] = loadingEl;
                 }
@@ -219,7 +208,7 @@ function reloadHistoryView() {
 
 // `resume` ({ el, afterSeq }) picks up a reply already in flight: events up to
 // afterSeq are skipped, and `el`, the bubble of its stored steps, is written on.
-function startSSE(requestId, loadingEl, timestamp, titleInfo, replayItems, resume) {
+function startSSE(requestId, loadingEl, timestamp, replayItems, resume) {
     let botEl = null;
     let stepsEl = null;    // .agent-steps  (thinking summaries + tool indicators)
     let contentEl = null;  // .answer-content (final streaming answer)
@@ -330,7 +319,7 @@ function startSSE(requestId, loadingEl, timestamp, titleInfo, replayItems, resum
             <span class="bot-face">${agentAvatarHTML(speaker, 32)}</span>
             <div class="min-w-0 flex-1 max-w-[85%]">
                 ${speakerName}
-                <div class="bg-white dark:bg-[#1A1A1A] border border-slate-200 dark:border-white/10 rounded-2xl px-4 py-3 text-sm leading-relaxed msg-content text-slate-700 dark:text-slate-200">
+                <div class="bg-panel border border-slate-200 dark:border-white/10 rounded-2xl px-4 py-3 text-sm leading-relaxed msg-content text-slate-700 dark:text-slate-200">
                     <div class="agent-steps"></div>
                     <div class="answer-content sse-streaming"></div>
                     <div class="media-content"></div>
@@ -383,9 +372,34 @@ function startSSE(requestId, loadingEl, timestamp, titleInfo, replayItems, resum
     // can close it. During replay there is no live connection (null).
     let currentEs = null;
 
+    // Deltas may arrive in a burst (an upstream that buffers the reply and
+    // flushes it at once). Re-rendering the whole answer per delta would then
+    // block the main thread, so renders are coalesced to at most one per frame.
+    let deltaRenderRaf = null;
+    function renderAccumulatedText() {
+        if (contentEl) contentEl.innerHTML = renderMarkdown(accumulatedText);
+    }
+    function scheduleDeltaRender() {
+        if (deltaRenderRaf !== null) return;
+        deltaRenderRaf = requestAnimationFrame(() => {
+            deltaRenderRaf = null;
+            renderAccumulatedText();
+            scrollChatToBottom();
+        });
+    }
+    // Any non-delta event may read or replace contentEl, so the pending text
+    // must be on screen before it runs.
+    function flushDeltaRender() {
+        if (deltaRenderRaf === null) return;
+        cancelAnimationFrame(deltaRenderRaf);
+        deltaRenderRaf = null;
+        renderAccumulatedText();
+    }
+
     // Render one SSE event into the bubble. Used by the live handler and by
     // re-attach replay alike, so both paths produce identical UI.
     function processSSEItem(item) {
+            if (item.type !== 'delta') flushDeltaRender();
             if (item.type === 'reasoning') {
                 ensureBotEl();
                 reasoningText += item.content;
@@ -456,8 +470,7 @@ function startSSE(requestId, loadingEl, timestamp, titleInfo, replayItems, resum
                     reasoningText = '';
                 }
                 accumulatedText += item.content;
-                contentEl.innerHTML = renderMarkdown(accumulatedText);
-                scrollChatToBottom();
+                scheduleDeltaRender();
 
             } else if (item.type === 'message_end') {
                 if (item.has_tool_calls && accumulatedText.trim()) {
@@ -654,8 +667,9 @@ function startSSE(requestId, loadingEl, timestamp, titleInfo, replayItems, resum
             } else if (item.type === 'image') {
                 ensureBotEl();
                 const imgEl = document.createElement('img');
+                imgEl.onerror = () => _onImageLoadError(imgEl);
                 imgEl.src = item.content;
-                imgEl.alt = 'screenshot';
+                imgEl.alt = item.file_name || 'image';
                 imgEl.style.cssText = 'max-width:600px;border-radius:8px;margin:8px 0;cursor:zoom-in;box-shadow:0 1px 4px rgba(0,0,0,0.1);';
                 imgEl.onclick = () => _openImageLightbox(imgEl.src);
                 mediaEl.appendChild(imgEl);
@@ -815,12 +829,7 @@ function startSSE(requestId, loadingEl, timestamp, titleInfo, replayItems, resum
 
                 if (typeof maybeAutoOpenArtifact === 'function') maybeAutoOpenArtifact();
 
-                if (titleInfo) {
-                    generateSessionTitle(titleInfo.sid, titleInfo.userMsg, '');
-                    titleInfo = null;
-                } else if (sessionPanelOpen) {
-                    loadSessionList();
-                }
+                if (sessionPanelOpen) loadSessionList();
 
             } else if (item.type === 'voice_attach') {
                 // TTS finished — attach a playable audio element to the

@@ -22,11 +22,12 @@ import threading
 # second, separate ``app`` module). The registry is a single shared cell every
 # caller sees — see common/channel_registry.py and issue #3120.
 from common.channel_registry import get_channel_manager, set_channel_manager  # noqa: F401 - re-exported for `from app import get_channel_manager`
+from common.deployment import is_desktop
 
 # Desktop mode: a lighter runtime for the packaged Electron client. Plugins are
 # loaded in a background thread (so command plugins like cow_cli/godcmd work
 # without slowing startup), while MCP warmup is still skipped to keep it fast.
-DESKTOP_MODE = os.environ.get("COW_DESKTOP") == "1"
+DESKTOP_MODE = is_desktop()
 
 
 def _parse_channel_type(raw) -> list:

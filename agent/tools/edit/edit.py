@@ -21,6 +21,7 @@ from agent.tools.utils.diff import (
     looks_like_line_numbered_block,
     reindent_replacement,
     strip_line_number_prefixes,
+    trim_outer_newlines,
 )
 from agent.tools.utils.file_state import note_write, staleness_warning
 from agent.tools.utils.memory_path import feeds_memory_index
@@ -178,6 +179,11 @@ class Edit(BaseTool):
                 for start, end in reversed(spans):
                     replacement = normalized_new_text
                     if not exact:
+                        # A fuzzy match leaves oldText's outer newlines in the
+                        # file, so newText must not add its own copies of them.
+                        replacement = trim_outer_newlines(
+                            normalized_old_text, replacement, base_content, start, end
+                        )
                         # A fuzzy match swallowed the file's own indentation;
                         # re-anchor the replacement to it instead of silently
                         # reindenting the line to whatever the model sent.

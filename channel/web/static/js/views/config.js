@@ -228,10 +228,14 @@ function initConfigView(data) {
 
     const pwdInput = document.getElementById('cfg-password');
     const maskedPwd = data.web_password_masked || '';
+    // A managed deployment signs the owner in; a password left over from
+    // before stays visible so it can still be cleared.
+    document.getElementById('cfg-password-row').classList.toggle('hidden', !!data.managed && !maskedPwd);
     pwdInput.value = maskedPwd;
     pwdInput.dataset.masked = maskedPwd ? '1' : '';
     pwdInput.dataset.maskedVal = maskedPwd;
     pwdInput.classList.toggle('cfg-key-masked', !!maskedPwd);
+    updatePasswordStrength('');
 
     if (maskedPwd) {
         pwdInput.placeholder = '••••••••';
@@ -241,14 +245,24 @@ function initConfigView(data) {
 
     if (!pwdInput._cfgBound) {
         pwdInput.addEventListener('focus', function() {
-            if (this.dataset.masked === '1') {
-                this.value = '';
-                this.dataset.masked = '';
-                this.classList.remove('cfg-key-masked');
-            }
+            if (this.dataset.masked !== '1') return;
+            setTimeout(() => this.setSelectionRange(this.value.length, this.value.length));
+        });
+        // The mask stands in for a password this page never sees, so it can
+        // only go as a whole: deleting empties the field, typing replaces it.
+        pwdInput.addEventListener('beforeinput', function(e) {
+            if (this.dataset.masked !== '1') return;
+            e.preventDefault();
+            this.value = e.inputType.startsWith('insert')
+                ? (e.data ?? e.dataTransfer?.getData('text/plain') ?? '')
+                : '';
+            this.dataset.masked = '';
+            this.classList.remove('cfg-key-masked');
+            updatePasswordStrength(this.value.trim());
         });
         pwdInput.addEventListener('input', function() {
             this.dataset.masked = '';
+            updatePasswordStrength(this.value.trim());
         });
         pwdInput._cfgBound = true;
     }
@@ -292,10 +306,16 @@ function onProviderChange(pid) {
     const keyWrap = document.getElementById('cfg-api-key-wrap');
     const keyInput = document.getElementById('cfg-api-key');
 
-    // Only LinkAI (an aggregation platform) gets a link to its console for
-    // managing the aggregated key; other providers manage keys on their sites.
+    // Aggregators get a link to the console that issues their key; other
+    // providers manage keys on their own sites. Providers with base presets
+    // link to the console of the preset matching the API Base (see
+    // syncCfgManageKey).
     const cfgManageKey = document.getElementById('cfg-manage-key');
-    if (cfgManageKey) cfgManageKey.classList.toggle('hidden', cfgProviderValue !== 'linkai');
+    if (cfgManageKey) {
+        if (!cfgManageKey.dataset.defaultHref) cfgManageKey.dataset.defaultHref = cfgManageKey.href;
+        cfgManageKey.href = cfgManageKey.dataset.defaultHref;
+        cfgManageKey.classList.toggle('hidden', cfgProviderValue !== 'linkai');
+    }
     if (keyField) {
         keyWrap.classList.remove('hidden');
         keyInput.classList.add('cfg-key-masked');
@@ -337,11 +357,17 @@ function onProviderChange(pid) {
     const apiBaseInput = document.getElementById('cfg-api-base');
     if (p.api_base_key) {
         document.getElementById('cfg-api-base-wrap').classList.remove('hidden');
-        apiBaseInput.value = configApiBases[p.api_base_key] || p.api_base_default || '';
+        const presets = p.api_base_presets || [];
+        // Unset bases follow the UI language: the China site for zh, otherwise the global one.
+        const presetBase = presets.length ? presets[currentLang === 'zh' ? 0 : presets.length - 1].value : '';
+        apiBaseInput.value = configApiBases[p.api_base_key] || presetBase || p.api_base_default || '';
         // Hint the version-path tail (e.g. /v1) so users are reminded to
         // include it themselves. We don't auto-rewrite anything server-side.
         apiBaseInput.placeholder = p.api_base_placeholder || 'https://...';
+        apiBaseInput.oninput = presets.length ? () => syncCfgManageKey(presets) : null;
+        if (presets.length) syncCfgManageKey(presets);
     } else {
+        apiBaseInput.oninput = null;
         document.getElementById('cfg-api-base-wrap').classList.add('hidden');
         apiBaseInput.value = '';
         apiBaseInput.placeholder = 'https://...';
@@ -442,6 +468,14 @@ function getSelectedModel() {
         return document.getElementById('cfg-model-custom').value.trim();
     }
     return cfgModelValue;
+}
+
+function syncCfgManageKey(presets) {
+    const link = document.getElementById('cfg-manage-key');
+    if (!link) return;
+    const active = matchBasePreset(presets, document.getElementById('cfg-api-base').value);
+    link.classList.toggle('hidden', !(active && active.keys_url));
+    if (active && active.keys_url) link.href = active.keys_url;
 }
 
 function toggleApiKeyVisibility() {
@@ -591,6 +625,41 @@ function saveGlobalPermission(mode) {
     .catch(() => showStatus('cfg-password-status', 'config_save_error', true));
 }
 
+const PASSWORD_MIN_LENGTH = 6;
+const COMMON_PASSWORDS = new Set([
+    'password', 'passw0rd', 'password1', 'admin', 'admin123', 'administrator', 'root123',
+    'qwerty', 'qwerty123', 'iloveyou', '1q2w3e4r', 'a123456', '123456a', 'abc123456', 'woaini1314',
+]);
+const PASSWORD_SEQUENCES = ['01234567890', '9876543210', 'abcdefghijklmnopqrstuvwxyz', 'qwertyuiopasdfghjklzxcvbnm'];
+const PASSWORD_STRENGTH_COLOR = {
+    short: 'text-red-500', weak: 'text-red-500', medium: 'text-amber-500', strong: 'text-primary-500',
+};
+
+// A rough hint while typing, not a guarantee: length and character variety,
+// with common and keyboard-run passwords always rated weak.
+function passwordStrength(pwd) {
+    if (pwd.length < PASSWORD_MIN_LENGTH) return 'short';
+    const lower = pwd.toLowerCase();
+    if (COMMON_PASSWORDS.has(lower) || /^(.)\1+$/.test(pwd) || PASSWORD_SEQUENCES.some(s => s.includes(lower))) return 'weak';
+    const kinds = [/[a-z]/, /[A-Z]/, /\d/, /[^A-Za-z0-9]/].filter(re => re.test(pwd)).length;
+    if ((pwd.length >= 10 && kinds >= 3) || (pwd.length >= 14 && kinds >= 2)) return 'strong';
+    if (pwd.length >= 8 && kinds >= 2) return 'medium';
+    return 'weak';
+}
+
+function updatePasswordStrength(pwd) {
+    const hint = document.getElementById('cfg-password-hint');
+    const el = document.getElementById('cfg-password-strength');
+    if (!hint || !el) return;
+    const level = pwd ? passwordStrength(pwd) : '';
+    hint.classList.toggle('hidden', !!level);
+    el.classList.toggle('hidden', !level);
+    el.className = el.className.replace(/\btext-(red|amber|primary)-500\b/g, '').trim();
+    if (!level) return;
+    el.classList.add(PASSWORD_STRENGTH_COLOR[level]);
+    el.textContent = t(`config_password_${level}`);
+}
+
 function savePasswordConfig() {
     const input = document.getElementById('cfg-password');
     if (input.dataset.masked === '1') {
@@ -598,6 +667,10 @@ function savePasswordConfig() {
         return;
     }
     const newPwd = input.value.trim();
+    if (newPwd && passwordStrength(newPwd) === 'short') {
+        showStatus('cfg-password-status', 'config_password_short', true);
+        return;
+    }
     const btn = document.getElementById('cfg-password-save');
     btn.disabled = true;
     fetch('/config', {
@@ -609,6 +682,7 @@ function savePasswordConfig() {
     .then(data => {
         console.log('[Password Config] Response:', data); // Debug
         if (data.status === 'success') {
+            updatePasswordStrength('');
             if (newPwd) {
                 showStatus('cfg-password-status', 'config_password_changed', false);
                 // Mark as masked so user needs to re-enter to change again
@@ -662,7 +736,7 @@ function _externalApiRevealed() {
 }
 
 function externalApiExample(lang, reveal) {
-    const base = `${window.location.origin}/v1`;
+    const base = `${integrationBaseUrl()}/v1`;
     const raw = externalApiState.api_key || '';
     const key = reveal ? raw : raw.slice(0, 7) + '********' + raw.slice(-4);
     if (lang === 'python') {
@@ -703,7 +777,7 @@ function renderExternalApi() {
     document.getElementById('cfg-api-enabled').checked = !!s.enabled;
     document.getElementById('cfg-api-detail').classList.toggle('hidden', !s.enabled);
     if (!s.enabled) return;
-    document.getElementById('cfg-api-base-url').value = `${window.location.origin}/v1`;
+    document.getElementById('cfg-api-base-url').value = `${integrationBaseUrl()}/v1`;
     document.getElementById('cfg-api-token').value = s.api_key || '';
     document.querySelectorAll('.cfg-api-lang').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.lang === externalApiLang);
@@ -780,11 +854,12 @@ function copyExternalApiField(id, btn) {
 }
 
 function switchConfigTab(tab) {
-    ['basic', 'models'].forEach(name => {
+    ['basic', 'models', 'integrations'].forEach(name => {
         document.getElementById(`config-tab-${name}`)?.classList.toggle('active', name === tab);
         document.getElementById(`config-panel-${name}`)?.classList.toggle('hidden', name !== tab);
     });
     if (tab === 'models') loadModelsView();
+    if (tab === 'integrations') loadIntegrationsView();
     // Re-pull /config when returning to Basic: a provider added on the Models
     // tab must show up in the basic main-model provider picker without a manual
     // page refresh. loadConfigView re-renders from the fresh provider list.

@@ -183,6 +183,13 @@ body[data-wallpaper='on'] .bg-base {
   background-color: color-mix(in srgb, var(--bg-base) 45%, transparent);
 }
 
+/* The structural panels nest (app shell > nav rail / header / content), so
+   only the outermost one tints; otherwise each layer compounds and the
+   wallpaper all but disappears. Fixed full-screen overlays keep their fill. */
+body[data-wallpaper='on'] .bg-base .bg-base:not(.fixed) {
+  background-color: transparent;
+}
+
 /* Glass mode (wallpaper + glass theme): turn the common surface panels
    translucent + blurred so the wallpaper reads behind the whole UI, with a
    subtle top border-highlight for a premium, layered material feel. All via
@@ -201,6 +208,26 @@ body[data-wallpaper='on'] .border-default {
   border-color: color-mix(in srgb, var(--border-default) 78%, rgba(255, 255, 255, 0.12));
 }
 
+/* The composer's full-width bar would cut a band across the wallpaper; drop
+   it so the composer card floats over the artwork like the messages above. */
+body[data-wallpaper='on'] .composer-bar {
+  background-color: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-top-color: transparent;
+}
+body[data-wallpaper='on'] .composer-card {
+  background-color: color-mix(in srgb, var(--bg-inset) 90%, transparent);
+}
+
+/* The history column sits beside the chat: let the wallpaper run through it
+   the same way instead of a frosted band, keeping only its divider. */
+body[data-wallpaper='on'] .session-list.bg-surface {
+  background-color: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
 /* ---- New-chat home page under a wallpaper ------------------------
    When a wallpaper is active, the empty chat home keeps its original
    centered layout; the suggestion cards just get a premium frosted-glass
@@ -210,6 +237,15 @@ body[data-wallpaper='on'] .chat-home .bg-surface {
   backdrop-filter: blur(var(--glass-blur)) saturate(1.4);
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.4);
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.18), inset 0 1px 0 0 rgba(255, 255, 255, 0.08);
+}
+
+/* A theme logo replaces the home-page logo; the original stays in the DOM
+   (hidden) so the layout is unchanged. */
+html[data-theme-logo] .theme-logo {
+  background: var(--theme-logo) center / cover no-repeat;
+}
+html[data-theme-logo] .theme-logo > * {
+  visibility: hidden;
 }
 
 /* Frosted-glass panel: translucent fill + blur so the wallpaper shows
@@ -482,6 +518,16 @@ body * {
   padding: 0;
 }
 
+/* Message list only. It follows the chat pane (a small side gutter,
+   not a locked 48rem / 768px strip) so a large window uses the width,
+   capped at 64rem so ultra-wide screens keep readable line lengths.
+   The composer stays on its own narrower column. */
+.chat-column {
+  width: calc(100% - 3rem);
+  max-width: 64rem;
+  margin-inline: auto;
+}
+
 /* ============================================================
    Composer toolbar responsiveness.
    The chip row (workspace / permission / model selectors) is a
@@ -497,6 +543,14 @@ body * {
   .composer-chip-label {
     display: none;
   }
+}
+
+/* Skip rendering work for off-screen messages so per-frame cost (typing in the
+   composer included) stays flat as a conversation grows. `auto` remembers each
+   row's real height once rendered; the length only estimates unrendered rows. */
+.chat-message-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 400px;
 }
 
 /* ============================================================
@@ -731,8 +785,13 @@ body * {
   backdrop-filter: saturate(160%) blur(8px);
   -webkit-backdrop-filter: saturate(160%) blur(8px);
 }
+/* Over a wallpaper a sticky fill reads as a band across the artwork, so the
+   day labels scroll with the list instead. */
 body[data-wallpaper='on'] .art-day-label {
-  background: color-mix(in srgb, var(--bg-base) 60%, transparent);
+  position: static;
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 .art-day-primary {
   display: inline-flex;

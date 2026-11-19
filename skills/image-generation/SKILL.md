@@ -10,6 +10,7 @@ metadata:
         - ARK_API_KEY
         - DASHSCOPE_API_KEY
         - MINIMAX_API_KEY
+        - COWAGENT_API_KEY
         - LINKAI_API_KEY
 ---
 
@@ -24,6 +25,7 @@ Supported models (passed via `model` only when the user asks for a specific one)
 - **Seedream (Volcengine Ark)** — `seedream-5.0-lite`, `seedream-4.5`
 - **Qwen (DashScope)** — `qwen-image-2.0`, `qwen-image-2.0-pro`
 - **MiniMax** — `image-01`
+- **CowAgent** — `gpt-image-2.5-flare`, `gpt-image-2.5-sunburst`, `gemini-3.1-flash-image`, `gemini-3-pro-image`, `seedream-5.0-pro`, `seedream-5.0-lite`
 
 ## Usage
 
@@ -104,7 +106,7 @@ On error:
 
 The script needs **at least one** of these API keys (set via `env_config` or `config.json`):
 
-`OPENAI_API_KEY` / `GEMINI_API_KEY` / `ARK_API_KEY` / `DASHSCOPE_API_KEY` / `MINIMAX_API_KEY` / `LINKAI_API_KEY`
+`OPENAI_API_KEY` / `GEMINI_API_KEY` / `ARK_API_KEY` / `DASHSCOPE_API_KEY` / `MINIMAX_API_KEY` / `COWAGENT_API_KEY` / `LINKAI_API_KEY`
 
 Each also has an optional `*_API_BASE` for custom endpoints. The script automatically picks the first configured backend and falls back to the next if it fails — no need to specify a model.
 

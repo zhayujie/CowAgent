@@ -38,3 +38,13 @@ def test_catalog_tick_overrides_a_bot_that_says_no_but_text_only_is_no_verdict()
     assert _vision("deepseek-chat", ["text", "vision"])._main_bot_supports_vision(bot)
     assert not _vision("deepseek-chat", ["text"])._main_bot_supports_vision(bot)
     assert _vision("gpt-4o", ["text"])._main_bot_supports_vision(_Bot())
+
+
+def test_the_agent_model_is_checked_not_the_global_config_model(monkeypatch):
+    from config import conf
+    from models.deepseek.deepseek_bot import DeepSeekBot
+
+    monkeypatch.setitem(conf(), "model", "claude-opus-5-5")
+    bot = DeepSeekBot.__new__(DeepSeekBot)
+    assert _vision("deepseek-flash")._main_bot_supports_vision(bot)
+    assert not _vision("deepseek-v4-pro")._main_bot_supports_vision(bot)

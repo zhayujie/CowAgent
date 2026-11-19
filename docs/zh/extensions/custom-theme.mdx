@@ -1,0 +1,163 @@
+---
+title: 自定义主题
+description: "为 Web 控制台和桌面客户端切换内置主题、导入主题包，或让 Agent 为你生成专属的配色、背景壁纸和图标。"
+---
+
+Web 控制台和桌面客户端都支持主题（皮肤）切换，两端共用同一个主题目录，在一端导入或生成的主题，另一端也能直接使用。主题只描述配色、圆角、字体和背景壁纸，不改动界面结构，因此升级后主题依然可用。
+
+## 切换主题
+
+- **Web 控制台**：点击左下角的版本号，在弹出菜单中将鼠标移到「主题」上展开主题列表
+- **桌面客户端**：点击左下角的「更多」菜单，将鼠标移到「主题」上展开主题列表
+
+点击即可切换。主题与浅色 / 深色模式相互独立，每个主题都同时适配两种模式。
+
+<Frame>
+  <img src="https://cdn.link-ai.tech/doc/custom-theme-zh.png" alt="主题列表" width="800" />
+</Frame>
+
+内置以下纯配色主题：
+
+- **Meadow**（默认）：清新绿
+- **Ocean**：海洋蓝
+- **Clay**：暖陶土
+- **Sakura**：樱花粉
+- **Lavender**：薰衣草紫
+
+## 导入主题
+
+在主题列表底部点击「自定义主题…」打开自定义主题窗口，把主题的 `.zip` 包或主题文件夹直接拖进去即可；也可以点击后在文件选择框中选择（Windows 客户端上选择文件夹时，选中文件夹内的 `theme.json` 即可）。导入成功后会自动应用。
+
+导入时会做以下检查：
+
+- `theme.json` 需位于包的根目录，或包内唯一一层文件夹中
+- 只会复制 `theme.json` 和图片（`jpg` / `png` / `webp` / `gif` / `svg`），其他文件会被忽略
+- 单个文件不超过 16MB，整个主题不超过 64MB
+- 与已有主题 ID 相同时会询问是否替换；与内置主题 ID 相同时会自动重命名
+
+所有导入的主题都保存在 `~/cow/system/themes/` 目录下（若修改过 Agent 工作空间路径，则在工作空间下的 `system/themes/`），每个主题一个文件夹，自定义主题窗口底部会显示该目录。删除文件夹即可移除主题，也可以把主题文件夹直接复制进来，重新打开主题列表即可看到；桌面客户端可点击「打开主题文件夹」直接管理。将 CowAgent 部署在服务器上时，该目录位于运行 CowAgent 的机器上。
+
+<Note>
+Web 控制台暂不支持 `shape`（圆角、字体），配色、壁纸和图标均可使用。
+</Note>
+
+## 主题结构
+
+```
+my-theme/
+├── theme.json        # 必需
+├── wallpaper.jpg     # 可选，背景壁纸
+└── logo.png          # 可选，新对话页中间的图标
+```
+
+`theme.json` 示例：
+
+```json
+{
+  "specVersion": 1,
+  "id": "midnight-neon",
+  "name": "Midnight Neon",
+  "preview": { "accent": "#8b5cf6", "bg": "#f7f6fb", "surface": "#ffffff" },
+  "shape": { "radiusCard": "14px", "radiusBtn": "10px" },
+  "wallpaper": { "image": "wallpaper.jpg", "overlayOpacity": 0.25, "glass": true },
+  "light": {
+    "colors": {
+      "accent": "#7c4dff",
+      "accentSoft": "rgba(124, 77, 255, 0.10)",
+      "bgBase": "#f7f6fb",
+      "textPrimary": "#1f1b2e"
+    }
+  },
+  "dark": {
+    "colors": {
+      "accent": "#8b5cf6",
+      "accentSoft": "rgba(139, 92, 246, 0.18)",
+      "bgBase": "#0d0b14",
+      "bgSurface": "#151220",
+      "textPrimary": "#f2effa"
+    }
+  }
+}
+```
+
+| 字段 | 说明 |
+| --- | --- |
+| `id` | 主题唯一标识，省略时使用文件夹名 |
+| `name` | 在主题列表中显示的名称 |
+| `specVersion` | 主题规范版本，当前为 `1` |
+| `preview` | 主题列表中的色块预览：`accent` / `bg` / `surface`，省略时从配色中推导 |
+| `shape` | 与明暗无关的形状：`radiusCard`、`radiusBtn`、`radiusSm`、`fontSans`、`fontMono` |
+| `wallpaper` | 背景壁纸，浅色和深色模式共用 |
+| `light` / `dark` | 对应模式下的 `colors`（配色），也可以单独设置该模式的 `wallpaper` |
+| `identity.logo` | 新对话页中间的图标，建议使用正方形图片。主题文件夹里的 `logo.png` 会被自动使用，只有想用其他文件名时才需要填写 |
+
+### 配色（colors）
+
+颜色值支持任意 CSS 颜色（如 `#7c4dff`、`rgba(...)`），未填写的键沿用默认主题，不认识的键会被忽略。如果配色导致文字与背景难以分辨，会自动改用默认主题。
+
+| 键 | 用途 |
+| --- | --- |
+| `accent` / `accentHover` / `accentActive` | 主题色及其悬停、按下状态（按钮、选中项、链接） |
+| `accentSoft` | 主题色浅底（选中项背景、标签） |
+| `accentContrast` | 叠在主题色上的文字颜色 |
+| `bubbleUserBg` / `bubbleUserText` | 用户消息气泡的背景和文字 |
+| `bgBase` | 应用最底层背景 |
+| `bgSurface` / `bgSurface2` | 面板、卡片背景，以及嵌套层和悬停填充 |
+| `bgElevated` | 弹出菜单、对话框背景 |
+| `bgInset` / `bgInset2` | 输入框背景，以及代码块等嵌套填充 |
+| `textPrimary` / `textSecondary` / `textTertiary` / `textDisabled` | 四级文字颜色 |
+| `sidebarBg` | 仅 Web 控制台：左侧菜单栏背景，需为深色以保证文字可读，只在 `dark` 中填写时浅色模式也会使用。默认为实色，填带透明度的颜色（如 `rgba(20, 16, 40, 0.7)`）时，有壁纸的主题会变为毛玻璃并透出壁纸 |
+| `borderDefault` / `borderStrong` / `borderSubtle` | 三级边框颜色 |
+
+### 壁纸（wallpaper）
+
+一张壁纸就够用：写在最外层，浅色和深色模式共用。想让两种模式用不同的图，就在 `light` / `dark` 里各写一个，单独设置的优先。只在一种模式里写了壁纸时，另一种模式也会复用它；主题文件夹里有 `wallpaper.jpg` 但哪里都没写时，也会自动使用。
+
+深浅模式使用不同壁纸时，去掉最外层的 `wallpaper`，在 `light` / `dark` 中分别指定：
+
+```json
+{
+  "light": {
+    "colors": { "...": "..." },
+    "wallpaper": { "image": "wallpaper-light.jpg", "glass": true }
+  },
+  "dark": {
+    "colors": { "...": "..." },
+    "wallpaper": { "image": "wallpaper-dark.jpg", "glass": true }
+  }
+}
+```
+
+| 键 | 说明 |
+| --- | --- |
+| `image` | 主题文件夹内的图片路径 |
+| `focusX` / `focusY` | 图片焦点位置（0~1），窗口比例变化时保持该点可见，默认 `0.5` |
+| `overlayOpacity` | 壁纸上的遮罩浓度（0~1），用于保证文字可读，默认浅色 `0.4`、深色 `0.3`，觉得壁纸太暗或太花时调整这个值 |
+| `glass` | 为 `true` 时面板变为半透明毛玻璃，壁纸透出整个界面 |
+
+## 让 Agent 生成主题
+
+Agent 可以直接帮你制作主题：它会把主题写入 `~/cow/system/themes/`。如果已配置图片生成能力，它还能顺便生成背景壁纸和图标。
+
+- **一键开始**：在自定义主题窗口中点击「让 Agent 帮你制作」旁的「开始制作」，会新建一个对话并填好提示词，只需在末尾补充想要的风格后发送。
+- **参考图生成**：发送时可以附上参考图，如喜欢的角色、插画或照片。Agent 会以参考图为基础生成壁纸和图标，角色、画风与参考图保持一致，主题配色也从参考图中提取。
+- **深浅色分别配图**：在风格描述中说明「深浅模式用不同壁纸」，会分别生成浅色和深色两张壁纸。
+
+也可以在任意对话中手动发送下面的提示词，在最后一行写上想要的风格即可。之后想微调，比如「壁纸再亮一点」「主题色换成青色」，直接告诉 Agent 即可，重新打开主题列表就能看到效果。
+
+```text
+帮我制作一个界面主题。
+
+要求：
+1. 在 ~/cow/system/themes/<主题id>/ 下创建 theme.json，id 用小写英文和连字符，结构为 {"specVersion": 1, "id", "name", "light": {"colors": {...}}, "dark": {"colors": {...}}}。
+2. light 和 dark 的 colors 都填这些键：accent、accentHover、accentActive、accentSoft、accentContrast、bubbleUserBg、bubbleUserText、bgBase、bgSurface、bgSurface2、bgElevated、bgInset、bgInset2、textPrimary、textSecondary、textTertiary、textDisabled、borderDefault、borderStrong、borderSubtle。背景低饱和，文字清晰易读，主题色上的白字也要看得清。
+3. 能生成图片的话，用图片生成技能在同一目录生成两张不带文字的图：
+   - wallpaper.jpg：16:9 壁纸，主体偏右，亮度适中、不要太暗；在 theme.json 最外层加上 "wallpaper": {"image": "wallpaper.jpg", "overlayOpacity": 0.25, "glass": true}，深浅模式共用。如果我要求深浅模式用不同壁纸，就生成 wallpaper-light.jpg 和 wallpaper-dark.jpg 两张，不写最外层的 wallpaper，改为在 light 和 dark 里各加一个 wallpaper，分别指向这两张图
+   - logo.png：正方形，用作新对话页中间的图标（不是应用图标），放在目录里即可，不用写进 theme.json
+4. 如果我发了参考图，生成图片时把参考图作为图片输入（垫图），让角色和画风与参考图一致，配色也从参考图中提取。
+5. 写完确认 theme.json 是合法 JSON，然后告诉我主题名称。
+
+我想要的风格：<例如「赛博朋克夜景，霓虹紫配青色」>
+```
+
+完成后打开左下角的主题列表，就能看到并切换到新主题。想分享给别人时，把主题文件夹打成 zip 发出去，对方拖进「自定义主题」窗口即可导入。

@@ -13,7 +13,7 @@ The API is off by default. Once it is on, every request must carry the API key.
 
 ### From the console
 
-Open "Config → General → Chat API" and turn on the switch. After you confirm, an API key is generated, along with the base URL and ready-to-copy examples (cURL / Python / Node.js).
+Open "Config → Integrations → Chat API" and turn on the switch. After you confirm, an API key is generated, along with the base URL and ready-to-copy examples (cURL / Python / Node.js).
 
 <Frame caption="The Chat API card on the Config page">
   <img src="https://cdn.jsdelivr.net/gh/zhayujie/cowagent-assets@main/screenshots/en/web-console-chat-api-config.png" alt="Chat API config" width="700" />
@@ -39,7 +39,7 @@ Set these two keys in `config.json`, then restart the service:
 | `external_api_token` | The API key; use a long random string. It is kept while the API is off |
 
 <Note>
-  The API shares the Web Console's address and port. By default it listens on `127.0.0.1`, so only this machine can reach it. To call it from other machines, set `web_host` to `0.0.0.0` as described in [Web Console](/channels/web) and open the port. The API key is independent from the console password `web_password`.
+  The API shares the Web Console's address and port. By default it listens on `127.0.0.1`, so only this machine can reach it. To call it from other machines, change the listen address to `0.0.0.0` under **Config → Integrations → Addresses** (see [Web Console](/channels/web)) and open the port. The API key is independent from the console password `web_password`.
 </Note>
 
 ## Quick start

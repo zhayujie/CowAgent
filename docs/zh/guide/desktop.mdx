@@ -11,20 +11,20 @@ CowAgent 提供开箱即用的桌面客户端，内置 Agent 运行环境，**�
 
 ## 下载安装
 
-<Card title="前往下载页" icon="download" href="https://cowagent.ai/zh/download/">
+<Card title="前往下载页" icon="download" href="https://cowagent.cn/zh/download/">
   下载 macOS / Windows 客户端安装包
 </Card>
 
 <Tabs>
   <Tab title="macOS">
-    1. 打开 [下载页](https://cowagent.ai/zh/download/)，根据芯片选择安装包：
+    1. 打开 [下载页](https://cowagent.cn/zh/download/)，根据芯片选择安装包：
        - Apple Silicon（M1/M2/M3/M4）：下载 `arm64` 版本
        - Intel 芯片：下载 `x64` 版本
     2. 打开下载的 `.dmg`，将 CowAgent 拖入「应用程序」文件夹。
     3. 从启动台或应用程序中打开 CowAgent 即可。
   </Tab>
   <Tab title="Windows">
-    1. 打开 [下载页](https://cowagent.ai/zh/download/)，下载 Windows 安装包（`.exe`）。
+    1. 打开 [下载页](https://cowagent.cn/zh/download/)，下载 Windows 安装包（`.exe`）。
     2. 双击运行安装程序，按提示完成安装（可自定义安装目录）。
     3. 从桌面或开始菜单打开 CowAgent 即可。
   </Tab>
@@ -44,6 +44,8 @@ CowAgent 提供开箱即用的桌面客户端，内置 Agent 运行环境，**�
 桌面客户端启动后会在本机监听 `9876` 端口，其后端与 Web 控制台完全一致。因此在打开客户端的同时，也可以直接用浏览器访问 `http://localhost:9876`，获得与客户端界面一致的完整体验。
 
 如果该端口不可用（例如 Windows 上被 Hyper-V/WSL2 保留），客户端会自动改用其它端口并正常启动。此时实际端口可在 `run.log` 中的 `Local access` 一行查到，也可以在 `config.json` 中设置 `web_port` 来指定固定端口。
+
+默认只有本机可以访问。如需让同一局域网中的其他设备（如手机）访问，可在「设置 → 集成配置」中把监听地址改为 `0.0.0.0` 或本机的局域网 IP（需先设置访问密码），下方会显示其他设备可以打开的地址。
 
 ## 本地数据存储
 

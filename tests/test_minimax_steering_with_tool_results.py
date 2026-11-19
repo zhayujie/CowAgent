@@ -1,0 +1,41 @@
+"""A steer that lands while tools run shares the user message with the
+tool_result blocks (AgentStreamExecutor._append_steering). The MiniMax converter
+must keep that text and place it after tool results instead of before them."""
+import os
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+
+def _steered_tool_result_message():
+    from agent.protocol.agent_stream import AgentStreamExecutor
+
+    executor = AgentStreamExecutor.__new__(AgentStreamExecutor)
+    executor._emit_event = lambda *a, **kw: None
+    blocks = [{"type": "tool_result", "tool_use_id": "call_1", "content": "file listing"}]
+    executor._append_steering(
+        ["Stop and summarise what you found so far"],
+        pending_tool_calls=[{"id": "call_2", "name": "bash", "arguments": {}}],
+        content_blocks=blocks,
+    )
+    return {"role": "user", "content": blocks}
+
+
+def test_steering_text_next_to_tool_results_reaches_minimax():
+    from models.minimax.minimax_bot import MinimaxBot
+
+    bot = MinimaxBot.__new__(MinimaxBot)
+    history = [
+        {"role": "user", "content": "look around"},
+        {"role": "assistant", "content": [
+            {"type": "tool_use", "id": "call_1", "name": "ls", "input": {}},
+            {"type": "tool_use", "id": "call_2", "name": "bash", "input": {}},
+        ]},
+        _steered_tool_result_message(),
+    ]
+
+    converted = bot._convert_messages_to_openai_format(history)
+
+    assert [m["role"] for m in converted] == ["user", "assistant", "tool", "tool", "user"]
+    assert [m["tool_call_id"] for m in converted[2:4]] == ["call_1", "call_2"]
+    assert "Stop and summarise what you found so far" in converted[-1]["content"]

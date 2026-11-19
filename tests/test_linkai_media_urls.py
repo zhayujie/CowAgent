@@ -53,7 +53,8 @@ def test_downloaded_file_name_excludes_query(monkeypatch, tmp_path):
     from models.linkai import link_ai_bot
 
     # The download checks the status before writing, so the stand-in response
-    # has to carry one the way a real requests.Response does.
+    # has to carry one the way a real requests.Response does. It is streamed
+    # now, so it also has to hand its body out in chunks.
     monkeypatch.setattr(
         link_ai_bot.requests,
         "get",
@@ -61,7 +62,10 @@ def test_downloaded_file_name_excludes_query(monkeypatch, tmp_path):
             "R", (), {
                 "content": b"x",
                 "status_code": 200,
+                "headers": {},
                 "raise_for_status": lambda self: None,
+                "iter_content": lambda self, chunk_size=1: iter([b"x"]),
+                "close": lambda self: None,
             }
         )(),
     )

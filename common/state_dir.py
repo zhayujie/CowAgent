@@ -191,6 +191,11 @@ def menu_file(base=None) -> Path:
     return system_dir(base) / "menu.json"
 
 
+def themes_dir(base=None) -> Path:
+    """Console themes, one folder each; shared by the web and desktop clients."""
+    return system_dir(base) / "themes"
+
+
 def scheduler_recipients_file(base=None) -> Path:
     """The one directory of people/groups observed on inbound IM channels.
 

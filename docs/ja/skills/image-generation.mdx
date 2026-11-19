@@ -3,7 +3,7 @@ title: image-generation - 画像生成
 description: テキストから画像生成 / 画像編集 / 複数画像融合に対応。複数プロバイダーの自動ルーティングとフォールバックをサポート
 ---
 
-汎用の画像生成・編集スキルです。OpenAI、Gemini、Seedream（Volcengine Ark）、Qwen（DashScope）、MiniMax、LinkAI の 6 つのプロバイダーに対応しています。いずれか 1 社の Key を設定すれば利用でき、複数社を設定すると自動フォールバックが有効になります。
+汎用の画像生成・編集スキルです。OpenAI、Gemini、Seedream（Volcengine Ark）、Qwen（DashScope）、MiniMax、CowAgent、LinkAI の 7 つのプロバイダーに対応しています。いずれか 1 社の Key を設定すれば利用でき、複数社を設定すると自動フォールバックが有効になります。
 
 ## 対応モデル
 
@@ -14,13 +14,14 @@ description: テキストから画像生成 / 画像編集 / 複数画像融合�
 | Seedream（Volcengine Ark） | `seedream-5.0-lite`、`seedream-4.5` | ネイティブ 2K–4K、最大 14 枚の画像融合 |
 | Qwen（DashScope） | `qwen-image-2.0`、`qwen-image-2.0-pro` | 中国語のレイアウトや画像とテキストの融合に強い |
 | MiniMax | `image-01` | シンプルで高速 |
+| CowAgent | `gpt-image-2.5-flare`、`gpt-image-2.5-sunburst`、`gemini-3.1-flash-image`、`gemini-3-pro-image`、`seedream-5.0-pro`、`seedream-5.0-lite` | OpenAI 互換 API、対話用の Key を共用 |
 | LinkAI | 任意のモデル | 統一ゲートウェイ、フォールバック用途 |
 
 ## モデル選択
 
 デフォルトでは「自動ルーティング + 失敗時フォールバック」で動作します：
 
-1. `OpenAI → Gemini → Seedream → Qwen → MiniMax → LinkAI` の順に、設定済みのプロバイダーを最初に選択
+1. `OpenAI → Gemini → Seedream → Qwen → MiniMax → CowAgent → LinkAI` の順に、設定済みのプロバイダーを最初に選択
 2. 401、モデル未開通、ネットワークエラーなどに遭遇した場合、自動的に次のプロバイダーへ切り替え
 3. ユーザーが対話内でモデルを指定した場合（例：「seedream で猫を描いて」）、該当プロバイダーが優先候補に繰り上がります
 
@@ -51,6 +52,7 @@ description: テキストから画像生成 / 画像編集 / 複数画像融合�
 | `ark_api_key` | Volcengine Ark（Seedream） |
 | `dashscope_api_key` | Alibaba DashScope（Qwen） |
 | `minimax_api_key` | MiniMax |
+| `cowagent_api_key` | CowAgent（グローバルサイトの Key は `cowagent_api_base` に `https://api.cowagent.ai/v1` も設定。デフォルトは中国サイト） |
 | `linkai_api_key` | LinkAI |
 
 

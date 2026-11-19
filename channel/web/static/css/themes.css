@@ -1,0 +1,182 @@
+/* Color themes: sidebar theme list, custom-theme dialog, wallpaper and theme logo.
+   The palette itself is the --cw-* variables in base.css; themes.js
+   overrides them and sets data-wallpaper / data-theme-logo on <html>. */
+
+/* ---- Theme list ----
+   Flies out of the sidebar footer menu (.update-menu) and shares its
+   always-dark look. Fixed, placed by themes.js; the padding bridges the gap
+   so the pointer can cross it. */
+.color-theme-flyout {
+    position: fixed;
+    padding-left: 6px;
+    z-index: 61;
+}
+.color-theme-menu {
+    width: 212px;
+    padding: 5px;
+    border-radius: 10px;
+    background: #171717;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 8px 30px -6px rgba(0, 0, 0, 0.5), 0 2px 8px -2px rgba(0, 0, 0, 0.4);
+    animation: slashMenuIn 0.15s ease-out;
+}
+.color-theme-list { max-height: 296px; overflow-y: auto; }
+.color-theme-item {
+    width: 100%;
+    height: 34px;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 0 9px;
+    border-radius: 7px;
+    font-size: 13px;
+    color: #d4d4d4;
+    cursor: pointer;
+    transition: background 0.12s ease, color 0.12s ease;
+}
+.color-theme-item:hover { background: rgba(255, 255, 255, 0.06); color: #fff; }
+.color-theme-name { flex: 1; min-width: 0; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.color-theme-check { font-size: 12px; color: rgb(var(--cw-primary-300)); }
+.color-theme-swatch {
+    flex-shrink: 0;
+    display: inline-flex;
+    width: 16px;
+    height: 16px;
+    border-radius: 9999px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+}
+.color-theme-swatch > span { width: 33.34%; height: 100%; }
+.color-theme-plus { flex-shrink: 0; width: 16px; text-align: center; font-size: 12px; color: #8f8f8f; }
+.color-theme-item:hover .color-theme-plus { color: rgb(var(--cw-primary-400)); }
+.color-theme-divider { margin: 4px 0; border-top: 1px solid rgba(255, 255, 255, 0.08); }
+
+/* ---- Custom theme dialog ---- */
+.theme-drop-zone {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 16px;
+    border-radius: 12px;
+    border: 1.5px dashed rgb(var(--cw-slate-300));
+    background: rgb(var(--cw-slate-50));
+    text-align: center;
+    cursor: pointer;
+    outline: none;
+    transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+.dark .theme-drop-zone { border-color: rgba(255, 255, 255, 0.16); background: rgba(255, 255, 255, 0.03); }
+.theme-drop-zone:hover,
+.theme-drop-zone:focus-visible { border-color: rgb(var(--cw-primary-400)); }
+.theme-drop-zone.is-over {
+    border-color: rgb(var(--cw-primary-400));
+    background: rgb(var(--cw-primary-400) / 0.08);
+}
+.theme-drop-zone.is-busy { cursor: default; }
+.theme-drop-icon {
+    width: 44px;
+    height: 44px;
+    margin-bottom: 12px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgb(var(--cw-slate-400));
+    background: rgb(var(--cw-panel));
+    border: 1px solid rgb(var(--cw-slate-200));
+}
+.dark .theme-drop-icon { border-color: rgba(255, 255, 255, 0.1); }
+.theme-drop-zone.is-over .theme-drop-icon,
+.theme-drop-zone.is-busy .theme-drop-icon { color: rgb(var(--cw-primary-500)); }
+
+/* ---- Accent fills ----
+   Text on accent buttons and the user's bubble follow the theme
+   (accentContrast, bubbleUserBg / bubbleUserText); unset, they keep the
+   stock colors. */
+.text-white[class*="bg-primary-"] { color: rgb(var(--cw-on-accent, 255 255 255)); }
+.user-bubble.bg-primary-400 {
+    background-color: rgb(var(--cw-bubble-user, var(--cw-primary-400)));
+    color: rgb(var(--cw-bubble-user-text, 255 255 255));
+}
+
+/* ---- Theme logo ----
+   Replaces the new-chat logo; the <img> keeps its box (and its src), its
+   own picture is pushed out of view so only the theme's shows. */
+html[data-theme-logo] #welcome-screen > img:first-child {
+    object-position: -9999px 0;
+    background: var(--cw-theme-logo) center / cover no-repeat;
+}
+
+/* ---- Wallpaper ----
+   A fixed layer under the whole console plus a scrim that keeps text
+   readable. The page shell turns translucent so the image shows through;
+   with a glass theme the panels (bg-panel) do too. */
+html[data-wallpaper] body::before,
+html[data-wallpaper] body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+}
+html[data-wallpaper] body::before {
+    z-index: -2;
+    background-image: var(--cw-wallpaper-image);
+    background-size: cover;
+    background-position: var(--cw-wallpaper-position, 50% 50%);
+    background-repeat: no-repeat;
+}
+html[data-wallpaper] body::after {
+    z-index: -1;
+    background: var(--cw-wallpaper-overlay);
+}
+html[data-wallpaper] body { background: transparent; }
+html[data-wallpaper] #app { background: rgb(var(--cw-canvas) / 0.45); }
+
+/* The header and composer bar would cut bands across the artwork: let them
+   sit on the page tint, with only the composer card itself filled. */
+html[data-wallpaper] #main-content > header,
+html[data-wallpaper] #chat-composer {
+    background: transparent;
+}
+html[data-wallpaper] #chat-composer { border-top-color: transparent; }
+/* A sticky fill over the artifact list would be a band across the artwork
+   too, so the day labels scroll with the list instead. */
+html[data-wallpaper] .art-day-label {
+    position: static;
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+/* The history panel sits beside the chat, so the wallpaper runs through it
+   the same way. On phones it floats over the chat and keeps a frosted fill. */
+html[data-wallpaper] .session-panel { background: transparent; }
+@media (max-width: 768px) {
+    html[data-wallpaper] .session-panel {
+        background: rgb(var(--cw-canvas) / 0.85);
+        backdrop-filter: blur(20px) saturate(1.4);
+        -webkit-backdrop-filter: blur(20px) saturate(1.4);
+    }
+}
+
+/* Dialogs and popovers float over other text with no blur of their own, so
+   they stay solid even with a glass theme. */
+html[data-wallpaper] .fixed .bg-panel,
+html[data-wallpaper] .absolute.bg-panel { background-color: rgb(var(--cw-panel)); }
+
+/* Frosted glass, only on boxes that never hold fixed-position children
+   (backdrop-filter would make them the containing block for those). */
+html[data-wallpaper] .composer-card,
+html[data-wallpaper='glass'] .example-card {
+    backdrop-filter: blur(20px) saturate(1.4);
+    -webkit-backdrop-filter: blur(20px) saturate(1.4);
+}
+/* The sidebar stays solid and dark; a theme opts into glass with a
+   translucent sidebarBg (themes.js sets the alpha and blur). */
+html[data-wallpaper] #sidebar {
+    background: rgb(var(--cw-sidebar) / var(--cw-sidebar-alpha, 1));
+    backdrop-filter: var(--cw-sidebar-blur, none);
+    -webkit-backdrop-filter: var(--cw-sidebar-blur, none);
+}
+html[data-wallpaper] .composer-card { background: rgb(var(--cw-panel) / 0.82); }
+html[data-wallpaper] .composer-card:focus-within { background: rgb(var(--cw-panel) / 0.9); }

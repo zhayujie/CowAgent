@@ -6,6 +6,20 @@
 const chatView = document.getElementById('view-chat');
 const chatInputArea = document.getElementById('composer-card') || chatInput.closest('.flex-shrink-0');
 
+// Make the empty parts of the composer card act like the text area. Keep
+// controls and their popovers in charge of their own clicks.
+chatInputArea.addEventListener('click', (event) => {
+    const target = event.target;
+    if (!(target instanceof Element) || target === chatInput) return;
+    const excluded = target.closest([
+        'button', 'input', 'select', 'a', '[role="button"]', 'textarea',
+        '.attachment-preview', '.attach-menu', '.slash-menu', '.mention-menu',
+        '.workspace-selector-menu', '.composer-menu',
+    ].join(', '));
+    if (excluded) return;
+    chatInput.focus({ preventScroll: true });
+});
+
 // Create drag overlay for visual feedback
 let dragOverlay = document.getElementById('drag-overlay');
 if (!dragOverlay) {
@@ -174,8 +188,11 @@ function showSlashMenu(filter) {
 }
 
 function hideSlashMenu() {
-    slashMenu.classList.add('hidden');
-    slashMenu.innerHTML = '';
+    // This runs on every keystroke. Skip DOM writes when already hidden: even a
+    // no-op classList.add rewrites the class attribute, which wakes the Tailwind
+    // runtime's MutationObserver and makes typing lag on long conversations.
+    if (!slashMenu.classList.contains('hidden')) slashMenu.classList.add('hidden');
+    if (slashMenu.firstChild) slashMenu.innerHTML = '';
     slashFiltered = [];
     slashActiveIdx = -1;
     slashLastFilter = '';

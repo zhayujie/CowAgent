@@ -77,3 +77,18 @@ def test_an_absolute_file_name_is_reduced_to_its_basename(agent_workspace):
 @pytest.mark.parametrize("raw,expected", [("", ""), ("..", ""), ("/", ""), ("a.txt", "a.txt")])
 def test_the_shared_guard_is_total(raw, expected):
     assert chat_message.safe_filename(raw) == expected
+
+
+@pytest.mark.parametrize(
+    "raw",
+    ["CON", "CON.md", "nul.txt", "COM1", "LPT9.pdf", "AUX.md", "prn"],
+)
+def test_the_shared_guard_rejects_windows_reserved_device_names(raw):
+    # On Windows these names are devices. wechat_kf writes the reduced name
+    # itself under tmp_dir(), so CON.txt would open the console device.
+    assert chat_message.safe_filename(raw) == ""
+
+
+@pytest.mark.parametrize("raw,expected", [("console.txt", "console.txt"), ("COM10.md", "COM10.md")])
+def test_the_shared_guard_keeps_nearby_ordinary_names(raw, expected):
+    assert chat_message.safe_filename(raw) == expected

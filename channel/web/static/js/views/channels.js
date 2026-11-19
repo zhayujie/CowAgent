@@ -83,7 +83,7 @@ function renderActiveChannels() {
         const iid = ch.iid;
         const label = (typeof ch.label === 'object') ? (ch.label[currentLang] || ch.label.en) : ch.label;
         const card = document.createElement('div');
-        card.className = 'bg-white dark:bg-[#1A1A1A] rounded-xl border border-slate-200 dark:border-white/10 p-6';
+        card.className = 'bg-panel rounded-xl border border-slate-200 dark:border-white/10 p-6';
         card.id = `channel-card-${iid}`;
 
         const fieldsHtml = buildChannelFieldsHtml(iid, ch.fields || []);
@@ -473,7 +473,7 @@ function openAddChannelPanel() {
     if (!anyCards && content) content.classList.add('hidden');
 
     if (available.length === 0) {
-        panel.innerHTML = `<div class="bg-white dark:bg-[#1A1A1A] rounded-xl border border-slate-200 dark:border-white/10 p-6 text-center">
+        panel.innerHTML = `<div class="bg-panel rounded-xl border border-slate-200 dark:border-white/10 p-6 text-center">
             <p class="text-sm text-slate-500 dark:text-slate-400">${currentLang === 'zh' ? '所有通道均已接入' : 'All channels are already connected'}</p>
             <button onclick="closeAddChannelPanel()" class="mt-3 text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 cursor-pointer">${t('channels_cancel')}</button>
         </div>`;
@@ -490,7 +490,7 @@ function openAddChannelPanel() {
     ];
 
     panel.innerHTML = `
-        <div class="bg-white dark:bg-[#1A1A1A] rounded-xl border border-primary-200 dark:border-primary-800 p-6">
+        <div class="bg-panel rounded-xl border border-primary-200 dark:border-primary-800 p-6">
             <div class="flex items-center gap-3 mb-5">
                 <div class="w-9 h-9 rounded-lg bg-primary-50 dark:bg-primary-900/30 flex items-center justify-center">
                     <i class="fas fa-plus text-primary-500 text-sm"></i>

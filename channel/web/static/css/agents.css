@@ -14,7 +14,7 @@
 .agents-list-pane {
     display: flex; flex-direction: column; min-height: 0;
     width: 320px; flex-shrink: 0;
-    border-right: 1px solid #e2e8f0;
+    border-right: 1px solid rgb(var(--cw-slate-200));
     padding: 18px 14px 8px;
     overflow-y: auto;
 }
@@ -48,48 +48,48 @@
     font-size: 9.5px;
     padding: 1px 7px;
     border-radius: 999px;
-    background: #f1f5f9;
-    color: #64748b;
+    background: rgb(var(--cw-slate-100));
+    color: rgb(var(--cw-slate-500));
     font-weight: 500;
 }
-.agent-card-badge.agent-chip-on { background: #EDFDF3; color: #17803d; }
-.dark .agent-card-badge { background: rgba(255,255,255,.06); color: #94a3b8; }
-.dark .agent-card-badge.agent-chip-on { background: rgba(74, 190, 110, .15); color: #86efac; }
-.agent-card:hover { background: #f8fafc; }
+.agent-card-badge.agent-chip-on { background: rgb(var(--cw-primary-50)); color: rgb(var(--cw-accent-ink)); }
+.dark .agent-card-badge { background: rgba(255,255,255,.06); color: rgb(var(--cw-slate-400)); }
+.dark .agent-card-badge.agent-chip-on { background: rgb(var(--cw-primary-400) / .15); color: rgb(var(--cw-accent-ink)); }
+.agent-card:hover { background: rgb(var(--cw-slate-50)); }
 .dark .agent-card:hover { background: rgba(255,255,255,.04); }
-.agent-card.selected { background: #EDFDF3; border-color: transparent; }
-.dark .agent-card.selected { background: rgba(74, 190, 110, .14); }
+.agent-card.selected { background: rgb(var(--cw-primary-50)); border-color: transparent; }
+.dark .agent-card.selected { background: rgb(var(--cw-primary-400) / .14); }
 .agent-card.archived { opacity: .55; }
 .agent-card-top { display: flex; align-items: center; gap: 10px; padding-right: 44px; min-width: 0; }
 .agent-card-top .agent-avatar { flex-shrink: 0; }
-.agent-card-name { font-weight: 600; font-size: 13.5px; color: #1e293b; }
-.dark .agent-card-name { color: #f1f5f9; }
-.agent-card-id { font-size: 11px; color: #94a3b8; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.agent-card-name { font-weight: 600; font-size: 13.5px; color: rgb(var(--cw-slate-800)); }
+.dark .agent-card-name { color: rgb(var(--cw-slate-100)); }
+.agent-card-id { font-size: 11px; color: rgb(var(--cw-slate-400)); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 /* One line of description under the name, ellipsised — keeps every row the same
    compact height so the roster reads as a clean list, not a wall of cards. */
 .agent-card-desc {
     margin-top: 3px;
     font-size: 12px;
     line-height: 1.4;
-    color: #64748b;
+    color: rgb(var(--cw-slate-500));
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
-.dark .agent-card-desc { color: #94a3b8; }
-.agent-card-desc-empty { color: #cbd5e1; }
-.dark .agent-card-desc-empty { color: #475569; }
+.dark .agent-card-desc { color: rgb(var(--cw-slate-400)); }
+.agent-card-desc-empty { color: rgb(var(--cw-slate-300)); }
+.dark .agent-card-desc-empty { color: rgb(var(--cw-slate-600)); }
 .agent-card-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 .agent-chip {
     font-size: 10px;
     padding: 2px 7px;
     border-radius: 999px;
-    background: #f1f5f9;
-    color: #64748b;
+    background: rgb(var(--cw-slate-100));
+    color: rgb(var(--cw-slate-500));
 }
-.dark .agent-chip { background: rgba(255,255,255,.06); color: #94a3b8; }
-.agent-chip-on { background: #EDFDF3; color: #17803d; }
-.dark .agent-chip-on { background: rgba(74, 190, 110, .15); color: #86efac; }
+.dark .agent-chip { background: rgba(255,255,255,.06); color: rgb(var(--cw-slate-400)); }
+.agent-chip-on { background: rgb(var(--cw-primary-50)); color: rgb(var(--cw-accent-ink)); }
+.dark .agent-chip-on { background: rgb(var(--cw-primary-400) / .15); color: rgb(var(--cw-accent-ink)); }
 
 .agent-avatar {
     display: inline-flex;
@@ -100,8 +100,8 @@
     flex-shrink: 0;
     font-weight: 600;
     line-height: 1;
-    background: #edfdf3;
-    color: #17803d;
+    background: rgb(var(--cw-primary-50));
+    color: rgb(var(--cw-accent-ink));
 }
 .agent-avatar img { width: 100%; height: 100%; object-fit: cover; }
 
@@ -150,44 +150,44 @@
 .agent-detail.hidden::before {
     content: attr(data-empty-label);
     margin: auto;
-    color: #cbd5e1;
+    color: rgb(var(--cw-slate-300));
     font-size: 14px;
 }
-.dark .agent-detail.hidden::before { color: #475569; }
-.dark .agent-detail { background: #1A1A1A; }
+.dark .agent-detail.hidden::before { color: rgb(var(--cw-slate-600)); }
+.dark .agent-detail { background: rgb(var(--cw-panel)); }
 .agent-detail-header { position: relative; padding: 20px 20px 8px; }
 .agent-detail-close {
     position: absolute; top: 12px; right: 12px;
     width: 28px; height: 28px; border-radius: 8px;
-    color: #94a3b8;
+    color: rgb(var(--cw-slate-400));
 }
-.agent-detail-close:hover { background: #f1f5f9; }
+.agent-detail-close:hover { background: rgb(var(--cw-slate-100)); }
 .dark .agent-detail-close:hover { background: rgba(255,255,255,.06); }
 .agent-detail-identity { display: flex; align-items: center; gap: 12px; padding-right: 28px; }
-.agent-detail-tabs { display: flex; gap: 4px; padding: 0 16px; border-bottom: 1px solid #e2e8f0; }
+.agent-detail-tabs { display: flex; gap: 4px; padding: 0 16px; border-bottom: 1px solid rgb(var(--cw-slate-200)); }
 .dark .agent-detail-tabs { border-color: rgba(255,255,255,.08); }
 .agent-detail-tab {
-    padding: 10px 12px; font-size: 13px; color: #64748b; border-bottom: 2px solid transparent;
+    padding: 10px 12px; font-size: 13px; color: rgb(var(--cw-slate-500)); border-bottom: 2px solid transparent;
 }
-.agent-detail-tab.active { color: #17803d; border-color: #4ABE6E; font-weight: 600; }
+.agent-detail-tab.active { color: rgb(var(--cw-accent-ink)); border-color: rgb(var(--cw-primary-400)); font-weight: 600; }
 .agent-detail-pane { flex: 1; overflow-y: auto; padding: 16px 20px; }
 .agent-core-editor {
     width: 100%; min-height: 520px; padding: 12px;
-    background: #f8fafc; color: #1e293b; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 12px; border-radius: 10px; resize: vertical; border: 1px solid #e2e8f0;
+    background: rgb(var(--cw-slate-50)); color: rgb(var(--cw-slate-800)); font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px; border-radius: 10px; resize: vertical; border: 1px solid rgb(var(--cw-slate-200));
 }
-.dark .agent-core-editor { background: #151515; color: #e2e8f0; border-color: rgba(255,255,255,.08); }
+.dark .agent-core-editor { background: #151515; color: rgb(var(--cw-slate-200)); border-color: rgba(255,255,255,.08); }
 /* Read-only rendered markdown, shown instead of the textarea in preview mode.
    Same footprint as the editor so switching modes doesn't jump the layout. */
 .agent-core-preview {
     width: 100%; min-height: 520px; padding: 12px 14px;
-    background: #f8fafc; border-radius: 10px; border: 1px solid #e2e8f0;
+    background: rgb(var(--cw-slate-50)); border-radius: 10px; border: 1px solid rgb(var(--cw-slate-200));
     overflow-y: auto; font-size: 13px;
 }
 .dark .agent-core-preview { background: #151515; border-color: rgba(255,255,255,.08); }
 .agent-skill-row {
     display: flex; align-items: center; gap: 10px;
-    padding: 10px 0; border-bottom: 1px solid #f1f5f9;
+    padding: 10px 0; border-bottom: 1px solid rgb(var(--cw-slate-100));
 }
 .dark .agent-skill-row { border-color: rgba(255,255,255,.05); }
 
@@ -198,13 +198,13 @@
     appearance: none; -webkit-appearance: none;
     flex-shrink: 0; margin: 0; cursor: pointer;
     width: 16px; height: 16px; border-radius: 5px;
-    border: 1.5px solid #cbd5e1; background: #fff;
+    border: 1.5px solid rgb(var(--cw-slate-300)); background: #fff;
     position: relative; transition: background .12s, border-color .12s;
 }
 .dark #agent-detail-skills input[type="checkbox"] { background: #1f1f1f; border-color: rgba(255,255,255,.2); }
-#agent-detail-skills input[type="checkbox"]:hover { border-color: #4ABE6E; }
+#agent-detail-skills input[type="checkbox"]:hover { border-color: rgb(var(--cw-primary-400)); }
 #agent-detail-skills input[type="checkbox"]:checked {
-    background: #4ABE6E; border-color: #4ABE6E;
+    background: rgb(var(--cw-primary-400)); border-color: rgb(var(--cw-primary-400));
 }
 #agent-detail-skills input[type="checkbox"]:checked::after {
     content: ""; position: absolute;
@@ -216,7 +216,7 @@
     opacity: .5; cursor: not-allowed;
 }
 .agent-modal {
-    position: fixed; inset: 0; background: rgba(15, 23, 42, .45);
+    position: fixed; inset: 0; background: rgb(var(--cw-slate-900) / .45);
     display: flex; align-items: center; justify-content: center; z-index: 60;
     backdrop-filter: blur(2px);
 }
@@ -230,13 +230,13 @@
     background: #fff; border-radius: 18px;
     box-shadow: 0 24px 60px -20px rgba(0,0,0,.4);
 }
-.dark .agent-modal-card { background: #1A1A1A; border: 1px solid rgba(255,255,255,.08); }
+.dark .agent-modal-card { background: rgb(var(--cw-panel)); border: 1px solid rgba(255,255,255,.08); }
 .agent-modal-title {
-    font-size: 16px; font-weight: 600; color: #1e293b;
+    font-size: 16px; font-weight: 600; color: rgb(var(--cw-slate-800));
     padding: 22px 24px 4px;
     flex: 0 0 auto;
 }
-.dark .agent-modal-title { color: #f1f5f9; }
+.dark .agent-modal-title { color: rgb(var(--cw-slate-100)); }
 /* The body scrolls when a form outgrows the viewport (e.g. small laptops or
    narrow mobile widths) so the footer's action buttons stay reachable. While a
    dropdown is open we let the body overflow so its menu can spill past the last
@@ -246,7 +246,7 @@
 .agent-modal-body:has(.cfg-dropdown.open) { overflow: visible; }
 .agent-modal-foot {
     display: flex; align-items: center; gap: 10px;
-    padding: 16px 24px 20px; border-top: 1px solid #f1f5f9;
+    padding: 16px 24px 20px; border-top: 1px solid rgb(var(--cw-slate-100));
     flex: 0 0 auto;
 }
 .dark .agent-modal-foot { border-color: rgba(255,255,255,.06); }
@@ -257,25 +257,25 @@
 .agent-field { margin-bottom: 18px; }
 .agent-field-label {
     display: block; font-size: 12px; font-weight: 500;
-    color: #64748b; margin-bottom: 7px;
+    color: rgb(var(--cw-slate-500)); margin-bottom: 7px;
 }
-.dark .agent-field-label { color: #94a3b8; }
-.agent-field-hint { font-size: 11px; color: #94a3b8; margin-top: 6px; }
-.agent-status-ok { color: #17803d !important; }
+.dark .agent-field-label { color: rgb(var(--cw-slate-400)); }
+.agent-field-hint { font-size: 11px; color: rgb(var(--cw-slate-400)); margin-top: 6px; }
+.agent-status-ok { color: rgb(var(--cw-accent-ink)) !important; }
 .dark .agent-status-ok { color: #86efac !important; }
 .agent-status-error { color: #dc2626 !important; }
 .dark .agent-status-error { color: #fca5a5 !important; }
 #agent-detail-files button[onclick="saveAgentCoreFile()"][disabled] { opacity: 0.55; cursor: default; }
 .agent-input {
     width: 100%; height: 40px; padding: 0 12px;
-    border-radius: 10px; border: 1px solid #e2e8f0; background: #f8fafc;
-    font-size: 14px; color: #1e293b;
+    border-radius: 10px; border: 1px solid rgb(var(--cw-slate-200)); background: rgb(var(--cw-slate-50));
+    font-size: 14px; color: rgb(var(--cw-slate-800));
     transition: border-color .2s ease, box-shadow .2s ease;
 }
-.agent-input::placeholder { color: #cbd5e1; }
+.agent-input::placeholder { color: rgb(var(--cw-slate-300)); }
 .agent-input:focus {
-    outline: none; border-color: #4ABE6E;
-    box-shadow: 0 0 0 3px rgba(74, 190, 110, .12); background: #fff;
+    outline: none; border-color: rgb(var(--cw-primary-400));
+    box-shadow: 0 0 0 3px rgb(var(--cw-primary-400) / .12); background: #fff;
 }
 /* Responsibilities is a paragraph, not a line: let it breathe and wrap. */
 .agent-textarea {
@@ -283,13 +283,13 @@
     line-height: 1.55; resize: vertical; font-family: inherit;
 }
 .dark .agent-input {
-    border-color: #475569; background: rgba(255,255,255,.05); color: #f1f5f9;
+    border-color: rgb(var(--cw-slate-600)); background: rgba(255,255,255,.05); color: rgb(var(--cw-slate-100));
 }
 .dark .agent-input:focus { background: rgba(255,255,255,.07); }
 .agent-input-locked {
     width: 100%; min-height: 40px; padding: 9px 12px;
-    border-radius: 10px; border: 1px dashed #e2e8f0;
-    font-size: 13px; color: #94a3b8; background: #f8fafc;
+    border-radius: 10px; border: 1px dashed rgb(var(--cw-slate-200));
+    font-size: 13px; color: rgb(var(--cw-slate-400)); background: rgb(var(--cw-slate-50));
 }
 .dark .agent-input-locked { border-color: rgba(255,255,255,.1); background: rgba(255,255,255,.03); }
 
@@ -297,24 +297,24 @@
    so it reads as an inline control rather than a heavy toolbar. */
 .agent-seg {
     display: inline-flex; gap: 2px; padding: 2px;
-    border-radius: 8px; background: #f1f5f9; border: 1px solid #e2e8f0;
+    border-radius: 8px; background: rgb(var(--cw-slate-100)); border: 1px solid rgb(var(--cw-slate-200));
 }
 .dark .agent-seg { background: rgba(255,255,255,.05); border-color: rgba(255,255,255,.1); }
 .agent-seg-btn {
     display: inline-flex; align-items: center; justify-content: center;
     padding: 4px 12px; height: 26px; border-radius: 6px; border: none; cursor: pointer;
-    font-size: 12px; font-weight: 500; color: #64748b; background: transparent;
+    font-size: 12px; font-weight: 500; color: rgb(var(--cw-slate-500)); background: transparent;
     transition: background .15s, color .15s;
 }
 .agent-seg-btn i { font-size: 11px; }
-.dark .agent-seg-btn { color: #94a3b8; }
-.agent-seg-btn:hover { color: #334155; }
-.dark .agent-seg-btn:hover { color: #cbd5e1; }
+.dark .agent-seg-btn { color: rgb(var(--cw-slate-400)); }
+.agent-seg-btn:hover { color: rgb(var(--cw-slate-700)); }
+.dark .agent-seg-btn:hover { color: rgb(var(--cw-slate-300)); }
 .agent-seg-btn.active {
     background: #fff; color: #16a34a;
     box-shadow: 0 1px 2px rgba(0,0,0,.06);
 }
-.dark .agent-seg-btn.active { background: rgba(255,255,255,.12); color: #86efac; }
+.dark .agent-seg-btn.active { background: rgba(255,255,255,.12); color: rgb(var(--cw-accent-ink)); }
 
 /* An info icon that sits after a field label and reveals its help on hover,
    replacing a permanent paragraph of hint text below the field. The popup
@@ -325,14 +325,14 @@
 .agent-field-label-row .agent-field-label { margin-bottom: 0; }
 .agent-field-tip {
     position: relative; display: inline-flex; align-items: center; justify-content: center;
-    width: 14px; height: 14px; color: #cbd5e1; cursor: help; font-size: 11px;
+    width: 14px; height: 14px; color: rgb(var(--cw-slate-300)); cursor: help; font-size: 11px;
 }
-.agent-field-tip:hover { color: #94a3b8; }
-.dark .agent-field-tip { color: #64748b; }
-.dark .agent-field-tip:hover { color: #94a3b8; }
+.agent-field-tip:hover { color: rgb(var(--cw-slate-400)); }
+.dark .agent-field-tip { color: rgb(var(--cw-slate-500)); }
+.dark .agent-field-tip:hover { color: rgb(var(--cw-slate-400)); }
 .agent-tip-popup {
     position: fixed; width: max-content; max-width: 260px; padding: 8px 10px;
-    border-radius: 8px; background: #1e293b; color: #f1f5f9;
+    border-radius: 8px; background: rgb(var(--cw-slate-800)); color: rgb(var(--cw-slate-100));
     font-size: 11px; font-weight: 400; line-height: 1.5; text-align: left; white-space: pre-line;
     opacity: 0; pointer-events: none; transition: opacity .12s; z-index: 200;
     box-shadow: 0 6px 20px rgba(0,0,0,.18);
@@ -341,17 +341,17 @@
 .agent-tip-popup::after {
     content: ""; position: absolute; left: var(--tip-arrow-x, 50%); top: 100%;
     transform: translateX(-50%);
-    border: 5px solid transparent; border-top-color: #1e293b;
+    border: 5px solid transparent; border-top-color: rgb(var(--cw-slate-800));
 }
 /* Flipped below the icon when there isn't room above (e.g. near the top of a
    drawer): the arrow points up at the icon instead of down. */
 .agent-tip-popup.tip-arrow-top::after {
     top: auto; bottom: 100%;
-    border-top-color: transparent; border-bottom-color: #1e293b;
+    border-top-color: transparent; border-bottom-color: rgb(var(--cw-slate-800));
 }
-.dark .agent-tip-popup { background: #0f172a; }
-.dark .agent-tip-popup::after { border-top-color: #0f172a; }
-.dark .agent-tip-popup.tip-arrow-top::after { border-bottom-color: #0f172a; }
+.dark .agent-tip-popup { background: rgb(var(--cw-slate-900)); }
+.dark .agent-tip-popup::after { border-top-color: rgb(var(--cw-slate-900)); }
+.dark .agent-tip-popup.tip-arrow-top::after { border-bottom-color: rgb(var(--cw-slate-900)); }
 
 /* Avatar picker: a live preview beside an emoji grid and an upload button,
    all in the page palette. */
@@ -361,12 +361,12 @@
 .agent-avatar-upload {
     display: inline-flex; align-items: center; gap: 6px; margin-top: 10px;
     padding: 6px 12px; border-radius: 9px;
-    border: 1px solid #e2e8f0; background: #fff;
-    font-size: 12px; color: #64748b; cursor: pointer;
+    border: 1px solid rgb(var(--cw-slate-200)); background: #fff;
+    font-size: 12px; color: rgb(var(--cw-slate-500)); cursor: pointer;
     transition: border-color .15s ease, color .15s ease;
 }
-.agent-avatar-upload:hover { border-color: #4ABE6E; color: #17803d; }
-.dark .agent-avatar-upload { background: rgba(255,255,255,.04); border-color: rgba(255,255,255,.1); color: #94a3b8; }
+.agent-avatar-upload:hover { border-color: rgb(var(--cw-primary-400)); color: rgb(var(--cw-accent-ink)); }
+.dark .agent-avatar-upload { background: rgba(255,255,255,.04); border-color: rgba(255,255,255,.1); color: rgb(var(--cw-slate-400)); }
 
 /* While bytes are in flight: dim the preview and spin a ring over it, and make
    the upload button read as busy so a second click does not stack requests. */
@@ -374,7 +374,7 @@
 .agent-avatar-picker.is-uploading .agent-avatar-picker-preview::after {
     content: ""; position: absolute; inset: 0; margin: auto;
     width: 22px; height: 22px; border-radius: 50%;
-    border: 2px solid rgba(74,190,110,.35); border-top-color: #4ABE6E;
+    border: 2px solid rgb(var(--cw-primary-400) / .35); border-top-color: rgb(var(--cw-primary-400));
     animation: agent-avatar-spin .7s linear infinite;
 }
 .agent-avatar-picker.is-uploading .agent-avatar-picker-preview .agent-avatar { opacity: .35; }
@@ -390,18 +390,18 @@
     font-size: 13px; font-weight: 500; cursor: pointer;
     transition: background .15s ease, border-color .15s ease, color .15s ease;
 }
-.agent-btn-primary { background: #4ABE6E; color: #fff; }
+.agent-btn-primary { background: rgb(var(--cw-primary-400)); color: #fff; }
 .agent-btn-primary:hover { background: #3aa85d; }
-.agent-btn-ghost { border: 1px solid #e2e8f0; color: #475569; background: #fff; }
-.agent-btn-ghost:hover { border-color: #94a3b8; }
-.dark .agent-btn-ghost { background: transparent; border-color: rgba(255,255,255,.12); color: #cbd5e1; }
-.agent-btn-text { color: #64748b; background: transparent; }
-.agent-btn-text:hover { color: #334155; }
-.dark .agent-btn-text:hover { color: #e2e8f0; }
+.agent-btn-ghost { border: 1px solid rgb(var(--cw-slate-200)); color: rgb(var(--cw-slate-600)); background: #fff; }
+.agent-btn-ghost:hover { border-color: rgb(var(--cw-slate-400)); }
+.dark .agent-btn-ghost { background: transparent; border-color: rgba(255,255,255,.12); color: rgb(var(--cw-slate-300)); }
+.agent-btn-text { color: rgb(var(--cw-slate-500)); background: transparent; }
+.agent-btn-text:hover { color: rgb(var(--cw-slate-700)); }
+.dark .agent-btn-text:hover { color: rgb(var(--cw-slate-200)); }
 .agent-btn-sm { padding: 4px 8px; font-size: 12px; }
-.agent-btn-text.agent-btn-sm { color: #4ABE6E; }
-.agent-btn-text.agent-btn-sm:hover { color: #228547; }
-.agent-btn-accent { color: #17803d; }
+.agent-btn-text.agent-btn-sm { color: rgb(var(--cw-primary-400)); }
+.agent-btn-text.agent-btn-sm:hover { color: rgb(var(--cw-primary-600)); }
+.agent-btn-accent { color: rgb(var(--cw-accent-ink)); }
 .agent-btn-danger { color: #ef4444; background: transparent; }
 .agent-btn-danger:hover { color: #dc2626; }
 
@@ -415,32 +415,32 @@
     box-shadow: 0 0 0 2px transparent;
 }
 .composer-agent-btn { position: relative; }
-.composer-agent-btn:hover { box-shadow: 0 0 0 2px #4ABE6E; }
+.composer-agent-btn:hover { box-shadow: 0 0 0 2px rgb(var(--cw-primary-400)); }
 /* Locked only means the owner can no longer be swapped; the button still opens
    its menu, so it keeps a pointer. */
-.composer-agent-btn.locked:hover { box-shadow: 0 0 0 2px #cbd5e1; }
+.composer-agent-btn.locked:hover { box-shadow: 0 0 0 2px rgb(var(--cw-slate-300)); }
 .composer-agent-count {
     position: absolute; right: -4px; bottom: -4px;
     min-width: 13px; height: 13px; padding: 0 2px;
     border-radius: 999px; border: 2px solid #fff;
-    background: #4ABE6E; color: #fff;
+    background: rgb(var(--cw-primary-400)); color: #fff;
     font-size: 8px; font-weight: 600; line-height: 9px; text-align: center;
 }
-.dark .composer-agent-count { border-color: #1A1A1A; }
+.dark .composer-agent-count { border-color: rgb(var(--cw-panel)); }
 
 /* The current Agent is marked by its trailing check, not a standing highlight:
    a permanent green fill fought the hover state, so two rows looked selected at
    once. Hover is the only fill; current just tints its text and check. */
-.composer-menu-item.current { color: #228547; }
-.composer-menu-item.current:hover { background: #EDFDF3; }
-.dark .composer-menu-item.current { color: #6EE7A0; }
-.dark .composer-menu-item.current:hover { background: rgba(74, 190, 110, .14); }
-.composer-menu-item.current > i.fa-check { color: #4ABE6E; }
+.composer-menu-item.current { color: rgb(var(--cw-primary-600)); }
+.composer-menu-item.current:hover { background: rgb(var(--cw-primary-50)); }
+.dark .composer-menu-item.current { color: rgb(var(--cw-accent-ink)); }
+.dark .composer-menu-item.current:hover { background: rgb(var(--cw-primary-400) / .14); }
+.composer-menu-item.current > i.fa-check { color: rgb(var(--cw-primary-400)); }
 /* A member already in the conversation is a plain row, not a standing green
    fill (that read as "everything is selected"). A dim ✓ marks that it's in the
    chat; hovering a removable teammate swaps it for a red × (the owner row is a
    non-button and stays put). */
-.composer-menu-item.joined .joined-check { color: #94a3b8; }
+.composer-menu-item.joined .joined-check { color: rgb(var(--cw-slate-400)); }
 .composer-menu-item.joined .joined-remove { display: none; }
 button.composer-menu-item.joined:hover { background: #FEF2F2; color: #b91c1c; cursor: pointer; }
 .dark button.composer-menu-item.joined:hover { background: rgba(239, 68, 68, .12); color: #fca5a5; }
@@ -452,13 +452,13 @@ button.composer-menu-item.joined:hover .joined-remove { display: inline; color: 
 .composer-menu-item.joined.is-owner:hover { background: transparent; color: inherit; }
 .composer-menu-badge {
     font-size: 10px; font-weight: 500; padding: 1px 7px; border-radius: 999px;
-    background: #f1f5f9; color: #64748b;
+    background: rgb(var(--cw-slate-100)); color: rgb(var(--cw-slate-500));
 }
-.dark .composer-menu-badge { background: rgba(255,255,255,.08); color: #94a3b8; }
+.dark .composer-menu-badge { background: rgba(255,255,255,.08); color: rgb(var(--cw-slate-400)); }
 /* The "main Agent" badge is the one standing marker in the roster, so it reads
    in the brand green rather than the muted grey of an ordinary badge. */
-.composer-menu-badge.owner-badge { background: #4ABE6E; color: #fff; }
-.dark .composer-menu-badge.owner-badge { background: #4ABE6E; color: #fff; }
+.composer-menu-badge.owner-badge { background: rgb(var(--cw-primary-400)); color: #fff; }
+.dark .composer-menu-badge.owner-badge { background: rgb(var(--cw-primary-400)); color: #fff; }
 .composer-menu-item .agent-avatar { flex-shrink: 0; }
 .composer-menu-sep { height: 1px; margin: 5px 6px; background: #eef2f6; }
 .dark .composer-menu-sep { background: rgba(255, 255, 255, 0.08); }
@@ -477,17 +477,17 @@ button.composer-menu-item.joined:hover .joined-remove { display: inline; color: 
     display: inline-flex; align-items: center; justify-content: center;
     min-width: 20px; height: 20px; padding: 0 4px; margin-left: -8px;
     border: 1.5px solid #fff; box-sizing: content-box;
-    border-radius: 999px; background: #e2e8f0; color: #475569;
+    border-radius: 999px; background: rgb(var(--cw-slate-200)); color: rgb(var(--cw-slate-600));
     font-size: 10px; font-weight: 600; line-height: 1;
 }
-.dark .session-face-more { border-color: #141414; background: #2a2a2a; color: #cbd5e1; }
+.dark .session-face-more { border-color: #141414; background: #2a2a2a; color: rgb(var(--cw-slate-300)); }
 
 .bot-face { flex-shrink: 0; line-height: 0; }
 .bot-speaker {
     margin: 0 0 4px 2px;
-    font-size: 11px; font-weight: 500; color: #64748b;
+    font-size: 11px; font-weight: 500; color: rgb(var(--cw-slate-500));
 }
-.dark .bot-speaker { color: #94a3b8; }
+.dark .bot-speaker { color: rgb(var(--cw-slate-400)); }
 
 /* A mention reads as the teammate it names: a rounded chip carrying their face
    and name, so "@我的运营助手" looks addressed rather than typed. */
@@ -515,21 +515,21 @@ button.composer-menu-item.joined:hover .joined-remove { display: inline; color: 
 }
 .mention-tag-name { white-space: nowrap; }
 /* In a bot bubble (white surface) the chip needs its own tint to read as a chip. */
-.bot-message-group .mention-tag { background: #EDFDF3; color: #17803d; }
-.dark .bot-message-group .mention-tag { background: rgba(74, 190, 110, .16); color: #6EE7A0; }
+.bot-message-group .mention-tag { background: rgb(var(--cw-primary-50)); color: rgb(var(--cw-accent-ink)); }
+.dark .bot-message-group .mention-tag { background: rgb(var(--cw-primary-400) / .16); color: rgb(var(--cw-accent-ink)); }
 
 .channel-agent-bind {
     display: flex; align-items: center; gap: 8px;
     margin: 0 0 16px; padding: 10px 12px;
-    background: #f8fafc; border-radius: 10px;
+    background: rgb(var(--cw-slate-50)); border-radius: 10px;
 }
 .dark .channel-agent-bind { background: rgba(255,255,255,.04); }
 .channel-agent-bind select {
     flex: 1; min-width: 0;
     padding: 6px 8px; border-radius: 8px;
-    border: 1px solid #e2e8f0; background: #fff; font-size: 13px;
+    border: 1px solid rgb(var(--cw-slate-200)); background: #fff; font-size: 13px;
 }
-.dark .channel-agent-bind select { background: #222; border-color: rgba(255,255,255,.1); color: #e2e8f0; }
+.dark .channel-agent-bind select { background: #222; border-color: rgba(255,255,255,.1); color: rgb(var(--cw-slate-200)); }
 /* Bind-agent avatar dropdown fills the row like the old <select> did. */
 .channel-agent-bind .cfg-dropdown { flex: 1 1 auto; min-width: 0; width: auto !important; }
 

@@ -1,4 +1,4 @@
-node_modules/
+node_modules
 dist/
 release/
 v[0-9]*/

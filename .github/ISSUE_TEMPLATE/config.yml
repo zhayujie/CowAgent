@@ -3,3 +3,6 @@ contact_links:
   - name: 📖 Documentation
     url: https://docs.cowagent.ai
     about: Setup guides, configuration, and FAQ.
+  - name: 🔒 Security vulnerability
+    url: https://github.com/zhayujie/CowAgent/security/advisories/new
+    about: Please report security issues privately, not as a public issue.

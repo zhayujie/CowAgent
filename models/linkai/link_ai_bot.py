@@ -16,9 +16,15 @@ from common.log import logger
 from config import conf, pconf
 import threading
 from common import memory, state_dir, utils
+from common.media_download import MAX_FILE_BYTES, download_to_file
 import base64
 import os
 from urllib.parse import urlparse
+
+# An overloaded endpoint can hold the stream open with only ": keep-alive"
+# comments. Each one resets the socket read timeout, so without this cap a
+# queued request can hang for many minutes.
+STREAM_KEEPALIVE_MAX_SECONDS = 180
 
 
 def _linkai_base_url():
@@ -515,10 +521,8 @@ def _download_file(url: str):
         # the process CWD, which the packaged desktop app does not control and may
         # not be able to write, and state_dir owns the layout anyway.
         file_path = state_dir.tmp_dir() / file_name
-        response = requests.get(url, timeout=(5, 60))
-        # An expired signed link answers with an HTML error page, not the file.
-        response.raise_for_status()
-        file_path.write_bytes(response.content)
+        # The remote side decides the size; stream under the shared cap.
+        download_to_file(url, str(file_path), MAX_FILE_BYTES, timeout=(5, 60))
         return str(file_path)
     except Exception as e:
         logger.warn(e)
@@ -551,14 +555,76 @@ class LinkAISession(ChatGPTSession):
         return len(str(self.messages))
 
     def discard_exceeding(self, max_tokens, cur_tokens=None):
+        """Trim the history until it fits the configured context budget.
+
+        ``conversation_max_tokens`` caps how much history is carried into
+        the next request (1000 characters by default). The sibling sessions
+        loop until the history fits and drop the oldest message first, so
+        the recent turns survive.
+
+        This override used to remove a single (user, assistant) pair and
+        return, so the history stayed permanently over the budget -- about
+        twenty times it after a handful of turns -- and every request
+        carried that stale context to the API. It also never trimmed at all
+        when the history had no adjacent user/assistant pair.
+        """
         cur_tokens = self.calc_tokens()
-        if cur_tokens > max_tokens:
-            for i in range(0, len(self.messages)):
-                if i > 0 and self.messages[i].get("role") == "assistant" and self.messages[i - 1].get("role") == "user":
-                    self.messages.pop(i)
-                    self.messages.pop(i - 1)
-                    return self.calc_tokens()
+        while cur_tokens > max_tokens:
+            # Index 0 is the system prompt; it always stays.
+            if len(self.messages) <= 1:
+                break
+            if not self._drop_oldest_turn():
+                break
+            cur_tokens = self.calc_tokens()
         return cur_tokens
+
+    def _drop_oldest_turn(self) -> bool:
+        """Drop the oldest turn from the history.
+
+        A turn is a question together with its answer, so the history never
+        keeps half a turn. Returns False when nothing may be dropped any
+        more: the current turn alone is larger than the whole budget and has
+        to be kept so the turn can still be answered.
+        """
+        for index in range(1, len(self.messages)):
+            if self.messages[index].get("role") != "user":
+                continue
+            if index + 1 < len(self.messages) and \
+                    self.messages[index + 1].get("role") == "assistant":
+                if self._is_last_turn(index):
+                    # The current turn alone exceeds the budget. Keep it,
+                    # like the other sessions keep the current question,
+                    # and stop trimming.
+                    logger.warning(
+                        "user message exceed max_tokens. total_tokens={}".format(
+                            self.calc_tokens())
+                    )
+                    return False
+                # Drop the whole turn: the question and its answer.
+                self.messages.pop(index + 1)
+                self.messages.pop(index)
+                return True
+            if len(self.messages) == 2:
+                # The current question alone exceeds the budget. Keep it,
+                # like the other sessions do, and stop trimming.
+                logger.warning(
+                    "user message exceed max_tokens. total_tokens={}".format(
+                        self.calc_tokens())
+                )
+                return False
+            # A question without an answer after it: drop it on its own.
+            self.messages.pop(index)
+            return True
+        # No user turn left: drop the oldest remaining message.
+        self.messages.pop(1)
+        return True
+
+    def _is_last_turn(self, index: int) -> bool:
+        """True when the question at `index` is the last turn of the history."""
+        for later in range(index + 1, len(self.messages)):
+            if self.messages[later].get("role") == "user":
+                return False
+        return True
 
 
 # Add call_with_tools method to LinkAIBot class
@@ -715,6 +781,7 @@ def _handle_linkai_sync_response(self, base_url, headers, body):
 def _handle_linkai_stream_response(self, base_url, headers, body):
     """Handle streaming LinkAI API response"""
     try:
+        last_data_at = time.time()
         res = requests.post(
             url=base_url + "/v1/chat/completions",
             json=body,
@@ -743,6 +810,22 @@ def _handle_linkai_stream_response(self, base_url, headers, body):
         for line in res.iter_lines():
             if line:
                 line = line.decode('utf-8')
+                if line.startswith(":"):
+                    if time.time() - last_data_at > STREAM_KEEPALIVE_MAX_SECONDS:
+                        logger.error(
+                            f"[LinkAI] Stream timeout: only keep-alive received for "
+                            f"{STREAM_KEEPALIVE_MAX_SECONDS}s"
+                        )
+                        yield {
+                            "error": True,
+                            "message": f"Stream timeout: only keep-alive received for {STREAM_KEEPALIVE_MAX_SECONDS}s",
+                            "status_code": 504,
+                        }
+                        return
+                    # Empty chunk lets the caller check for cancel while the server is queueing
+                    yield {}
+                    continue
+                last_data_at = time.time()
                 if line.startswith('data: '):
                     line = line[6:]  # Remove 'data: ' prefix
                     if line == '[DONE]':

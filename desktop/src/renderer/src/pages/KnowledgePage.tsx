@@ -12,12 +12,16 @@ import {
   FolderPlus,
   FilePlus2,
   Upload,
+  ArrowRightLeft,
+  Pencil,
+  Trash2,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { t, tf, getLang } from '../i18n'
 import apiClient from '../api/client'
 import type {
+  KnowledgeAction,
   KnowledgeDir,
   KnowledgeFile,
   KnowledgeList,
@@ -28,7 +32,9 @@ import Markdown from '../components/Markdown'
 import KnowledgeGraph from '../components/KnowledgeGraph'
 import { DocActions, DocEditor, DocNotice, DocView } from '../components/DocEditor'
 import { createDocEditorStore } from '../store/docEditorStore'
+import { askConfirm } from '../store/confirmStore'
 import AgentScopeSelect from '../components/AgentScopeSelect'
+import Tooltip from '../components/Tooltip'
 import { useAgentStore, selectMultiAgent } from '../store/agentStore'
 
 interface KnowledgePageProps {
@@ -148,9 +154,20 @@ function validateImportFiles(files: File[]): string {
 // ---- Dialog model ----------------------------------------------------------
 
 interface DialogState {
-  kind: 'category' | 'doc-pick-category' | 'document' | 'import'
+  kind: 'category' | 'doc-pick-category' | 'document' | 'import' | 'rename-category' | 'move-document'
   category?: string
   files?: File[]
+  /** The category being renamed, or the document being moved. */
+  path?: string
+}
+
+// Index pages the Agent maintains; the backend refuses to move or delete them.
+const isProtectedPage = (path: string) => PROTECTED_KNOWLEDGE_PAGES.includes(path)
+
+// Where a document can be moved to: any category but the one it is already in.
+const moveTargets = (categories: string[], path: string) => {
+  const current = path.split('/').slice(0, -1).join('/')
+  return categories.filter((c) => c !== current)
 }
 
 // Find the first document (root files first, then a DFS over the tree).
@@ -309,16 +326,17 @@ const KnowledgePage: React.FC<KnowledgePageProps> = ({ baseUrl }) => {
     [data, openDoc]
   )
 
-  // Reload the tree. When targetPath is given, open it; otherwise keep the
+  // Reload the tree. When targetPath is given, open it; null means the open doc
+  // no longer exists, so fall back to the first one; otherwise keep the
   // currently open doc (or open the first one on the initial load).
   const refresh = useCallback(
-    async (targetPath?: string) => {
+    async (targetPath?: string | null) => {
       try {
         const fresh = await apiClient.getKnowledgeList(viewingAgentId || undefined)
         setData(fresh)
         if (targetPath) {
           openDoc(targetPath, findTitle(fresh, targetPath))
-        } else if (!activePath) {
+        } else if (targetPath === null || !activePath) {
           const first = firstFile(fresh)
           if (first) openDoc(first.path, first.title)
         }
@@ -522,6 +540,157 @@ const KnowledgePage: React.FC<KnowledgePageProps> = ({ baseUrl }) => {
     [startImport]
   )
 
+  // Rename, move and delete: answers the action's payload, or null once the
+  // failure has been reported.
+  const runAction = useCallback(
+    async (req: KnowledgeAction): Promise<Record<string, unknown> | null> => {
+      showStatus(t('knowledge_working'), false, true)
+      try {
+        const res = await apiClient.knowledgeAction({
+          ...req,
+          ...(viewingAgentId ? { agent_id: viewingAgentId } : {}),
+        })
+        if (res.status !== 'success') {
+          showStatus((res.message as string) || t('knowledge_request_failed'), true)
+          await refresh()
+          return null
+        }
+        return (res.payload || {}) as Record<string, unknown>
+      } catch {
+        showStatus(t('knowledge_request_failed'), true)
+        return null
+      }
+    },
+    [refresh, showStatus, viewingAgentId]
+  )
+
+  const opensCategory = useCallback(
+    (path: string) => !!activePath && activePath.startsWith(`${path}/`),
+    [activePath]
+  )
+
+  // Moving or renaming changes the open page's path, which an open editor
+  // would save back to, so the editor is saved and closed first - an untouched
+  // one just closes. False when the user declined or the save did not land;
+  // the editor stays open either way.
+  const saveOpenEdit = useCallback(async (): Promise<boolean> => {
+    const { edit, save } = knowledgeEditor.getState()
+    if (!edit) return true
+    const ok = await askConfirm({
+      titleKey: 'knowledge_save_first_title',
+      msgKey: 'knowledge_save_first_msg',
+      okKey: 'doc_edit_save',
+      tone: 'primary',
+    })
+    if (!ok) return false
+    await save(editorRef.current?.value ?? edit.loaded)
+    return !knowledgeEditor.getState().edit
+  }, [])
+
+  const startMoveDocument = useCallback(
+    async (path: string) => {
+      if (!moveTargets(categories, path).length) {
+        showStatus(t('knowledge_move_need_category'), true)
+        return
+      }
+      if (activePath === path && !(await saveOpenEdit())) return
+      setDialog({ kind: 'move-document', path })
+    },
+    [activePath, categories, saveOpenEdit, showStatus]
+  )
+
+  const moveDocument = useCallback(
+    async (path: string, target: string): Promise<boolean> => {
+      const payload = await runAction({
+        action: 'move_documents',
+        payload: { paths: [path], target_category: target },
+      })
+      if (!payload) return false
+      const result = ((payload.results as { moved?: boolean; target?: string; reason?: string }[]) || [])[0]
+      if (!result?.moved) {
+        const clash = result?.reason === 'target_exists'
+        showStatus(clash ? t('knowledge_move_target_exists') : t('knowledge_request_failed'), true)
+        await refresh()
+        // A name clash can be fixed by picking another category; keep the dialog.
+        return !clash
+      }
+      showStatus(tf('knowledge_documents_moved', { count: Number(payload.moved) || 1 }))
+      await refresh(activePath === path ? result.target : undefined)
+      return true
+    },
+    [activePath, refresh, runAction, showStatus]
+  )
+
+  // Deleting needs no separate guard: confirming the deletion also gives up any
+  // unsaved edit of the page, and nothing is dropped if the user backs out.
+  const deleteDocument = useCallback(
+    async (path: string) => {
+      const affected = activePath === path
+      const ok = await askConfirm({
+        titleKey: 'knowledge_delete_document',
+        msgKey: 'knowledge_delete_document_confirm',
+        okKey: 'knowledge_delete',
+        vars: { name: path },
+      })
+      if (!ok) return
+      const payload = await runAction({ action: 'delete_documents', payload: { paths: [path] } })
+      if (!payload) return
+      showStatus(tf('knowledge_documents_deleted', { count: Number(payload.deleted) || 0 }))
+      if (affected) knowledgeEditor.getState().forget()
+      await refresh(affected ? null : undefined)
+    },
+    [activePath, refresh, runAction, showStatus]
+  )
+
+  const startRenameCategory = useCallback(
+    async (path: string) => {
+      if (opensCategory(path) && !(await saveOpenEdit())) return
+      setDialog({ kind: 'rename-category', path })
+    },
+    [opensCategory, saveOpenEdit]
+  )
+
+  const renameCategory = useCallback(
+    async (path: string, newPath: string): Promise<boolean> => {
+      const payload = await runAction({ action: 'rename_category', payload: { path, new_path: newPath } })
+      if (!payload) return false
+      const oldPath = (payload.old_path as string) || path
+      const renamed = (payload.path as string) || newPath
+      showStatus(t('knowledge_category_renamed'))
+      await refresh(
+        activePath && opensCategory(oldPath) ? renamed + activePath.slice(oldPath.length) : undefined
+      )
+      return true
+    },
+    [activePath, opensCategory, refresh, runAction, showStatus]
+  )
+
+  const deleteCategory = useCallback(
+    async (path: string) => {
+      const affected = opensCategory(path)
+      const ok = await askConfirm({
+        titleKey: 'knowledge_delete_category',
+        msgKey: 'knowledge_delete_category_confirm',
+        okKey: 'knowledge_delete',
+        vars: { name: path },
+      })
+      if (!ok) return
+      const payload = await runAction({ action: 'delete_category', payload: { path, confirm: true } })
+      if (!payload) return
+      showStatus(t('knowledge_category_deleted'))
+      if (affected) knowledgeEditor.getState().forget()
+      await refresh(affected ? null : undefined)
+    },
+    [opensCategory, refresh, runAction, showStatus]
+  )
+
+  const treeActions: TreeActions = {
+    moveDocument: startMoveDocument,
+    deleteDocument,
+    renameCategory: startRenameCategory,
+    deleteCategory,
+  }
+
   const totalPages = data?.stats?.pages ?? 0
   const statsLabel = useMemo(() => {
     if (!data) return ''
@@ -680,6 +849,7 @@ const KnowledgePage: React.FC<KnowledgePageProps> = ({ baseUrl }) => {
                 search={search.trim().toLowerCase()}
                 activePath={activePath}
                 onOpen={openDoc}
+                actions={treeActions}
               />
             </div>
           </div>
@@ -768,6 +938,8 @@ const KnowledgePage: React.FC<KnowledgePageProps> = ({ baseUrl }) => {
           onPickDocCategory={(category) => setDialog({ kind: 'document', category })}
           onCreateDocument={createDocument}
           onImport={importDocuments}
+          onRenameCategory={renameCategory}
+          onMoveDocument={moveDocument}
         />
       )}
     </div>
@@ -850,15 +1022,30 @@ const KnowledgeDialog: React.FC<{
   onPickDocCategory: (category: string) => void
   onCreateDocument: (path: string, content: string) => Promise<string | null>
   onImport: (files: File[], target: string) => Promise<boolean>
-}> = ({ state, categories, onClose, onCreateCategory, onPickDocCategory, onCreateDocument, onImport }) => {
-  const [categoryInput, setCategoryInput] = useState('')
-  const [selected, setSelected] = useState(categories[0] || '')
+  onRenameCategory: (path: string, newPath: string) => Promise<boolean>
+  onMoveDocument: (path: string, target: string) => Promise<boolean>
+}> = ({
+  state,
+  categories,
+  onClose,
+  onCreateCategory,
+  onPickDocCategory,
+  onCreateDocument,
+  onImport,
+  onRenameCategory,
+  onMoveDocument,
+}) => {
+  const choices = state.kind === 'move-document' ? moveTargets(categories, state.path || '') : categories
+  const [categoryInput, setCategoryInput] = useState(state.kind === 'rename-category' ? state.path || '' : '')
+  const [selected, setSelected] = useState(choices[0] || '')
   const [filename, setFilename] = useState('')
   const [contentInput, setContentInput] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
   const submit = async () => {
+    // Enter in a text field bypasses the disabled Confirm button.
+    if (busy) return
     setError('')
     if (state.kind === 'category') {
       const path = categoryInput.trim()
@@ -897,6 +1084,24 @@ const KnowledgeDialog: React.FC<{
       if (ok) onClose()
       return
     }
+    if (state.kind === 'rename-category') {
+      const newPath = categoryInput.trim()
+      if (!newPath) return setError(t('knowledge_field_required'))
+      if (newPath === state.path) return setError(t('knowledge_rename_same'))
+      setBusy(true)
+      const ok = await onRenameCategory(state.path || '', newPath)
+      setBusy(false)
+      if (ok) onClose()
+      return
+    }
+    if (state.kind === 'move-document') {
+      if (!selected) return setError(t('knowledge_field_required'))
+      setBusy(true)
+      const ok = await onMoveDocument(state.path || '', selected)
+      setBusy(false)
+      if (ok) onClose()
+      return
+    }
   }
 
   const titleMap: Record<DialogState['kind'], string> = {
@@ -904,9 +1109,13 @@ const KnowledgeDialog: React.FC<{
     'doc-pick-category': t('knowledge_new_document'),
     document: t('knowledge_new_document'),
     import: t('knowledge_import_documents'),
+    'rename-category': t('knowledge_rename_category'),
+    'move-document': t('knowledge_move_document'),
   }
 
-  const noCategory = (state.kind === 'doc-pick-category' || state.kind === 'import') && !categories.length
+  const noCategory =
+    (state.kind === 'doc-pick-category' || state.kind === 'import' || state.kind === 'move-document') &&
+    !choices.length
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4" onMouseDown={onClose}>
@@ -983,6 +1192,29 @@ const KnowledgeDialog: React.FC<{
             <p className="text-xs text-content-tertiary mt-1.5">
               {categories.length ? t('knowledge_import_hint') : t('knowledge_import_need_category')}
             </p>
+          </>
+        )}
+
+        {state.kind === 'rename-category' && (
+          <>
+            <p className="text-xs text-content-tertiary mb-4 font-mono truncate">{state.path}</p>
+            <label className="block text-sm text-content-secondary mb-1.5">{t('knowledge_rename_label')}</label>
+            <input
+              autoFocus
+              value={categoryInput}
+              onChange={(e) => setCategoryInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && submit()}
+              className="w-full px-3 py-2 rounded-btn border border-strong bg-inset text-sm text-content placeholder:text-content-tertiary focus:outline-none focus:border-accent transition-colors"
+            />
+            <p className="text-xs text-content-tertiary mt-1.5">{t('knowledge_category_hint')}</p>
+          </>
+        )}
+
+        {state.kind === 'move-document' && (
+          <>
+            <p className="text-xs text-content-tertiary mb-4 font-mono truncate">{state.path}</p>
+            <label className="block text-sm text-content-secondary mb-1.5">{t('knowledge_destination')}</label>
+            <CategorySelect value={selected} options={choices} onChange={setSelected} />
           </>
         )}
 
@@ -1088,12 +1320,45 @@ const TabBtn: React.FC<{
 
 // ---- Tree rendering --------------------------------------------------------
 
+interface TreeActions {
+  moveDocument: (path: string) => void
+  deleteDocument: (path: string) => void
+  renameCategory: (path: string) => void
+  deleteCategory: (path: string) => void
+}
+
+// Revealed on row hover. A span rather than a button: the row it sits in is
+// itself a button.
+const RowAction: React.FC<{
+  icon: LucideIcon
+  label: string
+  danger?: boolean
+  onClick: () => void
+}> = ({ icon: Icon, label, danger, onClick }) => (
+  <Tooltip label={label}>
+    <span
+      role="button"
+      aria-label={label}
+      onClick={(e) => {
+        e.stopPropagation()
+        onClick()
+      }}
+      className={`inline-flex items-center justify-center w-6 h-6 rounded cursor-pointer transition-colors text-content-tertiary ${
+        danger ? 'hover:text-danger hover:bg-danger-soft' : 'hover:text-content hover:bg-surface'
+      }`}
+    >
+      <Icon size={12} />
+    </span>
+  </Tooltip>
+)
+
 const Tree: React.FC<{
   data: KnowledgeList
   search: string
   activePath: string | null
   onOpen: (path: string, title: string) => void
-}> = ({ data, search, activePath, onOpen }) => {
+  actions: TreeActions
+}> = ({ data, search, activePath, onOpen, actions }) => {
   const matches = (f: KnowledgeFile) => !search || f.title.toLowerCase().includes(search) || f.name.toLowerCase().includes(search)
 
   return (
@@ -1105,10 +1370,19 @@ const Tree: React.FC<{
           title={f.title || f.name}
           active={activePath === f.name}
           onOpen={onOpen}
+          actions={actions}
         />
       ))}
       {(data.tree || []).map((dir) => (
-        <DirNode key={dir.dir} dir={dir} prefix="" search={search} activePath={activePath} onOpen={onOpen} />
+        <DirNode
+          key={dir.dir}
+          dir={dir}
+          prefix=""
+          search={search}
+          activePath={activePath}
+          onOpen={onOpen}
+          actions={actions}
+        />
       ))}
     </div>
   )
@@ -1128,7 +1402,8 @@ const DirNode: React.FC<{
   search: string
   activePath: string | null
   onOpen: (path: string, title: string) => void
-}> = ({ dir, prefix, search, activePath, onOpen }) => {
+  actions: TreeActions
+}> = ({ dir, prefix, search, activePath, onOpen, actions }) => {
   const dirPath = prefix ? `${prefix}/${dir.dir}` : dir.dir
   const [open, setOpen] = useState(true)
   const matchCount = search ? countMatches(dir, search) : dir.files.length + dir.children.length
@@ -1143,11 +1418,22 @@ const DirNode: React.FC<{
     <div>
       <button
         onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center gap-1 px-2 py-1.5 rounded-btn text-sm text-content-secondary hover:bg-surface-2 cursor-pointer transition-colors"
+        className="group w-full flex items-center gap-1 px-2 py-1.5 rounded-btn text-sm text-content-secondary hover:bg-surface-2 cursor-pointer transition-colors"
       >
         {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
         <span className="truncate font-medium">{dir.dir}</span>
-        <span className="ml-auto text-xs text-content-tertiary">{matchCount}</span>
+        <span className="ml-auto text-xs text-content-tertiary group-hover:hidden">
+          {matchCount}
+        </span>
+        <span className="ml-auto -my-1 hidden group-hover:flex items-center gap-0.5 flex-shrink-0">
+          <RowAction icon={Pencil} label={t('knowledge_rename')} onClick={() => actions.renameCategory(dirPath)} />
+          <RowAction
+            icon={Trash2}
+            label={t('knowledge_delete')}
+            danger
+            onClick={() => actions.deleteCategory(dirPath)}
+          />
+        </span>
       </button>
       {expanded && (
         <div className="ml-3 border-l border-default pl-1.5 space-y-0.5">
@@ -1160,6 +1446,7 @@ const DirNode: React.FC<{
                 title={f.title || f.name}
                 active={activePath === fpath}
                 onOpen={onOpen}
+                actions={actions}
               />
             )
           })}
@@ -1171,6 +1458,7 @@ const DirNode: React.FC<{
               search={search}
               activePath={activePath}
               onOpen={onOpen}
+              actions={actions}
             />
           ))}
         </div>
@@ -1184,15 +1472,22 @@ const FileLeaf: React.FC<{
   title: string
   active: boolean
   onOpen: (path: string, title: string) => void
-}> = ({ path, title, active, onOpen }) => (
+  actions: TreeActions
+}> = ({ path, title, active, onOpen, actions }) => (
   <button
     onClick={() => onOpen(path, title)}
-    className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-btn text-[13px] cursor-pointer transition-colors text-left ${
+    className={`group w-full flex items-center gap-2 px-2 py-1.5 rounded-btn text-[13px] cursor-pointer transition-colors text-left ${
       active ? 'bg-accent-soft text-accent' : 'text-content-secondary hover:bg-surface-2'
     }`}
   >
     <FileText size={13} className="flex-shrink-0 opacity-70" />
     <span className="truncate">{title}</span>
+    {!isProtectedPage(path) && (
+      <span className="ml-auto -my-1 hidden group-hover:flex items-center gap-0.5 flex-shrink-0">
+        <RowAction icon={ArrowRightLeft} label={t('knowledge_move')} onClick={() => actions.moveDocument(path)} />
+        <RowAction icon={Trash2} label={t('knowledge_delete')} danger onClick={() => actions.deleteDocument(path)} />
+      </span>
+    )}
   </button>
 )
 

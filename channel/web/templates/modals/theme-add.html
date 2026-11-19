@@ -1,0 +1,50 @@
+    <!-- Custom theme: import a package or have the Agent design one (themes.js) -->
+    <div id="theme-add-overlay" class="fixed inset-0 bg-black/50 z-[200] hidden flex items-center justify-center p-4">
+        <div class="bg-panel rounded-2xl border border-slate-200 dark:border-white/10 shadow-xl w-full max-w-md overflow-hidden">
+            <div class="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-white/5">
+                <h3 class="font-semibold text-slate-800 dark:text-slate-100 text-base" data-i18n="theme_add_title">自定义主题</h3>
+                <button type="button" onclick="closeThemeAddModal()"
+                        class="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200
+                               hover:bg-slate-100 dark:hover:bg-white/10 cursor-pointer transition-colors duration-150">
+                    <i class="fas fa-xmark"></i>
+                </button>
+            </div>
+            <div class="px-5 py-4 space-y-4">
+                <div id="theme-drop-zone" class="theme-drop-zone" role="button" tabindex="0">
+                    <div class="theme-drop-icon"><i id="theme-drop-icon" class="fas fa-file-arrow-up"></i></div>
+                    <p class="text-sm text-slate-600 dark:text-slate-300">
+                        <span id="theme-drop-idle"><span data-i18n="theme_drop_hint">将主题 zip 或文件夹拖到这里，或</span>
+                            <span class="text-primary-500 font-medium" data-i18n="theme_drop_pick">点击选择</span></span>
+                        <span id="theme-drop-busy" class="hidden" data-i18n="theme_importing">正在导入…</span>
+                    </p>
+                    <p class="text-xs text-slate-400 dark:text-slate-500 mt-1.5" data-i18n="theme_drop_types">需包含 theme.json，可附带壁纸图片，单个文件不超过 16MB</p>
+                    <input id="theme-file-input" type="file" class="hidden" accept=".zip,.json,application/zip,application/json">
+                </div>
+                <p id="theme-add-error" role="alert" class="hidden -mt-2 text-xs text-red-500 leading-relaxed"></p>
+
+                <div class="flex items-center gap-3 p-3.5 rounded-xl border border-slate-200 dark:border-white/10">
+                    <div class="w-8 h-8 rounded-lg bg-primary-50 dark:bg-primary-900/30 text-primary-500 flex items-center justify-center flex-shrink-0">
+                        <i class="fas fa-wand-magic-sparkles text-sm"></i>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <p class="text-sm font-medium text-slate-800 dark:text-slate-100" data-i18n="theme_agent_title">让 Agent 帮你制作</p>
+                        <p class="text-xs text-slate-400 dark:text-slate-500 leading-relaxed mt-0.5" data-i18n="theme_agent_desc"></p>
+                    </div>
+                    <button type="button" onclick="startThemeWithAgent()"
+                            class="flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium text-primary-600 dark:text-primary-400
+                                   bg-primary-50 dark:bg-primary-900/30 hover:opacity-80 cursor-pointer transition-opacity"
+                            data-i18n="theme_agent_start">开始制作</button>
+                </div>
+            </div>
+            <div class="flex items-center gap-4 px-5 py-3 border-t border-slate-100 dark:border-white/5 text-xs text-slate-400 dark:text-slate-500">
+                <span class="flex items-center gap-1.5 min-w-0">
+                    <i class="fas fa-folder-open"></i>
+                    <span id="theme-add-dir" class="truncate font-mono"></span>
+                </span>
+                <a id="theme-add-docs" href="https://docs.cowagent.ai" target="_blank" rel="noopener noreferrer"
+                   class="ml-auto flex-shrink-0 flex items-center gap-1.5 hover:text-slate-600 dark:hover:text-slate-300 transition-colors">
+                    <i class="fas fa-book"></i><span data-i18n="theme_docs">主题文档</span>
+                </a>
+            </div>
+        </div>
+    </div>

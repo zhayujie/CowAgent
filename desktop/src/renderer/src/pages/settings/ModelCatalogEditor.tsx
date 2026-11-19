@@ -20,7 +20,7 @@ import { apiClient } from '../../api/client'
 // - A custom provider has no presets (`seed` is empty), so every row is an
 //   override and nothing is ever tombstoned.
 
-const CAPABILITIES: ModelCapability[] = ['text', 'vision', 'video', 'image', 'embedding', 'asr', 'tts']
+const CAPABILITIES: ModelCapability[] = ['text', 'vision', 'image', 'video', 'embedding', 'asr', 'tts']
 
 const CAP_TAG_KEYS: Record<ModelCapability, string> = {
   text: 'models_cap_tag_text',
@@ -44,6 +44,7 @@ export interface CatalogDraftRow {
   capabilities: ModelCapability[]
   context_window: string
   max_output_tokens: string
+  alias?: string
 }
 
 const rowIsBudgeted = (caps: ModelCapability[]): boolean =>
@@ -56,6 +57,7 @@ export function toDraftRows(entries: ModelCatalogEntry[] | undefined): CatalogDr
     capabilities: (e.capabilities || []).slice(),
     context_window: e.context_window ? String(e.context_window) : '',
     max_output_tokens: e.max_output_tokens ? String(e.max_output_tokens) : '',
+    alias: e.alias || '',
   }))
 }
 
@@ -73,6 +75,8 @@ export function normalizeRows(rows: CatalogDraftRow[]): ModelCatalogEntry[] {
       if (!Number.isNaN(cw) && cw > 0) out.context_window = cw
       // A model with no text budget can't carry a max output either.
       if (rowIsBudgeted(caps) && !Number.isNaN(mo) && mo > 0) out.max_output_tokens = mo
+      const alias = (e.alias || '').trim()
+      if (alias && alias !== out.name) out.alias = alias
       return out
     })
 }
@@ -293,6 +297,18 @@ export const ModelCatalogEditor: React.FC<ModelCatalogEditorProps> = ({
                         placeholder={t('models_catalog_name_ph')}
                         onChange={(e) => setRow(idx, { name: e.target.value })}
                       />
+                      {isCustom && (
+                        <TextInput
+                          // The ! beats TextInput's own w-full, which comes
+                          // later in the generated CSS.
+                          className="!w-[38%] flex-shrink-0 !py-1.5 text-xs"
+                          value={row.alias || ''}
+                          maxLength={64}
+                          placeholder={t('models_catalog_alias_ph')}
+                          title={t('models_catalog_alias_tip')}
+                          onChange={(e) => setRow(idx, { alias: e.target.value })}
+                        />
+                      )}
                       <button
                         type="button"
                         onClick={() => removeRow(idx)}

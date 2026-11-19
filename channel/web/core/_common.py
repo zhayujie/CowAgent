@@ -11,6 +11,7 @@ before, the handlers and the channel had to share a module to share a helper.
 """
 
 import base64
+import contextlib
 import errno
 import hashlib
 import hmac
@@ -126,6 +127,26 @@ def _read_config_file_for_write() -> dict:
     return read_config_template()
 
 
+@contextlib.contextmanager
+def _config_write_guard():
+    """Hold the console's config-save lock across a read-modify-write.
+
+    Every console handler rewrites the whole file: it reads config.json, changes
+    a few keys and writes the dict back. Two of those overlapping without a
+    shared lock each write back the copy they read, so whichever finishes last
+    silently drops everything the other changed -- a channel credential typed
+    while another tab saved its settings simply disappears, and the file is
+    still valid so nothing reports an error. ``channel/web/api/config.py`` owns
+    the lock and ``integrations.save_config_values`` already takes it; this is
+    the same guard for the channel handlers. Imported lazily because
+    ``channel.web.api.config`` imports this module.
+    """
+    from channel.web.api.config import _settings_save_lock
+
+    with _settings_save_lock:
+        yield
+
+
 def _write_config_file_for_write(config_path: str, data: dict) -> None:
     """Write ``data`` to ``config_path`` without truncating the old file first.
 
@@ -208,6 +229,18 @@ def _get_web_password() -> str:
 
 def _is_password_enabled():
     return bool(_get_web_password())
+
+
+def _client_ip() -> str:
+    env = getattr(web.ctx, "env", {}) or {}
+    addr = (env.get("REMOTE_ADDR") or "").strip()
+    # Forwarding headers are only believed from a proxy on this machine;
+    # anyone else could set them to dodge the per-client limits.
+    if addr in ("::1", "::ffff:127.0.0.1") or addr.startswith("127."):
+        forwarded = (env.get("HTTP_X_FORWARDED_FOR") or "").split(",")[0].strip()
+        real = (env.get("HTTP_X_REAL_IP") or "").strip()
+        return forwarded or real or addr
+    return addr or "unknown"
 
 
 # Set once the console owns its socket. The desktop watchdog waits on this to
@@ -833,16 +866,24 @@ def _live_channel_manager():
 def _serve_allowed_roots() -> list:
     """Roots that /api/file and /preview may read from (symlinks resolved).
 
-    Includes the configured serve root, the Agent workspace, and any project
-    directory a session has opened. Project dirs may live outside the serve
-    root (e.g. ``/tmp/foo``), so previewing files in an opened project would
-    otherwise be denied.
+    Includes the configured serve root, all configured Agent workspaces
+    (including disabled Agents), and any project directory a session has
+    opened. Project dirs may live outside the serve root (e.g. ``/tmp/foo``),
+    so previewing files in an opened project would otherwise be denied.
     """
     serve_root = conf().get("web_file_serve_root", "~") or "~"
     roots = [
         os.path.realpath(os.path.expanduser(serve_root)),
         os.path.realpath(_get_workspace_root()),
     ]
+    # Artifact URLs are global, and the artifact index includes disabled
+    # Agents too. Their explicitly configured workspaces remain readable.
+    try:
+        from agent.registry import get_agent_registry
+        for profile in get_agent_registry().list(include_disabled=True):
+            roots.append(os.path.realpath(profile.workspace))
+    except Exception:
+        pass
     try:
         from agent.workspace import project_store
         for rec in project_store.list_recents():

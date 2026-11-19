@@ -44,7 +44,7 @@ function example(lang: ExampleLang, base: string, key: string): string {
   ].join('\n')
 }
 
-const CopyButton: React.FC<{ text: string; className?: string }> = ({ text, className }) => {
+export const CopyButton: React.FC<{ text: string; className?: string }> = ({ text, className }) => {
   const [copied, setCopied] = useState(false)
   return (
     <Tooltip label={t('config_api_copy')}>

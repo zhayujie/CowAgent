@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { product } from '@product'
 import apiClient from '../api/client'
 import { ownerOf, readActiveSessionId, forgetAgentOwners } from './sessionOwners'
 import type { AgentProfile, ChannelInstanceRecord, RosterSnapshot } from '../types'
@@ -31,6 +32,12 @@ const ACTIVE_KEY = 'cow_active_agent'
 // which is what makes AgentAvatar render the brand logo for it.
 const DEFAULT_AGENT_ID = 'default'
 const DEFAULT_AGENT_NAME = 'CowAgent'
+
+function withDefaultName(agents: AgentProfile[], defaultAgentId: string): AgentProfile[] {
+  const name = product.agents?.defaultAgentName?.()
+  if (!name) return agents
+  return agents.map((a) => (a.id === defaultAgentId && a.name === DEFAULT_AGENT_NAME ? { ...a, name } : a))
+}
 
 function syntheticDefaultRoster(): {
   agents: AgentProfile[]
@@ -125,7 +132,7 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
       const fb = syntheticDefaultRoster()
       syncClient('', false)
       set({
-        agents: fb.agents,
+        agents: withDefaultName(fb.agents, fb.defaultAgentId),
         defaultAgentId: fb.defaultAgentId,
         activeAgentId: '',
         channelInstances: fb.channelInstances,
@@ -134,8 +141,8 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
       return
     }
 
-    const agents = snap.agents
-    const defaultAgentId = snap.default_agent_id || agents[0]?.id || ''
+    const defaultAgentId = snap.default_agent_id || snap.agents[0]?.id || ''
+    const agents = withDefaultName(snap.agents, defaultAgentId)
     const enabled = enabledAgents(agents)
     const multiAgent = enabled.length > 1
 

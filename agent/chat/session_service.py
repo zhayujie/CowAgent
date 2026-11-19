@@ -31,31 +31,22 @@ def _truncate_fallback_title(user_message: str, max_len: int = 30) -> str:
     return first_line
 
 
-def generate_session_title(user_message: str, assistant_reply: str = "",
-                            session_id: str = "") -> str:
-    """
-    Generate a short session title by calling the current bot's reply_text.
-    Falls back to the first line of the user message if the LLM call fails
-    or returns an obvious error sentinel.
-    """
-    fallback = _truncate_fallback_title(user_message)
+def _clean_title(raw: str) -> Optional[str]:
+    title = re.sub(r'<think>.*?</think>', '', raw or "", flags=re.DOTALL).strip().strip('"\'')
+    if title and len(title) <= 50:
+        return title
+    return None
+
+
+def _title_from_primary(prompt: str, session_id: str) -> Optional[str]:
+    """Ask the global chat bot for a title; None when the call failed."""
     try:
         from bridge.bridge import Bridge
         from models.session_manager import Session
         bot = Bridge().get_bot("chat")
 
-        prompt_parts = [f"User: {user_message[:300]}"]
-        if assistant_reply:
-            prompt_parts.append(f"Assistant: {assistant_reply[:300]}")
-
         session = Session(session_id or "__title_gen__", system_prompt="")
-        session.messages = [
-            {"role": "user", "content": (
-                "Generate a very short title (max 15 characters for Chinese, max 6 words for English) "
-                "summarizing this conversation. Return ONLY the title text, nothing else.\n\n"
-                + "\n".join(prompt_parts)
-            )}
-        ]
+        session.messages = [{"role": "user", "content": prompt}]
 
         result = bot.reply_text(session) or {}
         # When bots fail (network error, auth error, rate limit, etc.) they
@@ -66,17 +57,69 @@ def generate_session_title(user_message: str, assistant_reply: str = "",
         if completion_tokens <= 0:
             logger.warning(
                 f"[SessionService] Title generation got empty completion "
-                f"(completion_tokens={completion_tokens}, content='{raw[:50]}'), "
-                f"using fallback")
-            return fallback
+                f"(completion_tokens={completion_tokens}, content='{raw[:50]}')")
+            return None
 
-        title = re.sub(r'<think>.*?</think>', '', raw, flags=re.DOTALL).strip().strip('"\'')
-        logger.info(f"[SessionService] Title generation result: '{title}' (len={len(title)})")
-        if title and len(title) <= 50:
-            return title
+        title = _clean_title(raw)
+        logger.info(f"[SessionService] Title generation result: '{title}'")
+        return title
     except Exception as e:
         logger.warning(f"[SessionService] Title generation failed: {e}")
-    return fallback
+        return None
+
+
+def _title_from_fallback_chain(prompt: str) -> Optional[str]:
+    """Retry on the configured chat fallback chain, one attempt per link."""
+    try:
+        from agent.memory.summarizer import MemoryFlushManager
+        from agent.protocol.models import LLMRequest
+        from bridge.agent_bridge import AgentLLMModel
+        from bridge.bridge import Bridge
+        model = AgentLLMModel(Bridge())
+        chain = model.fallback_config()["chain"]
+    except Exception as e:
+        logger.warning(f"[SessionService] Title fallback unavailable: {e}")
+        return None
+
+    for _ in chain:
+        if not model.use_fallback():
+            break
+        try:
+            response = model.call(LLMRequest(
+                messages=[{"role": "user", "content": prompt}],
+                stream=False,
+            ))
+            title = _clean_title(MemoryFlushManager._extract_response_text(response))
+        except Exception as e:
+            logger.warning(f"[SessionService] Title generation failed on fallback {model.model}: {e}")
+            continue
+        if title:
+            logger.info(f"[SessionService] Title generation result via fallback {model.model}: '{title}'")
+            return title
+    return None
+
+
+def generate_session_title(user_message: str, assistant_reply: str = "",
+                            session_id: str = "") -> str:
+    """
+    Generate a short session title with the current chat bot, walking the
+    configured fallback chain when it fails. Falls back to the first line of
+    the user message if every model fails.
+    """
+    prompt_parts = [f"User: {user_message[:300]}"]
+    if assistant_reply:
+        prompt_parts.append(f"Assistant: {assistant_reply[:300]}")
+    prompt = (
+        "Generate a very short title (max 15 characters for Chinese, max 6 words for English) "
+        "summarizing this conversation. Return ONLY the title text, nothing else.\n\n"
+        + "\n".join(prompt_parts)
+    )
+
+    title = _title_from_primary(prompt, session_id) or _title_from_fallback_chain(prompt)
+    if title:
+        return title
+    logger.warning("[SessionService] Title generation failed on all models, using fallback")
+    return _truncate_fallback_title(user_message)
 
 
 # Built-in fallback config, used when prompts.json is missing or broken.

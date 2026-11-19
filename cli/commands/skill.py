@@ -749,7 +749,7 @@ def skill():
 # cow skill list
 # ------------------------------------------------------------------
 @skill.command("list")
-@click.option("--remote", is_flag=True, help="Browse skills on Skill Hub")
+@click.option("--remote", "-r", is_flag=True, help="Browse skills on Skill Hub")
 @click.option("--page", default=1, type=int, help="Page number for remote listing")
 def skill_list(remote, page):
     """List installed skills or browse Skill Hub."""
@@ -960,10 +960,20 @@ def install_skill(name: str, agent_id: str = None) -> InstallResult:
     return result
 
 
+# ./x, ../x, /x or ~/x, with either kind of slash so that Windows paths such
+# as .\x, ~\x and \\server\share\x count too, or a drive path like C:\x or C:/x.
+_LOCAL_PATH_RE = re.compile(r"^(?:\.{1,2}|~|[A-Za-z]:)?[\\/]")
+
+
+def is_local_path(spec: str) -> bool:
+    """Whether an install spec names a local directory rather than a remote skill."""
+    return bool(_LOCAL_PATH_RE.match(spec))
+
+
 def _route_install(name: str, result: InstallResult, agent_id: str = None):
     """Dispatch to the appropriate installer based on input format."""
     # --- Local path ---
-    if name.startswith(("./", "../", "/", "~/")):
+    if is_local_path(name):
         _install_local(name, result, agent_id=agent_id)
         return
 

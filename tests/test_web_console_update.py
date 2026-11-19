@@ -199,7 +199,7 @@ def test_check_up_to_date(monkeypatch):
 def test_failed_pip_resets_git(tmp_path, monkeypatch):
     calls = []
 
-    def fake_run(cmd, cwd):
+    def fake_run(cmd, cwd, **kwargs):
         calls.append(cmd)
         if cmd[:2] == ["git", "rev-parse"]:
             return types.SimpleNamespace(returncode=0, stdout="abc123\n")
@@ -222,7 +222,7 @@ def test_failed_pip_resets_git(tmp_path, monkeypatch):
 def test_local_edits_block_the_update_before_anything_runs(tmp_path, monkeypatch):
     calls = []
 
-    def fake_run(cmd, cwd):
+    def fake_run(cmd, cwd, **kwargs):
         calls.append(cmd)
         if cmd[:2] == ["git", "status"]:
             return types.SimpleNamespace(returncode=0, stdout=" M plugins/foo.py\n")
@@ -239,7 +239,7 @@ def test_local_edits_block_the_update_before_anything_runs(tmp_path, monkeypatch
 def test_the_console_pulls_fast_forward_only(tmp_path, monkeypatch):
     calls = []
 
-    def fake_run(cmd, cwd):
+    def fake_run(cmd, cwd, **kwargs):
         calls.append(cmd)
         return types.SimpleNamespace(returncode=0, stdout="")
 
@@ -262,6 +262,30 @@ def test_a_running_status_left_by_a_dead_worker_does_not_block(tmp_path, monkeyp
     assert update_service._update_is_stale(
         {"state": "running", "started_at": "2020-01-01T00:00:00+00:00"}
     ) is True
+
+
+def test_a_corrupt_worker_pid_does_not_crash_the_in_progress_guard(tmp_path, monkeypatch):
+    """A status file carrying a non-numeric worker_pid must not raise.
+
+    read_update_status already tolerates a missing file, unreadable bytes, invalid
+    JSON and a non-dict payload, but it does not validate the fields it hands on.
+    int() on a corrupt pid raised ValueError out of the "already in progress" check.
+    """
+    from cli import update_service
+
+    monkeypatch.setattr(update_service, "_worker_alive", lambda pid: True)
+    fresh = update_service.datetime.now(update_service.timezone.utc).isoformat()
+
+    for bad in ("abc", "", "12abc", [], {}, 1.5e3):
+        status = {"state": "running", "worker_pid": bad, "started_at": fresh}
+        # A corrupt pid is no evidence the worker died, so a fresh run still blocks.
+        assert update_service._update_is_stale(status) is False, bad
+
+    # ... and an old run is still reported stale rather than blocking forever.
+    for bad in ("abc", [], {}):
+        assert update_service._update_is_stale(
+            {"state": "running", "worker_pid": bad, "started_at": "2020-01-01T00:00:00+00:00"}
+        ) is True, bad
 
 
 def test_web_handlers_auth_and_no_github_on_version(monkeypatch):
@@ -350,3 +374,46 @@ def test_frontend_contract():
     assert "from cli.update_service import run_git_pull" in (
         root / "cli/commands/process.py"
     ).read_text(encoding="utf-8")
+
+
+def test_managed_install_never_self_updates(tmp_path, monkeypatch):
+    (tmp_path / ".git").mkdir()
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setenv("COW_DEPLOYMENT", "managed")
+    monkeypatch.setenv("COW_MANAGE_URL", "https://example.com/instances/a")
+    kind = detect_install_kind(str(tmp_path))
+    assert kind.kind == "managed"
+    assert kind.update_supported is False
+    assert version_payload(str(tmp_path))["manage_url"] == "https://example.com/instances/a"
+    with patch("cli.update_service.fetch_github_releases") as fetch:
+        with pytest.raises(UpdateError):
+            check_for_updates("2.0.0")
+        fetch.assert_not_called()
+    with pytest.raises(UpdateError):
+        schedule_web_update(str(tmp_path))
+
+
+def test_manage_url_only_for_managed_and_http(tmp_path, monkeypatch):
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setenv("COW_MANAGE_URL", "javascript:alert(1)")
+    monkeypatch.setenv("COW_DEPLOYMENT", "managed")
+    assert version_payload(str(tmp_path))["manage_url"] == ""
+    monkeypatch.setenv("COW_MANAGE_URL", "https://example.com")
+    monkeypatch.setenv("COW_DEPLOYMENT", "docker")
+    assert version_payload(str(tmp_path))["manage_url"] == ""
+
+
+def test_deployment_reads_the_enum_and_the_older_flags(monkeypatch):
+    from common.deployment import deployment
+
+    for key in ("COW_DEPLOYMENT", "COW_DESKTOP", "COW_DOCKER"):
+        monkeypatch.delenv(key, raising=False)
+    assert deployment() == "source"
+    monkeypatch.setenv("COW_DESKTOP", "1")
+    assert deployment() == "desktop"
+    monkeypatch.setenv("COW_DEPLOYMENT", "Managed")
+    assert deployment() == "managed"
+    monkeypatch.setenv("COW_DEPLOYMENT", "bogus")
+    assert deployment() == "desktop"
+    monkeypatch.setenv("COW_DEPLOYMENT", "source")
+    assert deployment() == "source"

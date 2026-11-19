@@ -20,6 +20,7 @@ import base64
 import os
 import re
 import subprocess
+import sys
 import tempfile
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
@@ -27,6 +28,7 @@ from typing import Any, Dict, List, Optional
 import requests
 
 from agent.tools.base_tool import BaseTool, ToolResult
+from agent.tools.utils.credentials import DENIED_MESSAGE, is_credential_path
 from agent.tools.utils.url_safety import validate_url_safe, safe_get
 from common import const
 from common.log import logger
@@ -37,7 +39,8 @@ from config import conf
 DEFAULT_MODEL = const.GPT_41_MINI
 DEFAULT_TIMEOUT = 180
 MAX_TOKENS = 4000
-COMPRESS_THRESHOLD = 1_048_576  # 1 MB
+COMPRESS_THRESHOLD = 3 * 1_048_576  # 3 MB; base64 stays under the common 5 MB per-image limit
+COMPRESS_MAX_DIM = "3072"  # small print on documents and drawings is unreadable much below this
 
 SUPPORTED_EXTENSIONS = {
     "jpg": "image/jpeg",
@@ -61,7 +64,7 @@ _DISCOVERABLE_MODELS = [
     ("qianfan_api_key", const.QIANFAN, const.ERNIE_45_TURBO_VL, "Qianfan"),
     ("zhipu_ai_api_key", const.ZHIPU_AI, const.GLM_4_7, "ZhipuAI"),
     ("minimax_api_key", const.MiniMax, const.MINIMAX_M3, "MiniMax"),
-    ("mimo_api_key", const.MIMO, const.MIMO_V2_5_PRO, "MiMo"),
+    ("mimo_api_key", const.MIMO, const.MIMO_V2_6_PRO, "MiMo"),
     ("deepseek_api_key", const.DEEPSEEK, const.DEEPSEEK_FLASH, "DeepSeek"),
 ]
 
@@ -83,6 +86,9 @@ _MODEL_PREFIX_TO_PROVIDER = [
     ("deepseek-", "DeepSeek"),
 ]
 
+# Vision model of the CowAgent API when the user has not pinned one.
+_COWAGENT_VISION_MODEL = "deepseek-v4.1-flash"
+
 # Model prefixes that natively belong to OpenAI / LinkAI (raw HTTP providers).
 _OPENAI_MODEL_PREFIXES = ("gpt-", "o1-", "o3-", "o4-", "chatgpt-")
 
@@ -92,6 +98,7 @@ _OPENAI_MODEL_PREFIXES = ("gpt-", "o1-", "o3-", "o4-", "chatgpt-")
 _PROVIDER_ID_TO_DISPLAY = {
     "openai": "OpenAI",
     "linkai": "LinkAI",
+    "cowagent": "CowAgent",
     "moonshot": "Moonshot",
     "doubao": "Doubao",
     "dashscope": "DashScope",
@@ -130,6 +137,7 @@ class Vision(BaseTool):
     description: str = (
         "Analyze a local image or image URL (jpg/jpeg/png) using Vision API. "
         "Can describe content, extract text, identify objects, colors, etc. "
+        "Ask for everything needed in one call."
     )
 
     params: dict = {
@@ -171,6 +179,13 @@ class Vision(BaseTool):
             return ToolResult.fail("Error: 'image' parameter is required")
         if not question:
             return ToolResult.fail("Error: 'question' parameter is required")
+
+        # The file is sent to an external API, so it gets the same credential
+        # guard as the file tools; the resolved path also catches symlinks.
+        if not image.startswith(("http://", "https://")):
+            resolved = self._resolve_path(image)
+            if is_credential_path(resolved):
+                return ToolResult.fail(DENIED_MESSAGE)
 
         providers = self._resolve_providers()
         if not providers:
@@ -238,8 +253,8 @@ class Vision(BaseTool):
              and its API key is configured) — using the user-specified model
              name verbatim.
           2. Auto-discovery chain as fallback:
-               - use_linkai=true → [LinkAI, MainModel?, OtherModels…, OpenAI]
-               - default         → [MainModel?, OtherModels…, OpenAI, LinkAI]
+               - use_linkai=true → [LinkAI, MainModel?, OtherModels…, OpenAI, CowAgent]
+               - default         → [MainModel?, OtherModels…, OpenAI, CowAgent, LinkAI]
              MainModel is only included when the main bot is known to support
              vision (see _main_bot_supports_vision).
 
@@ -271,10 +286,12 @@ class Vision(BaseTool):
             self._append_provider(fallback, self._build_main_model_provider)
             self._append_other_model_providers(fallback, preferred_model=user_model)
             self._append_provider(fallback, lambda: self._build_openai_provider(user_model))
+            self._append_provider(fallback, self._build_cowagent_provider)
         else:
             self._append_provider(fallback, self._build_main_model_provider)
             self._append_other_model_providers(fallback, preferred_model=user_model)
             self._append_provider(fallback, lambda: self._build_openai_provider(user_model))
+            self._append_provider(fallback, self._build_cowagent_provider)
             self._append_provider(fallback, lambda: self._build_linkai_provider(user_model))
 
         for p in fallback:
@@ -304,6 +321,25 @@ class Vision(BaseTool):
         if isinstance(model, str) and model.strip():
             return model.strip()
         return conf().get("model") or ""
+
+    def runs_on_main_model(self) -> bool:
+        """Whether image analysis resolves to the agent's own main model:
+        vision is on auto (or set to the main model's name) and the main model
+        supports vision. The agent then hands images to it directly."""
+        main_model = self._current_main_model()
+        if not main_model or not (self.model and hasattr(self.model, "bot")):
+            return False
+        try:
+            bot = self.model.bot
+        except Exception:
+            return False
+        if not self._main_bot_supports_vision(bot):
+            return False
+        user_model = self._resolve_user_vision_model()
+        if user_model:
+            return user_model.lower() == main_model.lower()
+        # On auto with use_linkai set, that provider's default vision model goes first.
+        return not (conf().get("use_linkai", False) and conf().get("linkai_api_key"))
 
     @staticmethod
     def _resolve_user_vision_model() -> Optional[str]:
@@ -377,6 +413,9 @@ class Vision(BaseTool):
             return [p] if p else None
         if provider_id == "linkai":
             p = self._build_linkai_provider(user_model)
+            return [p] if p else None
+        if provider_id == "cowagent":
+            p = self._build_cowagent_provider(user_model)
             return [p] if p else None
 
         # Discoverable bot-backed providers.
@@ -547,9 +586,9 @@ class Vision(BaseTool):
         Resolution order:
           1. The user ticked vision for the main model in the model catalog
              (the only way to declare it for a custom provider's models).
-          2. If the bot explicitly declares `supports_vision`, trust it.
-             This lets bots opt in or out based on their own runtime
-             configuration (e.g. the currently selected model).
+          2. If the bot explicitly declares `model_supports_vision(model)` or
+             `supports_vision`, trust it. This lets bots opt in or out based on
+             the currently selected model.
           3. Otherwise, fall back to a model-name prefix heuristic: trust
              call_vision when the main model looks like an OpenAI family
              model or matches a known multimodal vendor prefix.
@@ -558,6 +597,11 @@ class Vision(BaseTool):
             return False
         if self._catalog_declares_vision():
             return True
+        # supports_vision reads global config, which misses a session's own
+        # model or an engaged fallback.
+        per_model = getattr(type(bot), "model_supports_vision", None)
+        if callable(per_model) and self._current_main_model():
+            return bool(per_model(self._current_main_model()))
         if hasattr(bot, "supports_vision"):
             return bool(getattr(bot, "supports_vision"))
         main_model = self._current_main_model().lower()
@@ -654,6 +698,22 @@ class Vision(BaseTool):
             api_base=self._ensure_v1(api_base),
             extra_headers=extra,
             model_override=preferred_model,
+        )
+
+    def _build_cowagent_provider(self, preferred_model: Optional[str] = None) -> Optional[VisionProvider]:
+        """The CowAgent API over Chat Completions. ``preferred_model`` is only
+        passed when the user pinned this provider: as a fallback link it uses
+        its own vision model, since a name meant for another vendor may not be
+        served here."""
+        from models.cowagent_provider import resolve_cowagent_credentials
+        api_key, api_base = resolve_cowagent_credentials()
+        if not api_key:
+            return None
+        return VisionProvider(
+            name="CowAgent",
+            api_key=api_key,
+            api_base=self._ensure_v1(api_base),
+            model_override=preferred_model or _COWAGENT_VISION_MODEL,
         )
 
     def _build_custom_provider(self, provider_id: str, preferred_model: Optional[str] = None) -> Optional[VisionProvider]:
@@ -831,7 +891,7 @@ class Vision(BaseTool):
 
     @staticmethod
     def _maybe_compress(path: str) -> str:
-        """Compress image to under COMPRESS_THRESHOLD with max long-edge 1536px."""
+        """Compress image to under COMPRESS_THRESHOLD with max long-edge 3072px (2048px as fallback)."""
         file_size = os.path.getsize(path)
         if file_size <= COMPRESS_THRESHOLD:
             return path
@@ -865,6 +925,10 @@ class Vision(BaseTool):
                 return False
 
         def _try_convert(max_dim: str, quality: str) -> bool:
+            # On Windows a bare "convert" is System32's FAT-to-NTFS volume
+            # converter, which is found before anything on PATH.
+            if sys.platform == "win32":
+                return False
             try:
                 subprocess.run(
                     ["convert", path, "-resize", f"{max_dim}x{max_dim}>",
@@ -875,14 +939,37 @@ class Vision(BaseTool):
             except (FileNotFoundError, subprocess.CalledProcessError):
                 return False
 
+        def _try_pillow(max_dim: str, quality: str) -> bool:
+            # Windows and the Docker image have neither tool; Pillow is a core dependency.
+            try:
+                from PIL import Image, ImageOps
+                with Image.open(path) as img:
+                    # The JPEG is saved without EXIF, so bake the orientation in.
+                    img = ImageOps.exif_transpose(img)
+                    if img.mode in ("I", "I;16"):
+                        # 16-bit grayscale: scale it to 8 bits, or the conversion below clips it to white.
+                        img = img.point(lambda v: v / 256)
+                    if img.mode != "RGB" or "transparency" in img.info:
+                        # Flatten to RGB for JPEG, with transparent areas on white rather than black.
+                        rgba = img.convert("RGBA")
+                        img = Image.new("RGB", rgba.size, "white")
+                        img.paste(rgba, mask=rgba)
+                    img.thumbnail((int(max_dim), int(max_dim)))  # only shrinks, like convert's ">"
+                    img.save(tmp.name, "JPEG", quality=int(quality))
+                return True
+            except Exception as e:
+                logger.debug(f"[Vision] Pillow compression failed: {e}")
+                return False
+
         attempts = [
-            ("1536", "85"),
-            ("1536", "70"),
-            ("1536", "50"),
+            (COMPRESS_MAX_DIM, "85"),
+            (COMPRESS_MAX_DIM, "70"),
+            ("2048", "70"),
+            ("2048", "50"),
         ]
 
         for max_dim, quality in attempts:
-            ok = _try_sips(max_dim, quality) or _try_convert(max_dim, quality)
+            ok = _try_sips(max_dim, quality) or _try_convert(max_dim, quality) or _try_pillow(max_dim, quality)
             if not ok:
                 continue
             new_size = os.path.getsize(tmp.name)

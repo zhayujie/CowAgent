@@ -79,7 +79,7 @@ Delegation happens between full Agents, so it comes with boundaries:
 | `enabled` | `true` | Set to `false`, or set the whole block to `false`, to not provide the tool at all |
 | `allowed_targets` | Unset | A mapping from a source Agent ID to the IDs it may reach, with `"*"` meaning any. If unset, all combinations are allowed. Targets are further confined to the members of the current session |
 | `max_depth` | `3` | The number of delegation hops in a chain (1-8) |
-| `timeout_seconds` | `600` | The time budget for a single delegation run (0.01-600) |
+| `timeout_seconds` | `600` | The time budget for a single delegation run (0.01-3600); a local run is cancelled when it expires |
 | `max_message_chars` | `8000` | The length limit for a single delegation task |
 
 An Agent configured with an empty array, like `"research"` above, can be delegated to but cannot delegate further.

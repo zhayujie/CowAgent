@@ -604,7 +604,7 @@ messagesDiv.addEventListener('click', (e) => {
         const userMsgEl = deleteBtn.closest('.user-message-group');
         if (!userMsgEl) return;
 
-        showConfirmModal(t('delete_message_title'), t('delete_message_confirm'), () => {
+        showConfirmModal(t('delete_message_title'), t('delete_message_confirm'), async () => {
             // Find the next bot reply for this turn (skip non-message nodes).
             let botReplyEl = null;
             let sibling = userMsgEl.nextElementSibling;
@@ -615,21 +615,13 @@ messagesDiv.addEventListener('click', (e) => {
                 }
                 sibling = sibling.nextElementSibling;
             }
+            const userSeq = userMsgEl.dataset.seq;
+            if (userSeq && !await deletePersistedMessage(userSeq)) return;
+
             userMsgEl.remove();
             if (botReplyEl) botReplyEl.remove();
-
-            const userSeq = userMsgEl.dataset.seq;
-            if (userSeq) {
-                fetch('/api/messages/delete', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ session_id: sessionId, user_seq: parseInt(userSeq) })
-                }).then(r => r.json()).then(data => {
-                    if (data.status === 'success') console.log(`Deleted ${data.deleted} messages`);
-                    // Drop the removed question from the navigation rail.
-                    if (typeof refreshTimeline === 'function') refreshTimeline();
-                }).catch(err => console.error('Failed to delete:', err));
-            }
+            // Drop the removed question from the navigation rail.
+            if (userSeq && typeof refreshTimeline === 'function') refreshTimeline();
         });
         return;
     }

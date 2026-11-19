@@ -9,6 +9,8 @@ must be set explicitly or the thinking blocks come back empty.
 import os
 import sys
 
+import pytest
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 
@@ -37,8 +39,9 @@ def _call(bot, **kwargs):
     )
 
 
-def test_adaptive_model_gets_adaptive_thinking_with_display(monkeypatch):
-    bot, captured = _bot_with_capture(monkeypatch, "claude-sonnet-5")
+@pytest.mark.parametrize("model", ["claude-sonnet-5", "claude-sonnet-5-5", "claude-haiku-5-5"])
+def test_adaptive_model_gets_adaptive_thinking_with_display(monkeypatch, model):
+    bot, captured = _bot_with_capture(monkeypatch, model)
 
     _call(bot, thinking={"type": "enabled"}, reasoning_effort="high")
 

@@ -1,6 +1,8 @@
 import os
 import sys
 
+import pytest
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from models.reasoning_capabilities import (
@@ -37,8 +39,9 @@ def test_zhipu_exposes_native_effort_values_without_disable_aliases():
     assert _values(cap) == ["low", "medium", "high", "xhigh", "max"]
 
 
-def test_claude_5_models_expose_all_effort_values():
-    cap = get_reasoning_capability("claudeAPI", "claude-opus-5")
+@pytest.mark.parametrize("model", ["claude-opus-5", "claude-sonnet-5-5", "claude-haiku-5-5"])
+def test_claude_5_models_expose_all_effort_values(model):
+    cap = get_reasoning_capability("claudeAPI", model)
 
     assert cap["supported"] is True
     assert cap["param"] == "effort"
@@ -103,8 +106,9 @@ def test_dashscope_other_qwen_models_hide_effort_control():
     assert get_reasoning_capability("dashscope", "qwen3.7-plus") == {"supported": False, "options": []}
 
 
-def test_kimi_k3_exposes_low_high_max_effort_values():
-    cap = get_reasoning_capability("moonshot", "kimi-k3")
+@pytest.mark.parametrize("model", ["kimi-k3", "kimi-k3.1-pro", "kimi-k3.1-pro-highspeed"])
+def test_kimi_k3_exposes_low_high_max_effort_values(model):
+    cap = get_reasoning_capability("moonshot", model)
 
     assert cap["supported"] is True
     assert cap["param"] == "reasoning_effort"
@@ -151,6 +155,17 @@ def test_custom_provider_is_hidden_by_default():
     cap = get_reasoning_capability("custom:local", "provider-native-model")
 
     assert cap == {"supported": False, "options": []}
+
+
+def test_gemini_4_exposes_thinking_levels():
+    cap = get_reasoning_capability("gemini", "gemini-4-argon")
+
+    assert cap["supported"] is True
+    assert cap["param"] == "thinking_level"
+    assert cap["default"] == "medium"
+    assert cap["thinking_only"] is True
+    assert _values(cap) == ["low", "medium", "high"]
+    assert normalize_reasoning_effort("gemini", "gemini-4-argon", "max") == "medium"
 
 
 def test_unsupported_provider_returns_hidden_capability():

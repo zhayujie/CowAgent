@@ -131,16 +131,16 @@ CowAgent は主要な LLM プロバイダーすべてに対応しています。
 | プロバイダー | 代表的なモデル | チャット | 画像認識 | 画像生成 | ASR | TTS | Embedding |
 | --- | --- | :-: | :-: | :-: | :-: | :-: | :-: |
 | [DeepSeek](https://docs.cowagent.ai/ja/models/deepseek) | deepseek-flash (V4.1) / pro | ✅ | ✅ | | | | |
-| [Claude](https://docs.cowagent.ai/ja/models/claude) | claude-opus-5-5 / fable-5.1 | ✅ | ✅ | | | | |
-| [OpenAI](https://docs.cowagent.ai/ja/models/openai) | gpt-6.1-sol / gpt-6 シリーズ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| [Gemini](https://docs.cowagent.ai/ja/models/gemini) | gemini-3.8-flash | ✅ | ✅ | ✅ | | | |
-| [MiniMax](https://docs.cowagent.ai/ja/models/minimax) | MiniMax-M3 | ✅ | ✅ | ✅ | | ✅ | |
+| [Claude](https://docs.cowagent.ai/ja/models/claude) | claude-opus-5-5 / sonnet-5-5 | ✅ | ✅ | | | | |
+| [OpenAI](https://docs.cowagent.ai/ja/models/openai) | gpt-6.1-terra / gpt-6.1-sol | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| [Gemini](https://docs.cowagent.ai/ja/models/gemini) | gemini-4-argon | ✅ | ✅ | ✅ | | | |
+| [MiniMax](https://docs.cowagent.ai/ja/models/minimax) | MiniMax-M3.1-Flash / M3 | ✅ | ✅ | ✅ | | ✅ | |
 | [GLM](https://docs.cowagent.ai/ja/models/glm) | glm-5.3-flash、glm-5v-turbo | ✅ | ✅ | | ✅ | | ✅ |
 | [Qwen](https://docs.cowagent.ai/ja/models/qwen) | qwen3.8-flash | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| [Kimi](https://docs.cowagent.ai/ja/models/kimi) | kimi-k3 | ✅ | ✅ | | | | |
+| [Kimi](https://docs.cowagent.ai/ja/models/kimi) | kimi-k3.1-pro / kimi-k3 | ✅ | ✅ | | | | |
 | [Doubao](https://docs.cowagent.ai/ja/models/doubao) | doubao-seed-2.1 シリーズ | ✅ | ✅ | ✅ | | | ✅ |
 | [ERNIE](https://docs.cowagent.ai/ja/models/qianfan) | ernie-5.1 | ✅ | ✅ | | | | |
-| [MiMo](https://docs.cowagent.ai/ja/models/mimo) | mimo-v2.5-pro / v2.5 | ✅ | ✅ | | | ✅ | |
+| [MiMo](https://docs.cowagent.ai/ja/models/mimo) | mimo-v2.6-pro / v2.6-flash | ✅ | ✅ | | ✅ | ✅ | |
 | [LinkAI](https://docs.cowagent.ai/ja/models/linkai) | 1 つの Key で 100+ モデルに接続 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | [カスタム](https://docs.cowagent.ai/ja/models/custom) | ローカルモデル / サードパーティプロキシ | ✅ | | | | | |
 
@@ -225,6 +225,8 @@ CowAgent は主要な LLM プロバイダーすべてに対応しています。
 <br/>
 
 ## 🏷 更新履歴
+
+> **2026.10.30:** [v2.2.2](https://github.com/zhayujie/CowAgent/releases/tag/2.2.2) — ゲストページ（独立ページとウィンドウ埋め込み）の追加、カスタムテーマ対応、メインモデルのネイティブマルチモーダル入力、新モデルの追加、ツール・チャネル・セキュリティの改善。
 
 > **2026.10.14:** [v2.2.1](https://github.com/zhayujie/CowAgent/releases/tag/2.2.1) — 成果物センターとカスタムメニューの追加、Agent チャット API の公開、モデルキャッシュとコンテキストコストの最適化、ツール・チャネル・セキュリティの改善。
 

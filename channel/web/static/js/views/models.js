@@ -114,7 +114,7 @@ function isCustomProviderCard(p) {
 
 function renderVendorsSection() {
     const wrap = document.createElement('div');
-    wrap.className = 'bg-white dark:bg-[#1A1A1A] rounded-xl border border-slate-200 dark:border-white/10 p-6';
+    wrap.className = 'bg-panel rounded-xl border border-slate-200 dark:border-white/10 p-6';
 
     // Custom providers always show once created (even without an api key,
     // e.g. a local vLLM/Ollama endpoint); built-in vendors show when configured.
@@ -214,7 +214,7 @@ function getCustomProviderCards() {
 function renderCapabilityCard(def) {
     const cap = modelsState.capabilities[def.id] || {};
     const wrap = document.createElement('div');
-    wrap.className = 'bg-white dark:bg-[#1A1A1A] rounded-xl border border-slate-200 dark:border-white/10 p-6';
+    wrap.className = 'bg-panel rounded-xl border border-slate-200 dark:border-white/10 p-6';
     wrap.id = `models-card-${def.id}`;
 
     const headerRight = renderCapabilityHeaderTag(def, cap);
@@ -538,7 +538,7 @@ function openChatFallbackModal() {
     overlay.id = 'chat-fallback-modal-overlay';
     overlay.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4';
     overlay.innerHTML = `
-        <div class="w-full max-w-md rounded-2xl bg-white dark:bg-[#1A1A1A] border border-slate-200 dark:border-white/10 shadow-xl">
+        <div class="w-full max-w-md rounded-2xl bg-panel border border-slate-200 dark:border-white/10 shadow-xl">
             <div class="flex items-start gap-3 px-6 pt-6 pb-4 border-b border-slate-100 dark:border-white/5">
                 <div class="w-9 h-9 rounded-lg bg-primary-50 dark:bg-primary-900/30 flex items-center justify-center flex-shrink-0">
                     <i class="fas fa-shield-halved text-primary-500 text-sm"></i>
@@ -735,8 +735,10 @@ function _renderSearchSummary(body, cap) {
     if (!host) return;
     const providers = cap.providers || [];
     const configured = providers.filter(p => p.configured);
+    // Disabled = credential kept but switched off for search; shown greyed out.
+    const disabled = providers.filter(p => p.disabled);
 
-    const missing = providers.filter(p => !p.configured);
+    const missing = providers.filter(p => !p.configured && !p.disabled);
 
     const addBtn = missing.length
         ? `<button type="button" id="cap-search-add-btn"
@@ -747,7 +749,7 @@ function _renderSearchSummary(body, cap) {
            </button>`
         : '';
 
-    if (configured.length === 0) {
+    if (configured.length === 0 && disabled.length === 0) {
         host.innerHTML = `
             <div class="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
                 <i class="fas fa-circle-info text-[10px] text-amber-500"></i>
@@ -757,18 +759,36 @@ function _renderSearchSummary(body, cap) {
         `;
     } else {
         const chips = configured.map(p => `
-            <button type="button" data-search-edit-provider="${p.id}"
-                    title="${t('models_search_edit_hint')}"
+            <span class="inline-flex items-center rounded-md text-[11px]
+                         bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400">
+                <button type="button" data-search-edit-provider="${p.id}"
+                        title="${t('models_search_edit_hint')}"
+                        class="inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-l-md cursor-pointer
+                               hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors">
+                    <i class="fas fa-check text-[10px]"></i>${escapeHtml(localizedLabel(p.label))}${p.anonymous ? ` · ${t('models_search_anonymous_badge')}` : ''}
+                </button>
+                <button type="button" data-search-disable-provider="${p.id}"
+                        title="${t('models_search_disable_hint')}"
+                        class="px-1.5 py-0.5 rounded-r-md cursor-pointer opacity-60 hover:opacity-100
+                               hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors">
+                    <i class="fas fa-xmark text-[10px]"></i>
+                </button>
+            </span>
+        `).join('');
+        const disabledChips = disabled.map(p => `
+            <button type="button" data-search-enable-provider="${p.id}"
+                    title="${t('models_search_enable_hint')}"
                     class="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] rounded-md cursor-pointer
-                           bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400
-                           hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors">
-                <i class="fas fa-check text-[10px]"></i>${escapeHtml(localizedLabel(p.label))}${p.anonymous ? ` · ${t('models_search_anonymous_badge')}` : ''}
+                           bg-slate-100 dark:bg-white/5 text-slate-400 dark:text-slate-500
+                           hover:bg-slate-200 dark:hover:bg-white/10 transition-colors">
+                ${escapeHtml(localizedLabel(p.label))}
             </button>
         `).join('');
         host.innerHTML = `
             <div class="flex items-center flex-wrap gap-2 text-xs text-slate-500 dark:text-slate-400">
                 <span>${t('models_search_available_label')}</span>
                 ${chips}
+                ${disabledChips}
                 ${addBtn}
             </div>
         `;
@@ -789,6 +809,34 @@ function _renderSearchSummary(body, cap) {
             _launchSearchProviderConfig(pid, meta);
         });
     });
+    host.querySelectorAll('[data-search-disable-provider]').forEach(el => {
+        el.addEventListener('click', (ev) => {
+            ev.preventDefault();
+            _setSearchProviderEnabled(el.getAttribute('data-search-disable-provider'), false);
+        });
+    });
+    host.querySelectorAll('[data-search-enable-provider]').forEach(el => {
+        el.addEventListener('click', (ev) => {
+            ev.preventDefault();
+            _setSearchProviderEnabled(el.getAttribute('data-search-enable-provider'), true);
+        });
+    });
+}
+
+// Toggle a provider in/out of search without touching its credential.
+function _setSearchProviderEnabled(providerId, enabled) {
+    fetch('/api/models', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'set_search_provider_enabled', provider: providerId, enabled }),
+    }).then(r => r.json()).then(data => {
+        if (data.status === 'success') {
+            loadModelsView({ preserveScroll: true });
+        } else {
+            console.log('[setSearchProviderEnabled] Error:', data.message);
+            showStatus('cap-search-status', 'models_save_failed', true);
+        }
+    }).catch(() => showStatus('cap-search-status', 'models_save_failed', true));
 }
 
 // Two-step add flow: click "+ 添加厂商" -> chooser dialog -> per-provider
@@ -818,7 +866,7 @@ function openSearchAddProviderPicker(missingProviders) {
     modal.id = 'search-add-modal';
     modal.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm';
     modal.innerHTML = `
-        <div class="bg-white dark:bg-[#1A1A1A] rounded-xl border border-slate-200 dark:border-white/10
+        <div class="bg-panel rounded-xl border border-slate-200 dark:border-white/10
                     w-full max-w-md mx-4 p-6 shadow-xl">
             <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-1">${t('models_search_add_provider')}</h3>
             <p class="text-xs text-slate-500 dark:text-slate-400 mb-4">${t('models_search_add_desc')}</p>
@@ -846,7 +894,7 @@ function _launchSearchProviderConfig(providerId, providerMeta) {
     // Providers that hold their own credential (dedicated key or, for SearXNG,
     // an instance URL) use the bespoke search-key modal. zhipu/qianfan/linkai
     // reuse a model-vendor key and go through the vendor modal instead.
-    if (['bocha', 'anysearch', 'serply', 'tavily', 'searxng', 'keenable'].includes(providerId)) {
+    if (['bocha', 'anysearch', 'serply', 'tavily', 'outcrawl', 'firecrawl', 'specstream', 'olostep', 'searchapi', 'searxng', 'keenable'].includes(providerId)) {
         openSearchKeyModal(providerId, providerMeta);
     } else if (providerId === 'deepseek') {
         openDeepseekSearchModal();
@@ -929,7 +977,7 @@ function openSearchKeyModal(providerId, providerMeta) {
     modal.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm';
     modal.innerHTML = `
         <div id="search-key-modal-card"
-             class="bg-white dark:bg-[#1A1A1A] rounded-xl border border-slate-200 dark:border-white/10
+             class="bg-panel rounded-xl border border-slate-200 dark:border-white/10
                     w-full max-w-md mx-4 p-6 shadow-xl">
             <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-1">${t('models_search_' + providerId + '_title')}</h3>
             <p class="text-xs text-slate-500 dark:text-slate-400 mb-4">${descText}</p>
@@ -1085,7 +1133,7 @@ function openDeepseekSearchModal() {
     modal.id = 'search-key-modal';
     modal.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm';
     modal.innerHTML = `
-        <div class="bg-white dark:bg-[#1A1A1A] rounded-xl border border-slate-200 dark:border-white/10
+        <div class="bg-panel rounded-xl border border-slate-200 dark:border-white/10
                     w-full max-w-md mx-4 p-6 shadow-xl">
             <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-1">${t('models_search_deepseek_title')}</h3>
             <p class="text-xs text-slate-500 dark:text-slate-400 mb-4">${t('models_search_deepseek_desc')}</p>
@@ -2126,11 +2174,15 @@ function fillVendorModalForProvider(providerId) {
     document.getElementById('vendor-modal-title').textContent = localizedLabel(meta.label);
     document.getElementById('vendor-modal-subtitle').textContent = meta.id;
 
-    // LinkAI aggregates many vendors, so only for it do we surface a link to its
-    // console for creating/managing the aggregated key. Other providers manage
-    // their keys on their own sites.
+    // Aggregators get a link to the console that issues their key; other
+    // providers manage keys on their own sites. Providers with base presets
+    // link to the console of the selected preset (see syncVendorBasePresets).
     const manageKey = document.getElementById('vendor-modal-manage-key');
-    if (manageKey) manageKey.classList.toggle('hidden', meta.id !== 'linkai');
+    if (manageKey) {
+        if (!manageKey.dataset.defaultHref) manageKey.dataset.defaultHref = manageKey.href;
+        manageKey.href = manageKey.dataset.defaultHref;
+        manageKey.classList.toggle('hidden', meta.id !== 'linkai');
+    }
 
     // ----- API Base -----
     // Always reflect the *current effective* base as the input value so the
@@ -2149,6 +2201,7 @@ function fillVendorModalForProvider(providerId) {
         baseWrap.classList.add('hidden');
         baseInput.value = '';
     }
+    renderVendorBasePresets(meta);
 
     // ----- API Key -----
     // For configured vendors, surface the masked key as the input *value* so
@@ -2178,6 +2231,70 @@ function fillVendorModalForProvider(providerId) {
     vendorModalState.providerId = providerId;
 }
 
+// Base presets: one chip per preset (e.g. the China and global sites of the
+// same API) that fills the API Base input. A provider that is not configured
+// yet starts on the preset matching the UI language.
+function renderVendorBasePresets(meta) {
+    const wrap = document.getElementById('vendor-modal-base-presets');
+    const baseInput = document.getElementById('vendor-modal-base');
+    if (!wrap || !baseInput) return;
+    const presets = (meta.api_base_field && meta.api_base_presets) || [];
+    // Only the Chinese UI offers the site switch, China site first. Other
+    // languages get the global site (listed last) prefilled and no switch.
+    const showChips = currentLang === 'zh';
+    wrap.innerHTML = '';
+    wrap.classList.toggle('hidden', !(showChips && presets.length));
+    baseInput.oninput = null;
+    if (!presets.length) return;
+
+    if (!meta.configured && (!meta.api_base || meta.api_base === meta.api_base_default)) {
+        baseInput.value = presets[showChips ? 0 : presets.length - 1].value;
+    }
+    if (showChips) presets.forEach(preset => {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.dataset.value = preset.value;
+        chip.textContent = localizedLabel(preset.label);
+        chip.className = 'px-2 py-0.5 rounded-md text-xs border transition-colors cursor-pointer';
+        chip.addEventListener('click', () => {
+            baseInput.value = preset.value;
+            syncVendorBasePresets(presets);
+        });
+        wrap.appendChild(chip);
+    });
+    baseInput.oninput = () => syncVendorBasePresets(presets);
+    syncVendorBasePresets(presets);
+}
+
+// Sites are told apart by domain, so any host under cowagent.cn (staging
+// included) maps to the China site and its key console.
+function matchBasePreset(presets, base) {
+    const domain = (url) => {
+        try { return new URL(url).hostname.split('.').slice(-2).join('.'); } catch (e) { return ''; }
+    };
+    const d = domain((base || '').trim());
+    return d ? presets.find(p => domain(p.value) === d) : undefined;
+}
+
+function syncVendorBasePresets(presets) {
+    const wrap = document.getElementById('vendor-modal-base-presets');
+    const active = matchBasePreset(presets, document.getElementById('vendor-modal-base').value);
+    wrap.querySelectorAll('button').forEach(chip => {
+        const on = !!active && chip.dataset.value === active.value;
+        chip.classList.toggle('border-primary-500', on);
+        chip.classList.toggle('text-primary-500', on);
+        chip.classList.toggle('border-slate-200', !on);
+        chip.classList.toggle('dark:border-slate-600', !on);
+        chip.classList.toggle('text-slate-500', !on);
+    });
+    const manageKey = document.getElementById('vendor-modal-manage-key');
+    const keysUrl = active && active.keys_url;
+    if (manageKey) {
+        manageKey.classList.toggle('hidden', !keysUrl);
+        if (keysUrl) manageKey.href = keysUrl;
+    }
+}
+
 function closeVendorModal() {
     document.getElementById('vendor-modal-overlay').classList.add('hidden');
 }
@@ -2195,7 +2312,7 @@ function closeVendorModal() {
 
 // Mirrors models/model_catalog.py VALID_CAPABILITIES. "text" drives the main
 // model dropdown, the rest route a model into the matching tool position.
-const MODEL_CATALOG_CAPABILITIES = ['text', 'vision', 'video', 'image', 'embedding', 'asr', 'tts'];
+const MODEL_CATALOG_CAPABILITIES = ['text', 'vision', 'image', 'video', 'embedding', 'asr', 'tts'];
 
 const MODEL_CATALOG_TAG_KEYS = {
     text: 'models_tag_chat',
@@ -2230,6 +2347,8 @@ function renderCatalogRows(prefix) {
     const draft = _catalogRows(prefix);
     const rows = document.getElementById(prefix + '-catalog-rows');
     if (!rows) return;
+    // Display names are offered for custom providers only.
+    const withAlias = prefix === 'custom-provider';
     rows.innerHTML = draft.map((entry, idx) => `
         <div class="rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 p-2.5">
             <div class="flex items-center gap-2 mb-2">
@@ -2239,6 +2358,13 @@ function renderCatalogRows(prefix) {
                        class="flex-1 min-w-0 px-2 py-1.5 rounded border border-slate-200 dark:border-slate-600
                               bg-white dark:bg-white/5 text-xs text-slate-800 dark:text-slate-100
                               focus:outline-none focus:border-primary-500 font-mono transition-colors">
+                ${withAlias ? `<input type="text" value="${escapeHtml(entry.alias || '')}" maxlength="64"
+                       placeholder="${escapeHtml(t('models_catalog_alias_ph'))}"
+                       title="${escapeHtml(t('models_catalog_alias_tip'))}"
+                       oninput="updateCatalogRow('${prefix}', ${idx}, 'alias', this.value)"
+                       class="w-[38%] flex-shrink-0 px-2 py-1.5 rounded border border-slate-200 dark:border-slate-600
+                              bg-white dark:bg-white/5 text-xs text-slate-800 dark:text-slate-100
+                              focus:outline-none focus:border-primary-500 transition-colors">` : ''}
                 <button type="button" onclick="removeCatalogRow('${prefix}', ${idx})"
                         title="${escapeHtml(t('delete'))}"
                         class="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded
@@ -2294,8 +2420,8 @@ function renderCatalogRows(prefix) {
 function updateCatalogRow(prefix, idx, field, rawValue) {
     const entry = _catalogRows(prefix)[idx];
     if (!entry) return;
-    if (field === 'name') {
-        entry.name = rawValue;
+    if (field === 'name' || field === 'alias') {
+        entry[field] = rawValue;
         return;
     }
     // Numeric fields: keep "" (meaning "unset") rather than storing NaN/0.
@@ -2377,6 +2503,7 @@ function collectCatalogPayload(prefix) {
             // to auto-detection", whereas 0 would be an invalid window.
             if (!Number.isNaN(cw) && cw > 0) out.context_window = cw;
             if (!Number.isNaN(mo) && mo > 0) out.max_output_tokens = mo;
+            _setCatalogAlias(out, e.alias);
             return out;
         });
 }
@@ -2403,6 +2530,7 @@ function fillCatalogForProvider(prefix, providerId) {
         capabilities: (e.capabilities || []).slice(),
         context_window: e.context_window || '',
         max_output_tokens: e.max_output_tokens || '',
+        alias: e.alias || '',
     }));
     // The pick list lives in this modal for every vendor; drop the previous
     // vendor's candidates so switching providers cannot leave them open.
@@ -2428,8 +2556,15 @@ function _normalizeEntries(rows) {
             const mo = parseInt(e.max_output_tokens, 10);
             if (!Number.isNaN(cw) && cw > 0) out.context_window = cw;
             if (!Number.isNaN(mo) && mo > 0) out.max_output_tokens = mo;
+            _setCatalogAlias(out, e.alias);
             return out;
         });
+}
+
+/** Keep a display name only when it says something the model name doesn't. */
+function _setCatalogAlias(out, rawAlias) {
+    const alias = (rawAlias || '').trim();
+    if (alias && alias !== out.name) out.alias = alias;
 }
 
 function setCatalogSectionOpen(prefix, open) {

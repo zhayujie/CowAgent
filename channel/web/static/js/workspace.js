@@ -821,9 +821,11 @@ const WS_PATH_EXTS = Object.values(WS_KIND_BY_EXT).flat().join('|');
 // (websites/report.html) paths, always anchored on a known file extension and
 // containing at least one separator, which keeps prose like "see report.html"
 // from turning into chips. Excluding `:` and `/` before the match is what stops
-// the tail of an http(s) URL from being picked up.
+// the tail of an http(s) URL from being picked up. Excluding every path char
+// (CJK included) means a match only starts where a path-like run starts; else
+// each CJK char is a start and long Chinese paragraphs scan in quadratic time.
 const WS_PATH_RE = new RegExp(
-    '(^|[^\\w/\\\\.~:-])((?:~\\/|\\/|[A-Za-z]:\\\\)?(?:[\\w.\\-\\u4e00-\\u9fa5]+[\\/\\\\])+[\\w.\\-\\u4e00-\\u9fa5]+\\.(?:'
+    '(^|[^\\w/\\\\.~:\\-\\u4e00-\\u9fa5])((?:~\\/|\\/|[A-Za-z]:\\\\)?(?:[\\w.\\-\\u4e00-\\u9fa5]+[\\/\\\\])+[\\w.\\-\\u4e00-\\u9fa5]+\\.(?:'
     + WS_PATH_EXTS + '))(?=$|[^\\w.\\-\\u4e00-\\u9fa5]|$)',
     'gi'
 );

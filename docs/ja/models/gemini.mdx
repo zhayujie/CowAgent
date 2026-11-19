@@ -13,16 +13,20 @@ Google Gemini はテキスト対話、画像理解、画像生成（Nano Banana 
 
 ```json
 {
-  "model": "gemini-3.8-flash",
+  "model": "gemini-4-argon",
   "gemini_api_key": "YOUR_API_KEY"
 }
 ```
 
 | パラメータ | 説明 |
 | --- | --- |
-| `model` | 推奨は `gemini-3.8-flash`。`gemini-3.7-flash`、`gemini-3.6-flash`、`gemini-3.5-flash`、`gemini-3.1-pro-preview`、`gemini-3.1-flash-lite-preview`、`gemini-3-flash-preview`、`gemini-3-pro-preview` などもサポート。詳細は [公式ドキュメント](https://ai.google.dev/gemini-api/docs/models) を参照 |
+| `model` | 推奨は `gemini-4-argon`。`gemini-3.8-flash`、`gemini-3.7-flash`、`gemini-3.6-flash`、`gemini-3.5-flash`、`gemini-3.1-pro-preview`、`gemini-3.1-flash-lite-preview`、`gemini-3-flash-preview`、`gemini-3-pro-preview` などもサポート。詳細は [公式ドキュメント](https://ai.google.dev/gemini-api/docs/models) を参照 |
 | `gemini_api_key` | [Google AI Studio](https://aistudio.google.com/app/apikey) で作成 |
 | `gemini_api_base` | 任意。デフォルトは `https://generativelanguage.googleapis.com`。サードパーティのプロキシに変更可能 |
+
+<Note>
+  `gemini-4-argon` は Gemini で最も高性能なモデルで、常に思考モードで動作します。思考レベルは `low` / `medium` / `high`（デフォルト `medium`）から選択でき、Web コンソールのモデル設定で変更できます。
+</Note>
 
 ## 画像理解
 

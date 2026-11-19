@@ -23,6 +23,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       return ''
     }
   },
+  getLanAddresses: () => ipcRenderer.invoke('get-lan-addresses') as Promise<string[]>,
   restartBackend: () => ipcRenderer.invoke('restart-backend'),
   selectDirectory: () => ipcRenderer.invoke('select-directory'),
   selectFile: (filters?: Electron.FileFilter[]) => ipcRenderer.invoke('select-file', filters),
@@ -82,13 +83,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
       error: string
     }>,
 
-  // Themes (bundled + user themes from ~/.cow/themes), assets inlined.
+  // Themes (bundled + user themes from <workspace>/system/themes), assets inlined.
   listThemes: () => ipcRenderer.invoke('themes-list') as Promise<Record<string, unknown>[]>,
   getThemesDir: () => ipcRenderer.invoke('themes-dir') as Promise<string>,
+  // Import a theme (.zip / folder / theme.json); shows a picker when no path.
+  importTheme: (opts: { path?: string; title?: string; overwrite?: boolean; reserved?: string[] }) =>
+    ipcRenderer.invoke('themes-import', opts),
   // Optional app config (first-run default theme + display name). Null in
   // the standard build.
   getAppConfig: () =>
-    ipcRenderer.invoke('app-config-get') as Promise<{ defaultTheme?: string; appName?: string } | null>,
+    ipcRenderer.invoke('app-config-get') as Promise<{
+      defaultTheme?: string
+      hiddenThemes?: string[]
+      appName?: string
+    } | null>,
 
   // Generic HTTPS relay via the main process (bypasses the renderer's CORS
   // restrictions for external endpoints). Optional extensions may use it.

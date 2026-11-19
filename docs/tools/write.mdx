@@ -23,7 +23,7 @@ No extra dependencies, available by default.
 A few checks run before writing, and report back in the result:
 
 - **Modified elsewhere**: if the file changed after the Agent last read it, the result carries a warning so another program's changes are not silently overwritten.
-- **Syntax check**: if the content is JSON / YAML / TOML and fails to parse, the write is **refused** and the file is left untouched - these formats are corrupt when half-written, and this also catches truncated model output. Source files (`.py`, for example) only warn, and only when this write introduced a new syntax error.
+- **Syntax check**: if the content is JSON / YAML / TOML and fails to parse, the write is **refused** and the file is left untouched - these formats are corrupt when half-written, and this also catches truncated model output. Source files (`.py`, for example) only warn, and only when this write introduced a new syntax error. JSON with comments and trailing commas is accepted in `tsconfig*.json`, `jsconfig*.json`, `.eslintrc.json`, `.vscode/*.json` and `devcontainer.json`, and a Helm chart template (YAML with Go template syntax under `templates/`) is not refused, since it is only YAML once rendered. An existing file that already uses comments or template syntax is checked the same lenient way, whatever its name.
 - **Credential protection**: `~/.cow/.env`, which holds API keys, cannot be written through this tool. Use the `env_config` tool instead.
 
 ## Use Cases

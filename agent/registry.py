@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 
 from common.utils import expand_path
+from common.deployment import is_desktop
 
 
 _AGENT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
@@ -369,8 +370,6 @@ def get_agent_registry() -> AgentRegistry:
     """
 
     global _registry_instance, _registry_signature
-    import os
-
     from agent import team
     from config import conf
 
@@ -393,7 +392,7 @@ def get_agent_registry() -> AgentRegistry:
                 # Fall back to the default single agent so the app still starts;
                 # the console can then edit the bad block. Source deployments
                 # keep failing loudly so the developer sees the error at once.
-                if os.environ.get("COW_DESKTOP") != "1":
+                if not is_desktop():
                     raise
                 from common.log import logger
 

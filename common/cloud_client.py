@@ -22,7 +22,7 @@ from bridge.reply import Reply, ReplyType
 from common.atomic_write import write_json_atomic
 from common.log import logger
 from linkai import LinkAIClient, PushMsg
-from config import conf, pconf, plugin_config, available_setting, write_plugin_config, get_root, get_weixin_credentials_path, drag_sensitive
+from config import conf, pconf, plugin_config, available_setting, write_plugin_config, get_data_root, get_weixin_credentials_path, drag_sensitive
 from plugins import PluginManager
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -57,6 +57,19 @@ PEER_RESULT_ACTION = "agent_invoke_result"
 # How much longer than the teammate's own budget to wait, so its timeout
 # report normally arrives before we give up on our side.
 _PEER_GRACE_SECONDS = 15.0
+
+
+class AgentRegistryUnavailable(RuntimeError):
+    """A named Agent could not be resolved because the registry is down.
+
+    Distinct from an unknown Agent (``KeyError``): a registry that cannot be
+    loaded during a config reload or with a missing optional dependency is a
+    transient server-side failure. It must be reported as an error, never as
+    "no Agent was requested", which would answer with another Agent's data.
+    """
+
+# Guest pages rendered by the console and answered by the guest runtime here.
+GUEST_MSG_TYPE = "GUEST"
 
 
 class _PendingHandoff:
@@ -374,6 +387,9 @@ class CloudClient(LinkAIClient):
         if self._peer_transport is not None and self._peer_transport.handle_message(config):
             return
         logger.info(f"[CloudClient] Loading remote config: {drag_sensitive(config)}")
+
+        if "weixin_proxy" in config:
+            conf()["weixin_proxy"] = str(config.get("weixin_proxy") or "").strip()
 
         action = config.get("action")
         if action in CHANNEL_ACTIONS:
@@ -724,14 +740,33 @@ class CloudClient(LinkAIClient):
         except Exception:
             return False
 
-    def _apply_instance(self, instance_id: str, channel_type: str, data: dict) -> bool:
+    def _weixin_needs_login(self, instance_id: str, waiting_counts: bool) -> bool:
+        """Whether a running Weixin instance should restart to issue a new QR code.
+
+        An instance whose login attempt has ended (idle) sits there without a
+        code until restarted. One still waiting for a scan only restarts on an
+        explicit request (``waiting_counts``), since a replayed record must not
+        swap out the code a user may be scanning right now.
+        """
+        try:
+            ch = self.channel_mgr.get_channel(instance_id)
+        except Exception:
+            return False
+        login_status = getattr(ch, "login_status", None)
+        if login_status == "idle":
+            return True
+        return waiting_counts and login_status in ("waiting_scan", "scanned")
+
+    def _apply_instance(self, instance_id: str, channel_type: str, data: dict,
+                        restart_waiting_login: bool = False) -> bool:
         """Persist one instance record and start it only when that matters.
 
         Returns True when the instance was (re)started. An identical record whose
         channel is already up is left alone: the control plane replays every
         channel on each login, and a bot must not drop its connection just to be
         told what it already knows. A record that changed, or one whose channel
-        is not running, is started (restarting if needed).
+        is not running, is started (restarting if needed). So is a Weixin
+        instance that is not logged in, see ``_weixin_needs_login``.
         """
         from channel.channel_instances import get_instance, upsert_instance
 
@@ -753,10 +788,17 @@ class CloudClient(LinkAIClient):
             and self._instance_signature(before) == self._instance_signature(inst)
         )
         if unchanged and self._instance_running(instance_id):
-            logger.info(
-                f"[CloudClient] Channel instance '{instance_id}' unchanged and running, skip restart"
-            )
-            return False
+            if channel_type in ("weixin", "wx") and self._weixin_needs_login(
+                    instance_id, restart_waiting_login):
+                logger.info(
+                    f"[CloudClient] Channel instance '{instance_id}' not logged in, "
+                    f"restarting for a new QR code"
+                )
+            else:
+                logger.info(
+                    f"[CloudClient] Channel instance '{instance_id}' unchanged and running, skip restart"
+                )
+                return False
         threading.Thread(
             target=self._do_add_instance, args=(inst,), daemon=True
         ).start()
@@ -776,7 +818,9 @@ class CloudClient(LinkAIClient):
                     target=self._do_remove_channel, args=(instance_id,), daemon=True
                 ).start()
             return
-        self._apply_instance(instance_id, channel_type, data)
+        # An update is the console's "connect" action: a Weixin instance still
+        # waiting on an old code gets a fresh one.
+        self._apply_instance(instance_id, channel_type, data, restart_waiting_login=True)
 
     def _handle_channel_sync(self, data: dict):
         """Reconcile team.json against the control plane's full desired list.
@@ -1189,7 +1233,14 @@ class CloudClient(LinkAIClient):
         """A SkillService over the requested agent's skills: its own set when it
         has one, else the shared set. Falls back to the process-wide service when
         no agent is requested, so single-agent installs are unaffected."""
-        workspace = self._agent_workspace(agent_id)
+        try:
+            workspace = self._agent_workspace(agent_id)
+        except KeyError:
+            raise
+        except Exception as e:
+            logger.error(f"[CloudClient] Cannot resolve agent workspace: {e}")
+            # A requested agent must never be answered with the default agent's data.
+            return None
         if workspace is None:
             return self.skill_service
         try:
@@ -1229,8 +1280,17 @@ class CloudClient(LinkAIClient):
     def _memory_service_for(self, agent_id):
         """A MemoryService bound to the requested agent's workspace. Falls back
         to the process-wide default-agent service when no agent is requested,
-        so single-agent installs are unaffected."""
-        workspace = self._agent_workspace(agent_id)
+        so single-agent installs are unaffected. A failed build for a requested
+        agent yields None so the caller reports it rather than serving the
+        default agent's data."""
+        try:
+            workspace = self._agent_workspace(agent_id)
+        except KeyError:
+            raise
+        except Exception as e:
+            logger.error(f"[CloudClient] Cannot resolve agent workspace: {e}")
+            # A requested agent must never be answered with the default agent's data.
+            return None
         if workspace is None:
             return self.memory_service
         try:
@@ -1238,7 +1298,8 @@ class CloudClient(LinkAIClient):
             return MemoryService(workspace)
         except Exception as e:
             logger.error(f"[CloudClient] Failed to build MemoryService for agent: {e}")
-            return self.memory_service
+            # A requested agent must never be answered with the default agent's data.
+            return None
 
     # ------------------------------------------------------------------
     # knowledge callback
@@ -1269,8 +1330,17 @@ class CloudClient(LinkAIClient):
         """A KnowledgeService bound to the requested agent's workspace. Falls
         back to the process-wide default-agent service when no agent is
         requested, so single-agent installs are unaffected. An agent with its
-        own knowledge/ reads that; otherwise it transparently reads the shared one."""
-        workspace = self._agent_workspace(agent_id)
+        own knowledge/ reads that; otherwise it transparently reads the shared one.
+        A failed build for a requested agent yields None so the caller reports it
+        rather than serving the default agent's data."""
+        try:
+            workspace = self._agent_workspace(agent_id)
+        except KeyError:
+            raise
+        except Exception as e:
+            logger.error(f"[CloudClient] Cannot resolve agent workspace: {e}")
+            # A requested agent must never be answered with the default agent's data.
+            return None
         if workspace is None:
             return self.knowledge_service
         try:
@@ -1278,7 +1348,8 @@ class CloudClient(LinkAIClient):
             return KnowledgeService(str(workspace))
         except Exception as e:
             logger.error(f"[CloudClient] Failed to build KnowledgeService for agent: {e}")
-            return self.knowledge_service
+            # A requested agent must never be answered with the default agent's data.
+            return None
 
     # ------------------------------------------------------------------
     # workspace callback
@@ -1311,8 +1382,17 @@ class CloudClient(LinkAIClient):
     def _workspace_service_for(self, agent_id):
         """A WorkspaceService rooted at the requested agent's workspace. Falls
         back to the process-wide default-agent service when no agent is
-        requested, so single-agent installs are unaffected."""
-        workspace = self._agent_workspace(agent_id)
+        requested, so single-agent installs are unaffected. A failed build for
+        a requested agent yields None so the caller reports it rather than
+        serving the default agent's data."""
+        try:
+            workspace = self._agent_workspace(agent_id)
+        except KeyError:
+            raise
+        except Exception as e:
+            logger.error(f"[CloudClient] Cannot resolve agent workspace: {e}")
+            # A requested agent must never be answered with the default agent's data.
+            return None
         if workspace is None:
             return self.workspace_service
         try:
@@ -1320,7 +1400,63 @@ class CloudClient(LinkAIClient):
             return WorkspaceService(str(workspace))
         except Exception as e:
             logger.error(f"[CloudClient] Failed to build WorkspaceService for agent: {e}")
-            return self.workspace_service
+            # A requested agent must never be answered with the default agent's data.
+            return None
+
+    # ------------------------------------------------------------------
+    # guest callback
+    # ------------------------------------------------------------------
+    def _dispatch_msg(self, msg):
+        # The base client drops message types it does not know, GUEST
+        # included, so it is routed here before falling through.
+        if isinstance(msg, dict) and msg.get("type") == GUEST_MSG_TYPE:
+            threading.Thread(target=self._handle_guest, args=(msg.get("data") or {}, msg.get("requestId")),
+                             name="guest-request", daemon=True).start()
+            return
+        super()._dispatch_msg(msg)
+
+    def _handle_guest(self, data: dict, request_id):
+        """Run one GUEST request off the receive loop, so a reply in progress
+        never holds up the cancel that follows it."""
+        action = data.get("action", "")
+
+        def send(body: dict):
+            if request_id:
+                self._send_package({"type": GUEST_MSG_TYPE, "code": 200, "requestId": request_id, "data": body})
+
+        def send_chunk(chunk: dict):
+            send({"action": action, "streaming": True, "payload": chunk})
+
+        try:
+            result = self.on_guest(data, send_chunk)
+        except Exception as e:
+            logger.error(f"[CloudClient] on_guest failed: action={action}, error={e}")
+            result = {"action": action, "code": 500, "message": "Internal error.", "payload": None}
+        try:
+            send(dict(result, streaming=False))
+        except Exception as e:
+            logger.error(f"[CloudClient] GUEST response send error: {e}")
+
+    def on_guest(self, data: dict, send_chunk_fn=None) -> dict:
+        """
+        Handle GUEST messages: guest pages whose front end is the console.
+
+        Everything runs in the confined guest runtime, never the owner's Agent.
+        Model usage is attributed to ``user_id``, as for CHAT.
+
+        :param data: message data with 'action' and 'payload'
+        :param send_chunk_fn: callable(chunk) for a reply's progress events
+        :return: response dict
+        """
+        action = data.get("action", "")
+        payload = data.get("payload") or {}
+        # Visitors' messages are not logged.
+        logger.info(f"[CloudClient] on_guest: action={action}, slug={payload.get('slug', '')}, "
+                    f"session={str(payload.get('session_id') or '')[:8]}")
+        from agent.guest.actions import dispatch
+
+        with _acting_user(payload.get("user_id") or data.get("user_id")):
+            return dispatch(action, payload, send_chunk_fn)
 
     # ------------------------------------------------------------------
     # chat callback
@@ -1495,11 +1631,16 @@ class CloudClient(LinkAIClient):
             return None
 
     def _agent_workspace(self, agent_id):
-        """Resolve a requested agent id to its workspace root, or None to keep
-        the default-agent behaviour when no agent is requested. An agent that is
-        requested but unknown raises KeyError rather than silently serving the
-        default agent's data (see AgentRegistry.get_addressed for the ids that
-        are tolerated)."""
+        """Resolve a requested agent id to its workspace root.
+
+        ``None`` means *no Agent was requested* and is the only case in which a
+        builder may use the process-wide default-agent service. A requested but
+        unknown Agent raises ``KeyError`` so the caller answers 404. A requested
+        Agent whose registry cannot be loaded raises ``AgentRegistryUnavailable``:
+        returning ``None`` here used to make every builder dispatch against the
+        default Agent's service and report success (the contract #3914 fixed in
+        the builders themselves still has to hold at their shared input).
+        """
         agent_id = str(agent_id).strip() if agent_id is not None else ""
         if not agent_id:
             return None
@@ -1507,8 +1648,7 @@ class CloudClient(LinkAIClient):
             from agent.registry import get_agent_registry
             registry = get_agent_registry()
         except Exception as e:
-            logger.warning(f"[CloudClient] agent registry unavailable, using default: {e}")
-            return None
+            raise AgentRegistryUnavailable(f"agent registry unavailable: {e}") from e
         return registry.get_addressed(agent_id, require_enabled=False).workspace
 
     @staticmethod
@@ -1712,7 +1852,7 @@ class CloudClient(LinkAIClient):
         Save configuration to config.json file.
         """
         try:
-            config_path = os.path.join(get_root(), "config.json")
+            config_path = os.path.join(get_data_root(), "config.json")
             if not os.path.exists(config_path):
                 logger.warning(f"[CloudClient] config.json not found at {config_path}, skip saving")
                 return
@@ -1755,6 +1895,10 @@ def get_deployment_id() -> str:
 
 def _deployment_base_url() -> str:
     """Return the URL prefix the deployment's websites/ dir is served at."""
+    base_url = str(conf().get("websites_base_url") or "").strip().rstrip("/")
+    if base_url.startswith(("http://", "https://")):
+        return base_url
+
     deployment_id = get_deployment_id()
     if not deployment_id:
         return ""
@@ -1806,7 +1950,7 @@ def get_publish_dir(workspace_dir: str = "", ensure: bool = False) -> str:
 def get_website_base_url(workspace_dir: str = "") -> str:
     """Return the URL prefix that maps to an Agent's websites/ dir.
 
-    Do nothing when in local env.
+    Empty unless ``websites_base_url`` or a deployment id says where it is served.
 
     The route serves the default Agent's directory at the root, so every other
     Agent is addressed by where its own directory sits relative to the instance
@@ -1840,32 +1984,68 @@ def get_website_base_url(workspace_dir: str = "") -> str:
 COW_SEND_WEB_SUBDIR = "cow-send"
 
 
+def _file_digest(path: str) -> str:
+    import hashlib
+
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
 def copy_send_file(src_path: str, workspace_root: str) -> str:
-    """Copy *src_path* into ``websites/cow-send/`` and return its URL.
+    """Return a public URL for *src_path*, copying it into ``websites/cow-send/``.
+
+    A file already under the published dir is linked in place. Copies are
+    named by content hash, so sending the same file again reuses the copy,
+    while an edited file gets a new one and earlier links keep their content.
 
     Returns empty string in local env.
     """
     import shutil
-    import uuid
+    import tempfile
+    from urllib.parse import quote
 
     base = get_website_base_url(workspace_root)
     if not base or not src_path or not os.path.isfile(src_path):
         return ""
-    send_dir = os.path.join(get_publish_dir(workspace_root), COW_SEND_WEB_SUBDIR)
+    publish_dir = get_publish_dir(workspace_root)
+
+    real_src = os.path.realpath(src_path)
+    real_publish = os.path.realpath(publish_dir)
     try:
-        os.makedirs(send_dir, exist_ok=True)
-    except OSError:
-        return ""
+        if os.path.commonpath([real_src, real_publish]) == real_publish:
+            relative = os.path.relpath(real_src, real_publish).replace(os.sep, "/")
+            return f"{base}/{quote(relative)}"
+    except ValueError:
+        pass
+
+    send_dir = os.path.join(publish_dir, COW_SEND_WEB_SUBDIR)
     ext = os.path.splitext(src_path)[1].lower()
     if len(ext) > 12 or not ext.replace(".", "").isalnum():
         ext = ""
-    dest_name = f"{uuid.uuid4().hex}{ext}"
-    dest_path = os.path.join(send_dir, dest_name)
+    tmp_path = ""
     try:
-        shutil.copy2(src_path, dest_path)
+        os.makedirs(send_dir, exist_ok=True)
+        dest_name = f"{_file_digest(src_path)[:32]}{ext}"
+        dest_path = os.path.join(send_dir, dest_name)
+        if not (os.path.isfile(dest_path) and os.path.getsize(dest_path) == os.path.getsize(src_path)):
+            # Copy then rename, so a concurrent send never serves a partial file.
+            fd, tmp_path = tempfile.mkstemp(dir=send_dir, prefix=".tmp-")
+            os.close(fd)
+            shutil.copy2(src_path, tmp_path)
+            os.replace(tmp_path, dest_path)
+            tmp_path = ""
     except OSError as e:
         logger.warning(f"[cloud] copy_send_file: copy failed: {e}")
         return ""
+    finally:
+        if tmp_path:
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
     return f"{base}/{COW_SEND_WEB_SUBDIR}/{dest_name}"
 
 
@@ -1878,9 +2058,9 @@ def _display_path(path: str) -> str:
 
 
 def build_website_prompt(workspace_dir: str) -> list:
-    """Build system prompt lines for cloud website/file sharing rules.
+    """Build system prompt lines for the website/file sharing rules.
 
-    Returns an empty list when cloud deployment is not configured,
+    Returns an empty list when the websites/ dir has no public address,
     so callers can safely do ``lines.extend(build_website_prompt(...))``.
 
     The directory is named absolutely rather than as a bare ``websites/``: each
@@ -1893,9 +2073,11 @@ def build_website_prompt(workspace_dir: str) -> list:
     pub = _display_path(get_publish_dir(workspace_dir))
 
     return [
-        "**文件分享与网页生成规则** (非常重要 — 当前为云部署模式):",
+        "**文件分享与网页生成规则** (非常重要):",
         "",
-        f"云端已为工作空间的 `{pub}/` 目录配置好公网路由映射，访问地址前缀为: `{base_url}`",
+        f"工作空间的 `{pub}/` 目录已配置公网访问，访问地址前缀为: `{base_url}`",
+        "",
+        "该目录下的文件任何拿到链接的人都能打开，**不要**放入密钥、配置文件或隐私数据",
         "",
         f"1. **网页/网站**: 编写网页、H5页面等前端代码时，**必须**将文件放到 `{pub}/` 目录中",
         f"   - 例如: `{pub}/index.html` → `{base_url}/index.html`",

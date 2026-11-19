@@ -79,7 +79,7 @@ agent_delegate(agent_id="research", task="...")
 | `enabled` | `true` | 设为 `false`，或把整个配置块设为 `false`，即可完全不提供该工具 |
 | `allowed_targets` | 未设置 | 源 Agent ID 到其可访问 ID 的映射，`"*"` 表示任意。未设置则允许所有组合。目标还会进一步限定在当前会话的成员范围内 |
 | `max_depth` | `3` | 一条链的委派跳数（1-8） |
-| `timeout_seconds` | `600` | 单次委派运行的时间预算（0.01-600） |
+| `timeout_seconds` | `600` | 单次委派运行的时间预算（0.01-3600）。本地运行在到期时被取消 |
 | `max_message_chars` | `8000` | 单次委派任务的长度上限 |
 
 像上面的 `"research"` 那样配成空数组的 Agent，可以被委派，但不能再向外委派。

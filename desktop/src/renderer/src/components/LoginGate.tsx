@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import apiClient from '../api/client'
-import { t } from '../i18n'
+import { t, tf } from '../i18n'
 
 interface LoginGateProps {
   // Called once the password is accepted (auth cookie set), so the app can
@@ -27,6 +27,8 @@ const LoginGate: React.FC<LoginGateProps> = ({ onAuthenticated }) => {
       const res = await apiClient.authLogin(password)
       if (res.status === 'success') {
         onAuthenticated()
+      } else if (res.reason === 'locked') {
+        setError(tf('login_locked', { n: Math.max(1, Math.ceil((res.retry_after || 60) / 60)) }))
       } else {
         setError(t('login_error'))
       }

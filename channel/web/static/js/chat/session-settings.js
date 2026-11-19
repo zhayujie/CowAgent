@@ -91,6 +91,13 @@ function _renderInputPlaceholder() {
     input.placeholder = t(sharedConversation() ? 'input_placeholder_team' : 'input_placeholder');
 }
 
+/** Display name a custom provider gives one of its models, or ''. */
+function _modelAlias(providers, providerId, model) {
+    if (!model) return '';
+    const group = (providers || []).find(p => p.id === providerId);
+    return (group && group.labels && group.labels[model]) || '';
+}
+
 function _renderModelChip() {
     const btn = _modelBtn();
     if (!btn || !_sessCfg) return;
@@ -106,9 +113,11 @@ function _renderModelChip() {
     }
     const state = _sessCfg.model || {};
     const model = state.model || '';
+    const activeProvider = state.provider || (state.global && state.global.provider) || '';
 
+    // The chip shows the display name; the tooltip keeps the real model name.
     const label = document.getElementById('model-selector-label');
-    if (label) label.textContent = model || t('model_unset');
+    if (label) label.textContent = _modelAlias(state.providers, activeProvider, model) || model || t('model_unset');
 
     const tip = t('model_tip').replace('{name}', model || t('model_unset'))
         + (state.source === 'global' ? ` · ${t('model_follow_global')}` : '')
@@ -207,7 +216,12 @@ function toggleModelSelector(event) {
         return;
     }
     _closeComposerMenus(menu);
-    const open = () => { renderModelMenu(); menu.classList.remove('hidden'); _modelBtn()?.classList.add('open'); };
+    const open = () => {
+        renderModelMenu();
+        menu.classList.remove('hidden');
+        _modelBtn()?.classList.add('open');
+        _scrollModelMenuToActive(menu);
+    };
     // Always re-fetch: the catalog depends on which providers have keys, which
     // may have changed in Settings since this page loaded.
     refreshSessionSettings().then(() => { if (_sessCfg) open(); });
@@ -228,7 +242,8 @@ function renderModelMenu() {
     const parts = [`<div class="composer-menu-title">${escapeHtml(t('model_menu_title'))}</div>`];
     providers.forEach((p, idx) => {
         if (idx > 0) parts.push('<div class="composer-menu-divider"></div>');
-        parts.push(`<div class="composer-menu-title">${escapeHtml(localizedLabel(p.label))}</div>`);
+        const current = p.id === activeProvider ? ' data-current-provider' : '';
+        parts.push(`<div class="composer-menu-title"${current}>${escapeHtml(localizedLabel(p.label))}</div>`);
         (p.models || []).forEach(m => {
             const active = m === activeModel && p.id === activeProvider;
             // Clicking the already-pinned model clears the pin (back to global);
@@ -236,12 +251,17 @@ function renderModelMenu() {
             const arg = (active && pinned)
                 ? 'null, null'
                 : `'${_wsAttr(p.id)}','${_wsAttr(m)}'`;
+            const alias = _modelAlias([p], p.id, m);
+            const body = alias
+                ? `<span class="composer-menu-name">${escapeHtml(alias)}</span>
+                   <span class="composer-menu-desc break-all">${escapeHtml(m)}</span>`
+                : `<span class="composer-menu-name">${escapeHtml(m)}</span>`;
             parts.push(`
                 <button class="composer-menu-item ${active ? 'active' : ''}"
                         onclick="selectSessionModel(${arg})">
                     <i class="fas fa-microchip"></i>
                     <span class="composer-menu-body">
-                        <span class="composer-menu-name">${escapeHtml(m)}</span>
+                        ${body}
                     </span>
                     ${active ? '<i class="fas fa-check composer-menu-check"></i>' : ''}
                 </button>`);
@@ -249,6 +269,16 @@ function renderModelMenu() {
     });
 
     menu.innerHTML = parts.join('');
+}
+
+// Scroll the menu (not the page) so the active model sits in the middle; a
+// model typed by hand has no row, so fall back to its provider's heading.
+function _scrollModelMenuToActive(menu) {
+    const target = menu.querySelector('.composer-menu-item.active')
+        || menu.querySelector('[data-current-provider]');
+    if (!target) return;
+    const offset = target.getBoundingClientRect().top - menu.getBoundingClientRect().top + menu.scrollTop;
+    menu.scrollTop = Math.max(0, offset - (menu.clientHeight - target.offsetHeight) / 2);
 }
 
 /** Pin a model for this session; pass nulls to follow the global model again. */

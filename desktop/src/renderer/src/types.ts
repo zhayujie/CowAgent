@@ -2,6 +2,12 @@
 // Electron bridge
 // ============================================================
 
+export type ThemeImportResult =
+  | { status: 'ok'; id: string; name: string }
+  | { status: 'exists'; id: string; name: string; path: string }
+  | { status: 'canceled' }
+  | { status: 'error'; code: 'no_theme' | 'bad_json' | 'bad_zip' | 'too_large' | 'failed' }
+
 export interface ElectronAPI {
   getBackendPort: () => Promise<number | null>
   getBackendStatus: () => Promise<string>
@@ -13,6 +19,8 @@ export interface ElectronAPI {
   getDesktopToken?: () => Promise<string>
   /** On-disk path of a picked/dropped File; '' when it has none (pasted image). */
   getPathForFile?: (file: File) => string
+  /** This machine's IPv4 addresses on private networks. */
+  getLanAddresses?: () => Promise<string[]>
   restartBackend: () => Promise<boolean>
   selectDirectory: () => Promise<string | null>
   selectFile: (filters?: { name: string; extensions: string[] }[]) => Promise<string | null>
@@ -39,12 +47,18 @@ export interface ElectronAPI {
   setLoginItemEnabled?: (
     enabled: boolean
   ) => Promise<{ ok: boolean; enabled: boolean; error: string }>
-  // Themes (bundled + user themes from ~/.cow/themes), images inlined.
+  // Themes (bundled + user themes from <workspace>/system/themes), images inlined.
   listThemes?: () => Promise<Record<string, unknown>[]>
   getThemesDir?: () => Promise<string>
+  importTheme?: (opts: {
+    path?: string
+    title?: string
+    overwrite?: boolean
+    reserved?: string[]
+  }) => Promise<ThemeImportResult>
   // Optional app config: first-run default theme + display name. Null when
   // the build ships no app config (standard build).
-  getAppConfig?: () => Promise<{ defaultTheme?: string; appName?: string } | null>
+  getAppConfig?: () => Promise<{ defaultTheme?: string; hiddenThemes?: string[]; appName?: string } | null>
   // Generic HTTPS relay via the main process (bypasses renderer CORS).
   httpRelay?: (req: {
     url: string
@@ -179,6 +193,8 @@ export interface ChatMessage {
   id: string
   role: Role
   content: string
+  /** Shown in place of `content` on a user turn; the agent still gets `content`. */
+  display?: string
   /** Unix seconds. Backend history uses `created_at`; we normalize to `timestamp`. */
   timestamp: number
   attachments?: Attachment[]
@@ -526,6 +542,8 @@ export interface SessionModelProvider {
   id: string
   label: string | { zh: string; en: string }
   models: string[]
+  // Display names for some of `models` (custom providers only).
+  labels?: Record<string, string>
 }
 
 export interface SessionSettingsState {
@@ -562,6 +580,8 @@ export interface SessionTeam {
 export interface HistoryMessage {
   role: Role
   content: string
+  /** User turns sent with a display text. */
+  display?: string
   created_at: number
   steps?: MessageStep[]
   tool_calls?: Array<{ id?: string; name: string; arguments?: Record<string, unknown>; result?: string }>
@@ -705,6 +725,15 @@ export interface ModelCatalogEntry {
   capabilities: ModelCapability[]
   context_window?: number
   max_output_tokens?: number
+  // Optional display name, custom providers only.
+  alias?: string
+}
+
+export interface ApiBasePreset {
+  label: LocalizedLabel
+  value: string
+  /** Where keys for this base are created. */
+  keys_url?: string
 }
 
 export interface ModelProvider {
@@ -721,6 +750,8 @@ export interface ModelProvider {
   api_base?: string
   api_base_default?: string
   api_base_placeholder?: string
+  /** One-click bases offered next to the API Base field. */
+  api_base_presets?: ApiBasePreset[]
   // The model catalog is an OVERLAY on the presets, not a replacement:
   // - `catalog` is the user's raw overrides (edited/added entries),
   // - `hidden` is the preset names the user removed (tombstones),

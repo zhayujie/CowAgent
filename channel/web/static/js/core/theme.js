@@ -5,7 +5,8 @@
 // =====================================================================
 // Theme
 // =====================================================================
-let currentTheme = localStorage.getItem('cow_theme') || 'dark';
+// Each page sets its own default before first paint; light if none did.
+let currentTheme = localStorage.getItem('cow_theme') || window.__COW_DEFAULT_THEME__ || 'light';
 
 function applyTheme() {
     const root = document.documentElement;
@@ -20,6 +21,8 @@ function applyTheme() {
         document.getElementById('hljs-light').disabled = false;
         document.getElementById('hljs-dark').disabled = true;
     }
+    // Color themes (themes.js) are console-only; the guest page has none.
+    if (typeof applyColorTheme === 'function') applyColorTheme();
     rerenderMermaidDiagrams();
 }
 

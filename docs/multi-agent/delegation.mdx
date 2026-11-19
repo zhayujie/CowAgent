@@ -73,7 +73,7 @@ Delegation is between full Agents, so it is fenced in:
 | `enabled` | `true` | Set to `false`, or the whole block to `false`, to withhold the tool |
 | `allowed_targets` | unset | Maps a source Agent ID to the IDs it may reach; `"*"` allows any. Unset allows every pair. Targets are further bounded to the current conversation's teammates |
 | `max_depth` | `3` | Delegation hops in one chain (1-8) |
-| `timeout_seconds` | `600` | Budget for one delegated run (0.01-600) |
+| `timeout_seconds` | `600` | Budget for one delegated run (0.01-3600); a local run is cancelled when it expires |
 | `max_message_chars` | `8000` | Size limit for one delegated task |
 
 An Agent listed with an empty array, like `"research"` above, can be delegated to but cannot delegate onward.

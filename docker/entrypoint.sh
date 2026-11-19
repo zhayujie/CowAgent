@@ -46,7 +46,7 @@ fi
 # apply runtime timezone from TZ env so datetime.now() uses local time
 if [ -n "$TZ" ] && [ -f "/usr/share/zoneinfo/$TZ" ]; then
     ln -snf "/usr/share/zoneinfo/$TZ" /etc/localtime 2>/dev/null || true
-    echo "$TZ" > /etc/timezone 2>/dev/null || true
+    echo "$TZ" 2>/dev/null > /etc/timezone || true
 fi
 
 # fix ownership of mounted volumes then drop to non-root user

@@ -20,7 +20,7 @@ Claude は Anthropic が提供するモデルで、テキスト対話と画像�
 
 | パラメータ | 説明 |
 | --- | --- |
-| `model` | `claude-opus-5-5`、`claude-opus-5`、`claude-sonnet-5`、`claude-fable-5-1`、`claude-fable-5`、`claude-opus-4-8`、`claude-opus-4-7`、`claude-sonnet-4-6`、`claude-opus-4-6`、`claude-sonnet-4-5`、`claude-sonnet-4-0`、`claude-3-5-sonnet-latest` などをサポート。詳細は [公式モデル一覧](https://docs.anthropic.com/en/docs/about-claude/models/overview) を参照 |
+| `model` | `claude-opus-5-5`、`claude-sonnet-5-5`、`claude-haiku-5-5`、`claude-opus-5`、`claude-sonnet-5`、`claude-fable-5-1`、`claude-fable-5`、`claude-opus-4-8`、`claude-opus-4-7`、`claude-sonnet-4-6`、`claude-opus-4-6`、`claude-sonnet-4-5`、`claude-sonnet-4-0`、`claude-3-5-sonnet-latest` などをサポート。詳細は [公式モデル一覧](https://docs.anthropic.com/en/docs/about-claude/models/overview) を参照 |
 | `claude_api_key` | [Claude コンソール](https://console.anthropic.com/settings/keys) で作成 |
 | `claude_api_base` | 任意。デフォルトは `https://api.anthropic.com/v1`。サードパーティのプロキシに変更可能 |
 
@@ -29,6 +29,8 @@ Claude は Anthropic が提供するモデルで、テキスト対話と画像�
 | モデル | 用途 |
 | --- | --- |
 | `claude-opus-5-5` | 最新フラッグシップ。デフォルト推奨モデルで、複雑な推論と長期的な Agent タスクに最適 |
+| `claude-sonnet-5-5` | Claude 5.5 シリーズのバランス型。速度と知能を両立し、価格も低め |
+| `claude-haiku-5-5` | Claude 5.5 シリーズで最速・最安。大量かつ低レイテンシのタスク向け |
 | `claude-opus-5` | 前世代の Opus フラッグシップ |
 | `claude-sonnet-5` | Claude 5 シリーズのバランス型。推論性能とコストのバランスが良く、価格も低め |
 | `claude-fable-5-1` | Claude 5 シリーズのもう一つのフラッグシップモデル（新バージョン） |

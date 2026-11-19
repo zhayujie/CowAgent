@@ -1,0 +1,143 @@
+---
+title: v2.2.2
+description: "CowAgent 2.2.2: standalone guest pages and embeddable chat windows, custom themes, native multimodal input for the main model, new models, plus improvements to tools, channels, and security"
+---
+
+🌐 [English](https://docs.cowagent.ai/releases/v2.2.2) | [中文](https://docs.cowagent.ai/zh/releases/v2.2.2)
+
+## 💬 Guest Pages
+
+Share an Agent as a standalone chat page, or embed it in your website as a chat window. Visitors open the link and start chatting without signing in, which suits product inquiries, knowledge base Q&A, customer support, and similar scenarios:
+
+- **Standalone pages**: each page gets its own link, visitors keep their chat history, and the name, icon, theme color, welcome message, and suggested questions are all customizable.
+
+<Frame>
+  <img src="https://cdn.jsdelivr.net/gh/zhayujie/cowagent-assets@main/screenshots/en/guest-share-page-dark.png" alt="Guest page" width="800" />
+</Frame>
+
+- **Embedded chat window**: a single code snippet embeds the page in your website, with a chat button in the bottom-right corner. You can restrict which sites may embed it and preview the result while configuring. Try it live on the [CowAgent website](https://cowagent.ai/?chat=open).
+
+<Frame>
+  <img src="https://cdn.jsdelivr.net/gh/zhayujie/cowagent-assets@main/screenshots/en/guest-share-embed.png" alt="Embed in a page" width="800" />
+</Frame>
+
+- **Data isolation**: the Agent serving visitors can only use the tools, skills, and references enabled for that page. It cannot access your memory, conversations, or workspace, cannot run commands, and its network requests are limited to public addresses. New pages start with file writing, file sending, and web search turned off.
+- **References**: select your knowledge base, or one of its categories, as read-only references, each with a note on what it is for.
+- **Access control**: supports an access password, a daily question limit per visitor, and an expiry date. Conversations can be reviewed per visitor, and a page's link can be reset, or the page paused or deleted, at any time.
+
+<Frame>
+  <img src="https://cdn.jsdelivr.net/gh/zhayujie/cowagent-assets@main/screenshots/en/guest-share-editor.png" alt="Edit guest page" width="800" />
+</Frame>
+
+Thanks @LanydLi #3113
+
+Related docs: [Guest Pages](https://docs.cowagent.ai/extensions/guest-share)
+
+
+## 🎨 Custom Themes
+
+The Web console and the desktop client now support themes, and both share one themes folder:
+
+- **Theme import**: drag in a theme zip or folder to import it, with custom colors, a background wallpaper, and a new-chat icon. Themes are stored in `~/cow/system/themes/`.
+- **Agent-generated themes**: describe the style you want or attach reference images, and the Agent generates the colors, wallpaper, and icon, ready to switch to.
+- **Built-in themes**: five color themes, Meadow, Ocean, Clay, Sakura, and Lavender, each adapted to both light and dark mode.
+
+<Frame>
+  <img src="https://cdn.jsdelivr.net/gh/zhayujie/cowagent-assets@main/screenshots/en/web-console-custom-theme.png" alt="Custom themes" width="800" />
+</Frame>
+
+Related docs: [Custom Themes](https://docs.cowagent.ai/extensions/custom-theme)
+
+## 🖼 Better Image Understanding with the Main Model
+
+When the main model supports vision, images are passed to it directly as multimodal input, so understanding and answering happen in a single call. This avoids the detail lost when an image understanding tool describes the image second-hand, and noticeably improves tasks such as UI reproduction and chart analysis (Thanks @592774447 #3608).
+
+- **When it applies**: takes effect when the vision model is set to "Auto" or to the same model as the main model, with no extra configuration.
+- **Context cost**: only the current turn carries the image. Earlier turns keep a reference to it, so its tokens are not counted again. If a request is rejected because of an image, it is retried automatically as text only.
+- **Provider support**: Claude, Gemini, and Qwen receive images in their own native formats.
+- **Recognition accuracy**: the image compression limit is raised to 3 MB / 3072 px, preserving more text and detail.
+
+## 🔗 Integrations & Access Addresses
+
+The Config page has a new **Integrations** tab, in both the Web console and the desktop client, that brings guest pages, the Chat API, and access addresses together:
+
+- **Addresses**: change the listen IP and port online. The service switches to the new address without a restart and falls back to the previous one if the new address is unavailable. This machine's LAN addresses are shown, and you can set a display address for share links and embed code.
+- **HTTPS and domains**: the console can serve HTTPS directly once a certificate is configured, and the docs now cover deployment behind an nginx reverse proxy (Thanks @anshlakhera048 #3774, @592774447 #3768).
+- **Login protection**: a client that enters the wrong password repeatedly is locked out temporarily. Local access is counted separately, so password guessing from outside never locks you out on this machine.
+- **Chat API**: concurrent requests in the same conversation are processed in order (Thanks @rudycelekli #3751).
+
+<Frame>
+  <img src="https://cdn.jsdelivr.net/gh/zhayujie/cowagent-assets@main/screenshots/en/web-console-integrations.png" alt="Integrations" width="800" />
+</Frame>
+
+Related docs: [Web Console - Access URL](https://docs.cowagent.ai/channels/web#access-url)
+
+## 🤖 Model Capabilities
+
+- **New models**: added `kimi-k3.1-pro` (Kimi's default model), `MiniMax-M3.1-Flash`, `gpt-6.1-terra` (OpenAI's default model), `claude-sonnet-5-5`, `claude-haiku-5-5`, and `gemini-4-argon` (Gemini's default model) (Thanks @octo-patch #3791).
+- **Xiaomi MiMo**: added `mimo-v2.5-asr` for speech recognition; chat models are upgraded to V2.6, and old model IDs are mapped automatically (Thanks @592774447 #3788).
+- **Model display names**: models from custom providers can have a display name, shown in the model picker while the original model ID is still used for requests (Thanks @592774447 #3852).
+- **Default context**: the Agent's default context limit is raised from 64K to 200K tokens, max steps from 30 to 100, and retained turns from 20 to 30.
+- **Streaming**: errors during Claude streaming are now surfaced instead of ending the stream silently; streams that signal completion by closing the connection are supported; streaming connections for every provider are released properly on all exit paths (Thanks @rudycelekli #3693, #3822, @a1094174619 #3847).
+- **OpenAI**: the Responses API correctly handles refusals, truncated tool arguments, and failed responses; retries of the image API keep the custom base URL (Thanks @rudycelekli #3691, #3692, #3702, #3706).
+- **Mid-run messages**: Zhipu GLM, Qwen, and MiniMax keep messages added during a run after the tool results; non-object tool results are wrapped correctly for Gemini (Thanks @rudycelekli #3825, #3826, #3827, @pei711 #3843).
+- **Voice**: fixed connection release, error detection, and URL building in the MiniMax, Google, and OpenAI speech APIs; repeated synthesis of the same text no longer overwrites earlier output files, and manual read-aloud plays the message version you clicked (Thanks @rudycelekli #3688, #3700, #3708, #3710, #3714, #3720, #3803). An error is returned when a transcription is invalid, and temporary files are cleaned up promptly on every reply path (Thanks @c020627 #3759, #3835, #3837, @rudycelekli #3815).
+- **Other**: Gemini token usage includes thinking tokens, and non-streaming responses also report accurate token usage (Thanks @pcbeingused333 #3850, #3855); ModelScope streaming tolerates chunks with empty `choices`, model capability lists no longer affect each other, and temporary files are cleaned up when image recognition fails (Thanks @rudycelekli #3704, #3813, #3821).
+
+## 🧩 Skills & Tools
+
+- **Web search**: integrates DeepSeek's official Search and Fetch APIs, enabled automatically and used as the default search provider once a DeepSeek API key is configured (Thanks @anshlakhera048 #3776, @592774447 #3775). Individual search providers can be disabled while keeping their credentials, and keyless anonymous search must now be enabled explicitly (Thanks @rudycelekli #3705).
+- **Skills**: the desktop client's Skills page shows icons and versions. A custom skill repository can be set with `skill_hub_url` for installing and searching skills by name, and skills it does not list are fetched from the default Skill Hub. Skill commands in a chat apply only to the current Agent.
+- **Skill management**: the original skill is kept when a replacement install fails, and its previous state is restored when enabling or disabling fails; files with a BOM and various metadata formats are supported, and one corrupted config entry no longer affects other skills (Thanks @rudycelekli #3685, #3690, #3695, #3696, #3698, #3711, #3753, #3754, @c020627 #3760).
+- **Terminal**: fixed commands producing no output and multi-line Python commands being truncated on Windows (Thanks @keeponlight #3795, @rudycelekli #3811, @Nolan527 #3793); the full output is kept after very long lines are truncated (Thanks @rudycelekli #3779); on Windows the full-output log keeps the command's original line breaks, so reading it back at the indicated line numbers lands in the right place (Thanks @tanishqbaweja #3858).
+- **Syntax checks**: the syntax check before writing accepts files with comments or template syntax, such as `tsconfig.json`, VS Code settings, and Helm templates, while strict JSON files such as `package.json` still reject comments with a hint on how to fix them (Thanks @tanishqbaweja #3853).
+- **File read/write and search**: fuzzy-match edits no longer add blank lines around the replaced content, and overwriting a file keeps its existing line endings instead of converting them all to CRLF on Windows (Thanks @tanishqbaweja #3854, #3856). Very long lines can be read by offset, CR line endings and the indentation of fuzzy matches are preserved, the original file is not overwritten when the encoding fallback fails, directories and special files are refused for reading and writing, and file read records are scoped to the current conversation; directory filters also apply when ripgrep is not installed (Thanks @rudycelekli #3689, #3715, #3752, #3770, #3772, #3794, #3799, #3810).
+- **Document parsing**: Word content controls, field results, and merged cells are read in full, and Excel cells outside the declared range are read (Thanks @ningyixi #3786, #3787, @rudycelekli #3773, #3777, #3798).
+- **Browser**: snapshots can be scoped to a given element, screenshots are saved to the current project, and input fields are filled only when explicit text is provided. Browser profile directories are matched exactly, so similar paths are no longer mistaken as in use, and process detection on Windows has a timeout (Thanks @rudycelekli #3724, #3725, #3727, #3802, @c020627 #3769).
+- **Vision**: compressed images keep their original orientation, and the next provider is tried when a model returns an empty result (Thanks @rudycelekli #3712, #3726, #3806).
+- **MCP and scheduled tasks**: MCP connection failures are returned as failed tool calls, and corrupted authorization records are ignored. Scheduled task results map to the exact run, schedule changes made during a run are no longer overwritten, rejected operations are reported as failures, and migration of legacy reminders is more reliable (Thanks @rudycelekli #3713, #3745, #3781, #3782, #3807, #3808).
+
+## 🤝 Multi-Agent Collaboration
+
+- **Sub-agents**: delegated only when necessary, such as for in-depth research, and they wrap up and return the results gathered so far as the timeout approaches. Local delegation follows the configured timeout, and invalid arguments or an unreadable template directory no longer abort it (Thanks @rudycelekli #3783, @c020627 #3761).
+- **Team collaboration**: @mentions are recognized correctly when followed directly by sentence-ending punctuation (Thanks @c020627 #3738).
+- **Context**: loop-detection hints are removed once the model has seen them instead of lingering in the context (Thanks @NotZhu #3851). New messages after clearing the context are kept, and when saving a channel conversation's execution steps to history fails briefly, it is retried, so tool records are no longer lost (Thanks @rudycelekli #3734, #3804).
+
+## 📡 Channels
+
+- **WeChat**: QR code login is more stable, expired QR codes refresh automatically, and an optional `weixin_proxy` can be configured (Thanks @c020627 #3838); sent files keep their original names and types (Thanks @6vision #3817); fixed connections not being released when a media download fails (Thanks @rudycelekli #3750).
+- **Feishu**: rich-text messages support parsing files and multilingual content.
+- **Sending files**: Feishu, DingTalk, WeCom Bot, and WeChat Customer Service keep the original file name when sending files.
+- **DingTalk**: files in group chats are kept separate per sender, and temporary media files are cleaned up promptly (Thanks @rudycelekli #3762, @c020627 #3828).
+- **WeCom / Official Account**: images saved by WeCom keep their original orientation (Thanks @c020627 #3845); the welcome message on follow is sent on Official Accounts even when no chat prefix is configured (Thanks @rudycelekli #3707).
+- **Telegram / Discord / Slack**: files can be sent from remote URLs. @mentions of the bot in group chats match the full username, oversized attachments are rejected before downloading, and workspace system notifications no longer get replies (Thanks @rudycelekli #3716, #3764, #3765, #3818, #3819, #3820).
+- **Plugins**: group admins are matched exactly by ID (Thanks @rudycelekli #3763).
+
+## 🛡 Security Hardening
+
+- **Scheduled task permissions**: scheduled Agent tasks keep the permission mode of the session they were created in, so tasks created in a read-only session cannot perform writes (Thanks @EddieMurphy89 #3833).
+- **Guest request protection**: network requests made on behalf of visitors always block local and private network addresses, and a guest page password cannot be the same as the console password.
+- **Console password**: newly set passwords must be at least 6 characters, with a strength hint while typing; existing passwords are not affected.
+- **Resource limits**: the download size of files returned by models is limited (Thanks @c020627 #3832).
+- **Security policy**: added a security policy and a private channel for reporting vulnerabilities.
+
+## 🛠 UX Improvements & Fixes
+
+- **Chat interaction**: you can scroll up freely while a reply is being generated, the scroll-to-bottom button is aligned with the input box, and earlier messages load automatically when you scroll to the top (Thanks @LYLMagui #3785); clicking a blank part of the input area focuses the input box (Thanks @Rofds #3830).
+- **Smoothness**: fixed UI stutter when replies arrive in bursts. Off-screen messages in long sessions are no longer rendered, so typing and scrolling are smoother (Thanks @zkjqd #3792).
+- **Wide screens**: the desktop client's chat area adapts to the window width (Thanks @zkjqd #3844, @592774447 #3839).
+- **Sessions**: the context usage chart is kept after a restart (Thanks @xiao115255 #3767, @jiangch1128 #3619); titles are generated with the fallback model when the main model fails; a failed send shows the specific reason; conversation history is kept when deletion fails (Thanks @rudycelekli #3809); a failure to index artifacts no longer duplicates conversation history.
+- **File display**: files outside the workspace are copied into it when sent, so they display correctly in the console; images that fail to load show their file name; the desktop client's file preview can reveal the file in its folder.
+- **Knowledge graph**: fixed unresolved cross-references leaving nodes without titles and dropping every edge. Links relative to the knowledge base root, bare file names, and angle-bracket syntax are supported, as are knowledge base folders under a symlink.
+- **Console**: the running configuration is kept when saving fails, and concurrent saves of a workspace file report a conflict. Fixed workspace file refresh, editor content validation, preference saving, and the scope of request cancellation; artifacts in registered Agent workspaces are accessible, and replacing knowledge base documents is more reliable (Thanks @rudycelekli #3733, #3746, #3747, #3748, #3749, #3755, #3784, #3801, #3805).
+- **Agent initialization**: an empty identity file no longer skips onboarding, and concurrent initialization no longer overwrites existing configuration (Thanks @rudycelekli #3722, #3730); trajectory evaluation correctly checks the expected tools and execution status (Thanks @xiong-wei1 #3849, #3848).
+- **Logs and CLI**: live logs continue after the log file is truncated, and console output is kept when the data directory is not writable. The service detaches from standard input when started in the background, and fixed the process ID being lost without sufficient permissions and a corrupted update status file (Thanks @rudycelekli #3686, #3687, #3709, #3717, #3719, #3780, #3800, #3812, #3814).
+- **Config and backup**: creating the data directory concurrently no longer fails, remotely pushed configuration is written to the data directory actually in use, and skill scripts keep their executable permission after a backup is restored (Thanks @rudycelekli #3723, #3778, @c020627 #3823).
+- **Desktop client**: the bundled backend's version matches the client's (Thanks @592774447 #3839); if copying files fails during Windows installation, the files are extracted again automatically; fixed the log file growing until the disk filled up when the client was opened from a terminal or launcher that later exited (Thanks @ClearloveUzi7 #3860).
+
+## 📦 How to Upgrade
+
+- **Source deployment**: run `cow update` for a one-click upgrade, update from the version menu in the Web console sidebar, or pull the latest code and restart. See the [upgrade guide](https://docs.cowagent.ai/guide/upgrade).
+- **Desktop client**: check for updates and update with one click inside the client, or get the latest version from the [download page](https://cowagent.ai/download/).
+
+**Release date**: 2026.10.30 | [Full Changelog](https://github.com/zhayujie/CowAgent/compare/2.2.1...2.2.2)

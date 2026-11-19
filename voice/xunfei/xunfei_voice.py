@@ -76,7 +76,7 @@ class XunfeiVoice(Voice):
             reply = Reply(ReplyType.TEXT, text)
         except Exception as e:
             logger.warn("XunfeiVoice init failed: %s, ignore " % e)
-            reply = Reply(ReplyType.ERROR, "讯飞语音识别出错了；{0}")
+            reply = Reply(ReplyType.ERROR, f"讯飞语音识别出错了；{e}")
         return reply
 
     def textToVoice(self, text):

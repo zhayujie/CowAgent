@@ -41,6 +41,7 @@ from common import i18n
 from common.log import logger
 from common.singleton import singleton
 from config import conf
+from common.deployment import is_desktop
 
 
 @singleton
@@ -69,6 +70,9 @@ class WebChannel(ChatChannel):
         self.sse_streams = {}  # request_id -> SSEStreamState
         self._sse_streams_lock = threading.RLock()
         self._http_server = None
+        self._rebind_to = None
+        self._rebind_lock = threading.Lock()
+        self._loopback_server = None
         self._sse_janitor_started = False
 
     def _generate_msg_id(self):
@@ -1177,6 +1181,11 @@ class WebChannel(ChatChannel):
                 # _maybe_dispatch_auto_tts; don't set desire_rtype here or
                 # chat_channel would synthesize a duplicate VOICE reply.
                 context["is_voice_input"] = True
+            # What the client shows for this turn in place of the message, which
+            # the agent still receives in full (e.g. a prompt filled in from a form).
+            display = json_data.get("display")
+            if isinstance(display, str) and display.strip():
+                context["display"] = display.strip()
 
             if use_sse:
                 context["on_event"] = self._make_sse_callback(request_id)
@@ -1531,7 +1540,6 @@ class WebChannel(ChatChannel):
         # never collides with a source-run web console (default 9899). This makes
         # the port a single source of truth owned by the Electron shell.
         port = int(os.environ.get("COW_WEB_PORT") or conf().get("web_port", 9899))
-        is_public_bind = host in ("0.0.0.0", "::")
 
         self._cleanup_stale_voice_recordings()
 
@@ -1579,7 +1587,7 @@ class WebChannel(ChatChannel):
                 logger.info(f"[WebChannel]  {idx:>2}. {name:<{name_width}} - {label}")
             logger.info("[WebChannel] ✅ Web console is running")
             logger.info(f"[WebChannel] 🌐 Local access: {scheme}://localhost:{port}")
-            if is_public_bind:
+            if host in ("0.0.0.0", "::"):
                 logger.info(f"[WebChannel] 🌍 Server access: {scheme}://YOUR_IP:{port} (replace YOUR_IP with your server IP)")
                 if not _is_password_enabled():
                     logger.info("[WebChannel] ⚠️  Listening on 0.0.0.0 without web_password set; set an access password in config.json for public deployment")
@@ -1588,7 +1596,7 @@ class WebChannel(ChatChannel):
 
             # In desktop mode the Electron shell renders the UI, so don't pop a
             # browser window (also avoids issues when running detached/headless).
-            if os.environ.get("COW_DESKTOP") != "1":
+            if not is_desktop():
                 try:
                     import webbrowser
                     webbrowser.open(f"{scheme}://localhost:{port}")
@@ -1629,7 +1637,7 @@ class WebChannel(ChatChannel):
         func = web.httpserver.LogMiddleware(func)
 
         # The desktop shell probes and loads the console over plain http.
-        https_enabled = bool(conf().get("web_https_enabled", False)) and os.environ.get("COW_DESKTOP") != "1"
+        https_enabled = bool(conf().get("web_https_enabled", False)) and not is_desktop()
         try:
             certfile, keyfile = resolve_tls_config(
                 https_enabled,
@@ -1639,29 +1647,33 @@ class WebChannel(ChatChannel):
         except ValueError as e:
             logger.error(f"[WebChannel] HTTPS misconfigured: {e}")
             raise
-        server = web.httpserver.WSGIServer((host, port), func)
-        scheme = "http"
+        def build(bind_host, bind_port):
+            server = web.httpserver.WSGIServer((bind_host, bind_port), func)
+            if certfile:
+                from cheroot.ssl.builtin import BuiltinSSLAdapter
+                server.ssl_adapter = BuiltinSSLAdapter(certfile, keyfile)
+            server.daemon_threads = True
+            # Default request_queue_size(5) / timeout(10s) / numthreads(10) are
+            # too small: when SSE streams occupy many threads, the backlog fills
+            # and new connections get refused (ERR_CONNECTION_ABORTED).
+            server.request_queue_size = 128
+            server.timeout = 300
+            server.requests.min = 20
+            server.requests.max = 80
+            # Allow large attachments (screenshots, PDFs, short videos). cheroot's
+            # default is unlimited (0), but pin an explicit, generous cap so an
+            # oversized body fails with a clean 413 instead of a connection reset
+            # that surfaces in the client as an opaque "Failed to fetch".
+            try:
+                server.max_request_body_size = 512 * 1024 * 1024  # 512 MB
+            except Exception:
+                pass
+            return server
+
+        scheme = "https" if certfile else "http"
         if certfile:
-            from cheroot.ssl.builtin import BuiltinSSLAdapter
-            server.ssl_adapter = BuiltinSSLAdapter(certfile, keyfile)
-            scheme = "https"
             logger.info("[WebChannel] 🔒 Serving the web console over HTTPS")
-        server.daemon_threads = True
-        # Default request_queue_size(5) / timeout(10s) / numthreads(10) are
-        # too small: when SSE streams occupy many threads, the backlog fills
-        # and new connections get refused (ERR_CONNECTION_ABORTED).
-        server.request_queue_size = 128
-        server.timeout = 300
-        server.requests.min = 20
-        server.requests.max = 80
-        # Allow large attachments (screenshots, PDFs, short videos). cheroot's
-        # default is unlimited (0), but pin an explicit, generous cap so an
-        # oversized body fails with a clean 413 instead of a connection reset
-        # that surfaces in the client as an opaque "Failed to fetch".
-        try:
-            server.max_request_body_size = 512 * 1024 * 1024  # 512 MB
-        except Exception:
-            pass
+        server = build(host, port)
         self._http_server = server
         # Reclaim orphaned SSE logs so disconnected clients don't leak memory.
         self._start_sse_janitor()
@@ -1673,15 +1685,121 @@ class WebChannel(ChatChannel):
             server.prepare()
         except OSError as e:
             _log_bind_failure(host, port, e)
-            raise
+            if not self._can_fall_back(host):
+                raise
+            logger.warning(f"[WebChannel] Falling back to 127.0.0.1:{port}")
+            host = "127.0.0.1"
+            server = build(host, port)
+            self._http_server = server
+            server.prepare()
+        from channel.web.api.integrations import record_listen
+        record_listen(host, port, scheme)
+        self._serve_loopback(build, host, port)
         SERVING.set()
         _log_startup_banner(scheme)
+        while True:
+            try:
+                server.serve()
+            except (KeyboardInterrupt, SystemExit):
+                server.stop()
+                return
+            self._stop_loopback()
+            target, self._rebind_to = self._rebind_to, None
+            if not target or self._http_server is not server:
+                return
+            # serve() returns as soon as stop() begins; the old socket closes
+            # a moment later, and the port is not free until it has.
+            deadline = time.time() + 5
+            while getattr(server, "socket", None) is not None and time.time() < deadline:
+                time.sleep(0.05)
+            target, on_bound = target[:2], target[2]
+            server = self._bind_again(build, target, (host, port))
+            if server is None:
+                return
+            host, port = server.bind_addr[:2]
+            record_listen(host, port, scheme)
+            self._serve_loopback(build, host, port)
+            if (host, port) == target and on_bound:
+                try:
+                    on_bound()
+                except Exception as e:
+                    logger.warning(f"[WebChannel] Could not save the new address: {e}")
+
+    def rebind(self, host: str, port: int, on_bound=None) -> None:
+        """Listen on another address without restarting the process. Runs
+        once the current request has been answered, as stopping the server
+        closes its connections."""
+        server = self._http_server
+        if server is None:
+            return
+
+        def swap():
+            time.sleep(0.5)
+            with self._rebind_lock:
+                if self._http_server is not server or self._rebind_to:
+                    return
+                self._rebind_to = (host, port, on_bound)
+            server.stop()
+
+        threading.Thread(target=swap, daemon=True, name="web-rebind").start()
+
+    def _can_fall_back(self, host: str) -> bool:
+        """Whether a failed bind on ``host`` should start on 127.0.0.1 instead
+        of not at all: always in the desktop app, whose shell only needs
+        loopback, and elsewhere when the address is gone from this machine
+        (a custom IP after a network change)."""
+        from channel.web.api.integrations import can_bind, is_loopback_host
+
+        if is_loopback_host(host):
+            return False
+        return is_desktop() or not can_bind(host, 0)
+
+    def _bind_again(self, build, target: tuple, previous: tuple):
+        """Bind the new address, else go back to the previous one. The console
+        must stay reachable, so keep trying before giving up."""
+        fallbacks = [previous, ("127.0.0.1", previous[1])]
+        candidates = [target] + fallbacks
+        for attempt in range(30):
+            for bind_host, bind_port in candidates:
+                server = build(bind_host, bind_port)
+                try:
+                    server.prepare()
+                except OSError as e:
+                    if attempt == 0:
+                        _log_bind_failure(bind_host, bind_port, e)
+                    continue
+                self._http_server = server
+                logger.info(f"[WebChannel] Now listening on {bind_host}:{bind_port}")
+                return server
+            candidates = fallbacks
+            time.sleep(1)
+        logger.error("[WebChannel] Could not listen on any address, the console is unavailable")
+        self._http_server = None
+        return None
+
+    def _serve_loopback(self, build, host: str, port: int) -> None:
+        """The desktop app reaches its backend on 127.0.0.1, which listening
+        on one other address would cut off, so loopback is served alongside."""
+        from channel.web.api.integrations import is_loopback_host
+
+        if not is_desktop() or host in ("0.0.0.0", "::") or is_loopback_host(host):
+            return
+        server = build("127.0.0.1", port)
         try:
-            server.serve()
-        except (KeyboardInterrupt, SystemExit):
+            server.prepare()
+        except OSError as e:
+            _log_bind_failure("127.0.0.1", port, e)
+            return
+        self._loopback_server = server
+        threading.Thread(target=server.serve, daemon=True, name="web-loopback").start()
+
+    def _stop_loopback(self) -> None:
+        server, self._loopback_server = self._loopback_server, None
+        if server:
             server.stop()
 
     def stop(self):
+        self._stop_loopback()
         if self._http_server:
             try:
                 self._http_server.stop()

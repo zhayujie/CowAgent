@@ -16,8 +16,13 @@ from config import conf, load_config
 from common import const
 from agent.protocol.message_utils import drop_orphaned_tool_results_openai
 
+# An overloaded endpoint can hold the stream open with only ": keep-alive"
+# comments. Each one resets the socket read timeout, so without this cap a
+# queued request can hang for many minutes.
+STREAM_KEEPALIVE_MAX_SECONDS = 180
 
-NATIVE_VISION_MODELS = frozenset({const.MINIMAX_M3.lower()})
+
+NATIVE_VISION_MODELS = frozenset({const.MINIMAX_M3_1_FLASH.lower(), const.MINIMAX_M3.lower()})
 
 
 # MiniMax对话模型API
@@ -25,7 +30,7 @@ class MinimaxBot(Bot):
     def __init__(self):
         super().__init__()
         self.args = {
-            "model": conf().get("model") or "MiniMax-M3",
+            "model": conf().get("model") or const.MINIMAX_M3_1_FLASH,
             "temperature": conf().get("temperature", 0.3),
             "top_p": conf().get("top_p", 0.95),
         }
@@ -45,8 +50,11 @@ class MinimaxBot(Bot):
     @property
     def supports_vision(self) -> bool:
         """Return whether the configured chat model accepts image or video input."""
-        model = str(self.args.get("model") or "").strip().lower()
-        return model in NATIVE_VISION_MODELS
+        return self.model_supports_vision(self.args.get("model"))
+
+    @staticmethod
+    def model_supports_vision(model_name: str) -> bool:
+        return str(model_name or "").strip().lower() in NATIVE_VISION_MODELS
 
     def reply(self, query, context: Context = None) -> Reply:
         # acquire reply content
@@ -87,6 +95,8 @@ class MinimaxBot(Bot):
                 reply = Reply(ReplyType.ERROR, reply_content["content"])
             elif reply_content["completion_tokens"] > 0:
                 self.sessions.session_reply(reply_content["content"], session_id, reply_content["total_tokens"])
+                if reply_content.get("reasoning_content"):
+                    session.messages[-1]["reasoning_content"] = reply_content["reasoning_content"]
                 reply = Reply(ReplyType.TEXT, reply_content["content"])
             else:
                 reply = Reply(ReplyType.ERROR, reply_content["content"])
@@ -138,6 +148,7 @@ class MinimaxBot(Bot):
                     "total_tokens": total_tokens,
                     "completion_tokens": completion_tokens,
                     "content": content,
+                    "reasoning_content": result["choices"][0]["message"].get("reasoning_content", ""),
                 }
             else:
                 error_msg = response.text
@@ -286,9 +297,21 @@ class MinimaxBot(Bot):
             if converted_tools:
                 request_body["tools"] = converted_tools
 
-            # Add reasoning_split=True for better thinking control (M2.1 feature)
-            # This separates thinking content into reasoning_details field
+            # Keep thinking separate from user-visible text and replay it on
+            # subsequent tool turns. Flash always uses adaptive thinking.
             request_body["reasoning_split"] = True
+            thinking = kwargs.get("thinking")
+            effort = kwargs.get("reasoning_effort")
+            is_flash = model.lower() == const.MINIMAX_M3_1_FLASH.lower()
+            if is_flash and thinking is not None:
+                thinking = {"type": "adaptive"}
+            elif model.lower() == const.MINIMAX_M3.lower() and thinking and thinking.get("type") == "enabled":
+                thinking = {"type": "adaptive"}
+            if model.lower() in NATIVE_VISION_MODELS:
+                if thinking is not None:
+                    request_body["thinking"] = thinking
+                if is_flash and effort in ("low", "medium", "high", "xhigh", "max"):
+                    request_body["reasoning_effort"] = effort
 
             logger.debug(f"[MINIMAX] API call: model={model}, tools={len(converted_tools) if converted_tools else 0}, stream={stream}")
 
@@ -327,7 +350,11 @@ class MinimaxBot(Bot):
             role = msg.get("role")
             content = msg.get("content")
 
-            if role == "user":
+            if role in ("system", "tool") or (role == "assistant" and not isinstance(content, list)):
+                allowed = ("role", "content", "tool_calls", "tool_call_id", "name",
+                           "reasoning_content", "reasoning_details")
+                converted.append({key: msg[key] for key in allowed if key in msg})
+            elif role == "user":
                 # Handle user message
                 if isinstance(content, list):
                     has_tool_result = any(
@@ -354,14 +381,14 @@ class MinimaxBot(Bot):
                                         "content": result_content
                                     })
 
+                        for tool_result in tool_results:
+                            converted.append(tool_result)
+
                         if text_parts:
                             converted.append({
                                 "role": "user",
                                 "content": "\n".join(text_parts)
                             })
-
-                        for tool_result in tool_results:
-                            converted.append(tool_result)
                     else:
                         # Keep as-is for multimodal content (e.g. image_url blocks)
                         converted.append(msg)
@@ -380,11 +407,14 @@ class MinimaxBot(Bot):
                     # Parse content blocks
                     text_parts = []
                     tool_calls = []
+                    thinking_parts = []
 
                     for block in content:
                         if isinstance(block, dict):
                             if block.get("type") == "text":
                                 text_parts.append(block.get("text", ""))
+                            elif block.get("type") == "thinking":
+                                thinking_parts.append(block.get("thinking", ""))
                             elif block.get("type") == "tool_use":
                                 # Convert to OpenAI tool_calls format
                                 tool_calls.append({
@@ -395,6 +425,9 @@ class MinimaxBot(Bot):
                                         "arguments": json.dumps(block.get("input", {}))
                                     }
                                 })
+
+                    if thinking_parts:
+                        openai_msg["reasoning_content"] = "".join(thinking_parts)
 
                     # Set content (can be empty if only tool calls)
                     if text_parts:
@@ -482,8 +515,14 @@ class MinimaxBot(Bot):
                 "content": []
             }
 
-            # Add reasoning_details (thinking) if present
-            if "reasoning_details" in message:
+            if message.get("reasoning_content"):
+                response_data["content"].append({
+                    "type": "thinking",
+                    "thinking": message["reasoning_content"],
+                })
+
+            # Retain compatibility with older reasoning_details responses.
+            elif "reasoning_details" in message:
                 for reasoning in message["reasoning_details"]:
                     if "text" in reasoning:
                         response_data["content"].append({
@@ -555,6 +594,7 @@ class MinimaxBot(Bot):
             finish_reason = None
             chunk_count = 0
             stream_usage = None  # Provider-reported token usage
+            last_data_at = time.time()
 
             # Process SSE stream
             for line in response.iter_lines():
@@ -562,6 +602,23 @@ class MinimaxBot(Bot):
                     continue
 
                 line = line.decode('utf-8')
+                if line.startswith(":"):
+                    if time.time() - last_data_at > STREAM_KEEPALIVE_MAX_SECONDS:
+                        logger.error(
+                            f"[MINIMAX] Stream timeout: only keep-alive received for "
+                            f"{STREAM_KEEPALIVE_MAX_SECONDS}s"
+                        )
+                        yield {
+                            "error": True,
+                            "message": f"Stream timeout: only keep-alive received for {STREAM_KEEPALIVE_MAX_SECONDS}s",
+                            "status_code": 504,
+                        }
+                        return
+                    # Empty chunk lets the caller check for cancel while the server is queueing
+                    yield {}
+                    continue
+                last_data_at = time.time()
+
                 if not line.startswith('data: '):
                     continue
 
@@ -603,8 +660,14 @@ class MinimaxBot(Bot):
                 choice = chunk["choices"][0]
                 delta = choice.get("delta", {})
 
-                # Handle reasoning_details (thinking)
-                if "reasoning_details" in delta:
+                if delta.get("reasoning_content"):
+                    yield {"choices": [{"index": 0, "delta": {
+                        "role": "assistant",
+                        "reasoning_content": delta["reasoning_content"],
+                    }}]}
+
+                # Retain compatibility with older reasoning_details responses.
+                elif "reasoning_details" in delta:
                     for reasoning in delta["reasoning_details"]:
                         if "text" in reasoning:
                             reasoning_id = reasoning.get("id", "reasoning-text-1")

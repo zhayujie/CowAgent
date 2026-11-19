@@ -1,0 +1,132 @@
+---
+title: CowAgent
+description: "CowAgent のモデルサービス。1 つの API Key で GPT、Claude、Gemini、DeepSeek などの主要モデルを利用できます。"
+---
+
+テキスト対話に加えて、同じ Key で画像理解、画像生成、音声、ベクトル、Web 検索も利用できます。Web コンソールで一度設定すれば、以下の機能をすぐに使えます。
+
+CowAgent にはグローバルサイトと中国サイトがあり、アカウントは別々です。API Key は発行したサイトでのみ使用できます：
+
+| サイト | API Base | コンソール（API Key の作成） |
+| --- | --- | --- |
+| グローバル | `https://api.cowagent.ai/v1` | [cloud.cowagent.ai](https://cloud.cowagent.ai/keys) |
+| 中国 | `https://api.cowagent.cn/v1` | [cloud.cowagent.cn](https://cloud.cowagent.cn/keys) |
+
+<Tip>
+  Web コンソールの「モデル管理」ページでの設定をおすすめします。CowAgent ベンダーのダイアログにはグローバルサイトの API Base が入力済みなので、Key を貼り付けるだけで使えます。以下のすべての機能が同じ Key を共有します。
+</Tip>
+
+## テキスト対話
+
+```json
+{
+  "bot_type": "cowagent",
+  "model": "deepseek-v4.1-flash",
+  "cowagent_api_key": "YOUR_API_KEY",
+  "cowagent_api_base": "https://api.cowagent.ai/v1"
+}
+```
+
+| パラメータ | 説明 |
+| --- | --- |
+| `bot_type` | `cowagent` に設定します |
+| `cowagent_api_key` | [グローバルコンソール](https://cloud.cowagent.ai/keys) で作成 |
+| `cowagent_api_base` | グローバルサイトの Key には `https://api.cowagent.ai/v1`、中国サイトの Key には `https://api.cowagent.cn/v1` を指定します。省略時は UI 言語に従い、中国語なら中国サイト、それ以外はグローバルサイトになります |
+| `model` | 下記のモデル ID を指定 |
+
+利用可能なモデル：`gpt-6.1-terra`、`gpt-6.1-sol`、`gpt-6-luna`、`gpt-6-astra`、`claude-opus-5-5`、`claude-sonnet-5-5`、`claude-haiku-5-5`、`claude-fable-5-1`、`gemini-4-argon`、`gemini-3.8-flash`、`deepseek-v4.1-flash`、`deepseek-v4-pro`、`deepseek-v4-flash`、`qwen3.8-flash`、`qwen3.8-max`、`qwen3.6-plus`、`glm-5.3-flash`、`glm-5.3`、`kimi-k3.1-pro`、`kimi-k3`、`MiniMax-M3.1-Flash`、`MiniMax-M3`、`doubao-seed-2-1-turbo`。全モデルと料金はコンソールを参照してください。
+
+## 画像理解
+
+Key を設定すれば追加設定は不要です。メインモデルが画像入力に対応していればメインモデルが画像を処理し、そうでなければ Vision ツールが `deepseek-v4.1-flash` を使用します。モデルを指定する場合：
+
+```json
+{
+  "tools": {
+    "vision": {
+      "provider": "cowagent",
+      "model": "deepseek-v4.1-flash"
+    }
+  }
+}
+```
+
+画像入力に対応するモデル：`gpt-6.1-terra`、`gpt-6.1-sol`、`gpt-6-luna`、`gpt-6-astra`、`claude-fable-5-1`、`gemini-4-argon`、`deepseek-v4.1-flash`、`qwen3.8-flash`、`qwen3.8-max`、`qwen3.6-plus`、`glm-5.3-flash`、`MiniMax-M3.1-Flash`、`doubao-seed-2-1-turbo`。
+
+## 画像生成
+
+```json
+{
+  "skills": {
+    "image-generation": {
+      "provider": "cowagent",
+      "model": "gpt-image-2.5-flare"
+    }
+  }
+}
+```
+
+| モデル ID | 説明 |
+| --- | --- |
+| `gpt-image-2.5-flare` | OpenAI、デフォルト |
+| `gpt-image-2.5-sunburst` | OpenAI、編集精度が高い |
+| `gemini-3.1-flash-image` | Nano Banana 2 |
+| `gemini-3-pro-image` | Nano Banana Pro |
+| `seedream-5.0-pro` | ByteDance Doubao Seedream |
+| `seedream-5.0-lite` | ByteDance Doubao Seedream |
+
+## 音声認識
+
+```json
+{
+  "voice_to_text": "cowagent",
+  "voice_to_text_model": "seed-asr"
+}
+```
+
+## 音声合成
+
+```json
+{
+  "text_to_voice": "cowagent",
+  "text_to_voice_model": "seed-tts-2.0",
+  "tts_voice_id": "en_female_dacey_uranus_bigtts"
+}
+```
+
+| `tts_voice_id` | 音色 |
+| --- | --- |
+| `zh_female_vv_uranus_bigtts` | 中国語 · 女性 · Vivi（デフォルト） |
+| `zh_female_xiaohe_uranus_bigtts` | 中国語 · 女性 · Xiaohe |
+| `zh_male_m191_uranus_bigtts` | 中国語 · 男性 · Yunzhou |
+| `zh_male_taocheng_uranus_bigtts` | 中国語 · 男性 · Xiaotian |
+| `zh_male_liufei_uranus_bigtts` | 中国語 · 男性 · Liufei |
+| `en_male_tim_uranus_bigtts` | 英語 · 男性 · Tim |
+| `en_female_dacey_uranus_bigtts` | 英語 · 女性 · Dacey |
+| `en_female_stokie_uranus_bigtts` | 英語 · 女性 · Stokie |
+
+## ベクトル
+
+```json
+{
+  "embedding_provider": "cowagent",
+  "embedding_model": "text-embedding-3-small"
+}
+```
+
+デフォルトモデルは `text-embedding-3-small`（1536 次元）です。embedding を変更した後は `/memory rebuild-index` コマンドを実行してインデックスを再構築する必要があります。
+
+## Web 検索
+
+Key を設定すると、[web_search](/ja/tools/web-search) ツールで CowAgent 検索を追加設定なしで利用できます。常に使用する場合：
+
+```json
+{
+  "tools": {
+    "web_search": {
+      "strategy": "fixed",
+      "provider": "cowagent"
+    }
+  }
+}
+```

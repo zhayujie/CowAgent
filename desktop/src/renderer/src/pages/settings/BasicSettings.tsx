@@ -8,8 +8,15 @@ import { useUIStore } from '../../store/uiStore'
 import { useSessionStore } from '../../store/sessionStore'
 import { useSessionSettingsStore } from '../../store/sessionSettingsStore'
 import { Card, Field, Dropdown, Toggle, TextInput, SaveRow, MASK_RE } from './primitives'
-import ChatApiCard from './ChatApiCard'
 import { PERMISSION_META, PERMISSION_MODE_ORDER, asPermissionMode } from '../../lib/permission'
+import { passwordStrength, type PasswordStrength } from '../../lib/passwordStrength'
+
+const PW_STRENGTH_COLOR: Record<PasswordStrength, string> = {
+  short: 'text-danger',
+  weak: 'text-danger',
+  medium: 'text-warning',
+  strong: 'text-success',
+}
 
 const CustomModelPicker = product.models?.ModelPicker
 const hideProviderSelect = product.models?.hideProviderSelect === true
@@ -32,16 +39,28 @@ interface BasicSettingsProps {
   baseUrl: string
   onLangChange?: () => void
   onOpenModels?: () => void
+  // Scroll to and focus the password field once the page has loaded.
+  focusPassword?: boolean
+  onPasswordFocused?: () => void
 }
 
-const BasicSettings: React.FC<BasicSettingsProps> = ({ baseUrl, onLangChange, onOpenModels }) => {
+const PASSWORD_INPUT_ID = 'cfg-password'
+
+const BasicSettings: React.FC<BasicSettingsProps> = ({
+  baseUrl,
+  onLangChange,
+  onOpenModels,
+  focusPassword,
+  onPasswordFocused,
+}) => {
   const [config, setConfig] = useState<ConfigData | null>(null)
   const [loading, setLoading] = useState(true)
   // When arriving from the context pie's "Config" action, scroll to and briefly
   // highlight the max-context-tokens field (signal set in sessionStorage).
+  // Fields only exist once the config has loaded, so wait for that.
   const [highlightBudget, setHighlightBudget] = useState(false)
   useEffect(() => {
-    if (sessionStorage.getItem('cow_focus_max_tokens') !== '1') return
+    if (loading || sessionStorage.getItem('cow_focus_max_tokens') !== '1') return
     sessionStorage.removeItem('cow_focus_max_tokens')
     const el = document.getElementById('cfg-max-tokens')
     if (el) {
@@ -51,7 +70,18 @@ const BasicSettings: React.FC<BasicSettingsProps> = ({ baseUrl, onLangChange, on
     setHighlightBudget(true)
     const timer = setTimeout(() => setHighlightBudget(false), 2000)
     return () => clearTimeout(timer)
-  }, [])
+  }, [loading])
+
+  useEffect(() => {
+    if (loading || !focusPassword) return
+    const input = document.getElementById(PASSWORD_INPUT_ID)
+    input?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    const timer = setTimeout(() => {
+      input?.focus({ preventScroll: true })
+      onPasswordFocused?.()
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [loading, focusPassword, onPasswordFocused])
 
   // notifications card (client-side preference, applied instantly)
   const taskNotify = useUIStore((s) => s.taskNotify)
@@ -369,10 +399,16 @@ const BasicSettings: React.FC<BasicSettingsProps> = ({ baseUrl, onLangChange, on
   // saved (including cleared) directly. Browser access only has the masked
   // value, where a masked string must never be saved as the real password.
   const hasRealPassword = config?.web_password !== undefined
+  const pwStrength = pwDirty && password ? passwordStrength(password) : null
 
   const savePassword = async () => {
     if (!pwDirty) return
     if (!hasRealPassword && MASK_RE.test(password)) return
+    if (pwStrength === 'short') {
+      setPwStatus(t('config_password_short'))
+      setTimeout(() => setPwStatus(''), 3000)
+      return
+    }
     try {
       await apiClient.updateConfig({ web_password: password })
       setPwStatus(password ? t('config_password_saved') : t('config_password_cleared'))
@@ -643,24 +679,24 @@ const BasicSettings: React.FC<BasicSettingsProps> = ({ baseUrl, onLangChange, on
             />
             {permStatus && <p className="text-xs text-accent mt-1">{permStatus}</p>}
           </Field>
-          <Field label={t('config_password')} hint={t('config_password_hint')}>
+          <Field label={t('config_password')} hint={pwStrength ? undefined : t('config_password_hint')}>
             <div className="relative">
               <TextInput
+                id={PASSWORD_INPUT_ID}
                 type={pwVisible ? 'text' : 'password'}
                 className="pr-10"
                 value={password}
                 placeholder={t('config_password_placeholder')}
-                onFocus={() => {
-                  // Browser access shows a mask; clear it on focus so the user
-                  // types a fresh password. Desktop holds the real password and
-                  // must stay editable in place (cursor at the end).
-                  if (!hasRealPassword && !pwDirty && MASK_RE.test(password)) setPassword('')
-                }}
-                onBlur={() => {
-                  if (!hasRealPassword && !pwDirty) setPassword(config?.web_password_masked || '')
+                onFocus={(e) => {
+                  const input = e.currentTarget
+                  setTimeout(() => input.setSelectionRange(input.value.length, input.value.length))
                 }}
                 onChange={(e) => {
-                  setPassword(e.target.value)
+                  const value = e.target.value
+                  // Browser access only has a mask, which can only go as a
+                  // whole: deleting empties the field, typing replaces it.
+                  const masked = !hasRealPassword && !pwDirty && MASK_RE.test(password)
+                  setPassword(!masked ? value : value.length < password.length ? '' : value.replace(/[*•]/g, ''))
                   setPwDirty(true)
                 }}
               />
@@ -672,12 +708,15 @@ const BasicSettings: React.FC<BasicSettingsProps> = ({ baseUrl, onLangChange, on
                 {pwVisible ? <EyeOff size={14} /> : <Eye size={14} />}
               </button>
             </div>
+            {pwStrength && (
+              <p className={`text-xs mt-1 ${PW_STRENGTH_COLOR[pwStrength]}`}>
+                {t(`config_password_${pwStrength}`)}
+              </p>
+            )}
           </Field>
           <SaveRow status={pwStatus} onSave={savePassword} />
         </div>
       </Card>
-
-      <ChatApiCard baseUrl={baseUrl} />
 
       {/* System — language + notification preferences (client-side, no save) */}
       <Card icon={<Settings size={16} />} title={t('config_system')}>

@@ -73,6 +73,10 @@ class SchedulerService:
         self._lock = threading.Lock()
         self._execution_lock = threading.Lock()
         self._active_task_ids = set()
+        # When a run held the loop past a tick, its start time. The next tick
+        # uses it to tell an occurrence we swallowed from one that expired
+        # while the process was away; see _is_task_due.
+        self._blocked_from = None
     
     def start(self):
         """Start the scheduler service"""
@@ -82,6 +86,9 @@ class SchedulerService:
                 return
             
             self.running = True
+            # A fresh worker starts with no blocking run behind it, so an
+            # occurrence that expired before the restart stays expired.
+            self._blocked_from = None
             # Each worker keeps its own stop signal so a restart cannot
             # reactivate a previous worker still finishing a callback.
             self._stop_event = threading.Event()
@@ -117,25 +124,33 @@ class SchedulerService:
     def _check_and_execute_tasks(self):
         """Check for due tasks and execute them"""
         now = datetime.now()
+        # Consume the window left by the previous tick: only the tick that
+        # follows a blocking run may rescue the occurrences it swallowed.
+        blocked_from = self._blocked_from
+        self._blocked_from = None
         tasks = []
         for raw_task in self.task_store.list_tasks(enabled_only=True):
             try:
-                tasks.append(_migrate_naive_timestamps(raw_task))
+                tasks.append((_migrate_naive_timestamps(raw_task), raw_task))
             except Exception as e:
                 logger.error(
                     f"[Scheduler] Failed to normalize timestamps for task "
                     f"{raw_task.get('id')}: {e}"
                 )
         
-        for task in tasks:
+        for task, observed_task in tasks:
             try:
-                if self._is_task_due(task, now):
+                if self._is_task_due(task, now, blocked_from):
                     logger.info(f"[Scheduler] Executing task: {task['id']} - {task['name']}")
                     if not self._claim_task(task['id']):
                         logger.info(
                             f"[Scheduler] Task {task['id']} is already running; skipping this tick"
                         )
                         continue
+                    # Tasks run inline, so this call holds the loop until it
+                    # returns; note when, for the next tick's catch-up.
+                    if self._blocked_from is None:
+                        self._blocked_from = datetime.now()
                     try:
                         ok = self._execute_task(task)
                     finally:
@@ -150,15 +165,19 @@ class SchedulerService:
                         continue
 
                     next_run = self._calculate_next_run(task, now)
+                    last_run_at = format_scheduled_time(scheduled_reference_time(task, now))
                     if next_run:
-                        completed_at = scheduled_reference_time(task, now)
-                        self.task_store.update_task(task['id'], {
-                            "next_run_at": format_scheduled_time(next_run),
-                            "last_run_at": format_scheduled_time(completed_at)
-                        })
+                        self.task_store.finish_scheduled_run(
+                            task['id'], observed_task,
+                            {"next_run_at": format_scheduled_time(next_run)},
+                            last_run_at=last_run_at,
+                        )
                     else:
-                        self.task_store.delete_task(task['id'])
-                        logger.info(f"[Scheduler] One-time task completed and removed: {task['id']}")
+                        removed = self.task_store.finish_scheduled_run(
+                            task['id'], observed_task, None, last_run_at=last_run_at
+                        )
+                        if removed:
+                            logger.info(f"[Scheduler] One-time task completed and removed: {task['id']}")
             except Exception as e:
                 logger.error(f"[Scheduler] Error processing task {task.get('id')}: {e}")
 
@@ -214,13 +233,17 @@ class SchedulerService:
         with self._execution_lock:
             self._active_task_ids.discard(task_id)
     
-    def _is_task_due(self, task: dict, now: datetime) -> bool:
+    def _is_task_due(self, task: dict, now: datetime, blocked_from=None) -> bool:
         """
         Check if a task is due to run
         
         Args:
             task: Task dictionary
             now: Current datetime
+            blocked_from: When the run that held the loop during the previous
+                tick started, if one did. Occurrences that became due after
+                that point are late because the loop was busy, not because the
+                process was away.
             
         Returns:
             True if task should run now
@@ -249,6 +272,20 @@ class SchedulerService:
                 # scheduled tick. Beyond that we'd rather skip than push a
                 # stale daily report to the user.
                 if time_diff <= 600:
+                    return True
+
+                # The loop runs every task inline, so one long agent task holds
+                # every other occurrence until it returns. An occurrence that
+                # came due after that run started missed its tick because of
+                # us, not because the process was away: run it late instead of
+                # dropping it and rescheduling to the next occurrence.
+                if blocked_from is not None and next_run >= scheduled_reference_time(
+                    task, blocked_from
+                ):
+                    logger.info(
+                        f"[Scheduler] Task {task['id']} came due while another task "
+                        f"was running; running it {int(time_diff)}s late"
+                    )
                     return True
 
                 logger.warning(

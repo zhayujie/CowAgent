@@ -127,7 +127,7 @@ function loadToolsSection() {
         listEl.innerHTML = '';
         tools.forEach(tool => {
             const card = document.createElement('div');
-            card.className = 'bg-white dark:bg-[#1A1A1A] rounded-xl border border-slate-200 dark:border-white/10 p-4 flex items-start gap-3';
+            card.className = 'bg-panel rounded-xl border border-slate-200 dark:border-white/10 p-4 flex items-start gap-3';
             card.innerHTML = `
                 <div class="w-9 h-9 rounded-lg bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center flex-shrink-0">
                     <i class="fas ${getToolIcon(tool.name)} text-blue-500 dark:text-blue-400 text-sm"></i>
@@ -261,7 +261,7 @@ function scheduleMcpStatusPoll() {
 
 function renderMcpCard(server) {
     const card = document.createElement('div');
-    card.className = 'group bg-white dark:bg-[#1A1A1A] rounded-xl border border-slate-200 dark:border-white/10 p-4 flex items-start gap-3 '
+    card.className = 'group bg-panel rounded-xl border border-slate-200 dark:border-white/10 p-4 flex items-start gap-3 '
         + 'cursor-pointer hover:border-slate-300 dark:hover:border-white/20 transition-colors';
     const type = server.type || (server.url ? 'sse' : 'stdio');
     const summary = type === 'stdio'
@@ -1232,7 +1232,7 @@ function loadSkillsSection(highlight) {
 
         skills.forEach(sk => {
             const card = document.createElement('div');
-            card.className = 'bg-white dark:bg-[#1A1A1A] rounded-xl border border-slate-200 dark:border-white/10 '
+            card.className = 'bg-panel rounded-xl border border-slate-200 dark:border-white/10 '
                 + 'p-4 flex items-start gap-3 transition-opacity cursor-pointer '
                 + 'hover:border-slate-300 dark:hover:border-white/20';
             card.dataset.skillName = sk.name;

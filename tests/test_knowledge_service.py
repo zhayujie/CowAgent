@@ -5,6 +5,8 @@ import threading
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from agent.memory.storage import MemoryChunk, MemoryStorage
 from agent.knowledge.service import KnowledgeService
 
@@ -633,3 +635,95 @@ def test_build_graph_resolves_encoded_and_anchored_links(tmp_path):
     assert ("concepts/health.md", "sources/训练记录 07.md") in edges
     assert ("concepts/health.md", "concepts/rag.md") in edges
     assert len(edges) == 2
+
+
+def test_build_graph_accepts_link_forms_the_viewer_opens(tmp_path):
+    svc, _ = service(tmp_path)
+    root = tmp_path / "knowledge"
+    for d in ("a", "b", "c", "d"):
+        (root / d).mkdir()
+    (root / "b/rooted.md").write_text("# Rooted", encoding="utf-8")
+    (root / "c/slashed.md").write_text("# Slashed", encoding="utf-8")
+    (root / "d/bare.md").write_text("# Bare", encoding="utf-8")
+    (root / "a/dup.md").write_text("# Dup A", encoding="utf-8")
+    (root / "b/dup.md").write_text("# Dup B", encoding="utf-8")
+    (root / "a/page.md").write_text(
+        "\ufeff# Page\n"
+        "- [r](b/rooted.md)\n"
+        "- [s](/c/slashed.md)\n"
+        "- [k](knowledge/c/slashed.md)\n"
+        "- [n](bare.md)\n"
+        "- [ambiguous](../missing/dup.md)\n",
+        encoding="utf-8",
+    )
+
+    graph = svc.build_graph()
+    edges = {(l["source"], l["target"]) for l in graph["links"]}
+    assert edges == {
+        ("a/page.md", "b/rooted.md"),
+        ("a/page.md", "c/slashed.md"),
+        ("a/page.md", "d/bare.md"),
+    }
+    labels = {n["id"]: n["label"] for n in graph["nodes"]}
+    assert labels["a/page.md"] == "Page"
+
+
+def test_build_graph_keeps_links_under_symlinked_knowledge_dir(tmp_path):
+    real = tmp_path / "real"
+    (real / "notes").mkdir(parents=True)
+    (real / "notes/a.md").write_text("# A\n[B](./b.md)\n", encoding="utf-8")
+    (real / "notes/b.md").write_text("# B\n", encoding="utf-8")
+    (tmp_path / "ws").mkdir()
+    try:
+        (tmp_path / "ws/knowledge").symlink_to(real, target_is_directory=True)
+    except OSError:
+        pytest.skip("symlinks unavailable")
+    svc = KnowledgeService(str(tmp_path / "ws"), FakeMemoryManager())
+
+    edges = {(l["source"], l["target"]) for l in svc.build_graph()["links"]}
+    assert edges == {("notes/a.md", "notes/b.md")}
+
+
+def test_windows_reserved_device_names_are_rejected(tmp_path):
+    # Path validation already rejects Windows-illegal punctuation; reserved
+    # device names (CON, NUL, COM1, ...) have to be rejected too, or a
+    # document or category that saves on POSIX fails or hits a device on Windows.
+    svc, _manager = service(tmp_path)
+
+    for path in ("CON.md", "nul.md", "COM1.md", "LPT9.md", "AUX.md"):
+        result = svc.dispatch("create_document", {"path": path, "content": "# x\n"})
+        assert result["code"] == 403, path
+        assert not (tmp_path / "knowledge" / path).exists(), path
+
+    for path in ("NUL", "con", "COM2"):
+        result = svc.dispatch("create_category", {"path": path})
+        assert result["code"] == 403, path
+        assert not (tmp_path / "knowledge" / path).exists(), path
+
+    result = svc.dispatch("create_document", {"path": "PRN/notes.md", "content": "# x\n"})
+    assert result["code"] == 403
+    assert not (tmp_path / "knowledge/PRN").exists()
+
+    assert svc.dispatch("create_category", {"path": "notes"})["payload"]["created"]
+    result = svc.dispatch("rename_category", {"path": "notes", "new_path": "PRN"})
+    assert result["code"] == 403
+    assert (tmp_path / "knowledge/notes").is_dir()
+    assert not (tmp_path / "knowledge/PRN").exists()
+
+    imported = svc.dispatch("import_documents", {
+        "target_category": "notes",
+        "files": [{"filename": "CON.md", "content": b"# x"}],
+        "conflict_strategy": "overwrite",
+    })
+    assert imported["code"] == 200
+    assert imported["payload"]["imported"] == 0
+    assert imported["payload"]["failed"] == 1
+    assert not (tmp_path / "knowledge/notes/CON.md").exists()
+
+    # Nearby ordinary names, including COM10 (not a reserved device), stay valid.
+    for path in ("console.md", "COM10.md"):
+        created = svc.dispatch("create_document", {"path": path, "content": "# ok\n"})
+        assert created["code"] == 200, path
+        assert (tmp_path / "knowledge" / path).read_text(encoding="utf-8") == "# ok\n"
+    category = svc.dispatch("create_category", {"path": "convention"})
+    assert category["payload"]["created"] is True

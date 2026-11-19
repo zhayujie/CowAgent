@@ -3,7 +3,7 @@ title: Kimi
 description: "CowAgent で Kimi（Moonshot）を設定します。テキスト対話とネイティブの画像理解に対応し、moonshot_api_key を設定すれば vision ツールも Kimi を使用。"
 ---
 
-Kimi は Moonshot が提供するモデルで、テキスト対話と画像理解をサポートします。`kimi-k3` と `kimi-k2.x` シリーズはネイティブにビジョンをサポートしています。
+Kimi は Moonshot が提供するモデルで、テキスト対話と画像理解をサポートします。`kimi-k3.1-pro`、`kimi-k3` と `kimi-k2.x` シリーズはネイティブにビジョンをサポートしています。
 
 <Tip>
   Web コンソールの「モデル管理」ページから、以下のすべての機能をワンストップで設定でき、設定ファイルを手動で編集する必要はありません。
@@ -13,16 +13,18 @@ Kimi は Moonshot が提供するモデルで、テキスト対話と画像理�
 
 ```json
 {
-  "model": "kimi-k3",
+  "model": "kimi-k3.1-pro",
   "moonshot_api_key": "YOUR_API_KEY"
 }
 ```
 
 | パラメータ | 説明 |
 | --- | --- |
-| `model` | `kimi-k3`、`kimi-k2.7-code`、`kimi-k2.7-code-highspeed`、`kimi-k2.6`、`kimi-k2.5`、`kimi-k2`、`moonshot-v1-8k`、`moonshot-v1-32k`、`moonshot-v1-128k` を指定可能 |
+| `model` | `kimi-k3.1-pro`、`kimi-k3.1-pro-highspeed`、`kimi-k3`、`kimi-k2.7-code`、`kimi-k2.7-code-highspeed`、`kimi-k2.6`、`kimi-k2.5`、`kimi-k2`、`moonshot-v1-8k`、`moonshot-v1-32k`、`moonshot-v1-128k` を指定可能 |
 | `moonshot_api_key` | [Moonshot コンソール](https://platform.kimi.com?aff=cowagent) で作成 |
 | `moonshot_base_url` | 任意。デフォルトは `https://api.moonshot.cn/v1` |
+
+`kimi-k3.1-pro` はデフォルト推奨モデルで、100 万トークンのコンテキストに対応します。`kimi-k3.1-pro-highspeed` は同等の知能で出力速度が約 2〜3 倍の高速版です。K3 / K3.1 シリーズは常に思考モードで動作し、`reasoning_effort` で思考の深さを調整できます（`low` / `high` / `max`、デフォルト `max`）。
 
 ## 画像理解
 

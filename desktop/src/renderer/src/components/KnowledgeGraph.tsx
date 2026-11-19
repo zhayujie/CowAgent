@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { KnowledgeGraph as KnowledgeGraphData } from '../types'
 
 interface SimNode {
@@ -34,6 +34,8 @@ const TABLEAU10 = [
 ]
 
 const nodeRadius = (degree: number) => Math.max(4, Math.min(12, 4 + degree * 1.4))
+// Room kept right of a labelled node: the label sits there, up to 15 chars at 9px.
+const LABEL_ALLOWANCE = 90
 
 // A dependency-free force-directed graph with wheel zoom, canvas pan and node
 // drag. The physics loop writes positions DIRECTLY to the DOM (like d3) instead
@@ -50,6 +52,9 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({ data, onSelect }) => {
 
   // View transform (pan + zoom).
   const viewRef = useRef({ k: 1, x: 0, y: 0 })
+  // The view follows the graph until the user zooms, pans or drags a node;
+  // after that it stays where they put it.
+  const autoFitRef = useRef(true)
 
   // Build the immutable model once per data change.
   const model = useMemo(() => {
@@ -71,19 +76,14 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({ data, onSelect }) => {
     )
     const colorOf = (cat: string) => TABLEAU10[categories.indexOf(cat) % TABLEAU10.length]
 
-    const n = data.nodes.length || 1
-    const { w, h } = sizeRef.current
-    const cx = w / 2
-    const cy = h / 2
-    const nodes: SimNode[] = data.nodes.map((nd, i) => {
-      const angle = (i / n) * Math.PI * 2
-      const radius = Math.min(w, h) * 0.32
+    // Positions are seeded once the pane has been measured (see below).
+    const nodes: SimNode[] = data.nodes.map((nd) => {
       return {
         id: nd.id,
         label: nd.label,
         category: nd.category || 'default',
-        x: cx + Math.cos(angle) * radius,
-        y: cy + Math.sin(angle) * radius,
+        x: 0,
+        y: 0,
         vx: 0,
         vy: 0,
         fx: null,
@@ -112,18 +112,87 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({ data, onSelect }) => {
   const lineEls = useRef(new Map<number, SVGLineElement>())
   const groupEls = useRef(new Map<string, SVGGElement>())
 
+  const paint = () => {
+    model.links.forEach(({ key, a, b }) => {
+      const el = lineEls.current.get(key)
+      if (!el) return
+      el.setAttribute('x1', String(a.x))
+      el.setAttribute('y1', String(a.y))
+      el.setAttribute('x2', String(b.x))
+      el.setAttribute('y2', String(b.y))
+    })
+    model.nodes.forEach((node) => {
+      const el = groupEls.current.get(node.id)
+      if (el) el.setAttribute('transform', `translate(${node.x},${node.y})`)
+    })
+  }
+
+  // Apply the view transform imperatively (no re-render needed).
+  const applyView = () => {
+    const v = viewRef.current
+    if (rootRef.current) rootRef.current.setAttribute('transform', `translate(${v.x},${v.y}) scale(${v.k})`)
+  }
+
+  // Centre the graph and zoom out (never in past 1x) until every node and its
+  // label fits the pane.
+  const fitView = () => {
+    const { nodes } = model
+    if (nodes.length === 0) return
+    let minX = Infinity
+    let minY = Infinity
+    let maxX = -Infinity
+    let maxY = -Infinity
+    nodes.forEach((node) => {
+      const r = nodeRadius(node.degree)
+      minX = Math.min(minX, node.x - r)
+      minY = Math.min(minY, node.y - r)
+      maxX = Math.max(maxX, node.x + r + (node.degree >= 3 ? LABEL_ALLOWANCE : 0))
+      maxY = Math.max(maxY, node.y + r)
+    })
+    const { w, h } = sizeRef.current
+    const pad = 32
+    const k = Math.max(
+      0.2,
+      Math.min(1, (w - pad * 2) / Math.max(1, maxX - minX), (h - pad * 2) / Math.max(1, maxY - minY)),
+    )
+    viewRef.current = { k, x: w / 2 - ((minX + maxX) / 2) * k, y: h / 2 - ((minY + maxY) / 2) * k }
+    applyView()
+  }
+  // The resize observer is bound once; it reaches the current model through this.
+  const fitViewRef = useRef(fitView)
+  fitViewRef.current = fitView
+
   // Track container size in a ref; never triggers a re-render on its own.
-  useEffect(() => {
+  // Measured before the first paint so the seeding below sees the real pane.
+  useLayoutEffect(() => {
     const el = wrapRef.current
     if (!el) return
     const apply = () => {
       sizeRef.current = { w: el.clientWidth || 800, h: el.clientHeight || 560 }
+      if (autoFitRef.current) fitViewRef.current()
     }
     apply()
     const ro = new ResizeObserver(apply)
     ro.observe(el)
     return () => ro.disconnect()
   }, [])
+
+  // Seed a ring around the pane's centre before the first paint, so the graph
+  // doesn't start off-centre and drift over.
+  useLayoutEffect(() => {
+    const { nodes } = model
+    const { w, h } = sizeRef.current
+    const radius = Math.min(w, h) * 0.32
+    nodes.forEach((node, i) => {
+      const angle = (i / nodes.length) * Math.PI * 2
+      node.x = w / 2 + Math.cos(angle) * radius
+      node.y = h / 2 + Math.sin(angle) * radius
+    })
+    paint()
+    autoFitRef.current = true
+    fitView()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [model])
 
   // Physics loop. Restarts only when the model (data) changes. Writes to DOM.
   // Uses d3-style alpha cooling so it always settles and stops the rAF.
@@ -136,21 +205,6 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({ data, onSelect }) => {
     let alpha = 1
     const alphaDecay = 0.018
     const alphaMin = 0.005
-
-    const paint = () => {
-      links.forEach(({ key, a, b }) => {
-        const el = lineEls.current.get(key)
-        if (!el) return
-        el.setAttribute('x1', String(a.x))
-        el.setAttribute('y1', String(a.y))
-        el.setAttribute('x2', String(b.x))
-        el.setAttribute('y2', String(b.y))
-      })
-      nodes.forEach((node) => {
-        const el = groupEls.current.get(node.id)
-        if (el) el.setAttribute('transform', `translate(${node.x},${node.y})`)
-      })
-    }
 
     const step = () => {
       if (!alive) return
@@ -232,6 +286,7 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({ data, onSelect }) => {
       })
 
       paint()
+      if (autoFitRef.current) fitView()
       alpha += (0 - alpha) * alphaDecay
       // Keep running while cooling, or while a node is being dragged.
       if (alpha > alphaMin || dragging) {
@@ -248,11 +303,6 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({ data, onSelect }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [model, warmTick])
 
-  // Apply the view transform imperatively (no re-render needed).
-  const applyView = () => {
-    const v = viewRef.current
-    if (rootRef.current) rootRef.current.setAttribute('transform', `translate(${v.x},${v.y}) scale(${v.k})`)
-  }
   useEffect(applyView)
 
   // Convert a pointer event to graph (pre-transform) coordinates.
@@ -271,6 +321,7 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({ data, onSelect }) => {
     if (!svg) return
     const onWheel = (e: WheelEvent) => {
       e.preventDefault()
+      autoFitRef.current = false
       const v = viewRef.current
       const rect = svg.getBoundingClientRect()
       const px = e.clientX - rect.left
@@ -295,6 +346,7 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({ data, onSelect }) => {
   const onPointerDownNode = (e: React.PointerEvent, node: SimNode) => {
     e.stopPropagation()
     ;(e.currentTarget as Element).setPointerCapture(e.pointerId)
+    autoFitRef.current = false
     const p = toGraph(e.clientX, e.clientY)
     node.fx = p.x
     node.fy = p.y
@@ -320,6 +372,7 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({ data, onSelect }) => {
       const el = groupEls.current.get(drag.node.id)
       if (el) el.setAttribute('transform', `translate(${p.x},${p.y})`)
     } else {
+      autoFitRef.current = false
       viewRef.current = { k: viewRef.current.k, x: drag.ox + (e.clientX - drag.startX), y: drag.oy + (e.clientY - drag.startY) }
       applyView()
     }
@@ -342,17 +395,17 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({ data, onSelect }) => {
   }
 
   const { nodes, links, adjacency, categories, colorOf } = model
-  const { w, h } = sizeRef.current
   const isDimmed = (id: string) => hover != null && hover !== id && !adjacency.get(hover)?.has(id)
   const isLinkActive = (aId: string, bId: string) => hover === aId || hover === bId
 
   return (
     <div ref={wrapRef} className="w-full h-full relative overflow-hidden">
+      {/* Sized by CSS, not by sizeRef: the ref changes without a re-render, so
+          fixed attributes would keep the mount-time size and clip the graph
+          after the pane grows (e.g. the window is maximized). */}
       <svg
         ref={svgRef}
-        width={w}
-        height={h}
-        className="select-none block cursor-grab active:cursor-grabbing"
+        className="select-none block w-full h-full cursor-grab active:cursor-grabbing"
         onPointerDown={onPointerDownBg}
         onPointerMove={onPointerMove}
         onPointerUp={(e) => onPointerUp(e)}

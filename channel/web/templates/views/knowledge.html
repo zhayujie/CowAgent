@@ -38,7 +38,7 @@
                                             <i class="fas fa-plus"></i><span data-i18n="knowledge_new">新建</span><i class="fas fa-chevron-down text-[9px] ml-0.5"></i>
                                         </button>
                                         <div id="knowledge-new-menu-list"
-                                             class="hidden absolute right-0 mt-1.5 w-44 z-50 bg-white dark:bg-[#1A1A1A] border border-slate-200 dark:border-white/10 rounded-lg shadow-lg py-1">
+                                             class="hidden absolute right-0 mt-1.5 w-44 z-50 bg-panel border border-slate-200 dark:border-white/10 rounded-lg shadow-lg py-1">
                                             <button onclick="createKnowledgeCategory(); closeKnowledgeNewMenu()"
                                                     class="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 cursor-pointer transition-colors">
                                                 <i class="fas fa-folder-plus w-3.5 text-slate-400"></i><span data-i18n="knowledge_new_category">新建分类</span>
@@ -80,7 +80,7 @@
                                 <div class="flex flex-col md:flex-row gap-4 md:gap-6 md:h-full">
                                     <!-- File tree -->
                                     <div id="knowledge-sidebar" class="w-full md:w-72 lg:w-80 flex-shrink-0 md:h-full">
-                                        <div class="bg-white dark:bg-[#1A1A1A] rounded-xl border border-slate-200 dark:border-white/10 overflow-hidden flex flex-col md:h-full">
+                                        <div class="bg-panel rounded-xl border border-slate-200 dark:border-white/10 overflow-hidden flex flex-col md:h-full">
                                             <div class="px-4 py-3 border-b border-slate-200 dark:border-white/10 flex-shrink-0">
                                                 <div class="relative">
                                                     <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
@@ -95,12 +95,12 @@
                                     <!-- Content viewer -->
                                     <div class="flex-1 min-w-0 md:h-full">
                                         <div id="knowledge-content-placeholder"
-                                             class="flex flex-col items-center justify-center py-20 md:h-full text-slate-400 dark:text-slate-500 bg-white dark:bg-[#1A1A1A] rounded-xl border border-slate-200 dark:border-white/10">
+                                             class="flex flex-col items-center justify-center py-20 md:h-full text-slate-400 dark:text-slate-500 bg-panel rounded-xl border border-slate-200 dark:border-white/10">
                                             <i class="fas fa-file-lines text-3xl mb-3 opacity-40"></i>
                                             <p class="text-sm" data-i18n="knowledge_select_hint">选择一个文档查看</p>
                                         </div>
                                         <div id="knowledge-content-viewer" class="hidden md:h-full">
-                                            <div class="bg-white dark:bg-[#1A1A1A] rounded-xl border border-slate-200 dark:border-white/10 overflow-hidden flex flex-col md:h-full">
+                                            <div class="bg-panel rounded-xl border border-slate-200 dark:border-white/10 overflow-hidden flex flex-col md:h-full">
                                                 <div class="flex items-center gap-3 px-4 md:px-5 py-3 border-b border-slate-200 dark:border-white/10 flex-shrink-0">
                                                     <button onclick="knowledgeMobileBack()" class="md:hidden p-1 -ml-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 cursor-pointer">
                                                         <i class="fas fa-arrow-left text-xs"></i>
@@ -134,7 +134,7 @@
 
                             <!-- Graph panel -->
                             <div id="knowledge-panel-graph" class="hidden">
-                                <div class="bg-white dark:bg-[#1A1A1A] rounded-xl border border-slate-200 dark:border-white/10 overflow-hidden">
+                                <div class="bg-panel rounded-xl border border-slate-200 dark:border-white/10 overflow-hidden">
                                     <div id="knowledge-graph-container" class="w-full h-[60dvh] md:h-[calc(100dvh-220px)]"></div>
                                 </div>
                             </div>

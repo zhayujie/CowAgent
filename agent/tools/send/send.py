@@ -3,11 +3,14 @@ Send tool - Send files to the user
 """
 
 import os
+import shutil
+from datetime import datetime
 from typing import Dict, Any
 from pathlib import Path
 
 from agent.tools.base_tool import BaseTool, ToolResult
 from agent.tools.utils.credentials import DENIED_MESSAGE, is_credential_path
+from common.log import logger
 from common.utils import expand_path
 
 
@@ -77,11 +80,13 @@ class Send(BaseTool):
         # Check if readable
         if not os.access(absolute_path, os.R_OK):
             return ToolResult.fail(f"Error: File is not readable: {path}")
+
+        absolute_path = self._localize_outside_file(absolute_path)
         
         # Get file info
         file_ext = Path(absolute_path).suffix.lower()
         file_size = os.path.getsize(absolute_path)
-        file_name = Path(absolute_path).name
+        file_name = Path(path).name or Path(absolute_path).name
         
         # Determine file type
         if file_ext in self.image_extensions:
@@ -171,6 +176,47 @@ class Send(BaseTool):
         if os.path.isabs(path):
             return path
         return os.path.abspath(os.path.join(self.cwd, path))
+
+    def _workspace_root(self) -> str:
+        try:
+            from common.state_dir import state_root_str
+            return state_root_str()
+        except Exception:
+            return self.cwd
+
+    def _localize_outside_file(self, absolute_path: str) -> str:
+        """Copy a file outside the home dir and workspace (e.g. /tmp) into
+        <workspace>/tmp/ and return the copy's path.
+
+        Clients that fetch files by path (the web console) only serve the home
+        dir and the workspace, and system temp dirs get purged, so the original
+        path would leave a broken image now and in the history later.
+        On failure the original path is returned unchanged.
+        """
+        try:
+            real = os.path.realpath(absolute_path)
+            workspace = os.path.realpath(self._workspace_root())
+            for root in (os.path.realpath(os.path.expanduser("~")), workspace):
+                try:
+                    if os.path.commonpath([real, root]) == root:
+                        return absolute_path
+                except ValueError:
+                    continue
+
+            dst_dir = os.path.join(workspace, "tmp")
+            os.makedirs(dst_dir, exist_ok=True)
+            stem, ext = os.path.splitext(os.path.basename(real))
+            stamp = datetime.now().strftime("%Y%m%d%H%M%S")
+            dst = os.path.join(dst_dir, f"{stem}_{stamp}{ext}")
+            n = 1
+            while os.path.exists(dst):
+                dst = os.path.join(dst_dir, f"{stem}_{stamp}_{n}{ext}")
+                n += 1
+            shutil.copy2(real, dst)
+            return dst
+        except Exception as e:
+            logger.warning(f"[Send] failed to copy {absolute_path} into workspace: {e}")
+            return absolute_path
     
     def _get_image_mime_type(self, ext: str) -> str:
         """Get MIME type for image"""

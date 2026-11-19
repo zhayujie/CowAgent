@@ -130,6 +130,33 @@ def test_failed_password_clear_keeps_real_get_and_post_authentication(console):
     assert json.loads(authenticated.data)["status"] == "success"
 
 
+def test_changing_the_password_hands_the_caller_a_token_for_it(console):
+    app, post, path, seed = console
+    path.write_text(json.dumps({**seed, "web_password": "old-test-password"}), encoding="utf-8")
+    config.load_config()
+    login = app.request("/auth/login", method="POST", headers={"Content-Type": "application/json"},
+                        data=json.dumps({"password": "old-test-password"}))
+    old_token = json.loads(login.data)["token"]
+    old_bearer = {"Authorization": f"Bearer {old_token}"}
+    result = json.loads(app.request(
+        "/api/config", method="POST",
+        headers={"Content-Type": "application/json", **old_bearer},
+        data=json.dumps({"updates": {"web_password": "new-test-password"}}),
+    ).data)
+    assert result["status"] == "success"
+    assert app.request("/api/config", headers=old_bearer).status.startswith("401")
+    new_bearer = {"Authorization": f"Bearer {result['auth_token']}"}
+    assert app.request("/api/config", headers=new_bearer).status.startswith("200")
+
+    other = json.loads(app.request(
+        "/api/config", method="POST",
+        headers={"Content-Type": "application/json", **new_bearer},
+        data=json.dumps({"updates": {"enable_thinking": True}}),
+    ).data)
+    assert other["status"] == "success"
+    assert "auth_token" not in other
+
+
 def test_a_rejected_value_still_changes_nothing(console):
     _, post, path, _ = console
     previous = copy.deepcopy(dict(config.conf()))

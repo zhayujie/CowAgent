@@ -59,6 +59,13 @@ class LinkAIVoice(Voice):
                 logger.error(f"[LinkVoice] voiceToText error, status_code={res.status_code}, msg={msg}")
                 return Reply(ReplyType.ERROR, "抱歉，语音识别失败")
             text = res.json().get("text")
+            # A gateway can answer 200 with a body that carries no transcript
+            # (quota exhausted, engine-side soft failure). Shape the value
+            # before handing it on: the ASR contract in this repo is TEXT only
+            # for a string, ERROR otherwise (cf. openai_voice.py).
+            if not isinstance(text, str):
+                logger.error(f"[LinkVoice] voiceToText failed: text is not a string: {text!r}")
+                return Reply(ReplyType.ERROR, "抱歉，语音识别失败")
             logger.info(f"[LinkVoice] voiceToText success, text={text}, file name={voice_file}")
             return Reply(ReplyType.TEXT, text)
         except Exception as e:

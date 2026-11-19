@@ -25,7 +25,7 @@ from bridge.reply import Reply, ReplyType
 from channel.chat_channel import ChatChannel
 from channel.chat_message import safe_filename
 from common import state_dir
-from common.media_download import MAX_FILE_BYTES, MediaTooLargeError, download_to_file
+from common.media_download import MAX_FILE_BYTES, MediaTooLargeError, download_to_file, remove_download
 from channel.dingtalk.dingtalk_message import DingTalkMessage
 from channel.dingtalk.dingtalk_stream_card import (
     DingTalkCardStreamer,
@@ -449,6 +449,7 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
             file_path = file_path[7:]
         
         # 如果是 HTTP URL，先下载（带字节上限，防止超大响应耗尽内存/磁盘）
+        temp_file = None
         if file_path.startswith("http://") or file_path.startswith("https://"):
             try:
                 import uuid
@@ -458,7 +459,10 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
                     safe_filename(unquote(os.path.basename(urlparse(file_path).path)))
                     or f"media_{uuid.uuid4()}"
                 )
-                temp_file = os.path.join(str(state_dir.tmp_dir()), file_name)
+                # A generated unique name, not the URL's: the tmp dir also holds
+                # inbound attachments, so two downloads of the same URL would
+                # overwrite each other under a name taken from the URL.
+                temp_file = state_dir.tmp_file("dingtalk_media", os.path.splitext(file_name)[1])
                 try:
                     download_to_file(
                         file_path, temp_file, MAX_FILE_BYTES,
@@ -502,6 +506,11 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
         except Exception as e:
             logger.error(f"[DingTalk] Error uploading media: {e}")
             return None
+        finally:
+            # A remote download belongs to this call to clean up, whatever the
+            # upload did with it -- the way the weixin / wecom_bot senders do.
+            if temp_file:
+                remove_download(temp_file)
     
     def send_image_with_media_id(self, access_token: str, media_id: str, incoming_message, is_group: bool) -> bool:
         """
@@ -990,7 +999,7 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
                 logger.info(f"[DingTalk] Sending file: {reply.content}")
                 media_id = self.upload_media(reply.content, media_type="file")
                 if media_id:
-                    file_name = os.path.basename(file_path)
+                    file_name = getattr(reply, "file_name", "") or os.path.basename(file_path)
                     file_base, file_extension = os.path.splitext(file_name)
                     msg_param = {
                         "mediaId": media_id,
@@ -1026,31 +1035,43 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
 
             amr_path = voice_path
             duration_ms = 0
-            if not voice_path.lower().endswith((".amr", ".ogg")):
-                try:
-                    from voice.audio_convert import any_to_amr
-                    amr_path = os.path.splitext(voice_path)[0] + ".amr"
-                    duration_ms = int(any_to_amr(voice_path, amr_path) or 0)
-                except Exception as e:
-                    logger.error(f"[DingTalk] Failed to convert voice to amr: {e}")
-                    self.reply_text("抱歉，语音转码失败", incoming_message)
+            # The amr this send creates is ours to clean up; the TTS source
+            # beside it belongs to voice synthesis and is left in place, the
+            # way the weixin / wecom_bot senders leave a local source alone.
+            temp_files = []
+            try:
+                if not voice_path.lower().endswith((".amr", ".ogg")):
+                    try:
+                        from voice.audio_convert import any_to_amr
+                        amr_path = os.path.splitext(voice_path)[0] + ".amr"
+                        # Register before converting: pydub opens the target
+                        # file before it spawns ffmpeg, so a conversion that
+                        # dies partway leaves a half-written amr behind too.
+                        temp_files.append(amr_path)
+                        duration_ms = int(any_to_amr(voice_path, amr_path) or 0)
+                    except Exception as e:
+                        logger.error(f"[DingTalk] Failed to convert voice to amr: {e}")
+                        self.reply_text("抱歉，语音转码失败", incoming_message)
+                        return
+
+                media_id = self.upload_media(amr_path, media_type="voice")
+                if not media_id:
+                    logger.error("[DingTalk] Failed to upload voice media")
+                    self.reply_text("抱歉，语音上传失败", incoming_message)
                     return
 
-            media_id = self.upload_media(amr_path, media_type="voice")
-            if not media_id:
-                logger.error("[DingTalk] Failed to upload voice media")
-                self.reply_text("抱歉，语音上传失败", incoming_message)
-                return
-
-            msg_param = {
-                "mediaId": media_id,
-                "duration": str(duration_ms or 1000),
-            }
-            success = self._send_file_message(
-                access_token, incoming_message, "sampleAudio", msg_param, isgroup
-            )
-            if not success:
-                self.reply_text("抱歉，语音发送失败", incoming_message)
+                msg_param = {
+                    "mediaId": media_id,
+                    "duration": str(duration_ms or 1000),
+                }
+                success = self._send_file_message(
+                    access_token, incoming_message, "sampleAudio", msg_param, isgroup
+                )
+                if not success:
+                    self.reply_text("抱歉，语音发送失败", incoming_message)
+            finally:
+                for path in temp_files:
+                    remove_download(path)
             return
 
         # 处理文本消息

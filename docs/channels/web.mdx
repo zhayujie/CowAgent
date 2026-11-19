@@ -22,16 +22,17 @@ The Web Console is CowAgent's default channel. It runs automatically once starte
 | Parameter | Description | Default |
 | --- | --- | --- |
 | `channel_type` | Set to `web` | `web` |
-| `web_host` | Web service listen address. Defaults to `127.0.0.1` (local only); set to `0.0.0.0` for public access and configure a password | `""` |
+| `web_host` | Web service listen address. When empty, it listens on `127.0.0.1` (local only) without a password and on `0.0.0.0` once a password is set. It can also be changed from the console, see "Access URL" below | `""` |
 | `web_port` | Web service listen port | `9899` |
+| `web_public_url` | Display address used in API URLs, share links and embed code. Enter your domain if you have one; leave empty to detect it | `""` |
 | `web_password` | Access password. Leave empty to disable password protection; recommended when listening on `0.0.0.0` | `""` |
 | `external_api_enabled` | Turn on the [Chat API](/extensions/chat-api) | `false` |
 | `external_api_token` | API key of the [Chat API](/extensions/chat-api), kept while the API is off | `""` |
 | `web_session_expire_days` | Login session validity in days | `30` |
-| `web_file_serve_root` | Root directory the web console can directly read/send files from. Defaults to the user home dir and agent workspace only; set to `/` to allow the whole filesystem | `"~"` |
+| `web_file_serve_root` | Additional root directory the web console can directly read/send files from (defaults to the user home directory). Configured Agent workspaces, including disabled Agents, and opened project directories are also allowed; set to `/` to allow the whole filesystem | `"~"` |
 | `enable_thinking` | Whether to enable deep thinking mode | `false` |
 
-Once a password is configured, you must enter it to log in when accessing the console. The login session is kept for 30 days by default, so restarting the service during that period does not require re-login. The password can also be changed online from the "Configuration" page in the console.
+Once a password is configured, you must enter it to log in when accessing the console. The login session is kept for 30 days by default, so restarting the service during that period does not require re-login. The password can also be changed online from the "Configuration" page in the console. A client that enters a wrong password 5 times in a row is locked out for 10 minutes.
 
 ## Access URL
 
@@ -43,6 +44,15 @@ After starting the project, visit:
 <Note>
   Ensure the server firewall and security group allow the corresponding port.
 </Note>
+
+Under **Config → Integrations → Addresses** in the console you can change:
+
+- **Display address**: the address used in API URLs, share links and embed code. Enter your domain if you have one; leave empty to detect it.
+- **Listen address**: the IP and port the service listens on. `127.0.0.1` is reachable from this machine only; `0.0.0.0` lets other devices on the local network or the internet connect and requires an access password first. After saving, the service switches to the new address without a restart, and goes back to the old one if the new one cannot be used. While other devices can connect, this machine's local network addresses are shown below.
+
+<Frame>
+  <img src="https://cdn.jsdelivr.net/gh/zhayujie/cowagent-assets@main/screenshots/en/web-console-integrations.png" alt="Integrations" width="800" />
+</Frame>
 
 ## HTTPS and Domain Access
 

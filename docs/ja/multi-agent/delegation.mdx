@@ -73,7 +73,7 @@ agent_delegate(agent_id="research", task="...")
 | `enabled` | `true` | `false`、またはブロック全体を `false` にするとツールを提供しない |
 | `allowed_targets` | 未設定 | 送信元 Agent ID から到達可能な ID への対応。`"*"` は任意。未設定ならすべての組み合わせを許可。対象はさらに現在の会話の同僚に限定される |
 | `max_depth` | `3` | 1 つの連鎖での委任段数（1-8） |
-| `timeout_seconds` | `600` | 1 回の委任 run の時間予算（0.01-600） |
+| `timeout_seconds` | `600` | 1 回の委任 run の時間予算（0.01-3600）。ローカル実行は期限が来るとキャンセルされる |
 | `max_message_chars` | `8000` | 1 回の委任タスクの長さ上限 |
 
 上記の `"research"` のように空配列を指定した Agent は、委任を受けることはできますが、さらに外へ委任することはできません。

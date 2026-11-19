@@ -15,7 +15,7 @@ let APP_VERSION = '';
 // One-click update — driven from the sidebar version menu
 // =====================================================================
 const GITHUB_RELEASES_URL = 'https://github.com/zhayujie/CowAgent/releases';
-let UPDATE_META = { version: '', install_kind: 'unknown', update_supported: false, unsupported_reason: '' };
+let UPDATE_META = { version: '', install_kind: 'unknown', update_supported: false, unsupported_reason: '', manage_url: '' };
 let UPDATE_CHECK = null;
 let _updateChecking = false;
 let _updateRunning = false;
@@ -42,14 +42,19 @@ function closeUpdateMenu() {
     const btn = document.getElementById('sidebar-version');
     if (menu) menu.classList.add('hidden');
     if (btn) btn.setAttribute('aria-expanded', 'false');
+    if (typeof closeColorThemeMenu === 'function') closeColorThemeMenu();
     document.removeEventListener('click', _closeUpdateMenuOnOutside);
 }
 
 function _closeUpdateMenuOnOutside(event) {
     const menu = document.getElementById('update-menu');
     const btn = document.getElementById('sidebar-version');
+    // The theme list flies out of this menu but lives outside it. Picking a
+    // theme re-renders the list, so test the dispatch path, not the live DOM.
+    const themes = document.getElementById('color-theme-menu');
     if (!menu) return;
     if (menu.contains(event.target) || (btn && btn.contains(event.target))) return;
+    if (themes && event.composedPath().includes(themes)) return;
     closeUpdateMenu();
 }
 
@@ -111,8 +116,27 @@ function _renderUpdateAction(state, label, opts) {
     icon.className = iconClass;
 }
 
+// Managed installs never check GitHub.
+function _applyManagedInstall() {
+    if (UPDATE_META.install_kind !== 'managed') return;
+    const item = document.getElementById('update-action-item');
+    const text = document.getElementById('update-action-label');
+    if (!item || !text) return;
+    if (!UPDATE_META.manage_url) {
+        item.style.display = 'none';
+        return;
+    }
+    text.dataset.i18n = 'update_manage';
+    text.textContent = t('update_manage');
+}
+
 // The single row's click behaviour depends on the current state.
 function onUpdateActionClick() {
+    if (UPDATE_META.install_kind === 'managed') {
+        if (UPDATE_META.manage_url) window.open(UPDATE_META.manage_url, '_blank', 'noopener,noreferrer');
+        closeUpdateMenu();
+        return;
+    }
     if (_updateChecking || _updateRunning) return;
     if (_updateUiState === 'available') {
         startConsoleUpdate();

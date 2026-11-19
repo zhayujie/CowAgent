@@ -312,7 +312,7 @@ const SessionList: React.FC = () => {
   }
 
   return (
-    <div className="w-[240px] flex-shrink-0 flex flex-col h-full bg-surface border-r border-default">
+    <div className="session-list w-[240px] flex-shrink-0 flex flex-col h-full bg-surface border-r border-default">
       <div className="flex items-center justify-between px-2 h-[44px] flex-shrink-0 titlebar-drag border-b border-default">
         <Tooltip label={t('session_history')}>
           <button

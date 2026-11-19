@@ -200,11 +200,31 @@ function _openImageLightbox(src) {
     requestAnimationFrame(() => overlay.style.opacity = '1');
 }
 
+// Swap a broken image for a one-line note naming the file, instead of the
+// browser's broken-image icon plus alt text.
+function _onImageLoadError(img) {
+    if (!img || !img.parentNode) return;
+    let name = '';
+    try {
+        const u = new URL(img.src, window.location.href);
+        name = (u.searchParams.get('path') || u.pathname).split(/[\\/]/).pop();
+    } catch (_) {}
+    const note = document.createElement('div');
+    note.style.cssText = 'display:inline-flex;align-items:center;gap:6px;margin:6px 0;padding:6px 10px;' +
+        'border-radius:8px;font-size:12px;color:#94a3b8;background:rgba(148,163,184,0.12);';
+    note.innerHTML = `<i class="fas fa-image"></i><span></span>`;
+    note.querySelector('span').textContent = name
+        ? `${t('image_unavailable')}: ${name}`
+        : t('image_unavailable');
+    img.parentNode.replaceChild(note, img);
+}
+
 function _buildImageHtml(url) {
     const webUrl = _toWebUrl(url);
     const safeUrl = webUrl.replace(/"/g, '&quot;');
     return `<div style="margin:10px 0;">` +
         `<img src="${safeUrl}" alt="image" loading="lazy" ` +
+        `onerror="_onImageLoadError(this)" ` +
         `onclick="_openImageLightbox(this.src)" ` +
         `style="max-width:520px;width:100%;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,0.15);display:block;cursor:zoom-in;">` +
         `</div>`;

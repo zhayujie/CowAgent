@@ -1,0 +1,163 @@
+---
+title: カスタムテーマ
+description: "Web コンソールとデスクトップクライアントで内蔵テーマを切り替えたり、テーマパッケージをインポートしたり、Agent にオリジナルの配色・壁紙・アイコンを作らせたりできます。"
+---
+
+Web コンソールとデスクトップクライアントはどちらもテーマ（スキン）の切り替えに対応しています。両者は同じテーマフォルダを共有しているため、どちらかでインポート・生成したテーマはもう一方でもそのまま使えます。テーマが定義するのは配色、角丸、フォント、背景壁紙だけで、UI の構造には触れないため、アップデート後もテーマはそのまま使えます。
+
+## テーマを切り替える
+
+- **Web コンソール**：左下のバージョン番号をクリックし、メニューの「Theme」にマウスを合わせるとテーマ一覧が表示されます
+- **デスクトップクライアント**：左下の「More」メニューを開き、「Theme」にマウスを合わせるとテーマ一覧が表示されます
+
+クリックすると適用されます。テーマはライト / ダークモードとは独立しており、どのテーマも両方のモードに対応しています。
+
+<Frame>
+  <img src="https://cdn.jsdelivr.net/gh/zhayujie/cowagent-assets@main/screenshots/en/web-console-custom-theme.png" alt="テーマ一覧" width="800" />
+</Frame>
+
+内蔵の配色テーマ：
+
+- **Meadow**（デフォルト）：さわやかなグリーン
+- **Ocean**：オーシャンブルー
+- **Clay**：あたたかなテラコッタ
+- **Sakura**：桜ピンク
+- **Lavender**：ラベンダーパープル
+
+## テーマをインポートする
+
+テーマ一覧の下部にある「Custom theme…」をクリックしてカスタムテーマのダイアログを開き、テーマの `.zip` またはテーマフォルダをドラッグ＆ドロップします。クリックしてファイル選択から選ぶこともできます（Windows クライアントでフォルダをインポートする場合は、フォルダ内の `theme.json` を選択）。インポートが完了すると自動的に適用されます。
+
+インポート時のチェック内容：
+
+- `theme.json` がパッケージのルート、またはパッケージ内の唯一のフォルダ直下にあること
+- コピーされるのは `theme.json` と画像（`jpg` / `png` / `webp` / `gif` / `svg`）のみで、その他のファイルは無視されます
+- 1 ファイルあたり 16MB 以下、テーマ全体で 64MB 以下
+- 既存テーマと ID が同じ場合は置き換えを確認し、内蔵テーマと同じ ID の場合は自動的にリネームします
+
+インポートしたテーマは `~/cow/system/themes/`（Agent のワークスペースを変更している場合はその中の `system/themes/`）に、テーマごとに 1 フォルダとして保存され、カスタムテーマのダイアログ下部にそのパスが表示されます。フォルダを削除すればテーマも削除され、テーマフォルダを直接コピーしても、次にテーマ一覧を開いたときに表示されます。デスクトップクライアントでは、ダイアログの「Open themes folder」からフォルダを開けます。CowAgent をサーバーにデプロイしている場合、このフォルダは CowAgent を実行しているマシン上にあります。
+
+<Note>
+Web コンソールは `shape`（角丸・フォント）にはまだ対応していませんが、配色・壁紙・アイコンはすべて利用できます。
+</Note>
+
+## テーマの構成
+
+```
+my-theme/
+├── theme.json        # 必須
+├── wallpaper.jpg     # 任意：背景壁紙
+└── logo.png          # 任意：新規チャット画面中央のアイコン
+```
+
+`theme.json` の例：
+
+```json
+{
+  "specVersion": 1,
+  "id": "midnight-neon",
+  "name": "Midnight Neon",
+  "preview": { "accent": "#8b5cf6", "bg": "#f7f6fb", "surface": "#ffffff" },
+  "shape": { "radiusCard": "14px", "radiusBtn": "10px" },
+  "wallpaper": { "image": "wallpaper.jpg", "overlayOpacity": 0.25, "glass": true },
+  "light": {
+    "colors": {
+      "accent": "#7c4dff",
+      "accentSoft": "rgba(124, 77, 255, 0.10)",
+      "bgBase": "#f7f6fb",
+      "textPrimary": "#1f1b2e"
+    }
+  },
+  "dark": {
+    "colors": {
+      "accent": "#8b5cf6",
+      "accentSoft": "rgba(139, 92, 246, 0.18)",
+      "bgBase": "#0d0b14",
+      "bgSurface": "#151220",
+      "textPrimary": "#f2effa"
+    }
+  }
+}
+```
+
+| フィールド | 説明 |
+| --- | --- |
+| `id` | テーマの一意な ID。省略時はフォルダ名 |
+| `name` | テーマ一覧に表示される名前 |
+| `specVersion` | テーマ仕様のバージョン。現在は `1` |
+| `preview` | テーマ一覧のカラープレビュー：`accent` / `bg` / `surface`。省略時は配色から推定 |
+| `shape` | モードに依存しない形状：`radiusCard`、`radiusBtn`、`radiusSm`、`fontSans`、`fontMono` |
+| `wallpaper` | 背景壁紙。ライト・ダーク共通 |
+| `light` / `dark` | 各モードの `colors`（配色）。そのモード専用の `wallpaper` も指定できます |
+| `identity.logo` | 新規チャット画面中央のアイコン。正方形の画像がおすすめです。テーマフォルダ内の `logo.png` は自動的に使われるため、別のファイル名を使う場合だけ指定します |
+
+### 配色（colors）
+
+値には任意の CSS カラー（`#7c4dff`、`rgba(...)` など）を使えます。指定しなかったキーはデフォルトテーマの値になり、未知のキーは無視されます。配色のせいで文字と背景が見分けにくい場合は、自動的にデフォルトテーマに戻ります。
+
+| キー | 用途 |
+| --- | --- |
+| `accent` / `accentHover` / `accentActive` | テーマカラーとホバー・押下時の色（ボタン、選択項目、リンク） |
+| `accentSoft` | テーマカラーの淡い背景（選択行、タグ） |
+| `accentContrast` | テーマカラー上の文字色 |
+| `bubbleUserBg` / `bubbleUserText` | ユーザーメッセージの吹き出しの背景と文字 |
+| `bgBase` | アプリ全体の背景 |
+| `bgSurface` / `bgSurface2` | パネル・カード、およびネストした層やホバー時の塗り |
+| `bgElevated` | メニュー、ダイアログ |
+| `bgInset` / `bgInset2` | 入力欄、およびコードブロックなどのネストした塗り |
+| `textPrimary` / `textSecondary` / `textTertiary` / `textDisabled` | 4 段階の文字色 |
+| `sidebarBg` | Web コンソールのみ：左側メニューバーの背景。文字を読みやすく保つため暗い色にしてください。`dark` にだけ書いた場合はライトモードでも使われます。既定は不透明で、透明度付きの色（例：`rgba(20, 16, 40, 0.7)`）にすると、壁紙のあるテーマではすりガラスになり壁紙が透けます |
+| `borderDefault` / `borderStrong` / `borderSubtle` | 3 段階の枠線色 |
+
+### 壁紙（wallpaper）
+
+壁紙は 1 枚で十分です。トップレベルに書けば、ライトとダークの両方で使われます。モードごとに別の画像を使いたい場合は `light` / `dark` の中に `wallpaper` を書くと、そちらが優先されます。片方のモードにだけ壁紙を書いた場合は、もう片方でも同じ壁紙が使われます。どこにも書いていなくても、テーマフォルダに `wallpaper.jpg` があれば自動的に使われます。
+
+モードごとに別の壁紙を使う場合は、トップレベルの `wallpaper` を外し、`light` / `dark` それぞれに指定します：
+
+```json
+{
+  "light": {
+    "colors": { "...": "..." },
+    "wallpaper": { "image": "wallpaper-light.jpg", "glass": true }
+  },
+  "dark": {
+    "colors": { "...": "..." },
+    "wallpaper": { "image": "wallpaper-dark.jpg", "glass": true }
+  }
+}
+```
+
+| キー | 説明 |
+| --- | --- |
+| `image` | テーマフォルダ内の画像パス |
+| `focusX` / `focusY` | ウィンドウサイズが変わっても表示し続ける焦点位置（0〜1）。デフォルト `0.5` |
+| `overlayOpacity` | 文字を読みやすくするための壁紙上のオーバーレイの濃さ（0〜1）。デフォルトはライト `0.4`、ダーク `0.3`。壁紙が暗すぎる・うるさすぎるときはこの値を調整します |
+| `glass` | `true` にするとパネルが半透明のすりガラスになり、UI 全体に壁紙が透けて見えます |
+
+## Agent にテーマを作らせる
+
+Agent にテーマを作らせることもできます。Agent はテーマを `~/cow/system/themes/` に書き込み、画像生成が設定されていれば背景壁紙とアイコンも生成できます。
+
+- **ワンクリックで開始**：カスタムテーマのダイアログで「Let the Agent create one」の横にある「Start」をクリックします。新しいチャットが開いてプロンプトが入力済みになるので、末尾に希望のスタイルを書き足して送信するだけです。
+- **参考画像から生成**：送信時に好きなキャラクター、イラスト、写真などの参考画像を添付できます。Agent は参考画像をもとに壁紙とアイコンを生成し、キャラクターや画風を参考画像に合わせ、テーマの配色も参考画像から抽出します。
+- **ライトとダークで別の壁紙**：スタイルの説明に「ライトモードとダークモードで別の壁紙にする」と書くと、ライト用とダーク用の 2 枚の壁紙を生成します。
+
+任意のチャットで以下のプロンプトを送ることもできます。最後の行に希望のスタイルを書いて送信してください。あとから「壁紙をもう少し明るく」「テーマカラーを青緑に」のように微調整したいときも、Agent に伝えるだけで構いません。テーマ一覧を開き直すと反映されます。
+
+```text
+このアプリのテーマを作ってください。
+
+要件：
+1. ~/cow/system/themes/<テーマid>/ に theme.json を作成する。id は小文字英字とハイフンで、構造は {"specVersion": 1, "id", "name", "light": {"colors": {...}}, "dark": {"colors": {...}}}。
+2. light と dark の colors に次のキーをすべて指定する：accent、accentHover、accentActive、accentSoft、accentContrast、bubbleUserBg、bubbleUserText、bgBase、bgSurface、bgSurface2、bgElevated、bgInset、bgInset2、textPrimary、textSecondary、textTertiary、textDisabled、borderDefault、borderStrong、borderSubtle。背景は低彩度、文字は読みやすく、テーマカラー上の白い文字も見やすくすること。
+3. 画像を生成できる場合は、画像生成スキルで文字のない画像を 2 枚、同じフォルダに作る：
+   - wallpaper.jpg：16:9 の壁紙、主題は右寄り、暗すぎない明るさ。theme.json のトップレベルに "wallpaper": {"image": "wallpaper.jpg", "overlayOpacity": 0.25, "glass": true} を追加し、ライト・ダークで共用する。モードごとに別の壁紙を求めた場合は wallpaper-light.jpg と wallpaper-dark.jpg の 2 枚を生成し、トップレベルの wallpaper は書かずに、light と dark それぞれに対応する画像を指す wallpaper を追加する
+   - logo.png：正方形、新規チャット画面中央のアイコン（アプリのアイコンではない）。フォルダに置くだけでよく、theme.json に書く必要はない
+4. 参考画像を送った場合は、それを画像生成の入力画像として渡し、キャラクターや画風を参考画像に合わせ、配色も参考画像から取ること。
+5. theme.json が正しい JSON であることを確認し、テーマ名を教えてください。
+
+希望のスタイル：<例：「夜のサイバーパンク都市、ネオンパープルとシアン」>
+```
+
+完了後、左下のテーマ一覧を開くと新しいテーマが表示され、切り替えられます。共有したいときはテーマフォルダを zip にして送れば、相手は「Custom theme」ダイアログにドロップしてインポートできます。

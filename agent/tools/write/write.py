@@ -9,7 +9,12 @@ from typing import Dict, Any
 from agent.tools.base_tool import BaseTool, ToolResult
 from common.atomic_write import write_text_atomic
 from agent.tools.utils.credentials import is_credential_path
-from agent.tools.utils.diff import looks_like_line_numbered_block
+from agent.tools.utils.diff import (
+    detect_line_ending,
+    looks_like_line_numbered_block,
+    normalize_to_lf,
+    restore_line_endings,
+)
 from agent.tools.utils.file_state import note_write, staleness_warning
 from agent.tools.utils.memory_path import feeds_memory_index
 from agent.tools.utils.syntax_check import review as syntax_review
@@ -79,15 +84,30 @@ class Write(BaseTool):
             previous = None
             if os.path.isfile(absolute_path):
                 try:
-                    with open(absolute_path, 'r', encoding='utf-8') as f:
+                    # newline='' leaves the file's own line endings in place
+                    # for detect_line_ending() below.
+                    with open(absolute_path, 'r', encoding='utf-8', newline='') as f:
                         previous = f.read()
                 except (OSError, UnicodeDecodeError):
                     previous = None
-            blocking, syntax_warning = syntax_review(absolute_path, previous, content)
+            # The syntax check gets the LF text a text-mode read would give.
+            blocking, syntax_warning = syntax_review(
+                absolute_path, normalize_to_lf(previous) if previous is not None else None, content
+            )
             if blocking:
                 return ToolResult.fail(f"Error: {blocking}")
 
-            write_text_atomic(absolute_path, content)
+            # LF content keeps the file's own line endings, as edit does, or
+            # gets the platform's when the file has none yet. Content that
+            # already uses CRLF is written as given.
+            if '\r\n' not in content:
+                ending = os.linesep
+                if previous and ('\n' in previous or '\r' in previous):
+                    ending = detect_line_ending(previous)
+                content = restore_line_endings(content, ending)
+            # newline='' writes content as is; on Windows text mode would turn
+            # every '\n' into '\r\n' again, and '\r\n' into '\r\r\n'.
+            write_text_atomic(absolute_path, content, newline='')
             note_write(absolute_path)
             
             # Get bytes written

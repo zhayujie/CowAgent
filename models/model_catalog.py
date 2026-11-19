@@ -32,7 +32,8 @@ Storage (``get_data_root()/system/models.json``)::
     }
 
 A custom (OpenAI-compatible) provider has no presets, so its ``overrides`` are
-simply its whole model list and ``hidden`` stays empty.
+simply its whole model list and ``hidden`` stays empty. Its entries may also
+carry an optional ``alias``, the name shown in model pickers.
 """
 
 from copy import deepcopy
@@ -55,6 +56,11 @@ LEGACY_CATALOG_KEY = "provider_model_catalog"
 # tags (e.g. text + vision for a VL model).
 VALID_CAPABILITIES = ("text", "vision", "video", "image", "embedding", "asr", "tts")
 DEFAULT_CAPABILITIES = ["text"]
+
+# Optional display name for a custom provider's model (e.g. "DeepSeek-Flash"
+# for a gateway's "deepseek/deepseek-flash"). Display only: requests, session
+# prefs and logs always use the real name.
+MAX_ALIAS_LENGTH = 64
 
 
 def _store_path() -> str:
@@ -99,6 +105,10 @@ def normalize_entry(raw) -> dict:
         if value <= 0:
             raise ValueError(f"{key} for {name} must be a positive integer")
         entry[key] = value
+
+    alias = str(raw.get("alias") or "").strip()[:MAX_ALIAS_LENGTH]
+    if alias and alias != name:
+        entry["alias"] = alias
     return entry
 
 
@@ -296,6 +306,11 @@ def save_catalog(provider_id, models, hidden=None) -> list:
     if not isinstance(models, list):
         raise ValueError("models must be a list")
     entries = [normalize_entry(m) for m in models]
+    if not str(provider_id).startswith("custom:"):
+        # Aliases are for custom providers only: a built-in vendor's model
+        # names are already readable.
+        for entry in entries:
+            entry.pop("alias", None)
     names = [e["name"] for e in entries]
     if len(names) != len(set(names)):
         raise ValueError("duplicate model name in catalog")

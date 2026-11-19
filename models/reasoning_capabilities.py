@@ -20,6 +20,9 @@ DASHSCOPE_QWEN38_VALUES = ["low", "medium", "xhigh"]
 DASHSCOPE_HIGH_MAX_VALUES = ["high", "max"]
 DASHSCOPE_MAX_ONLY_VALUES = ["max"]
 KIMI_K3_VALUES = ["low", "high", "max"]
+# Gemini 4 always thinks; depth is set via generationConfig.thinkingConfig.thinkingLevel.
+GEMINI4_VALUES = ["low", "medium", "high"]
+GEMINI4_MODELS = ("gemini-4",)
 CLAUDE_XHIGH_MODELS = (
     "claude-fable-5-1",
     "claude-fable-5",
@@ -28,6 +31,7 @@ CLAUDE_XHIGH_MODELS = (
     "claude-opus-4-8",
     "claude-opus-4-7",
     "claude-sonnet-5",
+    "claude-haiku-5",
 )
 CLAUDE_MAX_ONLY_MODELS = (
     "claude-mythos-preview",
@@ -131,8 +135,14 @@ def get_reasoning_capability(provider_id: str, model_name: str = "") -> dict:
         if model.startswith(DASHSCOPE_MAX_ONLY_MODELS):
             return _capability(DASHSCOPE_MAX_ONLY_VALUES, default="max")
 
+    if base_pid == "minimax" and model == "minimax-m3.1-flash":
+        return _capability(["low", "medium", "high", "xhigh", "max"], default="max", thinking_only=True)
+
     if base_pid == "moonshot" and model.startswith("kimi-k3"):
         return _capability(KIMI_K3_VALUES, default="max", thinking_only=True)
+
+    if base_pid == "gemini" and model.startswith(GEMINI4_MODELS):
+        return _capability(GEMINI4_VALUES, default="medium", param="thinking_level", thinking_only=True)
 
     if base_pid == "linkai":
         # LinkAI is a gateway; only expose passthrough effort for models whose

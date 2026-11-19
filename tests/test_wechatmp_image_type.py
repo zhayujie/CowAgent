@@ -84,7 +84,7 @@ def test_no_repo_module_imports_a_stdlib_module_removed_in_313():
     """The project advertises 3.13 support, so keep those names out of the tree."""
     offenders = {}
     for source in REPO_ROOT.rglob("*.py"):
-        if any(part in {".git", "venv", ".venv", "__pycache__", "node_modules"} for part in source.parts):
+        if any(part in {".git", "venv", ".venv", "__pycache__", "node_modules", "site-packages"} for part in source.parts):
             continue
         tree = ast.parse(source.read_text(encoding="utf-8", errors="ignore"))
         found = set()

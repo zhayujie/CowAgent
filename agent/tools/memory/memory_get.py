@@ -86,9 +86,19 @@ class MemoryGetTool(BaseTool):
             workspace_dir = self.memory_manager.config.get_workspace()
             
             # Auto-prepend memory/ if not present and not absolute path
-            # Exceptions: MEMORY.md in root, knowledge/ files at workspace root
-            if not path.startswith('memory/') and not path.startswith('knowledge/') and not path.startswith('/') and path != 'MEMORY.md':
-                path = f'memory/{path}'
+            # Exceptions: MEMORY.md in root, knowledge/ files at workspace root.
+            # On Windows the model may send 'memory\\x.md' or 'C:\\...';
+            # ntpath.isabs('/x') is False, so a leading '/' is checked too.
+            norm_path = path.replace('\\', '/')
+            if (
+                not norm_path.startswith('memory/')
+                and not norm_path.startswith('knowledge/')
+                and not norm_path.startswith('/')
+                and not os.path.isabs(path)
+                and norm_path != 'MEMORY.md'
+            ):
+                norm_path = f'memory/{norm_path}'
+            path = norm_path
             
             # Roots this path may legitimately resolve under. A "knowledge/"
             # path goes through state_dir, which sends an Agent with no private

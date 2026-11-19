@@ -70,11 +70,11 @@ class _ScriptedExecutor(AgentStreamExecutor):
         return text, tool_calls, "stop"
 
 
-def _call(index=1):
+def _call(index=1, query="status"):
     return {
         "id": "lookup-%s" % index,
         "name": "lookup",
-        "arguments": {"query": "status"},
+        "arguments": {"query": query},
     }
 
 
@@ -126,6 +126,121 @@ def test_failed_tool_call_is_distinguished_from_runtime_error():
     assert result.successful_tool_calls == 0
     assert result.failed_tool_calls == 1
     assert result.error_count == 0
+
+
+def test_tool_calls_record_arguments_and_status():
+    result = _run(
+        EvalCase("recorded_call", "Look up status", ("lookup",)),
+        [("", [_call()]), ("Status is ready", [])],
+        [ToolResult.success("ready")],
+    )
+
+    assert result.tool_calls == [{
+        "tool_name": "lookup",
+        "arguments": {"query": "status"},
+        "status": "success",
+    }]
+
+
+def test_expected_tools_and_arguments_pass():
+    result = _run(
+        EvalCase(
+            "expected_arguments",
+            "Look up status",
+            ("lookup",),
+            expected_arguments={"lookup": {"query": "status"}},
+        ),
+        [("", [_call()]), ("Status is ready", [])],
+        [ToolResult.success("ready")],
+    )
+
+    assert result.passed
+    assert result.expectation_failures == []
+
+
+def test_missing_expected_tool_fails_expectations():
+    result = _run(
+        EvalCase("missing_tool", "Look up status", ("lookup", "send_message")),
+        [("", [_call()]), ("Status is ready", [])],
+        [ToolResult.success("ready")],
+    )
+
+    assert not result.passed
+    assert result.expectation_failures == [
+        "expected tool 'send_message' was not called"
+    ]
+
+
+def test_wrong_arguments_fail_expectations():
+    result = _run(
+        EvalCase(
+            "wrong_arguments",
+            "Look up the weather",
+            ("lookup",),
+            expected_arguments={"lookup": {"query": "status"}},
+        ),
+        [("", [_call(query="weather")]), ("It is sunny", [])],
+        [ToolResult.success("sunny")],
+    )
+
+    assert not result.passed
+    assert len(result.expectation_failures) == 1
+    assert "expected arguments" in result.expectation_failures[0]
+
+
+def test_forbidden_tool_fails_expectations():
+    result = _run(
+        EvalCase(
+            "forbidden_tool",
+            "Answer directly",
+            forbidden_tools=("lookup",),
+        ),
+        [("", [_call()]), ("Status is ready", [])],
+        [ToolResult.success("ready")],
+    )
+
+    assert not result.passed
+    assert result.expectation_failures == ["forbidden tool 'lookup' was called"]
+
+
+def test_expected_status_mismatch_fails_expectations():
+    result = _run(
+        EvalCase("status_mismatch", "Say hello", expected_status="error"),
+        [("Hello", [])],
+    )
+
+    assert not result.passed
+    assert result.expectation_failures == ["expected status 'error', got 'done'"]
+
+
+def test_eval_suite_of_recorded_cases_all_pass():
+    """A small gate-style suite: every scripted case must meet its case."""
+    suite = [
+        (
+            EvalCase("suite_direct", "Say hello"),
+            [("Hello", [])],
+            None,
+        ),
+        (
+            EvalCase(
+                "suite_lookup",
+                "Look up status",
+                ("lookup",),
+                expected_arguments={"lookup": {"query": "status"}},
+            ),
+            [("", [_call()]), ("Status is ready", [])],
+            [ToolResult.success("ready")],
+        ),
+        (
+            EvalCase("suite_lookup_failure", "Look up status", ("lookup",)),
+            [("", [_call()]), ("I could not look it up", [])],
+            [ToolResult.fail("service unavailable")],
+        ),
+    ]
+
+    for case, responses, results in suite:
+        result = _run(case, responses, results)
+        assert result.passed, (case.name, result.expectation_failures)
 
 
 def test_recorder_handles_incomplete_tool_events():

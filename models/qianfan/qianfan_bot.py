@@ -32,7 +32,11 @@ class QianfanBot(Bot, OpenAICompatibleBot):
     @property
     def supports_vision(self) -> bool:
         """Whether the configured main model is multimodal."""
-        return (conf().get("model") or "").lower() in _VISION_CAPABLE_MODELS
+        return self.model_supports_vision(conf().get("model"))
+
+    @staticmethod
+    def model_supports_vision(model_name: str) -> bool:
+        return (model_name or "").lower() in _VISION_CAPABLE_MODELS
 
     def __init__(self):
         super().__init__()

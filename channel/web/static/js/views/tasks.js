@@ -185,7 +185,7 @@ function renderRunsLoadMore() {
 
 function renderRunCard(run) {
     const card = document.createElement('div');
-    card.className = 'bg-white dark:bg-[#1A1A1A] rounded-xl border border-slate-200 dark:border-white/10 p-4 cursor-pointer hover:border-slate-300 dark:hover:border-white/20 transition-colors';
+    card.className = 'bg-panel rounded-xl border border-slate-200 dark:border-white/10 p-4 cursor-pointer hover:border-slate-300 dark:hover:border-white/20 transition-colors';
     const owner = (multiAgentMode() && run.agent_id) ? findAgent(run.agent_id) : null;
     const ownerChip = owner
         ? `<span class="inline-flex items-center gap-1 pl-1 pr-1.5 py-0.5 rounded-full bg-slate-100 dark:bg-white/10 text-[10px] leading-none text-slate-400 dark:text-slate-500">${agentAvatarHTML(owner, 15)}<span class="truncate max-w-[80px]">${escapeHtml(owner.name || owner.id)}</span></span>`
@@ -427,7 +427,7 @@ function loadTasksView() {
         allTasks.forEach(task => {
             const isEnabled = task.enabled !== false;
             const card = document.createElement('div');
-            card.className = 'bg-white dark:bg-[#1A1A1A] rounded-xl border border-slate-200 dark:border-white/10 p-4';
+            card.className = 'bg-panel rounded-xl border border-slate-200 dark:border-white/10 p-4';
             card.dataset.taskId = task.id;
             if (!isEnabled) card.classList.add('opacity-50');
             const schedule = task.schedule || {};

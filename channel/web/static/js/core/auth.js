@@ -87,6 +87,16 @@ function showLoginScreen() {
                 // Now that the auth cookie is set, release the parked pollers.
                 openAuthGate();
                 initApp();
+            } else if (data.reason === 'locked') {
+                const mins = Math.max(1, Math.ceil((data.retry_after || 60) / 60));
+                if (currentLang === 'zh-Hant') {
+                    errEl.textContent = `嘗試次數過多，請 ${mins} 分鐘後再試`;
+                } else if (currentLang === 'zh') {
+                    errEl.textContent = `尝试次数过多，请 ${mins} 分钟后再试`;
+                } else {
+                    errEl.textContent = `Too many attempts. Try again in ${mins} min`;
+                }
+                errEl.classList.remove('hidden');
             } else {
                 if (currentLang === 'zh-Hant') {
                     errEl.textContent = '密碼錯誤';
@@ -163,9 +173,11 @@ function initApp() {
             version: data.version || '',
             install_kind: data.install_kind || 'unknown',
             update_supported: !!data.update_supported,
-            unsupported_reason: data.unsupported_reason || ''
+            unsupported_reason: data.unsupported_reason || '',
+            manage_url: data.manage_url || ''
         };
         _setSidebarVersionLabel(APP_VERSION);
+        _applyManagedInstall();
     }).catch(() => {
         _setSidebarVersionLabel('');
     });

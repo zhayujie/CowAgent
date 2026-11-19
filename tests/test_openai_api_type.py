@@ -103,7 +103,7 @@ def test_responses_mode_non_reasoning_model_sends_no_effort(monkeypatch):
     assert "reasoning" not in params
 
 
-@pytest.mark.parametrize("model", ["gpt-6-astra", "gpt-6.1-sol"])
+@pytest.mark.parametrize("model", ["gpt-6-astra", "gpt-6.1-sol", "gpt-6.1-terra"])
 def test_auto_mode_gpt6_behavior_unchanged(monkeypatch, model):
     bot, client = _make_bot(monkeypatch, model=model)
     _call_tools(bot, model=model, thinking={"type": "disabled"})

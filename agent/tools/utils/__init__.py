@@ -22,6 +22,7 @@ from .diff import (
     looks_like_line_numbered_block,
     reindent_replacement,
     strip_line_number_prefixes,
+    trim_outer_newlines,
     FuzzyMatchResult
 )
 
@@ -50,6 +51,7 @@ __all__ = [
     'generate_diff_string',
     'looks_like_line_numbered_block',
     'reindent_replacement',
+    'trim_outer_newlines',
     'strip_line_number_prefixes',
     'FuzzyMatchResult',
     'validate_url_safe',
