@@ -10,6 +10,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Mapping, Optional, Tuple
 
+from agent.permission.policy import MODES, global_mode, normalize_mode
 from agent.tools.base_tool import BaseTool, ToolResult
 from bridge.context import Context, ContextType
 from bridge.reply import ReplyType
@@ -574,7 +575,14 @@ class AgentDelegateTool(BaseTool):
         delegated_context["task_source"] = TASK_SOURCE
         inherited_mode = self._inherited_permission_mode(source.id)
         if inherited_mode:
-            delegated_context["delegated_permission_mode"] = inherited_mode
+            # A delegation may only narrow the target's mode, never widen it
+            # — the same clamp the remote inbound path applies (a full-access
+            # source session must not hand a read-only deployment's agent
+            # write access its own user sessions would refuse).
+            local_mode = global_mode()
+            delegated_context["delegated_permission_mode"] = min(
+                normalize_mode(inherited_mode, local_mode), local_mode, key=MODES.index
+            )
 
         prompt = delegated_prompt(source.name, source.id, task)
 

@@ -574,6 +574,34 @@ def test_no_live_source_leaves_the_mode_alone():
     assert "delegated_permission_mode" not in context
 
 
+@pytest.mark.parametrize("source_mode, global_mode_value, expected", [
+    ("full-access", "read-only", "read-only"),       # widening is refused
+    ("workspace-write", "read-only", "read-only"),
+    ("read-only", "full-access", "read-only"),       # narrowing travels
+    ("workspace-write", "workspace-write", "workspace-write"),
+    ("full-access", "full-access", "full-access"),   # equal is kept
+])
+def test_the_delegated_mode_is_clamped_to_the_global_one(
+    monkeypatch, source_mode, global_mode_value, expected
+):
+    # The remote inbound path clamps the travelling mode ("a caller can only
+    # narrow this instance's mode, never widen it", see
+    # test_peer_inbound_permission_mode.py); the local path must agree, or a
+    # full-access source session hands a read-only deployment's Agent write
+    # access its own user sessions would refuse.
+    from agent.tools.agent_delegate import agent_delegate as delegate_module
+
+    monkeypatch.setattr(delegate_module, "global_mode", lambda: global_mode_value)
+    bridge = PeekBridge(source_mode=source_mode)
+    tool = _tool(bridge=bridge)
+
+    result = tool.execute({"agent_id": "research", "task": "Check the evidence"})
+
+    assert result.status == "success"
+    _, context, _ = bridge.calls[0]
+    assert context.get("delegated_permission_mode") == expected
+
+
 def test_a_failing_lookup_does_not_break_the_delegation():
     class _Broken(PeekBridge):
         def peek_agent(self, session_id, agent_id=None):
