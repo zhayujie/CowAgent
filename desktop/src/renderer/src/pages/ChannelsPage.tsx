@@ -845,7 +845,6 @@ const ChannelBinding: React.FC<{ channel: ChannelInfo }> = ({ channel }) => {
 }
 
 const ChannelProject: React.FC<{channel: ChannelInfo; onChanged: () => void}> = ({channel, onChanged}) => {
-  const en = getLang() === 'en'
   const [path, setPath] = useState(channel.project_dir || '')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -876,19 +875,19 @@ const ChannelProject: React.FC<{channel: ChannelInfo; onChanged: () => void}> = 
     finally { setBusy(false) }
   }
   return <div className="mt-4 pt-4 border-t border-subtle space-y-2">
-    <label className="text-xs text-content-secondary">{en ? 'Default project directory' : '默认项目目录'}</label>
+    <label className="text-xs text-content-secondary">{t('channels_project_label')}</label>
     <div className="flex gap-2">
-      <input className="flex-1 min-w-0 bg-transparent border rounded px-2 text-sm" value={path} onChange={e => setPath(e.target.value)} placeholder={en ? 'Empty: Agent workspace' : '留空使用 Agent 工作区'} />
-      <Btn disabled={busy} onClick={() => void browse(path)}>{en ? 'Browse' : '选择目录'}</Btn>
+      <input className="flex-1 min-w-0 bg-transparent border rounded px-2 text-sm" value={path} onChange={e => setPath(e.target.value)} placeholder={t('channels_project_placeholder')} />
+      <Btn disabled={busy} onClick={() => void browse(path)}>{t('channels_project_browse')}</Btn>
       <Btn disabled={busy} onClick={() => void save()}>{t('channels_save')}</Btn>
     </div>
-    <p className="text-xs text-content-tertiary">{en ? 'Server-side path. Session selection takes priority. Not a filesystem sandbox.' : '运行 CowAgent 的机器上的目录；会话显式选择优先。不限制文件访问权限。'}</p>
+    <p className="text-xs text-content-tertiary">{t('channels_project_hint')}</p>
     {listing && <div className="border rounded p-2 space-y-2">
       <div className="text-xs break-all">{listing.path}</div>
       <div className="flex gap-2">
-        <Btn onClick={() => void browse(listing.parent || '')}>{en ? 'Up' : '上一级'}</Btn>
-        <Btn onClick={() => setListing(null)}>{en ? 'Cancel' : '取消'}</Btn>
-        <Btn disabled={listing.path === '__DRIVES__'} onClick={() => {setPath(listing.path); setListing(null)}}>{en ? 'Select here' : '选择此目录'}</Btn>
+        <Btn onClick={() => void browse(listing.parent || '')}>{t('channels_project_up')}</Btn>
+        <Btn onClick={() => setListing(null)}>{t('cancel')}</Btn>
+        <Btn disabled={listing.path === '__DRIVES__'} onClick={() => {setPath(listing.path); setListing(null)}}>{t('channels_project_select_here')}</Btn>
       </div>
       <div className="max-h-48 overflow-auto">{listing.dirs.map(dir => <button type="button" key={dir.path} className="block text-sm p-1" onClick={() => void browse(dir.path)}>{dir.name}</button>)}</div>
     </div>}
