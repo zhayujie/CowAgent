@@ -14,6 +14,7 @@ import {tr, trf, type MessageKey} from '../i18n';
 import type {RootStackParamList} from '../navigation/types';
 import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
+import {pad} from '../utils/format';
 
 type Props = StackScreenProps<RootStackParamList, 'Logs'>;
 
@@ -21,7 +22,6 @@ type Level = 'DEBUG' | 'INFO' | 'WARNING' | 'ERROR' | 'CRITICAL' | '';
 type Entry = {id: number; level: Level; time: string; source: string; message: string};
 type Filter = 'all' | 'warning' | 'error';
 
-const pad = (n: number) => String(n).padStart(2, '0');
 const logFileName = (d = new Date()) =>
   `cowagent-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}.log`;
 

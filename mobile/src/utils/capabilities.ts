@@ -150,7 +150,7 @@ export function resolveModels(data: ModelsState | null, pick: CapabilityPick, pr
   return toOptions(data?.providers.find(p => p.id === providerId)?.models);
 }
 
-/** Voices are a flat list per vendor, or keyed by model first (LinkAI). */
+/** Voices are a flat list per vendor, or keyed by model first for some. */
 export function resolveVoices(pick: CapabilityPick, providerId: string, model: string): Option[] {
   const raw = pick.provider_voices?.[providerId];
   if (!raw) {
@@ -185,9 +185,9 @@ export function capabilitySummary(data: ModelsState, key: CapabilityKey): string
 export type SearchEditor = 'vendor' | 'deepseek' | 'url' | 'key';
 
 /**
- * Zhipu, Qianfan and LinkAI search with the model vendor's key, so editing them
- * means editing the vendor. DeepSeek shares its key and base; SearXNG takes an
- * instance URL; the rest have a dedicated key.
+ * Some providers (Zhipu, Qianfan and the like) search with the model vendor's
+ * key, so editing them means editing the vendor. DeepSeek shares its key and
+ * base; SearXNG takes an instance URL; the rest have a dedicated key.
  */
 export function searchEditor(p: SearchProviderMeta): SearchEditor {
   if (p.id === 'deepseek') {

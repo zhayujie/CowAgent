@@ -1,4 +1,4 @@
-import { t, tf } from '../../i18n'
+import { tf } from '../../i18n'
 import { InstanceError } from '../../api/instances'
 
 const KNOWN = new Set([

@@ -469,7 +469,7 @@ export interface CapabilityPick {
   /** Provider ids that can serve this capability, in display order. */
   providers?: string[];
   provider_models?: Record<string, ModelOption[]>;
-  /** Voices per provider; some vendors (LinkAI) key them by model first. */
+  /** Voices per provider; some vendors key them by model first. */
   provider_voices?: Record<string, ModelOption[] | Record<string, ModelOption[]>>;
   reply_mode?: VoiceReplyMode;
   note?: string;

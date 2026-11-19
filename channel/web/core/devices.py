@@ -26,13 +26,13 @@ import time
 from typing import Callable, List, Optional, Tuple
 from urllib.parse import urlsplit
 
+from channel.web.core.identity import clean_name
 from common.log import logger
 from common.utils import constant_time_equals
 from config import conf, get_device_dir
 
 TOKEN_PREFIX = "cowd."
 MAX_DEVICES = 50
-NAME_MAX = 60
 PLATFORMS = ("ios", "android", "harmony", "web", "desktop", "other")
 VIA = ("pairing", "password")
 # Last use is only for showing; writing it on every request would rewrite the
@@ -127,10 +127,6 @@ def _password_tag() -> str:
     return tag()
 
 
-def _clean_name(name) -> str:
-    return " ".join(str(name or "").split())[:NAME_MAX]
-
-
 def _last_active(device: dict) -> int:
     return max(int(device.get("last_seen_at") or 0), int(_active.get(device.get("id"), 0)))
 
@@ -162,7 +158,7 @@ def add(name, platform, app_version="", ip="", origin="", via="pairing") -> Tupl
     now = int(time.time())
     device = {
         "id": "d_" + secrets.token_hex(6),
-        "name": _clean_name(name) or "Device",
+        "name": clean_name(name) or "Device",
         "platform": platform if platform in PLATFORMS else "other",
         "app_version": str(app_version or "")[:30],
         "via": via if via in VIA else "pairing",
@@ -242,7 +238,7 @@ def list_devices() -> List[dict]:
 
 
 def rename(device_id: str, name) -> Optional[dict]:
-    name = _clean_name(name)
+    name = clean_name(name)
     if not name:
         return None
     with _lock:

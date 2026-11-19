@@ -4,9 +4,6 @@ export const pad = (n: number) => String(n).padStart(2, '0');
 
 export const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
 
-/** The last segment of a `/` or `\` separated path. */
-export const basename = (p?: string) => p?.split(/[\\/]/).filter(Boolean).pop() ?? '';
-
 /** Accepts unix seconds, milliseconds or a date string. */
 export function toDate(value: number | string | null | undefined): Date | null {
   if (value === null || value === undefined || value === '') {

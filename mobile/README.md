@@ -110,7 +110,7 @@ else English); after that the choice in Settings is kept on the device and also 
 the same as the desktop client. Copy lives in `src/i18n/messages/<area>.ts`. Call `tr()` / `trf()` only while
 rendering or handling an event, never at module top level: modules load before the saved language is read.
 
-## Known limitations / TODO
+## Known limitations
 
 - The iOS simulator build of the built-in agent targets Apple silicon Macs only.
 - Device tokens live in the iOS Keychain / Android Keystore (`storage/secureStore.ts`); tokens saved by earlier

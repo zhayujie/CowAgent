@@ -23,7 +23,7 @@ const NUMBER_FIELDS: Record<NumberKey, {title: MessageKey; hint: MessageKey; min
   agent_max_steps: {title: 'settings_max_steps', hint: 'settings_max_steps_hint', min: 1},
 };
 
-/** The provider the console keys efforts by: LinkAI routing wins over the vendor. */
+/** The provider the console keys efforts by: `use_linkai` routing wins over the vendor. */
 function effortContext(config: GlobalConfig): {key: string; meta?: ReasoningMeta} {
   const provider = config.use_linkai ? 'linkai' : config.bot_type;
   const entry = config.providers[provider];
