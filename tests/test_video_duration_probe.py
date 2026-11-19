@@ -1,11 +1,9 @@
 # encoding:utf-8
 """Video duration probing, shared by DingTalk and Feishu.
 
-DingTalk's sampleVideo message required a hardcoded duration="30" (with a
-TODO to fetch the real one): every clip played as a 30-second video. The
-Feishu channel already had the correct ffprobe probe; it now lives in
-common.media_duration for both channels, with 0 as the failure answer so
-each caller keeps its own fallback (DingTalk: 30s, Feishu: 0).
+DingTalk's sampleVideo message needs the clip duration in seconds. Both
+channels probe it with ffprobe through common.media_duration, which answers 0
+on failure so each caller keeps its own fallback (DingTalk: 30s, Feishu: 0).
 """
 import os
 import sys

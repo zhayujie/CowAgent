@@ -2024,8 +2024,6 @@ class FeiShuChanel(ChatChannel):
         Returns:
             视频时长（毫秒），如果获取失败返回0
         """
-        # ffprobe probing lives in common.media_duration now (DingTalk needs
-        # the same answer); kept as a method for the existing call sites.
         return get_video_duration_ms(file_path)
 
     def _upload_video_url(self, video_url, access_token):
