@@ -234,7 +234,7 @@ class MemoryManager:
         if top and self._hit_boost_enabled():
             try:
                 self.storage.record_hits(
-                    [(r.path, r.start_line, r.end_line) for r in top]
+                    [MemoryManager._fusion_key(r) for r in top]
                 )
             except Exception as e:
                 logger.warning(f"[MemoryManager] Hit write-back failed: {e}")
@@ -720,6 +720,27 @@ class MemoryManager:
         return v, k
 
     @staticmethod
+    def _fusion_key(result: "SearchResult") -> tuple:
+        """Per-chunk identity for fusion and hit bookkeeping.
+
+        Hard-split pieces of one long line share (path, start_line,
+        end_line); keying on the triple collapsed them into one fusion
+        entry, let the worst piece's rank overwrite the best one's, and
+        credited sibling pieces for hits they never matched. The chunk id
+        separates them; results without one (hand-built doubles) keep the
+        legacy triple key.
+        """
+        # Always a 4-tuple so storage-side bookkeeping can unpack uniformly;
+        # a missing id leaves the first slot None and the positional triple
+        # still distinguishes the result.
+        return (
+            getattr(result, "chunk_id", None),
+            result.path,
+            result.start_line,
+            result.end_line,
+        )
+
+    @staticmethod
     def _rank_normalize(results: List[SearchResult]) -> Dict[tuple, float]:
         """Rank-normalize one channel's already-sorted results onto (0, 1].
 
@@ -735,7 +756,7 @@ class MemoryManager:
         if n == 0:
             return {}
         return {
-            (r.path, r.start_line, r.end_line): (n - i) / n
+            MemoryManager._fusion_key(r): (n - i) / n
             for i, r in enumerate(results)
         }
 
@@ -762,8 +783,7 @@ class MemoryManager:
         # either channel carries the same snippet/source/path metadata.
         result_map: Dict[tuple, SearchResult] = {}
         for result in vector_results + keyword_results:
-            key = (result.path, result.start_line, result.end_line)
-            result_map.setdefault(key, result)
+            result_map.setdefault(MemoryManager._fusion_key(result), result)
 
         merged_results = []
         for key in set(vector_norm) | set(keyword_norm):
@@ -792,7 +812,8 @@ class MemoryManager:
                 score=combined_score,
                 snippet=result.snippet,
                 source=result.source,
-                user_id=result.user_id
+                user_id=result.user_id,
+                chunk_id=getattr(result, "chunk_id", None),
             ))
 
         merged_results.sort(key=lambda r: r.score, reverse=True)
@@ -835,7 +856,8 @@ class MemoryManager:
                 score=decayed,
                 snippet=result.snippet,
                 source=result.source,
-                user_id=result.user_id
+                user_id=result.user_id,
+                chunk_id=getattr(result, "chunk_id", None),
             ))
 
         reranked.sort(key=lambda r: r.score, reverse=True)
@@ -888,7 +910,7 @@ class MemoryManager:
         from common.log import logger
 
         try:
-            keys = [(r.path, r.start_line, r.end_line) for r in results]
+            keys = [MemoryManager._fusion_key(r) for r in results]
             stats = storage.get_hit_stats(keys)
         except Exception as e:
             logger.warning(f"[MemoryManager] Hit stats unavailable, skipping boost: {e}")
@@ -898,7 +920,7 @@ class MemoryManager:
         boosted = []
         for result in results:
             hits, last_hit_at = stats.get(
-                (result.path, result.start_line, result.end_line), (0, None)
+                MemoryManager._fusion_key(result), (0, None)
             )
             factor = 1.0 + weight * math.log2(1.0 + max(0, int(hits or 0)))
             if last_hit_at:
@@ -909,6 +931,7 @@ class MemoryManager:
                 start_line=result.start_line,
                 end_line=result.end_line,
                 score=result.score * min(factor, cap),
+                chunk_id=getattr(result, "chunk_id", None),
                 snippet=result.snippet,
                 source=result.source,
                 user_id=result.user_id
