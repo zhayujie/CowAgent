@@ -88,10 +88,8 @@ _MESSAGE_FORMAT_MARKERS = (
 
 
 # Transient failures (timeouts, overload, 429 / 5xx) worth retrying unchanged.
-# The numeric markers are matched word-bounded: a bare '500' substring also
-# hit token/byte counts such as 15000 or 25000, misclassifying deterministic
-# errors as retryable and walking the whole retry budget (and the fallback
-# chain) on a request that could never succeed. Same lesson as _RE_HTTP_400.
+# Status codes are matched word-bounded so token or byte counts such as 15000
+# don't read as a 500.
 _RETRYABLE_TEXT_MARKERS = (
     'timeout', 'timed out', 'connection', 'network',
     'rate limit', 'overloaded', 'unavailable', 'busy', 'retry',
@@ -108,10 +106,6 @@ def _is_retryable_error(error_str_lower: str) -> bool:
         or any(rx.search(error_str_lower) for rx in _RETRYABLE_STATUS_RES)
     )
 
-
-# Kept as a name for the image-path check below: textual markers only, a bare
-# count must not keep an image round either.
-_RETRYABLE_MARKERS = _RETRYABLE_TEXT_MARKERS
 
 # Image references the channels append to the user query, e.g. "[图片: tmp/a.png]".
 _IMAGE_MARKER_RE = re.compile(r"\[(?:图片|Image):\s*([^\]]+)\]")
@@ -2010,7 +2004,7 @@ class AgentStreamExecutor:
             # The model may not accept images after all. Retry without them before
             # the classification below, which could read the rejection as a broken
             # history and reset the context; the vision tool still covers the images.
-            if sent_images and not any(m in error_str_lower for m in _RETRYABLE_MARKERS):
+            if sent_images and not _is_retryable_error(error_str_lower):
                 self._run_images_disabled = True
                 logger.warning(f"[Agent] Request with attached images failed, retrying without them: {e}")
                 return self._call_llm_stream(

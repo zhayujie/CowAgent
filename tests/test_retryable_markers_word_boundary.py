@@ -1,17 +1,15 @@
 """Numbers containing a status code must not mark an error retryable.
 
-_RETRYABLE_MARKERS matched bare '429'/'500'/… substrings, so a deterministic
-error whose text carries a count — "maximum value is 15000" (contains 500),
-"limited to 1429 tokens" (contains 429) — was classified retryable: the loop
-slept 2+4+6s re-sending a request that could never succeed, then walked the
-fallback chain blaming every backup. The rate-limit check got word boundaries
-in #3963; this pins the same for retryability.
+A deterministic error whose text carries a count, such as "maximum value is
+15000" (contains 500) or "limited to 1429 tokens" (contains 429), must fail
+fast instead of sleeping through the retry budget and walking the fallback
+chain. Real status codes keep retrying, on the text path and the image path.
 
 Harness mirrors tests/test_chat_fallback_ratelimit.py.
 """
 import pytest
 
-from agent.protocol.agent_stream import AgentStreamExecutor
+from agent.protocol.agent_stream import AgentStreamExecutor, _is_retryable_error
 
 ATTEMPTS = 3
 TOTAL_CALLS = ATTEMPTS + 1  # the budget plus the final failing call
@@ -64,6 +62,18 @@ DETERMINISTIC_ERRORS = [
     "payload limited to 1429 tokens per request",
     "messages must contain at most 25000 characters",
 ]
+
+
+@pytest.mark.parametrize("error, retryable", [
+    ("error code: 502 - bad gateway", True),
+    ("http 503 service temporarily", True),
+    ("status 429: too many requests", True),
+    ("maximum value is 15000", False),
+    ("payload limited to 1429 tokens per request", False),
+])
+def test_status_codes_are_matched_as_whole_words(error, retryable):
+    # The image path keeps images on a transient failure with this same check.
+    assert _is_retryable_error(error) is retryable
 
 
 class TestCountsAreNotRetryable:
