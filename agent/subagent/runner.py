@@ -181,7 +181,12 @@ def _open_run(parent, run_id: str, template) -> Optional[Any]:
 
 # What the runs table calls a finished run, keyed by the status this module
 # reports to its caller.
-_RUN_STATUS = {"completed": "done", "cancelled": "cancelled", "failed": "failed"}
+_RUN_STATUS = {
+    "completed": "done",
+    "cancelled": "cancelled",
+    "failed": "failed",
+    "timeout": "timeout",
+}
 
 
 def _close_run(store, run_id: str, result: Dict[str, Any]) -> None:
@@ -200,6 +205,30 @@ def _close_run(store, run_id: str, result: Dict[str, Any]) -> None:
 
 _POLL_SECONDS = 0.1
 _PARENT_CANCELLED = "The parent run was cancelled."
+
+
+class _RunRecord:
+    """Share one terminal result between the supervisor and a late worker."""
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._store = None
+        self._run_id = ""
+        self._result = None
+
+    def register(self, store, run_id):
+        with self._lock:
+            self._store, self._run_id = store, run_id
+            # Opening the row can finish after the supervisor's deadline.
+            if self._result is not None:
+                _close_run(store, run_id, self._result)
+
+    def finish(self, result):
+        with self._lock:
+            if self._result is None:
+                self._result = result
+                _close_run(self._store, self._run_id, result)
+            return self._result
 
 # Time left on the budget when a still-running sub agent is told to wrap up,
 # so it can write a report from what it has instead of being cut off with
@@ -221,13 +250,20 @@ def _unfinished(index: int, template, status: str, error: str, on_state=None) ->
 
 
 def _run_one(parent, template, task: SubagentTask, index: int, cancel_event,
-             on_state=None, on_event=None, steer_inbox=None) -> Dict[str, Any]:
+             on_state=None, on_event=None, steer_inbox=None, run_record=None) -> Dict[str, Any]:
     if cancel_event.is_set():
         return _unfinished(index, template, "cancelled", _PARENT_CANCELLED, on_state)
     started = time.time()
     run_id = uuid.uuid4().hex[:12]
     # Before identity_scope below, so the parent's run id is still ambient.
     run_store = _open_run(parent, run_id, template)
+    run_record = run_record or _RunRecord()
+    run_record.register(run_store, run_id)
+    if cancel_event.is_set():
+        result = run_record.finish({"task_index": index, "subagent_type": template.name,
+                                    "status": "cancelled", "error": _PARENT_CANCELLED})
+        _notify(on_state, index, result)
+        return result
     result: Dict[str, Any] = {"task_index": index, "subagent_type": template.name}
     _notify(on_state, index, {"status": "running", "subagent_type": template.name})
 
@@ -260,7 +296,7 @@ def _run_one(parent, template, task: SubagentTask, index: int, cancel_event,
         result["error"] = str(e)
 
     result["duration_seconds"] = round(time.time() - started, 2)
-    _close_run(run_store, run_id, result)
+    run_record.finish(result)
     _notify(on_state, index, result)
     return result
 
@@ -296,6 +332,7 @@ def run_tasks(
     from agent.protocol.steer import SteerInbox
 
     cancel_events = [threading.Event() for _ in tasks]
+    run_records = [_RunRecord() for _ in tasks]
     steer_inboxes = [SteerInbox() for _ in tasks]
     resolved = []
     for task in tasks:
@@ -320,7 +357,7 @@ def run_tasks(
             futures.append(
                 pool.submit(
                     ctx.run, _run_one, parent, template, task, index,
-                    cancel_events[index], on_state, on_event, steer_inboxes[index],
+                    cancel_events[index], on_state, on_event, steer_inboxes[index], run_records[index],
                 )
             )
 
@@ -352,13 +389,15 @@ def run_tasks(
                     # down at its next checkpoint, which may be a whole LLM
                     # response away, and will not report this itself.
                     future.cancel()
+                    result = run_records[index].finish({
+                        "task_index": index,
+                        "subagent_type": resolved[index].name,
+                        "status": "cancelled" if stopped else "timeout",
+                        "error": _PARENT_CANCELLED if stopped else timeout_error,
+                    })
                     cancel_events[index].set()
-                    results[index] = _unfinished(
-                        index, resolved[index],
-                        "cancelled" if stopped else "timeout",
-                        _PARENT_CANCELLED if stopped else timeout_error,
-                        on_state,
-                    )
+                    results[index] = result
+                    _notify(on_state, index, result)
                 break
             # Bounded so a user Stop reaches the children while they still run.
             wait(list(pending.values()), timeout=min(remaining, _POLL_SECONDS),
