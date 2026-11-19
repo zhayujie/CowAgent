@@ -88,11 +88,30 @@ _MESSAGE_FORMAT_MARKERS = (
 
 
 # Transient failures (timeouts, overload, 429 / 5xx) worth retrying unchanged.
-_RETRYABLE_MARKERS = (
+# The numeric markers are matched word-bounded: a bare '500' substring also
+# hit token/byte counts such as 15000 or 25000, misclassifying deterministic
+# errors as retryable and walking the whole retry budget (and the fallback
+# chain) on a request that could never succeed. Same lesson as _RE_HTTP_400.
+_RETRYABLE_TEXT_MARKERS = (
     'timeout', 'timed out', 'connection', 'network',
     'rate limit', 'overloaded', 'unavailable', 'busy', 'retry',
-    '429', '500', '502', '503', '504', '512',
 )
+_RETRYABLE_STATUS_RES = tuple(
+    re.compile(rf"\b{code}\b") for code in ('429', '500', '502', '503', '504', '512')
+)
+
+
+def _is_retryable_error(error_str_lower: str) -> bool:
+    """True if the error text marks a transient failure worth retrying."""
+    return (
+        any(keyword in error_str_lower for keyword in _RETRYABLE_TEXT_MARKERS)
+        or any(rx.search(error_str_lower) for rx in _RETRYABLE_STATUS_RES)
+    )
+
+
+# Kept as a name for the image-path check below: textual markers only, a bare
+# count must not keep an image round either.
+_RETRYABLE_MARKERS = _RETRYABLE_TEXT_MARKERS
 
 # Image references the channels append to the user query, e.g. "[图片: tmp/a.png]".
 _IMAGE_MARKER_RE = re.compile(r"\[(?:图片|Image):\s*([^\]]+)\]")
@@ -2068,7 +2087,7 @@ class AgentStreamExecutor:
             is_rate_limit = bool(_RE_HTTP_429.search(error_str_lower)) or 'rate limit' in error_str_lower
             
             # Check if error is retryable (timeout, connection, server busy, etc.)
-            is_retryable = any(keyword in error_str_lower for keyword in _RETRYABLE_MARKERS)
+            is_retryable = _is_retryable_error(error_str_lower)
             
             # A fallback link gets a single attempt. Giving every link the
             # primary's full retry budget would multiply the wait by the chain
