@@ -306,7 +306,7 @@ class ClaudeAPIBot(Bot, OpenAIImage):
             )
 
             if response.status_code != 200:
-                raise Exception(f"API request failed: {response.status_code} - {response.text}")
+                raise ConnectionError(f"API request failed: {response.status_code} - {response.text}")
 
             claude_response = response.json()
             # Handle response content and tool calls
@@ -786,7 +786,7 @@ class ClaudeAPIBot(Bot, OpenAIImage):
         )
 
         if response.status_code != 200:
-            raise Exception(f"API request failed: {response.status_code} - {response.text}")
+            raise ConnectionError(f"API request failed: {response.status_code} - {response.text}")
 
         claude_response = response.json()
 
