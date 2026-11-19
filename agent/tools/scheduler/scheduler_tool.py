@@ -7,7 +7,6 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 from croniter import croniter
-from agent.tools.scheduler.integration import effective_task_agent_id
 from agent.tools.scheduler.time_utils import (
     display_local,
     format_scheduled_time,
@@ -332,16 +331,19 @@ class SchedulerTool(BaseTool):
     def _caller_agent_id(self) -> str:
         """The Agent this turn runs as, or "" when it cannot be determined.
 
-        The initializer stamps ``agent_id`` onto the tool config, and a
-        context attached by ``attach_scheduler_to_tool`` carries it too. A
-        bare tool (CLI, unit tests) knows no identity and stays unscoped
-        rather than hiding every task from every caller.
+        Resolved in the same order as a new task's owner, so an Agent can
+        always list and delete what it created. A bare tool (CLI, unit tests)
+        knows no identity and stays unscoped.
         """
-        for source in (self.config or {}, self.current_context or {}):
-            agent_id = (source.get("agent_id") or "").strip()
-            if agent_id:
-                return agent_id
-        return ""
+        agent_id = ((self.current_context or {}).get("agent_id") or "").strip()
+        if not agent_id:
+            try:
+                from common.runtime_identity import current_identity
+
+                agent_id = (current_identity().agent_id or "").strip()
+            except Exception:
+                agent_id = ""
+        return agent_id or ((self.config or {}).get("agent_id") or "").strip()
 
     def _owned_task(self, task_id: str):
         """Fetch a task the calling Agent owns, or the error to report.
@@ -350,6 +352,8 @@ class SchedulerTool(BaseTool):
         caller learns nothing about a roster it is not part of, and cannot
         read, disable or delete what it does not own.
         """
+        from agent.tools.scheduler.integration import effective_task_agent_id
+
         task = self.task_store.get_task(task_id)
         if not task:
             return None, _SchedulerError(f"错误: 任务 '{task_id}' 不存在")

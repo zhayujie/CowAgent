@@ -89,3 +89,26 @@ def test_without_an_agent_id_the_tool_keeps_its_unscoped_behaviour(tmp_path):
     assert result.status == "success", result.result
     assert "Primary reminder" in result.result
     assert "Research reminder" in result.result
+
+
+def test_the_context_agent_wins_over_the_tool_config(tmp_path):
+    """Creation stamps the context's Agent first, so scoping must agree."""
+    tool = _tool(tmp_path, "primary")
+    tool.current_context = {"agent_id": "research"}
+
+    result = tool.execute({"action": "list"})
+
+    assert "Research reminder" in result.result
+    assert "Primary reminder" not in result.result
+
+
+def test_the_runtime_identity_is_used_when_the_context_has_none(tmp_path):
+    from common.runtime_identity import identity_scope
+
+    tool = _tool(tmp_path, "primary")
+    tool.current_context = {}
+    with identity_scope(agent_id="research"):
+        result = tool.execute({"action": "list"})
+
+    assert "Research reminder" in result.result
+    assert "Primary reminder" not in result.result
