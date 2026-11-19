@@ -80,6 +80,7 @@ def test_an_exact_phrase_match_still_outranks_a_partial_one(tmp_path):
 
 def test_short_cjk_runs_keep_exact_matching(storage):
     # A 3-character query is its own trigram: unchanged semantics.
-    results = storage.search_keyword("扫码登录")
+    assert MemoryStorage._build_trigram_query("机器人") == '"机器人"'
+    results = storage.search_keyword("机器人")
 
     assert [r.path for r in results] == ["memory/shared/wechat.md"]
