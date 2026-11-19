@@ -772,7 +772,7 @@ def _handle_linkai_sync_response(self, base_url, headers, body):
         else:
             error_msg, _kind = _linkai_error_body(res)
             error_msg = _explain_linkai_error(res.status_code, error_msg)
-            raise Exception(f"LinkAI API error: {res.status_code} - {error_msg}")
+            raise ConnectionError(f"LinkAI API error: {res.status_code} - {error_msg}")
             
     except Exception as e:
         logger.error(f"[LinkAI] sync response error: {e}")
