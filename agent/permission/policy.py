@@ -195,9 +195,16 @@ _XXD_VALUE_FLAGS = frozenset({"-c", "-cols", "-g", "-groupsize", "-l", "-len",
 _SED_WRITE_COMMAND_RE = re.compile(r"(?:^|[;{}])\s*w\s*(\S+)")
 # GNU sed's `s` command has a `w` flag with the same effect. The `w` sits after
 # the third delimiter of the substitution (`sed 's/a/b/w out.txt' in.txt`),
-# where the `w`-command pattern above cannot see it. The delimiter is
-# backreferenced so `s#a#b#w f` is caught too.
-_SED_S_WRITE_RE = re.compile(r"\bs([^a-zA-Z0-9\s]).+?\1.*?\1[a-zA-Z0-9]*w\s*(\S+)")
+# where the `w`-command pattern above cannot see it. Each s-command field may
+# contain escaped characters (including the delimiter, as in `s/http:\/\//x/`),
+# so the fields are matched as `(?:\\.|(?!\1)[^\\])*` rather than with lazy
+# dot-all — which crossed `;` and matched unrelated script parts like
+# `s/a/b/;s/x/w/`. The lookbehind admits address prefixes (`1,3s/...`) and
+# catches the empty-pattern form `s//b/w f` as well.
+_SED_S_WRITE_RE = re.compile(
+    r"(?<![A-Za-z])s([^\w\s\\])(?:\\.|(?!\1)[^\\])*\1(?:\\.|(?!\1)[^\\])*\1"
+    r"[gpiImMe0-9]*w\s*(\S+)"
+)
 
 # awk can hand a string to the shell, which makes any statement a write.
 # `printf` is included alongside `print`: it has the same `> "file"` redirect.
@@ -888,12 +895,13 @@ def _workspace_write_paths(name: str, args: Sequence[str]) -> List[str]:
     if name == "sed":
         # A `w` command (or GNU `s///w` flag) names its destination inside the
         # script text. Both patterns capture the destination last, so
-        # ``lastindex`` picks it regardless of which one matched.
+        # ``lastindex`` picks it regardless of which one matched. The result is
+        # a list: callers iterate it.
         found = [f.group(f.lastindex)
                  for f in (_SED_WRITE_COMMAND_RE.search(a) or _SED_S_WRITE_RE.search(a)
                            for a in args
                            if not a.startswith("-")) if f]
-        return found[0] if found else _positional_paths(args)
+        return [found[0]] if found else _positional_paths(args)
 
     if name == "xxd":
         return _xxd_output(args)
