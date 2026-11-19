@@ -492,8 +492,15 @@ class KnowledgeService:
             self._reindex(old_paths, force=True)
         return {"results": results, "imported": imported, "skipped": skipped, "failed": failed}
 
+    @staticmethod
+    def _check_category_name(rel_path: str) -> None:
+        # The index rebuild lists every *.md path as a document, directories included.
+        if any(part.lower().endswith(".md") for part in rel_path.replace("\\", "/").split("/")):
+            raise ValueError(f"category name must not end with .md: {rel_path}")
+
     def create_category(self, path: str) -> dict:
         rel_path, full_path = self._resolve_path(path, kind="category")
+        self._check_category_name(rel_path)
         if full_path.exists():
             return {"path": rel_path, "created": False, "reason": "already_exists"}
         full_path.mkdir(parents=True)
@@ -502,6 +509,7 @@ class KnowledgeService:
     def rename_category(self, path: str, new_path: str) -> dict:
         old_rel, old_full = self._resolve_path(path, kind="category", allow_missing=False)
         new_rel, new_full = self._resolve_path(new_path, kind="category")
+        self._check_category_name(new_rel)
         if not old_full.is_dir():
             raise ValueError(f"not a category: {old_rel}")
         if new_full.exists():
