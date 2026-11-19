@@ -915,6 +915,22 @@ class AgentStreamExecutor:
         # Stop at 5 consecutive calls with same args (whether success or failure)
         if same_args_calls >= 5:
             return True, f"工具 '{tool_name}' 使用相同参数已被调用 {same_args_calls} 次，停止执行以防止无限循环。如果需要查看配置，结果已在之前的调用中返回。", False
+
+        # An alternating loop (A, B, A, B, ...) never trips the consecutive
+        # counters above — every backwards scan breaks at the other tool's
+        # entry — yet it is the classic "check the file, re-run the test" spin
+        # this guard exists to stop. Count the same tool+args pair over a
+        # sliding window (the soft hint below already reads that window).
+        window = list(self.tool_failure_history)[-10:]
+        window_calls = sum(
+            1 for name, ahash, _success in window
+            if name == tool_name and ahash == args_hash
+        )
+        if window_calls >= 5:
+            return True, (
+                f"工具 '{tool_name}' 使用相同参数在最近 {len(window)} 次调用中已出现 {window_calls} 次"
+                "（与其他调用交替），停止执行以防止无限循环。如果需要查看结果，它们已在之前的调用中返回。"
+            ), False
         
         # Count consecutive failures for same tool + args
         same_args_failures = 0
