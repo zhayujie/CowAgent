@@ -19,17 +19,31 @@ from common import const
 
 _RECOMMENDED_MODELS = [
     const.DEEPSEEK_FLASH, const.DEEPSEEK_V4_FLASH, const.DEEPSEEK_V4_PRO,
-    const.MINIMAX_M3, const.MINIMAX_M2_7_HIGHSPEED, const.MINIMAX_M2_7,
-    # claude-opus-5-5 is the Claude default; claude-opus-5 / claude-sonnet-5 / claude-fable-5 follow right after it.
-    const.CLAUDE_OPUS_5_5, const.CLAUDE_OPUS_5, const.CLAUDE_SONNET_5, const.CLAUDE_FABLE_5_1, const.CLAUDE_FABLE_5, const.CLAUDE_4_8_OPUS, const.CLAUDE_4_7_OPUS, const.CLAUDE_4_6_SONNET, const.CLAUDE_4_6_OPUS,
-    const.GPT_61_SOL, const.GPT_6_LUNA, const.GPT_6_SOL, const.GPT_6_ASTRA, const.GPT_56_LUNA, const.GPT_56_TERRA, const.GPT_56_SOL, const.GPT_55, const.GPT_54, const.GPT_54_MINI, const.GPT_54_NANO, const.GPT_5, const.GPT_41, const.GPT_4o,
-    const.GEMINI_38_FLASH, const.GEMINI_37_FLASH, const.GEMINI_36_FLASH, const.GEMINI_35_FLASH, const.GEMINI_31_FLASH_LITE_PRE, const.GEMINI_31_PRO_PRE, const.GEMINI_3_FLASH_PRE,
+    const.MINIMAX_M3_1_FLASH, const.MINIMAX_M3, const.MINIMAX_M2_7_HIGHSPEED, const.MINIMAX_M2_7,
+    # claude-opus-5-5 is the Claude default; claude-sonnet-5-5 / claude-haiku-5-5 follow right after it.
+    const.CLAUDE_OPUS_5_5, const.CLAUDE_SONNET_5_5, const.CLAUDE_HAIKU_5_5, const.CLAUDE_OPUS_5, const.CLAUDE_SONNET_5, const.CLAUDE_FABLE_5_1, const.CLAUDE_FABLE_5, const.CLAUDE_4_8_OPUS, const.CLAUDE_4_7_OPUS, const.CLAUDE_4_6_SONNET, const.CLAUDE_4_6_OPUS,
+    const.GPT_61_TERRA, const.GPT_61_SOL, const.GPT_6_LUNA, const.GPT_6_SOL, const.GPT_6_ASTRA, const.GPT_56_LUNA, const.GPT_56_TERRA, const.GPT_56_SOL, const.GPT_55, const.GPT_54, const.GPT_54_MINI, const.GPT_54_NANO, const.GPT_5, const.GPT_41, const.GPT_4o,
+    const.GEMINI_4_ARGON, const.GEMINI_38_FLASH, const.GEMINI_37_FLASH, const.GEMINI_36_FLASH, const.GEMINI_35_FLASH, const.GEMINI_31_FLASH_LITE_PRE, const.GEMINI_31_PRO_PRE, const.GEMINI_3_FLASH_PRE,
     const.GLM_5_3_FLASH, const.GLM_5_3, const.GLM_5_2, const.GLM_5_1, const.GLM_5_TURBO, const.GLM_5, const.GLM_4_7,
     const.QWEN38_FLASH, const.QWEN38_MAX, const.QWEN37_PLUS, const.QWEN37_MAX, const.QWEN36_PLUS,
     const.DOUBAO_SEED_2_1_PRO, const.DOUBAO_SEED_2_1_TURBO, const.DOUBAO_SEED_2_CODE,
-    const.KIMI_K3, const.KIMI_K2_7_CODE, const.KIMI_K2_7_CODE_HIGHSPEED, const.KIMI_K2_6, const.KIMI_K2_5, const.KIMI_K2,
+    const.KIMI_K3_1_PRO, const.KIMI_K3_1_PRO_HIGHSPEED, const.KIMI_K3, const.KIMI_K2_7_CODE, const.KIMI_K2_7_CODE_HIGHSPEED, const.KIMI_K2_6, const.KIMI_K2_5, const.KIMI_K2,
     const.ERNIE_5_1, const.ERNIE_5, const.ERNIE_X1_1, const.ERNIE_45_TURBO_128K, const.ERNIE_45_TURBO_32K,
-    const.MIMO_V2_5_PRO, const.MIMO_V2_5,
+    const.MIMO_V2_6_PRO, const.MIMO_V2_6_FLASH,
+]
+
+# Chat models served by the CowAgent model API, named as that API names them
+# (some differ from the vendors' own ids, e.g. deepseek-v4.1-flash).
+_COWAGENT_MODELS = [
+    "deepseek-v4.1-flash", "deepseek-v4-pro", "deepseek-v4-flash",
+    "MiniMax-M3.1-Flash", "MiniMax-M3",
+    "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "claude-fable-5-1",
+    "gpt-6.1-terra", "gpt-6.1-sol", "gpt-6-luna", "gpt-6-astra",
+    "gemini-4-argon", "gemini-3.8-flash",
+    "glm-5.3-flash", "glm-5.3",
+    "qwen3.8-flash", "qwen3.8-max", "qwen3.6-plus",
+    "doubao-seed-2-1-turbo",
+    "kimi-k3.1-pro", "kimi-k3",
 ]
 
 # Generic placeholder hints surfaced in the web console. We deliberately
@@ -58,7 +72,7 @@ PROVIDER_MODELS = OrderedDict([
         "api_base_key": "claude_api_base",
         "api_base_default": "https://api.anthropic.com/v1",
         "api_base_placeholder": _PLACEHOLDER_V1,
-        "models": [const.CLAUDE_OPUS_5_5, const.CLAUDE_OPUS_5, const.CLAUDE_SONNET_5, const.CLAUDE_FABLE_5_1, const.CLAUDE_FABLE_5, const.CLAUDE_4_8_OPUS, const.CLAUDE_4_7_OPUS, const.CLAUDE_4_6_SONNET, const.CLAUDE_4_6_OPUS],
+        "models": [const.CLAUDE_OPUS_5_5, const.CLAUDE_SONNET_5_5, const.CLAUDE_HAIKU_5_5, const.CLAUDE_OPUS_5, const.CLAUDE_SONNET_5, const.CLAUDE_FABLE_5_1, const.CLAUDE_FABLE_5, const.CLAUDE_4_8_OPUS, const.CLAUDE_4_7_OPUS, const.CLAUDE_4_6_SONNET, const.CLAUDE_4_6_OPUS],
     }),
     ("openai", {
         "label": "OpenAI",
@@ -66,7 +80,7 @@ PROVIDER_MODELS = OrderedDict([
         "api_base_key": "open_ai_api_base",
         "api_base_default": "https://api.openai.com/v1",
         "api_base_placeholder": _PLACEHOLDER_V1,
-        "models": [const.GPT_61_SOL, const.GPT_6_LUNA, const.GPT_6_SOL, const.GPT_6_ASTRA, const.GPT_56_LUNA, const.GPT_56_TERRA, const.GPT_56_SOL, const.GPT_55, const.GPT_54, const.GPT_54_MINI, const.GPT_54_NANO, const.GPT_5, const.GPT_41, const.GPT_4o],
+        "models": [const.GPT_61_TERRA, const.GPT_61_SOL, const.GPT_6_LUNA, const.GPT_6_SOL, const.GPT_6_ASTRA, const.GPT_56_LUNA, const.GPT_56_TERRA, const.GPT_56_SOL, const.GPT_55, const.GPT_54, const.GPT_54_MINI, const.GPT_54_NANO, const.GPT_5, const.GPT_41, const.GPT_4o],
     }),
     ("gemini", {
         "label": "Gemini",
@@ -74,7 +88,7 @@ PROVIDER_MODELS = OrderedDict([
         "api_base_key": "gemini_api_base",
         "api_base_default": "https://generativelanguage.googleapis.com",
         "api_base_placeholder": _PLACEHOLDER_GEMINI,
-        "models": [const.GEMINI_38_FLASH, const.GEMINI_37_FLASH, const.GEMINI_36_FLASH, const.GEMINI_35_FLASH, const.GEMINI_31_FLASH_LITE_PRE, const.GEMINI_31_PRO_PRE, const.GEMINI_3_FLASH_PRE],
+        "models": [const.GEMINI_4_ARGON, const.GEMINI_38_FLASH, const.GEMINI_37_FLASH, const.GEMINI_36_FLASH, const.GEMINI_35_FLASH, const.GEMINI_31_FLASH_LITE_PRE, const.GEMINI_31_PRO_PRE, const.GEMINI_3_FLASH_PRE],
     }),
     ("minimax", {
         "label": "MiniMax",
@@ -82,7 +96,7 @@ PROVIDER_MODELS = OrderedDict([
         "api_base_key": None,
         "api_base_default": "https://api.minimaxi.com/v1",
         "api_base_placeholder": "",
-        "models": [const.MINIMAX_M3, const.MINIMAX_M2_7, const.MINIMAX_M2_7_HIGHSPEED],
+        "models": [const.MINIMAX_M3_1_FLASH, const.MINIMAX_M3, const.MINIMAX_M2_7, const.MINIMAX_M2_7_HIGHSPEED],
     }),
     ("zhipu", {
         "label": {"zh": "智谱AI", "en": "GLM"},
@@ -106,7 +120,7 @@ PROVIDER_MODELS = OrderedDict([
         "api_base_key": "moonshot_base_url",
         "api_base_default": "https://api.moonshot.cn/v1",
         "api_base_placeholder": _PLACEHOLDER_V1,
-        "models": [const.KIMI_K3, const.KIMI_K2_7_CODE, const.KIMI_K2_7_CODE_HIGHSPEED, const.KIMI_K2_6, const.KIMI_K2_5, const.KIMI_K2],
+        "models": [const.KIMI_K3_1_PRO, const.KIMI_K3_1_PRO_HIGHSPEED, const.KIMI_K3, const.KIMI_K2_7_CODE, const.KIMI_K2_7_CODE_HIGHSPEED, const.KIMI_K2_6, const.KIMI_K2_5, const.KIMI_K2],
     }),
     ("doubao", {
         "label": {"zh": "豆包", "en": "Doubao"},
@@ -130,7 +144,30 @@ PROVIDER_MODELS = OrderedDict([
         "api_base_key": "mimo_api_base",
         "api_base_default": "https://api.xiaomimimo.com/v1",
         "api_base_placeholder": _PLACEHOLDER_V1,
-        "models": [const.MIMO_V2_5_PRO, const.MIMO_V2_5],
+        "models": [const.MIMO_V2_6_PRO, const.MIMO_V2_6_FLASH],
+    }),
+    ("cowagent", {
+        "label": "CowAgent",
+        "api_key_field": "cowagent_api_key",
+        "api_base_key": "cowagent_api_base",
+        "api_base_default": const.COWAGENT_API_BASE_CN,
+        "api_base_placeholder": _PLACEHOLDER_V1,
+        # The two sites are separate accounts: a key only works on the site
+        # that issued it, so the form offers both bases and links each to the
+        # console where its keys are managed.
+        "api_base_presets": [
+            {
+                "label": {"zh": "国内站", "en": "cowagent.cn"},
+                "value": const.COWAGENT_API_BASE_CN,
+                "keys_url": "https://cloud.cowagent.cn/keys",
+            },
+            {
+                "label": {"zh": "全球站", "en": "cowagent.ai"},
+                "value": const.COWAGENT_API_BASE_GLOBAL,
+                "keys_url": "https://cloud.cowagent.ai/keys",
+            },
+        ],
+        "models": _COWAGENT_MODELS,
     }),
     ("linkai", {
         "label": "LinkAI",

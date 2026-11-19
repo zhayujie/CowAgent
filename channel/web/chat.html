@@ -28,13 +28,24 @@
                     sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
                     mono: ['"JetBrains Mono"', '"Fira Code"', 'Consolas', 'monospace'],
                 },
-                colors: {
-                    primary: {
-                        50: '#EDFDF3', 100: '#D4FAE2', 200: '#ABF4C7', 300: '#74E9A4',
-                        400: '#4ABE6E', 500: '#35A85B', 600: '#228547', 700: '#1C6B3B',
-                        800: '#1A5532', 900: '#16462A',
-                    }
-                },
+                // Palette colors read CSS variables (defaults in base.css) so a
+                // theme can recolor the console; see static/js/core/themes.js.
+                colors: (function () {
+                    var v = function (name) { return 'rgb(var(--cw-' + name + ') / <alpha-value>)'; };
+                    var scale = function (name, steps) {
+                        var out = {};
+                        steps.forEach(function (s) { out[s] = v(name + '-' + s); });
+                        return out;
+                    };
+                    return {
+                        primary: scale('primary', [50, 100, 200, 300, 400, 500, 600, 700, 800, 900]),
+                        slate: scale('slate', [50, 100, 200, 300, 400, 500, 600, 700, 800, 900]),
+                        // Surfaces; a glass wallpaper lowers --cw-glass-alpha.
+                        panel: 'rgb(var(--cw-panel) / calc(<alpha-value> * var(--cw-glass-alpha)))',
+                        canvas: v('canvas'),
+                        sidebar: v('sidebar'),
+                    };
+                })(),
                 animation: {
                     'pulse-dot': 'pulseDot 1.4s infinite ease-in-out both',
                 }
@@ -54,7 +65,9 @@
     <link rel="stylesheet" href="/assets/css/knowledge.css">
     <link rel="stylesheet" href="/assets/css/agents.css">
     <link rel="stylesheet" href="/assets/css/artifacts.css">
+    <link rel="stylesheet" href="/assets/css/shares.css">
     <link rel="stylesheet" href="/assets/css/menu.css">
+    <link rel="stylesheet" href="/assets/css/themes.css">
     <!-- Apply theme/lang before first paint to avoid flash of unstyled content.
          This runs synchronously in <head> so the correct class is on <html>
          before any CSS or body rendering occurs. -->
@@ -83,8 +96,23 @@
     (function() {
         // Backend-resolved default language (from cow_lang config / auto-detect).
         window.__COW_DEFAULT_LANG__ = '{{COW_DEFAULT_LANG}}';
-        var theme = localStorage.getItem('cow_theme') || 'dark';
+        // An explicit toggle wins; otherwise follow the OS, falling back to light.
+        window.__COW_DEFAULT_THEME__ = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        var theme = localStorage.getItem('cow_theme') || window.__COW_DEFAULT_THEME__;
         if (theme === 'dark') document.documentElement.classList.add('dark');
+        // Replay the color theme's last variables (written by themes.js) so
+        // the first paint already has them.
+        try {
+            var cached = JSON.parse(localStorage.getItem('cow_theme_cache') || 'null');
+            var state = cached && cached.id === localStorage.getItem('cow_theme_id') && cached[theme === 'dark' ? 'dark' : 'light'];
+            if (state && state.vars) {
+                for (var name in state.vars) {
+                    if (name.indexOf('--cw-') === 0) document.documentElement.style.setProperty(name, state.vars[name]);
+                }
+                if (state.wallpaper) document.documentElement.setAttribute('data-wallpaper', state.wallpaper);
+                if (state.logo) document.documentElement.setAttribute('data-theme-logo', '');
+            }
+        } catch (e) {}
         if (localStorage.getItem('cow_sidebar_collapsed') === '1') {
             document.documentElement.classList.add('sidebar-collapsed');
         }
@@ -99,7 +127,7 @@
     })();
     </script>
 </head>
-<body class="h-screen overflow-hidden bg-gray-50 dark:bg-[#111111] text-slate-800 dark:text-slate-200 font-sans">
+<body class="h-screen overflow-hidden bg-canvas text-slate-800 dark:text-slate-200 font-sans">
 
 <!--#include templates/layout/login.html-->
 
@@ -155,6 +183,8 @@
 
 <!--#include templates/modals/skill-add.html-->
 
+<!--#include templates/modals/theme-add.html-->
+
 <!--#include templates/modals/confirm-dialog.html-->
 
 <!--#include templates/modals/rename-dialog.html-->
@@ -171,6 +201,8 @@
 
 <!--#include templates/modals/menu-editor.html-->
 
+<!--#include templates/modals/share-dialogs.html-->
+
     <!-- Split out of a single console.js. These are classic scripts, not
          modules: they share one global scope and `defer` runs them in this
          order. The order is load-bearing - see channel/web/README.md before
@@ -182,6 +214,7 @@
     <script defer src="/assets/js/core/version.js"></script>
     <script defer src="/assets/js/core/i18n.js"></script>
     <script defer src="/assets/js/core/theme.js"></script>
+    <script defer src="/assets/js/core/themes.js"></script>
     <script defer src="/assets/js/core/utils.js"></script>
     <script defer src="/assets/js/core/markdown.js"></script>
     <script defer src="/assets/js/core/confirm.js"></script>
@@ -232,6 +265,7 @@
     <script defer src="/assets/js/views/logs.js"></script>
     <script defer src="/assets/js/views/artifacts.js"></script>
     <script defer src="/assets/js/views/menu-editor.js"></script>
+    <script defer src="/assets/js/views/shares.js"></script>
 
     <!-- Last of the core layer rather than first, which is where it sat in
          console.js. It installs a window.fetch wrapper for 401 handling, and

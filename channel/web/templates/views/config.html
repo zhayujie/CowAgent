@@ -20,7 +20,7 @@
                                 </div>
                             </div>
 
-                            <!-- Tabs: 基础配置 / 模型配置 -->
+                            <!-- Tabs: 基础配置 / 模型配置 / 集成配置 -->
                             <div class="flex items-center justify-between gap-3 mb-6">
                                 <div class="flex items-center bg-slate-100 dark:bg-white/10 rounded-lg p-0.5 w-max">
                                     <button id="config-tab-basic" onclick="switchConfigTab('basic')"
@@ -31,6 +31,10 @@
                                             class="config-tab px-4 py-1.5 rounded-md text-xs font-medium cursor-pointer transition-colors duration-150">
                                         <i class="fas fa-microchip mr-1.5"></i><span data-i18n="settings_tab_models">模型配置</span>
                                     </button>
+                                    <button id="config-tab-integrations" onclick="switchConfigTab('integrations')"
+                                            class="config-tab px-4 py-1.5 rounded-md text-xs font-medium cursor-pointer transition-colors duration-150">
+                                        <i class="fas fa-plug mr-1.5"></i><span data-i18n="settings_tab_integrations">集成配置</span>
+                                    </button>
                                 </div>
                             </div>
 
@@ -38,7 +42,7 @@
                             <div id="config-panel-basic" class="grid gap-6">
 
                                 <!-- Model Config Card -->
-                                <div class="bg-white dark:bg-[#1A1A1A] rounded-xl border border-slate-200 dark:border-white/10 p-6">
+                                <div class="bg-panel rounded-xl border border-slate-200 dark:border-white/10 p-6">
                                     <div class="flex items-center gap-3 mb-5">
                                         <div class="w-9 h-9 rounded-lg bg-primary-50 dark:bg-primary-900/30 flex items-center justify-center">
                                             <i class="fas fa-microchip text-primary-500 text-sm"></i>
@@ -129,7 +133,7 @@
                                 </div>
 
                                 <!-- Agent Config Card -->
-                                <div id="config-agent-card" class="bg-white dark:bg-[#1A1A1A] rounded-xl border border-slate-200 dark:border-white/10 p-6">
+                                <div id="config-agent-card" class="bg-panel rounded-xl border border-slate-200 dark:border-white/10 p-6">
                                     <div class="flex items-center gap-3 mb-5">
                                         <div class="w-9 h-9 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 flex items-center justify-center">
                                             <i class="fas fa-robot text-emerald-500 text-sm"></i>
@@ -227,7 +231,7 @@
                                 </div>
 
                                 <!-- Security Config Card -->
-                                <div class="bg-white dark:bg-[#1A1A1A] rounded-xl border border-slate-200 dark:border-white/10 p-6">
+                                <div class="bg-panel rounded-xl border border-slate-200 dark:border-white/10 p-6">
                                     <div class="flex items-center gap-3 mb-5">
                                         <div class="w-9 h-9 rounded-lg bg-amber-50 dark:bg-amber-900/30 flex items-center justify-center">
                                             <i class="fas fa-lock text-amber-500 text-sm"></i>
@@ -249,6 +253,7 @@
                                             </div>
                                             <p class="text-xs text-slate-400 dark:text-slate-500 mt-1.5" data-i18n="config_permission_desc">新会话默认使用该权限；单个会话可在输入框下方单独调整</p>
                                         </div>
+                                        <div id="cfg-password-row" class="space-y-4">
                                         <div>
                                             <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5" data-i18n="config_password">访问密码</label>
                                             <input id="cfg-password" type="password" autocomplete="new-password"
@@ -257,7 +262,8 @@
                                                           focus:outline-none focus:border-primary-500 font-mono transition-colors
                                                           cfg-key-masked"
                                                    data-masked="1">
-                                            <p class="text-xs text-slate-400 dark:text-slate-500 mt-1.5" data-i18n="config_password_hint">留空则不启用密码保护</p>
+                                            <p id="cfg-password-hint" class="text-xs text-slate-400 dark:text-slate-500 mt-1.5" data-i18n="config_password_hint">至少 6 位，留空则不启用密码保护</p>
+                                            <p id="cfg-password-strength" class="text-xs mt-1.5 hidden"></p>
                                         </div>
                                         <div class="flex items-center justify-end gap-3 pt-1">
                                             <span id="cfg-password-status" class="text-xs text-primary-500 opacity-0 transition-opacity duration-300"></span>
@@ -266,11 +272,139 @@
                                                            cursor-pointer transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
                                                     onclick="savePasswordConfig()" data-i18n="config_save">保存</button>
                                         </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- System Config Card -->
+                                <div class="bg-panel rounded-xl border border-slate-200 dark:border-white/10 p-6">
+                                    <div class="flex items-center gap-3 mb-5">
+                                        <div class="w-9 h-9 rounded-lg bg-sky-50 dark:bg-sky-900/30 flex items-center justify-center">
+                                            <i class="fas fa-sliders-h text-sky-500 text-sm"></i>
+                                        </div>
+                                        <h3 class="font-semibold text-slate-800 dark:text-slate-100" data-i18n="config_system">系统</h3>
+                                    </div>
+                                    <div class="space-y-4">
+                                        <div>
+                                            <label class="flex items-center gap-1.5 text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">
+                                                <span data-i18n="config_language">语言</span>
+                                                <span class="cfg-tip" data-tip-key="config_language_hint"><i class="fas fa-circle-question"></i></span>
+                                            </label>
+                                            <div id="cfg-lang-select" class="cfg-dropdown" tabindex="0">
+                                                <div class="cfg-dropdown-selected">
+                                                    <span class="cfg-dropdown-text">--</span>
+                                                    <i class="fas fa-chevron-down cfg-dropdown-arrow"></i>
+                                                </div>
+                                                <div class="cfg-dropdown-menu"></div>
+                                            </div>
+                                        </div>
+                                        <div class="flex items-center justify-between">
+                                            <label class="flex items-center gap-1.5 text-sm font-medium text-slate-600 dark:text-slate-400">
+                                                <span data-i18n="config_task_notify">Task Notifications</span>
+                                                <span class="cfg-tip" data-tip-key="config_task_notify_hint"><i class="fas fa-circle-question"></i></span>
+                                            </label>
+                                            <label class="relative inline-flex items-center cursor-pointer">
+                                                <input id="cfg-task-notify" type="checkbox" class="sr-only peer">
+                                                <div class="w-9 h-5 bg-slate-200 dark:bg-slate-700 peer-checked:bg-primary-400 rounded-full
+                                                            after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white
+                                                            after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full"></div>
+                                            </label>
+                                        </div>
+                                        <div class="flex items-center justify-between">
+                                            <label class="flex items-center gap-1.5 text-sm font-medium text-slate-600 dark:text-slate-400">
+                                                <span data-i18n="config_task_notify_sound">Notification Sound</span>
+                                                <span class="cfg-tip" data-tip-key="config_task_notify_sound_hint"><i class="fas fa-circle-question"></i></span>
+                                            </label>
+                                            <label class="relative inline-flex items-center cursor-pointer">
+                                                <input id="cfg-task-notify-sound" type="checkbox" class="sr-only peer">
+                                                <div class="w-9 h-5 bg-slate-200 dark:bg-slate-700 peer-checked:bg-primary-400 rounded-full
+                                                            after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white
+                                                            after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full"></div>
+                                            </label>
+                                        </div>
+                                        <div id="cfg-task-notify-blocked" class="hidden flex items-start gap-2 text-xs text-amber-600 dark:text-amber-500 bg-amber-50 dark:bg-amber-900/20 rounded-lg px-3 py-2">
+                                            <i class="fas fa-triangle-exclamation mt-0.5"></i>
+                                            <span data-i18n="config_task_notify_blocked">系统通知已被浏览器屏蔽，请点击地址栏左侧图标 → 通知 → 允许后刷新页面</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                            </div>
+
+                            <!-- Panel: 模型配置 (advanced vendor / capability management) -->
+                            <div id="config-panel-models" class="hidden">
+                                <div id="models-loading" class="flex items-center gap-2 py-12 justify-center text-slate-400 dark:text-slate-500 text-sm">
+                                    <i class="fas fa-spinner fa-spin text-xs"></i><span>Loading...</span>
+                                </div>
+                                <div id="models-content" class="grid gap-6 hidden"></div>
+                            </div>
+
+                            <!-- Panel: 集成配置 (the address shown to the outside, Chat API, guest pages) -->
+                            <div id="config-panel-integrations" class="grid gap-6 hidden">
+
+                                <!-- Public Address Card -->
+                                <div class="bg-panel rounded-xl border border-slate-200 dark:border-white/10 p-6">
+                                    <div class="flex items-center gap-3 mb-5">
+                                        <div class="w-9 h-9 rounded-lg bg-sky-50 dark:bg-sky-900/30 flex items-center justify-center">
+                                            <i class="fas fa-globe text-sky-500 text-sm"></i>
+                                        </div>
+                                        <div class="min-w-0">
+                                            <h3 class="font-semibold text-slate-800 dark:text-slate-100" data-i18n="config_public_url">访问地址</h3>
+                                            <p class="text-xs text-slate-400 dark:text-slate-500 mt-0.5" data-i18n="config_public_url_desc">接口地址、分享链接和嵌入代码中显示的地址</p>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label class="flex items-center gap-1.5 text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">
+                                            <span data-i18n="config_public_url_label">外部访问地址</span>
+                                            <span class="cfg-tip" data-tip-key="config_public_url_hint" data-tip-float><i class="fas fa-circle-question"></i></span>
+                                        </label>
+                                        <div class="flex gap-2">
+                                            <input id="cfg-public-url" type="text" spellcheck="false" autocomplete="off"
+                                                   class="flex-1 min-w-0 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600
+                                                          bg-slate-50 dark:bg-white/5 text-sm text-slate-800 dark:text-slate-100 font-mono
+                                                          focus:outline-none focus:border-primary-500 transition-colors">
+                                            <button id="cfg-public-url-save"
+                                                    class="px-4 py-2 rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-sm font-medium flex-shrink-0
+                                                           cursor-pointer transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                    onclick="savePublicUrl()" data-i18n="config_save">保存</button>
+                                        </div>
+                                        <p id="cfg-public-url-status" class="text-xs mt-1.5 min-h-[1rem] text-slate-400 dark:text-slate-500"></p>
+                                    </div>
+                                    <div id="cfg-listen-row" class="hidden pt-4 border-t border-slate-100 dark:border-white/5">
+                                        <label class="flex items-center gap-1.5 text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">
+                                            <span data-i18n="config_listen_host">监听地址</span>
+                                            <span class="cfg-tip" data-tip-key="config_listen_host_tip" data-tip-float><i class="fas fa-circle-question"></i></span>
+                                        </label>
+                                        <div class="flex gap-2">
+                                            <div id="cfg-listen-choice" class="cfg-dropdown flex-1 min-w-0" tabindex="0">
+                                                <div class="cfg-dropdown-selected">
+                                                    <span class="cfg-dropdown-text">--</span>
+                                                    <i class="fas fa-chevron-down cfg-dropdown-arrow"></i>
+                                                </div>
+                                                <div class="cfg-dropdown-menu"></div>
+                                            </div>
+                                            <input id="cfg-listen-host" type="text" spellcheck="false" autocomplete="off"
+                                                   class="hidden flex-1 min-w-0 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600
+                                                          bg-slate-50 dark:bg-white/5 text-sm text-slate-800 dark:text-slate-100 font-mono
+                                                          focus:outline-none focus:border-primary-500 transition-colors"
+                                                   data-i18n-placeholder="config_listen_custom_placeholder">
+                                            <span class="self-center text-slate-400 dark:text-slate-500">:</span>
+                                            <input id="cfg-listen-port" type="text" inputmode="numeric" spellcheck="false" autocomplete="off"
+                                                   class="w-24 flex-shrink-0 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600
+                                                          bg-slate-50 dark:bg-white/5 text-sm text-slate-800 dark:text-slate-100 font-mono
+                                                          focus:outline-none focus:border-primary-500 transition-colors"
+                                                   data-i18n-placeholder="config_listen_port">
+                                            <button id="cfg-listen-save"
+                                                    class="px-4 py-2 rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-sm font-medium flex-shrink-0
+                                                           cursor-pointer transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                    onclick="saveListenHost()" data-i18n="config_listen_apply">保存并生效</button>
+                                        </div>
+                                        <p id="cfg-listen" class="text-xs mt-1.5 text-slate-400 dark:text-slate-500"></p>
                                     </div>
                                 </div>
 
                                 <!-- Chat API Card -->
-                                <div id="config-api-card" class="bg-white dark:bg-[#1A1A1A] rounded-xl border border-slate-200 dark:border-white/10 p-6">
+                                <div id="config-api-card" class="bg-panel rounded-xl border border-slate-200 dark:border-white/10 p-6">
                                     <div class="flex items-center gap-3">
                                         <div class="w-9 h-9 rounded-lg bg-violet-50 dark:bg-violet-900/30 flex items-center justify-center">
                                             <i class="fas fa-plug text-violet-500 text-sm"></i>
@@ -347,67 +481,33 @@
                                     </div>
                                 </div>
 
-                                <!-- System Config Card -->
-                                <div class="bg-white dark:bg-[#1A1A1A] rounded-xl border border-slate-200 dark:border-white/10 p-6">
-                                    <div class="flex items-center gap-3 mb-5">
-                                        <div class="w-9 h-9 rounded-lg bg-sky-50 dark:bg-sky-900/30 flex items-center justify-center">
-                                            <i class="fas fa-sliders-h text-sky-500 text-sm"></i>
+                                <!-- Guest Pages Card -->
+                                <div id="config-shares-card" class="bg-panel rounded-xl border border-slate-200 dark:border-white/10 p-6">
+                                    <div class="flex items-center gap-3">
+                                        <div class="w-9 h-9 rounded-lg bg-primary-50 dark:bg-primary-900/30 flex items-center justify-center">
+                                            <i class="fas fa-share-nodes text-primary-500 text-sm"></i>
                                         </div>
-                                        <h3 class="font-semibold text-slate-800 dark:text-slate-100" data-i18n="config_system">系统</h3>
+                                        <div class="min-w-0">
+                                            <h3 class="font-semibold text-slate-800 dark:text-slate-100" data-i18n="shares_title">访客页面</h3>
+                                            <p class="text-xs text-slate-400 dark:text-slate-500 mt-0.5" data-i18n="shares_desc">把 Agent 分享为独立的对话页面，也可以嵌入你的网站</p>
+                                        </div>
+                                        <label class="ml-auto relative inline-flex items-center cursor-pointer flex-shrink-0">
+                                            <input id="shares-switch" type="checkbox" class="sr-only peer" onchange="toggleSharesFeature(this.checked)">
+                                            <div class="w-9 h-5 bg-slate-200 dark:bg-slate-700 peer-checked:bg-primary-400 rounded-full
+                                                        after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white
+                                                        after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full"></div>
+                                        </label>
                                     </div>
-                                    <div class="space-y-4">
-                                        <div>
-                                            <label class="flex items-center gap-1.5 text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">
-                                                <span data-i18n="config_language">语言</span>
-                                                <span class="cfg-tip" data-tip-key="config_language_hint"><i class="fas fa-circle-question"></i></span>
-                                            </label>
-                                            <div id="cfg-lang-select" class="cfg-dropdown" tabindex="0">
-                                                <div class="cfg-dropdown-selected">
-                                                    <span class="cfg-dropdown-text">--</span>
-                                                    <i class="fas fa-chevron-down cfg-dropdown-arrow"></i>
-                                                </div>
-                                                <div class="cfg-dropdown-menu"></div>
-                                            </div>
-                                        </div>
-                                        <div class="flex items-center justify-between">
-                                            <label class="flex items-center gap-1.5 text-sm font-medium text-slate-600 dark:text-slate-400">
-                                                <span data-i18n="config_task_notify">Task Notifications</span>
-                                                <span class="cfg-tip" data-tip-key="config_task_notify_hint"><i class="fas fa-circle-question"></i></span>
-                                            </label>
-                                            <label class="relative inline-flex items-center cursor-pointer">
-                                                <input id="cfg-task-notify" type="checkbox" class="sr-only peer">
-                                                <div class="w-9 h-5 bg-slate-200 dark:bg-slate-700 peer-checked:bg-primary-400 rounded-full
-                                                            after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white
-                                                            after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full"></div>
-                                            </label>
-                                        </div>
-                                        <div class="flex items-center justify-between">
-                                            <label class="flex items-center gap-1.5 text-sm font-medium text-slate-600 dark:text-slate-400">
-                                                <span data-i18n="config_task_notify_sound">Notification Sound</span>
-                                                <span class="cfg-tip" data-tip-key="config_task_notify_sound_hint"><i class="fas fa-circle-question"></i></span>
-                                            </label>
-                                            <label class="relative inline-flex items-center cursor-pointer">
-                                                <input id="cfg-task-notify-sound" type="checkbox" class="sr-only peer">
-                                                <div class="w-9 h-5 bg-slate-200 dark:bg-slate-700 peer-checked:bg-primary-400 rounded-full
-                                                            after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white
-                                                            after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full"></div>
-                                            </label>
-                                        </div>
-                                        <div id="cfg-task-notify-blocked" class="hidden flex items-start gap-2 text-xs text-amber-600 dark:text-amber-500 bg-amber-50 dark:bg-amber-900/20 rounded-lg px-3 py-2">
-                                            <i class="fas fa-triangle-exclamation mt-0.5"></i>
-                                            <span data-i18n="config_task_notify_blocked">系统通知已被浏览器屏蔽，请点击地址栏左侧图标 → 通知 → 允许后刷新页面</span>
-                                        </div>
+                                    <div id="shares-detail" class="hidden mt-5">
+                                        <div id="shares-feature"></div>
+                                        <div id="shares-content" class="space-y-3"></div>
+                                        <button id="shares-new-btn" onclick="openShareEditor()"
+                                                class="share-new mt-3">
+                                            <i class="fas fa-plus text-xs"></i><span data-i18n="shares_new">新建访客页面</span>
+                                        </button>
                                     </div>
                                 </div>
 
-                            </div>
-
-                            <!-- Panel: 模型配置 (advanced vendor / capability management) -->
-                            <div id="config-panel-models" class="hidden">
-                                <div id="models-loading" class="flex items-center gap-2 py-12 justify-center text-slate-400 dark:text-slate-500 text-sm">
-                                    <i class="fas fa-spinner fa-spin text-xs"></i><span>Loading...</span>
-                                </div>
-                                <div id="models-content" class="grid gap-6 hidden"></div>
                             </div>
 
                         </div>

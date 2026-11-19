@@ -13,16 +13,20 @@ Google Gemini supports text chat, image understanding, and image generation (Nan
 
 ```json
 {
-  "model": "gemini-3.8-flash",
+  "model": "gemini-4-argon",
   "gemini_api_key": "YOUR_API_KEY"
 }
 ```
 
 | Parameter | Description |
 | --- | --- |
-| `model` | Recommended: `gemini-3.8-flash`; also supports `gemini-3.7-flash`, `gemini-3.6-flash`, `gemini-3.5-flash`, `gemini-3.1-pro-preview`, `gemini-3.1-flash-lite-preview`, `gemini-3-flash-preview`, `gemini-3-pro-preview`, etc. See [official docs](https://ai.google.dev/gemini-api/docs/models) |
+| `model` | Recommended: `gemini-4-argon`; also supports `gemini-3.8-flash`, `gemini-3.7-flash`, `gemini-3.6-flash`, `gemini-3.5-flash`, `gemini-3.1-pro-preview`, `gemini-3.1-flash-lite-preview`, `gemini-3-flash-preview`, `gemini-3-pro-preview`, etc. See [official docs](https://ai.google.dev/gemini-api/docs/models) |
 | `gemini_api_key` | Create one in [Google AI Studio](https://aistudio.google.com/app/apikey) |
 | `gemini_api_base` | Optional, defaults to `https://generativelanguage.googleapis.com`. Can be changed to a third-party proxy |
+
+<Note>
+  `gemini-4-argon` is Gemini's most capable model. It always thinks; the thinking level can be `low` / `medium` / `high` (default `medium`) and is adjustable in the model settings of the Web console.
+</Note>
 
 ## Image Understanding
 

@@ -74,7 +74,7 @@ def _a_cloud_client(tmp_path, monkeypatch):
     ``__new__`` skips ``__init__``, which would open the cloud transport.
     """
     config_path, original = _an_existing_config(tmp_path)
-    monkeypatch.setattr(cloud_client, "get_root", lambda: str(tmp_path))
+    monkeypatch.setattr(cloud_client, "get_data_root", lambda: str(tmp_path))
     return cloud_client.CloudClient.__new__(cloud_client.CloudClient), config_path, original
 
 
@@ -115,6 +115,32 @@ def test_a_cloud_save_that_succeeds_replaces_the_file(tmp_path, monkeypatch):
     assert saved["model"] == "gpt-4o"
     assert saved["web_password"] == ORIGINAL["web_password"]
     assert _leftovers(tmp_path) == []
+
+
+def test_a_cloud_save_lands_in_the_data_root(tmp_path, monkeypatch):
+    """The desktop build sets COW_DATA_DIR=~/.cow and the docker image points it
+    at /home/agent/.cow, and ``load_config`` reads the data root -- so a
+    cloud-pushed config must be written where it will be read back. The save
+    used to go to ``get_root()`` (the bundle), which on those deployments is a
+    directory nobody reads: it either holds no config.json at all -- the push
+    is then dropped with a warning -- or a stale one that is never loaded.
+    """
+    data_root = tmp_path / "data_root"
+    data_root.mkdir()
+    data_config = data_root / "config.json"
+    data_config.write_text(json.dumps(ORIGINAL, indent=4, ensure_ascii=False), encoding="utf-8")
+
+    # Drive the real resolver: whatever it answers for COW_DATA_DIR is where a
+    # save has to land, exactly as on a desktop or docker deployment.
+    monkeypatch.setenv("COW_DATA_DIR", str(data_root))
+    client = cloud_client.CloudClient.__new__(cloud_client.CloudClient)
+
+    client._save_config_to_file({"model": "gpt-4o"})
+
+    saved = json.loads(data_config.read_text(encoding="utf-8"))
+    assert saved.get("model") == "gpt-4o"
+    assert saved["web_password"] == ORIGINAL["web_password"]
+    assert _leftovers(data_root) == []
 
 
 # ---------------------------------------------------------------------------

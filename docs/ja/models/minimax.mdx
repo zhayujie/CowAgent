@@ -13,19 +13,21 @@ MiniMax はテキスト対話、画像理解、画像生成、音声合成をサ
 
 ```json
 {
-  "model": "MiniMax-M3",
+  "model": "MiniMax-M3.1-Flash",
   "minimax_api_key": "YOUR_API_KEY"
 }
 ```
 
 | パラメータ | 説明 |
 | --- | --- |
-| `model` | `MiniMax-M3`、`MiniMax-M2.7`、`MiniMax-M2.7-highspeed` などを指定可能 |
+| `model` | `MiniMax-M3.1-Flash`（デフォルト推奨）、`MiniMax-M3`、`MiniMax-M2.7`、`MiniMax-M2.7-highspeed` などを指定可能 |
 | `minimax_api_key` | [MiniMax コンソール](https://platform.minimaxi.com/user-center/basic-information/interface-key) で作成 |
+
+`MiniMax-M3.1-Flash` は常に思考モードで動作し（無効化不可）、`reasoning_effort` で思考の深さを調整できます。指定可能な値は `low` / `medium` / `high` / `xhigh` / `max`（デフォルト `max`）です。`MiniMax-M3` は引き続き思考の無効化に対応しています。詳細は [MiniMax API ドキュメント](https://platform.minimax.io/docs/api-reference/text-openai-api) を参照してください。
 
 ## 画像理解
 
-MiniMax-M3 は OpenAI 互換の chat エンドポイントを通じて、テキスト・画像・動画の入力をネイティブにサポートしています。`minimax_api_key` を設定すると、Agent の Vision ツールは画像リクエストを自動的に MiniMax-M3 へルーティングするため、ビジョンモデルを個別に指定する必要はありません。
+MiniMax-M3.1-Flash と MiniMax-M3 は OpenAI 互換の chat エンドポイントを通じて、テキスト・画像・動画の入力をネイティブにサポートしています。`minimax_api_key` を設定すると、Agent の Vision ツールは MiniMax のマルチモーダルモデルで自動的に画像を認識するため、ビジョンモデルを個別に指定する必要はありません。
 
 ## 画像生成
 

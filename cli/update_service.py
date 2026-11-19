@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-from cli.utils import get_project_root
+from cli.utils import _ensure_project_on_path, get_project_root
 
 logger = logging.getLogger(__name__)
 
@@ -73,8 +73,24 @@ def compare_versions(left: str, right: str) -> int:
     return (a > b) - (a < b)
 
 
+def _deployment():
+    # Imported on use: an installed CLI must import without the project root.
+    _ensure_project_on_path()
+    from common import deployment
+
+    return deployment
+
+
+def is_managed() -> bool:
+    return _deployment().is_managed()
+
+
+def manage_url() -> str:
+    return _deployment().manage_url()
+
+
 def _is_docker_install() -> bool:
-    if os.environ.get("COW_DOCKER") == "1":
+    if _deployment().deployment() == "docker":
         return True
     try:
         return Path("/.dockerenv").exists()
@@ -87,7 +103,14 @@ def detect_install_kind(root: Optional[str] = None) -> InstallKind:
     root = root or get_project_root()
     platform = sys.platform
 
-    if os.environ.get("COW_DESKTOP") == "1" or getattr(sys, "frozen", False):
+    if is_managed():
+        return InstallKind(
+            kind="managed",
+            update_supported=False,
+            unsupported_reason="This install is updated by whoever runs it.",
+            platform=platform,
+        )
+    if _deployment().is_desktop() or getattr(sys, "frozen", False):
         return InstallKind(
             kind="packaged",
             update_supported=False,
@@ -151,6 +174,7 @@ def version_payload(root: Optional[str] = None) -> Dict[str, Any]:
         "update_supported": kind.update_supported,
         "unsupported_reason": kind.unsupported_reason,
         "platform": kind.platform,
+        "manage_url": manage_url() if kind.kind == "managed" else "",
     }
 
 
@@ -195,6 +219,8 @@ def check_for_updates(current_version: Optional[str] = None) -> Dict[str, Any]:
     """Hit GitHub releases. Call only from an explicit user action."""
     from cli import __version__
 
+    if is_managed():
+        raise UpdateError("check", "This install is updated by whoever runs it.")
     current = current_version or __version__
     releases = []
     for item in fetch_github_releases():
@@ -226,16 +252,41 @@ def check_for_updates(current_version: Optional[str] = None) -> Dict[str, Any]:
     }
 
 
-def _run(cmd: List[str], cwd: str) -> subprocess.CompletedProcess:
-    return subprocess.run(
-        cmd,
-        cwd=cwd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-    )
+# Ceilings for the web one-click update's subprocesses. git pull and pip both
+# talk to the network and can stall well past a sane wait; a step that never
+# finishes leaves the worker (and its child) alive with the status file stuck
+# mid-update, and once STALE_UPDATE_SECONDS lets a second update start, both
+# work on the same checkout.
+_GIT_TIMEOUT_S = 600
+_PIP_TIMEOUT_S = 900
+_IMPORT_TIMEOUT_S = 60
+
+
+def _run(cmd: List[str], cwd: str, timeout: int = _GIT_TIMEOUT_S) -> subprocess.CompletedProcess:
+    try:
+        return subprocess.run(
+            cmd,
+            cwd=cwd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as exc:
+        # Callers branch on returncode and read stdout, so a stalled step
+        # reports as a failed one - which sends apply_source_update down its
+        # existing git_reset_hard rollback - instead of hanging the worker
+        # forever. TimeoutExpired carries bytes even under text=True.
+        out = exc.stdout
+        if isinstance(out, bytes):
+            out = out.decode("utf-8", "replace")
+        return subprocess.CompletedProcess(
+            args=cmd,
+            returncode=-1,
+            stdout="".join([(out or "").rstrip(), f"\n[update] timed out after {timeout}s and was stopped"]),
+        )
 
 
 def git_rev_parse(root: str) -> str:
@@ -281,16 +332,16 @@ def install_requirements(root: str, python: str, quiet: bool = False) -> subproc
     extra = ["-q"] if quiet else []
     if not os.path.exists(req):
         return subprocess.CompletedProcess(args=[], returncode=0, stdout="")
-    return _run([python, "-m", "pip", "install", "-r", req, *extra], cwd=root)
+    return _run([python, "-m", "pip", "install", "-r", req, *extra], cwd=root, timeout=_PIP_TIMEOUT_S)
 
 
 def install_editable(root: str, python: str, quiet: bool = False) -> subprocess.CompletedProcess:
     extra = ["-q"] if quiet else []
-    return _run([python, "-m", "pip", "install", "-e", ".", *extra], cwd=root)
+    return _run([python, "-m", "pip", "install", "-e", ".", *extra], cwd=root, timeout=_PIP_TIMEOUT_S)
 
 
 def self_check_app(root: str, python: str) -> subprocess.CompletedProcess:
-    return _run([python, "-c", "import app"], cwd=root)
+    return _run([python, "-c", "import app"], cwd=root, timeout=_IMPORT_TIMEOUT_S)
 
 
 def status_path(root: Optional[str] = None) -> Path:
@@ -311,11 +362,20 @@ def read_update_status(root: Optional[str] = None) -> Dict[str, Any]:
 
 
 def write_update_status(payload: Dict[str, Any], root: Optional[str] = None) -> Dict[str, Any]:
+    _ensure_project_on_path()
+    from common.atomic_write import write_text_atomic
+
     path = status_path(root)
     current = read_update_status(root)
     current.update(payload)
     current["updated_at"] = datetime.now(timezone.utc).isoformat()
-    path.write_text(json.dumps(current, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    # Write through a temporary sibling: the status file guards the "an update
+    # is already running" check, and read_update_status reports a half-written
+    # file as {"state": "idle"}, so a write interrupted here would let a second
+    # update start on top of the first.
+    write_text_atomic(
+        path, json.dumps(current, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
     return current
 
 
@@ -403,7 +463,13 @@ def _worker_alive(pid: int) -> bool:
 def _update_is_stale(status: Dict[str, Any]) -> bool:
     """A running/restarting status whose worker is gone (killed, OOM, reboot)
     would otherwise block every later update."""
-    worker_pid = int(status.get("worker_pid") or 0)
+    try:
+        worker_pid = int(status.get("worker_pid") or 0)
+    except (TypeError, ValueError):
+        # A corrupt pid tells us nothing about the worker, so fall through to the
+        # timestamp check instead of raising. Reporting the run stale here would
+        # unblock an update that may still be running.
+        worker_pid = 0
     if worker_pid and not _worker_alive(worker_pid):
         return True
     started = status.get("started_at") or status.get("updated_at")

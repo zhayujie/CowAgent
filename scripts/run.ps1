@@ -532,14 +532,14 @@ function Add-ScriptsDirToPath {
 $ModelChoices = @{
     1  = @{ Provider = "DeepSeek";                Default = "deepseek-flash";                      Field = "deepseek_api_key" }
     2  = @{ Provider = "Claude";                  Default = "claude-opus-5-5";                     Field = "claude_api_key";    BaseField = "claude_api_base" }
-    3  = @{ Provider = "Gemini";                  Default = "gemini-3.1-pro-preview";              Field = "gemini_api_key";    BaseField = "gemini_api_base" }
-    4  = @{ Provider = "OpenAI";                  Default = "gpt-6.1-sol";                         Field = "open_ai_api_key";   BaseField = "open_ai_api_base" }
-    5  = @{ Provider = "MiniMax";                 Default = "MiniMax-M3";                          Field = "minimax_api_key" }
+    3  = @{ Provider = "Gemini";                  Default = "gemini-4-argon";                      Field = "gemini_api_key";    BaseField = "gemini_api_base" }
+    4  = @{ Provider = "OpenAI";                  Default = "gpt-6.1-terra";                       Field = "open_ai_api_key";   BaseField = "open_ai_api_base" }
+    5  = @{ Provider = "MiniMax";                 Default = "MiniMax-M3.1-Flash";                  Field = "minimax_api_key" }
     6  = @{ Provider = "GLM";                     Default = "glm-5.3-flash";                       Field = "zhipu_ai_api_key" }
     7  = @{ Provider = "Qwen (DashScope)";        Default = "qwen3.8-flash";                       Field = "dashscope_api_key" }
     8  = @{ Provider = "Doubao (Volcengine Ark)"; Default = "doubao-seed-2-1-pro-260628"; Field = "ark_api_key" }
-    9  = @{ Provider = "Kimi (Moonshot)";         Default = "kimi-k3";                             Field = "moonshot_api_key" }
-    10 = @{ Provider = "MiMo";                    Default = "mimo-v2.5-pro";                       Field = "mimo_api_key" }
+    9  = @{ Provider = "Kimi (Moonshot)";         Default = "kimi-k3.1-pro";                       Field = "moonshot_api_key" }
+    10 = @{ Provider = "MiMo";                    Default = "mimo-v2.6-pro";                       Field = "mimo_api_key" }
     11 = @{ Provider = "LinkAI";                  Default = "deepseek-flash";                      Field = "linkai_api_key";    Linkai = $true }
 }
 
@@ -548,15 +548,15 @@ function Select-Model {
     $title = T "选择 AI 模型" "Select AI Model"
     $options = @(
         "DeepSeek (deepseek-flash, deepseek-v4-pro, etc.)",
-        "Claude (claude-opus-5-5, claude-sonnet-5, etc.)",
-        "Gemini (gemini-3.5-flash, gemini-3.1-pro-preview, etc.)",
-        "OpenAI (gpt-6.1-sol, gpt-6-luna, etc.)",
-        "MiniMax (MiniMax-M3, etc.)",
+        "Claude (claude-opus-5-5, claude-sonnet-5-5, etc.)",
+        "Gemini (gemini-4-argon, gemini-3.8-flash, etc.)",
+        "OpenAI (gpt-6.1-terra, gpt-6.1-sol, etc.)",
+        "MiniMax (MiniMax-M3.1-Flash, MiniMax-M3, etc.)",
         "GLM (glm-5.3-flash, glm-5.3, etc.)",
         "Qwen (qwen3.8-flash, qwen3.8-max, etc.)",
         "Doubao (doubao-seed-2.1, etc.)",
-        "Kimi (kimi-k3, etc.)",
-        "MiMo (mimo-v2.5-pro, etc.)",
+        "Kimi (kimi-k3.1-pro, kimi-k3, etc.)",
+        "MiMo (mimo-v2.6-pro, etc.)",
         ("LinkAI (" + (T "一个 Key 接入所有模型" "access all models via one API") + ")"),
         (T "⏭  跳过（稍后在 Web 控制台配置）" "⏭  Skip (configure later in the web console)")
     )

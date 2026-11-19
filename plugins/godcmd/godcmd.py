@@ -1,12 +1,12 @@
 # encoding:utf-8
 
 import os
-import random
-import string
+import secrets
 import logging
 from typing import Tuple
 
 import plugins
+from agent.guest.access import LoginLimiter
 from bridge.bridge import Bridge
 from bridge.context import ContextType
 from bridge.reply import Reply, ReplyType
@@ -175,6 +175,15 @@ def get_help_text(isadmin, isgroup):
 # fallback for a config that is empty or only half-filled in.
 DEFAULT_CONFIG = {"password": "", "admin_users": []}
 
+# Unambiguous symbols only (no 0/O, 1/I): the password is read from a log
+# line and typed back in a chat window.
+_TEMP_PASSWORD_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"
+
+
+def _generate_temp_password(length: int = 6) -> str:
+    """A temp admin password for first runs with no password configured."""
+    return "".join(secrets.choice(_TEMP_PASSWORD_ALPHABET) for _ in range(length))
+
 
 @plugins.register(
     name="Godcmd",
@@ -208,7 +217,7 @@ class Godcmd(Plugin):
                 # (packaged builds) or a full disk must not take the plugin down.
                 logger.warning(f"[Godcmd] cannot write {config_path}: {e}")
         if gconf["password"] == "":
-            self.temp_password = "".join(random.sample(string.digits, 4))
+            self.temp_password = _generate_temp_password()
             logger.info("[Godcmd] 因未设置口令，本次的临时口令为%s。" % self.temp_password)
         else:
             self.temp_password = None
@@ -222,6 +231,9 @@ class Godcmd(Plugin):
         self.password = gconf["password"]
         self.admin_users = gconf["admin_users"]
         global_config["admin_users"] = self.admin_users
+        # Per-sender lockout only: a plugin-wide cap would let anyone lock
+        # the real admin out of #auth.
+        self._auth_limiter = LoginLimiter(per_profile=False)
         self.isrunning = True  # 机器人是否运行中
 
         self.handlers[Event.ON_HANDLE_CONTEXT] = self.on_handle_context
@@ -477,16 +489,23 @@ class Godcmd(Plugin):
         if len(args) != 1:
             return False, "请提供口令"
 
+        wait = self._auth_limiter.locked_for("godcmd", userid)
+        if wait:
+            return False, f"尝试次数过多，请 {wait} 秒后再试"
+
         password = args[0]
         if password == self.password:
+            self._auth_limiter.succeeded("godcmd", userid)
             self.admin_users.append(userid)
             global_config["admin_users"].append(userid)
             return True, "认证成功"
-        elif password == self.temp_password:
+        elif self.temp_password and password.upper() == self.temp_password:
+            self._auth_limiter.succeeded("godcmd", userid)
             self.admin_users.append(userid)
             global_config["admin_users"].append(userid)
             return True, "认证成功，请尽快设置口令"
         else:
+            self._auth_limiter.failed("godcmd", userid)
             return False, "认证失败"
 
     def get_help_text(self, isadmin=False, isgroup=False, **kwargs):

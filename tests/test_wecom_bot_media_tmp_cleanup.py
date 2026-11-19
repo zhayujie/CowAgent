@@ -29,7 +29,7 @@ def channel(workspace, monkeypatch):
     handle = cls.__new__(cls)
     handle.uploads = []
 
-    def _upload(local_path, media_type):
+    def _upload(local_path, media_type, file_name=""):
         with open(local_path, "rb") as fh:
             handle.uploads.append((os.path.basename(local_path), len(fh.read())))
         return f"media-{len(handle.uploads)}"

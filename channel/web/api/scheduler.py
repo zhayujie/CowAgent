@@ -21,6 +21,10 @@ from config import conf
 # permission check, so neither route may produce them.
 _ALLOWED_ACTION_TYPES = ("send_message", "agent_task")
 
+# Recorded when an Agent creates the task and bound what its runs may do, so an
+# edit must not rewrite them.
+_PROTECTED_ACTION_FIELDS = ("origin_session_id", "origin_agent_id", "permission_mode")
+
 
 def _resolve_instance_agent_id(instance_id: str) -> str:
     """The Agent a channel instance is currently bound to, or "" for none.
@@ -336,7 +340,10 @@ class SchedulerUpdateHandler:
                 # as notify_session_id, silent, and channel-specific delivery
                 # fields survive unrelated edits.
                 action = dict(original_action)
-                action.update(action_patch)
+                action.update({
+                    k: v for k, v in action_patch.items()
+                    if k not in _PROTECTED_ACTION_FIELDS
+                })
                 action_type = action.get("type")
                 if action_type not in _ALLOWED_ACTION_TYPES:
                     return json.dumps({

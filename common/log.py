@@ -60,12 +60,12 @@ def _reset_logger(log):
             )
         )
         log.addHandler(file_handle)
-    except OSError:
+    except OSError as exc:
         console_handle.handle(
             logging.LogRecord(
                 "log", logging.WARNING, __file__, 0,
                 "[log] file logging disabled (log path not writable): %s",
-                (_log_path(),), None,
+                (str(exc),), None,
             )
         )
 

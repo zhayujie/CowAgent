@@ -16,7 +16,9 @@ import base64
 import mimetypes
 import os
 import tempfile
+import threading
 import time
+import unicodedata
 from typing import Dict, List, Optional
 
 from common.log import logger
@@ -51,6 +53,9 @@ MAX_FILE_BYTES = 64 * 1024 * 1024
 # mtime is compared as a float that has been through JSON on both sides, so
 # allow for the last bit of the timestamp rather than requiring bit equality.
 MTIME_EPSILON = 1e-6
+
+# Services are per request, so optimistic saves need process-wide path locks.
+_WRITE_LOCKS = tuple(threading.RLock() for _ in range(256))
 
 
 class WorkspaceConflictError(Exception):
@@ -406,7 +411,15 @@ class WorkspaceService:
             instead of dropping those changes on the floor.
         """
         full = self._resolve_file(rel_path)
+        # POSIX normcase does not fold case or canonical Unicode aliases on APFS.
+        # Extra collisions on case-sensitive filesystems only serialize saves.
+        key = unicodedata.normalize("NFC", os.path.normcase(full)).casefold()
+        with _WRITE_LOCKS[hash(key) % len(_WRITE_LOCKS)]:
+            return self._write_text_locked(full, content, expected_mtime)
 
+    def _write_text_locked(self, full: str, content: str,
+                           expected_mtime: Optional[float]) -> Dict:
+        """Check the editor version and publish under the same process lock."""
         kind = classify_kind(full)
         if not is_editable(kind):
             raise ValueError(f"Not an editable text file: {self.to_rel(full)}")

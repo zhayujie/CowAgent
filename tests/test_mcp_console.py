@@ -120,6 +120,22 @@ def test_without_mcp_json_the_editor_lists_config_json_servers(tmp_path, monkeyp
     assert set(saved) == {"legacy", "new"}
 
 
+@pytest.mark.parametrize("blank", ["", "\n  \n", "\ufeff"])
+def test_a_blank_mcp_json_counts_as_absent(tmp_path, monkeypatch, blank):
+    monkeypatch.setattr(
+        "agent.tools.mcp.service.mcp_config_path",
+        lambda workspace=None: str(tmp_path / "mcp.json"),
+    )
+    (tmp_path / "mcp.json").write_text(blank, encoding="utf-8")
+    legacy = [{"name": "legacy", "command": "uvx", "args": ["mcp-server-fetch"]}]
+    with patch("config.conf", return_value={"mcp_servers": legacy}):
+        assert [item["name"] for item in load_servers(str(tmp_path))] == ["legacy"]
+        save_servers(str(tmp_path), [{"name": "amap", "type": "http", "url": "https://example.com/mcp"}])
+
+    saved = json.loads((tmp_path / "mcp.json").read_text(encoding="utf-8"))
+    assert saved == {"mcpServers": {"amap": {"type": "streamable-http", "url": "https://example.com/mcp"}}}
+
+
 def test_save_keeps_other_top_level_keys_of_mcp_json(tmp_path, monkeypatch):
     monkeypatch.setattr(
         "agent.tools.mcp.service.mcp_config_path",

@@ -68,6 +68,9 @@ _ACTIVE_RUN_MODELS: contextvars.ContextVar = contextvars.ContextVar(
 
 # Word-bounded so "4000" / "40096" are not read as HTTP 400.
 _RE_HTTP_400 = re.compile(r"\b400\b")
+# Same treatment for the rate-limit status: "1429" / "4294967295" are counts,
+# not HTTP 429.
+_RE_HTTP_429 = re.compile(r"\b429\b")
 
 _CONTEXT_OVERFLOW_MARKERS = (
     "context length exceeded", "maximum context length", "prompt is too long",
@@ -82,6 +85,30 @@ _MESSAGE_FORMAT_MARKERS = (
     "tool result", "tool id",
     "must be a response to a preceeding message",
 )
+
+
+# Transient failures (timeouts, overload, 429 / 5xx) worth retrying unchanged.
+_RETRYABLE_MARKERS = (
+    'timeout', 'timed out', 'connection', 'network',
+    'rate limit', 'overloaded', 'unavailable', 'busy', 'retry',
+    '429', '500', '502', '503', '504', '512',
+)
+
+# Image references the channels append to the user query, e.g. "[图片: tmp/a.png]".
+_IMAGE_MARKER_RE = re.compile(r"\[(?:图片|Image):\s*([^\]]+)\]")
+_IMAGE_NOT_ATTACHED = "(The images referenced above are not attached to this request; use the vision tool if you need to view them.)"
+
+
+def _user_text(content) -> str:
+    """Text of a user message, skipping tool results."""
+    if isinstance(content, str):
+        return content
+    if not isinstance(content, list):
+        return ""
+    return "\n".join(
+        b.get("text", "") for b in content
+        if isinstance(b, dict) and b.get("type") == "text"
+    )
 
 
 def _is_context_overflow(error_str_lower: str) -> bool:
@@ -121,6 +148,35 @@ def _truncate_reasoning_for_storage(text: str) -> str:
     tail = text[-half:]
     omitted = len(text) - len(head) - len(tail)
     return head + _REASONING_TRUNCATE_MARKER.format(omitted=omitted) + tail
+
+
+def _layout_native_blocks(layout: list, text: str, tool_use_blocks: list) -> list:
+    """Assistant content in the order Claude produced it.
+
+    Signed thinking must go back unmodified and in place, or the next request
+    of the tool loop runs without the model's earlier reasoning. The agent's
+    own text and tool calls take the slots of the provider's text and tool_use
+    blocks; several text blocks collapse into the first slot.
+    """
+    content = []
+    text_placed = tools_placed = False
+    for block in layout:
+        btype = block.get("type")
+        if btype in ("thinking", "redacted_thinking"):
+            content.append(dict(block))
+        elif btype == "text" and not text_placed:
+            if text:
+                content.append({"type": "text", "text": text})
+            text_placed = True
+        elif btype == "tool_use" and not tools_placed:
+            content.extend(tool_use_blocks)
+            tools_placed = True
+    if text and not text_placed:
+        first_tool = next((i for i, b in enumerate(content) if b.get("type") == "tool_use"), len(content))
+        content.insert(first_tool, {"type": "text", "text": text})
+    if not tools_placed:
+        content.extend(tool_use_blocks)
+    return content
 
 
 def _cache_hit_tokens(usage: Dict[str, Any]) -> int:
@@ -304,6 +360,11 @@ class AgentStreamExecutor:
         # This run's user query, the anchor callers use to find the messages
         # the run added (see run_start_index).
         self.run_user_message = None
+        # Images attached to the query, sent with it only while this run lasts
+        # (see _run_image_blocks); never written into self.messages.
+        self._run_images: Optional[List[Dict[str, Any]]] = None
+        self._run_images_disabled = False
+        self._images_in_request = False
         
         # Tool failure tracking for retry protection
         self.tool_failure_history = []  # List of (tool_name, args_hash, success) tuples
@@ -318,6 +379,11 @@ class AgentStreamExecutor:
         # Provider usage summed over every model call of this run; StepWriter
         # stamps it on the stored answer.
         self.run_usage: Optional[Dict[str, int]] = None
+
+        # The loop-breaker hint rides in the message list so the next model
+        # call sees it, then it is removed again: the user never wrote it, so
+        # it must not be stored as a user turn or summarised into memory.
+        self._pending_loop_hint: Optional[Dict[str, Any]] = None
 
     @staticmethod
     def _normalize_stream_usage(stream_usage: Dict[str, Any]) -> Dict[str, int]:
@@ -422,6 +488,20 @@ class AgentStreamExecutor:
             f"{body}"
         )
 
+    @staticmethod
+    def _unrun_tool_result(tool_call: Dict, halted_by: str) -> Dict:
+        """Close a tool_use that never ran because a steer or cancel stopped the turn."""
+        if halted_by == "steer":
+            content = "Skipped because the user redirected the active task."
+        else:
+            content = "Error: Tool execution was interrupted"
+        return {
+            "type": "tool_result",
+            "tool_use_id": tool_call["id"],
+            "content": content,
+            "is_error": True,
+        }
+
     def _append_steering(
         self,
         updates: List[str],
@@ -433,12 +513,7 @@ class AgentStreamExecutor:
             return
         blocks = content_blocks if content_blocks is not None else []
         for tool_call in pending_tool_calls or []:
-            blocks.append({
-                "type": "tool_result",
-                "tool_use_id": tool_call["id"],
-                "content": "Skipped because the user redirected the active task.",
-                "is_error": True,
-            })
+            blocks.append(self._unrun_tool_result(tool_call, "steer"))
         blocks.append({"type": "text", "text": self._steering_text(updates)})
         if content_blocks is None:
             self.messages.append({"role": "user", "content": blocks})
@@ -887,6 +962,41 @@ class AgentStreamExecutor:
         if len(self.tool_failure_history) > 50:
             self.tool_failure_history = self.tool_failure_history[-50:]
 
+    def _inject_loop_hint(self) -> None:
+        """Tell the model to answer with what it already has, for one call.
+
+        The hint is appended to the message list so the very next model call
+        sees it, then removed by :meth:`_drop_pending_loop_hint`. A message
+        the user never wrote must not outlive that call: stored as a user
+        turn it would show up in the chat history and be summarised into the
+        daily memory as if it were the user's request.
+        """
+        hint = {
+            "role": "user",
+            "content": [{
+                "type": "text",
+                "text": _t(
+                    "工具已成功执行并返回结果。请基于这些信息向用户做出回复，不要重复调用相同的工具。",
+                    "The tool already ran successfully and returned its result. Reply to the "
+                    "user from that result; do not call the same tool with the same arguments again.",
+                ),
+            }],
+        }
+        self.messages.append(hint)
+        self._pending_loop_hint = hint
+
+    def _drop_pending_loop_hint(self) -> None:
+        """Remove the loop hint the previous model call consumed, if any.
+
+        Removed by identity rather than index: steering, retries and context
+        compaction can insert or rebuild messages between injection and
+        removal. A hint compaction already discarded is simply forgotten.
+        """
+        hint, self._pending_loop_hint = self._pending_loop_hint, None
+        if hint is None:
+            return
+        self.messages[:] = [msg for msg in self.messages if msg is not hint]
+
     def run_stream(self, user_message: str) -> str:
         """
         Execute streaming reasoning loop
@@ -908,6 +1018,8 @@ class AgentStreamExecutor:
             ]
         }
         self.messages.append(self.run_user_message)
+        self._run_images = None
+        self._run_images_disabled = False
 
         # Trim context ONCE before the agent loop starts, not during tool steps.
         # This ensures tool_use/tool_result chains created during the current run
@@ -1001,8 +1113,14 @@ class AgentStreamExecutor:
                 logger.info(f"[Agent] Turn {turn}")
                 self._emit_event("turn_start", {"turn": turn})
 
-                # Call LLM (enable retry_on_empty for better reliability)
-                assistant_msg, tool_calls, stop_reason = self._call_llm_stream(retry_on_empty=True)
+                # Call LLM (enable retry_on_empty for better reliability). Any
+                # loop hint injected by the previous tool turn was meant for
+                # this call only, so drop it as the call returns - success or
+                # error alike.
+                try:
+                    assistant_msg, tool_calls, stop_reason = self._call_llm_stream(retry_on_empty=True)
+                finally:
+                    self._drop_pending_loop_hint()
                 final_response = assistant_msg
 
                 # A steer that arrived while the model was streaming takes
@@ -1133,17 +1251,31 @@ class AgentStreamExecutor:
 
                 try:
                     already_run = self._run_parallel_calls(tool_calls)
-                    for tool_index, tool_call in enumerate(tool_calls):
-                        # Honour cancel between tool invocations within the same turn
-                        self._check_cancelled()
-                        steering_updates = self._drain_steering()
-                        if steering_updates:
-                            self._append_steering(
-                                steering_updates,
-                                pending_tool_calls=tool_calls[tool_index:],
-                                content_blocks=tool_result_blocks,
-                            )
-                            break
+                    # A steer or cancel only stops calls that have not run yet.
+                    # Calls that already ran in parallel have done their work,
+                    # so they keep their real result even after the stop.
+                    halted_by = None
+                    steering_updates = []
+                    for call_index, tool_call in enumerate(tool_calls):
+                        if tool_call["id"] not in already_run:
+                            if halted_by is None:
+                                try:
+                                    self._check_cancelled()
+                                except AgentCancelledError:
+                                    halted_by = "cancel"
+                                else:
+                                    steering_updates = self._drain_steering()
+                                    if steering_updates:
+                                        halted_by = "steer"
+                            if halted_by is not None:
+                                tool_result_blocks.append(
+                                    self._unrun_tool_result(tool_call, halted_by))
+                                continue
+                            # Ordinary calls are ordering barriers. Only start
+                            # the next parallel batch after preceding calls and
+                            # the cancel/steer checkpoint have completed.
+                            if call_index:
+                                already_run.update(self._run_parallel_calls(tool_calls[call_index:]))
                         if tool_call["id"] in already_run:
                             result = already_run[tool_call["id"]]
                         else:
@@ -1227,6 +1359,11 @@ class AgentStreamExecutor:
                             tool_result_block["is_error"] = True
                         
                         tool_result_blocks.append(tool_result_block)
+
+                    if halted_by == "steer":
+                        self._append_steering(steering_updates, content_blocks=tool_result_blocks)
+                    elif halted_by == "cancel":
+                        raise AgentCancelledError("agent cancelled by user")
                 
                 finally:
                     # CRITICAL: Always add tool_result to maintain message history integrity
@@ -1256,14 +1393,11 @@ class AgentStreamExecutor:
                                     f"⚠️  Detected potential loop: '{tool_name}' called {recent_success_count} times "
                                     f"with same args. Adding hint to LLM to provide final response."
                                 )
-                                # Add a gentle hint message to guide LLM to respond
-                                self.messages.append({
-                                    "role": "user",
-                                    "content": [{
-                                        "type": "text",
-                                        "text": "工具已成功执行并返回结果。请基于这些信息向用户做出回复，不要重复调用相同的工具。"
-                                    }]
-                                })
+                                # Add a gentle hint message to guide LLM to respond.
+                                # It is temporary: the next model call sees it and
+                                # then drops it, so it never becomes a user turn in
+                                # the persisted conversation.
+                                self._inject_loop_hint()
                     elif tool_calls:
                         # If we have tool_calls but no tool_result_blocks (unexpected error),
                         # create error results for all tool calls to maintain message integrity
@@ -1333,6 +1467,9 @@ class AgentStreamExecutor:
                             and self.messages[prompt_insert_idx].get("role") == "user"):
                         self.messages.pop(prompt_insert_idx)
                         logger.debug("[Agent] Removed injected max-steps prompt from message history")
+                    # A hint injected by the last tool turn was consumed by this
+                    # summary call; drop it before the run winds down.
+                    self._drop_pending_loop_hint()
 
         except AgentCancelledError:
             # User-initiated stop: wind down message history cleanly so the
@@ -1354,6 +1491,10 @@ class AgentStreamExecutor:
                 clear_agent_run_id(_run_token)
             if self.steer_inbox is not None:
                 self.steer_inbox.close()
+            # Safety net for exits that never reached the next model call:
+            # cancel, an exception, or a run that ended on a tool turn. The
+            # hint is not part of the conversation, so no exit may keep it.
+            self._drop_pending_loop_hint()
             final_response = final_response.strip() if final_response else final_response
             if cancelled:
                 # Emit before agent_end so channels can mark UI as cancelled
@@ -1609,6 +1750,7 @@ class AgentStreamExecutor:
 
         # Prepare messages
         messages = self._prepare_messages()
+        sent_images = getattr(self, "_images_in_request", False)
         turns = self._identify_complete_turns()
         logger.info(f"Sending {len(messages)} messages ({len(turns)} turns) to LLM")
 
@@ -1661,6 +1803,7 @@ class AgentStreamExecutor:
         full_reasoning = ""
         tool_calls_buffer = {}  # {index: {id, name, arguments}}
         gemini_raw_parts = None  # Preserve Gemini thoughtSignature for round-trip
+        claude_blocks = None  # Claude's block layout with signed thinking, for round-trip
         stop_reason = None  # Track why the stream stopped
         stream_usage = None  # Real token usage from the provider, if reported
 
@@ -1829,6 +1972,8 @@ class AgentStreamExecutor:
                         gemini_raw_parts = delta["_gemini_raw_parts"]
                     elif isinstance(choice, dict) and choice.get("_gemini_raw_parts"):
                         gemini_raw_parts = choice["_gemini_raw_parts"]
+                    if delta.get("_claude_content_blocks"):
+                        claude_blocks = delta["_claude_content_blocks"]
 
             _think_tail_out = self._flush_think_stream()
             if _think_tail_out:
@@ -1842,6 +1987,21 @@ class AgentStreamExecutor:
         except Exception as e:
             error_str = str(e)
             error_str_lower = error_str.lower()
+
+            # The model may not accept images after all. Retry without them before
+            # the classification below, which could read the rejection as a broken
+            # history and reset the context; the vision tool still covers the images.
+            if sent_images and not any(m in error_str_lower for m in _RETRYABLE_MARKERS):
+                self._run_images_disabled = True
+                logger.warning(f"[Agent] Request with attached images failed, retrying without them: {e}")
+                return self._call_llm_stream(
+                    retry_on_empty=retry_on_empty,
+                    retry_count=retry_count,
+                    max_retries=max_retries,
+                    _overflow_stage=_overflow_stage,
+                    _on_fallback=_on_fallback,
+                    _exhausted=_exhausted,
+                )
             
             # Context overflow is non-retryable and needs the working context reset.
             is_context_overflow = _is_context_overflow(error_str_lower)
@@ -1900,15 +2060,15 @@ class AgentStreamExecutor:
                         "Sorry, something went wrong with the earlier conversation. I've reset the current context (your history is kept) — please send your message again.",
                     ))
             
-            # Check if error is rate limit (429)
-            is_rate_limit = '429' in error_str_lower or 'rate limit' in error_str_lower
+            # Check if error is rate limit (429). Word-bounded for the same
+            # reason as _RE_HTTP_400 above: a bare '429' substring also
+            # matches token/byte counts such as 1429 or 4294967295, which
+            # would misroute a retryable timeout into fallback switching and
+            # the long rate-limit backoff.
+            is_rate_limit = bool(_RE_HTTP_429.search(error_str_lower)) or 'rate limit' in error_str_lower
             
             # Check if error is retryable (timeout, connection, server busy, etc.)
-            is_retryable = any(keyword in error_str_lower for keyword in [
-                'timeout', 'timed out', 'connection', 'network', 
-                'rate limit', 'overloaded', 'unavailable', 'busy', 'retry',
-                '429', '500', '502', '503', '504', '512'
-            ])
+            is_retryable = any(keyword in error_str_lower for keyword in _RETRYABLE_MARKERS)
             
             # A fallback link gets a single attempt. Giving every link the
             # primary's full retry budget would multiply the wait by the chain
@@ -2124,34 +2284,38 @@ class AgentStreamExecutor:
         
         # Add assistant message to history (Claude format uses content blocks)
         assistant_msg = {"role": "assistant", "content": []}
+        tool_use_blocks = [
+            {
+                "type": "tool_use",
+                "id": tc.get("id", ""),
+                "name": tc.get("name", ""),
+                "input": tc.get("arguments", {})
+            }
+            for tc in tool_calls or []
+        ]
 
-        if full_reasoning:
-            stored_reasoning = _truncate_reasoning_for_storage(full_reasoning)
-            if len(stored_reasoning) < len(full_reasoning):
-                logger.info(
-                    f"[reasoning] truncated for storage: "
-                    f"{len(full_reasoning)} -> {len(stored_reasoning)} chars"
-                )
-            assistant_msg["content"].append({
-                "type": "thinking",
-                "thinking": stored_reasoning
-            })
-
-        if full_content:
-            assistant_msg["content"].append({
-                "type": "text",
-                "text": full_content
-            })
-
-        # Add tool_use blocks if present
-        if tool_calls:
-            for tc in tool_calls:
+        if claude_blocks:
+            assistant_msg["content"] = _layout_native_blocks(claude_blocks, full_content, tool_use_blocks)
+        else:
+            if full_reasoning:
+                stored_reasoning = _truncate_reasoning_for_storage(full_reasoning)
+                if len(stored_reasoning) < len(full_reasoning):
+                    logger.info(
+                        f"[reasoning] truncated for storage: "
+                        f"{len(full_reasoning)} -> {len(stored_reasoning)} chars"
+                    )
                 assistant_msg["content"].append({
-                    "type": "tool_use",
-                    "id": tc.get("id", ""),
-                    "name": tc.get("name", ""),
-                    "input": tc.get("arguments", {})
+                    "type": "thinking",
+                    "thinking": stored_reasoning
                 })
+
+            if full_content:
+                assistant_msg["content"].append({
+                    "type": "text",
+                    "text": full_content
+                })
+
+            assistant_msg["content"].extend(tool_use_blocks)
         
         if gemini_raw_parts:
             assistant_msg["_gemini_raw_parts"] = gemini_raw_parts
@@ -2176,7 +2340,7 @@ class AgentStreamExecutor:
         return list(required) if isinstance(required, list) else []
 
     def _run_parallel_calls(self, tool_calls: List[Dict]) -> Dict[str, Dict[str, Any]]:
-        """Start every parallel-safe call of this turn at once, keyed by call id.
+        """Start the leading parallel-safe batch, keyed by call id.
 
         Tools otherwise run strictly in the order the model asked for them.
         That is the right default, but a model that splits independent work
@@ -2184,6 +2348,7 @@ class AgentStreamExecutor:
         the second wait out the first. For a tool that declares itself
         parallel_safe the wait buys nothing, so those calls are run together
         here and the loop below picks up the finished results in place.
+        An ordinary call ends the batch: later calls must not run before it.
 
         Each call gets its own copy of the tool: the loop drives tools by
         assigning `cancel_event` and `progress_callback` before a call and
@@ -2193,10 +2358,11 @@ class AgentStreamExecutor:
         The wait polls `cancel_event`, so a cancel returns control without
         waiting for the slowest call; each tool keeps its own timeout.
         """
-        eligible = [
-            call for call in tool_calls
-            if getattr(self.tools.get(call["name"]), "parallel_safe", False)
-        ]
+        eligible = []
+        for call in tool_calls:
+            if not getattr(self.tools.get(call["name"]), "parallel_safe", False):
+                break
+            eligible.append(call)
         if len(eligible) < 2:
             return {}
 
@@ -2959,4 +3125,56 @@ class AgentStreamExecutor:
         not as a message. The AgentLLMModel will handle this.
         """
         # Don't add system message here - it will be handled separately by the LLM adapter
-        return self.messages
+        images = self._run_image_blocks()
+        self._images_in_request = False
+        if "vision" not in (self.tools or {}):
+            return self.messages
+
+        prepared = []
+        for msg in self.messages:
+            content = msg.get("content")
+            if msg is self.run_user_message and images and isinstance(content, list):
+                msg = {**msg, "content": content + images}
+                self._images_in_request = True
+            elif msg.get("role") == "user" and _IMAGE_MARKER_RE.search(_user_text(content)):
+                # A model that answered earlier images directly would otherwise
+                # describe one it no longer (or never) received.
+                if isinstance(content, list):
+                    msg = {**msg, "content": content + [{"type": "text", "text": _IMAGE_NOT_ATTACHED}]}
+                else:
+                    msg = {**msg, "content": f"{content}\n{_IMAGE_NOT_ATTACHED}"}
+            prepared.append(msg)
+        return prepared
+
+    def _run_image_blocks(self) -> List[Dict[str, Any]]:
+        """Image blocks for the query's attached images, when the main model
+        would be the one analyzing them anyway (see Vision.runs_on_main_model).
+
+        Checked per request because a fallback can switch the model mid-run.
+        Later runs only see the "[图片: path]" text, so the image never piles
+        up in the history.
+        """
+        if self._run_images_disabled or self.run_user_message is None:
+            return []
+        vision = (self.tools or {}).get("vision")
+        if vision is None or not hasattr(vision, "runs_on_main_model"):
+            return []
+        vision.model = self.model
+        try:
+            if not vision.runs_on_main_model():
+                return []
+        except Exception as e:
+            logger.debug(f"[Agent] Native image input skipped: {e}")
+            return []
+
+        if self._run_images is None:
+            self._run_images = []
+            for ref in _IMAGE_MARKER_RE.findall(_user_text(self.run_user_message.get("content"))):
+                ref = ref.strip().strip("'\"")
+                try:
+                    self._run_images.append(vision._build_image_content(ref))
+                except Exception as e:
+                    logger.warning(f"[Agent] Cannot attach image {ref}: {e}")
+            if self._run_images:
+                logger.info(f"[Agent] Sending {len(self._run_images)} image(s) to the main model directly")
+        return self._run_images

@@ -18,8 +18,8 @@ pytestmark = pytest.mark.skipif(shutil.which("sips") is None, reason="Requires n
 
 
 @pytest.mark.parametrize("size,expected", [
-    ((650, 650), (650, 650)),
-    ((2000, 200), (1536, 153)),
+    ((1100, 1100), (1100, 1100)),
+    ((4000, 300), (3072, 230)),
     ((3, 3), (3, 3)),
 ])
 def test_public_vision_never_upscales_during_native_compression(tmp_path, monkeypatch, size, expected):

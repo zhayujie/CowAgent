@@ -41,7 +41,7 @@
 
  - 配置项中 `group_app_map` 部分是用于映射群聊与LinkAI平台上的应用， `midjourney` 部分是 mj 画图的配置，`summary` 部分是文档总结及对话功能的配置。三部分的配置相互独立，可按需开启
  - 实际 `config.json` 配置中应保证json格式，不应携带 '#' 及后面的注释
- - 如果是`docker`部署，可通过映射 `plugins/config.json` 到容器中来完成插件配置，参考[文档](https://github.com/zhayujie/chatgpt-on-wechat#3-%E6%8F%92%E4%BB%B6%E4%BD%BF%E7%94%A8)
+ - 如果是`docker`部署，可通过映射 `plugins/config.json` 到容器中来完成插件配置，参考[文档](https://github.com/zhayujie/CowAgent#3-%E6%8F%92%E4%BB%B6%E4%BD%BF%E7%94%A8)
 
 ## 插件使用
 

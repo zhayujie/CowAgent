@@ -82,7 +82,9 @@ def test_godcmd_starts_with_an_empty_config_object(tmp_path, monkeypatch):
 
     assert plugin.password == ""
     assert plugin.admin_users == []
-    assert plugin.temp_password and len(plugin.temp_password) == 4
+    alphabet = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"
+    assert plugin.temp_password and len(plugin.temp_password) == 6
+    assert all(c in alphabet for c in plugin.temp_password)
     assert json.loads(config_path.read_text(encoding="utf-8")) == {
         "password": "",
         "admin_users": [],

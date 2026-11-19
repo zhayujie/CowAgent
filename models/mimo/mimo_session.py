@@ -3,7 +3,7 @@ from models.session_manager import Session
 
 
 class MimoSession(Session):
-    def __init__(self, session_id, system_prompt=None, model="mimo-v2.5-pro"):
+    def __init__(self, session_id, system_prompt=None, model="mimo-v2.6-pro"):
         super().__init__(session_id, system_prompt)
         self.model = model
         self.reset()

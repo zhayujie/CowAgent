@@ -2,7 +2,9 @@
 Cross-tool record of when the agent last read each file.
 
 The tool manager builds a fresh tool instance per call, so this state has to
-live at module level to be shared between read, edit and write.
+live at module level to be shared between read, edit and write. Observations
+are scoped to the current conversation: another conversation reading the same
+file must not replace the snapshot this agent actually saw.
 
 It powers a staleness warning: if a file changed on disk after the agent read
 it, the agent is probably about to overwrite someone else's change (the user
@@ -17,12 +19,12 @@ import threading
 from collections import OrderedDict
 from typing import Optional
 
-# Plenty for one conversation; bounded so a long-running process can't grow
+# Bound all conversations together so a long-running process cannot grow
 # without limit.
 _MAX_TRACKED = 512
 
 _lock = threading.Lock()
-_read_mtimes = OrderedDict()  # realpath -> mtime at the time we read it
+_read_mtimes = OrderedDict()  # conversation + realpath -> observed mtime
 
 
 def _key(path: str) -> Optional[str]:
@@ -30,6 +32,15 @@ def _key(path: str) -> Optional[str]:
         return os.path.realpath(path)
     except OSError:
         return None
+
+
+def _observation_key(path: str) -> tuple:
+    from common.runtime_identity import current_identity
+
+    identity = current_identity()
+    # Keep observations across turns of the same conversation. A fresh run id
+    # must not discard a file view still present in that conversation's context.
+    return identity.agent_id, identity.user_id, identity.session_id, path
 
 
 def _current_mtime(path: str) -> Optional[float]:
@@ -47,9 +58,10 @@ def note_read(path: str) -> None:
     mtime = _current_mtime(key)
     if mtime is None:
         return
+    observation = _observation_key(key)
     with _lock:
-        _read_mtimes[key] = mtime
-        _read_mtimes.move_to_end(key)
+        _read_mtimes[observation] = mtime
+        _read_mtimes.move_to_end(observation)
         while len(_read_mtimes) > _MAX_TRACKED:
             _read_mtimes.popitem(last=False)
 
@@ -70,7 +82,7 @@ def staleness_warning(path: str) -> Optional[str]:
     if not key:
         return None
     with _lock:
-        seen = _read_mtimes.get(key)
+        seen = _read_mtimes.get(_observation_key(key))
     if seen is None:
         return None
     current = _current_mtime(key)

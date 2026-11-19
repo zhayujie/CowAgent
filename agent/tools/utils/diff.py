@@ -192,6 +192,31 @@ def count_matches(content: str, old_text: str) -> int:
     return len(find_match_spans(content, old_text)[0])
 
 
+def trim_outer_newlines(old_text: str, new_text: str, content: str, start: int, end: int) -> str:
+    """
+    Drop ``new_text``'s copies of the outer newlines a fuzzy match left in the file.
+
+    The fuzzy pattern matches ``old_text`` without its leading and trailing
+    newlines (see _build_fuzzy_pattern), so they stay in the file around the
+    match ``content[start:end]``. Writing ``new_text`` with its own copies of
+    them would add a blank line for each one - enough to end a shell command
+    at a backslash continuation or split a Markdown table - while the tool
+    reports success.
+
+    Only as many newlines as ``old_text`` had are dropped, so extra ones that
+    ``new_text`` adds on purpose are still written. A side is left alone when
+    the match starts or ends partway through a line, because the file has no
+    newline there to stand in for ``new_text``'s.
+    """
+    old_lead = len(old_text) - len(old_text.lstrip('\n'))
+    old_trail = len(old_text) - len(old_text.rstrip('\n'))
+    new_lead = len(new_text) - len(new_text.lstrip('\n'))
+    new_trail = len(new_text) - len(new_text.rstrip('\n'))
+    lead = min(old_lead, new_lead) if content[start - 1:start] in ('', '\n') else 0
+    trail = min(old_trail, new_trail) if content[end:end + 1] in ('', '\n') else 0
+    return new_text[lead:max(lead, len(new_text) - trail)]
+
+
 def reindent_replacement(matched_text: str, old_text: str, new_text: str) -> str:
     """
     Re-anchor ``new_text``'s indentation to the indentation actually in the file.

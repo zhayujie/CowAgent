@@ -13,7 +13,7 @@ description: "开启 OpenAI 兼容的 /v1/chat/completions 接口，让任意应
 
 ### 在控制台开启
 
-进入「配置 → 基础配置 → 对话 API」，打开开关并确认后会自动生成 API Key，并给出接口地址和调用示例（cURL / Python / Node.js），可直接复制使用。
+进入「配置 → 集成配置 → 对话 API」，打开开关并确认后会自动生成 API Key，并给出接口地址和调用示例（cURL / Python / Node.js），可直接复制使用。
 
 <Frame caption="配置页的「对话 API」卡片">
   <img src="https://cdn.link-ai.tech/doc/chat-api-config-zh.png" alt="对话 API 配置" width="700" />
@@ -39,7 +39,7 @@ description: "开启 OpenAI 兼容的 /v1/chat/completions 接口，让任意应
 | `external_api_token` | API Key，建议使用足够长的随机字符串。关闭接口时会保留 |
 
 <Note>
-  接口与 Web 控制台使用同一地址和端口。默认只监听 `127.0.0.1`，仅本机可以访问；如需其他机器调用，请参考 [Web 控制台](/zh/channels/web) 将 `web_host` 设为 `0.0.0.0`，并放行端口。API Key 与控制台访问密码 `web_password` 相互独立。
+  接口与 Web 控制台使用同一地址和端口。默认只监听 `127.0.0.1`，仅本机可以访问；如需其他机器调用，可在「配置 → 集成配置 → 访问地址」中把监听地址改为 `0.0.0.0`（详见 [Web 控制台](/zh/channels/web)），并放行端口。API Key 与控制台访问密码 `web_password` 相互独立。
 </Note>
 
 ## 快速开始

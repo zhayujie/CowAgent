@@ -499,13 +499,16 @@ def _group_into_display_turns(
     for user_row, rest in groups:
         # User turn
         if user_row:
-            content, created_at, _u_extras, user_seq, _u_run = user_row
+            content, created_at, u_extras, user_seq, _u_run = user_row
             text = _extract_display_text(content)
             # Hide internal injection markers (scheduler / self-evolution) so the
             # user never sees a synthetic "[SCHEDULED] self-evolution" bubble;
             # the assistant reply that follows is still rendered.
             if text and not _is_internal_user_marker(text):
                 turn = {"role": "user", "content": text, "created_at": created_at}
+                display = u_extras.get("display")
+                if isinstance(display, str) and display:
+                    turn["display"] = display
                 if user_seq is not None:
                     turn["_seq"] = user_seq
                 turns.append(turn)
@@ -864,6 +867,16 @@ class ConversationStore:
                         (aid, session_id),
                     ).fetchone()
                     next_seq = row[0] + 1
+                    # Deleting old turns can lower MAX(seq) below a cleared
+                    # context boundary. New messages must remain visible even
+                    # when those deleted sequence numbers would be reusable.
+                    boundary = conn.execute(
+                        "SELECT context_start_seq FROM sessions "
+                        "WHERE agent_id = ? AND session_id = ?",
+                        (aid, session_id),
+                    ).fetchone()
+                    if boundary:
+                        next_seq = max(next_seq, boundary[0])
 
                     inserted = 0
                     for msg in messages:
@@ -900,7 +913,7 @@ class ConversationStore:
                         for msg in messages:
                             if msg.get("role") == "user":
                                 content = msg.get("content", "")
-                                text = _extract_display_text(content)
+                                text = (msg.get("extras") or {}).get("display") or _extract_display_text(content)
                                 if text:
                                     title = text[:50].split("\n")[0]
                                     conn.execute(
@@ -1281,19 +1294,54 @@ class ConversationStore:
         Returns the message seq that was updated, or ``None`` if no assistant
         message exists or the update could not be applied.
         """
+        return self._attach_assistant_extras(session_id, extras)
+
+    def get_assistant_message_snapshot(
+        self, session_id: str, message_seq: int
+    ) -> Optional[tuple]:
+        """Capture an assistant row's immutable id and raw content before work."""
+        with self._lock:
+            conn = self._connect()
+            try:
+                return conn.execute(
+                    "SELECT id, content FROM messages WHERE agent_id = ? "
+                    "AND session_id = ? AND seq = ? AND role = 'assistant'",
+                    (self._agent_id, session_id, message_seq),
+                ).fetchone()
+            finally:
+                conn.close()
+
+    def attach_extras_to_assistant(
+        self, session_id: str, message_seq: int, extras: Dict[str, Any], snapshot: tuple
+    ) -> Optional[int]:
+        """Merge extras only if the captured assistant row still has its content."""
+        if (isinstance(message_seq, bool) or not isinstance(message_seq, int)
+                or message_seq < 0 or snapshot is None):
+            return None
+        return self._attach_assistant_extras(session_id, extras, message_seq, snapshot)
+
+    def _attach_assistant_extras(
+        self, session_id: str, extras: Dict[str, Any], message_seq: Optional[int] = None,
+        snapshot: Optional[tuple] = None
+    ) -> Optional[int]:
         if not extras:
             return None
         with self._lock:
             conn = self._connect()
             try:
                 aid = self._agent_id
+                identity_filter = " AND id = ? AND content = ?" if snapshot is not None else ""
+                identity_values = snapshot if snapshot is not None else ()
+                seq_filter = (" AND seq = ?" if message_seq is not None else "") + identity_filter
+                params = (aid, session_id, message_seq) if message_seq is not None else (aid, session_id)
+                params += identity_values
                 row = conn.execute(
-                    """
+                    f"""
                     SELECT seq, extras FROM messages
-                    WHERE agent_id = ? AND session_id = ? AND role = 'assistant'
+                    WHERE agent_id = ? AND session_id = ? AND role = 'assistant'{seq_filter}
                     ORDER BY seq DESC LIMIT 1
                     """,
-                    (aid, session_id),
+                    params,
                 ).fetchone()
                 if not row:
                     return None
@@ -1305,12 +1353,13 @@ class ConversationStore:
                 except Exception:
                     cur = {}
                 cur.update(extras)
-                conn.execute(
-                    "UPDATE messages SET extras = ? WHERE agent_id = ? AND session_id = ? AND seq = ?",
-                    (json.dumps(cur, ensure_ascii=False), aid, session_id, seq),
+                updated = conn.execute(
+                    "UPDATE messages SET extras = ? WHERE agent_id = ? AND session_id = ? AND seq = ?"
+                    + identity_filter,
+                    (json.dumps(cur, ensure_ascii=False), aid, session_id, seq, *identity_values),
                 )
                 conn.commit()
-                return seq
+                return seq if updated.rowcount else None
             except Exception as e:
                 logger.warning(f"[ConversationStore] attach_extras failed: {e}")
                 return None
@@ -1641,14 +1690,10 @@ class ConversationStore:
         the scheduler threads the push into (``_remember_delivered_output``), so
         this joins back to that session to recover the full body.
 
-        Correlation is by ``(session_id, agent_id)`` from the run, then the
-        scheduler-injected assistant message whose ``created_at`` is closest at
-        or after the run's ``started_at`` (the pair this run wrote). It is
-        best-effort: the session copy is itself capped (~2000 chars) and old
-        scheduler pairs are pruned, so ``full_output`` may be ``None`` — the
-        caller falls back to the preview. Messages are scoped to the *run's*
-        ``agent_id``, not this store's bound id, since a run may belong to any
-        Agent in the global ledger.
+        Correlation uses the scheduler run id persisted on the delivered pair,
+        scoped to its Agent and receiver session. If that pair was pruned or
+        predates run-id association, leave ``full_output`` unset so the caller
+        uses this run's durable preview instead of another task's message.
         """
         run = self.get_run(run_id)
         if run is None:
@@ -1669,45 +1714,39 @@ class ConversationStore:
             return detail
 
         run_agent_id = run.get("agent_id") or ""
-        started_at = run.get("started_at") or 0
+        try:
+            from agent.registry import get_agent_registry
+            if run_agent_id == get_agent_registry().default_agent_id:
+                run_agent_id = ""
+        except Exception:
+            pass
         with self._lock:
             conn = self._connect()
             try:
                 rows = conn.execute(
                     """
-                    SELECT seq, role, content, created_at
+                    SELECT role, content
                     FROM messages
-                    WHERE agent_id = ? AND session_id = ?
+                    WHERE agent_id = ? AND session_id = ? AND run_id = ?
                     ORDER BY seq ASC
                     """,
-                    (run_agent_id, session_id),
+                    (run_agent_id, session_id, run_id),
                 ).fetchall()
             except sqlite3.OperationalError:
                 rows = []
             finally:
                 conn.close()
 
-        # Assistant messages that answer a [SCHEDULED] user turn are the delivered
-        # bodies. Pick the one written closest at/after this run started; fall
-        # back to the newest scheduler body if none lands after the timestamp
-        # (clock skew, or the pair persisted a hair before the run row).
-        candidates: List[tuple] = []  # (created_at, text)
-        for i, (seq, role, raw, created_at) in enumerate(rows):
-            if role != "user":
+        candidates = []
+        for index, (role, raw) in enumerate(rows):
+            if role != "user" or not _message_is_scheduled_marker(raw):
                 continue
-            if not _message_is_scheduled_marker(raw):
-                continue
-            if i + 1 < len(rows) and rows[i + 1][1] == "assistant":
-                text = _message_plain_text(rows[i + 1][2])
+            if index + 1 < len(rows) and rows[index + 1][0] == "assistant":
+                text = _message_plain_text(rows[index + 1][1])
                 if text:
-                    candidates.append((rows[i + 1][3] or 0, text))
-
-        if candidates:
-            after = [c for c in candidates if c[0] >= started_at]
-            chosen = min(after, key=lambda c: c[0]) if after else max(
-                candidates, key=lambda c: c[0]
-            )
-            detail["full_output"] = chosen[1]
+                    candidates.append(text)
+        if len(candidates) == 1:
+            detail["full_output"] = candidates[0]
         return detail
 
     def load_history_page(
@@ -1871,7 +1910,7 @@ class ConversationStore:
                 aid = self._agent_id
                 rows = conn.execute(
                     """
-                    SELECT seq, content, created_at
+                    SELECT seq, content, created_at, extras
                     FROM messages
                     WHERE agent_id = ? AND session_id = ? AND role = 'user'
                     ORDER BY seq ASC
@@ -1882,7 +1921,7 @@ class ConversationStore:
                 conn.close()
 
         items: List[Dict[str, Any]] = []
-        for seq, raw_content, created_at in rows:
+        for seq, raw_content, created_at, raw_extras in rows:
             try:
                 content = json.loads(raw_content)
             except Exception:
@@ -1894,7 +1933,12 @@ class ConversationStore:
             text = _extract_display_text(content)
             if not text or _is_internal_user_marker(text):
                 continue
-            preview = _first_line_preview(text, preview_chars)
+            try:
+                extras = json.loads(raw_extras) if raw_extras else {}
+            except Exception:
+                extras = {}
+            display = extras.get("display") if isinstance(extras, dict) else None
+            preview = _first_line_preview(display if isinstance(display, str) and display else text, preview_chars)
             if not preview:
                 continue
             items.append({

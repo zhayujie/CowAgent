@@ -17,6 +17,7 @@ import requests
 import web
 
 from channel.web.core._common import (
+    _config_write_guard,
     _read_config_file_for_write,
     _require_auth,
     _write_config_file_for_write,
@@ -30,11 +31,13 @@ from channel.web.core.providers import (
 from common import const
 from common.log import logger
 from config import (
+    CONFIG_TO_ENV,
     conf,
     get_data_root,
     sync_image_generation_custom_provider_env,
 )
 from models import model_catalog
+from models.cowagent_provider import resolve_cowagent_credentials
 
 
 class ModelDiscoveryError(Exception):
@@ -153,7 +156,8 @@ def _capabilities_from_modalities(row: Dict[str, Any]) -> List[str]:
         caps.append("vision")
     if "image" in out:
         caps.append("image")
-    if "video" in inp or "video" in out:
+    # "video" tags video generation, like "image" does for images.
+    if "video" in out:
         caps.append("video")
     if "audio" in inp:
         caps.append("asr")
@@ -319,9 +323,9 @@ class ModelsHandler:
     """
 
     # Capability -> provider ids drawn from PROVIDER_MODELS.
-    _ASR_PROVIDERS = ["openai", "dashscope", "zhipu", "linkai"]
+    _ASR_PROVIDERS = ["openai", "dashscope", "zhipu", "mimo", "cowagent", "linkai"]
     # Web-console white-list. Other vendors stay usable via direct config.
-    _TTS_PROVIDERS = ["openai", "minimax", "dashscope", "mimo", "linkai"]
+    _TTS_PROVIDERS = ["openai", "minimax", "dashscope", "mimo", "cowagent", "linkai"]
 
     # TTS engine catalog (speech models, not voice timbres). Entries are
     # either a bare code or {value, hint?} when a friendly label helps.
@@ -339,6 +343,9 @@ class ModelsHandler:
         # 小米 MiMo TTS 系列，通过 chat completions 接口合成
         "mimo": [
             {"value": "mimo-v2.5-tts", "hint": "预置音色 · 支持唱歌模式"},
+        ],
+        "cowagent": [
+            {"value": "seed-tts-2.0", "hint": "豆包语音 · 中英文音色"},
         ],
         # Aggregating gateway: a single endpoint multiplexes several
         # underlying TTS engines, selected via the `model` field.
@@ -364,6 +371,12 @@ class ModelsHandler:
         ],
         "zhipu": [
             {"value": "glm-asr-2512", "hint": "智谱语音识别"},
+        ],
+        "mimo": [
+            {"value": "mimo-v2.5-asr", "hint": "中英文 · 支持方言"},
+        ],
+        "cowagent": [
+            {"value": "seed-asr", "hint": "豆包语音识别 · 中英文"},
         ],
         # LinkAI gateway routes ASR by `model` (see
         # https://docs.link-ai.tech/platform/api/voice-recognition). An empty
@@ -497,6 +510,17 @@ class ModelsHandler:
             {"value": "Milo",  "hint": "英文 · 男声 · Milo"},
             {"value": "Dean",  "hint": "英文 · 男声 · Dean"},
         ],
+        # seed-tts-2.0 voices; the first one is the default.
+        "cowagent": [
+            {"value": "zh_female_vv_uranus_bigtts",     "hint": "中文 · 女声 · Vivi"},
+            {"value": "zh_female_xiaohe_uranus_bigtts", "hint": "中文 · 女声 · 小何"},
+            {"value": "zh_male_m191_uranus_bigtts",     "hint": "中文 · 男声 · 云舟"},
+            {"value": "zh_male_taocheng_uranus_bigtts", "hint": "中文 · 男声 · 小天"},
+            {"value": "zh_male_liufei_uranus_bigtts",   "hint": "中文 · 男声 · 刘飞"},
+            {"value": "en_male_tim_uranus_bigtts",      "hint": "英文 · 男声 · Tim"},
+            {"value": "en_female_dacey_uranus_bigtts",  "hint": "英文 · 女声 · Dacey"},
+            {"value": "en_female_stokie_uranus_bigtts", "hint": "英文 · 女声 · Stokie"},
+        ],
         # Aggregating gateway: voices are scoped per engine model. The
         # frontend picks the correct list based on the selected model so
         # users don't see incompatible timbres for the active engine.
@@ -597,7 +621,7 @@ class ModelsHandler:
             ],
         },
     }
-    _EMBEDDING_PROVIDERS = ["openai", "dashscope", "doubao", "zhipu", "linkai", "custom"]
+    _EMBEDDING_PROVIDERS = ["openai", "dashscope", "doubao", "zhipu", "cowagent", "linkai", "custom"]
 
     # Embedding model catalog per provider. Mirrors the default_model in
     # agent/memory/embedding/provider.py::EMBEDDING_VENDORS.
@@ -608,6 +632,7 @@ class ModelsHandler:
         "dashscope": ["text-embedding-v4"],
         "doubao":    ["doubao-embedding-vision-251215"],
         "zhipu":     ["embedding-3"],
+        "cowagent":  ["text-embedding-3-small"],
         "linkai":    ["text-embedding-3-small"],
         "custom":    [],
     }
@@ -644,8 +669,8 @@ class ModelsHandler:
         # claude-sonnet-5 stays first here (unlike the chat lists): the first
         # entry is the auto-picked vision model, and image understanding does
         # not justify the Opus price.
-        "claudeAPI": [const.CLAUDE_SONNET_5, const.CLAUDE_OPUS_5_5, const.CLAUDE_OPUS_5, const.CLAUDE_FABLE_5_1, const.CLAUDE_FABLE_5, const.CLAUDE_4_8_OPUS, const.CLAUDE_4_7_OPUS, const.CLAUDE_4_6_SONNET, const.CLAUDE_4_6_OPUS],
-        "gemini":    [const.GEMINI_38_FLASH, const.GEMINI_37_FLASH, const.GEMINI_36_FLASH, const.GEMINI_35_FLASH, const.GEMINI_31_FLASH_LITE_PRE, const.GEMINI_31_PRO_PRE, const.GEMINI_3_FLASH_PRE],
+        "claudeAPI": [const.CLAUDE_SONNET_5, const.CLAUDE_OPUS_5_5, const.CLAUDE_SONNET_5_5, const.CLAUDE_HAIKU_5_5, const.CLAUDE_OPUS_5, const.CLAUDE_FABLE_5_1, const.CLAUDE_FABLE_5, const.CLAUDE_4_8_OPUS, const.CLAUDE_4_7_OPUS, const.CLAUDE_4_6_SONNET, const.CLAUDE_4_6_OPUS],
+        "gemini":    [const.GEMINI_4_ARGON, const.GEMINI_38_FLASH, const.GEMINI_37_FLASH, const.GEMINI_36_FLASH, const.GEMINI_35_FLASH, const.GEMINI_31_FLASH_LITE_PRE, const.GEMINI_31_PRO_PRE, const.GEMINI_3_FLASH_PRE],
         "qianfan":   [const.ERNIE_45_TURBO_VL],
         # glm-5.3-flash is natively multimodal and dispatched as-is; the
         # text-only chat models (glm-5.2, glm-5-turbo, etc.) fall back to the
@@ -654,9 +679,25 @@ class ModelsHandler:
         "zhipu":     [const.GLM_5_3_FLASH, const.GLM_5V_TURBO],
         # MiniMax-M3 natively accepts text, image, and video input. The M2.x
         # chat family remains text-only and is not offered for vision.
-        "minimax":   [const.MINIMAX_M3],
-        # MiMo 原生全模态模型：v2.5-pro / v2.5 支持图像/音频/视频输入
-        "mimo":      [const.MIMO_V2_5_PRO, const.MIMO_V2_5],
+        "minimax":   [const.MINIMAX_M3_1_FLASH, const.MINIMAX_M3],
+        # MiMo 原生全模态模型：v2.6-pro / v2.6-flash 支持图像/音频/视频输入
+        "mimo":      [const.MIMO_V2_6_PRO, const.MIMO_V2_6_FLASH],
+        # Multimodal models of the CowAgent API; the first is the auto pick.
+        "cowagent":  [
+            "deepseek-v4.1-flash",
+            "MiniMax-M3.1-Flash",
+            "gpt-6-luna",
+            "gpt-6.1-terra",
+            "gpt-6.1-sol",
+            "gpt-6-astra",
+            "claude-fable-5-1",
+            "gemini-4-argon",
+            "glm-5.3-flash",
+            "qwen3.8-flash",
+            "qwen3.8-max",
+            "qwen3.6-plus",
+            "doubao-seed-2-1-turbo",
+        ],
         # LinkAI proxies the underlying vendor; surface a curated set of
         # multimodal models. Order: gpt-4.1-mini → gpt-5.4-mini as the
         # cross-vendor baselines, then each vendor's recommended default.
@@ -701,6 +742,14 @@ class ModelsHandler:
         "doubao":    ["seedream-5.0-lite", "seedream-4.5"],
         "dashscope": ["qwen-image-2.0-pro", "qwen-image-2.0"],
         "minimax":   ["image-01"],
+        "cowagent": [
+            "gpt-image-2.5-flare",
+            "gpt-image-2.5-sunburst",
+            {"value": "gemini-3.1-flash-image", "hint": "Nano Banana 2"},
+            {"value": "gemini-3-pro-image",     "hint": "Nano Banana Pro"},
+            "seedream-5.0-pro",
+            "seedream-5.0-lite",
+        ],
         "linkai": [
             "gpt-image-2.5-flare",
             "gpt-image-2.5-sunburst",
@@ -826,6 +875,10 @@ class ModelsHandler:
             base_field = p.get("api_base_key")
             raw_key = local_config.get(key_field, "") if key_field else ""
             raw_base = local_config.get(base_field, "") if base_field else ""
+            if not raw_base and pid == const.COWAGENT:
+                # An unset base follows the UI language; show that site, or saving
+                # the form would pin the default one and break keys from the other.
+                raw_base = resolve_cowagent_credentials()[1]
             configured = is_real_key(raw_key)
             overrides = catalog_map.get(pid) or []
             hidden = hidden_map.get(pid) or []
@@ -845,6 +898,7 @@ class ModelsHandler:
                 "api_base": raw_base or (p.get("api_base_default") or ""),
                 "api_base_default": p.get("api_base_default") or "",
                 "api_base_placeholder": p.get("api_base_placeholder") or "",
+                "api_base_presets": p.get("api_base_presets") or [],
                 # Raw stored overlay (overrides + tombstones), so the editor can
                 # tell what the user actually changed from the presets.
                 "catalog": overrides,
@@ -1071,7 +1125,7 @@ class ModelsHandler:
         ("qianfan",   "qianfan_api_key",   const.ERNIE_45_TURBO_VL),
         ("zhipu",     "zhipu_ai_api_key",  const.GLM_5V_TURBO),
         ("minimax",   "minimax_api_key",   const.MINIMAX_M3),
-        ("mimo",      "mimo_api_key",      const.MIMO_V2_5_PRO),
+        ("mimo",      "mimo_api_key",      const.MIMO_V2_6_PRO),
     ]
 
     @classmethod
@@ -1134,7 +1188,11 @@ class ModelsHandler:
         if is_real_key(local_config.get("open_ai_api_key", "")):
             return {"provider": "openai", "model": const.GPT_55}
 
-        # 5. LinkAI as last resort (only reached when use_linkai is off)
+        # 5. CowAgent with its own default vision model
+        if is_real_key(local_config.get("cowagent_api_key", "")):
+            return {"provider": "cowagent", "model": cls._VISION_PROVIDER_MODELS["cowagent"][0]}
+
+        # 6. LinkAI as last resort (only reached when use_linkai is off)
         if linkai_configured:
             return {"provider": "linkai", "model": const.GPT_41_MINI}
 
@@ -1330,6 +1388,7 @@ class ModelsHandler:
         ("doubao",    "seedream-5.0-lite"),
         ("dashscope", "qwen-image-2.0"),
         ("minimax",   "image-01"),
+        ("cowagent",  "gpt-image-2.5-flare"),
         ("linkai",    "gpt-image-2.5-flare"),
     ]
 
@@ -1428,17 +1487,23 @@ class ModelsHandler:
 
     # Canonical search provider order. Mirrors PROVIDER_ORDER in
     # agent/tools/web_search/web_search.py — keep them in sync.
-    _SEARCH_PROVIDERS = ("deepseek", "bocha", "qianfan", "zhipu", "linkai", "anysearch", "serply", "tavily", "searxng", "keenable")
+    _SEARCH_PROVIDERS = ("deepseek", "bocha", "qianfan", "zhipu", "cowagent", "linkai", "anysearch", "serply", "tavily", "outcrawl", "firecrawl", "specstream", "olostep", "searchapi", "searxng", "keenable")
 
     _SEARCH_PROVIDER_LABELS = {
         "bocha":   {"zh": "博查", "en": "Bocha"},
         "zhipu":   {"zh": "智谱", "en": "GLM"},
         "qianfan": {"zh": "百度", "en": "ERNIE"},
+        "cowagent": {"zh": "CowAgent", "en": "CowAgent"},
         "linkai":  {"zh": "LinkAI", "en": "LinkAI"},
         "deepseek": {"zh": "DeepSeek", "en": "DeepSeek"},
         "anysearch": {"zh": "AnySearch", "en": "AnySearch"},
         "serply":  {"zh": "Serply", "en": "Serply"},
         "tavily":  {"zh": "Tavily", "en": "Tavily"},
+        "outcrawl": {"zh": "Outcrawl", "en": "Outcrawl"},
+        "firecrawl": {"zh": "Firecrawl", "en": "Firecrawl"},
+        "specstream": {"zh": "SpecStream", "en": "SpecStream"},
+        "olostep": {"zh": "Olostep", "en": "Olostep"},
+        "searchapi": {"zh": "SearchApi", "en": "SearchApi"},
         "searxng": {"zh": "SearXNG", "en": "SearXNG"},
         "keenable": {"zh": "Keenable", "en": "Keenable"},
     }
@@ -1454,6 +1519,8 @@ class ModelsHandler:
             return local_config.get("zhipu_ai_api_key") or os.environ.get("ZHIPUAI_API_KEY", "")
         if provider == "qianfan":
             return local_config.get("qianfan_api_key") or os.environ.get("QIANFAN_API_KEY", "")
+        if provider == "cowagent":
+            return local_config.get("cowagent_api_key") or os.environ.get("COWAGENT_API_KEY", "")
         if provider == "linkai":
             return local_config.get("linkai_api_key") or os.environ.get("LINKAI_API_KEY", "")
         if provider == "deepseek":
@@ -1473,6 +1540,31 @@ class ModelsHandler:
             block = tools_cfg.get("web_search") or {} if isinstance(tools_cfg, dict) else {}
             return (block.get("tavily_api_key") if isinstance(block, dict) else "") or os.environ.get(
                 "TAVILY_API_KEY", "")
+        if provider == "outcrawl":
+            tools_cfg = local_config.get("tools") or {}
+            block = tools_cfg.get("web_search") or {} if isinstance(tools_cfg, dict) else {}
+            return (block.get("outcrawl_api_key") if isinstance(block, dict) else "") or os.environ.get(
+                "OUTCRAWL_API_KEY", "")
+        if provider == "firecrawl":
+            tools_cfg = local_config.get("tools") or {}
+            block = tools_cfg.get("web_search") or {} if isinstance(tools_cfg, dict) else {}
+            return (block.get("firecrawl_api_key") if isinstance(block, dict) else "") or os.environ.get(
+                "FIRECRAWL_API_KEY", "")
+        if provider == "specstream":
+            tools_cfg = local_config.get("tools") or {}
+            block = tools_cfg.get("web_search") or {} if isinstance(tools_cfg, dict) else {}
+            return (block.get("specstream_api_key") if isinstance(block, dict) else "") or os.environ.get(
+                "SPECSTREAM_API_KEY", "")
+        if provider == "olostep":
+            tools_cfg = local_config.get("tools") or {}
+            block = tools_cfg.get("web_search") or {} if isinstance(tools_cfg, dict) else {}
+            return (block.get("olostep_api_key") if isinstance(block, dict) else "") or os.environ.get(
+                "OLOSTEP_API_KEY", "")
+        if provider == "searchapi":
+            tools_cfg = local_config.get("tools") or {}
+            block = tools_cfg.get("web_search") or {} if isinstance(tools_cfg, dict) else {}
+            return (block.get("searchapi_api_key") if isinstance(block, dict) else "") or os.environ.get(
+                "SEARCHAPI_API_KEY", "")
         if provider == "keenable":
             tools_cfg = local_config.get("tools") or {}
             block = tools_cfg.get("web_search") or {} if isinstance(tools_cfg, dict) else {}
@@ -1492,8 +1584,9 @@ class ModelsHandler:
         if not isinstance(ws_cfg, dict):
             ws_cfg = {}
 
-        from agent.tools.web_search.web_search import anonymous_opt_in
+        from agent.tools.web_search.web_search import anonymous_opt_in, parse_provider_list
 
+        disabled = set(parse_provider_list(ws_cfg.get("disabled_providers")))
         anonymous_on = anonymous_opt_in(ws_cfg.get("anysearch_anonymous"))
         keenable_anonymous_on = anonymous_opt_in(ws_cfg.get("keenable_anonymous"))
         searxng_url = (ws_cfg.get("searxng_url") or "").strip() if isinstance(ws_cfg, dict) else ""
@@ -1512,17 +1605,21 @@ class ModelsHandler:
                 ok = bool(searxng_url)
             else:
                 ok = is_real_key(raw_key)
+            is_disabled = ok and pid in disabled
             providers.append({
                 "id": pid,
                 "label": cls._SEARCH_PROVIDER_LABELS.get(pid, pid),
-                "configured": ok,
+                # configured = usable for search; disabled = credential kept
+                # but switched off by the user.
+                "configured": ok and not is_disabled,
+                "disabled": is_disabled,
                 # bocha owns its key under tools.web_search; zhipu/qianfan/
                 # linkai/deepseek piggy-back on a model-vendor credential.
                 # Frontend uses this hint to decide which credential editor
                 # to surface.
                 # Lets the frontend badge "匿名/anonymous" only in anonymous mode.
                 "anonymous": pid in ("anysearch", "keenable") and ok and not raw_key,
-                "needs_dedicated_key": pid in ("bocha", "anysearch", "serply", "tavily", "keenable"),
+                "needs_dedicated_key": pid in ("bocha", "anysearch", "serply", "tavily", "outcrawl", "firecrawl", "specstream", "olostep", "searchapi", "keenable"),
                 "needs_url": pid == "searxng",
                 # SearXNG stores an instance URL (not a secret), so echo it back
                 # verbatim to prefill/edit; other providers mask their key.
@@ -1534,7 +1631,7 @@ class ModelsHandler:
                 ) if pid == "deepseek" else "",
                 "api_key_masked": mask_key(raw_key) if raw_key else "",
             })
-            if ok:
+            if ok and not is_disabled:
                 configured_ids.append(pid)
 
         strategy = (ws_cfg.get("strategy") or "auto").strip().lower()
@@ -1620,6 +1717,8 @@ class ModelsHandler:
         "qwen3.7-plus": {"context_window": 1000000},
         "qwen3.7-max": {"context_window": 1000000},
         "qwen3.6-plus": {"context_window": 128000},
+        "kimi-k3.1-pro": {"capabilities": ["text", "vision"], "context_window": 1048576, "max_output_tokens": 131072},
+        "kimi-k3.1-pro-highspeed": {"capabilities": ["text", "vision"], "context_window": 1048576, "max_output_tokens": 131072},
         "kimi-k3": {"capabilities": ["text", "vision"], "context_window": 1048576},
         "kimi-k2.7-code": {"context_window": 262144},
         "kimi-k2.7-code-highspeed": {"context_window": 262144},
@@ -1635,12 +1734,16 @@ class ModelsHandler:
         "ernie-4.5-turbo-128k": {"context_window": 128000, "max_output_tokens": 16000},
         "ernie-4.5-turbo-32k": {"context_window": 32000, "max_output_tokens": 16000},
         "ernie-4.5-turbo-vl": {"capabilities": ["text", "vision"], "context_window": 128000, "max_output_tokens": 16000},
-        "MiniMax-M3": {"capabilities": ["text", "vision", "video"], "context_window": 1000000, "max_output_tokens": 512000},
+        "MiniMax-M3.1-Flash": {
+            "capabilities": ["text", "vision"], "context_window": 1000000, "max_output_tokens": 524288,
+        },
+        "MiniMax-M3": {"capabilities": ["text", "vision"], "context_window": 1000000, "max_output_tokens": 512000},
         "MiniMax-M2.7": {"context_window": 204800, "max_output_tokens": 196608},
         "MiniMax-M2.7-highspeed": {"context_window": 204800, "max_output_tokens": 196608},
         "MiniMax-Text-01": {"context_window": 1000000},
-        "mimo-v2.5-pro": {"context_window": 1000000, "max_output_tokens": 131072},
-        "mimo-v2.5": {"context_window": 1000000, "max_output_tokens": 131072},
+        "mimo-v2.6-pro": {"context_window": 1000000, "max_output_tokens": 131072},
+        "mimo-v2.6-flash": {"context_window": 1000000, "max_output_tokens": 131072},
+        "gpt-6.1-terra": {"capabilities": ["text", "vision"], "context_window": 1050000, "max_output_tokens": 128000},
         "gpt-6.1-sol": {"context_window": 1000000, "max_output_tokens": 128000},
         "gpt-6-luna": {"context_window": 1000000, "max_output_tokens": 128000},
         "gpt-6-sol": {"context_window": 1000000, "max_output_tokens": 128000},
@@ -1657,6 +1760,8 @@ class ModelsHandler:
         "gpt-4.1-mini": {"context_window": 1047576, "max_output_tokens": 32768},
         "gpt-4o": {"context_window": 128000, "max_output_tokens": 16384},
         "claude-opus-5-5": {"context_window": 1000000, "max_output_tokens": 128000},
+        "claude-sonnet-5-5": {"context_window": 1000000, "max_output_tokens": 128000},
+        "claude-haiku-5-5": {"context_window": 1000000, "max_output_tokens": 128000},
         "claude-opus-5": {"context_window": 1000000, "max_output_tokens": 128000},
         "claude-sonnet-5": {"context_window": 1000000, "max_output_tokens": 128000},
         "claude-fable-5": {"context_window": 1000000, "max_output_tokens": 128000},
@@ -1664,6 +1769,7 @@ class ModelsHandler:
         "claude-opus-4-7": {"context_window": 200000, "max_output_tokens": 64000},
         "claude-sonnet-4-6": {"context_window": 200000, "max_output_tokens": 64000},
         "claude-opus-4-6": {"context_window": 200000, "max_output_tokens": 64000},
+        "gemini-4-argon": {"context_window": 1048576, "max_output_tokens": 65536},
         "gemini-3.7-flash": {"context_window": 1048576, "max_output_tokens": 65536},
         "gemini-3.6-flash": {"context_window": 1048576, "max_output_tokens": 65536},
         "gemini-3.5-flash": {"context_window": 1048576, "max_output_tokens": 65536},
@@ -1678,7 +1784,7 @@ class ModelsHandler:
 
         Membership in the per-capability preset lists IS the type: the chat
         list -> "text", the vision list -> "vision", etc. Tags merge across
-        lists (gpt-4o -> text+vision, mimo-v2.5 -> text+vision+tts), so the
+        lists (gpt-4o -> text+vision, mimo-v2.6-pro -> text+vision), so the
         catalog editor seeds each preset with its real capabilities."""
         merged: "OrderedDict[str, dict]" = OrderedDict()
 
@@ -1775,30 +1881,49 @@ class ModelsHandler:
         try:
             data = json.loads(web.data() or b"{}")
             action = data.get("action") or ""
-            if action == "set_provider":
-                return self._handle_set_provider(data)
-            if action == "delete_provider":
-                return self._handle_delete_provider(data)
-            if action == "set_custom_provider":
-                return self._handle_set_custom_provider(data)
-            if action == "delete_custom_provider":
-                return self._handle_delete_custom_provider(data)
-            if action == "set_active_custom_provider":
-                return self._handle_set_active_custom_provider(data)
-            if action == "set_capability":
-                return self._handle_set_capability(data)
-            if action == "save_catalog":
-                return self._handle_save_catalog(data)
             if action == "discover_models":
+                # Read-only: this probes the provider's /models endpoint with a
+                # 10s timeout and never writes config.json. Holding the save
+                # lock across that request would stall every other console save
+                # behind an unrelated network call.
                 return self._handle_discover_models(data)
-            if action == "set_voice_reply_mode":
-                return self._handle_set_voice_reply_mode(data)
-            if action == "set_search_credential":
-                return self._handle_set_search_credential(data)
-            return json.dumps({"status": "error", "message": f"unknown action: {action!r}"})
+            # ConfigHandler.POST, integrations.save_config_values and the four
+            # channel handlers all hold _settings_save_lock across their
+            # read-modify-write. Every models action rewrites the whole of
+            # config.json, so it must take the same lock: an overlapping save
+            # otherwise writes back the copy it read before the other landed and
+            # silently drops the keys the other one changed -- a provider key,
+            # a channel_type, a nested tool setting. The file stays valid, so
+            # nothing reports an error.
+            with _config_write_guard():
+                return self._dispatch_write_action(action, data)
         except Exception as e:
             logger.error(f"[ModelsHandler] POST failed: {e}")
             return json.dumps({"status": "error", "message": str(e)})
+
+    def _dispatch_write_action(self, action: str, data: dict) -> str:
+        """The POST actions that persist config (all run under the save lock)."""
+        if action == "set_provider":
+            return self._handle_set_provider(data)
+        if action == "delete_provider":
+            return self._handle_delete_provider(data)
+        if action == "set_custom_provider":
+            return self._handle_set_custom_provider(data)
+        if action == "delete_custom_provider":
+            return self._handle_delete_custom_provider(data)
+        if action == "set_active_custom_provider":
+            return self._handle_set_active_custom_provider(data)
+        if action == "set_capability":
+            return self._handle_set_capability(data)
+        if action == "save_catalog":
+            return self._handle_save_catalog(data)
+        if action == "set_voice_reply_mode":
+            return self._handle_set_voice_reply_mode(data)
+        if action == "set_search_credential":
+            return self._handle_set_search_credential(data)
+        if action == "set_search_provider_enabled":
+            return self._handle_set_search_provider_enabled(data)
+        return json.dumps({"status": "error", "message": f"unknown action: {action!r}"})
 
     def _handle_discover_models(self, data: dict) -> str:
         """Probe a provider's model endpoint without persisting credentials."""
@@ -1935,9 +2060,15 @@ class ModelsHandler:
             # in-memory conf() reflects the cleared state without needing a
             # restart. (`in local_config` was too strict: provider keys that
             # were ever set then deleted manually wouldn't get reset.)
+            previous = local_config.get(field_name)
             local_config[field_name] = ""
             file_cfg[field_name] = ""
             cleared.append(field_name)
+            # Startup mirrors these keys into os.environ, and readers fall
+            # back to env when config is empty, so drop the mirrored copy too.
+            env_key = CONFIG_TO_ENV.get(field_name)
+            if env_key and previous and os.environ.get(env_key) == previous:
+                os.environ.pop(env_key, None)
 
         self._write_file_config(file_cfg)
         logger.info(f"[ModelsHandler] provider {provider_id} cleared: {cleared}")
@@ -2681,7 +2812,7 @@ class ModelsHandler:
         instead.
         """
         provider = (data.get("provider") or "bocha").strip().lower()
-        if provider not in ("bocha", "anysearch", "serply", "tavily", "searxng", "keenable"):
+        if provider not in ("bocha", "anysearch", "serply", "tavily", "outcrawl", "firecrawl", "specstream", "olostep", "searchapi", "searxng", "keenable"):
             return json.dumps({"status": "error", "message": f"unsupported search provider: {provider!r}"})
 
         if provider in ("anysearch", "keenable"):
@@ -2700,6 +2831,8 @@ class ModelsHandler:
 
             self._set_nested_namespace_value(local_config, "tools", "web_search", anonymous_field, anonymous_on)
             self._set_nested_namespace_value(file_cfg, "tools", "web_search", anonymous_field, anonymous_on)
+            if api_key or anonymous_on:
+                self._set_search_provider_disabled(local_config, file_cfg, provider, False)
 
             self._write_file_config(file_cfg)
             logger.info(
@@ -2712,6 +2845,8 @@ class ModelsHandler:
             file_cfg = self._read_file_config()
             self._set_nested_namespace_value(local_config, "tools", "web_search", "searxng_url", instance_url)
             self._set_nested_namespace_value(file_cfg, "tools", "web_search", "searxng_url", instance_url)
+            if instance_url:
+                self._set_search_provider_disabled(local_config, file_cfg, provider, False)
             self._write_file_config(file_cfg)
             logger.info(f"[ModelsHandler] search credential set: searxng_url={'***' if instance_url else ''}")
             return json.dumps({"status": "success", "provider": provider})
@@ -2722,9 +2857,44 @@ class ModelsHandler:
             file_cfg = self._read_file_config()
             self._set_nested_namespace_value(local_config, "tools", "web_search", key_field, api_key)
             self._set_nested_namespace_value(file_cfg, "tools", "web_search", key_field, api_key)
+            if api_key:
+                self._set_search_provider_disabled(local_config, file_cfg, provider, False)
             self._write_file_config(file_cfg)
             logger.info(f"[ModelsHandler] search credential set: {key_field}={'***' if api_key else ''}")
             return json.dumps({"status": "success", "provider": provider})
+
+    def _handle_set_search_provider_enabled(self, data: dict) -> str:
+        """Switch a search provider on/off without touching its credential.
+        Model-vendor keys (deepseek/zhipu/qianfan/linkai) stay usable for chat."""
+        provider = (data.get("provider") or "").strip().lower()
+        if provider not in self._SEARCH_PROVIDERS:
+            return json.dumps({"status": "error", "message": f"unknown search provider: {provider!r}"})
+        enabled = data.get("enabled")
+        if not isinstance(enabled, bool):
+            return json.dumps({"status": "error", "message": "enabled must be a boolean"})
+
+        local_config = conf()
+        file_cfg = self._read_file_config()
+        self._set_search_provider_disabled(local_config, file_cfg, provider, not enabled)
+        self._write_file_config(file_cfg)
+        logger.info(f"[ModelsHandler] search provider {provider} enabled={enabled}")
+        return json.dumps({"status": "success", "provider": provider, "enabled": enabled})
+
+    def _set_search_provider_disabled(self, local_config, file_cfg, provider: str, disabled: bool) -> None:
+        """Add/remove ``provider`` in tools.web_search.disabled_providers."""
+        from agent.tools.web_search.web_search import parse_provider_list
+
+        for cfg in (local_config, file_cfg):
+            tools_cfg = cfg.get("tools") if isinstance(cfg.get("tools"), dict) else {}
+            ws_cfg = tools_cfg.get("web_search") if isinstance(tools_cfg.get("web_search"), dict) else {}
+            current = parse_provider_list(ws_cfg.get("disabled_providers"))
+            if disabled and provider not in current:
+                current.append(provider)
+            elif not disabled and provider in current:
+                current = [p for p in current if p != provider]
+            elif "disabled_providers" not in ws_cfg:
+                continue
+            self._set_nested_namespace_value(cfg, "tools", "web_search", "disabled_providers", current)
 
     @staticmethod
     def _reset_bridge() -> None:

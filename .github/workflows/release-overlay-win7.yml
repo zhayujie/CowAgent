@@ -131,6 +131,14 @@ jobs:
         with:
           node-version: "20"
 
+      # The backend reports cli/VERSION, not package.json; stamp the same
+      # version so the bundled backend can't lag behind the installer.
+      - name: Write version into cli/VERSION
+        shell: bash
+        env:
+          VER: ${{ inputs.version }}
+        run: bash desktop/build/stamp-backend-version.sh "$VER"
+
       - name: Build Python backend (PyInstaller, Python 3.8)
         shell: bash
         run: |
@@ -149,6 +157,12 @@ jobs:
             --noconfirm \
             --distpath desktop/build/dist \
             --workpath desktop/build/build-work
+
+      - name: Verify bundled backend version
+        shell: bash
+        env:
+          VER: ${{ inputs.version }}
+        run: bash desktop/build/stamp-backend-version.sh --verify "$VER"
 
       - name: Install desktop deps
         working-directory: desktop

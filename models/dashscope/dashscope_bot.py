@@ -73,6 +73,11 @@ class DashscopeBot(Bot):
         """Check if the model requires MultiModalConversation API"""
         return model_name.startswith(MULTIMODAL_MODEL_PREFIXES)
 
+    @classmethod
+    def model_supports_vision(cls, model_name: str) -> bool:
+        """Images only reach the model through the MultiModalConversation path."""
+        return cls._is_multimodal_model((model_name or "").lower())
+
     def reply(self, query, context=None):
         # acquire reply content
         if context.type == ContextType.TEXT:
@@ -661,6 +666,7 @@ class DashscopeBot(Bot):
                 # Check if this is a tool result message (user role with tool_result blocks)
                 if role == "user" and any(block.get("type") == "tool_result" for block in content):
                     # Convert each tool_result block to a separate tool message
+                    text_parts = []
                     for block in content:
                         if block.get("type") == "tool_result":
                             dashscope_messages.append({
@@ -668,6 +674,12 @@ class DashscopeBot(Bot):
                                 "content": block.get("content", ""),
                                 "tool_call_id": block.get("tool_use_id")  # DashScope uses 'tool_call_id'
                             })
+                        elif block.get("type") == "text":
+                            text_parts.append(block.get("text", ""))
+                    # Text next to tool results (e.g. a steering message sent
+                    # while tools ran) follows them as a user message.
+                    if text_parts:
+                        dashscope_messages.append({"role": "user", "content": "\n".join(text_parts)})
                 
                 # Check if this is an assistant message with tool_use blocks
                 elif role == "assistant":
@@ -707,8 +719,13 @@ class DashscopeBot(Bot):
                     
                     dashscope_messages.append(dashscope_msg)
                 else:
-                    # Other list content, keep as is
-                    dashscope_messages.append(msg)
+                    # Other list content, keep as is; OpenAI image blocks become
+                    # the {"image": url} parts MultiModalConversation expects.
+                    dashscope_messages.append({**msg, "content": [
+                        {"image": (block.get("image_url") or {}).get("url", "")}
+                        if isinstance(block, dict) and block.get("type") == "image_url" else block
+                        for block in content
+                    ]})
             else:
                 # Other formats, keep as is
                 dashscope_messages.append(msg)

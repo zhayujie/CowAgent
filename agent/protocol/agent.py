@@ -53,6 +53,12 @@ _MODEL_SPECS = {
     # Qwen: only 3.8-flash ships a 1M window; keep others conservative.
     "qwen": {"prefix": "qwen3.8-flash", "window": 1000000, "max_output": None,
              "fallback_window": 128000},
+    # MiniMax-M3.1-Flash: 1M context, 512K max output.
+    "minimax": {"prefix": "minimax-m3.1-flash", "window": 1000000, "max_output": 524288,
+                "fallback_window": 128000},
+    # Kimi K3 / K3.1 Pro / Highspeed: 1M context, 128K default max output.
+    "kimi": {"prefix": "kimi-k3", "window": 1048576, "max_output": 131072,
+             "fallback_window": 128000},
 }
 
 
@@ -516,9 +522,12 @@ class Agent:
         """
         if not text:
             return 0
-        # Count non-ASCII characters (CJK, emoji, etc.)
-        non_ascii = sum(1 for c in text if ord(c) > 127)
-        ascii_count = len(text) - non_ascii
+        # Count non-ASCII characters (CJK, emoji, etc.). encode() with
+        # errors="ignore" keeps exactly the code points up to 127 and runs in
+        # C: the whole history is estimated on every LLM call, and a
+        # per-character Python loop took ~50 ms per million characters.
+        ascii_count = len(text.encode("ascii", "ignore"))
+        non_ascii = len(text) - ascii_count
         # CJK chars: ~1.5 tokens each; ASCII: ~0.25 tokens per char
         return int(non_ascii * 1.5 + ascii_count * 0.25) + 1
 

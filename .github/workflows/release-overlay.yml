@@ -83,7 +83,7 @@ jobs:
           # first and the published feed loses an architecture. Windows has a
           # single leg and parks its feed untagged.
           - name: macOS arm64
-            os: macos-14
+            os: macos-15
             platform: mac
             eb_flags: --mac --arm64
             meta_arch: arm64
@@ -143,6 +143,14 @@ jobs:
         with:
           node-version: "20"
 
+      # The backend reports cli/VERSION, not package.json; stamp the same
+      # version so the bundled backend can't lag behind the installer.
+      - name: Write version into cli/VERSION
+        shell: bash
+        env:
+          VER: ${{ inputs.version }}
+        run: bash desktop/build/stamp-backend-version.sh "$VER"
+
       - name: Build Python backend (PyInstaller)
         shell: bash
         run: |
@@ -154,6 +162,12 @@ jobs:
             --noconfirm \
             --distpath desktop/build/dist \
             --workpath desktop/build/build-work
+
+      - name: Verify bundled backend version
+        shell: bash
+        env:
+          VER: ${{ inputs.version }}
+        run: bash desktop/build/stamp-backend-version.sh --verify "$VER"
 
       # Same guard as release.yml: the bundle carries only Python's own
       # libssl.3.dylib, so an extension linked against another OpenSSL fails to

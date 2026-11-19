@@ -517,7 +517,7 @@ function createBotMessageEl(content, timestamp, requestId, msg, peer) {
         ${faceHtml}
         <div class="min-w-0 flex-1 max-w-[85%]">
             ${speakerName}
-            <div class="bg-white dark:bg-[#1A1A1A] border border-slate-200 dark:border-white/10 rounded-2xl px-4 py-3 text-sm leading-relaxed msg-content text-slate-700 dark:text-slate-200">
+            <div class="bg-panel border border-slate-200 dark:border-white/10 rounded-2xl px-4 py-3 text-sm leading-relaxed msg-content text-slate-700 dark:text-slate-200">
                 ${evolutionBadge}
                 ${stepsHtml ? `<div class="agent-steps">${stepsHtml}</div>` : ''}
                 <div class="answer-content">${renderMarkdown(displayContent)}</div>
@@ -722,10 +722,14 @@ function _triggerManualTts(btn, botEl, text) {
     const icon = btn.querySelector('i');
     const prev = icon ? icon.className : '';
     if (icon) icon.className = 'fas fa-spinner fa-spin';
+    const payload = { text, session_id: sessionId };
+    const rawSeq = botEl.dataset.seq;
+    const messageSeq = rawSeq === undefined || rawSeq === '' ? null : Number(rawSeq);
+    if (Number.isInteger(messageSeq) && messageSeq >= 0) payload.message_seq = messageSeq;
     fetch('/api/voice/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, session_id: sessionId }),
+        body: JSON.stringify(payload),
     })
         .then(r => r.json())
         .then(data => {
@@ -914,7 +918,7 @@ function loadHistory(page, untilSeq) {
                 startSSE(
                     resume.request_id,
                     resumeEl ? null : addLoadingIndicator(),
-                    new Date(), null, null,
+                    new Date(), null,
                     { el: resumeEl, afterSeq: resume.after_seq || 0 }
                 );
             }
@@ -974,7 +978,7 @@ function addLoadingIndicator() {
     // once the server says who actually took the turn (an addressed teammate).
     el.innerHTML = `
         <span class="bot-face">${agentAvatarHTML(findAgent(activeAgentId), 32)}</span>
-        <div class="bg-white dark:bg-[#1A1A1A] border border-slate-200 dark:border-white/10 rounded-2xl px-4 py-3">
+        <div class="bg-panel border border-slate-200 dark:border-white/10 rounded-2xl px-4 py-3">
             <div class="flex items-center gap-1.5">
                 <span class="w-2 h-2 rounded-full bg-primary-400 animate-pulse-dot" style="animation-delay: 0s"></span>
                 <span class="w-2 h-2 rounded-full bg-primary-400 animate-pulse-dot" style="animation-delay: 0.2s"></span>

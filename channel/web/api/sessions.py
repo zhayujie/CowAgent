@@ -586,11 +586,18 @@ def _session_model_catalog() -> List[dict]:
                 # active provider) — skip rather than render an empty group.
                 continue
             name = cp.get("name") or cid
-            catalog.append({
+            group = {
                 "id": pid,
                 "label": {"zh": name, "en": name},
                 "models": models,
-            })
+            }
+            labels = {
+                e["name"]: e["alias"] for e in (entries or [])
+                if e.get("alias") and e["name"] in models
+            }
+            if labels:
+                group["labels"] = labels
+            catalog.append(group)
     except Exception as e:
         logger.debug(f"[WebChannel] custom providers unavailable: {e}")
 

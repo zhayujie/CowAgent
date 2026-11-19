@@ -45,6 +45,8 @@ Once the desktop client is running, it listens on port `9876` locally, and its b
 
 If that port is unavailable (for example reserved by Hyper-V/WSL2 on Windows), the client automatically falls back to another one and still starts normally. The actual port is shown on the `Local access` line in `run.log`, and you can pin one by setting `web_port` in `config.json`.
 
+By default only this machine can connect. To open it from other devices on the same network (a phone, for example), change the listen address to `0.0.0.0` or this machine's local IP under **Settings → Integrations** (an access password is required first); the addresses other devices can open are shown below it.
+
 ## Local Data Storage
 
 All data of the desktop client is stored on your machine:

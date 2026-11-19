@@ -6,6 +6,44 @@
    CowAgent Console Styles
    ===================================================================== */
 
+/* Palette (space-separated RGB so alpha can be applied). Tailwind's primary /
+   slate scales and the stylesheets read these; a theme overrides them inline
+   on <html> (static/js/core/themes.js). */
+:root {
+    --cw-primary-50: 237 253 243;
+    --cw-primary-100: 212 250 226;
+    --cw-primary-200: 171 244 199;
+    --cw-primary-300: 116 233 164;
+    --cw-primary-400: 74 190 110;
+    --cw-primary-500: 53 168 91;
+    --cw-primary-600: 34 133 71;
+    --cw-primary-700: 28 107 59;
+    --cw-primary-800: 26 85 50;
+    --cw-primary-900: 22 70 42;
+    --cw-slate-50: 248 250 252;
+    --cw-slate-100: 241 245 249;
+    --cw-slate-200: 226 232 240;
+    --cw-slate-300: 203 213 225;
+    --cw-slate-400: 148 163 184;
+    --cw-slate-500: 100 116 139;
+    --cw-slate-600: 71 85 105;
+    --cw-slate-700: 51 65 85;
+    --cw-slate-800: 30 41 59;
+    --cw-slate-900: 15 23 42;
+    /* Accent-colored text on a tinted accent background. */
+    --cw-accent-ink: 23 128 61;
+    --cw-canvas: 249 250 251;
+    --cw-panel: 255 255 255;
+    --cw-sidebar: 10 10 10;
+    /* Panel opacity; a glass wallpaper lowers it. */
+    --cw-glass-alpha: 1;
+}
+.dark {
+    --cw-accent-ink: 110 231 160;
+    --cw-canvas: 17 17 17;
+    --cw-panel: 26 26 26;
+}
+
 /* Mobile viewport fixes.
    On mobile browsers `100vh` includes the (collapsible) URL bar, so a full-height
    layout ends up taller than the visible area and leaks a vertical scrollbar/jitter.
@@ -40,13 +78,13 @@
 }
 
 /* Scrollbar */
-* { scrollbar-width: thin; scrollbar-color: #94a3b8 transparent; }
+* { scrollbar-width: thin; scrollbar-color: rgb(var(--cw-slate-400)) transparent; }
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #64748b; }
-.dark ::-webkit-scrollbar-thumb { background: #475569; }
-.dark ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+::-webkit-scrollbar-thumb { background: rgb(var(--cw-slate-400)); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgb(var(--cw-slate-500)); }
+.dark ::-webkit-scrollbar-thumb { background: rgb(var(--cw-slate-600)); }
+.dark ::-webkit-scrollbar-thumb:hover { background: rgb(var(--cw-slate-500)); }
 
 /* Generic Tooltip (via data-tooltip attribute) */
 [data-tooltip] {
@@ -64,8 +102,8 @@
     font-weight: 400;
     line-height: 1.4;
     white-space: nowrap;
-    background: #1e293b;
-    color: #e2e8f0;
+    background: rgb(var(--cw-slate-800));
+    color: rgb(var(--cw-slate-200));
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
     opacity: 0;
     pointer-events: none;
@@ -77,8 +115,8 @@
     top: calc(100% + 8px);
 }
 .dark [data-tooltip]::after {
-    background: #334155;
-    color: #f1f5f9;
+    background: rgb(var(--cw-slate-700));
+    color: rgb(var(--cw-slate-100));
 }
 [data-tooltip]:hover::after {
     opacity: 1;

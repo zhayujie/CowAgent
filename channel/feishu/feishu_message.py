@@ -3,15 +3,17 @@ from channel.chat_message import ChatMessage
 from channel.chat_message import safe_filename
 import json
 import os
+import re
 import requests
 from common.log import logger
 from common import state_dir, utils
 from common.media_download import MAX_FILE_BYTES, MAX_IMAGE_BYTES, download_to_file
+from channel.feishu.domain import FEISHU_DOMAIN
 
 
-def _download_resource(message_id, key, resource_type, access_token, path, max_bytes) -> bool:
+def _download_resource(message_id, key, resource_type, access_token, path, max_bytes, domain=FEISHU_DOMAIN) -> bool:
     """Save one message resource (image / file / audio) to ``path``."""
-    url = f"https://open.feishu.cn/open-apis/im/v1/messages/{message_id}/resources/{key}"
+    url = f"{domain}/open-apis/im/v1/messages/{message_id}/resources/{key}"
     try:
         download_to_file(
             url, path, max_bytes, timeout=(5, 30),
@@ -24,20 +26,62 @@ def _download_resource(message_id, key, resource_type, access_token, path, max_b
         return False
 
 
+def _mention_labels(mentions, bot_mention_keys) -> dict:
+    """What the agent reads in place of each mention key.
+
+    A text message writes the n-th person it @-mentions, the bot included, as
+    the key @_user_n; the event's "mentions" pairs each key with that person's
+    name. A person reads as "@name" and the bot's own mention as nothing. A key
+    that comes without a name is its own label, so its placeholder stays as it is.
+    """
+    labels = {}
+    for mention in mentions or []:
+        key = mention.get("key")
+        if not key:
+            continue
+        if key in bot_mention_keys:
+            labels[key] = ""
+        else:
+            labels[key] = "@" + mention["name"] if mention.get("name") else key
+    return labels
+
+
+def _name_mentions(text, labels) -> str:
+    """Put each key's label in its place; the bot's key goes with the spaces after it.
+
+    Only the keys of the message's own mentions are matched, the longest first:
+    with twelve mentions @_user_12 is one key, and with fewer it is @_user_1
+    followed by a 2 the sender typed.
+    """
+    if not labels:
+        return text
+
+    def replace(match):
+        key, spaces = match.groups()
+        return labels[key] + spaces if labels[key] else ""
+
+    keys = "|".join(re.escape(key) for key in sorted(labels, key=len, reverse=True))
+    return re.sub(f"({keys})( *)", replace, text)
+
+
 class FeishuMessage(ChatMessage):
     # Message types __init__ can parse; anything else raises NotImplementedError.
     SUPPORTED_TYPES = ("text", "image", "post", "file", "audio")
 
-    def __init__(self, event: dict, is_group=False, access_token=None):
+    def __init__(self, event: dict, is_group=False, access_token=None, bot_mention_keys=(), domain=FEISHU_DOMAIN):
         super().__init__(event)
         msg = event.get("message")
         sender = event.get("sender")
         self.access_token = access_token
+        self.domain = domain.rstrip("/")
         self.msg_id = msg.get("message_id")
         self.create_time = msg.get("create_time")
         self.is_group = is_group
         self.quoted_content = ""
         msg_type = msg.get("message_type")
+        # Who each mention key in a group message stands for; bot_mention_keys
+        # are the bot's own. Direct messages are left as they are.
+        mention_labels = _mention_labels(msg.get("mentions"), bot_mention_keys) if is_group else {}
 
         if msg_type == "text":
             self.ctype = ContextType.TEXT
@@ -52,7 +96,7 @@ class FeishuMessage(ChatMessage):
             # 下载图片到工作空间临时目录
             tmp_dir = str(state_dir.tmp_dir())
             image_path = os.path.join(tmp_dir, f"{safe_filename(image_key) or 'image'}.png")
-            if _download_resource(self.msg_id, image_key, "image", access_token, image_path, MAX_IMAGE_BYTES):
+            if _download_resource(self.msg_id, image_key, "image", access_token, image_path, MAX_IMAGE_BYTES, domain=self.domain):
                 logger.info(f"[FeiShu] Downloaded single image, key={image_key}, path={image_path}")
                 self.content = image_path
                 self.image_path = image_path  # 保存图片路径
@@ -60,79 +104,140 @@ class FeishuMessage(ChatMessage):
                 self.content = f"[图片下载失败: {image_key}]"
                 self.image_path = None
         elif msg_type == "post":
-            # 富文本消息，可能包含图片、文本等多种元素
-            content = json.loads(msg.get("content"))
-            
-            # 飞书富文本消息结构：content 直接包含 title 和 content 数组
-            # 不是嵌套在 post 字段下
+            # 富文本消息，可能包含图片、文本、视频、文件等多种元素
+            raw_content = json.loads(msg.get("content"))
+            content = raw_content
+            # Some payloads wrap the post body in a locale key, e.g. {"zh_cn": {...}}.
+            if "content" not in content:
+                localized = next((v for v in content.values() if isinstance(v, dict)), None)
+                if localized:
+                    content = localized
+
             title = content.get("title", "")
-            content_list = content.get("content", [])
-            
+            content_list = content.get("content") or []
+
             logger.info(f"[FeiShu] Post message - title: '{title}', content_list length: {len(content_list)}")
-            
-            # 收集所有图片和文本
+
             image_keys = []
             text_parts = []
-            
+            # Where the @-mentions sit in text_parts; they are not the post's own words
+            mention_parts = set()
+            # (file_key, file_name, file_type) for videos and file attachments
+            file_items = []
+            folder_names = []
+
             if title:
                 text_parts.append(title)
-            
+
             for block in content_list:
                 logger.debug(f"[FeiShu] Processing block: {block}")
                 # block 本身就是元素列表
                 if not isinstance(block, list):
                     continue
-                    
+
                 for element in block:
+                    if not isinstance(element, dict):
+                        continue
                     element_tag = element.get("tag")
                     logger.debug(f"[FeiShu] Element tag: {element_tag}, element: {element}")
                     if element_tag == "img":
-                        # 找到图片元素
                         image_key = element.get("image_key")
                         if image_key:
                             image_keys.append(image_key)
-                    elif element_tag == "text":
-                        # 文本元素
+                    elif element_tag in ("text", "code_block"):
                         text_content = element.get("text", "")
                         if text_content:
                             text_parts.append(text_content)
-            
-            logger.info(f"[FeiShu] Parsed - images: {len(image_keys)}, text_parts: {text_parts}")
-            
+                    elif element_tag == "a":
+                        link_text = element.get("text", "")
+                        href = element.get("href", "")
+                        if link_text or href:
+                            text_parts.append(f"{link_text} ({href})" if link_text and href else (link_text or href))
+                    elif element_tag == "at":
+                        # user_id is the mention key (@_user_n) here, not an id.
+                        # The bot's own key and a key without a name are left out.
+                        key = element.get("user_id")
+                        label = mention_labels.get(key)
+                        if label and label != key:
+                            mention_parts.add(len(text_parts))
+                            text_parts.append(label)
+                    elif element_tag == "media":
+                        file_key = element.get("file_key")
+                        if file_key:
+                            file_items.append((file_key, element.get("file_name") or "video.mp4", "video"))
+
+            # A file sent together with a caption arrives as a post whose
+            # attachments sit in a top-level "files" array next to "content".
+            files = list(content.get("files") or [])
+            if raw_content is not content:
+                files += raw_content.get("files") or []
+            for f in files:
+                if not isinstance(f, dict) or not f.get("file_key"):
+                    continue
+                file_name = f.get("file_name") or "file"
+                if f.get("is_folder"):
+                    # Folders can only be opened in the client, not downloaded via API.
+                    folder_names.append(file_name)
+                else:
+                    file_items.append((f["file_key"], file_name, "file"))
+
+            logger.info(
+                f"[FeiShu] Parsed - images: {len(image_keys)}, files: {len(file_items)}, "
+                f"folders: {len(folder_names)}, text_parts: {text_parts}"
+            )
+
             # 富文本消息统一作为文本消息处理
             self.ctype = ContextType.TEXT
-            
-            if image_keys:
-                # 如果包含图片，下载并在文本中引用本地路径
-                tmp_dir = str(state_dir.tmp_dir())
-                
-                # Only successful downloads are recorded as paths; failed ones
-                # keep a marker so the agent knows an image was sent.
-                self.image_paths = {}
-                failed_keys = []
-                for image_key in dict.fromkeys(image_keys):
-                    image_path = os.path.join(tmp_dir, f"{safe_filename(image_key) or 'image'}.png")
-                    if _download_resource(self.msg_id, image_key, "image", access_token, image_path, MAX_IMAGE_BYTES):
-                        self.image_paths[image_key] = image_path
-                        logger.info(f"[FeiShu] Image downloaded from post message, key={image_key}, path={image_path}")
-                    else:
-                        failed_keys.append(image_key)
-                
-                # 构建消息内容：文本 + 图片路径
-                content_parts = []
-                if text_parts:
-                    content_parts.append("\n".join(text_parts).strip())
-                for image_key, image_path in self.image_paths.items():
-                    content_parts.append(f"[图片: {image_path}]")
-                for image_key in failed_keys:
-                    content_parts.append(f"[图片下载失败: {image_key}]")
-                
-                self.content = "\n".join(content_parts)
-                logger.info(f"[FeiShu] Received post message with {len(image_keys)} image(s) and text: {self.content}")
-            else:
-                # 纯文本富文本消息
-                self.content = "\n".join(text_parts).strip() if text_parts else "[富文本消息]"
-                logger.info(f"[FeiShu] Received post message (text only): {self.content}")
+            # The post's own words: @-mentions alone don't make a post of files
+            # a question, so the channel still caches its files until one comes.
+            self.post_text = "\n".join(p for i, p in enumerate(text_parts) if i not in mention_parts).strip()
+            # (local_path, file_type) of every successfully downloaded attachment
+            self.attachments = []
+            tmp_dir = str(state_dir.tmp_dir())
+            text = "\n".join(text_parts).strip()
+            content_parts = [text] if text else []
+
+            # Only successful downloads are recorded as paths; failed ones
+            # keep a marker so the agent knows something was sent.
+            self.image_paths = {}
+            failed_images = []
+            for image_key in dict.fromkeys(image_keys):
+                image_path = os.path.join(tmp_dir, f"{safe_filename(image_key) or 'image'}.png")
+                if _download_resource(self.msg_id, image_key, "image", access_token, image_path, MAX_IMAGE_BYTES, domain=self.domain):
+                    self.image_paths[image_key] = image_path
+                    self.attachments.append((image_path, "image"))
+                    logger.info(f"[FeiShu] Image downloaded from post message, key={image_key}, path={image_path}")
+                else:
+                    failed_images.append(image_key)
+            for image_path in self.image_paths.values():
+                content_parts.append(f"[图片: {image_path}]")
+            for image_key in failed_images:
+                content_parts.append(f"[图片下载失败: {image_key}]")
+
+            self.failed_files = []
+            seen_file_keys = set()
+            for file_key, file_name, file_type in file_items:
+                if file_key in seen_file_keys:
+                    continue
+                seen_file_keys.add(file_key)
+                suffix = utils.get_path_suffix(file_name)
+                file_path = os.path.join(
+                    tmp_dir, f"{safe_filename(file_key) or file_type}" + (f".{suffix}" if suffix else "")
+                )
+                label = "视频" if file_type == "video" else "文件"
+                if _download_resource(self.msg_id, file_key, "file", access_token, file_path, MAX_FILE_BYTES, domain=self.domain):
+                    self.attachments.append((file_path, file_type))
+                    content_parts.append(f"[{label}: {file_path}]")
+                    logger.info(f"[FeiShu] {file_type} downloaded from post message, key={file_key}, path={file_path}")
+                else:
+                    self.failed_files.append(file_name)
+                    content_parts.append(f"[{label}下载失败: {file_name}]")
+            for folder_name in folder_names:
+                content_parts.append(f"[文件夹: {folder_name}]")
+
+            self.has_file_attachments = bool(file_items)
+            self.content = "\n".join(content_parts) if content_parts else "[富文本消息]"
+            logger.info(f"[FeiShu] Received post message: {self.content}")
         elif msg_type == "file":
             self.ctype = ContextType.FILE
             content = json.loads(msg.get("content"))
@@ -147,7 +252,7 @@ class FeishuMessage(ChatMessage):
             )
 
             def _download_file():
-                _download_resource(self.msg_id, file_key, "file", access_token, self.content, MAX_FILE_BYTES)
+                _download_resource(self.msg_id, file_key, "file", access_token, self.content, MAX_FILE_BYTES, domain=self.domain)
             self._prepare_fn = _download_file
         elif msg_type == "audio":
             # 飞书用户发送的语音消息类型为 "audio"，文件为 opus 编码格式。
@@ -164,7 +269,7 @@ class FeishuMessage(ChatMessage):
 
             def _download_audio():
                 logger.info(f"[FeiShu] downloading audio: file_key={file_key}, msg_id={self.msg_id}")
-                if _download_resource(self.msg_id, file_key, "file", access_token, self.content, MAX_FILE_BYTES):
+                if _download_resource(self.msg_id, file_key, "file", access_token, self.content, MAX_FILE_BYTES, domain=self.domain):
                     logger.info(f"[FeiShu] audio saved to: {self.content}")
             self._prepare_fn = _download_audio
         else:
@@ -179,7 +284,7 @@ class FeishuMessage(ChatMessage):
             # 群聊
             self.other_user_id = msg.get("chat_id")
             self.actual_user_id = self.from_user_id
-            self.content = self.content.replace("@_user_1", "").strip()
+            self.content = _name_mentions(self.content, mention_labels).strip()
             self.actual_user_nickname = ""
         else:
             # 私聊
@@ -202,7 +307,7 @@ class FeishuMessage(ChatMessage):
         if not parent_id or not self.access_token:
             return ""
 
-        url = "https://open.feishu.cn/open-apis/im/v1/messages/{}".format(parent_id)
+        url = "{}/open-apis/im/v1/messages/{}".format(self.domain, parent_id)
         headers = {"Authorization": "Bearer " + self.access_token}
         try:
             response = requests.get(

@@ -138,3 +138,80 @@ def test_an_unparsable_line_still_fails_closed_in_read_only():
     # Unchanged behaviour, kept so a future parser change cannot quietly turn
     # this into a fail-open path.
     assert not _read_only("echo 'unterminated").allowed
+
+
+# --- ``timeout``: the mandatory duration must not mask the wrapped command --
+
+TIMEOUT_WRAPPED_WRITES = [
+    "timeout 10 cp a.txt /etc/b.txt",
+    "timeout 1m rm /etc/passwd",
+    "timeout 10 cat a.txt > /etc/b.txt",
+]
+
+TIMEOUT_WRAPPED_READS = [
+    "timeout 10 cat a.txt",
+    "timeout 2.5s cat a.txt",
+    "timeout --preserve-status 5 grep -r foo .",
+]
+
+
+@pytest.mark.parametrize("command", TIMEOUT_WRAPPED_WRITES)
+def test_read_only_refuses_a_write_behind_timeout(command):
+    decision = _read_only(command)
+    assert not decision.allowed, f"{command!r} was allowed to write"
+
+
+@pytest.mark.parametrize("command", TIMEOUT_WRAPPED_READS)
+def test_read_only_still_allows_a_read_behind_timeout(command):
+    assert _read_only(command).allowed
+
+
+def test_workspace_write_refuses_a_write_behind_timeout():
+    assert not _workspace_write("timeout 10 cp a.txt /etc/b.txt").allowed
+
+
+def test_workspace_write_refuses_escalation_behind_timeout():
+    assert not _workspace_write("timeout 10 sudo rm -rf /").allowed
+
+
+def test_workspace_write_allows_a_workspace_write_behind_timeout():
+    assert _workspace_write("timeout 10 cp a.txt b.txt").allowed
+
+
+# --- wrapper options that take a separate value ---------------------------
+
+VALUE_OPTION_WRAPPED_WRITES = [
+    "timeout -s KILL 10 cp a.txt /etc/b.txt",
+    "timeout -k 5 --signal TERM 10 cp a.txt /etc/b.txt",
+    "nice -n 10 cp a.txt /etc/b.txt",
+    "ionice -c 2 -n 7 cp a.txt /etc/b.txt",
+    "stdbuf -o 0 cp a.txt /etc/b.txt",
+    "xargs -I {} cp {} /etc/b.txt",
+    "xargs -n 1 -P 4 rm /etc/passwd",
+    "env -u HOME cp a.txt /etc/b.txt",
+    "time -f %e cp a.txt /etc/b.txt",
+    "watch -n 5 cp a.txt /etc/b.txt",
+]
+
+
+@pytest.mark.parametrize("command", VALUE_OPTION_WRAPPED_WRITES)
+def test_workspace_write_refuses_a_write_behind_a_value_option(command):
+    assert not _workspace_write(command).allowed, f"{command!r} was allowed to write"
+
+
+@pytest.mark.parametrize("command", VALUE_OPTION_WRAPPED_WRITES)
+def test_read_only_refuses_a_write_behind_a_value_option(command):
+    assert not _read_only(command).allowed, f"{command!r} was allowed to write"
+
+
+@pytest.mark.parametrize("command", [
+    "timeout -s KILL 10 cat a.txt",
+    "nice -n 10 grep -r foo .",
+    "xargs -I {} cat {}",
+])
+def test_read_only_still_allows_a_read_behind_a_value_option(command):
+    assert _read_only(command).allowed
+
+
+def test_workspace_write_allows_a_workspace_write_behind_a_value_option():
+    assert _workspace_write("nice -n 10 cp a.txt b.txt").allowed

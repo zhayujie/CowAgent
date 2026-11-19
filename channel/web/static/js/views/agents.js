@@ -283,7 +283,8 @@ function _showFieldTip(iconEl) {
 }
 
 function _hideFieldTip() {
-    if (_fieldTipEl) _fieldTipEl.classList.remove('show');
+    // Bound to every scroll: avoid a no-op class write that wakes the Tailwind runtime.
+    if (_fieldTipEl && _fieldTipEl.classList.contains('show')) _fieldTipEl.classList.remove('show');
     _fieldTipIcon = null;
 }
 

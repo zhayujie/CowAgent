@@ -173,11 +173,14 @@ class WechatMPChannel(ChatChannel):
                 logger.info("[wechatmp] text cached, receiver {}\n{}".format(receiver, reply_text))
                 self.cache_dict[receiver].append(("text", reply_text))
             elif reply.type == ReplyType.VOICE:
+                owned = []
                 try:
                     voice_file_path = reply.content
+                    owned.append(voice_file_path)
                     duration, files = split_audio(voice_file_path, 60 * 1000)
                     if len(files) > 1:
                         logger.info("[wechatmp] voice too long {}s > 60s , split into {} parts".format(duration / 1000.0, len(files)))
+                    owned += files
 
                     for path in files:
                         # support: <2M, <60s, mp3/wma/wav/amr
@@ -198,6 +201,12 @@ class WechatMPChannel(ChatChannel):
                     logger.error("[wechatmp] voice conversion failed: {}".format(e))
                     logger.error("[wechatmp] please install pydub: pip install pydub")
                     return
+                finally:
+                    for path in owned:
+                        try:
+                            os.remove(path)
+                        except OSError:
+                            pass
 
             elif reply.type == ReplyType.IMAGE_URL:  # 从网络下载图片
                 img_url = reply.content
@@ -285,8 +294,10 @@ class WechatMPChannel(ChatChannel):
                         time.sleep(0.5)  # 休眠0.5秒，防止发送过快乱序
                 logger.info("[wechatmp] Do send text to {}: {}".format(receiver, reply_text))
             elif reply.type == ReplyType.VOICE:
+                owned = []
                 try:
                     file_path = reply.content
+                    owned.append(file_path)
                     file_name = os.path.basename(file_path)
                     file_type = os.path.splitext(file_name)[1]
                     if file_type == ".mp3":
@@ -295,6 +306,7 @@ class WechatMPChannel(ChatChannel):
                         file_type = "audio/amr"
                     else:
                         mp3_file = os.path.splitext(file_path)[0] + ".mp3"
+                        owned.append(mp3_file)
                         any_to_mp3(file_path, mp3_file)
                         file_path = mp3_file
                         file_name = os.path.basename(file_path)
@@ -304,12 +316,13 @@ class WechatMPChannel(ChatChannel):
                     duration, files = split_audio(file_path, 60 * 1000)
                     if len(files) > 1:
                         logger.info("[wechatmp] voice too long {}s > 60s , split into {} parts".format(duration / 1000.0, len(files)))
+                    owned += files
                     for path in files:
                         # support: <2M, <60s, AMR\MP3
-                        response = self.client.media.upload("voice", (os.path.basename(path), open(path, "rb"), file_type))
+                        with open(path, "rb") as f:
+                            response = self.client.media.upload("voice", (os.path.basename(path), f, file_type))
                         logger.debug("[wechatcom] upload voice response: {}".format(response))
                         media_ids.append(response["media_id"])
-                        os.remove(path)
                 except ImportError as e:
                     logger.error("[wechatmp] voice conversion failed: {}".format(e))
                     logger.error("[wechatmp] please install pydub: pip install pydub")
@@ -317,11 +330,12 @@ class WechatMPChannel(ChatChannel):
                 except WeChatClientException as e:
                     logger.error("[wechatmp] upload voice failed: {}".format(e))
                     return
-
-                try:
-                    os.remove(file_path)
-                except Exception:
-                    pass
+                finally:
+                    for path in owned:
+                        try:
+                            os.remove(path)
+                        except OSError:
+                            pass
 
                 for media_id in media_ids:
                     self.client.message.send_voice(receiver, media_id)

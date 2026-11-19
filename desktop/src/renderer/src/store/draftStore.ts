@@ -9,3 +9,13 @@ export const chatDraft: { text: string; attachments: Attachment[] } = {
   text: '',
   attachments: [],
 }
+
+export const PREFILL_EVENT = 'cow:prefill-chat-input'
+
+// Put `text` in the chat input without sending it: a mounted chat page picks
+// it up from the event, otherwise the input restores it from the draft.
+export function prefillChatInput(text: string): void {
+  chatDraft.text = text
+  chatDraft.attachments = []
+  window.dispatchEvent(new CustomEvent<string>(PREFILL_EVENT, { detail: text }))
+}

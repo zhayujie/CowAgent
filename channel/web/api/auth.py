@@ -6,19 +6,33 @@ sends the user back to after authorising it.
 
 import hashlib
 import hmac
+import html
 import json
 import time
 
 import web
 
+from agent.guest.access import LoginLimiter
 from channel.web.core._common import (
     _check_auth,
+    _client_ip,
     _get_web_password,
     _is_password_enabled,
     _session_expire_seconds,
 )
 from common.log import logger
 from common.utils import constant_time_equals
+
+# Once the console listens beyond this machine, anyone on the network can try
+# passwords; this caps the guessing per client and across all clients. Clients
+# on this machine are counted apart, so guessing from the network cannot lock
+# the owner out locally.
+_login_limiter = LoginLimiter()
+
+
+def _limiter_scope(client: str) -> str:
+    local = client in ("::1", "::ffff:127.0.0.1", "localhost") or client.startswith("127.")
+    return "console-local" if local else "console"
 
 
 def _create_auth_token():
@@ -46,6 +60,15 @@ class McpOAuthCallbackHandler:
         params = web.input(code="", state="", error="", error_description="")
 
         def _page(title: str, message: str) -> str:
+            # This page is reachable without a session by design (the OAuth
+            # `state` param is the secret), and `error` / `error_description`
+            # come straight from the query string while `server_name` comes
+            # from mcp.json — all attacker-controllable text rendered into the
+            # console's origin. Escape both fields so a crafted callback URL
+            # cannot run script here (e.g. same-origin fetches with the
+            # victim's session cookie).
+            title = html.escape(title)
+            message = html.escape(message)
             return (
                 "<!doctype html><html><head><meta charset='utf-8'>"
                 "<meta name='viewport' content='width=device-width,initial-scale=1'>"
@@ -109,11 +132,19 @@ class AuthLoginHandler:
             data = json.loads(web.data())
         except Exception:
             return json.dumps({"status": "error", "message": "Invalid request"})
+        client = _client_ip()
+        scope = _limiter_scope(client)
+        wait = _login_limiter.locked_for(scope, client)
+        if wait:
+            return json.dumps({"status": "error", "reason": "locked", "retry_after": wait,
+                               "message": f"Too many attempts. Try again in {wait} seconds."})
         password = str(data.get("password", "") or "")
         expected = _get_web_password()
         if not constant_time_equals(password, expected):
-            logger.warning("[WebChannel] Invalid login attempt")
-            return json.dumps({"status": "error", "message": "Wrong password"})
+            _login_limiter.failed(scope, client)
+            logger.warning(f"[WebChannel] Invalid login attempt from {client}")
+            return json.dumps({"status": "error", "reason": "wrong_password", "message": "Wrong password"})
+        _login_limiter.succeeded(scope, client)
         token = _create_auth_token()
         web.setcookie("cow_auth_token", token, expires=_session_expire_seconds(),
                        path="/", httponly=True, samesite="Lax")

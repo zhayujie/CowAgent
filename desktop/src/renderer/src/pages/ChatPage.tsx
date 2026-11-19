@@ -17,7 +17,7 @@ import ChatTimeline from '../components/ChatTimeline'
 import { useTimelineStore } from '../store/timelineStore'
 import { TeamChatModal } from '../components/NewChatMenu'
 import { product } from '@product'
-import { t } from '../i18n'
+import { t, getLang } from '../i18n'
 import apiClient from '../api/client'
 import type { Attachment, ChatMessage } from '../types'
 import { useChatStore } from '../store/chatStore'
@@ -25,6 +25,7 @@ import { useSessionStore, sessionOwner } from '../store/sessionStore'
 import { useAgentStore } from '../store/agentStore'
 import { useWorkspaceStore } from '../store/workspaceStore'
 import { startNewChat } from '../lib/newChat'
+import { PREFILL_EVENT } from '../store/draftStore'
 import { followingAfterUserScroll, shouldApplyBottomScroll, shouldFollowContentChange, shouldShowScrollToBottom } from '../lib/chatScroll'
 
 interface ChatPageProps {
@@ -65,12 +66,13 @@ function useSuggestionCards() {
         icon: s.icon ?? base.icon,
         iconClass: base.iconClass,
         bgClass: base.bgClass,
+        onSelect: s.onSelect,
       }
     })
   }
   return SUGGESTIONS.map(({ key, send, icon, iconClass, bgClass }) => {
     const text = t(`${key}_text` as Parameters<typeof t>[0])
-    return { key, title: t(`${key}_title` as Parameters<typeof t>[0]), text, prompt: send ?? text, icon, iconClass, bgClass }
+    return { key, title: t(`${key}_title` as Parameters<typeof t>[0]), text, prompt: send ?? text, icon, iconClass, bgClass, onSelect: undefined }
   })
 }
 
@@ -105,6 +107,13 @@ const ChatPage: React.FC<ChatPageProps> = ({ baseUrl }) => {
   const inputResetRef = useRef<ChatInputHandle>(null)
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
+
+  // Text handed over by another surface (e.g. "create a theme with the Agent").
+  useEffect(() => {
+    const onPrefill = (e: Event) => inputResetRef.current?.((e as CustomEvent<string>).detail, [])
+    window.addEventListener(PREFILL_EVENT, onPrefill)
+    return () => window.removeEventListener(PREFILL_EVENT, onPrefill)
+  }, [])
 
   // The Agents page can hand the user straight into a group chat: it navigates
   // here with ?team=1 to pop the group-chat picker over the conversation. Clear
@@ -310,7 +319,7 @@ const ChatPage: React.FC<ChatPageProps> = ({ baseUrl }) => {
   }, [messages, activeId, isStreaming, cancelQueuedScroll, scrollToBottom, updateScrollButton])
 
   const handleSend = useCallback(
-    async (text: string, attachments: Attachment[]) => {
+    async (text: string, attachments: Attachment[], display?: string) => {
       const sid = activeId
       const isFirst = (useChatStore.getState().sessions[sid]?.messages.length ?? 0) === 0
       titlePendingRef.current = isFirst
@@ -320,11 +329,11 @@ const ChatPage: React.FC<ChatPageProps> = ({ baseUrl }) => {
       followBottomRef.current = true
       cancelQueuedScroll()
       useTimelineStore.getState().setJumping(false)
-      await send(sid, text, attachments)
+      await send(sid, text, attachments, display)
       // After the first message, refresh the list and ask backend to title it.
       if (isFirst) {
         try {
-          const res = await apiClient.generateSessionTitle(sid, text, undefined, owner)
+          const res = await apiClient.generateSessionTitle(sid, display || text, undefined, owner)
           if (res.status === 'success' && res.title) {
             useSessionStore.setState((s) => ({
               sessions: s.sessions.map((x) => (x.session_id === sid ? { ...x, title: res.title } : x)),
@@ -496,13 +505,13 @@ const ChatPage: React.FC<ChatPageProps> = ({ baseUrl }) => {
 
         {isEmpty ? (
           <div data-home className="chat-home flex flex-col items-center justify-center h-full px-6 py-12">
-            {product.slots?.HomeLogo ? (
-              <div className="w-16 h-16 rounded-2xl mb-5 shadow-md overflow-hidden">
+            <div className="theme-logo w-16 h-16 rounded-2xl mb-5 shadow-md overflow-hidden">
+              {product.slots?.HomeLogo ? (
                 <product.slots.HomeLogo />
-              </div>
-            ) : (
-              <img src="./logo.jpg" alt="CowAgent" className="w-16 h-16 rounded-2xl mb-5 shadow-md" />
-            )}
+              ) : (
+                <img src="./logo.jpg" alt="CowAgent" className="block w-full h-full" />
+              )}
+            </div>
             <h1 className="text-xl font-semibold text-content mb-2">{t('chat_welcome')}</h1>
             <p className="text-content-tertiary text-sm text-center max-w-md mb-8 leading-relaxed whitespace-pre-line">
               {t('welcome_subtitle')}
@@ -510,10 +519,16 @@ const ChatPage: React.FC<ChatPageProps> = ({ baseUrl }) => {
 
             {suggestions.length > 0 && (
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 w-full max-w-2xl">
-                {suggestions.map(({ key, title, text, prompt, icon: Icon, iconClass, bgClass }) => (
+                {suggestions.map(({ key, title, text, prompt, icon: Icon, iconClass, bgClass, onSelect }) => (
                   <button
                     key={key}
                     onClick={() => {
+                      if (onSelect) {
+                        onSelect({
+                          send: (value, display, attachments) => void handleSend(value, attachments ?? [], display),
+                        })
+                        return
+                      }
                       // Fill the input (don't auto-send) so the user can tweak it first.
                       inputResetRef.current?.(prompt, [])
                     }}
@@ -534,7 +549,7 @@ const ChatPage: React.FC<ChatPageProps> = ({ baseUrl }) => {
             )}
           </div>
         ) : (
-          <div ref={contentRef} className="py-3 max-w-3xl mx-auto">
+          <div ref={contentRef} className="chat-column py-3">
             {messages.map((msg, i) =>
               msg.kind === 'divider' ? (
                 <div key={msg.id} className="flex items-center gap-3 px-6 py-3 text-content-tertiary">
@@ -553,6 +568,7 @@ const ChatPage: React.FC<ChatPageProps> = ({ baseUrl }) => {
                 // can locate and scroll to them on click.
                 <div
                   key={msg.id}
+                  className="chat-message-row"
                   data-user-seq={msg.role === 'user' && msg.userSeq != null ? msg.userSeq : undefined}
                 >
                   <MessageBubble
@@ -565,6 +581,7 @@ const ChatPage: React.FC<ChatPageProps> = ({ baseUrl }) => {
                     onDelete={handleDelete}
                     onMediaLoad={handleMediaLoad}
                     turnSeq={turnSeqs[i]}
+                    lang={getLang()}
                   />
                 </div>
               )

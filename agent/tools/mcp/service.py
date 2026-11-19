@@ -183,13 +183,18 @@ def mcp_config_path(workspace: Optional[str] = None) -> str:
 
 
 def _read_mcp_file(path: str):
+    """Parse mcp.json; None when the file is blank (treated as absent)."""
     try:
         with open(path, "r", encoding="utf-8-sig") as handle:
-            data = json.load(handle)
-    except json.JSONDecodeError as exc:
-        raise McpConfigError(f"mcp.json is not valid JSON: {exc}") from exc
+            text = handle.read()
     except OSError as exc:
         raise McpConfigError(f"failed to read mcp.json: {exc}") from exc
+    if not text.strip():
+        return None
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise McpConfigError(f"mcp.json is not valid JSON: {exc}") from exc
     if not isinstance(data, dict):
         raise McpConfigError("mcp.json must be a JSON object")
     return data
@@ -206,11 +211,11 @@ def load_servers(workspace: Optional[str] = None) -> list:
     from agent.tools.tool_manager import _normalize_mcp_configs
 
     path = mcp_config_path(workspace)
-    if not os.path.exists(path):
+    data = _read_mcp_file(path) if os.path.exists(path) else None
+    if data is None:
         from config import conf
 
         return _normalize_mcp_configs(conf().get("mcp_servers") or [])
-    data = _read_mcp_file(path)
     raw = data.get("mcpServers")
     if raw is None:
         raw = data.get("mcp_servers", data)
@@ -259,8 +264,8 @@ def save_servers(workspace: Optional[str], servers: list) -> list:
     # Keep any other top-level keys a hand-edited mcp.json carries; a flat
     # file (servers at the top level) has nothing besides servers to keep.
     payload = {}
-    if os.path.exists(path):
-        current = _read_mcp_file(path)
+    current = _read_mcp_file(path) if os.path.exists(path) else None
+    if current:
         if "mcpServers" in current or "mcp_servers" in current:
             payload = {k: v for k, v in current.items() if k not in ("mcpServers", "mcp_servers")}
     payload["mcpServers"] = {entry["name"]: _persistable(entry) for entry in normalized}
@@ -327,9 +332,13 @@ def probe_server(cfg: dict) -> dict:
     try:
         if not client.initialize():
             needs_auth = bool(getattr(client, "needs_auth", False))
+            if needs_auth:
+                error = "needs authorization"
+            else:
+                error = getattr(client, "last_error", None) or "initialization failed"
             return {
                 "ok": False,
-                "error": "needs authorization" if needs_auth else "initialization failed",
+                "error": error,
                 "tools": [],
                 "needs_auth": needs_auth,
             }

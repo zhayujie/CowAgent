@@ -1,15 +1,15 @@
 ---
 title: 项目介绍
-description: "CowAgent 是开源的超级 AI 助理与 Agent Harness：自主规划任务、调用工具与技能、操作计算机，拥有长期记忆与知识库并持续自我进化，支持多模型、多智能体和微信、飞书、钉钉等通道。"
+description: "CowAgent 是开源的 Personal Agent，属于你自己的超级 AI 助理：主动规划任务，调用工具、技能与 MCP，通过长期记忆、知识库和自进化越用越懂你，支持多模型、多通道、多智能体。"
 ---
 
 <div align="center">
   <img src="https://cdn.link-ai.tech/doc/78c5dd674e2c828642ecc0406669fed7.png" alt="CowAgent" width="400px"/>
 </div>
 
-**CowAgent** 是基于大模型的超级AI助理，能够主动思考和任务规划、操作计算机和外部资源、创造和执行Skills、拥有长期记忆和知识库并不断成长。
+**CowAgent** 是开源的 Personal Agent，属于你自己的超级 AI 助理：能主动规划任务，调用工具、技能与 MCP，通过长期记忆、知识库和自进化能力越用越懂你。
 
-CowAgent 支持灵活切换多种模型，可快速搭建多智能体团队，能处理文本、语音、图片、文件等多模态消息，可接入微信、飞书、钉钉、企业微信应用、微信公众号、网页中使用，7×24小时运行于你的个人电脑或服务器中。
+CowAgent 支持多模型、多通道、多智能体，能处理文本、语音、图片、文件等多模态消息，可接入微信、飞书、钉钉、企业微信、QQ、网页等渠道，7×24 小时运行于个人电脑或服务器中。它既是开箱即用的 AI 助理，也是开放可扩展的 Agent Harness。
 
 <Frame>
   <video controls preload="metadata" playsInline className="w-full rounded-xl" src="https://cdn.link-ai.tech/desktop/video/cow-demo-zh-v1.mp4" />
@@ -19,8 +19,8 @@ CowAgent 支持灵活切换多种模型，可快速搭建多智能体团队，�
   <Card title="GitHub" icon="github" href="https://github.com/zhayujie/CowAgent">
     开源代码仓库，欢迎 Star 和贡献
   </Card>
-  <Card title="免部署在线体验" icon="cloud" href="https://link-ai.tech/cowagent/create?utm_source=cowagent&utm_medium=docs&utm_campaign=intro">
-    无需安装，立即在线体验 CowAgent
+  <Card title="免部署在线使用" icon="cloud" href="https://cloud.cowagent.cn">
+    专属云端实例，内置模型服务，开箱即用
   </Card>
 </CardGroup>
 
@@ -49,7 +49,7 @@ CowAgent 支持灵活切换多种模型，可快速搭建多智能体团队，�
     提供终端 CLI 和对话中的命令，支持进程管理、技能安装、配置修改、上下文查看等常用操作。
   </Card>
   <Card title="多模型支持" icon="microchip" href="/zh/models/index">
-    支持 OpenAI, Claude, Gemini, DeepSeek, MiniMax, GLM, Qwen, Kimi, Doubao 等国内外主流模型厂商。
+    支持 OpenAI, Claude, Gemini, DeepSeek, MiniMax, GLM, Qwen, Kimi, Doubao 等国内外主流模型厂商，也可以通过 CowAgent 模型服务一个 Key 接入全部能力。
   </Card>
   <Card title="多通道接入" icon="server" href="/zh/channels/weixin">
     支持运行在本地计算机或服务器，可集成到微信、网页、飞书、钉钉、微信公众号、企业微信应用中使用。
@@ -84,7 +84,9 @@ CowAgent 支持灵活切换多种模型，可快速搭建多智能体团队，�
 
 运行后默认会启动 Web 控制台，通过访问 `http://localhost:9899` 可以在网页端进行对话、配置、应用通道接入等操作。
 
-也可以使用桌面客户端（macOS / Windows），内置 Agent 运行环境，[下载安装](https://cowagent.ai/zh/download/)后开箱即用。
+也可以使用桌面客户端（macOS / Windows），内置 Agent 运行环境，[下载安装](https://cowagent.cn/zh/download/)后开箱即用。
+
+不想自己部署和准备模型 Key，还可以 [在线使用](https://cloud.cowagent.cn)：在浏览器中创建专属实例，内置模型服务，7×24 小时在线。详见 [云端托管](/zh/guide/cloud)。
 
 <CardGroup cols={2}>
   <Card title="快速开始" icon="rocket" href="/zh/guide/quick-start">

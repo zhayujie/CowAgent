@@ -19,16 +19,16 @@
   "navbar": {
     "links": [
       {
-        "label": "官网",
+        "label": "Website",
         "href": "https://cowagent.ai/"
       },
       {
-        "label": "下载",
+        "label": "Download",
         "href": "https://cowagent.ai/download/"
       },
       {
-        "label": "博客",
-        "href": "https://cowagent.ai/zh/blog/"
+        "label": "Blog",
+        "href": "https://cowagent.ai/blog/"
       },
       {
         "label": "GitHub",
@@ -45,6 +45,21 @@
     {
       "source": "/en/:slug*",
       "destination": "/:slug*",
+      "permanent": true
+    },
+    {
+      "source": "/guide/desktop-themes",
+      "destination": "/extensions/custom-theme",
+      "permanent": true
+    },
+    {
+      "source": "/zh/guide/desktop-themes",
+      "destination": "/zh/extensions/custom-theme",
+      "permanent": true
+    },
+    {
+      "source": "/ja/guide/desktop-themes",
+      "destination": "/ja/extensions/custom-theme",
       "permanent": true
     }
   ],
@@ -95,6 +110,7 @@
                 "pages": [
                   "guide/quick-start",
                   "guide/desktop",
+                  "guide/cloud",
                   "guide/manual-install",
                   "guide/upgrade"
                 ]
@@ -119,6 +135,7 @@
                   "models/kimi",
                   "models/qianfan",
                   "models/mimo",
+                  "models/cowagent",
                   "models/linkai",
                   "models/coding-plan",
                   "models/custom"
@@ -277,9 +294,16 @@
                 ]
               },
               {
+                "group": "Sharing",
+                "pages": [
+                  "extensions/guest-share"
+                ]
+              },
+              {
                 "group": "Customization",
                 "pages": [
-                  "extensions/custom-menu"
+                  "extensions/custom-menu",
+                  "extensions/custom-theme"
                 ]
               },
               {
@@ -297,6 +321,7 @@
                 "group": "Release Notes",
                 "pages": [
                   "releases/overview",
+                  "releases/v2.2.2",
                   "releases/v2.2.1",
                   "releases/v2.2.0",
                   "releases/v2.1.9",
@@ -331,15 +356,15 @@
           "links": [
             {
               "label": "官网",
-              "href": "https://cowagent.ai/?lang=zh"
+              "href": "https://cowagent.cn/"
             },
             {
               "label": "下载",
-              "href": "https://cowagent.ai/zh/download/"
+              "href": "https://cowagent.cn/zh/download/"
             },
             {
               "label": "博客",
-              "href": "https://cowagent.ai/zh/blog/"
+              "href": "https://cowagent.cn/zh/blog/"
             },
             {
               "label": "GitHub",
@@ -369,6 +394,7 @@
                 "pages": [
                   "zh/guide/quick-start",
                   "zh/guide/desktop",
+                  "zh/guide/cloud",
                   "zh/guide/manual-install",
                   "zh/guide/upgrade"
                 ]
@@ -393,6 +419,7 @@
                   "zh/models/kimi",
                   "zh/models/qianfan",
                   "zh/models/mimo",
+                  "zh/models/cowagent",
                   "zh/models/linkai",
                   "zh/models/coding-plan",
                   "zh/models/custom"
@@ -551,9 +578,16 @@
                 ]
               },
               {
+                "group": "对外分享",
+                "pages": [
+                  "zh/extensions/guest-share"
+                ]
+              },
+              {
                 "group": "界面定制",
                 "pages": [
-                  "zh/extensions/custom-menu"
+                  "zh/extensions/custom-menu",
+                  "zh/extensions/custom-theme"
                 ]
               },
               {
@@ -571,6 +605,7 @@
                 "group": "发布记录",
                 "pages": [
                   "zh/releases/overview",
+                  "zh/releases/v2.2.2",
                   "zh/releases/v2.2.1",
                   "zh/releases/v2.2.0",
                   "zh/releases/v2.1.9",
@@ -667,6 +702,7 @@
                   "ja/models/kimi",
                   "ja/models/qianfan",
                   "ja/models/mimo",
+                  "ja/models/cowagent",
                   "ja/models/linkai",
                   "ja/models/coding-plan",
                   "ja/models/custom"
@@ -824,9 +860,16 @@
                 ]
               },
               {
+                "group": "共有",
+                "pages": [
+                  "ja/extensions/guest-share"
+                ]
+              },
+              {
                 "group": "UI カスタマイズ",
                 "pages": [
-                  "ja/extensions/custom-menu"
+                  "ja/extensions/custom-menu",
+                  "ja/extensions/custom-theme"
                 ]
               },
               {
@@ -844,6 +887,7 @@
                 "group": "リリースノート",
                 "pages": [
                   "ja/releases/overview",
+                  "ja/releases/v2.2.2",
                   "ja/releases/v2.2.1",
                   "ja/releases/v2.2.0",
                   "ja/releases/v2.1.9",

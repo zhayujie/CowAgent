@@ -1,9 +1,9 @@
 ---
 title: 小米 MiMo
-description: "在 CowAgent 中配置小米 MiMo 原生全模态模型：一份 API Key 即可同时启用文本对话、图像理解与语音合成，V2.5 系列默认开启思考模式，可在 Web 控制台一站式配置。"
+description: "在 CowAgent 中配置小米 MiMo 原生全模态模型：一份 API Key 即可同时启用文本对话、图像理解、语音识别与语音合成，V2.6 系列默认开启思考模式，可在 Web 控制台一站式配置。"
 ---
 
-小米 MiMo 是原生全模态大模型，单 `mimo_api_key` 即可同时启用文本对话、图像理解与语音合成。
+小米 MiMo 是原生全模态大模型，单 `mimo_api_key` 即可同时启用文本对话、图像理解、语音识别与语音合成。
 
 <Tip>
   通过 Web 控制台的「模型管理」页面可一站式配置以下全部能力，无需手动改配置文件。
@@ -13,7 +13,7 @@ description: "在 CowAgent 中配置小米 MiMo 原生全模态模型：一份 A
 
 ```json
 {
-  "model": "mimo-v2.5-pro",
+  "model": "mimo-v2.6-pro",
   "mimo_api_key": "YOUR_API_KEY",
   "mimo_api_base": "https://api.xiaomimimo.com/v1"
 }
@@ -21,7 +21,7 @@ description: "在 CowAgent 中配置小米 MiMo 原生全模态模型：一份 A
 
 | 参数 | 说明 |
 | --- | --- |
-| `model` | 默认推荐 `mimo-v2.5-pro`，也可使用 `mimo-v2.5` |
+| `model` | 默认推荐 `mimo-v2.6-pro`，也可使用 `mimo-v2.6-flash` |
 | `mimo_api_key` | 在 [MiMo 开放平台](https://platform.xiaomimimo.com/console/api-keys) 创建 |
 | `mimo_api_base` | 可选，默认为 `https://api.xiaomimimo.com/v1` |
 
@@ -29,12 +29,12 @@ description: "在 CowAgent 中配置小米 MiMo 原生全模态模型：一份 A
 
 | 模型 | 适用场景 |
 | --- | --- |
-| `mimo-v2.5-pro` | 旗舰，原生全模态 + Agent 能力，最高 100 万 tokens 上下文 |
-| `mimo-v2.5` | 综合版，原生全模态（文本 / 图像 / 视频 / 音频） |
+| `mimo-v2.6-pro` | 旗舰，原生全模态 + Agent 能力，最高 100 万 tokens 上下文 |
+| `mimo-v2.6-flash` | 更快更省，原生全模态（文本 / 图像 / 视频 / 音频），最高 100 万 tokens 上下文 |
 
 ## 思考模式
 
-MiMo V2.5 系列默认开启「思考模式」：模型在输出最终回答前会先输出 `reasoning_content`（思维链），提升复杂任务表现。
+MiMo V2.6 系列默认开启「思考模式」：模型在输出最终回答前会先输出 `reasoning_content`（思维链），提升复杂任务表现。
 
 通过全局配置 `enable_thinking` 控制是否展示（也可在 Web 控制台 - 配置页面切换）：
 
@@ -48,8 +48,8 @@ MiMo V2.5 系列默认开启「思考模式」：模型在输出最终回答前�
 
 配置 `mimo_api_key` 后，Agent 的 Vision 工具可以自动使用 MiMo 视觉模型：
 
-- 当主模型本身是多模态时（`mimo-v2.5-pro` / `mimo-v2.5`），直接由主模型识别图像，无需额外配置
-- 当主模型是其他厂商时，Vision 工具会根据顺序自动 fallback 到 `mimo-v2.5-pro`
+- 当主模型本身是多模态时（`mimo-v2.6-pro` / `mimo-v2.6-flash`），直接由主模型识别图像，无需额外配置
+- 当主模型是其他厂商时，Vision 工具会根据顺序自动 fallback 到 `mimo-v2.6-pro`
 
 如需手动指定 Vision 模型，可在配置文件中显式配置：
 
@@ -58,11 +58,27 @@ MiMo V2.5 系列默认开启「思考模式」：模型在输出最终回答前�
   "tools": {
     "vision": {
       "provider": "mimo",
-      "model": "mimo-v2.5-pro"
+      "model": "mimo-v2.6-pro"
     }
   }
 }
 ```
+
+## 语音识别
+
+```json
+{
+  "voice_to_text": "mimo",
+  "voice_to_text_model": "mimo-v2.5-asr"
+}
+```
+
+| 参数 | 说明 |
+| --- | --- |
+| `voice_to_text` | 设为 `mimo` 启用 MiMo 语音识别 |
+| `voice_to_text_model` | 可选，默认 `mimo-v2.5-asr`（中英文自动识别，支持粤语、吴语、闽南语、四川话等方言） |
+
+凭证自动复用 `mimo_api_key`。MiMo 仅支持 MP3 / WAV 音频，其他格式的语音消息（如 AMR / SILK / Opus）会先自动转为 MP3 再识别。编码后的音频需小于 10MB。
 
 ## 语音合成
 

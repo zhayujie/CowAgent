@@ -7,7 +7,6 @@ Unit tests for MiniMax provider additions:
 """
 import sys
 import os
-import json
 import unittest
 from unittest.mock import MagicMock, patch, PropertyMock
 
@@ -50,25 +49,13 @@ class TestMinimaxConst(unittest.TestCase):
 
 
 class TestMinimaxBotDefaultModel(unittest.TestCase):
-    """Test that MinimaxBot defaults to MiniMax-M3."""
+    """Test the real MiniMax default and native vision support."""
 
-    def test_default_model_is_m3(self):
-        # Patch conf() to return empty config
-        mock_conf = MagicMock()
-        mock_conf.get = MagicMock(side_effect=lambda key, default=None: default)
+    def test_default_model_is_flash(self):
+        from models.minimax.minimax_bot import MinimaxBot
 
-        with patch("models.minimax.minimax_bot.conf", return_value=mock_conf):
-            with patch("models.minimax.minimax_bot.SessionManager"):
-                from models.minimax import minimax_bot
-                # Reload to pick up patches
-                import importlib
-                importlib.reload(minimax_bot)
-                with patch("models.minimax.minimax_bot.conf", return_value=mock_conf):
-                    bot = minimax_bot.MinimaxBot.__new__(minimax_bot.MinimaxBot)
-                    bot.args = {
-                        "model": mock_conf.get("model") or "MiniMax-M3",
-                    }
-                    self.assertEqual(bot.args["model"], "MiniMax-M3")
+        with patch("models.minimax.minimax_bot.conf", return_value={}):
+            self.assertEqual(MinimaxBot().args["model"], "MiniMax-M3.1-Flash")
 
     def test_m3_is_marked_as_native_vision_model(self):
         from models.minimax.minimax_bot import MinimaxBot
@@ -109,16 +96,6 @@ class TestMinimaxBotDefaultModel(unittest.TestCase):
         bot.args = {"model": "MiniMax-M2.7"}
         result = bot.call_vision("https://example.com/image.png", "Describe it")
         self.assertTrue(result["error"])
-
-    def test_default_model_string(self):
-        """Verify the fallback string literal in minimax_bot.py is MiniMax-M3."""
-        import ast
-        bot_path = os.path.join(os.path.dirname(__file__), "..", "models", "minimax", "minimax_bot.py")
-        with open(bot_path) as f:
-            source = f.read()
-        # Verify MiniMax-M3 is in the source (not the older default)
-        self.assertIn("MiniMax-M3", source)
-        self.assertNotIn('"MiniMax-M2.1"', source)
 
 
 class TestMinimaxVoice(unittest.TestCase):
@@ -162,7 +139,6 @@ class TestMinimaxVoice(unittest.TestCase):
         audio_hex = bytes([0x49, 0x44, 0x33]).hex()  # "ID3" MP3 magic bytes
         sse_line = f'data: {{"data": {{"audio": "{audio_hex}", "status": 2}}}}\n\n'
         done_line = "data: [DONE]\n\n"
-        fake_body = (sse_line + done_line).encode("utf-8")
 
         mock_response = MagicMock()
         mock_response.raise_for_status = MagicMock()

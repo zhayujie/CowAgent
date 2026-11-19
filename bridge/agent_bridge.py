@@ -2104,6 +2104,9 @@ class AgentBridge:
                 "role": "user",
                 "content": [{"type": "text", "text": query}],
             }
+            display = context.get("display") if context else None
+            if display:
+                user_msg["extras"] = {"display": display}
             store.append_messages(session_id, [user_msg], channel_type=channel_type)
             return True
         except Exception as e:
@@ -2154,8 +2157,9 @@ class AgentBridge:
         except Exception:
             thinking_enabled = False
 
-        messages_to_store = new_messages
-        if not thinking_enabled:
+        if thinking_enabled:
+            messages_to_store = self._unsign_thinking_blocks(new_messages)
+        else:
             messages_to_store = self._strip_thinking_blocks(new_messages)
 
         stored = False
@@ -2209,6 +2213,7 @@ class AgentBridge:
         channel_type: str = "",
         task_description: str = "",
         agent_id: str = None,
+        run_id: str = "",
     ) -> None:
         """Add the visible output of a scheduled task to the receiver's session.
 
@@ -2223,6 +2228,9 @@ class AgentBridge:
             scheduler_inject_max_per_session (int, default 3):
                 Maximum scheduler-injected user/assistant pairs retained per
                 session. Older injections are pruned automatically.
+
+        ``run_id`` associates the stored pair with its scheduler execution;
+        callers without an id remain supported without guessing association.
 
         Content is truncated to 4000 chars to prevent a single high-volume task
         from bloating one entry, while staying long enough that the history
@@ -2248,9 +2256,14 @@ class AgentBridge:
             {"role": "assistant", "content": [{"type": "text", "text": content}]},
         ]
 
+        # Association is storage metadata, not a field in model messages.
+        persisted_messages = (
+            [dict(message, run_id=run_id) for message in messages] if run_id else messages
+        )
+
         # Persist first so the new pair gets a stable seq, then prune old
         # scheduler pairs in DB, then sync the in-memory agent.messages buffer.
-        self._persist_messages(session_id, messages, channel_type, agent_id)
+        self._persist_messages(session_id, persisted_messages, channel_type, agent_id)
 
         keep_last_n = max(int(conf().get("scheduler_inject_max_per_session", 3) or 0), 0)
         try:
@@ -2404,7 +2417,7 @@ class AgentBridge:
                 continue
             filtered_blocks = [
                 b for b in content
-                if not (isinstance(b, dict) and b.get("type") == "thinking")
+                if not (isinstance(b, dict) and b.get("type") in ("thinking", "redacted_thinking"))
             ]
             if len(filtered_blocks) == len(content):
                 cleaned.append(msg)
@@ -2412,6 +2425,41 @@ class AgentBridge:
                 new_msg = dict(msg)
                 new_msg["content"] = filtered_blocks
                 cleaned.append(new_msg)
+        return cleaned
+
+    @staticmethod
+    def _unsign_thinking_blocks(messages: list) -> list:
+        """Return a shallow copy of messages with signed thinking stored as plain reasoning.
+
+        A signature is only needed within the run that produced it, and its
+        reasoning is truncated for storage like any other, which would void it.
+        Unsigned thinking is never sent back to Claude, so drop the signature
+        and the opaque redacted_thinking blocks.
+        """
+        from agent.protocol.agent_stream import _truncate_reasoning_for_storage
+
+        cleaned = []
+        for msg in messages:
+            content = msg.get("content") if isinstance(msg, dict) and msg.get("role") == "assistant" else None
+            if not isinstance(content, list) or not any(
+                isinstance(b, dict) and (
+                    b.get("type") == "redacted_thinking"
+                    or (b.get("type") == "thinking" and "signature" in b)
+                )
+                for b in content
+            ):
+                cleaned.append(msg)
+                continue
+            blocks = []
+            for b in content:
+                if isinstance(b, dict) and b.get("type") == "redacted_thinking":
+                    continue
+                if isinstance(b, dict) and b.get("type") == "thinking" and "signature" in b:
+                    if not b.get("thinking"):
+                        continue
+                    b = {"type": "thinking", "thinking": _truncate_reasoning_for_storage(b["thinking"])}
+                blocks.append(b)
+            cleaned.append({**msg, "content": blocks})
         return cleaned
 
     def clear_session(self, session_id: str, agent_id: str = None):

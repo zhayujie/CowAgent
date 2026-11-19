@@ -30,6 +30,7 @@ def test_fuzzy_edit_keeps_conditional_scope(tmp_path, outer_newlines, ending):
     assert namespace["choose"](True) == "new"
     if ending == "\r\n":
         assert b"\n" not in path.read_bytes().replace(b"\r\n", b"")
+    assert path.read_bytes() == source.replace("'old'", "'new'").replace("\n", ending).encode()
 
 
 @pytest.mark.parametrize("replacement_indent,disabled", [("        ", "disabled"), ("    ", "new")])

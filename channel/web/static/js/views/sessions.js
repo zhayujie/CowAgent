@@ -622,7 +622,7 @@ function _reattachStream(sid) {
     // Snapshot the buffered events into the replay, then start a fresh stream
     // that replays them and reconnects for the live tail.
     const replay = buffer.items.slice();
-    startSSE(requestId, null, buffer.timestamp || new Date(), null, replay);
+    startSSE(requestId, null, buffer.timestamp || new Date(), replay);
     return true;
 }
 

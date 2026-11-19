@@ -1,4 +1,4 @@
-import { app, BrowserWindow, session, shell, ipcMain, dialog, nativeImage, Notification, systemPreferences, crashReporter, Menu, clipboard, net } from 'electron'
+import { app, BrowserWindow, screen, session, shell, ipcMain, dialog, nativeImage, Notification, systemPreferences, crashReporter, Menu, clipboard, net } from 'electron'
 import path from 'path'
 import fs from 'fs'
 import os from 'os'
@@ -53,13 +53,27 @@ function initDesktopLogging(): void {
     }
   }
 
+  // When the app is launched with stdout/stderr attached to a pipe whose reader
+  // later exits (a terminal or launcher), every write fails asynchronously with
+  // EPIPE. A try/catch can't see that: it arrives as an 'error' event, and with
+  // no listener it becomes an uncaughtException — whose handler logs through
+  // console again, looping forever and filling run.log. Console output is
+  // best-effort, so swallow stream errors here.
+  for (const s of [process.stdout, process.stderr]) {
+    s?.on?.('error', () => {})
+  }
+
   // Wrap console so existing console.* calls throughout main also persist,
   // while still printing to stdout for `npm run dev`.
   const patch = (name: 'log' | 'warn' | 'error') => {
     const original = console[name].bind(console)
     console[name] = (...args: unknown[]) => {
       write(name.toUpperCase(), args)
-      original(...args)
+      try {
+        original(...args)
+      } catch {
+        // stdout/stderr unavailable
+      }
     }
   }
   patch('log')
@@ -74,12 +88,32 @@ function initDesktopLogging(): void {
     // crashReporter is best-effort; never let it block startup
   }
 
+  // Rate-limit crash logging so an error that keeps recurring (e.g. thrown from
+  // a timer) can't grow run.log without bound.
+  const CRASH_WINDOW_MS = 5000
+  const CRASH_MAX_PER_WINDOW = 20
+  let crashWindowStart = 0
+  let crashCount = 0
+  const logCrash = (...args: unknown[]) => {
+    const now = Date.now()
+    if (now - crashWindowStart > CRASH_WINDOW_MS) {
+      crashWindowStart = now
+      crashCount = 0
+    }
+    crashCount++
+    if (crashCount <= CRASH_MAX_PER_WINDOW) {
+      console.error(...args)
+    } else if (crashCount === CRASH_MAX_PER_WINDOW + 1) {
+      console.error(`[crash] too many errors, suppressing further output for ${CRASH_WINDOW_MS / 1000}s`)
+    }
+  }
+
   // Main-process JS errors that would otherwise kill the app silently.
   process.on('uncaughtException', (err) => {
-    console.error('[crash] uncaughtException:', err?.stack || err)
+    logCrash('[crash] uncaughtException:', err?.stack || err)
   })
   process.on('unhandledRejection', (reason) => {
-    console.error('[crash] unhandledRejection:', reason instanceof Error ? reason.stack : reason)
+    logCrash('[crash] unhandledRejection:', reason instanceof Error ? reason.stack : reason)
   })
 
   // Renderer/GPU/utility process crashes. These are the "white screen" and
@@ -200,11 +234,57 @@ const isWin = process.platform === 'win32'
 // Persisted window bounds
 const windowStateFile = () => path.join(app.getPath('userData'), 'window-state.json')
 
-function loadWindowState(): { width: number; height: number; x?: number; y?: number } {
+type WindowBounds = { width: number; height: number; x?: number; y?: number }
+
+// How much of the window must overlap a display's work area for the user to
+// still see it and drag it back.
+const MIN_VISIBLE_PX = 100
+
+// A disconnected monitor, a resolution/DPI change, Windows' minimized
+// (-32000, -32000), or a third-party tool parking the window far away can all
+// leave saved bounds off every display: the window is shown (the taskbar
+// previews it) yet clicking it reveals nothing.
+function isOnSomeDisplay(b: { x: number; y: number; width: number; height: number }): boolean {
+  return screen.getAllDisplays().some(({ workArea: wa }) => {
+    const w = Math.min(b.x + b.width, wa.x + wa.width) - Math.max(b.x, wa.x)
+    const h = Math.min(b.y + b.height, wa.y + wa.height) - Math.max(b.y, wa.y)
+    return w >= MIN_VISIBLE_PX && h >= MIN_VISIBLE_PX
+  })
+}
+
+// Clamp the size to the primary work area and drop an off-screen position so
+// Electron centers the window instead.
+function sanitizeWindowState(s: WindowBounds): WindowBounds {
+  const wa = screen.getPrimaryDisplay().workArea
+  const width = Math.min(Math.max(s.width, 900), wa.width)
+  const height = Math.min(Math.max(s.height, 600), wa.height)
+  if (typeof s.x !== 'number' || typeof s.y !== 'number') return { width, height }
+  if (!isOnSomeDisplay({ x: s.x, y: s.y, width, height })) return { width, height }
+  return { width, height, x: s.x, y: s.y }
+}
+
+// Pull a window that ended up off-screen (e.g. its monitor was unplugged while
+// running) back to the center of the primary display.
+function ensureWindowOnScreen(win: BrowserWindow) {
+  if (win.isDestroyed() || win.isMinimized() || win.isFullScreen()) return
+  const b = win.getBounds()
+  if (isOnSomeDisplay(b)) return
+  const wa = screen.getPrimaryDisplay().workArea
+  const width = Math.min(b.width, wa.width)
+  const height = Math.min(b.height, wa.height)
+  win.setBounds({
+    x: Math.round(wa.x + (wa.width - width) / 2),
+    y: Math.round(wa.y + (wa.height - height) / 2),
+    width,
+    height,
+  })
+}
+
+function loadWindowState(): WindowBounds {
   try {
     const raw = fs.readFileSync(windowStateFile(), 'utf-8')
     const s = JSON.parse(raw)
-    if (typeof s.width === 'number' && typeof s.height === 'number') return s
+    if (typeof s.width === 'number' && typeof s.height === 'number') return sanitizeWindowState(s)
   } catch {
     /* first run or unreadable */
   }
@@ -214,7 +294,10 @@ function loadWindowState(): { width: number; height: number; x?: number; y?: num
 function saveWindowState() {
   if (!mainWindow || mainWindow.isDestroyed()) return
   if (mainWindow.isMinimized() || mainWindow.isFullScreen()) return
-  const b = mainWindow.getBounds()
+  // Keep the restore size while maximized, and never persist an off-screen
+  // position, or the next launch would open there again.
+  const b = mainWindow.isMaximized() ? mainWindow.getNormalBounds() : mainWindow.getBounds()
+  if (!isOnSomeDisplay(b)) return
   try {
     fs.writeFileSync(windowStateFile(), JSON.stringify(b))
   } catch {
@@ -355,6 +438,18 @@ function createWindow() {
   mainWindow.on('move', persist)
   mainWindow.on('maximize', emitMaximizeState)
   mainWindow.on('unmaximize', emitMaximizeState)
+  // Every way of bringing the window up (tray, taskbar, second-instance,
+  // notification click) ends in a show event.
+  mainWindow.on('show', () => mainWindow && ensureWindowOnScreen(mainWindow))
+  const recheck = () => {
+    if (mainWindow?.isVisible()) ensureWindowOnScreen(mainWindow)
+  }
+  screen.on('display-removed', recheck)
+  screen.on('display-metrics-changed', recheck)
+  mainWindow.on('closed', () => {
+    screen.removeListener('display-removed', recheck)
+    screen.removeListener('display-metrics-changed', recheck)
+  })
 
   const rendererHtml = path.join(__dirname, '../renderer/index.html')
 
@@ -535,6 +630,30 @@ async function startBackend() {
   await pythonBackend.start()
 }
 
+// Interfaces VPNs, containers and VMs create; their addresses are not on the
+// network the user's other devices share.
+const VIRTUAL_IFACE_RE = /^(utun|tun|tap|wg|zt|tailscale|docker|br-|veth|vmnet|vboxnet|bridge|llw|awdl|vEthernet)/i
+
+/** This machine's IPv4 addresses on private networks, home ranges first. */
+function listLanAddresses(): string[] {
+  const rank = (ip: string): number => {
+    if (ip.startsWith('192.168.')) return 0
+    if (ip.startsWith('10.')) return 1
+    const m = /^172\.(\d+)\./.exec(ip)
+    return m && Number(m[1]) >= 16 && Number(m[1]) <= 31 ? 2 : -1
+  }
+  const out: string[] = []
+  for (const [name, addrs] of Object.entries(os.networkInterfaces())) {
+    if (VIRTUAL_IFACE_RE.test(name)) continue
+    for (const a of addrs ?? []) {
+      if (a.family === 'IPv4' && !a.internal && rank(a.address) >= 0 && !out.includes(a.address)) {
+        out.push(a.address)
+      }
+    }
+  }
+  return out.sort((a, b) => rank(a) - rank(b))
+}
+
 function setupIPC() {
   // Await the port decision rather than reading the current guess: the renderer
   // usually asks before startBackend() has probed anything, and a wrong answer
@@ -565,6 +684,8 @@ function setupIPC() {
   ipcMain.handle('get-desktop-token', () => {
     return pythonBackend?.getDesktopToken() ?? ''
   })
+
+  ipcMain.handle('get-lan-addresses', () => listLanAddresses())
 
   ipcMain.handle('restart-backend', async () => {
     await pythonBackend?.restart()
@@ -792,7 +913,7 @@ app.whenReady().then(async () => {
   })
 
   setupIPC()
-  setupThemeIPC()
+  setupThemeIPC(() => pythonBackend?.getDataDir() ?? '')
   setupHttpRelayIPC()
   setupAppIconIPC({ getWindow: () => mainWindow, getTray })
   createWindow()

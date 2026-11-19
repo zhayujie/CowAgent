@@ -42,7 +42,7 @@ jobs:
       matrix:
         include:
           - name: macOS arm64
-            os: macos-14
+            os: macos-15
             platform: mac
             arch: arm64
             eb_flags: --mac --arm64
@@ -84,6 +84,14 @@ jobs:
         with:
           node-version: "20"
 
+      # The backend reports cli/VERSION, not package.json; stamp the same
+      # version so the bundled backend can't lag behind the installer.
+      - name: Write version into cli/VERSION
+        shell: bash
+        env:
+          VER: ${{ steps.ver.outputs.version }}
+        run: bash desktop/build/stamp-backend-version.sh "$VER"
+
       - name: Build Python backend (PyInstaller)
         shell: bash
         run: |
@@ -95,6 +103,12 @@ jobs:
             --noconfirm \
             --distpath desktop/build/dist \
             --workpath desktop/build/build-work
+
+      - name: Verify bundled backend version
+        shell: bash
+        env:
+          VER: ${{ steps.ver.outputs.version }}
+        run: bash desktop/build/stamp-backend-version.sh --verify "$VER"
 
       # PyInstaller follows whatever arch the host Python is, so a translated
       # toolchain would hand us a backend for the wrong arch. Shipping that in

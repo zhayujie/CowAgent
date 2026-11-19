@@ -30,6 +30,13 @@ for _name in ("HOME", "USERPROFILE"):
     os.environ[_name] = _FAKE_HOME
 atexit.register(shutil.rmtree, _FAKE_HOME, ignore_errors=True)
 
+# A source checkout's data root is the checkout itself, so load_config() would
+# read the developer's real config.json and mirror its API keys into
+# os.environ, where later tests can pick them up and call real providers.
+_FAKE_DATA_ROOT = tempfile.mkdtemp(prefix="cow-tests-data-")
+os.environ["COW_DATA_DIR"] = _FAKE_DATA_ROOT
+atexit.register(shutil.rmtree, _FAKE_DATA_ROOT, ignore_errors=True)
+
 _WEB_DIR = os.path.join(os.path.dirname(__file__), "..", "channel", "web")
 
 

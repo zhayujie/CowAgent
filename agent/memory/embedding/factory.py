@@ -36,7 +36,7 @@ def create_default_embedding_provider():
 
 
 def _init_legacy_provider():
-    """Legacy auto-init path: OpenAI -> LinkAI."""
+    """Legacy auto-init path: OpenAI -> CowAgent -> LinkAI."""
     from agent.memory.embedding.provider import create_embedding_provider
     from config import conf
 
@@ -57,6 +57,22 @@ def _init_legacy_provider():
             embedding_model = f"openai/{model}"
         except Exception as e:
             logger.warning(f"[EmbeddingFactory] OpenAI embedding failed: {e}")
+
+    if embedding_provider is None:
+        from models.cowagent_provider import resolve_cowagent_credentials
+        cowagent_api_key, cowagent_api_base = resolve_cowagent_credentials()
+        if cowagent_api_key:
+            try:
+                model = "text-embedding-3-small"
+                embedding_provider = create_embedding_provider(
+                    provider="cowagent",
+                    model=model,
+                    api_key=cowagent_api_key,
+                    api_base=cowagent_api_base,
+                )
+                embedding_model = f"cowagent/{model}"
+            except Exception as e:
+                logger.warning(f"[EmbeddingFactory] CowAgent embedding failed: {e}")
 
     if embedding_provider is None:
         linkai_api_key = conf().get("linkai_api_key", "") or os.environ.get("LINKAI_API_KEY", "")
@@ -168,6 +184,10 @@ def _resolve_api_key(provider_key: str) -> str:
                 return entry.get("api_key", "")
         return ""
 
+    if provider_key == "cowagent":
+        from models.cowagent_provider import resolve_cowagent_credentials
+        return resolve_cowagent_credentials()[0]
+
     key_map = {
         "openai":    "open_ai_api_key",
         "linkai":    "linkai_api_key",
@@ -196,6 +216,10 @@ def _resolve_api_base(provider_key: str, default_base: str) -> str:
             if entry and entry.get("api_base"):
                 return entry["api_base"]
         return default_base
+
+    if provider_key == "cowagent":
+        from models.cowagent_provider import resolve_cowagent_credentials
+        return resolve_cowagent_credentials()[1]
 
     base_map = {
         "openai":    "open_ai_api_base",

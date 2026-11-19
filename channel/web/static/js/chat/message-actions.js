@@ -44,13 +44,16 @@ function sendVoiceMessage(text, audioUrl) {
             if (data.status === 'success') {
                 rememberLiveSpeaker(data);
                 setLoadingSpeaker(loadingEl, data.request_id);
+                if (titleInfo && !data.inline_reply) {
+                    generateSessionTitle(titleInfo.sid, titleInfo.userMsg, '');
+                }
                 if (data.inline_reply) {
                     // Synchronous fast-path reply (e.g. /cancel); skip SSE.
                     loadingEl.remove();
                     addBotMessage(data.inline_reply, new Date());
                 } else if (data.stream) {
                     setSendBtnCancelMode(data.request_id);
-                    startSSE(data.request_id, loadingEl, timestamp, titleInfo);
+                    startSSE(data.request_id, loadingEl, timestamp);
                 } else {
                     loadingContainers[data.request_id] = loadingEl;
                 }
@@ -118,6 +121,26 @@ function copyToClipboard(text) {
     });
 }
 
+// Keep visible history in sync with the store before editing, regenerating,
+// or deleting a persisted turn. Callers keep their existing deletion options.
+async function deletePersistedMessage(userSeq, options = {}) {
+    try {
+        const resp = await fetch('/api/messages/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ session_id: sessionId, user_seq: parseInt(userSeq), ...options })
+        });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        if (data.status !== 'success') throw new Error(data.message || 'Delete failed');
+        return true;
+    } catch (err) {
+        console.error('Failed to delete messages:', err);
+        alert(t('records_delete_failed'));
+        return false;
+    }
+}
+
 // Edit user message: extract content, remove this and subsequent messages, fill input
 async function editUserMessage(msgEl) {
     if (isCurrentSessionConversationActive()) return;
@@ -127,24 +150,7 @@ async function editUserMessage(msgEl) {
     // Delete this message and ALL subsequent messages from database (cascade)
     // Must await to ensure delete completes before user sends a new message
     const userSeq = msgEl.dataset.seq;
-    if (userSeq) {
-        try {
-            const resp = await fetch('/api/messages/delete', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    session_id: sessionId, 
-                    user_seq: parseInt(userSeq),
-                    delete_user: true,
-                    cascade: true
-                })
-            });
-            const data = await resp.json();
-            if (data.status === 'success') console.log(`Deleted ${data.deleted} old messages`);
-        } catch (err) {
-            console.error('Failed to delete old messages:', err);
-        }
-    }
+    if (userSeq && !await deletePersistedMessage(userSeq, { delete_user: true, cascade: true })) return;
 
     // Remove this message bubble and every later bubble that belongs to
     // this or a subsequent turn. We mirror the backend cascade contract:

@@ -13,6 +13,7 @@ from common.sorted_dict import SortedDict
 from config import write_plugin_config, get_data_root, get_resource_root
 
 from .event import *
+from common.deployment import is_desktop
 
 
 def _plugins_resource_dir():
@@ -285,7 +286,7 @@ class PluginManager:
         plugins.json (bundle default or user copy) says. Runs after scan (which
         syncs enabled from plugins.json) and before activate, so denied plugins
         are never instantiated and never write into the read-only bundle."""
-        if os.environ.get("COW_DESKTOP") != "1":
+        if not is_desktop():
             return
         for name in list(self.plugins.keys()):
             if name.upper() in self.DESKTOP_DISABLED_PLUGINS and self.plugins[name].enabled:
@@ -392,12 +393,19 @@ class PluginManager:
             except Exception as e:
                 logger.error("Failed to install plugin, {}".format(e))
                 return False, "安装插件失败，请检查仓库地址是否正确"
-        dirname = os.path.join("./plugins", match.group(4))
+        # Only the last path segment names the clone directory, so subgroup
+        # URLs still work and nothing can point it outside ./plugins.
+        repo_name = match.group(4).rsplit("/", 1)[-1]
+        if repo_name in (".", "..") or not re.match(r"^[A-Za-z0-9_.-]+$", repo_name):
+            return False, "安装插件失败，仓库地址不合法"
+        dirname = os.path.join("./plugins", repo_name)
         try:
             repo = porcelain.clone(repo, dirname, checkout=True)
-            if os.path.exists(os.path.join(dirname, "requirements.txt")):
+            requirements_path = os.path.join(dirname, "requirements.txt")
+            if os.path.exists(requirements_path):
                 logger.info("detect requirements.txt，installing...")
-            pkgmgr.install_requirements(os.path.join(dirname, "requirements.txt"))
+                if pkgmgr.install_requirements(requirements_path):
+                    return False, "安装插件失败，依赖安装失败，请手动执行 pip install -r " + requirements_path
             return True, "安装插件成功，请使用 #scanp 命令扫描插件或重启程序，开启前请检查插件是否需要配置"
         except Exception as e:
             logger.error("Failed to install plugin, {}".format(e))
@@ -430,9 +438,11 @@ class PluginManager:
         dirname = self.plugins[name].path
         try:
             porcelain.pull(dirname, "origin")
-            if os.path.exists(os.path.join(dirname, "requirements.txt")):
+            requirements_path = os.path.join(dirname, "requirements.txt")
+            if os.path.exists(requirements_path):
                 logger.info("detect requirements.txt，installing...")
-            pkgmgr.install_requirements(os.path.join(dirname, "requirements.txt"))
+                if pkgmgr.install_requirements(requirements_path):
+                    return False, "更新插件失败，依赖安装失败，请手动执行 pip install -r " + requirements_path
             return True, "更新插件成功，请重新运行程序"
         except Exception as e:
             logger.error("Failed to update plugin, {}".format(e))

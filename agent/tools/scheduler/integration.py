@@ -4,6 +4,7 @@ Integration module for scheduler with AgentBridge
 
 import os
 import threading
+import time
 from typing import Dict
 from config import conf
 from common.log import logger
@@ -587,12 +588,47 @@ def stop_scheduler(agent_id: str = None, workspace_root: str = None) -> bool:
     return False
 
 
+# Pauses between in-place retries of a failed send. A task whose result could
+# not be delivered is never re-run to retry the send: by then it has already
+# done its work (LLM calls, tool side effects), and a re-run on every tick of
+# the catch-up window would repeat all of that.
+_DELIVERY_RETRY_DELAYS = (1, 3)
+
+
+def _deliver_result(channel, reply, context, task: dict, output_sink: dict = None) -> bool:
+    """Send a task's result, retrying the send a few times in place.
+
+    Returns False when every attempt failed; the error is then left in
+    ``output_sink["delivery_error"]`` so the run is recorded as failed.
+    """
+    attempts = len(_DELIVERY_RETRY_DELAYS) + 1
+    for attempt in range(attempts):
+        try:
+            channel.send(reply, context)
+            return True
+        except Exception as e:
+            last_error = e
+            if attempt < len(_DELIVERY_RETRY_DELAYS):
+                logger.warning(
+                    f"[Scheduler] Task {task.get('id')}: send failed ({e}), retrying"
+                )
+                time.sleep(_DELIVERY_RETRY_DELAYS[attempt])
+    logger.error(
+        f"[Scheduler] Task {task.get('id')}: failed to deliver the result after "
+        f"{attempts} attempts: {last_error}"
+    )
+    if output_sink is not None:
+        output_sink["delivery_error"] = f"delivery failed: {last_error}"
+    return False
+
+
 def _remember_delivered_output(
     agent_bridge,
     task: dict,
     channel_type: str,
     content: str,
     agent_id: str = None,
+    run_id: str = "",
 ) -> None:
     """Best-effort persistence of the message the scheduler sent to a user.
 
@@ -637,6 +673,18 @@ def _remember_delivered_output(
             }
             if hasattr(agent_bridge, "agent_registry"):
                 kwargs["agent_id"] = agent_id
+            if run_id:
+                import inspect
+
+                try:
+                    params = inspect.signature(remember).parameters.values()
+                    if any(
+                        p.name == "run_id" or p.kind == inspect.Parameter.VAR_KEYWORD
+                        for p in params
+                    ):
+                        kwargs["run_id"] = run_id
+                except (TypeError, ValueError):
+                    pass
             remember(session_id, str(content), **kwargs)
     except Exception as e:
         logger.warning(
@@ -702,6 +750,38 @@ def _record_scheduler_run(task: dict, agent_id: str, trigger: str = "scheduled")
         return None
 
 
+def _task_permission_mode(task: dict, agent_id: str = None) -> str:
+    """The permission mode a scheduled Agent run executes under.
+
+    A run gets its own ``scheduler_*`` session with no override, which would
+    fall back to the instance-wide mode. Instead it takes the stricter of the
+    mode recorded when the task was created and the mode the originating
+    conversation has now, so a task can neither do more than the conversation
+    that created it nor outlive a later downgrade of that conversation. Tasks
+    stored before the origin was recorded use the conversation they deliver to.
+    """
+    from agent.permission import MODES, global_mode, normalize_mode
+    from agent.workspace import session_prefs
+
+    action = task.get("action") or {}
+    current = global_mode()
+    session_id = action.get("origin_session_id") or action.get("notify_session_id")
+    if session_id:
+        try:
+            pinned = session_prefs.get_prefs(
+                session_id, action.get("origin_agent_id") or agent_id
+            ).get("permission")
+        except Exception as e:
+            logger.warning(f"[Scheduler] Task {task.get('id')}: could not read session permission: {e}")
+            pinned = None
+        if pinned:
+            current = normalize_mode(pinned, current)
+    recorded = action.get("permission_mode")
+    if recorded:
+        return min(normalize_mode(recorded, current), current, key=MODES.index)
+    return current
+
+
 def _run_scheduled_task(
     task: dict, agent_bridge, agent_id: str, trigger: str = "scheduled"
 ) -> bool:
@@ -732,7 +812,7 @@ def _run_scheduled_task(
         return False
 
     run = _record_scheduler_run(task, agent_id, trigger=trigger)
-    sink: Dict[str, str] = {}
+    sink: Dict[str, str] = {"run_id": run[1]} if run is not None else {}
     status = "done"
     error = ""
     try:
@@ -754,6 +834,10 @@ def _run_scheduled_task(
         if not ok:
             status = "error"
             error = "deferred or delivery failed"
+        elif sink.get("delivery_error"):
+            # The task ran but its result never reached the user.
+            status = "error"
+            error = sink["delivery_error"]
         return ok
     except Exception as e:
         status = "error"
@@ -782,7 +866,7 @@ def _execute_agent_task(
 ) -> bool:
     """
     Execute an agent_task action - let Agent handle the task.
-    Returns True on successful delivery, False to retry next tick.
+    Returns True once the task has run (delivered or not), False to retry next tick.
     """
     try:
         action = task.get("action", {})
@@ -849,6 +933,7 @@ def _execute_agent_task(
         # Use Agent to execute the task
         # Mark this as a scheduled task execution to prevent recursive task creation
         context["is_scheduled_task"] = True
+        context["delegated_permission_mode"] = _task_permission_mode(task, agent_id)
         
         try:
             # Don't clear history - scheduler tasks use isolated session_id so they won't pollute user conversations
@@ -879,16 +964,15 @@ def _execute_agent_task(
                 if request_id:
                     channel.request_to_session[request_id] = receiver
 
-            try:
-                channel.send(reply, context)
-            except Exception as e:
-                logger.error(f"[Scheduler] Failed to send result: {e}")
-                return False
+            if not _deliver_result(channel, reply, context, task, output_sink):
+                # The agent already ran; don't re-run it just to retry the send.
+                return True
 
             if output_sink is not None:
                 output_sink["preview"] = str(reply.content)
             _remember_delivered_output(
-                agent_bridge, task, channel_type, reply.content, agent_id
+                agent_bridge, task, channel_type, reply.content, agent_id,
+                run_id=(output_sink or {}).get("run_id", ""),
             )
             logger.info(f"[Scheduler] Task {task['id']} executed successfully, result sent to {receiver}")
             return True
@@ -980,7 +1064,8 @@ def _execute_send_message(
         if output_sink is not None:
             output_sink["preview"] = str(content)
         _remember_delivered_output(
-            agent_bridge, task, channel_type, content, agent_id
+            agent_bridge, task, channel_type, content, agent_id,
+            run_id=(output_sink or {}).get("run_id", ""),
         )
         logger.info(f"[Scheduler] Task {task['id']} executed: sent message to {receiver}")
         return True
@@ -1051,16 +1136,15 @@ def _execute_tool_call(
         if channel_type == "web" and request_id and hasattr(channel, 'request_to_session'):
             channel.request_to_session[request_id] = receiver
 
-        try:
-            channel.send(reply, context)
-        except Exception as e:
-            logger.error(f"[Scheduler] Failed to send tool result: {e}")
-            return False
+        if not _deliver_result(channel, reply, context, task, output_sink):
+            # The tool already ran; don't re-run it just to retry the send.
+            return True
 
         if output_sink is not None:
             output_sink["preview"] = str(content)
         _remember_delivered_output(
-            agent_bridge, task, channel_type, content, agent_id
+            agent_bridge, task, channel_type, content, agent_id,
+            run_id=(output_sink or {}).get("run_id", ""),
         )
         logger.info(f"[Scheduler] Task {task['id']} executed: sent tool result to {receiver}")
         return True
@@ -1114,6 +1198,7 @@ def _execute_skill_call(
             context["msg"] = None
         elif channel_type == "wecom_bot":
             context["msg"] = None
+        context["delegated_permission_mode"] = _task_permission_mode(task, agent_id)
 
         try:
             reply = agent_bridge.agent_reply(query, context=context, on_event=None, clear_history=False)
@@ -1155,16 +1240,15 @@ def _execute_skill_call(
             if req_id:
                 channel.request_to_session[req_id] = receiver
 
-        try:
-            channel.send(delivery, context)
-        except Exception as e:
-            logger.error(f"[Scheduler] Failed to send skill result: {e}")
-            return False
+        if not _deliver_result(channel, delivery, context, task, output_sink):
+            # The skill already ran; don't re-run it just to retry the send.
+            return True
 
         if output_sink is not None:
             output_sink["preview"] = str(summary)
         _remember_delivered_output(
-            agent_bridge, task, channel_type, summary, agent_id
+            agent_bridge, task, channel_type, summary, agent_id,
+            run_id=(output_sink or {}).get("run_id", ""),
         )
         logger.info(f"[Scheduler] Task {task['id']} executed: skill result sent to {receiver}")
         return True

@@ -282,7 +282,11 @@ function installContextUsagePopover() {
         if (e.key === 'Escape' && _ctxPinned && !_ctxCompacting) _ctxHideCard();
     });
 
-    window.addEventListener('scroll', () => { if (!_ctxPinned) _ctxUsageEl.classList.remove('show'); }, true);
+    // Fires for every scroll anywhere on the page: only touch the class when the
+    // card is actually open, so idle scrolling doesn't wake the Tailwind runtime.
+    window.addEventListener('scroll', () => {
+        if (!_ctxPinned && _ctxUsageEl.classList.contains('show')) _ctxUsageEl.classList.remove('show');
+    }, true);
     window.addEventListener('resize', () => { if (_ctxUsageEl.classList.contains('show')) position(); });
 
     // Prime the mini pie once on load so the button reflects state immediately.

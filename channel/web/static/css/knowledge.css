@@ -8,16 +8,16 @@
 
 /* Tab toggle */
 .knowledge-tab, .memory-tab, .config-tab, .cfg-api-lang {
-    color: #64748b;
+    color: rgb(var(--cw-slate-500));
 }
 .knowledge-tab.active, .memory-tab.active, .config-tab.active, .cfg-api-lang.active {
     background: #fff;
-    color: #334155;
+    color: rgb(var(--cw-slate-700));
     box-shadow: 0 1px 3px rgba(0,0,0,0.08);
 }
 .dark .knowledge-tab.active, .dark .memory-tab.active, .dark .config-tab.active, .dark .cfg-api-lang.active {
     background: rgba(255,255,255,0.1);
-    color: #e2e8f0;
+    color: rgb(var(--cw-slate-200));
 }
 
 /* File tree */
@@ -33,7 +33,7 @@
     border-radius: 6px;
     font-size: 12px;
     font-weight: 600;
-    color: #64748b;
+    color: rgb(var(--cw-slate-500));
     cursor: pointer;
     border: none;
     background: none;
@@ -42,11 +42,11 @@
 }
 .knowledge-tree-group-btn:hover {
     background: rgba(0,0,0,0.04);
-    color: #334155;
+    color: rgb(var(--cw-slate-700));
 }
 .dark .knowledge-tree-group-btn:hover {
     background: rgba(255,255,255,0.06);
-    color: #e2e8f0;
+    color: rgb(var(--cw-slate-200));
 }
 .knowledge-tree-group-btn i.chevron {
     font-size: 8px;
@@ -69,7 +69,7 @@
     padding: 5px 8px 5px 24px;
     border-radius: 6px;
     font-size: 12px;
-    color: #64748b;
+    color: rgb(var(--cw-slate-500));
     cursor: pointer;
     border: none;
     background: none;
@@ -82,11 +82,11 @@
 }
 .knowledge-tree-file:hover {
     background: rgba(0,0,0,0.04);
-    color: #334155;
+    color: rgb(var(--cw-slate-700));
 }
 .knowledge-tree-file.active {
-    background: #EDFDF3;
-    color: #228547;
+    background: rgb(var(--cw-primary-50));
+    color: rgb(var(--cw-primary-600));
 }
 
 .knowledge-actions {
@@ -105,12 +105,12 @@
 .knowledge-action {
     padding: 3px 5px;
     border-radius: 5px;
-    color: #94a3b8;
+    color: rgb(var(--cw-slate-400));
     font-size: 9px;
 }
 .knowledge-action:hover {
-    color: #228547;
-    background: rgba(34, 133, 71, 0.08);
+    color: rgb(var(--cw-primary-600));
+    background: rgb(var(--cw-primary-600) / 0.08);
 }
 .knowledge-action.danger:hover {
     color: #ef4444;
@@ -118,14 +118,14 @@
 }
 .dark .knowledge-tree-file:hover {
     background: rgba(255,255,255,0.06);
-    color: #e2e8f0;
+    color: rgb(var(--cw-slate-200));
 }
 .dark .knowledge-tree-file.active {
-    background: rgba(74, 190, 110, 0.1);
-    color: #4ABE6E;
+    background: rgb(var(--cw-primary-400) / 0.1);
+    color: rgb(var(--cw-primary-400));
 }
 .knowledge-import-drag-over {
-    outline: 2px dashed rgba(74, 190, 110, 0.55);
+    outline: 2px dashed rgb(var(--cw-primary-400) / 0.55);
     outline-offset: 4px;
     border-radius: 14px;
 }
@@ -146,7 +146,7 @@
     flex-wrap: wrap;
     gap: 8px;
     font-size: 11px;
-    color: #64748b;
+    color: rgb(var(--cw-slate-500));
     z-index: 10;
 }
 .knowledge-graph-legend-item {
@@ -165,10 +165,10 @@
     position: absolute;
     padding: 6px 10px;
     background: #fff;
-    border: 1px solid #e2e8f0;
+    border: 1px solid rgb(var(--cw-slate-200));
     border-radius: 8px;
     font-size: 12px;
-    color: #334155;
+    color: rgb(var(--cw-slate-700));
     box-shadow: 0 4px 12px rgba(0,0,0,0.08);
     pointer-events: none;
     opacity: 0;
@@ -176,22 +176,22 @@
     z-index: 20;
 }
 .dark .knowledge-graph-tooltip {
-    background: #1A1A1A;
+    background: rgb(var(--cw-panel));
     border-color: rgba(255,255,255,0.1);
-    color: #e2e8f0;
+    color: rgb(var(--cw-slate-200));
 }
 
 /* Graph node label — the halo keeps it readable where links and nodes crowd */
 .knowledge-graph-label {
-    fill: #475569;
+    fill: rgb(var(--cw-slate-600));
     paint-order: stroke;
     stroke: rgba(255,255,255,0.9);
     stroke-width: 3px;
     stroke-linejoin: round;
 }
 .dark .knowledge-graph-label {
-    fill: #cbd5e1;
-    stroke: rgba(26,26,26,0.9);
+    fill: rgb(var(--cw-slate-300));
+    stroke: rgb(var(--cw-panel) / 0.9);
 }
 
 /* The viewer body already fills the documents panel, so the editor's text area

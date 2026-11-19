@@ -44,6 +44,37 @@ RETRYABLE_ERRORS = (
     requests.exceptions.ChunkedEncodingError,
 )
 
+# Optional ``weixin_proxy`` for QR login on networks that cannot log in
+# directly. If it fails, login goes direct and skips it for a while.
+LOGIN_PROXY_COOLDOWN_S = 300
+_login_proxy_down_until = {}
+
+
+def _login_proxy() -> str:
+    try:
+        from config import conf
+        proxy = str((conf() or {}).get("weixin_proxy") or "").strip()
+    except Exception:
+        return ""
+    if not proxy or time.time() < _login_proxy_down_until.get(proxy, 0):
+        return ""
+    return proxy
+
+
+def _login_request(method: str, url: str, timeout_is_failure: bool = True, **kwargs):
+    # A long poll's read timeout only means no status change yet.
+    proxy = _login_proxy()
+    if proxy:
+        fallback_errors = (requests.exceptions.ConnectionError,)
+        if timeout_is_failure:
+            fallback_errors += (requests.exceptions.Timeout,)
+        try:
+            return requests.request(method, url, proxies={"http": proxy, "https": proxy}, **kwargs)
+        except fallback_errors as e:
+            _login_proxy_down_until[proxy] = time.time() + LOGIN_PROXY_COOLDOWN_S
+            logger.warning(f"[Weixin] Login proxy failed ({type(e).__name__}), retrying direct")
+    return requests.request(method, url, **kwargs)
+
 
 # The Weixin CDN only accepts legacy TLS1.2 + RSA cipher suites (e.g.
 # AES256-GCM-SHA384). OpenSSL 1.1.1's default SECLEVEL=2 rejects these
@@ -142,7 +173,12 @@ class WeixinApi:
         self.cdn_base_url = cdn_base_url
 
     def _post(self, endpoint: str, body: dict, timeout: int = DEFAULT_API_TIMEOUT,
-              retries: int = 0) -> dict:
+              retries: int = 0, log_errors: bool = True) -> dict:
+        """POST to the ilink API.
+
+        ``log_errors=False`` leaves failures to the caller, for the long poll
+        whose loop already logs them with backoff context.
+        """
         url = _ensure_trailing_slash(self.base_url) + endpoint
         headers = _build_headers(self.token)
         body.setdefault("base_info", {}).setdefault("channel_version", CHANNEL_VERSION)
@@ -153,7 +189,8 @@ class WeixinApi:
                 resp.raise_for_status()
                 return resp.json()
             except requests.exceptions.ReadTimeout as e:
-                logger.error(f"[Weixin] API read timeout {endpoint}: {e}")
+                if log_errors:
+                    logger.error(f"[Weixin] API read timeout {endpoint}: {e}")
                 raise
             except RETRYABLE_ERRORS as e:
                 if attempt < retries:
@@ -164,10 +201,12 @@ class WeixinApi:
                                    f"{backoff}s: {e}")
                     time.sleep(backoff)
                     continue
-                logger.error(f"[Weixin] API error {endpoint}: {e}")
+                if log_errors:
+                    logger.error(f"[Weixin] API error {endpoint}: {e}")
                 raise
             except Exception as e:
-                logger.error(f"[Weixin] API error {endpoint}: {e}")
+                if log_errors:
+                    logger.error(f"[Weixin] API error {endpoint}: {e}")
                 raise
 
     # ── getUpdates (long-poll) ─────────────────────────────────────────
@@ -176,7 +215,7 @@ class WeixinApi:
         try:
             return self._post("ilink/bot/getupdates", {
                 "get_updates_buf": get_updates_buf,
-            }, timeout=timeout + 5)
+            }, timeout=timeout + 5, log_errors=False)
         except requests.exceptions.ReadTimeout:
             # A long poll that times out just means no message arrived.
             logger.debug("[Weixin] getUpdates read timeout: empty poll")
@@ -301,9 +340,10 @@ class WeixinApi:
 
     # ── QR Login ───────────────────────────────────────────────────────
 
-    def fetch_qr_code(self) -> dict:
+    def fetch_qr_code(self, local_token_list: list = None) -> dict:
         url = _ensure_trailing_slash(self.base_url) + f"ilink/bot/get_bot_qrcode?bot_type={BOT_TYPE}"
-        resp = requests.get(url, timeout=15)
+        body = {"local_token_list": list(local_token_list or [])}
+        resp = _login_request("POST", url, json=body, headers=_build_headers(), timeout=15)
         resp.raise_for_status()
         return resp.json()
 
@@ -315,7 +355,7 @@ class WeixinApi:
             "iLink-App-ClientVersion": CLIENT_VERSION,
         }
         try:
-            resp = requests.get(url, headers=headers, timeout=timeout)
+            resp = _login_request("GET", url, timeout_is_failure=False, headers=headers, timeout=timeout)
             resp.raise_for_status()
             return resp.json()
         except requests.exceptions.Timeout:

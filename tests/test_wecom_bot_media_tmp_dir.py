@@ -32,7 +32,7 @@ def _channel(uploads):
     # __init__ touches the global conf; these methods only need the two hooks.
     ch = CHANNEL_CLS.__new__(CHANNEL_CLS)
     ch._ws_send = lambda data: None
-    ch._upload_media = lambda path, media_type="file": (uploads.append(path), "media-id")[1]
+    ch._upload_media = lambda path, media_type="file", file_name="": (uploads.append(path), "media-id")[1]
     return ch
 
 

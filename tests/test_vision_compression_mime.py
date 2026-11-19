@@ -3,7 +3,7 @@ import io
 import os
 import shutil
 import pytest
-from agent.tools.vision.vision import Vision
+from agent.tools.vision.vision import COMPRESS_THRESHOLD, Vision
 
 
 def test_compressed_jpeg_has_matching_data_url_mime(tmp_path, monkeypatch):
@@ -25,8 +25,8 @@ def test_compressed_jpeg_has_matching_data_url_mime(tmp_path, monkeypatch):
 def test_native_png_compression_produces_jpeg_bytes_and_mime(tmp_path):
     image = pytest.importorskip('PIL.Image')
     original = tmp_path / 'noise.png'
-    image.frombytes('RGB', (650, 650), os.urandom(650 * 650 * 3)).save(original)
-    assert original.stat().st_size > 1048576
+    image.frombytes('RGB', (1100, 1100), os.urandom(1100 * 1100 * 3)).save(original)
+    assert original.stat().st_size > COMPRESS_THRESHOLD
     before = original.read_bytes()
     url = Vision()._build_image_content(str(original))['image_url']['url']
     header, data = url.split(',', 1)

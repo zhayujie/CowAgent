@@ -39,6 +39,10 @@ def create_bot(bot_type, credential_bot_type=None):
         from models.chatgpt.chat_gpt_bot import ChatGPTBot
         return ChatGPTBot(credential_bot_type)
 
+    elif bot_type == const.COWAGENT:  # OpenAI-compatible, with its own credentials
+        from models.chatgpt.chat_gpt_bot import ChatGPTBot
+        return ChatGPTBot(credential_bot_type or const.COWAGENT)
+
     elif bot_type == const.OPEN_AI:
         # OpenAI 官方对话模型API
         from models.openai.open_ai_bot import OpenAIBot

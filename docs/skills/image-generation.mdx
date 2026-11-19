@@ -3,7 +3,7 @@ title: image-generation
 description: "The image-generation skill handles text-to-image, image-to-image and multi-image fusion across OpenAI, Gemini, Seedream, Qwen, MiniMax and more, with automatic routing and fallback between providers."
 ---
 
-A general-purpose image generation and editing skill supporting six providers: OpenAI, Gemini, Seedream (Volcengine Ark), Qwen (DashScope), MiniMax, and LinkAI. Configure any one provider's key to start using it; configure multiple to enable automatic fallback.
+A general-purpose image generation and editing skill supporting seven providers: OpenAI, Gemini, Seedream (Volcengine Ark), Qwen (DashScope), MiniMax, CowAgent, and LinkAI. Configure any one provider's key to start using it; configure multiple to enable automatic fallback.
 
 ## Supported Models
 
@@ -14,13 +14,14 @@ A general-purpose image generation and editing skill supporting six providers: O
 | Seedream (Volcengine Ark) | `seedream-5.0-lite`, `seedream-4.5` | Native 2K–4K, up to 14 reference images for fusion |
 | Qwen (DashScope) | `qwen-image-2.0`, `qwen-image-2.0-pro` | Strong with Chinese text rendering and text-image layouts |
 | MiniMax | `image-01` | Fast and simple |
+| CowAgent | `gpt-image-2.5-flare`, `gpt-image-2.5-sunburst`, `gemini-3.1-flash-image`, `gemini-3-pro-image`, `seedream-5.0-pro`, `seedream-5.0-lite` | OpenAI-compatible API, reuses the chat key |
 | LinkAI | Any model | Universal gateway, used as fallback |
 
 ## Model Selection
 
 By default, "auto routing + automatic fallback" is used:
 
-1. Pick the first configured provider in the order `OpenAI → Gemini → Seedream → Qwen → MiniMax → LinkAI`
+1. Pick the first configured provider in the order `OpenAI → Gemini → Seedream → Qwen → MiniMax → CowAgent → LinkAI`
 2. On errors such as 401, model not enabled, or network issues, automatically switch to the next provider
 3. If the user specifies a model in the conversation (e.g. "use seedream to draw a cat"), the corresponding provider is promoted to the front
 
@@ -51,6 +52,7 @@ Credentials are shared with the main model providers:
 | `ark_api_key` | Volcengine Ark (Seedream) |
 | `dashscope_api_key` | Alibaba DashScope (Qwen) |
 | `minimax_api_key` | MiniMax |
+| `cowagent_api_key` | CowAgent (Global keys also need `cowagent_api_base` set to `https://api.cowagent.ai/v1`; the default is the China site) |
 | `linkai_api_key` | LinkAI |
 
 

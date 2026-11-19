@@ -15,11 +15,12 @@ import {
   Store,
   MessageSquareWarning,
   Palette,
-  Check,
   SquarePen,
   ExternalLink,
 } from 'lucide-react'
 import type { Theme } from '../theme/themes'
+import ThemeFlyout from '../components/ThemePicker'
+import ThemeAddModal from '../components/ThemeAddModal'
 import type { MenuGroup, MenuItem } from '../types'
 // The desktop app's own brand icon (transparent PNG), bundled by Vite.
 import brandLogo from '../assets/logo.png'
@@ -38,7 +39,7 @@ import { product } from '@product'
 // Fallback shown when app.getVersion() is unavailable (dev/web preview). Keep
 // in sync with desktop/package.json "version"; the packaged app overrides this
 // with the real value via IPC, so it only matters outside a packaged build.
-const FALLBACK_VERSION = '2.2.1'
+const FALLBACK_VERSION = '2.2.2'
 
 // External links opened in the user's default browser. The window-open handler
 // in the main process routes window.open() through shell.openExternal.
@@ -48,7 +49,7 @@ const SKILL_HUB_URL = 'https://skills.cowagent.ai/'
 // GitHub issues — where users report bugs / request features.
 const FEEDBACK_URL = 'https://github.com/zhayujie/CowAgent/issues'
 
-const websiteUrl = () => (getLang() === 'zh' ? 'https://cowagent.ai/zh' : 'https://cowagent.ai')
+const websiteUrl = () => (getLang() === 'zh' ? 'https://cowagent.cn' : 'https://cowagent.ai')
 const docsUrl = () => (getLang() === 'zh' ? 'https://docs.cowagent.ai/zh' : 'https://docs.cowagent.ai')
 
 const openExternal = (url: string) => {
@@ -63,7 +64,8 @@ const NavRail: React.FC<NavRailProps> = ({ onLangChange }) => {
   const location = useLocation()
   const navigate = useNavigate()
   const { navCollapsed, toggleNav } = useUIStore()
-  const { theme, toggleTheme, themeId, themes, appName, setThemeId } = useTheme()
+  const { theme, toggleTheme, themeId, themes, appName, setThemeId, reloadThemes, importTheme, openThemesDir } =
+    useTheme()
   // On macOS the top-left is occupied by the native traffic lights, so the
   // brand mark is only shown on Windows/Linux where that corner is otherwise
   // empty (mirrors the web console's sidebar logo).
@@ -104,6 +106,7 @@ const NavRail: React.FC<NavRailProps> = ({ onLangChange }) => {
   const checking = updateState.status?.state === 'checking'
 
   const [menuOpen, setMenuOpen] = useState(false)
+  const [addThemeOpen, setAddThemeOpen] = useState(false)
   // Local fallback so a version always shows even if the main-process IPC is
   // unavailable (e.g. dev/web preview). The real value comes from
   // app.getVersion() (packaged package.json), never from a remote service.
@@ -285,6 +288,11 @@ const NavRail: React.FC<NavRailProps> = ({ onLangChange }) => {
             themeId={themeId}
             themes={themes}
             onThemeId={setThemeId}
+            onThemesOpen={() => void reloadThemes()}
+            onAddTheme={() => {
+              setMenuOpen(false)
+              setAddThemeOpen(true)
+            }}
             onLanguage={toggleLanguage}
             onCheckUpdate={checkUpdate}
             onOpenLink={(url) => {
@@ -339,6 +347,12 @@ const NavRail: React.FC<NavRailProps> = ({ onLangChange }) => {
         </div>
       </div>
       </div>
+      <ThemeAddModal
+        open={addThemeOpen}
+        onClose={() => setAddThemeOpen(false)}
+        onImport={importTheme}
+        onOpenDir={() => void openThemesDir()}
+      />
     </aside>
   )
 }
@@ -386,14 +400,15 @@ const FooterMenu: React.FC<{
   themeId: string
   themes: Theme[]
   onThemeId: (id: string) => void
+  onThemesOpen: () => void
+  onAddTheme: () => void
   onLogs: () => void
   onEditMenu: () => void
   onTheme: () => void
   onLanguage: () => void
   onCheckUpdate: () => void
   onOpenLink: (url: string) => void
-}> = ({ theme, checking, pendingUpdate, upToDate, themeId, themes, onThemeId, onLogs, onEditMenu, onTheme, onLanguage, onCheckUpdate, onOpenLink }) => {
-  const [themeMenuOpen, setThemeMenuOpen] = useState(false)
+}> = ({ theme, checking, pendingUpdate, upToDate, themeId, themes, onThemeId, onThemesOpen, onAddTheme, onLogs, onEditMenu, onTheme, onLanguage, onCheckUpdate, onOpenLink }) => {
   const updateLabel = checking
     ? t('update_checking')
     : upToDate
@@ -430,24 +445,19 @@ const FooterMenu: React.FC<{
       label={theme === 'dark' ? t('menu_theme_light') : t('menu_theme_dark')}
       onClick={onTheme}
     />
-    <MenuItem
-      icon={<Palette size={16} />}
-      label={t('menu_theme_picker')}
-      trailing={themeMenuOpen ? '▾' : '▸'}
-      onClick={() => setThemeMenuOpen((o) => !o)}
-    />
-    {themeMenuOpen &&
-      themes.map((th) => (
-        <button
-          key={th.id}
-          onClick={() => onThemeId(th.id)}
-          className="w-full flex items-center gap-2.5 pl-8 pr-3 h-9 text-[13px] text-content-secondary hover:bg-surface-2 hover:text-content cursor-pointer transition-colors"
-        >
-          <ThemeSwatch preview={th.preview ?? { accent: '#4abe6e', bg: '#111', surface: '#1c1c1f' }} />
-          <span className="flex-1 text-left truncate">{th.name}</span>
-          {themeId === th.id && <Check size={14} className="flex-shrink-0 text-accent" />}
-        </button>
-      ))}
+    {/* Theme picker: hovering opens a flyout beside the menu, bottom-aligned
+        with it, so a long list never grows the menu. The wrapper is left
+        unpositioned so the flyout anchors to the menu box. */}
+    <ThemeFlyout
+      flyoutClassName="left-full -bottom-px pl-1.5"
+      onOpen={onThemesOpen}
+      themes={themes}
+      themeId={themeId}
+      onSelect={onThemeId}
+      onAdd={onAddTheme}
+    >
+      <MenuItem icon={<Palette size={16} />} label={t('menu_theme_picker')} trailing="▸" onClick={() => {}} />
+    </ThemeFlyout>
     <MenuItem
       icon={<Languages size={16} />}
       label={t('menu_language')}
@@ -459,17 +469,6 @@ const FooterMenu: React.FC<{
   </div>
   )
 }
-
-// Tiny 3-color preview (bg / surface / accent) for the theme picker.
-const ThemeSwatch: React.FC<{ preview: { accent: string; bg: string; surface: string } }> = ({
-  preview,
-}) => (
-  <span className="flex-shrink-0 inline-flex h-4 w-4 rounded-full overflow-hidden border border-default">
-    <span className="w-1/3 h-full" style={{ background: preview.bg }} />
-    <span className="w-1/3 h-full" style={{ background: preview.surface }} />
-    <span className="w-1/3 h-full" style={{ background: preview.accent }} />
-  </span>
-)
 
 const MenuItem: React.FC<{
   icon: React.ReactNode

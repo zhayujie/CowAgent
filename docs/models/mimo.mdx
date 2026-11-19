@@ -1,9 +1,9 @@
 ---
 title: MiMo
-description: "Configure Xiaomi MiMo, a natively omni-modal model, in CowAgent: one API key enables chat, image understanding and text-to-speech, with thinking mode on by default for V2.5."
+description: "Configure Xiaomi MiMo, a natively omni-modal model, in CowAgent: one API key enables chat, image understanding, speech recognition and text-to-speech, with thinking mode on by default for V2.6."
 ---
 
-Xiaomi MiMo is a native omni-modal large model. A single `mimo_api_key` enables text chat, image understanding, and text-to-speech all at once.
+Xiaomi MiMo is a native omni-modal large model. A single `mimo_api_key` enables text chat, image understanding, speech recognition, and text-to-speech all at once.
 
 <Tip>
   All capabilities below can be configured in one place via the "Model Management" page in the Web Console — no need to manually edit the configuration file.
@@ -13,7 +13,7 @@ Xiaomi MiMo is a native omni-modal large model. A single `mimo_api_key` enables 
 
 ```json
 {
-  "model": "mimo-v2.5-pro",
+  "model": "mimo-v2.6-pro",
   "mimo_api_key": "YOUR_API_KEY",
   "mimo_api_base": "https://api.xiaomimimo.com/v1"
 }
@@ -21,7 +21,7 @@ Xiaomi MiMo is a native omni-modal large model. A single `mimo_api_key` enables 
 
 | Parameter | Description |
 | --- | --- |
-| `model` | Default recommendation: `mimo-v2.5-pro`; `mimo-v2.5` is also supported |
+| `model` | Default recommendation: `mimo-v2.6-pro`; `mimo-v2.6-flash` is also supported |
 | `mimo_api_key` | Create one in the [MiMo Open Platform](https://platform.xiaomimimo.com/console/api-keys) |
 | `mimo_api_base` | Optional, defaults to `https://api.xiaomimimo.com/v1` |
 
@@ -29,12 +29,12 @@ Xiaomi MiMo is a native omni-modal large model. A single `mimo_api_key` enables 
 
 | Model | Use Case |
 | --- | --- |
-| `mimo-v2.5-pro` | Flagship: native omni-modal + Agent capability, up to 1M tokens context |
-| `mimo-v2.5` | General-purpose, native omni-modal (text / image / video / audio) |
+| `mimo-v2.6-pro` | Flagship: native omni-modal + Agent capability, up to 1M tokens context |
+| `mimo-v2.6-flash` | Faster and cheaper, native omni-modal (text / image / video / audio), up to 1M tokens context |
 
 ## Thinking Mode
 
-The MiMo V2.5 series enables "thinking mode" by default: the model emits `reasoning_content` (chain-of-thought) before the final answer, improving performance on complex tasks.
+The MiMo V2.6 series enables "thinking mode" by default: the model emits `reasoning_content` (chain-of-thought) before the final answer, improving performance on complex tasks.
 
 Use the global `enable_thinking` flag to toggle visibility (also switchable from the Web Console settings):
 
@@ -48,8 +48,8 @@ Use the global `enable_thinking` flag to toggle visibility (also switchable from
 
 Once `mimo_api_key` is configured, the Agent's Vision tool can automatically use MiMo's vision models:
 
-- When the main model itself is multimodal (`mimo-v2.5-pro` / `mimo-v2.5`), images are handled directly by the main model with no extra setup.
-- When the main model belongs to another provider, the Vision tool falls back to `mimo-v2.5-pro` in order.
+- When the main model itself is multimodal (`mimo-v2.6-pro` / `mimo-v2.6-flash`), images are handled directly by the main model with no extra setup.
+- When the main model belongs to another provider, the Vision tool falls back to `mimo-v2.6-pro` in order.
 
 To force a specific Vision model, set it explicitly in the configuration:
 
@@ -58,11 +58,27 @@ To force a specific Vision model, set it explicitly in the configuration:
   "tools": {
     "vision": {
       "provider": "mimo",
-      "model": "mimo-v2.5-pro"
+      "model": "mimo-v2.6-pro"
     }
   }
 }
 ```
+
+## Speech-to-Text (ASR)
+
+```json
+{
+  "voice_to_text": "mimo",
+  "voice_to_text_model": "mimo-v2.5-asr"
+}
+```
+
+| Parameter | Description |
+| --- | --- |
+| `voice_to_text` | Set to `mimo` to enable MiMo ASR |
+| `voice_to_text_model` | Optional, defaults to `mimo-v2.5-asr` (Chinese and English with automatic language detection, plus dialects such as Cantonese, Wu, Minnan and Sichuanese) |
+
+Credentials are automatically reused from `mimo_api_key`. MiMo only accepts MP3 / WAV audio, so voice messages in other formats (e.g. AMR / SILK / Opus) are converted to MP3 before recognition. The encoded audio must stay under 10MB.
 
 ## Text-to-Speech (TTS)
 

@@ -1,14 +1,13 @@
 """Helpers for choosing the native Feishu delivery format for text replies."""
 
-import ipaddress
 import json
 import re
-import socket
 from typing import Callable, Optional, Tuple
 from urllib.parse import urljoin, urlparse
 
 import requests
 
+from channel.feishu.domain import FEISHU_DOMAIN
 from common.markdown_fence import transform_outside_fences
 
 _BLOCK_MARKDOWN = re.compile(
@@ -117,38 +116,21 @@ def resolve_markdown_images(
 
 
 def validate_public_image_url(url: str) -> None:
-    """Reject non-HTTP and non-public image targets before downloading."""
-    parsed = urlparse(url)
-    if parsed.scheme not in ("http", "https"):
-        raise ValueError("unsupported image URL scheme")
-    if not parsed.hostname:
-        raise ValueError("image URL has no hostname")
+    """Reject non-HTTP and non-public image targets before downloading.
 
-    try:
-        literal_address = ipaddress.ip_address(parsed.hostname)
-        resolved_addresses = [literal_address]
-    except ValueError:
-        try:
-            addresses = socket.getaddrinfo(
-                parsed.hostname,
-                parsed.port,
-                socket.AF_UNSPEC,
-                socket.SOCK_STREAM,
-            )
-        except socket.gaierror as exc:
-            raise ValueError("cannot resolve image hostname") from exc
-        resolved_addresses = [ipaddress.ip_address(item[4][0]) for item in addresses]
+    This check is unconditional: image URLs come from the model's Markdown
+    reply, while the instance-wide ``web_security_ssrf_protection`` switch
+    is off by default. Delegate to the shared guard instead of keeping a
+    local copy of the public-IP rule -- the previous copy drifted out of
+    sync when the shared rule started rejecting the 100.64.0.0/10 shared
+    address space (which hosts Alibaba Cloud's 100.100.100.200 metadata
+    endpoint).
+    """
+    # Imported here so the channel import chain stays free of the tool layer.
+    from agent.tools.utils.url_safety import strict_url_guard, validate_url_safe
 
-    for address in resolved_addresses:
-        if (
-            address.is_private
-            or address.is_loopback
-            or address.is_link_local
-            or address.is_reserved
-            or address.is_multicast
-            or address.is_unspecified
-        ):
-            raise ValueError("image URL resolves to a non-public address")
+    with strict_url_guard():
+        validate_url_safe(url)
 
 
 def download_public_image(
@@ -214,6 +196,7 @@ def upload_public_image_to_feishu(
     url: str,
     access_token: str,
     post=requests.post,
+    domain=FEISHU_DOMAIN,
 ) -> Optional[str]:
     """Download a public image and upload its bytes to Feishu."""
     payload, content_type = download_public_image(url)
@@ -225,7 +208,7 @@ def upload_public_image_to_feishu(
         "image/bmp": "bmp",
     }.get(content_type, "img")
     response = post(
-        "https://open.feishu.cn/open-apis/im/v1/images",
+        f"{domain}/open-apis/im/v1/images",
         headers={"Authorization": "Bearer " + access_token},
         data={"image_type": "message"},
         files={

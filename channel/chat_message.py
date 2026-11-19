@@ -37,6 +37,15 @@ import os
 import re
 
 
+# Reserved Windows device names, including those with an extension (CON.md).
+# safe_filename already strips illegal punctuation; without this, a WeCom
+# attachment named CON.txt is written as tmp_dir()/CON.txt.
+_WINDOWS_RESERVED_NAME_RE = re.compile(
+    r"^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\..*)?$",
+    re.IGNORECASE,
+)
+
+
 def safe_filename(name) -> str:
     """Reduce a server-supplied filename to a single path component.
 
@@ -44,12 +53,18 @@ def safe_filename(name) -> str:
     attachment is written to ``tmp_dir()/<file_name>``. A name holding a path
     separator (``../../etc/x``), a backslash, or an absolute path therefore
     redirects that write outside the directory the app manages and cleans.
-    Strip it down before it reaches ``os.path.join``; callers fall back to
-    their own generated name when this returns ``""``.
+    Windows reserved device names (CON, PRN, AUX, NUL, COM1-9, LPT1-9),
+    with or without an extension, are also rejected: writing
+    ``tmp_dir()/CON.txt`` succeeds on POSIX and fails or opens a device
+    on Windows. Callers fall back to their own generated name when this
+    returns ``""``.
     """
     name = os.path.basename(str(name or "").replace("\\", "/"))
     name = re.sub(r"[^\w.\- ]+", "_", name).strip(" .")
-    return name[:180]
+    name = name[:180]
+    if _WINDOWS_RESERVED_NAME_RE.match(name):
+        return ""
+    return name
 
 
 class ChatMessage(object):

@@ -1,7 +1,7 @@
         <!-- ================================================================ -->
         <!-- SIDEBAR                                                          -->
         <!-- ================================================================ -->
-        <aside id="sidebar" class="fixed inset-y-0 left-0 z-50 w-52 bg-[#0A0A0A] text-neutral-400 flex flex-col
+        <aside id="sidebar" class="fixed inset-y-0 left-0 z-50 w-52 bg-sidebar text-neutral-400 flex flex-col
                                     transform -translate-x-full lg:relative lg:translate-x-0
                                     transition-transform duration-300 ease-in-out">
             <!-- Logo -->
@@ -135,6 +135,15 @@
                         <span class="update-menu-label" data-i18n="update_changelog">版本说明</span>
                         <i class="fas fa-arrow-up-right-from-square update-menu-ext"></i>
                     </button>
+                    <!-- Hovering opens the theme list beside the menu (mirrors the desktop NavRail) -->
+                    <button type="button" id="color-theme-row" class="update-menu-item" role="menuitem"
+                            aria-haspopup="menu" aria-controls="color-theme-menu"
+                            onmouseenter="openColorThemeMenu()" onmouseleave="scheduleCloseColorThemeMenu()"
+                            onclick="openColorThemeMenu()">
+                        <span class="update-menu-icon"><i class="fas fa-palette"></i></span>
+                        <span class="update-menu-label" data-i18n="theme_picker">主题</span>
+                        <i class="fas fa-chevron-right update-menu-ext"></i>
+                    </button>
                     <button type="button" class="update-menu-item" role="menuitem" onclick="openMenuEditorFromFooter()">
                         <span class="update-menu-icon"><i class="fas fa-pen"></i></span>
                         <span class="update-menu-label" data-i18n="menu_edit">自定义菜单</span>
@@ -142,6 +151,19 @@
                 </div>
             </div>
         </aside>
+        <!-- Theme list for the footer menu's theme row. Lives outside the
+             sidebar, whose overflow would clip it; themes.js positions it. -->
+        <div id="color-theme-menu" class="color-theme-flyout hidden" role="menu"
+             onmouseenter="openColorThemeMenu()" onmouseleave="scheduleCloseColorThemeMenu()">
+            <div class="color-theme-menu">
+                <div id="color-theme-list" class="color-theme-list"></div>
+                <div class="color-theme-divider"></div>
+                <button type="button" class="color-theme-item" onclick="openThemeAddModal()">
+                    <span class="color-theme-plus"><i class="fas fa-plus"></i></span>
+                    <span class="color-theme-name" data-i18n="theme_add">自定义主题…</span>
+                </button>
+            </div>
+        </div>
         <!-- Close the groups the user folded last time before the first paint,
              so they don't flash open and then animate shut. -->
         <script>

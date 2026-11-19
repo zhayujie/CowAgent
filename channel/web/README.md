@@ -41,6 +41,7 @@ The code sits in two packages, mirroring the frontend's `core/` and `views/`:
 | `sessions.py` | `/api/sessions/*`, `/api/history`, per-session settings and context |
 | `artifacts.py` | `/api/artifacts`, `/api/artifacts/add`, `/api/artifacts/pin`, `/api/artifacts/rename`, `/api/artifacts/delete`: the cross-Agent index of files the conversations produced |
 | `menu.py` | `/api/menu`: the menu the user arranged, shared with the desktop client; its custom pages open at `/m/<id>` |
+| `themes.py` | `/api/themes`, `/api/themes/asset`, `/api/themes/import`: color themes in `<workspace>/system/themes` (`~/cow/system/themes` by default), the folder the desktop client reads too |
 | `agents.py` | `/api/agents/*`, core files, avatars |
 | `config.py` | `/api/config`, `/api/external_api` (turn the chat API on or off, issue its key) |
 | `models.py` | `/api/models` |
@@ -117,7 +118,7 @@ Two rules for includes:
 | File | Contents |
 |---|---|
 | `layout/login.html` | Login overlay |
-| `layout/sidebar.html` | Left navigation (`data-view` names the target; this is the default menu, redrawn by `core/menu.js` once a saved one loads), the update menu on the version row, the rail toggle, mobile overlay |
+| `layout/sidebar.html` | Left navigation (`data-view` names the target; this is the default menu, redrawn by `core/menu.js` once a saved one loads), the footer menu on the version row (update, theme list), the rail toggle, mobile overlay |
 | `layout/session-panel.html` | Session history side panel |
 | `layout/header.html` | Top bar: panel toggle, breadcrumb (with an open-outside button for menu pages), language/theme switches, logout |
 | `views/chat.html` | Chat view: message list, composer card, workspace panel |
@@ -142,6 +143,7 @@ Two rules for includes:
 | `modals/task-edit.html` | Scheduled task create/edit |
 | `modals/run-detail.html` | Run record detail |
 | `modals/menu-editor.html` | Menu editor frame |
+| `modals/theme-add.html` | Custom theme: import a package, or have the Agent make one |
 
 Names that are easy to misread:
 
@@ -298,6 +300,7 @@ auth), see `tests/test_web_console_routing.py`.
 | `core/version.js` | Version label (filled from the backend's `/VERSION`) and the one-click update menu on the version row |
 | `core/i18n.js` | Translation table and `t()` / `applyI18n()` / `setLanguage()` |
 | `core/theme.js` | Light/dark theme switch |
+| `core/themes.js` | Color themes: built-in palettes and the ones in `<workspace>/system/themes` (`~/cow/system/themes` by default), mapped onto the `--cw-*` variables; wallpaper, new-chat logo, the theme list in the sidebar footer menu, custom theme dialog |
 | `core/utils.js` | `escapeHtml`, time formatting, scroll helpers, tool argument summaries |
 | `core/markdown.js` | markdown-it setup; image, video and code block rendering |
 | `core/confirm.js` | Scripted confirm dialog shared by the views |
@@ -366,6 +369,8 @@ changing them produces runtime errors:
    one, so the 401 check sees the caller's original URL. The auth gate
    (`requestAuthGatedStart` / `openAuthGate`) is in this file too; the only
    top-level caller is `boot.js`, which loads later, so no TDZ is hit.
+   `core/themes.js` loads earlier and calls it from a `DOMContentLoaded`
+   handler instead.
 3. **`boot.js` must precede `workspace.js`**, which is where `console.js` used
    to be. `applyI18n()` probes `relocalizeWorkspacePanel` with a `typeof`
    guard, and it has always run before `workspace.js` defines that function;
@@ -422,12 +427,17 @@ section before reordering or inserting a file.**
 | `agents.css` | Agent cards, detail drawer, composer identity badge |
 | `artifacts.css` | Artifacts view, and the lit state of the header's view buttons |
 | `menu.css` | Custom sidebar labels, custom pages, menu editor |
+| `themes.css` | Theme list flyout and custom theme dialog, wallpaper and glass, theme logo |
 
-Two things to watch when moving rules:
+Things to watch when moving rules:
 
-- **Dark mode does not use CSS variables.** Rules are written in light/dark
-  pairs with a `.dark` ancestor selector. Move both halves of a pair together or
-  dark mode silently breaks.
+- **Colors come from `--cw-*` variables** (`base.css`), which the Tailwind
+  config in `chat.html` reads too; a color theme repaints by overriding them
+  on `<html>`. Write `rgb(var(--cw-slate-200))`, not a hex value, or the color
+  ignores themes.
+- **Light/dark is still a `.dark` ancestor selector.** Rules are written in
+  light/dark pairs. Move both halves of a pair together or dark mode silently
+  breaks.
 - `sessions.css` must precede `components.css`: both size `.agent-avatar` at
   the same specificity, and flipping the order gives the session list the wrong
   avatar size.

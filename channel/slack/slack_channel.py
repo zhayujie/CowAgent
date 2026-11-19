@@ -19,16 +19,22 @@ import os
 import re
 import threading
 import uuid
+from urllib.parse import urlparse
 
 from bridge.context import Context, ContextType
 from bridge.reply import Reply, ReplyType
 from channel.chat_channel import ChatChannel, check_prefix
 from channel.slack.slack_message import SlackMessage
+from common import state_dir
 from common.expired_dict import ExpiredDict
 from common.log import logger
-from common.media_download import MAX_FILE_BYTES, download_to_file
+from common.markdown_fence import split_markdown
+from common.media_download import MAX_FILE_BYTES, download_to_file, remove_download
 from common.singleton import singleton
 from config import conf
+
+# send() runs on the shared reply thread; a stalled download must not block it.
+_MAX_REMOTE_FILE_SECONDS = 300
 
 
 # `message` event subtypes that carry something a user typed or shared; every other subtype
@@ -471,7 +477,7 @@ class SlackChannel(ChatChannel):
             if not text:
                 return
             # Slack caps a message around 40k chars; split conservatively
-            for chunk in _split_text(text, 3500):
+            for chunk in split_markdown(text, 3500):
                 self._client.chat_postMessage(channel=channel_id, text=chunk, thread_ts=thread_ts)
                 progress["sent"] = True
 
@@ -496,31 +502,25 @@ class SlackChannel(ChatChannel):
         elif rtype in (ReplyType.VOICE, ReplyType.FILE, ReplyType.VIDEO):
             local = content[7:] if isinstance(content, str) and content.startswith("file://") else content
             caption = getattr(reply, "text_content", None) or None
-            self._client.files_upload_v2(
-                channel=channel_id, file=local, initial_comment=caption, thread_ts=thread_ts,
-            )
+            file_name = getattr(reply, "file_name", None) or None
+            downloaded = None
+            try:
+                if isinstance(local, str) and local.startswith(("http://", "https://")):
+                    # A file reply may carry an http(s) URL instead of a local path.
+                    url_path = urlparse(local).path
+                    downloaded = state_dir.tmp_file("slack_file", os.path.splitext(url_path)[1] or ".bin")
+                    download_to_file(local, downloaded, MAX_FILE_BYTES, timeout=60,
+                                     max_seconds=_MAX_REMOTE_FILE_SECONDS, guarded=True)
+                    # The published URL's last segment is a random hash, not the user's file name.
+                    file_name = file_name or os.path.basename(url_path)
+                    local = downloaded
+                self._client.files_upload_v2(
+                    channel=channel_id, file=local, filename=file_name,
+                    initial_comment=caption, thread_ts=thread_ts,
+                )
+            finally:
+                remove_download(downloaded)
 
         else:
             # Fallback: send as plain text
             self._client.chat_postMessage(channel=channel_id, text=str(content), thread_ts=thread_ts)
-
-
-def _split_text(text: str, limit: int):
-    """Split long text preferring line breaks to keep markdown structure intact."""
-    if len(text) <= limit:
-        yield text
-        return
-    buf = []
-    size = 0
-    for line in text.splitlines(keepends=True):
-        if size + len(line) > limit and buf:
-            yield "".join(buf)
-            buf, size = [], 0
-        # Hard-split single lines that exceed the limit
-        while len(line) > limit:
-            yield line[:limit]
-            line = line[limit:]
-        buf.append(line)
-        size += len(line)
-    if buf:
-        yield "".join(buf)

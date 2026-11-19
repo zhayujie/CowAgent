@@ -4,15 +4,15 @@
 小米 MiMo Bot —— OpenAI 兼容协议，使用独立 API key / base 配置。
 
 支持模型：
-- mimo-v2.5-pro     (旗舰，长上下文，默认开启思考)
-- mimo-v2.5         (多模态：文/图/音/视频，默认开启思考)
-- mimo-v2-pro       (V2 Pro，默认开启思考)
-- mimo-v2-omni      (V2 多模态，默认开启思考)
-- mimo-v2-flash     (V2 极速版，默认关闭思考)
+- mimo-v2.6-pro     (旗舰，全模态，1M 上下文，默认开启思考)
+- mimo-v2.6-flash   (全模态，更快更省，默认开启思考)
+
+已下线的 mimo-v2.5-pro / mimo-v2.5 / mimo-v2-* 会自动映射到对应的 V2.6 模型，
+避免旧配置直接报错。
 
 思考模式说明：
 - 开关参数：``{"thinking": {"type": "enabled" | "disabled"}}``
-- mimo-v2.5-pro / mimo-v2.5 在思考模式下 ``temperature`` 会被强制为 1.0，
+- 思考模式下 ``temperature`` / ``top_p`` 会被强制为 1.0 / 0.95，
   本地直接剥离 ``temperature`` / ``top_p`` 等参数避免歧义。
 - 多轮工具调用过程中，若历史包含 tool_calls，所有后续 assistant 消息必须回传
   ``reasoning_content``，否则 API 返回 400 错误。
@@ -36,20 +36,37 @@ from models.session_manager import SessionManager
 from .mimo_session import MimoSession
 
 DEFAULT_API_BASE = "https://api.xiaomimimo.com/v1"
-DEFAULT_MODEL = const.MIMO_V2_5_PRO
+DEFAULT_MODEL = const.MIMO_V2_6_PRO
+
+# An overloaded endpoint can hold the stream open with only ": keep-alive"
+# comments. Each one resets the socket read timeout, so without this cap a
+# queued request can hang for many minutes.
+STREAM_KEEPALIVE_MAX_SECONDS = 180
 
 # 支持多模态输入（图/音/视频）的模型
-MULTIMODAL_MODELS = {const.MIMO_V2_5_PRO, const.MIMO_V2_5, const.MIMO_V2_OMNI}
+MULTIMODAL_MODELS = {const.MIMO_V2_6_PRO, const.MIMO_V2_6_FLASH}
+
+# Vendor-retired model ids and their official replacements.
+RETIRED_MODELS = {
+    const.MIMO_V2_5_PRO: const.MIMO_V2_6_PRO,
+    const.MIMO_V2_PRO: const.MIMO_V2_6_PRO,
+    const.MIMO_V2_5: const.MIMO_V2_6_FLASH,
+    const.MIMO_V2_OMNI: const.MIMO_V2_6_FLASH,
+    const.MIMO_V2_FLASH: const.MIMO_V2_6_FLASH,
+}
+
+
+def resolve_model(model_name: Optional[str]) -> str:
+    """Map a retired model id onto its replacement; empty falls back to the default."""
+    name = (model_name or "").strip() or DEFAULT_MODEL
+    return RETIRED_MODELS.get(name.lower(), name)
 
 
 class MimoBot(Bot, OpenAICompatibleBot):
     def __init__(self):
         super().__init__()
-        self.sessions = SessionManager(
-            MimoSession,
-            model=conf().get("model") or DEFAULT_MODEL,
-        )
-        conf_model = conf().get("model") or DEFAULT_MODEL
+        conf_model = resolve_model(conf().get("model"))
+        self.sessions = SessionManager(MimoSession, model=conf_model)
         self.args = {
             "model": conf_model,
             "temperature": conf().get("temperature", 1.0),
@@ -72,7 +89,7 @@ class MimoBot(Bot, OpenAICompatibleBot):
         return {
             "api_key": self.api_key,
             "api_base": self.api_base,
-            "model": conf().get("model", DEFAULT_MODEL),
+            "model": resolve_model(conf().get("model")),
             "default_temperature": conf().get("temperature", 1.0),
             "default_top_p": conf().get("top_p", 0.95),
         }
@@ -80,8 +97,11 @@ class MimoBot(Bot, OpenAICompatibleBot):
     @property
     def supports_vision(self) -> bool:
         """主模型为多模态模型时，允许 vision tool 走主 bot 通道。"""
-        model_name = (conf().get("model") or "").lower()
-        return model_name in MULTIMODAL_MODELS
+        return self.model_supports_vision(conf().get("model"))
+
+    @staticmethod
+    def model_supports_vision(model_name: str) -> bool:
+        return resolve_model(model_name).lower() in MULTIMODAL_MODELS
 
     @staticmethod
     def _model_supports_thinking(model_name: str) -> bool:
@@ -155,9 +175,10 @@ class MimoBot(Bot, OpenAICompatibleBot):
             headers = self._build_headers()
             body = dict(args) if args else dict(self.args)
             body["messages"] = session.messages
+            body["model"] = resolve_model(body.get("model"))
 
-            model_name = str(body.get("model", ""))
-            # 思考模式下 mimo-v2.5-pro / mimo-v2.5 不支持自定义 temperature/top_p,
+            model_name = body["model"]
+            # 思考模式下不支持自定义 temperature/top_p,
             # 简单起见，所有支持思考的模型按默认配置走，剥离这些参数。
             if self._model_supports_thinking(model_name) and self._thinking_default_enabled(model_name):
                 for k in ("temperature", "top_p", "presence_penalty", "frequency_penalty"):
@@ -232,7 +253,7 @@ class MimoBot(Bot, OpenAICompatibleBot):
             if tools:
                 converted_tools = self._convert_tools_to_openai_format(tools)
 
-            model = kwargs.pop("model", None) or self.args["model"]
+            model = resolve_model(kwargs.pop("model", None) or self.args["model"])
             max_tokens = kwargs.pop("max_tokens", None)
 
             request_body = {
@@ -263,7 +284,7 @@ class MimoBot(Bot, OpenAICompatibleBot):
                 request_body["thinking"] = thinking_param
                 thinking_active = thinking_param.get("type") == "enabled"
 
-            # 思考模式下 v2.5-pro / v2.5 不支持自定义 temperature；干脆全部剥离避免被静默忽略
+            # 思考模式下不支持自定义 temperature 等采样参数；干脆全部剥离避免被静默忽略
             if thinking_active:
                 for k in ("temperature", "top_p", "presence_penalty", "frequency_penalty"):
                     request_body.pop(k, None)
@@ -316,12 +337,30 @@ class MimoBot(Bot, OpenAICompatibleBot):
             current_tool_calls = {}
             finish_reason = None
             stream_usage = None  # Provider-reported token usage (include_usage)
+            last_data_at = time.time()
 
             for line in response.iter_lines():
                 if not line:
                     continue
 
                 line = line.decode("utf-8")
+                if line.startswith(":"):
+                    if time.time() - last_data_at > STREAM_KEEPALIVE_MAX_SECONDS:
+                        logger.error(
+                            f"[MIMO] Stream timeout: only keep-alive received for "
+                            f"{STREAM_KEEPALIVE_MAX_SECONDS}s"
+                        )
+                        yield {
+                            "error": True,
+                            "message": f"Stream timeout: only keep-alive received for {STREAM_KEEPALIVE_MAX_SECONDS}s",
+                            "status_code": 504,
+                        }
+                        return
+                    # Empty chunk lets the caller check for cancel while the server is queueing
+                    yield {}
+                    continue
+                last_data_at = time.time()
+
                 if line.startswith("data: "):
                     data_str = line[6:]
                 elif line.startswith("data:"):
@@ -641,11 +680,12 @@ class MimoBot(Bot, OpenAICompatibleBot):
                     max_tokens: int = 1000) -> dict:
         """通过 MiMo OpenAI 兼容的 /chat/completions 端点进行图像理解。"""
         try:
-            # 主模型若不支持视觉（如 mimo-v2-flash），自动切到 mimo-v2.5-pro
-            vision_model = model
-            if not vision_model:
-                cur = self.args.get("model") or DEFAULT_MODEL
-                vision_model = cur if cur in MULTIMODAL_MODELS else const.MIMO_V2_5_PRO
+            # 主模型若不支持视觉，自动切到 mimo-v2.6-pro
+            if model:
+                vision_model = resolve_model(model)
+            else:
+                cur = resolve_model(self.args.get("model"))
+                vision_model = cur if cur in MULTIMODAL_MODELS else const.MIMO_V2_6_PRO
 
             payload = {
                 "model": vision_model,

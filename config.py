@@ -11,6 +11,7 @@ import time
 from common.log import logger
 from common import i18n
 from cli.config_json import deep_merge_dicts as _deep_merge_dicts, merge_duplicate_keys
+from common.deployment import is_desktop
 
 # All available config keys are listed in this dict (use lowercase keys).
 # The values here are placeholders only; the program does NOT read them.
@@ -235,6 +236,7 @@ available_setting = {
     "weixin_base_url": "https://ilinkai.weixin.qq.com",  # Weixin ilink API base URL
     "weixin_cdn_base_url": "https://novac2c.cdn.weixin.qq.com/c2c",  # CDN base URL
     "weixin_credentials_path": "~/.weixin_cow_credentials.json",  # credentials file path
+    "weixin_proxy": "",  # optional proxy for QR login, for networks that cannot log in directly
     # custom trigger words for chatgpt commands
     "clear_memory_commands": ["#清除记忆"],  # session-reset command; must start with #
     # channel config
@@ -262,6 +264,8 @@ available_setting = {
     "modelscope_base_url": "https://api-inference.modelscope.cn/v1/chat/completions",
     # LinkAI platform config
     "use_linkai": False,
+    "cowagent_api_key": "",
+    "cowagent_api_base": "",  # empty means const.COWAGENT_API_BASE_CN
     "linkai_api_key": "",
     "linkai_app_code": "",
     "linkai_api_base": "https://api.link-ai.tech",
@@ -286,6 +290,14 @@ available_setting = {
     "external_api_token": "",  # API key for the /v1 chat API; kept while the API is off
     "web_session_expire_days": 30,  # Auth session expiry in days
     "web_file_serve_root": "~",  # Root dir the /api/file endpoint may serve; "/" allows the whole filesystem
+    # Guest share: public chat pages (/share/<token>) backed by guest profiles in
+    # <workspace>/guests/. Off by default, and refused while web_password is
+    # empty, because the console on the same port would be open to visitors.
+    "guest_share": {
+        "enabled": False,
+    },
+    "web_public_url": "",  # Address shown in API examples, share links and embed code; empty uses the page's own
+    "websites_base_url": "",  # Public URL prefix a static server exposes the Agent's websites/ dir at; empty disables published links
     "mcp_oauth_redirect_base": "",  # Base URL for MCP OAuth callback (e.g. http://your-ip:9899); empty uses local web console
     "agent": True,  # whether to enable Agent mode
     "agent_workspace": "~/cow",  # agent workspace path, used to store skills, memory, etc.
@@ -343,7 +355,7 @@ available_setting = {
         # the teammates in the current conversation.
         "allowed_targets": None,
         "max_depth": 3,               # delegation hops in one chain (range 1-8)
-        "timeout_seconds": 600,       # budget for one delegated run (range 0.01-600)
+        "timeout_seconds": 600,       # budget for one delegated run (range 0.01-3600)
         "max_message_chars": 8000,    # size limit for one delegated task
     },
     "enable_thinking": False,  # Enable deep-thinking mode for thinking-capable models
@@ -432,9 +444,19 @@ class Config(dict):
         try:
             # SECURITY: pickle.dump output should only be loaded by this same
             # process. See note on load_user_datas() above.
-            with open(os.path.join(get_appdata_dir(), "user_datas.pkl"), "wb") as f:
-                pickle.dump(self.user_datas, f)
-                logger.info("[Config] User datas saved.")
+            #
+            # Serialize fully in memory and swap the file atomically. This
+            # runs on SIGTERM, and the update relay SIGKILLs the process a
+            # fixed grace period later (cli/commands/process.py) — a pickle
+            # truncated mid-dump would make load_user_datas fall back to {}
+            # on the next start and silently wipe all plugin/session user data.
+            from common.atomic_write import write_bytes_atomic
+
+            write_bytes_atomic(
+                os.path.join(get_appdata_dir(), "user_datas.pkl"),
+                pickle.dumps(self.user_datas),
+            )
+            logger.info("[Config] User datas saved.")
         except Exception as e:
             logger.info("[Config] User datas error: {}".format(e))
 
@@ -442,20 +464,29 @@ class Config(dict):
 config = Config()
 
 
-def _mask_value(val):
-    """Mask a sensitive string value, keeping first 3 and last 3 chars."""
-    if not isinstance(val, str) or len(val) <= 8:
+_SENSITIVE_KEY_PARTS = ("key", "secret", "token", "password", "passwd", "cookie", "authorization")
+_FULLY_MASKED_KEY_PARTS = ("password", "passwd")
+
+
+def _mask_value(val, full=False):
+    """Mask a sensitive string value, keeping first 3 and last 3 chars of a
+    long one. Short values and passwords are hidden entirely, since a few
+    characters of them is most of the secret."""
+    if not isinstance(val, str) or not val:
         return val
+    if full or len(val) <= 8:
+        return "*" * 8
     return val[0:3] + "*" * 5 + val[-3:]
 
 
 def _mask_sensitive_recursive(obj):
-    """Recursively mask values whose keys contain 'key' or 'secret'."""
+    """Recursively mask string values whose keys name a credential."""
     if isinstance(obj, dict):
         masked = {}
         for k, v in obj.items():
-            if ("key" in k or "secret" in k) and isinstance(v, str):
-                masked[k] = _mask_value(v)
+            name = str(k).lower()
+            if isinstance(v, str) and any(p in name for p in _SENSITIVE_KEY_PARTS):
+                masked[k] = _mask_value(v, full=any(p in name for p in _FULLY_MASKED_KEY_PARTS))
             else:
                 masked[k] = _mask_sensitive_recursive(v)
         return masked
@@ -499,6 +530,55 @@ def _quarantine_corrupted_config(config_path):
         logger.warning("[INIT] failed to back up corrupted config: {}".format(e))
 
 
+# Config keys mirrored into environment variables at startup so that
+# subprocesses (e.g. shell skill scripts) can read them directly.
+CONFIG_TO_ENV = {
+    "open_ai_api_key": "OPENAI_API_KEY",
+    "open_ai_api_base": "OPENAI_API_BASE",
+    "cowagent_api_key": "COWAGENT_API_KEY",
+    "cowagent_api_base": "COWAGENT_API_BASE",
+    "linkai_api_key": "LINKAI_API_KEY",
+    "linkai_api_base": "LINKAI_API_BASE",
+    "claude_api_key": "CLAUDE_API_KEY",
+    "claude_api_base": "CLAUDE_API_BASE",
+    "gemini_api_key": "GEMINI_API_KEY",
+    "gemini_api_base": "GEMINI_API_BASE",
+    "minimax_api_key": "MINIMAX_API_KEY",
+    "minimax_api_base": "MINIMAX_API_BASE",
+    "deepseek_api_key": "DEEPSEEK_API_KEY",
+    "deepseek_api_base": "DEEPSEEK_API_BASE",
+    "mimo_api_key": "MIMO_API_KEY",
+    "mimo_api_base": "MIMO_API_BASE",
+    "qianfan_api_key": "QIANFAN_API_KEY",
+    "qianfan_api_base": "QIANFAN_API_BASE",
+    "zhipu_ai_api_key": "ZHIPU_AI_API_KEY",
+    "zhipu_ai_api_base": "ZHIPU_AI_API_BASE",
+    "moonshot_api_key": "MOONSHOT_API_KEY",
+    "moonshot_api_base": "MOONSHOT_API_BASE",
+    "ark_api_key": "ARK_API_KEY",
+    "ark_api_base": "ARK_API_BASE",
+    "dashscope_api_key": "DASHSCOPE_API_KEY",
+    "dashscope_api_base": "DASHSCOPE_API_BASE",
+    # Channel credentials (used by skills that check env vars)
+    "feishu_app_id": "FEISHU_APP_ID",
+    "feishu_app_secret": "FEISHU_APP_SECRET",
+    "dingtalk_client_id": "DINGTALK_CLIENT_ID",
+    "dingtalk_client_secret": "DINGTALK_CLIENT_SECRET",
+    "wechatmp_app_id": "WECHATMP_APP_ID",
+    "wechatmp_app_secret": "WECHATMP_APP_SECRET",
+    "wechatcomapp_agent_id": "WECHATCOMAPP_AGENT_ID",
+    "wechatcomapp_secret": "WECHATCOMAPP_SECRET",
+    "wechatcom_corp_id": "WECHATCOM_CORP_ID",
+    "wechat_kf_corp_id": "WECHAT_KF_CORP_ID",
+    "wechat_kf_secret": "WECHAT_KF_SECRET",
+    "wechat_kf_token": "WECHAT_KF_TOKEN",
+    "wechat_kf_aes_key": "WECHAT_KF_AES_KEY",
+    "qq_app_id": "QQ_APP_ID",
+    "qq_app_secret": "QQ_APP_SECRET",
+    "weixin_token": "WEIXIN_TOKEN",
+}
+
+
 def load_config():
     global config
 
@@ -534,7 +614,7 @@ def load_config():
     # deleting the file. Source deployments deliberately keep the original
     # behavior (raise): a developer editing config.json wants a clear error to
     # fix, not to have their file silently backed up and replaced by defaults.
-    desktop_mode = os.environ.get("COW_DESKTOP") == "1"
+    desktop_mode = is_desktop()
     try:
         config = Config(json.loads(config_str, object_pairs_hook=_merge_duplicate_keys))
     except ValueError as parse_err:
@@ -577,7 +657,7 @@ def load_config():
     # never silently tightened by an upgrade. Non-desktop (docker, source) is
     # untouched. Placed before the env override so AGENT_PERMISSION_MODE still
     # wins if explicitly set.
-    if os.environ.get("COW_DESKTOP") == "1" and config_path != user_config_path:
+    if is_desktop() and config_path != user_config_path:
         config["agent_permission_mode"] = "workspace-write"
 
     # override config with environment variables.
@@ -664,56 +744,20 @@ def load_config():
     # Sync selected config values to environment variables so that
     # subprocesses (e.g. shell skill scripts) can access them directly.
     # Existing env vars are NOT overwritten (env takes precedence).
-    _CONFIG_TO_ENV = {
-        "open_ai_api_key": "OPENAI_API_KEY",
-        "open_ai_api_base": "OPENAI_API_BASE",
-        "linkai_api_key": "LINKAI_API_KEY",
-        "linkai_api_base": "LINKAI_API_BASE",
-        "claude_api_key": "CLAUDE_API_KEY",
-        "claude_api_base": "CLAUDE_API_BASE",
-        "gemini_api_key": "GEMINI_API_KEY",
-        "gemini_api_base": "GEMINI_API_BASE",
-        "minimax_api_key": "MINIMAX_API_KEY",
-        "minimax_api_base": "MINIMAX_API_BASE",
-        "deepseek_api_key": "DEEPSEEK_API_KEY",
-        "deepseek_api_base": "DEEPSEEK_API_BASE",
-        "mimo_api_key": "MIMO_API_KEY",
-        "mimo_api_base": "MIMO_API_BASE",
-        "qianfan_api_key": "QIANFAN_API_KEY",
-        "qianfan_api_base": "QIANFAN_API_BASE",
-        "zhipu_ai_api_key": "ZHIPU_AI_API_KEY",
-        "zhipu_ai_api_base": "ZHIPU_AI_API_BASE",
-        "moonshot_api_key": "MOONSHOT_API_KEY",
-        "moonshot_api_base": "MOONSHOT_API_BASE",
-        "ark_api_key": "ARK_API_KEY",
-        "ark_api_base": "ARK_API_BASE",
-        "dashscope_api_key": "DASHSCOPE_API_KEY",
-        "dashscope_api_base": "DASHSCOPE_API_BASE",
-        # Channel credentials (used by skills that check env vars)
-        "feishu_app_id": "FEISHU_APP_ID",
-        "feishu_app_secret": "FEISHU_APP_SECRET",
-        "dingtalk_client_id": "DINGTALK_CLIENT_ID",
-        "dingtalk_client_secret": "DINGTALK_CLIENT_SECRET",
-        "wechatmp_app_id": "WECHATMP_APP_ID",
-        "wechatmp_app_secret": "WECHATMP_APP_SECRET",
-        "wechatcomapp_agent_id": "WECHATCOMAPP_AGENT_ID",
-        "wechatcomapp_secret": "WECHATCOMAPP_SECRET",
-        "wechatcom_corp_id": "WECHATCOM_CORP_ID",
-        "wechat_kf_corp_id": "WECHAT_KF_CORP_ID",
-        "wechat_kf_secret": "WECHAT_KF_SECRET",
-        "wechat_kf_token": "WECHAT_KF_TOKEN",
-        "wechat_kf_aes_key": "WECHAT_KF_AES_KEY",
-        "qq_app_id": "QQ_APP_ID",
-        "qq_app_secret": "QQ_APP_SECRET",
-        "weixin_token": "WEIXIN_TOKEN",
-    }
     injected = 0
-    for conf_key, env_key in _CONFIG_TO_ENV.items():
+    for conf_key, env_key in CONFIG_TO_ENV.items():
         if not os.environ.get(env_key):
             val = config.get(conf_key, "")
             if val:
                 os.environ[env_key] = str(val)
                 injected += 1
+
+    # Skill scripts only see the environment, so hand them the same base the
+    # runtime falls back to when cowagent_api_base is unset.
+    if config.get("cowagent_api_key") and not os.environ.get("COWAGENT_API_BASE"):
+        from models.cowagent_provider import default_cowagent_api_base
+        os.environ["COWAGENT_API_BASE"] = default_cowagent_api_base()
+        injected += 1
 
     injected += _sync_skill_config_to_env(config.get("skills", {}))
     injected += sync_image_generation_custom_provider_env(config)

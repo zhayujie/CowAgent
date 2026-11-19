@@ -6,7 +6,7 @@ description: "CowAgent が対応するモデルベンダーと機能の一覧。
 CowAgent は国内外の主要ベンダーの大規模言語モデルをサポートしており、モデル接続の実装はプロジェクトの `models/` ディレクトリにあります。テキスト対話に加えて、一部のベンダーは画像理解、画像生成、音声認識、音声合成、ベクトルなどの機能も提供しており、Agent フローの中で必要に応じて呼び出すことができます。
 
 <Note>
-  Agent モードでは、効果とコストのバランスを考慮して以下のモデルの利用を推奨します：deepseek-flash、MiniMax-M3、claude-opus-5-5、claude-sonnet-5、gemini-3.8-flash、glm-5.3-flash、qwen3.8-flash、kimi-k3、ernie-5.1。
+  Agent モードでは、効果とコストのバランスを考慮して以下のモデルの利用を推奨します：deepseek-flash、MiniMax-M3.1-Flash、claude-opus-5-5、claude-sonnet-5-5、gemini-4-argon、glm-5.3-flash、qwen3.8-flash、kimi-k3.1-pro、ernie-5.1。
 
   同時に [LinkAI](https://link-ai.tech/?utm_source=cowagent&utm_medium=docs&utm_campaign=models) プラットフォームの API もサポートしており、1 つの Key で複数ベンダーを柔軟に切り替えられ、ナレッジベース、ワークフロー、プラグインなどの機能も付属しています。
 </Note>
@@ -19,15 +19,16 @@ CowAgent は国内外の主要ベンダーの大規模言語モデルをサポ�
 | ベンダー | 代表モデル | テキスト | 画像理解 | 画像生成 | 音声認識 | 音声合成 | ベクトル |
 | --- | --- | :-: | :-: | :-: | :-: | :-: | :-: |
 | [DeepSeek](/ja/models/deepseek) | deepseek-flash (V4.1) / pro | ✅ | ✅ | | | | |
-| [Claude](/ja/models/claude) | claude-opus-5-5 / sonnet-5 | ✅ | ✅ | | | | |
+| [Claude](/ja/models/claude) | claude-opus-5-5 / sonnet-5-5 | ✅ | ✅ | | | | |
 | [OpenAI](/ja/models/openai) | gpt-6.1 / gpt-6 シリーズ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| [Gemini](/ja/models/gemini) | gemini-3.8-flash | ✅ | ✅ | ✅ | | | |
-| [MiniMax](/ja/models/minimax) | MiniMax-M3 | ✅ | ✅ | ✅ | | ✅ | |
+| [Gemini](/ja/models/gemini) | gemini-4-argon | ✅ | ✅ | ✅ | | | |
+| [MiniMax](/ja/models/minimax) | MiniMax-M3.1-Flash / M3 | ✅ | ✅ | ✅ | | ✅ | |
 | [Zhipu GLM](/ja/models/glm) | glm-5.3-flash、glm-5v-turbo | ✅ | ✅ | | ✅ | | ✅ |
 | [Tongyi Qianwen](/ja/models/qwen) | qwen3.8-flash | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| [Kimi](/ja/models/kimi) | kimi-k3 | ✅ | ✅ | | | | |
+| [Kimi](/ja/models/kimi) | kimi-k3.1-pro / kimi-k3 | ✅ | ✅ | | | | |
 | [Doubao](/ja/models/doubao) | doubao-seed-2.1 シリーズ | ✅ | ✅ | ✅ | | | ✅ |
 | [Baidu Qianfan](/ja/models/qianfan) | ernie-5.1 | ✅ | ✅ | | | | |
+| [CowAgent](/ja/models/cowagent) | 1 つの Key で GPT / Claude / Gemini など | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | [LinkAI](/ja/models/linkai) | 複数ベンダー 100+ モデルを統一接続 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | [カスタム](/ja/models/custom) | ローカルモデル / サードパーティプロキシ | ✅ | | | | | |
 
