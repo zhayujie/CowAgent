@@ -42,6 +42,8 @@ import { Btn, Card } from './primitives'
 
 type Pairing = PairingCode & { expiresAt: number; expired?: boolean }
 
+// Off until the mobile app is published: hides the QR code and the app step.
+const MOBILE_PAIRING = false
 const PAIR_POLL_MS = 2000
 const REFRESH_MS = 30000
 const NAME_MAX = 60
@@ -625,41 +627,47 @@ const DevicesTab: React.FC<{
 
         {pairing && (
           <div className="mt-4 flex gap-6 p-5 rounded-xl border border-default bg-[color-mix(in_srgb,var(--bg-base)_60%,transparent)]">
-            <div className="relative flex-shrink-0 self-start">
-              {pairing.qr_image ? (
-                <img
-                  src={pairing.qr_image}
-                  alt="QR"
-                  className={`w-44 h-44 rounded-xl bg-white p-2 shadow-sm ring-1 ring-black/5 ${
-                    pairing.expired ? 'opacity-20' : ''
-                  }`}
-                />
-              ) : (
-                <div className="w-44 h-44 rounded-xl bg-surface-2 flex items-center justify-center text-xs text-content-tertiary">
-                  {t('devices_no_qr')}
-                </div>
-              )}
-              {pairing.expired && (
-                <Btn
-                  variant="primary"
-                  className="absolute inset-0 m-auto w-28 !h-9 !px-2 !py-0 !text-xs inline-flex items-center justify-center shadow"
-                  onClick={() => void startPairing()}
-                >
-                  {t('devices_regenerate')}
-                </Btn>
-              )}
-            </div>
+            {MOBILE_PAIRING && (
+              <div className="relative flex-shrink-0 self-start">
+                {pairing.qr_image ? (
+                  <img
+                    src={pairing.qr_image}
+                    alt="QR"
+                    className={`w-44 h-44 rounded-xl bg-white p-2 shadow-sm ring-1 ring-black/5 ${
+                      pairing.expired ? 'opacity-20' : ''
+                    }`}
+                  />
+                ) : (
+                  <div className="w-44 h-44 rounded-xl bg-surface-2 flex items-center justify-center text-xs text-content-tertiary">
+                    {t('devices_no_qr')}
+                  </div>
+                )}
+                {pairing.expired && (
+                  <Btn
+                    variant="primary"
+                    className="absolute inset-0 m-auto w-28 !h-9 !px-2 !py-0 !text-xs inline-flex items-center justify-center shadow"
+                    onClick={() => void startPairing()}
+                  >
+                    {t('devices_regenerate')}
+                  </Btn>
+                )}
+              </div>
+            )}
             <div className="min-w-0 flex-1 space-y-4">
-              <ol className="space-y-2 text-sm text-content-secondary">
-                {[t('devices_step_app'), t('devices_step_other')].map((text, i) => (
-                  <li key={i} className="flex gap-2.5">
-                    <span className="w-5 h-5 rounded-full bg-accent-soft text-accent text-[11px] font-semibold flex items-center justify-center flex-shrink-0">
-                      {i + 1}
-                    </span>
-                    <span className="leading-relaxed">{text}</span>
-                  </li>
-                ))}
-              </ol>
+              {MOBILE_PAIRING ? (
+                <ol className="space-y-2 text-sm text-content-secondary">
+                  {[t('devices_step_app'), t('devices_step_other')].map((text, i) => (
+                    <li key={i} className="flex gap-2.5">
+                      <span className="w-5 h-5 rounded-full bg-accent-soft text-accent text-[11px] font-semibold flex items-center justify-center flex-shrink-0">
+                        {i + 1}
+                      </span>
+                      <span className="leading-relaxed">{text}</span>
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <p className="text-sm leading-relaxed text-content-secondary">{t('devices_step_other')}</p>
+              )}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <div className="text-xs text-content-tertiary mb-1">{t('devices_code')}</div>
@@ -687,6 +695,16 @@ const DevicesTab: React.FC<{
                   <Clock size={12} />
                   {pairing.expired ? t('devices_expired') : tf('devices_expires_in', { t: clock })}
                 </span>
+                {pairing.expired && !MOBILE_PAIRING && (
+                  <button
+                    type="button"
+                    onClick={() => void startPairing()}
+                    className="inline-flex items-center gap-1.5 text-accent hover:underline cursor-pointer"
+                  >
+                    <RotateCw size={12} />
+                    {t('devices_regenerate')}
+                  </button>
+                )}
                 {!pairing.expired && (
                   <>
                     <button

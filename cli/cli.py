@@ -24,7 +24,7 @@ Commands:
   update   Update CowAgent and restart.
   status   Show CowAgent running status.
   logs     View CowAgent logs.
-  pair     Connect another device (app, desktop, browser).
+  pair     Connect another device (desktop, browser).
   skill    Manage CowAgent skills.
   knowledge  Manage knowledge base.
   backup   Back up config and agent workspace.
