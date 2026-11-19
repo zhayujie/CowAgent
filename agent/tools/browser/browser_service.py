@@ -411,20 +411,22 @@ def _flatten_tree(node, indent=0) -> List[str]:
     return lines
 
 
-# How long _submit() blocks the calling agent for one dispatched action. A
-# model-supplied timeout cannot honestly exceed this: the caller has already
-# failed and moved on while the worker thread is still inside the Playwright
-# call, so every model-supplied timeout is clamped to the same budget -- an
-# action that cannot finish in time then fails cleanly instead of occupying
-# the single worker thread (and resetting the idle-release timer) for as long
-# as the model asked.
+# How long _submit() waits for one action. Model-supplied timeouts stay a bit
+# below it so Playwright gives up before the caller does; to Playwright,
+# timeout=0 means "no timeout".
 _BROWSER_OP_BUDGET_S = 120
-_BROWSER_OP_BUDGET_MS = _BROWSER_OP_BUDGET_S * 1000
+_MODEL_TIMEOUT_CEILING_MS = (_BROWSER_OP_BUDGET_S - 5) * 1000
 
 
-def _clamp_timeout(timeout: int) -> int:
+def _clamp_timeout(timeout, default: int) -> int:
     """Keep a model-supplied timeout within the budget _submit() waits for."""
-    return min(timeout, _BROWSER_OP_BUDGET_MS)
+    try:
+        value = int(timeout)
+    except (TypeError, ValueError):
+        return default
+    if value <= 0:
+        return _MODEL_TIMEOUT_CEILING_MS
+    return min(value, _MODEL_TIMEOUT_CEILING_MS)
 
 
 class BrowserService:
@@ -1116,7 +1118,7 @@ class BrowserService:
     # ------------------------------------------------------------------
 
     def navigate(self, url: str, timeout: int = 30000) -> Dict[str, Any]:
-        return self._submit(self._do_navigate, url, _clamp_timeout(timeout))
+        return self._submit(self._do_navigate, url, _clamp_timeout(timeout, 30000))
 
     def _do_navigate(self, url: str, timeout: int) -> Dict[str, Any]:
         page = self._page
@@ -1197,7 +1199,7 @@ class BrowserService:
 
     def click(self, ref: Optional[int] = None, selector: Optional[str] = None,
               timeout: int = 5000) -> Dict[str, Any]:
-        return self._submit(self._do_click, ref, selector, _clamp_timeout(timeout))
+        return self._submit(self._do_click, ref, selector, _clamp_timeout(timeout, 5000))
 
     @contextmanager
     def _ref_element(self, ref):
@@ -1231,7 +1233,7 @@ class BrowserService:
 
     def fill(self, text: str, ref: Optional[int] = None,
              selector: Optional[str] = None, timeout: int = 5000) -> Dict[str, Any]:
-        return self._submit(self._do_fill, text, ref, selector, _clamp_timeout(timeout))
+        return self._submit(self._do_fill, text, ref, selector, _clamp_timeout(timeout, 5000))
 
     def _do_fill(self, text, ref, selector, timeout) -> Dict[str, Any]:
         page = self._page
@@ -1250,7 +1252,7 @@ class BrowserService:
 
     def select(self, value: str, ref: Optional[int] = None,
                selector: Optional[str] = None, timeout: int = 5000) -> Dict[str, Any]:
-        return self._submit(self._do_select, value, ref, selector, _clamp_timeout(timeout))
+        return self._submit(self._do_select, value, ref, selector, _clamp_timeout(timeout, 5000))
 
     def _do_select(self, value, ref, selector, timeout) -> Dict[str, Any]:
         page = self._page
@@ -1297,7 +1299,7 @@ class BrowserService:
 
     def wait(self, selector: Optional[str] = None, timeout: int = 5000,
              state: str = "visible") -> Dict[str, Any]:
-        return self._submit(self._do_wait, selector, _clamp_timeout(timeout), state)
+        return self._submit(self._do_wait, selector, _clamp_timeout(timeout, 5000), state)
 
     def _do_wait(self, selector, timeout, state) -> Dict[str, Any]:
         page = self._page

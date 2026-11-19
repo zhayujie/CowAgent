@@ -1,19 +1,10 @@
 """A model-supplied timeout must not outlive what the caller will wait for.
 
-The tool schema exposes ``timeout`` (milliseconds, no documented maximum) to
-the model on five actions -- navigate, click, fill, select, wait -- and the
-handlers pass it straight through to Playwright. But ``_submit`` blocks the
-calling agent for a hardcoded 120s and then fails the action cleanly, while
-the background worker thread stays inside the Playwright call for as long as
-the model asked. One oversized parameter -- a slow page, or ``wait`` with no
-selector, which really sleeps -- therefore occupies the single worker thread
-long after the agent has moved on: every following browser action queues
-behind it and burns its own 120s, and each retry resets the idle-release
-timer, so the session cannot recover until the user stops asking.
-
-The service now clamps every model-supplied timeout to the submit budget, so
-an action that cannot finish in time fails cleanly instead of wedging the
-worker. These tests pin what reaches Playwright.
+``_submit`` stops waiting after a fixed budget, but the single browser worker
+thread stays inside the Playwright call for as long as the model asked, and
+every later action queues behind it. Model timeouts are therefore clamped
+below the budget; ``0`` (Playwright's "no timeout") maps to the ceiling and
+``None`` or junk falls back to the action's default.
 """
 
 import queue
@@ -23,6 +14,8 @@ import pytest
 
 from agent.tools.browser import browser_service
 from agent.tools.browser.browser_service import BrowserService
+
+CEILING = browser_service._MODEL_TIMEOUT_CEILING_MS
 
 
 class _RecordingPage:
@@ -85,9 +78,7 @@ def test_navigate_clamps_a_model_timeout_to_the_submit_budget():
 
     _a_service_with(page).navigate("https://slow.example.com", timeout=600_000)
 
-    # Unclamped, the full 600_000 reached page.goto and the worker stayed
-    # inside it for ten minutes after the caller had already failed.
-    assert page.goto_timeouts == [120_000]
+    assert page.goto_timeouts == [CEILING]
 
 
 def test_wait_without_a_selector_clamps_the_sleep():
@@ -95,9 +86,7 @@ def test_wait_without_a_selector_clamps_the_sleep():
 
     _a_service_with(page).wait(timeout=3_600_000)
 
-    # wait with no selector really sleeps: an hour of it, for a caller that
-    # gave up after two minutes.
-    assert page.sleeps == [120_000]
+    assert page.sleeps == [CEILING]
 
 
 def test_click_clamps_a_model_timeout_to_the_submit_budget():
@@ -105,7 +94,7 @@ def test_click_clamps_a_model_timeout_to_the_submit_budget():
 
     _a_service_with(page).click(selector="#buy", timeout=600_000)
 
-    assert page.click_timeouts == [120_000]
+    assert page.click_timeouts == [CEILING]
 
 
 def test_fill_clamps_a_model_timeout_to_the_submit_budget():
@@ -113,7 +102,7 @@ def test_fill_clamps_a_model_timeout_to_the_submit_budget():
 
     _a_service_with(page).fill("hello", selector="#name", timeout=600_000)
 
-    assert page.fill_timeouts == [120_000]
+    assert page.fill_timeouts == [CEILING]
 
 
 def test_select_clamps_a_model_timeout_to_the_submit_budget():
@@ -121,7 +110,7 @@ def test_select_clamps_a_model_timeout_to_the_submit_budget():
 
     _a_service_with(page).select("pro", selector="#plan", timeout=600_000)
 
-    assert page.select_timeouts == [120_000]
+    assert page.select_timeouts == [CEILING]
 
 
 def test_defaults_are_left_alone():
@@ -141,6 +130,36 @@ def test_a_timeout_under_the_budget_is_left_alone():
     _a_service_with(page).wait(selector="#ready", timeout=45_000)
 
     assert page.selector_timeouts == [45_000]
+
+
+def test_zero_or_negative_maps_to_the_ceiling():
+    page = _RecordingPage()
+    service = _a_service_with(page)
+
+    service.navigate("https://example.com", timeout=0)
+    service.click(selector="#ok", timeout=-1)
+    service.wait(selector="#ready", timeout=0)
+
+    assert page.goto_timeouts == [CEILING]
+    assert page.click_timeouts == [CEILING]
+    assert page.selector_timeouts == [CEILING]
+
+
+def test_none_or_junk_falls_back_to_the_default():
+    page = _RecordingPage()
+    service = _a_service_with(page)
+
+    service.navigate("https://example.com", timeout=None)
+    service.click(selector="#ok", timeout="soon")
+    service.fill("x", selector="#name", timeout="2000")
+
+    assert page.goto_timeouts == [30_000]
+    assert page.click_timeouts == [5_000]
+    assert page.fill_timeouts == [2_000]
+
+
+def test_the_ceiling_stays_below_the_submit_budget():
+    assert CEILING < browser_service._BROWSER_OP_BUDGET_S * 1000
 
 
 def test_submit_waits_exactly_the_budget_the_clamp_allows(monkeypatch):
