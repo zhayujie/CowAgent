@@ -159,10 +159,12 @@ SAFETY:
         if self.windows_shell == "cmd" and not changed:
             return ""
         if self.windows_shell == "pwsh":
-            return ("CURRENT COMMAND ENVIRONMENT: bash executes PowerShell 7 (pwsh). "
-                    "Use $env:NAME for environment variables, never %NAME%. "
-                    "Earlier CMD commands in this conversation belong to an old setting; "
-                    "generate all new commands using PowerShell syntax.")
+            notice = ("CURRENT COMMAND ENVIRONMENT: bash executes PowerShell 7 (pwsh). "
+                      "Use $env:NAME for environment variables, never %NAME%.")
+            if changed:
+                notice += (" Earlier CMD commands in this conversation belong to an old setting; "
+                           "generate all new commands using PowerShell syntax.")
+            return notice
         return ("CURRENT COMMAND ENVIRONMENT: bash executes Windows cmd.exe. "
                 "Use %NAME% for environment variables, never $env:NAME. "
                 "Earlier PowerShell commands in this conversation belong to an old setting; "

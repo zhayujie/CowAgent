@@ -83,6 +83,23 @@ def test_model_schema_refreshes_cached_shell(monkeypatch, tmp_path):
     assert 'Use %NAME%' in tool.runtime_shell_notice()
 
 
+def test_pwsh_notice_mentions_old_commands_only_after_a_switch(monkeypatch, tmp_path):
+    import config
+    monkeypatch.setattr(Bash, '_IS_WIN', True)
+    state = {'tools': {'bash': {'windows_shell': 'pwsh'}}}
+    monkeypatch.setattr(config, 'conf', lambda: state)
+    tool = Bash({'cwd': str(tmp_path), 'windows_shell': 'pwsh'})
+    tool.refresh_runtime_config()
+    assert 'Earlier CMD' not in tool.runtime_shell_notice()
+    state['tools']['bash']['windows_shell'] = 'cmd'
+    tool.refresh_runtime_config()
+    tool.runtime_shell_notice()
+    state['tools']['bash']['windows_shell'] = 'pwsh'
+    tool.refresh_runtime_config()
+    assert 'Earlier CMD' in tool.runtime_shell_notice()
+    assert 'Earlier CMD' not in tool.runtime_shell_notice()
+
+
 def test_request_system_tracks_shell_without_accumulating(monkeypatch, tmp_path):
     import config
     from agent.protocol.agent_stream import AgentStreamExecutor

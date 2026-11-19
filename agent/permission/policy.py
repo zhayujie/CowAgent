@@ -288,7 +288,7 @@ _ESCALATION_COMMANDS = frozenset({"sudo", "doas", "su", "runas", "pkexec"})
 # PowerShell can start an elevated child without spelling `runas` as the
 # command. Refuse the explicit Verb=RunAs form in every gated mode.
 _PWSH_ELEVATION_RE = re.compile(
-    r"(?is)\bStart-Process\b(?:(?![;&|\n]).)*?\s-Verb\s+(?:['\"]?RunAs['\"]?)(?:\s|$)"
+    r"(?is)\b(?:Start-Process|saps|start)\b(?:(?![;&|\n]).)*?\s-Verb(?:\s+|\s*:\s*)['\"]?RunAs\b"
 )
 # Shells the bash tool can run on Windows; both treat a backslash literally.
 _WINDOWS_SHELLS = frozenset({"pwsh", "cmd"})
@@ -780,9 +780,7 @@ def _check_bash_read_only(args: Dict[str, Any], shell: Optional[str]) -> Decisio
             "confirmed read-only.",
             READ_ONLY,
         )
-    if _PWSH_ELEVATION_RE.search(command) or re.search(
-        r"(?is)\bstart-process\b(?:(?![;&|\n]).)*?-verb\s*:\s*['\"]?runas\b", command
-    ):
+    if _PWSH_ELEVATION_RE.search(command):
         return _deny("'Start-Process -Verb RunAs' escalates privileges.", READ_ONLY)
 
     for tokens in segments:
@@ -920,9 +918,7 @@ def _check_bash_workspace_write(
     if not command:
         return ALLOW
 
-    if _PWSH_ELEVATION_RE.search(command) or re.search(
-        r"(?is)\bstart-process\b(?:(?![;&|\n]).)*?-verb\s*:\s*['\"]?runas\b", command
-    ):
+    if _PWSH_ELEVATION_RE.search(command):
         return _deny("'Start-Process -Verb RunAs' escalates privileges.", WORKSPACE_WRITE)
     # Check PowerShell paths before POSIX tokenization can alter backslashes
     # or split PowerShell-only quoting and argument syntax. CMD has neither

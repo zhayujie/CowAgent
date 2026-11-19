@@ -217,6 +217,8 @@ def test_workspace_write_allows_inside_the_roots(command):
     "Start-Process cmd.exe -Verb RunAs",
     "start-process -FilePath powershell.exe -Verb:RunAs",
     "Start-Process powershell.exe -Verb 'RunAs'",
+    "start pwsh -Verb RunAs",
+    "saps cmd.exe -Verb:RunAs",
 ])
 def test_workspace_write_refuses_powershell_elevation(command):
     assert not _workspace_write(command).allowed
