@@ -9,11 +9,11 @@ handler can still return without delivering anything:
   created only at agent_end (very fast replies never send a message_update),
   and _create_and_send_card marks the run disabled — the docstring promises
   "创建卡片实体失败 → 不设置 feishu_streamed 标记，让 chat_channel 走普通文本
-  回复路径", but the flag was already set, so the user got NOTHING;
-- the reply was cancelled and no card ever existed.
+  回复路径", but the flag was already set, so the user got NOTHING.
 
-These tests pin the flag being undone on both paths (and kept on success),
-with requests mocked at the module boundary.
+These tests pin the flag being undone when card creation fails, kept on
+success and on a cancelled tool turn, with requests mocked at the module
+boundary.
 """
 import os
 import sys
@@ -69,8 +69,8 @@ class TestStreamedFlagFallback(unittest.TestCase):
                          "the text fallback must stay enabled when no card was delivered")
 
     def test_cancelled_without_a_card_keeps_the_flag(self):
-        # Review follow-up: a tool turn's card was already finalized (and
-        # delivered) in message_end, so has_card is False here while the
+        # A tool turn's card was already finalized (and delivered) in
+        # message_end, so has_card is False here while the
         # intermediate text HAS been shown. Clearing the flag would make
         # send() deliver final_response — that same text — a second time.
         context = _context()
