@@ -68,7 +68,11 @@ class TestStreamedFlagFallback(unittest.TestCase):
         self.assertFalse(context.get("feishu_streamed"),
                          "the text fallback must stay enabled when no card was delivered")
 
-    def test_cancelled_without_a_card_undoes_the_flag(self):
+    def test_cancelled_without_a_card_keeps_the_flag(self):
+        # Review follow-up: a tool turn's card was already finalized (and
+        # delivered) in message_end, so has_card is False here while the
+        # intermediate text HAS been shown. Clearing the flag would make
+        # send() deliver final_response — that same text — a second time.
         context = _context()
         on_event = self._callback(context)
 
@@ -76,7 +80,7 @@ class TestStreamedFlagFallback(unittest.TestCase):
             on_event({"type": "agent_cancelled", "data": {}})
             on_event({"type": "agent_end", "data": {"final_response": "partial"}})
 
-        self.assertFalse(context.get("feishu_streamed"))
+        self.assertTrue(context.get("feishu_streamed"))
 
     def test_successful_delivery_keeps_the_flag(self):
         context = _context()
