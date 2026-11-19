@@ -71,7 +71,7 @@ class Role(Plugin):
                         del self.tags[tag]
 
             if len(self.roles) == 0:
-                raise Exception("no role found")
+                raise ValueError("no role found")
             self.handlers[Event.ON_HANDLE_CONTEXT] = self.on_handle_context
             self.roleplays = {}
             logger.debug("[Role] inited")
