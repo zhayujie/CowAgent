@@ -11,6 +11,10 @@ line added here would be a way in.
 A device paired from a web page on another origin remembers that origin: the
 page may then call this server across origins, and only with that device's
 token (see ``request_guard``).
+
+A device signed in with the password keeps a tag of that password and stops
+working once the password is another, however it was changed (the console,
+config.json or the environment).
 """
 
 import hashlib
@@ -106,11 +110,21 @@ def _save(doc: dict) -> None:
     from common.atomic_write import write_json_atomic
 
     path = _path()
-    write_json_atomic(path, {k: v for k, v in doc.items() if k != "_path"}, indent=2)
+    try:
+        write_json_atomic(path, {k: v for k, v in doc.items() if k != "_path"}, indent=2)
+    except OSError as e:
+        logger.warning(f"[Devices] Could not save {path}, keeping the list in memory: {e}")
+        return
     try:
         os.chmod(path, 0o600)
     except OSError:
         pass
+
+
+def _password_tag() -> str:
+    from channel.web.core._common import _password_tag as tag
+
+    return tag()
 
 
 def _clean_name(name) -> str:
@@ -158,6 +172,8 @@ def add(name, platform, app_version="", ip="", origin="", via="pairing") -> Tupl
         "last_seen_at": now,
         "last_ip": str(ip or "")[:64],
     }
+    if device["via"] == "password":
+        device["pw_tag"] = _password_tag()
     with _lock:
         doc = _load()
         devices = [d for d in doc["devices"] if not _expired(d, now)]
@@ -192,6 +208,8 @@ def verify(token: str, ip: str = "") -> Optional[dict]:
             return None
         now = time.time()
         if _expired(device, now):
+            return None
+        if device.get("pw_tag") and not constant_time_equals(device["pw_tag"], _password_tag()):
             return None
         _active[device_id] = now
         if now - (device.get("last_seen_at") or 0) >= SEEN_WRITE_INTERVAL:
@@ -235,6 +253,17 @@ def rename(device_id: str, name) -> Optional[dict]:
         device["name"] = name
         _save(doc)
         return public(device)
+
+
+def retag(device_id: str) -> None:
+    """Carry a password device over to the current password."""
+    tag = _password_tag()
+    with _lock:
+        doc = _load()
+        device = next((d for d in doc["devices"] if d.get("id") == device_id), None)
+        if device is not None and device.get("pw_tag") and device["pw_tag"] != tag:
+            device["pw_tag"] = tag
+            _save(doc)
 
 
 def remove_where(predicate: Callable[[dict], bool]) -> int:

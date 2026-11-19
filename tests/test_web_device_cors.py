@@ -53,7 +53,7 @@ def server(tmp_path, monkeypatch):
     pairing.reset()
 
 
-def _call(app, path, method="GET", body=None, token="", origin="", preflight=False):
+def _call(app, path, method="GET", body=None, token="", origin="", preflight=False, site=""):
     query = ""
     if "?" in path:
         path, query = path.split("?", 1)
@@ -70,6 +70,8 @@ def _call(app, path, method="GET", body=None, token="", origin="", preflight=Fal
     if origin:
         env["HTTP_ORIGIN"] = origin
         env["HTTP_SEC_FETCH_SITE"] = "cross-site"
+    if site:
+        env["HTTP_SEC_FETCH_SITE"] = site
     if preflight:
         env["HTTP_ACCESS_CONTROL_REQUEST_METHOD"] = "POST"
         env["HTTP_ACCESS_CONTROL_REQUEST_HEADERS"] = "authorization,content-type"
@@ -178,3 +180,20 @@ def test_removing_the_device_closes_its_origin(server):
 def test_a_native_client_records_no_origin(server):
     _, _, paired = _pair_from(server, "")
     assert paired["device"]["origin"] == ""
+
+
+@pytest.mark.parametrize("origin", ["", "null"])
+def test_the_desktop_app_writes_to_a_remote_instance_with_its_device_token(server, origin):
+    # A file:// page sends no origin (or "null") and is cross-site to everything.
+    token = _pair_from(server, "")[2]["token"]
+    status, _, body = _call(server, "/api/pairing", "POST", {}, token=token, site="cross-site",
+                            **({"origin": origin} if origin else {}))
+    assert status.startswith("200") and body["status"] == "success"
+    status, _, _ = _call(server, "/api/pairing", "POST", {}, site="cross-site")
+    assert status.startswith("403")
+
+
+def test_a_web_paired_token_is_not_a_pass_for_pages_without_an_origin(server):
+    _, _, paired = _pair_from(server, CONSOLE)
+    status, _, _ = _call(server, "/api/pairing", "POST", {}, token=paired["token"], site="cross-site")
+    assert status.startswith("403")

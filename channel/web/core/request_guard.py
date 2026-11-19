@@ -9,13 +9,15 @@ Two ways in are closed here, for every request before it reaches a handler:
   Writes from another site are refused unless the site is listed in
   ``web_allowed_origins`` or the request carries the desktop shell's token.
   Native apps and scripts send no ``Origin`` or ``Sec-Fetch-Site`` and are
-  left to the usual authentication.
+  left to the usual authentication. So is a write from a page without an
+  origin (the desktop app talking to another machine) carrying a device token
+  in its ``Authorization`` header: no other site can make the browser add it.
 - DNS rebinding. A domain the attacker controls can resolve to this machine,
-  which makes the page same-origin with the server. Without a password nothing
-  else stands in the way, so requests are then only served at ``localhost``,
-  an IP address, the host of ``web_public_url`` or one listed in
-  ``web_allowed_hosts``: the server can't tell any other name from one an
-  attacker points here.
+  which makes the page same-origin with the server. The server can't tell such
+  a name from one of the user's own (a container name, a LAN or VPN host
+  name), so this is opt-in: once ``web_allowed_hosts`` lists any name, a
+  console without a password is only served at ``localhost``, an IP address,
+  the host of ``web_public_url`` or a listed name. A password closes it too.
 
 One kind of cross-site caller is let in: a console on another origin (say one
 running on the user's own machine) that paired with this server. Pairing from
@@ -55,6 +57,7 @@ class GuardPolicy:
     password_set: bool
     # Reached only through an authenticating proxy that owns the host names.
     behind_auth_proxy: bool = False
+    # Empty leaves host names unchecked.
     allowed_hosts: FrozenSet[str] = field(default_factory=frozenset)
     allowed_origins: FrozenSet[str] = field(default_factory=frozenset)
 
@@ -148,10 +151,24 @@ def _is_preflight(environ: dict) -> bool:
             and bool(environ.get("HTTP_ACCESS_CONTROL_REQUEST_METHOD")))
 
 
+def _bearer_device_ok(environ: dict) -> bool:
+    """A device token in the header, sent by a page with no web origin of its
+    own (the desktop app's file:// page). Tokens of devices paired from a web
+    page stay tied to that page's origin."""
+    if (environ.get("HTTP_ORIGIN") or "null").strip() != "null":
+        return False
+    auth = environ.get("HTTP_AUTHORIZATION", "") or ""
+    token = auth[7:].strip() if auth.startswith("Bearer ") else ""
+    if not token.startswith(devices.TOKEN_PREFIX):
+        return False
+    device = devices.verify(token, ip=environ.get("REMOTE_ADDR", ""))
+    return device is not None and not device.get("origin")
+
+
 def refusal(environ: dict, policy: GuardPolicy, desktop_token_ok: bool = False,
-            cors_ok: bool = False) -> Optional[str]:
+            cors_ok: bool = False, bearer_ok: bool = False) -> Optional[str]:
     """Why the request must be turned away, or None to let it through."""
-    if not policy.password_set and not policy.behind_auth_proxy:
+    if policy.allowed_hosts and not policy.password_set and not policy.behind_auth_proxy:
         name = _host_name(environ.get("HTTP_HOST", ""))
         if not _is_local_name(name) and name not in policy.allowed_hosts:
             return (f"Host '{name}' is not allowed while no web_password is set. "
@@ -161,7 +178,7 @@ def refusal(environ: dict, policy: GuardPolicy, desktop_token_ok: bool = False,
         return None
     if (environ.get("PATH_INFO") or "").startswith(_OWN_POLICY_PREFIXES):
         return None
-    if not _is_cross_site(environ) or desktop_token_ok or cors_ok:
+    if not _is_cross_site(environ) or desktop_token_ok or cors_ok or bearer_ok:
         return None
     if _origin(environ.get("HTTP_ORIGIN", "")) in policy.allowed_origins:
         return None
@@ -198,7 +215,7 @@ def current_policy() -> GuardPolicy:
 
     hosts = {h.lower() for h in _str_list(conf().get("web_allowed_hosts"))}
     public_host = urlsplit(_origin(conf().get("web_public_url", ""))).hostname
-    if public_host:
+    if hosts and public_host:
         hosts.add(public_host)
     origins = {o for o in (_origin(v) for v in _str_list(conf().get("web_allowed_origins"))) if o}
     return GuardPolicy(
@@ -220,10 +237,10 @@ def _refusal_page(reason: str, host: str) -> str:
         "<body style='font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:560px;"
         "margin:64px auto;padding:0 20px;color:#1f2328;line-height:1.6'>"
         f"<h2>This console isn't served at {html.escape(host)}</h2>"
-        "<p>No access password is set, so the console only answers to addresses no other "
-        "website can point at this machine. Either:</p>"
+        "<p>No access password is set and <code>web_allowed_hosts</code> limits the host "
+        "names this console answers to. Either:</p>"
         "<ol><li>set an access password (<code>web_password</code>), or</li>"
-        "<li>add this host name to <code>config.json</code> and restart:"
+        "<li>add this host name to <code>web_allowed_hosts</code> in <code>config.json</code> and restart:"
         f"<pre style='background:#f6f8fa;padding:12px;border-radius:6px'>{snippet}</pre></li></ol>"
         "</body></html>"
     )
@@ -235,11 +252,13 @@ def guard_requests(app):
 
     def wrapped(environ, start_response):
         allowed_origin = cors_origin(environ)
+        is_write = (environ.get("REQUEST_METHOD") or "GET").upper() not in _SAFE_METHODS
         reason = refusal(
             environ,
             current_policy(),
             desktop_token_ok=_is_loopback_request(environ) and _desktop_token_matches(environ),
             cors_ok=bool(allowed_origin),
+            bearer_ok=is_write and _bearer_device_ok(environ),
         )
         if reason is None and allowed_origin and _is_preflight(environ):
             start_response("204 No Content", _preflight_headers(environ, allowed_origin))

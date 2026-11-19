@@ -34,10 +34,21 @@ def test_issued_token_verifies(core):
     assert core._verify_auth_token(core._create_auth_token()) is True
 
 
-def test_password_keyed_token_no_longer_verifies(core):
-    ts_hex = format(int(time.time()), "x")
-    legacy = hmac.new(PASSWORD.encode(), ts_hex.encode(), hashlib.sha256).hexdigest()
-    assert core._verify_auth_token(f"{ts_hex}.{legacy}") is False
+def _password_keyed(password, ts):
+    ts_hex = format(int(ts), "x")
+    return f"{ts_hex}.{hmac.new(password.encode(), ts_hex.encode(), hashlib.sha256).hexdigest()}"
+
+
+def test_password_keyed_token_still_verifies_until_it_expires(core):
+    # Sessions issued by older versions must survive an upgrade.
+    assert core._verify_auth_token(_password_keyed(PASSWORD, time.time())) is True
+    assert core._verify_auth_token(_password_keyed(PASSWORD, time.time() - 2 * 86400)) is False
+
+
+def test_password_keyed_token_stops_with_a_new_password(core):
+    token = _password_keyed(PASSWORD, time.time())
+    core.password["value"] = "another one"
+    assert core._verify_auth_token(token) is False
 
 
 def test_changing_the_password_signs_sessions_out(core):

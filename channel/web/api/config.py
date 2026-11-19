@@ -254,6 +254,14 @@ class ConfigHandler:
                 applied[section] = merged
             _write_config_file_for_write(config_path, file_cfg)
 
+            # Looked up under the old password: under the new one the caller's
+            # device no longer verifies.
+            caller_device = ""
+            if "web_password" in applied:
+                from channel.web.api.devices import current_device_id
+
+                caller_device = current_device_id()
+
             # Publish only after the file is saved, so a failed save changes nothing.
             for key, value in applied.items():
                 local_config[key] = value
@@ -314,15 +322,17 @@ class ConfigHandler:
             # device, or gets one if it had none (no password before, or an
             # old session token).
             if applied.get("web_password") and applied["web_password"] != old_password:
-                from channel.web.api.devices import current_device_id, issue_password_device
+                from channel.web.api.devices import issue_password_device
                 from channel.web.core import devices
 
-                current = current_device_id()
+                current = caller_device
                 removed = devices.remove_where(
                     lambda d: d.get("id") != current and (was_open or d.get("via") == "password"))
                 if removed:
                     logger.info(f"[WebChannel] Password changed, signed out {removed} device(s)")
-                if not current:
+                if current:
+                    devices.retag(current)
+                else:
                     result["auth_token"] = issue_password_device(data.get("device"))
             return json.dumps(result, ensure_ascii=False)
         except Exception as e:

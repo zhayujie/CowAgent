@@ -85,27 +85,31 @@ def test_paths_with_their_own_policy_are_left_alone(path):
 # --- host names without a password -------------------------------------------
 
 
+LISTED = GuardPolicy(password_set=False, allowed_hosts=frozenset({"cow.example.com"}))
+
+
+@pytest.mark.parametrize("host", ["cow.company.com", "nas:9899", "my-mac.local", "cow-agent"])
+@pytest.mark.parametrize("path", ["/", "/v1/chat/completions", "/api/health"])
+def test_any_host_passes_without_password_by_default(host, path):
+    assert refusal(_env(method="GET", host=host, path=path), OPEN) is None
+
+
 @pytest.mark.parametrize("host", [
     "127.0.0.1:9899", "localhost:9899", "[::1]:9899", "192.168.1.20:9899",
-    "app.localhost", "",
+    "app.localhost", "", "cow.example.com",
 ])
-def test_local_host_names_pass_without_password(host):
-    assert refusal(_env(method="GET", host=host), OPEN) is None
+def test_local_and_listed_names_pass_once_hosts_are_listed(host):
+    assert refusal(_env(method="GET", host=host), LISTED) is None
 
 
-@pytest.mark.parametrize("host", ["attacker.example:9899", "cow.company.com", "nas", "my-mac.local"])
-def test_other_names_are_refused_without_password(host):
-    # A name of the user's own looks the same as one an attacker rebinds.
-    assert refusal(_env(method="GET", host=host), OPEN)
+@pytest.mark.parametrize("host", ["attacker.example:9899", "nas", "my-mac.local"])
+def test_other_names_are_refused_once_hosts_are_listed(host):
+    assert refusal(_env(method="GET", host=host), LISTED)
 
 
 def test_any_host_passes_with_password():
-    assert refusal(_env(method="GET", host="cow.example.com"), LOCKED) is None
-
-
-def test_listed_host_passes_without_password():
-    policy = GuardPolicy(password_set=False, allowed_hosts=frozenset({"cow.example.com"}))
-    assert refusal(_env(method="GET", host="cow.example.com"), policy) is None
+    policy = GuardPolicy(password_set=True, allowed_hosts=frozenset({"cow.example.com"}))
+    assert refusal(_env(method="GET", host="other.example.com"), policy) is None
 
 
 def test_display_address_and_listed_hosts_come_from_config(monkeypatch):
@@ -121,8 +125,19 @@ def test_display_address_and_listed_hosts_come_from_config(monkeypatch):
     assert refusal(_env(method="GET", host="other.company.com"), policy)
 
 
+def test_display_address_alone_does_not_turn_the_host_check_on(monkeypatch):
+    from channel.web.core import request_guard
+    from config import conf
+
+    monkeypatch.setitem(conf(), "web_password", "")
+    monkeypatch.setitem(conf(), "web_public_url", "https://cow.company.com/")
+    monkeypatch.setitem(conf(), "web_allowed_hosts", [])
+    policy = request_guard.current_policy()
+    assert refusal(_env(method="GET", host="nas:9899"), policy) is None
+
+
 def test_host_check_is_left_to_an_authenticating_proxy():
-    policy = GuardPolicy(password_set=False, behind_auth_proxy=True)
+    policy = GuardPolicy(password_set=False, behind_auth_proxy=True, allowed_hosts=frozenset({"x"}))
     assert refusal(_env(method="GET", host="slug.example.app"), policy) is None
 
 
@@ -158,7 +173,10 @@ def test_middleware_refuses_with_403(open_console):
     assert b"web_allowed_origins" in body
 
 
-def test_middleware_explains_a_refused_host_to_a_browser(open_console):
+def test_middleware_explains_a_refused_host_to_a_browser(open_console, monkeypatch):
+    from channel.web.core import request_guard
+
+    monkeypatch.setattr(request_guard, "current_policy", lambda: LISTED)
     env = _env(method="GET", path="/", host="cow.company.com", accept="text/html,*/*")
     status, body = _call(open_console, env)
     assert status.startswith("403")

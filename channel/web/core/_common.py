@@ -301,6 +301,13 @@ def _session_expire_seconds():
     return int(conf().get("web_session_expire_days", 30)) * 86400
 
 
+def _password_tag() -> str:
+    """Tag of the current password under the session secret: changes with the
+    password without giving it away."""
+    password = _get_web_password().encode("utf-8", "surrogatepass")
+    return hmac.new(_get_auth_secret(), password, hashlib.sha256).hexdigest()[:16]
+
+
 def _auth_signature(ts_hex: str) -> str:
     """Signature of a session token issued at ``ts_hex``.
 
@@ -309,10 +316,8 @@ def _auth_signature(ts_hex: str) -> str:
     offline. A tag of the password is signed in, so changing the password
     still signs every session out.
     """
-    secret = _get_auth_secret()
-    password = _get_web_password().encode("utf-8", "surrogatepass")
-    pw_tag = hmac.new(secret, password, hashlib.sha256).hexdigest()[:16]
-    return hmac.new(secret, f"{ts_hex}.{pw_tag}".encode(), hashlib.sha256).hexdigest()
+    message = f"{ts_hex}.{_password_tag()}".encode()
+    return hmac.new(_get_auth_secret(), message, hashlib.sha256).hexdigest()
 
 
 def _create_auth_token() -> str:
@@ -325,7 +330,8 @@ def _verify_auth_token(token):
     """Verify a signed token is valid and not expired.
 
     Stateless, so it survives server restarts; it stops working when the
-    password changes.
+    password changes. Tokens signed with the password itself, as older versions
+    issued them, are honoured until they expire so an upgrade signs no one out.
     """
     if not token or "." not in token:
         return False
@@ -336,7 +342,13 @@ def _verify_auth_token(token):
         return False
     if time.time() - ts > _session_expire_seconds():
         return False
-    return constant_time_equals(sig, _auth_signature(ts_hex))
+    if constant_time_equals(sig, _auth_signature(ts_hex)):
+        return True
+    password = _get_web_password().encode("utf-8", "surrogatepass")
+    if not password:
+        return False
+    legacy = hmac.new(password, ts_hex.encode(), hashlib.sha256).hexdigest()
+    return constant_time_equals(sig, legacy)
 
 
 def _get_bearer_token():

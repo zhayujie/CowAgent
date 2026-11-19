@@ -1,6 +1,8 @@
 """Shared utilities for cow CLI."""
 
+import hashlib
 import os
+import re
 import sys
 import json
 
@@ -63,7 +65,13 @@ def get_data_root() -> str:
 
 def get_device_dir() -> str:
     # Mirrors config.get_device_dir(), without creating it.
-    return os.path.join(os.path.expanduser(os.environ.get("COW_DATA_DIR") or "~/.cow"), "device")
+    data_dir = os.environ.get("COW_DATA_DIR")
+    if data_dir:
+        return os.path.join(os.path.expanduser(data_dir), "device")
+    real = os.path.realpath(get_project_root())
+    name = re.sub(r"[^A-Za-z0-9._-]", "", os.path.basename(real))[:40] or "cow"
+    digest = hashlib.sha256(real.encode("utf-8", "surrogatepass")).hexdigest()[:8]
+    return os.path.join(os.path.expanduser("~/.cow"), "device", f"{name}-{digest}")
 
 
 def _config_json_path() -> str:

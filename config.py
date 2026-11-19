@@ -1,10 +1,12 @@
 # encoding:utf-8
 
 import ast
+import hashlib
 import json
 import logging
 import os
 import pickle
+import re
 import sys
 import time
 
@@ -283,7 +285,7 @@ available_setting = {
     "web_host": "",  # Web console bind address; empty means auto
     "web_port": 9899,
     "web_password": "",  # Web console password; empty means no authentication required
-    "web_allowed_hosts": [],  # Host names served while web_password is empty, besides localhost, IPs and web_public_url
+    "web_allowed_hosts": [],  # When set and web_password is empty, only these host names (plus localhost, IPs and web_public_url) are served
     "web_allowed_origins": [],  # Other sites allowed to send write requests, e.g. "https://my.dashboard.com"
     "web_https_enabled": False,  # Serve the web console over HTTPS directly; needs web_ssl_certfile + web_ssl_keyfile
     "web_ssl_certfile": "",  # PEM certificate file for direct HTTPS (full chain recommended)
@@ -986,18 +988,47 @@ def get_data_root():
     return get_root()
 
 
+def get_device_base_dir() -> str:
+    """Where every instance on this machine keeps its device directory."""
+    return os.path.join(os.path.expanduser(os.environ.get("COW_DATA_DIR") or "~/.cow"), "device")
+
+
+def source_instance_key(root: str) -> str:
+    """Folder name for a source deployment at ``root``: readable, and unique
+    to the path."""
+    real = os.path.realpath(root)
+    name = re.sub(r"[^A-Za-z0-9._-]", "", os.path.basename(real))[:40] or "cow"
+    digest = hashlib.sha256(real.encode("utf-8", "surrogatepass")).hexdigest()[:8]
+    return f"{name}-{digest}"
+
+
 def get_device_dir(create: bool = True):
     """Directory for who this install is and who may sign in to it: its device
     id, the paired devices, the session key and the running console's local key.
 
-    It sits under COW_DATA_DIR when set and under ~/.cow otherwise, never in the
-    data root of a source deployment, which is the project directory itself.
+    It sits under COW_DATA_DIR when set. A source deployment keeps it out of the
+    project directory, under ~/.cow/device, in a folder of its own per project:
+    two checkouts, or a checkout beside the desktop app, are separate instances
+    with their own devices and keys.
     """
     data_dir = os.environ.get("COW_DATA_DIR")
-    path = os.path.join(os.path.expanduser(data_dir or "~/.cow"), "device")
+    if data_dir:
+        path = os.path.join(os.path.expanduser(data_dir), "device")
+    else:
+        path = os.path.join(get_device_base_dir(), source_instance_key(get_root()))
     if create:
-        os.makedirs(path, mode=0o700, exist_ok=True)
+        # An unwritable home must not stop the server: what lives here then
+        # stays in memory until a restart.
+        try:
+            os.makedirs(path, mode=0o700, exist_ok=True)
+        except OSError as e:
+            if path not in _unwritable_device_dirs:
+                _unwritable_device_dirs.add(path)
+                logger.warning(f"[Config] Could not create device directory {path}: {e}")
     return path
+
+
+_unwritable_device_dirs = set()
 
 
 def read_file(path):

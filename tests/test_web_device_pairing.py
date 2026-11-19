@@ -119,12 +119,48 @@ def test_the_device_id_survives_a_restart(env):
 
 
 def test_a_source_deployment_keeps_device_state_out_of_the_project(tmp_path, monkeypatch):
+    from cli import utils as cli_utils
+
     monkeypatch.delenv("COW_DATA_DIR", raising=False)
     monkeypatch.setenv("HOME", str(tmp_path))
     path = config.get_device_dir()
-    assert path == os.path.join(str(tmp_path), ".cow", "device")
+    assert os.path.dirname(path) == os.path.join(str(tmp_path), ".cow", "device")
     assert stat.S_IMODE(os.stat(path).st_mode) == 0o700
     assert not path.startswith(config.get_root())
+    assert cli_utils.get_device_dir() == path
+
+
+def test_an_unwritable_home_keeps_the_console_working(env, tmp_path, monkeypatch):
+    from channel.web.core import local_control
+
+    home = tmp_path / "home-is-a-file"
+    home.write_text("")
+    monkeypatch.delenv("COW_DATA_DIR", raising=False)
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(local_control, "_key", "")
+    local_control.publish("127.0.0.1", 9899, "http")
+    local_control.withdraw()
+    app = _app()
+    token = _owner_token(app)
+    assert _call(app, "/api/sessions", token=token)[0].status.startswith("200")
+
+
+def test_each_source_checkout_is_an_instance_of_its_own(tmp_path):
+    a = config.source_instance_key(str(tmp_path / "one" / "CowAgent"))
+    b = config.source_instance_key(str(tmp_path / "two" / "CowAgent"))
+    assert a != b and a.startswith("CowAgent-") and b.startswith("CowAgent-")
+    assert config.source_instance_key(str(tmp_path / "one" / "CowAgent")) == a
+
+
+def test_the_agent_cannot_reach_another_instances_device_directory(tmp_path, monkeypatch):
+    from agent.tools.read.read import Read
+
+    monkeypatch.delenv("COW_DATA_DIR", raising=False)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    other = tmp_path / ".cow" / "device"
+    other.mkdir(parents=True)
+    (other / "auth_secret").write_text("x")
+    assert Read().execute({"path": str(other / "auth_secret")}).status == "error"
 
 
 def test_the_agent_file_tools_refuse_the_device_directory(env):
@@ -424,6 +460,15 @@ def test_password_change_keeps_paired_devices(env, monkeypatch):
     assert _call(app, "/api/sessions", token=phone["token"])[0].status.startswith("200")
 
 
+def test_a_password_changed_outside_the_console_signs_out_password_devices(env, monkeypatch):
+    app = _app()
+    browser = _owner_token(app)
+    _, phone = _pair(app, browser)
+    monkeypatch.setitem(config.conf(), "web_password", "edited-in-config-json")
+    assert _call(app, "/api/sessions", token=browser)[0].status.startswith("401")
+    assert _call(app, "/api/sessions", token=phone["token"])[0].status.startswith("200")
+
+
 def test_signing_in_with_the_password_is_a_device_too(env):
     app = _app()
     res, body = _call(app, "/auth/login", "POST",
@@ -478,6 +523,8 @@ def test_a_new_password_signs_out_password_devices_but_not_paired_ones(env):
     assert _call(app, "/api/sessions", token=me)[0].status.startswith("200")
     assert _call(app, "/api/sessions", token=phone["token"])[0].status.startswith("200")
     assert _call(app, "/api/sessions", token=other_browser)[0].status.startswith("401")
+    _, listed = _call(app, "/api/devices", token=me)
+    assert listed["current"] == me.split(".")[1]
 
 
 def test_setting_the_first_password_keeps_the_caller_signed_in(env, monkeypatch):
