@@ -1,17 +1,20 @@
-# encoding:utf-8
 """`cow skill install` must cap every download it makes.
 
-Each network entry point of the skill installer used a bare requests.get plus
-resp.content / resp.text, so an oversized or endless URL was buffered whole
-before anything could object -- ``media_download``'s docstring spells out why
-a socket timeout alone never fires on a server that keeps trickling bytes. The
-skill service (``agent/skills/service.py``) already routes through the shared
-helper; the CLI installer was the one that did not.
+Each network entry point of the skill installer buffered a bare requests.get
+whole, so an oversized URL was read into memory before anything could object.
+They now go through the shared bounded helper, imported lazily so an installed
+CLI (which ships only the ``cli`` package) still starts.
 """
+
+import os
+import shutil
+import subprocess
+import sys
 
 import pytest
 
 import cli.commands.skill as skill_cmd
+import common.media_download as media_download
 from cli.commands.skill import SkillInstallError
 
 
@@ -47,14 +50,9 @@ class _Listing(_Stream):
         return self._items
 
 
-def _cap(monkeypatch, module, size=1024):
-    """Shrink the shared cap so an oversized body is a few chunks, not 100 MB.
-
-    ``raising=False`` keeps this working on the unfixed code, where the
-    module does not import the constant yet: there the real 100 MB cap
-    applies and the small body sails through -- which is the bug.
-    """
-    monkeypatch.setattr(module, "MAX_FILE_BYTES", size, raising=False)
+def _cap(monkeypatch, size=1024):
+    """Shrink the shared cap so an oversized body is a few chunks, not 100 MB."""
+    monkeypatch.setattr(media_download, "MAX_FILE_BYTES", size)
 
 
 def _oversized(chunks=8, size=512):
@@ -65,7 +63,7 @@ def test_repo_zip_download_refuses_an_oversized_archive(monkeypatch, tmp_path):
     sandbox = tmp_path / "tmp"
     sandbox.mkdir()
     monkeypatch.setattr(skill_cmd.tempfile, "tempdir", str(sandbox))
-    _cap(monkeypatch, skill_cmd)
+    _cap(monkeypatch)
     monkeypatch.setattr(skill_cmd.requests, "get",
                         lambda *a, **k: _Stream(_oversized()))
 
@@ -77,7 +75,7 @@ def test_repo_zip_download_refuses_an_oversized_archive(monkeypatch, tmp_path):
 
 
 def test_skill_md_download_refuses_an_oversized_page(monkeypatch):
-    _cap(monkeypatch, skill_cmd)
+    _cap(monkeypatch)
     monkeypatch.setattr(skill_cmd.requests, "get",
                         lambda *a, **k: _Stream(_oversized()))
 
@@ -86,7 +84,7 @@ def test_skill_md_download_refuses_an_oversized_page(monkeypatch):
 
 
 def test_archive_download_refuses_an_oversized_package(monkeypatch):
-    _cap(monkeypatch, skill_cmd)
+    _cap(monkeypatch)
     monkeypatch.setattr(skill_cmd.requests, "get",
                         lambda *a, **k: _Stream(_oversized(),
                                                 headers={"Content-Type": "application/zip"}))
@@ -113,7 +111,7 @@ def _contents_api(monkeypatch, file_response):
 
 
 def test_contents_api_file_download_refuses_an_oversized_file(monkeypatch, tmp_path):
-    _cap(monkeypatch, skill_cmd)
+    _cap(monkeypatch)
     _contents_api(monkeypatch, _Stream(_oversized()))
 
     with pytest.raises(ValueError, match="too large"):
@@ -131,3 +129,15 @@ def test_contents_api_still_writes_ordinary_files(monkeypatch, tmp_path):
                                    str(tmp_path / "dest"))
 
     assert (tmp_path / "dest" / "SKILL.md").read_bytes() == payload
+
+
+def test_the_cli_imports_without_the_project_on_the_path(tmp_path):
+    """An installed CLI ships only the ``cli`` package: no ``common`` at import time."""
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    shutil.copytree(os.path.join(root, "cli"), tmp_path / "cli")
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+    proc = subprocess.run(
+        [sys.executable, "-c", "import cli.cli, cli.commands.skill"],
+        cwd=tmp_path, env=env, capture_output=True, text=True, timeout=60,
+    )
+    assert proc.returncode == 0, proc.stderr
