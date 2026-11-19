@@ -352,66 +352,46 @@ def _get_query_token():
         return ""
 
 
-# Methods that change state and therefore must not be reachable by a
-# cross-origin request when the console runs with no password set.
 _STATE_CHANGING_METHODS = ("POST", "PUT", "PATCH", "DELETE")
 
 
-def _is_state_changing_method() -> bool:
+def _is_cross_site_request() -> bool:
     env = getattr(web.ctx, "env", {}) or {}
-    return (env.get("REQUEST_METHOD") or "GET").upper() in _STATE_CHANGING_METHODS
-
-
-def _origin_is_foreign() -> bool:
-    """Whether an Origin/Referer header names a site other than this console.
-
-    A browser attaches ``Origin`` (and ``Referer``) to a cross-origin request,
-    including the CORS-simple ``text/plain`` POST the console accepts, so this
-    is what separates a drive-by from a legitimate caller. A request with no
-    Origin/Referer at all is not a browser making a cross-site call -- curl, the
-    desktop shell's non-XHR callers and local scripts all look like that -- and
-    the desktop renderer's ``file://`` origin arrives as the literal ``null``;
-    both are treated as local rather than foreign.
-    """
-    env = getattr(web.ctx, "env", {}) or {}
-    host = (env.get("HTTP_HOST") or "").strip().lower()
-    for header in ("HTTP_ORIGIN", "HTTP_REFERER"):
-        raw = (env.get(header) or "").strip()
-        if not raw:
-            continue
-        if raw.lower() == "null":
-            return False
-        try:
-            netloc = urlsplit(raw).netloc.lower()
-        except ValueError:
-            return True
-        # Same-origin (or a header we can't attribute to another host): not foreign.
-        return bool(netloc) and netloc != host
-    return False
+    site = (env.get("HTTP_SEC_FETCH_SITE") or "").strip().lower()
+    if site:
+        return site in ("cross-site", "same-site")
+    # Browsers without Sec-Fetch-* still send Origin on a cross-origin write.
+    origin = (env.get("HTTP_ORIGIN") or "").strip()
+    if not origin:
+        return False
+    try:
+        netloc = urlsplit(origin).netloc.lower() if origin != "null" else ""
+    except ValueError:
+        return True
+    hosts = {
+        (env.get("HTTP_HOST") or "").strip().lower(),
+        (env.get("HTTP_X_FORWARDED_HOST") or "").split(",")[0].strip().lower(),
+    }
+    return not netloc or netloc not in hosts
 
 
 def _passwordless_write_blocked() -> bool:
-    """Whether a write on a password-less console must be refused.
+    """Whether a password-less console must refuse this request.
 
-    With no ``web_password`` (the shipped default) the console is reachable
-    without credentials, so any page the operator visits can POST to loopback
-    and drive the full-access agent. Refuse those cross-origin writes while
-    leaving reads (already local-only) and the desktop shell untouched.
+    Without a password any page the operator visits could POST to the console
+    and drive the agent, so writes from another site are refused. The desktop
+    renderer runs from file:// and proves itself with its spawn token instead.
     """
-    if not _is_state_changing_method():
+    env = getattr(web.ctx, "env", {}) or {}
+    if (env.get("REQUEST_METHOD") or "GET").upper() not in _STATE_CHANGING_METHODS:
         return False
     if _desktop_token_matches():
         return False
-    return _origin_is_foreign()
+    return _is_cross_site_request()
 
 
 def _check_auth():
-    """Return True if request is authenticated, or password not enabled.
-
-    When no password is configured, reads stay open so the local console keeps
-    working, but a state-changing request that a browser is making from another
-    origin is rejected (CSRF guard) -- see :func:`_passwordless_write_blocked`.
-    """
+    """Return True if request is authenticated or password not enabled."""
     if not _is_password_enabled():
         return not _passwordless_write_blocked()
     if _verify_auth_token(web.cookies().get("cow_auth_token", "")):
@@ -424,6 +404,16 @@ def _check_auth():
 def _require_auth():
     """Raise 401 if not authenticated. Call at the top of protected handlers."""
     if not _check_auth():
+        if not _is_password_enabled():
+            logger.warning(
+                "[WebChannel] 403 cross-site write refused: %s %s (origin: %s)",
+                web.ctx.env.get("REQUEST_METHOD", "?"),
+                web.ctx.env.get("PATH_INFO", "?"),
+                web.ctx.env.get("HTTP_ORIGIN", "") or "none",
+            )
+            raise web.HTTPError("403 Forbidden",
+                                {"Content-Type": "application/json; charset=utf-8"},
+                                json.dumps({"status": "error", "message": "Cross-site request refused"}))
         # Log which credential the caller offered (never the value). A rejected
         # request is otherwise invisible in run.log, which makes client bugs —
         # e.g. an endpoint that forgets the Authorization header — undiagnosable.
