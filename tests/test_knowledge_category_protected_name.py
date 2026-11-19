@@ -1,9 +1,8 @@
-"""A category must not be named after a protected knowledge file.
+"""A category name must not end in ``.md``.
 
-``index.md`` and ``log.md`` are generated/maintained by the service. Allowing a
-category (a directory) with one of those names shadows the real file, after
-which ``rebuild_index_md`` raises ``IsADirectoryError`` and is silently
-swallowed -- the directory listing then stops updating.
+``rebuild_index_md`` collects every ``*.md`` path as a document, so a category
+directory named like one (``foo.md``, ``index.md``, ``log.md``) would be listed
+as a document.
 """
 
 import pytest
@@ -36,7 +35,7 @@ def service(tmp_path):
 
 def test_create_category_rejects_protected_name(tmp_path):
     svc = service(tmp_path)
-    for name in ("index.md", "log.md", "notes/index.md"):
+    for name in ("index.md", "log.md", "notes/index.md", "foo.md", "Notes.MD", "a.md/b"):
         with pytest.raises(ValueError):
             svc.create_category(name)
 
@@ -49,5 +48,12 @@ def test_create_category_allows_normal_name(tmp_path):
 def test_rename_category_rejects_protected_name(tmp_path):
     svc = service(tmp_path)
     svc.create_category("notes")
-    with pytest.raises(ValueError):
-        svc.rename_category("notes", "index.md")
+    for name in ("index.md", "foo.md", "sub.MD/x"):
+        with pytest.raises(ValueError):
+            svc.rename_category("notes", name)
+
+
+def test_a_name_merely_containing_md_is_allowed(tmp_path):
+    svc = service(tmp_path)
+    assert svc.create_category("md-notes")["created"] is True
+    assert svc.create_category("notes.mdx")["created"] is True
