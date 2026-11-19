@@ -25,7 +25,7 @@ class Tool(Plugin):
         self.app = self._reset_app()
         if not self.tool_config.get("tools"):
             logger.warn("[tool] init failed, ignore ")
-            raise Exception("config.json not found")
+            raise FileNotFoundError("config.json not found")
         logger.info("[tool] inited")
 
 
