@@ -4,6 +4,7 @@ Integration module for scheduler with AgentBridge
 
 import os
 import threading
+import time
 from typing import Dict
 from config import conf
 from common.log import logger
@@ -587,6 +588,40 @@ def stop_scheduler(agent_id: str = None, workspace_root: str = None) -> bool:
     return False
 
 
+# Pauses between in-place retries of a failed send. A task whose result could
+# not be delivered is never re-run to retry the send: by then it has already
+# done its work (LLM calls, tool side effects), and a re-run on every tick of
+# the catch-up window would repeat all of that.
+_DELIVERY_RETRY_DELAYS = (1, 3)
+
+
+def _deliver_result(channel, reply, context, task: dict, output_sink: dict = None) -> bool:
+    """Send a task's result, retrying the send a few times in place.
+
+    Returns False when every attempt failed; the error is then left in
+    ``output_sink["delivery_error"]`` so the run is recorded as failed.
+    """
+    attempts = len(_DELIVERY_RETRY_DELAYS) + 1
+    for attempt in range(attempts):
+        try:
+            channel.send(reply, context)
+            return True
+        except Exception as e:
+            last_error = e
+            if attempt < len(_DELIVERY_RETRY_DELAYS):
+                logger.warning(
+                    f"[Scheduler] Task {task.get('id')}: send failed ({e}), retrying"
+                )
+                time.sleep(_DELIVERY_RETRY_DELAYS[attempt])
+    logger.error(
+        f"[Scheduler] Task {task.get('id')}: failed to deliver the result after "
+        f"{attempts} attempts: {last_error}"
+    )
+    if output_sink is not None:
+        output_sink["delivery_error"] = f"delivery failed: {last_error}"
+    return False
+
+
 def _remember_delivered_output(
     agent_bridge,
     task: dict,
@@ -799,6 +834,10 @@ def _run_scheduled_task(
         if not ok:
             status = "error"
             error = "deferred or delivery failed"
+        elif sink.get("delivery_error"):
+            # The task ran but its result never reached the user.
+            status = "error"
+            error = sink["delivery_error"]
         return ok
     except Exception as e:
         status = "error"
@@ -827,7 +866,7 @@ def _execute_agent_task(
 ) -> bool:
     """
     Execute an agent_task action - let Agent handle the task.
-    Returns True on successful delivery, False to retry next tick.
+    Returns True once the task has run (delivered or not), False to retry next tick.
     """
     try:
         action = task.get("action", {})
@@ -925,11 +964,9 @@ def _execute_agent_task(
                 if request_id:
                     channel.request_to_session[request_id] = receiver
 
-            try:
-                channel.send(reply, context)
-            except Exception as e:
-                logger.error(f"[Scheduler] Failed to send result: {e}")
-                return False
+            if not _deliver_result(channel, reply, context, task, output_sink):
+                # The agent already ran; don't re-run it just to retry the send.
+                return True
 
             if output_sink is not None:
                 output_sink["preview"] = str(reply.content)
@@ -1099,11 +1136,9 @@ def _execute_tool_call(
         if channel_type == "web" and request_id and hasattr(channel, 'request_to_session'):
             channel.request_to_session[request_id] = receiver
 
-        try:
-            channel.send(reply, context)
-        except Exception as e:
-            logger.error(f"[Scheduler] Failed to send tool result: {e}")
-            return False
+        if not _deliver_result(channel, reply, context, task, output_sink):
+            # The tool already ran; don't re-run it just to retry the send.
+            return True
 
         if output_sink is not None:
             output_sink["preview"] = str(content)
@@ -1205,11 +1240,9 @@ def _execute_skill_call(
             if req_id:
                 channel.request_to_session[req_id] = receiver
 
-        try:
-            channel.send(delivery, context)
-        except Exception as e:
-            logger.error(f"[Scheduler] Failed to send skill result: {e}")
-            return False
+        if not _deliver_result(channel, delivery, context, task, output_sink):
+            # The skill already ran; don't re-run it just to retry the send.
+            return True
 
         if output_sink is not None:
             output_sink["preview"] = str(summary)
