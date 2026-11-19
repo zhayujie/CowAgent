@@ -166,6 +166,8 @@ export interface HistoryPage {
   page: number;
   page_size: number;
   has_more: boolean;
+  /** A reply still streaming on the server: the page stops where it was stored, the stream continues after `after_seq`. */
+  active_request?: {request_id: string; after_seq: number | null};
 }
 
 export interface SessionItem {

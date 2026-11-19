@@ -1,14 +1,15 @@
 import React from 'react';
-import {Linking, StyleSheet} from 'react-native';
+import {StyleSheet} from 'react-native';
 import {WebView, type WebViewNavigation} from 'react-native-webview';
 import {fileHttpError} from '../files/chatFile';
 import {tr} from '../i18n';
+import {openWebPage} from '../navigation/openWeb';
 import {useTheme} from '../theme/theme';
 
 const originOf = (url: string) => /^(https?:\/\/[^/]+)/i.exec(url)?.[1]?.toLowerCase() ?? '';
 
 /**
- * A generated page, live; links that leave its server go to the system browser.
+ * A generated page, live; links that leave its server open on a web page of their own.
  * The page's own swipe-back is left off so the edge swipe always closes the preview.
  */
 export function HtmlView({
@@ -29,7 +30,7 @@ export function HtmlView({
     if (req.isTopFrame === false || !/^https?:/i.test(req.url) || originOf(req.url) === home) {
       return true;
     }
-    Linking.openURL(req.url).catch(() => undefined);
+    openWebPage(req.url);
     return false;
   };
   return (

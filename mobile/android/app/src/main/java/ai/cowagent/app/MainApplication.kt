@@ -1,5 +1,6 @@
 package ai.cowagent.app
 
+import ai.cowagent.app.files.CowDownloadsPackage
 import ai.cowagent.app.kernel.CowKernelPackage
 import android.app.Application
 import com.facebook.react.PackageList
@@ -16,6 +17,7 @@ class MainApplication : Application(), ReactApplication {
       packageList =
         PackageList(this).packages.apply {
           add(CowKernelPackage())
+          add(CowDownloadsPackage())
         },
     )
   }

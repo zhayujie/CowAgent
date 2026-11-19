@@ -23,8 +23,9 @@ const SSE_MAX_RETRIES = 5;
 export function subscribeChat(
   requestId: string,
   handlers: ChatStreamHandlers,
+  afterSeq = 0,
 ): () => void {
-  let cursor = 0;
+  let cursor = afterSeq;
   let ended = false;
   let sawDone = false;
   let retries = 0;

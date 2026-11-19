@@ -1,6 +1,6 @@
 import type {StackScreenProps} from '@react-navigation/stack';
 import React, {useCallback, useEffect, useRef, useState} from 'react';
-import {Linking, Pressable, ScrollView, Text, View} from 'react-native';
+import {Pressable, ScrollView, Text, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {checkForUpdate, getUpdateStatus, getVersion, startUpdate} from '../api/cowApi';
 import {Markdown} from '../components/Markdown';
@@ -8,6 +8,7 @@ import {ActionButton, ConfirmSheet, Footnote, Kpis, Notice} from '../components/
 import {showToast, ToastHost} from '../components/Toast';
 import {GroupLabel, PageHeader} from '../components/ui';
 import {tr, trf, type MessageKey} from '../i18n';
+import {openWebPage} from '../navigation/openWeb';
 import type {RootStackParamList} from '../navigation/types';
 import type {UpdateCheck, UpdateStatus, VersionInfo} from '../protocol/resources';
 import {useOverviewStore} from '../store/overviewStore';
@@ -234,7 +235,7 @@ export function VersionScreen({navigation}: Props) {
                   {links.length > 0 && (
                     <View style={styles.links}>
                       {links.map(l => (
-                        <Pressable key={l.url} hitSlop={8} onPress={() => Linking.openURL(l.url).catch(() => undefined)}>
+                        <Pressable key={l.url} hitSlop={8} onPress={() => openWebPage(l.url)}>
                           <Text style={styles.link}>{l.label}</Text>
                         </Pressable>
                       ))}

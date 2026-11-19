@@ -19,7 +19,7 @@ const unsubscribe = jest.fn();
 
 beforeEach(() => {
   jest.clearAllMocks();
-  useChatStore.setState({messages: {}, active: null});
+  useChatStore.setState({messages: {}, active: {}});
   jest.mocked(subscribeChat).mockImplementation((_id, h) => {
     handlers = h;
     return unsubscribe;
@@ -33,11 +33,11 @@ it('stops the reply on screen at once and frees the composer', async () => {
   await useChatStore.getState().send('s1', 'hi');
   handlers.onEvent({type: 'tool_start', tool: 'read', tool_call_id: 't1'} as never);
 
-  await useChatStore.getState().cancel();
+  await useChatStore.getState().cancel('s1');
 
   expect(cancelRequest).toHaveBeenCalledWith('r1', 's1');
   expect(unsubscribe).toHaveBeenCalledTimes(1);
-  expect(useChatStore.getState().active).toBeNull();
+  expect(useChatStore.getState().active).toEqual({});
   expect(reply()).toMatchObject({cancelled: true, streaming: false});
   expect(reply().steps).toEqual([expect.objectContaining({id: 't1', status: 'stopped'})]);
 });
@@ -47,8 +47,8 @@ it('cancels a request stopped before the server named it', async () => {
   jest.mocked(sendMessage).mockReturnValue(new Promise(r => (resolve = r)) as never);
   const sending = useChatStore.getState().send('s1', 'hi');
 
-  await useChatStore.getState().cancel();
-  expect(useChatStore.getState().active).toBeNull();
+  await useChatStore.getState().cancel('s1');
+  expect(useChatStore.getState().active).toEqual({});
   expect(cancelRequest).not.toHaveBeenCalled();
 
   resolve({request_id: 'r2'});

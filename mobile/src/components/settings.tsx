@@ -38,6 +38,7 @@ export function SettingRow({
   onLongPress,
   chevron = !!onPress,
   right,
+  action,
   mono,
   dim,
   last,
@@ -51,14 +52,17 @@ export function SettingRow({
   onPress?: () => void;
   onLongPress?: () => void;
   chevron?: boolean;
+  /** Non-interactive content such as a tag; a tap on it counts as a tap on the row. */
   right?: ReactNode;
+  /** A control with its own press handler, kept outside the row's button. */
+  action?: ReactNode;
   mono?: boolean;
   dim?: boolean;
   last?: boolean;
 }) {
   const t = useTheme();
   const styles = useStyles();
-  const body = (
+  const head = (
     <>
       {icon && (
         <View style={styles.rowIcon}>
@@ -81,20 +85,54 @@ export function SettingRow({
         </Text>
       )}
       {right}
-      {chevron && <Icon icon={faChevronRight} size={10} color={t.t4} />}
     </>
   );
+  const arrow = <Icon icon={faChevronRight} size={10} color={t.t4} />;
   if (!onPress && !onLongPress) {
-    return <View style={[styles.row, last && styles.rowLast]}>{body}</View>;
+    return (
+      <View style={[styles.row, last && styles.rowLast]}>
+        {head}
+        {action}
+        {chevron && arrow}
+      </View>
+    );
+  }
+  const a11yLabel = value ? trf('settings_a11y_title_value', {title, value}) : title;
+  // On the web a button inside a button is invalid HTML, so an action splits the row into sibling buttons.
+  if (action) {
+    return (
+      <View style={[styles.row, styles.rowSplit, last && styles.rowLast]}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={a11yLabel}
+          onPress={onPress}
+          onLongPress={onLongPress}
+          style={({pressed}) => [styles.rowMain, pressed && styles.rowPressed]}>
+          {head}
+        </Pressable>
+        {action}
+        {chevron && (
+          <Pressable
+            accessible={false}
+            importantForAccessibility="no"
+            onPress={onPress}
+            onLongPress={onLongPress}
+            style={({pressed}) => [styles.rowArrow, pressed && styles.rowPressed]}>
+            {arrow}
+          </Pressable>
+        )}
+      </View>
+    );
   }
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={value ? trf('settings_a11y_title_value', {title, value}) : title}
+      accessibilityLabel={a11yLabel}
       onPress={onPress}
       onLongPress={onLongPress}
       style={({pressed}) => [styles.row, last && styles.rowLast, pressed && styles.rowPressed]}>
-      {body}
+      {head}
+      {chevron && arrow}
     </Pressable>
   );
 }
@@ -475,6 +513,9 @@ const useStyles = makeStyles(t => ({
     borderBottomColor: t.line1,
   },
   rowLast: {borderBottomWidth: 0},
+  rowSplit: {paddingVertical: 0},
+  rowArrow: {alignSelf: 'stretch', justifyContent: 'center', paddingLeft: 6},
+  rowMain: {flex: 1, minWidth: 0, minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12},
   rowPressed: {opacity: 0.6},
   rowIcon: {width: 18, alignItems: 'center'},
   rowText: {flex: 1, minWidth: 0},

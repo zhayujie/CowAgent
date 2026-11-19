@@ -1,13 +1,15 @@
 import {faArrowDown, faPause, faPlay} from '@fortawesome/free-solid-svg-icons';
 import type {StackScreenProps} from '@react-navigation/stack';
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
-import {FlatList, Linking, Pressable, Text, View} from 'react-native';
+import {FlatList, Pressable, Text, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {logDownloadUrl, openLogStream} from '../api/cowApi';
 import type {EventStreamHandle} from '../api/sse';
 import {Icon} from '../components/Icon';
 import {MONO} from '../components/settings';
+import {ToastHost} from '../components/Toast';
 import {Chip, EmptyState, IconButton, PageHeader} from '../components/ui';
+import {downloadUrl} from '../files/openFile';
 import {tr, trf, type MessageKey} from '../i18n';
 import type {RootStackParamList} from '../navigation/types';
 import {radius} from '../theme/palette';
@@ -18,6 +20,10 @@ type Props = StackScreenProps<RootStackParamList, 'Logs'>;
 type Level = 'DEBUG' | 'INFO' | 'WARNING' | 'ERROR' | 'CRITICAL' | '';
 type Entry = {id: number; level: Level; time: string; source: string; message: string};
 type Filter = 'all' | 'warning' | 'error';
+
+const pad = (n: number) => String(n).padStart(2, '0');
+const logFileName = (d = new Date()) =>
+  `cowagent-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}.log`;
 
 const MAX_ENTRIES = 500;
 const LINE = /^\[(DEBUG|INFO|WARNING|ERROR|CRITICAL)\]\[\d{4}-\d\d-\d\d (\d\d:\d\d:\d\d)\]\[([^\]]+)\] - ([\s\S]*)$/;
@@ -238,10 +244,11 @@ export function LogsScreen({navigation}: Props) {
       )}
 
       <View style={[styles.footer, {paddingBottom: insets.bottom + 10}]}>
-        <Pressable accessibilityRole="link" hitSlop={8} onPress={() => Linking.openURL(logDownloadUrl()).catch(() => undefined)}>
+        <Pressable accessibilityRole="button" hitSlop={8} onPress={() => downloadUrl(logDownloadUrl(), logFileName())}>
           <Text style={styles.footerLink}>{tr('settings_log_download')}</Text>
         </Pressable>
       </View>
+      <ToastHost bottom={insets.bottom + 56} />
     </View>
   );
 }

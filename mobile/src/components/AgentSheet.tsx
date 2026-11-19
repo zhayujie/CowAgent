@@ -5,7 +5,6 @@ import {tr} from '../i18n';
 import {useAgentStore} from '../store/agentStore';
 import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
-import {basename} from '../utils/format';
 import {AgentAvatar} from './AgentAvatar';
 import {Icon} from './Icon';
 import {Sheet} from './Sheet';
@@ -50,9 +49,11 @@ export function AgentSheet({
               <Text style={styles.name} numberOfLines={1}>
                 {agent.name}
               </Text>
-              <Text style={styles.meta} numberOfLines={1}>
-                {isDefault ? tr('chat_default') : tr('chat_agent_workspace')} · {basename(agent.workspace) || agent.id}
-              </Text>
+              {(isDefault || !!agent.description) && (
+                <Text style={styles.meta} numberOfLines={1}>
+                  {[isDefault ? tr('chat_default') : null, agent.description].filter(Boolean).join(' · ')}
+                </Text>
+              )}
             </View>
             {selected && <Icon icon={faCheck} size={13} color={t.accent} />}
           </Pressable>

@@ -8,11 +8,10 @@ export type RootStackParamList = {
   /** `focusPath` narrows the list to one file, as "view in artifacts" from a reply does. */
   Artifacts: {focusPath?: string; focusName?: string} | undefined;
   Skills: undefined;
-  /** `agentId` is the request-ready id: undefined for the default Agent. */
-  SkillDetail: {name: string; agentId?: string};
+  SkillDetail: {name: string};
   /** `path` is a file inside the skill's directory; omitted, its SKILL.md. */
-  SkillFile: {name: string; path?: string; title: string; agentId?: string; edit?: boolean};
-  SkillCreate: {agentId?: string};
+  SkillFile: {name: string; path?: string; title: string; edit?: boolean};
+  SkillCreate: undefined;
   Memory: undefined;
   Knowledge: undefined;
   /** `agentId` is the request-ready id: undefined for the default Agent. */
@@ -20,6 +19,8 @@ export type RootStackParamList = {
   /** `edit` opens straight into the editor, as a freshly created page does. */
   KnowledgeDoc: {path: string; title: string; agentId?: string; edit?: boolean};
   FilePreview: {file: ChatFile};
+  /** Any http(s) page; `title` shows until the page names itself. */
+  WebPage: {url: string; title?: string};
   Tasks: undefined;
   /** Without `task` the form creates a new one. */
   TaskEdit: {task?: ScheduledTask} | undefined;
@@ -41,6 +42,7 @@ export type RootStackParamList = {
   Runtime: undefined;
   ExternalApi: undefined;
   Access: undefined;
+  Devices: undefined;
   GuestShares: undefined;
   /** No `slug` creates a page; `focus` jumps to the password field. */
   GuestShareEdit: {slug?: string; focus?: 'password'};

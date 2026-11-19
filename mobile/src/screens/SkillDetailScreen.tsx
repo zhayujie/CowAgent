@@ -24,7 +24,7 @@ import {skillErrorText} from './SkillsScreen';
 type Props = StackScreenProps<RootStackParamList, 'SkillDetail'>;
 
 export function SkillDetailScreen({route, navigation}: Props) {
-  const {name, agentId} = route.params;
+  const {name} = route.params;
   const t = useTheme();
   const styles = useStyles();
   const insets = useSafeAreaInsets();
@@ -38,14 +38,14 @@ export function SkillDetailScreen({route, navigation}: Props) {
   const load = useCallback(async () => {
     try {
       // No single-skill endpoint: the library list is what carries its state.
-      const [list, tree] = await Promise.all([getSkills(agentId), getSkillFiles(name, agentId).catch(() => null)]);
+      const [list, tree] = await Promise.all([getSkills(), getSkillFiles(name).catch(() => null)]);
       setSkill(list.skills.find(s => s.name === name) ?? null);
       setFiles(tree?.files ?? []);
       setError(null);
     } catch (e) {
       setError(describeConnectError(e));
     }
-  }, [name, agentId]);
+  }, [name]);
 
   useFocusEffect(
     useCallback(() => {
@@ -89,7 +89,7 @@ export function SkillDetailScreen({route, navigation}: Props) {
   const toggle = async (enabled: boolean) => {
     setSkill({...skill, enabled});
     try {
-      await setSkillEnabled(skill.name, enabled, agentId);
+      await setSkillEnabled(skill.name, enabled);
     } catch (e) {
       setSkill({...skill, enabled: !enabled});
       showToast(trf(enabled ? 'skill_enable_failed' : 'skill_disable_failed', {error: skillErrorText(e)}));
@@ -115,7 +115,6 @@ export function SkillDetailScreen({route, navigation}: Props) {
       name: skill.name,
       path: file.path === 'SKILL.md' ? undefined : file.path,
       title: file.name,
-      agentId,
     });
   };
 
@@ -132,7 +131,7 @@ export function SkillDetailScreen({route, navigation}: Props) {
               filled
               size={13}
               color={t.t1}
-              onPress={() => navigation.navigate('SkillFile', {name: skill.name, title: 'SKILL.md', agentId, edit: true})}
+              onPress={() => navigation.navigate('SkillFile', {name: skill.name, title: 'SKILL.md', edit: true})}
             />
           )
         }
@@ -237,7 +236,7 @@ export function SkillDetailScreen({route, navigation}: Props) {
         danger
         onConfirm={async () => {
           try {
-            await deleteSkill(skill.name, agentId);
+            await deleteSkill(skill.name);
             setConfirmDelete(false);
             navigation.goBack();
           } catch (e) {

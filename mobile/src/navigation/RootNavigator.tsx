@@ -14,6 +14,7 @@ import {CapabilityScreen} from '../screens/CapabilityScreen';
 import {ChannelScreen} from '../screens/ChannelScreen';
 import {ChannelsScreen} from '../screens/ChannelsScreen';
 import {ChatScreen} from '../screens/ChatScreen';
+import {DevicesScreen} from '../screens/DevicesScreen';
 import {ExternalApiScreen} from '../screens/ExternalApiScreen';
 import {FilePreviewScreen} from '../screens/FilePreviewScreen';
 import {GuestShareEditScreen} from '../screens/GuestShareEditScreen';
@@ -40,6 +41,7 @@ import {TaskRunScreen} from '../screens/TaskRunScreen';
 import {TaskRunsScreen} from '../screens/TaskRunsScreen';
 import {TasksScreen} from '../screens/TasksScreen';
 import {VersionScreen} from '../screens/VersionScreen';
+import {WebPageScreen} from '../screens/WebPageScreen';
 import {WebSearchScreen} from '../screens/WebSearchScreen';
 import {useServerStore} from '../store/serverStore';
 import {usePrefsStore, useTheme} from '../theme/theme';
@@ -108,6 +110,7 @@ export function RootNavigator() {
           <Stack.Screen name="Knowledge" component={KnowledgeScreen} options={{gestureResponseDistance: EDGE_ONLY}} />
           <Stack.Screen name="KnowledgeDoc" component={KnowledgeDocScreen} />
           <Stack.Screen name="FilePreview" component={FilePreviewScreen} options={{gestureResponseDistance: EDGE_ONLY}} />
+          <Stack.Screen name="WebPage" component={WebPageScreen} options={{gestureResponseDistance: EDGE_ONLY}} />
           <Stack.Screen name="Tasks" component={TasksScreen} />
           <Stack.Screen name="TaskEdit" component={TaskEditScreen} />
           <Stack.Screen name="TaskRuns" component={TaskRunsScreen} />
@@ -126,6 +129,7 @@ export function RootNavigator() {
           <Stack.Screen name="Runtime" component={RuntimeScreen} />
           <Stack.Screen name="ExternalApi" component={ExternalApiScreen} />
           <Stack.Screen name="Access" component={AccessScreen} />
+          <Stack.Screen name="Devices" component={DevicesScreen} />
           <Stack.Screen name="GuestShares" component={GuestSharesScreen} />
           <Stack.Screen name="GuestShareEdit" component={GuestShareEditScreen} />
           <Stack.Screen name="McpDetail" component={McpDetailScreen} />

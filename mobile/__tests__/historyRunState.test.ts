@@ -15,7 +15,7 @@ jest.mock('../src/api/cowApi', () => ({
 
 async function replay(messages: HistoryMessage[]) {
   jest.mocked(getHistory).mockResolvedValue({messages, total: messages.length, page: 1, page_size: 50, has_more: false});
-  useChatStore.setState({messages: {}, active: null});
+  useChatStore.setState({messages: {}, active: {}});
   await useChatStore.getState().loadHistory('s1');
   return useChatStore.getState().messages.s1;
 }
@@ -27,6 +27,17 @@ it('marks a failed reply as interrupted instead of an empty bubble', async () =>
   ]);
   expect(user).toMatchObject({role: 'user', content: 'hi'});
   expect(reply).toMatchObject({role: 'assistant', content: '', runState: 'interrupted'});
+});
+
+it('keeps a reply cut off before storing anything under its own message', async () => {
+  const at = 1_790_000_000;
+  const list = await replay([
+    {role: 'user', content: 'first', created_at: at, _seq: 10},
+    {role: 'assistant', content: '', created_at: at, run_state: 'interrupted'},
+    {role: 'user', content: 'second', created_at: at + 60, _seq: 11},
+    {role: 'assistant', content: 'answer', created_at: at + 61, _seq: 12},
+  ]);
+  expect(list.map(m => m.content || m.runState)).toEqual(['first', 'interrupted', 'second', 'answer']);
 });
 
 it('keeps what an interrupted reply wrote as steps, not as its answer', async () => {

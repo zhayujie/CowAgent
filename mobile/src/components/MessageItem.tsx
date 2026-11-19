@@ -27,6 +27,7 @@ import {useAgentStore} from '../store/agentStore';
 import type {
   AttachmentKind,
   ChatMessage,
+  MessageAttachment,
   Speaker,
   Step,
   SubStep,
@@ -36,13 +37,14 @@ import type {
 import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
 import {clockTime, formatCount, formatSeconds, kindFromName} from '../utils/format';
+import {serverFileUrl} from '../api/cowApi';
 import {type ChatFile, sameFile} from '../files/chatFile';
+import {useImageViewer} from '../files/openFile';
 import {AgentAvatar} from './AgentAvatar';
 import {KindTile} from './ArtifactStrip';
 import {Dots} from './Dots';
-import {FileCard, InlineImage} from './FileViews';
+import {FileCard, FileSheet, InlineImage} from './FileViews';
 import {Icon} from './Icon';
-import {ImageViewer} from './ImageViewer';
 import {Markdown} from './Markdown';
 
 const MONO = Platform.select({ios: 'Menlo', default: 'monospace'});
@@ -66,10 +68,15 @@ function MessageItemImpl({message, labelled}: {message: ChatMessage; labelled?: 
 
 export const MessageItem = memo(MessageItemImpl);
 
+/** The server copy of a picture the user sent, which the viewer shows and the save options fetch. */
+const sentImage = (a: MessageAttachment): ChatFile => ({name: a.name, kind: 'image', rawUrl: serverFileUrl(a.path)});
+
 function UserTurn({message}: {message: ChatMessage}) {
   const t = useTheme();
   const styles = useStyles();
-  const [viewing, setViewing] = useState<string | null>(null);
+  // Kept after closing so the sheet still has its file while it slides away.
+  const [actingOn, setActingOn] = useState<ChatFile | null>(null);
+  const [acting, setActing] = useState(false);
   const files = message.attachments ?? [];
   const images = files.filter(a => a.kind === 'image' && a.previewUri);
   const others = files.filter(a => !(a.kind === 'image' && a.previewUri));
@@ -84,7 +91,13 @@ function UserTurn({message}: {message: ChatMessage}) {
               key={`${img.path}-${i}`}
               accessibilityRole="imagebutton"
               accessibilityLabel={trf('chat_view_image', {name: img.name})}
-              onPress={() => setViewing(img.previewUri ?? null)}>
+              accessibilityHint={tr('file_long_press_hint')}
+              onPress={() => useImageViewer.getState().show(sentImage(img))}
+              onLongPress={() => {
+                setActingOn(sentImage(img));
+                setActing(true);
+              }}
+              delayLongPress={350}>
               {single ? (
                 <FittedImage uri={img.previewUri as string} />
               ) : (
@@ -122,7 +135,7 @@ function UserTurn({message}: {message: ChatMessage}) {
         )
       )}
       {!!message.createdAt && <Text style={styles.userMeta}>{clockTime(message.createdAt)}</Text>}
-      <ImageViewer uri={viewing} onClose={() => setViewing(null)} />
+      {actingOn && <FileSheet file={actingOn} visible={acting} onClose={() => setActing(false)} />}
     </View>
   );
 }

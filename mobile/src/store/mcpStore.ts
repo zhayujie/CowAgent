@@ -5,11 +5,9 @@ import type {McpServer} from '../protocol/resources';
 import {resetOnSignOut} from './reset';
 
 interface McpState {
+  /** The shared mcp.json every Agent reads, as on the consoles' Capabilities page. */
   servers: McpServer[] | null;
-  /** Whose mcp.json the list is; undefined for the default Agent. Saves go back to the same one. */
-  agentId?: string;
-  /** Switching Agents clears the list first, so one Agent's servers never show under another. */
-  load: (agentId?: string) => Promise<void>;
+  load: () => Promise<void>;
   /** Writes the whole list, which is how mcp.json is stored. */
   save: (servers: McpServer[]) => Promise<void>;
   upsert: (server: McpServer, previousName?: string) => Promise<void>;
@@ -20,24 +18,13 @@ interface McpState {
 
 export const useMcpStore = create<McpState>((set, get) => ({
   servers: null,
-  agentId: undefined,
 
-  load: async agentId => {
-    if (agentId !== get().agentId) {
-      set({servers: null, agentId});
-    }
-    const res = await getMcpServers(agentId);
-    if (get().agentId === agentId) {
-      set({servers: res.servers});
-    }
+  load: async () => {
+    set({servers: (await getMcpServers()).servers});
   },
 
   save: async servers => {
-    const agentId = get().agentId;
-    const res = await saveMcpServers(servers, agentId);
-    if (get().agentId === agentId) {
-      set({servers: res.servers});
-    }
+    set({servers: (await saveMcpServers(servers)).servers});
   },
 
   upsert: async (server, previousName) => {

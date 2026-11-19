@@ -16,6 +16,8 @@ import type {
   ChannelsResponse,
   ConfigUpdates,
   ContextUsage,
+  DeviceInstance,
+  DeviceList,
   ExternalApiState,
   FallbackLink,
   GlobalConfig,
@@ -35,6 +37,8 @@ import type {
   MemoryPage,
   MenuDoc,
   ModelsState,
+  PairedDevice,
+  PairingCode,
   QrPayload,
   ScheduledTask,
   SessionSettings,
@@ -496,7 +500,7 @@ export async function setExternalApi(action: 'enable' | 'disable' | 'regenerate'
   return http.request<ExternalApiState>('/api/external_api', {body: {action}});
 }
 
-/** Each Agent keeps its own mcp.json; `agentId` undefined reads the default Agent's. */
+/** mcp.json is shared unless an Agent has its own; `agentId` undefined reads the default Agent's. */
 export async function getMcpServers(agentId?: string) {
   return http.request<{servers: McpServer[]; path?: string}>(`/api/mcp/servers?${query({agent_id: agentId})}`);
 }
@@ -835,6 +839,37 @@ export async function pollFeishuRegister() {
   return http.request<QrPayload & {register_status?: string; app_id?: string; app_secret?: string}>(
     '/api/feishu/register',
     {body: {action: 'poll'}, timeoutMs: 30_000},
+  );
+}
+
+export async function listDevices() {
+  return http.request<DeviceList>('/api/devices');
+}
+
+/** Renames the server itself; an empty name goes back to the computer's. */
+export async function renameInstance(name: string) {
+  return http.request<{instance: DeviceInstance}>('/api/device', {method: 'PATCH', body: {name}});
+}
+
+export async function renameDevice(id: string, name: string) {
+  return http.request<{device: PairedDevice}>(`/api/devices/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: {name},
+  });
+}
+
+export async function removeDevice(id: string) {
+  return http.request(`/api/devices/${encodeURIComponent(id)}`, {method: 'DELETE'});
+}
+
+/** `baseUrl` is the address this app reaches the server at, offered to the other device among the LAN ones. */
+export async function createPairing(baseUrl: string) {
+  return http.request<PairingCode>('/api/pairing', {body: {base_url: baseUrl}});
+}
+
+export async function getPairing(id: string) {
+  return http.request<{state: 'pending' | 'paired' | 'expired'; device?: PairedDevice}>(
+    `/api/pairing/${encodeURIComponent(id)}`,
   );
 }
 

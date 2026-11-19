@@ -22,7 +22,7 @@ import {PERMISSION_META} from '../components/ComposerSheets';
 import {Icon} from '../components/Icon';
 import {ServerSheet} from '../components/ServerSheet';
 import {tr, trf, useLangStore, type Lang, type MessageKey} from '../i18n';
-import {ChoiceSheet, FieldSheet, Footnote, SettingRow} from '../components/settings';
+import {ChoiceSheet, ConfirmSheet, FieldSheet, Footnote, SettingRow} from '../components/settings';
 import {showToast, ToastHost} from '../components/Toast';
 import {GroupLabel, PageHeader} from '../components/ui';
 import type {RootStackParamList} from '../navigation/types';
@@ -261,14 +261,16 @@ export function SettingsScreen({navigation}: Props) {
           }
         />
         <SettingRow title={tr('settings_realtime')} value={tr(REALTIME_LABEL[realtimeStatus])} />
-        <SettingRow title={tr('server_switch')} onPress={() => setServerSheet(true)} last />
+        <SettingRow title={tr('server_switch')} onPress={() => setServerSheet(true)} last={local} />
+        {/* Nothing outside this phone can reach the built-in agent, so it has no other devices. */}
+        {!local && <SettingRow title={tr('devices_title')} onPress={() => navigation.navigate('Devices')} last />}
 
         <GroupLabel style={styles.group}>{tr('settings_group_account')}</GroupLabel>
         <Pressable
           accessibilityRole="button"
-          onPress={() => (confirmLogout ? logout() : setConfirmLogout(true))}
+          onPress={() => setConfirmLogout(true)}
           style={({pressed}) => [styles.logout, pressed && styles.logoutPressed]}>
-          <Text style={styles.logoutText}>{confirmLogout ? tr('settings_logout_confirm') : tr('settings_logout')}</Text>
+          <Text style={styles.logoutText}>{tr('settings_logout')}</Text>
         </Pressable>
         <Footnote>{tr('settings_logout_note')}</Footnote>
       </ScrollView>
@@ -300,6 +302,15 @@ export function SettingsScreen({navigation}: Props) {
         }}
         onSubmit={changePassword}
         onClose={() => setSheet(null)}
+      />
+      <ConfirmSheet
+        visible={confirmLogout}
+        title={tr('settings_logout')}
+        message={tr('settings_logout_note')}
+        confirmLabel={tr('settings_logout')}
+        danger
+        onConfirm={logout}
+        onClose={() => setConfirmLogout(false)}
       />
       <ServerSheet visible={serverSheet} onClose={() => setServerSheet(false)} />
       <ToastHost bottom={insets.bottom + 28} />

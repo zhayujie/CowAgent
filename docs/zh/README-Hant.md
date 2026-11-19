@@ -22,7 +22,7 @@
 CowAgent 輕量、易部署、可擴充，自由接入主流大模型，覆蓋微信、飛書、釘釘、企微、QQ、Telegram、Slack、網頁等多渠道，7×24 執行於個人電腦或伺服器中。
 
 <p align="center">
-  <a href="https://cowagent.ai/?lang=zh">🌐 官網</a> &nbsp;·&nbsp;
+  <a href="https://cowagent.ai/zh/?utm_source=github">🌐 官網</a> &nbsp;·&nbsp;
   <a href="https://docs.cowagent.ai/zh/">📖 文件中心</a> &nbsp;·&nbsp;
   <a href="https://docs.cowagent.ai/zh/guide/quick-start">🚀 快速開始</a> &nbsp;·&nbsp;
   <a href="https://skills.cowagent.ai/">🧩 技能廣場</a> &nbsp;·&nbsp;
@@ -37,7 +37,7 @@ CowAgent 輕量、易部署、可擴充，自由接入主流大模型，覆蓋�
 <p align="center">
   <video src="https://github.com/user-attachments/assets/a2d8fb12-f294-42d6-a569-c4a6ceedab1d" controls muted playsinline width="720">
     你的瀏覽器無法播放該影片。
-    <a href="https://cowagent.ai/?lang=zh">前往官網觀看示範 →</a>
+    <a href="https://cowagent.ai/zh/?utm_source=github">前往官網觀看示範 →</a>
   </video>
 </p>
 

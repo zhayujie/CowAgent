@@ -8,7 +8,6 @@ import {
   FlatList,
   Keyboard,
   KeyboardAvoidingView,
-  Linking,
   Platform,
   Pressable,
   Text,
@@ -48,11 +47,12 @@ import {tr, trf} from '../i18n';
 import {canTakePhoto, pickDocuments, pickPhotos, takePhoto} from '../media/picker';
 import type {Recording} from '../media/types';
 import {linkAsPage} from '../navigation/menuViews';
+import {openWebPage} from '../navigation/openWeb';
 import type {RootStackParamList} from '../navigation/types';
 import type {SessionItem} from '../protocol/events';
 import type {PermissionMode} from '../protocol/resources';
 import {agentParam, useAgentStore, useCurrentAgent} from '../store/agentStore';
-import {useChatStore, type ChatMessage} from '../store/chatStore';
+import {MAX_REPLYING, useChatStore, type ChatMessage} from '../store/chatStore';
 import {MAX_ATTACHMENTS, useComposerStore} from '../store/composerStore';
 import {useMenuStore} from '../store/menuStore';
 import {useOverviewStore} from '../store/overviewStore';
@@ -81,8 +81,8 @@ export function ChatScreen({route, navigation}: Props) {
   const insets = useSafeAreaInsets();
   const messages = useChatStore(s => s.messages[sessionId] ?? EMPTY);
   const loading = useChatStore(s => !!s.loading[sessionId]);
-  const busy = useChatStore(s => s.active?.sessionId === sessionId);
-  const anyActive = useChatStore(s => !!s.active);
+  const busy = useChatStore(s => !!s.active[sessionId]);
+  const replying = useChatStore(s => Object.keys(s.active).sort().join('\n'));
   const recent = useSessionStore(s => s.sessions);
   const agent = useCurrentAgent();
   const defaultAgentId = useAgentStore(s => s.defaultId);
@@ -160,14 +160,15 @@ export function ChatScreen({route, navigation}: Props) {
   }, [loadSettings, currentAgentId]);
 
   // A finished reply may have titled a new session or produced artifacts.
-  const wasActive = useRef(anyActive);
+  const wasReplying = useRef(replying);
   useEffect(() => {
-    if (wasActive.current && !anyActive) {
+    const now = replying.split('\n');
+    if (wasReplying.current && wasReplying.current.split('\n').some(id => !now.includes(id))) {
       useSessionStore.getState().refresh();
       useOverviewStore.getState().load().catch(() => undefined);
     }
-    wasActive.current = anyActive;
-  }, [anyActive]);
+    wasReplying.current = replying;
+  }, [replying]);
 
   const refreshDrawer = useCallback(() => {
     useMenuStore.getState().load().catch(() => undefined);
@@ -220,7 +221,7 @@ export function ChatScreen({route, navigation}: Props) {
     (label: string, url: string, external: boolean) => {
       setDrawerOpen(false);
       if (external) {
-        Linking.openURL(serverUrl(url)).catch(() => showToast(tr('chat_link_open_failed')));
+        openWebPage(serverUrl(url), label);
         return;
       }
       navigation.navigate('FilePreview', {file: linkAsPage(label, url)});
@@ -294,12 +295,13 @@ export function ChatScreen({route, navigation}: Props) {
   const send = useCallback(
     (text: string, voice?: {replaceId: string}) => {
       const chat = useChatStore.getState();
-      // Only one reply streams at a time; the store would drop this one silently.
-      if (chat.active) {
+      // The store would drop this one silently.
+      const own = !!chat.active[sessionId];
+      if (own || Object.keys(chat.active).length >= MAX_REPLYING) {
         if (voice) {
           chat.removeMessage(sessionId, voice.replaceId);
         }
-        showToast(tr('chat_other_replying'));
+        showToast(own ? tr('chat_busy_wait') : trf('chat_too_many_replying', {n: MAX_REPLYING}));
         return false;
       }
       usePrefsStore.getState().markOnboarded();
@@ -619,7 +621,7 @@ export function ChatScreen({route, navigation}: Props) {
             busy={busy}
             onSend={sendText}
             onStop={() => {
-              useChatStore.getState().cancel().catch(() => undefined);
+              useChatStore.getState().cancel(sessionId).catch(() => undefined);
             }}
             onVoice={sendVoice}
             transcribing={transcribing}

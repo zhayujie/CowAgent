@@ -22,7 +22,7 @@
 CowAgent は軽量でデプロイしやすく、拡張性に優れています。主要な LLM プロバイダーをそのまま組み込み、Web や主要な IM プラットフォーム上で動作。個人 PC やサーバー上で 24 時間 365 日稼働できます。
 
 <p align="center">
-  <a href="https://cowagent.ai/">🌐 ウェブサイト</a> &nbsp;·&nbsp;
+  <a href="https://cowagent.ai/?utm_source=github">🌐 ウェブサイト</a> &nbsp;·&nbsp;
   <a href="https://docs.cowagent.ai/ja/intro/index">📖 ドキュメント</a> &nbsp;·&nbsp;
   <a href="https://docs.cowagent.ai/ja/guide/quick-start">🚀 クイックスタート</a> &nbsp;·&nbsp;
   <a href="https://skills.cowagent.ai/">🧩 Skill Hub</a> &nbsp;·&nbsp;
@@ -37,7 +37,7 @@ CowAgent は軽量でデプロイしやすく、拡張性に優れています�
 <p align="center">
   <video src="https://github.com/user-attachments/assets/8625a19f-615c-4343-8be8-3707ce4d4d4e" controls muted playsinline width="720">
     このブラウザでは動画を再生できません。
-    <a href="https://cowagent.ai/">公式サイトでデモを見る →</a>
+    <a href="https://cowagent.ai/?utm_source=github">公式サイトでデモを見る →</a>
   </video>
 </p>
 

@@ -107,7 +107,6 @@ export interface ChatMessage {
 }
 
 interface ActiveRequest {
-  sessionId: string;
   requestId: string | null;
   unsubscribe: (() => void) | null;
   /** Ends the turn on screen at once; the server stops it on its own time. */
@@ -128,7 +127,8 @@ interface ChatState {
   currentSessionId: string | null;
   messages: Record<string, ChatMessage[]>;
   loading: Record<string, boolean>;
-  active: ActiveRequest | null;
+  /** Replies streaming right now, by session; at most `MAX_REPLYING` of them. */
+  active: Record<string, ActiveRequest>;
   setCurrentSession: (sessionId: string) => void;
   loadHistory: (sessionId: string, agentId?: string | null) => Promise<void>;
   send: (
@@ -140,8 +140,21 @@ interface ChatState {
   /** Holds the place of a voice message until its text is known; returns the bubble's id. */
   addTranscribing: (sessionId: string) => string;
   removeMessage: (sessionId: string, id: string) => void;
-  cancel: () => Promise<void>;
+  cancel: (sessionId: string) => Promise<void>;
 }
+
+/**
+ * Each streaming reply holds one HTTP connection open for its whole run, and
+ * the platform allows only a few per host (4 on iOS, 5 on Android). Beyond two,
+ * history and list requests would queue behind the streams.
+ */
+export const MAX_REPLYING = 2;
+
+const without = <T>(map: Record<string, T>, key: string): Record<string, T> => {
+  const next = {...map};
+  delete next[key];
+  return next;
+};
 
 let localId = 0;
 const nextId = (prefix: string) => `${prefix}-${Date.now()}-${++localId}`;
@@ -316,10 +329,12 @@ function fromHistoryMessage(m: HistoryMessage, index: number): ChatMessage[] {
   return bubbles;
 }
 
+/**
+ * The server returns a page in conversation order. Not every turn has a `_seq`
+ * (a run cut off before storing anything has none), so it can't be re-sorted.
+ */
 function fromHistory(items: HistoryMessage[]): ChatMessage[] {
-  return [...items]
-    .sort((a, b) => (a._seq ?? a.created_at) - (b._seq ?? b.created_at))
-    .flatMap((m, i) => fromHistoryMessage(m, i).map(msg => ({...msg, createdAt: m.created_at})));
+  return items.flatMap((m, i) => fromHistoryMessage(m, i).map(msg => ({...msg, createdAt: m.created_at})));
 }
 
 const MAX_DELEGATE_DEPTH = 3;
@@ -408,10 +423,14 @@ const isBlank = (m: ChatMessage) =>
   !m.content.trim() && !m.steps?.length && !m.files?.length && !m.error && !m.cancelled;
 
 /** Pending text per message, flushed to the store on a short interval. */
-const pending = new Map<string, {content: string; reasoning: string}>();
+const pending = new Map<string, {sessionId: string; content: string; reasoning: string}>();
 /** The thinking step each message is writing, and when that thinking began. */
 const thinking = new Map<string, {stepId: string | null; startedAt: number}>();
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
+/** Moves on whenever a turn starts or ends in a session; a history page fetched across that is stale. */
+const turnEpoch = new Map<string, number>();
+/** Requests the user stopped, never picked up again from history while the server winds them down. */
+const stoppedRequests = new Set<string>();
 
 export const useChatStore = create<ChatState>((set, get) => {
   const patch = (
@@ -433,14 +452,14 @@ export const useChatStore = create<ChatState>((set, get) => {
       clearTimeout(flushTimer);
       flushTimer = null;
     }
-    const active = get().active;
-    if (!active) {
-      pending.clear();
-      return;
-    }
+    const {active} = get();
     pending.forEach((buf, messageId) => {
+      // Signed out meanwhile: the session belongs to another server now.
+      if (!active[buf.sessionId]) {
+        return;
+      }
       const open = thinking.get(messageId);
-      patch(active.sessionId, messageId, m => {
+      patch(buf.sessionId, messageId, m => {
         let steps = m.steps ?? [];
         if (buf.reasoning) {
           const last = steps[steps.length - 1];
@@ -460,8 +479,8 @@ export const useChatStore = create<ChatState>((set, get) => {
     pending.clear();
   };
 
-  const buffer = (messageId: string, field: 'content' | 'reasoning', text: string) => {
-    const buf = pending.get(messageId) ?? {content: '', reasoning: ''};
+  const buffer = (sessionId: string, messageId: string, field: 'content' | 'reasoning', text: string) => {
+    const buf = pending.get(messageId) ?? {sessionId, content: '', reasoning: ''};
     buf[field] += text;
     pending.set(messageId, buf);
     if (!flushTimer) {
@@ -533,11 +552,11 @@ export const useChatStore = create<ChatState>((set, get) => {
         if (!thinking.has(messageId)) {
           thinking.set(messageId, {stepId: null, startedAt: Date.now()});
         }
-        buffer(messageId, 'reasoning', event.content ?? '');
+        buffer(sessionId, messageId, 'reasoning', event.content ?? '');
         break;
       case 'delta':
         stopThinking(sessionId, messageId);
-        buffer(messageId, 'content', event.content ?? '');
+        buffer(sessionId, messageId, 'content', event.content ?? '');
         break;
       case 'tool_start':
         stopThinking(sessionId, messageId);
@@ -677,21 +696,163 @@ export const useChatStore = create<ChatState>((set, get) => {
     }
   };
 
+  const bumpEpoch = (sessionId: string) => turnEpoch.set(sessionId, (turnEpoch.get(sessionId) ?? 0) + 1);
+
+  /** Ends a turn on screen; its first bubble stays even if nothing was written into it. */
+  const control = (turn: Turn) => {
+    const {sessionId} = turn;
+    const ownId = turn.ids[0];
+    const ctl = {
+      settled: false,
+      /** Stopped by the user: the turn is over on screen while the server winds down. */
+      stopped: false,
+      unsubscribe: null as (() => void) | null,
+      finish: () => {
+        if (ctl.settled) {
+          return;
+        }
+        ctl.settled = true;
+        bumpEpoch(sessionId);
+        turn.ids.forEach(id => stopThinking(sessionId, id));
+        flush();
+        set(state => ({
+          // After a sign-out the session may already be streaming a newer turn.
+          active: state.active[sessionId]?.stop === ctl.stop ? without(state.active, sessionId) : state.active,
+          messages: {
+            ...state.messages,
+            [sessionId]: (state.messages[sessionId] ?? [])
+              // A bubble opened for a speaker who then said nothing is noise.
+              .filter(m => !turn.ids.includes(m.id) || m.id === ownId || !isBlank(m))
+              .map(m =>
+                turn.ids.includes(m.id)
+                  ? {
+                      ...m,
+                      streaming: false,
+                      steps: m.steps?.map(s =>
+                        s.kind === 'tool' && s.status === 'running' ? {...s, status: 'stopped'} : s,
+                      ),
+                    }
+                  : m,
+              ),
+          },
+        }));
+      },
+      stop: () => {
+        if (ctl.settled) {
+          return;
+        }
+        ctl.stopped = true;
+        // Left open, a late event would write into whatever server is signed in by then.
+        ctl.unsubscribe?.();
+        patch(sessionId, turn.current, m => ({...m, cancelled: true}));
+        ctl.finish();
+      },
+    };
+    return ctl;
+  };
+
+  const follow = (
+    turn: Turn,
+    ctl: ReturnType<typeof control>,
+    requestId: string,
+    agentId: string | null | undefined,
+    afterSeq = 0,
+  ) => {
+    ctl.unsubscribe = subscribeChat(
+      requestId,
+      {
+        onEvent: event => {
+          applyEvent(turn, event);
+          // The answer is stored; with auto TTS on, `stream_end` waits up to a
+          // minute for the audio. Free the composer now, as the web console does.
+          if (event.type === 'done') {
+            ctl.finish();
+          }
+        },
+        onEnd: end => {
+          // After `done` only the audio tail was left; the next message may
+          // already be streaming, which a history reload would wipe.
+          if (ctl.settled) {
+            return;
+          }
+          if (end.kind === 'failed') {
+            patch(turn.sessionId, turn.current, m => ({...m, error: end.error}));
+          }
+          ctl.finish();
+          if (end.kind === 'resync') {
+            get().loadHistory(turn.sessionId, agentId).catch(() => undefined);
+          }
+        },
+      },
+      afterSeq,
+    );
+    set(s => {
+      const own = s.active[turn.sessionId];
+      return own?.stop === ctl.stop
+        ? {active: {...s.active, [turn.sessionId]: {...own, requestId, unsubscribe: ctl.unsubscribe}}}
+        : s;
+    });
+  };
+
+  /**
+   * Follows a reply the server is still streaming into a session just loaded
+   * from history, as the web console does: the stored part is on screen, the
+   * rest arrives after `afterSeq`. Without this a reply left mid-stream (by
+   * switching sessions or a dropped stream) would stay cut off.
+   */
+  const resume = (
+    sessionId: string,
+    agentId: string | null | undefined,
+    requestId: string,
+    afterSeq: number,
+  ) => {
+    const list = get().messages[sessionId] ?? [];
+    const last = list[list.length - 1];
+    const stored = last?.role === 'assistant' && last.runState === 'running';
+    const ownerId = agentId ?? useAgentStore.getState().currentId;
+    const bubble: ChatMessage = stored
+      ? {...last, runState: undefined, streaming: true}
+      : {
+          id: nextId('a'),
+          role: 'assistant',
+          content: '',
+          createdAt: nowSeconds(),
+          streaming: true,
+          speaker: ownerId ? {id: ownerId} : undefined,
+        };
+    const turn: Turn = {
+      sessionId,
+      ids: [bubble.id],
+      current: bubble.id,
+      floor: bubble.speaker ? [bubble.speaker] : [],
+    };
+    const ctl = control(turn);
+    bumpEpoch(sessionId);
+    set(s => ({
+      messages: {...s.messages, [sessionId]: stored ? [...list.slice(0, -1), bubble] : [...list, bubble]},
+      active: {...s.active, [sessionId]: {requestId, unsubscribe: null, stop: ctl.stop}},
+    }));
+    follow(turn, ctl, requestId, agentId, afterSeq);
+  };
+
   return {
     currentSessionId: null,
     messages: {},
     loading: {},
-    active: null,
+    active: {},
 
     setCurrentSession: sessionId => set({currentSessionId: sessionId}),
 
     loadHistory: async (sessionId, agentId) => {
+      const epoch = turnEpoch.get(sessionId) ?? 0;
+      // A reply streaming into this session is matched by its local ids, and
+      // one that ended while the page was in flight is newer than it: the
+      // server's copy would drop the rest of the answer.
+      const stale = () => !!get().active[sessionId] || (turnEpoch.get(sessionId) ?? 0) !== epoch;
       set(s => ({loading: {...s.loading, [sessionId]: true}}));
       try {
         const page = await getHistory(sessionId, agentParam(agentId));
-        // A reply streaming into this session is matched by its local ids;
-        // the server's copy would drop them and the rest of the answer.
-        if (get().active?.sessionId === sessionId) {
+        if (stale()) {
           return;
         }
         const loaded = fromHistory(page.messages);
@@ -700,6 +861,12 @@ export const useChatStore = create<ChatState>((set, get) => {
           const expanded = await expandDelegations(loaded);
           // A message sent meanwhile owns the list now.
           set(s => (s.messages[sessionId] === loaded ? {messages: {...s.messages, [sessionId]: expanded}} : s));
+        }
+        const live = page.active_request;
+        // With every slot taken the page stays as stored, like the web console before a reload.
+        const full = Object.keys(get().active).length >= MAX_REPLYING;
+        if (live?.request_id && !stoppedRequests.has(live.request_id) && !full && !stale()) {
+          resume(sessionId, agentId, live.request_id, live.after_seq ?? 0);
         }
       } finally {
         set(s => ({loading: {...s.loading, [sessionId]: false}}));
@@ -717,7 +884,8 @@ export const useChatStore = create<ChatState>((set, get) => {
       set(s => ({messages: {...s.messages, [sessionId]: (s.messages[sessionId] ?? []).filter(m => m.id !== id)}})),
 
     send: async (sessionId, text, agentId, opts = {}) => {
-      if (get().active) {
+      const {active} = get();
+      if (active[sessionId] || Object.keys(active).length >= MAX_REPLYING) {
         if (opts.replaceId) {
           get().removeMessage(sessionId, opts.replaceId);
         }
@@ -746,56 +914,15 @@ export const useChatStore = create<ChatState>((set, get) => {
         current: botMsg.id,
         floor: botMsg.speaker ? [botMsg.speaker] : [],
       };
-      let settled = false;
-      // Stopped by the user: the turn is over on screen while the server winds down.
-      let stopped = false;
-      let unsubscribe: (() => void) | null = null;
-      const finish = () => {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        turn.ids.forEach(id => stopThinking(sessionId, id));
-        flush();
-        set(state => ({
-          // After a sign-out the composer may already belong to a newer turn.
-          active: state.active?.sessionId === sessionId ? null : state.active,
-          messages: {
-            ...state.messages,
-            [sessionId]: (state.messages[sessionId] ?? [])
-              // A bubble opened for a speaker who then said nothing is noise.
-              .filter(m => !turn.ids.includes(m.id) || m.id === botMsg.id || !isBlank(m))
-              .map(m =>
-                turn.ids.includes(m.id)
-                  ? {
-                      ...m,
-                      streaming: false,
-                      steps: m.steps?.map(s =>
-                        s.kind === 'tool' && s.status === 'running' ? {...s, status: 'stopped'} : s,
-                      ),
-                    }
-                  : m,
-              ),
-          },
-        }));
-      };
-      const stop = () => {
-        if (settled) {
-          return;
-        }
-        stopped = true;
-        // Left open, a late event would write into whatever server is signed in by then.
-        unsubscribe?.();
-        patch(sessionId, turn.current, m => ({...m, cancelled: true}));
-        finish();
-      };
+      const ctl = control(turn);
 
+      bumpEpoch(sessionId);
       set(s => ({
         messages: {
           ...s.messages,
           [sessionId]: [...(s.messages[sessionId] ?? []).filter(m => m.id !== opts.replaceId), userMsg, botMsg],
         },
-        active: {sessionId, requestId: null, unsubscribe: null, stop},
+        active: {...s.active, [sessionId]: {requestId: null, unsubscribe: null, stop: ctl.stop}},
       }));
 
       try {
@@ -808,81 +935,59 @@ export const useChatStore = create<ChatState>((set, get) => {
           isVoice: opts.voice,
         });
         // Stopped before the server named the request: cancel it now, show nothing of it.
-        if (stopped) {
+        if (ctl.stopped) {
           if (res.request_id) {
+            stoppedRequests.add(res.request_id);
             cancelRequest(res.request_id, sessionId).catch(() => undefined);
           }
           return;
         }
         // Signed out while the message was posting: nothing is left to stream into.
-        if (get().active?.sessionId !== sessionId) {
+        if (get().active[sessionId]?.stop !== ctl.stop) {
           return;
         }
         if (!res.request_id) {
           patch(sessionId, botMsg.id, m => ({...m, content: res.inline_reply ?? ''}));
-          finish();
+          ctl.finish();
           return;
         }
         if (res.speaker) {
           turn.floor[0] = {id: res.speaker};
           patch(sessionId, botMsg.id, m => ({...m, speaker: turn.floor[0]}));
         }
-        unsubscribe = subscribeChat(res.request_id, {
-          onEvent: event => {
-            applyEvent(turn, event);
-            // The answer is stored; with auto TTS on, `stream_end` waits up to a
-            // minute for the audio. Free the composer now, as the web console does.
-            if (event.type === 'done') {
-              finish();
-            }
-          },
-          onEnd: end => {
-            // After `done` only the audio tail was left; the next message may
-            // already be streaming, which a history reload would wipe.
-            if (settled) {
-              return;
-            }
-            if (end.kind === 'failed') {
-              patch(sessionId, turn.current, m => ({...m, error: end.error}));
-            }
-            finish();
-            if (end.kind === 'resync') {
-              get().loadHistory(sessionId, agentId).catch(() => undefined);
-            }
-          },
-        });
-        set(s => ({
-          active: s.active && {...s.active, requestId: res.request_id, unsubscribe},
-        }));
+        follow(turn, ctl, res.request_id, agentId);
       } catch (e) {
-        if (stopped) {
+        if (ctl.stopped) {
           return;
         }
         patch(sessionId, botMsg.id, m => ({
           ...m,
           error: e instanceof Error ? e.message : String(e),
         }));
-        finish();
+        ctl.finish();
       }
     },
 
-    cancel: async () => {
-      const active = get().active;
+    cancel: async sessionId => {
+      const active = get().active[sessionId];
       if (!active) {
         return;
       }
       active.stop?.();
       if (active.requestId) {
-        await cancelRequest(active.requestId, active.sessionId);
+        stoppedRequests.add(active.requestId);
+        await cancelRequest(active.requestId, sessionId);
       }
     },
   };
 });
 
 resetOnSignOut(useChatStore, state => {
-  state.active?.unsubscribe?.();
+  Object.values(state.active).forEach(a => a.unsubscribe?.());
   pending.clear();
   thinking.clear();
+  turnEpoch.clear();
+  stoppedRequests.clear();
 });
 
 onServerEnvelope(envelope => {

@@ -14,7 +14,7 @@ import {
 import {useFocusEffect} from '@react-navigation/native';
 import type {StackScreenProps} from '@react-navigation/stack';
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
-import {FlatList, Linking, Pressable, RefreshControl, ScrollView, Text, View} from 'react-native';
+import {FlatList, Pressable, RefreshControl, ScrollView, Text, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {
   confirmSkillInstall,
@@ -26,7 +26,6 @@ import {
   setSkillEnabled,
   uploadSkill,
 } from '../api/cowApi';
-import {AgentSheet} from '../components/AgentSheet';
 import {Icon} from '../components/Icon';
 import {
   ChoiceSheet,
@@ -46,9 +45,9 @@ import {SwipeTabs} from '../components/SwipeTabs';
 import {EmptyState, IconButton, PageHeader, Segmented} from '../components/ui';
 import {tr, trf} from '../i18n';
 import {pickDocuments} from '../media/picker';
+import {openWebPage} from '../navigation/openWeb';
 import type {RootStackParamList} from '../navigation/types';
 import type {Skill, SkillMarketSource, SkillPreview, ToolInfo} from '../protocol/resources';
-import {agentParam, useViewedAgent} from '../store/agentStore';
 import {MCP_STATUS, MCP_TRANSPORT_LABEL, mcpTarget, mcpTransport, useMcpStore} from '../store/mcpStore';
 import {describeConnectError, useLocalServer} from '../store/serverStore';
 import {radius} from '../theme/palette';
@@ -62,8 +61,7 @@ type SheetState =
   | {kind: 'add'}
   | {kind: 'market'; source: SkillMarketSource}
   | {kind: 'skill'; skill: Skill}
-  | {kind: 'delete'; skill: Skill}
-  | {kind: 'agent'};
+  | {kind: 'delete'; skill: Skill};
 type AddKey = 'create' | SkillMarketSource | 'upload' | 'browse';
 
 export const SKILL_HUB_URL = 'https://skills.cowagent.ai/';
@@ -108,8 +106,6 @@ export function SkillsScreen({navigation}: Props) {
   const t = useTheme();
   const styles = useStyles();
   const insets = useSafeAreaInsets();
-  const viewed = useViewedAgent('skills');
-  const scope = agentParam(viewed.agentId);
   const local = useLocalServer();
   const [tab, setTab] = useState<Tab>('skills');
   const [skills, setSkills] = useState<Skill[] | null>(null);
@@ -121,27 +117,18 @@ export function SkillsScreen({navigation}: Props) {
   const [openTool, setOpenTool] = useState<string | null>(null);
   const [sheet, setSheet] = useState<SheetState | null>(null);
   const [preview, setPreview] = useState<SkillPreview | null>(null);
-  const storeServers = useMcpStore(s => s.servers);
-  const storeScope = useMcpStore(s => s.agentId);
+  const servers = useMcpStore(s => s.servers);
   const loadMcp = useMcpStore(s => s.load);
-  const servers = storeScope === scope ? storeServers : null;
-  const generation = useRef(0);
   const pollDeadline = useRef(0);
 
   const loadSkills = useCallback(async () => {
-    const gen = generation.current;
     try {
-      const res = await getSkills(scope);
-      if (gen === generation.current) {
-        setSkills(res.skills);
-        setError(null);
-      }
+      setSkills((await getSkills()).skills);
+      setError(null);
     } catch (e) {
-      if (gen === generation.current) {
-        setError(describeConnectError(e));
-      }
+      setError(describeConnectError(e));
     }
-  }, [scope]);
+  }, []);
 
   const loadTools = useCallback(async () => {
     try {
@@ -155,20 +142,18 @@ export function SkillsScreen({navigation}: Props) {
   // A broken mcp.json must not take the skills and tools down with it.
   const reloadMcp = useCallback(async () => {
     try {
-      await loadMcp(scope);
+      await loadMcp();
       setMcpError(null);
     } catch (e) {
       setMcpError(describeConnectError(e));
     }
-  }, [loadMcp, scope]);
+  }, [loadMcp]);
 
   useFocusEffect(
     useCallback(() => {
-      if (viewed.ready) {
-        loadSkills();
-        reloadMcp();
-      }
-    }, [viewed.ready, loadSkills, reloadMcp]),
+      loadSkills();
+      reloadMcp();
+    }, [loadSkills, reloadMcp]),
   );
 
   useEffect(() => {
@@ -187,9 +172,9 @@ export function SkillsScreen({navigation}: Props) {
     if (Date.now() > pollDeadline.current) {
       return;
     }
-    const timer = setTimeout(() => loadMcp(scope).catch(() => undefined), MCP_POLL_MS);
+    const timer = setTimeout(() => loadMcp().catch(() => undefined), MCP_POLL_MS);
     return () => clearTimeout(timer);
-  }, [servers, loadMcp, scope]);
+  }, [servers, loadMcp]);
 
   const refresh = async () => {
     setRefreshing(true);
@@ -204,14 +189,6 @@ export function SkillsScreen({navigation}: Props) {
     }
   };
 
-  const switchAgent = (id: string) => {
-    setSheet(null);
-    generation.current += 1;
-    setSkills(null);
-    setError(null);
-    viewed.select(id);
-  };
-
   const sorted = useMemo(() => (skills ? [...skills].sort(compareSkills) : []), [skills]);
   const enabledCount = sorted.filter(s => s.enabled).length;
 
@@ -219,7 +196,7 @@ export function SkillsScreen({navigation}: Props) {
     const flip = (on: boolean) => setSkills(prev => prev?.map(s => (s.name === skill.name ? {...s, enabled: on} : s)) ?? prev);
     flip(enabled);
     try {
-      await setSkillEnabled(skill.name, enabled, scope);
+      await setSkillEnabled(skill.name, enabled);
     } catch (e) {
       flip(!enabled);
       showToast(trf(enabled ? 'skill_enable_failed' : 'skill_disable_failed', {error: skillErrorText(e)}));
@@ -229,7 +206,7 @@ export function SkillsScreen({navigation}: Props) {
   const fetchPreview = async (source: SkillMarketSource, value: string) => {
     let res: SkillPreview;
     try {
-      res = await previewSkill(source, value, scope);
+      res = await previewSkill(source, value);
     } catch (e) {
       throw new Error(skillErrorText(e));
     }
@@ -254,7 +231,7 @@ export function SkillsScreen({navigation}: Props) {
     }
     showToast(tr('skill_uploading'));
     try {
-      setPreview(await uploadSkill(files, scope));
+      setPreview(await uploadSkill(files));
     } catch (e) {
       showToast(trf('skill_upload_failed', {error: skillErrorText(e)}));
     }
@@ -266,7 +243,7 @@ export function SkillsScreen({navigation}: Props) {
     }
     let installed: string[];
     try {
-      installed = (await confirmSkillInstall(preview.token, names, scope)).installed ?? [];
+      installed = (await confirmSkillInstall(preview.token, names)).installed ?? [];
     } catch (e) {
       throw new Error(skillErrorText(e));
     }
@@ -286,7 +263,7 @@ export function SkillsScreen({navigation}: Props) {
 
   const remove = async (skill: Skill) => {
     try {
-      await deleteSkill(skill.name, scope);
+      await deleteSkill(skill.name);
       setSheet(null);
       showToast(tr('common_deleted'));
       await loadSkills();
@@ -299,18 +276,18 @@ export function SkillsScreen({navigation}: Props) {
   const onAdd = (key: AddKey) => {
     if (key === 'create') {
       setSheet(null);
-      navigation.navigate('SkillCreate', {agentId: scope});
+      navigation.navigate('SkillCreate');
     } else if (key === 'upload') {
       runUpload();
     } else if (key === 'browse') {
       setSheet(null);
-      Linking.openURL(SKILL_HUB_URL).catch(() => showToast(tr('skill_open_browser_failed')));
+      openWebPage(SKILL_HUB_URL);
     } else {
       next({kind: 'market', source: key});
     }
   };
 
-  const openSkill = (skill: Skill) => navigation.navigate('SkillDetail', {name: skill.name, agentId: scope});
+  const openSkill = (skill: Skill) => navigation.navigate('SkillDetail', {name: skill.name});
 
   const renderSkill = ({item}: {item: Skill}) => {
     const tag = item.ships_with_install
@@ -361,9 +338,7 @@ export function SkillsScreen({navigation}: Props) {
   return (
     <View style={styles.root}>
       <PageHeader
-        title={tr('skill_title')}
-        subtitle={viewed.multi ? viewed.agent?.name ?? viewed.agentId ?? undefined : undefined}
-        onTitlePress={viewed.multi ? () => setSheet({kind: 'agent'}) : undefined}
+        title={tr('menu_skills')}
         onBack={navigation.goBack}
         right={
           tab === 'tools' ? undefined : (
@@ -407,7 +382,7 @@ export function SkillsScreen({navigation}: Props) {
               sorted.length ? (
                 <Pressable
                   accessibilityRole="link"
-                  onPress={() => Linking.openURL(SKILL_HUB_URL).catch(() => undefined)}
+                  onPress={() => openWebPage(SKILL_HUB_URL)}
                   style={({pressed}) => [styles.hubLink, pressed && styles.cardPressed]}>
                   <Icon icon={faCompass} size={12} color={t.t3} />
                   <Text style={styles.hubText}>{tr('skill_hub_link')}</Text>
@@ -541,7 +516,7 @@ export function SkillsScreen({navigation}: Props) {
             openSkill(skillSheet);
           } else if (key === 'edit') {
             setSheet(null);
-            navigation.navigate('SkillFile', {name: skillSheet.name, title: 'SKILL.md', agentId: scope, edit: true});
+            navigation.navigate('SkillFile', {name: skillSheet.name, title: 'SKILL.md', edit: true});
           } else {
             next({kind: 'delete', skill: skillSheet});
           }
@@ -558,13 +533,6 @@ export function SkillsScreen({navigation}: Props) {
         onClose={() => setSheet(null)}
       />
       <SkillInstallSheet preview={preview} onInstall={install} onClose={closePreview} />
-      <AgentSheet
-        visible={sheet?.kind === 'agent'}
-        title={tr('skill_agent_pick')}
-        selectedId={viewed.agentId}
-        onSelect={switchAgent}
-        onClose={() => setSheet(null)}
-      />
       <ToastHost bottom={insets.bottom + 28} />
     </View>
   );

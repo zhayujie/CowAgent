@@ -14,8 +14,7 @@ import {skillErrorText} from './SkillsScreen';
 
 type Props = StackScreenProps<RootStackParamList, 'SkillCreate'>;
 
-export function SkillCreateScreen({route, navigation}: Props) {
-  const agentId = route.params?.agentId;
+export function SkillCreateScreen({navigation}: Props) {
   const t = useTheme();
   const styles = useStyles();
   const insets = useSafeAreaInsets();
@@ -54,9 +53,9 @@ export function SkillCreateScreen({route, navigation}: Props) {
     setError(null);
     guard.current = false;
     try {
-      const res = await createSkill({name: name.trim(), description: description.trim(), body}, agentId);
+      const res = await createSkill({name: name.trim(), description: description.trim(), body});
       showToast(tr('skill_created'));
-      navigation.replace('SkillDetail', {name: res.name, agentId});
+      navigation.replace('SkillDetail', {name: res.name});
     } catch (e) {
       setError(skillErrorText(e));
       setBusy(false);

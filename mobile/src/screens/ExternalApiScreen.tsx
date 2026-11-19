@@ -1,6 +1,6 @@
 import type {StackScreenProps} from '@react-navigation/stack';
 import React, {useEffect, useRef, useState} from 'react';
-import {Linking, Pressable, ScrollView, Text, View} from 'react-native';
+import {Pressable, ScrollView, Text, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {getIntegrations} from '../api/cowApi';
 import {http} from '../api/http';
@@ -8,6 +8,7 @@ import {CodeBlock, ConfirmSheet, Footnote, SettingRow, SwitchRow} from '../compo
 import {showToast, ToastHost} from '../components/Toast';
 import {Chip, EmptyState, GroupLabel, PageHeader} from '../components/ui';
 import {getLang, tr, trf, type MessageKey} from '../i18n';
+import {openWebPage} from '../navigation/openWeb';
 import type {RootStackParamList} from '../navigation/types';
 import type {IntegrationsState} from '../protocol/resources';
 import {useConfigStore} from '../store/configStore';
@@ -124,7 +125,7 @@ export function ExternalApiScreen({navigation}: Props) {
   };
 
   const docsLink = (
-    <Text style={styles.docs} onPress={() => Linking.openURL(docsUrl()).catch(() => undefined)}>
+    <Text style={styles.docs} onPress={() => openWebPage(docsUrl())}>
       {tr('extapi_docs')}
     </Text>
   );
@@ -152,7 +153,7 @@ export function ExternalApiScreen({navigation}: Props) {
               title={base}
               mono
               chevron={false}
-              right={
+              action={
                 <Pressable accessibilityRole="button" hitSlop={8} onPress={() => copy(base, tr('extapi_base_url'))}>
                   <Text style={styles.link}>{tr('common_copy')}</Text>
                 </Pressable>
@@ -167,7 +168,7 @@ export function ExternalApiScreen({navigation}: Props) {
               mono
               onPress={() => setRevealed(v => !v)}
               chevron={false}
-              right={
+              action={
                 <Pressable accessibilityRole="button" hitSlop={8} onPress={() => copy(key, 'API Key')}>
                   <Text style={styles.link}>{tr('common_copy')}</Text>
                 </Pressable>

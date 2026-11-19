@@ -1,6 +1,6 @@
 import {faArrowUpRightFromSquare, faDownload, faXmark} from '@fortawesome/free-solid-svg-icons';
 import type {IconDefinition} from '@fortawesome/fontawesome-svg-core';
-import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useRef, useState, type ReactNode} from 'react';
 import {Image, Modal, Pressable, StyleSheet, Text, View} from 'react-native';
 import {Gesture, GestureDetector, GestureHandlerRootView} from 'react-native-gesture-handler';
 import Animated, {
@@ -14,6 +14,7 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {scheduleOnRN} from 'react-native-worklets';
 import {tr} from '../i18n';
 import {Icon} from './Icon';
+import {ToastHost} from './Toast';
 
 const MAX_SCALE = 5;
 const DOUBLE_TAP_SCALE = 2.5;
@@ -29,7 +30,8 @@ function clamp(v: number, lo: number, hi: number) {
 
 /**
  * Full-screen look at one picture: pinch or double-tap to zoom, drag to look
- * around, pull down to close. A single tap also closes it.
+ * around, pull down to close. A single tap also closes it; a long press asks
+ * for `onLongPress`.
  */
 export function ImageViewer({
   uri,
@@ -37,12 +39,17 @@ export function ImageViewer({
   title,
   onDownload,
   onOpen,
+  onLongPress,
+  children,
 }: {
   uri: string | null;
   onClose: () => void;
   title?: string;
   onDownload?: () => void;
   onOpen?: () => void;
+  onLongPress?: () => void;
+  /** Sheets opened over the picture, which must sit inside its modal. */
+  children?: ReactNode;
 }) {
   const insets = useSafeAreaInsets();
   const stageW = useSharedValue(0);
@@ -75,6 +82,9 @@ export function ImageViewer({
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
   const close = useCallback(() => closeRef.current(), []);
+  const longPressRef = useRef(onLongPress);
+  longPressRef.current = onLongPress;
+  const longPress = useCallback(() => longPressRef.current?.(), []);
 
   const gesture = useMemo(() => {
     const bounds = (s: number) => {
@@ -199,11 +209,19 @@ export function ImageViewer({
         scheduleOnRN(close);
       });
 
+    const hold = Gesture.LongPress()
+      .minDuration(450)
+      .maxDistance(10)
+      .onStart(() => {
+        scheduleOnRN(longPress);
+      });
+
+    // The taps wait for the long press to fail, so letting go after one does not also close.
     return Gesture.Simultaneous(
       Gesture.Simultaneous(pinch, pan),
-      Gesture.Exclusive(doubleTap, singleTap),
+      Gesture.Exclusive(hold, doubleTap, singleTap),
     );
-  }, [close, stageW, stageH, aspect, scale, savedScale, tx, ty, savedTx, savedTy, pull, rebase]);
+  }, [close, longPress, stageW, stageH, aspect, scale, savedScale, tx, ty, savedTx, savedTy, pull, rebase]);
 
   // Explicit dependencies keep the web preview working, where no worklets Babel plugin runs.
   const imageStyle = useAnimatedStyle(
@@ -268,6 +286,8 @@ export function ImageViewer({
             {onOpen && <Pill icon={faArrowUpRightFromSquare} label={tr('media_open_in_browser')} onPress={onOpen} />}
           </Animated.View>
         )}
+        {children}
+        <ToastHost bottom={insets.bottom + 72} />
       </GestureHandlerRootView>
     </Modal>
   );

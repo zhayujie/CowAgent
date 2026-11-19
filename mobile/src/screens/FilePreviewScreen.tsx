@@ -14,7 +14,7 @@ import {PreviewSkeleton} from '../components/Skeleton';
 import {ToastHost} from '../components/Toast';
 import {Chip, IconButton} from '../components/ui';
 import {type ChatFile, fileHttpError, viewUrlOf} from '../files/chatFile';
-import {downloadFile, MEDIA_KINDS, openInBrowser} from '../files/openFile';
+import {downloadFile, MEDIA_KINDS, openAsWebPage} from '../files/openFile';
 import {tr, trf} from '../i18n';
 import {EDGE_ONLY, useFullBackSwipe} from '../navigation/gestures';
 import type {RootStackParamList} from '../navigation/types';
@@ -130,7 +130,7 @@ export function FilePreviewScreen({route, navigation}: Props) {
         <Text style={styles.failedHint}>{error}</Text>
         <View style={styles.failedActions}>
           <Chip label={tr('common_retry')} active onPress={retry} />
-          <Chip label={tr('file_open_in_browser')} onPress={() => openInBrowser(file)} />
+          <Chip label={tr('file_open_in_browser')} onPress={() => openAsWebPage(file)} />
         </View>
       </View>
     );
@@ -158,6 +158,7 @@ export function FilePreviewScreen({route, navigation}: Props) {
           onError={setError}
           onProgress={setProgress}
           onReady={() => setPageReady(true)}
+          onLongPress={() => setActing(true)}
         />
         {media === 'pdf' && <PreviewSkeleton visible={!pageReady} overlay />}
         <View style={styles.backEdge} />
