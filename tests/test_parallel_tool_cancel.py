@@ -38,7 +38,7 @@ def _executor(tool, cancel_event=None):
     executor.agent = None
     executor.cancel_event = cancel_event
     executor._record_tool_result = lambda *a, **kw: None
-    executor._check_consecutive_failures = lambda *a, **kw: (False, None, False)
+    executor._check_consecutive_failures = lambda *a, **kw: (False, None, False, False)
     executor._emit_event = lambda *a, **kw: None
     return executor
 

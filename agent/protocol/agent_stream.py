@@ -896,10 +896,14 @@ class AgentStreamExecutor:
         Check if tool has failed too many times consecutively or called repeatedly with same args
         
         Returns:
-            (should_stop, reason, is_critical)
+            (should_stop, reason, is_critical, repetition_block)
             - should_stop: Whether to stop tool execution
             - reason: Reason for stopping
             - is_critical: Whether to abort entire conversation (True for 8+ failures)
+            - repetition_block: True when the block fired on the identical-call
+              repetition rule — the tool itself was working (results already
+              returned), so the caller must not record the blocked attempt as
+              a tool failure. Failure-based blocks keep recording.
         """
         args_hash = self._hash_args(args)
         
@@ -914,7 +918,7 @@ class AgentStreamExecutor:
         
         # Stop at 5 consecutive calls with same args (whether success or failure)
         if same_args_calls >= 5:
-            return True, f"工具 '{tool_name}' 使用相同参数已被调用 {same_args_calls} 次，停止执行以防止无限循环。如果需要查看配置，结果已在之前的调用中返回。", False
+            return True, f"工具 '{tool_name}' 使用相同参数已被调用 {same_args_calls} 次，停止执行以防止无限循环。如果需要查看配置，结果已在之前的调用中返回。", False, True
         
         # Count consecutive failures for same tool + args
         same_args_failures = 0
@@ -928,7 +932,7 @@ class AgentStreamExecutor:
                 break  # Different tool or args, stop counting
         
         if same_args_failures >= 3:
-            return True, f"工具 '{tool_name}' 使用相同参数连续失败 {same_args_failures} 次，停止执行以防止无限循环", False
+            return True, f"工具 '{tool_name}' 使用相同参数连续失败 {same_args_failures} 次，停止执行以防止无限循环", False, False
         
         # Count consecutive failures for same tool (any args)
         same_tool_failures = 0
@@ -946,13 +950,13 @@ class AgentStreamExecutor:
             return True, _t(
                 "抱歉，我没能完成这个任务。可能是我理解有误或者当前方法不太合适。\n\n建议你：\n• 换个方式描述需求试试\n• 把任务拆分成更小的步骤\n• 或者换个思路来解决",
                 "Sorry, I couldn't complete this task. I may have misunderstood, or my current approach isn't quite right.\n\nYou could try:\n• Rephrasing your request\n• Breaking the task into smaller steps\n• Taking a different approach",
-            ), True
+            ), True, False
         
         # Warning at 6 failures
         if same_tool_failures >= 6:
-            return True, f"工具 '{tool_name}' 连续失败 {same_tool_failures} 次（使用不同参数），停止执行以防止无限循环", False
+            return True, f"工具 '{tool_name}' 连续失败 {same_tool_failures} 次（使用不同参数），停止执行以防止无限循环", False, False
         
-        return False, "", False
+        return False, "", False, False
     
     def _record_tool_result(self, tool_name: str, args: dict, success: bool):
         """Record tool execution result for failure tracking"""
@@ -2487,11 +2491,19 @@ class AgentStreamExecutor:
             return result
 
         # Check for consecutive failures (retry protection)
-        should_stop, stop_reason, is_critical = self._check_consecutive_failures(tool_name, arguments)
+        should_stop, stop_reason, is_critical, repetition_block = self._check_consecutive_failures(tool_name, arguments)
         if should_stop:
             logger.error(f"🛑 {stop_reason}")
-            self._record_tool_result(tool_name, arguments, False)
-            
+            # A repetition block is the guardrail stopping a loop of *working*
+            # calls — the results are already in the context — so the blocked
+            # attempt is not a tool failure (same principle as the permission
+            # refusal above). Recorded as one, a stubborn model's blocked
+            # retries stacked into the 8-failure critical abort even though
+            # every real execution had succeeded. Failure-based blocks keep
+            # recording, so genuine failures still escalate.
+            if not repetition_block:
+                self._record_tool_result(tool_name, arguments, False)
+
             if is_critical:
                 # Critical failure - abort entire conversation
                 result = {

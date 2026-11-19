@@ -59,7 +59,7 @@ def _run(tool, arguments=None):
     executor.agent = None
     executor.cancel_event = None
     executor._record_tool_result = lambda *a, **kw: None
-    executor._check_consecutive_failures = lambda *a, **kw: (False, None, False)
+    executor._check_consecutive_failures = lambda *a, **kw: (False, None, False, False)
     executor._emit_event = lambda kind, data: events.append((kind, data))
     executor._execute_tool({"id": "call_1", "name": tool.name, "arguments": arguments or {}})
     return events
