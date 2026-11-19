@@ -59,7 +59,7 @@ class PluginManager:
             # 首次启动写入 plugins.json 时即为关闭状态，避免拦截用户消息。
             plugincls.enabled = kwargs.get("enabled", True)
             if self.current_plugin_path == None:
-                raise Exception("Plugin path not set")
+                raise RuntimeError("Plugin path not set")
             self.plugins[name.upper()] = plugincls
             logger.debug("Plugin %s_v%s registered, path=%s" % (name, plugincls.version, plugincls.path))
 
