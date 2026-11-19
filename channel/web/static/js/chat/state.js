@@ -710,6 +710,7 @@ function steerActiveTask() {
 
     chatInput.value = '';
     resetComposerHeight();
+    saveComposerDraft();
     updateSteerBtnState();
 
     fetch('/message', {
@@ -862,6 +863,7 @@ async function handleFileSelect(files) {
     const tasks = [];
     for (const file of files) {
         const placeholder = { file_name: file.name, file_type: 'file', _uploading: true };
+        const draftKey = runtimeSessionKey(sessionId);
         pendingAttachments.push(placeholder);
         uploadingCount++;
         renderAttachmentPreview();
@@ -879,6 +881,7 @@ async function handleFileSelect(files) {
                     placeholder.file_type = data.file_type;
                     placeholder.preview_url = data.preview_url;
                     delete placeholder._uploading;
+                    fileFinishedUpload(draftKey, placeholder);
                 } else {
                     const i = pendingAttachments.indexOf(placeholder);
                     if (i !== -1) pendingAttachments.splice(i, 1);
@@ -923,6 +926,7 @@ async function handleFolderSelect(files) {
             file_count: entries.length,
             _uploading: true,
         };
+        const draftKey = runtimeSessionKey(sessionId);
         pendingAttachments.push(placeholder);
         uploadingCount++;
         renderAttachmentPreview();
@@ -949,6 +953,7 @@ async function handleFolderSelect(files) {
                 placeholder.file_path = data.root_path;
                 placeholder.file_name = data.root_name || rootName;
                 delete placeholder._uploading;
+                fileFinishedUpload(draftKey, placeholder);
             } catch (e) {
                 console.error('Directory upload failed:', e);
                 const i = pendingAttachments.indexOf(placeholder);

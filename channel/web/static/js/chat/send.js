@@ -124,6 +124,7 @@ function sendMessage() {
     resetComposerHeight();
     pendingAttachments = [];
     renderAttachmentPreview();
+    saveComposerDraft();
     sendBtn.disabled = true;
     if (typeof resetTurnArtifacts === 'function') resetTurnArtifacts();
 

@@ -582,20 +582,25 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     // Report per-file outcomes: a silent failure here is indistinguishable from
     // the file picker never opening, which makes the feature look broken.
     const failed: string[] = []
+    const sid = draftSidRef.current
     try {
       for (const file of files) {
         try {
-          const result = await apiClient.uploadFile(file, sessionId)
+          const result = await apiClient.uploadFile(file, sid)
           if (result.status === 'success') {
-            setAttachments((prev) => [
-              ...prev,
-              {
-                file_path: result.file_path,
-                file_name: result.file_name,
-                file_type: result.file_type as Attachment['file_type'],
-                preview_url: result.preview_url,
-              },
-            ])
+            const att: Attachment = {
+              file_path: result.file_path,
+              file_name: result.file_name,
+              file_type: result.file_type as Attachment['file_type'],
+              preview_url: result.preview_url,
+            }
+            // The user may have switched conversations while this uploaded.
+            if (draftSidRef.current === sid) {
+              setAttachments((prev) => [...prev, att])
+            } else {
+              const draft = getDraft(sid)
+              setDraft(sid, { text: draft.text, attachments: [...draft.attachments, att] })
+            }
           } else {
             failed.push(`${file.name}: ${result.message || 'unknown error'}`)
           }

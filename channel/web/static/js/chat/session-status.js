@@ -70,6 +70,25 @@ function swapComposerDraft() {
     refreshSessionStatus();
 }
 
+/**
+ * An upload finished. If the composer moved to another conversation meanwhile,
+ * the placeholder is in neither list, so file it under the one it was added in.
+ */
+function fileFinishedUpload(key, attachment) {
+    if (pendingAttachments.includes(attachment)) return;
+    if (key === _draftKey) {
+        pendingAttachments.push(attachment);
+        renderAttachmentPreview();
+        updateSendBtnState();
+        saveComposerDraft();
+        return;
+    }
+    const draft = _drafts[key] || (_drafts[key] = { text: '', attachments: [] });
+    draft.attachments.push(attachment);
+    _schedulePersistDrafts();
+    refreshSessionStatus();
+}
+
 function dropSessionDraft(sid, agentId) {
     const key = runtimeSessionKey(sid, agentId || activeAgentId);
     if (!_drafts[key]) return;

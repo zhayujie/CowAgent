@@ -24,8 +24,15 @@ function save(unread: Record<string, true>): void {
   }
 }
 
+// Counts only sessions still in the list: one deleted from another client
+// stays in `unread` with no row left to open and clear it.
+let badgeCount = -1
+
 function syncBadge(unread: Record<string, true>): void {
-  window.electronAPI?.setUnreadBadge?.(Object.keys(unread).length)
+  const count = useSessionStore.getState().sessions.filter((s) => unread[s.session_id]).length
+  if (count === badgeCount) return
+  badgeCount = count
+  window.electronAPI?.setUnreadBadge?.(count)
 }
 
 /** The user is looking at this conversation right now. */
@@ -74,6 +81,7 @@ function clearIfViewing(): void {
 
 useSessionStore.subscribe((s, prev) => {
   if (s.activeId !== prev.activeId) clearIfViewing()
+  if (s.sessions !== prev.sessions) syncBadge(useUnreadStore.getState().unread)
 })
 window.addEventListener('focus', clearIfViewing)
 window.addEventListener('hashchange', clearIfViewing)
