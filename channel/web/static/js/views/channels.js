@@ -16,18 +16,6 @@ function isMultiInstanceType(name) {
     return channelsMultiAgent && multiInstanceTypes.indexOf(name) !== -1;
 }
 
-function getChannelProjectText(key) {
-    const en = currentLang === 'en';
-    const texts = {
-        label: ['默认项目目录', 'Default project directory'],
-        empty: ['留空使用 Agent 工作区', 'Empty: use Agent workspace'],
-        browse: ['选择目录', 'Browse'],
-        hint: ['运行 CowAgent 的机器上的目录；会话显式选择优先。不限制文件访问权限。首次启用后使用独立通道会话，旧历史保留在会话列表。', 'Server-side directory; session selection takes priority. Not a filesystem sandbox. Enabling starts isolated channel conversations; old history remains in the session list.'],
-        confirm: ['首次启用会开始独立的通道会话；旧历史保留在会话列表，不会删除。继续？', 'Start isolated channel conversations? Old history stays in the session list and is not deleted.'],
-    };
-    return texts[key][en ? 1 : 0];
-}
-
 function loadChannelsView() {
     const container = document.getElementById('channels-content');
     if (!container) return Promise.resolve();
@@ -154,13 +142,13 @@ function renderActiveChannels() {
                 </div>
             </div>` : ''}
             <div class="my-4 space-y-2">
-                <label class="text-xs text-slate-500">${getChannelProjectText('label')}</label>
+                <label class="text-xs text-slate-500">${t('channels_project_label')}</label>
                 <div class="flex gap-2">
-                    <input id="ch-project-${iid}" value="${escapeHtml(ch.project_dir || '')}" class="flex-1 min-w-0 cfg-input" placeholder="${getChannelProjectText('empty')}">
-                    <button type="button" class="text-sm text-primary-500" data-project-browse>${getChannelProjectText('browse')}</button>
+                    <input id="ch-project-${iid}" value="${escapeHtml(ch.project_dir || '')}" class="flex-1 min-w-0 cfg-input" placeholder="${escapeHtml(t('channels_project_placeholder'))}">
+                    <button type="button" class="text-sm text-primary-500" data-project-browse>${t('channels_project_browse')}</button>
                     <button type="button" class="text-sm text-primary-500" data-project-save>${t('channels_save')}</button>
                 </div>
-                <p class="text-xs text-slate-400">${getChannelProjectText('hint')}</p>
+                <p class="text-xs text-slate-400">${t('channels_project_hint')}</p>
                 <p class="text-xs text-red-500" data-project-error></p>
             </div>
             ${weixinWaiting ? weixinScanPromptHtml(iid) : ''}
@@ -188,7 +176,7 @@ function renderActiveChannels() {
             error.textContent = '';
             try {
                 if (projectInput.value.trim() && !ch.session_namespace && !await new Promise(resolve => showConfirmDialog({
-                    title: getChannelProjectText('label'), message: getChannelProjectText('confirm'),
+                    title: t('channels_project_label'), message: t('channels_project_isolate_message'),
                     okText: t('channels_save'), cancelText: t('channels_cancel'),
                     onConfirm: () => resolve(true), onCancel: () => resolve(false)
                 }))) return;
@@ -196,7 +184,7 @@ function renderActiveChannels() {
                     body: JSON.stringify({action: 'set_project', channel: ch.name,
                         instance_id: ch.instance_id || '', project_dir: projectInput.value}) });
                 const data = await res.json();
-                if (data.status !== 'success') throw new Error(data.message || 'Save failed');
+                if (data.status !== 'success') throw new Error(data.message || t('channels_save_error'));
                 loadChannelsView();
             } catch (e) { error.textContent = e.message || String(e); }
             finally { this.disabled = false; }
