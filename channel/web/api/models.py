@@ -686,11 +686,11 @@ class ModelsHandler:
         "cowagent":  [
             "deepseek-v4.1-flash",
             "MiniMax-M3.1-Flash",
-            "gpt-6-luna",
-            "gpt-6.1-terra",
             "gpt-6.2-sol",
-            "gpt-6.1-sol",
             "gpt-6.2-astra",
+            "gpt-6.1-terra",
+            "gpt-6.1-sol",
+            "gpt-6-luna",
             "gpt-6-astra",
             "claude-haiku-5-5",
             "claude-fable-5-2",
@@ -737,7 +737,7 @@ class ModelsHandler:
     # The skill itself maps either form to the real vendor endpoint, so the
     # hint is purely cosmetic.
     _IMAGE_PROVIDER_MODELS = {
-        "openai":    ["gpt-image-2.5-flare", "gpt-image-2.5-sunburst", "gpt-image-2.6-flare", "gpt-image-2.6-sunburst", "gpt-image-2", "gpt-image-1"],
+        "openai":    ["gpt-image-2.6-flare", "gpt-image-2.6-sunburst", "gpt-image-2.5-flare", "gpt-image-2.5-sunburst", "gpt-image-2", "gpt-image-1"],
         "gemini": [
             {"value": "gemini-3.1-flash-image-preview", "hint": "Nano Banana 2"},
             {"value": "gemini-3-pro-image-preview",     "hint": "Nano Banana Pro"},
@@ -747,23 +747,23 @@ class ModelsHandler:
         "dashscope": ["qwen-image-2.0-pro", "qwen-image-2.0"],
         "minimax":   ["image-01"],
         "cowagent": [
-            "gpt-image-2.5-flare",
-            "gpt-image-2.5-sunburst",
             "gpt-image-2.6-flare",
             "gpt-image-2.6-sunburst",
             {"value": "gemini-nano-banana-2.1", "hint": "Nano Banana 2.1"},
+            "gpt-image-2.5-flare",
+            "gpt-image-2.5-sunburst",
             {"value": "gemini-3.1-flash-image", "hint": "Nano Banana 2"},
             {"value": "gemini-3-pro-image",     "hint": "Nano Banana Pro"},
             "seedream-5.0-pro",
             "seedream-5.0-lite",
         ],
         "linkai": [
-            "gpt-image-2.5-flare",
-            "gpt-image-2.5-sunburst",
             "gpt-image-2.6-flare",
             "gpt-image-2.6-sunburst",
-            "gpt-image-2",
             {"value": "gemini-nano-banana-2.1", "hint": "Nano Banana 2.1"},
+            "gpt-image-2.5-flare",
+            "gpt-image-2.5-sunburst",
+            "gpt-image-2",
             {"value": "gemini-3.1-flash-image-preview", "hint": "Nano Banana 2"},
             {"value": "gemini-3-pro-image-preview",     "hint": "Nano Banana Pro"},
             "seedream-5.0-lite",
@@ -1393,13 +1393,13 @@ class ModelsHandler:
     # provider-card id to the script's per-provider DEFAULT_MODEL so the
     # hint matches what the runtime would actually request.
     _IMAGE_AUTO_ORDER = [
-        ("openai",    "gpt-image-2.5-flare"),
+        ("openai",    "gpt-image-2.6-flare"),
         ("gemini",    "gemini-3.1-flash-image-preview"),  # nano-banana-2
         ("doubao",    "seedream-5.0-lite"),
         ("dashscope", "qwen-image-2.0"),
         ("minimax",   "image-01"),
-        ("cowagent",  "gpt-image-2.5-flare"),
-        ("linkai",    "gpt-image-2.5-flare"),
+        ("cowagent",  "gpt-image-2.6-flare"),
+        ("linkai",    "gpt-image-2.6-flare"),
     ]
 
     @classmethod
