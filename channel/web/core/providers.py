@@ -37,8 +37,8 @@ _RECOMMENDED_MODELS = [
 _COWAGENT_MODELS = [
     "deepseek-v4.1-flash", "deepseek-v4-pro", "deepseek-v4-flash",
     "MiniMax-M3.1-Flash", "MiniMax-M3",
-    "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "claude-fable-5-1",
-    "gpt-6.1-terra", "gpt-6.1-sol", "gpt-6-luna", "gpt-6-astra",
+    "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "claude-fable-5-2", "claude-fable-5-1",
+    "gpt-6.2-sol", "gpt-6.2-astra", "gpt-6.1-terra", "gpt-6.1-sol", "gpt-6-luna", "gpt-6-astra",
     "gemini-4-argon", "gemini-3.8-flash",
     "glm-5.3-flash", "glm-5.3",
     "qwen3.8-flash", "qwen3.8-max", "qwen3.6-plus",

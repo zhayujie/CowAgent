@@ -688,8 +688,12 @@ class ModelsHandler:
             "MiniMax-M3.1-Flash",
             "gpt-6-luna",
             "gpt-6.1-terra",
+            "gpt-6.2-sol",
             "gpt-6.1-sol",
+            "gpt-6.2-astra",
             "gpt-6-astra",
+            "claude-haiku-5-5",
+            "claude-fable-5-2",
             "claude-fable-5-1",
             "gemini-4-argon",
             "glm-5.3-flash",
@@ -733,7 +737,7 @@ class ModelsHandler:
     # The skill itself maps either form to the real vendor endpoint, so the
     # hint is purely cosmetic.
     _IMAGE_PROVIDER_MODELS = {
-        "openai":    ["gpt-image-2.5-flare", "gpt-image-2.5-sunburst", "gpt-image-2", "gpt-image-1"],
+        "openai":    ["gpt-image-2.5-flare", "gpt-image-2.5-sunburst", "gpt-image-2.6-flare", "gpt-image-2.6-sunburst", "gpt-image-2", "gpt-image-1"],
         "gemini": [
             {"value": "gemini-3.1-flash-image-preview", "hint": "Nano Banana 2"},
             {"value": "gemini-3-pro-image-preview",     "hint": "Nano Banana Pro"},
@@ -745,6 +749,9 @@ class ModelsHandler:
         "cowagent": [
             "gpt-image-2.5-flare",
             "gpt-image-2.5-sunburst",
+            "gpt-image-2.6-flare",
+            "gpt-image-2.6-sunburst",
+            {"value": "gemini-nano-banana-2.1", "hint": "Nano Banana 2.1"},
             {"value": "gemini-3.1-flash-image", "hint": "Nano Banana 2"},
             {"value": "gemini-3-pro-image",     "hint": "Nano Banana Pro"},
             "seedream-5.0-pro",
@@ -753,7 +760,10 @@ class ModelsHandler:
         "linkai": [
             "gpt-image-2.5-flare",
             "gpt-image-2.5-sunburst",
+            "gpt-image-2.6-flare",
+            "gpt-image-2.6-sunburst",
             "gpt-image-2",
+            {"value": "gemini-nano-banana-2.1", "hint": "Nano Banana 2.1"},
             {"value": "gemini-3.1-flash-image-preview", "hint": "Nano Banana 2"},
             {"value": "gemini-3-pro-image-preview",     "hint": "Nano Banana Pro"},
             "seedream-5.0-lite",
@@ -1743,6 +1753,8 @@ class ModelsHandler:
         "MiniMax-Text-01": {"context_window": 1000000},
         "mimo-v2.6-pro": {"context_window": 1000000, "max_output_tokens": 131072},
         "mimo-v2.6-flash": {"context_window": 1000000, "max_output_tokens": 131072},
+        "gpt-6.2-sol": {"context_window": 1050000, "max_output_tokens": 128000},
+        "gpt-6.2-astra": {"context_window": 1050000, "max_output_tokens": 128000},
         "gpt-6.1-terra": {"capabilities": ["text", "vision"], "context_window": 1050000, "max_output_tokens": 128000},
         "gpt-6.1-sol": {"context_window": 1000000, "max_output_tokens": 128000},
         "gpt-6-luna": {"context_window": 1000000, "max_output_tokens": 128000},
