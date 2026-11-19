@@ -81,7 +81,7 @@ class YoudaoTranslator(Translator):
 
         translations = result.get("translation") or []
         if not translations:
-            raise ValueError("youdao translate returned empty translation")
+            raise RuntimeError("youdao translate returned empty translation")
         return "\n".join(translations)
 
     def _build_sign(self, query: str, salt: str, curtime: str) -> str:
