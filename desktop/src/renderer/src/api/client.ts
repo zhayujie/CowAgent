@@ -1725,6 +1725,17 @@ class ApiClient {
     return data.recipients || []
   }
 
+  async setChannelProject(channel: string, instanceId: string, projectDir: string): Promise<ApiResult> {
+    return this.request('/api/channels', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'set_project', channel, instance_id: instanceId, project_dir: projectDir }),
+    })
+  }
+
+  async browseChannelProject(path: string): Promise<{ status: string; message?: string; path: string; parent?: string; dirs: {name: string; path: string}[] }> {
+    return this.request(`/api/projects/browse?path=${encodeURIComponent(path)}`)
+  }
+
   // Set a channel instance's friendly display name. Goes through the shared
   // /api/channels endpoint with the 'rename' action; does not touch credentials
   // or the live connection, so renaming never interrupts a running channel.

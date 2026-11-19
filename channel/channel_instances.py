@@ -170,6 +170,10 @@ class ChannelInstance:
     #: True when synthesized from legacy channel_type rather than an explicit
     #: channel_instances record. Legacy instances carry no credential override.
     legacy: bool = True
+    project_dir: str = ""
+    # Opt-in namespace stays enabled after clearing the directory. Existing
+    # conversations keep their old ids until an administrator opts in.
+    session_namespace: bool = False
 
 
 def _normalize_type(channel_type: str) -> str:
@@ -264,6 +268,8 @@ def _explicit_instances(raw_list: list) -> List[ChannelInstance]:
                 members=members,
                 peers=peers,
                 legacy=False,
+                project_dir=str(raw.get("project_dir") or ""),
+                session_namespace=bool(raw.get("session_namespace", False)),
             )
         )
     return out
@@ -476,6 +482,22 @@ def default_instance_name(channel_type: str, records: Iterable[Mapping[str, Any]
     return label if same_type == 0 else f"{label} {same_type + 1}"
 
 
+def validate_project_dir(value: str) -> str:
+    """Validate a server-side directory without creating it."""
+    from common.utils import expand_path
+
+    if not isinstance(value, str):
+        raise ValueError("project_dir must be a string")
+    if not value.strip():
+        return ""
+    path = os.path.realpath(expand_path(value.strip()))
+    if not os.path.isdir(path):
+        raise ValueError(f"Project directory does not exist: {path}")
+    if not os.access(path, os.R_OK | os.W_OK | os.X_OK):
+        raise ValueError(f"Project directory is not accessible: {path}")
+    return path
+
+
 def upsert_instance(
     settings: Mapping[str, Any],
     channel_type: str,
@@ -485,6 +507,7 @@ def upsert_instance(
     members: Optional[list] = None,
     peers: Optional[list] = None,
     name: Optional[str] = None,
+    project_dir: Optional[str] = None,
 ) -> ChannelInstance:
     """Create or update one channel instance record and persist it.
 
@@ -501,12 +524,21 @@ def upsert_instance(
 
     ctype = _normalize_type((channel_type or "").strip())
     records = read_raw_instances(settings)
+    # A directory edit can be the first roster mutation on a legacy install.
+    # Carry every legacy channel over, not only the one being edited.
+    if not records and project_dir is not None:
+        records = [
+            {"instance_id": inst.instance_id, "channel_type": inst.channel_type,
+             "credentials": _filtered_credentials(inst.channel_type, settings)}
+            for inst in _legacy_instances(settings)
+        ]
     taken = {str(r.get("instance_id") or "").strip() for r in records}
 
     target_id = (instance_id or "").strip()
     if not target_id:
         target_id = new_instance_id(ctype, taken)
 
+    normalized_project = validate_project_dir(project_dir) if project_dir is not None else None
     incoming_creds = _filtered_credentials(ctype, credentials or {})
 
     updated = False
@@ -564,6 +596,11 @@ def upsert_instance(
             result_record["peers"] = cleaned_peers
         records.append(result_record)
 
+    if normalized_project is not None:
+        result_record["project_dir"] = normalized_project
+        if normalized_project:
+            result_record["session_namespace"] = True
+
     roster = team.read(settings)
     roster["channel_instances"] = records
     team.write(settings, roster)
@@ -577,6 +614,8 @@ def upsert_instance(
         members=list(result_record.get("members") or []),
         peers=[dict(p) for p in (result_record.get("peers") or [])],
         legacy=False,
+        project_dir=str(result_record.get("project_dir") or ""),
+        session_namespace=bool(result_record.get("session_namespace", False)),
     )
 
 
