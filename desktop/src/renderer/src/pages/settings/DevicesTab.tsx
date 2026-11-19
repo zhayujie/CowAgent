@@ -426,25 +426,6 @@ const DevicesTab: React.FC<{
     }
   }
 
-  const revokeOthers = async () => {
-    const others = devices.filter((d) => d.id !== current).length
-    if (!others) return
-    const ok = await askConfirm({
-      titleKey: 'devices_revoke_others',
-      msgKey: 'devices_revoke_others_confirm',
-      okKey: 'devices_revoke_others',
-      vars: { n: String(others) },
-    })
-    if (!ok) return
-    try {
-      const res = await apiClient.revokeOtherDevices()
-      if (res.status === 'success') notice(tf('devices_revoked', { n: res.removed || 0 }))
-    } catch (e) {
-      notice((e as Error).message)
-    }
-    void loadDevices()
-  }
-
   const sorted = [...devices].sort(
     (a, b) =>
       Number(b.id === current) - Number(a.id === current) ||
@@ -554,6 +535,16 @@ const DevicesTab: React.FC<{
                       {joinMeta([instanceHost(item.url), outSub(item, st)])}
                     </div>
                   </div>
+                  <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                    {item.token && st !== 'other' && !item.managed && (
+                      <IconAction label={t('devices_rename_device')} onClick={() => setRenaming(`out:${item.id}`)}>
+                        <Pencil size={13} />
+                      </IconAction>
+                    )}
+                    <IconAction danger label={t('devices_forget')} onClick={() => void forgetOut(item)}>
+                      <Trash2 size={13} />
+                    </IconAction>
+                  </div>
                   {!on && item.token && st !== 'other' && (
                     <Btn onClick={() => void switchOut(item.id)} className={BTN_ROW}>
                       {t('devices_switch')}
@@ -570,16 +561,6 @@ const DevicesTab: React.FC<{
                       </span>
                     </Btn>
                   )}
-                  <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
-                    {item.token && st !== 'other' && !item.managed && (
-                      <IconAction label={t('devices_rename_device')} onClick={() => setRenaming(`out:${item.id}`)}>
-                        <Pencil size={13} />
-                      </IconAction>
-                    )}
-                    <IconAction danger label={t('devices_forget')} onClick={() => void forgetOut(item)}>
-                      <Trash2 size={13} />
-                    </IconAction>
-                  </div>
                 </div>
               )
             })}
@@ -600,30 +581,23 @@ const DevicesTab: React.FC<{
         }
         subtitle={t('devices_in_desc')}
         action={
-          <div className="flex items-center gap-2">
-            {current && devices.some((d) => d.id !== current) && (
-              <Btn onClick={() => void revokeOthers()} className={BTN_SM}>
-                {t('devices_revoke_others')}
-              </Btn>
-            )}
-            <Btn
-              variant={pairing ? 'ghost' : 'primary'}
-              disabled={pairBusy || (!pairing && !reachable)}
-              onClick={() => (pairing ? setPairing(null) : void startPairing())}
-              className={BTN_SM}
-            >
-              <span className="inline-flex items-center gap-1.5">
-                {pairBusy ? (
-                  <Loader2 size={13} className="animate-spin" />
-                ) : pairing ? (
-                  <X size={13} />
-                ) : (
-                  <QrCode size={13} />
-                )}
-                {pairing ? t('devices_cancel') : t('devices_let_connect')}
-              </span>
-            </Btn>
-          </div>
+          <Btn
+            variant={pairing ? 'ghost' : 'primary'}
+            disabled={pairBusy || (!pairing && !reachable)}
+            onClick={() => (pairing ? setPairing(null) : void startPairing())}
+            className={BTN_SM}
+          >
+            <span className="inline-flex items-center gap-1.5">
+              {pairBusy ? (
+                <Loader2 size={13} className="animate-spin" />
+              ) : pairing ? (
+                <X size={13} />
+              ) : (
+                <QrCode size={13} />
+              )}
+              {pairing ? t('devices_cancel') : t('devices_let_connect')}
+            </span>
+          </Btn>
         }
       >
         {accessNotice && (

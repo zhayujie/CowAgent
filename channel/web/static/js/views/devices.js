@@ -432,8 +432,6 @@ function renderDevicesList() {
     if (!box) return;
     const count = document.getElementById('devices-count');
     if (count) count.textContent = devicesList.length ? `(${devicesList.length})` : '';
-    document.getElementById('devices-revoke-others')?.classList.toggle('hidden',
-        !(devicesCurrent && devicesList.some(d => d.id !== devicesCurrent)));
     if (devicesLoadFailed && !devicesList.length) {
         box.innerHTML = `<div class="py-6 text-center text-sm text-slate-400 dark:text-slate-500">${escapeHtml(t('devices_load_failed'))}</div>`;
         return;
@@ -523,22 +521,6 @@ function removeDevice(id) {
             fetch(`/api/devices/${id}`, { method: 'DELETE' }).then(r => r.json()).then(data => {
                 if (data.status === 'success') _loadDevices();
             }).catch(() => {});
-        },
-    });
-}
-
-function revokeOtherDevices() {
-    const others = devicesList.filter(d => d.id !== devicesCurrent).length;
-    if (!others) return;
-    showConfirmDialog({
-        title: t('devices_revoke_others'),
-        message: t('devices_revoke_others_confirm').replace('{n}', others),
-        okText: t('devices_revoke_others'),
-        tone: 'danger',
-        onConfirm: () => {
-            fetch('/api/devices/revoke_others', { method: 'POST' }).then(r => r.json()).then(data => {
-                if (data.status === 'success') _shareToast(t('devices_revoked').replace('{n}', data.removed || 0));
-            }).catch(() => {}).finally(() => _loadDevices());
         },
     });
 }

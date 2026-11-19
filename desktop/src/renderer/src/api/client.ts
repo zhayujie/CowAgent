@@ -1037,11 +1037,6 @@ class ApiClient {
     return this.request(`/api/devices/${encodeURIComponent(id)}`, { method: 'DELETE' })
   }
 
-  /** Signs out every device but the one asking. */
-  async revokeOtherDevices(): Promise<ApiResult & { removed?: number }> {
-    return this.request('/api/devices/revoke_others', { method: 'POST' })
-  }
-
   /** Guest pages belong to the instance, not an Agent, and their errors carry a reason code. */
   private async shareRequest<T>(path: string, method = 'GET', body?: unknown | FormData): Promise<T> {
     const isForm = body instanceof FormData
