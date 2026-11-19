@@ -14,7 +14,6 @@
 import json
 import logging
 import os
-import ssl
 import threading
 import time
 # -*- coding=utf-8 -*-
@@ -523,14 +522,6 @@ class FeiShuChanel(ChatChannel):
         def start_client_with_retry():
             """Run ws client in this thread with its own event loop to avoid conflicts."""
             import asyncio
-            import ssl as ssl_module
-            original_create_default_context = ssl_module.create_default_context
-
-            def create_unverified_context(*args, **kwargs):
-                context = original_create_default_context(*args, **kwargs)
-                context.check_hostname = False
-                context.verify_mode = ssl.CERT_NONE
-                return context
 
             # lark_oapi.ws.client keeps its event loop in a module-level global,
             # and Client.start() / _select() / _ping_loop() all reference it. A
@@ -553,12 +544,8 @@ class FeiShuChanel(ChatChannel):
             # recover on its own and the channel would stay deaf.
             #
             # Backoff: 5s -> 10s -> 20s -> 40s -> 60s (capped).
-            # The ssl patch is process-wide, so only a certificate error may
-            # switch to unverified TLS (once, retried immediately); any other
-            # failure must leave verification untouched.
             attempt = 0
             backoff = 5
-            ssl_verify_disabled = False
             error_reported = False
             while True:
                 try:
@@ -589,15 +576,14 @@ class FeiShuChanel(ChatChannel):
                         logger.warning("[FeiShu] Feishu domain rejected; retrying websocket on open.larksuite.com")
                         continue
                     attempt += 1
-                    if is_ssl_error and not ssl_verify_disabled:
-                        logger.warning(f"[FeiShu] SSL error: {error_msg}, retrying with SSL verification disabled...")
-                        ssl_module.create_default_context = create_unverified_context
-                        ssl_module._create_unverified_context = create_unverified_context
-                        ssl_verify_disabled = True
-                        continue
+                    if is_ssl_error:
+                        error_msg = (
+                            f"{error_msg} (TLS certificate verification failed; if this network "
+                            "uses a TLS-intercepting proxy, point SSL_CERT_FILE or SSL_CERT_DIR at its CA)"
+                        )
                     logger.error(
                         "[FeiShu] Websocket client error (attempt %d, retry in %ds): %s"
-                        % (attempt, backoff, e), exc_info=not error_reported)
+                        % (attempt, backoff, error_msg), exc_info=not error_reported)
                     if not error_reported:
                         # wait_startup() only sees the first result, so report
                         # now and keep retrying in the background.
