@@ -274,7 +274,7 @@ class BrowserTool(BaseTool):
         )
 
     def execute(self, args: Dict[str, Any]) -> ToolResult:
-        action = args.get("action", "").strip().lower()
+        action = (args.get("action") or "").strip().lower()
         if not action:
             return ToolResult.fail("Error: 'action' parameter is required")
 
@@ -307,7 +307,7 @@ class BrowserTool(BaseTool):
     # ------------------------------------------------------------------
 
     def _do_navigate(self, args: Dict[str, Any]) -> ToolResult:
-        url = args.get("url", "").strip()
+        url = (args.get("url") or "").strip()
         if not url:
             return ToolResult.fail("Error: 'url' is required for navigate action")
         # Only auto-prepend https:// for bare hosts; preserve file://, about:, data:, etc.
@@ -408,7 +408,7 @@ class BrowserTool(BaseTool):
         return ToolResult.success(f"Navigated forward to: {result['url']}")
 
     def _do_get_text(self, args: Dict[str, Any]) -> ToolResult:
-        selector = args.get("selector", "").strip()
+        selector = (args.get("selector") or "").strip()
         if not selector:
             return ToolResult.fail("Error: 'selector' is required for get_text action")
         result = self._get_service().get_text(selector)
@@ -417,7 +417,7 @@ class BrowserTool(BaseTool):
         return ToolResult.success(result["text"])
 
     def _do_press(self, args: Dict[str, Any]) -> ToolResult:
-        key = args.get("key", "").strip()
+        key = (args.get("key") or "").strip()
         if not key:
             return ToolResult.fail("Error: 'key' is required for press action")
         result = self._get_service().press(key)
@@ -426,7 +426,7 @@ class BrowserTool(BaseTool):
         return ToolResult.success(f"Pressed key: {key}")
 
     def _do_evaluate(self, args: Dict[str, Any]) -> ToolResult:
-        script = args.get("script", "").strip()
+        script = (args.get("script") or "").strip()
         if not script:
             return ToolResult.fail("Error: 'script' is required for evaluate action")
         result = self._get_service().evaluate(script)

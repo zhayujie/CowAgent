@@ -66,7 +66,7 @@ class Edit(BaseTool):
         self.memory_manager = self.config.get("memory_manager", None)
     
     def execute(self, args: Dict[str, Any]) -> ToolResult:
-        path = args.get("path", "").strip()
+        path = (args.get("path") or "").strip()
         if not path:
             return ToolResult.fail("Error: path parameter is required")
         key = os.path.normcase(os.path.realpath(self._resolve_path(path)))
@@ -82,7 +82,7 @@ class Edit(BaseTool):
         :param args: Contains file path, old text and new text
         :return: Operation result
         """
-        path = args.get("path", "").strip()
+        path = (args.get("path") or "").strip()
         old_text = args.get("oldText", "")
         new_text = args.get("newText", "")
         replace_all = bool(args.get("replaceAll", False))
