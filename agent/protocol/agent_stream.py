@@ -1159,30 +1159,25 @@ class AgentStreamExecutor:
                         if turn > 1:
                             logger.info("[Agent] Requesting explicit response from LLM...")
                             
-                            # Remember position so we can remove the injected prompt later
-                            prompt_insert_idx = len(self.messages)
-                            
                             # 添加一条消息，明确要求回复用户
-                            self.messages.append({
+                            prompt_msg = {
                                 "role": "user",
                                 "content": [{
                                     "type": "text",
                                     "text": self._explicit_response_prompt()
                                 }]
-                            })
-                            
-                            # 再调用一次 LLM
-                            assistant_msg, tool_calls, stop_reason = self._call_llm_stream(retry_on_empty=False)
-                            final_response = assistant_msg
-                            
-                            # Remove the injected prompt from history so it doesn't
-                            # appear as a user message in persisted conversations.
-                            # _call_llm_stream may have appended an assistant message
-                            # after the prompt, so we locate and remove only the prompt.
-                            if (prompt_insert_idx < len(self.messages)
-                                    and self.messages[prompt_insert_idx].get("role") == "user"):
-                                self.messages.pop(prompt_insert_idx)
+                            }
+                            self.messages.append(prompt_msg)
+
+                            # The prompt must never reach persisted history, even
+                            # when the call raises. Removed by identity: retries and
+                            # compaction can rebuild messages around it.
+                            try:
+                                assistant_msg, tool_calls, stop_reason = self._call_llm_stream(retry_on_empty=False)
+                            finally:
+                                self.messages[:] = [m for m in self.messages if m is not prompt_msg]
                                 logger.debug("[Agent] Removed injected explicit-response prompt from message history")
+                            final_response = assistant_msg
                             
                             # If LLM responded with tool_calls instead of text, fall through
                             # to the tool execution path below (don't break the loop).
