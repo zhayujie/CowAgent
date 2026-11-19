@@ -53,7 +53,7 @@ READ_ONLY_WRITES = [
     "sed 's#a#b#gw stolen.txt' in.txt",
     "sed 's/a/b/w/stolen.txt' in.txt",
     "sed 'w/tmp/stolen' in.txt",
-    # address-prefixed and empty-pattern s///w forms (review follow-up)
+    # address-prefixed and empty-pattern s///w forms
     "sed '1,3s/a/b/w stolen.txt' in.txt",
     "sed 's//b/w stolen.txt' in.txt",
     # awk can hand a string to the shell
