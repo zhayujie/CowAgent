@@ -38,12 +38,6 @@ class _RaisingCountingExecutor(_CountingExecutor):
 
 class EmptyReplyPromptLeakTest(unittest.TestCase):
 
-    def _roles_and_texts(self, executor):
-        roles = []
-        for message in executor.agent.messages:
-            roles.append(message["role"])
-        return roles
-
     def test_the_prompt_is_removed_when_the_extra_call_raises(self):
         # Turn 1: a tool call. Turn 2: empty reply -> prompt injected -> the
         # extra call dies the way a real provider failure does.
