@@ -26,6 +26,9 @@ PROFILE_LOCK_SECONDS = 900
 # key pins a bucket (or an expired lock entry) for the process lifetime.
 # _profile stays unswept: it is keyed by profile slug, a small fixed set.
 _CLIENT_SWEEP_THRESHOLD = 1024
+# At most one rebuild per interval: without it a flood turns the sweep into
+# per-call CPU amplification under the global lock.
+_CLIENT_SWEEP_INTERVAL = 60.0
 
 
 class LoginLimiter:
@@ -36,6 +39,7 @@ class LoginLimiter:
         self._client_locked: Dict[Tuple[str, str], float] = {}
         self._profile: Dict[str, Deque[float]] = {}
         self._profile_locked: Dict[str, float] = {}
+        self._last_sweep = 0.0
 
     def locked_for(self, slug: str, client: str, now: float = None) -> int:
         """Seconds until ``client`` may try a password on ``slug`` again (0 = now)."""
@@ -45,9 +49,13 @@ class LoginLimiter:
         return max(0, int(until - now + 0.999))
 
     def _sweep_expired(self, now: float) -> None:
-        """Drop stale per-client state (caller holds the lock)."""
+        """Drop stale per-client state (caller holds the lock), at most once
+        per interval (see _CLIENT_SWEEP_INTERVAL)."""
         if len(self._client) < _CLIENT_SWEEP_THRESHOLD:
             return
+        if now - self._last_sweep < _CLIENT_SWEEP_INTERVAL:
+            return
+        self._last_sweep = now
         self._client = {
             key: hits for key, hits in self._client.items()
             if hits and now - hits[-1] <= CLIENT_LOCK_SECONDS

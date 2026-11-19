@@ -85,6 +85,9 @@ def _reply_texts(content: str, steps: List[Dict[str, Any]]) -> List[str]:
 # keeps only buckets with a live hit, bounding memory to the distinct clients
 # seen within a window instead of every client the process has ever seen.
 _IP_HITS_SWEEP_THRESHOLD = 1024
+# And at most this often: rebuilding the whole dict under the global lock on
+# every call would trade the memory leak for CPU amplification under a flood.
+_IP_HITS_SWEEP_INTERVAL = 60.0
 
 
 class GuestPages:
@@ -92,6 +95,7 @@ class GuestPages:
         self._lock = threading.Lock()
         self._runs: Dict[str, GuestRun] = {}
         self._ip_hits: Dict[str, Deque[float]] = {}
+        self._last_ip_sweep = 0.0
 
     def _sweep_expired(self, now: float, window: float) -> None:
         """Drop buckets with no hit inside *window* (caller holds the lock).
@@ -101,10 +105,13 @@ class GuestPages:
         were only popped when the same key came back, so one-shot keys stayed
         pinned for the process lifetime. All allow_ip callers share the 60s
         default window, so sweeping with the caller's window drops nothing
-        that is still live.
+        that is still live. Sweeps are amortized to one per interval.
         """
         if len(self._ip_hits) < _IP_HITS_SWEEP_THRESHOLD:
             return
+        if now - self._last_ip_sweep < _IP_HITS_SWEEP_INTERVAL:
+            return
+        self._last_ip_sweep = now
         self._ip_hits = {
             ip: hits for ip, hits in self._ip_hits.items()
             if hits and now - hits[-1] <= window

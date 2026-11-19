@@ -40,6 +40,27 @@ class TestGuestPagesSweep(unittest.TestCase):
         self.assertNotIn("msg:1.2.3.0", pages._ip_hits)
         self.assertLess(len(pages._ip_hits), 5, "stale buckets survived the sweep")
 
+    def test_the_sweep_is_amortized_once_per_interval(self):
+        # Review follow-up: rebuilding on every call under a flood is CPU
+        # amplification under the global lock. A second over-threshold call
+        # inside the interval must not sweep; one after it must.
+        now = time.time()
+        pages = GuestPages()
+        pages._ip_hits = {f"msg:1.2.3.{i}": deque([now - 120]) for i in range(_IP_HITS_SWEEP_THRESHOLD + 8)}
+        pages.allow_ip("msg:a", 5)  # first sweep happens, dict shrinks
+        self.assertLess(len(pages._ip_hits), 16)
+
+        # Refill past the threshold; still inside the interval -> no sweep.
+        pages._ip_hits.update({f"msg:9.9.9.{i}": deque([now - 120]) for i in range(_IP_HITS_SWEEP_THRESHOLD)})
+        pages.allow_ip("msg:b", 5)
+        self.assertGreater(len(pages._ip_hits), _IP_HITS_SWEEP_THRESHOLD,
+                           "swept again inside the amortization interval")
+
+        # Once the interval has passed, the sweep runs again.
+        pages._last_ip_sweep = now - 61
+        pages.allow_ip("msg:c", 5)
+        self.assertLess(len(pages._ip_hits), 16, "stale buckets survived the next sweep")
+
     def test_below_the_threshold_nothing_is_swept(self):
         now = time.time()
         pages = GuestPages()
