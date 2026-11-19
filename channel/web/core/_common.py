@@ -330,8 +330,8 @@ def _verify_auth_token(token):
     """Verify a signed token is valid and not expired.
 
     Stateless, so it survives server restarts; it stops working when the
-    password changes. Tokens signed with the password itself, as older versions
-    issued them, are honoured until they expire so an upgrade signs no one out.
+    password changes. A token signed with the password itself, the earlier
+    form, verifies too until it expires.
     """
     if not token or "." not in token:
         return False
@@ -347,8 +347,8 @@ def _verify_auth_token(token):
     password = _get_web_password().encode("utf-8", "surrogatepass")
     if not password:
         return False
-    legacy = hmac.new(password, ts_hex.encode(), hashlib.sha256).hexdigest()
-    return constant_time_equals(sig, legacy)
+    password_sig = hmac.new(password, ts_hex.encode(), hashlib.sha256).hexdigest()
+    return constant_time_equals(sig, password_sig)
 
 
 def _get_bearer_token():
@@ -387,12 +387,40 @@ def _get_cookie_token():
     return web.cookies().get("cow_auth_token", "") or ""
 
 
+# The browser drops the cookie on the date it was given, while the device it
+# holds stays valid as long as it is used; handing it out again now and then
+# keeps a browser in use signed in.
+_COOKIE_REFRESH_INTERVAL = 86400
+_cookie_given_at: dict = {}
+
+
+def _set_auth_cookie(token: str) -> None:
+    from channel.web.core import devices
+
+    web.setcookie("cow_auth_token", token, expires=_session_expire_seconds(),
+                  path="/", httponly=True, samesite="Lax")
+    _cookie_given_at[devices.device_id_of(token)] = time.time()
+
+
+def _refresh_auth_cookie(token: str) -> None:
+    from channel.web.core import devices
+
+    given = _cookie_given_at.get(devices.device_id_of(token), 0)
+    if time.time() - given >= _COOKIE_REFRESH_INTERVAL:
+        _set_auth_cookie(token)
+
+
 def _check_auth():
     """Return True if request is authenticated or password not enabled."""
     if not _is_password_enabled():
         return True
-    for token in (_get_cookie_token(), _get_bearer_token(), _get_query_token()):
-        if _verify_auth_token(token) or _verify_device_token(token):
+    cookie = _get_cookie_token()
+    for token in (cookie, _get_bearer_token(), _get_query_token()):
+        if _verify_auth_token(token):
+            return True
+        if _verify_device_token(token):
+            if token == cookie:
+                _refresh_auth_cookie(token)
             return True
     return False
 

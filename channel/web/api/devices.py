@@ -20,7 +20,7 @@ from channel.web.api.integrations import is_loopback_host, lan_urls, public_url
 from channel.web.core import devices, identity, local_control, pairing
 from channel.web.core._common import (
     _client_ip, _current_device_token, _is_password_enabled, _qr_data_uri,
-    _require_auth, _session_expire_seconds,
+    _require_auth, _set_auth_cookie,
 )
 from channel.web.core.request_guard import cross_site_origin
 from common.deployment import is_managed
@@ -136,8 +136,7 @@ def issue_password_device(info=None) -> str:
     header instead."""
     name, platform, version = describe_client(info)
     device, token = devices.add(name, platform, version, ip=_client_ip(), via="password")
-    web.setcookie("cow_auth_token", token, expires=_session_expire_seconds(),
-                  path="/", httponly=True, samesite="Lax")
+    _set_auth_cookie(token)
     logger.info(f"[Devices] {device['name']} ({device['platform']}) signed in with the password")
     return token
 

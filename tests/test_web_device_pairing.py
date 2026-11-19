@@ -482,6 +482,36 @@ def test_signing_in_with_the_password_is_a_device_too(env):
     assert listed["instance"]["name"] and listed["password_set"] is True
 
 
+def test_a_browser_in_use_gets_its_cookie_again_once_a_day(env, monkeypatch):
+    from channel.web.core import _common
+
+    monkeypatch.setattr(_common, "_cookie_given_at", {})
+    app = _app()
+    _, body = _call(app, "/auth/login", "POST", {"password": PASSWORD})
+    cookie = {"Cookie": f"cow_auth_token={body['token']}"}
+    res, _ = _call(app, "/api/sessions", headers=cookie)
+    assert "Set-Cookie" not in res.headers
+
+    clock = _common.time.time() + 86400 + 1
+    monkeypatch.setattr(_common.time, "time", lambda: clock)
+    res, _ = _call(app, "/api/sessions", headers=cookie)
+    assert f"cow_auth_token={body['token']}" in res.headers.get("Set-Cookie", "")
+    assert "HttpOnly" in res.headers["Set-Cookie"]
+    res, _ = _call(app, "/api/sessions", headers=cookie)
+    assert "Set-Cookie" not in res.headers
+
+
+def test_a_header_token_never_sets_a_cookie(env, monkeypatch):
+    from channel.web.core import _common
+
+    monkeypatch.setattr(_common, "_cookie_given_at", {})
+    app = _app()
+    token = _owner_token(app)
+    _common._cookie_given_at.clear()
+    res, _ = _call(app, "/api/sessions", token=token)
+    assert "Set-Cookie" not in res.headers
+
+
 def test_a_browser_is_named_after_itself(env):
     app = _app()
     ua = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
