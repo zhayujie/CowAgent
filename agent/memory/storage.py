@@ -1038,25 +1038,44 @@ class MemoryStorage:
             params.append(f'%{word.lower()}%')
         
         where_clause = ' OR '.join(like_conditions)
-        params.extend(scopes)
-        
+
+        columns = "id, path, start_line, end_line, text, source, user_id"
+        # With several words, rank by how many each row matches before the
+        # LIMIT, or the best rows can be cut. Ordering forces a full scan, so a
+        # single word keeps the early-exit LIMIT: every row ranks the same.
+        if len(words) > 1:
+            score_expr = " + ".join(
+                "(CASE WHEN LOWER(text) LIKE ? THEN 1 ELSE 0 END)" for _ in words
+            )
+            select = f"SELECT {columns}, ({score_expr}) AS matched_words"
+            order_by = "ORDER BY matched_words DESC"
+            score_params = [f'%{word.lower()}%' for word in words]
+        else:
+            select = f"SELECT {columns}"
+            order_by = ""
+            score_params = []
+
         if user_id:
             sql_query = f"""
-                SELECT * FROM chunks
+                {select}
+                FROM chunks
                 WHERE ({where_clause})
                 AND scope IN ({scope_placeholders})
                 AND (scope = 'shared' OR user_id = ?)
+                {order_by}
                 LIMIT ?
             """
-            params.extend([user_id, limit])
+            params = score_params + params + scopes + [user_id, limit]
         else:
             sql_query = f"""
-                SELECT * FROM chunks
+                {select}
+                FROM chunks
                 WHERE ({where_clause})
                 AND scope IN ({scope_placeholders})
+                {order_by}
                 LIMIT ?
             """
-            params.append(limit)
+            params = score_params + params + scopes + [limit]
         
         try:
             rows = self.conn.execute(sql_query, params).fetchall()
