@@ -33,6 +33,7 @@ from channel.dingtalk.dingtalk_stream_card import (
 )
 from common.expired_dict import ExpiredDict
 from common.log import logger
+from common.media_duration import get_video_duration_ms
 from common.singleton import singleton
 from common.time_check import time_checker
 from config import conf
@@ -974,9 +975,19 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
                 logger.info(f"[DingTalk] Sending video: {reply.content}")
                 media_id = self.upload_media(reply.content, media_type="video")
                 if media_id:
+                    # duration 必填且单位是秒（仅接收方向的视频消息和 sampleAudio
+                    # 用毫秒）。硬编码 30 会让播放器把每条视频都当 30 秒显示；
+                    # ffprobe 探测实际时长（毫秒）换算成秒，取不到时保底 30。
+                    # 仅探测本地文件：不希望 ffprobe 绕过 upload_media 的受控
+                    # 下载去抓远程内容。
+                    duration_s = "30"
+                    if not file_path.lower().startswith(("http://", "https://")):
+                        probed_ms = get_video_duration_ms(file_path)
+                        if probed_ms:
+                            duration_s = str(max(1, round(probed_ms / 1000)))
                     # 发送视频消息
                     msg_param = {
-                        "duration": "30",  # TODO: 获取实际视频时长
+                        "duration": duration_s,
                         "videoMediaId": media_id,
                         "videoType": "mp4",
                         "height": "400",
