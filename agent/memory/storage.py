@@ -1039,33 +1039,40 @@ class MemoryStorage:
         
         where_clause = ' OR '.join(like_conditions)
 
-        # Rank before the LIMIT, in SQL: the previous shape applied LIMIT to
-        # an unordered scan, so a chunk matching three query words could be
-        # cut in favour of single-word matches that merely sat earlier in the
-        # table — the Python-side scoring below never saw the best rows.
-        score_expr = " + ".join(
-            "(CASE WHEN LOWER(text) LIKE ? THEN 1 ELSE 0 END)" for _ in words
-        )
-        score_params = [f'%{word.lower()}%' for word in words]
+        columns = "id, path, start_line, end_line, text, source, user_id"
+        # With several words, rank by how many each row matches before the
+        # LIMIT, or the best rows can be cut. Ordering forces a full scan, so a
+        # single word keeps the early-exit LIMIT: every row ranks the same.
+        if len(words) > 1:
+            score_expr = " + ".join(
+                "(CASE WHEN LOWER(text) LIKE ? THEN 1 ELSE 0 END)" for _ in words
+            )
+            select = f"SELECT {columns}, ({score_expr}) AS matched_words"
+            order_by = "ORDER BY matched_words DESC"
+            score_params = [f'%{word.lower()}%' for word in words]
+        else:
+            select = f"SELECT {columns}"
+            order_by = ""
+            score_params = []
 
         if user_id:
             sql_query = f"""
-                SELECT *, ({score_expr}) AS matched_words
+                {select}
                 FROM chunks
                 WHERE ({where_clause})
                 AND scope IN ({scope_placeholders})
                 AND (scope = 'shared' OR user_id = ?)
-                ORDER BY matched_words DESC
+                {order_by}
                 LIMIT ?
             """
             params = score_params + params + scopes + [user_id, limit]
         else:
             sql_query = f"""
-                SELECT *, ({score_expr}) AS matched_words
+                {select}
                 FROM chunks
                 WHERE ({where_clause})
                 AND scope IN ({scope_placeholders})
-                ORDER BY matched_words DESC
+                {order_by}
                 LIMIT ?
             """
             params = score_params + params + scopes + [limit]
