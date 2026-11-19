@@ -1155,7 +1155,7 @@ class AgentStreamExecutor:
                             
                             # Remember position so we can remove the injected prompt later
                             prompt_insert_idx = len(self.messages)
-                            
+
                             # 添加一条消息，明确要求回复用户
                             self.messages.append({
                                 "role": "user",
@@ -1164,19 +1164,24 @@ class AgentStreamExecutor:
                                     "text": self._explicit_response_prompt()
                                 }]
                             })
-                            
-                            # 再调用一次 LLM
-                            assistant_msg, tool_calls, stop_reason = self._call_llm_stream(retry_on_empty=False)
+
+                            # 再调用一次 LLM。移除注入提示词必须在 finally 里：
+                            # 调用抛异常（重试耗尽、鉴权失败、用户取消）时，
+                            # 合成的 user 消息会随 executor.messages 一起被上层
+                            # 持久化，之后像真实用户输入一样被回放、进入记忆蒸馏。
+                            # max-turns 摘要路径（见下）已有同样的 finally 保证。
+                            try:
+                                assistant_msg, tool_calls, stop_reason = self._call_llm_stream(retry_on_empty=False)
+                            finally:
+                                # Remove the injected prompt from history so it doesn't
+                                # appear as a user message in persisted conversations.
+                                # _call_llm_stream may have appended an assistant message
+                                # after the prompt, so we locate and remove only the prompt.
+                                if (prompt_insert_idx < len(self.messages)
+                                        and self.messages[prompt_insert_idx].get("role") == "user"):
+                                    self.messages.pop(prompt_insert_idx)
+                                    logger.debug("[Agent] Removed injected explicit-response prompt from message history")
                             final_response = assistant_msg
-                            
-                            # Remove the injected prompt from history so it doesn't
-                            # appear as a user message in persisted conversations.
-                            # _call_llm_stream may have appended an assistant message
-                            # after the prompt, so we locate and remove only the prompt.
-                            if (prompt_insert_idx < len(self.messages)
-                                    and self.messages[prompt_insert_idx].get("role") == "user"):
-                                self.messages.pop(prompt_insert_idx)
-                                logger.debug("[Agent] Removed injected explicit-response prompt from message history")
                             
                             # If LLM responded with tool_calls instead of text, fall through
                             # to the tool execution path below (don't break the loop).
