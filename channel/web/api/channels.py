@@ -278,6 +278,8 @@ class ChannelsHandler:
                 "instance_id": inst.instance_id,
                 "channel_type": inst.channel_type,
                 "agent_id": inst.agent_id or "",
+                "project_dir": inst.project_dir,
+                "session_namespace": inst.session_namespace,
                 # User-editable label; empty falls back client-side to the id.
                 "instance_name": inst.name or "",
                 "members": list(inst.members or []),
@@ -355,6 +357,11 @@ class ChannelsHandler:
                 channels.append(ch_info)
 
             from channel.channel_instances import MULTI_INSTANCE_READY
+            instance_views = {i["channel_type"]: i for i in self._channel_instances_view()}
+            for ch in channels:
+                view = instance_views.get(ch["name"], {})
+                ch["project_dir"] = view.get("project_dir", "")
+                ch["session_namespace"] = view.get("session_namespace", False)
             multi_agent = self._multi_agent_mode()
             payload = {
                 "status": "success",
@@ -398,6 +405,17 @@ class ChannelsHandler:
             # in which case its card has no instance_id. Disconnect/rename on
             # such a card must fall through to the legacy per-type path, or it
             # would be rejected ("instance_id is required") and never removed.
+            if action == "set_project":
+                from channel.channel_instances import get_instance, upsert_instance
+                iid = instance_id or channel_name
+                before = get_instance(conf(), iid)
+                if not before or before.channel_type != channel_name:
+                    return json.dumps({"status": "error", "message": "Channel instance not found"})
+                inst = upsert_instance(
+                    conf(), channel_type=channel_name, instance_id=iid,
+                    project_dir=body.get("project_dir", ""),
+                )
+                return json.dumps({"status": "success", "project_dir": inst.project_dir})
             is_instance_op = action in ("save", "connect") or bool(instance_id)
             if self._multi_agent_mode() and channel_name in MULTI_INSTANCE_READY and is_instance_op:
                 if action == "save":

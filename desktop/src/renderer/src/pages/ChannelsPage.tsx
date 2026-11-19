@@ -47,7 +47,7 @@ const pendingState = (ch: ChannelInfo): Pending => {
 }
 
 // An icon component that takes a `size` prop (lucide icons and our PaperPlaneIcon).
-type IconComponent = React.FC<{ size?: number }>
+type IconComponent = LucideIcon | React.FC<{ size?: number }>
 
 // Per-channel icon + accent color, mirroring the web console's FontAwesome
 // icon + Tailwind color palette (we use lucide here, with hex colors so the
@@ -711,6 +711,8 @@ const ChannelCard: React.FC<{
         <ChannelBinding channel={channel} />
       )}
 
+      {channel.active && <ChannelProject channel={channel} onChanged={onChanged} />}
+
       {/* QR-login channels with no desktop support fall back to the web console. */}
       {isQrLogin && !channel.active && !qrProvider && (
         <p className="text-xs text-content-tertiary mt-3 pl-12">{t('channels_qr_hint')}</p>
@@ -840,6 +842,58 @@ const ChannelBinding: React.FC<{ channel: ChannelInfo }> = ({ channel }) => {
       />
     </div>
   )
+}
+
+const ChannelProject: React.FC<{channel: ChannelInfo; onChanged: () => void}> = ({channel, onChanged}) => {
+  const en = getLang() === 'en'
+  const [path, setPath] = useState(channel.project_dir || '')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [listing, setListing] = useState<Awaited<ReturnType<typeof apiClient.browseChannelProject>> | null>(null)
+  useEffect(() => { setPath(channel.project_dir || '') }, [channel.project_dir])
+  const browse = async (dir: string) => {
+    try {
+      setError('')
+      const data = await apiClient.browseChannelProject(dir)
+      if (data.status !== 'success') throw new Error(data.message)
+      setListing(data)
+    } catch (e) { setError(String(e)) }
+  }
+  const save = async () => {
+    if (path.trim() && !channel.session_namespace && !await askConfirm({
+      titleKey: 'channels_project_isolate_title',
+      msgKey: 'channels_project_isolate_message',
+      okKey: 'channels_save',
+      tone: 'primary',
+    })) return
+    setBusy(true)
+    setError('')
+    try {
+      const data = await apiClient.setChannelProject(channel.name, channel.instance_id || '', path)
+      if (data.status !== 'success') throw new Error(data.message)
+      onChanged()
+    } catch (e) { setError(String(e)) }
+    finally { setBusy(false) }
+  }
+  return <div className="mt-4 pt-4 border-t border-subtle space-y-2">
+    <label className="text-xs text-content-secondary">{en ? 'Default project directory' : '默认项目目录'}</label>
+    <div className="flex gap-2">
+      <input className="flex-1 min-w-0 bg-transparent border rounded px-2 text-sm" value={path} onChange={e => setPath(e.target.value)} placeholder={en ? 'Empty: Agent workspace' : '留空使用 Agent 工作区'} />
+      <Btn disabled={busy} onClick={() => void browse(path)}>{en ? 'Browse' : '选择目录'}</Btn>
+      <Btn disabled={busy} onClick={() => void save()}>{t('channels_save')}</Btn>
+    </div>
+    <p className="text-xs text-content-tertiary">{en ? 'Server-side path. Session selection takes priority. Not a filesystem sandbox.' : '运行 CowAgent 的机器上的目录；会话显式选择优先。不限制文件访问权限。'}</p>
+    {listing && <div className="border rounded p-2 space-y-2">
+      <div className="text-xs break-all">{listing.path}</div>
+      <div className="flex gap-2">
+        <Btn onClick={() => void browse(listing.parent || '')}>{en ? 'Up' : '上一级'}</Btn>
+        <Btn onClick={() => setListing(null)}>{en ? 'Cancel' : '取消'}</Btn>
+        <Btn disabled={listing.path === '__DRIVES__'} onClick={() => {setPath(listing.path); setListing(null)}}>{en ? 'Select here' : '选择此目录'}</Btn>
+      </div>
+      <div className="max-h-48 overflow-auto">{listing.dirs.map(dir => <button type="button" key={dir.path} className="block text-sm p-1" onClick={() => void browse(dir.path)}>{dir.name}</button>)}</div>
+    </div>}
+    {error && <p role="alert" className="text-xs text-red-500">{error}</p>}
+  </div>
 }
 
 const FieldRow: React.FC<{

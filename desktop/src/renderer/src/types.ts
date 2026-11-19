@@ -928,6 +928,8 @@ export interface ChannelInfo {
   // User-editable display name for this instance (e.g. "微信2"); empty falls back
   // to the instance id. Present only on per-instance cards (multi-Agent mode).
   instance_name?: string
+  project_dir?: string
+  session_namespace?: boolean
 }
 
 // The full /api/channels response. Legacy single-Agent installs only populate

@@ -540,6 +540,7 @@ class ChatChannel(Channel):
     _BYPASS_QUEUE_COMMANDS = ("/cancel",)
 
     def produce(self, context: Context):
+        self.prepare_project_context(context)
         session_id = context["session_id"]
         try:
             from bridge.bridge import Bridge
