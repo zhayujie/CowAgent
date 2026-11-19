@@ -1,11 +1,9 @@
 # encoding:utf-8
 """The browser navigate action must re-validate the URL the browser landed on.
 
-``page.goto`` follows redirects on its own, so a model-supplied public URL
-can bounce the browser into a link-local / cloud-metadata address. The entry
-URL is validated -- ``url_safety`` spells out the contract: "validating only
-the original URL leaves the redirect hop unguarded" -- but the final one was
-not, and the auto-snapshot handed that page's content straight to the model.
+``page.goto`` follows redirects, so a public URL can bounce the browser into a
+link-local / cloud-metadata address. The final URL is checked, and on a refusal
+the browser leaves the page so a later snapshot cannot read it either.
 """
 
 from agent.tools.browser.browser_tool import BrowserTool
@@ -16,19 +14,23 @@ SECRET = "ami-id: ami-0abcdef1234567890\nrole: prod"
 
 
 class _Service:
-    """Stands in for BrowserService: reports a final URL, snapshots on demand."""
+    """Stands in for BrowserService: follows one redirect, snapshots the current page."""
 
     def __init__(self, final_url, snapshot=SECRET):
         self._final_url = final_url
         self._snapshot = snapshot
+        self.current = ""
+        self.visited = []
         self.snapshot_called = False
 
     def navigate(self, url, timeout=None):
-        return {"url": self._final_url, "title": "t", "status": 200}
+        self.visited.append(url)
+        self.current = url if url == "about:blank" else self._final_url
+        return {"url": self.current, "title": "t", "status": 200}
 
     def snapshot(self):
         self.snapshot_called = True
-        return self._snapshot
+        return "" if self.current == "about:blank" else self._snapshot
 
 
 def _tool(monkeypatch, service):
@@ -48,6 +50,16 @@ def test_navigate_rechecks_the_url_the_browser_landed_on(monkeypatch):
     # The snapshot of the redirected page must not reach the model.
     assert not service.snapshot_called
     assert SECRET not in str(result.result)
+
+
+def test_a_snapshot_after_a_refused_redirect_cannot_read_the_page(monkeypatch):
+    service = _Service(METADATA)
+    tool = _tool(monkeypatch, service)
+
+    tool._do_navigate({"url": PUBLIC})
+
+    assert service.visited[-1] == "about:blank"
+    assert SECRET not in service.snapshot()
 
 
 def test_navigate_without_a_redirect_still_snapshots(monkeypatch):

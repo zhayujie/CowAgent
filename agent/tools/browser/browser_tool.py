@@ -328,11 +328,8 @@ class BrowserTool(BaseTool):
         result = service.navigate(url, timeout=timeout)
         if "error" in result:
             return ToolResult.fail(result["error"])
-        # page.goto follows redirects on its own, so the address the browser
-        # landed on may differ from the one validated above. Re-check the final
-        # URL before the auto-snapshot hands its content to the model: the
-        # url_safety contract is that every hop of a model-supplied URL is
-        # validated, not only the first one.
+        # page.goto follows redirects, so the page it landed on is checked too.
+        # On a refusal the browser leaves it, or the next snapshot would read it.
         final_url = result.get("url") or ""
         if (
             final_url
@@ -343,6 +340,10 @@ class BrowserTool(BaseTool):
             try:
                 self._validate_url_safe(final_url)
             except ValueError as e:
+                try:
+                    service.navigate("about:blank")
+                except Exception:
+                    pass
                 return ToolResult.fail(f"Error: {e}")
         # Auto-snapshot after navigation so the agent gets page content in one call
         snapshot_text = service.snapshot()
