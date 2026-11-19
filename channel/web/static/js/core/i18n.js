@@ -2567,6 +2567,7 @@ function applyI18n() {
     if (websiteLink) websiteLink.href = currentLang === 'zh' ? 'https://cowagent.cn' : 'https://cowagent.ai';
     // Workspace panel content is rendered by JS, not data-i18n attributes.
     if (typeof relocalizeWorkspacePanel === 'function') relocalizeWorkspacePanel();
+    if (typeof renderEnvVariables === 'function') renderEnvVariables();
 }
 
 // Single entry point for switching language. Updates the in-memory language,

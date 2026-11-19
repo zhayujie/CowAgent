@@ -22,7 +22,7 @@
 
                             <!-- Tabs: 基础配置 / 模型配置 / 集成配置 -->
                             <div class="flex items-center justify-between gap-3 mb-6">
-                                <div class="flex items-center bg-slate-100 dark:bg-white/10 rounded-lg p-0.5 w-max">
+                                <div class="flex items-center bg-slate-100 dark:bg-white/10 rounded-lg p-0.5 max-w-full overflow-x-auto whitespace-nowrap">
                                     <button id="config-tab-basic" onclick="switchConfigTab('basic')"
                                             class="config-tab px-4 py-1.5 rounded-md text-xs font-medium cursor-pointer transition-colors duration-150 active">
                                         <i class="fas fa-sliders mr-1.5"></i><span data-i18n="settings_tab_basic">基础配置</span>
@@ -35,8 +35,14 @@
                                             class="config-tab px-4 py-1.5 rounded-md text-xs font-medium cursor-pointer transition-colors duration-150">
                                         <i class="fas fa-plug mr-1.5"></i><span data-i18n="settings_tab_integrations">集成配置</span>
                                     </button>
+                                    <button id="config-tab-environment" onclick="switchConfigTab('environment')"
+                                            class="config-tab px-4 py-1.5 rounded-md text-xs font-medium cursor-pointer transition-colors duration-150">
+                                        <i class="fas fa-key mr-1.5"></i><span data-i18n="env_title">环境变量</span>
+                                    </button>
                                 </div>
                             </div>
+
+<!--#include templates/views/environment.html-->
 
                             <!-- Panel: 基础配置 -->
                             <div id="config-panel-basic" class="grid gap-6">
