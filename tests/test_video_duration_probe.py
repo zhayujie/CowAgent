@@ -65,12 +65,21 @@ class TestDingTalkUsesTheProbe(unittest.TestCase):
         incoming = SimpleNamespace()
         context["msg"] = SimpleNamespace(is_group=False, incoming_message=incoming,
                                          robot_code="robot-1")
-        reply = Reply(ReplyType.VIDEO, os.devnull)
-        with patch.object(mod, "get_video_duration_ms", lambda path: 95000):
-            ch.send(reply, context)
 
-        self.assertEqual(len(sent), 1)
-        self.assertEqual(sent[0]["duration"], "95000")
+        def _send(path, probed_ms):
+            reply = Reply(ReplyType.VIDEO, path)
+            with patch.object(mod, "get_video_duration_ms", lambda p: probed_ms):
+                ch.send(reply, context)
+            return sent.pop()
+
+        # The unit is seconds: a 95s clip reports "95", not 95000.
+        self.assertEqual(_send(os.devnull, 95000)["duration"], "95")
+        # Sub-second clips round up to at least 1s rather than reporting "0".
+        self.assertEqual(_send(os.devnull, 400)["duration"], "1")
+        # A failed probe keeps the legacy 30s fallback.
+        self.assertEqual(_send(os.devnull, 0)["duration"], "30")
+        # Remote URLs are not probed at all (ffprobe must not fetch them).
+        self.assertEqual(_send("https://cdn.example.com/clip.mp4", 95000)["duration"], "30")
 
 
 if __name__ == "__main__":
