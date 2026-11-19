@@ -36,6 +36,9 @@ import tempfile
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
+from agent.permission.powershell import POSIX_NAMED_ALIASES as _PWSH_NATIVE_NAMES
+from agent.permission.powershell import write_targets as _powershell_write_targets
+
 from common.deployment import is_desktop
 
 READ_ONLY = "read-only"
@@ -171,6 +174,11 @@ _READ_ONLY_COMMANDS = frozenset({
     "dir", "findstr", "where", "ver", "systeminfo", "tasklist", "chdir", "cd",
 })
 
+_PWSH_READ_ONLY_COMMANDS = frozenset({
+    "get-content", "gc", "get-childitem", "gci", "select-string", "sls",
+    "get-item", "test-path",
+})
+
 # Allowlisted read-only commands that write a file through a flag rather than
 # a shell redirect (which is refused separately).
 _READ_ONLY_WRITE_FORMS = {
@@ -294,6 +302,30 @@ _INTO_DIRECTORY_COMMANDS = frozenset({
 
 # Privilege escalation is out of scope for every gated mode.
 _ESCALATION_COMMANDS = frozenset({"sudo", "doas", "su", "runas", "pkexec"})
+
+# PowerShell can start an elevated child without spelling `runas` as the
+# command. Refuse the explicit Verb=RunAs form in every gated mode.
+_PWSH_ELEVATION_RE = re.compile(
+    r"(?is)\b(?:Start-Process|saps|start)\b(?:(?![;&|\n]).)*?\s-Verb(?:\s+|\s*:\s*)['\"]?RunAs\b"
+)
+# Shells the bash tool can run on Windows; both treat a backslash literally.
+_WINDOWS_SHELLS = frozenset({"pwsh", "cmd"})
+
+# Slash options belong to these CMD builtins. External programs can use a
+# forward slash in a rooted path, so keep their arguments intact.
+_CMD_BUILTIN_SWITCHES = {
+    "copy": {"/?", "/a", "/b", "/d", "/n", "/v", "/y", "/-y", "/z"},
+    "move": {"/?", "/y", "/-y"},
+    "del": {"/?", "/p", "/f", "/s", "/q", "/a"},
+    "erase": {"/?", "/p", "/f", "/s", "/q", "/a"},
+    "rd": {"/?", "/s", "/q"},
+    "rmdir": {"/?", "/s", "/q"},
+    "md": {"/?"},
+    "mkdir": {"/?"},
+    "ren": {"/?"},
+    "rename": {"/?"},
+}
+_CMD_DELETE_ATTRIBUTES = re.compile(r"/a:?(?:-?[adilorhs])+")
 
 # Wrappers that run another command; the real command follows.
 _WRAPPER_COMMANDS = frozenset({
@@ -525,9 +557,8 @@ def _positional_paths(args: Sequence[str]) -> List[str]:
 
 def _real(path: str, cwd: Optional[str]) -> str:
     expanded = os.path.expanduser(os.path.expandvars(path))
-    if not os.path.isabs(expanded):
-        expanded = os.path.join(cwd or os.getcwd(), expanded)
-    return os.path.realpath(expanded)
+    # In Windows shells a rooted path without a drive uses the shell's drive.
+    return os.path.realpath(os.path.join(cwd or os.getcwd(), expanded))
 
 
 def _normalize_roots(roots: Optional[Iterable[str]], cwd: Optional[str]) -> List[str]:
@@ -546,7 +577,10 @@ def _normalize_roots(roots: Optional[Iterable[str]], cwd: Optional[str]) -> List
 
 
 def _inside_roots(path: str, roots: Sequence[str], cwd: Optional[str]) -> bool:
-    real = _real(path, cwd)
+    return _resolved_inside_roots(_real(path, cwd), roots)
+
+
+def _resolved_inside_roots(real: str, roots: Sequence[str]) -> bool:
     for root in roots:
         try:
             if os.path.commonpath([root, real]) == root:
@@ -643,6 +677,7 @@ def check_tool_call(
     cwd: Optional[str] = None,
     write_roots: Optional[Iterable[str]] = None,
     protected_paths: Optional[Iterable[str]] = None,
+    shell: Optional[str] = None,
 ) -> Decision:
     """Decide whether ``tool_name`` may run with ``arguments`` under ``mode``.
 
@@ -654,6 +689,9 @@ def check_tool_call(
         write_roots: directories writes are confined to in workspace-write mode.
             ``cwd`` and the system temp dir are always included.
         protected_paths: files workspace-write refuses even inside the roots.
+        shell: the Windows shell the bash tool runs (``"pwsh"`` or ``"cmd"``),
+            or None for a POSIX shell. Windows shells keep backslashes literal,
+            and pwsh binds aliases such as ``rm`` and ``cp`` as cmdlets.
 
     Returns:
         A :class:`Decision` whose ``reason`` is written for the model: what was
@@ -667,11 +705,11 @@ def check_tool_call(
     args = arguments if isinstance(arguments, dict) else {}
 
     if mode == READ_ONLY:
-        return _check_read_only(tool_name, args)
-    return _check_workspace_write(tool_name, args, cwd, write_roots, protected_paths)
+        return _check_read_only(tool_name, args, shell)
+    return _check_workspace_write(tool_name, args, cwd, write_roots, protected_paths, shell)
 
 
-def _check_read_only(tool_name: str, args: Dict[str, Any]) -> Decision:
+def _check_read_only(tool_name: str, args: Dict[str, Any], shell: Optional[str]) -> Decision:
     if tool_name in _FILE_WRITE_TOOLS:
         path = str(args.get("path") or "")
         return _deny(
@@ -696,7 +734,7 @@ def _check_read_only(tool_name: str, args: Dict[str, Any]) -> Decision:
         return ALLOW
 
     if tool_name == "bash":
-        return _check_bash_read_only(args)
+        return _check_bash_read_only(args, shell)
 
     if tool_name not in _KNOWN_TOOLS and _MUTATING_NAME_RE.search(tool_name):
         return _deny(
@@ -714,6 +752,7 @@ def _check_workspace_write(
     cwd: Optional[str],
     write_roots: Optional[Iterable[str]],
     protected_paths: Optional[Iterable[str]] = None,
+    shell: Optional[str] = None,
 ) -> Decision:
     roots = _normalize_roots(write_roots, cwd)
     protected = _normalize_protected(protected_paths)
@@ -732,7 +771,7 @@ def _check_workspace_write(
         return ALLOW
 
     if tool_name == "bash":
-        return _check_bash_workspace_write(args, cwd, roots, protected)
+        return _check_bash_workspace_write(args, cwd, roots, protected, shell)
 
     return ALLOW
 
@@ -774,19 +813,21 @@ def _read_only_write_form(
     return None
 
 
-def _check_bash_read_only(args: Dict[str, Any]) -> Decision:
+def _check_bash_read_only(args: Dict[str, Any], shell: Optional[str]) -> Decision:
     command = str(args.get("command") or "").strip()
     if not command:
         # Reading from or killing a background job the agent itself started.
         return ALLOW
 
-    segments = _parse_segments(command)
+    segments = _parse_segments(command.replace("\\", "\\\\") if shell in _WINDOWS_SHELLS else command)
     if segments is None:
         return _deny(
             "this command could not be parsed, and an unparsable command cannot be "
             "confirmed read-only.",
             READ_ONLY,
         )
+    if _PWSH_ELEVATION_RE.search(command):
+        return _deny("'Start-Process -Verb RunAs' escalates privileges.", READ_ONLY)
 
     for tokens in segments:
         real_targets = [t for t in _redirect_targets(tokens) if t not in _NULL_SINKS]
@@ -814,6 +855,8 @@ def _check_bash_read_only(args: Dict[str, Any]) -> Decision:
                 f"session cannot run it.",
                 READ_ONLY,
             )
+        if shell == "pwsh" and tokens[0].lower() in _PWSH_READ_ONLY_COMMANDS:
+            continue
         if name not in _READ_ONLY_COMMANDS:
             return _deny(
                 f"'{name}' is not on the read-only command allowlist, so it may change "
@@ -927,19 +970,58 @@ def _workspace_write_paths(name: str, args: Sequence[str]) -> List[str]:
 def _check_bash_workspace_write(
     args: Dict[str, Any], cwd: Optional[str], roots: Sequence[str],
     protected: frozenset = frozenset(),
+    shell: Optional[str] = None,
 ) -> Decision:
     command = str(args.get("command") or "").strip()
     if not command:
         return ALLOW
 
-    segments = _parse_segments(command)
+    if _PWSH_ELEVATION_RE.search(command):
+        return _deny("'Start-Process -Verb RunAs' escalates privileges.", WORKSPACE_WRITE)
+    # Check PowerShell paths before POSIX tokenization can alter backslashes
+    # or split PowerShell-only quoting and argument syntax. CMD has neither
+    # cmdlets nor PowerShell quoting, and `sc` there is the service tool.
+    shell_cwd = cwd or os.getcwd()
+    pwsh_targets = ()
+    if shell != "cmd":
+        location, pwsh_targets = _powershell_write_targets(
+            command, shell_cwd, powershell=shell == "pwsh",
+        )
+        if shell == "pwsh":
+            shell_cwd = location
+    for name, paths in pwsh_targets:
+        for path in paths:
+            if not path:
+                if name == "redirect":
+                    return _deny("the command redirects to a path that cannot be checked statically.", WORKSPACE_WRITE)
+                return _deny(f"'{name}' has no statically checkable destination path.", WORKSPACE_WRITE)
+            if path in _NULL_SINKS:
+                continue
+            # The lexer already resolved string quoting. PowerShell does not
+            # expand percent-delimited variables or variables in single quotes.
+            real = os.path.realpath(path)
+            if os.path.normcase(real) in protected:
+                return _deny_protected(path)
+            if not _resolved_inside_roots(real, roots):
+                if name == "redirect":
+                    return _deny(
+                        f"the command writes to '{path}', outside the writable area ({_roots_hint(roots)}).",
+                        WORKSPACE_WRITE,
+                    )
+                return _deny(
+                    f"'{name}' would change '{path}', outside the writable area ({_roots_hint(roots)}).",
+                    WORKSPACE_WRITE,
+                )
+
+    # A backslash is a path separator in cmd and pwsh, not an escape. Doubling
+    # it keeps `del C:\x` from lexing as the drive-relative `C:x`.
+    segments = _parse_segments(command.replace("\\", "\\\\") if shell in _WINDOWS_SHELLS else command)
     if segments is None:
         # This mode is explicitly best effort, so an unparsable line goes to the
         # shell rather than blocking work that is probably fine.
         return ALLOW
-
     for tokens in segments:
-        for target in _redirect_targets(tokens):
+        for target in _redirect_targets(tokens) if shell != "pwsh" else ():
             if target in _NULL_SINKS:
                 continue
             if _is_protected(target, protected, cwd):
@@ -958,13 +1040,27 @@ def _check_bash_workspace_write(
             return _deny(f"'{name}' escalates privileges.", WORKSPACE_WRITE)
         if name not in _PATH_MUTATING_COMMANDS:
             continue
+        if shell == "pwsh" and name in _PWSH_NATIVE_NAMES and tokens[0].lower() == name:
+            # The PowerShell pass bound this alias as a cmdlet. Keep the
+            # generic checks for explicit native executables such as cp.exe.
+            continue
+        if shell == "cmd" and tokens[0].lower() in _CMD_BUILTIN_SWITCHES:
+            switches = _CMD_BUILTIN_SWITCHES[name]
+            attributes = _CMD_DELETE_ATTRIBUTES if name in {"del", "erase"} else None
+            rest = [arg for arg in rest if arg.lower() not in switches
+                    and not (attributes and attributes.fullmatch(arg.lower()))]
         if name == "sed" and _read_only_write_form(name, rest) is None:
             continue
 
         paths = _workspace_write_paths(name, rest)
         if name == "dd":
             paths = [a.split("=", 1)[1] for a in rest if a.startswith("of=")]
-        hit = _protected_operand(name, paths, protected, cwd)
+        if shell_cwd is None and any(
+            path not in _NULL_SINKS and (not os.path.isabs(path) or (os.name == "nt" and not os.path.splitdrive(path)[0]))
+            for path in paths
+        ):
+            return _deny(f"'{name}' has no statically checkable destination path.", WORKSPACE_WRITE)
+        hit = _protected_operand(name, paths, protected, shell_cwd)
         if hit:
             return _deny_protected(hit)
         if name in _DESTINATION_ONLY_COMMANDS:
@@ -973,7 +1069,7 @@ def _check_bash_workspace_write(
         for path in paths:
             if not path or path in _NULL_SINKS:
                 continue
-            if not _inside_roots(path, roots, cwd):
+            if not _inside_roots(path, roots, shell_cwd):
                 return _deny(
                     f"'{name}' would change '{path}', outside the writable area "
                     f"({_roots_hint(roots)}). Reading it is still allowed.",

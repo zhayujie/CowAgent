@@ -1,0 +1,23 @@
+<div id="bash-settings-overlay" class="hidden fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+    <section role="dialog" aria-modal="true" aria-labelledby="bash-settings-title" class="bg-panel rounded-2xl shadow-xl w-full max-w-lg p-6">
+        <div class="flex items-center justify-between mb-4">
+            <h3 id="bash-settings-title" class="font-semibold" data-i18n="bash_settings_title">命令执行设置</h3>
+            <button type="button" id="bash-settings-close" aria-label="Close">×</button>
+        </div>
+        <p class="text-sm text-slate-500 mb-3" data-i18n="bash_settings_scope">配置适用于当前 CowAgent 实例的所有 Agent，检测的是服务端执行环境。</p>
+        <p id="bash-settings-platform" class="text-sm mb-3"></p>
+        <fieldset id="bash-settings-options" class="space-y-3">
+            <legend class="text-sm font-medium mb-2" data-i18n="bash_settings_shell">Windows 命令解释器</legend>
+            <label class="flex gap-3 border border-slate-200 dark:border-white/10 rounded-lg p-3"><input type="radio" name="bash-shell" value="cmd">CMD</label>
+            <label class="flex gap-3 border border-slate-200 dark:border-white/10 rounded-lg p-3"><input type="radio" name="bash-shell" value="pwsh">PowerShell 7</label>
+        </fieldset>
+        <p id="bash-settings-detection" class="text-sm text-slate-500 mt-3" aria-live="polite"></p>
+        <a id="bash-settings-install" class="hidden text-sm text-blue-500" href="https://learn.microsoft.com/powershell/scripting/install/installing-powershell-on-windows" target="_blank" rel="noopener noreferrer" data-i18n="bash_settings_install">PowerShell 7 安装说明</a>
+        <p class="text-xs text-slate-500 mt-4" data-i18n="bash_settings_apply">保存后在后续模型请求和新启动的命令中生效，已运行的后台任务不变。</p>
+        <p id="bash-settings-error" class="text-sm text-red-500 mt-3" role="alert"></p>
+        <div class="flex justify-end gap-3 mt-5">
+            <button type="button" id="bash-settings-cancel" class="px-4 py-2 rounded-lg border border-slate-200 dark:border-white/10" data-i18n="cancel">取消</button>
+            <button type="button" id="bash-settings-save" class="px-4 py-2 rounded-lg bg-blue-500 text-white disabled:opacity-50" data-i18n="save">保存</button>
+        </div>
+    </section>
+</div>

@@ -248,6 +248,8 @@ def build_tools_schema(tools: list) -> list:
     """
     tools_schema = []
     for tool in tools or []:
+        if tool.name == "bash" and callable(getattr(tool, "refresh_runtime_config", None)):
+            tool.refresh_runtime_config()
         input_schema = tool.params
         try:
             dynamic = (tool.get_json_schema() or {}).get("parameters") or {}
@@ -1789,6 +1791,16 @@ class AgentStreamExecutor:
         # except Exception:
         #     pass
 
+        # Refresh a request-local host notice as well as the tool schema: earlier
+        # successful commands in retained history may use the previous shell.
+        request_system = self.system_prompt
+        bash_tool = (self.tools or {}).get("bash")
+        notice_fn = getattr(bash_tool, "runtime_shell_notice", None)
+        if callable(notice_fn):
+            notice = notice_fn()
+            if notice:
+                request_system = f"{request_system or ''}\n\n{notice}"
+
         # Create request
         request = LLMRequest(
             messages=messages,
@@ -1796,7 +1808,7 @@ class AgentStreamExecutor:
             stream=True,
             tools=tools_schema,
             max_tokens=self._catalog_max_output_tokens(),
-            system=self.system_prompt  # Pass system prompt separately for Claude API
+            system=request_system  # Pass system prompt separately for Claude API
         )
 
         self._emit_event("message_start", {"role": "assistant"})
@@ -2642,6 +2654,10 @@ class AgentStreamExecutor:
             mode = agent.effective_permission_mode()
             if mode == FULL_ACCESS:
                 return None
+            # The bash tool runs cmd or pwsh on Windows, which parse paths and
+            # aliases differently from a POSIX shell.
+            bash_tool = (getattr(self, "tools", None) or {}).get("bash")
+            shell = getattr(bash_tool, "windows_shell", None) if getattr(bash_tool, "_IS_WIN", False) else None
             decision = check_tool_call(
                 mode,
                 tool_name,
@@ -2649,6 +2665,7 @@ class AgentStreamExecutor:
                 cwd=agent.effective_cwd(),
                 write_roots=agent.write_roots(),
                 protected_paths=agent.protected_paths(),
+                shell=shell,
             )
             return None if decision.allowed else decision.reason
         except Exception as e:

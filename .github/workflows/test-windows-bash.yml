@@ -4,8 +4,14 @@ on:
   workflow_dispatch:
   pull_request:
     paths:
-      - "agent/tools/bash/bash.py"
-      - "tests/test_bash_streaming.py"
+      - "agent/tools/bash/**"
+      - "agent/tools/tool_manager.py"
+      - "agent/protocol/agent_stream.py"
+      - "agent/permission/**"
+      - "channel/web/api/bash_settings.py"
+      - "tests/test_bash*.py"
+      - "tests/test_permission_powershell.py"
+      - "tests/test_web_bash_settings.py"
       - ".github/workflows/test-windows-bash.yml"
 
 jobs:
@@ -28,5 +34,5 @@ jobs:
           python -m pip install pytest
           python -m pip install -r requirements.txt
 
-      - name: Run Windows Bash streaming tests
-        run: python -m pytest tests/test_bash_streaming.py -v
+      - name: Run Windows shell and settings tests
+        run: python -m pytest tests/test_bash_streaming.py tests/test_bash_shell_selection.py tests/test_bash_config_propagation.py tests/test_web_bash_settings.py tests/test_permission_powershell.py -v
