@@ -46,11 +46,11 @@ class TestNullStringArgs(unittest.TestCase):
                 self.assertNotIn("AttributeError", str(result.result))
 
     def test_null_url_and_action_report_clear_errors(self):
-        self.assertNotIn("AttributeError", str(_run(WebFetch({}), {"url": None})))
-        self.assertNotIn("AttributeError", str(_run(BrowserTool({}), {"action": None})))
+        self.assertNotIn("AttributeError", str(_run(WebFetch({}), {"url": None}).result))
+        self.assertNotIn("AttributeError", str(_run(BrowserTool({}), {"action": None}).result))
         self.assertNotIn(
             "AttributeError",
-            str(_run(BrowserTool({}), {"action": "click", "selector": None})),
+            str(_run(BrowserTool({}), {"action": "click", "selector": None}).result),
         )
 
     def test_vision_null_parameters_report_the_missing_parameter(self):
