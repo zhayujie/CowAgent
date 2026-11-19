@@ -1,5 +1,5 @@
 const zh = {
-  access_default_server_name: '云服务器',
+  access_default_server_name: '默认服务器',
   access_title: '访问地址',
   access_subtitle: '对外展示的地址，以及服务监听的地址',
   access_public_url: '展示地址',
@@ -201,7 +201,7 @@ const zh = {
 };
 
 const en: Record<keyof typeof zh, string> = {
-  access_default_server_name: 'Cloud server',
+  access_default_server_name: 'Default server',
   access_title: 'Addresses',
   access_subtitle: 'The address shown to others, and where the service listens',
   access_public_url: 'Display address',

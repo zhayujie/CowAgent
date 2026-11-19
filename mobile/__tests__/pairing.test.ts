@@ -1,7 +1,7 @@
 import {ApiError, http} from '../src/api/http';
 import {addressCandidates, parsePairLink} from '../src/api/pairing';
 import {secureStore} from '../src/storage/secureStore';
-import {describePairError, useServerStore, type ServerProfile} from '../src/store/serverStore';
+import {describeConnectError, describePairError, useServerStore, type ServerProfile} from '../src/store/serverStore';
 
 jest.mock('react-native-keychain', () => ({}));
 
@@ -115,7 +115,7 @@ it('tells a server from before pairing apart from a wrong address', async () => 
     .pair({code: 'ABCD-EFGH', urls: ['http://192.168.1.20:9899']})
     .catch(e => e);
 
-  expect(describePairError(err)).toContain('不支持配对');
+  expect(describePairError(err)).toContain('需要 2.3.0 或更高版本');
   expect(useServerStore.getState()).toMatchObject({activeId: home.id, authed: true});
 
   mockFetch({});
@@ -124,6 +124,23 @@ it('tells a server from before pairing apart from a wrong address', async () => 
     .pair({code: 'ABCD-EFGH', urls: ['http://192.168.1.20:9899']})
     .catch(e => e);
   expect(describePairError(other)).toBe('192.168.1.20:9899 上有服务在响应（HTTP 404），但不是 CowAgent。请检查端口是否填对');
+});
+
+it('refuses to sign in with the password to a server from before pairing', async () => {
+  const calls = mockFetch({
+    'http://192.168.1.20:9899/auth/check': () => ({body: {auth_required: true}}),
+    'http://192.168.1.20:9899/api/info': () => ({body: {auth_required: true}}),
+    'http://192.168.1.20:9899/auth/login': () => ({body: {status: 'success', token: 'session'}}),
+  });
+
+  const err = await useServerStore
+    .getState()
+    .connect('http://192.168.1.20:9899', 'pw')
+    .catch(e => e);
+
+  expect(describeConnectError(err)).toContain('需要 2.3.0 或更高版本');
+  expect(calls.some(c => c.url.endsWith('/auth/login'))).toBe(false);
+  expect(useServerStore.getState()).toMatchObject({activeId: home.id, authed: true});
 });
 
 it('says why an address is no CowAgent to pair with', async () => {

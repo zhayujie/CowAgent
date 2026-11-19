@@ -168,6 +168,8 @@ android {
 dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
+    // QR scanning without Play services (see CowQrScannerModule).
+    implementation("com.journeyapps:zxing-android-embedded:4.3.0")
 
     if (hermesEnabled.toBoolean()) {
         implementation("com.facebook.react:hermes-android")

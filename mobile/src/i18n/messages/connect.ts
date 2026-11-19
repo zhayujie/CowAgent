@@ -31,7 +31,7 @@ const zh = {
   connect_add_manual: '手动添加',
   connect_err_invalid_code: '配对码错误或已失效，请在电脑上重新生成',
   connect_err_locked: '尝试次数过多，请 {s} 秒后再试',
-  connect_err_outdated: '{host} 上的 CowAgent 版本过旧，还不支持配对，请升级，或改用访问密码登录',
+  connect_err_outdated: '{host} 上的 CowAgent 版本过旧，App 需要 {min} 或更高版本，请先升级',
   connect_err_unreachable_host: '连不上 {host}。请检查地址和端口是否正确、手机和电脑是否在同一网络，以及对方的 CowAgent 是否正在运行且没有只监听本机（127.0.0.1）',
   connect_err_timeout: '{host} 一直没有响应。可能被防火墙拦截，或手机和电脑不在同一网络',
   connect_err_login: '{host} 需要先登录才能访问（前面可能有一层登录网关），无法用配对码直接连接',
@@ -86,7 +86,7 @@ const en: Record<keyof typeof zh, string> = {
   connect_add_manual: 'Add manually',
   connect_err_invalid_code: 'The pairing code is wrong or has expired. Create a new one on your computer',
   connect_err_locked: 'Too many attempts. Try again in {s} seconds',
-  connect_err_outdated: 'CowAgent at {host} is too old for pairing. Upgrade it, or sign in with the access password',
+  connect_err_outdated: 'CowAgent at {host} is too old. The app needs {min} or later, so upgrade it first',
   connect_err_unreachable_host:
     "Can't reach {host}. Check the address and port, that the phone and computer are on the same network, and that CowAgent is running there and not listening on 127.0.0.1 only",
   connect_err_timeout: '{host} did not answer. A firewall may be blocking it, or the phone and computer are on different networks',

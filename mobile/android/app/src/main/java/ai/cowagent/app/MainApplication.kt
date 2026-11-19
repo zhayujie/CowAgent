@@ -2,6 +2,7 @@ package ai.cowagent.app
 
 import ai.cowagent.app.files.CowDownloadsPackage
 import ai.cowagent.app.kernel.CowKernelPackage
+import ai.cowagent.app.scan.CowQrScannerPackage
 import android.app.Application
 import com.facebook.react.PackageList
 import com.facebook.react.ReactApplication
@@ -18,6 +19,7 @@ class MainApplication : Application(), ReactApplication {
         PackageList(this).packages.apply {
           add(CowKernelPackage())
           add(CowDownloadsPackage())
+          add(CowQrScannerPackage())
         },
     )
   }

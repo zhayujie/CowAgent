@@ -3,8 +3,6 @@ import React, {useEffect, useRef, useState} from 'react';
 import {
   Linking,
   Modal,
-  PermissionsAndroid,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -23,11 +21,8 @@ export const qrScannerAvailable = true;
 
 type Access = 'checking' | 'granted' | 'denied';
 
+// Android has QrScanner.android.tsx.
 async function requestCamera(): Promise<boolean> {
-  if (Platform.OS === 'android') {
-    const res = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.CAMERA);
-    return res === PermissionsAndroid.RESULTS.GRANTED;
-  }
   const mod = TurboModuleRegistry.get<CameraKitModule>('RNCameraKitModule');
   return mod ? !!(await mod.requestDeviceCameraAuthorization()) : true;
 }

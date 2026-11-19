@@ -55,6 +55,8 @@ export function sameDevice(instanceId: string | undefined, info: Discovery | nul
 }
 
 export const DEVICE_TOKEN_PREFIX = 'cowd.';
+/** The oldest CowAgent this app works with: the first to answer discovery. */
+export const MIN_SERVER_VERSION = '2.3.0';
 const DISCOVER_TIMEOUT_MS = 4000;
 
 export function isDeviceToken(token: string | null | undefined): boolean {

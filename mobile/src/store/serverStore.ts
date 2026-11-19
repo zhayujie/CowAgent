@@ -4,6 +4,7 @@ import {ApiError, http, normalizeBaseUrl} from '../api/http';
 import {
   discover,
   isDeviceToken,
+  MIN_SERVER_VERSION,
   redeem,
   revokeToken,
   sameDevice,
@@ -156,7 +157,7 @@ export function describePairError(e: unknown): string {
     }
     const key = DISCOVER_FAILURES[reason as DiscoverFailure];
     if (key) {
-      return trf(key, {host: String(e.body?.host ?? ''), status: e.status ?? '?'});
+      return trf(key, {host: String(e.body?.host ?? ''), status: e.status ?? '?', min: MIN_SERVER_VERSION});
     }
     if (e.kind === 'network' || e.kind === 'timeout') {
       return tr('connect_err_unreachable');
@@ -187,8 +188,8 @@ function guardIdentity(profile: ServerProfile, confirmed = false) {
       if (reason === 'unreachable' || reason === 'timeout') {
         return 'unreachable';
       }
-      // Something answers there, but not as CowAgent.
-      onWrongDevice(profile);
+      // Something answers there, but not as a CowAgent this app works with.
+      onWrongDevice(profile, reason === 'outdated' ? describePairError(e) : undefined);
       return 'wrong_device';
     }
     const known = currentProfile(profile.id)?.instanceId ?? profile.instanceId;
@@ -215,7 +216,7 @@ function adoptInstanceId(id: string, instanceId: string) {
 }
 
 /** The active server's address now answers as another machine: step out to the login screen. */
-function onWrongDevice(profile: ServerProfile) {
+function onWrongDevice(profile: ServerProfile, problem?: string) {
   const {activeId, authed} = useServerStore.getState();
   if (activeId !== profile.id || !authed) {
     return;
@@ -225,8 +226,23 @@ function onWrongDevice(profile: ServerProfile) {
     authed: false,
     returnTo: null,
     loginForm: false,
-    problem: trf('connect_err_wrong_device', {name: profile.name}),
+    problem: problem ?? trf('connect_err_wrong_device', {name: profile.name}),
   });
+}
+
+/**
+ * An older CowAgent accepts the password but has no discovery, so the identity
+ * check would sign the app out a minute later: refuse it up front instead.
+ */
+async function requireCurrentServer(baseUrl: string) {
+  try {
+    await discover(baseUrl);
+  } catch (e) {
+    const reason = e instanceof ApiError ? e.body?.reason : undefined;
+    if (reason === 'outdated' || reason === 'not_cowagent') {
+      throw new ApiError('server', describePairError(e));
+    }
+  }
 }
 
 async function startRealtime(
@@ -259,6 +275,9 @@ async function signIn(
   password: string,
   identity: {id: string; name?: string; local?: boolean},
 ) {
+  if (!identity.local) {
+    await requireCurrentServer(baseUrl);
+  }
   const info: ServerInfo = await probeServer(baseUrl);
   if (!info.auth_required) {
     throw new ApiError('server', tr('login_err_no_password'));
