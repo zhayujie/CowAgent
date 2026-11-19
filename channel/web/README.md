@@ -325,6 +325,7 @@ auth), see `tests/test_web_console_routing.py`.
 | `chat/render.js` | Message DOM: user/bot bubbles, steps, voice pills, history rendering |
 | `chat/timeline.js` | Message navigator: header button listing the conversation's questions, click one to jump to it |
 | `chat/new-chat.js` | New conversation and multi-agent conversation |
+| `chat/session-status.js` | Per-session composer drafts, unread tracking, and the running / unread / draft status on session rows |
 
 ### views/ -- the management pages
 

@@ -112,6 +112,7 @@ function newChat(optimistic = true, inherit = true) {
     // Generate a fresh session and persist it so the next page load also starts clean
     sessionId = generateSessionId();
     localStorage.setItem(activeSessionStorageKey(), sessionId);
+    swapComposerDraft();
     refreshWorkspaceSelector();  // a fresh session starts on the default workspace
     refreshSessionSettings();    // ... and on the global model / permission
     if (typeof wsOnSessionSwitch === 'function') wsOnSessionSwitch();

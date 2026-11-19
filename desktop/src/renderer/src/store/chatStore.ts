@@ -5,6 +5,7 @@ import { sessionOwner } from './sessionStore'
 import { cfgFor } from './sessionSettingsStore'
 import { findAgent } from './agentStore'
 import { notifyRunDone } from '../lib/taskNotify'
+import { useUnreadStore } from './unreadStore'
 import { parseAttachmentMarkers } from '../lib/fileKind'
 import { handoffPayload } from '../lib/handoff'
 import { t } from '../i18n'
@@ -727,6 +728,7 @@ export const useChatStore = create<ChatState>((set, get) => {
           // The answer is final: free the UI now (don't wait for onerror).
           completeTurn()
           if (!stopped) {
+            useUnreadStore.getState().mark(sid)
             notifyRunDone(sid, 'done', data.content || '')
             useWorkspaceStore.getState().maybeAutoOpen()
           }
@@ -761,6 +763,7 @@ export const useChatStore = create<ChatState>((set, get) => {
             updateMsg(sid, main.id, (m) => ({ ...m, isStreaming: false }))
           } else {
             updateMsg(sid, main.id, (m) => ({ ...m, error: data.message || 'stream error', isStreaming: false }))
+            useUnreadStore.getState().mark(sid)
             notifyRunDone(sid, 'error', data.message || 'stream error')
           }
           finishStream()
@@ -982,7 +985,10 @@ export const useChatStore = create<ChatState>((set, get) => {
           patchMessages(sid, (msgs) => (keepOlder ? [...msgs.slice(0, anchor), ...uiMsgs] : uiMsgs))
           clearTimeout(followTimers[sid])
           delete followTimers[sid]
-          if (uiMsgs[uiMsgs.length - 1]?.runState === 'running') {
+          const running = uiMsgs[uiMsgs.length - 1]?.runState === 'running'
+          // A reply followed in the background (no stream here) just ended.
+          if (following && !running) useUnreadStore.getState().mark(sid)
+          if (running) {
             followTimers[sid] = setTimeout(() => {
               delete followTimers[sid]
               if (get().sessions[sid]?.isStreaming) return
@@ -1081,6 +1087,7 @@ export const useChatStore = create<ChatState>((set, get) => {
         pushRequestId: requestId,
       }
       patchMessages(sid, (msgs) => [...msgs, msg])
+      useUnreadStore.getState().mark(sid)
       return true
     },
   }
