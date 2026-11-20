@@ -27,7 +27,7 @@ import uuid
 from collections import deque
 from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
-from urllib.parse import quote, urlsplit
+from urllib.parse import quote
 
 import web
 
@@ -36,7 +36,7 @@ from channel.chat_message import ChatMessage
 from common.channel_registry import get_channel_manager
 from common.log import logger
 from common.utils import constant_time_equals
-from config import conf, get_data_root, read_config_template
+from config import conf, get_data_root, get_device_dir, read_config_template
 
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg"}
@@ -47,13 +47,14 @@ VIDEO_EXTENSIONS = {".mp4", ".webm", ".avi", ".mov", ".mkv"}
 MAX_LOCAL_IMPORT_BYTES = 512 * 1024 * 1024
 
 
-def _is_loopback_request() -> bool:
+def _is_loopback_request(env: Optional[dict] = None) -> bool:
     """True when the current request came straight from this machine.
 
     A request that went through a reverse proxy carries forwarding headers even
     if the proxy itself sits on localhost, so those disqualify it.
     """
-    env = getattr(web.ctx, "env", {}) or {}
+    if env is None:
+        env = getattr(web.ctx, "env", {}) or {}
     if env.get("HTTP_X_FORWARDED_FOR") or env.get("HTTP_X_REAL_IP"):
         return False
     addr = (env.get("REMOTE_ADDR") or "").strip()
@@ -75,7 +76,7 @@ def _can_reveal_in_file_manager() -> bool:
     return bool(has_display and shutil.which("xdg-open"))
 
 
-def _desktop_token_matches() -> bool:
+def _desktop_token_matches(env: Optional[dict] = None) -> bool:
     """Whether the request carries the secret the desktop shell handed us.
 
     The shell generates a random token per launch and passes it in via
@@ -87,7 +88,8 @@ def _desktop_token_matches() -> bool:
     expected = os.environ.get("COW_DESKTOP_TOKEN", "")
     if not expected:
         return False
-    env = getattr(web.ctx, "env", {}) or {}
+    if env is None:
+        env = getattr(web.ctx, "env", {}) or {}
     provided = env.get("HTTP_X_COW_DESKTOP_TOKEN", "")
     return bool(provided) and constant_time_equals(provided, expected)
 
@@ -235,11 +237,13 @@ def _client_ip() -> str:
     env = getattr(web.ctx, "env", {}) or {}
     addr = (env.get("REMOTE_ADDR") or "").strip()
     # Forwarding headers are only believed from a proxy on this machine;
-    # anyone else could set them to dodge the per-client limits.
+    # anyone else could set them to dodge the per-client limits. Even then
+    # only what the proxy wrote counts: X-Real-IP, or the last X-Forwarded-For
+    # hop, since proxies append to whatever the client sent.
     if addr in ("::1", "::ffff:127.0.0.1") or addr.startswith("127."):
-        forwarded = (env.get("HTTP_X_FORWARDED_FOR") or "").split(",")[0].strip()
         real = (env.get("HTTP_X_REAL_IP") or "").strip()
-        return forwarded or real or addr
+        forwarded = (env.get("HTTP_X_FORWARDED_FOR") or "").split(",")[-1].strip()
+        return real or forwarded or addr
     return addr or "unknown"
 
 
@@ -297,11 +301,37 @@ def _session_expire_seconds():
     return int(conf().get("web_session_expire_days", 30)) * 86400
 
 
+def _password_tag() -> str:
+    """Tag of the current password under the session secret: changes with the
+    password without giving it away."""
+    password = _get_web_password().encode("utf-8", "surrogatepass")
+    return hmac.new(_get_auth_secret(), password, hashlib.sha256).hexdigest()[:16]
+
+
+def _auth_signature(ts_hex: str) -> str:
+    """Signature of a session token issued at ``ts_hex``.
+
+    Keyed by a random secret rather than the password, so a token that leaks
+    (a sniffed request, a log line) can't be used to guess the password
+    offline. A tag of the password is signed in, so changing the password
+    still signs every session out.
+    """
+    message = f"{ts_hex}.{_password_tag()}".encode()
+    return hmac.new(_get_auth_secret(), message, hashlib.sha256).hexdigest()
+
+
+def _create_auth_token() -> str:
+    """Create a stateless signed token: ``<timestamp_hex>.<signature_hex>``."""
+    ts_hex = format(int(time.time()), "x")
+    return f"{ts_hex}.{_auth_signature(ts_hex)}"
+
+
 def _verify_auth_token(token):
     """Verify a signed token is valid and not expired.
 
-    The token is derived from the password, so it survives server restarts
-    and automatically invalidates when the password changes.
+    Stateless, so it survives server restarts; it stops working when the
+    password changes. A token signed with the password itself, the earlier
+    form, verifies too until it expires.
     """
     if not token or "." not in token:
         return False
@@ -312,12 +342,13 @@ def _verify_auth_token(token):
         return False
     if time.time() - ts > _session_expire_seconds():
         return False
-    expected = hmac.new(
-        _get_web_password().encode(),
-        ts_hex.encode(),
-        hashlib.sha256,
-    ).hexdigest()
-    return constant_time_equals(sig, expected)
+    if constant_time_equals(sig, _auth_signature(ts_hex)):
+        return True
+    password = _get_web_password().encode("utf-8", "surrogatepass")
+    if not password:
+        return False
+    password_sig = hmac.new(password, ts_hex.encode(), hashlib.sha256).hexdigest()
+    return constant_time_equals(sig, password_sig)
 
 
 def _get_bearer_token():
@@ -352,73 +383,91 @@ def _get_query_token():
         return ""
 
 
-_STATE_CHANGING_METHODS = ("POST", "PUT", "PATCH", "DELETE")
+def _get_cookie_token():
+    return web.cookies().get("cow_auth_token", "") or ""
 
 
-def _is_cross_site_request() -> bool:
-    env = getattr(web.ctx, "env", {}) or {}
-    site = (env.get("HTTP_SEC_FETCH_SITE") or "").strip().lower()
-    if site:
-        return site in ("cross-site", "same-site")
-    # Browsers without Sec-Fetch-* still send Origin on a cross-origin write.
-    origin = (env.get("HTTP_ORIGIN") or "").strip()
-    if not origin:
-        return False
-    try:
-        netloc = urlsplit(origin).netloc.lower() if origin != "null" else ""
-    except ValueError:
-        return True
-    hosts = {
-        (env.get("HTTP_HOST") or "").strip().lower(),
-        (env.get("HTTP_X_FORWARDED_HOST") or "").split(",")[0].strip().lower(),
-    }
-    return not netloc or netloc not in hosts
+# The browser drops the cookie on the date it was given, while the device it
+# holds stays valid as long as it is used; handing it out again now and then
+# keeps a browser in use signed in.
+_COOKIE_REFRESH_INTERVAL = 86400
+_cookie_given_at: dict = {}
 
 
-def _passwordless_write_blocked() -> bool:
-    """Whether a password-less console must refuse this request.
+def _set_auth_cookie(token: str) -> None:
+    from channel.web.core import devices
 
-    Without a password any page the operator visits could POST to the console
-    and drive the agent, so writes from another site are refused. The desktop
-    renderer runs from file:// and proves itself with its spawn token instead.
-    """
-    env = getattr(web.ctx, "env", {}) or {}
-    if (env.get("REQUEST_METHOD") or "GET").upper() not in _STATE_CHANGING_METHODS:
-        return False
-    if _desktop_token_matches():
-        return False
-    return _is_cross_site_request()
+    web.setcookie("cow_auth_token", token, expires=_session_expire_seconds(),
+                  path="/", httponly=True, samesite="Lax")
+    _cookie_given_at[devices.device_id_of(token)] = time.time()
+
+
+def _refresh_auth_cookie(token: str) -> None:
+    from channel.web.core import devices
+
+    given = _cookie_given_at.get(devices.device_id_of(token), 0)
+    if time.time() - given >= _COOKIE_REFRESH_INTERVAL:
+        _set_auth_cookie(token)
 
 
 def _check_auth():
     """Return True if request is authenticated or password not enabled."""
     if not _is_password_enabled():
-        return not _passwordless_write_blocked()
-    if _verify_auth_token(web.cookies().get("cow_auth_token", "")):
         return True
-    if _verify_auth_token(_get_bearer_token()):
-        return True
-    return _verify_auth_token(_get_query_token())
+    cookie = _get_cookie_token()
+    for token in (cookie, _get_bearer_token(), _get_query_token()):
+        if _verify_auth_token(token):
+            return True
+        if _verify_device_token(token):
+            if token == cookie:
+                _refresh_auth_cookie(token)
+            return True
+    return False
+
+
+def _current_device_token() -> str:
+    """The device token this request signed in with, if any."""
+    from channel.web.core import devices
+
+    for token in (_get_bearer_token(), _get_query_token(), _get_cookie_token()):
+        if token.startswith(devices.TOKEN_PREFIX):
+            return token
+    return ""
+
+
+def _verify_device_token(token: str) -> bool:
+    from channel.web.core import devices
+
+    if not token or not token.startswith(devices.TOKEN_PREFIX):
+        return False
+    return devices.verify(token, ip=_client_ip()) is not None
+
+
+def _qr_data_uri(data: str) -> str:
+    """A QR code as a PNG data URI, or "" without the qrcode package."""
+    try:
+        import qrcode as qr_lib
+    except ImportError:
+        return ""
+    import io
+
+    qr = qr_lib.QRCode(error_correction=qr_lib.constants.ERROR_CORRECT_L, box_size=6, border=2)
+    qr.add_data(data)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
 
 
 def _require_auth():
     """Raise 401 if not authenticated. Call at the top of protected handlers."""
     if not _check_auth():
-        if not _is_password_enabled():
-            logger.warning(
-                "[WebChannel] 403 cross-site write refused: %s %s (origin: %s)",
-                web.ctx.env.get("REQUEST_METHOD", "?"),
-                web.ctx.env.get("PATH_INFO", "?"),
-                web.ctx.env.get("HTTP_ORIGIN", "") or "none",
-            )
-            raise web.HTTPError("403 Forbidden",
-                                {"Content-Type": "application/json; charset=utf-8"},
-                                json.dumps({"status": "error", "message": "Cross-site request refused"}))
         # Log which credential the caller offered (never the value). A rejected
         # request is otherwise invisible in run.log, which makes client bugs —
         # e.g. an endpoint that forgets the Authorization header — undiagnosable.
         offered = []
-        if web.cookies().get("cow_auth_token", ""):
+        if _get_cookie_token():
             offered.append("cookie")
         if _get_bearer_token():
             offered.append("bearer")
@@ -504,8 +553,42 @@ def _get_workspace_root(session_id: str = None, agent_id: str = None) -> str:
     return get_agent_registry().get(agent_id).workspace
 
 
-_PREVIEW_SECRET = None
-_PREVIEW_SECRET_LOCK = threading.Lock()
+_SECRETS = {}
+_SECRETS_LOCK = threading.Lock()
+
+
+def _persistent_secret(path: str) -> bytes:
+    """A random secret kept in a file, created on first use.
+
+    It must survive restarts, or everything signed with it stops verifying.
+    """
+    filename = os.path.basename(path)
+    secret = _SECRETS.get(path)
+    if secret is not None:
+        return secret
+    with _SECRETS_LOCK:
+        secret = _SECRETS.get(path)
+        if secret is not None:
+            return secret
+        value = None
+        try:
+            if os.path.isfile(path):
+                with open(path, "r", encoding="utf-8") as f:
+                    value = (f.read() or "").strip() or None
+        except Exception as e:
+            logger.warning(f"[WebChannel] Could not read {filename}: {e}")
+        if not value:
+            value = uuid.uuid4().hex + uuid.uuid4().hex
+            try:
+                fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                    f.write(value)
+                os.chmod(path, 0o600)
+            except Exception as e:
+                logger.warning(f"[WebChannel] Could not persist {filename}: {e}")
+        secret = value.encode()
+        _SECRETS[path] = secret
+        return secret
 
 
 def _get_preview_secret() -> bytes:
@@ -515,32 +598,14 @@ def _get_preview_secret() -> bytes:
     Preview URLs can't rely on the auth cookie: the preview iframe is sandboxed
     without `allow-same-origin`, so its subresource requests come from an opaque
     origin and Chrome withholds the SameSite=Lax cookie. The signature in the
-    URL is what authorizes the request instead, so it must survive restarts.
+    URL is what authorizes the request instead.
     """
-    global _PREVIEW_SECRET
-    if _PREVIEW_SECRET is not None:
-        return _PREVIEW_SECRET
-    with _PREVIEW_SECRET_LOCK:
-        if _PREVIEW_SECRET is not None:
-            return _PREVIEW_SECRET
-        path = os.path.join(get_data_root(), ".preview_secret")
-        secret = None
-        try:
-            if os.path.isfile(path):
-                with open(path, "r", encoding="utf-8") as f:
-                    secret = (f.read() or "").strip() or None
-        except Exception as e:
-            logger.warning(f"[WebChannel] Could not read preview secret: {e}")
-        if not secret:
-            secret = uuid.uuid4().hex + uuid.uuid4().hex
-            try:
-                with open(path, "w", encoding="utf-8") as f:
-                    f.write(secret)
-                os.chmod(path, 0o600)
-            except Exception as e:
-                logger.warning(f"[WebChannel] Could not persist preview secret: {e}")
-        _PREVIEW_SECRET = secret.encode()
-        return _PREVIEW_SECRET
+    return _persistent_secret(os.path.join(get_data_root(), ".preview_secret"))
+
+
+def _get_auth_secret() -> bytes:
+    """Stable secret used to sign console session tokens."""
+    return _persistent_secret(os.path.join(get_device_dir(), "auth_secret"))
 
 
 def _encode_dir_token(dir_path: str) -> str:

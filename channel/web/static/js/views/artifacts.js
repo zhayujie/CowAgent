@@ -619,7 +619,7 @@ function _artMountThumb(card) {
         iframe.setAttribute('aria-hidden', 'true');
         iframe.tabIndex = -1;
         iframe.onload = done;
-        iframe.src = item.preview_url;
+        iframe.src = instanceUrl(item.preview_url);
         frame.appendChild(iframe);
         place(frame);
     } else if (ART_TEXT_KINDS.has(item.kind) && item.preview_url && item.size <= ART_TEXT_THUMB_MAX) {

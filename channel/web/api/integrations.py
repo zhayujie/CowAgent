@@ -36,12 +36,16 @@ from channel.web.core._common import (
     _require_auth,
     _write_config_file_for_write,
 )
-from common.deployment import is_desktop, is_managed
+from common.deployment import is_app_bundled, is_managed, is_mobile
 
 _PUBLIC_URL_RE = re.compile(r"^https?://[A-Za-z0-9.\-\[\]:]+(:\d{1,5})?(/[A-Za-z0-9._~\-/]*)?$")
 # Interfaces VPNs, containers and VMs create; their addresses are not on the
 # network the user's other devices share.
-_VIRTUAL_IFACE_RE = re.compile(r"^(utun|tun|tap|wg|zt|tailscale|docker|br-|veth|vmnet|vboxnet|bridge|llw|awdl|virbr|cni|flannel)", re.I)
+_VIRTUAL_IFACE_RE = re.compile(r"^(utun|tun|tap|wg|zt|tailscale|docker|br-|veth|vmnet|vboxnet|bridge|llw|awdl|virbr|cni|flannel|vEthernet)", re.I)
+# Windows names adapters freely, so its virtual ones are told by driver.
+_VIRTUAL_ADAPTER_RE = re.compile(r"hyper-v|vmware|virtualbox|tap-windows|wintun|wireguard|tailscale|zerotier|npcap|loopback", re.I)
+# IF_TYPE_ETHERNET_CSMACD and IF_TYPE_IEEE80211; tunnels report other types.
+_LAN_IF_TYPES = (6, 71)
 # Addresses VPN and proxy tools hand out on virtual interfaces.
 _VIRTUAL_NETS = (ipaddress.ip_network("198.18.0.0/15"), ipaddress.ip_network("100.64.0.0/10"))
 # Where there is no interface list, these are probed to learn which local
@@ -74,8 +78,9 @@ def _lan_rank(ip: str) -> int:
 
 
 def _interface_ips() -> List[str]:
-    """IPv4 address of each real interface, or [] where the OS offers no
-    stdlib way to ask (Windows)."""
+    """IPv4 address of each real interface, or [] where they cannot be listed."""
+    if sys.platform == "win32":
+        return _windows_ips()
     try:
         import fcntl
         import struct
@@ -99,6 +104,92 @@ def _interface_ips() -> List[str]:
     return out
 
 
+def _windows_ips() -> List[str]:
+    """IPv4 address of each real adapter that is up, those with a gateway
+    first: the one the user's other devices share has a router behind it."""
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        class SocketAddress(ctypes.Structure):
+            _fields_ = [("lpSockaddr", ctypes.c_void_p), ("iSockaddrLength", ctypes.c_int)]
+
+        class Unicast(ctypes.Structure):
+            pass
+
+        Unicast._fields_ = [
+            ("Length", wintypes.ULONG),
+            ("Flags", wintypes.DWORD),
+            ("Next", ctypes.POINTER(Unicast)),
+            ("Address", SocketAddress),
+        ]
+
+        # The leading fields of IP_ADAPTER_ADDRESSES_LH, up to the gateways.
+        class Adapter(ctypes.Structure):
+            pass
+
+        Adapter._fields_ = [
+            ("Length", wintypes.ULONG),
+            ("IfIndex", wintypes.DWORD),
+            ("Next", ctypes.POINTER(Adapter)),
+            ("AdapterName", ctypes.c_char_p),
+            ("FirstUnicastAddress", ctypes.POINTER(Unicast)),
+            ("FirstAnycastAddress", ctypes.c_void_p),
+            ("FirstMulticastAddress", ctypes.c_void_p),
+            ("FirstDnsServerAddress", ctypes.c_void_p),
+            ("DnsSuffix", ctypes.c_wchar_p),
+            ("Description", ctypes.c_wchar_p),
+            ("FriendlyName", ctypes.c_wchar_p),
+            ("PhysicalAddress", ctypes.c_ubyte * 8),
+            ("PhysicalAddressLength", wintypes.ULONG),
+            ("Flags", wintypes.ULONG),
+            ("Mtu", wintypes.ULONG),
+            ("IfType", wintypes.ULONG),
+            ("OperStatus", ctypes.c_int),
+            ("Ipv6IfIndex", wintypes.DWORD),
+            ("ZoneIndices", wintypes.ULONG * 16),
+            ("FirstPrefix", ctypes.c_void_p),
+            ("TransmitLinkSpeed", ctypes.c_uint64),
+            ("ReceiveLinkSpeed", ctypes.c_uint64),
+            ("FirstWinsServerAddress", ctypes.c_void_p),
+            ("FirstGatewayAddress", ctypes.c_void_p),
+        ]
+
+        # Skip anycast, multicast and DNS servers; include gateways.
+        flags = 0x2 | 0x4 | 0x8 | 0x80
+        size = wintypes.ULONG(16384)
+        for _ in range(3):
+            buf = ctypes.create_string_buffer(size.value)
+            err = ctypes.windll.iphlpapi.GetAdaptersAddresses(socket.AF_INET, flags, None, buf, ctypes.byref(size))
+            if err != 111:  # ERROR_BUFFER_OVERFLOW: size now holds what is needed
+                break
+        if err:
+            return []
+        found = []
+        node = ctypes.cast(buf, ctypes.POINTER(Adapter))
+        while node:
+            adapter = node.contents
+            if (
+                adapter.OperStatus == 1
+                and adapter.IfType in _LAN_IF_TYPES
+                and not _VIRTUAL_IFACE_RE.match(adapter.FriendlyName or "")
+                and not _VIRTUAL_ADAPTER_RE.search(adapter.Description or "")
+            ):
+                addr = adapter.FirstUnicastAddress
+                while addr:
+                    sockaddr = addr.contents.Address.lpSockaddr
+                    if sockaddr:
+                        raw = ctypes.string_at(sockaddr, 8)
+                        found.append((not adapter.FirstGatewayAddress, socket.inet_ntoa(raw[4:8])))
+                    addr = addr.contents.Next
+            node = adapter.Next
+        return [ip for _, ip in sorted(found, key=lambda f: f[0])]
+    # Detection is best effort; the caller falls back to routed probes.
+    except Exception as e:
+        logger.debug(f"[Integrations] Listing network adapters failed: {e}")
+        return []
+
+
 def _routed_ips() -> List[str]:
     found: List[str] = []
     for probe in _PRIVATE_PROBES:
@@ -110,17 +201,21 @@ def _routed_ips() -> List[str]:
             continue
     try:
         found += socket.gethostbyname_ex(socket.gethostname())[2]
-    except OSError:
+    # Older Pythons on Windows fail to decode a non-ASCII computer name here.
+    except (OSError, UnicodeError):
         pass
     return found
 
 
 def _lan_ips() -> List[str]:
-    out: List[str] = []
-    for ip in _interface_ips() or _routed_ips():
-        if _lan_rank(ip) >= 0 and ip not in out:
-            out.append(ip)
-    return sorted(out, key=_lan_rank)
+    for source in (_interface_ips, _routed_ips):
+        out: List[str] = []
+        for ip in source():
+            if _lan_rank(ip) >= 0 and ip not in out:
+                out.append(ip)
+        if out:
+            return sorted(out, key=_lan_rank)
+    return []
 
 
 def lan_urls(host: str = None, port: int = None) -> List[str]:
@@ -165,6 +260,12 @@ def _behind_auth_proxy() -> bool:
     return is_managed()
 
 
+def _listen_fixed() -> bool:
+    """Whether host and port are not the owner's to change: an auth proxy
+    forwards to a fixed address, and the mobile app only serves itself."""
+    return _behind_auth_proxy() or is_mobile()
+
+
 def _public_url_fixed() -> bool:
     return bool((os.environ.get("WEB_PUBLIC_URL") or "").strip())
 
@@ -179,9 +280,9 @@ def _state(host: str = None, port: int = None) -> dict:
         "public_url_fixed": _public_url_fixed(),
         "lan_urls": [] if proxied else lan_urls(host, port),
         "listen": {"host": host, "port": port},
-        "listen_fixed": proxied,
-        # The desktop app owns its backend's port.
-        "port_fixed": is_desktop(),
+        "listen_fixed": _listen_fixed(),
+        # The desktop and mobile apps own their backend's port.
+        "port_fixed": is_app_bundled(),
         "local_only": is_loopback_host(host),
         "password_set": _is_password_enabled(),
     }
@@ -207,7 +308,7 @@ class IntegrationsHandler:
         data = data if isinstance(data, dict) else {}
         if "public_url" in data and _public_url_fixed():
             return _error("public_url_fixed", "public_url_fixed")
-        if ("web_host" in data or "web_port" in data) and _behind_auth_proxy():
+        if ("web_host" in data or "web_port" in data) and _listen_fixed():
             return _error("listen_fixed", "listen_fixed")
         if "public_url" in data:
             value = str(data.get("public_url") or "").strip().rstrip("/")
@@ -253,7 +354,7 @@ def _port_problem(host: str, port: int) -> str:
         return "invalid_port"
     if port == _listen["port"]:
         return ""
-    if is_desktop():
+    if is_app_bundled():
         return "port_fixed"
     return "" if can_bind(host, port) else "port_in_use"
 

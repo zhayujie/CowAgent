@@ -1,0 +1,4 @@
+# Client apps are built separately; the server image doesn't need them.
+mobile/
+desktop/
+**/node_modules/

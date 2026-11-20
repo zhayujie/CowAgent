@@ -308,6 +308,7 @@ auth), see `tests/test_web_console_routing.py`.
 | `core/nav.js` | `navigateTo` view switching and each view's lazy-load hook |
 | `core/menu.js` | The sidebar drawn from the default or saved menu (a group header's pencil opens the editor), and the custom pages it opens |
 | `core/router.js` | Address-bar routing: parsing and writing `/view/tab`, Back/Forward; see above |
+| `core/instances.js` | Other CowAgent devices this browser can switch to: the device switcher at the top of the sidebar (hideable from the menu editor, never while a remote device is in use), the connect dialog with its failure diagnosis, the problem overlay. A remote device is reached through the `static/instance-sw.js` worker, which forwards backend calls with that device's token only after its discovery id matches the one stored at pairing; `instanceUrl()` / `instanceOrigin()` give the address for links and iframes |
 | `core/auth.js` | Login screen, logout, the 401 interceptor on `fetch`, the auth gate for background pollers. **Loads last, see below** |
 
 ### chat/ -- the chat view
@@ -349,6 +350,7 @@ auth), see `tests/test_web_console_routing.py`.
 | `views/logs.js` | Live log stream |
 | `views/artifacts.js` | Artifacts view: gallery, thumbnails, preview pane, jump back to the producing turn |
 | `views/menu-editor.js` | Menu editor: groups, drag ordering, names and icons, hiding, adding artifacts, links and pages |
+| `views/devices.js` | Settings > Devices: the device in use and its name (`PATCH /api/device`), the devices this browser connects to, and the devices connected to the one in use (pairing code, authorized list) |
 | `boot.js` | Startup: apply theme and language, auth gate, first fetch of config and history |
 
 ### Three load-order constraints that must not move
@@ -429,6 +431,7 @@ section before reordering or inserting a file.**
 | `artifacts.css` | Artifacts view, and the lit state of the header's view buttons |
 | `menu.css` | Custom sidebar labels, custom pages, menu editor |
 | `themes.css` | Theme list flyout and custom theme dialog, wallpaper and glass, theme logo |
+| `devices.css` | Device switcher and its menu, Settings > Devices, pairing code panel |
 
 Things to watch when moving rules:
 

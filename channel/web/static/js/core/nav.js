@@ -138,6 +138,7 @@ function syncSidebarTips() {
             item.removeAttribute('data-tip-float');
         }
     });
+    if (typeof renderInstanceSwitcher === 'function') renderInstanceSwitcher();
     const toggle = document.getElementById('sidebar-collapse-btn');
     if (toggle) {
         toggle.setAttribute('data-tooltip', t(collapsed ? 'sidebar_expand' : 'sidebar_collapse'));

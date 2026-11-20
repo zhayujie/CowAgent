@@ -40,6 +40,7 @@ import regex as re  # not stdlib re: .search() takes a real per-call timeout, st
 
 from agent.tools.base_tool import BaseTool, ToolResult
 from agent.tools.utils.truncate import truncate_line
+from common.deployment import is_mobile
 from common.log import logger
 from common.utils import expand_path
 
@@ -454,6 +455,9 @@ class SearchFiles(BaseTool):
     # ------------------------------------------------------------- backend pick
     def _pick_backend(self):
         """Return the best available backend callable for this machine."""
+        # Android's toybox grep lacks the flags the grep backend needs, and iOS cannot spawn processes.
+        if is_mobile():
+            return self._backend_python
         if shutil.which("rg"):
             return self._backend_rg
         if not _IS_WIN and shutil.which("grep"):

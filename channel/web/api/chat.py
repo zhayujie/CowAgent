@@ -58,6 +58,5 @@ class StreamHandler:
         web.header('Content-Type', 'text/event-stream; charset=utf-8')
         web.header('Cache-Control', 'no-cache')
         web.header('X-Accel-Buffering', 'no')
-        web.header('Access-Control-Allow-Origin', '*')
 
         return WebChannel().stream_response(request_id, after_seq)

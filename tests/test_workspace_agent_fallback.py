@@ -19,7 +19,7 @@ def console(tmp_path, monkeypatch):
     data_root = tmp_path / "app-data"
     data_root.mkdir()
     monkeypatch.setattr(_common, "get_data_root", lambda: str(data_root))
-    monkeypatch.setattr(_common, "_PREVIEW_SECRET", None)
+    monkeypatch.setattr(_common, "_SECRETS", {})
     roots = {name: tmp_path / name for name in ("primary", "writer", "project")}
     for name, root in roots.items():
         root.mkdir()

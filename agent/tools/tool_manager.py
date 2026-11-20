@@ -4,8 +4,17 @@ import threading
 from pathlib import Path
 from typing import Dict
 from agent.tools.base_tool import BaseTool
+from common.deployment import is_mobile
 from common.log import logger
 from config import conf
+
+# Tools that need a shell or a local browser, neither of which the mobile app
+# can provide.
+_MOBILE_UNAVAILABLE_TOOLS = frozenset({"bash", "browser"})
+
+
+def _available_here(tool_name: str) -> bool:
+    return not (is_mobile() and tool_name in _MOBILE_UNAVAILABLE_TOOLS)
 
 
 def _normalize_mcp_configs(raw) -> list:
@@ -176,6 +185,9 @@ class ToolManager:
                                     # Create a temporary instance to get the name
                                     temp_instance = cls()
                                     tool_name = temp_instance.name
+                                    if not _available_here(tool_name):
+                                        logger.debug(f"Skipped tool {tool_name} (unavailable in this deployment)")
+                                        continue
                                     # Store the class, not the instance
                                     self.tool_classes[tool_name] = cls
                                     logger.debug(f"Loaded tool: {tool_name} from class {class_name}")
@@ -240,6 +252,8 @@ class ToolManager:
                                 # Create a temporary instance to get the name
                                 temp_instance = cls()
                                 tool_name = temp_instance.name
+                                if not _available_here(tool_name):
+                                    continue
                                 # Store the class, not the instance
                                 self.tool_classes[tool_name] = cls
                             except ImportError as e:

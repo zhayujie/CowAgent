@@ -1,0 +1,14 @@
+{
+  "network-security-config": {
+    "base-config": {
+      "cleartextTrafficPermitted": true
+    },
+    "component-config": {
+      "Request": true,
+      "Network Kit": true,
+      "ArkWeb": true,
+      "Media Kit": true,
+      "Remote Communication Kit": true
+    }
+  }
+}

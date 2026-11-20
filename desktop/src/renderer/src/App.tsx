@@ -20,6 +20,9 @@ import ConfirmDialog from './components/ConfirmDialog'
 import { initUpdateListener } from './store/updateStore'
 import { useOnboardingStore } from './store/onboardingStore'
 import OnboardingWizard from './components/OnboardingWizard'
+import AddInstanceDialog from './components/instances/AddInstanceDialog'
+import RemoteProblem, { type RemoteProblemReason } from './components/instances/RemoteProblem'
+import { checkRemote, useInstanceStore } from './store/instanceStore'
 import apiClient from './api/client'
 import { t } from './i18n'
 import ChatPage from './pages/ChatPage'
@@ -58,6 +61,13 @@ const App: React.FC = () => {
   // whole build, so calling its hook conditionally is stable across renders.
   // eslint-disable-next-line react-hooks/rules-of-hooks
   const productRequiresAuth = product.auth ? product.auth.useRequiresAuth() : false
+  // Another computer or server this window drives; its own backend keeps
+  // running underneath but isn't waited for.
+  const instance = apiClient.getInstance()
+  const ready = !!instance || backend.status === 'ready'
+  const baseUrl = instance ? instance.url : backend.baseUrl
+  const [remoteProblem, setRemoteProblem] = useState<RemoteProblemReason | null>(null)
+  const [authAttempt, setAuthAttempt] = useState(0)
 
   useEffect(() => {
     if (backend.status === 'ready') apiClient.setBaseUrl(backend.baseUrl)
@@ -81,11 +91,23 @@ const App: React.FC = () => {
   // Once the backend is ready, check whether a web_password is set. If so and
   // this session isn't authenticated, show the login gate before the app.
   useEffect(() => {
-    if (backend.status !== 'ready') {
+    if (!ready) {
       setAuthState('checking')
       return
     }
     let cancelled = false
+    if (instance) {
+      setAuthState('checking')
+      setRemoteProblem(null)
+      void checkRemote(instance).then((problem) => {
+        if (cancelled) return
+        setRemoteProblem(problem)
+        if (!problem) setAuthState('ok')
+      })
+      return () => {
+        cancelled = true
+      }
+    }
     apiClient
       .authCheck()
       .then((res) => {
@@ -101,7 +123,7 @@ const App: React.FC = () => {
     return () => {
       cancelled = true
     }
-  }, [backend.status, backend.baseUrl])
+  }, [ready, baseUrl, instance, authAttempt])
 
   // A token can stop working while the app is open (the password was changed
   // in a browser, or it expired). Confirm with the backend before showing the
@@ -116,7 +138,13 @@ const App: React.FC = () => {
       apiClient
         .authCheck()
         .then((res) => {
-          if (res.auth_required && !res.authenticated) setAuthState('need_login')
+          if (!(res.auth_required && !res.authenticated)) return
+          if (instance) {
+            apiClient.setAuthToken(null)
+            setRemoteProblem('auth_lost')
+            // Stops the pollers, which would keep hitting 401 behind the overlay.
+            setAuthState('checking')
+          } else setAuthState('need_login')
         })
         .catch(() => {})
         .finally(() => {
@@ -124,15 +152,38 @@ const App: React.FC = () => {
         })
     })
     return () => apiClient.onUnauthorized(null)
-  }, [authState])
+  }, [authState, instance])
+
+  // The address of the device driven from here now answers as another one:
+  // its token has been held back, and the app steps aside.
+  useEffect(() => {
+    if (!instance || authState !== 'ok') return
+    apiClient.onWrongDevice(() => {
+      setRemoteProblem('wrong_device')
+      setAuthState('checking')
+    })
+    return () => apiClient.onWrongDevice(null)
+  }, [authState, instance])
+
+  // The name the device in use goes by, for the switcher.
+  const noteDevice = useInstanceStore((s) => s.noteDevice)
+  useEffect(() => {
+    if (!ready || authState !== 'ok') return
+    apiClient
+      .getConfig()
+      .then((data) => noteDevice(data.device))
+      .catch(() => {})
+  }, [ready, authState, baseUrl, noteDevice])
 
   // First-run check: once the backend is ready, decide whether to show the
   // onboarding wizard. It's config-driven — shown whenever the chat model isn't
   // configured (and not dismissed earlier this session); no persisted flag.
   useEffect(() => {
-    if (backend.status !== 'ready' || authState !== 'ok') return
+    if (!ready || authState !== 'ok') return
     // An extension may opt out of the built-in setup wizard.
     if (product.onboarding?.enabled === false) return
+    // First-run setup is for this computer, not one driven from here.
+    if (instance) return
     let cancelled = false
     apiClient
       .getModels()
@@ -156,7 +207,7 @@ const App: React.FC = () => {
     return () => {
       cancelled = true
     }
-  }, [backend.status, authState, maybeOpenOnboarding])
+  }, [ready, authState, instance, maybeOpenOnboarding])
 
   // Load the team roster once the backend and auth are settled. This is
   // best-effort: the store swallows every error and degrades to single-Agent,
@@ -164,21 +215,21 @@ const App: React.FC = () => {
   // the app — the team affordances simply stay hidden.
   const refreshRoster = useAgentStore((s) => s.refresh)
   useEffect(() => {
-    if (backend.status === 'ready' && authState === 'ok') void refreshRoster()
-  }, [backend.status, authState, backend.baseUrl, refreshRoster])
+    if (ready && authState === 'ok') void refreshRoster()
+  }, [ready, authState, baseUrl, refreshRoster])
 
   // The menu the user arranged, shared with the web console. Until it answers
   // the rail draws the last copy seen, or the built-in menu.
   const loadMenu = useMenuStore((s) => s.load)
   useEffect(() => {
-    if (backend.status === 'ready' && authState === 'ok') void loadMenu()
-  }, [backend.status, authState, backend.baseUrl, loadMenu])
+    if (ready && authState === 'ok') void loadMenu()
+  }, [ready, authState, baseUrl, loadMenu])
 
   // Poll for scheduler/push messages once the backend and auth are settled.
-  usePushPoll(backend.status === 'ready' && authState === 'ok')
+  usePushPoll(ready && authState === 'ok')
   // Independently watch the global runs ledger so a scheduled task firing into a
   // non-active session still notifies (usePushPoll only sees the open session).
-  useSchedulerNotifyPoll(backend.status === 'ready' && authState === 'ok')
+  useSchedulerNotifyPoll(ready && authState === 'ok')
 
   // A clicked OS notification asks us to open its session.
   useEffect(() => {
@@ -212,10 +263,23 @@ const App: React.FC = () => {
 
   const handleLangChange = useCallback(() => forceUpdate((n) => n + 1), [])
 
-  if (backend.status !== 'ready') {
+  if (instance && remoteProblem) {
+    return (
+      <>
+        <RemoteProblem
+          instance={instance}
+          reason={remoteProblem}
+          onRetry={() => setAuthAttempt((n) => n + 1)}
+        />
+        <AddInstanceDialog />
+      </>
+    )
+  }
+
+  if (!ready) {
     return (
       <StatusScreen
-        status={backend.status}
+        status={backend.status === 'error' ? 'error' : 'connecting'}
         error={backend.error}
         code={backend.code}
         path={backend.path}
@@ -258,6 +322,7 @@ const App: React.FC = () => {
       {onboardingOpen && <OnboardingWizard onDone={handleLangChange} />}
       <Lightbox />
       <ConfirmDialog />
+      <AddInstanceDialog />
       <MenuEditor />
       <NavRail onLangChange={handleLangChange} />
 
@@ -309,18 +374,18 @@ const App: React.FC = () => {
             <ProductGate onAuthenticated={() => setProductAuthed(true)} />
           ) : (
           <Routes>
-            <Route path="/" element={<ChatPage baseUrl={backend.baseUrl} />} />
+            <Route path="/" element={<ChatPage baseUrl={baseUrl} />} />
             <Route path="/artifacts" element={<ArtifactsPage />} />
-            <Route path="/knowledge" element={<KnowledgePage baseUrl={backend.baseUrl} />} />
-            <Route path="/memory" element={<MemoryPage baseUrl={backend.baseUrl} />} />
-            <Route path="/skills" element={<SkillsPage baseUrl={backend.baseUrl} />} />
-            <Route path="/channels" element={<ChannelsPage baseUrl={backend.baseUrl} />} />
-            <Route path="/agents" element={<AgentsPage baseUrl={backend.baseUrl} />} />
-            <Route path="/tasks" element={<TasksPage baseUrl={backend.baseUrl} />} />
-            <Route path="/settings" element={<SettingsPage baseUrl={backend.baseUrl} onLangChange={handleLangChange} />} />
+            <Route path="/knowledge" element={<KnowledgePage baseUrl={baseUrl} />} />
+            <Route path="/memory" element={<MemoryPage baseUrl={baseUrl} />} />
+            <Route path="/skills" element={<SkillsPage baseUrl={baseUrl} />} />
+            <Route path="/channels" element={<ChannelsPage baseUrl={baseUrl} />} />
+            <Route path="/agents" element={<AgentsPage baseUrl={baseUrl} />} />
+            <Route path="/tasks" element={<TasksPage baseUrl={baseUrl} />} />
+            <Route path="/settings" element={<SettingsPage baseUrl={baseUrl} onLangChange={handleLangChange} />} />
             {/* Legacy /models route now lives as a tab inside settings */}
-            <Route path="/models" element={<SettingsPage baseUrl={backend.baseUrl} onLangChange={handleLangChange} />} />
-            <Route path="/logs" element={<LogsPage baseUrl={backend.baseUrl} />} />
+            <Route path="/models" element={<SettingsPage baseUrl={baseUrl} onLangChange={handleLangChange} />} />
+            <Route path="/logs" element={<LogsPage baseUrl={baseUrl} />} />
             <Route path="/m/:id" element={<CustomPage />} />
             {product.routes?.map((r) => (
               <Route key={r.path} path={r.path} element={r.element} />

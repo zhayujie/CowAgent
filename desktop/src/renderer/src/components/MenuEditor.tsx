@@ -7,6 +7,7 @@ import {
   FileText,
   Globe,
   GripVertical,
+  Laptop,
   Loader2,
   Plus,
   RotateCcw,
@@ -18,6 +19,7 @@ import { t } from '../i18n'
 import apiClient from '../api/client'
 import { Btn } from '../pages/settings/primitives'
 import { useMenuStore } from '../store/menuStore'
+import { useInstanceStore } from '../store/instanceStore'
 import { askConfirm, useConfirmStore } from '../store/confirmStore'
 import { colorFor, iconFor } from '../lib/fileKind'
 import {
@@ -147,6 +149,8 @@ const EditorDialog: React.FC = () => {
   const [pop, setPop] = useState<Pop | null>(null)
   const [drag, setDrag] = useState<Drag | null>(null)
   const [fresh, setFresh] = useState(() => intent?.add?.id || intent?.focus || '')
+  // Kept on this computer only, unlike the menu itself.
+  const [switcherHidden, setSwitcherHidden] = useState(() => useInstanceStore.getState().switcherHidden)
 
   const panelRef = useRef<HTMLDivElement>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
@@ -356,6 +360,7 @@ const EditorDialog: React.FC = () => {
     setSaving(true)
     try {
       await save(menu)
+      useInstanceStore.getState().setSwitcherHidden(menu ? switcherHidden : false)
       setSaving(false)
       close()
       // The page on screen may be the entry just removed.
@@ -605,6 +610,27 @@ const EditorDialog: React.FC = () => {
           className="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-3"
           onScroll={() => pop && setPop(null)}
         >
+          <div
+            className={`flex items-center gap-1.5 pl-1 pr-1.5 py-1.5 rounded-lg border border-default bg-surface transition-opacity ${
+              switcherHidden ? 'opacity-55' : ''
+            }`}
+          >
+            <span className="w-5 flex-shrink-0" />
+            <span className="inline-flex items-center justify-center w-7 h-7 flex-shrink-0 rounded-md border border-default text-content-secondary">
+              <Laptop size={14} />
+            </span>
+            <div className="flex-1 min-w-0 px-1.5">
+              <div className="text-[13px] text-content truncate">{t('devices_switcher')}</div>
+              <div className="text-[11.5px] text-content-tertiary truncate">{t('devices_switcher_desc')}</div>
+            </div>
+            <button
+              onClick={() => setSwitcherHidden((v) => !v)}
+              title={t(switcherHidden ? 'menu_show' : 'menu_hide')}
+              className={iconBtn}
+            >
+              {switcherHidden ? <EyeOff size={14} /> : <Eye size={14} />}
+            </button>
+          </div>
           {draft.groups.map((group) => {
             // Footer pages stay in the document for the web console but have no
             // row here, and a group holding nothing else has nothing to edit.

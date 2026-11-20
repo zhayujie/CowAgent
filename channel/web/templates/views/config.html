@@ -20,7 +20,7 @@
                                 </div>
                             </div>
 
-                            <!-- Tabs: 基础配置 / 模型配置 / 集成配置 -->
+                            <!-- Tabs: 基础配置 / 模型配置 / 集成配置 / 设备 -->
                             <div class="flex items-center justify-between gap-3 mb-6">
                                 <div class="flex items-center bg-slate-100 dark:bg-white/10 rounded-lg p-0.5 w-max">
                                     <button id="config-tab-basic" onclick="switchConfigTab('basic')"
@@ -34,6 +34,10 @@
                                     <button id="config-tab-integrations" onclick="switchConfigTab('integrations')"
                                             class="config-tab px-4 py-1.5 rounded-md text-xs font-medium cursor-pointer transition-colors duration-150">
                                         <i class="fas fa-plug mr-1.5"></i><span data-i18n="settings_tab_integrations">集成配置</span>
+                                    </button>
+                                    <button id="config-tab-devices" onclick="switchConfigTab('devices')"
+                                            class="config-tab px-4 py-1.5 rounded-md text-xs font-medium cursor-pointer transition-colors duration-150">
+                                        <i class="fas fa-laptop mr-1.5"></i><span data-i18n="settings_tab_devices">设备</span>
                                     </button>
                                 </div>
                             </div>
@@ -337,6 +341,63 @@
                                     <i class="fas fa-spinner fa-spin text-xs"></i><span>Loading...</span>
                                 </div>
                                 <div id="models-content" class="grid gap-6 hidden"></div>
+                            </div>
+
+                            <!-- Panel: 设备. A CowAgent device connects to other devices, and
+                                 other devices connect to it: the device the console drives, the
+                                 devices this browser connects to, and those that connect to the
+                                 device. views/devices.js -->
+                            <div id="config-panel-devices" class="grid gap-6 hidden">
+                                <div id="devices-self" class="dev-self"></div>
+
+                                <div class="bg-panel rounded-xl border border-slate-200 dark:border-white/10 p-6">
+                                    <div class="flex flex-col sm:flex-row sm:items-center gap-3 mb-3">
+                                        <div class="flex items-center gap-3 min-w-0 flex-1">
+                                            <div class="w-9 h-9 rounded-lg bg-primary-50 dark:bg-primary-900/20 flex items-center justify-center flex-shrink-0">
+                                                <i class="fas fa-arrow-right-arrow-left text-primary-500 text-sm"></i>
+                                            </div>
+                                            <div class="min-w-0">
+                                                <h3 class="flex items-center gap-1.5 font-semibold text-slate-800 dark:text-slate-100">
+                                                    <span data-i18n="devices_out_title">我连接的设备</span>
+                                                    <span class="cfg-tip" data-tip-key="devices_out_tip" data-tip-float data-tip-wrap><i class="fas fa-circle-question"></i></span>
+                                                </h3>
+                                                <p class="text-xs text-slate-400 dark:text-slate-500 mt-0.5" data-i18n="devices_out_desc">连接后可以切换过去操作</p>
+                                            </div>
+                                        </div>
+                                        <button onclick="openInstanceAdd()"
+                                                class="self-start sm:self-center px-4 py-2 rounded-lg text-sm font-medium flex-shrink-0 cursor-pointer transition-colors duration-150
+                                                       bg-primary-500 hover:bg-primary-600 text-white">
+                                            <i class="fas fa-plus mr-1.5"></i><span data-i18n="devices_connect_other">连接其他设备</span>
+                                        </button>
+                                    </div>
+                                    <div id="devices-out-list"></div>
+                                </div>
+
+                                <div class="bg-panel rounded-xl border border-slate-200 dark:border-white/10 p-6">
+                                    <div class="flex flex-col sm:flex-row sm:items-center gap-3 mb-3">
+                                        <div class="flex items-center gap-3 min-w-0 flex-1">
+                                            <div class="w-9 h-9 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 flex items-center justify-center flex-shrink-0">
+                                                <i class="fas fa-shield-halved text-emerald-500 text-sm"></i>
+                                            </div>
+                                            <div class="min-w-0">
+                                                <h3 class="flex items-center gap-1.5 font-semibold text-slate-800 dark:text-slate-100">
+                                                    <span id="devices-in-title" class="truncate"></span>
+                                                    <span id="devices-count" class="text-sm font-normal text-slate-400 dark:text-slate-500"></span>
+                                                    <span class="cfg-tip" data-tip-key="devices_in_tip" data-tip-float data-tip-wrap><i class="fas fa-circle-question"></i></span>
+                                                </h3>
+                                                <p class="text-xs text-slate-400 dark:text-slate-500 mt-0.5" data-i18n="devices_in_desc">拥有操作权限，移除后立即断开</p>
+                                            </div>
+                                        </div>
+                                        <div class="self-start sm:self-center flex items-center gap-2 flex-shrink-0">
+                                            <button id="devices-pair-btn"
+                                                    class="px-4 py-2 rounded-lg text-sm font-medium cursor-pointer transition-colors duration-150
+                                                           disabled:opacity-50 disabled:cursor-not-allowed"></button>
+                                        </div>
+                                    </div>
+                                    <div id="devices-in-notice"></div>
+                                    <div id="devices-pairing" class="hidden"></div>
+                                    <div id="devices-list"></div>
+                                </div>
                             </div>
 
                             <!-- Panel: 集成配置 (the address shown to the outside, Chat API, guest pages) -->

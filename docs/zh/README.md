@@ -22,12 +22,12 @@
 CowAgent 支持多模型、多通道、多智能体，轻量且易于扩展，可接入微信、飞书、钉钉、企微、QQ、Telegram、Slack、网页等消息通道，7×24 小时运行于个人电脑或服务器中。
 
 <p align="center">
-  <a href="https://cowagent.cn/">🌐 官网</a> &nbsp;·&nbsp;
+  <a href="https://cowagent.cn/?utm_source=github">🌐 官网</a> &nbsp;·&nbsp;
   <a href="https://docs.cowagent.ai/zh/">📖 文档中心</a> &nbsp;·&nbsp;
   <a href="https://docs.cowagent.ai/zh/guide/quick-start">🚀 快速开始</a> &nbsp;·&nbsp;
   <a href="https://skills.cowagent.ai/">🧩 技能广场</a> &nbsp;·&nbsp;
   <a href="https://cowagent.cn/zh/download/">💻 下载客户端</a> &nbsp;·&nbsp;
-  <a href="https://cloud.cowagent.cn">☁️ 在线使用</a>
+  <a href="https://cloud.cowagent.cn/?utm_source=github">☁️ 在线使用</a>
 </p>
 
 <br/>
@@ -37,7 +37,7 @@ CowAgent 支持多模型、多通道、多智能体，轻量且易于扩展，�
 <p align="center">
   <video src="https://github.com/user-attachments/assets/a2d8fb12-f294-42d6-a569-c4a6ceedab1d" controls muted playsinline width="720">
     你的浏览器无法播放该视频。
-    <a href="https://cowagent.cn/">前往官网观看演示 →</a>
+    <a href="https://cowagent.cn/?utm_source=github">前往官网观看演示 →</a>
   </video>
 </p>
 
@@ -112,7 +112,7 @@ cow install-browser                # 安装浏览器工具
 
 > 💻 桌面客户端：前往 **[下载 CowAgent 桌面客户端](https://cowagent.cn/zh/download/)**（macOS / Windows），内置 Agent 运行环境，开箱即用。
 
-> ☁️ 在线使用：不想自己部署，也可以直接 **[打开云端控制台](https://cloud.cowagent.cn)** 创建专属实例，内置模型服务，7×24 小时在线。
+> ☁️ 在线使用：不想自己部署，也可以直接 **[打开云端控制台](https://cloud.cowagent.cn/?utm_source=github)** 创建专属实例，内置模型服务，7×24 小时在线。
 
 <br/>
 

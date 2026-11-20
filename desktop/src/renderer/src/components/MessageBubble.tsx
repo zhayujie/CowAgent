@@ -114,7 +114,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   // Open a sent file: prefer the local path via Electron (Finder / default
   // app); fall back to the served URL in a browser when unavailable.
   const openAttachment = (att: { abs_path?: string; preview_url?: string; file_path: string }) => {
-    if (att.abs_path && window.electronAPI?.openPath) {
+    if (att.abs_path && window.electronAPI?.openPath && !apiClient.isRemote()) {
       window.electronAPI.openPath(att.abs_path)
       return
     }

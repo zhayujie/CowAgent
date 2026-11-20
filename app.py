@@ -22,12 +22,18 @@ import threading
 # second, separate ``app`` module). The registry is a single shared cell every
 # caller sees — see common/channel_registry.py and issue #3120.
 from common.channel_registry import get_channel_manager, set_channel_manager  # noqa: F401 - re-exported for `from app import get_channel_manager`
-from common.deployment import is_desktop
+from common.deployment import is_app_bundled, is_desktop, is_mobile
 
 # Desktop mode: a lighter runtime for the packaged Electron client. Plugins are
 # loaded in a background thread (so command plugins like cow_cli/godcmd work
 # without slowing startup), while MCP warmup is still skipped to keep it fast.
 DESKTOP_MODE = is_desktop()
+# Mobile mode: the backend runs inside the mobile app's process, on a thread it
+# owns. Only the web console starts (no IM channels or plugins), and nothing
+# here may exit the process, since that would close the app with it.
+MOBILE_MODE = is_mobile()
+# Either app shell: it owns the UI, so web readiness comes before warmups.
+BUNDLED_MODE = is_app_bundled()
 
 
 def _parse_channel_type(raw) -> list:
@@ -250,7 +256,7 @@ class ChannelManager:
                     threading.Thread(
                         target=PluginManager().load_plugins, daemon=True
                     ).start()
-                else:
+                elif not MOBILE_MODE:
                     PluginManager().load_plugins()
 
                 # Cloud client is optional. It is only started when
@@ -507,7 +513,7 @@ def _register_pid_file():
     the CLI or by another live instance is left alone, and on exit the file is
     removed only while it still names this process.
     """
-    if DESKTOP_MODE:
+    if BUNDLED_MODE:
         return
     try:
         from cli.commands.process import _get_pid_file, _read_pid
@@ -804,15 +810,20 @@ def run():
         _migrate_team_roster()
         _migrate_conversations()
         _warn_if_legacy_workspace_data_exists()
-        # ctrl + c
-        sigterm_handler_wrap(signal.SIGINT)
-        # kill signal
-        sigterm_handler_wrap(signal.SIGTERM)
+        # Signal handlers can only be installed from the main thread; an
+        # embedding host that runs us on a worker thread handles them itself.
+        if threading.current_thread() is threading.main_thread():
+            # ctrl + c
+            sigterm_handler_wrap(signal.SIGINT)
+            # kill signal
+            sigterm_handler_wrap(signal.SIGTERM)
 
         # Parse channel_type into a list
         raw_channel = conf().get("channel_type", "web")
 
-        if "--cmd" in sys.argv:
+        if MOBILE_MODE:
+            channel_names = ["web"]
+        elif "--cmd" in sys.argv:
             channel_names = ["terminal"]
         else:
             # Multi-instance opt-in: when team.json defines channel_instances,
@@ -831,17 +842,18 @@ def run():
         _scaffold_subagent_assets()
 
         # Kick off MCP server loading in the background so first-message
-        # latency isn't dominated by npx package downloads. Skipped in desktop
-        # mode (MCP relies on external npx/uvx runtimes that aren't bundled).
-        if not DESKTOP_MODE:
+        # latency isn't dominated by npx package downloads. Skipped in the app
+        # shells (MCP relies on external npx/uvx runtimes that aren't bundled).
+        if not BUNDLED_MODE:
             _warmup_mcp_tools()
 
-        if DESKTOP_MODE:
+        if BUNDLED_MODE:
             # Defer the (heavy) AgentBridge/scheduler warmup to a background
             # thread so the web API becomes available within a couple seconds.
             # The scheduler still starts; it just doesn't block UI readiness.
             _preload_heavy_imports()
-            _start_web_watchdog()
+            if DESKTOP_MODE:
+                _start_web_watchdog()
             threading.Thread(target=_warmup_scheduler, daemon=True).start()
         else:
             _warmup_scheduler()

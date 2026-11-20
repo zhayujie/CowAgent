@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 
 from common.utils import expand_path
-from common.deployment import is_desktop
+from common.deployment import is_app_bundled
 
 
 _AGENT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
@@ -388,11 +388,11 @@ def get_agent_registry() -> AgentRegistry:
                 # An invalid `agents`/`default_agent_id` block would otherwise
                 # bubble all the way up through load_config() and take the whole
                 # process down before the web console can bind — leaving a
-                # desktop user with no UI to fix the very config that is broken.
+                # desktop or mobile user with no UI to fix the very config that is broken.
                 # Fall back to the default single agent so the app still starts;
                 # the console can then edit the bad block. Source deployments
                 # keep failing loudly so the developer sees the error at once.
-                if not is_desktop():
+                if not is_app_bundled():
                     raise
                 from common.log import logger
 

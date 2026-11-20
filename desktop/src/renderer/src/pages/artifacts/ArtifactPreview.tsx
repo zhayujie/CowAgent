@@ -133,11 +133,11 @@ const ArtifactPreview: React.FC<ArtifactPreviewProps> = ({ item, onJump, resizin
 
   const canAdd = item.id == null && item.exists && !!item.origin?.session_id
   const canMenu = item.exists && MENU_KINDS.has(item.kind)
-  const canReveal = item.exists && !!item.abs_path && !!window.electronAPI?.revealPath
+  const canReveal = item.exists && !!item.abs_path && !!window.electronAPI?.revealPath && !apiClient.isRemote()
 
   const openExternally = async () => {
     // The desktop hands the file to the system app; the browser is the fallback.
-    if (item.abs_path && window.electronAPI?.openPath) {
+    if (item.abs_path && window.electronAPI?.openPath && !apiClient.isRemote()) {
       const err = await window.electronAPI.openPath(item.abs_path)
       if (err) flash(err)
       return

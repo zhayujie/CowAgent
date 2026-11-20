@@ -1,0 +1,7 @@
+/node_modules
+/.preview
+/build
+/.cxx
+package-lock.json
+/oh_modules
+/assets

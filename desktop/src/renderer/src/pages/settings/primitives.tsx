@@ -62,7 +62,7 @@ export const FieldTip: React.FC<{ tip: string }> = ({ tip }) => {
 
 export const Card: React.FC<{
   icon: React.ReactNode
-  title: string
+  title: React.ReactNode
   subtitle?: string
   // Optional trailing element on the header row (right-aligned), e.g. a small
   // secondary action such as the chat-fallback gear on the main model card.

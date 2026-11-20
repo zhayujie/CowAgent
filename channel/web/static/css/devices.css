@@ -1,0 +1,237 @@
+/* Devices: the switcher at the top of the sidebar, its menu, and the
+   Settings > Devices tab. The menu shares the always-dark look of the footer
+   menu (.update-menu). */
+
+/* ---- Switcher (top of the sidebar, like the desktop app's) ---- */
+.device-switcher-wrap { padding: 10px 12px 0; flex-shrink: 0; }
+/* Hidden from the menu editor, but never while another device is driven. */
+html.device-switcher-off:not(.device-remote) .device-switcher-wrap { display: none; }
+html:not(.device-switcher-off) #sidebar-nav,
+html.device-remote #sidebar-nav { padding-top: 8px; }
+.device-switcher {
+    width: 100%;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 8px;
+    border-radius: 10px;
+    color: #d4d4d4;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.12s ease;
+}
+.device-switcher:hover,
+.device-switcher[aria-expanded="true"] { background: rgba(255, 255, 255, 0.06); }
+.device-switcher-icon {
+    position: relative;
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    color: rgb(var(--cw-primary-300));
+    background: rgb(var(--cw-primary-500) / 0.16);
+}
+.device-switcher.is-remote .device-switcher-icon { color: #fff; background: rgb(var(--cw-primary-500)); }
+.device-switcher-text { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
+.device-switcher-name { font-size: 13px; font-weight: 500; color: #e5e5e5; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.device-switcher-sub { font-size: 11px; color: #737373; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.device-switcher.is-remote .device-switcher-sub { color: rgb(var(--cw-primary-300)); }
+.device-switcher-chevron { flex-shrink: 0; font-size: 11px; color: #737373; }
+.device-switcher:hover .device-switcher-chevron { color: #a3a3a3; }
+@media (min-width: 1024px) {
+    html.sidebar-collapsed .device-switcher-wrap { padding: 10px 12px 0; }
+    html.sidebar-collapsed .device-switcher { height: 40px; justify-content: center; padding: 0; gap: 0; }
+    html.sidebar-collapsed .device-switcher-text,
+    html.sidebar-collapsed .device-switcher-chevron { display: none; }
+}
+
+/* ---- Menu ---- */
+.instance-menu {
+    position: fixed;
+    z-index: 61;
+    width: 248px;
+    padding: 5px;
+    border-radius: 10px;
+    background: #171717;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 8px 30px -6px rgba(0, 0, 0, 0.5), 0 2px 8px -2px rgba(0, 0, 0, 0.4);
+    animation: slashMenuIn 0.15s ease-out;
+}
+.instance-menu.hidden { display: none; }
+.instance-menu-head {
+    padding: 6px 9px 4px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #6b6b6b;
+}
+#instance-menu-list { max-height: 300px; overflow-y: auto; }
+.instance-menu-item {
+    width: 100%;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 5px 9px;
+    border-radius: 7px;
+    color: #d4d4d4;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.12s ease, color 0.12s ease;
+}
+.instance-menu-item:hover { background: rgba(255, 255, 255, 0.06); color: #fff; }
+.instance-menu-icon {
+    position: relative;
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    border-radius: 7px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    color: #a3a3a3;
+    background: rgba(255, 255, 255, 0.06);
+}
+.instance-menu-item.is-active .instance-menu-icon { color: rgb(var(--cw-primary-300)); background: rgb(var(--cw-primary-500) / 0.16); }
+.instance-menu-icon .instance-dot { position: absolute; right: -2px; bottom: -2px; box-shadow: 0 0 0 2px #171717; }
+.instance-menu-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.instance-menu-name { font-size: 13px; line-height: 17px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.instance-menu-sub { font-size: 11px; line-height: 14px; color: #737373; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.instance-menu-check { flex-shrink: 0; font-size: 11px; color: rgb(var(--cw-primary-300)); }
+
+/* ---- Status dots ---- */
+.instance-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 9999px;
+    background: #a3a3a3;
+}
+.instance-dot.is-online { background: #10b981; }
+.instance-dot.is-offline { background: #a3a3a3; }
+.instance-dot.is-checking { background: #a3a3a3; animation: instanceDotPulse 1.2s ease-in-out infinite; }
+@keyframes instanceDotPulse { 50% { opacity: 0.35; } }
+
+/* ---- Settings > Devices ---- */
+.dev-self {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 18px;
+    border-radius: 12px;
+    border: 1px solid rgb(var(--cw-slate-200));
+    background: rgb(var(--cw-panel));
+}
+.dark .dev-self { border-color: rgba(255, 255, 255, 0.1); }
+.dev-self:empty { display: none; }
+.dev-self.is-remote { border-color: rgb(var(--cw-primary-500) / 0.35); background: rgb(var(--cw-primary-500) / 0.05); }
+.dev-self-icon {
+    flex-shrink: 0;
+    width: 40px;
+    height: 40px;
+    border-radius: 11px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    color: rgb(var(--cw-primary-500));
+    background: rgb(var(--cw-primary-500) / 0.12);
+}
+.dev-self.is-remote .dev-self-icon { color: #fff; background: rgb(var(--cw-primary-500)); }
+.dev-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 8px;
+    border-radius: 9999px;
+    font-size: 11px;
+    line-height: 16px;
+    color: rgb(var(--cw-slate-500));
+    background: rgb(100 116 139 / 0.1);
+    white-space: nowrap;
+}
+.dark .dev-chip { color: #a3a3a3; background: rgba(255, 255, 255, 0.06); }
+.dev-chip.is-primary { color: rgb(var(--cw-primary-600)); background: rgb(var(--cw-primary-500) / 0.12); }
+.dark .dev-chip.is-primary { color: rgb(var(--cw-primary-300)); background: rgb(var(--cw-primary-500) / 0.16); }
+.dev-chip.is-online { color: #059669; background: rgb(16 185 129 / 0.12); }
+.dark .dev-chip.is-online { color: #34d399; background: rgb(16 185 129 / 0.14); }
+
+.dev-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 8px;
+    margin: 0 -8px;
+    border-radius: 10px;
+    transition: background 0.12s ease;
+}
+.dev-row:hover { background: rgb(100 116 139 / 0.06); }
+.dark .dev-row:hover { background: rgba(255, 255, 255, 0.03); }
+.dev-row-icon {
+    position: relative;
+    flex-shrink: 0;
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    color: rgb(var(--cw-slate-500));
+    background: rgb(100 116 139 / 0.1);
+}
+.dark .dev-row-icon { color: #a3a3a3; background: rgba(255, 255, 255, 0.06); }
+.dev-row.is-current .dev-row-icon,
+.dev-row.is-active .dev-row-icon { color: rgb(var(--cw-primary-500)); background: rgb(var(--cw-primary-500) / 0.12); }
+.dev-row-icon .instance-dot { position: absolute; right: -2px; bottom: -2px; box-shadow: 0 0 0 2px rgb(var(--cw-panel)); }
+.dev-icon-btn {
+    flex-shrink: 0;
+    width: 26px;
+    height: 26px;
+    border-radius: 7px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    color: rgb(var(--cw-slate-400));
+    cursor: pointer;
+    transition: color 0.12s ease, background 0.12s ease;
+}
+.dev-icon-btn:hover { color: rgb(var(--cw-slate-600)); background: rgb(100 116 139 / 0.1); }
+.dark .dev-icon-btn:hover { color: rgb(var(--cw-slate-200)); background: rgba(255, 255, 255, 0.08); }
+.dev-row-actions { display: flex; align-items: center; gap: 2px; opacity: 0; transition: opacity 0.12s ease; }
+.dev-row:hover .dev-row-actions,
+.dev-row:focus-within .dev-row-actions { opacity: 1; }
+@media (hover: none) { .dev-row-actions { opacity: 1; } }
+.dev-name-input {
+    width: 100%;
+    max-width: 260px;
+    padding: 2px 6px;
+    margin: -3px 0 -3px -7px;
+    border-radius: 6px;
+    border: 1px solid rgb(var(--cw-primary-500));
+    background: transparent;
+    font-size: 14px;
+    outline: none;
+}
+
+.dev-code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 28px;
+    letter-spacing: 0.18em;
+    line-height: 1.1;
+}
+.dev-pair-ring {
+    position: relative;
+    width: 176px;
+    height: 176px;
+    flex-shrink: 0;
+}
+.dev-pair-ring img { width: 100%; height: 100%; border-radius: 12px; background: #fff; padding: 8px; }

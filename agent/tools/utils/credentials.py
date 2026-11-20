@@ -10,6 +10,9 @@ surrounding lines).
 Scope is deliberately narrow (the credential file and its process-environment
 aliases) so this does not re-broaden the block that issue #2863 intentionally
 narrowed to ~/.cow/.env. See also issue #2913 for the bypasses handled here.
+The one other place covered is the device directories (``config.get_device_dir``
+and the others beside it): the console's session key and the list of who may
+sign in, where a line the agent wrote would let someone in.
 """
 
 import os
@@ -54,4 +57,15 @@ def is_credential_path(absolute_path: str) -> bool:
 
     # 2. The credential file itself, following symlinks on both sides.
     env_real = os.path.realpath(expand_path("~/.cow/.env")).replace(os.sep, "/")
-    return env_real in candidates
+    if env_real in candidates:
+        return True
+
+    # 3. Anything in a device directory, this instance's or another's on the
+    # same machine (their keys would let the agent in there).
+    from config import get_device_base_dir, get_device_dir
+
+    for root in {get_device_dir(create=False), get_device_base_dir(), expand_path("~/.cow/device")}:
+        root_real = os.path.realpath(root).replace(os.sep, "/")
+        if any(c == root_real or c.startswith(root_real + "/") for c in candidates):
+            return True
+    return False

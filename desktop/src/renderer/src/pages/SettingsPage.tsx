@@ -1,17 +1,18 @@
-import React, { useCallback, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { t } from '../i18n'
 import { product } from '@product'
 import BasicSettings from './settings/BasicSettings'
 import ModelsTab from './settings/ModelsTab'
 import IntegrationsTab from './settings/IntegrationsTab'
+import DevicesTab from './settings/DevicesTab'
 
 interface SettingsPageProps {
   baseUrl: string
   onLangChange?: () => void
 }
 
-type Tab = 'basic' | 'models' | 'integrations'
+type Tab = 'basic' | 'models' | 'integrations' | 'devices'
 
 const SettingsPage: React.FC<SettingsPageProps> = ({ baseUrl, onLangChange }) => {
   const location = useLocation()
@@ -21,8 +22,16 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ baseUrl, onLangChange }) =>
   // lives in the URL so a remount (e.g. after a backend restart) keeps it.
   const requested = new URLSearchParams(location.search).get('tab')
   const initial: Tab =
-    requested === 'integrations' ? 'integrations' : !modelsTabHidden && requested === 'models' ? 'models' : 'basic'
+    requested === 'integrations' || requested === 'devices'
+      ? requested
+      : !modelsTabHidden && requested === 'models'
+        ? 'models'
+        : 'basic'
   const [tab, setTab] = useState<Tab>(initial)
+  // A deep link followed while Settings is already open.
+  useEffect(() => {
+    if (requested) setTab(initial)
+  }, [requested]) // eslint-disable-line react-hooks/exhaustive-deps
   const [focusPassword, setFocusPassword] = useState(false)
 
   const switchTab = (next: Tab) => {
@@ -31,11 +40,16 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ baseUrl, onLangChange }) =>
   }
 
   const clearFocusPassword = useCallback(() => setFocusPassword(false), [])
+  const goToPassword = () => {
+    switchTab('basic')
+    setFocusPassword(true)
+  }
 
   const tabs: { key: Tab; label: string }[] = [
     { key: 'basic', label: t('settings_tab_basic') },
     ...(modelsTabHidden ? [] : [{ key: 'models' as Tab, label: t('settings_tab_models') }]),
     { key: 'integrations', label: t('settings_tab_integrations') },
+    { key: 'devices', label: t('settings_tab_devices') },
   ]
 
   return (
@@ -63,14 +77,10 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ baseUrl, onLangChange }) =>
           ))}
         </div>
 
-        {tab === 'integrations' ? (
-          <IntegrationsTab
-            baseUrl={baseUrl}
-            onGoToPassword={() => {
-              switchTab('basic')
-              setFocusPassword(true)
-            }}
-          />
+        {tab === 'devices' ? (
+          <DevicesTab onGoToPassword={goToPassword} onGoToIntegrations={() => switchTab('integrations')} />
+        ) : tab === 'integrations' ? (
+          <IntegrationsTab baseUrl={baseUrl} onGoToPassword={goToPassword} />
         ) : tab === 'basic' || modelsTabHidden ? (
           <BasicSettings
             baseUrl={baseUrl}

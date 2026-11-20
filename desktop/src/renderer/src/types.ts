@@ -21,6 +21,8 @@ export interface ElectronAPI {
   getPathForFile?: (file: File) => string
   /** This machine's IPv4 addresses on private networks. */
   getLanAddresses?: () => Promise<string[]>
+  /** The computer's name, used to label this app in other instances' device lists. */
+  getHostName?: () => Promise<string>
   restartBackend: () => Promise<boolean>
   selectDirectory: () => Promise<string | null>
   selectFile: (filters?: { name: string; extensions: string[] }[]) => Promise<string | null>
@@ -680,6 +682,8 @@ export interface ProviderMeta {
 export interface ConfigData {
   use_agent: boolean
   title: string
+  /** This CowAgent device: its id and the name other devices show for it. */
+  device?: { id: string; name: string }
   model: string
   bot_type: string
   use_linkai: boolean

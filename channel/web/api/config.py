@@ -18,10 +18,12 @@ from agent.permission import (
 )
 from channel.web.core._common import (
     _can_reveal_in_file_manager,
+    _is_password_enabled,
     _read_config_file_for_write,
     _require_auth,
     _write_config_file_for_write,
 )
+from channel.web.core import identity
 from channel.web.core.providers import (
     PROVIDER_MODELS,
     legacy_custom_in_use,
@@ -144,6 +146,8 @@ class ConfigHandler:
                 "status": "success",
                 "use_agent": use_agent,
                 "title": title,
+                "device": {"id": identity.device_id(), "name": identity.device_name(),
+                           "managed": is_managed()},
                 "model": local_config.get("model", ""),
                 "bot_type": "openai" if local_config.get("bot_type") == "chatGPT" else local_config.get("bot_type", ""),
                 "use_linkai": bool(local_config.get("use_linkai", False)),
@@ -239,6 +243,7 @@ class ConfigHandler:
             file_cfg = _read_config_file_for_write()
             # Capture old password before updating
             old_password = file_cfg.get("web_password", "") if "web_password" in applied else ""
+            was_open = not _is_password_enabled()
             file_cfg.update(applied)
             # Merged rather than assigned: the UI sends the one switch it owns,
             # and the rest of the section is the user's to keep.
@@ -248,6 +253,14 @@ class ConfigHandler:
                 file_cfg[section] = merged
                 applied[section] = merged
             _write_config_file_for_write(config_path, file_cfg)
+
+            # Looked up under the old password: under the new one the caller's
+            # device no longer verifies.
+            caller_device = ""
+            if "web_password" in applied:
+                from channel.web.api.devices import current_device_id
+
+                caller_device = current_device_id()
 
             # Publish only after the file is saved, so a failed save changes nothing.
             for key, value in applied.items():
@@ -302,12 +315,25 @@ class ConfigHandler:
                     logger.warning(f"[WebChannel] Failed to apply runtime limits: {limits_err}")
 
             result = {"status": "success", "applied": applied, "warning": password_warning}
-            # A new password voids every token signed with the old one, the
-            # caller's included; hand it one for the new password so the
-            # client that made the change stays signed in.
-            if applied.get("web_password"):
-                from channel.web.api.auth import _create_auth_token
-                result["auth_token"] = _create_auth_token()
+            # A new password signs out everyone who got in with the old one;
+            # devices that were paired never knew it and stay. The first
+            # password signs out every device: without one, anybody who
+            # reached the console could have paired. The caller keeps its
+            # device, or gets one if it had none (no password before, or an
+            # old session token).
+            if applied.get("web_password") and applied["web_password"] != old_password:
+                from channel.web.api.devices import issue_password_device
+                from channel.web.core import devices
+
+                current = caller_device
+                removed = devices.remove_where(
+                    lambda d: d.get("id") != current and (was_open or d.get("via") == "password"))
+                if removed:
+                    logger.info(f"[WebChannel] Password changed, signed out {removed} device(s)")
+                if current:
+                    devices.retag(current)
+                else:
+                    result["auth_token"] = issue_password_device(data.get("device"))
             return json.dumps(result, ensure_ascii=False)
         except Exception as e:
             logger.error(f"Error updating config: {e}")

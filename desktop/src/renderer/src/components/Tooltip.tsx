@@ -8,6 +8,8 @@ interface TooltipProps {
   placement?: Placement
   /** Delay before showing, ms. Short by default so it feels instant. */
   delay?: number
+  /** Wrap long text over several lines instead of truncating it. */
+  multiline?: boolean
   children: React.ReactElement
 }
 
@@ -17,7 +19,7 @@ interface TooltipProps {
  * consistent than the native `title` attribute. Wraps a single interactive
  * child and positions itself relative to that child's bounding box.
  */
-const Tooltip: React.FC<TooltipProps> = ({ label, placement = 'top', delay = 120, children }) => {
+const Tooltip: React.FC<TooltipProps> = ({ label, placement = 'top', delay = 120, multiline, children }) => {
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -80,7 +82,11 @@ const Tooltip: React.FC<TooltipProps> = ({ label, placement = 'top', delay = 120
               pointerEvents: 'none',
               zIndex: 9999,
             }}
-            className="px-2 py-1 rounded-md bg-elevated border border-default shadow-lg text-[11px] leading-none text-content whitespace-nowrap max-w-[480px] overflow-hidden text-ellipsis"
+            className={`px-2 py-1 rounded-md bg-elevated border border-default shadow-lg text-[11px] text-content ${
+              multiline
+                ? 'py-1.5 leading-relaxed whitespace-pre-line max-w-[280px]'
+                : 'leading-none whitespace-nowrap max-w-[480px] overflow-hidden text-ellipsis'
+            }`}
           >
             {label}
           </div>,

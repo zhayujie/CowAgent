@@ -20,7 +20,7 @@
     "links": [
       {
         "label": "Website",
-        "href": "https://cowagent.ai/"
+        "href": "https://cowagent.ai/?utm_source=docs"
       },
       {
         "label": "Download",
@@ -72,7 +72,7 @@
           "links": [
             {
               "label": "Website",
-              "href": "https://cowagent.ai/"
+              "href": "https://cowagent.ai/?utm_source=docs"
             },
             {
               "label": "Download",
@@ -356,7 +356,7 @@
           "links": [
             {
               "label": "官网",
-              "href": "https://cowagent.cn/"
+              "href": "https://cowagent.cn/?utm_source=docs"
             },
             {
               "label": "下载",
@@ -640,7 +640,7 @@
           "links": [
             {
               "label": "ウェブサイト",
-              "href": "https://cowagent.ai/"
+              "href": "https://cowagent.ai/?utm_source=docs"
             },
             {
               "label": "ダウンロード",

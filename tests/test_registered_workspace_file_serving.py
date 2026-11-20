@@ -30,7 +30,7 @@ def registered_files(tmp_path, monkeypatch):
     set_agent_registry(registry)
     monkeypatch.setitem(conf(), "web_password", "")
     monkeypatch.setitem(conf(), "web_file_serve_root", str(default))
-    monkeypatch.setattr(_common, "_PREVIEW_SECRET", b"local-test-preview-secret")
+    monkeypatch.setitem(_common._SECRETS, ".preview_secret", b"local-test-preview-secret")
     app = web.application(
         ("/api/file", "FileServeHandler", "/preview/(.*)", "PreviewHandler"),
         vars(files),

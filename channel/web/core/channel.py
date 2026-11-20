@@ -41,7 +41,7 @@ from common import i18n
 from common.log import logger
 from common.singleton import singleton
 from config import conf
-from common.deployment import is_desktop
+from common.deployment import is_app_bundled, is_mobile
 
 
 @singleton
@@ -1536,6 +1536,10 @@ class WebChannel(ChatChannel):
     def startup(self):
         configured_host = conf().get("web_host", "")
         host = configured_host or ("0.0.0.0" if _is_password_enabled() else "127.0.0.1")
+        # The mobile app is the only client of its embedded backend; anything
+        # wider would expose the phone's agent to whoever shares its network.
+        if is_mobile():
+            host = "127.0.0.1"
         # The desktop app passes its chosen port via COW_WEB_PORT so its backend
         # never collides with a source-run web console (default 9899). This makes
         # the port a single source of truth owned by the Electron shell.
@@ -1594,9 +1598,9 @@ class WebChannel(ChatChannel):
             else:
                 logger.info(f"[WebChannel] 🔒 Listening on {host} only (local access). For public access, set web_host to 0.0.0.0 and configure web_password")
 
-            # In desktop mode the Electron shell renders the UI, so don't pop a
-            # browser window (also avoids issues when running detached/headless).
-            if not is_desktop():
+            # The desktop and mobile apps render the UI themselves, so don't pop
+            # a browser window (also avoids issues when running detached/headless).
+            if not is_app_bundled():
                 try:
                     import webbrowser
                     webbrowser.open(f"{scheme}://localhost:{port}")
@@ -1632,12 +1636,14 @@ class WebChannel(ChatChannel):
 
         from channel.web.core.tls import resolve_tls_config
 
+        from channel.web.core.request_guard import guard_requests
+
         # Build WSGI app with middleware (same as runsimple but without print)
-        func = web.httpserver.StaticMiddleware(app.wsgifunc())
+        func = guard_requests(web.httpserver.StaticMiddleware(app.wsgifunc()))
         func = web.httpserver.LogMiddleware(func)
 
-        # The desktop shell probes and loads the console over plain http.
-        https_enabled = bool(conf().get("web_https_enabled", False)) and not is_desktop()
+        # The app shells probe and load the console over plain http.
+        https_enabled = bool(conf().get("web_https_enabled", False)) and not is_app_bundled()
         try:
             certfile, keyfile = resolve_tls_config(
                 https_enabled,
@@ -1693,7 +1699,9 @@ class WebChannel(ChatChannel):
             self._http_server = server
             server.prepare()
         from channel.web.api.integrations import record_listen
+        from channel.web.core import local_control
         record_listen(host, port, scheme)
+        local_control.publish(host, port, scheme)
         self._serve_loopback(build, host, port)
         SERVING.set()
         _log_startup_banner(scheme)
@@ -1718,6 +1726,7 @@ class WebChannel(ChatChannel):
                 return
             host, port = server.bind_addr[:2]
             record_listen(host, port, scheme)
+            local_control.publish(host, port, scheme)
             self._serve_loopback(build, host, port)
             if (host, port) == target and on_bound:
                 try:
@@ -1752,7 +1761,7 @@ class WebChannel(ChatChannel):
 
         if is_loopback_host(host):
             return False
-        return is_desktop() or not can_bind(host, 0)
+        return is_app_bundled() or not can_bind(host, 0)
 
     def _bind_again(self, build, target: tuple, previous: tuple):
         """Bind the new address, else go back to the previous one. The console
@@ -1782,7 +1791,7 @@ class WebChannel(ChatChannel):
         on one other address would cut off, so loopback is served alongside."""
         from channel.web.api.integrations import is_loopback_host
 
-        if not is_desktop() or host in ("0.0.0.0", "::") or is_loopback_host(host):
+        if not is_app_bundled() or host in ("0.0.0.0", "::") or is_loopback_host(host):
             return
         server = build("127.0.0.1", port)
         try:
@@ -1799,6 +1808,8 @@ class WebChannel(ChatChannel):
             server.stop()
 
     def stop(self):
+        from channel.web.core import local_control
+        local_control.withdraw()
         self._stop_loopback()
         if self._http_server:
             try:

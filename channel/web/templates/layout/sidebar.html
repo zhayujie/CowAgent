@@ -14,8 +14,20 @@
                             hover:opacity-80 transition-opacity duration-150">
                 <div class="sidebar-brand-text flex flex-col min-w-0">
                     <span class="text-white font-semibold text-sm truncate">CowAgent</span>
-                    <span class="text-neutral-500 text-xs" data-i18n="console">控制台</span>
                 </div>
+            </div>
+
+            <!-- Which device the console drives; opens the switcher. -->
+            <div id="device-switcher-wrap" class="device-switcher-wrap">
+                <button type="button" id="instance-switcher" class="device-switcher" data-tooltip-pos="right" data-tip-float
+                        onclick="toggleInstanceMenu(event)" aria-haspopup="menu" aria-controls="instance-menu" aria-expanded="false">
+                    <span class="device-switcher-icon"><i id="instance-switcher-icon" class="fas fa-laptop"></i></span>
+                    <span class="device-switcher-text">
+                        <span id="instance-switcher-label" class="device-switcher-name"></span>
+                        <span id="instance-switcher-sub" class="device-switcher-sub"></span>
+                    </span>
+                    <i class="fas fa-up-down device-switcher-chevron" aria-hidden="true"></i>
+                </button>
             </div>
 
             <!-- Navigation -->
@@ -164,11 +176,29 @@
                 </button>
             </div>
         </div>
+        <!-- Device switcher menu. Outside the sidebar so its overflow can't
+             clip it; instances.js places it. -->
+        <div id="instance-menu" class="instance-menu hidden" role="menu" aria-labelledby="instance-switcher">
+            <div class="instance-menu-head" data-i18n="devices_title">设备</div>
+            <div id="instance-menu-list"></div>
+            <div class="color-theme-divider"></div>
+            <button type="button" class="update-menu-item" role="menuitem" onclick="openInstanceAdd()">
+                <span class="update-menu-icon"><i class="fas fa-plus"></i></span>
+                <span class="update-menu-label" data-i18n="devices_connect_other_ellipsis">连接其他设备…</span>
+            </button>
+            <button type="button" class="update-menu-item" role="menuitem" onclick="openDevicesSettings()">
+                <span class="update-menu-icon"><i class="fas fa-sliders"></i></span>
+                <span class="update-menu-label" data-i18n="devices_manage_ellipsis">管理设备…</span>
+            </button>
+        </div>
         <!-- Close the groups the user folded last time before the first paint,
              so they don't flash open and then animate shut. -->
         <script>
         (function () {
             try {
+                if (localStorage.getItem('cow_device_switcher') === 'hidden') {
+                    document.documentElement.classList.add('device-switcher-off');
+                }
                 var groups = JSON.parse(localStorage.getItem('cow_sidebar_groups') || '{}');
                 document.querySelectorAll('#sidebar .menu-group[data-group]').forEach(function (g) {
                     if (groups[g.getAttribute('data-group')] === false) g.classList.remove('open');

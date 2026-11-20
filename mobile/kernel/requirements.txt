@@ -1,0 +1,18 @@
+# Python packages bundled with the agent kernel embedded in the mobile app.
+# Only what the web console API and the agent core import at runtime: no IM
+# channel SDKs, browser automation or local-model packages. numpy and Pillow
+# are optional in the core (pure-Python fallbacks) and left out to keep the
+# app small. Every entry must install through Chaquopy (Android) and
+# ios_prepare.py (iOS, which compiles packages that ship no iOS wheel).
+requests>=2.28.2
+certifi
+chardet>=5.1.0
+web.py>=0.76
+PyYAML>=6.0
+croniter>=2.0.0
+regex>=2019.3.12
+markdown-it-py>=3.0.0
+json-repair
+python-dotenv>=1.0.0
+# Mobile systems have no zoneinfo database where Python looks for one.
+tzdata

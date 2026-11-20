@@ -1,0 +1,23 @@
+/build-profile.json5
+
+# ---
+
+/local.properties
+/.idea
+**/build
+/.hvigor
+.cxx
+/.clangd
+/.clang-format
+/.clang-tidy
+/oh_modules
+oh-package-lock.json5
+hvigorw
+hvigorw.bat
+hvigor/hvigor-wrapper.js
+/.appanalyzer
+/.codegenie
+
+# JS bundles, built by `npm run bundle:harmony:release`
+/entry/src/main/resources/rawfile/*.hbc
+/entry/src/main/resources/rawfile/*.js

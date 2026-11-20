@@ -22,11 +22,13 @@ from common.utils import expand_path
 CORE_FILES = ("AGENT.md", "USER.md", "RULE.md", "MEMORY.md", "BOOTSTRAP.md")
 MAX_CORE_FILE_BYTES = 1024 * 1024
 
-# What a cloned Agent starts from: how it behaves, not what it knows.
+# What a cloned Agent starts from: how it behaves, not what it learned.
 # MEMORY.md is excluded because it is what the source Agent learned about its
 # user, and .env, the session database and the shared asset directories are
 # excluded because copying them would fork credentials, hand one Agent another's
 # conversations, and put the skill library into N places that then drift.
+# The skill selection and a private knowledge base are carried over by
+# ``create_agent`` instead.
 CLONED_FILES = ("AGENT.md", "USER.md", "RULE.md", "BOOTSTRAP.md")
 
 # The keys this service owns. Anything else in the settings it is handed
@@ -339,6 +341,24 @@ class AgentAdminService:
             if candidate.is_file():
                 shutil.copy2(candidate, destination / filename)
 
+    @staticmethod
+    def _clone_own_knowledge(source: Path, destination: Path) -> None:
+        """Copy a source Agent's private knowledge base into a new workspace.
+
+        Only a real ``knowledge/`` directory (not a symlink to the shared base)
+        is copied. The shared library must never be materialised into the clone.
+        """
+        src = source / "knowledge"
+        dst = destination / "knowledge"
+        if src.is_symlink() or not src.is_dir() or dst.exists():
+            return
+        try:
+            shutil.copytree(src, dst)
+        except OSError as e:
+            logger.warning(
+                f"[AgentAdmin] Could not clone knowledge from {src} to {dst}: {e}"
+            )
+
     def _reject_overlapping_workspace(
         self, workspace: Path, registry: AgentRegistry, sanctioned: Path
     ) -> None:
@@ -423,12 +443,25 @@ class AgentAdminService:
                 raise AgentAdminError("workspace must be empty for a new agent")
 
             source: Optional[Path] = None
+            source_mode: Optional[str] = None
             if clone_from:
-                source = registry.get(clone_from).workspace_path
+                source_profile = registry.get(clone_from, require_enabled=False)
+                source = source_profile.workspace_path
                 if not source.is_dir():
                     raise AgentAdminError(
                         f"source workspace for '{clone_from}' does not exist"
                     )
+                # Whatever the caller leaves unset follows the source. Skills stay
+                # a selection over the shared library, never a forked skills/.
+                if skills is None and source_profile.skills is not None:
+                    skills = list(source_profile.skills)
+                if knowledge is None and source_profile.knowledge is not None:
+                    knowledge = list(source_profile.knowledge)
+                source_mode = self._knowledge_mode_of(
+                    source_profile, registry.default_agent_id
+                )
+                if knowledge_mode is None:
+                    knowledge_mode = source_mode
 
             created_destination = not destination.exists()
             try:
@@ -442,6 +475,9 @@ class AgentAdminService:
                 self._seed_user_profile(registry, destination, cloned=source is not None)
                 self._seed_name(workspace, name)
                 if knowledge_mode == "own":
+                    if source_mode == "own":
+                        self._clone_own_knowledge(source, destination)
+                    # Seeds the index when nothing was copied; leaves a copy alone.
                     self._make_own_knowledge(destination)
                 if skill_mode == "own":
                     self._make_own_skills(destination)

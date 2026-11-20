@@ -4,21 +4,20 @@ The console's own password check plus the redirect target an MCP server
 sends the user back to after authorising it.
 """
 
-import hashlib
-import hmac
 import html
 import json
-import time
 
 import web
 
 from agent.guest.access import LoginLimiter
+from channel.web.api.devices import issue_password_device
+from channel.web.core import devices
 from channel.web.core._common import (
     _check_auth,
     _client_ip,
+    _current_device_token,
     _get_web_password,
     _is_password_enabled,
-    _session_expire_seconds,
 )
 from common.log import logger
 from common.utils import constant_time_equals
@@ -33,17 +32,6 @@ _login_limiter = LoginLimiter()
 def _limiter_scope(client: str) -> str:
     local = client in ("::1", "::ffff:127.0.0.1", "localhost") or client.startswith("127.")
     return "console-local" if local else "console"
-
-
-def _create_auth_token():
-    """Create a stateless signed token: ``<timestamp_hex>.<hmac_hex>``."""
-    ts = format(int(time.time()), "x")
-    sig = hmac.new(
-        _get_web_password().encode(),
-        ts.encode(),
-        hashlib.sha256,
-    ).hexdigest()
-    return f"{ts}.{sig}"
 
 
 class McpOAuthCallbackHandler:
@@ -145,9 +133,7 @@ class AuthLoginHandler:
             logger.warning(f"[WebChannel] Invalid login attempt from {client}")
             return json.dumps({"status": "error", "reason": "wrong_password", "message": "Wrong password"})
         _login_limiter.succeeded(scope, client)
-        token = _create_auth_token()
-        web.setcookie("cow_auth_token", token, expires=_session_expire_seconds(),
-                       path="/", httponly=True, samesite="Lax")
+        token = issue_password_device(data.get("device"))
         # Also return the token in the body: the desktop client (file:// origin)
         # can't rely on the cookie and sends it back via an Authorization header.
         return json.dumps({"status": "success", "token": token})
@@ -156,5 +142,11 @@ class AuthLoginHandler:
 class AuthLogoutHandler:
     def POST(self):
         web.header('Content-Type', 'application/json; charset=utf-8')
+        # Signing out gives the device's token up for good.
+        token = _current_device_token()
         web.setcookie("cow_auth_token", "", expires=-1, path="/")
+        if devices.verify(token):
+            device_id = devices.device_id_of(token)
+            devices.remove(device_id)
+            logger.info(f"[WebChannel] Device {device_id} signed out")
         return json.dumps({"status": "success"})

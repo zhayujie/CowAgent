@@ -17,6 +17,7 @@ import web
 from channel.web.core._common import (
     _config_write_guard,
     _live_channel_manager,
+    _qr_data_uri,
     _read_config_file_for_write,
     _require_auth,
     _write_config_file_for_write,
@@ -849,20 +850,7 @@ class WeixinQrHandler:
     @staticmethod
     def _qr_to_data_uri(data: str) -> str:
         """Generate a QR code as a PNG data URI."""
-        try:
-            import qrcode as qr_lib
-            import io
-            import base64
-            qr = qr_lib.QRCode(error_correction=qr_lib.constants.ERROR_CORRECT_L, box_size=6, border=2)
-            qr.add_data(data)
-            qr.make(fit=True)
-            img = qr.make_image(fill_color="black", back_color="white")
-            buf = io.BytesIO()
-            img.save(buf, format="PNG")
-            b64 = base64.b64encode(buf.getvalue()).decode("ascii")
-            return f"data:image/png;base64,{b64}"
-        except ImportError:
-            return ""
+        return _qr_data_uri(data)
 
     # instance_id -> monotonic time of the last restart this handler kicked off,
     # so a card polling while the channel comes back up cannot restart it again.

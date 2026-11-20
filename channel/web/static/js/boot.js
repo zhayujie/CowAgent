@@ -10,6 +10,7 @@ requestAuthGatedStart(() => {
     fetch('/config').then(r => r.json()).then(data => {
         if (data.status === 'success') {
             appConfig = data;
+            instanceNoteDevice(data.device);
             const title = data.title || 'CowAgent';
             document.getElementById('welcome-title').textContent = title;
             initConfigView(data);
@@ -26,13 +27,16 @@ requestAuthGatedStart(startPolling);
 applyTheme();
 applyI18n();
 
-fetch('/auth/check').then(r => r.json()).then(data => {
+// Backend calls go to whichever instance the console is switched to, so
+// nothing may reach the backend before that routing is in place.
+instanceBoot().then(() => fetch('/auth/check').then(r => r.json()).then(data => {
     if (data.auth_required && !data.authenticated) {
+        if (instanceActive()) return instanceAuthLost();
         // Keep background pollers parked until login succeeds (openAuthGate is
         // called from the login handler), so they don't spam 401s meanwhile.
         showLoginScreen();
     } else {
-        if (data.auth_required) {
+        if (data.auth_required || instanceActive()) {
             const logoutBtn = document.getElementById('logout-btn-header');
             if (logoutBtn) logoutBtn.classList.remove('hidden');
         }
@@ -44,7 +48,7 @@ fetch('/auth/check').then(r => r.json()).then(data => {
     // password-less deployment still works.
     openAuthGate();
     initApp();
-});
+}), showInstanceProblem);
 
 requestAnimationFrame(() => {
     document.body.classList.add('transition-colors', 'duration-200');

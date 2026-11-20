@@ -122,6 +122,46 @@ def test_clone_copies_persona_but_not_secrets_history_or_nested_agents(admin):
     )
 
 
+def test_clone_inherits_skills_subset(admin):
+    service, root, _ = admin
+    service.create_agent("research", "Research", str(root / "research"), skills=["web-search", "summarize"])
+    (root / "research" / "AGENT.md").write_text("# Research", encoding="utf-8")
+
+    created = service.create_agent("copy", "Copy", str(root / "copy"), clone_from="research")
+
+    assert created["skills"] == ["web-search", "summarize"]
+    stored = next(item for item in _saved(root)["agents"] if item["id"] == "copy")
+    assert stored["skills"] == ["web-search", "summarize"]
+    # Shared library stays shared: no forked skills/ directory on the clone.
+    assert not (root / "copy" / "skills").exists()
+
+
+def test_clone_inherits_own_knowledge_content(admin):
+    service, root, _ = admin
+    service.create_agent("research", "Research", str(root / "research"), knowledge_mode="own")
+    (root / "research" / "knowledge" / "notes.md").write_text("private notes", encoding="utf-8")
+    (root / "research" / "AGENT.md").write_text("# Research", encoding="utf-8")
+
+    created = service.create_agent("copy", "Copy", str(root / "copy"), clone_from="research")
+
+    assert service.knowledge_mode("copy") == "own"
+    kdir = root / "copy" / "knowledge"
+    assert kdir.is_dir() and not kdir.is_symlink()
+    assert (kdir / "notes.md").read_text(encoding="utf-8") == "private notes"
+    assert "skills" not in created
+
+
+def test_clone_from_shared_knowledge_stays_shared(admin):
+    service, root, _ = admin
+    service.create_agent("research", "Research", str(root / "research"))
+    (root / "research" / "AGENT.md").write_text("# Research", encoding="utf-8")
+
+    service.create_agent("copy", "Copy", str(root / "copy"), clone_from="research")
+
+    assert service.knowledge_mode("copy") == "shared"
+    assert not (root / "copy" / "knowledge").exists()
+
+
 def test_cloning_the_default_agent_into_its_own_subtree_terminates(tmp_path):
     """A whole-tree copy here recursed until the path length was rejected.
 

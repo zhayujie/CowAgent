@@ -110,12 +110,12 @@ def detect_install_kind(root: Optional[str] = None) -> InstallKind:
             unsupported_reason="This install is updated by whoever runs it.",
             platform=platform,
         )
-    if _deployment().is_desktop() or getattr(sys, "frozen", False):
+    if _deployment().is_app_bundled() or getattr(sys, "frozen", False):
         return InstallKind(
             kind="packaged",
             update_supported=False,
             unsupported_reason=(
-                "This desktop build is updated from the app's own updater, "
+                "This app build is updated with the app itself, "
                 "not with git pull."
             ),
             platform=platform,

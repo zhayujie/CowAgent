@@ -1,3 +1,11 @@
+import {
+  activeInstance,
+  deviceInfo,
+  diagnoseInstance,
+  sameDevice,
+  updateInstance,
+  type Instance,
+} from './instances'
 import type {
   ConfigData,
   ChannelInfo,
@@ -68,6 +76,48 @@ export interface IntegrationsState {
   port_fixed?: boolean
   local_only: boolean
   password_set: boolean
+}
+
+export interface PairingCode {
+  pairing_id: string
+  /** Short code to type, as XXXX-XXXX. */
+  code: string
+  expires_in: number
+  urls: string[]
+  link: string
+  qr_image: string
+  password_set: boolean
+}
+
+export interface PairedDevice {
+  id: string
+  name: string
+  platform: string
+  app_version: string
+  created_at: number
+  last_seen_at: number
+  /** How it signed in: a pairing code or the access password. */
+  via?: 'pairing' | 'password'
+  /** The web page it calls from, for a browser console on another address. */
+  origin?: string
+  last_ip?: string
+  online?: boolean
+}
+
+/** The CowAgent device itself, as it introduces itself to signed-in clients. */
+export interface DeviceSelf {
+  id: string
+  name: string
+  version?: string
+  /** Named and reached the way whoever runs it decides; clients don't offer a rename. */
+  managed?: boolean
+}
+
+export interface DeviceList {
+  devices: PairedDevice[]
+  /** The device making this request, empty when it isn't one (e.g. this app on its own backend). */
+  current: string
+  instance?: DeviceSelf
 }
 
 export type GuestShareStatus = 'active' | 'unconfirmed' | 'password_missing' | 'disabled' | 'expired'
@@ -161,24 +211,101 @@ export interface UploadResult {
 const AUTH_TOKEN_KEY = 'cow_auth_token'
 
 class ApiClient {
-  private baseUrl = 'http://127.0.0.1:9876'
+  private localBaseUrl = 'http://127.0.0.1:9876'
   // Bearer token for web_password-protected backends. The desktop renderer
   // runs from a file:// origin, where cross-origin cookies to http://127.0.0.1
   // aren't sent reliably, so we authenticate via an Authorization header
   // instead. Persisted in localStorage so it survives reloads.
-  private authToken: string | null =
+  private localToken: string | null =
     typeof localStorage !== 'undefined' ? localStorage.getItem(AUTH_TOKEN_KEY) : null
+  // Another computer or server this window drives instead of its own backend.
+  // Fixed for the window's lifetime: switching reloads.
+  private readonly instance: Instance | null = activeInstance()
 
+  private get baseUrl(): string {
+    return this.instance ? this.instance.url : this.localBaseUrl
+  }
+
+  // The address of another device can come to lead to a different machine;
+  // its token goes only where the device that issued it still answers. A
+  // check holds for a minute, and until a request finds the address silent.
+  private identity: { at: number; ok: boolean } | null = null
+  private identityCheck: Promise<'ok' | 'unreachable' | 'wrong_device'> | null = null
+  private wrongDeviceListener: (() => void) | null = null
+
+  onWrongDevice(listener: (() => void) | null) {
+    this.wrongDeviceListener = listener
+  }
+
+  /** Whether the active instance's address still leads to the device that issued its token. */
+  confirmInstance(force = false): Promise<'ok' | 'unreachable' | 'wrong_device'> {
+    const item = this.instance
+    if (!item || !item.instance_id) return Promise.resolve('ok')
+    if (!force && this.identity && Date.now() - this.identity.at < 60_000) {
+      return Promise.resolve(this.identity.ok ? 'ok' : 'wrong_device')
+    }
+    if (!this.identityCheck) {
+      this.identityCheck = diagnoseInstance(item.url, 8000)
+        .then((info) => {
+          const ok = sameDevice(item, info)
+          this.identity = { at: Date.now(), ok }
+          if (!ok) this.wrongDeviceListener?.()
+          return ok ? ('ok' as const) : ('wrong_device' as const)
+        })
+        .catch(() => 'unreachable' as const)
+        .finally(() => {
+          this.identityCheck = null
+        })
+    }
+    return this.identityCheck
+  }
+
+  /** Records the id of a device paired before devices had ids. */
+  adoptInstanceId(id: string) {
+    if (!this.instance || this.instance.instance_id || !id) return
+    this.instance.instance_id = id
+    updateInstance(this.instance.id, { instance_id: id })
+    this.identity = { at: Date.now(), ok: true }
+  }
+
+  /** The token to send right now: none to a remote address not confirmed as its device. */
+  private async sendableToken(): Promise<string | null> {
+    if (!this.instance) return this.localToken
+    if (!this.instance.token) return null
+    return (await this.confirmInstance()) === 'ok' ? this.instance.token : null
+  }
+
+  /** Same, for addresses built synchronously (EventSource, <img>): the last check decides. */
+  private get confirmedToken(): string | null {
+    if (!this.instance) return this.localToken
+    if (this.instance.instance_id && !this.identity?.ok) return null
+    return this.instance.token || null
+  }
+
+  /** The backend this app started; requests go elsewhere while an instance is active. */
   setBaseUrl(url: string) {
-    this.baseUrl = url
+    this.localBaseUrl = url
   }
 
   getBaseUrl() {
     return this.baseUrl
   }
 
+  getInstance(): Instance | null {
+    return this.instance
+  }
+
+  isRemote(): boolean {
+    return !!this.instance
+  }
+
   setAuthToken(token: string | null) {
-    this.authToken = token
+    if (this.instance) {
+      this.instance.token = token || ''
+      updateInstance(this.instance.id, { token: this.instance.token })
+      return
+    }
+    this.localToken = token
     try {
       if (token) localStorage.setItem(AUTH_TOKEN_KEY, token)
       else localStorage.removeItem(AUTH_TOKEN_KEY)
@@ -269,29 +396,37 @@ class ApiClient {
     return { path: url, options: opts }
   }
 
-  // The renderer is a file:// page, so a password-less backend sees its writes
-  // as cross-site and only lets them through with the desktop shell's token.
+  // The renderer is a file:// page, so the backend sees its writes as
+  // cross-site and only lets them through with the desktop shell's token.
   private async authHeaders(): Promise<Record<string, string>> {
     const desktopToken = this.isLoopbackBackend() ? await this.getDesktopToken() : ''
+    const token = await this.sendableToken()
     return {
       ...(desktopToken ? { 'X-Cow-Desktop-Token': desktopToken } : {}),
-      ...(this.authToken ? { Authorization: `Bearer ${this.authToken}` } : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     }
   }
 
   private async request<T>(path: string, rawOptions?: RequestInit): Promise<T> {
     const { path: url, options } = this.carryAgent(path, rawOptions)
-    const res = await fetch(`${this.baseUrl}${url}`, {
-      ...options,
-      // Cookies still work for browser access; the desktop app relies on the
-      // Authorization header below.
-      credentials: 'include',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(await this.authHeaders()),
-        ...options?.headers,
-      },
-    })
+    const headers = await this.authHeaders()
+    let res: Response
+    try {
+      res = await fetch(`${this.baseUrl}${url}`, {
+        ...options,
+        // Cookies still work for browser access; the desktop app relies on the
+        // Authorization header below.
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          ...headers,
+          ...options?.headers,
+        },
+      })
+    } catch (e) {
+      if (this.instance) this.identity = null
+      throw e
+    }
     if (!res.ok) {
       this.noteStatus(res)
       throw new Error(`HTTP ${res.status}: ${res.statusText}`)
@@ -447,9 +582,10 @@ class ApiClient {
   // EventSource can't set an Authorization header, so append the auth token as
   // a query param for SSE endpoints (the backend accepts it there).
   private withToken(url: string): string {
-    if (!this.authToken) return url
+    const token = this.confirmedToken
+    if (!token) return url
     const sep = url.includes('?') ? '&' : '?'
-    return `${url}${sep}token=${encodeURIComponent(this.authToken)}`
+    return `${url}${sep}token=${encodeURIComponent(token)}`
   }
 
   createSSEStream(requestId: string): EventSource {
@@ -484,6 +620,10 @@ class ApiClient {
   // Whether the backend runs on this machine. Only then does a local file path
   // mean anything to it; a remote backend must receive the bytes.
   private isLoopbackBackend(): boolean {
+    // A paired instance is another installation even on a loopback address
+    // (an SSH tunnel, a second copy): it gets neither this machine's desktop
+    // token nor its file paths.
+    if (this.instance) return false
     try {
       const host = new URL(this.baseUrl).hostname
       return host === '127.0.0.1' || host === 'localhost' || host === '[::1]' || host === '::1'
@@ -869,6 +1009,32 @@ class ApiClient {
   /** Saves web_host; the server restarts on it right after answering. */
   async saveListenHost(host: string): Promise<ApiResult & IntegrationsState & { reason?: string }> {
     return this.request('/api/integrations', { method: 'PUT', body: JSON.stringify({ web_host: host }) })
+  }
+
+  /** `baseUrl` is an address this side knows reaches the server, offered to the phone first. */
+  async createPairing(baseUrl = ''): Promise<ApiResult & PairingCode & { reason?: string }> {
+    return this.request('/api/pairing', { method: 'POST', body: JSON.stringify({ base_url: baseUrl }) })
+  }
+
+  async getPairing(id: string): Promise<ApiResult & { state: 'pending' | 'paired' | 'expired'; device?: PairedDevice }> {
+    return this.request(`/api/pairing/${encodeURIComponent(id)}`)
+  }
+
+  async listDevices(): Promise<ApiResult & DeviceList> {
+    return this.request('/api/devices')
+  }
+
+  /** Names this CowAgent device for every client that connects to it. */
+  async renameSelf(name: string): Promise<ApiResult & { instance?: DeviceSelf }> {
+    return this.request('/api/device', { method: 'PATCH', body: JSON.stringify({ name }) })
+  }
+
+  async renameDevice(id: string, name: string): Promise<ApiResult & { device?: PairedDevice }> {
+    return this.request(`/api/devices/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ name }) })
+  }
+
+  async removeDevice(id: string): Promise<ApiResult> {
+    return this.request(`/api/devices/${encodeURIComponent(id)}`, { method: 'DELETE' })
   }
 
   /** Guest pages belong to the instance, not an Agent, and their errors carry a reason code. */
@@ -1631,7 +1797,7 @@ class ApiClient {
   async authLogin(password: string): Promise<ApiResult & { token?: string; reason?: string; retry_after?: number }> {
     const res = await this.request<ApiResult & { token?: string; reason?: string; retry_after?: number }>('/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ password }),
+      body: JSON.stringify({ password, device: await deviceInfo() }),
     })
     if (res.status === 'success' && res.token) {
       this.setAuthToken(res.token)
@@ -1640,9 +1806,23 @@ class ApiClient {
   }
 
   async authLogout(): Promise<ApiResult> {
-    this.setAuthToken(null)
-    return this.request('/auth/logout', { method: 'POST' })
+    // Sent with the token still attached, so the server drops this device.
+    try {
+      return await this.request('/auth/logout', { method: 'POST' })
+    } finally {
+      this.setAuthToken(null)
+    }
   }
+}
+
+/** LAN addresses as the backend reports them, so the web console and mobile app
+ *  show the same ones; this machine's own list only when the backend found none
+ *  and is this machine's. */
+export async function lanUrls(state: IntegrationsState): Promise<string[]> {
+  if (state.local_only || !state.listen?.port) return []
+  if (state.lan_urls?.length || apiClient.isRemote()) return state.lan_urls || []
+  const ips = (await window.electronAPI?.getLanAddresses?.().catch(() => [])) || []
+  return ips.map((ip) => `http://${ip}:${state.listen.port}`)
 }
 
 export const apiClient = new ApiClient()

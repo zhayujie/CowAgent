@@ -1,17 +1,19 @@
 # encoding:utf-8
 
 import ast
+import hashlib
 import json
 import logging
 import os
 import pickle
+import re
 import sys
 import time
 
 from common.log import logger
 from common import i18n
 from cli.config_json import deep_merge_dicts as _deep_merge_dicts, merge_duplicate_keys
-from common.deployment import is_desktop
+from common.deployment import is_app_bundled
 
 # All available config keys are listed in this dict (use lowercase keys).
 # The values here are placeholders only; the program does NOT read them.
@@ -283,6 +285,8 @@ available_setting = {
     "web_host": "",  # Web console bind address; empty means auto
     "web_port": 9899,
     "web_password": "",  # Web console password; empty means no authentication required
+    "web_allowed_hosts": [],  # When set and web_password is empty, only these host names (plus localhost, IPs and web_public_url) are served
+    "web_allowed_origins": [],  # Other sites allowed to send write requests, e.g. "https://my.dashboard.com"
     "web_https_enabled": False,  # Serve the web console over HTTPS directly; needs web_ssl_certfile + web_ssl_keyfile
     "web_ssl_certfile": "",  # PEM certificate file for direct HTTPS (full chain recommended)
     "web_ssl_keyfile": "",  # PEM private key file for direct HTTPS
@@ -297,6 +301,7 @@ available_setting = {
         "enabled": False,
     },
     "web_public_url": "",  # Address shown in API examples, share links and embed code; empty uses the page's own
+    "device_name": "",  # Name other devices show for this one; empty uses the computer's name
     "websites_base_url": "",  # Public URL prefix a static server exposes the Agent's websites/ dir at; empty disables published links
     "mcp_oauth_redirect_base": "",  # Base URL for MCP OAuth callback (e.g. http://your-ip:9899); empty uses local web console
     "agent": True,  # whether to enable Agent mode
@@ -330,7 +335,7 @@ available_setting = {
     # Default permission mode for sessions that have not picked one of their own:
     # "read-only" | "workspace-write" | "full-access". Kept at full-access so an
     # existing install behaves exactly as before an upgrade. Only a fresh desktop
-    # client (COW_DESKTOP=1 with no config.json yet) is tightened to the stricter
+    # or mobile client (no config.json yet) is tightened to the stricter
     # workspace-write in load_config(); docker/source stay at full-access.
     "agent_permission_mode": "full-access",
     # In-process sub agents: the Agent hands a self-contained task to a
@@ -607,18 +612,18 @@ def load_config():
     # otherwise silently drop all but the last occurrence.
     #
     # Self-heal a corrupted user config.json instead of crashing on startup —
-    # but ONLY for the packaged desktop client (COW_DESKTOP=1). A truncated or
+    # but ONLY for the packaged desktop and mobile clients. A truncated or
     # invalid file (e.g. a bad write during a previous update) would otherwise
-    # make json.loads raise and strand the desktop app on "Initialization
+    # make json.loads raise and strand the app on "Initialization
     # Failed" forever, with no way for an end user to recover short of manually
     # deleting the file. Source deployments deliberately keep the original
     # behavior (raise): a developer editing config.json wants a clear error to
     # fix, not to have their file silently backed up and replaced by defaults.
-    desktop_mode = is_desktop()
+    bundled_mode = is_app_bundled()
     try:
         config = Config(json.loads(config_str, object_pairs_hook=_merge_duplicate_keys))
     except ValueError as parse_err:
-        if not desktop_mode or config_path != user_config_path:
+        if not bundled_mode or config_path != user_config_path:
             # Source run, or the bundled template itself is broken (a packaging
             # bug we can't heal by falling back further) — surface it.
             raise
@@ -649,7 +654,7 @@ def load_config():
     # upgrade, so normalize it into the current shape before anything reads it.
     _migrate_chat_fallback(config)
 
-    # Fresh desktop installs default to the stricter "workspace-write"; every
+    # Fresh desktop and mobile installs default to the stricter "workspace-write"; every
     # other case keeps the template's "full-access". A packaged client only
     # lacks config.json on its very first launch (config_path fell back to the
     # bundled template) — once the user configures anything (e.g. a model) the
@@ -657,7 +662,7 @@ def load_config():
     # never silently tightened by an upgrade. Non-desktop (docker, source) is
     # untouched. Placed before the env override so AGENT_PERMISSION_MODE still
     # wins if explicitly set.
-    if is_desktop() and config_path != user_config_path:
+    if is_app_bundled() and config_path != user_config_path:
         config["agent_permission_mode"] = "workspace-write"
 
     # override config with environment variables.
@@ -981,6 +986,49 @@ def get_data_root():
         os.makedirs(data_dir, exist_ok=True)
         return data_dir
     return get_root()
+
+
+def get_device_base_dir() -> str:
+    """Where every instance on this machine keeps its device directory."""
+    return os.path.join(os.path.expanduser(os.environ.get("COW_DATA_DIR") or "~/.cow"), "device")
+
+
+def source_instance_key(root: str) -> str:
+    """Folder name for a source deployment at ``root``: readable, and unique
+    to the path."""
+    real = os.path.realpath(root)
+    name = re.sub(r"[^A-Za-z0-9._-]", "", os.path.basename(real))[:40] or "cow"
+    digest = hashlib.sha256(real.encode("utf-8", "surrogatepass")).hexdigest()[:8]
+    return f"{name}-{digest}"
+
+
+def get_device_dir(create: bool = True):
+    """Directory for who this install is and who may sign in to it: its device
+    id, the paired devices, the session key and the running console's local key.
+
+    It sits under COW_DATA_DIR when set. A source deployment keeps it out of the
+    project directory, under ~/.cow/device, in a folder of its own per project:
+    two checkouts, or a checkout beside the desktop app, are separate instances
+    with their own devices and keys.
+    """
+    data_dir = os.environ.get("COW_DATA_DIR")
+    if data_dir:
+        path = os.path.join(os.path.expanduser(data_dir), "device")
+    else:
+        path = os.path.join(get_device_base_dir(), source_instance_key(get_root()))
+    if create:
+        # An unwritable home must not stop the server: what lives here then
+        # stays in memory until a restart.
+        try:
+            os.makedirs(path, mode=0o700, exist_ok=True)
+        except OSError as e:
+            if path not in _unwritable_device_dirs:
+                _unwritable_device_dirs.add(path)
+                logger.warning(f"[Config] Could not create device directory {path}: {e}")
+    return path
+
+
+_unwritable_device_dirs = set()
 
 
 def read_file(path):

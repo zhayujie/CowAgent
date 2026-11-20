@@ -1,0 +1,71 @@
+diff --git a/node_modules/react-native-audio-recorder-player/android/src/main/java/com/dooboolab.audiorecorderplayer/RNAudioRecorderPlayerModule.kt b/node_modules/react-native-audio-recorder-player/android/src/main/java/com/dooboolab.audiorecorderplayer/RNAudioRecorderPlayerModule.kt
+index 4570fc2..8c72087 100644
+--- a/node_modules/react-native-audio-recorder-player/android/src/main/java/com/dooboolab.audiorecorderplayer/RNAudioRecorderPlayerModule.kt
++++ b/node_modules/react-native-audio-recorder-player/android/src/main/java/com/dooboolab.audiorecorderplayer/RNAudioRecorderPlayerModule.kt
+@@ -41,16 +41,9 @@ class RNAudioRecorderPlayerModule(private val reactContext: ReactApplicationCont
+                 // On devices that run Android 10 (API level 29) or higher
+                 // your app can contribute to well-defined media collections such as MediaStore.Downloads without requesting any storage-related permissions
+                 // https://developer.android.com/about/versions/11/privacy/storage#permissions-target-11
+-                if (Build.VERSION.SDK_INT < 29 &&
+-                        (ActivityCompat.checkSelfPermission(reactContext, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED ||
+-                        ActivityCompat.checkSelfPermission(reactContext, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED))  {
+-                    ActivityCompat.requestPermissions((currentActivity)!!, arrayOf(
+-                            Manifest.permission.RECORD_AUDIO,
+-                            Manifest.permission.WRITE_EXTERNAL_STORAGE), 0)
+-                    promise.reject("No permission granted.", "Try again after adding permission.")
+-                    return
+-                } else if (ActivityCompat.checkSelfPermission(reactContext, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+-                    ActivityCompat.requestPermissions((currentActivity)!!, arrayOf(Manifest.permission.RECORD_AUDIO), 0)
++                // Recordings go to cacheDir, which needs no storage permission on any version.
++                if (ActivityCompat.checkSelfPermission(reactContext, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
++                    ActivityCompat.requestPermissions((reactContext.currentActivity)!!, arrayOf(Manifest.permission.RECORD_AUDIO), 0)
+                     promise.reject("No permission granted.", "Try again after adding permission.")
+                     return
+                 }
+@@ -69,9 +62,15 @@ class RNAudioRecorderPlayerModule(private val reactContext: ReactApplicationCont
+         audioFileURL = if (((path == "DEFAULT"))) "${reactContext.cacheDir}/sound.${defaultFileExtensions.get(outputFormat)}" else path
+         _meteringEnabled = meteringEnabled
+ 
++        // The JS side never starts twice, so a recorder still here was left behind by a stop that failed.
+         if (mediaRecorder != null) {
+-            promise.reject("InvalidState", "startRecorder has already been called.")
+-            return
++            recorderRunnable?.let { recordHandler?.removeCallbacks(it) }
++            try {
++                mediaRecorder!!.release()
++            } catch (e: Exception) {
++                Log.w(tag, "release stale recorder: " + e.message)
++            }
++            mediaRecorder = null
+         }
+ 
+         var newMediaRecorder: MediaRecorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+@@ -190,14 +189,17 @@ class RNAudioRecorderPlayerModule(private val reactContext: ReactApplicationCont
+             return
+         }
+ 
++        // stop() throws when nothing was captured yet (a quick tap); the recorder must be released either way,
++        // or every later start is refused.
+         try {
+             mediaRecorder!!.stop()
+-            mediaRecorder!!.release()
+-            mediaRecorder = null
+             promise.resolve("file:///$audioFileURL")
+         } catch (stopException: RuntimeException) {
+             stopException.message?.let { Log.d(tag,"" + it) }
+             promise.reject("stopRecord", stopException.message)
++        } finally {
++            mediaRecorder?.release()
++            mediaRecorder = null
+         }
+     }
+ 
+@@ -252,7 +254,7 @@ class RNAudioRecorderPlayerModule(private val reactContext: ReactApplicationCont
+                         val key = iterator.nextKey()
+                         headers.put(key, httpHeaders.getString(key))
+                     }
+-                    mediaPlayer!!.setDataSource(currentActivity!!.applicationContext, Uri.parse(path), headers)
++                    mediaPlayer!!.setDataSource(reactContext.currentActivity!!.applicationContext, Uri.parse(path), headers)
+                 } else {
+                     mediaPlayer!!.setDataSource(path)
+                 }
