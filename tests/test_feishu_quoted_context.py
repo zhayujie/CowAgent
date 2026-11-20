@@ -81,6 +81,61 @@ def test_post_reply_extracts_title_and_text(monkeypatch):
     )
 
 
+def test_quoted_image_is_downloaded_and_added_as_attachment(tmp_path, monkeypatch):
+    monkeypatch.setattr("channel.feishu.feishu_message.state_dir.tmp_dir", lambda: tmp_path)
+    post = {
+        "msg_type": "image",
+        "body": {"content": json.dumps({"image_key": "quoted-image"})},
+    }
+    response = _response({"code": 0, "data": {"items": [post]}})
+    monkeypatch.setattr(
+        "channel.feishu.feishu_message.requests.get", lambda **kwargs: response
+    )
+    monkeypatch.setattr(
+        "channel.feishu.feishu_message.download_to_file",
+        lambda url, path, *args, **kwargs: open(path, "wb").write(b"image-bytes"),
+    )
+
+    message = FeishuMessage(_event(), access_token="tenant-token")
+
+    assert len(message.attachments) == 1
+    image_path, image_type = message.attachments[0]
+    assert image_type == "image"
+    assert open(image_path, "rb").read() == b"image-bytes"
+    marker = "[图片: " + image_path + "]"
+    assert marker in message.quoted_content
+    assert marker in message.content_with_quote()
+    assert "[Image]" not in message.quoted_content
+
+
+def test_quoted_post_downloads_all_images(tmp_path, monkeypatch):
+    monkeypatch.setattr("channel.feishu.feishu_message.state_dir.tmp_dir", lambda: tmp_path)
+    post = {
+        "msg_type": "post",
+        "body": {"content": json.dumps({
+            "content": [[
+                {"tag": "text", "text": "caption"},
+                {"tag": "img", "image_key": "image-1"},
+                {"tag": "img", "image_key": "image-2"},
+            ]]
+        })},
+    }
+    response = _response({"code": 0, "data": {"items": [post]}})
+    monkeypatch.setattr(
+        "channel.feishu.feishu_message.requests.get", lambda **kwargs: response
+    )
+    monkeypatch.setattr(
+        "channel.feishu.feishu_message.download_to_file",
+        lambda url, path, *args, **kwargs: open(path, "wb").write(b"image-bytes"),
+    )
+
+    message = FeishuMessage(_event(), access_token="tenant-token")
+
+    assert [kind for _, kind in message.attachments] == ["image", "image"]
+    assert "caption" in message.quoted_content
+    assert message.quoted_content.count("[图片: ") == 2
+
+
 def test_quote_fetch_failure_keeps_current_message_usable(monkeypatch):
     def fail(**kwargs):
         raise TimeoutError("network timeout")
