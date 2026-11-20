@@ -80,11 +80,7 @@ const InstanceSwitcher: React.FC<{ collapsed: boolean }> = ({ collapsed }) => {
             : 'hover:bg-surface-2'
       } ${collapsed ? 'h-10 justify-center' : 'h-11 gap-2.5 px-2'}`}
     >
-      <span
-        className={`relative w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${
-          active ? 'bg-accent text-accent-contrast' : 'bg-accent-soft text-accent'
-        }`}
-      >
+      <span className="relative w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 bg-accent-soft text-accent">
         <Icon size={15} strokeWidth={2} />
         {active && <StatusDot status={activeStatus} className="absolute -right-0.5 -bottom-0.5" />}
       </span>

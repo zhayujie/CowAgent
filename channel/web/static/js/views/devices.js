@@ -194,7 +194,7 @@ function renderDevicesOut() {
         const tools = (item.token && !needsPairing && !item.managed ? _devicesIconBtn('fas fa-pen', 'devices_rename_device', `startOutRename('${id}')`) : '')
             + _devicesIconBtn('far fa-trash-can', 'devices_forget', `confirmForgetInstance('${id}')`);
         return `
-            <div class="dev-row${on ? ' is-active' : ''}">
+            <div class="dev-row">
                 <div class="dev-row-icon"><i class="fas fa-server"></i><span class="instance-dot is-${status}"></span></div>
                 <div class="min-w-0 flex-1">
                     <div class="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200 min-w-0">${name}</div>
@@ -476,7 +476,7 @@ function _deviceRow(d) {
     const badges = (current ? `<span class="dev-chip is-primary">${escapeHtml(t('devices_this'))}</span>` : '')
         + (d.online && !current ? `<span class="dev-chip is-online">${escapeHtml(t('devices_online'))}</span>` : '');
     return `
-        <div class="dev-row${current ? ' is-current' : ''}">
+        <div class="dev-row">
             <div class="dev-row-icon"><i class="${icon}"></i>${d.online ? '<span class="instance-dot is-online"></span>' : ''}</div>
             <div class="min-w-0 flex-1">
                 <div class="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200 min-w-0">${name}${badges}</div>
