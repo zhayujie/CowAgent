@@ -396,6 +396,23 @@ class WecomBotChannel(ChatChannel):
             }
         return stream_id
 
+    def _claim_message_id(self, msg_id: str) -> bool:
+        """Reserve *msg_id* for one turn; True when this is its first delivery.
+
+        WeCom redelivers a callback when the reply is slow, so both inbound paths
+        (webhook and the long connection) must filter repeats. A payload without
+        a msgid has nothing to key on: recording "" as seen would then filter
+        every later id-less message for the whole TTL, which reads as a channel
+        that suddenly went deaf.
+        """
+        if not msg_id:
+            return True
+        with self._callback_lock:
+            if self.received_msgs.get(msg_id):
+                return False
+            self.received_msgs[msg_id] = True
+        return True
+
     def _callback_handle_message(self, data: dict) -> dict:
         """Handle a freshly-received user message in callback mode.
 
@@ -404,15 +421,10 @@ class WecomBotChannel(ChatChannel):
         agent's streamed answer. Returns ``None`` when there's nothing to reply
         (e.g. an image/file silently cached for the next query).
         """
-        msg_id = data.get("msgid", "")
-        if msg_id:
-            with self._callback_lock:
-                duplicate = self.received_msgs.get(msg_id)
-                if not duplicate:
-                    self.received_msgs[msg_id] = True
-            if duplicate:
-                logger.debug(f"[WecomBot] Duplicate msg filtered: {msg_id}")
-                return None
+        message_id = data.get("msgid", "")
+        if not self._claim_message_id(message_id):
+            logger.debug(f"[WecomBot] Duplicate msg filtered: {message_id}")
+            return None
 
         chattype = data.get("chattype", "single")
         is_group = chattype == "group"
@@ -617,10 +629,9 @@ class WecomBotChannel(ChatChannel):
         req_id = data.get("headers", {}).get("req_id", "")
         msg_id = body.get("msgid", "")
 
-        if self.received_msgs.get(msg_id):
+        if not self._claim_message_id(msg_id):
             logger.debug(f"[WecomBot] Duplicate msg filtered: {msg_id}")
             return
-        self.received_msgs[msg_id] = True
 
         chattype = body.get("chattype", "single")
         is_group = chattype == "group"
