@@ -840,6 +840,7 @@ class CloudClient(LinkAIClient):
             return
 
         desired_ids = set()
+        disabled_ids = set()
         started = 0
         for record in channels:
             if not isinstance(record, dict):
@@ -850,6 +851,10 @@ class CloudClient(LinkAIClient):
                 logger.warning(f"[CloudClient] channel_sync record missing id/type, skipped: {record}")
                 continue
             if str(record.get("enabled") or "Y") == "N":
+                # Disabled is an explicit state, not a deletion: `_handle_instance_update`
+                # keeps the login so re-enabling does not need a new QR scan. Remember it
+                # so the reconcile below stops the channel without dropping its credentials.
+                disabled_ids.add(instance_id)
                 continue
             desired_ids.add(instance_id)
             try:
@@ -874,7 +879,9 @@ class CloudClient(LinkAIClient):
                 continue
             remove_instance(conf(), instance_id)
             removed += 1
-            if channel_type in ("weixin", "wx"):
+            if channel_type in ("weixin", "wx") and instance_id not in disabled_ids:
+                # Only a record the platform actually dropped loses its login; a
+                # disabled one keeps the token so re-enabling needs no new QR scan.
                 self._remove_weixin_credentials(instance_id)
             if self.channel_mgr:
                 threading.Thread(
