@@ -36,7 +36,6 @@ html.device-remote #sidebar-nav { padding-top: 8px; }
     color: rgb(var(--cw-primary-300));
     background: rgb(var(--cw-primary-500) / 0.16);
 }
-.device-switcher.is-remote .device-switcher-icon { color: #fff; background: rgb(var(--cw-primary-500)); }
 .device-switcher-text { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
 .device-switcher-name { font-size: 13px; font-weight: 500; color: #e5e5e5; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .device-switcher-sub { font-size: 11px; color: #737373; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -144,7 +143,6 @@ html.device-remote #sidebar-nav { padding-top: 8px; }
     color: rgb(var(--cw-primary-500));
     background: rgb(var(--cw-primary-500) / 0.12);
 }
-.dev-self.is-remote .dev-self-icon { color: #fff; background: rgb(var(--cw-primary-500)); }
 .dev-chip {
     display: inline-flex;
     align-items: center;
@@ -188,8 +186,6 @@ html.device-remote #sidebar-nav { padding-top: 8px; }
     background: rgb(100 116 139 / 0.1);
 }
 .dark .dev-row-icon { color: #a3a3a3; background: rgba(255, 255, 255, 0.06); }
-.dev-row.is-current .dev-row-icon,
-.dev-row.is-active .dev-row-icon { color: rgb(var(--cw-primary-500)); background: rgb(var(--cw-primary-500) / 0.12); }
 .dev-row-icon .instance-dot { position: absolute; right: -2px; bottom: -2px; box-shadow: 0 0 0 2px rgb(var(--cw-panel)); }
 .dev-icon-btn {
     flex-shrink: 0;

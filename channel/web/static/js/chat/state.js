@@ -133,6 +133,8 @@ const COMPOSER_MIN_H = 52;
 const COMPOSER_MAX_H = 220;
 
 function autoResizeComposer() {
+    // A hidden composer has no width, so its scrollHeight would be meaningless.
+    if (chatInput.clientWidth === 0) return;
     chatInput.style.height = COMPOSER_MIN_H + 'px';
     const scrollH = chatInput.scrollHeight;
     chatInput.style.height = Math.max(COMPOSER_MIN_H, Math.min(scrollH, COMPOSER_MAX_H)) + 'px';
@@ -144,6 +146,18 @@ function resetComposerHeight() {
     chatInput.style.height = COMPOSER_MIN_H + 'px';
     chatInput.style.overflowY = 'hidden';
 }
+
+// Line wrapping depends on the width, which changes when side panels open or
+// close or the chat view becomes visible again.
+(function watchComposerWidth() {
+    if (typeof ResizeObserver === 'undefined') return;
+    let width = chatInput.clientWidth;
+    new ResizeObserver(() => {
+        if (chatInput.clientWidth === width) return;
+        width = chatInput.clientWidth;
+        if (chatInput.value) autoResizeComposer(); else resetComposerHeight();
+    }).observe(chatInput);
+})();
 
 // ---------------- Mic button: in-page voice input via the configured ASR provider ----------------
 (function setupMicButton() {
