@@ -182,7 +182,12 @@ def _tool_output_text(content: Any) -> str:
 def tools_to_responses(tools: Optional[List[Dict[str, Any]]]) -> Optional[List[Dict[str, Any]]]:
     """Convert Chat-Completions tools (externally tagged) into Responses tools
     (internally tagged): ``{type:function, function:{name,...}}`` ->
-    ``{type:function, name, description, parameters}``."""
+    ``{type:function, name, description, parameters, strict}``.
+
+    A missing ``strict`` is sent as ``False``: Chat Completions treats it as
+    non-strict, but Responses compiles it in strict mode, and one schema using
+    keywords outside the strict subset (e.g. ``dependentRequired`` from an MCP
+    tool) fails the whole request. An explicit value is kept."""
     if not tools:
         return None
     converted: List[Dict[str, Any]] = []
@@ -207,6 +212,8 @@ def tools_to_responses(tools: Optional[List[Dict[str, Any]]]) -> Optional[List[D
                 "parameters": tool.get("parameters") or tool.get("input_schema") or {},
                 "strict": tool.get("strict"),
             }
+        if entry["strict"] is None:
+            entry["strict"] = False
         converted.append({k: v for k, v in entry.items() if v is not None})
     return converted or None
 
