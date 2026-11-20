@@ -833,10 +833,22 @@ class FeiShuChanel(ChatChannel):
             )
             return
 
+        # Scope pending attachments to this bot and the same group/session split
+        # used for messages. Shared groups intentionally omit the sender.
+        sender_id = (event["sender"].get("sender_id") or {}).get("open_id")
+        shared_group = is_group and conf().get("group_shared_session", True)
+        cache_key = "feishu:" + json.dumps([
+            self.instance_id,
+            self.cfg("feishu_app_id") or event.get("app_id"),
+            chat_type,
+            msg.get("chat_id") if is_group else None,
+            None if shared_group else sender_id,
+        ])
+
         # 构造飞书消息对象
         feishu_msg = FeishuMessage(
             event, is_group=is_group, access_token=self.fetch_access_token(), bot_mention_keys=bot_mention_keys,
-            domain=self.feishu_domain
+            domain=self.feishu_domain, attachment_cache_key=cache_key,
         )
         if not feishu_msg:
             return
@@ -850,20 +862,14 @@ class FeiShuChanel(ChatChannel):
         from channel.file_cache import get_file_cache
         file_cache = get_file_cache()
 
-        # 获取 session_id（用于缓存关联）
-        if is_group:
-            if conf().get("group_shared_session", True):
-                session_id = msg.get("chat_id")  # 群共享会话
-            else:
-                session_id = feishu_msg.from_user_id + "_" + msg.get("chat_id")
-        else:
-            session_id = feishu_msg.from_user_id
+        image_sources = {path: (feishu_msg.msg_id, key) for key, path in feishu_msg.image_paths.items()}
 
         # 如果是单张图片消息，缓存起来
         if feishu_msg.ctype == ContextType.IMAGE:
             if hasattr(feishu_msg, 'image_path') and feishu_msg.image_path:
-                file_cache.add(session_id, feishu_msg.image_path, file_type='image')
-                logger.info(f"[FeiShu] Image cached for session {session_id}, waiting for user query...")
+                file_cache.add(cache_key, feishu_msg.image_path, file_type='image',
+                               source=image_sources[feishu_msg.image_path])
+                logger.info("[FeiShu] Image cached, waiting for user query")
             # 单张图片不直接处理，等待用户提问
             return
 
@@ -881,8 +887,8 @@ class FeiShuChanel(ChatChannel):
                 # 文件下载失败时主动通知用户，避免静默丢失
                 self._notify_file_download_failed(feishu_msg, is_group, receive_id_type, e)
                 return
-            file_cache.add(session_id, feishu_msg.content, file_type='file')
-            logger.info(f"[FeiShu] File cached for session {session_id}: {feishu_msg.content}")
+            file_cache.add(cache_key, feishu_msg.content, file_type='file')
+            logger.info(f"[FeiShu] File cached: {feishu_msg.content}")
             return
 
         # A post carrying files but no text (e.g. several files sent at once)
@@ -891,9 +897,9 @@ class FeiShuChanel(ChatChannel):
                 and getattr(feishu_msg, "has_file_attachments", False)
                 and not feishu_msg.post_text):
             for file_path, file_type in feishu_msg.attachments:
-                file_cache.add(session_id, file_path, file_type=file_type)
+                file_cache.add(cache_key, file_path, file_type=file_type, source=image_sources.get(file_path))
             logger.info(
-                f"[FeiShu] {len(feishu_msg.attachments)} post attachment(s) cached for session {session_id}"
+                f"[FeiShu] {len(feishu_msg.attachments)} post attachment(s) cached"
             )
             if feishu_msg.failed_files:
                 self._notify_file_download_failed(
@@ -903,7 +909,7 @@ class FeiShuChanel(ChatChannel):
 
         # 如果是文本消息，检查是否有缓存的文件
         if feishu_msg.ctype == ContextType.TEXT:
-            cached_files = file_cache.get(session_id)
+            cached_files = file_cache.pop(cache_key)
             if cached_files:
                 # 将缓存的文件附加到文本消息中
                 file_refs = []
@@ -911,16 +917,17 @@ class FeiShuChanel(ChatChannel):
                     file_path = file_info['path']
                     file_type = file_info['type']
                     if file_type == 'image':
+                        if file_info.get("source") in feishu_msg.quoted_image_sources:
+                            continue
                         file_refs.append(f"[图片: {file_path}]")
                     elif file_type == 'video':
                         file_refs.append(f"[视频: {file_path}]")
                     else:
                         file_refs.append(f"[文件: {file_path}]")
 
-                feishu_msg.content = feishu_msg.content + "\n" + "\n".join(file_refs)
-                logger.info(f"[FeiShu] Attached {len(cached_files)} cached file(s) to user query")
-                # 清除缓存
-                file_cache.clear(session_id)
+                if file_refs:
+                    feishu_msg.content = feishu_msg.content + "\n" + "\n".join(file_refs)
+                    logger.info(f"[FeiShu] Attached {len(file_refs)} cached file(s) to user query")
 
         context = self._compose_context(
             feishu_msg.ctype,

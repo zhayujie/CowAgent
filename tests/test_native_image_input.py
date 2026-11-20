@@ -71,7 +71,7 @@ def _has_note(message, note=_IMAGE_NOT_ATTACHED):
     content = message.get("content")
     if isinstance(content, str):
         return note in content
-    return any(isinstance(b, dict) and b.get("text") == note for b in content)
+    return any(isinstance(b, dict) and (b.get("text") or "").startswith(note) for b in content)
 
 
 def test_image_rides_only_on_the_current_query(workspace):
@@ -84,11 +84,22 @@ def test_image_rides_only_on_the_current_query(workspace):
     assert len(_images(sent)) == 1
     assert _images(sent)[0]["image_url"]["url"].startswith("data:image/png;base64,")
     assert sent[-1]["content"][0]["text"].endswith("[Image: tmp/photo.png]")
+    assert sent[-1]["content"][1]["text"] == _IMAGE_ATTACHED + '["tmp/photo.png"]'
     assert not _has_note(sent[-1])
     assert _has_note(sent[-1], _IMAGE_ATTACHED)
     assert _has_note(sent[0]) and not _has_note(sent[0], _IMAGE_ATTACHED)
     assert _images(ex.messages) == [] and not any(
         _has_note(m) or _has_note(m, _IMAGE_ATTACHED) for m in ex.messages)
+
+
+def test_image_note_only_lists_paths_actually_attached(workspace):
+    ex = _executor(workspace, _Model())
+    _start_run(ex, "[图片: tmp/photo.png]\n[Image: tmp/photo.png]\n[图片: tmp/missing.png]")
+
+    sent = ex._prepare_messages()
+
+    assert len(_images(sent)) == 1
+    assert sent[-1]["content"][1]["text"] == _IMAGE_ATTACHED + '["tmp/photo.png"]'
 
 
 def test_history_images_given_as_plain_strings_get_the_note_too(workspace):

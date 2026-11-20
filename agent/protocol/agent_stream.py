@@ -109,8 +109,12 @@ def _is_retryable_error(error_str_lower: str) -> bool:
 
 # Image references the channels append to the user query, e.g. "[图片: tmp/a.png]".
 _IMAGE_MARKER_RE = re.compile(r"\[(?:图片|Image):\s*([^\]]+)\]")
+_IMAGE_ATTACHED = (
+    "If the task requires image analysis, use the images attached to this request directly. "
+    "Use the vision tool only if you need an image that is not attached. "
+    "The attached image paths, in order, are: "
+)
 _IMAGE_NOT_ATTACHED = "(The images referenced above are not attached to this request; use the vision tool if you need to view them.)"
-_IMAGE_ATTACHED = "(The images referenced above are attached to this message; view them directly without the vision tool.)"
 
 
 def _user_text(content) -> str:
@@ -378,7 +382,7 @@ class AgentStreamExecutor:
         self.run_user_message = None
         # Images attached to the query, sent with it only while this run lasts
         # (see _run_image_blocks); never written into self.messages.
-        self._run_images: Optional[List[Dict[str, Any]]] = None
+        self._run_images: Optional[Dict[str, Dict[str, Any]]] = None
         self._run_images_disabled = False
         self._images_in_request = False
         
@@ -3172,7 +3176,8 @@ class AgentStreamExecutor:
         for msg in self.messages:
             content = msg.get("content")
             if msg is self.run_user_message and images and isinstance(content, list):
-                msg = {**msg, "content": content + [{"type": "text", "text": _IMAGE_ATTACHED}] + images}
+                note = {"type": "text", "text": _IMAGE_ATTACHED + json.dumps(list(images), ensure_ascii=False)}
+                msg = {**msg, "content": content + [note, *images.values()]}
                 self._images_in_request = True
             elif msg.get("role") == "user" and _IMAGE_MARKER_RE.search(_user_text(content)):
                 # A model that answered earlier images directly would otherwise
@@ -3184,7 +3189,7 @@ class AgentStreamExecutor:
             prepared.append(msg)
         return prepared
 
-    def _run_image_blocks(self) -> List[Dict[str, Any]]:
+    def _run_image_blocks(self) -> Dict[str, Dict[str, Any]]:
         """Image blocks for the query's attached images, when the main model
         would be the one analyzing them anyway (see Vision.runs_on_main_model).
 
@@ -3193,24 +3198,24 @@ class AgentStreamExecutor:
         up in the history.
         """
         if self._run_images_disabled or self.run_user_message is None:
-            return []
+            return {}
         vision = (self.tools or {}).get("vision")
         if vision is None or not hasattr(vision, "runs_on_main_model"):
-            return []
+            return {}
         vision.model = self.model
         try:
             if not vision.runs_on_main_model():
-                return []
+                return {}
         except Exception as e:
             logger.debug(f"[Agent] Native image input skipped: {e}")
-            return []
+            return {}
 
         if self._run_images is None:
-            self._run_images = []
-            for ref in _IMAGE_MARKER_RE.findall(_user_text(self.run_user_message.get("content"))):
-                ref = ref.strip().strip("'\"")
+            self._run_images = {}
+            refs = _IMAGE_MARKER_RE.findall(_user_text(self.run_user_message.get("content")))
+            for ref in dict.fromkeys(ref.strip().strip("'\"") for ref in refs):
                 try:
-                    self._run_images.append(vision._build_image_content(ref))
+                    self._run_images[ref] = vision._build_image_content(ref)
                 except Exception as e:
                     logger.warning(f"[Agent] Cannot attach image {ref}: {e}")
             if self._run_images:
