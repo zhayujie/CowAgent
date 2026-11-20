@@ -1,4 +1,4 @@
-"""Web Search tool. Supports fifteen backends with a unified response format:
+"""Web Search tool. Supports seventeen backends with a unified response format:
   - deepseek (https://api-docs.deepseek.com/guides/search, official Search API)
   - bocha   (https://open.bochaai.com)
   - zhipu   (https://docs.bigmodel.cn/cn/guide/tools/web-search)
@@ -10,6 +10,7 @@
   - tavily  (https://tavily.com, AI-optimized search API)
   - outcrawl (https://outcrawl.ai, scrape and search API for AI agents)
   - firecrawl (https://www.firecrawl.dev/?utm_source=cowagent&utm_medium=integration, context API for AI agents)
+  - context (https://context.dev, web search with query-relevant Highlights)
   - specstream (https://specstream.ai/docs/search-api, web search and page extraction API)
   - olostep (https://docs.olostep.com, web search, scraping and crawling API for AI agents)
   - searchapi (https://www.searchapi.io, Google SERP API)
@@ -19,7 +20,7 @@
 Provider selection
   - strategy 'auto' (default): pick the first configured provider in the
     canonical order [deepseek, bocha, qianfan, zhipu, cowagent, linkai, anysearch,
-    serply, tavily, outcrawl, firecrawl, specstream, olostep, searchapi, searxng, keenable].
+    serply, tavily, outcrawl, firecrawl, context, specstream, olostep, searchapi, searxng, keenable].
     Keenable counts as configured with a key or with the explicit `keenable_anonymous` opt-in (same contract as
     `anysearch_anonymous`). When the caller passes an explicit `provider`
     it overrides the pick; an invalid/unconfigured one silently falls back
@@ -42,6 +43,7 @@ Credentials
   - tavily  : tools.web_search.tavily_api_key  ->  env TAVILY_API_KEY
   - outcrawl: tools.web_search.outcrawl_api_key  ->  env OUTCRAWL_API_KEY
   - firecrawl: tools.web_search.firecrawl_api_key  ->  env FIRECRAWL_API_KEY
+  - context: tools.web_search.context_api_key  ->  env CONTEXT_DEV_API_KEY
   - specstream: tools.web_search.specstream_api_key  ->  env SPECSTREAM_API_KEY
   - olostep : tools.web_search.olostep_api_key  ->  env OLOSTEP_API_KEY
   - searchapi: tools.web_search.searchapi_api_key  ->  env SEARCHAPI_API_KEY
@@ -55,7 +57,7 @@ import json
 import math
 import os
 from typing import Any, Dict, List, Optional
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 import requests
 
@@ -72,9 +74,9 @@ DEFAULT_TIMEOUT = 30
 # zhipu (strong on long-form articles), cowagent and linkai (aggregators),
 # anysearch, serply (global Google/Bing SERP, last since it isn't
 # benchmarked against the Chinese-market providers above), tavily, outcrawl,
-# firecrawl, specstream, olostep, searchapi, searxng, keenable (global index, keyless tier behind an explicit
+# firecrawl, context, specstream, olostep, searchapi, searxng, keenable (global index, keyless tier behind an explicit
 # opt-in; placed last so any provider the user paid for wins).
-PROVIDER_ORDER = ("deepseek", "bocha", "qianfan", "zhipu", "cowagent", "linkai", "anysearch", "serply", "tavily", "outcrawl", "firecrawl", "specstream", "olostep", "searchapi", "searxng", "keenable")
+PROVIDER_ORDER = ("deepseek", "bocha", "qianfan", "zhipu", "cowagent", "linkai", "anysearch", "serply", "tavily", "outcrawl", "firecrawl", "context", "specstream", "olostep", "searchapi", "searxng", "keenable")
 
 PROVIDER_LABELS = {
     "bocha":   "Bocha",
@@ -88,6 +90,7 @@ PROVIDER_LABELS = {
     "tavily":  "Tavily",
     "outcrawl": "Outcrawl",
     "firecrawl": "Firecrawl",
+    "context": "Context.dev",
     "specstream": "SpecStream",
     "olostep": "Olostep",
     "searchapi": "SearchApi",
@@ -154,6 +157,9 @@ def _get_api_key(provider: str) -> str:
     if provider == "firecrawl":
         key = _conf_str(_tools_web_search_conf().get("firecrawl_api_key"), "")
         return key or os.environ.get("FIRECRAWL_API_KEY", "").strip()
+    if provider == "context":
+        key = _conf_str(_tools_web_search_conf().get("context_api_key"), "")
+        return key or os.environ.get("CONTEXT_DEV_API_KEY", "").strip()
     if provider == "specstream":
         key = _conf_str(_tools_web_search_conf().get("specstream_api_key"), "")
         return key or os.environ.get("SPECSTREAM_API_KEY", "").strip()
@@ -378,7 +384,7 @@ class WebSearch(BaseTool):
             return ToolResult.fail(
                 "Error: No search provider configured. "
                 "Configure one of BOCHA_API_KEY / zhipu_ai_api_key / qianfan_api_key / linkai_api_key / "
-                "deepseek_api_key / anysearch_api_key / SERPLY_API_KEY / TAVILY_API_KEY / OUTCRAWL_API_KEY / FIRECRAWL_API_KEY / SPECSTREAM_API_KEY / OLOSTEP_API_KEY / SEARCHAPI_API_KEY / SEARXNG_URL."
+                "deepseek_api_key / anysearch_api_key / SERPLY_API_KEY / TAVILY_API_KEY / OUTCRAWL_API_KEY / FIRECRAWL_API_KEY / CONTEXT_DEV_API_KEY / SPECSTREAM_API_KEY / OLOSTEP_API_KEY / SEARCHAPI_API_KEY / SEARXNG_URL."
             )
 
         # Always log the routing decision so multi-provider deployments can
@@ -414,6 +420,8 @@ class WebSearch(BaseTool):
                 return self._search_outcrawl(query, count)
             if provider == "firecrawl":
                 return self._search_firecrawl(query, count)
+            if provider == "context":
+                return self._search_context(query, count)
             if provider == "specstream":
                 return self._search_specstream(query, count)
             if provider == "olostep":
@@ -1222,6 +1230,73 @@ class WebSearch(BaseTool):
             "query": query, "backend": "firecrawl",
             "total": len(results), "count": len(results), "results": results,
         })
+
+    # ------------------------------------------------------------------
+    # Context.dev
+    # ------------------------------------------------------------------
+
+    def _search_context(self, query: str, count: int) -> ToolResult:
+        if len(query) > 500:
+            return ToolResult.fail("Error: Context.dev search queries must be at most 500 characters.")
+        try:
+            resp = requests.post(
+                "https://api.context.dev/v1/web/search",
+                headers={"Authorization": f"Bearer {_get_api_key('context')}", "Content-Type": "application/json"},
+                json={
+                    "query": query, "numResults": count,
+                    "highlightsOptions": {"enabled": True, "maxCharacters": 1000},
+                    "timeoutOpts": {"milliseconds": 25000, "behavior": "fail"},
+                },
+                timeout=DEFAULT_TIMEOUT, allow_redirects=False,
+            )
+            if resp.status_code != 200:
+                reason = {
+                    401: "Invalid Context.dev API key.",
+                    402: "Context.dev API credits exhausted.",
+                    403: "Context.dev API access denied.",
+                    429: "Context.dev API rate limit reached.",
+                }.get(resp.status_code, f"Context.dev API returned HTTP {resp.status_code}.")
+                return ToolResult.fail(f"Error: {reason}")
+            data = resp.json()
+            if not isinstance(data, dict) or not isinstance(data.get("results"), list):
+                return ToolResult.fail("Error: Context.dev returned an invalid search response.")
+            if data.get("partial", False) is not False:
+                return ToolResult.fail("Error: Context.dev returned incomplete search results. Try again.")
+            results = []
+            for item in data["results"][:count]:
+                if not isinstance(item, dict) or not isinstance(item.get("title"), str) or not isinstance(item.get("url"), str):
+                    return ToolResult.fail("Error: Context.dev returned an invalid search result.")
+                title, url = item["title"].strip(), item["url"].strip()
+                parsed_url = urlsplit(url)
+                if not title or parsed_url.scheme not in ("http", "https") or not parsed_url.hostname or parsed_url.username or parsed_url.password:
+                    return ToolResult.fail("Error: Context.dev returned an invalid source URL or title.")
+                highlights = item.get("highlights")
+                snippet = ""
+                if highlights is not None:
+                    if not isinstance(highlights, dict) or highlights.get("code") not in (
+                        "SUCCESS", "NOT_REQUESTED", "TIMEOUT", "CONTENT_TOO_LARGE", "WEBSITE_ACCESS_ERROR", "WEBSITE_BLOCKED", "ERROR",
+                    ):
+                        return ToolResult.fail("Error: Context.dev returned invalid Highlights.")
+                    if highlights["code"] == "SUCCESS":
+                        passages = highlights.get("highlights")
+                        if not isinstance(passages, list) or any(not isinstance(passage, str) for passage in passages):
+                            return ToolResult.fail("Error: Context.dev returned invalid Highlights.")
+                        snippet = "\n".join(passage.strip() for passage in passages).strip()
+                if not snippet:
+                    description = item.get("description")
+                    if description is not None and not isinstance(description, str):
+                        return ToolResult.fail("Error: Context.dev returned an invalid search description.")
+                    snippet = "[Highlights unavailable; search description only.] " + (description or "")
+                results.append({"title": title, "url": url, "snippet": snippet})
+            return ToolResult.success({
+                "query": query, "backend": "context",
+                "total": len(results), "count": len(results), "results": results,
+            })
+        except requests.Timeout:
+            return ToolResult.fail(f"Error: Context.dev search timed out after {DEFAULT_TIMEOUT}s.")
+        except Exception:
+            # Transport and validation exceptions can contain credentials or upstream payloads.
+            return ToolResult.fail("Error: Context.dev search failed. Check your API key and provider availability.")
 
     # ------------------------------------------------------------------
     # SpecStream
