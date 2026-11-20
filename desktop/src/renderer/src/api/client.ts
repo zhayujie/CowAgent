@@ -483,7 +483,7 @@ class ApiClient {
 
   // Whether the backend runs on this machine. Only then does a local file path
   // mean anything to it; a remote backend must receive the bytes.
-  private isLoopbackBackend(): boolean {
+  isLoopbackBackend(): boolean {
     try {
       const host = new URL(this.baseUrl).hostname
       return host === '127.0.0.1' || host === 'localhost' || host === '[::1]' || host === '::1'

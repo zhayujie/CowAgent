@@ -265,6 +265,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
                   key={att.abs_path}
                   meta={{ file_name: att.file_name, rel_path: att.file_name, abs_path: att.abs_path }}
                   turnSeq={turnSeq}
+                  openLocallyIfDenied
                 />
               ))}
             </div>
