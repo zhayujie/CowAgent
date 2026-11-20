@@ -50,6 +50,31 @@ def _openai_usage(usage_meta) -> dict:
 _THINKING_LEVEL_MODELS = ("gemini-4",)
 _THINKING_LEVELS = ("low", "medium", "high")
 
+# Gemini names the stop cause in its own vocabulary. The agent reads the OpenAI
+# name instead: a turn that returns text and no tool calls looks finished either
+# way, so "length" / "max_tokens" is the only thing that separates a model which
+# chose to stop from one cut off at the output limit, and a blocked answer must
+# not be handed over as a normal completion.
+_FINISH_REASON_MAP = {
+    "STOP": "stop",
+    "MAX_TOKENS": "length",
+    "SAFETY": "content_filter",
+    "RECITATION": "content_filter",
+    "BLOCKLIST": "content_filter",
+    "PROHIBITED_CONTENT": "content_filter",
+    "SPII": "content_filter",
+    "IMAGE_SAFETY": "content_filter",
+    "OTHER": "stop",
+}
+
+
+def _map_finish_reason(raw_finish_reason) -> str:
+    """Translate Gemini's finishReason into the finish_reason the agent reads."""
+    if not raw_finish_reason:
+        return "stop"
+    return _FINISH_REASON_MAP.get(str(raw_finish_reason).upper(), "stop")
+
+
 # Inlined images come out of message content or the model itself, so they are
 # fetched the way every channel fetches media: streamed under a size cap, with
 # the SSRF guard re-checking each redirect hop when it is switched on.
@@ -765,7 +790,9 @@ class GoogleGeminiBot(Bot):
                 "choices": [{
                     "index": 0,
                     "message": message_dict,
-                    "finish_reason": "tool_calls" if tool_calls else "stop"
+                    "finish_reason": "tool_calls" if tool_calls else _map_finish_reason(
+                        candidate.get("finishReason")
+                    )
                 }],
                 "usage": _openai_usage(data.get("usageMetadata")),
                 "safety_ratings": safety_ratings
@@ -967,7 +994,9 @@ class GoogleGeminiBot(Bot):
                 "choices": [{
                     "index": 0,
                     "delta": {},
-                    "finish_reason": "tool_calls" if all_tool_calls else "stop"
+                    "finish_reason": "tool_calls" if all_tool_calls else _map_finish_reason(
+                        last_finish_reason
+                    )
                 }]
             }
             if last_usage_meta is not None:
