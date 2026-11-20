@@ -135,6 +135,25 @@ def test_user_template_can_replace_a_builtin(workspace):
     assert load_templates(str(workspace))["explore"].description == "Mine."
 
 
+@pytest.mark.parametrize("tools_header", ["tools: []\n", ""])
+def test_empty_tools_list_disables_tools_while_omission_inherits(tools_header):
+    template = parse_template(
+        "---\nname: text-only\ndescription: Answer without tools\n"
+        + tools_header
+        + "---\nAnswer the question.\n",
+        "fallback",
+        "test",
+    )
+    available = [_Tool("bash"), _Tool("write")]
+    inherits = not tools_header
+
+    assert template is not None
+    assert template.tools == (["*"] if inherits else [])
+    assert template.allows_all_tools() is inherits
+    assert template.inherits_skills() is inherits
+    assert template.select_tools(available) == (available if inherits else [])
+
+
 def test_bad_template_encoding_does_not_disable_valid_subagents(
     spawn_tool, enabled, workspace, monkeypatch
 ):
