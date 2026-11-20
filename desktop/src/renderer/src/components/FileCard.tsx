@@ -8,7 +8,7 @@ import { useWorkspaceStore } from '../store/workspaceStore'
 import { useSessionStore } from '../store/sessionStore'
 import { focusProduced } from '../store/artifactStore'
 import { iconFor, colorFor, formatSize, kindOf, PREVIEWABLE_KINDS } from '../lib/fileKind'
-import type { Artifact, ArtifactOrigin } from '../types'
+import type { Artifact, ArtifactOrigin, WorkspaceEntry } from '../types'
 
 /** Partial artifact: history-rebuilt cards only know the path. */
 export type FileCardMeta = Pick<Artifact, 'file_name' | 'rel_path'> & Partial<Artifact>
@@ -17,12 +17,15 @@ interface FileCardProps {
   meta: FileCardMeta
   /** Seq of the question whose turn wrote the file; null while it isn't persisted. */
   turnSeq?: number | null
+  /** Open the file with the system app when the backend won't serve it
+   *  (outside its allowed roots) and runs on this machine. */
+  openLocallyIfDenied?: boolean
 }
 
 const action =
   'w-6 h-6 flex items-center justify-center rounded-md text-content-tertiary hover:text-content hover:bg-surface transition-colors'
 
-const FileCard: React.FC<FileCardProps> = ({ meta, turnSeq = null }) => {
+const FileCard: React.FC<FileCardProps> = ({ meta, turnSeq = null, openLocallyIfDenied = false }) => {
   const navigate = useNavigate()
   const preview = useWorkspaceStore((s) => s.preview)
   const kind = meta.kind || kindOf(meta.file_name)
@@ -41,13 +44,37 @@ const FileCard: React.FC<FileCardProps> = ({ meta, turnSeq = null }) => {
     turn_seq: turnSeq,
   })
 
-  const open = () =>
-    preview(meta.preview_url ? (meta as Artifact) : meta.abs_path || meta.rel_path, { origin: origin() })
+  // The file is on this machine's disk, so the system can still reach it when
+  // the backend won't serve it.
+  const localPath =
+    openLocallyIfDenied && meta.abs_path && window.electronAPI?.openPath && apiClient.isLoopbackBackend()
+      ? meta.abs_path
+      : null
+
+  /** The backend's entry for the file; undefined when it won't serve it. */
+  const served = async (): Promise<WorkspaceEntry | undefined> => {
+    try {
+      return (await apiClient.workspaceResolve(meta.abs_path || meta.rel_path, useWorkspaceStore.getState().sessionId)).file
+    } catch {
+      return undefined
+    }
+  }
 
   const resolved = async (): Promise<FileCardMeta> => {
     if (meta.abs_path && meta.raw_url && meta.preview_url) return meta
-    const file = (await apiClient.workspaceResolve(meta.abs_path || meta.rel_path, useWorkspaceStore.getState().sessionId)).file
+    const file = await served()
+    if (!file) throw new Error('file not served')
     return { ...meta, abs_path: file.abs_path, raw_url: file.raw_url, preview_url: file.preview_url, size: file.size }
+  }
+
+  const open = async () => {
+    if (localPath && !meta.preview_url) {
+      const file = await served()
+      if (file) preview(file, { origin: origin() })
+      else void window.electronAPI!.openPath(localPath)
+      return
+    }
+    preview(meta.preview_url ? (meta as Artifact) : meta.abs_path || meta.rel_path, { origin: origin() })
   }
 
   const download = async (e: React.MouseEvent) => {
@@ -57,6 +84,7 @@ const FileCard: React.FC<FileCardProps> = ({ meta, turnSeq = null }) => {
       try {
         url = (await resolved()).raw_url
       } catch {
+        if (localPath) void window.electronAPI?.revealPath?.(localPath)
         return
       }
     }
@@ -69,6 +97,11 @@ const FileCard: React.FC<FileCardProps> = ({ meta, turnSeq = null }) => {
     try {
       file = await resolved()
     } catch {
+      // The artifacts view couldn't preview it either.
+      if (localPath) {
+        void window.electronAPI!.openPath(localPath)
+        return
+      }
       /* the view looks the file up by path, or shows what the card knows */
     }
     if (!file.abs_path) return

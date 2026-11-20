@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useEffect, useMemo, forwardRef, useImperativeHandle } from 'react'
+import React, { useState, useRef, useCallback, useEffect, useLayoutEffect, useMemo, forwardRef, useImperativeHandle } from 'react'
 import {
   Plus,
   Paperclip,
@@ -300,7 +300,8 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
   // 180px). Keep overflow hidden until we hit the cap, so an empty/short input
   // never shows a scrollbar (matches the web console behavior).
   const autoSize = (el: HTMLTextAreaElement | null) => {
-    if (!el) return
+    // A hidden textarea has no width, so its scrollHeight would be meaningless.
+    if (!el || el.clientWidth === 0) return
     el.style.height = '48px'
     const h = Math.min(el.scrollHeight, 200)
     el.style.height = h + 'px'
@@ -314,10 +315,26 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     el.style.overflowY = 'hidden'
   }
 
-  // Sync the height once on mount so the very first render matches the 42px
-  // single-line height instead of the browser's default textarea size.
-  useEffect(() => {
+  // Fit the height to the content before paint whenever the text changes, so
+  // a draft swapped in on session switch never shows at a stale height.
+  useLayoutEffect(() => {
     autoSize(textareaRef.current)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [text])
+
+  // Line wrapping depends on the width, which changes when side panels open or
+  // close or the composer becomes visible again.
+  useEffect(() => {
+    const el = textareaRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    let width = el.clientWidth
+    const ro = new ResizeObserver(() => {
+      if (el.clientWidth === width) return
+      width = el.clientWidth
+      autoSize(el)
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 

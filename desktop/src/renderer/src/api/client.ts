@@ -619,7 +619,7 @@ class ApiClient {
 
   // Whether the backend runs on this machine. Only then does a local file path
   // mean anything to it; a remote backend must receive the bytes.
-  private isLoopbackBackend(): boolean {
+  isLoopbackBackend(): boolean {
     // A paired instance is another installation even on a loopback address
     // (an SSH tunnel, a second copy): it gets neither this machine's desktop
     // token nor its file paths.
