@@ -37,6 +37,8 @@ function setup() {
     const state = fs.readFileSync(path.join(ROOT, 'channel/web/static/js/chat/state.js'), 'utf8');
     vm.runInContext(utils.slice(utils.indexOf('let _scrollRafId'), utils.indexOf('function applyHighlighting')), context);
     vm.runInContext(state.slice(state.indexOf('let _autoScrollEnabled'), state.indexOf('// Intercept internal navigation')), context);
+    const render = fs.readFileSync(path.join(ROOT, 'channel/web/static/js/chat/render.js'), 'utf8');
+    vm.runInContext(render.slice(render.indexOf('let historyPinToken'), render.indexOf('// Load conversation history')), context);
     return {
         box, frames, button, classes, listeners, historyLoads, run: code => vm.runInContext(code, context),
         flush() { const batch = [...frames.values()]; frames.clear(); batch.forEach(callback => callback()); },
@@ -168,6 +170,21 @@ test('programmatic scrolls near the top and exhausted history never load pages',
     s.scroll(0, 'up');
     s.touch(300, 340);
     assert.deepEqual(s.historyLoads, []);
+});
+
+test('switching sessions drops the previous reader position and follows the new bottom', () => {
+    const s = setup();
+    s.scroll(600, 'up');
+    assert.equal(s.run('_autoScrollEnabled'), false);
+    s.run('const pin = historyPinToken; resetChatScrollForSession(); globalThis.pinBumped = historyPinToken !== pin');
+    assert.equal(s.run('pinBumped'), true);
+    assert.equal(s.run('_autoScrollEnabled'), true);
+    assert.equal(s.classes.has('hidden'), true);
+    s.box.scrollTop = 0;
+    s.box.scrollHeight = 1500;
+    s.run('scrollChatToBottom()');
+    s.flush();
+    assert.equal(s.box.scrollTop, 1400);
 });
 
 test('composer viewport resize follows only while enabled and keeps the return button clickable', () => {

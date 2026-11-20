@@ -120,6 +120,7 @@ function newChat(optimistic = true, inherit = true) {
     startPolling();  // bump generation so old loop self-cancels, new loop uses fresh sessionId
     if (typeof resetTimeline === 'function') resetTimeline();
     messagesDiv.innerHTML = '';
+    resetChatScrollForSession();
     const ws = document.createElement('div');
     ws.id = 'welcome-screen';
     ws.className = 'flex flex-col items-center justify-center h-full px-6 pb-16';

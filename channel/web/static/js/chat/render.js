@@ -784,6 +784,16 @@ function cancelChatScrollForNavigation() {
     _updateScrollToBottomBtn();
 }
 
+// The follow-the-bottom state belongs to the conversation on screen: a reader
+// who scrolled up in one session must not leave the next one stuck mid-list.
+function resetChatScrollForSession() {
+    cancelHistoryBottomPins();
+    if (typeof cancelQueuedChatScroll === 'function') cancelQueuedChatScroll();
+    _autoScrollEnabled = true;
+    _lastScrollTop = 0;
+    _updateScrollToBottomBtn();
+}
+
 // Load conversation history from the server (page 1 = most recent messages).
 // Subsequent pages prepend older messages when the user scrolls to the top.
 // With untilSeq, every page from `page` back to the one holding that message

@@ -670,6 +670,7 @@ function switchSession(newSessionId, agentId) {
     historyLoading = false;
 
     messagesDiv.innerHTML = '';
+    resetChatScrollForSession();
     if (typeof resetTimeline === 'function') resetTimeline();
     loadHistory(1);
     startPolling();
