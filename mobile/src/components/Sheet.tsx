@@ -1,5 +1,5 @@
 import React, {useEffect, useState, type ReactNode} from 'react';
-import {KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, View} from 'react-native';
+import {Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, View} from 'react-native';
 import Animated, {Easing, useAnimatedStyle, useSharedValue, withTiming} from 'react-native-reanimated';
 import {scheduleOnRN} from 'react-native-worklets';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
@@ -11,6 +11,28 @@ const EASE = Easing.bezier(0.22, 0.61, 0.36, 1);
 
 /** iOS cannot present another modal while the sheet's modal is still dismissing. */
 export const SHEET_DISMISS_MS = Platform.OS === 'ios' ? 360 : 0;
+
+/**
+ * HarmonyOS draws a Modal in its own dialog layer, which the page's keyboard
+ * RESIZE mode (harmony/entry/src/main/ets/pages/Index.ets) does not reach, so
+ * the keyboard would cover the sheet. There the sheet makes room itself.
+ */
+function useHarmonyKeyboardHeight(active: boolean): number {
+  const [height, setHeight] = useState(0);
+  useEffect(() => {
+    if (!active || (Platform.OS as string) !== 'harmony') {
+      return;
+    }
+    const show = Keyboard.addListener('keyboardDidShow', e => setHeight(e.endCoordinates.height));
+    const hide = Keyboard.addListener('keyboardDidHide', () => setHeight(0));
+    return () => {
+      show.remove();
+      hide.remove();
+      setHeight(0);
+    };
+  }, [active]);
+  return height;
+}
 
 /** Bottom sheet: slides up over a scrim, closes on scrim tap or back. */
 export function Sheet({
@@ -29,6 +51,7 @@ export function Sheet({
   const progress = useSharedValue(0);
   const [mounted, setMounted] = useState(visible);
   const [panelHeight, setPanelHeight] = useState(420);
+  const keyboardHeight = useHarmonyKeyboardHeight(mounted);
 
   useEffect(() => {
     if (visible) {
@@ -55,7 +78,7 @@ export function Sheet({
   return (
     <Modal transparent visible animationType="none" onRequestClose={onClose} statusBarTranslucent>
       <KeyboardAvoidingView
-        style={styles.root}
+        style={[styles.root, {paddingBottom: keyboardHeight}]}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <Animated.View style={[StyleSheet.absoluteFill, styles.scrim, scrim]}>
           <Pressable style={styles.fill} onPress={onClose} accessibilityLabel={tr('common_close')} />
