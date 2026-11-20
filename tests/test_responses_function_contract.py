@@ -50,3 +50,21 @@ def test_native_bot_http_request_preserves_function_contract(monkeypatch):
     payload = request.call_args.kwargs["json"]
     assert payload["tool_choice"] == {"type": "function", "name": "read"}
     assert payload["tools"][0]["strict"] is False
+
+
+@pytest.mark.parametrize("nested", [True, False])
+def test_unset_strictness_is_sent_as_non_strict(nested):
+    # Responses compiles a function with no ``strict`` in strict mode, so an MCP
+    # schema using e.g. ``dependentRequired`` would fail the whole request.
+    params = {
+        "type": "object",
+        "properties": {"start": {"type": "string"}, "end": {"type": "string"}},
+        "dependentRequired": {"start": ["end"]},
+    }
+    fn = {"name": "list_events", "parameters": params}
+    tool = {"type": "function", "function": fn} if nested else {"type": "function", **fn}
+    original = deepcopy(tool)
+    converted = adapter.tools_to_responses([tool])[0]
+    assert converted["strict"] is False
+    assert converted["parameters"] == params
+    assert tool == original
