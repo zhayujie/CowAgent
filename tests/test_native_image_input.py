@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
-from agent.protocol.agent_stream import _IMAGE_NOT_ATTACHED, AgentStreamExecutor
+from agent.protocol.agent_stream import _IMAGE_ATTACHED, _IMAGE_NOT_ATTACHED, AgentStreamExecutor
 from agent.tools.vision.vision import Vision
 from config import conf
 from models.claudeapi.claude_api_bot import ClaudeAPIBot
@@ -67,11 +67,11 @@ def _images(messages):
             for b in m["content"] if isinstance(b, dict) and b.get("type") == "image_url"]
 
 
-def _has_note(message):
+def _has_note(message, note=_IMAGE_NOT_ATTACHED):
     content = message.get("content")
     if isinstance(content, str):
-        return _IMAGE_NOT_ATTACHED in content
-    return any(isinstance(b, dict) and b.get("text") == _IMAGE_NOT_ATTACHED for b in content)
+        return note in content
+    return any(isinstance(b, dict) and b.get("text") == note for b in content)
 
 
 def test_image_rides_only_on_the_current_query(workspace):
@@ -85,8 +85,10 @@ def test_image_rides_only_on_the_current_query(workspace):
     assert _images(sent)[0]["image_url"]["url"].startswith("data:image/png;base64,")
     assert sent[-1]["content"][0]["text"].endswith("[Image: tmp/photo.png]")
     assert not _has_note(sent[-1])
-    assert _has_note(sent[0])
-    assert _images(ex.messages) == [] and not any(_has_note(m) for m in ex.messages)
+    assert _has_note(sent[-1], _IMAGE_ATTACHED)
+    assert _has_note(sent[0]) and not _has_note(sent[0], _IMAGE_ATTACHED)
+    assert _images(ex.messages) == [] and not any(
+        _has_note(m) or _has_note(m, _IMAGE_ATTACHED) for m in ex.messages)
 
 
 def test_history_images_given_as_plain_strings_get_the_note_too(workspace):
@@ -125,7 +127,7 @@ def test_images_stay_with_the_vision_tool_when_the_main_model_is_not_its_target(
     sent = ex._prepare_messages()
 
     assert _images(sent) == []
-    assert _has_note(sent[-1])
+    assert _has_note(sent[-1]) and not _has_note(sent[-1], _IMAGE_ATTACHED)
 
 
 def test_vision_model_set_to_the_main_model_counts_as_main(workspace, monkeypatch):
@@ -148,7 +150,7 @@ def test_rejected_image_request_retries_without_images(workspace):
     assert len(model.requests) == 2
     assert len(_images(model.requests[0])) == 1
     assert _images(model.requests[1]) == []
-    assert _has_note(model.requests[1][-1])
+    assert _has_note(model.requests[1][-1]) and not _has_note(model.requests[1][-1], _IMAGE_ATTACHED)
     assert ex.run_user_message in ex.messages
 
 

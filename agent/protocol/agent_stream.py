@@ -110,6 +110,7 @@ def _is_retryable_error(error_str_lower: str) -> bool:
 # Image references the channels append to the user query, e.g. "[图片: tmp/a.png]".
 _IMAGE_MARKER_RE = re.compile(r"\[(?:图片|Image):\s*([^\]]+)\]")
 _IMAGE_NOT_ATTACHED = "(The images referenced above are not attached to this request; use the vision tool if you need to view them.)"
+_IMAGE_ATTACHED = "(The images referenced above are attached to this message; view them directly without the vision tool.)"
 
 
 def _user_text(content) -> str:
@@ -3171,7 +3172,7 @@ class AgentStreamExecutor:
         for msg in self.messages:
             content = msg.get("content")
             if msg is self.run_user_message and images and isinstance(content, list):
-                msg = {**msg, "content": content + images}
+                msg = {**msg, "content": content + [{"type": "text", "text": _IMAGE_ATTACHED}] + images}
                 self._images_in_request = True
             elif msg.get("role") == "user" and _IMAGE_MARKER_RE.search(_user_text(content)):
                 # A model that answered earlier images directly would otherwise
