@@ -27,7 +27,13 @@ from bridge.context import Context, ContextType
 from bridge.reply import Reply, ReplyType
 from channel.chat_channel import ChatChannel, check_prefix
 from channel.chat_message import safe_filename
-from channel.telegram.telegram_markdown import CAPTION_LIMIT, to_telegram_html
+from channel.telegram.telegram_markdown import (
+    CAPTION_LIMIT,
+    TEXT_LIMIT,
+    split_plain_by_utf16,
+    to_telegram_html,
+    utf16_len,
+)
 from channel.telegram.telegram_message import TelegramMessage
 from common import state_dir
 from common.expired_dict import ExpiredDict
@@ -656,34 +662,39 @@ class TelegramChannel(ChatChannel):
         raise last_err
 
     async def _send_text(self, text: str, chat_id, reply_to_msg_id):
-        """Send markdown as Telegram HTML, splitting on the 4096-char cap.
+        """Send markdown as Telegram HTML, splitting on the 4096-unit cap.
 
         One malformed entity makes Telegram reject the whole message, so a
-        rejected chunk is resent verbatim rather than dropped.
+        rejected chunk is resent as plain text rather than dropped — and the
+        plain resend is re-split by UTF-16 units, because a chunk dense in
+        astral characters fails the plain attempt exactly like the HTML one.
         """
         from telegram.constants import ParseMode
         from telegram.error import BadRequest
 
         for chunk in split_markdown(text, 4000):
             rendered = to_telegram_html(chunk)
-            if not rendered:
+            if rendered and utf16_len(rendered) <= TEXT_LIMIT:
+                try:
+                    await self._send_with_retry(
+                        lambda c=rendered: self._bot.send_message(
+                            chat_id=chat_id,
+                            text=c,
+                            parse_mode=ParseMode.HTML,
+                            reply_to_message_id=reply_to_msg_id,
+                            # Avoid failing the whole send if reply_to was deleted
+                            allow_sending_without_reply=True,
+                        ),
+                        label="send_message",
+                    )
+                    continue
+                except BadRequest as e:
+                    logger.warning(f"[Telegram] HTML rejected ({e}); resending as plain text")
+            if not chunk:
                 continue
-            try:
+            for part in split_plain_by_utf16(chunk, 4000):
                 await self._send_with_retry(
-                    lambda c=rendered: self._bot.send_message(
-                        chat_id=chat_id,
-                        text=c,
-                        parse_mode=ParseMode.HTML,
-                        reply_to_message_id=reply_to_msg_id,
-                        # Avoid failing the whole send if reply_to was deleted
-                        allow_sending_without_reply=True,
-                    ),
-                    label="send_message",
-                )
-            except BadRequest as e:
-                logger.warning(f"[Telegram] HTML rejected ({e}); resending as plain text")
-                await self._send_with_retry(
-                    lambda c=chunk: self._bot.send_message(
+                    lambda c=part: self._bot.send_message(
                         chat_id=chat_id,
                         text=c,
                         reply_to_message_id=reply_to_msg_id,
@@ -760,9 +771,11 @@ class TelegramChannel(ChatChannel):
                 ))
 
                 # Captions are capped far below a message, and an oversized one
-                # fails the upload itself. Anything too long follows separately.
+                # fails the upload itself. The cap counts UTF-16 units, so an
+                # astral-dense caption can pass len() and still be rejected.
+                # Anything too long follows separately.
                 overflow = None
-                if caption and len(caption) > CAPTION_LIMIT:
+                if caption and utf16_len(caption) > CAPTION_LIMIT:
                     caption, overflow = None, caption
 
                 from telegram.constants import ParseMode
@@ -793,8 +806,13 @@ class TelegramChannel(ChatChannel):
                         label=label,
                     )
                 except BadRequest as e:
-                    logger.warning(f"[Telegram] caption rejected ({e}); resending file without markup")
-                    await self._send_with_retry(lambda: _send_file(caption, None), label=f"{label}(plain)")
+                    # Resending the same caption (plain) fails identically when
+                    # the rejection is about its length or content: send the
+                    # file bare and deliver the caption as a text message.
+                    logger.warning(f"[Telegram] caption rejected ({e}); resending file without caption")
+                    await self._send_with_retry(lambda: _send_file(None, None), label=f"{label}(no-caption)")
+                    if caption:
+                        overflow = caption
 
                 if overflow:
                     await self._send_text(overflow, chat_id, reply_to_msg_id)
