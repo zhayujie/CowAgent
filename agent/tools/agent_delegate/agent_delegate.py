@@ -160,8 +160,18 @@ class _DelegateView:
 
 
 @contextmanager
-def _local_run_deadline(bridge, agent_id, request_id, session_id, seconds):
-    """Cancel cooperatively at the deadline without detaching the running Agent."""
+def _local_run_deadline(bridge, agent_id, request_id, session_id, seconds,
+                        parent_cancel=None):
+    """Cancel cooperatively at the deadline without detaching the running Agent.
+
+    ``parent_cancel`` is the delegating run's cancel event (the executor sets
+    ``tool.cancel_event`` before running tools). Linked here, a user Stop on
+    the source session reaches the delegated turn too: without the link the
+    teammate kept running to its full budget after the user stopped, with its
+    side effects landing and the relay lock held — the sub-agent path already
+    forwards its parent's event (see agent/tools/subagent), delegation did
+    not.
+    """
     from agent.protocol import get_cancel_registry
 
     registry = get_cancel_registry()
@@ -179,7 +189,22 @@ def _local_run_deadline(bridge, agent_id, request_id, session_id, seconds):
 
     timer = threading.Timer(seconds, expire)
     timer.daemon = True
+
+    def relay_parent_cancel():
+        # Park until the parent cancels or the deadline passes, whichever
+        # comes first; a normal completion simply leaves this parked (daemon,
+        # no CPU) until the budget expires.
+        if parent_cancel.wait(seconds + 1):
+            cancelled.set()
+
+    linker = None
+    if parent_cancel is not None:
+        linker = threading.Thread(
+            target=relay_parent_cancel, daemon=True, name="delegate-cancel-link"
+        )
     try:
+        if linker is not None:
+            linker.start()
         timer.start()
         yield expired
     finally:
@@ -592,7 +617,8 @@ class AgentDelegateTool(BaseTool):
             )
         started_at = time.monotonic()
         with _local_run_deadline(self.agent_bridge, target.id, request_id,
-                                 session_id, policy.timeout_seconds) as timed_out:
+                                 session_id, policy.timeout_seconds,
+                                 parent_cancel=getattr(self, "cancel_event", None)) as timed_out:
             try:
                 reply = self.agent_bridge.agent_reply(
                     prompt, context=delegated_context, on_event=view.relay
