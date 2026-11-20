@@ -11,6 +11,7 @@ from common.atomic_write import write_text_atomic
 from agent.tools.utils.credentials import is_credential_path
 from agent.tools.utils.diff import (
     detect_line_ending,
+    generate_diff_string,
     looks_like_line_numbered_block,
     normalize_to_lf,
     restore_line_endings,
@@ -97,6 +98,16 @@ class Write(BaseTool):
             if blocking:
                 return ToolResult.fail(f"Error: {blocking}")
 
+            # Diff the logical text, before line endings are put back, the
+            # same way edit does. A failed read of an existing file has no
+            # reliable "before", so it gets no diff rather than a fake one.
+            diff_result = None
+            if previous is not None or not os.path.isfile(absolute_path):
+                diff_result = generate_diff_string(
+                    normalize_to_lf(previous) if previous is not None else "",
+                    normalize_to_lf(content),
+                )
+
             # LF content keeps the file's own line endings, as edit does, or
             # gets the platform's when the file has none yet. Content that
             # already uses CRLF is written as given.
@@ -127,6 +138,9 @@ class Write(BaseTool):
                 "path": path,
                 "bytes_written": bytes_written
             }
+            if diff_result and diff_result.get("diff"):
+                result["diff"] = diff_result["diff"]
+                result["first_changed_line"] = diff_result.get("first_changed_line")
             warnings = [w for w in (warning, syntax_warning) if w]
             if warnings:
                 result["warning"] = " ".join(warnings)
