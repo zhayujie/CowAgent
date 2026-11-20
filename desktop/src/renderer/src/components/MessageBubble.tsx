@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { Copy, Check, ChartColumn, RefreshCw, Trash2, File as FileIcon, Folder, Sprout } from 'lucide-react'
-import type { ChatMessage, MessageUsage } from '../types'
+import type { Attachment, ChatMessage, MessageUsage } from '../types'
 import { t, tf } from '../i18n'
 import apiClient from '../api/client'
 import { useWorkspaceStore } from '../store/workspaceStore'
@@ -192,6 +192,11 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   const hasLiveReasoning = !!(message.reasoning && message.isStreaming)
   const status = message.runState || (message.isCancelled ? 'cancelled' : null)
 
+  const carded = new Set((message.artifacts || []).map((a) => a.abs_path))
+  const isLocalFile = (att: Attachment) => att.file_type === 'file' && !!att.abs_path
+  const sentFiles = (message.attachments || []).filter((a) => isLocalFile(a) && !carded.has(a.abs_path!))
+  const sentMedia = (message.attachments || []).filter((a) => !isLocalFile(a))
+
   return (
     <div className="group flex gap-3 px-4 sm:px-6 py-2">
       {speaker ? (
@@ -251,10 +256,24 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
             </div>
           )}
 
-          {/* Media attachments sent via the `send` tool (images / files). */}
-          {message.attachments && message.attachments.length > 0 && (
+          {/* Local files sent via the `send` tool open in the preview panel like
+              the files written this turn; a file already carded is shown once. */}
+          {sentFiles.length > 0 && (
+            <div className="flex flex-col items-start">
+              {sentFiles.map((att) => (
+                <FileCard
+                  key={att.abs_path}
+                  meta={{ file_name: att.file_name, rel_path: att.file_name, abs_path: att.abs_path }}
+                  turnSeq={turnSeq}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Media attachments sent via the `send` tool (images / videos / remote files). */}
+          {sentMedia.length > 0 && (
             <div className="flex flex-wrap gap-2 mt-2">
-              {message.attachments.map((att, i) => {
+              {sentMedia.map((att, i) => {
                 const url = apiClient.getFileUrl(att.preview_url || att.file_path)
                 if (att.file_type === 'image') {
                   return (

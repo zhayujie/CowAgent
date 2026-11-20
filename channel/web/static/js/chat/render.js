@@ -367,6 +367,15 @@ function _renderSentFileFromToolResult(step, carded) {
     // Without a card (file gone, hidden, or not indexed) the link stays the
     // only trace of the delivery.
     if (carded && carded.has(payload.path)) return '';
+    // A local document gets the same card as the live stream shows, so it
+    // still previews after a reload; remote URLs stay a download link.
+    const isRemote = /^https?:\/\//i.test(payload.url || payload.path);
+    if (!isRemote && typeof renderFileCard === 'function') {
+        const kind = payload.kind || wsKindOf(fileName);
+        return `<div class="agent-step"><div class="file-card-list" data-artifact-path="${escapeHtml(payload.path)}">` +
+            renderFileCard({ file_name: fileName, rel_path: fileName, abs_path: payload.path, kind, raw_url: webUrl }) +
+            `</div></div>`;
+    }
     return `<div class="agent-step"><a href="${webUrl}" download="${escapeHtml(fileName)}" target="_blank" ` +
         `style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;margin:8px 0;border-radius:8px;` +
         `background:var(--bg-secondary,#f3f4f6);color:var(--text-primary,#374151);text-decoration:none;font-size:14px;` +
