@@ -5,11 +5,13 @@ Provides high-level interface for memory operations
 """
 
 import os
+import time
 from typing import List, Optional, Dict, Any, Sequence, Tuple
 from pathlib import Path
 import hashlib
 from datetime import datetime
 
+from common.atomic_write import write_text_atomic
 from agent.memory.config import MemoryConfig, get_default_memory_config
 from agent.memory.storage import MemoryStorage, MemoryChunk, SearchResult
 from agent.memory.chunker import TextChunker
@@ -241,6 +243,13 @@ class MemoryManager:
 
         return top
     
+    def _get_workspace_dir(self) -> Optional[Path]:
+        config = getattr(self, "config", None)
+        if config is not None:
+            return Path(config.get_workspace())
+        workspace_dir = getattr(self, "workspace_dir", None)
+        return Path(workspace_dir) if workspace_dir is not None else None
+
     async def add_memory(
         self,
         content: str,
@@ -252,7 +261,7 @@ class MemoryManager:
     ):
         """
         Add new memory content
-        
+
         Args:
             content: Memory content
             user_id: User ID for user-scoped memory
@@ -263,7 +272,7 @@ class MemoryManager:
         """
         if not content.strip():
             return
-        
+
         # Generate path if not provided
         if not path:
             content_hash = hashlib.md5(content.encode('utf-8')).hexdigest()[:8]
@@ -271,10 +280,24 @@ class MemoryManager:
                 path = f"memory/users/{user_id}/memory_{content_hash}.md"
             else:
                 path = f"memory/shared/memory_{content_hash}.md"
-        
+
+        target: Optional[Path] = None
+        workspace_dir = self._get_workspace_dir()
+        if workspace_dir is not None:
+            workspace_real = _real(workspace_dir)
+            candidate = _real(workspace_real / path)
+            try:
+                rel = candidate.relative_to(workspace_real)
+            except ValueError:
+                raise ValueError(f"Memory path escapes workspace: {path}") from None
+            if candidate == workspace_real or candidate.is_dir():
+                raise ValueError(f"Memory path must point to a file inside workspace: {path}")
+            path = rel.as_posix()
+            target = candidate
+
         # Chunk content
         chunks = self.chunker.chunk_text(content)
-        
+
         # Generate embeddings (if provider available)
         texts = [chunk.text for chunk in chunks]
         if self.embedding_provider:
@@ -282,13 +305,34 @@ class MemoryManager:
         else:
             # No embeddings, just use None
             embeddings = [None] * len(texts)
-        
+
+        # Persist the backing file so sync() keeps the indexed rows.
+        if target is not None:
+            disk_content: Optional[str] = None
+            if target.exists():
+                try:
+                    disk_content = target.read_text(encoding="utf-8")
+                except (OSError, UnicodeDecodeError):
+                    disk_content = None
+            if disk_content != content:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                write_text_atomic(target, content, encoding="utf-8")
+                disk_content = target.read_text(encoding="utf-8")
+            stat = target.stat()
+            file_hash = MemoryStorage.compute_hash(disk_content)
+            mtime = int(stat.st_mtime)
+            size = stat.st_size
+        else:
+            file_hash = MemoryStorage.compute_hash(content)
+            mtime = int(time.time())
+            size = len(content.encode("utf-8"))
+
         # Create memory chunks
         memory_chunks = []
         for chunk, embedding in zip(chunks, embeddings):
             chunk_id = self._generate_chunk_id(path, chunk.start_line, chunk.end_line, chunk.part)
             chunk_hash = MemoryStorage.compute_hash(chunk.text)
-            
+
             memory_chunks.append(MemoryChunk(
                 id=chunk_id,
                 user_id=user_id,
@@ -302,18 +346,15 @@ class MemoryManager:
                 hash=chunk_hash,
                 metadata=metadata
             ))
-        
-        # Save to storage
+
+        self.storage.delete_by_path(path)
         self.storage.save_chunks_batch(memory_chunks)
-        
-        # Update file metadata
-        file_hash = MemoryStorage.compute_hash(content)
         self.storage.update_file_metadata(
             path=path,
             source=source,
             file_hash=file_hash,
-            mtime=int(os.path.getmtime(__file__)),  # Use current time
-            size=len(content)
+            mtime=mtime,
+            size=size,
         )
     
     async def sync(self, force: bool = False):
