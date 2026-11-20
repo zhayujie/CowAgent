@@ -575,8 +575,13 @@ class SchedulerTool(BaseTool):
 
         return None
 
-    def _format_schedule_description(self, schedule: dict) -> str:
+    def _format_schedule_description(self, schedule) -> str:
         """Format schedule as human-readable description"""
+        if not isinstance(schedule, dict):
+            # A stored schedule that is not a mapping declares no schedule. Every
+            # read path has to survive it: one hand-edited task must not take the
+            # whole list/get down, or the user cannot even find it to delete it.
+            return "未知"
         schedule_type = schedule.get("type")
         
         if schedule_type == "cron":

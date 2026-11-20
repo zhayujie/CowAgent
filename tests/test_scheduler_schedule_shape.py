@@ -55,3 +55,82 @@ class TestTaskTimezoneToleratesANonMappingSchedule:
         assert parsed.tzinfo is not None
         assert parsed.utcoffset() == timedelta(0)
         assert parsed == datetime(2099, 1, 1, 9, 0, tzinfo=timezone.utc)
+
+
+# ---------------------------------------------------------------------------
+# the tool's own read paths, not just the loop's helpers
+# ---------------------------------------------------------------------------
+
+
+def _store_with(tmp_path, tasks):
+    """A real TaskStore whose file already holds *tasks* (id -> record)."""
+    import json
+
+    from agent.tools.scheduler.task_store import TaskStore
+
+    path = tmp_path / "tasks.json"
+    path.write_text(json.dumps({"tasks": tasks}), encoding="utf-8")
+    return TaskStore(str(path))
+
+
+def _tool(store):
+    from agent.tools.scheduler.scheduler_tool import SchedulerTool
+
+    tool = SchedulerTool({"channel_type": "web", "agent_id": ""})
+    tool.task_store = store
+    return tool
+
+
+def _good_task():
+    return {
+        "id": "good", "name": "good", "enabled": True,
+        "created_at": "2099-01-01T09:00:00",
+        "schedule": {"type": "cron", "expression": "0 9 * * *"},
+        "action": {"type": "send_message", "content": "hi"},
+    }
+
+
+def _broken_task():
+    return {
+        "id": "bad", "name": "bad", "enabled": True, "schedule": None,
+        "created_at": "2099-01-01T09:00:00",
+        "action": {"type": "send_message", "content": "hi"},
+    }
+
+
+def test_list_survives_a_task_whose_schedule_is_not_a_mapping(tmp_path):
+    store = _store_with(tmp_path, {"good": _good_task(), "bad": _broken_task()})
+
+    result = _tool(store).execute({"action": "list"})
+
+    assert result.status == "success", f"one bad record took the whole list down: {result.result}"
+    assert "good" in result.result and "bad" in result.result
+
+
+def test_get_survives_a_task_whose_schedule_is_not_a_mapping(tmp_path):
+    store = _store_with(tmp_path, {"bad": _broken_task()})
+
+    result = _tool(store).execute({"action": "get", "task_id": "bad"})
+
+    assert result.status == "success", f"the bad task cannot even be inspected: {result.result}"
+    assert "bad" in result.result
+
+
+def test_a_string_schedule_also_reads_as_unknown(tmp_path):
+    broken = _broken_task()
+    broken["schedule"] = "daily"
+    store = _store_with(tmp_path, {"bad": broken})
+
+    result = _tool(store).execute({"action": "list"})
+
+    assert result.status == "success", result.result
+    assert "未知" in result.result
+
+
+def test_a_real_cron_is_still_described(tmp_path):
+    store = _store_with(tmp_path, {"good": _good_task()})
+
+    result = _tool(store).execute({"action": "list"})
+
+    assert result.status == "success"
+    assert "每天 9:00" in result.result
