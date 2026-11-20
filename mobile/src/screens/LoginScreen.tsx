@@ -1,4 +1,11 @@
-import {faChevronLeft, faChevronRight, faMobileScreen, faQrcode} from '@fortawesome/free-solid-svg-icons';
+import {
+  faCheck,
+  faChevronLeft,
+  faDesktop,
+  faKeyboard,
+  faMobileScreen,
+  faQrcode,
+} from '@fortawesome/free-solid-svg-icons';
 import type {IconDefinition} from '@fortawesome/fontawesome-svg-core';
 import React, {useEffect, useState} from 'react';
 import {
@@ -13,12 +20,13 @@ import {
   View,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import {ApiError, isPublicCleartext} from '../api/http';
+import {isPublicCleartext} from '../api/http';
 import {addressCandidates, parsePairLink, type PairTarget} from '../api/pairing';
 import logo from '../assets/logo-mark.png';
 import {Icon} from '../components/Icon';
 import {usePairAction} from '../components/PairFlow';
 import {QrScanner, qrScannerAvailable} from '../components/QrScanner';
+import {ChoiceSheet} from '../components/settings';
 import {SHEET_DISMISS_MS} from '../components/Sheet';
 import {getLang, tr, trf, useLangStore, type Lang} from '../i18n';
 import {isLocalKernelAvailable, LOCAL_SERVER_ID} from '../kernel/localKernel';
@@ -27,7 +35,8 @@ import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
 
 type Step = 'welcome' | 'manual';
-type Method = 'code' | 'password';
+type Where = 'local' | 'remote';
+type RemoteWay = 'scan' | 'manual';
 
 /** Each language names itself, so a wrong pick can always be undone. */
 const LANGS: {key: Lang; label: string}[] = [
@@ -36,8 +45,8 @@ const LANGS: {key: Lang; label: string}[] = [
 ];
 
 /**
- * First screen whenever no server is signed in: choose to scan a computer's
- * pairing code, run the built-in agent, or type an address by hand.
+ * First screen whenever no server is signed in: run the built-in agent, or
+ * connect a computer by scanning its pairing code or typing its address.
  */
 export function LoginScreen() {
   const t = useTheme();
@@ -51,8 +60,9 @@ export function LoginScreen() {
   const local = isLocalKernelAvailable();
 
   const [step, setStep] = useState<Step>(() => (useServerStore.getState().loginForm ? 'manual' : 'welcome'));
+  const [where, setWhere] = useState<Where>(local ? 'local' : 'remote');
+  const [remoteOpen, setRemoteOpen] = useState(false);
   const [scanning, setScanning] = useState(false);
-  const [method, setMethod] = useState<Method>('code');
   // Signed out of a server, or its session ran out: start from its address.
   const [address, setAddress] = useState(() => {
     const server = activeServer();
@@ -62,7 +72,6 @@ export function LoginScreen() {
   const [focus, setFocus] = useState<'address' | 'secret' | null>(null);
   // Sign-ins that need no form input: the built-in agent, or going back to the server left.
   const [pending, setPending] = useState<'local' | 'back' | null>(null);
-  const [formBusy, setFormBusy] = useState(false);
   // A server that stepped aside (e.g. another machine now at its address) says why, once.
   const [formError, setFormError] = useState<string | null>(() => useServerStore.getState().problem);
   useEffect(() => {
@@ -71,7 +80,7 @@ export function LoginScreen() {
     }
   }, []);
   const pairing = usePairAction();
-  const busy = formBusy || pairing.busy || !!pending;
+  const busy = pairing.busy || !!pending;
   const error = formError || pairing.error;
 
   const clearErrors = () => {
@@ -84,7 +93,6 @@ export function LoginScreen() {
     if (qrScannerAvailable) {
       setScanning(true);
     } else {
-      setMethod('code');
       setStep('manual');
     }
   };
@@ -116,6 +124,29 @@ export function LoginScreen() {
     }
   };
 
+  const go = (target: Where) => {
+    if (busy) {
+      return;
+    }
+    setWhere(target);
+    if (target === 'local') {
+      switchTo('local', LOCAL_SERVER_ID);
+      return;
+    }
+    clearErrors();
+    if (qrScannerAvailable) {
+      setRemoteOpen(true);
+    } else {
+      toManual();
+    }
+  };
+
+  const onRemoteWay = (way: RemoteWay) => {
+    setRemoteOpen(false);
+    // The scanner is a modal too, and iOS can't open one while another closes.
+    setTimeout(() => (way === 'scan' ? openScanner() : toManual()), SHEET_DISMISS_MS);
+  };
+
   const pastedLink = parsePairLink(address);
   const submitDisabled = busy || !address.trim() || (!secret.trim() && !pastedLink);
   const submit = async () => {
@@ -127,33 +158,7 @@ export function LoginScreen() {
       await pairing.run(pastedLink);
       return;
     }
-    if (method === 'code') {
-      await pairing.run({code: secret.trim(), urls: addressCandidates(address)});
-      return;
-    }
-    setFormBusy(true);
-    try {
-      // Without a scheme a LAN address may answer over http or https; only an
-      // address that can't be reached moves on to the next.
-      let failure: unknown = null;
-      for (const url of addressCandidates(address)) {
-        try {
-          await useServerStore.getState().connect(url, secret);
-          failure = null;
-          break;
-        } catch (e) {
-          failure = e;
-          if (!(e instanceof ApiError && (e.kind === 'network' || e.kind === 'timeout'))) {
-            break;
-          }
-        }
-      }
-      if (failure) {
-        setFormError(describeConnectError(failure));
-      }
-    } finally {
-      setFormBusy(false);
-    }
+    await pairing.run({code: secret.trim(), urls: addressCandidates(address)});
   };
 
   const langSwitch = (
@@ -218,66 +223,45 @@ export function LoginScreen() {
 
             {errorBox}
 
-            <Choice
-              icon={faQrcode}
-              title={tr('connect_pc_title')}
-              desc={qrScannerAvailable ? tr('connect_pc_desc') : tr('connect_pc_desc_manual')}
-              primary
-              busy={pairing.busy}
-              disabled={busy}
-              onPress={openScanner}
-            />
             {local && (
               <Choice
                 icon={faMobileScreen}
                 title={tr('connect_local_title')}
                 desc={tr('connect_local_desc')}
+                selected={where === 'local'}
                 busy={pending === 'local'}
                 disabled={busy}
-                onPress={() => switchTo('local', LOCAL_SERVER_ID)}
+                onPress={() => go('local')}
               />
             )}
+            <Choice
+              icon={faDesktop}
+              title={tr('connect_pc_title')}
+              desc={tr('connect_pc_desc')}
+              selected={where === 'remote'}
+              busy={pairing.busy}
+              disabled={busy}
+              onPress={() => go('remote')}
+            />
 
-            {qrScannerAvailable && (
-              <Pressable
-                accessibilityRole="button"
-                hitSlop={8}
-                disabled={busy}
-                onPress={toManual}
-                style={styles.manualLink}>
-                <Text style={styles.manualLinkText}>{tr('connect_manual')}</Text>
-                <Icon icon={faChevronRight} size={11} color={t.accent} />
-              </Pressable>
-            )}
-            <Text style={styles.footnote}>{tr('connect_where_qr')}</Text>
+            <View style={styles.spacer} />
+            <Pressable
+              accessibilityRole="button"
+              disabled={busy}
+              onPress={() => go(where)}
+              style={({pressed}) => [styles.button, styles.nextButton, pressed && styles.buttonPressed]}>
+              {pending === 'local' || pairing.busy ? (
+                <ActivityIndicator color={t.onAccent} />
+              ) : (
+                <Text style={styles.buttonText}>{tr('connect_next')}</Text>
+              )}
+            </Pressable>
             {backLink}
           </>
         ) : (
           <>
             <Text style={[styles.title, styles.titleManual]}>{tr('connect_manual_title')}</Text>
             <Text style={styles.lead}>{tr('connect_manual_lead')}</Text>
-
-            <View style={styles.segment}>
-              {(['code', 'password'] as Method[]).map(m => {
-                const active = method === m;
-                return (
-                  <Pressable
-                    key={m}
-                    accessibilityRole="tab"
-                    accessibilityState={{selected: active}}
-                    onPress={() => {
-                      setMethod(m);
-                      setSecret('');
-                      clearErrors();
-                    }}
-                    style={[styles.segmentItem, active && styles.segmentItemActive]}>
-                    <Text style={[styles.segmentText, active && styles.segmentTextActive]}>
-                      {m === 'code' ? tr('connect_mode_code') : tr('connect_mode_password')}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
 
             <Text style={styles.label}>{tr('connect_address')}</Text>
             <TextInput
@@ -297,21 +281,19 @@ export function LoginScreen() {
             {!pastedLink && addressCandidates(address).every(isPublicCleartext) && !!address.trim() && (
               <Text style={styles.warning}>{tr('login_cleartext_warning')}</Text>
             )}
-            <Text style={styles.label}>{method === 'code' ? tr('connect_code') : tr('login_password')}</Text>
+            <Text style={styles.label}>{tr('connect_code')}</Text>
             <TextInput
-              key={method}
-              style={[styles.input, method === 'code' && styles.codeInput, focus === 'secret' && styles.inputFocused]}
+              style={[styles.input, styles.codeInput, focus === 'secret' && styles.inputFocused]}
               value={secret}
               onChangeText={setSecret}
               onFocus={() => setFocus('secret')}
               onBlur={() => setFocus(null)}
-              placeholder={method === 'code' ? tr('connect_code_placeholder') : tr('login_password_placeholder')}
+              placeholder={tr('connect_code_placeholder')}
               placeholderTextColor={t.t4}
               selectionColor={t.accent}
-              autoCapitalize={method === 'code' ? 'characters' : 'none'}
+              autoCapitalize="characters"
               autoCorrect={false}
-              secureTextEntry={method === 'password'}
-              maxLength={method === 'code' ? 12 : undefined}
+              maxLength={12}
               returnKeyType="go"
               onSubmitEditing={submit}
             />
@@ -321,30 +303,40 @@ export function LoginScreen() {
               disabled={submitDisabled}
               onPress={submit}
               style={({pressed}) => [styles.button, submitDisabled && styles.buttonOff, pressed && styles.buttonPressed]}>
-              {formBusy || pairing.busy ? (
+              {pairing.busy ? (
                 <ActivityIndicator color={t.onAccent} />
               ) : (
                 <Text style={[styles.buttonText, submitDisabled && styles.buttonTextOff]}>{tr('connect_submit')}</Text>
               )}
             </Pressable>
-            <Text style={styles.footnote}>
-              {method === 'code' ? tr('connect_code_footnote') : tr('login_footnote')}
-            </Text>
+            <Text style={styles.footnote}>{tr('connect_code_footnote')}</Text>
             {backLink}
           </>
         )}
       </ScrollView>
 
+      <ChoiceSheet<RemoteWay>
+        visible={remoteOpen}
+        title={tr('connect_pc_title')}
+        options={[
+          {key: 'scan', label: tr('connect_scan'), desc: tr('connect_scan_desc'), icon: faQrcode},
+          {key: 'manual', label: tr('connect_manual'), desc: tr('connect_manual_desc'), icon: faKeyboard},
+        ]}
+        note={tr('connect_remote_note')}
+        onSelect={onRemoteWay}
+        onClose={() => setRemoteOpen(false)}
+      />
       <QrScanner visible={scanning} onClose={() => setScanning(false)} onScanned={onScanned} onManual={toManual} />
     </KeyboardAvoidingView>
   );
 }
 
+/** One of the places the Agent can run; tapping it also moves on, like Next. */
 function Choice({
   icon,
   title,
   desc,
-  primary,
+  selected,
   busy,
   disabled,
   onPress,
@@ -352,7 +344,7 @@ function Choice({
   icon: IconDefinition;
   title: string;
   desc: string;
-  primary?: boolean;
+  selected: boolean;
   busy?: boolean;
   disabled?: boolean;
   onPress: () => void;
@@ -361,26 +353,32 @@ function Choice({
   const styles = useStyles();
   return (
     <Pressable
-      accessibilityRole="button"
-      accessibilityState={{busy, disabled}}
+      accessibilityRole="radio"
+      accessibilityState={{selected, busy, disabled}}
       disabled={disabled}
       onPress={onPress}
-      style={({pressed}) => [styles.choice, primary && styles.choicePrimary, pressed && styles.choicePressed]}>
-      <View style={[styles.choiceIcon, primary && styles.choiceIconPrimary]}>
-        <Icon icon={icon} size={18} color={primary ? t.onAccent : t.t2} />
+      style={({pressed}) => [styles.choice, selected && styles.choiceSelected, pressed && styles.choicePressed]}>
+      <View style={[styles.choiceIcon, selected && styles.choiceIconSelected]}>
+        <Icon icon={icon} size={18} color={selected ? t.onAccent : t.t2} />
       </View>
       <View style={styles.choiceText}>
         <Text style={styles.choiceTitle}>{title}</Text>
         <Text style={styles.choiceDesc}>{desc}</Text>
       </View>
-      {busy ? <ActivityIndicator color={t.t3} /> : <Icon icon={faChevronRight} size={12} color={t.t4} />}
+      {busy ? (
+        <ActivityIndicator color={t.t3} />
+      ) : (
+        <View style={[styles.radio, selected && styles.radioOn]}>
+          {selected && <Icon icon={faCheck} size={10} color={t.onAccent} />}
+        </View>
+      )}
     </Pressable>
   );
 }
 
 const useStyles = makeStyles(t => ({
   root: {flex: 1, backgroundColor: t.bg0},
-  body: {paddingHorizontal: 24},
+  body: {flexGrow: 1, paddingHorizontal: 24},
   topBar: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 36, minHeight: 34},
   backButton: {width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: t.bg2},
   langs: {flexDirection: 'row', padding: 3, borderRadius: 999, backgroundColor: t.bg2},
@@ -404,7 +402,7 @@ const useStyles = makeStyles(t => ({
     borderColor: t.line2,
     backgroundColor: t.bg1,
   },
-  choicePrimary: {borderColor: t.accentLine, backgroundColor: t.accentSoft},
+  choiceSelected: {borderColor: t.accentLine, backgroundColor: t.accentSoft},
   choicePressed: {opacity: 0.75},
   choiceIcon: {
     width: 44,
@@ -414,21 +412,22 @@ const useStyles = makeStyles(t => ({
     justifyContent: 'center',
     backgroundColor: t.bg3,
   },
-  choiceIconPrimary: {backgroundColor: t.green},
+  choiceIconSelected: {backgroundColor: t.green},
   choiceText: {flex: 1},
   choiceTitle: {fontSize: 16, fontWeight: '600', color: t.t1, letterSpacing: -0.2},
   choiceDesc: {fontSize: 13, lineHeight: 19, color: t.t3, marginTop: 3},
-  manualLink: {flexDirection: 'row', alignItems: 'center', alignSelf: 'center', gap: 6, marginTop: 14, paddingVertical: 6},
-  manualLinkText: {fontSize: 14, color: t.accent, fontWeight: '500'},
-  segment: {flexDirection: 'row', padding: 3, borderRadius: radius.sm + 1, backgroundColor: t.bg2, marginBottom: 22},
-  segmentItem: {flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 8, borderRadius: radius.xs},
-  segmentItemActive: {
-    backgroundColor: t.isDark ? t.bg3 : t.bg0,
-    borderWidth: t.isDark ? 0 : 1,
-    borderColor: t.line1,
+  radio: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: t.line2,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  segmentText: {fontSize: 14, color: t.t3},
-  segmentTextActive: {color: t.t1, fontWeight: '600'},
+  radioOn: {borderColor: t.green, backgroundColor: t.green},
+  spacer: {flexGrow: 1, minHeight: 24},
+  nextButton: {marginTop: 0},
   label: {fontSize: 12, color: t.t3, marginBottom: 8, marginTop: 4, letterSpacing: 0.2},
   input: {
     height: 48,

@@ -47,7 +47,6 @@ interface ServerState {
   /** Why the login screen took over from a signed-in server, shown there once. */
   problem: string | null;
   hydrate: () => Promise<void>;
-  connect: (rawUrl: string, password: string) => Promise<void>;
   /** Redeem a pairing code for a token of this device's own and switch to that server. */
   pair: (target: PairTarget) => Promise<void>;
   /**
@@ -390,12 +389,6 @@ export const useServerStore = create<ServerState>((set, get) => ({
     if (token) {
       await startRealtime(active, token, s => set({realtimeStatus: s}));
     }
-  },
-
-  connect: async (rawUrl, password) => {
-    const baseUrl = normalizeBaseUrl(rawUrl);
-    const id = serverIdFor(baseUrl);
-    await signIn(baseUrl, password, {id, name: get().servers.find(s => s.id === id)?.name});
   },
 
   pair: async target => {

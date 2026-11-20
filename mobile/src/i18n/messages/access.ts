@@ -36,10 +36,7 @@ const zh = {
   access_switch_confirm: '保存并生效',
   access_copy_failed: '复制失败',
 
-  login_cleartext_warning: '这是公网上的 http 地址，密码和登录凭证会明文传输，建议改用 https。',
-  login_password: '访问密码',
-  login_password_placeholder: '服务端配置的 web_password',
-  login_footnote: '密码只在这次登录时使用，之后这台设备用独立凭证访问。',
+  login_cleartext_warning: '这是公网上的 http 地址，配对码和登录凭证会明文传输，建议改用 https。',
   login_err_timeout: '连接超时，请检查地址和网络',
   login_err_network: '无法连接：域名解析失败、证书无效或端口不通',
   login_err_unauthorized: '访问密码错误或登录已失效',
@@ -240,10 +237,7 @@ const en: Record<keyof typeof zh, string> = {
   access_copy_failed: 'Copy failed',
 
   login_cleartext_warning:
-    'This is a public http address, so the password and credentials travel in plain text. Use https instead.',
-  login_password: 'Access password',
-  login_password_placeholder: 'The web_password set on the server',
-  login_footnote: 'The password is only used to sign in; afterwards this device uses its own credential.',
+    'This is a public http address, so the pairing code and credentials travel in plain text. Use https instead.',
   login_err_timeout: 'Connection timed out. Check the address and network',
   login_err_network: "Can't connect: DNS lookup failed, invalid certificate, or port unreachable",
   login_err_unauthorized: 'Wrong access password, or the session has expired',
