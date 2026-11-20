@@ -309,7 +309,7 @@ function instanceSignOut() {
     if (!item) return;
     showConfirmDialog({
         title: t('devices_disconnect'),
-        message: t('devices_disconnect_confirm').replace('{name}', item.name),
+        message: t('devices_disconnect_confirm').replace('{name}', item.name).replace('{local}', instanceLocalName()),
         okText: t('devices_disconnect'),
         tone: 'danger',
         onConfirm: () => {

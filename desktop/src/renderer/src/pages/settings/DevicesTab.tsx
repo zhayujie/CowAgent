@@ -328,8 +328,9 @@ const DevicesTab: React.FC<{
   const managed = !!list?.instance?.managed
   const reachable = !!instance || managed || !net || openElsewhere(net.public_url) || lan.length > 0
   const accessNotice = !!net && !managed && (!reachable || !net.password_set)
-  const devices = list?.devices || []
   const current = list?.current || ''
+  // This computer is listed only on a remote device, where it can disconnect.
+  const devices = (list?.devices || []).filter((d) => instance || d.id !== current)
 
   const startPairing = async () => {
     setPairBusy(true)
@@ -397,30 +398,24 @@ const DevicesTab: React.FC<{
   }
 
   const removeIn = async (device: PairedDevice) => {
-    const isCurrent = device.id === current
-    if (isCurrent && instance) {
+    if (device.id === current && instance) {
       const ok = await askConfirm({
         titleKey: 'devices_disconnect',
         msgKey: 'devices_disconnect_confirm',
         okKey: 'devices_disconnect',
-        vars: { name: instance.name },
+        vars: { name: instance.name, local: localName || t('devices_this_device') },
       })
       if (ok) await forget(instance.id)
       return
     }
     const ok = await askConfirm({
-      titleKey: isCurrent ? 'devices_sign_out_here' : 'devices_remove',
-      msgKey: isCurrent ? 'devices_sign_out_here_confirm' : 'devices_remove_confirm',
-      okKey: isCurrent ? 'devices_sign_out_here' : 'devices_remove',
+      titleKey: 'devices_remove',
+      msgKey: 'devices_remove_confirm',
+      okKey: 'devices_remove',
       vars: { name: device.name },
     })
     if (!ok) return
     try {
-      if (isCurrent) {
-        await apiClient.authLogout()
-        window.location.reload()
-        return
-      }
       await apiClient.removeDevice(device.id)
       setList((l) => l && { ...l, devices: l.devices.filter((d) => d.id !== device.id) })
     } catch (e) {
@@ -783,7 +778,7 @@ const DevicesTab: React.FC<{
                       <IconAction
                         danger
                         label={
-                          isCurrent ? (instance ? t('devices_disconnect') : t('devices_sign_out_here')) : t('devices_remove')
+                          isCurrent ? t('devices_disconnect') : t('devices_remove')
                         }
                         onClick={() => void removeIn(d)}
                       >

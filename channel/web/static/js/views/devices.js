@@ -431,20 +431,27 @@ function _deviceSeen(d) {
     return t('devices_seen_days').replace('{n}', Math.floor(mins / 1440));
 }
 
+/** This browser is listed only on a remote device, where it can disconnect;
+    on the device serving the page it signs out from the header. */
+function _devicesShown() {
+    return instanceActive() ? devicesList : devicesList.filter(d => d.id !== devicesCurrent);
+}
+
 function renderDevicesList() {
     const box = document.getElementById('devices-list');
     if (!box) return;
+    const shown = _devicesShown();
     const count = document.getElementById('devices-count');
-    if (count) count.textContent = devicesList.length ? `(${devicesList.length})` : '';
-    if (devicesLoadFailed && !devicesList.length) {
+    if (count) count.textContent = shown.length ? `(${shown.length})` : '';
+    if (devicesLoadFailed && !shown.length) {
         box.innerHTML = `<div class="py-6 text-center text-sm text-slate-400 dark:text-slate-500">${escapeHtml(t('devices_load_failed'))}</div>`;
         return;
     }
-    if (!devicesList.length) {
+    if (!shown.length) {
         box.innerHTML = `<div class="py-6 text-center text-sm text-slate-400 dark:text-slate-500">${escapeHtml(t('devices_empty'))}</div>`;
         return;
     }
-    const sorted = [...devicesList].sort((a, b) =>
+    const sorted = [...shown].sort((a, b) =>
         (b.id === devicesCurrent) - (a.id === devicesCurrent)
         || (b.online - a.online)
         || ((b.last_seen_at || b.created_at || 0) - (a.last_seen_at || a.created_at || 0)));
@@ -479,7 +486,7 @@ function _deviceRow(d) {
             <div class="dev-row-actions">
                 ${_devicesIconBtn('fas fa-pen', 'devices_rename_device', `startDeviceRename('${d.id}')`)}
                 ${_devicesIconBtn(current ? 'fas fa-right-from-bracket' : 'far fa-trash-can',
-                    current ? 'devices_sign_out_here' : 'devices_remove', `removeDevice('${d.id}')`)}
+                    current ? 'devices_disconnect' : 'devices_remove', `removeDevice('${d.id}')`)}
             </div>
         </div>`;
 }
@@ -514,14 +521,13 @@ function commitDeviceRename(id) {
 function removeDevice(id) {
     const device = devicesList.find(d => d.id === id);
     if (!device) return;
-    const current = id === devicesCurrent;
+    if (id === devicesCurrent) return instanceSignOut();
     showConfirmDialog({
-        title: t(current ? 'devices_sign_out_here' : 'devices_remove'),
-        message: t(current ? 'devices_sign_out_here_confirm' : 'devices_remove_confirm').replace('{name}', device.name),
-        okText: t(current ? 'devices_sign_out_here' : 'devices_remove'),
+        title: t('devices_remove'),
+        message: t('devices_remove_confirm').replace('{name}', device.name),
+        okText: t('devices_remove'),
         tone: 'danger',
         onConfirm: () => {
-            if (current) return handleLogout();
             fetch(`/api/devices/${id}`, { method: 'DELETE' }).then(r => r.json()).then(data => {
                 if (data.status === 'success') _loadDevices();
             }).catch(() => {});
