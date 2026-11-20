@@ -1,8 +1,8 @@
-"""A custom provider's model may carry an optional display name (alias).
+"""A model from any provider may carry an optional display name (alias).
 
 The alias is display only: the stored name stays the one sent to the API, a
-catalog without aliases reads exactly as before, and built-in vendors never
-store one.
+catalog without aliases reads exactly as before, and provider/model values sent
+to the API remain the raw model names.
 """
 import json
 
@@ -60,11 +60,26 @@ def test_alias_is_capped(store):
     assert len(model_catalog.get_catalog(CUSTOM)[0]["alias"]) == model_catalog.MAX_ALIAS_LENGTH
 
 
-def test_builtin_vendor_does_not_store_an_alias(store):
+def test_builtin_vendor_keeps_an_alias(store):
     model_catalog.save_catalog("deepseek", [{"name": "deepseek-flash", "alias": "Flash"}])
 
     assert model_catalog.get_catalog("deepseek") == [
-        {"name": "deepseek-flash", "capabilities": ["text"]}]
+        {"name": "deepseek-flash", "capabilities": ["text"], "alias": "Flash"}]
+
+
+def test_builtin_provider_picker_adds_label_without_changing_model_id(store):
+    model_catalog.save_catalog("deepseek", [
+        {"name": "deepseek-chat", "alias": "DeepSeek-Chat"},
+    ])
+
+    group = next(c for c in _catalog_with({
+        "bot_type": "deepseek",
+        "deepseek_api_key": "sk-ds",
+        "model": "deepseek-chat",
+    }) if c["id"] == "deepseek")
+
+    assert "deepseek-chat" in group["models"]
+    assert group["labels"] == {"deepseek-chat": "DeepSeek-Chat"}
 
 
 def test_session_picker_gets_the_display_names(store):

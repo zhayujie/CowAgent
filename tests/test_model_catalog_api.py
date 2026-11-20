@@ -124,6 +124,13 @@ class TestEffectiveAndOverlayFields(unittest.TestCase):
         g52 = next(e for e in p["effective"] if e["name"] == "glm-5.2")
         self.assertEqual(g52["context_window"], 200000)
 
+    def test_builtin_alias_is_exposed_separately_from_raw_model_names(self):
+        override = [{"name": "glm-5.2", "alias": "GLM-5.2", "capabilities": ["text"]}]
+        p = _provider({"zhipu_ai_api_key": "sk-x"}, "zhipu",
+                      catalog_map={"zhipu": override})
+        self.assertIn("glm-5.2", p["models"])
+        self.assertEqual(p["model_labels"], {"glm-5.2": "GLM-5.2"})
+
     def test_a_hidden_preset_drops_out_of_the_effective_list(self):
         p = _provider({"zhipu_ai_api_key": "sk-x"}, "zhipu",
                       hidden_map={"zhipu": ["glm-5.2"]})
@@ -169,6 +176,18 @@ class TestApplyCatalogFiltersByCapability(unittest.TestCase):
         names = [m["value"] for m in out["zhipu"]]
         self.assertIn("chat-only", names)
         self.assertNotIn("vec", names, "embedding-only model must not reach the chat dropdown")
+
+    def test_overlay_alias_is_picker_label_and_raw_id_hint(self):
+        from channel.web.api import models as models_api
+
+        override = [{"name": "raw/model-id", "alias": "Friendly", "capabilities": ["text"]}]
+        with patch("channel.web.api.models.model_catalog.get_catalog_map",
+                   return_value={"zhipu": override}), \
+                patch("channel.web.api.models.model_catalog.get_hidden_map", return_value={}):
+            out = models_api.ModelsHandler._apply_catalog({}, "text")
+        self.assertIn({
+            "value": "raw/model-id", "label": "Friendly", "hint": "raw/model-id",
+        }, out["zhipu"])
 
 
 class TestSaveCatalogHandler(unittest.TestCase):

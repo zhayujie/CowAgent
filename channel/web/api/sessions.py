@@ -545,11 +545,18 @@ def _session_model_catalog() -> List[dict]:
         # chat picker can both display and re-select it.
         if pid == active_provider and active_model and active_model not in models:
             models.insert(0, active_model)
-        catalog.append({
+        group = {
             "id": pid,
             "label": pinfo["label"],
             "models": models,
-        })
+        }
+        labels = {
+            e["name"]: e["alias"] for e in (catalog_map.get(pid) or [])
+            if e.get("alias") and e["name"] in models
+        }
+        if labels:
+            group["labels"] = labels
+        catalog.append(group)
 
     # User-defined OpenAI-compatible providers carry their own credentials, so
     # offer any that have a key on file (or are the active provider). Their model

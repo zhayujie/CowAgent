@@ -286,7 +286,7 @@ function onProviderChange(pid) {
     if (customTip) customTip.classList.toggle('hidden', cfgProviderValue !== 'custom');
 
     const modelEl = document.getElementById('cfg-model-select');
-    const modelOpts = (p.models || []).map(m => ({ value: m, label: m }));
+    const modelOpts = configModelOptions(p);
     modelOpts.push({ value: '__custom__', label: t('config_custom_option') });
 
     // Restore a custom model the user typed for this provider earlier in the
@@ -398,20 +398,29 @@ function onModelSelectChange(val, opts) {
     syncReasoningEffortOptions();
 }
 
+function configModelOptions(provider) {
+    const labels = provider.model_labels || {};
+    return (provider.models || []).map(model => ({
+        value: model,
+        label: labels[model] || model,
+        hint: labels[model] ? model : '',
+    }));
+}
+
 function syncModelSelection(model) {
     const p = configProviders[cfgProviderValue];
     if (!p) return;
 
     const modelEl = document.getElementById('cfg-model-select');
     if (p.models && p.models.includes(model)) {
-        const modelOpts = (p.models || []).map(m => ({ value: m, label: m }));
+        const modelOpts = configModelOptions(p);
         modelOpts.push({ value: '__custom__', label: t('config_custom_option') });
         initDropdown(modelEl, modelOpts, model, onModelSelectChange);
         cfgModelValue = model;
         document.getElementById('cfg-model-custom-wrap').classList.add('hidden');
     } else {
         cfgModelValue = '__custom__';
-        const modelOpts = (p.models || []).map(m => ({ value: m, label: m }));
+        const modelOpts = configModelOptions(p);
         modelOpts.push({ value: '__custom__', label: t('config_custom_option') });
         initDropdown(modelEl, modelOpts, '__custom__', onModelSelectChange);
         document.getElementById('cfg-model-custom-wrap').classList.remove('hidden');
