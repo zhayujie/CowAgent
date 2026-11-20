@@ -440,12 +440,18 @@ def responses_stream_to_chat_chunks(
         if etype in ("response.failed", "error"):
             response = event.get("response") or {}
             err = event.get("error") or response.get("error") or {}
+            err_type = err.get("type", "") if isinstance(err, dict) else ""
+            if not err and etype == "error":
+                # A Responses ``error`` event carries code/message at the top
+                # level: {"type": "error", "code": ..., "message": ..., "param": ...}
+                err = event
+                err_type = ""
             message = err.get("message") if isinstance(err, dict) else str(err)
             code = err.get("code") if isinstance(err, dict) else ""
             logger.error(f"[Responses] stream error: {message} (code={code})")
             yield {
                 "error": {"message": message or "Responses stream error",
-                          "code": code or "", "type": err.get("type", "") if isinstance(err, dict) else ""},
+                          "code": code or "", "type": err_type},
                 "message": message or "Responses stream error",
                 "status_code": 500,
             }
