@@ -1,5 +1,6 @@
 import {PermissionsAndroid, Platform} from 'react-native';
 import {tr} from '../i18n';
+import {cowNative, nativeError, type NativeFile} from './cowNative';
 import type {PickedFile} from './types';
 
 type ImagePickerModule = typeof import('react-native-image-picker');
@@ -11,12 +12,16 @@ const imagePicker = (): ImagePickerModule | null =>
   Platform.OS === 'ios' || Platform.OS === 'android' ? require('react-native-image-picker') : null;
 const documentPicker = (): DocumentPickerModule => require('react-native-document-picker');
 
-/** HarmonyOS has no camera picker wired in yet; photos come from the system file picker. */
-export const canTakePhoto = Platform.OS === 'ios' || Platform.OS === 'android';
+const isHarmony = (Platform.OS as string) === 'harmony';
+
+/** HarmonyOS goes through the system camera and photo pickers in our own native module. */
+export const canTakePhoto = Platform.OS === 'ios' || Platform.OS === 'android' || cowNative != null;
 
 const MAX_PICK = 9;
 
 const extOf = (name: string) => name.split('.').pop()?.toLowerCase() ?? '';
+/** HarmonyOS pickers return bare sandbox paths; <Image> needs a file:// URI. */
+const toFileUri = (path: string) => (path.startsWith('/') ? `file://${path}` : path);
 const IMAGE_MIME: Record<string, string> = {
   jpg: 'image/jpeg',
   jpeg: 'image/jpeg',
@@ -42,6 +47,19 @@ function fromAssets(
     });
 }
 
+const rethrowNative = (e: unknown): never => {
+  throw nativeError(e);
+};
+
+function fromNative(files: NativeFile[]): PickedFile[] {
+  return files.map(f => ({
+    uri: toFileUri(f.path),
+    name: f.name,
+    type: IMAGE_MIME[extOf(f.name)] || 'image/jpeg',
+    size: f.size,
+  }));
+}
+
 function ensureOk(res: {errorCode?: string; errorMessage?: string}) {
   if (res.errorCode === 'permission') {
     throw new Error(tr('media_permission_denied'));
@@ -55,6 +73,9 @@ function ensureOk(res: {errorCode?: string; errorMessage?: string}) {
 }
 
 export async function pickPhotos(): Promise<PickedFile[]> {
+  if (cowNative) {
+    return fromNative(await cowNative.pickPhotos(MAX_PICK).catch(rethrowNative));
+  }
   const picker = imagePicker();
   if (!picker) {
     return pickDocuments(true);
@@ -72,6 +93,9 @@ export async function pickPhotos(): Promise<PickedFile[]> {
 
 /** One image, scaled down to stay well under the server's 2 MiB avatar limit. */
 export async function pickAvatar(): Promise<PickedFile | null> {
+  if (cowNative) {
+    return fromNative(await cowNative.pickPhotos(1).catch(rethrowNative))[0] ?? null;
+  }
   const picker = imagePicker();
   if (!picker) {
     return (await pickDocuments(true))[0] ?? null;
@@ -88,6 +112,13 @@ export async function pickAvatar(): Promise<PickedFile | null> {
 }
 
 export async function takePhoto(): Promise<PickedFile[]> {
+  if (cowNative) {
+    // The camera picker fails outright where there is no camera, the emulator included.
+    const photo = await cowNative.takePhoto().catch((e: unknown) => {
+      throw new Error(`${tr('media_no_camera')}: ${nativeError(e).message}`);
+    });
+    return photo ? fromNative([photo]) : [];
+  }
   const picker = imagePicker();
   if (!picker) {
     return [];
@@ -117,13 +148,15 @@ export async function pickDocuments(imagesOnly = false): Promise<PickedFile[]> {
     const res = await picker.pick({
       type: [imagesOnly ? picker.types.images : picker.types.allFiles],
       allowMultiSelection: true,
-      // Android hands back content:// URIs that can expire; a cache copy can be uploaded later.
-      copyTo: Platform.OS === 'android' ? 'cachesDirectory' : undefined,
+      // Android hands back content:// URIs that can expire, and HarmonyOS paths outside the
+      // sandbox that uploads can't read; a cache copy works for both. The HarmonyOS build
+      // rejects the key when it is present but undefined.
+      ...(Platform.OS === 'android' || isHarmony ? {copyTo: 'cachesDirectory' as const} : {}),
     });
     return res.slice(0, MAX_PICK).map((d, i) => {
       const name = d.name || `file_${Date.now()}_${i}`;
       return {
-        uri: d.fileCopyUri || d.uri,
+        uri: toFileUri(d.fileCopyUri || d.uri),
         name,
         type: d.type || IMAGE_MIME[extOf(name)] || 'application/octet-stream',
         size: d.size ?? undefined,

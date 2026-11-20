@@ -1,4 +1,4 @@
-import {Linking, NativeModules, PermissionsAndroid, Platform} from 'react-native';
+import {Linking, NativeModules, Platform} from 'react-native';
 import {create} from 'zustand';
 import {showToast} from '../components/Toast';
 import {serverUrl} from '../api/cowApi';
@@ -16,6 +16,8 @@ import {
   viewUrlOf,
   withPreview,
 } from './chatFile';
+import {cowNative, nativeError} from '../media/cowNative';
+import {canWriteDownloads} from './downloadPermission';
 
 /** Read as text or rendered as a page on the preview screen. */
 const IN_APP = new Set(['markdown', 'text', 'csv', 'code', 'html']);
@@ -64,12 +66,34 @@ export function openAsWebPage(f: ChatFile) {
 /** Where a native save put the file; null when the user backed out of the iOS share sheet. */
 type SavedTo = 'downloads' | 'photos' | 'files' | 'other' | null;
 
+/** The file name at the end of a URL, decoded; empty when there is none. */
+function nameFromUrl(url: string): string {
+  const name = url.split(/[?#]/)[0].split('/').pop() || '';
+  try {
+    return decodeURIComponent(name);
+  } catch {
+    return name;
+  }
+}
+
 /**
  * Native saving, http(s) only: Android queues the system downloader into Downloads,
- * iOS downloads first and then offers the share sheet. Both settle once the file is kept.
+ * iOS downloads first and then offers the share sheet, HarmonyOS streams into
+ * Downloads/<app name>. All settle once the file is kept.
  */
 const systemDownloads: {save(url: string, fileName: string): Promise<SavedTo>} | undefined =
-  NativeModules.CowDownloads;
+  NativeModules.CowDownloads ??
+  (cowNative
+    ? {
+        save: (url, fileName) =>
+          cowNative!.saveDownload(url, fileName || nameFromUrl(url)).then(
+            () => 'downloads' as const,
+            (e: unknown) => {
+              throw nativeError(e);
+            },
+          ),
+      }
+    : undefined);
 
 const savesNatively = (url: string) => !!systemDownloads && /^https?:/i.test(url);
 
@@ -81,13 +105,9 @@ const SAVED_TOAST: Partial<Record<NonNullable<SavedTo>, MessageKey>> = {
 
 /** An empty `fileName` leaves the name to the native side, which can read the server's on iOS. */
 async function saveToDownloads(url: string, name: string, fileName = name) {
-  // Writing to the shared Downloads folder needs this permission before Android 10.
-  if (Platform.OS === 'android' && typeof Platform.Version === 'number' && Platform.Version < 29) {
-    const result = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE);
-    if (result !== PermissionsAndroid.RESULTS.GRANTED) {
-      showToast(tr('file_download_no_permission'));
-      return;
-    }
+  if (!(await canWriteDownloads())) {
+    showToast(tr('file_download_no_permission'));
+    return;
   }
   showToast(trf('file_download_started', {name}));
   try {
@@ -111,13 +131,7 @@ export function downloadUrl(url: string, name?: string) {
     saveToDownloads(url, name);
     return;
   }
-  let shown = url.split(/[?#]/)[0].split('/').pop() || '';
-  try {
-    shown = decodeURIComponent(shown);
-  } catch {
-    // Kept as sent.
-  }
-  saveToDownloads(url, shown || tr('file_download'), '');
+  saveToDownloads(url, nameFromUrl(url) || tr('file_download'), '');
 }
 
 /** Saved natively on Android and iOS, through an anchor on the web, and by the system elsewhere. */

@@ -1,7 +1,7 @@
 import {faArrowUpRightFromSquare, faDownload, faXmark} from '@fortawesome/free-solid-svg-icons';
 import type {IconDefinition} from '@fortawesome/fontawesome-svg-core';
 import React, {useCallback, useEffect, useMemo, useRef, useState, type ReactNode} from 'react';
-import {Image, Modal, Pressable, StyleSheet, Text, View} from 'react-native';
+import {Image, Modal, Platform, Pressable, StyleSheet, Text, View} from 'react-native';
 import {Gesture, GestureDetector, GestureHandlerRootView} from 'react-native-gesture-handler';
 import Animated, {
   interpolate,
@@ -22,6 +22,7 @@ const DOUBLE_TAP_SCALE = 2.5;
 const DISMISS_DISTANCE = 120;
 const DISMISS_VELOCITY = 900;
 const SPRING = {damping: 22, stiffness: 220, mass: 0.6};
+const IS_HARMONY = (Platform.OS as string) === 'harmony';
 
 function clamp(v: number, lo: number, hi: number) {
   'worklet';
@@ -217,10 +218,12 @@ export function ImageViewer({
       });
 
     // The taps wait for the long press to fail, so letting go after one does not also close.
-    return Gesture.Simultaneous(
-      Gesture.Simultaneous(pinch, pan),
-      Gesture.Exclusive(hold, doubleTap, singleTap),
-    );
+    const taps = Gesture.Exclusive(hold, doubleTap, singleTap);
+    // The HarmonyOS gesture handler crashes when a long press that runs alongside other
+    // gestures activates (it looks them up and finds none), so there they race instead.
+    return IS_HARMONY
+      ? Gesture.Race(Gesture.Simultaneous(pinch, pan), taps)
+      : Gesture.Simultaneous(Gesture.Simultaneous(pinch, pan), taps);
   }, [close, longPress, stageW, stageH, aspect, scale, savedScale, tx, ty, savedTx, savedTy, pull, rebase]);
 
   // Explicit dependencies keep the web preview working, where no worklets Babel plugin runs.
