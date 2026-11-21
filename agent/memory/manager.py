@@ -8,6 +8,7 @@ import os
 from typing import List, Optional, Dict, Any, Sequence, Tuple
 from pathlib import Path
 import hashlib
+import time
 from datetime import datetime
 
 from agent.memory.config import MemoryConfig, get_default_memory_config
@@ -312,7 +313,9 @@ class MemoryManager:
             path=path,
             source=source,
             file_hash=file_hash,
-            mtime=int(os.path.getmtime(__file__)),  # Use current time
+            # Wall clock at index time: sync() stores the file's own mtime, so
+            # a fixed timestamp here would look like a file from install day.
+            mtime=int(time.time()),
             size=len(content)
         )
     
