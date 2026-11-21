@@ -115,3 +115,70 @@ def test_handle_instance_delete_skips_non_weixin(tmp_path):
         client._handle_instance_delete("abc", "feishu", {})
 
     assert inst_file.exists()
+
+
+# ---------------------------------------------------------------------------
+# channel_sync: a record the platform disabled is not a record it deleted
+# ---------------------------------------------------------------------------
+
+
+def _sync(client, tmp_path, channels, stored):
+    """Reconcile *stored* against *channels*, returning the removed ids."""
+    removed = []
+
+    def _remove(_conf, instance_id):
+        removed.append(instance_id)
+
+    with patch.object(cloud_client, "conf", lambda: {}), \
+            patch.object(client, "_apply_instance", lambda *a, **k: False), \
+            patch("channel.channel_instances.read_raw_instances", lambda _conf: stored), \
+            patch("channel.channel_instances.remove_instance", _remove), \
+            patch.object(cloud_client, "get_weixin_credentials_path",
+                         side_effect=_path_resolver(tmp_path)):
+        client._handle_channel_sync({"channels": channels})
+    return removed
+
+
+def test_channel_sync_disabling_a_weixin_instance_keeps_its_login(tmp_path):
+    """`_handle_instance_update` keeps the login so re-enabling needs no new QR scan."""
+    inst_file = tmp_path / "weixin_credentials.abc.json"
+    inst_file.write_text("{}")
+
+    removed = _sync(
+        _client(), tmp_path,
+        [{"channelId": "abc", "channelType": "weixin", "enabled": "N"}],
+        [{"instance_id": "abc", "channel_type": "weixin"}],
+    )
+
+    assert removed == ["abc"], "a disabled instance must still be stopped"
+    assert inst_file.exists(), "disabling must not force a new QR scan"
+
+
+def test_channel_sync_removing_a_weixin_instance_drops_its_login(tmp_path):
+    """Control: a record the platform no longer lists keeps no stale credential."""
+    inst_file = tmp_path / "weixin_credentials.abc.json"
+    inst_file.write_text("{}")
+
+    removed = _sync(
+        _client(), tmp_path,
+        [],
+        [{"instance_id": "abc", "channel_type": "weixin"}],
+    )
+
+    assert removed == ["abc"]
+    assert not inst_file.exists()
+
+
+def test_channel_sync_keeps_the_login_of_an_enabled_instance(tmp_path):
+    """Control: an upserted instance is not removed at all."""
+    inst_file = tmp_path / "weixin_credentials.abc.json"
+    inst_file.write_text("{}")
+
+    removed = _sync(
+        _client(), tmp_path,
+        [{"channelId": "abc", "channelType": "weixin", "enabled": "Y"}],
+        [{"instance_id": "abc", "channel_type": "weixin"}],
+    )
+
+    assert removed == []
+    assert inst_file.exists()
