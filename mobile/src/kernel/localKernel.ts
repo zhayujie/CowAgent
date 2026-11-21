@@ -8,11 +8,26 @@ import {tr} from '../i18n';
  */
 interface NativeKernel {
   start(): Promise<{port: number; password: string}>;
+  deviceName?(): string;
 }
 
 const native: NativeKernel | undefined = NativeModules.CowKernel;
 
 export const LOCAL_SERVER_ID = 'local';
+
+let deviceName: string | undefined;
+
+/** What the owner calls this phone, naming the local agent; a generic "This phone" where unknown. */
+export function localDeviceName(): string {
+  if (deviceName === undefined) {
+    try {
+      deviceName = native?.deviceName?.()?.trim() ?? '';
+    } catch {
+      deviceName = '';
+    }
+  }
+  return deviceName || tr('server_local');
+}
 
 /** First launch unpacks the sources and compiles them, which takes a while on slow phones. */
 const READY_TIMEOUT_MS = 90_000;
