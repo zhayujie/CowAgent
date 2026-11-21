@@ -74,7 +74,7 @@ description: "LinkAI プラットフォームの linkai_api_key ひとつで Ope
 }
 ```
 
-ASR は固定で Whisper を使用します。認証情報は `linkai_api_key` を自動的に再利用します。
+認証情報は `linkai_api_key` を自動的に再利用します。`voice_to_text_model` で認識エンジンを選択でき、空欄ならゲートウェイのデフォルトエンジン、または `doubao`、`whisper-1`、`baidu`、`deepseek-asr` を指定できます。
 
 ## 音声合成
 
@@ -93,6 +93,7 @@ ASR は固定で Whisper を使用します。認証情報は `linkai_api_key` �
 | `tts-1` | OpenAI · 多言語汎用（音色 `alloy` / `nova` / `echo` など） |
 | `doubao` | ByteDance Doubao · 中国語の音色が豊富 |
 | `baidu` | Baidu · 中国語のアナウンサー音色 |
+| `deepseek-tts` | DeepSeek（音色 `stella` / `tide`） |
 
 エンジンによって対応する音色が異なるため、Web コンソールの「モデル管理 → 音声合成」から視覚的に選択することをおすすめします。
 

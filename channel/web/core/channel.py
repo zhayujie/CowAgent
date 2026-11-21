@@ -663,16 +663,13 @@ class WebChannel(ChatChannel):
             return "voice_if_voice"
         return "off"
 
-    # Mirror of ModelsHandler._TTS_PROVIDERS. zhipu is intentionally omitted
-    # from the UI (GLM-TTS prelude beep); pinning it in config.json still works.
-    _TTS_PROVIDERS_SUGGEST_ORDER = ["openai", "minimax", "dashscope", "linkai"]
-
     @classmethod
     def _tts_provider_ready(cls) -> bool:
         """True if user picked a provider OR any suggested vendor has an API key."""
         if (conf().get("text_to_voice") or "").strip():
             return True
-        for pid in cls._TTS_PROVIDERS_SUGGEST_ORDER:
+        from channel.web.api.models import ModelsHandler
+        for pid in ModelsHandler._TTS_PROVIDERS:
             meta = providers.PROVIDER_MODELS.get(pid) or {}
             key_field = meta.get("api_key_field")
             if not key_field:

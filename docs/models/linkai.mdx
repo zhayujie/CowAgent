@@ -74,7 +74,7 @@ Available models: `gpt-4.1-mini`, `gpt-5.4-mini`, `qwen3.8-flash`, `qwen3.7-plus
 }
 ```
 
-ASR uses Whisper by default; credentials are automatically reused from `linkai_api_key`.
+Credentials are automatically reused from `linkai_api_key`. Pick the recognition engine with `voice_to_text_model`: leave it empty for the gateway default, or set `doubao`, `whisper-1`, `baidu` or `deepseek-asr`.
 
 ## Text-to-Speech (TTS)
 
@@ -93,6 +93,7 @@ The TTS gateway supports multiple underlying engines. The engine is selected by 
 | `tts-1` | OpenAI · Multi-language (voices like `alloy` / `nova` / `echo`, etc.) |
 | `doubao` | ByteDance Doubao · Rich Chinese voices |
 | `baidu` | Baidu · Chinese broadcaster voices |
+| `deepseek-tts` | DeepSeek (voices `stella` / `tide`) |
 
 Voices differ by engine; we recommend selecting them visually in the Web Console under "Model Management → Text-to-Speech".
 

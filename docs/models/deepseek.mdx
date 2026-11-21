@@ -1,9 +1,13 @@
 ---
 title: DeepSeek
-description: "Configure DeepSeek in CowAgent, a cost-effective default for agent mode: chat and task planning, with thinking mode on the V4 series, set up in the web console or config.json."
+description: "Configure DeepSeek in CowAgent, the default provider: one deepseek_api_key enables chat, vision, speech-to-text, text-to-speech and web search, with thinking mode support."
 ---
 
-DeepSeek is one of the default recommended providers in Agent mode, focused on cost-effective text chat and task planning.
+DeepSeek is CowAgent's default provider. A single `deepseek_api_key` enables text chat, image understanding, speech-to-text, text-to-speech and web search.
+
+<Tip>
+  All capabilities below can be configured in one place via the "Model Management" page in the Web Console, with no need to manually edit the configuration file.
+</Tip>
 
 ## Text Chat
 
@@ -71,3 +75,41 @@ Under thinking mode, `reasoning_effort` controls reasoning intensity:
 <Tip>
   `deepseek-flash` (V4.1 Flash, natively multimodal) is used by default; switch to `deepseek-v4-pro` for complex tasks; enable `enable_thinking` when deep reasoning is needed.
 </Tip>
+
+## Image Understanding
+
+`deepseek-flash` accepts images natively; as the main model it handles images directly, with no extra configuration.
+
+## Speech-to-Text (ASR)
+
+```json
+{
+  "voice_to_text": "deepseek"
+}
+```
+
+| Parameter | Description |
+| --- | --- |
+| `voice_to_text` | Set to `deepseek` to enable it. When empty, a provider is picked from the configured API keys, DeepSeek first |
+
+Reuses `deepseek_api_key`; no model needs to be set. 21 languages are detected automatically, and each clip can be up to 120 seconds. Web console recordings work out of the box; AMR / SILK / MP3 and other formats need the optional dependencies (`requirements-optional.txt`) and ffmpeg.
+
+## Text-to-Speech (TTS)
+
+```json
+{
+  "text_to_voice": "deepseek",
+  "tts_voice_id": "stella"
+}
+```
+
+| Parameter | Description |
+| --- | --- |
+| `text_to_voice` | Set to `deepseek` to enable it. When empty, a provider is picked from the configured API keys, DeepSeek first |
+| `tts_voice_id` | Optional: `stella` (female, default) or `tide` (male) |
+
+10 languages are detected automatically, and Markdown is stripped before synthesis. When to reply with voice is set in the Web Console under "Model Management → Speech Synthesis".
+
+## Web Search
+
+Reuses `deepseek_api_key` with no extra setup. See [Web Search](/tools/web-search).

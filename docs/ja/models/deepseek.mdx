@@ -1,9 +1,13 @@
 ---
 title: DeepSeek
-description: "CowAgent で DeepSeek を設定します。Agent モードで推奨されるコストパフォーマンスの高いベンダーで、テキスト対話とタスク計画に対応し、V4 シリーズでは思考モードも使えます。"
+description: "CowAgent で DeepSeek を設定します。デフォルトのベンダーで、1 つの deepseek_api_key でテキスト対話・画像理解・音声認識・音声合成・Web 検索を利用でき、思考モードにも対応します。"
 ---
 
-DeepSeek は現在 Agent モードでデフォルト推奨されているベンダーの 1 つで、コストパフォーマンスの高いテキスト対話とタスクプランニング能力を主力としています。
+DeepSeek は CowAgent のデフォルトベンダーで、`deepseek_api_key` 1 つでテキスト対話・画像理解・音声認識・音声合成・Web 検索を有効にできます。
+
+<Tip>
+  Web コンソールの「モデル管理」ページから、以下のすべての機能をワンストップで設定でき、設定ファイルを手動で編集する必要はありません。
+</Tip>
 
 ## テキスト対話
 
@@ -71,3 +75,41 @@ DeepSeek は現在 Agent モードでデフォルト推奨されているベン�
 <Tip>
   デフォルトでは `deepseek-flash`（V4.1 Flash、ネイティブマルチモーダル）を使用します。複雑なタスクには `deepseek-v4-pro` を使用でき、深い推論が必要な場合は `enable_thinking` をオンにできます。
 </Tip>
+
+## 画像理解
+
+`deepseek-flash` はネイティブに画像入力に対応しており、メインモデルとして使う場合は追加設定なしで画像を直接理解します。
+
+## 音声認識
+
+```json
+{
+  "voice_to_text": "deepseek"
+}
+```
+
+| パラメータ | 説明 |
+| --- | --- |
+| `voice_to_text` | `deepseek` で有効化。空欄の場合は設定済みの API Key から自動選択し、DeepSeek が優先されます |
+
+`deepseek_api_key` を再利用し、モデルの指定は不要です。21 言語を自動判別し、1 件あたり最長 120 秒です。Web コンソールの録音はそのまま認識でき、AMR / SILK / MP3 などの形式はオプション依存（`requirements-optional.txt`）と ffmpeg が必要です。
+
+## 音声合成
+
+```json
+{
+  "text_to_voice": "deepseek",
+  "tts_voice_id": "stella"
+}
+```
+
+| パラメータ | 説明 |
+| --- | --- |
+| `text_to_voice` | `deepseek` で有効化。空欄の場合は設定済みの API Key から自動選択し、DeepSeek が優先されます |
+| `tts_voice_id` | 任意。`stella`（女性、デフォルト）または `tide`（男性） |
+
+10 言語を自動判別し、合成前に Markdown を除去します。音声で返信するタイミングは Web コンソールの「モデル管理 → 音声合成」で設定できます。
+
+## Web 検索
+
+`deepseek_api_key` を再利用し、追加設定は不要です。詳しくは [Web 検索](/ja/tools/web-search) を参照してください。

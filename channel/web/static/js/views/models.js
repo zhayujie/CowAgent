@@ -1413,10 +1413,8 @@ function renderCapabilityBody(def, cap, body) {
 
     if (def.needsModel) {
         rebuildCapabilityModelDropdown(def, initialProviderValue, cap.current_model || '', body);
-        // Embedding: hide model picker when no provider is selected.
-        const showModel = def.id === 'embedding' ? initialProviderValue !== '' :
-            (initialProviderValue !== '' || !capabilitySupportsAuto(def.id));
-        setCapabilityModelPickerVisible(def, showModel, body);
+        // No provider (auto or pending config) means there is no model to pick.
+        setCapabilityModelPickerVisible(def, initialProviderValue !== '', body);
     }
 
     if (def.id === 'tts') {
@@ -1869,9 +1867,8 @@ function onCapabilityProviderChange(def, providerId, scope) {
         }
         capabilityLastProviderId[def.id] = providerId;
 
-        // Embedding: hide model picker when no provider is selected.
-        const showModel = def.id === 'embedding' ? providerId !== '' :
-            !(providerId === '' && capabilitySupportsAuto(def.id));
+        // No provider (auto or pending config) means there is no model to pick.
+        const showModel = providerId !== '';
         if (showModel) {
             // Restore a remembered custom model for this provider (if any) so
             // switching vendors and back does not drop it.

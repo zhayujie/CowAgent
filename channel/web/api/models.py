@@ -323,13 +323,18 @@ class ModelsHandler:
     """
 
     # Capability -> provider ids drawn from PROVIDER_MODELS.
-    _ASR_PROVIDERS = ["openai", "dashscope", "zhipu", "mimo", "cowagent", "linkai"]
+    # Order doubles as the auto-pick order (mirrors Bridge._auto_pick_*).
+    _ASR_PROVIDERS = ["deepseek", "openai", "dashscope", "zhipu", "mimo", "cowagent", "linkai"]
     # Web-console white-list. Other vendors stay usable via direct config.
-    _TTS_PROVIDERS = ["openai", "minimax", "dashscope", "mimo", "cowagent", "linkai"]
+    _TTS_PROVIDERS = ["deepseek", "openai", "minimax", "dashscope", "mimo", "cowagent", "linkai"]
 
     # TTS engine catalog (speech models, not voice timbres). Entries are
     # either a bare code or {value, hint?} when a friendly label helps.
     _TTS_PROVIDER_MODELS = {
+        # DeepSeek's TTS endpoint takes no model id.
+        "deepseek": [
+            {"value": "", "hint": "默认"},
+        ],
         "openai":    ["tts-1", "tts-1-hd", "gpt-4o-mini-tts"],
         "minimax": [
             {"value": "speech-2.8-hd",    "hint": "情绪渲染融合语气词,自然听感"},
@@ -354,6 +359,7 @@ class ModelsHandler:
             {"value": "tts-1",  "hint": "OpenAI · 多语种通用"},
             {"value": "doubao", "hint": "字节豆包 · 中文音色丰富"},
             {"value": "baidu",  "hint": "百度 · 中文主播音色"},
+            {"value": "deepseek-tts", "hint": "DeepSeek"},
         ],
     }
 
@@ -361,6 +367,10 @@ class ModelsHandler:
     # runtime default (mirrors DEFAULT_ASR_MODEL in voice/*). Users can still
     # pick "custom" in the UI to send any other model id.
     _ASR_PROVIDER_MODELS = {
+        # DeepSeek's ASR endpoint takes no model id.
+        "deepseek": [
+            {"value": "", "hint": "默认"},
+        ],
         "openai": [
             {"value": "gpt-4o-mini-transcribe", "hint": "默认 · 速度快"},
             {"value": "gpt-4o-transcribe",      "hint": "更高准确率"},
@@ -386,6 +396,7 @@ class ModelsHandler:
             {"value": "doubao", "hint": "火山豆包"},
             {"value": "whisper-1", "hint": "OpenAI Whisper"},
             {"value": "baidu", "hint": "百度"},
+            {"value": "deepseek-asr", "hint": "DeepSeek"},
         ],
     }
 
@@ -394,6 +405,10 @@ class ModelsHandler:
     # helps recognition. We keep `value` as the raw API code so power
     # users can cross-reference config.json.
     _TTS_PROVIDER_VOICES = {
+        "deepseek": [
+            {"value": "stella", "hint": "海星 · 女声"},
+            {"value": "tide",   "hint": "暗潮 · 男声"},
+        ],
         "openai":    [
             "alloy", "echo", "fable", "onyx", "nova", "shimmer",
             "ash", "ballad", "coral", "sage", "verse",
@@ -618,6 +633,10 @@ class ModelsHandler:
                 {"value": "baidu_4226", "hint": "南方 · 电台女主播"},
                 {"value": "baidu_4254", "hint": "度小清 · 广告女声"},
                 {"value": "baidu_4278", "hint": "度小贝 · 知识女主播"},
+            ],
+            "deepseek-tts": [
+                {"value": "stella", "hint": "海星 · 女声"},
+                {"value": "tide",   "hint": "暗潮 · 男声"},
             ],
         },
     }

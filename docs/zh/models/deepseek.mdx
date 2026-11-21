@@ -1,9 +1,13 @@
 ---
 title: DeepSeek
-description: "在 CowAgent 中配置 DeepSeek 模型：Agent 模式默认推荐的高性价比厂商，支持文本对话与任务规划，V4 系列可开启思考模式输出思维链，在 Web 控制台或 config.json 中配置。"
+description: "在 CowAgent 中配置 DeepSeek：默认模型厂商，一个 deepseek_api_key 即可启用文本对话、图像理解、语音识别、语音合成和联网搜索，支持思考模式。"
 ---
 
-DeepSeek 是当前 Agent 模式默认推荐的厂商之一，主打高性价比的文本对话和任务规划能力。
+DeepSeek 是 CowAgent 的默认模型厂商，一个 `deepseek_api_key` 即可启用文本对话、图像理解、语音识别、语音合成和联网搜索。
+
+<Tip>
+  通过 Web 控制台的「模型管理」页面可一站式配置以下全部能力，无需手动改配置文件。
+</Tip>
 
 ## 文本对话
 
@@ -71,3 +75,41 @@ DeepSeek 是当前 Agent 模式默认推荐的厂商之一，主打高性价比�
 <Tip>
   默认使用 `deepseek-flash`（V4.1 Flash，原生多模态）；复杂任务可使用 `deepseek-v4-pro`；需要深度推理可开启 `enable_thinking`。
 </Tip>
+
+## 图像理解
+
+`deepseek-flash` 原生支持图像输入，作为主模型时图片直接交由它理解，无需额外配置。
+
+## 语音识别
+
+```json
+{
+  "voice_to_text": "deepseek"
+}
+```
+
+| 参数 | 说明 |
+| --- | --- |
+| `voice_to_text` | 设为 `deepseek` 启用；留空时按已配置的 API Key 自动选择，DeepSeek 优先 |
+
+凭证复用 `deepseek_api_key`，无需指定模型。支持 21 种语言自动识别，单段音频最长 120 秒。网页端录音可直接识别，AMR / SILK / MP3 等格式需安装可选依赖（`requirements-optional.txt`）和 ffmpeg。
+
+## 语音合成
+
+```json
+{
+  "text_to_voice": "deepseek",
+  "tts_voice_id": "stella"
+}
+```
+
+| 参数 | 说明 |
+| --- | --- |
+| `text_to_voice` | 设为 `deepseek` 启用；留空时按已配置的 API Key 自动选择，DeepSeek 优先 |
+| `tts_voice_id` | 可选，`stella`（海星 · 女声，默认）或 `tide`（暗潮 · 男声） |
+
+支持 10 种语言自动识别，合成前自动过滤 Markdown。语音回复策略可在 Web 控制台「模型管理 → 语音合成」中设置。
+
+## 联网搜索
+
+复用 `deepseek_api_key`，无需单独配置，详见 [联网搜索](/zh/tools/web-search)。

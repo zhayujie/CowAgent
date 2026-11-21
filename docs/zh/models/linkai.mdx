@@ -74,7 +74,7 @@ description: "通过 LinkAI 平台的一个 linkai_api_key 调用 OpenAI、Claud
 }
 ```
 
-ASR 固定使用 Whisper，凭证自动复用 `linkai_api_key`。
+凭证自动复用 `linkai_api_key`。可通过 `voice_to_text_model` 选择识别引擎：留空使用网关默认引擎，也可设为 `doubao`、`whisper-1`、`baidu` 或 `deepseek-asr`。
 
 ## 语音合成
 
@@ -93,6 +93,7 @@ ASR 固定使用 Whisper，凭证自动复用 `linkai_api_key`。
 | `tts-1` | OpenAI · 多语种通用（音色 `alloy` / `nova` / `echo` 等） |
 | `doubao` | 字节豆包 · 中文音色丰富 |
 | `baidu` | 百度 · 中文主播音色 |
+| `deepseek-tts` | DeepSeek（音色 `stella` / `tide`） |
 
 不同引擎对应的音色不同，建议在 Web 控制台「模型管理 → 语音合成」中可视化选择。
 

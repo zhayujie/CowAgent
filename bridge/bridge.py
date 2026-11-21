@@ -14,10 +14,10 @@ class Bridge(object):
     def __init__(self):
         self.btype = {
             "chat": const.OPENAI,
-            # Empty `voice_to_text` (the default in new configs) triggers
-            # the auto-pick below — see _auto_pick_voice_to_text for order.
+            # Empty `voice_to_text` / `text_to_voice` (the default in new
+            # configs) triggers the auto-pick below — see _auto_pick_* for order.
             "voice_to_text": conf().get("voice_to_text") or self._auto_pick_voice_to_text(),
-            "text_to_voice": conf().get("text_to_voice", "google"),
+            "text_to_voice": conf().get("text_to_voice") or self._auto_pick_text_to_voice(),
             "translate": conf().get("translate", "baidu"),
         }
         # 这边取配置的模型
@@ -97,7 +97,7 @@ class Bridge(object):
         Does NOT touch the agent_bridge / agent state.
         """
         new_v2t = conf().get("voice_to_text") or self._auto_pick_voice_to_text()
-        new_t2v = conf().get("text_to_voice", "google")
+        new_t2v = conf().get("text_to_voice") or self._auto_pick_text_to_voice()
         if conf().get("use_linkai") and conf().get("linkai_api_key"):
             if not conf().get("voice_to_text") or conf().get("voice_to_text") in ["openai"]:
                 new_v2t = const.LINKAI
@@ -110,27 +110,49 @@ class Bridge(object):
         logger.info(f"[Bridge] voice refreshed: voice_to_text={new_v2t}, text_to_voice={new_t2v}")
 
     @staticmethod
-    def _auto_pick_voice_to_text() -> str:
-        """Pick an ASR provider by configured api keys when voice_to_text is
-        unset. Order matches the web console: openai → dashscope → zhipu →
-        mimo → cowagent → linkai. Falls back to 'openai' when nothing is configured so the
-        original "missing key" error is preserved.
-        """
+    def _pick_by_api_key(candidates) -> str:
         def has(k: str) -> bool:
             v = (conf().get(k) or "").strip()
             return v != "" and v not in ("YOUR API KEY", "YOUR_API_KEY")
 
-        for key, provider in (
+        for key, provider in candidates:
+            if has(key):
+                return provider
+        return ""
+
+    @classmethod
+    def _auto_pick_voice_to_text(cls) -> str:
+        """Pick an ASR provider by configured api keys when voice_to_text is
+        unset. Order matches the web console: deepseek → openai → dashscope →
+        zhipu → mimo → cowagent → linkai. Falls back to 'openai' when nothing
+        is configured so the original "missing key" error is preserved.
+        """
+        return cls._pick_by_api_key((
+            ("deepseek_api_key", "deepseek"),
             ("open_ai_api_key", "openai"),
             ("dashscope_api_key", "dashscope"),
             ("zhipu_ai_api_key", "zhipu"),
             ("mimo_api_key", "mimo"),
             ("cowagent_api_key", "cowagent"),
             ("linkai_api_key", "linkai"),
-        ):
-            if has(key):
-                return provider
-        return "openai"
+        )) or "openai"
+
+    @classmethod
+    def _auto_pick_text_to_voice(cls) -> str:
+        """Pick a TTS provider by configured api keys when text_to_voice is
+        unset. Order matches the web console: deepseek → openai → minimax →
+        dashscope → mimo → cowagent → linkai. Falls back to 'google' (the
+        historical default) when nothing is configured.
+        """
+        return cls._pick_by_api_key((
+            ("deepseek_api_key", "deepseek"),
+            ("open_ai_api_key", "openai"),
+            ("minimax_api_key", "minimax"),
+            ("dashscope_api_key", "dashscope"),
+            ("mimo_api_key", "mimo"),
+            ("cowagent_api_key", "cowagent"),
+            ("linkai_api_key", "linkai"),
+        )) or "google"
 
     # 模型对应的接口
     def get_bot(self, typename):
