@@ -135,7 +135,5 @@ const useStyles = makeStyles(t => ({
     left: 0,
     zIndex: 6,
     backgroundColor: t.isDark ? t.bg1 : t.bg0,
-    borderRightWidth: 1,
-    borderRightColor: t.line2,
   },
 }));

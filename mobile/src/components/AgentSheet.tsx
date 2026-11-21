@@ -1,4 +1,4 @@
-import {faCheck} from '@fortawesome/free-solid-svg-icons';
+import {faCheck, faUserGroup} from '@fortawesome/free-solid-svg-icons';
 import React from 'react';
 import {Pressable, Text, View} from 'react-native';
 import {tr} from '../i18n';
@@ -14,6 +14,7 @@ export function AgentSheet({
   onClose,
   onSelect,
   onManage,
+  onTeamChat,
   title = tr('chat_agent_sheet_title'),
   selectedId,
 }: {
@@ -21,6 +22,8 @@ export function AgentSheet({
   onClose: () => void;
   onSelect: (agentId: string) => void;
   onManage?: () => void;
+  /** Offered below the Agents once there are at least two to bring together. */
+  onTeamChat?: () => void;
   title?: string;
   /** Defaults to the Agent new chats go to. */
   selectedId?: string | null;
@@ -59,6 +62,24 @@ export function AgentSheet({
           </Pressable>
         );
       })}
+      {!!onTeamChat && agents.length > 1 && (
+        <Pressable
+          accessibilityRole="button"
+          onPress={onTeamChat}
+          style={({pressed}) => [styles.row, styles.team, pressed && styles.pressed]}>
+          <View style={styles.teamIcon}>
+            <Icon icon={faUserGroup} size={14} color={t.accent} />
+          </View>
+          <View style={styles.text}>
+            <Text style={styles.name} numberOfLines={1}>
+              {tr('menu_new_team_chat')}
+            </Text>
+            <Text style={styles.meta} numberOfLines={1}>
+              {tr('menu_new_team_chat_desc')}
+            </Text>
+          </View>
+        </Pressable>
+      )}
       {!!onManage && (
         <View style={styles.footer}>
           <Pressable accessibilityRole="button" hitSlop={8} onPress={onManage}>
@@ -80,9 +101,18 @@ const useStyles = makeStyles(t => ({
     borderRadius: radius.md,
   },
   pressed: {backgroundColor: t.bg2},
+  team: {marginTop: 4, borderTopWidth: 1, borderTopColor: t.line1, borderRadius: 0},
+  teamIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: t.accentSoft,
+  },
   text: {flex: 1},
   name: {fontSize: 16, fontWeight: '500', color: t.t1, letterSpacing: -0.2},
-  meta: {fontSize: 12, color: t.t3, marginTop: 3},
+  meta: {fontSize: 12, color: t.t2, marginTop: 3},
   footer: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -39,9 +39,8 @@ import {makeStyles} from '../theme/theme';
 
 type Props = StackScreenProps<RootStackParamList, 'MenuEditor'>;
 
-/** Built-ins this app has no screen for (desktop-only pages) stay in the document but aren't offered. */
-const editable = (i: MenuItem) =>
-  !isPinnedMenuItem(i) && (i.type !== 'builtin' || i.view === 'chat' || !!BUILTIN_VIEWS[i.view]);
+/** Built-ins this app doesn't list (desktop-only pages, Logs) stay in the document but aren't offered. */
+const editable = (i: MenuItem) => !isPinnedMenuItem(i) && (i.type !== 'builtin' || !!BUILTIN_VIEWS[i.view]);
 
 /** The server's limit on a title. */
 const TITLE_MAX = 40;
@@ -100,7 +99,7 @@ export function MenuEditorScreen({navigation}: Props) {
   const itemRow = (item: MenuItem) => {
     if (item.type === 'builtin') {
       const required = MENU_REQUIRED.has(item.view);
-      const label = item.title || (item.view === 'chat' ? tr('menu_chat') : BUILTIN_VIEWS[item.view].label);
+      const label = item.title || BUILTIN_VIEWS[item.view].label;
       return (
         <SwitchRow
           icon={menuItemIcon(item)}

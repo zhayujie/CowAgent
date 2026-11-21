@@ -28,7 +28,7 @@ import {
   type AttachSource,
 } from '../components/ComposerSheets';
 import {Dock} from '../components/Dock';
-import {DrawerMenu, type DrawerMode, type DrawerRoute} from '../components/DrawerMenu';
+import {DrawerMenu, type DrawerRoute, type DrawerView} from '../components/DrawerMenu';
 import {Icon} from '../components/Icon';
 import {Intro} from '../components/Intro';
 import {MessageItem} from '../components/MessageItem';
@@ -94,7 +94,8 @@ export function ChatScreen({route, navigation}: Props) {
   const teamSize = settings?.team?.members.length ?? 0;
   const [draft, setDraft] = useState('');
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [drawerMode, setDrawerMode] = useState<DrawerMode>('chat');
+  const [drawerView, setDrawerView] = useState<DrawerView>('menu');
+  const [drawerNested, setDrawerNested] = useState(false);
   const [agentSheetOpen, setAgentSheetOpen] = useState(false);
   const [serverSheetOpen, setServerSheetOpen] = useState(false);
   const [teamSheetOpen, setTeamSheetOpen] = useState(false);
@@ -176,10 +177,9 @@ export function ChatScreen({route, navigation}: Props) {
     useOverviewStore.getState().load().catch(() => undefined);
   }, []);
   const openDrawer = useCallback(
-    (mode?: DrawerMode) => {
-      if (mode) {
-        setDrawerMode(mode);
-      }
+    (view: DrawerView) => {
+      setDrawerView(view);
+      setDrawerNested(false);
       setDrawerOpen(true);
       refreshDrawer();
     },
@@ -495,7 +495,8 @@ export function ChatScreen({route, navigation}: Props) {
         })
         .onStart(() => {
           Keyboard.dismiss();
-          setDrawerMode('features');
+          setDrawerView('menu');
+          setDrawerNested(false);
           refreshDrawer();
         })
         .onUpdate(e => drawerRef.current?.drag(e.translationX))
@@ -527,11 +528,11 @@ export function ChatScreen({route, navigation}: Props) {
         <View style={[styles.top, {paddingTop: insets.top + 6}]}>
           <View style={styles.topLeft}>
             <View style={styles.panes}>
-              <IconButton label={tr('chat_features')} onPress={() => openDrawer('features')}>
+              <IconButton label={tr('chat_features')} onPress={() => openDrawer('menu')}>
                 <Burger />
               </IconButton>
               <View style={styles.panesDivider} />
-              <IconButton icon={faComments} label={tr('chat_session_list')} onPress={() => openDrawer('chat')} size={15} />
+              <IconButton icon={faComments} label={tr('chat_session_list')} onPress={() => openDrawer('sessions')} size={15} />
             </View>
           </View>
           <Pressable
@@ -646,22 +647,18 @@ export function ChatScreen({route, navigation}: Props) {
 
         <SlideDrawer ref={drawerRef} open={drawerOpen} onClose={closeDrawer}>
           <DrawerMenu
-            mode={drawerMode}
-            onModeChange={setDrawerMode}
+            view={drawerView}
+            nested={drawerNested}
+            onViewChange={view => {
+              setDrawerView(view);
+              setDrawerNested(view === 'sessions');
+            }}
             currentSessionId={sessionId}
             onNewChat={startNewChat}
-            onNewTeamChat={() => {
-              setDrawerOpen(false);
-              setTeamSheetOpen(true);
-            }}
             onOpenSession={openSession}
             onNavigate={goTo}
             onOpenFile={openMenuFile}
             onOpenLink={openLink}
-            onSwitchAgent={() => {
-              setDrawerOpen(false);
-              setAgentSheetOpen(true);
-            }}
             onSwitchServer={() => {
               setDrawerOpen(false);
               setServerSheetOpen(true);
@@ -677,6 +674,10 @@ export function ChatScreen({route, navigation}: Props) {
           visible={agentSheetOpen}
           onClose={() => setAgentSheetOpen(false)}
           onSelect={switchAgent}
+          onTeamChat={() => {
+            setAgentSheetOpen(false);
+            setTimeout(() => setTeamSheetOpen(true), SHEET_DISMISS_MS);
+          }}
           onManage={() => {
             setAgentSheetOpen(false);
             navigation.navigate('Agents');

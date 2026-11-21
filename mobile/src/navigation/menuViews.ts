@@ -16,7 +16,6 @@ import {
   faLightbulb,
   faNewspaper,
   faPaperPlane,
-  faRectangleList,
   faStar,
 } from '@fortawesome/free-regular-svg-icons';
 import {
@@ -47,6 +46,7 @@ import type {MenuDoc, MenuItem} from '../protocol/resources';
 import {menuGroupLabel} from '../store/menuStore';
 
 export type MenuRoute =
+  | 'Sessions'
   | 'Artifacts'
   | 'Agents'
   | 'Settings'
@@ -68,8 +68,13 @@ const builtin = (key: MessageKey, icon: IconDefinition, route: MenuRoute): Built
   route,
 });
 
-/** Built-in pages of the shared menu this app has a screen for; others (desktop-only) are skipped. */
+/**
+ * Built-in pages of the shared menu this app lists; others (desktop-only) are
+ * skipped. Logs is left out too: it sits behind the drawer's version sheet and
+ * in Settings rather than in the menu.
+ */
 export const BUILTIN_VIEWS: Record<string, BuiltinView> = {
+  chat: builtin('menu_chat', faComments, 'Sessions'),
   artifacts: builtin('menu_artifacts', faFolderOpen, 'Artifacts'),
   agents: builtin('menu_agents', faAddressCard, 'Agents'),
   config: builtin('menu_config', faSliders, 'Settings'),
@@ -78,7 +83,6 @@ export const BUILTIN_VIEWS: Record<string, BuiltinView> = {
   knowledge: builtin('menu_knowledge', faNewspaper, 'Knowledge'),
   channels: builtin('menu_channels', faPaperPlane, 'Channels'),
   tasks: builtin('menu_tasks', faClock, 'Tasks'),
-  logs: builtin('menu_logs', faRectangleList, 'Logs'),
 };
 
 /** Same names as MENU_ICONS in the web console's core/menu.js. */
@@ -125,8 +129,6 @@ export type MenuEntry =
 export interface MenuSection {
   id: string;
   label: string;
-  /** The group holding the chat page; the drawer draws its conversation shortcuts there. */
-  hasChat: boolean;
   entries: MenuEntry[];
 }
 
@@ -136,7 +138,7 @@ export function menuItemIcon(item: MenuItem): IconDefinition {
     return custom;
   }
   if (item.type === 'builtin') {
-    return item.view === 'chat' ? faComments : BUILTIN_VIEWS[item.view]?.icon ?? faFileLines;
+    return BUILTIN_VIEWS[item.view]?.icon ?? faFileLines;
   }
   return item.type === 'url' ? faGlobe : faFileLines;
 }
@@ -182,26 +184,18 @@ export function linkAsPage(label: string, url: string): ChatFile {
 
 /**
  * The web console keeps Artifacts hidden in its chat group; this app lists it
- * right below Knowledge, wherever and however the shared menu has it, behind a
- * switch kept on the device.
+ * right below the chat page, wherever and however the shared menu has it,
+ * behind a switch kept on the device.
  */
 const PINNED_VIEW = 'artifacts';
-const PINNED_GROUP = 'manage';
-
-const hasChatPage = (items: MenuItem[]) => items.some(i => i.type === 'builtin' && i.view === 'chat');
+const PINNED_GROUP = 'chat';
 
 /** The entry Artifacts follows. */
-export const isPinnedAnchor = (item: MenuItem) => item.type === 'builtin' && item.view === 'knowledge';
+export const isPinnedAnchor = (item: MenuItem) => item.type === 'builtin' && item.view === 'chat';
 
-/**
- * Where Artifacts is listed: Knowledge's group, else Manage, else the first
- * group without the chat page (first in those); null opens a Manage section.
- */
+/** Where Artifacts is listed: the chat page's group, else the first one; null opens a Chat section. */
 export function pinnedGroupId(doc: MenuDoc): string | null {
-  const home =
-    doc.groups.find(g => g.items.some(isPinnedAnchor)) ??
-    doc.groups.find(g => g.id === PINNED_GROUP) ??
-    doc.groups.find(g => !hasChatPage(g.items));
+  const home = doc.groups.find(g => g.items.some(isPinnedAnchor)) ?? doc.groups[0];
   return home?.id ?? null;
 }
 
@@ -225,15 +219,14 @@ export function menuSections(doc: MenuDoc, local = false, showPinned = true): Me
       if (entry) {
         entries.push(entry);
       }
-      // Even when Knowledge itself is hidden, Artifacts keeps its place.
       if (home && isPinnedAnchor(i)) {
         entries.push(home);
       }
     });
-    return {id: g.id, label: menuGroupLabel(g), hasChat: hasChatPage(g.items), entries};
+    return {id: g.id, label: menuGroupLabel(g), entries};
   });
   if (pinned && homeId === null) {
-    sections.push({id: PINNED_GROUP, label: pinnedGroupLabel(), hasChat: false, entries: [pinned]});
+    sections.push({id: PINNED_GROUP, label: pinnedGroupLabel(), entries: [pinned]});
   }
-  return sections.filter(s => s.hasChat || s.entries.length);
+  return sections.filter(s => s.entries.length);
 }

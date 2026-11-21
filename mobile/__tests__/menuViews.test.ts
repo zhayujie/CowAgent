@@ -38,37 +38,28 @@ describe('menuSections', () => {
   const entries = menuSections(doc)[0].entries;
   const byKey = (key: string) => entries.find(e => e.key === key);
 
-  it('keeps Artifacts out of the chat group', () => {
-    expect(byKey('artifacts')).toBeUndefined();
+  it('lists the chat page as the way into all conversations', () => {
+    expect(byKey('chat')).toMatchObject({kind: 'route', route: 'Sessions'});
   });
 
-  it('lists Artifacts right below Knowledge, even when the shared menu hides it', () => {
-    const withManage: MenuDoc = {
-      groups: [
-        doc.groups[0],
-        {
-          id: 'manage',
-          title: 'Manage',
-          items: [
-            {id: 'agents', type: 'builtin', view: 'agents', title: '', icon: ''},
-            {id: 'knowledge', type: 'builtin', view: 'knowledge', title: '', icon: ''},
-            {id: 'memory', type: 'builtin', view: 'memory', title: '', icon: ''},
-          ],
-        },
-      ],
-    };
-    const manage = menuSections(withManage).find(s => s.id === 'manage')!;
-    expect(manage.entries.map(e => e.key)).toEqual(['agents', 'knowledge', 'artifacts', 'memory']);
-    expect(manage.entries[2]).toMatchObject({kind: 'route', route: 'Artifacts'});
+  it('lists Artifacts right below the chat page, even when the shared menu hides it', () => {
+    expect(entries.slice(0, 2).map(e => e.key)).toEqual(['chat', 'artifacts']);
+    expect(entries[1]).toMatchObject({kind: 'route', route: 'Artifacts'});
   });
 
   it("leaves Artifacts out when this device's switch is off", () => {
     expect(menuSections(doc, false, false).flatMap(s => s.entries.map(e => e.key))).not.toContain('artifacts');
   });
 
-  it('opens a Manage section for Artifacts when the menu has none', () => {
-    const sections = menuSections(doc);
-    expect(sections[sections.length - 1]).toMatchObject({id: 'manage', entries: [{key: 'artifacts'}]});
+  it('opens a Chat section for Artifacts when the menu has no groups', () => {
+    expect(menuSections({groups: []})).toMatchObject([{id: 'chat', entries: [{key: 'artifacts'}]}]);
+  });
+
+  it('keeps Logs out of the drawer, dropping a group left empty', () => {
+    const withMonitor: MenuDoc = {
+      groups: [doc.groups[0], {id: 'monitor', title: 'Monitor', items: [{id: 'logs', type: 'builtin', view: 'logs', title: '', icon: ''}]}],
+    };
+    expect(menuSections(withMonitor).map(s => s.id)).toEqual(['chat']);
   });
 
   it('turns a pinned artifact into a file the app opens itself', () => {
