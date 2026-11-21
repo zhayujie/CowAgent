@@ -13,6 +13,10 @@ export interface Palette {
   bg2: string;
   /** Inactive controls such as a disabled send button. */
   bg3: string;
+  /** Behind grouped cards, as on the settings page. */
+  grouped: string;
+  /** The cards on `grouped`. */
+  card: string;
   line1: string;
   line2: string;
   t1: string;
@@ -45,12 +49,14 @@ export const dark: Palette = {
   bg1: '#141416',
   bg2: '#1B1B1E',
   bg3: '#232327',
+  grouped: '#0A0A0B',
+  card: '#161618',
   line1: 'rgba(255,255,255,0.06)',
   line2: 'rgba(255,255,255,0.10)',
   t1: '#EDEDEF',
-  t2: 'rgba(237,237,239,0.62)',
-  t3: 'rgba(237,237,239,0.38)',
-  t4: 'rgba(237,237,239,0.22)',
+  t2: 'rgba(237,237,239,0.70)',
+  t3: 'rgba(237,237,239,0.48)',
+  t4: 'rgba(237,237,239,0.30)',
   green: '#35A85B',
   greenDeep: '#228547',
   accent: '#4BBE72',
@@ -70,7 +76,7 @@ export const dark: Palette = {
     doc: ['rgba(53,168,91,0.13)', '#5CC97F'],
     image: ['rgba(243,152,0,0.13)', '#F0AC4E'],
     media: ['rgba(155,107,255,0.13)', '#A98CFF'],
-    other: ['rgba(255,255,255,0.06)', 'rgba(237,237,239,0.62)'],
+    other: ['rgba(255,255,255,0.06)', 'rgba(237,237,239,0.70)'],
   },
 };
 
@@ -80,12 +86,14 @@ export const light: Palette = {
   bg1: '#F7F7F8',
   bg2: '#F1F1F3',
   bg3: '#E6E6E9',
+  grouped: '#F2F2F5',
+  card: '#FFFFFF',
   line1: 'rgba(15,15,20,0.06)',
   line2: 'rgba(15,15,20,0.10)',
   t1: '#17171A',
-  t2: 'rgba(23,23,26,0.64)',
-  t3: 'rgba(23,23,26,0.42)',
-  t4: 'rgba(23,23,26,0.26)',
+  t2: 'rgba(23,23,26,0.72)',
+  t3: 'rgba(23,23,26,0.52)',
+  t4: 'rgba(23,23,26,0.34)',
   green: '#35A85B',
   greenDeep: '#228547',
   accent: '#2B9650',
@@ -105,7 +113,7 @@ export const light: Palette = {
     doc: ['rgba(53,168,91,0.10)', '#228547'],
     image: ['rgba(230,140,0,0.12)', '#B9710A'],
     media: ['rgba(124,92,224,0.10)', '#6E4FD0'],
-    other: ['rgba(15,15,20,0.05)', 'rgba(23,23,26,0.64)'],
+    other: ['rgba(15,15,20,0.05)', 'rgba(23,23,26,0.72)'],
   },
 };
 

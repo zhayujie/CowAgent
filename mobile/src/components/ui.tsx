@@ -67,6 +67,7 @@ export function PageHeader({
   onTitlePress,
   onBack,
   right,
+  background,
 }: {
   title: string;
   count?: number | string;
@@ -76,6 +77,8 @@ export function PageHeader({
   onTitlePress?: () => void;
   onBack: () => void;
   right?: ReactNode;
+  /** Matches a page whose background isn't the default, such as a grouped one. */
+  background?: string;
 }) {
   const t = useTheme();
   const styles = useStyles();
@@ -99,7 +102,7 @@ export function PageHeader({
     </>
   );
   return (
-    <View style={[styles.pageHeader, {paddingTop: insets.top + 6}]}>
+    <View style={[styles.pageHeader, {paddingTop: insets.top + 6}, !!background && {backgroundColor: background}]}>
       <IconButton icon={faChevronLeft} label={tr('common_back')} onPress={onBack} filled size={13} color={t.t1} />
       <View style={[styles.pageTitleWrap, {top: insets.top + 6, left: 14 + inset, right: 14 + inset}]} pointerEvents="box-none">
         {onTitlePress ? (
@@ -279,7 +282,7 @@ const useStyles = makeStyles(t => ({
   pageSubRow: {flexDirection: 'row', alignItems: 'center', gap: 4, maxWidth: '100%'},
   pageSubtitle: {fontSize: 12, lineHeight: 15, color: t.t3, flexShrink: 1},
   group: {flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 18, marginBottom: 10},
-  groupText: {fontSize: 11, fontWeight: '600', letterSpacing: 1.4, color: t.t4},
+  groupText: {fontSize: 12, fontWeight: '600', letterSpacing: 0.4, color: t.t3},
   groupLine: {flex: 1, height: 1, backgroundColor: t.line1},
   empty: {flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40, paddingVertical: 80},
   emptyIcon: {

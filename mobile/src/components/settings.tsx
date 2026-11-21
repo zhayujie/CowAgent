@@ -78,8 +78,8 @@ export function SettingRow({
   const head = (
     <>
       {icon && (
-        <View style={styles.rowIcon}>
-          <Icon icon={icon} size={14} color={t.t2} />
+        <View style={inCard ? styles.rowTile : styles.rowIcon}>
+          <Icon icon={icon} size={inCard ? 13 : 15} color={inCard ? t.t1 : t.t2} />
         </View>
       )}
       <View style={styles.rowText}>
@@ -100,7 +100,7 @@ export function SettingRow({
       {right}
     </>
   );
-  const arrow = <Icon icon={faChevronRight} size={10} color={t.t4} />;
+  const arrow = <Icon icon={faChevronRight} size={11} color={t.t4} />;
   if (!onPress && !onLongPress) {
     return (
       <View style={[styles.row, inCard && styles.rowInCard, last && styles.rowLast]}>
@@ -519,7 +519,7 @@ const useStyles = makeStyles(t => ({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    minHeight: 52,
+    minHeight: 54,
     marginHorizontal: 18,
     paddingVertical: 12,
     borderBottomWidth: 1,
@@ -530,20 +530,28 @@ const useStyles = makeStyles(t => ({
   card: {
     marginHorizontal: 16,
     borderRadius: radius.md,
-    backgroundColor: t.bg1,
-    borderWidth: 1,
+    backgroundColor: t.card,
+    borderWidth: t.isDark ? 1 : 0,
     borderColor: t.line1,
     overflow: 'hidden',
   },
   rowSplit: {paddingVertical: 0},
   rowArrow: {alignSelf: 'stretch', justifyContent: 'center', paddingLeft: 6},
-  rowMain: {flex: 1, minWidth: 0, minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12},
+  rowMain: {flex: 1, minWidth: 0, minHeight: 54, flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12},
   rowPressed: {opacity: 0.6},
-  rowIcon: {width: 18, alignItems: 'center'},
+  rowIcon: {width: 20, alignItems: 'center'},
+  rowTile: {
+    width: 30,
+    height: 30,
+    borderRadius: radius.xs,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: t.isDark ? t.bg3 : t.bg2,
+  },
   rowText: {flex: 1, minWidth: 0},
-  rowTitle: {fontSize: 15, color: t.t1, letterSpacing: -0.1},
-  rowDetail: {fontSize: 12, lineHeight: 17, color: t.t3, marginTop: 3},
-  rowValue: {flexShrink: 1, maxWidth: '55%', fontSize: 14, color: t.t3, textAlign: 'right'},
+  rowTitle: {fontSize: 16, color: t.t1, letterSpacing: -0.2},
+  rowDetail: {fontSize: 13, lineHeight: 18, color: t.t3, marginTop: 3},
+  rowValue: {flexShrink: 1, maxWidth: '55%', fontSize: 15, color: t.t3, textAlign: 'right'},
   dim: {color: t.t3},
   mono: {fontFamily: MONO, fontSize: 13},
   monoValue: {fontFamily: MONO, fontSize: 12},
@@ -562,7 +570,7 @@ const useStyles = makeStyles(t => ({
     borderColor: t.line1,
   },
   noticeText: {fontSize: 13, lineHeight: 20, color: t.t2},
-  footnote: {fontSize: 12, lineHeight: 19, color: t.t4, paddingHorizontal: 18, paddingTop: 12},
+  footnote: {fontSize: 12, lineHeight: 19, color: t.t3, paddingHorizontal: 18, paddingTop: 12},
   footnoteFlush: {paddingHorizontal: 0},
   kpis: {flexDirection: 'row', gap: 10, paddingHorizontal: 18, marginBottom: 8},
   kpi: {
@@ -638,10 +646,10 @@ const useStyles = makeStyles(t => ({
     backgroundColor: t.bg2,
   },
   choiceIconActive: {backgroundColor: t.accentSoft},
-  choiceName: {fontSize: 15, fontWeight: '500', color: t.t1},
-  choiceDesc: {fontSize: 12, lineHeight: 17, color: t.t3, marginTop: 3},
+  choiceName: {fontSize: 16, fontWeight: '500', color: t.t1},
+  choiceDesc: {fontSize: 13, lineHeight: 18, color: t.t3, marginTop: 3},
   choiceList: {flexGrow: 0, flexShrink: 1},
-  choiceNote: {fontSize: 12, lineHeight: 18, color: t.t4, paddingHorizontal: 12, paddingTop: 8, paddingBottom: 4},
+  choiceNote: {fontSize: 12, lineHeight: 18, color: t.t3, paddingHorizontal: 12, paddingTop: 8, paddingBottom: 4},
   confirmText: {fontSize: 14, lineHeight: 22, color: t.t2, paddingBottom: 16},
   confirmActions: {flexDirection: 'row', gap: 10, paddingBottom: 4},
   flex: {flex: 1},

@@ -18,7 +18,7 @@ import {
   type PermissionState,
 } from '../media/permissions';
 import type {RootStackParamList} from '../navigation/types';
-import {makeStyles} from '../theme/theme';
+import {makeStyles, useTheme} from '../theme/theme';
 
 type Props = StackScreenProps<RootStackParamList, 'Permissions'>;
 
@@ -39,6 +39,7 @@ const STATE_LABEL: Record<PermissionState, MessageKey> = {
 const SHOWS_LOCAL_NETWORK = Platform.OS === 'ios';
 
 export function PermissionsScreen({navigation}: Props) {
+  const t = useTheme();
   const styles = useStyles();
   const insets = useSafeAreaInsets();
   const [states, setStates] = useState<Partial<Record<AppPermission, PermissionState>>>({});
@@ -70,7 +71,7 @@ export function PermissionsScreen({navigation}: Props) {
 
   return (
     <View style={styles.root}>
-      <PageHeader title={tr('perm_title')} onBack={navigation.goBack} />
+      <PageHeader title={tr('perm_title')} onBack={navigation.goBack} background={t.grouped} />
       <ScrollView contentContainerStyle={[styles.body, {paddingBottom: insets.bottom + 32}]}>
         <SettingCard>
           {APP_PERMISSIONS.map((p, i) => {
@@ -110,7 +111,7 @@ export function PermissionsScreen({navigation}: Props) {
 }
 
 const useStyles = makeStyles(t => ({
-  root: {flex: 1, backgroundColor: t.bg0},
+  root: {flex: 1, backgroundColor: t.grouped},
   body: {paddingTop: 8},
-  group: {marginTop: 14},
+  group: {marginTop: 18},
 }));

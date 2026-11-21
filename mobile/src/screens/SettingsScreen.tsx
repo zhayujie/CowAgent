@@ -26,6 +26,7 @@ import {PERMISSION_META} from '../components/ComposerSheets';
 import {Icon} from '../components/Icon';
 import {ServerSheet} from '../components/ServerSheet';
 import {tr, trf, useLangStore, type Lang, type MessageKey} from '../i18n';
+import {localDeviceName} from '../kernel/localKernel';
 import {ChoiceSheet, ConfirmSheet, FieldSheet, SettingCard, SettingRow} from '../components/settings';
 import {showToast, ToastHost} from '../components/Toast';
 import {PageHeader} from '../components/ui';
@@ -140,7 +141,7 @@ export function SettingsScreen({navigation}: Props) {
     updateConfig({cow_lang: next}).catch(() => undefined);
   };
 
-  const serverName = local ? tr('server_local') : server?.name ?? '-';
+  const serverName = local ? localDeviceName() : server?.name ?? '-';
   const serverMeta = local
     ? tr('server_local_meta')
     : `${server?.baseUrl.replace(/^https?:\/\//, '') ?? '-'} · ${
@@ -160,7 +161,7 @@ export function SettingsScreen({navigation}: Props) {
   const loading = !config;
   return (
     <View style={styles.root}>
-      <PageHeader title={tr('settings_title')} onBack={navigation.goBack} />
+      <PageHeader title={tr('settings_title')} onBack={navigation.goBack} background={t.grouped} />
       <ScrollView
         contentContainerStyle={[styles.body, {paddingBottom: insets.bottom + 32}]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={t.t3} colors={[t.green]} />}>
@@ -362,9 +363,9 @@ function Segmented<K extends string>({
 }
 
 const useStyles = makeStyles(t => ({
-  root: {flex: 1, backgroundColor: t.bg0},
+  root: {flex: 1, backgroundColor: t.grouped},
   body: {paddingTop: 8},
-  group: {marginTop: 14},
+  group: {marginTop: 18},
   pressed: {opacity: 0.6},
   server: {flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingVertical: 14},
   serverIcon: {
@@ -376,34 +377,34 @@ const useStyles = makeStyles(t => ({
     backgroundColor: t.accentSoft,
   },
   serverText: {flex: 1, minWidth: 0},
-  serverName: {fontSize: 16, fontWeight: '600', color: t.t1, letterSpacing: -0.2},
-  serverMeta: {fontSize: 12, color: t.t3, marginTop: 3},
+  serverName: {fontSize: 17, fontWeight: '600', color: t.t1, letterSpacing: -0.3},
+  serverMeta: {fontSize: 13, color: t.t3, marginTop: 3},
   realtime: {flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6},
   dot: {width: 6, height: 6, borderRadius: 3},
-  realtimeText: {fontSize: 12, color: t.t3},
+  realtimeText: {fontSize: 13, color: t.t2},
   segRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    minHeight: 52,
+    minHeight: 54,
     marginHorizontal: 14,
     paddingVertical: 8,
     borderBottomWidth: 1,
     borderBottomColor: t.line1,
   },
-  segTitle: {flex: 1, fontSize: 15, color: t.t1, letterSpacing: -0.1},
+  segTitle: {flex: 1, fontSize: 16, color: t.t1, letterSpacing: -0.2},
   seg: {flexBasis: 228, flexShrink: 1, flexDirection: 'row', padding: 3, borderRadius: radius.sm, backgroundColor: t.bg2},
   segItem: {flex: 1, alignItems: 'center', paddingVertical: 6, borderRadius: radius.xs},
   segItemActive: {backgroundColor: t.accentSoft},
-  segText: {fontSize: 13, color: t.t3},
+  segText: {fontSize: 14, color: t.t2},
   segTextActive: {color: t.accent, fontWeight: '600'},
   logout: {
-    marginTop: 14,
+    marginTop: 18,
     marginHorizontal: 16,
-    paddingVertical: 14,
+    paddingVertical: 15,
     alignItems: 'center',
     borderRadius: radius.md,
     backgroundColor: t.dangerSoft,
   },
-  logoutText: {fontSize: 15, fontWeight: '500', color: t.danger},
+  logoutText: {fontSize: 16, fontWeight: '500', color: t.danger},
 }));
