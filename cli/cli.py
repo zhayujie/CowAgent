@@ -9,6 +9,7 @@ from cli.commands.install import install_browser
 from cli.commands.knowledge import knowledge
 from cli.commands.backup import backup_command, restore_command
 from cli.commands.pair import pair
+from cli.commands.codex import codex
 
 
 HELP_TEXT = """Usage: cow COMMAND [ARGS]...
@@ -25,6 +26,7 @@ Commands:
   status   Show CowAgent running status.
   logs     View CowAgent logs.
   pair     Connect another device (desktop, browser).
+  codex    Manage Codex subscription sign-in.
   skill    Manage CowAgent skills.
   knowledge  Manage knowledge base.
   backup   Back up config and agent workspace.
@@ -78,6 +80,7 @@ main.add_command(update)
 main.add_command(status)
 main.add_command(logs)
 main.add_command(pair)
+main.add_command(codex)
 main.add_command(context)
 main.add_command(knowledge)
 main.add_command(backup_command)

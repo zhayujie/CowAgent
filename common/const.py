@@ -1,6 +1,7 @@
 # Provider types
 OPEN_AI = "openAI"
 OPENAI = "openai"
+CODEX = "codex"  # Codex App Server with ChatGPT sign-in
 CHATGPT = "chatGPT"  # legacy alias for OPENAI, kept for backward compatibility
 BAIDU = "baidu"
 QIANFAN = "qianfan"

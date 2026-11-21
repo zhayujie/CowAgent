@@ -15,6 +15,7 @@ handlers to each other.
 from collections import OrderedDict
 
 from common import const
+from models.codex.app_server import cached_models
 
 
 _RECOMMENDED_MODELS = [
@@ -81,6 +82,13 @@ PROVIDER_MODELS = OrderedDict([
         "api_base_default": "https://api.openai.com/v1",
         "api_base_placeholder": _PLACEHOLDER_V1,
         "models": [const.GPT_62_SOL, const.GPT_62_ASTRA, const.GPT_61_TERRA, const.GPT_61_SOL, const.GPT_6_LUNA, const.GPT_6_SOL, const.GPT_6_ASTRA, const.GPT_56_LUNA, const.GPT_56_TERRA, const.GPT_56_SOL, const.GPT_55, const.GPT_54, const.GPT_54_MINI, const.GPT_54_NANO, const.GPT_5, const.GPT_41, const.GPT_4o],
+    }),
+    (const.CODEX, {
+        "label": "Codex",
+        "api_key_field": None,
+        "api_base_key": None,
+        "api_base_default": "",
+        "models": [],
     }),
     ("gemini", {
         "label": "Gemini",
@@ -192,6 +200,13 @@ PROVIDER_MODELS = OrderedDict([
 # split across ConfigHandler and ModelsHandler, and each handler needed one
 # from the other, which is a cycle the moment the two live in separate
 # modules. They are about the catalogue above, so they belong here.
+
+def provider_model_names(provider_id: str):
+    """Return local subscription models or the built-in provider presets."""
+    if provider_id == const.CODEX:
+        return cached_models()
+    return PROVIDER_MODELS.get(provider_id, {}).get("models") or []
+
 
 def is_real_key(value: str) -> bool:
     """False for an unset key and for the placeholders the form ships with."""

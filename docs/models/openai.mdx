@@ -28,6 +28,48 @@ OpenAI offers the most complete coverage and can simultaneously serve text chat,
 | `open_ai_api_type` | Optional API protocol, defaults to `auto` (only the `gpt-6` series, including `gpt-6.1` / `gpt-6.2`, uses the Responses API, others use Chat Completions). If your endpoint no longer serves `/chat/completions`, set it to `responses` to send all requests to `/responses`; `chat` always uses `/chat/completions`. For Docker deployments, set it via the `OPEN_AI_API_TYPE` environment variable |
 | `bot_type` | Not required when using OpenAI's official models; set to `openai` when accessing other providers via the compatible protocol |
 
+## Codex with a ChatGPT subscription
+
+For a personal CowAgent installation, the **Codex** provider uses
+your ChatGPT account's Codex allowance for chat. It uses the official Codex
+App Server over standard input and output. CowAgent handles conversation
+history and executes its own tools under the existing permission settings.
+
+### Sign in from the web console
+
+Open **Models → Chat → Codex**. Click **Sign in with ChatGPT**, or
+**Install and sign in** when Codex CLI is missing. Follow the OpenAI link,
+enter the displayed device code and authorize with your ChatGPT account. The
+model list syncs automatically when you finish. Select a model and save.
+Use the provider dialog to sync the list again or sign out. Set a web access
+password to manage Codex from a remote console.
+
+### Sign in from the terminal
+
+Run `cow codex login` as the CowAgent service user with its usual
+`COW_DATA_DIR`. If the CLI is missing, confirm the installation prompt. Use
+`cow codex login --yes` to accept automatically or `cow codex install` to
+install without signing in. The installer verifies the official Codex
+0.171.0 release for Linux, macOS and Windows on x64 or ARM64 and keeps it in
+this CowAgent instance's data directory. It reuses an existing CLI if present.
+On a machine with a local browser you can also run `cow codex login --browser`.
+
+If OpenAI prompts you to enable device-code authorization, turn it on in
+ChatGPT security settings. The console and terminal use the same sign-in.
+The global model choice applies to channels such as WeChat. An individual
+web conversation can also select its own model.
+
+Use `cow codex status` to check sign-in, `cow codex models` to refresh the
+available model list, and `cow codex logout` to disconnect. Codex manages
+its own credentials and refresh in a private directory for this CowAgent
+instance. No API key is needed. When using `config.json`, set `bot_type` to
+`codex` and `model` to a slug listed by `cow codex models`. If LinkAI is
+enabled, set `use_linkai` to `false`.
+
+This provider covers chat and CowAgent tool calls. Configure vision tools,
+image generation, voice and embeddings separately. The App Server controls
+the output budget. Model availability and usage limits follow your Codex plan.
+
 ## Image Understanding
 
 OpenAI models like `gpt-5.5`, `gpt-5.4`, `gpt-4o`, and `gpt-4.1` natively support vision. Once `open_ai_api_key` is configured, the Agent's Vision tool automatically uses the main model to recognize images. If the main model does not support vision or you want to specify it explicitly, set it in the configuration file:
