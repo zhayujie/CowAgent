@@ -24,6 +24,7 @@ import {
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {getArtifacts, pinArtifact, serverUrl} from '../api/cowApi';
 import {artifactFile, KIND_ICON, kindGroup, KindTile, openArtifact} from '../components/ArtifactStrip';
+import {ArtifactThumb, createThumbViewport, hasThumb, type ThumbViewport} from '../components/ArtifactThumb';
 import {Icon} from '../components/Icon';
 import {Sheet, SHEET_DISMISS_MS} from '../components/Sheet';
 import {SwipeTabs} from '../components/SwipeTabs';
@@ -56,10 +57,12 @@ interface Group {
   rows: Artifact[];
 }
 
-/** Pictures and pages read best as thumbnails; everything else as a row. */
+const THUMB_HEIGHT = 92;
+
+/** Pictures, pages and readable documents show as thumbnails; everything else as a row. */
 const isCard = (a: Artifact) => {
   const g = kindGroup(a.kind);
-  return g === 'image' || g === 'web';
+  return g === 'image' || g === 'web' || hasThumb(a);
 };
 
 function groupArtifacts(items: Artifact[]): Group[] {
@@ -106,6 +109,7 @@ export function ArtifactsScreen({navigation, route}: Props) {
   const [acting, setActing] = useState<Artifact | null>(null);
   const actingFile = acting?.exists === false ? null : acting && artifactFile(acting);
   const requestId = useRef(0);
+  const thumbViewport = useMemo(createThumbViewport, []);
 
   const load = useCallback(
     async (mode: 'reset' | 'refresh' | 'more') => {
@@ -242,6 +246,10 @@ export function ArtifactsScreen({navigation, route}: Props) {
       <SwipeTabs tabs={FILTER_KEYS} value={kind} onChange={setKind} enabled={!focus && !searching}>
         <ScrollView
           contentContainerStyle={[styles.scrollBody, {paddingBottom: insets.bottom + 24}]}
+          onContentSizeChange={thumbViewport.settle}
+          onScrollEndDrag={thumbViewport.settle}
+          onMomentumScrollBegin={thumbViewport.cancel}
+          onMomentumScrollEnd={thumbViewport.notify}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -292,6 +300,7 @@ export function ArtifactsScreen({navigation, route}: Props) {
                       <ArtifactCard
                         key={`${a.agent_id}-${a.id}`}
                         artifact={a}
+                        viewport={thumbViewport}
                         onPress={() => openArtifact(a)}
                         onLongPress={() => setActing(a)}
                       />
@@ -358,10 +367,12 @@ export function ArtifactsScreen({navigation, route}: Props) {
 
 function ArtifactCard({
   artifact: a,
+  viewport,
   onPress,
   onLongPress,
 }: {
   artifact: Artifact;
+  viewport: ThumbViewport;
   onPress: () => void;
   onLongPress: () => void;
 }) {
@@ -387,7 +398,10 @@ function ArtifactCard({
             resizeMethod="resize"
           />
         ) : (
-          <Icon icon={KIND_ICON[group]} size={22} color={fg} />
+          <>
+            <Icon icon={KIND_ICON[group]} size={22} color={fg} />
+            {hasThumb(a) && <ArtifactThumb artifact={a} height={THUMB_HEIGHT} viewport={viewport} />}
+          </>
         )}
         {!!a.pinned_at && (
           <View style={styles.pin}>
@@ -517,7 +531,7 @@ const useStyles = makeStyles(t => ({
     borderColor: t.line1,
   },
   pressedDim: {opacity: 0.7},
-  thumb: {height: 92, alignItems: 'center', justifyContent: 'center'},
+  thumb: {height: THUMB_HEIGHT, alignItems: 'center', justifyContent: 'center', overflow: 'hidden'},
   thumbImage: {width: '100%', height: '100%'},
   pin: {
     position: 'absolute',
