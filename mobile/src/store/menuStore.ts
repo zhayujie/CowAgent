@@ -74,6 +74,11 @@ interface MenuState {
   removeItem: (id: string) => Promise<void>;
   /** Appends a custom entry (a file or a link) to a group. */
   addItem: (groupId: string, item: CustomMenuItem) => Promise<void>;
+  /** An empty title puts a built-in group back to its default name. */
+  renameGroup: (groupId: string, title: string) => Promise<void>;
+  addGroup: (title: string) => Promise<void>;
+  /** Only a group holding no built-in page can go, or that page would drop out of the menu. */
+  removeGroup: (groupId: string) => Promise<void>;
   reset: () => Promise<void>;
 }
 
@@ -81,6 +86,16 @@ export type CustomMenuItem = Exclude<MenuItem, {type: 'builtin'}>;
 
 /** Same shape as the web console's ids (`_meId`), which the server checks. */
 export const newMenuItemId = () => `m_${Math.random().toString(36).slice(2, 10)}`;
+const newGroupId = () => `g_${Math.random().toString(36).slice(2, 10)}`;
+
+/** The server's limits on a menu. */
+export const MENU_TITLE_MAX = 40;
+export const MENU_MAX_GROUPS = 20;
+
+/** Built-in groups have a default name, so their title may be left empty. */
+export const isBuiltinGroup = (group: MenuGroup) => group.id in GROUP_LABELS;
+
+export const groupKeepsPages = (group: MenuGroup) => group.items.some(i => i.type === 'builtin');
 
 export const useMenuStore = create<MenuState>((set, get) => {
   const apply = (saved: MenuDoc | null) => {
@@ -89,9 +104,9 @@ export const useMenuStore = create<MenuState>((set, get) => {
   };
 
   /** Shows the edit at once and saves it; a save the server refuses puts the menu back. */
-  const commit = async (edit: (items: MenuItem[], group: MenuGroup) => MenuItem[]) => {
+  const commitDoc = async (edit: (doc: MenuDoc) => MenuDoc) => {
     const before = get().doc;
-    const doc: MenuDoc = {groups: before.groups.map(g => ({...g, items: edit(g.items, g)}))};
+    const doc = edit(before);
     set({doc});
     try {
       const res = await saveMenu(doc);
@@ -101,6 +116,9 @@ export const useMenuStore = create<MenuState>((set, get) => {
       throw e;
     }
   };
+
+  const commit = (edit: (items: MenuItem[], group: MenuGroup) => MenuItem[]) =>
+    commitDoc(doc => ({groups: doc.groups.map(g => ({...g, items: edit(g.items, g)}))}));
 
   readJSON<MenuDoc | null>(CACHE_KEY, null)
     .then(cached => {
@@ -137,6 +155,19 @@ export const useMenuStore = create<MenuState>((set, get) => {
     removeItem: id => commit(items => items.filter(i => i.id !== id || i.type === 'builtin')),
 
     addItem: (groupId, item) => commit((items, group) => (group.id === groupId ? [...items, item] : items)),
+
+    renameGroup: (groupId, title) =>
+      commitDoc(doc => ({
+        groups: doc.groups.map(g => (g.id === groupId ? {...g, title: title.trim().slice(0, MENU_TITLE_MAX)} : g)),
+      })),
+
+    addGroup: title =>
+      commitDoc(doc => ({
+        groups: [...doc.groups, {id: newGroupId(), title: title.trim().slice(0, MENU_TITLE_MAX), items: []}],
+      })),
+
+    removeGroup: groupId =>
+      commitDoc(doc => ({groups: doc.groups.filter(g => g.id !== groupId || groupKeepsPages(g))})),
 
     reset: async () => {
       const res = await saveMenu(null);

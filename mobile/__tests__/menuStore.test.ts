@@ -1,6 +1,6 @@
 import {saveMenu} from '../src/api/cowApi';
 import type {MenuDoc} from '../src/protocol/resources';
-import {newMenuItemId, useMenuStore} from '../src/store/menuStore';
+import {menuMerge, newMenuItemId, useMenuStore} from '../src/store/menuStore';
 
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock'),
@@ -60,4 +60,19 @@ it('puts the menu back when the server refuses the save', async () => {
   jest.mocked(saveMenu).mockRejectedValue(new Error('nope'));
   await expect(useMenuStore.getState().removeItem('m1')).rejects.toThrow('nope');
   expect(items().map(i => i.id)).toEqual(['config', 'm1', 'u1']);
+});
+
+it('adds, renames and deletes a group, but keeps one holding a built-in page', async () => {
+  useMenuStore.setState({doc: menuMerge(null)});
+  await useMenuStore.getState().addGroup('  常用  ');
+  const added = jest.mocked(saveMenu).mock.calls[0][0]!.groups.at(-1)!;
+  expect(added).toMatchObject({title: '常用', items: []});
+  expect(added.id).toMatch(/^g_[a-z0-9]{1,8}$/);
+
+  await useMenuStore.getState().renameGroup('manage', '设置');
+  expect(useMenuStore.getState().doc.groups.find(g => g.id === 'manage')?.title).toBe('设置');
+
+  await useMenuStore.getState().removeGroup(added.id);
+  await useMenuStore.getState().removeGroup('manage');
+  expect(useMenuStore.getState().doc.groups.map(g => g.id)).toEqual(['chat', 'manage', 'monitor']);
 });

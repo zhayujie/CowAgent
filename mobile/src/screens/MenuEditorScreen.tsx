@@ -1,7 +1,7 @@
-import {faFileLines, faGlobe, faPen, faPlus, faXmark} from '@fortawesome/free-solid-svg-icons';
+import {faFileLines, faGlobe, faPen, faPlus, faTrashCan, faXmark} from '@fortawesome/free-solid-svg-icons';
 import type {StackScreenProps} from '@react-navigation/stack';
 import React, {useEffect, useMemo, useState} from 'react';
-import {ScrollView, View} from 'react-native';
+import {Pressable, ScrollView, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {ArtifactPickSheet, LinkSheet} from '../components/MenuAddSheets';
 import {
@@ -9,10 +9,10 @@ import {
   ChoiceSheet,
   ConfirmSheet,
   FieldSheet,
-  Footnote,
   SettingRow,
   SwitchRow,
 } from '../components/settings';
+import {Icon} from '../components/Icon';
 import {SHEET_DISMISS_MS} from '../components/Sheet';
 import {showToast, ToastHost} from '../components/Toast';
 import {GroupLabel, PageHeader} from '../components/ui';
@@ -26,26 +26,28 @@ import {
   pinnedGroupLabel,
 } from '../navigation/menuViews';
 import type {RootStackParamList} from '../navigation/types';
-import type {MenuItem} from '../protocol/resources';
+import type {MenuGroup, MenuItem} from '../protocol/resources';
 import {
   type CustomMenuItem,
+  groupKeepsPages,
+  isBuiltinGroup,
+  MENU_MAX_GROUPS,
   MENU_REQUIRED,
+  MENU_TITLE_MAX,
   menuGroupLabel,
   newMenuItemId,
   useMenuStore,
 } from '../store/menuStore';
 import {describeConnectError} from '../store/serverStore';
-import {makeStyles} from '../theme/theme';
+import {makeStyles, useTheme} from '../theme/theme';
 
 type Props = StackScreenProps<RootStackParamList, 'MenuEditor'>;
 
 /** Built-ins this app doesn't list (desktop-only pages, Logs) stay in the document but aren't offered. */
 const editable = (i: MenuItem) => !isPinnedMenuItem(i) && (i.type !== 'builtin' || !!BUILTIN_VIEWS[i.view]);
 
-/** The server's limit on a title. */
-const TITLE_MAX = 40;
-
 export function MenuEditorScreen({navigation}: Props) {
+  const t = useTheme();
   const styles = useStyles();
   const insets = useSafeAreaInsets();
   const doc = useMenuStore(s => s.doc);
@@ -56,6 +58,11 @@ export function MenuEditorScreen({navigation}: Props) {
   const removeItem = useMenuStore(s => s.removeItem);
   const addItem = useMenuStore(s => s.addItem);
   const reset = useMenuStore(s => s.reset);
+  const renameGroup = useMenuStore(s => s.renameGroup);
+  const addGroup = useMenuStore(s => s.addGroup);
+  const removeGroup = useMenuStore(s => s.removeGroup);
+  const [group, setGroup] = useState<MenuGroup | null>(null);
+  const [groupAction, setGroupAction] = useState<'menu' | 'rename' | 'remove' | 'add' | null>(null);
   const artifactsHidden = useMenuStore(s => s.artifactsHidden);
   const setArtifactsHidden = useMenuStore(s => s.setArtifactsHidden);
   const [confirmReset, setConfirmReset] = useState(false);
@@ -76,6 +83,14 @@ export function MenuEditorScreen({navigation}: Props) {
     setHidden(view, !shown).catch(e => showToast(trf('common_save_failed_detail', {error: describeConnectError(e)})));
 
   const closeAction = () => setAction(null);
+  const closeGroupAction = () => setGroupAction(null);
+  const saveFailed = (e: unknown) => showToast(trf('common_save_failed_detail', {error: describeConnectError(e)}));
+
+  // A group that must keep its pages has nothing to offer but a new name.
+  const editGroup = (g: MenuGroup) => {
+    setGroup(g);
+    setGroupAction(groupKeepsPages(g) ? 'rename' : 'menu');
+  };
   const closeAdding = () => setAdding(null);
 
   const add = async (item: CustomMenuItem) => {
@@ -135,12 +150,28 @@ export function MenuEditorScreen({navigation}: Props) {
     <View style={styles.root}>
       <PageHeader title={tr('settings_menu')} onBack={navigation.goBack} />
       <ScrollView contentContainerStyle={{paddingBottom: insets.bottom + 32}}>
-        {doc.groups.map((group, gi) => {
-          const items = group.items.filter(editable);
-          const pinnedHere = group.id === pinnedHome;
+        {doc.groups.map(g => {
+          const items = g.items.filter(editable);
+          const pinnedHere = g.id === pinnedHome;
+          // Holds only pages this app doesn't list, such as Logs.
+          if (!items.length && !pinnedHere && groupKeepsPages(g)) {
+            return null;
+          }
           return (
-            <View key={group.id}>
-              <GroupLabel style={gi === 0 ? styles.firstGroup : styles.group}>{menuGroupLabel(group)}</GroupLabel>
+            <View key={g.id} style={styles.groupWrap}>
+              <GroupLabel
+                action={
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={tr('menu_group_edit')}
+                    hitSlop={10}
+                    onPress={() => editGroup(g)}
+                    style={({pressed}) => [styles.groupEdit, pressed && styles.pressed]}>
+                    <Icon icon={faPen} size={12} color={t.t3} />
+                  </Pressable>
+                }>
+                {menuGroupLabel(g)}
+              </GroupLabel>
               {pinnedHere && !items.some(isPinnedAnchor) && artifactsRow(false)}
               {items.map(item => (
                 <React.Fragment key={item.id}>
@@ -153,7 +184,7 @@ export function MenuEditorScreen({navigation}: Props) {
                 title={tr('menu_add')}
                 dim
                 onPress={() => {
-                  setAddTo(group.id);
+                  setAddTo(g.id);
                   setAdding('choose');
                 }}
                 last
@@ -162,18 +193,25 @@ export function MenuEditorScreen({navigation}: Props) {
           );
         })}
         {!pinnedHome && (
-          <View>
-            <GroupLabel style={styles.group}>{pinnedGroupLabel()}</GroupLabel>
+          <View style={styles.groupWrap}>
+            <GroupLabel>{pinnedGroupLabel()}</GroupLabel>
             {artifactsRow(true)}
           </View>
         )}
 
-        <Footnote>{tr('menu_note')}</Footnote>
-        {customised && (
-          <View style={styles.reset}>
-            <ActionButton label={tr('menu_reset_title')} onPress={() => setConfirmReset(true)} />
-          </View>
-        )}
+        <View style={styles.actions}>
+          {doc.groups.length < MENU_MAX_GROUPS && (
+            <ActionButton
+              label={tr('menu_group_add')}
+              icon={faPlus}
+              onPress={() => {
+                setGroup(null);
+                setGroupAction('add');
+              }}
+            />
+          )}
+          {customised && <ActionButton label={tr('menu_reset_title')} tone="quiet" onPress={() => setConfirmReset(true)} />}
+        </View>
       </ScrollView>
 
       <ChoiceSheet
@@ -197,7 +235,7 @@ export function MenuEditorScreen({navigation}: Props) {
           add({
             id: newMenuItemId(),
             type: 'artifact',
-            title: (a.title || a.file_name).slice(0, TITLE_MAX),
+            title: (a.title || a.file_name).slice(0, MENU_TITLE_MAX),
             icon: '',
             path: a.abs_path!,
             file: {
@@ -269,6 +307,59 @@ export function MenuEditorScreen({navigation}: Props) {
         }}
         onClose={closeAction}
       />
+      <ChoiceSheet
+        visible={groupAction === 'menu'}
+        title={group ? menuGroupLabel(group) : ''}
+        options={[
+          {key: 'rename', label: tr('common_rename'), icon: faPen},
+          {key: 'remove', label: tr('menu_group_remove'), icon: faTrashCan},
+        ]}
+        onSelect={key => {
+          closeGroupAction();
+          setTimeout(() => setGroupAction(key), SHEET_DISMISS_MS);
+        }}
+        onClose={closeGroupAction}
+      />
+      <FieldSheet
+        visible={groupAction === 'rename' || groupAction === 'add'}
+        title={groupAction === 'add' ? tr('menu_group_add') : tr('menu_group_rename')}
+        initial={groupAction === 'add' ? '' : group?.title ?? ''}
+        placeholder={group && isBuiltinGroup(group) ? menuGroupLabel({...group, title: ''}) : tr('menu_group_name_ph')}
+        hint={
+          group && groupAction === 'rename' && isBuiltinGroup(group)
+            ? trf('menu_group_default_hint', {name: menuGroupLabel({...group, title: ''})})
+            : undefined
+        }
+        allowEmpty={groupAction === 'rename' && !!group && isBuiltinGroup(group)}
+        onSubmit={async title => {
+          try {
+            if (groupAction === 'add') {
+              await addGroup(title);
+            } else if (group && title.trim() !== group.title) {
+              await renameGroup(group.id, title);
+            }
+          } catch (e) {
+            throw new Error(describeConnectError(e));
+          }
+        }}
+        onClose={closeGroupAction}
+      />
+      <ConfirmSheet
+        visible={groupAction === 'remove'}
+        title={trf('menu_group_remove_title', {name: group ? menuGroupLabel(group) : ''})}
+        message={
+          group?.items.length ? trf('menu_group_remove_msg', {n: group.items.length}) : tr('menu_group_remove_empty')
+        }
+        confirmLabel={tr('menu_group_remove')}
+        danger
+        onConfirm={async () => {
+          if (group) {
+            await removeGroup(group.id).catch(saveFailed);
+          }
+          closeGroupAction();
+        }}
+        onClose={closeGroupAction}
+      />
       <ConfirmSheet
         visible={confirmReset}
         title={tr('menu_reset_title')}
@@ -294,7 +385,8 @@ export function MenuEditorScreen({navigation}: Props) {
 
 const useStyles = makeStyles(t => ({
   root: {flex: 1, backgroundColor: t.bg0},
-  firstGroup: {marginTop: 8},
-  group: {marginTop: 26},
-  reset: {paddingHorizontal: 18, marginTop: 24},
+  groupWrap: {marginTop: 22},
+  groupEdit: {width: 28, height: 28, alignItems: 'center', justifyContent: 'center', borderRadius: 14},
+  pressed: {opacity: 0.6},
+  actions: {gap: 10, paddingHorizontal: 18, marginTop: 28},
 }));
