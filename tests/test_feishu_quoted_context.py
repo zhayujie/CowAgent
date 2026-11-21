@@ -158,3 +158,30 @@ def test_message_without_parent_does_not_fetch(monkeypatch):
 
     assert message.quoted_content == ""
     assert message.content_with_quote() == "What does this mean?"
+
+
+def test_quoted_post_keeps_code_blocks(monkeypatch):
+    post = {
+        "title": "",
+        "content": [
+            [{"tag": "text", "text": "The job fails with:"}],
+            [{"tag": "code_block", "language": "PYTHON", "text": "KeyError: 'user_id'"}],
+        ],
+    }
+    response = _response(
+        {
+            "code": 0,
+            "data": {
+                "items": [
+                    {"msg_type": "post", "body": {"content": json.dumps(post)}}
+                ]
+            },
+        }
+    )
+    monkeypatch.setattr(
+        "channel.feishu.feishu_message.requests.get", lambda **kwargs: response
+    )
+
+    message = FeishuMessage(_event(), access_token="tenant-token")
+
+    assert message.quoted_content == "The job fails with:\nKeyError: 'user_id'"

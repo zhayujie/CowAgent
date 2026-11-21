@@ -377,7 +377,7 @@ class FeishuMessage(ChatMessage):
                         continue
                     tag = element.get("tag")
                     text = str(element.get("text") or "").strip()
-                    if tag == "text" and text:
+                    if tag in ("text", "code_block") and text:
                         parts.append(text)
                     elif tag == "a" and text:
                         href = str(element.get("href") or "").strip()
