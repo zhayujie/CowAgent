@@ -3,8 +3,10 @@ Integration module for scheduler with AgentBridge
 """
 
 import os
+import re
 import threading
 import time
+import unicodedata
 from typing import Dict
 from config import conf
 from common.log import logger
@@ -861,6 +863,64 @@ def _run_scheduled_task(
                 logger.debug(f"[Scheduler] finish_run failed for {run_id}: {e}")
 
 
+_INVISIBLE_EMPTY_CHARS = frozenset(
+    chr(cp) for cp in (0x034F, 0x115F, 0x1160, 0x17B4, 0x17B5, 0x2800, 0x3164, 0xFFA0)
+)
+
+_EMPTY_QUOTE_PAIRS = (
+    ('"', '"'),
+    ("'", "'"),
+    (chr(0x201C), chr(0x201D)),
+    (chr(0x2018), chr(0x2019)),
+    ("`", "`"),
+)
+
+_EMPTY_FENCE_RE = re.compile(
+    r"(?m)^(?P<fence>`{3,}|~{3,})[^\n`~]*\r?\n[ \t\r\n]*(?P=fence)[ \t]*$"
+)
+_WRAPPED_FENCE_RE = re.compile(
+    r"^(?P<fence>`{3,}|~{3,})[^\n`~]*\r?\n(?P<body>[\s\S]*?)\r?\n(?P=fence)$"
+)
+_INLINE_EMPTY_FENCE_RE = re.compile(r"^(?P<fence>`{3,}|~{3,})[ \t]*(?P=fence)$")
+
+
+def _strip_invisible_chars(text: str) -> str:
+    return "".join(
+        ch for ch in text
+        if ch not in _INVISIBLE_EMPTY_CHARS and unicodedata.category(ch) != "Cf"
+    )
+
+
+def _is_empty_scheduled_content(content) -> bool:
+    """True when a scheduled reply carries no visible content to deliver."""
+    if not content:
+        return True
+    if not isinstance(content, str):
+        return False
+
+    text = _strip_invisible_chars(content).strip()
+    while text:
+        prev = text
+        text = _EMPTY_FENCE_RE.sub("", text).strip()
+        if _INLINE_EMPTY_FENCE_RE.match(text):
+            return True
+        wrapped = _WRAPPED_FENCE_RE.match(text)
+        if wrapped:
+            text = wrapped.group("body").strip()
+            continue
+        for open_q, close_q in _EMPTY_QUOTE_PAIRS:
+            if (
+                len(text) >= len(open_q) + len(close_q)
+                and text.startswith(open_q)
+                and text.endswith(close_q)
+            ):
+                text = text[len(open_q):-len(close_q)].strip()
+                break
+        if text == prev:
+            break
+    return not text
+
+
 def _execute_agent_task(
     task: dict, agent_bridge, agent_id: str = None, output_sink: dict = None
 ) -> bool:
@@ -939,7 +999,7 @@ def _execute_agent_task(
             # Don't clear history - scheduler tasks use isolated session_id so they won't pollute user conversations
             reply = agent_bridge.agent_reply(execution_prompt, context=context, on_event=None, clear_history=False)
 
-            if not (reply and reply.content):
+            if not reply or _is_empty_scheduled_content(reply.content):
                 # Empty is a valid outcome: the task ran and decided there was
                 # nothing worth reporting (conditional reminders, monitors with
                 # no alert). Send nothing rather than a placeholder message.
@@ -1208,7 +1268,7 @@ def _execute_skill_call(
             logger.error(f"[Scheduler] Traceback: {traceback.format_exc()}")
             return False
 
-        if not (reply and reply.content):
+        if not reply or _is_empty_scheduled_content(reply.content):
             logger.error(f"[Scheduler] Task {task['id']}: No result from skill execution")
             return True
 

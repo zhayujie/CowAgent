@@ -15,8 +15,12 @@ from unittest.mock import patch
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from agent.protocol.agent_stream import AgentStreamExecutor
-from agent.tools.scheduler.integration import _execute_agent_task
+from agent.tools.scheduler.integration import (
+    _execute_agent_task,
+    _is_empty_scheduled_content,
+)
 from common import i18n
+from tests.test_agent_stream_max_turns import _CountingExecutor
 
 
 def _make_executor(allow_empty_response):
@@ -73,6 +77,94 @@ class EmptyResponseFallbackTest(unittest.TestCase):
         self.assertIn("返回空", _make_executor(True)._explicit_response_prompt())
         self.assertNotIn("返回空", _make_executor(False)._explicit_response_prompt())
 
+    def test_empty_after_tool_turn_still_asks_a_scheduled_run_for_its_answer(self):
+        # Silence is allowed for every scheduled task, not only conditional
+        # ones: a plain daily summary that ends empty after its tools still has
+        # to be asked for the answer, with a prompt that permits returning none.
+        executor = _CountingExecutor(
+            script=[
+                ("", ["fetch_news"]),
+                ("", []),
+                ("Today's summary.", []),
+            ],
+            max_turns=5,
+            allow_empty_response=True,
+        )
+
+        response = executor.run_stream("send me a daily news summary")
+
+        self.assertEqual(response, "Today's summary.")
+        self.assertEqual(executor.calls, 3)
+
+    def test_empty_after_tool_turn_still_requests_explicit_reply_for_chat(self):
+        executor = _CountingExecutor(
+            script=[
+                ("", ["check_price"]),
+                ("", []),
+                ("Price is 105, no drop.", []),
+            ],
+            max_turns=5,
+            allow_empty_response=False,
+        )
+
+        response = executor.run_stream("check the price")
+
+        self.assertEqual(response, "Price is 105, no drop.")
+        self.assertEqual(executor.calls, 3)
+
+    def test_empty_after_tool_turn_falls_back_when_chat_explicit_retry_stays_empty(self):
+        executor = _CountingExecutor(
+            script=[
+                ("", ["check_price"]),
+                ("", []),
+                ("", []),
+            ],
+            max_turns=5,
+            allow_empty_response=False,
+        )
+
+        response = executor.run_stream("check the price")
+
+        self.assertIn("无法生成回复", response)
+        self.assertEqual(executor.calls, 3)
+
+    def test_stream_retries_on_empty_for_user_facing_run(self):
+        calls = []
+
+        class _RetryThenAnswerModel:
+            model = "test-model"
+
+            def call_stream(self, request):
+                calls.append(request)
+                if len(calls) == 1:
+                    yield {"choices": [{"delta": {}, "finish_reason": "stop"}]}
+                else:
+                    yield {"choices": [{"delta": {"content": "recovered"}, "finish_reason": "stop"}]}
+
+        agent = SimpleNamespace(
+            name="test-agent",
+            messages=[],
+            tools=[],
+            workspace_dir=None,
+            last_usage=None,
+            _current_session_id="chat-1",
+            _current_agent_id="default",
+        )
+        executor = AgentStreamExecutor(
+            agent=agent,
+            model=_RetryThenAnswerModel(),
+            system_prompt="",
+            tools=[],
+            max_turns=3,
+            allow_empty_response=False,
+        )
+        with patch.object(executor, "_trim_messages"), \
+                patch.object(executor, "_validate_and_fix_messages"):
+            response = executor.run_stream("hello")
+
+        self.assertEqual(response, "recovered")
+        self.assertEqual(len(calls), 2)
+
 
 class _AgentBridge:
     def __init__(self, content):
@@ -115,6 +207,54 @@ class SchedulerEmptyReplyTest(unittest.TestCase):
             _execute_agent_task(self._task(), bridge)
 
         create_channel.assert_called_once()
+
+    def test_invisible_quote_and_empty_fence_replies_are_suppressed(self):
+        empty_variants = [
+            "",
+            "   \n\t  ",
+            '""',
+            "''",
+            chr(0x201C) + chr(0x201D),
+            chr(0x2018) + chr(0x2019),
+            '"   "',
+            chr(0x200B),
+            chr(0x200C) + chr(0x200D) + chr(0x2060),
+            f"  {chr(0xFEFF)}  ",
+            f'"{chr(0x200B)}"',
+            '`""`',
+            "```\n```",
+            "```text\n   \n```",
+            f"```text\n{chr(0x200B)}\n```",
+            '```text\n""\n```',
+            "```   ```",
+            "~~~\n~~~",
+        ]
+        for payload in empty_variants:
+            with self.subTest(payload=repr(payload)):
+                self.assertTrue(_is_empty_scheduled_content(payload))
+                bridge = _AgentBridge(payload)
+                with patch("channel.channel_factory.create_channel") as create_channel:
+                    result = _execute_agent_task(self._task(), bridge)
+                self.assertTrue(result)
+                create_channel.assert_not_called()
+
+    def test_short_real_alerts_are_still_delivered(self):
+        real_alerts = [
+            "CSL 98.20",
+            '"CSL 98.20"',
+            "```text\nCSL 98.20\n```",
+            "```CSL 98.20```",
+            "OK",
+            "0",
+        ]
+        for payload in real_alerts:
+            with self.subTest(payload=repr(payload)):
+                self.assertFalse(_is_empty_scheduled_content(payload))
+                bridge = _AgentBridge(payload)
+                with patch("channel.channel_factory.create_channel") as create_channel:
+                    result = _execute_agent_task(self._task(), bridge)
+                self.assertTrue(result)
+                create_channel.assert_called_once()
 
 
 if __name__ == "__main__":
