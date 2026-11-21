@@ -71,12 +71,34 @@ def test_a_failed_middle_chunk_does_not_swallow_the_tail():
     ])
 
     with patch.object(module, "time", MagicMock()):
-        with pytest.raises(RuntimeError, match="1/3"):
-            channel._send_text(text, "user-1", "context-token")
+        channel._send_text(text, "user-1", "context-token")
 
     assert channel.api.send_text.call_count == 3, (
         "the chunks after a rejected one must still be attempted"
     )
+
+
+def test_a_partial_delivery_does_not_raise_into_a_full_resend():
+    # ChatChannel._send retries a raising send() from the first chunk, which
+    # would deliver the chunks that already went out a second and third time.
+    channel = _channel([{"ret": 0}, {"ret": 0, "errcode": 45009}, {"ret": 0}])
+
+    with patch.object(module, "time", MagicMock()):
+        channel._send_text(_long_text(), "user-1", "context-token")
+
+    assert channel.api.send_text.call_count == 3
+
+
+def test_every_chunk_rejected_raises():
+    channel = _channel([
+        {"ret": 0, "errcode": 45009},
+        requests.exceptions.ReadTimeout("Read timed out."),
+        {"ret": -14, "errcode": -14},
+    ])
+
+    with patch.object(module, "time", MagicMock()):
+        with pytest.raises(RuntimeError, match="3/3"):
+            channel._send_text(_long_text(), "user-1", "context-token")
 
 
 def test_a_fully_delivered_answer_stays_silent():

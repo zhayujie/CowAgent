@@ -1069,13 +1069,17 @@ class WeixinChannel(ChatChannel):
         return True
 
     def _send_text(self, text: str, receiver: str, context_token: str):
-        """Send ``text`` in chunks, raising once the platform refused any of them.
+        """Send ``text`` in chunks, raising when the platform refused all of them.
 
         A silent return means "delivered" to the scheduler, which then deletes a
         one-time task, so a refusal has to surface as a failure here -- the same
         reason ``send()`` raises when the context_token is missing. Remaining
         chunks are still attempted: a rejected middle chunk must not swallow the
         tail of a long answer.
+
+        A partial delivery is only logged: ``ChatChannel._send`` retries a
+        raising ``send()`` from the first chunk, which would repeat every chunk
+        that already went out.
         """
         chunks = self._split_text(text, TEXT_CHUNK_LIMIT)
         rejected = 0
@@ -1100,11 +1104,15 @@ class WeixinChannel(ChatChannel):
             if i < len(chunks) - 1:
                 time.sleep(0.5)
 
-        if rejected:
-            raise RuntimeError(
-                f"[Weixin] {rejected}/{len(chunks)} text chunk(s) rejected for "
-                f"receiver={receiver}: {reason}"
-            )
+        if not rejected:
+            return
+        summary = (
+            f"[Weixin] {rejected}/{len(chunks)} text chunk(s) rejected for "
+            f"receiver={receiver}: {reason}"
+        )
+        if rejected == len(chunks):
+            raise RuntimeError(summary)
+        logger.error(summary)
 
     @staticmethod
     def _split_text(text: str, limit: int) -> list:
