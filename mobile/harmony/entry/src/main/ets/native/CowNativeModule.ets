@@ -43,7 +43,7 @@ export class CowNativeModule extends TurboModule {
       if (err.code === scanCore.ScanErrorCode.SCAN_SERVICE_CANCELED) {
         return null;
       }
-      throw err;
+      throw err as Error;
     }
   }
 

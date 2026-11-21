@@ -54,12 +54,36 @@ class JSI_EXPORT CowNativeTurboModule : public ArkTSTurboModule {
   }
 };
 
+// Forwards JS calls to the ArkTS module in ets/native/CowKernelModule.ets.
+class JSI_EXPORT CowKernelTurboModule : public ArkTSTurboModule {
+ public:
+  CowKernelTurboModule(const ArkTSTurboModule::Context ctx, const std::string name)
+      : ArkTSTurboModule(ctx, name) {
+    methodMap_["start"] = MethodMetadata{0, start};
+  }
+
+ private:
+  static facebook::jsi::Value start(
+      facebook::jsi::Runtime& rt,
+      facebook::react::TurboModule& turboModule,
+      const facebook::jsi::Value* args,
+      size_t count) {
+    return static_cast<ArkTSTurboModule&>(turboModule)
+        .callAsync(rt, "start", args, count);
+  }
+};
+
 class CowNativeFactoryDelegate : public TurboModuleFactoryDelegate {
  public:
   SharedTurboModule createTurboModule(Context ctx, const std::string& name)
       const override {
     if (name == "CowNative") {
       return std::make_shared<CowNativeTurboModule>(ctx, name);
+    }
+    // The ArkTS side only offers the kernel when this build embeds Python;
+    // claiming it without that would be a fatal error.
+    if (name == "CowKernel" && ctx.arkTSTurboModuleInstanceRef) {
+      return std::make_shared<CowKernelTurboModule>(ctx, name);
     }
     return nullptr;
   }

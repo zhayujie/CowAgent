@@ -1,15 +1,17 @@
-import {Linking, NativeModules, Platform} from 'react-native';
+import {Linking, NativeModules, Platform, Share} from 'react-native';
 import {create} from 'zustand';
 import {showToast} from '../components/Toast';
 import {serverUrl} from '../api/cowApi';
 import {tr, trf, type MessageKey} from '../i18n';
-import {openWebPage} from '../navigation/openWeb';
+import {openWebPage, withoutLoginToken} from '../navigation/openWeb';
 import {navigationRef} from '../navigation/ref';
 import {useAgentStore} from '../store/agentStore';
 import {useChatStore} from '../store/chatStore';
+import {copyText} from '../utils/clipboard';
 import {
   type ChatFile,
   isUnsandboxedPage,
+  outsideLinkOf,
   rawUrlOf,
   resolveFile,
   serverFileRef,
@@ -61,6 +63,41 @@ export function openAsWebPage(f: ChatFile) {
   // Asked from the full-screen picture, which would otherwise stay over the page.
   useImageViewer.getState().close();
   openWebPage(viewUrlOf(f), f.name);
+}
+
+/**
+ * The file in the system browser. Without a link that works outside the app the
+ * app's own web page shows it, so the login token never reaches the browser.
+ */
+export async function openInBrowser(f: ChatFile) {
+  const url = withoutLoginToken(await outsideLinkOf(f));
+  if (!url) {
+    openAsWebPage(f);
+    return;
+  }
+  Linking.openURL(url).catch(() => showToast(tr('file_cannot_open')));
+}
+
+/** The system share sheet with the file's link; where there is none, the link is copied instead. */
+export async function shareFile(f: ChatFile) {
+  const url = withoutLoginToken(await outsideLinkOf(f));
+  if (!url) {
+    showToast(tr('file_share_no_link'));
+    return;
+  }
+  try {
+    // Android shares only the message; iOS, HarmonyOS and the web take the link itself.
+    await Share.share(
+      Platform.OS === 'android' ? {title: f.name, message: `${f.name}\n${url}`} : {title: f.name, url},
+      {dialogTitle: f.name, subject: f.name},
+    );
+  } catch (e) {
+    if (e instanceof Error && e.name === 'AbortError') {
+      return;
+    }
+    const ok = await copyText(url);
+    showToast(ok ? tr('share_link_copied') : tr('file_share_failed'));
+  }
 }
 
 /** Where a native save put the file; null when the user backed out of the iOS share sheet. */

@@ -6,14 +6,13 @@ import {BackHandler, Linking, StyleSheet, Text, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {WebView, type WebViewNavigation} from 'react-native-webview';
 import {LoadBar} from '../components/LoadBar';
-import {serverUrl} from '../api/cowApi';
 import {ChoiceSheet} from '../components/settings';
 import {showToast, ToastHost} from '../components/Toast';
 import {Chip, IconButton} from '../components/ui';
 import {downloadUrl} from '../files/openFile';
 import {tr} from '../i18n';
 import {EDGE_ONLY} from '../navigation/gestures';
-import {loadsInPage} from '../navigation/openWeb';
+import {loadsInPage, withoutLoginToken} from '../navigation/openWeb';
 import type {RootStackParamList} from '../navigation/types';
 import {makeStyles, useTheme} from '../theme/theme';
 import {copyText} from '../utils/clipboard';
@@ -24,15 +23,6 @@ const hostOf = (url: string) => /^https?:\/\/([^/?#]+)/i.exec(url)?.[1] ?? url;
 
 /** Pages can redirect on their own, so only these leave for another app; others could launch anything installed. */
 const HANDED_OUT = /^(mailto:|tel:|sms:)/i;
-
-/** A link to hand out: on the app's own server, without the login token the app put in it. */
-function shareable(url: string): string {
-  const base = serverUrl('');
-  if (!base || !url.startsWith(base)) {
-    return url;
-  }
-  return url.replace(/([?&])token=[^&#]*&?/, '$1').replace(/[?&](?=#|$)/, '');
-}
 
 /** Any web page, inside the app: links stay in it, its own back steps through its history. */
 export function WebPageScreen({route, navigation}: Props) {
@@ -99,7 +89,7 @@ export function WebPageScreen({route, navigation}: Props) {
       }
       return;
     }
-    const ok = await copyText(shareable(page.url));
+    const ok = await copyText(withoutLoginToken(page.url));
     showToast(ok ? tr('share_link_copied') : tr('file_copy_failed'));
   };
 
