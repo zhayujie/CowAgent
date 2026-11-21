@@ -181,6 +181,14 @@ export interface WorkspaceText {
   size?: number;
 }
 
+export interface WorkspaceHit {
+  name: string;
+  /** Relative to the session's working root. */
+  path: string;
+  is_dir?: boolean;
+  kind?: string;
+}
+
 export interface MemoryPage {
   list: MemoryFile[];
   total: number;
@@ -297,6 +305,8 @@ export interface ModelProvider {
   id: string;
   label: string | {zh?: string; en?: string};
   models: string[];
+  /** Display aliases keyed by model name. */
+  labels?: Record<string, string>;
 }
 
 export interface SessionSettings {

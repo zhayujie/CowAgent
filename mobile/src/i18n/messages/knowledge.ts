@@ -116,7 +116,7 @@ const zh = {
   agent_knowledge: '知识库',
   agent_knowledge_own: '独立',
   agent_knowledge_shared: '共享',
-  agent_team_note: '团队会话中，主 Agent 负责接收消息，可以把任务委派给其他成员；委派对象沿用发起方的权限。',
+  agent_team_note: '团队会话中，主 Agent 负责接收消息，可以把任务委派给其他成员。',
   agent_create: '新建 Agent',
   agent_create_name_required: '请填写名称',
   agent_create_avatar: '头像',
@@ -300,8 +300,7 @@ const en: Record<keyof typeof zh, string> = {
   agent_knowledge: 'Knowledge',
   agent_knowledge_own: 'Own',
   agent_knowledge_shared: 'Shared',
-  agent_team_note:
-    "In team chats the main agent receives messages and can delegate tasks to other members, who inherit the delegator's permissions.",
+  agent_team_note: 'In team chats the main agent receives messages and can delegate tasks to other members.',
   agent_create: 'New agent',
   agent_create_name_required: 'A name is required',
   agent_create_avatar: 'Avatar',

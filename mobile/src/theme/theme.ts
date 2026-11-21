@@ -8,49 +8,28 @@ export type ThemeMode = 'system' | 'light' | 'dark';
 interface PrefsState {
   hydrated: boolean;
   mode: ThemeMode;
-  /** Set once the first message is sent; the first-run guide never returns. */
-  onboarded: boolean;
   hydrate: () => Promise<void>;
   setMode: (mode: ThemeMode) => void;
-  markOnboarded: () => void;
 }
 
 interface PersistedPrefs {
   mode: ThemeMode;
-  onboarded: boolean;
 }
 
 const PREFS_KEY = 'prefs';
 
-export const usePrefsStore = create<PrefsState>((set, get) => {
-  const persist = () => {
-    const {mode, onboarded} = get();
-    writeJSON(PREFS_KEY, {mode, onboarded} satisfies PersistedPrefs).catch(() => undefined);
-  };
-  return {
-    hydrated: false,
-    mode: 'system',
-    onboarded: false,
-    hydrate: async () => {
-      const saved = await readJSON<Partial<PersistedPrefs>>(PREFS_KEY, {});
-      set({
-        hydrated: true,
-        mode: saved.mode ?? 'system',
-        onboarded: saved.onboarded ?? false,
-      });
-    },
-    setMode: mode => {
-      set({mode});
-      persist();
-    },
-    markOnboarded: () => {
-      if (!get().onboarded) {
-        set({onboarded: true});
-        persist();
-      }
-    },
-  };
-});
+export const usePrefsStore = create<PrefsState>(set => ({
+  hydrated: false,
+  mode: 'system',
+  hydrate: async () => {
+    const saved = await readJSON<Partial<PersistedPrefs>>(PREFS_KEY, {});
+    set({hydrated: true, mode: saved.mode ?? 'system'});
+  },
+  setMode: mode => {
+    set({mode});
+    writeJSON(PREFS_KEY, {mode} satisfies PersistedPrefs).catch(() => undefined);
+  },
+}));
 
 export function useTheme(): Palette {
   const scheme = useColorScheme();

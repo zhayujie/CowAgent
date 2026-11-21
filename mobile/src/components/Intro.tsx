@@ -1,151 +1,155 @@
+import {faClock, faFolderOpen} from '@fortawesome/free-regular-svg-icons';
 import {
-  faBookmark,
-  faClock,
-  faFolderOpen,
-  faLightbulb,
-  faMessage,
-  faWindowMaximize,
-} from '@fortawesome/free-regular-svg-icons';
-import {faChevronRight, faMicrochip} from '@fortawesome/free-solid-svg-icons';
+  faBook,
+  faMagnifyingGlassChart,
+  faMicrochip,
+  faPuzzlePiece,
+  faTerminal,
+} from '@fortawesome/free-solid-svg-icons';
 import type {IconDefinition} from '@fortawesome/fontawesome-svg-core';
-import React from 'react';
+import React, {useEffect, useRef} from 'react';
 import {Pressable, ScrollView, Text, View} from 'react-native';
-import {tr} from '../i18n';
-import type {SessionItem} from '../protocol/events';
+import {tr, trf, type MessageKey} from '../i18n';
+import type {AgentProfile} from '../protocol/resources';
+import type {Palette} from '../theme/palette';
 import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
-import {greeting, shortTime} from '../utils/format';
+import {greeting} from '../utils/format';
+import {AgentAvatar} from './AgentAvatar';
 import {Icon} from './Icon';
 
-const examples = (): {icon: IconDefinition; text: string}[] => [
-  {icon: faFolderOpen, text: tr('chat_intro_example_files')},
-  {icon: faClock, text: tr('chat_intro_example_reminder')},
-  {icon: faWindowMaximize, text: tr('chat_intro_example_news')},
-  {icon: faBookmark, text: tr('chat_intro_example_knowledge')},
-  {icon: faLightbulb, text: tr('chat_intro_example_skills')},
+/** The web console's starter cards; the last one sends a command rather than prose. */
+const EXAMPLES: {
+  key: string;
+  icon: IconDefinition;
+  tint: (t: Palette) => [string, string];
+  send?: string;
+}[] = [
+  {key: 'research', icon: faMagnifyingGlassChart, tint: t => t.kind.doc},
+  {key: 'sys', icon: faFolderOpen, tint: t => t.kind.web},
+  {key: 'task', icon: faClock, tint: t => t.kind.image},
+  {key: 'knowledge', icon: faBook, tint: t => t.kind.media},
+  {key: 'skill', icon: faPuzzlePiece, tint: t => [t.dangerSoft, t.danger]},
+  {key: 'cmd', icon: faTerminal, tint: t => t.kind.other, send: '/help'},
 ];
 
-const RECENT_LIMIT = 4;
-
 export function Intro({
-  firstRun,
-  recent,
+  agent,
+  isDefault,
   onPick,
-  onOpenSession,
   onSetupModel,
+  onCardsBand,
 }: {
-  firstRun: boolean;
-  recent: SessionItem[];
+  agent?: AgentProfile;
+  isDefault: boolean;
+  /** Puts the text in the composer for the user to send or edit. */
   onPick: (text: string) => void;
-  onOpenSession: (session: SessionItem) => void;
   /** Set while chat has no usable model; shows the card leading to model setup. */
   onSetupModel?: () => void;
+  /** Where the sideways cards sit on screen, so a swipe over them scrolls them instead of opening the drawer. */
+  onCardsBand?: (band: {top: number; bottom: number} | null) => void;
 }) {
   const t = useTheme();
   const styles = useStyles();
-  const showRecent = !firstRun && recent.length > 0;
+  const cardsRef = useRef<View>(null);
+  const measureCards = () =>
+    cardsRef.current?.measureInWindow((_x, y, _w, h) => onCardsBand?.({top: y, bottom: y + h}));
+  useEffect(() => () => onCardsBand?.(null), [onCardsBand]);
+  const custom = !isDefault && agent?.description?.trim();
 
   return (
-    <ScrollView
-      style={styles.scroll}
-      contentContainerStyle={styles.body}
-      keyboardShouldPersistTaps="handled">
-      <Text style={styles.eyebrow}>{firstRun ? tr('chat_intro_first_run') : greeting()}</Text>
-      <Text style={styles.title}>
-        {firstRun ? tr('chat_intro_title_first') : tr('chat_intro_title_back')}
-      </Text>
-      <Text style={styles.lead}>
-        {firstRun ? tr('chat_intro_lead_first') : tr('chat_intro_lead_back')}
-      </Text>
+    <View style={styles.root}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.hero}
+        keyboardShouldPersistTaps="handled"
+        bounces={false}>
+        <AgentAvatar agent={agent} isDefault={isDefault} size={52} />
+        <Text style={styles.title}>{trf('chat_intro_title', {greeting: greeting()})}</Text>
+        <Text style={styles.lead}>{custom || tr('chat_intro_lead')}</Text>
 
-      {onSetupModel && (
-        <Pressable
-          accessibilityRole="button"
-          onPress={onSetupModel}
-          style={({pressed}) => [styles.setup, pressed && styles.pickPressed]}>
-          <View style={styles.setupIcon}>
-            <Icon icon={faMicrochip} size={15} color={t.onAccent} />
-          </View>
-          <View style={styles.setupText}>
-            <Text style={styles.setupTitle}>{tr('connect_setup_model_title')}</Text>
-            <Text style={styles.setupDesc}>{tr('connect_setup_model_desc')}</Text>
-          </View>
-          <View style={styles.setupAction}>
-            <Text style={styles.setupActionText}>{tr('connect_setup_model_action')}</Text>
-          </View>
-        </Pressable>
-      )}
+        {onSetupModel && (
+          <Pressable
+            accessibilityRole="button"
+            onPress={onSetupModel}
+            style={({pressed}) => [styles.setup, pressed && styles.pressed]}>
+            <View style={styles.setupIcon}>
+              <Icon icon={faMicrochip} size={15} color={t.onAccent} />
+            </View>
+            <View style={styles.setupText}>
+              <Text style={styles.setupTitle}>{tr('connect_setup_model_title')}</Text>
+              <Text style={styles.setupDesc}>{tr('connect_setup_model_desc')}</Text>
+            </View>
+            <View style={styles.setupAction}>
+              <Text style={styles.setupActionText}>{tr('connect_setup_model_action')}</Text>
+            </View>
+          </Pressable>
+        )}
+      </ScrollView>
 
-      <View style={styles.picks}>
-        {showRecent
-          ? recent.slice(0, RECENT_LIMIT).map(s => (
-              <Pick
-                key={s.session_id}
-                icon={faMessage}
-                text={s.title || tr('session_untitled')}
-                aside={shortTime(s.last_active)}
-                onPress={() => onOpenSession(s)}
-              />
-            ))
-          : examples().map(e => (
-              <Pick key={e.text} icon={e.icon} text={e.text} onPress={() => onPick(e.text)} />
-            ))}
+      <View ref={cardsRef} onLayout={measureCards} collapsable={false}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          style={styles.cardsScroll}
+          contentContainerStyle={styles.cards}>
+          {EXAMPLES.map(e => {
+            const [bg, fg] = e.tint(t);
+            const text = tr(`chat_example_${e.key}_text` as MessageKey);
+            return (
+              <Pressable
+                key={e.key}
+                accessibilityRole="button"
+                onPress={() => onPick(e.send ?? text)}
+                style={({pressed}) => [styles.card, pressed && styles.cardPressed]}>
+                <View style={styles.cardHead}>
+                  <View style={[styles.cardIcon, {backgroundColor: bg}]}>
+                    <Icon icon={e.icon} size={12} color={fg} />
+                  </View>
+                  <Text style={styles.cardTitle} numberOfLines={1}>
+                    {tr(`chat_example_${e.key}_title` as MessageKey)}
+                  </Text>
+                </View>
+                <Text style={styles.cardText} numberOfLines={2}>
+                  {text}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
       </View>
-    </ScrollView>
-  );
-}
-
-function Pick({
-  icon,
-  text,
-  aside,
-  onPress,
-}: {
-  icon: IconDefinition;
-  text: string;
-  aside?: string;
-  onPress: () => void;
-}) {
-  const t = useTheme();
-  const styles = useStyles();
-  return (
-    <Pressable
-      accessibilityRole="button"
-      onPress={onPress}
-      style={({pressed}) => [styles.pick, pressed && styles.pickPressed]}>
-      <View style={styles.pickIcon}>
-        <Icon icon={icon} size={13} color={t.t3} />
-      </View>
-      <Text style={styles.pickText} numberOfLines={1}>
-        {text}
-      </Text>
-      {aside ? (
-        <Text style={styles.pickAside}>{aside}</Text>
-      ) : (
-        <Icon icon={faChevronRight} size={10} color={t.t4} />
-      )}
-    </Pressable>
+    </View>
   );
 }
 
 const useStyles = makeStyles(t => ({
+  root: {flex: 1},
   scroll: {flex: 1},
-  body: {paddingHorizontal: 22, paddingTop: 28, paddingBottom: 24},
-  eyebrow: {fontSize: 12, fontWeight: '600', letterSpacing: 1.6, color: t.accent, marginBottom: 12},
-  title: {fontSize: 26, lineHeight: 36, fontWeight: '600', letterSpacing: -0.7, color: t.t1},
-  lead: {fontSize: 14, lineHeight: 23, color: t.t2, marginTop: 10, letterSpacing: 0.1},
-  picks: {marginTop: 26, borderBottomWidth: 1, borderBottomColor: t.line1},
+  hero: {flexGrow: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32, paddingVertical: 24},
+  title: {
+    fontSize: 22,
+    lineHeight: 30,
+    fontWeight: '600',
+    letterSpacing: -0.4,
+    color: t.t1,
+    textAlign: 'center',
+    marginTop: 18,
+  },
+  lead: {fontSize: 14, lineHeight: 22, color: t.t3, textAlign: 'center', marginTop: 8, maxWidth: 300},
   setup: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    marginTop: 24,
+    alignSelf: 'stretch',
+    marginTop: 28,
     padding: 14,
     borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: t.accentLine,
     backgroundColor: t.accentSoft,
   },
+  pressed: {opacity: 0.6},
   setupIcon: {
     width: 36,
     height: 36,
@@ -159,17 +163,20 @@ const useStyles = makeStyles(t => ({
   setupDesc: {fontSize: 12, lineHeight: 18, color: t.t2, marginTop: 3},
   setupAction: {paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999, backgroundColor: t.green},
   setupActionText: {fontSize: 13, fontWeight: '600', color: t.onAccent},
-  pick: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 2,
-    borderTopWidth: 1,
-    borderTopColor: t.line1,
+  cardsScroll: {flexGrow: 0},
+  cards: {gap: 10, paddingHorizontal: 12, paddingTop: 4, paddingBottom: 6},
+  card: {
+    width: 164,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 18,
+    backgroundColor: t.bg1,
+    borderWidth: 1,
+    borderColor: t.line1,
   },
-  pickPressed: {opacity: 0.55},
-  pickIcon: {width: 18, alignItems: 'center'},
-  pickText: {flex: 1, fontSize: 15, color: t.t1, letterSpacing: -0.1},
-  pickAside: {fontSize: 12, color: t.t4, fontVariant: ['tabular-nums']},
+  cardPressed: {backgroundColor: t.bg2},
+  cardHead: {flexDirection: 'row', alignItems: 'center', gap: 8},
+  cardIcon: {width: 22, height: 22, borderRadius: 7, alignItems: 'center', justifyContent: 'center'},
+  cardTitle: {flexShrink: 1, fontSize: 14, fontWeight: '600', color: t.t1},
+  cardText: {fontSize: 13, lineHeight: 19, color: t.t3, marginTop: 8, minHeight: 38},
 }));

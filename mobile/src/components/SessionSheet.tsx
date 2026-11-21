@@ -1,4 +1,5 @@
-import {faPlus} from '@fortawesome/free-solid-svg-icons';
+import {faPenToSquare, faTrashCan} from '@fortawesome/free-regular-svg-icons';
+import {faPlus, faThumbtack} from '@fortawesome/free-solid-svg-icons';
 import React, {useCallback, useEffect, useState} from 'react';
 import {ActivityIndicator, Pressable, ScrollView, Text, View} from 'react-native';
 import {clearContext, compactContext, getContextUsage} from '../api/cowApi';
@@ -12,6 +13,7 @@ import {makeStyles, useTheme} from '../theme/theme';
 import {formatTokens} from '../utils/format';
 import {AgentAvatar} from './AgentAvatar';
 import {Icon} from './Icon';
+import {SessionAction} from './SessionActions';
 import {Sheet} from './Sheet';
 import {showToast} from './Toast';
 
@@ -24,20 +26,29 @@ const CANDIDATE_PREVIEW = 4;
 export function SessionSheet({
   visible,
   onClose,
+  title,
+  contextOnly,
   sessionId,
   agentId,
   isNew,
   replying,
+  pinned,
+  onTogglePin,
   onRename,
   onDelete,
 }: {
   visible: boolean;
   onClose: () => void;
+  title: string;
+  /** Only the context budget, as opened from a reply's token count. */
+  contextOnly?: boolean;
   sessionId: string;
   agentId: string | null;
   /** Nothing is stored yet, so there is no context and nothing to rename. */
   isNew: boolean;
   replying: boolean;
+  pinned: boolean;
+  onTogglePin: () => void;
   onRename: () => void;
   onDelete: () => void;
 }) {
@@ -127,7 +138,7 @@ export function SessionSheet({
     : [];
 
   return (
-    <Sheet visible={visible} onClose={onClose} title={tr('session_current')}>
+    <Sheet visible={visible} onClose={onClose} title={title}>
       <ScrollView style={styles.scroll} contentContainerStyle={styles.body} bounces={false}>
         {!isNew && (
           <View style={styles.block}>
@@ -190,7 +201,7 @@ export function SessionSheet({
           </View>
         )}
 
-        {!team && multiAgent && (
+        {!contextOnly && !team && multiAgent && (
           <View style={styles.block}>
             <Text style={styles.blockTitle}>{tr('session_members')}</Text>
             {teamError ? (
@@ -200,7 +211,7 @@ export function SessionSheet({
             )}
           </View>
         )}
-        {!!team && (team.candidates.length > 0 || team.members.length > 0) && (
+        {!contextOnly && !!team && (team.candidates.length > 0 || team.members.length > 0) && (
           <View style={styles.block}>
             <View style={styles.blockHead}>
               <Text style={styles.blockTitle}>{tr('session_members')}</Text>
@@ -249,14 +260,15 @@ export function SessionSheet({
           </View>
         )}
 
-        {!isNew && (
-          <View style={styles.links}>
-            <Pressable accessibilityRole="button" onPress={onRename} style={({pressed}) => [styles.link, pressed && styles.pressed]}>
-              <Text style={styles.linkText}>{tr('common_rename')}</Text>
-            </Pressable>
-            <Pressable accessibilityRole="button" onPress={onDelete} style={({pressed}) => [styles.link, pressed && styles.pressed]}>
-              <Text style={[styles.linkText, styles.danger]}>{tr('session_delete')}</Text>
-            </Pressable>
+        {!isNew && !contextOnly && (
+          <View>
+            <SessionAction
+              icon={faThumbtack}
+              label={pinned ? tr('session_unpin') : tr('session_pin')}
+              onPress={onTogglePin}
+            />
+            <SessionAction icon={faPenToSquare} label={tr('common_rename')} onPress={onRename} />
+            <SessionAction icon={faTrashCan} label={tr('session_delete')} danger onPress={onDelete} />
           </View>
         )}
       </ScrollView>
@@ -385,16 +397,4 @@ const useStyles = makeStyles(t => ({
   add: {fontSize: 12, fontWeight: '500', color: t.accent},
   more: {paddingVertical: 8},
   moreText: {fontSize: 13, color: t.accent},
-  links: {flexDirection: 'row', gap: 10},
-  link: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: 13,
-    borderRadius: radius.sm,
-    backgroundColor: t.isDark ? t.bg2 : t.bg1,
-    borderWidth: 1,
-    borderColor: t.line1,
-  },
-  linkText: {fontSize: 14, color: t.t1},
-  danger: {color: t.danger},
 }));

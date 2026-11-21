@@ -22,6 +22,8 @@ interface ComposerState {
   items: PendingAttachment[];
   /** Returns how many files were left out because the tray was full. */
   add: (files: PickedFile[], sessionId: string, agentId: string | null) => number;
+  /** A file already in the workspace, referenced in place instead of uploaded. */
+  addRef: (path: string, name: string) => void;
   remove: (id: string) => void;
   retry: (id: string, sessionId: string, agentId: string | null) => void;
   clear: () => void;
@@ -81,6 +83,22 @@ export const useComposerStore = create<ComposerState>((set, get) => {
       set(s => ({items: [...s.items, ...added]}));
       added.forEach(a => upload(a.id, sessionId, agentId));
       return files.length - accepted.length;
+    },
+
+    addRef: (path, name) => {
+      const {items} = get();
+      if (items.length >= MAX_ATTACHMENTS || items.some(a => a.kind === 'workspace_ref' && a.path === path)) {
+        return;
+      }
+      const ref: PendingAttachment = {
+        id: `att-${Date.now()}-${++seq}`,
+        name,
+        kind: 'workspace_ref',
+        localUri: '',
+        status: 'done',
+        path,
+      };
+      set(s => ({items: [...s.items, ref]}));
     },
 
     remove: id => {

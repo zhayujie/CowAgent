@@ -186,14 +186,14 @@ export function VoiceOverlay() {
 
 const useStyles = makeStyles(t => ({
   pad: {
-    height: 42,
-    marginHorizontal: 10,
-    marginTop: 10,
-    marginBottom: 10,
-    borderRadius: radius.sm,
+    height: 48,
+    marginHorizontal: 12,
+    marginTop: 12,
+    marginBottom: 2,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: t.bg3,
+    backgroundColor: t.isDark ? t.bg3 : t.bg2,
   },
   padActive: {backgroundColor: t.accentSoft},
   padCancel: {backgroundColor: t.dangerSoft},

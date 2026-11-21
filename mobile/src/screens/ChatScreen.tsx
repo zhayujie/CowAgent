@@ -1,29 +1,33 @@
 import {faComments} from '@fortawesome/free-regular-svg-icons';
-import {faArrowDown, faChevronDown, faEllipsis, faPlus} from '@fortawesome/free-solid-svg-icons';
+import {faArrowDown, faChevronDown, faPlus} from '@fortawesome/free-solid-svg-icons';
 import {useFocusEffect} from '@react-navigation/native';
 import type {StackScreenProps} from '@react-navigation/stack';
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {
   ActivityIndicator,
+  BackHandler,
   FlatList,
   Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
   Text,
+  TextInput,
   View,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from 'react-native';
 import {Gesture, GestureDetector} from 'react-native-gesture-handler';
-import Animated, {FadeIn, FadeOut} from 'react-native-reanimated';
+import Animated, {FadeIn, FadeOut, useSharedValue} from 'react-native-reanimated';
+import {scheduleOnRN} from 'react-native-worklets';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import {getModels, newSessionId, optimizePrompt, serverUrl, transcribeVoice} from '../api/cowApi';
+import {getModels, newSessionId, optimizePrompt, searchWorkspace, serverUrl, transcribeVoice} from '../api/cowApi';
 import {AgentAvatar} from '../components/AgentAvatar';
 import {AgentSheet} from '../components/AgentSheet';
 import {
   AttachSheet,
   ModelSheet,
+  modelDisplayName,
   PermissionSheet,
   type AttachSource,
 } from '../components/ComposerSheets';
@@ -31,8 +35,10 @@ import {Dock} from '../components/Dock';
 import {DrawerMenu, type DrawerRoute, type DrawerView} from '../components/DrawerMenu';
 import {Icon} from '../components/Icon';
 import {Intro} from '../components/Intro';
+import {ListShiftContext} from '../components/listAnchor';
 import {MessageItem} from '../components/MessageItem';
 import {ServerSheet} from '../components/ServerSheet';
+import {SessionActions} from '../components/SessionActions';
 import {SessionSheet} from '../components/SessionSheet';
 import {SHEET_DISMISS_MS} from '../components/Sheet';
 import {ConfirmSheet, FieldSheet} from '../components/settings';
@@ -50,7 +56,7 @@ import {linkAsPage} from '../navigation/menuViews';
 import {openWebPage} from '../navigation/openWeb';
 import type {RootStackParamList} from '../navigation/types';
 import type {SessionItem} from '../protocol/events';
-import type {PermissionMode} from '../protocol/resources';
+import type {AgentBadge, PermissionMode, WorkspaceHit} from '../protocol/resources';
 import {agentParam, useAgentStore, useCurrentAgent} from '../store/agentStore';
 import {MAX_REPLYING, useChatStore, type ChatMessage} from '../store/chatStore';
 import {MAX_ATTACHMENTS, useComposerStore} from '../store/composerStore';
@@ -59,7 +65,7 @@ import {useOverviewStore} from '../store/overviewStore';
 import {useSessionSettingsStore} from '../store/sessionSettingsStore';
 import {useSessionStore} from '../store/sessionStore';
 import {radius} from '../theme/palette';
-import {makeStyles, usePrefsStore, useTheme} from '../theme/theme';
+import {makeStyles, useTheme} from '../theme/theme';
 import {chatModelReady} from '../utils/capabilities';
 
 type Props = StackScreenProps<RootStackParamList, 'Chat'>;
@@ -68,6 +74,7 @@ const EMPTY: ChatMessage[] = [];
 const OPTIMIZE_CONTEXT = 6;
 /** Further than this from the newest message counts as reading back. */
 const AWAY_PX = 240;
+const HISTORY_MAX = 20;
 /** Within this of the bottom, a new bubble is followed instead of held below the screen. */
 const FOLLOW_PX = 80;
 const KEEP_POSITION = {minIndexForVisible: 0, autoscrollToTopThreshold: FOLLOW_PX};
@@ -83,15 +90,14 @@ export function ChatScreen({route, navigation}: Props) {
   const loading = useChatStore(s => !!s.loading[sessionId]);
   const busy = useChatStore(s => !!s.active[sessionId]);
   const replying = useChatStore(s => Object.keys(s.active).sort().join('\n'));
-  const recent = useSessionStore(s => s.sessions);
+  const pinned = useSessionStore(s => !!s.sessions.find(x => x.session_id === sessionId)?.pinned);
   const agent = useCurrentAgent();
   const defaultAgentId = useAgentStore(s => s.defaultId);
   const currentAgentId = useAgentStore(s => s.currentId);
-  const agentCount = useAgentStore(s => s.agents.length);
-  const onboarded = usePrefsStore(s => s.onboarded);
   const attachments = useComposerStore(s => s.items);
   const settings = useSessionSettingsStore(s => s.bySession[sessionId]);
-  const teamSize = settings?.team?.members.length ?? 0;
+  const team = settings?.team;
+  const teamSize = team?.members.length ?? 0;
   const [draft, setDraft] = useState('');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerView, setDrawerView] = useState<DrawerView>('menu');
@@ -104,8 +110,22 @@ export function ChatScreen({route, navigation}: Props) {
   const [permissionOpen, setPermissionOpen] = useState(false);
   const [optimizing, setOptimizing] = useState(false);
   const [sessionOpen, setSessionOpen] = useState(false);
+  const [contextOnly, setContextOnly] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [actingSession, setActingSession] = useState<SessionItem | null>(null);
+  const dock = useRef<TextInput>(null);
+  // The keyboard covers the home indicator, so the composer sits right on it.
+  const [keyboardShown, setKeyboardShown] = useState(false);
+  useEffect(() => {
+    const ios = Platform.OS === 'ios';
+    const show = Keyboard.addListener(ios ? 'keyboardWillShow' : 'keyboardDidShow', () => setKeyboardShown(true));
+    const hide = Keyboard.addListener(ios ? 'keyboardWillHide' : 'keyboardDidHide', () => setKeyboardShown(false));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
 
   useEffect(() => {
     useAgentStore.getState().load().catch(() => undefined);
@@ -128,13 +148,6 @@ export function ChatScreen({route, navigation}: Props) {
       };
     }, []),
   );
-
-  // Anyone with history has already used the product; the guide is for strangers only.
-  useEffect(() => {
-    if (!onboarded && recent.length > 0) {
-      usePrefsStore.getState().markOnboarded();
-    }
-  }, [onboarded, recent.length]);
 
   useEffect(() => {
     const chat = useChatStore.getState();
@@ -186,6 +199,63 @@ export function ChatScreen({route, navigation}: Props) {
     [refreshDrawer],
   );
   const closeDrawer = useCallback(() => setDrawerOpen(false), []);
+
+  // Conversations visited in this screen, so back returns to the previous one before leaving the app.
+  const visited = useRef<{sessionId: string; agentId: string | null}[]>([]);
+  const goingBack = useRef(false);
+  const shownRef = useRef({sessionId, isNew: !!isNew, agentId: currentAgentId});
+  const emptyRef = useRef(true);
+  useEffect(() => {
+    const prev = shownRef.current;
+    if (prev.sessionId !== sessionId) {
+      // A blank new chat left behind holds nothing to come back to.
+      const blank = prev.isNew && emptyRef.current;
+      const top = visited.current[visited.current.length - 1];
+      if (!goingBack.current && !blank && top?.sessionId !== prev.sessionId) {
+        visited.current = [...visited.current, {sessionId: prev.sessionId, agentId: prev.agentId}].slice(-HISTORY_MAX);
+      }
+      goingBack.current = false;
+    }
+    shownRef.current = {sessionId, isNew: !!isNew, agentId: useAgentStore.getState().currentId};
+  }, [sessionId, isNew]);
+
+  // An existing conversation always speaks as the Agent it belongs to, however it was reached.
+  const sessionAgentId = useSessionStore(s =>
+    isNew ? undefined : s.sessions.find(x => x.session_id === sessionId)?.agent?.id,
+  );
+  const sessionAgentKnown = useAgentStore(s => !!sessionAgentId && s.agents.some(a => a.id === sessionAgentId));
+  useEffect(() => {
+    if (sessionAgentId && sessionAgentKnown) {
+      useAgentStore.getState().select(sessionAgentId);
+      shownRef.current = {...shownRef.current, agentId: sessionAgentId};
+    }
+  }, [sessionAgentId, sessionAgentKnown]);
+
+  useFocusEffect(
+    useCallback(() => {
+      const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+        const prev = visited.current[visited.current.length - 1];
+        if (!prev) {
+          return false;
+        }
+        visited.current = visited.current.slice(0, -1);
+        goingBack.current = true;
+        const owner =
+          useSessionStore.getState().sessions.find(s => s.session_id === prev.sessionId)?.agent?.id ?? prev.agentId;
+        if (owner) {
+          useAgentStore.getState().select(owner);
+        }
+        setDraft('');
+        navigation.setParams({sessionId: prev.sessionId, isNew: false});
+        return true;
+      });
+      return () => sub.remove();
+    }, [navigation]),
+  );
+
+  const forgetSession = useCallback((id: string) => {
+    visited.current = visited.current.filter(v => v.sessionId !== id);
+  }, []);
 
   const startNewChat = useCallback(() => {
     setDrawerOpen(false);
@@ -260,6 +330,12 @@ export function ChatScreen({route, navigation}: Props) {
   );
 
   const list = useRef<FlatList<ChatMessage>>(null);
+  const offsetRef = useRef(0);
+  const shiftList = useCallback((dy: number) => {
+    const next = Math.max(0, offsetRef.current + dy);
+    offsetRef.current = next;
+    list.current?.scrollToOffset({offset: next, animated: false});
+  }, []);
   // The list is inverted, so its bottom is offset 0; wait a frame for the new bubble to be laid out.
   const toBottom = useCallback(() => {
     requestAnimationFrame(() => list.current?.scrollToOffset({offset: 0, animated: true}));
@@ -270,6 +346,7 @@ export function ChatScreen({route, navigation}: Props) {
   const [unread, setUnread] = useState(false);
   const awayRef = useRef(false);
   const onListScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    offsetRef.current = e.nativeEvent.contentOffset.y;
     const next = e.nativeEvent.contentOffset.y > AWAY_PX;
     if (next !== awayRef.current) {
       awayRef.current = next;
@@ -281,6 +358,7 @@ export function ChatScreen({route, navigation}: Props) {
   }, []);
   useEffect(() => {
     awayRef.current = false;
+    offsetRef.current = 0;
     setAway(false);
     setUnread(false);
   }, [sessionId]);
@@ -304,7 +382,6 @@ export function ChatScreen({route, navigation}: Props) {
         showToast(own ? tr('chat_busy_wait') : trf('chat_too_many_replying', {n: MAX_REPLYING}));
         return false;
       }
-      usePrefsStore.getState().markOnboarded();
       const files = useComposerStore.getState().take();
       chat
         .send(sessionId, text, useAgentStore.getState().currentId, {
@@ -319,6 +396,25 @@ export function ChatScreen({route, navigation}: Props) {
     [sessionId, toBottom],
   );
   const sendText = useCallback((text: string) => send(text), [send]);
+
+  const pickExample = useCallback((text: string) => {
+    setDraft(text);
+    dock.current?.focus();
+  }, []);
+
+  // Who `@` can address: only a shared conversation has anyone besides its owner.
+  const roster = useMemo<AgentBadge[]>(
+    () => (team && team.members.length ? [team.owner, ...team.members.filter(m => m.available !== false)] : []),
+    [team],
+  );
+  const searchFiles = useCallback(
+    async (q: string) =>
+      (await searchWorkspace(q, sessionId, agentParam(useAgentStore.getState().currentId))).results ?? [],
+    [sessionId],
+  );
+  const pickFile = useCallback((hit: WorkspaceHit) => {
+    useComposerStore.getState().addRef(hit.path, hit.name);
+  }, []);
 
   const sendVoice = useCallback(
     async (rec: Recording) => {
@@ -462,65 +558,105 @@ export function ChatScreen({route, navigation}: Props) {
     [sessionItem],
   );
 
+  const togglePin = useCallback(() => {
+    setSessionOpen(false);
+    const item = sessionItem();
+    useSessionStore
+      .getState()
+      .setPinned(item, !item.pinned)
+      .then(() => showToast(item.pinned ? tr('session_unpinned') : tr('session_pinned')))
+      .catch(e => showToast(trf('common_save_failed_detail', {error: errorText(e)})));
+  }, [sessionItem]);
+
   const deleteSession = useCallback(async () => {
     try {
       await useSessionStore.getState().remove(sessionItem());
+      forgetSession(sessionId);
       setDeleteOpen(false);
       startNewChat();
     } catch (e) {
       setDeleteOpen(false);
       showToast(trf('common_delete_failed', {error: errorText(e)}));
     }
-  }, [sessionItem, startNewChat]);
+  }, [sessionItem, startNewChat, forgetSession, sessionId]);
 
   // Swiping right anywhere pulls the features drawer out under the finger.
   // It runs as a native gesture so the message list cannot steal a sideways
   // drag; sideways scrollers such as code blocks still win their own drags.
   // Built once: a detector handed a new gesture can stop answering touches, so
-  // the open state is read from a ref instead of toggling `enabled`.
+  // what decides a touch lives in shared values instead of toggling `enabled`.
+  // The callbacks are worklets: only there can a touch be failed outright.
   const drawerRef = useRef<SlideDrawerHandle>(null);
-  const drawerOpenRef = useRef(drawerOpen);
-  drawerOpenRef.current = drawerOpen;
+  const swipeBlocked = useSharedValue(false);
+  const bandTop = useSharedValue(-1);
+  const bandBottom = useSharedValue(-1);
+  useEffect(() => {
+    swipeBlocked.value = drawerOpen;
+  }, [drawerOpen, swipeBlocked]);
+  const onCardsBand = useCallback(
+    (band: {top: number; bottom: number} | null) => {
+      bandTop.value = band ? band.top : -1;
+      bandBottom.value = band ? band.bottom : -1;
+    },
+    [bandTop, bandBottom],
+  );
+  const swipeStart = useCallback(() => {
+    Keyboard.dismiss();
+    setDrawerView('menu');
+    setDrawerNested(false);
+    refreshDrawer();
+  }, [refreshDrawer]);
+  const swipeMove = useCallback((dx: number) => drawerRef.current?.drag(dx), []);
+  const swipeEnd = useCallback((success: boolean, dx: number, vx: number) => {
+    // Pan velocity is in px/s; the drawer's fling threshold is px/ms.
+    const opened = success ? drawerRef.current?.release(dx, vx / 1000) : drawerRef.current?.release(0, 0);
+    setDrawerOpen(!!opened);
+  }, []);
   const drawerSwipe = useMemo(
     () =>
       Gesture.Pan()
-        .runOnJS(true)
         .activeOffsetX(12)
         .failOffsetX(-12)
         .failOffsetY([-14, 14])
-        .onTouchesDown((_, manager) => {
-          if (drawerOpenRef.current) {
+        .onTouchesDown((e, manager) => {
+          'worklet';
+          const y = e.allTouches[0]?.absoluteY ?? -1;
+          if (swipeBlocked.value || (y >= bandTop.value && y <= bandBottom.value)) {
             manager.fail();
           }
         })
         .onStart(() => {
-          Keyboard.dismiss();
-          setDrawerView('menu');
-          setDrawerNested(false);
-          refreshDrawer();
+          'worklet';
+          scheduleOnRN(swipeStart);
         })
-        .onUpdate(e => drawerRef.current?.drag(e.translationX))
+        .onUpdate(e => {
+          'worklet';
+          scheduleOnRN(swipeMove, e.translationX);
+        })
         .onEnd((e, success) => {
-          // Pan velocity is in px/s; the drawer's fling threshold is px/ms.
-          const opened = success
-            ? drawerRef.current?.release(e.translationX, e.velocityX / 1000)
-            : drawerRef.current?.release(0, 0);
-          if (opened) {
-            setDrawerOpen(true);
-          }
+          'worklet';
+          scheduleOnRN(swipeEnd, success, e.translationX, e.velocityX);
         }),
-    [refreshDrawer],
+    [swipeBlocked, bandTop, bandBottom, swipeStart, swipeMove, swipeEnd],
   );
 
   // Inverted list keeps the newest message pinned to the bottom while streaming.
   const data = useMemo(() => [...messages].reverse(), [messages]);
   // A shared conversation names whoever said each reply.
   const shared = teamSize > 0;
+  const openContext = useCallback(() => {
+    setContextOnly(true);
+    setSessionOpen(true);
+  }, []);
   const renderItem = useCallback(
-    ({item}: {item: ChatMessage}) => <MessageItem message={item} labelled={shared} />,
-    [shared],
+    ({item}: {item: ChatMessage}) => <MessageItem message={item} labelled={shared} onOpenContext={openContext} />,
+    [shared, openContext],
   );
   const empty = messages.length === 0;
+  emptyRef.current = empty;
+  // A conversation that exists, or already has teammates, is about itself rather than about who to start one with.
+  const showInfo = !empty || teamSize > 0;
+  const crew = team && teamSize > 0 ? [team.owner, ...team.members] : null;
 
   return (
     <GestureDetector gesture={drawerSwipe}>
@@ -537,33 +673,32 @@ export function ChatScreen({route, navigation}: Props) {
           </View>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={trf('chat_agent_a11y', {
+            accessibilityLabel={trf(showInfo ? 'chat_info_a11y' : 'chat_agent_a11y', {
               name: agent?.name ?? 'CowAgent',
               team: teamSize ? trf('chat_agent_a11y_team', {n: teamSize}) : '',
             })}
-            onPress={() => setAgentSheetOpen(true)}
+            onPress={() => {
+              if (showInfo) {
+                setContextOnly(false);
+                setSessionOpen(true);
+              } else {
+                setAgentSheetOpen(true);
+              }
+            }}
             style={({pressed}) => [styles.agent, pressed && styles.agentPressed]}>
-            <AgentAvatar
-              agent={agent}
-              isDefault={!agent || agent.id === defaultAgentId}
-              size={24}
-            />
-            <Text style={styles.agentName} numberOfLines={1}>
-              {agent?.name ?? 'CowAgent'}
-            </Text>
-            {teamSize > 0 && (
-              <View style={styles.teamBadge}>
-                <Text style={styles.teamBadgeText}>+{teamSize}</Text>
-              </View>
+            {crew ? (
+              <AvatarStack agents={crew} defaultId={defaultAgentId} />
+            ) : (
+              <AgentAvatar agent={agent} isDefault={!agent || agent.id === defaultAgentId} size={24} />
             )}
+            <Text style={styles.agentName} numberOfLines={1}>
+              {crew ? crew.map(a => a.name).join(tr('chat_names_sep')) : (agent?.name ?? 'CowAgent')}
+            </Text>
             <Icon icon={faChevronDown} size={8} color={t.t3} />
           </Pressable>
           <View style={styles.topRight}>
-            {(!empty || agentCount > 1) && (
-              <IconButton icon={faEllipsis} label={tr('session_current')} onPress={() => setSessionOpen(true)} size={15} />
-            )}
             {!empty && (
-              <IconButton icon={faPlus} label={tr('session_new')} onPress={startNewChat} filled size={14} />
+              <IconButton icon={faPlus} label={tr('session_new')} onPress={startNewChat} size={18} />
             )}
           </View>
         </View>
@@ -578,47 +713,50 @@ export function ChatScreen({route, navigation}: Props) {
               </View>
             ) : (
               <Intro
-                firstRun={!onboarded}
-                recent={recent}
-                onPick={sendText}
-                onOpenSession={openSession}
+                agent={agent}
+                isDefault={!agent || agent.id === defaultAgentId}
+                onPick={pickExample}
+                onCardsBand={onCardsBand}
                 onSetupModel={modelMissing ? () => navigation.navigate('Models') : undefined}
               />
             )
           ) : (
-            <View style={styles.body}>
-              <FlatList
-                ref={list}
-                inverted
-                data={data}
-                keyExtractor={m => m.id}
-                renderItem={renderItem}
-                contentContainerStyle={styles.list}
-                keyboardShouldPersistTaps="handled"
-                keyboardDismissMode="interactive"
-                maintainVisibleContentPosition={KEEP_POSITION}
-                onScroll={onListScroll}
-                scrollEventThrottle={32}
-              />
-              {away && (
-                <Animated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(120)} style={styles.toBottom}>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={unread ? tr('chat_back_to_latest_unread') : tr('chat_back_to_latest')}
-                    onPress={toBottom}
-                    hitSlop={8}
-                    style={({pressed}) => [styles.toBottomButton, pressed && styles.agentPressed]}>
-                    <Icon icon={faArrowDown} size={13} color={t.t2} />
-                    {unread && <View style={styles.unreadDot} />}
-                  </Pressable>
-                </Animated.View>
-              )}
-            </View>
+            <ListShiftContext.Provider value={shiftList}>
+              <View style={styles.body}>
+                <FlatList
+                  ref={list}
+                  inverted
+                  data={data}
+                  keyExtractor={m => m.id}
+                  renderItem={renderItem}
+                  contentContainerStyle={styles.list}
+                  keyboardShouldPersistTaps="handled"
+                  keyboardDismissMode="interactive"
+                  maintainVisibleContentPosition={KEEP_POSITION}
+                  onScroll={onListScroll}
+                  scrollEventThrottle={32}
+                />
+                {away && (
+                  <Animated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(120)} style={styles.toBottom}>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={unread ? tr('chat_back_to_latest_unread') : tr('chat_back_to_latest')}
+                      onPress={toBottom}
+                      hitSlop={8}
+                      style={({pressed}) => [styles.toBottomButton, pressed && styles.agentPressed]}>
+                      <Icon icon={faArrowDown} size={12} color={t.t2} />
+                      {unread && <View style={styles.unreadDot} />}
+                    </Pressable>
+                  </Animated.View>
+                )}
+              </View>
+            </ListShiftContext.Provider>
           )}
           <Dock
+            ref={dock}
             text={draft}
             onChangeText={setDraft}
-            placeholder={empty ? tr('composer_placeholder_empty') : tr('composer_placeholder_followup')}
+            placeholder={shared ? tr('composer_placeholder_team') : tr('composer_placeholder')}
             busy={busy}
             onSend={sendText}
             onStop={() => {
@@ -632,14 +770,16 @@ export function ChatScreen({route, navigation}: Props) {
               useComposerStore.getState().retry(id, sessionId, useAgentStore.getState().currentId)
             }
             onOpenAttach={() => setAttachOpen(true)}
-            model={settings?.model.model}
-            modelPinned={settings?.model.source === 'session'}
+            model={modelDisplayName(settings?.model)}
             onOpenModel={() => openSettingsSheet(setModelOpen)}
             permission={settings?.permission.mode}
-            permissionPinned={settings?.permission.source === 'session'}
             onOpenPermission={() => openSettingsSheet(setPermissionOpen)}
+            roster={roster}
+            defaultAgentId={defaultAgentId}
+            searchFiles={searchFiles}
+            onPickFile={pickFile}
           />
-          <View style={{height: insets.bottom}} />
+          {!keyboardShown && <View style={{height: insets.bottom}} />}
         </KeyboardAvoidingView>
 
         <VoiceOverlay />
@@ -656,6 +796,7 @@ export function ChatScreen({route, navigation}: Props) {
             currentSessionId={sessionId}
             onNewChat={startNewChat}
             onOpenSession={openSession}
+            onSessionActions={setActingSession}
             onNavigate={goTo}
             onOpenFile={openMenuFile}
             onOpenLink={openLink}
@@ -708,12 +849,26 @@ export function ChatScreen({route, navigation}: Props) {
         <SessionSheet
           visible={sessionOpen}
           onClose={() => setSessionOpen(false)}
+          title={contextOnly ? tr('session_ctx_title') : sessionItem().title || tr('session_untitled')}
+          contextOnly={contextOnly}
           sessionId={sessionId}
           agentId={currentAgentId}
           isNew={!!isNew && empty}
           replying={busy}
+          pinned={pinned}
+          onTogglePin={togglePin}
           onRename={() => fromSessionSheet(() => setRenameOpen(true))}
           onDelete={() => fromSessionSheet(() => setDeleteOpen(true))}
+        />
+        <SessionActions
+          session={actingSession}
+          onClose={() => setActingSession(null)}
+          onDeleted={s => {
+            forgetSession(s.session_id);
+            if (s.session_id === sessionId) {
+              startNewChat();
+            }
+          }}
         />
         <FieldSheet
           visible={renameOpen}
@@ -773,18 +928,29 @@ const useStyles = makeStyles(t => ({
     backgroundColor: t.bg2,
   },
   agentPressed: {backgroundColor: t.bg3},
-  teamBadge: {paddingHorizontal: 6, paddingVertical: 1, borderRadius: 999, backgroundColor: t.accentSoft},
-  teamBadgeText: {fontSize: 11, fontWeight: '600', color: t.accent, fontVariant: ['tabular-nums']},
+  stack: {flexDirection: 'row', alignItems: 'center'},
+  stackItem: {borderRadius: 9, borderWidth: 1.5, borderColor: t.bg2, overflow: 'hidden', backgroundColor: t.bg2},
+  stackOverlap: {marginLeft: -9},
+  stackMore: {
+    width: 24,
+    height: 24,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: t.bg3,
+  },
+  stackMoreText: {fontSize: 10, fontWeight: '600', color: t.t2, fontVariant: ['tabular-nums']},
   agentName: {fontSize: 15, fontWeight: '500', letterSpacing: -0.2, color: t.t1, flexShrink: 1},
   body: {flex: 1},
   center: {flex: 1, alignItems: 'center', justifyContent: 'center'},
   // The list is inverted: flex-end is the visual top, so a short conversation starts there.
   list: {flexGrow: 1, justifyContent: 'flex-end', paddingTop: 20, paddingBottom: 8},
-  toBottom: {position: 'absolute', alignSelf: 'center', bottom: 10},
+  toBottom: {position: 'absolute', right: 22, bottom: 10},
+  // No elevation: Android draws a fading elevated circle's shadow as a jagged polygon.
   toBottomButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: t.isDark ? t.bg2 : t.bg0,
@@ -794,7 +960,6 @@ const useStyles = makeStyles(t => ({
     shadowOpacity: t.isDark ? 0 : 0.08,
     shadowRadius: 8,
     shadowOffset: {width: 0, height: 2},
-    elevation: t.isDark ? 0 : 3,
   },
   unreadDot: {
     position: 'absolute',
@@ -808,3 +973,28 @@ const useStyles = makeStyles(t => ({
     borderColor: t.isDark ? t.bg2 : t.bg0,
   },
 }));
+
+const STACK_MAX = 3;
+
+/** Overlapping faces for a shared conversation: owner first, then teammates. */
+function AvatarStack({agents, defaultId}: {agents: AgentBadge[]; defaultId: string | null}) {
+  const styles = useStyles();
+  const shown = agents.slice(0, STACK_MAX);
+  const rest = agents.length - shown.length;
+  return (
+    <View style={styles.stack}>
+      {shown.map((a, i) => (
+        <View key={a.id} style={[styles.stackItem, i > 0 && styles.stackOverlap, {zIndex: STACK_MAX - i}]}>
+          <AgentAvatar agent={a} isDefault={a.id === defaultId} size={24} />
+        </View>
+      ))}
+      {rest > 0 && (
+        <View style={[styles.stackItem, styles.stackOverlap]}>
+          <View style={styles.stackMore}>
+            <Text style={styles.stackMoreText}>+{rest}</Text>
+          </View>
+        </View>
+      )}
+    </View>
+  );
+}

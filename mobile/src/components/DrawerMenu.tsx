@@ -50,6 +50,7 @@ export function DrawerMenu({
   currentSessionId,
   onNewChat,
   onOpenSession,
+  onSessionActions,
   onNavigate,
   onOpenFile,
   onOpenLink,
@@ -62,6 +63,8 @@ export function DrawerMenu({
   currentSessionId: string;
   onNewChat: () => void;
   onOpenSession: (session: SessionItem) => void;
+  /** Long press on a conversation: pin, rename, delete. */
+  onSessionActions: (session: SessionItem) => void;
   onNavigate: (route: DrawerRoute) => void;
   onOpenFile: (file: ChatFile) => void;
   onOpenLink: (label: string, url: string, external: boolean) => void;
@@ -125,6 +128,7 @@ export function DrawerMenu({
           onBack={nested ? () => onViewChange('menu') : undefined}
           onNewChat={onNewChat}
           onOpenSession={onOpenSession}
+          onSessionActions={onSessionActions}
           onViewAll={() => onNavigate('Sessions')}
         />
       </View>
@@ -206,6 +210,7 @@ function SessionList({
   onBack,
   onNewChat,
   onOpenSession,
+  onSessionActions,
   onViewAll,
 }: {
   currentSessionId: string;
@@ -213,12 +218,14 @@ function SessionList({
   onBack?: () => void;
   onNewChat: () => void;
   onOpenSession: (session: SessionItem) => void;
+  onSessionActions: (session: SessionItem) => void;
   onViewAll: () => void;
 }) {
   const t = useTheme();
   const styles = useStyles();
   const sessions = useSessionStore(s => s.sessions);
   const total = useSessionStore(s => s.total);
+  const shown = Math.min(sessions.length, RECENT_LIMIT);
   const groups = useMemo(() => groupSessions(sessions.slice(0, RECENT_LIMIT)), [sessions]);
   return (
     <>
@@ -259,12 +266,13 @@ function SessionList({
                 meta={g.key === 'yesterday' ? clockTime(s.last_active) : shortTime(s.last_active)}
                 active={s.session_id === currentSessionId}
                 onPress={() => onOpenSession(s)}
+                onLongPress={() => onSessionActions(s)}
               />
             ))}
           </React.Fragment>
         ))}
         {!groups.length && <Text style={styles.empty}>{tr('menu_no_chats')}</Text>}
-        {total > 0 && (
+        {total > shown && (
           <Pressable accessibilityRole="button" hitSlop={6} onPress={onViewAll} style={styles.more}>
             <Text style={styles.moreText}>{trf('menu_view_all', {n: total})}</Text>
           </Pressable>
@@ -282,6 +290,7 @@ function Item({
   external,
   dim,
   onPress,
+  onLongPress,
 }: {
   icon: IconDefinition;
   label: string;
@@ -292,6 +301,7 @@ function Item({
   external?: boolean;
   dim?: boolean;
   onPress: () => void;
+  onLongPress?: () => void;
 }) {
   const t = useTheme();
   const styles = useStyles();
@@ -299,7 +309,10 @@ function Item({
     <Pressable
       accessibilityRole={external ? 'link' : 'button'}
       accessibilityState={{selected: active, disabled: dim}}
+      accessibilityHint={onLongPress ? tr('session_row_hint') : undefined}
       onPress={onPress}
+      onLongPress={onLongPress}
+      delayLongPress={350}
       style={({pressed}) => [styles.item, active && styles.itemActive, pressed && !active && styles.pressed]}>
       <View style={styles.itemIcon}>
         <Icon icon={icon} size={15} color={active ? t.accent : dim ? t.t4 : t.t2} />

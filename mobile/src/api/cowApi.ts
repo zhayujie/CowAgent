@@ -58,6 +58,7 @@ import type {
   UploadedFile,
   VersionInfo,
   VoiceReplyMode,
+  WorkspaceHit,
   WorkspaceText,
 } from '../protocol/resources';
 import {appendFile, type PickedFile} from '../media/types';
@@ -740,6 +741,13 @@ export async function getMemoryContent(filename: string, category: MemoryCategor
 /** No session: memory lives in the Agent's state root, not in whatever project a session has open. */
 export async function readWorkspaceText(path: string, agentId?: string) {
   return http.request<WorkspaceText>(`/api/workspace/read?${query({path, agent_id: agentId})}`);
+}
+
+/** Files and folders whose name matches `q`, rooted where the session works. */
+export async function searchWorkspace(q: string, sessionId?: string, agentId?: string, limit = 12) {
+  return http.request<{results: WorkspaceHit[]}>(
+    `/api/workspace/search?${query({q, limit, session: sessionId, agent_id: agentId})}`,
+  );
 }
 
 /** A stale `expectedMtime` fails with an ApiError whose body carries `code: "conflict"`. */

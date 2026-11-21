@@ -5,7 +5,6 @@ import {
   faEye,
   faLockOpen,
   faMagnifyingGlass,
-  faMicrochip,
   faShieldHalved,
   faWandMagicSparkles,
 } from '@fortawesome/free-solid-svg-icons';
@@ -142,6 +141,15 @@ export function AttachSheet({
 
 const providerLabel = (p: ModelProvider) => localizedLabel(p.label, p.id);
 
+/** What the composer shows for the model this conversation runs on. */
+export function modelDisplayName(state?: SessionSettings['model']): string | undefined {
+  if (!state) {
+    return undefined;
+  }
+  const provider = state.providers.find(p => p.id === state.provider);
+  return provider?.labels?.[state.model] || state.model;
+}
+
 export function ModelSheet({
   visible,
   onClose,
@@ -160,15 +168,16 @@ export function ModelSheet({
   const providers = useMemo(() => state?.providers ?? [], [state]);
   const total = providers.reduce((n, p) => n + p.models.length, 0);
   const pinned = state?.source === 'session';
-  const fallback = state?.agent ?? state?.global;
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) {
       return providers;
     }
+    const hit = (p: ModelProvider, m: string) =>
+      m.toLowerCase().includes(q) || !!p.labels?.[m]?.toLowerCase().includes(q);
     return providers
-      .map(p => ({...p, models: p.models.filter(m => m.toLowerCase().includes(q))}))
+      .map(p => ({...p, models: p.models.filter(m => hit(p, m))}))
       .filter(p => p.models.length || providerLabel(p).toLowerCase().includes(q));
   }, [providers, query]);
 
@@ -186,24 +195,6 @@ export function ModelSheet({
         </View>
       ) : (
         <>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityState={{selected: !pinned}}
-            onPress={() => onSelect(null)}
-            style={({pressed}) => [styles.row, pressed && styles.rowPressed]}>
-            <View style={styles.rowIcon}>
-              <Icon icon={faMicrochip} size={13} color={t.t2} />
-            </View>
-            <View style={styles.rowBody}>
-              <Text style={styles.rowName}>{tr('composer_model_follow_default')}</Text>
-              <Text style={styles.rowDesc} numberOfLines={1}>
-                {state.agent ? tr('composer_model_agent_default') : tr('composer_model_global_default')} ·{' '}
-                {fallback?.model || tr('common_not_configured')}
-              </Text>
-            </View>
-            {!pinned && <Icon icon={faCheck} size={13} color={t.accent} />}
-          </Pressable>
-
           {total > SEARCH_THRESHOLD && (
             <View style={styles.search}>
               <Icon icon={faMagnifyingGlass} size={12} color={t.t3} />
@@ -228,19 +219,18 @@ export function ModelSheet({
               <View key={p.id} style={styles.group}>
                 <GroupLabel style={styles.groupLabel}>{providerLabel(p)}</GroupLabel>
                 {p.models.map(m => {
-                  const current = m === state.model && p.id === state.provider;
-                  const active = pinned && current;
+                  const active = m === state.model && p.id === state.provider;
                   return (
                     <Pressable
                       key={m}
                       accessibilityRole="button"
                       accessibilityState={{selected: active}}
-                      onPress={() => onSelect({provider: p.id, model: m})}
+                      // Tapping the pinned model again drops the pin and follows the default.
+                      onPress={() => onSelect(active && pinned ? null : {provider: p.id, model: m})}
                       style={({pressed}) => [styles.modelRow, pressed && styles.rowPressed]}>
                       <Text style={[styles.modelName, active && styles.modelActive]} numberOfLines={1}>
-                        {m}
+                        {p.labels?.[m] || m}
                       </Text>
-                      {current && !pinned && <Text style={styles.tag}>{tr('chat_default')}</Text>}
                       {active && <Icon icon={faCheck} size={13} color={t.accent} />}
                     </Pressable>
                   );
@@ -375,14 +365,5 @@ const useStyles = makeStyles(t => ({
   },
   modelName: {flex: 1, fontSize: 14, color: t.t1},
   modelActive: {color: t.accent, fontWeight: '600'},
-  tag: {
-    fontSize: 11,
-    color: t.t3,
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: 4,
-    backgroundColor: t.bg2,
-    overflow: 'hidden',
-  },
   empty: {fontSize: 13, lineHeight: 20, color: t.t3, paddingHorizontal: 12, paddingVertical: 20},
 }));
