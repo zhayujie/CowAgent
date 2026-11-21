@@ -21,3 +21,8 @@ hvigor/hvigor-wrapper.js
 # JS bundles, built by `npm run bundle:harmony:release`
 /entry/src/main/resources/rawfile/*.hbc
 /entry/src/main/resources/rawfile/*.js
+
+# The embedded agent kernel: the Python runtime from mobile/kernel/harmony_prepare.py,
+# staged into rawfile with the kernel sources on every build
+/cow-python
+/entry/src/main/resources/rawfile/cow-kernel

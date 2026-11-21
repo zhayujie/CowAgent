@@ -41,3 +41,18 @@ target_link_libraries(rnoh_app PUBLIC
     rnoh_screens
     rnoh_svg
 )
+
+# The embedded agent kernel. Without the runtime from mobile/kernel/harmony_prepare.py
+# for this ABI it builds as a stub, and the app offers remote servers only.
+set(COW_PYTHON_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../../cow-python/${OHOS_ARCH}")
+add_library(cowkernel SHARED "./kernel/CowKernel.cpp")
+set_target_properties(cowkernel PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
+target_link_libraries(cowkernel PRIVATE libace_napi.z.so)
+if(EXISTS "${COW_PYTHON_DIR}/lib/libcowpython.a")
+    message(STATUS "cowkernel: embedding Python from ${COW_PYTHON_DIR}")
+    target_compile_definitions(cowkernel PRIVATE COW_KERNEL_PYTHON=1)
+    target_include_directories(cowkernel PRIVATE "${COW_PYTHON_DIR}/include/python3.13")
+    target_link_libraries(cowkernel PRIVATE "${COW_PYTHON_DIR}/lib/libcowpython.a" libhilog_ndk.z.so z m)
+else()
+    message(STATUS "cowkernel: no Python runtime for ${OHOS_ARCH}, building the stub")
+endif()
