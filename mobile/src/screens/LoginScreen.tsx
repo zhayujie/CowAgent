@@ -12,8 +12,6 @@ import {
   ActivityIndicator,
   BackHandler,
   Image,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
   ScrollView,
   Text,
@@ -34,6 +32,7 @@ import {isLocalKernelAvailable, LOCAL_SERVER_ID, localDeviceName} from '../kerne
 import {activeServer, describeConnectError, useServerStore} from '../store/serverStore';
 import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
+import {AvoidKeyboard} from '../components/AvoidKeyboard';
 
 type Step = 'welcome' | 'manual';
 type Where = 'local' | 'remote';
@@ -198,7 +197,7 @@ export function LoginScreen() {
   );
 
   return (
-    <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <AvoidKeyboard style={styles.root}>
       <ScrollView
         contentContainerStyle={[styles.body, {paddingTop: insets.top + 12, paddingBottom: insets.bottom + 32}]}
         keyboardShouldPersistTaps="handled">
@@ -331,7 +330,7 @@ export function LoginScreen() {
         onClose={() => setRemoteOpen(false)}
       />
       <QrScanner visible={scanning} onClose={() => setScanning(false)} onScanned={onScanned} onManual={toManual} />
-    </KeyboardAvoidingView>
+    </AvoidKeyboard>
   );
 }
 

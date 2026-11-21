@@ -20,6 +20,7 @@ class MainApplication : Application(), ReactApplication {
           add(CowKernelPackage())
           add(CowDownloadsPackage())
           add(CowQrScannerPackage())
+          add(CowSystemBarsPackage())
         },
     )
   }

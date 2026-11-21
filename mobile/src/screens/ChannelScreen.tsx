@@ -3,8 +3,6 @@ import type {StackScreenProps} from '@react-navigation/stack';
 import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
   ScrollView,
   Text,
@@ -45,6 +43,7 @@ import {
   localized,
   missingFields,
 } from '../utils/channels';
+import {AvoidKeyboard} from '../components/AvoidKeyboard';
 
 type Props = StackScreenProps<RootStackParamList, 'Channel'>;
 type Params = RootStackParamList['Channel'];
@@ -277,7 +276,7 @@ export function ChannelScreen({navigation, route}: Props) {
         title={creating ? trf('channel_add_named', {name: label}) : channelTitle(target)}
         onBack={navigation.goBack}
       />
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <AvoidKeyboard style={styles.flex}>
         <ScrollView
           contentContainerStyle={[styles.body, {paddingBottom: insets.bottom + 32}]}
           keyboardShouldPersistTaps="handled">
@@ -369,7 +368,7 @@ export function ChannelScreen({navigation, route}: Props) {
             />
           )}
         </ScrollView>
-      </KeyboardAvoidingView>
+      </AvoidKeyboard>
 
       <FieldSheet
         visible={sheet === 'rename'}

@@ -1,6 +1,6 @@
 import type {StackScreenProps} from '@react-navigation/stack';
 import React, {useEffect, useRef, useState} from 'react';
-import {KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, View} from 'react-native';
+import {ScrollView, Text, TextInput, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {createSkill} from '../api/cowApi';
 import {ActionButton, ConfirmSheet, Footnote, MONO} from '../components/settings';
@@ -11,6 +11,7 @@ import type {RootStackParamList} from '../navigation/types';
 import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
 import {skillErrorText} from './SkillsScreen';
+import {AvoidKeyboard} from '../components/AvoidKeyboard';
 
 type Props = StackScreenProps<RootStackParamList, 'SkillCreate'>;
 
@@ -91,7 +92,7 @@ export function SkillCreateScreen({navigation}: Props) {
   return (
     <View style={styles.root}>
       <PageHeader title={tr('skill_create')} onBack={navigation.goBack} />
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <AvoidKeyboard style={styles.flex}>
         <ScrollView contentContainerStyle={[styles.body, {paddingBottom: insets.bottom + 32}]} keyboardShouldPersistTaps="handled">
           <Text style={styles.label}>{tr('common_name')}</Text>
           {field(name, setName, {placeholder: tr('skill_create_name_ph')})}
@@ -109,7 +110,7 @@ export function SkillCreateScreen({navigation}: Props) {
           <ActionButton label={tr('skill_create_submit')} tone="primary" loading={busy} onPress={submit} style={styles.submit} />
           <Footnote flush>{tr('skill_create_footnote')}</Footnote>
         </ScrollView>
-      </KeyboardAvoidingView>
+      </AvoidKeyboard>
       <ConfirmSheet
         visible={!!leaving}
         title={tr('skill_create_discard_title')}

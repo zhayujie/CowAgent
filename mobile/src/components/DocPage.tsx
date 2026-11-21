@@ -2,7 +2,7 @@ import type {IconDefinition} from '@fortawesome/fontawesome-svg-core';
 import {faEllipsis, faFloppyDisk, faPen, faRotateLeft} from '@fortawesome/free-solid-svg-icons';
 import type {StackNavigationProp} from '@react-navigation/stack';
 import React, {useCallback, useEffect, useRef, useState} from 'react';
-import {ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View} from 'react-native';
+import {ActivityIndicator, Pressable, ScrollView, Text, TextInput, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {ApiError} from '../api/http';
 import {tr, trf} from '../i18n';
@@ -15,6 +15,7 @@ import {Markdown} from './Markdown';
 import {ConfirmSheet, MONO} from './settings';
 import {showToast, ToastHost} from './Toast';
 import {EmptyState, IconButton, PageHeader} from './ui';
+import {AvoidKeyboard} from './AvoidKeyboard';
 
 export interface LoadedDoc {
   content: string;
@@ -261,7 +262,7 @@ export function DocPage({
       {!doc ? (
         <EmptyState loading={!error} title={tr('common_load_failed')} hint={error ?? undefined} />
       ) : editing ? (
-        <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <AvoidKeyboard style={styles.flex}>
           <TextInput
             value={draft}
             onChangeText={setDraft}
@@ -276,7 +277,7 @@ export function DocPage({
             placeholderTextColor={t.t4}
             style={[styles.editor, {paddingBottom: insets.bottom + 24}]}
           />
-        </KeyboardAvoidingView>
+        </AvoidKeyboard>
       ) : (
         <ScrollView contentContainerStyle={[styles.body, {paddingBottom: insets.bottom + 32}]}>
           {doc.content.trim() ? (

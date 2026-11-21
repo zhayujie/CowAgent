@@ -8,7 +8,6 @@ import {
   BackHandler,
   FlatList,
   Keyboard,
-  KeyboardAvoidingView,
   Platform,
   Pressable,
   Text,
@@ -67,6 +66,7 @@ import {useSessionStore} from '../store/sessionStore';
 import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
 import {chatModelReady} from '../utils/capabilities';
+import {AvoidKeyboard} from '../components/AvoidKeyboard';
 
 type Props = StackScreenProps<RootStackParamList, 'Chat'>;
 
@@ -716,9 +716,7 @@ export function ChatScreen({route, navigation}: Props) {
           </View>
         </View>
 
-        <KeyboardAvoidingView
-          style={styles.body}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <AvoidKeyboard style={styles.body}>
           {empty ? (
             loading ? (
               <View style={styles.center}>
@@ -795,7 +793,7 @@ export function ChatScreen({route, navigation}: Props) {
             onPickFile={pickFile}
           />
           {!keyboardShown && <View style={{height: insets.bottom}} />}
-        </KeyboardAvoidingView>
+        </AvoidKeyboard>
 
         <VoiceOverlay />
         <ToastHost bottom={insets.bottom + 150} />

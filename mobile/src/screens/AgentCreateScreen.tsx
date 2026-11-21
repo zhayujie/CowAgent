@@ -1,7 +1,7 @@
 import {faCamera, faChevronDown} from '@fortawesome/free-solid-svg-icons';
 import type {StackScreenProps} from '@react-navigation/stack';
 import React, {useEffect, useRef, useState} from 'react';
-import {Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View} from 'react-native';
+import {Image, Pressable, ScrollView, Text, TextInput, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {createAgent, uploadAgentAvatar} from '../api/cowApi';
 import {Icon} from '../components/Icon';
@@ -17,6 +17,7 @@ import {describeConnectError} from '../store/serverStore';
 import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
 import {newAgentId} from '../utils/agentId';
+import {AvoidKeyboard} from '../components/AvoidKeyboard';
 
 type Props = StackScreenProps<RootStackParamList, 'AgentCreate'>;
 
@@ -129,7 +130,7 @@ export function AgentCreateScreen({navigation}: Props) {
   return (
     <View style={styles.root}>
       <PageHeader title={tr('agent_create')} onBack={navigation.goBack} />
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <AvoidKeyboard style={styles.flex}>
         <ScrollView contentContainerStyle={{paddingBottom: insets.bottom + 32}} keyboardShouldPersistTaps="handled">
           <View style={styles.body}>
             <View style={styles.avatarRow}>
@@ -178,7 +179,7 @@ export function AgentCreateScreen({navigation}: Props) {
             <ActionButton label={tr('agent_create_submit')} tone="primary" loading={busy} onPress={submit} style={styles.submit} />
           </View>
         </ScrollView>
-      </KeyboardAvoidingView>
+      </AvoidKeyboard>
       <ChoiceSheet
         visible={clonePicker}
         title={tr('agent_clone_from')}

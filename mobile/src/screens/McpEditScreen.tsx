@@ -1,7 +1,7 @@
 import {faChevronRight, faCircleCheck, faCircleXmark} from '@fortawesome/free-solid-svg-icons';
 import type {StackScreenProps} from '@react-navigation/stack';
 import React, {useState} from 'react';
-import {ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View} from 'react-native';
+import {ActivityIndicator, Pressable, ScrollView, Text, TextInput, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {testMcpServer} from '../api/cowApi';
 import {Icon} from '../components/Icon';
@@ -16,6 +16,7 @@ import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
 import {kvToObject, MCP_JSON_PLACEHOLDER, mcpServersToJson, objectToKv, parseMcpJson} from '../utils/mcp';
 import {omit} from '../utils/object';
+import {AvoidKeyboard} from '../components/AvoidKeyboard';
 
 type Props = StackScreenProps<RootStackParamList, 'McpEdit'>;
 type Mode = 'form' | 'json';
@@ -272,7 +273,7 @@ export function McpEditScreen({route, navigation}: Props) {
           {key: 'json', label: 'JSON'},
         ]}
       />
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <AvoidKeyboard style={styles.flex}>
         <ScrollView contentContainerStyle={[styles.body, {paddingBottom: insets.bottom + 32}]} keyboardShouldPersistTaps="handled">
           {mode === 'form' ? (
             <>
@@ -370,7 +371,7 @@ export function McpEditScreen({route, navigation}: Props) {
           </View>
           <Footnote flush>{tr('mcp_edit_footnote')}</Footnote>
         </ScrollView>
-      </KeyboardAvoidingView>
+      </AvoidKeyboard>
     </View>
   );
 }

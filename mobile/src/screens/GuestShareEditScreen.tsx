@@ -1,7 +1,7 @@
 import {faCheck, faChevronDown, faChevronUp, faPlus, faSliders, faXmark} from '@fortawesome/free-solid-svg-icons';
 import type {StackScreenProps} from '@react-navigation/stack';
 import React, {useEffect, useMemo, useState} from 'react';
-import {KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View} from 'react-native';
+import {Pressable, ScrollView, Text, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {createGuestShare, getGuestShare, getGuestShares, setGuestSharePassword, updateGuestShare} from '../api/cowApi';
 import {InfoRow, InputRow, OptionRow, PickerSheet, Section, type PickerOption} from '../components/forms';
@@ -31,6 +31,7 @@ import {
   type ShareDraft,
 } from '../utils/guestShares';
 import {describeShareError} from './GuestSharesScreen';
+import {AvoidKeyboard} from '../components/AvoidKeyboard';
 
 type Props = StackScreenProps<RootStackParamList, 'GuestShareEdit'>;
 
@@ -153,7 +154,7 @@ export function GuestShareEditScreen({navigation, route}: Props) {
         subtitle={share ? share.name || share.slug : tr('share_new_desc')}
         onBack={navigation.goBack}
       />
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <AvoidKeyboard style={styles.flex}>
         <ScrollView contentContainerStyle={{paddingBottom: insets.bottom + 32}} keyboardShouldPersistTaps="handled">
           <Section title={tr('share_section_basic')}>
             <InputRow
@@ -371,7 +372,7 @@ export function GuestShareEditScreen({navigation, route}: Props) {
             style={styles.save}
           />
         </ScrollView>
-      </KeyboardAvoidingView>
+      </AvoidKeyboard>
 
       <PickerSheet
         visible={modelSheet}

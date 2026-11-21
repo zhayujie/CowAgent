@@ -1,6 +1,6 @@
 import type {StackScreenProps} from '@react-navigation/stack';
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
-import {KeyboardAvoidingView, Platform, ScrollView, View} from 'react-native';
+import {ScrollView, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {getModels, setCapability, setVoiceReplyMode} from '../api/cowApi';
 import {InfoRow, InputRow, OptionRow, PickerSheet, Section} from '../components/forms';
@@ -21,6 +21,7 @@ import {
   resolveModels,
   resolveVoices,
 } from '../utils/capabilities';
+import {AvoidKeyboard} from '../components/AvoidKeyboard';
 
 type Props = StackScreenProps<RootStackParamList, 'Capability'>;
 
@@ -225,7 +226,7 @@ export function CapabilityScreen({navigation, route}: Props) {
   return (
     <View style={styles.root}>
       <PageHeader title={meta.title} subtitle={meta.blurb} onBack={navigation.goBack} />
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <AvoidKeyboard style={styles.flex}>
         <ScrollView contentContainerStyle={{paddingBottom: insets.bottom + 32}} keyboardShouldPersistTaps="handled">
           {locked && <Notice style={styles.notice}>{pick.note || tr('settings_cap_locked')}</Notice>}
 
@@ -278,7 +279,7 @@ export function CapabilityScreen({navigation, route}: Props) {
             </>
           )}
         </ScrollView>
-      </KeyboardAvoidingView>
+      </AvoidKeyboard>
 
       <PickerSheet
         visible={sheet === 'model'}

@@ -1,5 +1,5 @@
 import React, {useEffect, useState, type ReactNode} from 'react';
-import {Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, View} from 'react-native';
+import {Keyboard, Modal, Platform, Pressable, StyleSheet, Text, View} from 'react-native';
 import Animated, {Easing, useAnimatedStyle, useSharedValue, withTiming} from 'react-native-reanimated';
 import {scheduleOnRN} from 'react-native-worklets';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
@@ -8,6 +8,7 @@ import {tr} from '../i18n';
 import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
 import {Icon} from './Icon';
+import {AvoidKeyboard} from './AvoidKeyboard';
 
 const EASE = Easing.bezier(0.22, 0.61, 0.36, 1);
 
@@ -83,9 +84,7 @@ export function Sheet({
 
   return (
     <Modal transparent visible animationType="none" onRequestClose={onClose} statusBarTranslucent>
-      <KeyboardAvoidingView
-        style={[styles.root, {paddingBottom: keyboardHeight}]}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <AvoidKeyboard style={[styles.root, {paddingBottom: keyboardHeight}]}>
         <Animated.View style={[StyleSheet.absoluteFill, styles.scrim, scrim]}>
           <Pressable style={styles.fill} onPress={onClose} accessibilityLabel={tr('common_close')} />
         </Animated.View>
@@ -112,7 +111,7 @@ export function Sheet({
           )}
           {children}
         </Animated.View>
-      </KeyboardAvoidingView>
+      </AvoidKeyboard>
     </Modal>
   );
 }

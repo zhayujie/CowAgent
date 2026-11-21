@@ -1,6 +1,6 @@
 import type {StackScreenProps} from '@react-navigation/stack';
 import React, {useCallback, useEffect, useState} from 'react';
-import {KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View} from 'react-native';
+import {Pressable, ScrollView, Text, TextInput, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {getAgentFile, saveAgentFile} from '../api/cowApi';
 import {ApiError} from '../api/http';
@@ -14,6 +14,7 @@ import type {RootStackParamList} from '../navigation/types';
 import {describeConnectError} from '../store/serverStore';
 import {makeStyles, useTheme} from '../theme/theme';
 import {CORE_FILE_META} from './AgentDetailScreen';
+import {AvoidKeyboard} from '../components/AvoidKeyboard';
 
 type Props = StackScreenProps<RootStackParamList, 'AgentFile'>;
 
@@ -101,7 +102,7 @@ export function AgentFileScreen({route, navigation}: Props) {
       {!file ? (
         <EmptyState loading={!error} title={tr('common_load_failed')} hint={error ?? undefined} />
       ) : editing ? (
-        <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <AvoidKeyboard style={styles.flex}>
           <TextInput
             value={draft}
             onChangeText={setDraft}
@@ -116,7 +117,7 @@ export function AgentFileScreen({route, navigation}: Props) {
             placeholderTextColor={t.t4}
             style={[styles.editor, {paddingBottom: insets.bottom + 24}]}
           />
-        </KeyboardAvoidingView>
+        </AvoidKeyboard>
       ) : (
         <ScrollView contentContainerStyle={[styles.body, {paddingBottom: insets.bottom + 32}]}>
           {file.content.trim() ? (

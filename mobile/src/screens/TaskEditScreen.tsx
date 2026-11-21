@@ -3,8 +3,6 @@ import type {StackScreenProps} from '@react-navigation/stack';
 import React, {useEffect, useMemo, useState} from 'react';
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
   ScrollView,
   Text,
@@ -34,6 +32,7 @@ import {describeConnectError} from '../store/serverStore';
 import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
 import {dateVars, daysAgo, fullTime, pad, startOfDay, toDate} from '../utils/format';
+import {AvoidKeyboard} from '../components/AvoidKeyboard';
 
 type Props = StackScreenProps<RootStackParamList, 'TaskEdit'>;
 type OpenSheet = 'schedule' | 'action' | 'instance' | 'recipient' | 'once' | 'delete' | 'run' | null;
@@ -355,7 +354,7 @@ export function TaskEditScreen({navigation, route}: Props) {
   return (
     <View style={styles.root}>
       <PageHeader title={task ? tr('task_edit_title') : tr('task_add_title')} onBack={navigation.goBack} />
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <AvoidKeyboard style={styles.flex}>
         <ScrollView contentContainerStyle={[styles.body, {paddingBottom: insets.bottom + 32}]} keyboardShouldPersistTaps="handled">
           <Text style={styles.label}>{tr('task_name')}</Text>
           {field(name, setName, {placeholder: tr('task_name'), label: tr('task_name')})}
@@ -489,7 +488,7 @@ export function TaskEditScreen({navigation, route}: Props) {
             </View>
           )}
         </ScrollView>
-      </KeyboardAvoidingView>
+      </AvoidKeyboard>
 
       <ChoiceSheet
         visible={sheet === 'schedule'}
