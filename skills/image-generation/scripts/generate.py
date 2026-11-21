@@ -274,7 +274,7 @@ def _default_quality(model: str, quality: str | None) -> str | None:
 class OpenAIProvider(ImageProvider):
     """Provider for OpenAI Image API (generations + edits)."""
 
-    DEFAULT_MODEL = "gpt-image-2.6-flare"
+    DEFAULT_MODEL = "gpt-image-2.5-flare"
 
     def __init__(self, api_key: str, api_base: str, model: str):
         self.api_key = api_key
@@ -432,7 +432,7 @@ class OpenAIProvider(ImageProvider):
 class LinkAIProvider(ImageProvider):
     """Provider for LinkAI unified image generation API."""
 
-    DEFAULT_MODEL = "gpt-image-2.6-flare"
+    DEFAULT_MODEL = "gpt-image-2.5-flare"
 
     def __init__(self, api_key: str, api_base: str, model: str):
         self.api_key = api_key

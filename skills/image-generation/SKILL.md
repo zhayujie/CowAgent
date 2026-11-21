@@ -20,12 +20,12 @@ Generate and edit images using AI models. The script automatically picks a backe
 
 Supported models (passed via `model` only when the user asks for a specific one):
 
-- **OpenAI** — `gpt-image-2.6-flare` (recommended default), `gpt-image-2.6-sunburst`, `gpt-image-2.5-flare`, `gpt-image-2.5-sunburst`, `gpt-image-2`, `gpt-image-1`
+- **OpenAI** — `gpt-image-2.5-flare` (recommended default: best quality/latency trade-off), `gpt-image-2.5-sunburst` (highest editing precision), `gpt-image-2.6-flare`, `gpt-image-2.6-sunburst`, `gpt-image-2`, `gpt-image-1`
 - **Gemini Nano Banana** — `nano-banana-2`, `nano-banana-pro`, `nano-banana`
 - **Seedream (Volcengine Ark)** — `seedream-5.0-lite`, `seedream-4.5`
 - **Qwen (DashScope)** — `qwen-image-2.0`, `qwen-image-2.0-pro`
 - **MiniMax** — `image-01`
-- **CowAgent** — `gpt-image-2.6-flare`, `gpt-image-2.6-sunburst`, `gemini-nano-banana-2.1`, `gpt-image-2.5-flare`, `gpt-image-2.5-sunburst`, `gemini-3.1-flash-image`, `gemini-3-pro-image`, `seedream-5.0-pro`, `seedream-5.0-lite`
+- **CowAgent** — `gpt-image-2.5-flare`, `gpt-image-2.5-sunburst`, `gpt-image-2.6-flare`, `gpt-image-2.6-sunburst`, `gemini-nano-banana-2.1`, `gemini-3.1-flash-image`, `gemini-3-pro-image`, `seedream-5.0-pro`, `seedream-5.0-lite`
 
 ## Usage
 
