@@ -251,7 +251,8 @@
 /* Compact attachment chips/thumbnails so adding one barely grows the card. */
 .composer-card .att-thumb { width: 34px; height: 34px; }
 .composer-card .att-chip { padding: 3px 24px 3px 8px; font-size: 11px; }
-.composer-card .att-remove { top: 1px; right: 1px; width: 15px; height: 15px; line-height: 15px; font-size: 10px; }
+.composer-card .att-remove { top: 1px; right: 1px; width: 15px; height: 15px; font-size: 8px; }
+.composer-card .att-chip .att-remove { top: 50%; right: 4px; transform: translateY(-50%); }
 
 /* Narrow viewports: chips keep their icon and drop the text label, so the row
    still holds workspace / permission / model without wrapping. */
@@ -464,9 +465,11 @@
     background: #ef4444;
     color: #fff;
     border: none;
-    font-size: 12px;
-    line-height: 18px;
-    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    line-height: 1;
     cursor: pointer;
     padding: 0;
     opacity: 0;

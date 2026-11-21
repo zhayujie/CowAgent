@@ -695,13 +695,13 @@ function renderAttachmentPreview() {
         if (att.file_type === 'image') {
             return `<div class="att-thumb" data-idx="${idx}">
                 <img src="${escapeHtml(att.preview_url)}" alt="${escapeHtml(att.file_name)}">
-                <button class="att-remove" data-remove="${idx}">&times;</button>
+                <button class="att-remove" data-remove="${idx}"><i class="fas fa-xmark"></i></button>
             </div>`;
         }
         return `<div class="att-chip" data-idx="${idx}">
             <i class="fas fa-file-alt"></i>
             <span class="att-name">${escapeHtml(att.file_name)}</span>
-            <button class="att-remove" data-remove="${idx}">&times;</button>
+            <button class="att-remove" data-remove="${idx}"><i class="fas fa-xmark"></i></button>
         </div>`;
     }).join('');
     updateSendBtnState();

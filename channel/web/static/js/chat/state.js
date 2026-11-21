@@ -819,7 +819,7 @@ function renderAttachmentPreview() {
         if (att.file_type === 'image') {
             return `<div class="att-thumb" data-idx="${idx}">
                 <img src="${att.preview_url}" alt="${escapeHtml(att.file_name)}">
-                <button class="att-remove" onclick="removeAttachment(${idx})">&times;</button>
+                <button class="att-remove" onclick="removeAttachment(${idx})"><i class="fas fa-xmark"></i></button>
             </div>`;
         }
         const icon = att.file_type === 'video'
@@ -832,7 +832,7 @@ function renderAttachmentPreview() {
         return `<div class="att-chip" data-idx="${idx}">
             <i class="fas ${icon}"></i>
             <span class="att-name">${escapeHtml(att.file_name)}${suffix}</span>
-            <button class="att-remove" onclick="removeAttachment(${idx})">&times;</button>
+            <button class="att-remove" onclick="removeAttachment(${idx})"><i class="fas fa-xmark"></i></button>
         </div>`;
     }).join('');
     updateSendBtnState();
