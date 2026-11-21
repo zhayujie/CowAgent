@@ -18,7 +18,7 @@ import {Pressable, ScrollView, Text, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import type {ChatFile} from '../files/chatFile';
 import {tr, trf} from '../i18n';
-import {localDeviceName} from '../kernel/localKernel';
+import {useLocalDeviceName} from '../kernel/localKernel';
 import {menuSections, type MenuEntry, type MenuRoute} from '../navigation/menuViews';
 import type {SessionItem} from '../protocol/events';
 import {useMenuStore} from '../store/menuStore';
@@ -82,7 +82,8 @@ export function DrawerMenu({
   const [aboutOpen, setAboutOpen] = useState(false);
   const server = activeServer();
   // Servers go by the name they gave themselves; the address is only a fallback.
-  const name = server?.local ? localDeviceName() : server?.name || server?.baseUrl.replace(/^https?:\/\//, '');
+  const localName = useLocalDeviceName();
+  const name = server?.local ? localName : server?.name || server?.baseUrl.replace(/^https?:\/\//, '');
   const offline = realtime === 'closed';
   const status = !server
     ? tr('menu_not_connected')
@@ -90,7 +91,7 @@ export function DrawerMenu({
       ? tr('menu_reconnecting')
       : server.local
         ? tr('server_local_meta')
-        : tr('menu_connected');
+        : tr('menu_remote_device');
 
   const renderEntry = (e: MenuEntry) => {
     if (e.kind === 'route') {

@@ -97,6 +97,10 @@ it('signs in to the built-in agent afresh on launch instead of reusing an old to
   expect(servers.find(s => s.id === 'local')).toMatchObject({name: 'Phone', baseUrl: 'http://127.0.0.1:4000'});
   expect(http.getToken()).toBe('local-token');
   expect(await secureStore.get('token:local')).toBe('local-token');
+  // The other saved servers outlive the launch, in memory and on disk.
+  expect(servers.map(s => s.id)).toEqual(['local', home.id]);
+  const saved = JSON.parse((await AsyncStorage.getItem('cow:servers')) ?? '{}');
+  expect(saved.servers.map((s: ServerProfile) => s.id)).toEqual(['local', home.id]);
 });
 
 it('goes back to the server left for the login screen without a password', async () => {

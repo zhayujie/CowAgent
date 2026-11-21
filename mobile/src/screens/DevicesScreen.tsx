@@ -11,11 +11,12 @@ import {
   faRightFromBracket,
   faServer,
   faTrashCan,
+  faXmark,
 } from '@fortawesome/free-solid-svg-icons';
 import type {IconDefinition} from '@fortawesome/fontawesome-svg-core';
 import type {StackScreenProps} from '@react-navigation/stack';
 import React, {useCallback, useEffect, useRef, useState} from 'react';
-import {ActivityIndicator, Image, RefreshControl, ScrollView, Text, View} from 'react-native';
+import {ActivityIndicator, Image, Pressable, RefreshControl, ScrollView, Text, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {
   createPairing,
@@ -27,23 +28,28 @@ import {
 } from '../api/cowApi';
 import {ApiError, http} from '../api/http';
 import {Icon} from '../components/Icon';
+import {hostOf, useLinkColor, useServerPicker} from '../components/ServerPicker';
 import {
   ActionButton,
+  CardLabel,
   ChoiceSheet,
   ConfirmSheet,
   FieldSheet,
   MONO,
   Notice,
+  SettingCard,
   SettingRow,
   StatusTag,
+  TileButtons,
 } from '../components/settings';
 import {SHEET_DISMISS_MS, Sheet} from '../components/Sheet';
 import {showToast, ToastHost} from '../components/Toast';
-import {EmptyState, GroupLabel, PageHeader} from '../components/ui';
+import {PageHeader} from '../components/ui';
 import {tr, trf} from '../i18n';
+import {setLocalDeviceName, systemDeviceName, useLocalDeviceName} from '../kernel/localKernel';
 import type {RootStackParamList} from '../navigation/types';
 import type {DeviceList, PairedDevice, PairingCode} from '../protocol/resources';
-import {describeConnectError, noteServerName, useServerStore} from '../store/serverStore';
+import {activeServer, describeConnectError, noteServerName, useLocalServer, useServerStore} from '../store/serverStore';
 import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
 import {copyText} from '../utils/clipboard';
@@ -53,7 +59,8 @@ type Props = StackScreenProps<RootStackParamList, 'Devices'>;
 
 type Pairing = PairingCode & {expiresAt: number; expired?: boolean};
 type MenuKey = 'rename' | 'remove' | 'signout';
-type Confirm = {kind: 'remove' | 'signout'; device: PairedDevice};
+type Confirm = {kind: 'remove' | 'signout'; device: PairedDevice} | {kind: 'forget'; id: string; name: string};
+type Renaming = PairedDevice | 'current';
 
 const REFRESH_MS = 30_000;
 const PAIR_POLL_MS = 2_000;
@@ -78,10 +85,19 @@ function useLingering<T>(value: T | null): T | null {
   return last.current;
 }
 
+/**
+ * The device the app is on now, the ones it can switch to, and, for a
+ * remote one, everything else connected to it.
+ */
 export function DevicesScreen({navigation}: Props) {
   const t = useTheme();
   const styles = useStyles();
   const insets = useSafeAreaInsets();
+  const local = useLocalServer();
+  const server = activeServer();
+  const localName = useLocalDeviceName();
+  const linkColor = useLinkColor();
+  const picker = useServerPicker();
   const logout = useServerStore(s => s.logout);
   const [list, setList] = useState<DeviceList | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -95,13 +111,17 @@ export function DevicesScreen({navigation}: Props) {
   const [localOnly, setLocalOnly] = useState(false);
   const [, setTick] = useState(0);
   const [menu, setMenu] = useState<PairedDevice | null>(null);
-  const [renaming, setRenaming] = useState<PairedDevice | 'server' | null>(null);
+  const [renaming, setRenaming] = useState<Renaming | null>(null);
   const [confirm, setConfirm] = useState<Confirm | null>(null);
   const menuShown = useLingering(menu);
   const renamingShown = useLingering(renaming);
   const confirmShown = useLingering(confirm);
 
+  // The agent on this phone listens on loopback only: nothing else can connect to it.
   const load = useCallback(async () => {
+    if (local) {
+      return;
+    }
     try {
       const data = await listDevices();
       setList(data);
@@ -110,13 +130,16 @@ export function DevicesScreen({navigation}: Props) {
     } catch (e) {
       setError(describeConnectError(e));
     }
-  }, []);
+  }, [local]);
 
   useEffect(() => {
+    if (local) {
+      return;
+    }
     load();
     const timer = setInterval(load, REFRESH_MS);
     return () => clearInterval(timer);
-  }, [load]);
+  }, [load, local]);
 
   const refresh = async () => {
     setRefreshing(true);
@@ -230,6 +253,10 @@ export function DevicesScreen({navigation}: Props) {
 
   const current = list?.current ?? '';
   const devices = list ? sortDevices(list.devices, current) : [];
+  // A managed instance is named and reached the way whoever runs it set up.
+  const managed = !!list?.instance.managed;
+  const currentName = local ? localName : server?.name || list?.instance.name || '-';
+  const canRename = local || (!!list && !managed);
 
   const onMenu = (key: MenuKey) => {
     const device = menu;
@@ -245,7 +272,11 @@ export function DevicesScreen({navigation}: Props) {
 
   const submitRename = async (value: string) => {
     const target = renamingShown;
-    if (target === 'server') {
+    if (target === 'current') {
+      if (local) {
+        setLocalDeviceName(value);
+        return;
+      }
       if (value === list?.instance.name) {
         return;
       }
@@ -267,12 +298,14 @@ export function DevicesScreen({navigation}: Props) {
       return;
     }
     try {
-      if (c.kind === 'signout') {
+      if (c.kind === 'forget') {
+        picker.remove(c.id);
+      } else if (c.kind === 'signout') {
         await logout();
-        return;
+      } else {
+        await removeDevice(c.device.id);
+        setList(l => l && {...l, devices: l.devices.filter(d => d.id !== c.device.id)});
       }
-      await removeDevice(c.device.id);
-      setList(l => l && {...l, devices: l.devices.filter(d => d.id !== c.device.id)});
     } catch (e) {
       showToast(trf('devices_remove_failed', {error: describeConnectError(e)}));
     } finally {
@@ -284,6 +317,13 @@ export function DevicesScreen({navigation}: Props) {
     const c = confirmShown;
     if (!c) {
       return {title: '', message: '', ok: ''};
+    }
+    if (c.kind === 'forget') {
+      return {
+        title: tr('devices_forget'),
+        message: trf('devices_forget_confirm', {name: c.name}),
+        ok: tr('devices_forget'),
+      };
     }
     if (c.kind === 'signout') {
       return {
@@ -299,69 +339,153 @@ export function DevicesScreen({navigation}: Props) {
     };
   })();
 
-  if (!list) {
-    return (
-      <View style={styles.root}>
-        <PageHeader title={tr('devices_title')} onBack={navigation.goBack} />
-        <EmptyState loading={!error} title={tr('devices_load_failed')} hint={error ?? undefined} />
-      </View>
-    );
-  }
+  const renameCopy =
+    renamingShown === 'current'
+      ? local
+        ? {
+            title: tr('devices_rename_local'),
+            initial: localName,
+            hint: trf('devices_rename_local_hint', {name: systemDeviceName()}),
+          }
+        : {title: tr('devices_rename_server'), initial: list?.instance.name ?? '', hint: tr('devices_rename_server_hint')}
+      : {title: tr('devices_rename_device'), initial: renamingShown?.name ?? '', hint: undefined};
 
-  // A managed instance is named and reached the way whoever runs it set up.
-  const managed = !!list.instance.managed;
   const menuIsCurrent = !!menuShown && menuShown.id === current;
+  const others = picker.entries;
+  const address = local ? tr('server_local_meta') : server ? hostOf(server.baseUrl) : '-';
+  const version = !local && list?.instance.version ? ` · v${list.instance.version}` : '';
+
+  const connectedList = () => {
+    if (!list) {
+      return error ? (
+        <SettingRow icon={faXmark} title={tr('devices_load_failed')} detail={error} onPress={refresh} last />
+      ) : (
+        <View style={styles.loading}>
+          <ActivityIndicator color={t.t3} />
+        </View>
+      );
+    }
+    if (!devices.length) {
+      return (
+        <View style={styles.empty}>
+          <Text style={styles.emptyText}>{tr('devices_empty')}</Text>
+        </View>
+      );
+    }
+    return devices.map((d, i) => {
+      const isCurrent = d.id === current;
+      return (
+        <SettingRow
+          key={d.id}
+          icon={platformIcon(d.platform)}
+          title={d.name}
+          detail={deviceMeta(d)}
+          value={isCurrent || d.online ? undefined : seenLabel(d)}
+          right={
+            isCurrent ? (
+              <StatusTag label={tr('devices_this')} on />
+            ) : d.online ? (
+              <StatusTag label={tr('devices_online')} on />
+            ) : undefined
+          }
+          onPress={() => setMenu(d)}
+          last={i === devices.length - 1}
+        />
+      );
+    });
+  };
 
   return (
     <View style={styles.root}>
-      <PageHeader title={tr('devices_title')} onBack={navigation.goBack} />
+      <PageHeader title={tr('devices_title')} onBack={navigation.goBack} background={t.grouped} />
       <ScrollView
         contentContainerStyle={[styles.body, {paddingBottom: insets.bottom + 32}]}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={t.t3} colors={[t.green]} />}>
-        <GroupLabel style={styles.firstGroup}>{tr('devices_server')}</GroupLabel>
-        <SettingRow
-          icon={faServer}
-          title={list.instance.name}
-          detail={list.instance.version ? `CowAgent v${list.instance.version}` : undefined}
-          onPress={managed ? undefined : () => setRenaming('server')}
-          last
-        />
-
-        <GroupLabel style={styles.group}>
-          {devices.length ? `${tr('devices_connected')} (${devices.length})` : tr('devices_connected')}
-        </GroupLabel>
-        {!managed && localOnly && <Notice>{tr('devices_local_only')}</Notice>}
-        {!managed && !list.password_set && <Notice>{tr('devices_no_password')}</Notice>}
-
-        <SettingRow icon={faQrcode} title={tr('devices_let_connect')} onPress={openPairing} />
-
-        {!devices.length ? (
-          <View style={styles.empty}>
-            <Icon icon={faMobileScreen} size={18} color={t.t4} />
-            <Text style={styles.emptyText}>{tr('devices_empty')}</Text>
+        refreshControl={
+          local ? undefined : (
+            <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={t.t3} colors={[t.green]} />
+          )
+        }>
+        <SettingCard>
+          <View style={styles.hero}>
+            <View style={styles.heroIcon}>
+              <Icon icon={local ? faMobileScreen : faServer} size={17} color={t.accent} />
+            </View>
+            <View style={styles.heroText}>
+              <Text style={styles.heroName} numberOfLines={1}>
+                {currentName}
+              </Text>
+              <View style={styles.heroMetaRow}>
+                <View style={[styles.dot, {backgroundColor: linkColor}]} />
+                <Text style={styles.heroMeta} numberOfLines={1}>
+                  {address}
+                  {version}
+                </Text>
+              </View>
+            </View>
+            {canRename && (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={tr('devices_rename_device')}
+                hitSlop={8}
+                onPress={() => setRenaming('current')}
+                style={({pressed}) => [styles.heroEdit, pressed && styles.pressed]}>
+                <Icon icon={faPen} size={13} color={t.t2} />
+              </Pressable>
+            )}
           </View>
-        ) : (
-          devices.map((d, i) => {
-            const isCurrent = d.id === current;
+        </SettingCard>
+
+        <CardLabel desc={tr('devices_mine_note')}>{tr('devices_mine')}</CardLabel>
+        <SettingCard>
+          {others.map(s => {
+            const active = s.id === picker.activeId;
+            const busy = picker.pending === s.id;
             return (
               <SettingRow
-                key={d.id}
-                icon={platformIcon(d.platform)}
-                title={d.name}
-                detail={deviceMeta(d)}
-                value={isCurrent || d.online ? undefined : seenLabel(d)}
+                key={s.id}
+                icon={s.local ? faMobileScreen : faServer}
+                title={s.name}
+                detail={s.meta}
+                chevron={false}
                 right={
-                  isCurrent ? (
-                    <StatusTag label={tr('devices_this')} on />
-                  ) : d.online ? (
-                    <StatusTag label={tr('devices_online')} on />
+                  busy ? (
+                    <ActivityIndicator size="small" color={t.t3} />
+                  ) : active ? (
+                    <Icon icon={faCheck} size={14} color={t.accent} />
                   ) : undefined
                 }
-                onPress={() => setMenu(d)}
-                last={i === devices.length - 1}
+                onPress={active ? undefined : () => picker.select(s.id)}
+                action={
+                  !s.local && !active && !busy ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={tr('devices_forget')}
+                      hitSlop={8}
+                      onPress={() => setConfirm({kind: 'forget', id: s.id, name: s.name})}
+                      style={({pressed}) => [styles.forget, pressed && styles.pressed]}>
+                      <Icon icon={faTrashCan} size={13} color={t.t4} />
+                    </Pressable>
+                  ) : undefined
+                }
               />
             );
-          })
+          })}
+        </SettingCard>
+        <TileButtons items={picker.connectActions()} style={styles.tiles} />
+
+        {!local && (
+          <>
+            <CardLabel desc={tr('devices_connected_note')}>
+              {trf('devices_connected', {name: currentName}) + (devices.length ? ` (${devices.length})` : '')}
+            </CardLabel>
+            {!managed && localOnly && <Notice>{tr('devices_local_only')}</Notice>}
+            {!!list && !managed && !list.password_set && <Notice>{tr('devices_no_password')}</Notice>}
+            <SettingCard>{connectedList()}</SettingCard>
+            <TileButtons
+              items={[{icon: faQrcode, label: tr('devices_let_connect'), onPress: openPairing}]}
+              style={styles.tiles}
+            />
+          </>
         )}
       </ScrollView>
 
@@ -398,10 +522,10 @@ export function DevicesScreen({navigation}: Props) {
       />
       <FieldSheet
         visible={!!renaming}
-        title={renamingShown === 'server' ? tr('devices_rename_server') : tr('devices_rename_device')}
-        initial={renamingShown === 'server' ? list.instance.name : renamingShown?.name ?? ''}
-        hint={renamingShown === 'server' ? tr('devices_rename_server_hint') : undefined}
-        allowEmpty={renamingShown === 'server'}
+        title={renameCopy.title}
+        initial={renameCopy.initial}
+        hint={renameCopy.hint}
+        allowEmpty={renamingShown === 'current'}
         onSubmit={submitRename}
         onClose={() => setRenaming(null)}
       />
@@ -414,6 +538,7 @@ export function DevicesScreen({navigation}: Props) {
         onConfirm={runConfirm}
         onClose={() => setConfirm(null)}
       />
+      {picker.overlays}
       <ToastHost bottom={insets.bottom + 28} />
     </View>
   );
@@ -512,11 +637,35 @@ function PairingCard({
 }
 
 const useStyles = makeStyles(t => ({
-  root: {flex: 1, backgroundColor: t.bg0},
-  body: {paddingTop: 4},
-  firstGroup: {marginTop: 8},
-  group: {marginTop: 26},
-  empty: {alignItems: 'center', gap: 10, paddingVertical: 28},
+  root: {flex: 1, backgroundColor: t.grouped},
+  body: {paddingTop: 8},
+  pressed: {opacity: 0.6},
+  hero: {flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingVertical: 16},
+  heroIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: t.accentSoft,
+  },
+  heroText: {flex: 1, minWidth: 0},
+  heroName: {fontSize: 18, fontWeight: '600', color: t.t1, letterSpacing: -0.3},
+  heroMetaRow: {flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 5},
+  heroMeta: {flexShrink: 1, fontSize: 13, color: t.t3},
+  heroEdit: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: t.isDark ? t.bg3 : t.bg2,
+  },
+  dot: {width: 7, height: 7, borderRadius: 4},
+  forget: {alignSelf: 'stretch', justifyContent: 'center', paddingLeft: 10},
+  tiles: {marginHorizontal: 16, marginTop: 10},
+  loading: {alignItems: 'center', paddingVertical: 24},
+  empty: {alignItems: 'center', paddingVertical: 22},
   emptyText: {fontSize: 13, color: t.t3},
   sheetScroll: {flexGrow: 0, flexShrink: 1},
   pairLoading: {alignItems: 'center', justifyContent: 'center', paddingVertical: 48},

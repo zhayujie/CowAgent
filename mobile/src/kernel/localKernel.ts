@@ -1,5 +1,7 @@
 import {NativeModules, Platform, type TurboModule} from 'react-native';
+import {create} from 'zustand';
 import {tr} from '../i18n';
+import {readJSON, writeJSON} from '../storage/kv';
 
 /**
  * The agent kernel embedded in the app: the same CowAgent backend a server
@@ -23,8 +25,8 @@ export const LOCAL_SERVER_ID = 'local';
 
 let deviceName: string | undefined;
 
-/** What the owner calls this phone, naming the local agent; a generic "This phone" where unknown. */
-export function localDeviceName(): string {
+/** What the owner calls this phone in its system settings; a generic "This phone" where unknown. */
+export function systemDeviceName(): string {
   if (deviceName === undefined) {
     try {
       deviceName = native?.deviceName?.()?.trim() ?? '';
@@ -33,6 +35,32 @@ export function localDeviceName(): string {
     }
   }
   return deviceName || tr('server_local');
+}
+
+const NAME_KEY = 'local:name';
+/** A name given in the app wins over the system one; it stays on the device. */
+const useLocalName = create<{custom: string}>(() => ({custom: ''}));
+
+export async function loadLocalDeviceName(): Promise<void> {
+  const custom = await readJSON<string>(NAME_KEY, '');
+  useLocalName.setState({custom: typeof custom === 'string' ? custom.trim() : ''});
+}
+
+/** Empty goes back to the system name. */
+export function setLocalDeviceName(name: string): void {
+  const custom = name.trim();
+  useLocalName.setState({custom});
+  writeJSON(NAME_KEY, custom).catch(() => undefined);
+}
+
+/** The name this phone goes by as a device. */
+export function localDeviceName(): string {
+  return useLocalName.getState().custom || systemDeviceName();
+}
+
+export function useLocalDeviceName(): string {
+  const custom = useLocalName(s => s.custom);
+  return custom || systemDeviceName();
 }
 
 /** First launch unpacks the sources and compiles them, which takes a while on slow phones. */

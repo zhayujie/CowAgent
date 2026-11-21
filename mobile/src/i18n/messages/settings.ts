@@ -336,7 +336,7 @@ const zh = {
   menu_about_menu_desc: '调整侧边栏里的分组和入口',
   menu_not_connected: '未连接',
   menu_reconnecting: '重新连接中',
-  menu_connected: '已连接',
+  menu_remote_device: '远程设备',
 };
 
 const en: Record<keyof typeof zh, string> = {
@@ -683,7 +683,7 @@ const en: Record<keyof typeof zh, string> = {
   menu_about_menu_desc: 'Arrange the groups and entries in the sidebar',
   menu_not_connected: 'Not connected',
   menu_reconnecting: 'Reconnecting',
-  menu_connected: 'Connected',
+  menu_remote_device: 'Remote device',
 };
 
 export default {zh, en};

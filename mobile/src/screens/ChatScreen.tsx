@@ -807,7 +807,11 @@ export function ChatScreen({route, navigation}: Props) {
           />
         </SlideDrawer>
 
-        <ServerSheet visible={serverSheetOpen} onClose={() => setServerSheetOpen(false)} />
+        <ServerSheet
+          visible={serverSheetOpen}
+          onClose={() => setServerSheetOpen(false)}
+          onManage={() => navigation.navigate('Devices')}
+        />
 
         <TeamChatSheet visible={teamSheetOpen} onClose={() => setTeamSheetOpen(false)} onStart={startTeamChat} />
 

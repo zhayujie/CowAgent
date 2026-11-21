@@ -13,7 +13,7 @@ import {
 } from '../api/pairing';
 import {DEFAULT_SERVER_NAME, DEFAULT_SERVER_URL} from '../config/defaults';
 import {getLang, tr, trf, useLangStore, type MessageKey} from '../i18n';
-import {LOCAL_SERVER_ID, startLocalKernel} from '../kernel/localKernel';
+import {loadLocalDeviceName, LOCAL_SERVER_ID, startLocalKernel} from '../kernel/localKernel';
 import type {ServerEnvelope, ServerInfo} from '../protocol/envelope';
 import {realtime, type RealtimeStatus} from '../realtime/RealtimeClient';
 import {readJSON, removeKey, writeJSON} from '../storage/kv';
@@ -342,10 +342,10 @@ export const useServerStore = create<ServerState>((set, get) => ({
   loginForm: false,
 
   hydrate: async () => {
-    const saved = await readJSON<PersistedServers>(SERVERS_KEY, {
-      servers: [],
-      activeId: null,
-    });
+    const [saved] = await Promise.all([
+      readJSON<PersistedServers>(SERVERS_KEY, {servers: [], activeId: null}),
+      loadLocalDeviceName().catch(() => undefined),
+    ]);
     let servers = saved.servers;
     if (servers.length === 0 && DEFAULT_SERVER_URL) {
       const baseUrl = normalizeBaseUrl(DEFAULT_SERVER_URL);
@@ -368,6 +368,8 @@ export const useServerStore = create<ServerState>((set, get) => ({
       return;
     }
     if (active.local) {
+      // Signing in saves the list from the store, which must hold the saved servers by then.
+      set({servers});
       // Signed in afresh on every launch: the native side keeps the password,
       // and a token from an earlier run may no longer verify.
       try {

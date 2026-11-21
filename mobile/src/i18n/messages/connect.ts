@@ -8,6 +8,7 @@ const zh = {
   connect_local_desc: '在这台手机上运行 Agent 和存储数据',
   connect_next: '下一步',
   connect_manual: '输入地址连接',
+  connect_manual_short: '输入地址',
   connect_scan_desc: '扫描对方 CowAgent 生成的配对二维码',
   connect_manual_desc: '填写对方的地址和配对码',
   connect_remote_note: '手机需要能通过网络访问到对方，比如连接同一个 Wi-Fi。二维码在对方 CowAgent 的「设置 › 设备管理」里，点「让其他设备连接我」生成；服务器上可通过运行 cow pair 命令生成配对码。',
@@ -40,7 +41,6 @@ const zh = {
   connect_confirm_title: '连接到这个 CowAgent？',
   connect_confirm_body: '请确认这是你自己的电脑或服务器。连接后，你在这里的对话都会发送到它上面。',
   connect_confirm_ok: '连接',
-  connect_group_other: '连接其他设备',
   connect_method_device: '扫码配对',
   connect_method_password: '访问密码',
   connect_setup_model_title: '还差一步：配置模型',
@@ -58,6 +58,7 @@ const en: Record<keyof typeof zh, string> = {
   connect_local_desc: 'Run the Agent and keep its data on this phone',
   connect_next: 'Next',
   connect_manual: 'Enter an address',
+  connect_manual_short: 'Enter address',
   connect_scan_desc: 'Scan the pairing QR code the other CowAgent shows',
   connect_manual_desc: 'Enter its address and pairing code',
   connect_remote_note:
@@ -95,7 +96,6 @@ const en: Record<keyof typeof zh, string> = {
   connect_confirm_body:
     'Make sure this is your own computer or server. Once connected, what you send here goes to it.',
   connect_confirm_ok: 'Connect',
-  connect_group_other: 'Connect another device',
   connect_method_device: 'QR pairing',
   connect_method_password: 'Access password',
   connect_setup_model_title: 'One more step: set up a model',
