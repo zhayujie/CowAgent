@@ -1,7 +1,7 @@
 import {useCallback, useEffect, useState} from 'react';
 import {create} from 'zustand';
 import {getAgents, setAgentKnowledgeMode, updateAgent, type AgentPatch} from '../api/cowApi';
-import {ApiError} from '../api/http';
+import {ApiError, http} from '../api/http';
 import type {AgentProfile} from '../protocol/resources';
 import {readJSON, writeJSON} from '../storage/kv';
 import {resetOnSignOut} from './reset';
@@ -32,10 +32,15 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   currentId: null,
 
   load: async () => {
+    const server = http.getBaseUrl();
     const [res, saved] = await Promise.all([
       getAgents(),
       get().currentId ? Promise.resolve(get().currentId) : readJSON<string | null>(CURRENT_KEY, null),
     ]);
+    // A roster from the server just left must not land on the next one.
+    if (http.getBaseUrl() !== server) {
+      return;
+    }
     const agents = res.agents.filter(a => a.enabled !== false);
     const currentId =
       saved && agents.some(a => a.id === saved) ? saved : res.default_agent_id;
