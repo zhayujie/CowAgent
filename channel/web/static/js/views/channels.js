@@ -141,6 +141,16 @@ function renderActiveChannels() {
                     <div class="cfg-dropdown-menu"></div>
                 </div>
             </div>` : ''}
+            <div class="my-4 space-y-2">
+                <label class="text-xs text-slate-500">${t('channels_project_label')}</label>
+                <div class="flex gap-2">
+                    <input id="ch-project-${iid}" value="${escapeHtml(ch.project_dir || '')}" class="flex-1 min-w-0 cfg-input" placeholder="${escapeHtml(t('channels_project_placeholder'))}">
+                    <button type="button" class="text-sm text-primary-500" data-project-browse>${t('channels_project_browse')}</button>
+                    <button type="button" class="text-sm text-primary-500" data-project-save>${t('channels_save')}</button>
+                </div>
+                <p class="text-xs text-slate-400">${t('channels_project_hint')}</p>
+                <p class="text-xs text-red-500" data-project-error></p>
+            </div>
             ${weixinWaiting ? weixinScanPromptHtml(iid) : ''}
             ${isFeishu ? buildFeishuPanel(ch, true) : (isWecomBot ? buildWecomBotPanel(ch, true) : (hasFields ? `<div class="space-y-4">
                 ${fieldsHtml}
@@ -156,6 +166,29 @@ function renderActiveChannels() {
         container.appendChild(card);
         bindSecretFieldEvents(card);
         initChannelTeam(ch);
+        const projectInput = document.getElementById(`ch-project-${iid}`);
+        card.querySelector('[data-project-browse]').onclick = () => {
+            openServerFolderPicker(path => { projectInput.value = path; });
+        };
+        card.querySelector('[data-project-save]').onclick = async function () {
+            this.disabled = true;
+            const error = card.querySelector('[data-project-error]');
+            error.textContent = '';
+            try {
+                if (projectInput.value.trim() && !ch.session_namespace && !await new Promise(resolve => showConfirmDialog({
+                    title: t('channels_project_label'), message: t('channels_project_isolate_message'),
+                    okText: t('channels_save'), cancelText: t('channels_cancel'),
+                    onConfirm: () => resolve(true), onCancel: () => resolve(false)
+                }))) return;
+                const res = await fetch('/api/channels', { method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({action: 'set_project', channel: ch.name,
+                        instance_id: ch.instance_id || '', project_dir: projectInput.value}) });
+                const data = await res.json();
+                if (data.status !== 'success') throw new Error(data.message || t('channels_save_error'));
+                loadChannelsView();
+            } catch (e) { error.textContent = e.message || String(e); }
+            finally { this.disabled = false; }
+        };
 
         if (weixinWaiting) {
             startWeixinActiveStatusPoll(iid);
