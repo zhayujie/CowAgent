@@ -137,6 +137,7 @@ def _parse_tools(raw) -> List[str]:
         names = [part.strip() for part in raw.split(",")]
     elif isinstance(raw, (list, tuple)):
         names = [str(part).strip() for part in raw]
+        return [name for name in names if name]
     else:
         return [_ALL_TOOLS]
     names = [name for name in names if name]
