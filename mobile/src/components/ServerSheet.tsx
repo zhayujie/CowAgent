@@ -1,10 +1,10 @@
-import {faCheck, faKeyboard, faMobileScreen, faQrcode, faServer} from '@fortawesome/free-solid-svg-icons';
+import {faCheck, faChevronRight, faKeyboard, faMobileScreen, faQrcode, faServer} from '@fortawesome/free-solid-svg-icons';
 import type {IconDefinition} from '@fortawesome/fontawesome-svg-core';
 import React, {useEffect, useState} from 'react';
 import {ActivityIndicator, Pressable, Text, View} from 'react-native';
 import type {PairTarget} from '../api/pairing';
 import {tr} from '../i18n';
-import {isLocalKernelAvailable, LOCAL_SERVER_ID} from '../kernel/localKernel';
+import {isLocalKernelAvailable, LOCAL_SERVER_ID, localDeviceName} from '../kernel/localKernel';
 import {describeConnectError, useServerStore} from '../store/serverStore';
 import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
@@ -19,8 +19,8 @@ function hostOf(baseUrl: string): string {
 }
 
 /**
- * Pick where the agent runs: the kernel on this phone or one of the saved
- * computers and servers, or pair a new one by scanning its code.
+ * Pick where the agent runs: this phone first, then the computers and servers
+ * paired before, then the ways to pair another one.
  */
 export function ServerSheet({visible, onClose}: {visible: boolean; onClose: () => void}) {
   const t = useTheme();
@@ -128,39 +128,37 @@ export function ServerSheet({visible, onClose}: {visible: boolean; onClose: () =
     );
   };
 
+  const action = (icon: IconDefinition, title: string, desc: string, onPress: () => void) => (
+    <Pressable
+      key={title}
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({pressed}) => [styles.action, pressed && styles.pressed]}>
+      <View style={styles.badge}>
+        <Icon icon={icon} size={14} color={t.t1} />
+      </View>
+      <View style={styles.text}>
+        <Text style={styles.name} numberOfLines={1}>
+          {title}
+        </Text>
+        <Text style={styles.meta} numberOfLines={1}>
+          {desc}
+        </Text>
+      </View>
+      <Icon icon={faChevronRight} size={11} color={t.t4} />
+    </Pressable>
+  );
+
   return (
     <>
       <Sheet visible={visible} onClose={onClose} title={tr('server_sheet_title')}>
-        {local && (
-          <>
-            <Text style={styles.group}>{tr('connect_group_local')}</Text>
-            {row(LOCAL_SERVER_ID, faMobileScreen, tr('server_local'), tr('server_local_meta'), false)}
-          </>
-        )}
-        {remotes.length > 0 && (
-          <>
-            <Text style={[styles.group, local && styles.groupSpaced]}>{tr('connect_group_remote')}</Text>
-            {remotes.map(s => row(s.id, faServer, s.name, hostOf(s.baseUrl), true))}
-          </>
-        )}
-        <View style={styles.actions}>
-          {qrScannerAvailable && (
-            <Pressable
-              accessibilityRole="button"
-              onPress={scan}
-              style={({pressed}) => [styles.action, styles.actionPrimary, pressed && styles.pressed]}>
-              <Icon icon={faQrcode} size={14} color={t.accent} />
-              <Text style={[styles.actionText, styles.actionTextPrimary]}>{tr('connect_scan')}</Text>
-            </Pressable>
-          )}
-          <Pressable
-            accessibilityRole="button"
-            onPress={addManually}
-            style={({pressed}) => [styles.action, pressed && styles.pressed]}>
-            <Icon icon={faKeyboard} size={14} color={t.t2} />
-            <Text style={styles.actionText}>{tr('connect_add_manual')}</Text>
-          </Pressable>
-        </View>
+        {local && row(LOCAL_SERVER_ID, faMobileScreen, localDeviceName(), tr('server_local_meta'), false)}
+        {remotes.map(s => row(s.id, faServer, s.name, hostOf(s.baseUrl), true))}
+        <Text style={[styles.group, (local || remotes.length > 0) && styles.groupSpaced]}>
+          {tr('connect_group_other')}
+        </Text>
+        {qrScannerAvailable && action(faQrcode, tr('connect_scan'), tr('connect_scan_desc'), scan)}
+        {action(faKeyboard, tr('connect_manual'), tr('connect_manual_desc'), addManually)}
       </Sheet>
       <QrScanner
         visible={scanning}
@@ -184,8 +182,8 @@ export function ServerSheet({visible, onClose}: {visible: boolean; onClose: () =
 }
 
 const useStyles = makeStyles(t => ({
-  group: {fontSize: 11, fontWeight: '600', letterSpacing: 1.2, color: t.t4, paddingHorizontal: 12, marginBottom: 4},
-  groupSpaced: {marginTop: 14},
+  group: {fontSize: 12, fontWeight: '600', letterSpacing: 0.4, color: t.t3, paddingHorizontal: 12, marginBottom: 4},
+  groupSpaced: {marginTop: 18},
   row: {flexDirection: 'row', alignItems: 'center', borderRadius: radius.md},
   rowActive: {backgroundColor: t.bg2},
   rowMain: {
@@ -197,6 +195,14 @@ const useStyles = makeStyles(t => ({
     paddingVertical: 11,
   },
   removeButton: {paddingRight: 12},
+  action: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    borderRadius: radius.md,
+  },
   pressed: {opacity: 0.7},
   badge: {
     width: 34,
@@ -209,23 +215,9 @@ const useStyles = makeStyles(t => ({
   badgeActive: {backgroundColor: t.accentSoft},
   text: {flex: 1},
   name: {fontSize: 16, fontWeight: '500', color: t.t1, letterSpacing: -0.2},
-  meta: {fontSize: 12, color: t.t3, marginTop: 3},
-  remove: {fontSize: 13, color: t.t4},
+  meta: {fontSize: 13, color: t.t3, marginTop: 3},
+  remove: {fontSize: 13, color: t.t3},
   removeConfirm: {color: t.danger},
-  actions: {flexDirection: 'row', gap: 10, marginTop: 16, paddingHorizontal: 4},
-  action: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    height: 46,
-    borderRadius: radius.md,
-    backgroundColor: t.bg2,
-  },
-  actionPrimary: {backgroundColor: t.accentSoft, borderWidth: 1, borderColor: t.accentLine},
-  actionText: {fontSize: 15, fontWeight: '500', color: t.t1},
-  actionTextPrimary: {color: t.accent, fontWeight: '600'},
   busy: {flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingVertical: 20},
   busyText: {fontSize: 15, color: t.t2},
 }));

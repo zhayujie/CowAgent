@@ -7,9 +7,10 @@ import {
   faQrcode,
 } from '@fortawesome/free-solid-svg-icons';
 import type {IconDefinition} from '@fortawesome/fontawesome-svg-core';
-import React, {useEffect, useState} from 'react';
+import React, {useEffect, useRef, useState} from 'react';
 import {
   ActivityIndicator,
+  BackHandler,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -29,7 +30,7 @@ import {QrScanner, qrScannerAvailable} from '../components/QrScanner';
 import {ChoiceSheet} from '../components/settings';
 import {SHEET_DISMISS_MS} from '../components/Sheet';
 import {getLang, tr, trf, useLangStore, type Lang} from '../i18n';
-import {isLocalKernelAvailable, LOCAL_SERVER_ID} from '../kernel/localKernel';
+import {isLocalKernelAvailable, LOCAL_SERVER_ID, localDeviceName} from '../kernel/localKernel';
 import {activeServer, describeConnectError, useServerStore} from '../store/serverStore';
 import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
@@ -55,11 +56,16 @@ export function LoginScreen() {
   const returnTo = useServerStore(s => s.returnTo);
   const returnHost = useServerStore(s => s.servers.find(p => p.id === s.returnTo)?.baseUrl);
   const returnLabel =
-    returnTo === LOCAL_SERVER_ID ? tr('server_local') : returnHost?.replace(/^https?:\/\//, '');
+    returnTo === LOCAL_SERVER_ID ? localDeviceName() : returnHost?.replace(/^https?:\/\//, '');
   const lang = useLangStore(s => s.lang);
   const local = isLocalKernelAvailable();
 
   const [step, setStep] = useState<Step>(() => (useServerStore.getState().loginForm ? 'manual' : 'welcome'));
+  // Opened straight on the form from the device switcher: back returns to the device in use, not to onboarding.
+  const [formOnly] = useState(() => {
+    const s = useServerStore.getState();
+    return s.loginForm && !!s.returnTo;
+  });
   const [where, setWhere] = useState<Where>(local ? 'local' : 'remote');
   const [remoteOpen, setRemoteOpen] = useState(false);
   const [scanning, setScanning] = useState(false);
@@ -147,6 +153,33 @@ export function LoginScreen() {
     setTimeout(() => (way === 'scan' ? openScanner() : toManual()), SHEET_DISMISS_MS);
   };
 
+  /** Returns whether there was somewhere to go, so the system back gesture otherwise leaves the app. */
+  const back = (): boolean => {
+    if (busy) {
+      return true;
+    }
+    clearErrors();
+    if (step === 'manual' && !formOnly) {
+      setStep('welcome');
+      return true;
+    }
+    if (returnTo) {
+      switchTo('back', returnTo);
+      return true;
+    }
+    if (step === 'manual') {
+      setStep('welcome');
+      return true;
+    }
+    return false;
+  };
+  const backRef = useRef(back);
+  backRef.current = back;
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => backRef.current());
+    return () => sub.remove();
+  }, []);
+
   const pastedLink = parsePairLink(address);
   const submitDisabled = busy || !address.trim() || (!secret.trim() && !pastedLink);
   const submit = async () => {
@@ -201,10 +234,7 @@ export function LoginScreen() {
               accessibilityLabel={tr('common_back')}
               hitSlop={10}
               disabled={busy}
-              onPress={() => {
-                clearErrors();
-                setStep('welcome');
-              }}
+              onPress={back}
               style={styles.backButton}>
               <Icon icon={faChevronLeft} size={16} color={t.t2} />
             </Pressable>
@@ -363,7 +393,9 @@ function Choice({
       </View>
       <View style={styles.choiceText}>
         <Text style={styles.choiceTitle}>{title}</Text>
-        <Text style={styles.choiceDesc}>{desc}</Text>
+        <Text style={styles.choiceDesc} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
+          {desc}
+        </Text>
       </View>
       {busy ? (
         <ActivityIndicator color={t.t3} />
@@ -394,9 +426,10 @@ const useStyles = makeStyles(t => ({
   choice: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
-    padding: 16,
-    marginBottom: 12,
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 20,
+    marginBottom: 14,
     borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: t.line2,
