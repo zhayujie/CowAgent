@@ -59,7 +59,7 @@ export function SessionsScreen({navigation}: Props) {
         stickySectionHeadersEnabled={false}
         contentContainerStyle={[styles.list, {paddingBottom: insets.bottom + 24}]}
         renderSectionHeader={({section}) => (
-          <GroupLabel style={styles.groupLabel}>{section.title}</GroupLabel>
+          <GroupLabel style={styles.groupLabel} small>{section.title}</GroupLabel>
         )}
         renderItem={({item}) => (
           <SessionRow

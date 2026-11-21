@@ -39,6 +39,63 @@ export function SettingCard({children, style}: {children: ReactNode; style?: Sty
   );
 }
 
+/** The title above a card on a grouped page, with an optional line on what it holds and a link on the right. */
+export function CardLabel({
+  children,
+  desc,
+  action,
+  first,
+}: {
+  children: string;
+  desc?: string;
+  action?: ReactNode;
+  first?: boolean;
+}) {
+  const styles = useStyles();
+  return (
+    <View style={[styles.cardHead, first && styles.cardHeadFirst]}>
+      <View style={styles.cardHeadRow}>
+        <Text style={styles.cardTitle} numberOfLines={1}>
+          {children}
+        </Text>
+        {action}
+      </View>
+      {!!desc && <Text style={styles.cardDesc}>{desc}</Text>}
+    </View>
+  );
+}
+
+/** Ways to add something, set apart from the rows of what is already there. */
+export function TileButtons({
+  items,
+  inSheet,
+  style,
+}: {
+  items: {icon: IconDefinition; label: string; onPress: () => void}[];
+  /** On a sheet's surface rather than a grouped page. */
+  inSheet?: boolean;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const t = useTheme();
+  const styles = useStyles();
+  return (
+    <View style={[styles.tiles, style]}>
+      {items.map(item => (
+        <Pressable
+          key={item.label}
+          accessibilityRole="button"
+          onPress={item.onPress}
+          style={({pressed}) => [styles.tile, inSheet && styles.tileInSheet, pressed && styles.rowPressed]}>
+          <Icon icon={item.icon} size={14} color={t.t2} />
+          <Text style={styles.tileText} numberOfLines={1}>
+            {item.label}
+          </Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
 /** One line of a settings list: title, optional detail below, value and chevron on the right. */
 export function SettingRow({
   icon,
@@ -526,6 +583,27 @@ const useStyles = makeStyles(t => ({
     borderBottomColor: t.line1,
   },
   rowInCard: {marginHorizontal: 14},
+  cardHead: {paddingHorizontal: 22, marginTop: 28, marginBottom: 10},
+  cardHeadFirst: {marginTop: 8},
+  cardHeadRow: {flexDirection: 'row', alignItems: 'center', gap: 10},
+  cardTitle: {flex: 1, fontSize: 16, fontWeight: '600', letterSpacing: -0.2, color: t.t1},
+  cardDesc: {fontSize: 13, lineHeight: 18, color: t.t3, marginTop: 3},
+  tiles: {flexDirection: 'row', gap: 10},
+  tile: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    height: 46,
+    paddingHorizontal: 10,
+    borderRadius: radius.md,
+    backgroundColor: t.card,
+    borderWidth: t.isDark ? 1 : 0,
+    borderColor: t.line1,
+  },
+  tileInSheet: {backgroundColor: t.bg2, borderWidth: 0},
+  tileText: {flexShrink: 1, fontSize: 15, fontWeight: '500', color: t.t1},
   rowLast: {borderBottomWidth: 0},
   card: {
     marginHorizontal: 16,

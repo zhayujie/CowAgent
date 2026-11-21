@@ -518,7 +518,7 @@ const useStyles = makeStyles(t => ({
   statusText: {fontSize: 13, color: t.accent},
   pendingText: {color: t.kind.image[1]},
   section: {marginTop: 20},
-  sectionTitle: {fontSize: 12, fontWeight: '600', letterSpacing: 0.6, color: t.t3, paddingHorizontal: 18, marginBottom: 10},
+  sectionTitle: {fontSize: 16, fontWeight: '600', letterSpacing: -0.2, color: t.t1, paddingHorizontal: 18, marginBottom: 10},
   segmentWrap: {marginBottom: 8},
   qrWrap: {marginHorizontal: 14},
   group: {

@@ -3,9 +3,11 @@ import {Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, 
 import Animated, {Easing, useAnimatedStyle, useSharedValue, withTiming} from 'react-native-reanimated';
 import {scheduleOnRN} from 'react-native-worklets';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import {faChevronRight} from '@fortawesome/free-solid-svg-icons';
 import {tr} from '../i18n';
 import {radius} from '../theme/palette';
-import {makeStyles} from '../theme/theme';
+import {makeStyles, useTheme} from '../theme/theme';
+import {Icon} from './Icon';
 
 const EASE = Easing.bezier(0.22, 0.61, 0.36, 1);
 
@@ -39,13 +41,17 @@ export function Sheet({
   visible,
   onClose,
   title,
+  action,
   children,
 }: {
   visible: boolean;
   onClose: () => void;
   title?: string;
+  /** A link on the title row, for going somewhere fuller than the sheet. */
+  action?: {label: string; onPress: () => void};
   children: ReactNode;
 }) {
+  const t = useTheme();
   const styles = useStyles();
   const insets = useSafeAreaInsets();
   const progress = useSharedValue(0);
@@ -87,7 +93,23 @@ export function Sheet({
           onLayout={e => setPanelHeight(e.nativeEvent.layout.height + 40)}
           style={[styles.panel, {paddingBottom: insets.bottom + 12}, slide]}>
           <View style={styles.grabber} />
-          {!!title && <Text style={styles.title}>{title}</Text>}
+          {action ? (
+            <View style={styles.head}>
+              <Text style={[styles.title, styles.headTitle]} numberOfLines={1}>
+                {title}
+              </Text>
+              <Pressable
+                accessibilityRole="button"
+                hitSlop={8}
+                onPress={action.onPress}
+                style={({pressed}) => [styles.headAction, pressed && styles.pressed]}>
+                <Text style={styles.headActionText}>{action.label}</Text>
+                <Icon icon={faChevronRight} size={10} color={t.accent} />
+              </Pressable>
+            </View>
+          ) : (
+            !!title && <Text style={styles.title}>{title}</Text>
+          )}
           {children}
         </Animated.View>
       </KeyboardAvoidingView>
@@ -119,12 +141,17 @@ const useStyles = makeStyles(t => ({
     backgroundColor: t.line2,
   },
   title: {
-    fontSize: 12,
+    fontSize: 17,
     fontWeight: '600',
-    letterSpacing: 1.2,
-    color: t.t3,
+    letterSpacing: -0.3,
+    color: t.t1,
     paddingHorizontal: 12,
-    paddingTop: 4,
-    paddingBottom: 8,
+    paddingTop: 2,
+    paddingBottom: 10,
   },
+  head: {flexDirection: 'row', alignItems: 'center', paddingRight: 12},
+  headTitle: {flex: 1},
+  headAction: {flexDirection: 'row', alignItems: 'center', gap: 4, paddingBottom: 8},
+  headActionText: {fontSize: 14, fontWeight: '500', color: t.accent},
+  pressed: {opacity: 0.6},
 }));

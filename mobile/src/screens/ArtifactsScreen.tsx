@@ -293,7 +293,7 @@ export function ArtifactsScreen({navigation, route}: Props) {
           ) : (
             groups.map(g => (
               <View key={g.title} style={styles.group}>
-                <GroupLabel>{g.title}</GroupLabel>
+                <GroupLabel small>{g.title}</GroupLabel>
                 {g.cards.length > 0 && (
                   <View style={styles.cards}>
                     {g.cards.map(a => (

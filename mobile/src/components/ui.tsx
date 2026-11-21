@@ -125,13 +125,30 @@ export function PageHeader({
   );
 }
 
-/** Small-caps group label trailed by a hairline. */
-export function GroupLabel({children, style}: {children: string; style?: StyleProp<ViewStyle>}) {
+/**
+ * A section title on a page. `small` is for groups within one list, such as
+ * dates or vendors in a sheet, trailed by a hairline.
+ */
+export function GroupLabel({
+  children,
+  style,
+  small,
+  action,
+}: {
+  children: string;
+  style?: StyleProp<ViewStyle>;
+  small?: boolean;
+  /** A control at the right end, e.g. to edit the group. */
+  action?: ReactNode;
+}) {
   const styles = useStyles();
   return (
     <View style={[styles.group, style]}>
-      <Text style={styles.groupText}>{children}</Text>
-      <View style={styles.groupLine} />
+      <Text style={[small ? styles.groupTextSmall : styles.groupText, !!action && styles.groupTextFill]} numberOfLines={1}>
+        {children}
+      </Text>
+      {small && <View style={styles.groupLine} />}
+      {action}
     </View>
   );
 }
@@ -282,7 +299,9 @@ const useStyles = makeStyles(t => ({
   pageSubRow: {flexDirection: 'row', alignItems: 'center', gap: 4, maxWidth: '100%'},
   pageSubtitle: {fontSize: 12, lineHeight: 15, color: t.t3, flexShrink: 1},
   group: {flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 18, marginBottom: 10},
-  groupText: {fontSize: 12, fontWeight: '600', letterSpacing: 0.4, color: t.t3},
+  groupText: {fontSize: 16, fontWeight: '600', letterSpacing: -0.2, color: t.t1},
+  groupTextSmall: {fontSize: 13, fontWeight: '600', color: t.t2},
+  groupTextFill: {flex: 1},
   groupLine: {flex: 1, height: 1, backgroundColor: t.line1},
   empty: {flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40, paddingVertical: 80},
   emptyIcon: {

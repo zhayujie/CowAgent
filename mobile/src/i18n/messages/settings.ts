@@ -124,7 +124,7 @@ const zh = {
   settings_model_vision: '识图',
   settings_model_video: '视频',
   settings_search_models: '搜索模型',
-  settings_no_ready_vendor: '还没有配置好的模型厂商，先在「模型厂商」里填入 API Key',
+  settings_no_ready_vendor: '还没有可用的模型厂商，先在「模型厂商」里添加一个并填入 API Key',
   settings_no_matching_model: '没有匹配的模型',
 
   // Capabilities
@@ -467,7 +467,7 @@ const en: Record<keyof typeof zh, string> = {
   settings_model_vision: 'Vision',
   settings_model_video: 'Video',
   settings_search_models: 'Search models',
-  settings_no_ready_vendor: 'No provider is set up yet. Add an API key under "Providers" first',
+  settings_no_ready_vendor: 'No provider is ready yet. Add one under "Providers" with its API key first',
   settings_no_matching_model: 'No matching models',
 
   // Capabilities

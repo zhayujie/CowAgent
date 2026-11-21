@@ -36,7 +36,11 @@ export function AgentSheet({
   const checkedId = selectedId === undefined ? currentId : selectedId;
 
   return (
-    <Sheet visible={visible} onClose={onClose} title={title}>
+    <Sheet
+      visible={visible}
+      onClose={onClose}
+      title={title}
+      action={onManage ? {label: tr('chat_agent_manage'), onPress: onManage} : undefined}>
       {agents.map(agent => {
         const selected = agent.id === checkedId;
         const isDefault = agent.id === defaultId;
@@ -80,13 +84,6 @@ export function AgentSheet({
           </View>
         </Pressable>
       )}
-      {!!onManage && (
-        <View style={styles.footer}>
-          <Pressable accessibilityRole="button" hitSlop={8} onPress={onManage}>
-            <Text style={styles.manage}>{tr('chat_agent_manage')}</Text>
-          </Pressable>
-        </View>
-      )}
     </Sheet>
   );
 }
@@ -113,13 +110,4 @@ const useStyles = makeStyles(t => ({
   text: {flex: 1},
   name: {fontSize: 16, fontWeight: '500', color: t.t1, letterSpacing: -0.2},
   meta: {fontSize: 12, color: t.t2, marginTop: 3},
-  footer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    paddingHorizontal: 12,
-    paddingTop: 10,
-    paddingBottom: 4,
-  },
-  manage: {fontSize: 13, color: t.accent},
 }));

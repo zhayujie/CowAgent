@@ -210,7 +210,7 @@ function Row({first, onPress, label, children}: {first: boolean; onPress: () => 
 const useStyles = makeStyles(t => ({
   root: {flex: 1, backgroundColor: t.bg0},
   body: {paddingTop: 4, flexGrow: 1},
-  sectionTitle: {fontSize: 12, fontWeight: '600', letterSpacing: 0.6, color: t.t3, paddingHorizontal: 18, marginTop: 14, marginBottom: 10},
+  sectionTitle: {fontSize: 16, fontWeight: '600', letterSpacing: -0.2, color: t.t1, paddingHorizontal: 18, marginTop: 14, marginBottom: 10},
   group: {
     marginHorizontal: 14,
     borderRadius: radius.md,

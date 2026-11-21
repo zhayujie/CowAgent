@@ -383,7 +383,7 @@ const useStyles = makeStyles(t => ({
   memberName: {flex: 1, fontSize: 14, color: t.t1},
   memberTag: {fontSize: 11, color: t.t3},
   remove: {fontSize: 13, color: t.t3},
-  subLabel: {fontSize: 11, fontWeight: '600', letterSpacing: 1, color: t.t4, marginTop: 10, marginBottom: 2},
+  subLabel: {fontSize: 13, fontWeight: '600', color: t.t2, marginTop: 10, marginBottom: 2},
   candidateName: {color: t.t2},
   addButton: {
     flexDirection: 'row',

@@ -120,7 +120,7 @@ export function ModelPicker({
         {!!usable.length && !groups.length && <Text style={styles.empty}>{tr('settings_no_matching_model')}</Text>}
         {groups.map(({provider, models}) => (
           <View key={provider.id} style={styles.group}>
-            <GroupLabel style={styles.groupLabel}>{labelText(provider.label, provider.id)}</GroupLabel>
+            <GroupLabel style={styles.groupLabel} small>{labelText(provider.label, provider.id)}</GroupLabel>
             {models.map(m => {
               const active = selected?.provider === provider.id && selected?.model === m.name;
               const desc = describeModel(m);

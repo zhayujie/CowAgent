@@ -155,7 +155,7 @@ export function MemoryScreen({navigation}: Props) {
           keyExtractor={f => `${f.type}:${f.filename}`}
           stickySectionHeadersEnabled={false}
           contentContainerStyle={[styles.list, {paddingBottom: insets.bottom + 24}]}
-          renderSectionHeader={({section}) => <GroupLabel style={styles.groupLabel}>{section.title}</GroupLabel>}
+          renderSectionHeader={({section}) => <GroupLabel style={styles.groupLabel} small>{section.title}</GroupLabel>}
           renderItem={({item}) => (
             <Pressable
               accessibilityRole="button"

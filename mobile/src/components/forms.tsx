@@ -282,12 +282,12 @@ export function PickerSheet({
 const useStyles = makeStyles(t => ({
   flex: {flex: 1, minWidth: 0},
   sheetScroll: {flexGrow: 0, flexShrink: 1},
-  sheetGroup: {fontSize: 12, fontWeight: '600', letterSpacing: 0.6, color: t.t3, paddingHorizontal: 12, paddingTop: 14, paddingBottom: 4},
+  sheetGroup: {fontSize: 13, fontWeight: '600', color: t.t2, paddingHorizontal: 12, paddingTop: 14, paddingBottom: 4},
   sheetRow: {flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12, paddingVertical: 11, borderRadius: radius.sm},
   sheetName: {fontSize: 15, color: t.t1},
   section: {marginTop: 22},
-  sectionHead: {flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18, marginBottom: 10, minHeight: 16},
-  sectionTitle: {flex: 1, fontSize: 12, fontWeight: '600', letterSpacing: 0.6, color: t.t3},
+  sectionHead: {flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18, marginBottom: 10, minHeight: 20},
+  sectionTitle: {flex: 1, fontSize: 16, fontWeight: '600', letterSpacing: -0.2, color: t.t1},
   group: {
     marginHorizontal: 14,
     borderRadius: radius.md,

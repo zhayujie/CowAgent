@@ -217,7 +217,7 @@ export function ModelSheet({
             {!!total && !filtered.length && <Text style={styles.empty}>{tr('composer_model_no_match')}</Text>}
             {filtered.map(p => (
               <View key={p.id} style={styles.group}>
-                <GroupLabel style={styles.groupLabel}>{providerLabel(p)}</GroupLabel>
+                <GroupLabel style={styles.groupLabel} small>{providerLabel(p)}</GroupLabel>
                 {p.models.map(m => {
                   const active = m === state.model && p.id === state.provider;
                   return (
