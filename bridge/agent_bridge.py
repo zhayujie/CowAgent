@@ -1317,17 +1317,30 @@ class AgentBridge:
     def _apply_session_project(self, agent, session_id: str, agent_id: str) -> None:
         """Retarget the agent's working directory to the session's project dir.
 
-        A no-op when the session has no project selected (clears any previous
-        override). Failures are swallowed: a bad project setting must not break
-        the chat, it just falls back to the default workspace.
+        Priority: explicit session project, channel-instance default, then the
+        Agent workspace (clears any previous override). A configured channel
+        directory is validated on every fetch; failures propagate rather than
+        silently allowing writes in an unintended fallback directory.
         """
-        try:
-            from agent.workspace import project_store
-            project_dir = project_store.get_project_dir(session_id, agent_id)
-            if getattr(agent, "apply_project_dir", None):
-                agent.apply_project_dir(project_dir)
-        except Exception as e:
-            logger.debug(f"[AgentBridge] apply_session_project failed: {e}")
+        from agent.workspace import project_store
+        project_dir = project_store.get_project_dir(session_id, agent_id)
+        # The namespace is part of the conversation identity, so guests and
+        # delegated turns resolve the same default without trusting message text.
+        if not project_dir and session_id and session_id.startswith("channel:"):
+            import json
+            from channel.channel_instances import get_instance, validate_project_dir
+            from config import conf
+            try:
+                iid, _ = json.loads(session_id[len("channel:"):])
+            except (ValueError, TypeError):
+                iid = ""
+            inst = get_instance(conf(), iid) if iid else None
+            if inst and inst.project_dir:
+                # Fail closed: never silently write into the Agent state root
+                # when an explicitly configured channel directory disappears.
+                project_dir = validate_project_dir(inst.project_dir)
+        if getattr(agent, "apply_project_dir", None):
+            agent.apply_project_dir(project_dir)
 
     def apply_session_prefs(
         self,
@@ -1657,12 +1670,36 @@ class AgentBridge:
             if cached:
                 self._sync_shared_transcript(agent, session_id, resolved_agent_id)
             
+            # Bind platform identity before prompt rebuild, retrieval or memory flush.
+            from agent.memory.identity import feishu_identity, attach_identity, attributed_query
+            sender_identity = None
+            if context.get("channel_type") == "feishu":
+                msg = context.get("msg")
+                sender_identity = feishu_identity(
+                    msg, owner_open_ids=getattr(msg, "identity_owner_open_ids", ()),
+                    private_memory_mode=getattr(msg, "identity_private_memory_mode", "owner_workspace"),
+                )
+                context["sender_identity"] = sender_identity
+                model_query = attributed_query(model_query, sender_identity)
+            attach_identity(agent, sender_identity)
+            if sender_identity:
+                for tool in agent.tools:
+                    if tool.name == "member_profile":
+                        tool.identity["current_text"] = query
+
             # Create event handler for logging and channel communication
             event_handler = AgentEventHandler(context=context, original_callback=on_event)
             
             # Filter tools based on context
             original_tools = agent.tools
             filtered_tools = original_tools
+            if sender_identity and (not sender_identity["legacy_private"] or not sender_identity["is_owner"]):
+                scoped_tools = {
+                    "read", "write", "edit", "send", "vision", "ls", "member_profile",
+                    "memory_search", "memory_get", "web_fetch", "web_search", "current_time",
+                }
+                filtered_tools = [tool for tool in filtered_tools if tool.name in scoped_tools]
+                agent.tools = filtered_tools
             
             # If this is a scheduled task execution, exclude scheduler tool to prevent recursion
             if context and context.get("is_scheduled_task"):
@@ -2107,6 +2144,12 @@ class AgentBridge:
             display = context.get("display") if context else None
             if display:
                 user_msg["extras"] = {"display": display}
+            identity = context.get("sender_identity") if context else None
+            if identity:
+                user_msg.setdefault("extras", {})["sender_identity"] = identity
+                from agent.memory.identity import attributed_query
+                user_msg["content"][0]["text"] = attributed_query(query, identity)
+                user_msg["extras"].setdefault("display", query)
             store.append_messages(session_id, [user_msg], channel_type=channel_type)
             return True
         except Exception as e:

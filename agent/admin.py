@@ -33,7 +33,7 @@ CLONED_FILES = ("AGENT.md", "USER.md", "RULE.md", "BOOTSTRAP.md")
 
 # The keys this service owns. Anything else in the settings it is handed
 # belongs to another console page and is never written from here.
-ROSTER_KEYS = team.TEAM_KEYS
+ROSTER_KEYS = ("agents", "default_agent_id", "channel_instances")
 _UNSET = object()
 
 
@@ -156,6 +156,7 @@ class AgentAdminService:
                 if key not in team.TEAM_KEYS
             }
 
+    @team.roster_transaction()
     def _commit(self, updates: Mapping, revision: Optional[str] = None) -> Dict:
         """Apply the roster keys onto whatever is stored right now.
 

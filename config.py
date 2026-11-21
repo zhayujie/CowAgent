@@ -206,6 +206,7 @@ available_setting = {
     "feishu_app_secret": "",  # Feishu bot app secret
     "feishu_token": "",  # Feishu verification token; only needed in webhook mode
     "feishu_event_mode": "websocket",  # Feishu event mode: webhook(HTTP server) or websocket(long connection)
+    "feishu_private_chat_enabled": True,  # process incoming Feishu direct messages
     # Feishu streaming reply (based on the official cardkit streaming-card API; requires the cardkit:card:write permission and Feishu client 7.20+)
     "feishu_stream_reply": True,  # whether to enable streaming reply (typewriter effect); auto-downgrades to non-streaming or shows an upgrade prompt on failure/old clients
     "feishu_detailed_card": True,  # render normal chat streaming as a detailed card (status header, thinking/tool panels, elapsed time); off keeps the plain typewriter card

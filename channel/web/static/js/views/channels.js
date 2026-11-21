@@ -141,6 +141,16 @@ function renderActiveChannels() {
                     <div class="cfg-dropdown-menu"></div>
                 </div>
             </div>` : ''}
+            <div class="my-4 space-y-2">
+                <label class="text-xs text-slate-500">${t('channels_project_label')}</label>
+                <div class="flex gap-2">
+                    <input id="ch-project-${iid}" value="${escapeHtml(ch.project_dir || '')}" class="flex-1 min-w-0 cfg-input" placeholder="${escapeHtml(t('channels_project_placeholder'))}">
+                    <button type="button" class="text-sm text-primary-500" data-project-browse>${t('channels_project_browse')}</button>
+                    <button type="button" class="text-sm text-primary-500" data-project-save>${t('channels_save')}</button>
+                </div>
+                <p class="text-xs text-slate-400">${t('channels_project_hint')}</p>
+                <p class="text-xs text-red-500" data-project-error></p>
+            </div>
             ${weixinWaiting ? weixinScanPromptHtml(iid) : ''}
             ${isFeishu ? buildFeishuPanel(ch, true) : (isWecomBot ? buildWecomBotPanel(ch, true) : (hasFields ? `<div class="space-y-4">
                 ${fieldsHtml}
@@ -156,6 +166,29 @@ function renderActiveChannels() {
         container.appendChild(card);
         bindSecretFieldEvents(card);
         initChannelTeam(ch);
+        const projectInput = document.getElementById(`ch-project-${iid}`);
+        card.querySelector('[data-project-browse]').onclick = () => {
+            openServerFolderPicker(path => { projectInput.value = path; });
+        };
+        card.querySelector('[data-project-save]').onclick = async function () {
+            this.disabled = true;
+            const error = card.querySelector('[data-project-error]');
+            error.textContent = '';
+            try {
+                if (projectInput.value.trim() && !ch.session_namespace && !await new Promise(resolve => showConfirmDialog({
+                    title: t('channels_project_label'), message: t('channels_project_isolate_message'),
+                    okText: t('channels_save'), cancelText: t('channels_cancel'),
+                    onConfirm: () => resolve(true), onCancel: () => resolve(false)
+                }))) return;
+                const res = await fetch('/api/channels', { method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({action: 'set_project', channel: ch.name,
+                        instance_id: ch.instance_id || '', project_dir: projectInput.value}) });
+                const data = await res.json();
+                if (data.status !== 'success') throw new Error(data.message || t('channels_save_error'));
+                loadChannelsView();
+            } catch (e) { error.textContent = e.message || String(e); }
+            finally { this.disabled = false; }
+        };
 
         if (weixinWaiting) {
             startWeixinActiveStatusPoll(iid);
@@ -263,8 +296,15 @@ function buildChannelFieldsHtml(chName, fields) {
     let html = '';
     fields.forEach(f => {
         const inputId = `ch-${chName}-${f.key}`;
+        const label = escapeHtml(localizedLabel(f.label));
         let inputHtml = '';
-        if (f.type === 'bool') {
+        if (f.type === 'select' && f.key === 'feishu_private_memory_mode') {
+            const selected = f.value || f.default;
+            const options = ['owner_workspace', 'per_user', 'shared'].map(value =>
+                `<option value="${value}" ${value === selected ? 'selected' : ''}>${escapeHtml(t(`feishu_memory_${value}`))}</option>`);
+            inputHtml = `<select id="${inputId}" data-field="${f.key}" data-ch="${chName}"
+                class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800">${options.join('')}</select>`;
+        } else if (f.type === 'bool') {
             const checked = f.value ? 'checked' : '';
             inputHtml = `<label class="relative inline-flex items-center cursor-pointer">
                 <input id="${inputId}" type="checkbox" ${checked} class="sr-only peer" data-field="${f.key}" data-ch="${chName}">
@@ -279,7 +319,7 @@ function buildChannelFieldsHtml(chName, fields) {
                        bg-slate-50 dark:bg-white/5 text-sm text-slate-800 dark:text-slate-100
                        focus:outline-none focus:border-primary-500 font-mono transition-colors
                        ${f.value ? 'cfg-key-masked' : ''}"
-                placeholder="${escapeHtml(f.label)}">`;
+                placeholder="${label}">`;
         } else {
             const inputType = f.type === 'number' ? 'number' : 'text';
             inputHtml = `<input id="${inputId}" type="${inputType}" value="${escapeHtml(String(f.value ?? f.default ?? ''))}"
@@ -287,10 +327,10 @@ function buildChannelFieldsHtml(chName, fields) {
                 class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600
                        bg-slate-50 dark:bg-white/5 text-sm text-slate-800 dark:text-slate-100
                        focus:outline-none focus:border-primary-500 font-mono transition-colors"
-                placeholder="${escapeHtml(f.label)}">`;
+                placeholder="${label}">`;
         }
         html += `<div>
-            <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">${escapeHtml(f.label)}</label>
+            <label for="${inputId}" class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">${label}</label>
             ${inputHtml}
         </div>`;
     });
@@ -327,7 +367,7 @@ function saveChannelConfig(chName, instanceId) {
     if (!card) return;
 
     const updates = {};
-    card.querySelectorAll('input[data-ch="' + iid + '"]').forEach(inp => {
+    card.querySelectorAll('[data-field][data-ch="' + iid + '"]').forEach(inp => {
         const key = inp.dataset.field;
         if (inp.type === 'checkbox') {
             updates[key] = inp.checked;
@@ -588,7 +628,7 @@ function submitAddChannel() {
 
     const fieldsContainer = document.getElementById('add-channel-fields');
     const updates = {};
-    fieldsContainer.querySelectorAll('input[data-ch="' + chName + '"]').forEach(inp => {
+    fieldsContainer.querySelectorAll('[data-field][data-ch="' + chName + '"]').forEach(inp => {
         const key = inp.dataset.field;
         if (inp.type === 'checkbox') {
             updates[key] = inp.checked;

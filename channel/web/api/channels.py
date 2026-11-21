@@ -9,11 +9,17 @@ and Feishu's one-click app registration.
 from collections import OrderedDict
 import json
 import os
+import secrets
 import threading
 import time
 
 import web
 
+from agent import team
+from channel.feishu.owner_config import (
+    DEFAULT_MEMORY_MODE, MEMORY_MODE, MEMORY_MODES, OWNER_IDS, memory_mode,
+    owner_ids, parse_owner_ids, registration_owner_id,
+)
 from channel.web.core._common import (
     _config_write_guard,
     _live_channel_manager,
@@ -44,6 +50,35 @@ class ChannelsHandler:
             "fields": [
                 {"key": "feishu_app_id", "label": "App ID", "type": "text"},
                 {"key": "feishu_app_secret", "label": "App Secret", "type": "secret"},
+                {
+                    "key": OWNER_IDS,
+                    "label": {
+                        "zh": "Owner 的 Open ID（多个用逗号分隔）",
+                        "zh-Hant": "Owner 的 Open ID（多個用逗號分隔）",
+                        "en": "Owner Open IDs (comma-separated)",
+                    },
+                    "type": "text",
+                },
+                {
+                    "key": MEMORY_MODE,
+                    "label": {
+                        "zh": "私聊记忆模式",
+                        "zh-Hant": "私聊記憶模式",
+                        "en": "Direct chat memory mode",
+                    },
+                    "type": "select",
+                    "default": DEFAULT_MEMORY_MODE,
+                },
+                {
+                    "key": "feishu_private_chat_enabled",
+                    "label": {
+                        "zh": "接收私聊消息",
+                        "zh-Hant": "接收私聊訊息",
+                        "en": "Receive direct messages",
+                    },
+                    "type": "bool",
+                    "default": True,
+                },
             ],
         }),
         ("dingtalk", {
@@ -248,7 +283,11 @@ class ChannelsHandler:
                 # the global config.json. Show the same value so a credential
                 # the bot actually uses never renders as a blank field (e.g. a
                 # secret that lives only in the global config still shows masked).
-                if raw_val in (None, ""):
+                if f["key"] == OWNER_IDS:
+                    raw_val = ", ".join(owner_ids(inst.credentials))
+                elif f["key"] == MEMORY_MODE:
+                    raw_val = memory_mode(inst.credentials)
+                elif raw_val in (None, ""):
                     raw_val = local_config.get(f["key"], f.get("default", ""))
                 if f["type"] == "secret" and raw_val:
                     display_val = cls._mask_secret(str(raw_val))
@@ -278,6 +317,8 @@ class ChannelsHandler:
                 "instance_id": inst.instance_id,
                 "channel_type": inst.channel_type,
                 "agent_id": inst.agent_id or "",
+                "project_dir": inst.project_dir,
+                "session_namespace": inst.session_namespace,
                 # User-editable label; empty falls back client-side to the id.
                 "instance_name": inst.name or "",
                 "members": list(inst.members or []),
@@ -303,6 +344,7 @@ class ChannelsHandler:
         try:
             from common import i18n
             local_config = conf()
+            multi_agent = self._multi_agent_mode()
             active_channels = self._active_channel_set()
             channels = []
             is_hant = i18n.get_language() == i18n.ZH_HANT
@@ -315,6 +357,10 @@ class ChannelsHandler:
                 fields_out = []
                 for f in ch_def["fields"]:
                     raw_val = local_config.get(f["key"], f.get("default", ""))
+                    if f["key"] == OWNER_IDS:
+                        raw_val = ""
+                    elif f["key"] == MEMORY_MODE:
+                        raw_val = DEFAULT_MEMORY_MODE
                     if f["type"] == "secret" and raw_val:
                         display_val = self._mask_secret(str(raw_val))
                     else:
@@ -355,7 +401,11 @@ class ChannelsHandler:
                 channels.append(ch_info)
 
             from channel.channel_instances import MULTI_INSTANCE_READY
-            multi_agent = self._multi_agent_mode()
+            instance_views = {i["channel_type"]: i for i in self._channel_instances_view()}
+            for ch in channels:
+                view = instance_views.get(ch["name"], {})
+                ch["project_dir"] = view.get("project_dir", "")
+                ch["session_namespace"] = view.get("session_namespace", False)
             payload = {
                 "status": "success",
                 "channels": channels,
@@ -391,6 +441,12 @@ class ChannelsHandler:
             # "create a new instance".
             from channel.channel_instances import MULTI_INSTANCE_READY
             instance_id = (body.get("instance_id") or "").strip()
+            if channel_name == "feishu" and action == "lookup_owner":
+                return self._handle_feishu_owner_lookup(instance_id, body.get("config", {}))
+            if channel_name == "feishu" and action == "connect":
+                return self._handle_instance_connect(channel_name, instance_id, body.get("config", {}))
+            if channel_name == "feishu" and action == "save":
+                return self._handle_instance_save(channel_name, instance_id or "feishu", body.get("config", {}))
             # A multi-instance-ready type (feishu) is only an *instance* when it
             # carries an instance_id (connect with an empty id creates one). But
             # the same type can still be active the legacy way — enabled in
@@ -398,6 +454,17 @@ class ChannelsHandler:
             # in which case its card has no instance_id. Disconnect/rename on
             # such a card must fall through to the legacy per-type path, or it
             # would be rejected ("instance_id is required") and never removed.
+            if action == "set_project":
+                from channel.channel_instances import get_instance, upsert_instance
+                iid = instance_id or channel_name
+                before = get_instance(conf(), iid)
+                if not before or before.channel_type != channel_name:
+                    return json.dumps({"status": "error", "message": "Channel instance not found"})
+                inst = upsert_instance(
+                    conf(), channel_type=channel_name, instance_id=iid,
+                    project_dir=body.get("project_dir", ""),
+                )
+                return json.dumps({"status": "success", "project_dir": inst.project_dir})
             is_instance_op = action in ("save", "connect") or bool(instance_id)
             if self._multi_agent_mode() and channel_name in MULTI_INSTANCE_READY and is_instance_op:
                 if action == "save":
@@ -424,33 +491,16 @@ class ChannelsHandler:
             return json.dumps({"status": "error", "message": str(e)})
 
     def _handle_save(self, channel_name: str, updates: dict):
-        ch_def = self.CHANNEL_DEFS[channel_name]
-        valid_keys = {f["key"] for f in ch_def["fields"]}
-        secret_keys = {f["key"] for f in ch_def["fields"] if f["type"] == "secret"}
-
         local_config = conf()
-        applied = {}
+        applied = self._clean_credentials(channel_name, updates)
+        if channel_name == "feishu":
+            applied.pop(OWNER_IDS, None)
+            applied.pop(MEMORY_MODE, None)
         # Track which applied keys actually changed value, so a save that leaves
         # every credential untouched (e.g. the user re-saved the form, or only
         # an unrelated setting moved) does not needlessly tear down and
         # reconnect a live channel.
-        changed = {}
-        for key, value in updates.items():
-            if key not in valid_keys:
-                continue
-            if key in secret_keys:
-                if self._is_masked_secret(value):
-                    continue
-            field_def = next((f for f in ch_def["fields"] if f["key"] == key), None)
-            if field_def:
-                if field_def["type"] == "number":
-                    value = int(value)
-                elif field_def["type"] == "bool":
-                    value = bool(value)
-            if local_config.get(key) != value:
-                changed[key] = value
-            local_config[key] = value
-            applied[key] = value
+        changed = {key: value for key, value in applied.items() if local_config.get(key) != value}
 
         if not applied:
             return json.dumps({"status": "error", "message": "no valid fields to update"})
@@ -460,6 +510,7 @@ class ChannelsHandler:
             file_cfg = _read_config_file_for_write()
             file_cfg.update(applied)
             _write_config_file_for_write(config_path, file_cfg)
+            local_config.update(applied)
 
         logger.info(
             f"[WebChannel] Channel '{channel_name}' config saved: {list(applied.keys())}, "
@@ -492,37 +543,19 @@ class ChannelsHandler:
 
     def _handle_connect(self, channel_name: str, updates: dict):
         """Save config fields, add channel to channel_type, and start it."""
-        ch_def = self.CHANNEL_DEFS[channel_name]
-        valid_keys = {f["key"] for f in ch_def["fields"]}
-        secret_keys = {f["key"] for f in ch_def["fields"] if f["type"] == "secret"}
+        local_config = conf()
+        applied = self._clean_credentials(channel_name, updates)
 
         # Feishu connected via web console must use websocket (long connection) mode
         if channel_name == "feishu":
-            updates.setdefault("feishu_event_mode", "websocket")
-            valid_keys.add("feishu_event_mode")
-
-        local_config = conf()
-        applied = {}
-        for key, value in updates.items():
-            if key not in valid_keys:
-                continue
-            if key in secret_keys:
-                if self._is_masked_secret(value):
-                    continue
-            field_def = next((f for f in ch_def["fields"] if f["key"] == key), None)
-            if field_def:
-                if field_def["type"] == "number":
-                    value = int(value)
-                elif field_def["type"] == "bool":
-                    value = bool(value)
-            local_config[key] = value
-            applied[key] = value
+            applied["feishu_event_mode"] = updates.get("feishu_event_mode", "websocket")
+            applied.pop(OWNER_IDS, None)
+            applied.pop(MEMORY_MODE, None)
 
         existing = self._parse_channel_list(conf().get("channel_type", ""))
         if channel_name not in existing:
             existing.append(channel_name)
         new_channel_type = ",".join(existing)
-        local_config["channel_type"] = new_channel_type
 
         config_path = os.path.join(get_data_root(), "config.json")
         with _config_write_guard():
@@ -530,6 +563,7 @@ class ChannelsHandler:
             file_cfg.update(applied)
             file_cfg["channel_type"] = new_channel_type
             _write_config_file_for_write(config_path, file_cfg)
+            local_config.update(applied, channel_type=new_channel_type)
 
         logger.info(f"[WebChannel] Channel '{channel_name}' connecting, channel_type={new_channel_type}")
 
@@ -627,25 +661,77 @@ class ChannelsHandler:
     def _clean_credentials(self, channel_name: str, updates: dict) -> dict:
         """Keep only real, unmasked credential values for this channel type."""
         ch_def = self.CHANNEL_DEFS[channel_name]
-        valid_keys = {f["key"] for f in ch_def["fields"]}
-        secret_keys = {f["key"] for f in ch_def["fields"] if f["type"] == "secret"}
+        field_types = {f["key"]: f["type"] for f in ch_def["fields"]}
         creds = {}
         for key, value in (updates or {}).items():
-            if key not in valid_keys:
+            field_type = field_types.get(key)
+            if field_type is None:
                 continue
-            if key in secret_keys:
-                # Skip empty or still-masked secrets so a save that leaves the
-                # secret untouched does not overwrite it with the mask.
-                if self._is_masked_secret(value):
-                    continue
+            if field_type == "secret" and self._is_masked_secret(value):
+                continue
+            if key == OWNER_IDS:
+                value = parse_owner_ids(value)
+            elif key == MEMORY_MODE and value not in MEMORY_MODES:
+                raise ValueError("Invalid Feishu direct chat memory mode")
+            elif field_type == "number":
+                value = int(value)
+            elif field_type == "bool":
+                value = bool(value)
             creds[key] = value
         return creds
 
+    def _handle_feishu_owner_lookup(self, instance_id, updates):
+        from channel.channel_instances import get_instance
+        from channel.feishu.owner_config import lookup_application_owner
+
+        current = get_instance(conf(), instance_id) if instance_id else None
+        if current and current.channel_type != "feishu":
+            raise ValueError("The target is not a Feishu instance")
+        previous = current.credentials if current and not current.legacy else {}
+        app_id = str(updates.get("feishu_app_id") or previous.get("feishu_app_id") or "").strip()
+        secret = updates.get("feishu_app_secret")
+        if self._is_masked_secret(secret) or not secret:
+            secret = previous.get("feishu_app_secret") if app_id == previous.get("feishu_app_id") else None
+        candidate = lookup_application_owner(app_id, secret)
+        return json.dumps({"status": "success", "app_id": app_id, "owner_open_id": candidate})
+
+    @staticmethod
+    def _prepare_feishu_credentials(before, creds):
+        if "feishu_app_id" in creds:
+            creds["feishu_app_id"] = str(creds["feishu_app_id"]).strip()
+        previous = before.credentials if before and not before.legacy else {}
+        if before and before.legacy:
+            from channel.channel_instances import CREDENTIAL_KEYS
+
+            inherited = (key for key in CREDENTIAL_KEYS["feishu"] if key not in (OWNER_IDS, MEMORY_MODE))
+            previous = {key: conf()[key] for key in inherited if key in conf()}
+        old_app = previous.get("feishu_app_id")
+        if "feishu_app_id" in creds and creds["feishu_app_id"] != old_app:
+            from channel.channel_instances import ensure_feishu_app_available
+
+            if not creds["feishu_app_id"] or not creds.get("feishu_app_secret"):
+                raise ValueError("Enter the App ID and App Secret for the Feishu app")
+            ensure_feishu_app_available(conf(), before.instance_id if before else "", creds["feishu_app_id"])
+        if before and before.legacy:
+            creds = {**previous, **creds}
+        return creds
+
+    @team.roster_transaction()
     def _handle_instance_connect(self, channel_name: str, instance_id: str, updates: dict):
         """Create (empty id) or reconnect a channel instance, stored in team.json."""
-        from channel.channel_instances import upsert_instance
+        from channel.channel_instances import get_instance, upsert_instance
 
         creds = self._clean_credentials(channel_name, updates)
+        if channel_name == "feishu":
+            before = get_instance(conf(), instance_id) if instance_id else None
+            if instance_id and (not before or before.channel_type != "feishu"):
+                raise ValueError("Feishu instance not found")
+            creds = self._prepare_feishu_credentials(before, creds)
+            if not before:
+                creds.setdefault(OWNER_IDS, [])
+                creds.setdefault(MEMORY_MODE, DEFAULT_MEMORY_MODE)
+                if not creds.get("feishu_app_id") or not creds.get("feishu_app_secret"):
+                    raise ValueError("Feishu App ID and App Secret are required")
         # Weixin scans its token during the QR flow (before the instance exists),
         # which lands in the global config. Fold it into this instance's own
         # credentials so the instance is self-contained: it stays logged in
@@ -699,6 +785,7 @@ class ChannelsHandler:
             "downloading": downloading,
         }, ensure_ascii=False)
 
+    @team.roster_transaction()
     def _handle_instance_save(self, channel_name: str, instance_id: str, updates: dict):
         """Update one instance's credentials in team.json and restart it."""
         from channel.channel_instances import get_instance, upsert_instance
@@ -707,6 +794,10 @@ class ChannelsHandler:
             return json.dumps({"status": "error", "message": "instance_id is required"})
         before = get_instance(conf(), instance_id)
         creds = self._clean_credentials(channel_name, updates)
+        if channel_name == "feishu":
+            if not before or before.channel_type != "feishu":
+                raise ValueError("Feishu instance not found")
+            creds = self._prepare_feishu_credentials(before, creds)
         inst = upsert_instance(
             conf(),
             channel_type=channel_name,
@@ -754,12 +845,16 @@ class ChannelsHandler:
             ensure_ascii=False,
         )
 
+    @team.roster_transaction()
     def _handle_instance_disconnect(self, channel_name: str, instance_id: str):
         """Remove one instance record from team.json and stop its channel."""
-        from channel.channel_instances import remove_instance, read_raw_instances
+        from channel.channel_instances import get_instance, remove_instance, read_raw_instances
 
         if not instance_id:
             return json.dumps({"status": "error", "message": "instance_id is required"})
+        instance = get_instance(conf(), instance_id)
+        if not instance or instance.channel_type != channel_name:
+            return json.dumps({"status": "error", "message": "Channel instance not found"})
 
         # A legacy channel (enabled the old way via config.json's channel_type)
         # is folded into channel_instances on every team.json write by
@@ -770,7 +865,7 @@ class ChannelsHandler:
         # is the last instance of it), so by the time remove_instance writes,
         # the bootstrap has nothing to recreate.
         remaining = [
-            r for r in read_raw_instances(conf())
+            r for r in read_raw_instances(conf(), strict=True)
             if str(r.get("instance_id") or "").strip() != instance_id
         ]
         self._prune_legacy_channel_type(channel_name, remaining)
@@ -1026,15 +1121,11 @@ class FeishuRegisterHandler:
 
     GET  /api/feishu/register   → 启动注册：调用 SDK 生成二维码 URL，立即返回；
                                    后台线程继续轮询飞书侧直到用户扫码授权。
-    POST /api/feishu/register   → 轮询当前会话状态（downloading / pending / done /
-                                   error / expired）。桌面版首次启用时要先下载飞书
-                                   SDK 包，此时二维码尚不存在，改由轮询补发。
-                                   注册成功后不直接写 config，由前端再调
-                                   /api/channels {action:'connect'} 走标准启用流程。
+    POST /api/feishu/register   → 轮询或取消。首次轮询到授权成功时，将凭据和
+                                   扫码用户绑定到发码前选定的实例，再请求启动通道。
     """
 
-    # 进程内单例状态（{url, expire_in, status, app_id, app_secret, error, thread}）。
-    # 简单的本地自部署场景下不需要 session 隔离。
+    # Only the client that started the current scan may consume its result.
     _state = {}
     _lock = threading.Lock()
 
@@ -1058,15 +1149,26 @@ class FeishuRegisterHandler:
         return cls._state.get("cancel_event") is cancel_event
 
     @classmethod
-    def _start_register_thread(cls):
+    def _start_register_thread(cls, instance_id="", replace=False):
         """启动一次新的注册会话。如已有进行中的会话，先取消（通过 cancel_event）。"""
         # 先取消可能存在的上一次会话，避免两个 SDK 线程并发 poll 同一个端点
+        from channel.channel_instances import get_instance, new_instance_id, read_raw_instances
+
+        target = get_instance(conf(), instance_id) if instance_id else None
+        if instance_id and (not target or target.channel_type != "feishu"):
+            raise ValueError("Feishu instance not found")
+        target_id = instance_id or new_instance_id("feishu", (r.get("instance_id") for r in read_raw_instances(conf())))
         with cls._lock:
             old_cancel = cls._state.get("cancel_event") if cls._state else None
             if old_cancel is not None:
                 old_cancel.set()
             cancel_event = threading.Event()
-            cls._state = {"status": "starting", "cancel_event": cancel_event}
+            registration_id = secrets.token_urlsafe(24)
+            cls._state = {
+                "status": "starting", "cancel_event": cancel_event, "registration_id": registration_id,
+                "instance_id": target_id, "expected": target, "replace": replace,
+                "expires_at": time.monotonic() + 900,
+            }
 
         def _worker():
             try:
@@ -1088,7 +1190,7 @@ class FeishuRegisterHandler:
                     cls._state["status"] = "error"
                     cls._state["error"] = (
                         "飞书 SDK 不可用，请联网后重试，"
-                        "或手动执行 pip install -U 'lark-oapi>=1.5.5'（%s）" % e
+                        "或手动执行 pip install -U 'lark-oapi>=1.7.1'（%s）" % e
                     )
                 return
 
@@ -1100,6 +1202,7 @@ class FeishuRegisterHandler:
                         return
                     cls._state["url"] = info.get("url", "")
                     cls._state["expire_in"] = info.get("expire_in", 600)
+                    cls._state["expires_at"] = time.monotonic() + cls._state["expire_in"]
                     cls._state["qr_image"] = cls._qr_to_data_uri(info.get("url", ""))
                     cls._state["status"] = "pending"
                 logger.info(f"[FeishuRegister] QR ready, expire_in={info.get('expire_in')}s")
@@ -1113,11 +1216,16 @@ class FeishuRegisterHandler:
                 logger.info(f"[FeishuRegister] SDK status: {info}")
 
             try:
+                app_id = None
+                if target and not replace:
+                    source = conf() if target.legacy else target.credentials
+                    app_id = source.get("feishu_app_id")
                 result = lark.register_app(
                     on_qr_code=_on_qr,
                     on_status_change=_on_status,
                     source="cowagent",
                     cancel_event=cancel_event,
+                    **({"app_id": app_id} if app_id else {"create_only": True}),
                 )
                 with cls._lock:
                     if not cls._owns_session(cancel_event):
@@ -1126,8 +1234,10 @@ class FeishuRegisterHandler:
                         )
                         return
                     cls._state["status"] = "done"
+                    cls._state["expires_at"] = time.monotonic() + 900
                     cls._state["app_id"] = result.get("client_id", "")
                     cls._state["app_secret"] = result.get("client_secret", "")
+                    cls._state["owner_open_id"] = registration_owner_id(result)
                 logger.info(f"[FeishuRegister] App created: app_id={result.get('client_id')}")
             except Exception as e:
                 err_msg = str(e)
@@ -1150,23 +1260,29 @@ class FeishuRegisterHandler:
                 logger.warning(f"[FeishuRegister] Register failed ({err_cls}): {err_msg}")
 
         threading.Thread(target=_worker, daemon=True, name="feishu-register").start()
+        return registration_id
 
     def GET(self):
         """启动一次新的注册会话。如果已有 pending/done 会话则覆盖。"""
         _require_auth()
         web.header('Content-Type', 'application/json; charset=utf-8')
         try:
-            self._start_register_thread()
+            query = web.input()
+            registration_id = self._start_register_thread(query.get("instance_id", ""), query.get("replace") == "1")
             # 等待 SDK 拿到二维码 URL（最多 10s）。SDK 内部会马上回调 _on_qr。
             import time as _t
             for _ in range(100):
                 with self._lock:
-                    if self._state.get("url") or self._state.get("status") in (
-                        "downloading", "error", "expired", "denied"
+                    if (
+                        self._state.get("registration_id") != registration_id
+                        or self._state.get("url")
+                        or self._state.get("status") in ("downloading", "error", "expired", "denied")
                     ):
                         break
                 _t.sleep(0.1)
             with self._lock:
+                if self._state.get("registration_id") != registration_id:
+                    return json.dumps({"status": "error", "message": "Feishu registration was replaced"})
                 if self._state.get("status") in ("error", "expired", "denied"):
                     return json.dumps({
                         "status": "error",
@@ -1178,6 +1294,7 @@ class FeishuRegisterHandler:
                     return json.dumps({
                         "status": "success",
                         "register_status": "downloading",
+                        "registration_id": registration_id,
                     })
                 if not self._state.get("url"):
                     return json.dumps({
@@ -1186,6 +1303,7 @@ class FeishuRegisterHandler:
                     })
                 return json.dumps({
                     "status": "success",
+                    "registration_id": registration_id,
                     "qrcode_url": self._state["url"],
                     "qr_image": self._state.get("qr_image", ""),
                     "expire_in": self._state.get("expire_in", 600),
@@ -1201,21 +1319,53 @@ class FeishuRegisterHandler:
         try:
             body = json.loads(web.data() or b"{}")
             action = body.get("action", "poll")
-            if action != "poll":
+            if action not in ("poll", "cancel"):
                 return json.dumps({"status": "error", "message": f"unknown action: {action}"})
 
             with self._lock:
+                registration_id = body.get("registration_id")
+                if not registration_id or registration_id != self._state.get("registration_id"):
+                    return json.dumps({"status": "error", "message": "Feishu registration expired or was replaced"})
+                if action == "cancel" or time.monotonic() > self._state["expires_at"]:
+                    self._state["cancel_event"].set()
+                    type(self)._state = {}
+                    return json.dumps({"status": "success", "register_status": "expired"})
                 status = self._state.get("status", "idle")
+                if status == "saved":
+                    return json.dumps(self._state["payload"])
                 if status == "done":
-                    payload = {
-                        "status": "success",
-                        "register_status": "done",
-                        "app_id": self._state.get("app_id", ""),
-                        "app_secret": self._state.get("app_secret", ""),
-                    }
-                    # 一次性返回凭据后清掉，避免敏感信息长期驻留内存
-                    self._state = {}
-                    return json.dumps(payload)
+                    from channel.channel_instances import save_feishu_registration
+
+                    app_id = self._state.get("app_id")
+                    secret = self._state.get("app_secret")
+                    scanner = self._state.get("owner_open_id")
+                    if not app_id or not secret:
+                        return json.dumps({"status": "error", "message": "Feishu registration returned incomplete credentials"})
+                    try:
+                        instance = save_feishu_registration(
+                            conf(), self._state["instance_id"], self._state["expected"],
+                            app_id, secret, scanner, replace=self._state["replace"],
+                        )
+                    except OSError:
+                        return json.dumps({"status": "success", "register_status": "save_failed"})
+                    except ValueError as exc:
+                        status = "error"
+                        result = {"status": status, "error": str(exc)}
+                    else:
+                        payload = {
+                            "status": "success",
+                            "register_status": "done",
+                            "owner_bound": bool(scanner),
+                            "instance_id": instance.instance_id,
+                        }
+                        result = {"status": "saved", "payload": payload}
+                    type(self)._state = {key: self._state[key] for key in ("registration_id", "expires_at", "cancel_event")}
+                    self._state.update(result)
+                    if result["status"] == "saved":
+                        mgr = _live_channel_manager()
+                        if mgr:
+                            threading.Thread(target=mgr.add_channel, args=(instance,), daemon=True).start()
+                        return json.dumps(payload)
                 if status in ("error", "expired", "denied"):
                     return json.dumps({
                         "status": "success",

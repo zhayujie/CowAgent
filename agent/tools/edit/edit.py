@@ -93,6 +93,9 @@ class Edit(BaseTool):
         
         # Resolve path
         absolute_path = self._resolve_path(path)
+        from agent.memory.identity import permits_memory_path
+        if not permits_memory_path(self, absolute_path):
+            return ToolResult.fail("Error: Access denied: private memory path")
 
         # Same guard the read tool applies. Editing is also a read: the success
         # result carries a diff whose context lines would expose the secrets.

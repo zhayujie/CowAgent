@@ -26,6 +26,8 @@ import secrets
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Mapping, Optional
 
+from agent import team
+from channel.feishu.owner_config import MEMORY_MODE, OWNER_IDS, owner_ids, reset_replaced_app_settings
 from common import const
 from common.log import logger
 
@@ -72,16 +74,18 @@ def is_local_instance_id(instance_id: str, channel_type: str) -> bool:
     return re.fullmatch(rf"{re.escape(ctype)}-[0-9a-f]{{{_INSTANCE_ID_RANDOM_LEN}}}", iid) is not None
 
 
-# Per channel type, the config keys that make up its credentials. Only these
-# keys are copied into a per-instance override; everything else (ports, feature
-# flags) stays global in conf(). Keep in sync with the channel classes' cfg()
-# reads. Extend as more channel types gain multi-instance support.
+# Per-channel keys stored in the instance's credentials record, including
+# settings that can vary by bot. Other settings stay in the global config.
+# Keep these keys in sync with the channel classes' cfg() reads.
 CREDENTIAL_KEYS: Dict[str, tuple] = {
     const.FEISHU: (
         "feishu_app_id",
         "feishu_app_secret",
         "feishu_token",
         "feishu_bot_name",
+        "feishu_private_chat_enabled",
+        OWNER_IDS,
+        MEMORY_MODE,
     ),
     const.DINGTALK: (
         "dingtalk_client_id",
@@ -170,6 +174,10 @@ class ChannelInstance:
     #: True when synthesized from legacy channel_type rather than an explicit
     #: channel_instances record. Legacy instances carry no credential override.
     legacy: bool = True
+    project_dir: str = ""
+    # Opt-in namespace stays enabled after clearing the directory. Existing
+    # conversations keep their old ids until an administrator opts in.
+    session_namespace: bool = False
 
 
 def _normalize_type(channel_type: str) -> str:
@@ -264,6 +272,8 @@ def _explicit_instances(raw_list: list) -> List[ChannelInstance]:
                 members=members,
                 peers=peers,
                 legacy=False,
+                project_dir=str(raw.get("project_dir") or ""),
+                session_namespace=bool(raw.get("session_namespace", False)),
             )
         )
     return out
@@ -343,6 +353,11 @@ def bootstrap_legacy_instances(
         if ctype not in MULTI_INSTANCE_READY or ctype in have_types:
             continue
         creds = _filtered_credentials(ctype, settings)
+        if ctype == const.FEISHU:
+            if not creds.get("feishu_app_id"):
+                continue
+            creds.pop(OWNER_IDS, None)
+            creds.pop(MEMORY_MODE, None)
         if not creds and not (ctype == const.WEIXIN and _legacy_weixin_login()):
             continue
         records.append(
@@ -416,11 +431,11 @@ def _carry_weixin_credentials_file(instance_id: str) -> None:
         logger.warning(f"[ChannelInstances] Weixin credentials carry-over skipped: {e}")
 
 
-def read_raw_instances(settings: Mapping[str, Any]) -> List[Dict[str, Any]]:
+def read_raw_instances(settings: Mapping[str, Any], *, strict=False) -> List[Dict[str, Any]]:
     """The raw ``channel_instances`` records as stored, or an empty list."""
     from agent import team
 
-    roster = team.read(settings)
+    roster = team.read(settings, strict=strict)
     raw = roster.get("channel_instances")
     if isinstance(raw, list):
         return [dict(item) for item in raw if isinstance(item, Mapping)]
@@ -476,6 +491,23 @@ def default_instance_name(channel_type: str, records: Iterable[Mapping[str, Any]
     return label if same_type == 0 else f"{label} {same_type + 1}"
 
 
+def validate_project_dir(value: str) -> str:
+    """Validate a server-side directory without creating it."""
+    from common.utils import expand_path
+
+    if not isinstance(value, str):
+        raise ValueError("project_dir must be a string")
+    if not value.strip():
+        return ""
+    path = os.path.realpath(expand_path(value.strip()))
+    if not os.path.isdir(path):
+        raise ValueError(f"Project directory does not exist: {path}")
+    if not os.access(path, os.R_OK | os.W_OK | os.X_OK):
+        raise ValueError(f"Project directory is not accessible: {path}")
+    return path
+
+
+@team.roster_transaction()
 def upsert_instance(
     settings: Mapping[str, Any],
     channel_type: str,
@@ -485,6 +517,7 @@ def upsert_instance(
     members: Optional[list] = None,
     peers: Optional[list] = None,
     name: Optional[str] = None,
+    project_dir: Optional[str] = None,
 ) -> ChannelInstance:
     """Create or update one channel instance record and persist it.
 
@@ -500,19 +533,30 @@ def upsert_instance(
     from agent import team
 
     ctype = _normalize_type((channel_type or "").strip())
-    records = read_raw_instances(settings)
+    records = read_raw_instances(settings, strict=True)
+    # A directory edit can be the first roster mutation on a legacy install.
+    # Carry every legacy channel over, not only the one being edited.
+    if not records and project_dir is not None:
+        records = [
+            {"instance_id": inst.instance_id, "channel_type": inst.channel_type,
+             "credentials": _filtered_credentials(inst.channel_type, settings)}
+            for inst in _legacy_instances(settings)
+        ]
     taken = {str(r.get("instance_id") or "").strip() for r in records}
 
     target_id = (instance_id or "").strip()
     if not target_id:
         target_id = new_instance_id(ctype, taken)
 
+    normalized_project = validate_project_dir(project_dir) if project_dir is not None else None
     incoming_creds = _filtered_credentials(ctype, credentials or {})
 
     updated = False
     for record in records:
         if str(record.get("instance_id") or "").strip() != target_id:
             continue
+        if _normalize_type(record.get("channel_type") or "") != ctype:
+            raise ValueError("Channel instance type does not match")
         record["channel_type"] = ctype
         if agent_id is not None:
             record["agent_id"] = str(agent_id).strip()
@@ -523,7 +567,10 @@ def upsert_instance(
             else:
                 record.pop("name", None)
         if incoming_creds:
-            merged = dict(record.get("credentials") or {})
+            source = record.get("credentials")
+            merged = dict(source) if isinstance(source, Mapping) else _filtered_credentials(ctype, record)
+            if ctype == const.FEISHU:
+                reset_replaced_app_settings(merged, incoming_creds)
             merged.update(incoming_creds)
             record["credentials"] = merged
         if members is not None:
@@ -564,9 +611,14 @@ def upsert_instance(
             result_record["peers"] = cleaned_peers
         records.append(result_record)
 
-    roster = team.read(settings)
+    if normalized_project is not None:
+        result_record["project_dir"] = normalized_project
+        if normalized_project:
+            result_record["session_namespace"] = True
+
+    roster = team.read(settings, strict=True)
     roster["channel_instances"] = records
-    team.write(settings, roster)
+    team.write(settings, roster, strict=ctype == const.FEISHU)
 
     return ChannelInstance(
         instance_id=target_id,
@@ -577,9 +629,12 @@ def upsert_instance(
         members=list(result_record.get("members") or []),
         peers=[dict(p) for p in (result_record.get("peers") or [])],
         legacy=False,
+        project_dir=str(result_record.get("project_dir") or ""),
+        session_namespace=bool(result_record.get("session_namespace", False)),
     )
 
 
+@team.roster_transaction()
 def remove_instance(settings: Mapping[str, Any], instance_id: str) -> bool:
     """Drop one instance record by id. Returns True if something was removed."""
     from agent import team
@@ -611,3 +666,39 @@ def get_instance(settings: Mapping[str, Any], instance_id: str) -> Optional[Chan
         if inst.instance_id == target_id:
             return inst
     return None
+
+
+@team.roster_transaction()
+def save_feishu_registration(settings, instance_id, expected, app_id, app_secret, scanner, *, replace=False):
+    """Commit a scan against exactly the instance the scan was started for."""
+    current = get_instance(settings, instance_id)
+    if current != expected:
+        raise ValueError("Feishu instance changed during registration; restart the scan")
+    if current and current.channel_type != const.FEISHU:
+        raise ValueError("The target is not a Feishu instance")
+    previous = current.credentials if current and not current.legacy else {}
+    old_app = previous.get("feishu_app_id")
+    if current and current.legacy:
+        old_app = settings.get("feishu_app_id")
+    if old_app and not replace and old_app != app_id:
+        raise ValueError("The scan returned a different App ID; use Replace app")
+    ensure_feishu_app_available(settings, instance_id, app_id)
+    owners = owner_ids(previous) if app_id == old_app else []
+    if scanner and scanner not in owners:
+        owners.append(scanner)
+    return upsert_instance(settings, const.FEISHU, instance_id, credentials={
+        "feishu_app_id": app_id, "feishu_app_secret": app_secret, OWNER_IDS: owners,
+    })
+
+
+def ensure_feishu_app_available(settings, instance_id, app_id):
+    records = read_raw_instances(settings, strict=True)
+    for record in records:
+        source = record.get("credentials", record)
+        if (record.get("channel_type") == const.FEISHU and record.get("instance_id") != instance_id
+                and isinstance(source, Mapping) and source.get("feishu_app_id") == app_id):
+            raise ValueError("This Feishu app is already connected to another instance")
+    if (instance_id != const.FEISHU and not any(r.get("channel_type") == const.FEISHU for r in records)
+            and const.FEISHU in _parse_channel_type(settings.get("channel_type"))
+            and settings.get("feishu_app_id") == app_id):
+        raise ValueError("This Feishu app is already connected to the legacy instance")

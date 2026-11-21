@@ -148,7 +148,15 @@ function _wsAttr(p) { return String(p || '').replace(/\\/g, '\\\\').replace(/'/g
 let _fpCurrent = '';   // absolute path currently listed
 let _fpBound = false;  // one-time listener binding guard
 
-function wsSelOpenProjectDialog() {
+let _fpSelectCallback = null;
+
+function openServerFolderPicker(onSelect) {
+    _fpSelectCallback = onSelect;
+    wsSelOpenProjectDialog(true);
+}
+
+function wsSelOpenProjectDialog(custom = false) {
+    if (!custom) _fpSelectCallback = null;
     _wsSelHide();
     _fpBindOnce();
     const overlay = document.getElementById('folder-picker-overlay');
@@ -163,11 +171,20 @@ function _fpBindOnce() {
     if (_fpBound) return;
     _fpBound = true;
     const overlay = document.getElementById('folder-picker-overlay');
-    const close = () => overlay.classList.add('hidden');
+    const close = () => {
+        overlay.classList.add('hidden');
+        _fpSelectCallback = null;
+    };
     document.getElementById('folder-picker-cancel').addEventListener('click', close);
     overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
     document.getElementById('folder-picker-open').addEventListener('click', async () => {
         if (!_fpCurrent) return;
+        if (_fpSelectCallback) {
+            _fpSelectCallback(_fpCurrent);
+            _fpSelectCallback = null;
+            close();
+            return;
+        }
         const ok = await _wsSelApply('/api/projects/select', { session: sessionId, project_dir: _fpCurrent });
         if (ok) close();
     });

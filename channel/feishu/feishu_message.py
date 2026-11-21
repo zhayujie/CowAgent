@@ -283,7 +283,9 @@ class FeishuMessage(ChatMessage):
             self.quoted_content = quoted["text"]
             self.attachments.extend(quoted["attachments"])
 
-        self.from_user_id = sender.get("sender_id").get("open_id")
+        self.identity_app_id = event.get("app_id", "")
+        self.identity_tenant_key = sender.get("tenant_key", "")
+        self.from_user_id = (sender.get("sender_id") or {}).get("open_id")
         self.to_user_id = event.get("app_id")
         if is_group:
             # 群聊

@@ -25,9 +25,9 @@ import uuid
 _IN_PLACE_ERRNOS = (errno.EBUSY, errno.EXDEV, errno.EACCES, errno.EPERM)
 
 
-def write_text_atomic(path, text: str, encoding: str = "utf-8", newline=None) -> None:
+def write_text_atomic(path, text: str, encoding: str = "utf-8", newline=None, *, allow_in_place=True) -> None:
     """``newline`` is passed to ``open``; ``''`` writes ``text`` verbatim."""
-    _replace(path, lambda f: f.write(text), encoding, newline)
+    _replace(path, lambda f: f.write(text), encoding, newline, allow_in_place=allow_in_place)
 
 
 def write_json_atomic(path, data, indent: int = 4, ensure_ascii: bool = False) -> None:
@@ -39,7 +39,7 @@ def write_bytes_atomic(path, data: bytes) -> None:
     _replace(path, lambda f: f.write(data), binary=True)
 
 
-def _replace(path, write, encoding: str = "utf-8", newline=None, binary: bool = False) -> None:
+def _replace(path, write, encoding: str = "utf-8", newline=None, binary: bool = False, *, allow_in_place=True) -> None:
     # Resolve symlinks so the link keeps pointing at the updated file instead
     # of being swapped for a regular one.
     target = os.path.realpath(os.fspath(path))
@@ -64,7 +64,7 @@ def _replace(path, write, encoding: str = "utf-8", newline=None, binary: bool = 
             opener=lambda name, flags: os.open(name, flags | os.O_EXCL, mode),
         )
     except OSError as e:
-        if not _can_write_in_place(e, target):
+        if not allow_in_place or not _can_write_in_place(e, target):
             raise
         if binary:
             buffer = io.BytesIO()
@@ -84,7 +84,7 @@ def _replace(path, write, encoding: str = "utf-8", newline=None, binary: bool = 
         try:
             os.replace(tmp_path, target)
         except OSError as e:
-            if not _can_write_in_place(e, target):
+            if not allow_in_place or not _can_write_in_place(e, target):
                 raise
             # Copy what is already on disk, byte-exact in binary mode,
             # line endings included in text mode.

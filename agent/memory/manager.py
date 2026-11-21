@@ -142,7 +142,8 @@ class MemoryManager:
         user_id: Optional[str] = None,
         max_results: Optional[int] = None,
         min_score: Optional[float] = None,
-        include_shared: bool = True
+        include_shared: bool = True,
+        include_knowledge: bool = False,
     ) -> List[SearchResult]:
         """
         Search memory with hybrid search (vector + keyword)
@@ -153,6 +154,7 @@ class MemoryManager:
             max_results: Maximum results to return
             min_score: Minimum score threshold
             include_shared: Include shared memories
+            include_knowledge: Include knowledge pages in a scoped search
             
         Returns:
             List of search results sorted by relevance
@@ -160,6 +162,9 @@ class MemoryManager:
         max_results = max_results or self.config.max_results
         # min_score=0 means "no threshold", so only None takes the default.
         min_score = self.config.min_score if min_score is None else min_score
+        if include_knowledge:
+            from config import conf
+            include_knowledge = bool(user_id and not include_shared and conf().get("knowledge", True))
         
         # Determine scopes
         scopes = []
@@ -194,7 +199,8 @@ class MemoryManager:
                     query_embedding=query_embedding,
                     user_id=user_id,
                     scopes=scopes,
-                    limit=max_results * 2  # Get more candidates for merging
+                    limit=max_results * 2,  # Get more candidates for merging
+                    include_knowledge=include_knowledge,
                 )
                 logger.info(f"[MemoryManager] Vector search found {len(vector_results)} results for query: {query}")
             except Exception as e:
@@ -207,7 +213,8 @@ class MemoryManager:
             query=query,
             user_id=user_id,
             scopes=scopes,
-            limit=max_results * 2
+            limit=max_results * 2,
+            include_knowledge=include_knowledge,
         )
         logger.info(f"[MemoryManager] Keyword search found {len(keyword_results)} results for query: {query}")
 
@@ -218,6 +225,8 @@ class MemoryManager:
             self.config.vector_weight,
             self.config.keyword_weight
         )
+        if include_knowledge:
+            merged = self._scoped_search_results(merged, user_id)
 
         # min_score is a cutoff on the fused score, so it is applied before
         # rerank; the reranker only reorders the candidates that pass it.
@@ -242,6 +251,33 @@ class MemoryManager:
                 logger.warning(f"[MemoryManager] Hit write-back failed: {e}")
 
         return top
+
+    def _scoped_search_results(self, results: List[SearchResult], user_id: str) -> List[SearchResult]:
+        """Check the live knowledge root before using cached knowledge snippets."""
+        from common import state_dir
+        from agent.tools.utils.credentials import is_credential_path
+
+        knowledge_root = None
+        if any(result.source == "knowledge" for result in results):
+            try:
+                knowledge_root = _real(state_dir.knowledge_dir(base=self.config.get_workspace()))
+            except (OSError, RuntimeError):
+                pass
+
+        visible = []
+        for result in results:
+            if result.source != "knowledge":
+                if result.user_id == user_id:
+                    visible.append(result)
+                continue
+
+            path = result.path.replace("\\", "/")
+            if knowledge_root is None or result.user_id is not None or not path.startswith("knowledge/"):
+                continue
+            page = _real(knowledge_root / path[len("knowledge/"):])
+            if knowledge_root in page.parents and page.is_file() and not is_credential_path(str(page)):
+                visible.append(result)
+        return visible
     
     def _get_workspace_dir(self) -> Optional[Path]:
         config = getattr(self, "config", None)
@@ -431,11 +467,14 @@ class MemoryManager:
             # scans the shared base rather than an empty (or missing) local one.
             knowledge_dir = Path(state_dir.knowledge_dir(base=workspace_dir))
             if knowledge_dir.exists():
+                resolved_knowledge_dir = _real(knowledge_dir)
                 for file_path in knowledge_dir.rglob("*.[mM][dD]"):
                     # The root index.md / log.md only restate pages indexed on
                     # their own, and change on every page write, which re-embeds
                     # the whole file each time.
                     if file_path.parent == knowledge_dir and file_path.name in ("index.md", "log.md"):
+                        continue
+                    if resolved_knowledge_dir not in _real(file_path).parents:
                         continue
                     files_to_scan.append((file_path, "knowledge", "shared", None))
 

@@ -194,6 +194,9 @@ class Read(BaseTool):
 
         # Security check: block credential files and their aliases.
         # See issue #2913 (/proc/self/environ bypass) and #2863 (scope).
+        from agent.memory.identity import permits_memory_path
+        if not permits_memory_path(self, absolute_path):
+            return ToolResult.fail("Error: Access denied: private memory path")
         if self._is_credential_path(absolute_path):
             return ToolResult.fail(DENIED_MESSAGE)
         

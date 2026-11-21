@@ -8,7 +8,7 @@ import sqlite3
 import struct
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 try:
     import numpy as np
@@ -37,6 +37,34 @@ class VectorMatch:
     metadata: Dict[str, Any]
 
 
+def search_visibility(
+    scopes: Optional[Sequence[str]],
+    user_id: Optional[str],
+    include_knowledge: bool = False,
+) -> Tuple[str, List[str]]:
+    """SQL predicate shared by the SQLite keyword and vector searches."""
+    clauses = []
+    params = []
+    if scopes is not None:
+        if scopes:
+            placeholders = ",".join("?" for _ in scopes)
+            clauses.append(f"chunks.scope IN ({placeholders})")
+            params.extend(scopes)
+        else:
+            clauses.append("0")
+    if user_id:
+        clauses.append("(chunks.scope = 'shared' OR chunks.user_id = ?)")
+        params.append(user_id)
+
+    predicate = " AND ".join(clauses) or "1"
+    if include_knowledge:
+        predicate = (
+            f"(({predicate}) OR (chunks.scope = 'shared' "
+            "AND chunks.source = 'knowledge' AND chunks.user_id IS NULL))"
+        )
+    return predicate, params
+
+
 class VectorBackend(ABC):
     """Storage-independent vector operations used by memory."""
 
@@ -59,7 +87,10 @@ class VectorBackend(ABC):
         limit: int = 10,
         metadata_filter: Optional[Dict[str, Any]] = None,
     ) -> List[VectorMatch]:
-        """Return the highest-scoring matches satisfying the filter."""
+        """Return the highest-scoring matches satisfying the filter.
+
+        ``include_knowledge`` also admits shared, unowned knowledge chunks.
+        """
 
 
 class SQLiteVectorBackend(VectorBackend):
@@ -190,23 +221,16 @@ class SQLiteVectorBackend(VectorBackend):
         metadata_filter = metadata_filter or {}
 
         scopes = metadata_filter.get("scopes")
-        if scopes is not None:
-            if not scopes:
-                clauses.append("0")
-            else:
-                clauses.append(
-                    "scope IN ({})".format(",".join("?" for _ in scopes))
-                )
-                params.extend(scopes)
-
-        user_id = metadata_filter.get("user_id")
-        if shared_visible_to_user and user_id:
-            clauses.append("(scope = 'shared' OR user_id = ?)")
-            params.append(user_id)
+        user_id = metadata_filter.get("user_id") if shared_visible_to_user else None
+        include_knowledge = shared_visible_to_user and metadata_filter.get("include_knowledge", False)
+        if scopes is not None or user_id or include_knowledge:
+            predicate, scope_params = search_visibility(scopes, user_id, include_knowledge)
+            clauses.append(predicate)
+            params.extend(scope_params)
 
         for key, value in metadata_filter.items():
             if key == "scopes" or (
-                key == "user_id" and shared_visible_to_user
+                key in ("user_id", "include_knowledge") and shared_visible_to_user
             ) or value is None:
                 continue
             if key not in cls._FILTER_COLUMNS:

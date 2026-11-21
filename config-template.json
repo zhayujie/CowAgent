@@ -29,6 +29,7 @@
   "linkai_app_code": "",
   "feishu_app_id": "",
   "feishu_app_secret": "",
+  "feishu_private_chat_enabled": true,
   "feishu_stream_reply": true,
   "dingtalk_client_id": "",
   "dingtalk_client_secret": "",

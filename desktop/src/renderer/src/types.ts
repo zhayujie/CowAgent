@@ -904,8 +904,8 @@ export type ModelsAction =
 
 export interface ChannelField {
   key: string
-  label: string
-  type: 'text' | 'secret' | 'number' | 'bool'
+  label: string | { zh: string; en: string; 'zh-Hant'?: string }
+  type: 'text' | 'secret' | 'number' | 'bool' | 'select'
   value?: string | number | boolean
   default?: string | number | boolean
 }
@@ -928,6 +928,8 @@ export interface ChannelInfo {
   // User-editable display name for this instance (e.g. "微信2"); empty falls back
   // to the instance id. Present only on per-instance cards (multi-Agent mode).
   instance_name?: string
+  project_dir?: string
+  session_namespace?: boolean
 }
 
 // The full /api/channels response. Legacy single-Agent installs only populate
@@ -940,7 +942,7 @@ export interface ChannelsResponse {
   instances?: ChannelInfo[]
 }
 
-export type ChannelAction = 'save' | 'connect' | 'disconnect' | 'rename'
+export type ChannelAction = 'save' | 'connect' | 'disconnect' | 'rename' | 'lookup_owner'
 
 // ============================================================
 // Agents / team roster (multi-Agent mode)

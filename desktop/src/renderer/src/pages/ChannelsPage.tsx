@@ -47,7 +47,7 @@ const pendingState = (ch: ChannelInfo): Pending => {
 }
 
 // An icon component that takes a `size` prop (lucide icons and our PaperPlaneIcon).
-type IconComponent = React.FC<{ size?: number }>
+type IconComponent = LucideIcon | React.FC<{ size?: number }>
 
 // Per-channel icon + accent color, mirroring the web console's FontAwesome
 // icon + Tailwind color palette (we use lucide here, with hex colors so the
@@ -555,13 +555,14 @@ const ChannelCard: React.FC<{
   const weixinQr = qrProvider === 'weixin' && (pending === 'scanning' || (!channel.active && defaultExpanded))
   // Feishu's scan creates a brand new app, so it stays behind a button.
   const [feishuScanning, setFeishuScanning] = useState(false)
+  const [replaceFeishuApp, setReplaceFeishuApp] = useState(false)
   // Stored credentials mean the user most likely wants to edit them.
   const [mode, setMode] = useState<'scan' | 'manual'>(() =>
-    channel.fields.some((f) => f.type !== 'bool' && !!f.value) ? 'manual' : 'scan'
+    channel.fields.some((f) => f.key === 'feishu_app_id' && !!f.value) ? 'manual' : 'scan'
   )
   const [expanded, setExpanded] = useState(defaultExpanded)
   const [values, setValues] = useState<Record<string, string>>(() =>
-    Object.fromEntries(channel.fields.map((f) => [f.key, f.value != null ? String(f.value) : '']))
+    Object.fromEntries(channel.fields.map((f) => [f.key, String(f.value ?? f.default ?? '')]))
   )
   // Track which secret fields still hold the server-provided mask.
   const [masked, setMasked] = useState<Record<string, boolean>>(() =>
@@ -571,8 +572,25 @@ const ChannelCard: React.FC<{
   )
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState('')
+  const [ownerCandidate, setOwnerCandidate] = useState('')
+  const [ownerLookupStatus, setOwnerLookupStatus] = useState('')
+  const [ownerLookupBusy, setOwnerLookupBusy] = useState(false)
+  const ownerLookupRevision = useRef(0)
 
-  const setField = (key: string, val: string) => setValues((p) => ({ ...p, [key]: val }))
+  const setField = (key: string, val: string) => {
+    if (key === 'feishu_app_id' || key === 'feishu_app_secret') {
+      ownerLookupRevision.current++
+      setOwnerCandidate('')
+      setOwnerLookupStatus('')
+      setOwnerLookupBusy(false)
+    }
+    setValues((prev) => {
+      if (key === 'feishu_app_id' && val !== prev[key]) {
+        return { ...prev, [key]: val, feishu_owner_open_ids: '', feishu_private_memory_mode: 'owner_workspace' }
+      }
+      return { ...prev, [key]: val }
+    })
+  }
 
   // Only send fields the user actually changed; masked secrets are skipped so
   // the backend keeps the stored value (mirrors the web console behavior).
@@ -581,8 +599,12 @@ const ChannelCard: React.FC<{
     channel.fields.forEach((f) => {
       const v = values[f.key]
       if (f.type === 'secret' && masked[f.key]) return
-      if (v === '' || v == null) return
-      cfg[f.key] = f.type === 'number' ? Number(v) : v
+      if (v == null || (v === '' && f.key !== 'feishu_owner_open_ids')) return
+      if (f.type === 'bool') {
+        cfg[f.key] = v === 'true' || v === '1'
+      } else {
+        cfg[f.key] = f.type === 'number' ? Number(v) : v
+      }
     })
     return cfg
   }
@@ -595,6 +617,28 @@ const ChannelCard: React.FC<{
     if (forceNewInstance) return ''
     if (channel.instance_id) return channel.instance_id
     return undefined
+  }
+
+  const lookupFeishuOwner = async () => {
+    const revision = ++ownerLookupRevision.current
+    const appId = values.feishu_app_id.trim()
+    setOwnerLookupBusy(true)
+    setOwnerCandidate('')
+    setOwnerLookupStatus('')
+    try {
+      const res = await apiClient.channelAction('lookup_owner', 'feishu', {
+        feishu_app_id: appId,
+        feishu_app_secret: masked.feishu_app_secret ? '' : values.feishu_app_secret,
+      }, instanceIdArg())
+      if (revision !== ownerLookupRevision.current) return
+      const candidate = res.status === 'success' && res.app_id === appId ? String(res.owner_open_id || '') : ''
+      setOwnerCandidate(candidate)
+      setOwnerLookupStatus(candidate || t('feishu_lookup_owner_missing'))
+    } catch {
+      if (revision === ownerLookupRevision.current) setOwnerLookupStatus(t('feishu_lookup_owner_missing'))
+    } finally {
+      if (revision === ownerLookupRevision.current) setOwnerLookupBusy(false)
+    }
   }
 
   const run = async (action: 'save' | 'connect' | 'disconnect') => {
@@ -651,6 +695,18 @@ const ChannelCard: React.FC<{
           }}
         />
       ))}
+      {channel.name === 'feishu' && <div className="flex flex-wrap items-center gap-2 text-xs">
+        <button type="button" className="text-accent" disabled={ownerLookupBusy || !values.feishu_app_id} onClick={lookupFeishuOwner}>
+          {t('feishu_lookup_owner')}
+        </button>
+        {ownerCandidate && <button type="button" className="text-accent" onClick={() => {
+          const ids = new Set((values.feishu_owner_open_ids || '').split(/[,，\s]+/).filter(Boolean))
+          ids.add(ownerCandidate)
+          setField('feishu_owner_open_ids', [...ids].join(', '))
+          setOwnerCandidate('')
+        }}>{t('feishu_use_owner')}</button>}
+        <span role="status">{ownerLookupStatus}</span>
+      </div>}
       <div className="flex items-center justify-end gap-3 pt-1">
         <span className={`text-xs transition-opacity ${status ? 'opacity-100' : 'opacity-0'} ${status === t('channels_save_ok') ? 'text-accent' : 'text-danger'}`}>
           {status || '\u00a0'}
@@ -711,6 +767,8 @@ const ChannelCard: React.FC<{
         <ChannelBinding channel={channel} />
       )}
 
+      {channel.active && <ChannelProject channel={channel} onChanged={onChanged} />}
+
       {/* QR-login channels with no desktop support fall back to the web console. */}
       {isQrLogin && !channel.active && !qrProvider && (
         <p className="text-xs text-content-tertiary mt-3 pl-12">{t('channels_qr_hint')}</p>
@@ -754,18 +812,21 @@ const ChannelCard: React.FC<{
           {mode !== 'scan' ? (
             fieldEditor
           ) : feishuScanning ? (
-            <QrScanPanel provider="feishu" onConnected={onChanged} newInstance={multiAgent && (forceNewInstance || !channel.instance_id)} />
+            <QrScanPanel provider="feishu" onConnected={onChanged} instanceId={channel.instance_id}
+              newInstance={forceNewInstance || !channel.instance_id} replaceApp={replaceFeishuApp} />
           ) : (
             <div className="flex flex-col items-center py-3">
               <p className="text-sm text-content-secondary mb-4 text-center max-w-sm leading-relaxed">
-                {channel.active ? t('feishu_scan_replace_desc') : t('feishu_scan_panel_desc')}
+                {channel.active ? t('feishu_scan_reconnect') : t('feishu_scan_panel_desc')}
               </p>
-              <Btn variant="primary" onClick={() => setFeishuScanning(true)}>
+              <Btn variant="primary" onClick={() => { setReplaceFeishuApp(false); setFeishuScanning(true) }}>
                 <span className="flex items-center gap-1.5">
                   <QrCode size={15} />
-                  {t('feishu_scan_btn')}
+                  {t(channel.active ? 'feishu_scan_reconnect' : 'feishu_scan_btn')}
                 </span>
               </Btn>
+              {channel.active && <button title={t('feishu_scan_replace_desc')} className="mt-3 text-sm text-accent"
+                onClick={() => { setReplaceFeishuApp(true); setFeishuScanning(true) }}>{t('feishu_scan_replace')}</button>}
             </div>
           )}
         </div>
@@ -842,27 +903,89 @@ const ChannelBinding: React.FC<{ channel: ChannelInfo }> = ({ channel }) => {
   )
 }
 
+const ChannelProject: React.FC<{channel: ChannelInfo; onChanged: () => void}> = ({channel, onChanged}) => {
+  const [path, setPath] = useState(channel.project_dir || '')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [listing, setListing] = useState<Awaited<ReturnType<typeof apiClient.browseChannelProject>> | null>(null)
+  useEffect(() => { setPath(channel.project_dir || '') }, [channel.project_dir])
+  const browse = async (dir: string) => {
+    try {
+      setError('')
+      const data = await apiClient.browseChannelProject(dir)
+      if (data.status !== 'success') throw new Error(data.message)
+      setListing(data)
+    } catch (e) { setError(String(e)) }
+  }
+  const save = async () => {
+    if (path.trim() && !channel.session_namespace && !await askConfirm({
+      titleKey: 'channels_project_isolate_title',
+      msgKey: 'channels_project_isolate_message',
+      okKey: 'channels_save',
+      tone: 'primary',
+    })) return
+    setBusy(true)
+    setError('')
+    try {
+      const data = await apiClient.setChannelProject(channel.name, channel.instance_id || '', path)
+      if (data.status !== 'success') throw new Error(data.message)
+      onChanged()
+    } catch (e) { setError(String(e)) }
+    finally { setBusy(false) }
+  }
+  return <div className="mt-4 pt-4 border-t border-subtle space-y-2">
+    <label className="text-xs text-content-secondary">{t('channels_project_label')}</label>
+    <div className="flex gap-2">
+      <input className="flex-1 min-w-0 bg-transparent border rounded px-2 text-sm" value={path} onChange={e => setPath(e.target.value)} placeholder={t('channels_project_placeholder')} />
+      <Btn disabled={busy} onClick={() => void browse(path)}>{t('channels_project_browse')}</Btn>
+      <Btn disabled={busy} onClick={() => void save()}>{t('channels_save')}</Btn>
+    </div>
+    <p className="text-xs text-content-tertiary">{t('channels_project_hint')}</p>
+    {listing && <div className="border rounded p-2 space-y-2">
+      <div className="text-xs break-all">{listing.path}</div>
+      <div className="flex gap-2">
+        <Btn onClick={() => void browse(listing.parent || '')}>{t('channels_project_up')}</Btn>
+        <Btn onClick={() => setListing(null)}>{t('cancel')}</Btn>
+        <Btn disabled={listing.path === '__DRIVES__'} onClick={() => {setPath(listing.path); setListing(null)}}>{t('channels_project_select_here')}</Btn>
+      </div>
+      <div className="max-h-48 overflow-auto">{listing.dirs.map(dir => <button type="button" key={dir.path} className="block text-sm p-1" onClick={() => void browse(dir.path)}>{dir.name}</button>)}</div>
+    </div>}
+    {error && <p role="alert" className="text-xs text-red-500">{error}</p>}
+  </div>
+}
+
 const FieldRow: React.FC<{
   field: ChannelField
   value: string
   onChange: (v: string) => void
   onFocusSecret: () => void
 }> = ({ field, value, onChange, onFocusSecret }) => {
+  const label = localizedLabel(field.label)
+  if (field.type === 'select') {
+    return <label className="block text-sm text-content-secondary">
+      {label}
+      <select value={value || String(field.default)} onChange={(e) => onChange(e.target.value)}
+        className="mt-1 w-full px-3 py-2 rounded-btn border border-strong bg-inset text-content">
+        {(['owner_workspace', 'per_user', 'shared'] as const).map((mode) =>
+          <option key={mode} value={mode}>{t(`feishu_memory_${mode}`)}</option>)}
+      </select>
+    </label>
+  }
   if (field.type === 'bool') {
     return (
       <div className="flex items-center justify-between">
-        <span className="text-sm text-content-secondary">{field.label}</span>
+        <span className="text-sm text-content-secondary">{label}</span>
         <Toggle checked={value === 'true' || value === '1'} onChange={(v) => onChange(v ? 'true' : 'false')} />
       </div>
     )
   }
   return (
     <div>
-      <label className="block text-sm text-content-secondary mb-1.5">{field.label}</label>
+      <label className="block text-sm text-content-secondary mb-1.5">{label}</label>
       <input
         type={field.type === 'number' ? 'number' : 'text'}
         value={value}
-        placeholder={field.label}
+        placeholder={label}
         onChange={(e) => onChange(e.target.value)}
         onFocus={onFocusSecret}
         className="w-full px-3 py-2 rounded-btn border border-strong bg-inset text-sm text-content placeholder:text-content-tertiary focus:outline-none focus:border-accent font-mono transition-colors"
