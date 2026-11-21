@@ -108,3 +108,38 @@ def test_missing_callback_id_does_not_filter_later_messages(callback_channel):
     assert channel._callback_handle_message(message(""))["msgtype"] == "stream"
     assert channel._callback_handle_message(message(""))["msgtype"] == "stream"
     assert len(queued) == 2
+
+
+# ---------------------------------------------------------------------------
+# the long-connection path feeds the same dedupe table
+# ---------------------------------------------------------------------------
+
+
+def _long_connection(body):
+    """A `aibot_msg_callback` frame: the message sits under `body`."""
+    return {"body": body, "headers": {"req_id": ""}}
+
+
+def test_long_connection_repeated_msgid_queues_only_one_turn(callback_channel):
+    channel, queued = callback_channel
+    channel._handle_msg_callback(_long_connection(message("same-message")))
+    channel._handle_msg_callback(_long_connection(message("same-message")))
+
+    assert len(queued) == 1
+
+
+def test_long_connection_missing_msgid_does_not_filter_later_messages(callback_channel):
+    """A payload without msgid must not poison the table for every later one."""
+    channel, queued = callback_channel
+    channel._handle_msg_callback(_long_connection(message("")))
+    channel._handle_msg_callback(_long_connection(message("")))
+
+    assert len(queued) == 2
+
+
+def test_long_connection_distinct_msgids_each_queue_a_turn(callback_channel):
+    channel, queued = callback_channel
+    channel._handle_msg_callback(_long_connection(message("first")))
+    channel._handle_msg_callback(_long_connection(message("second")))
+
+    assert len(queued) == 2
