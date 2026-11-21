@@ -384,6 +384,11 @@ export async function setProviderCredential(providerId: string, apiKey: string, 
   });
 }
 
+/** Forgets a built-in vendor's key and base. */
+export async function clearProviderCredential(providerId: string) {
+  return http.request<{status: string}>('/api/models', {body: {action: 'delete_provider', provider_id: providerId}});
+}
+
 export interface CapabilityChoice {
   capability: CapabilityKey;
   /** Empty means automatic (vision, image, asr) or switched off (embedding). */

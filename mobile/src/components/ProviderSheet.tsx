@@ -1,14 +1,18 @@
+import {faArrowUpRightFromSquare} from '@fortawesome/free-solid-svg-icons';
 import React, {useEffect, useState} from 'react';
-import {ScrollView, Text, TextInput, View} from 'react-native';
-import {saveCustomCatalog, setCustomProvider, setProviderCredential} from '../api/cowApi';
+import {Pressable, ScrollView, Text, TextInput, View} from 'react-native';
+import {clearProviderCredential, saveCustomCatalog, setCustomProvider, setProviderCredential} from '../api/cowApi';
 import {tr} from '../i18n';
+import {openWebPage} from '../navigation/openWeb';
 import type {CatalogModel, ProviderEntry} from '../protocol/resources';
 import {describeConnectError} from '../store/serverStore';
 import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
+import {Icon} from './Icon';
 import {labelText} from './ModelPicker';
 import {ActionButton, MONO} from './settings';
 import {Sheet} from './Sheet';
+import {Chip} from './ui';
 
 /** The server masks keys with one * per hidden character, which overruns a phone row. */
 export const compactMask = (masked: string) => masked.replace(/\*{4,}/g, '••••');
@@ -59,34 +63,42 @@ export function ProviderSheet({
   note,
   onClose,
   onSaved,
+  onCleared,
 }: {
   provider: ProviderEntry | null;
   /** Shown above the hint, e.g. that search shares these credentials. */
   note?: string;
   onClose: () => void;
   onSaved: () => Promise<void>;
+  /** Offers to forget a saved key; called once it is gone. */
+  onCleared?: () => Promise<void>;
 }) {
+  const t = useTheme();
   const styles = useStyles();
   const [key, setKey] = useState('');
   const [base, setBase] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<'save' | 'clear' | null>(null);
+  const [confirmClear, setConfirmClear] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (provider) {
       setKey('');
       setBase(provider.api_base ?? '');
+      setConfirmClear(false);
       setError(null);
     }
   }, [provider]);
 
   const hasBase = !!provider?.api_base_field;
+  const presets = (hasBase && provider?.api_base_presets) || [];
+  const preset = presets.find(p => p.value === base.trim());
   const baseChanged = hasBase && base.trim() !== (provider?.api_base ?? '');
   const save = async () => {
     if (!provider) {
       return;
     }
-    setBusy(true);
+    setBusy('save');
     setError(null);
     try {
       await setProviderCredential(provider.id, key.trim(), baseChanged ? base.trim() : undefined);
@@ -94,43 +106,107 @@ export function ProviderSheet({
     } catch (e) {
       setError(describeConnectError(e));
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   };
 
+  const clear = async () => {
+    if (!provider || !onCleared) {
+      return;
+    }
+    if (!confirmClear) {
+      setConfirmClear(true);
+      return;
+    }
+    setBusy('clear');
+    setError(null);
+    try {
+      await clearProviderCredential(provider.id);
+      await onCleared();
+    } catch (e) {
+      setError(describeConnectError(e));
+    } finally {
+      setBusy(null);
+      setConfirmClear(false);
+    }
+  };
+
+  const hint = error
+    ? error
+    : confirmClear
+      ? tr('settings_clear_key_warn')
+      : provider?.configured
+        ? tr('settings_key_keep_hint')
+        : tr('settings_key_local_hint');
+
   return (
     <Sheet visible={!!provider} onClose={onClose} title={provider ? labelText(provider.label, provider.id) : ''}>
-      <View style={styles.body}>
-        {!!note && <Text style={styles.note}>{note}</Text>}
-        <Field
-          label="API Key"
-          value={key}
-          onChangeText={setKey}
-          placeholder={provider?.api_key_masked ? compactMask(provider.api_key_masked) : tr('settings_paste_api_key')}
-          secure
-        />
-        {hasBase && (
+      <ScrollView style={styles.scroll} keyboardShouldPersistTaps="handled">
+        <View style={styles.body}>
+          {!!note && <Text style={styles.note}>{note}</Text>}
+          {presets.length > 0 && (
+            <>
+              <Text style={styles.fieldLabel}>{tr('settings_api_site')}</Text>
+              <View style={styles.presets}>
+                {presets.map(p => (
+                  <Chip
+                    key={p.value}
+                    label={labelText(p.label, p.value)}
+                    active={p.value === base.trim()}
+                    onPress={() => setBase(p.value)}
+                  />
+                ))}
+              </View>
+            </>
+          )}
           <Field
-            label={tr('settings_api_base')}
-            value={base}
-            onChangeText={setBase}
-            placeholder={provider?.api_base_placeholder || provider?.api_base_default || 'https://'}
-            mono
-            url
+            label="API Key"
+            value={key}
+            onChangeText={setKey}
+            placeholder={provider?.api_key_masked ? compactMask(provider.api_key_masked) : tr('settings_paste_api_key')}
+            secure
           />
-        )}
-        <Text style={[styles.hint, !!error && styles.error]}>
-          {error ?? (provider?.configured ? tr('settings_key_keep_hint') : tr('settings_key_local_hint'))}
-        </Text>
-        <ActionButton
-          label={tr('common_save')}
-          tone="primary"
-          loading={busy}
-          disabled={!key.trim() && !baseChanged}
-          onPress={save}
-          style={styles.button}
-        />
-      </View>
+          {!!preset?.keys_url && (
+            <Pressable
+              accessibilityRole="link"
+              hitSlop={6}
+              onPress={() => openWebPage(preset.keys_url!)}
+              style={({pressed}) => [styles.link, pressed && styles.pressed]}>
+              <Text style={styles.linkText}>{tr('settings_get_key')}</Text>
+              <Icon icon={faArrowUpRightFromSquare} size={10} color={t.accent} />
+            </Pressable>
+          )}
+          {hasBase && !presets.length && (
+            <Field
+              label={tr('settings_api_base')}
+              value={base}
+              onChangeText={setBase}
+              placeholder={provider?.api_base_placeholder || provider?.api_base_default || 'https://'}
+              mono
+              url
+            />
+          )}
+          <Text style={[styles.hint, (!!error || confirmClear) && styles.error]}>{hint}</Text>
+          <ActionButton
+            label={tr('common_save')}
+            tone="primary"
+            loading={busy === 'save'}
+            disabled={(!key.trim() && !baseChanged) || busy === 'clear'}
+            onPress={save}
+            style={styles.button}
+          />
+          {!!onCleared && !!provider?.configured && (
+            <ActionButton
+              label={confirmClear ? tr('settings_clear_key_confirm') : tr('settings_clear_key')}
+              tone={confirmClear ? 'danger' : 'quiet'}
+              loading={busy === 'clear'}
+              disabled={busy === 'save'}
+              onPress={clear}
+              style={styles.deleteButton}
+            />
+          )}
+        </View>
+      </ScrollView>
     </Sheet>
   );
 }
@@ -271,6 +347,10 @@ const useStyles = makeStyles(t => ({
   },
   mono: {fontFamily: MONO, fontSize: 13},
   hint: {fontSize: 12, lineHeight: 18, color: t.t4, paddingTop: 4},
+  presets: {flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8},
+  link: {flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start', paddingVertical: 4},
+  linkText: {fontSize: 13, fontWeight: '500', color: t.accent},
+  pressed: {opacity: 0.6},
   error: {color: t.danger},
   button: {marginTop: 14, marginBottom: 4},
   deleteButton: {marginTop: 8, marginBottom: 4},

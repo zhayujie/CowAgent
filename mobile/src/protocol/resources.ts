@@ -433,6 +433,8 @@ export interface ProviderEntry {
   api_base?: string;
   api_base_default?: string;
   api_base_placeholder?: string;
+  /** Known bases to pick from, each with where its keys are issued. */
+  api_base_presets?: {label: string | {zh?: string; en?: string}; value: string; keys_url?: string}[];
   /** `custom:<custom_id>` vendors carry their own display name. */
   custom_id?: string;
   custom_name?: string;
