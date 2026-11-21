@@ -8,7 +8,6 @@ import {
   HelpCircle,
   Info,
   Laptop,
-  Link2,
   Loader2,
   LogOut,
   Monitor,
@@ -376,14 +375,6 @@ const DevicesTab: React.FC<{
     return () => clearInterval(timer)
   }, [pairingId, notice, loadDevices])
 
-  const copyLink = () => {
-    if (!pairing || pairing.expired) return
-    navigator.clipboard
-      .writeText(pairing.link)
-      .then(() => notice(t('devices_link_copied')))
-      .catch(() => {})
-  }
-
   const renameIn = async (device: PairedDevice, next: string | null) => {
     setRenaming('')
     const value = (next || '').trim()
@@ -697,20 +688,10 @@ const DevicesTab: React.FC<{
                   </button>
                 )}
                 {!pairing.expired && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={copyLink}
-                      className="inline-flex items-center gap-1.5 text-accent hover:underline cursor-pointer"
-                    >
-                      <Link2 size={12} />
-                      {t('devices_copy_link')}
-                    </button>
-                    <span className="inline-flex items-center gap-1.5 text-content-tertiary">
-                      <Loader2 size={11} className="animate-spin" />
-                      {t('devices_waiting')}
-                    </span>
-                  </>
+                  <span className="inline-flex items-center gap-1.5 text-content-tertiary">
+                    <Loader2 size={11} className="animate-spin" />
+                    {t('devices_waiting')}
+                  </span>
                 )}
               </div>
             </div>

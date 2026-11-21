@@ -359,11 +359,6 @@ function _pollDevicePairing() {
     }, 2000);
 }
 
-function copyDevicePairLink() {
-    if (!devicePairing || devicePairing.expired) return;
-    copyToClipboard(devicePairing.link).then(() => _shareToast(t('devices_link_copied'))).catch(() => {});
-}
-
 function renderDevicePairing() {
     const box = document.getElementById('devices-pairing');
     if (!box) return;
@@ -407,8 +402,6 @@ function renderDevicePairing() {
                     </span>
                     ${p.expired && !DEVICES_MOBILE_PAIRING ? `<button onclick="startDevicePairing()" class="inline-flex items-center gap-1.5 text-primary-500 hover:text-primary-600 cursor-pointer">
                         <i class="fas fa-rotate-right"></i>${escapeHtml(t('devices_regenerate'))}</button>` : ''}
-                    ${p.expired ? '' : `<button onclick="copyDevicePairLink()" class="inline-flex items-center gap-1.5 text-primary-500 hover:text-primary-600 cursor-pointer">
-                        <i class="fas fa-link"></i>${escapeHtml(t('devices_copy_link'))}</button>`}
                     ${p.expired ? '' : `<span class="inline-flex items-center gap-1.5 text-slate-400 dark:text-slate-500"><i class="fas fa-spinner fa-spin text-[10px]"></i>${escapeHtml(t('devices_waiting'))}</span>`}
                 </div>
             </div>
