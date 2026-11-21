@@ -178,6 +178,23 @@ export async function withPreview(f: ChatFile): Promise<ChatFile | null> {
   return resolved?.previewUrl ? {...f, previewUrl: resolved.previewUrl} : null;
 }
 
+/**
+ * A link that works outside the app, in a browser or for someone else: the signed
+ * preview, which needs no login, or a file already on the web. Empty when there is
+ * neither; never the `/api/file` link, which carries the login token.
+ */
+export async function outsideLinkOf(f: ChatFile): Promise<string> {
+  if (f.previewUrl) {
+    return serverUrl(f.previewUrl);
+  }
+  if (f.rawUrl && /^https?:\/\//i.test(f.rawUrl)) {
+    return f.rawUrl;
+  }
+  const path = f.path ?? (f.rawUrl ? pathOfFileUrl(f.rawUrl) : null);
+  const resolved = path ? await resolveFile(path).catch(() => null) : null;
+  return resolved?.previewUrl ? serverUrl(resolved.previewUrl) : '';
+}
+
 /** `/api/file?path=…` back to the path it serves, so a link can be resolved like any other. */
 function pathOfFileUrl(url: string): string | null {
   const match = /^\/api\/file\?(.*)$/.exec(url);

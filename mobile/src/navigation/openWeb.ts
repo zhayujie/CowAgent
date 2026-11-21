@@ -1,4 +1,5 @@
 import {Linking, Platform} from 'react-native';
+import {serverUrl} from '../api/cowApi';
 import {showToast} from '../components/Toast';
 import {tr} from '../i18n';
 import {navigationRef} from './ref';
@@ -22,6 +23,15 @@ export function openWebPage(url: string, title?: string) {
     return;
   }
   Linking.openURL(target).catch(() => showToast(tr('file_link_unsupported')));
+}
+
+/** A link to hand out: on the app's own server, without the login token the app put in it. */
+export function withoutLoginToken(url: string): string {
+  const base = serverUrl('');
+  if (!base || !url.startsWith(base)) {
+    return url;
+  }
+  return url.replace(/([?&])token=[^&#]*&?/, '$1').replace(/[?&](?=#|$)/, '');
 }
 
 /** Whether the app's web page loads this itself rather than handing it to the system. */

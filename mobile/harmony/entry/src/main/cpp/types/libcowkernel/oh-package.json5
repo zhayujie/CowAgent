@@ -1,0 +1,6 @@
+{
+  "name": "libcowkernel.so",
+  "types": "./index.d.ts",
+  "version": "1.0.0",
+  "description": "The embedded agent kernel (cpp/kernel/CowKernel.cpp)."
+}

@@ -1,7 +1,9 @@
+import * as cowApi from '../src/api/cowApi';
 import {
   codeFilePath,
   fileFromImageRef,
   isUnsandboxedPage,
+  outsideLinkOf,
   serverFileRef,
   splitFilePaths,
 } from '../src/files/chatFile';
@@ -56,6 +58,32 @@ describe('isUnsandboxedPage', () => {
     );
     expect(isUnsandboxedPage({name: 'a.html', kind: 'html', rawUrl: 'https://example.com/a.html'})).toBe(false);
     expect(isUnsandboxedPage({name: 'a.md', kind: 'markdown', path: '/w/a.md'})).toBe(false);
+  });
+});
+
+describe('outsideLinkOf', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  it('prefers the signed preview and keeps web files as they are', async () => {
+    const preview = await outsideLinkOf({name: 'a.png', kind: 'image', path: '/w/a.png', previewUrl: '/preview/t/a.png'});
+    expect(preview).toMatch(/\/preview\/t\/a\.png$/);
+    expect(await outsideLinkOf({name: 'a.png', kind: 'image', rawUrl: 'https://x.com/a.png'})).toBe('https://x.com/a.png');
+  });
+
+  it('asks the server for a preview instead of handing out the authed file link', async () => {
+    const resolve = jest.spyOn(cowApi, 'resolveWorkspacePath').mockResolvedValue({
+      status: 'success',
+      file: {abs_path: '/w/a.md', path: 'a.md', name: 'a.md', kind: 'markdown', preview_url: '/preview/t/a.md'},
+    } as unknown as Awaited<ReturnType<typeof cowApi.resolveWorkspacePath>>);
+    const link = await outsideLinkOf({name: 'a.md', kind: 'markdown', rawUrl: '/api/file?path=%2Fw%2Fa.md&token=t'});
+    expect(resolve).toHaveBeenCalledWith('/w/a.md', undefined, undefined);
+    expect(link).toMatch(/\/preview\/t\/a\.md$/);
+  });
+
+  it('gives nothing rather than the authed link when the server has no preview', async () => {
+    jest.spyOn(cowApi, 'resolveWorkspacePath').mockRejectedValue(new Error('offline'));
+    expect(await outsideLinkOf({name: 'a.md', kind: 'markdown', rawUrl: '/api/file?path=%2Fw%2Fa.md&token=t'})).toBe('');
+    expect(await outsideLinkOf({name: 'a.png', kind: 'image', rawUrl: 'data:image/png;base64,AA'})).toBe('');
   });
 });
 

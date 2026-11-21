@@ -1,16 +1,22 @@
-import {NativeModules} from 'react-native';
+import {NativeModules, Platform, type TurboModule} from 'react-native';
 import {tr} from '../i18n';
 
 /**
  * The agent kernel embedded in the app: the same CowAgent backend a server
  * runs, serving the usual console API on loopback. Builds without it (web
- * preview, platforms not wired up yet) only connect to remote servers.
+ * preview, HarmonyOS builds made without the Python runtime) only connect to
+ * remote servers.
  */
-interface NativeKernel {
+interface NativeKernel extends TurboModule {
   start(): Promise<{port: number; password: string}>;
 }
 
-const native: NativeKernel | undefined = NativeModules.CowKernel;
+// HarmonyOS's is an ArkTS TurboModule. Looked up lazily because react-native-web
+// has no TurboModuleRegistry, and this file is part of the web preview.
+const native: NativeKernel | null | undefined =
+  (Platform.OS as string) === 'harmony'
+    ? (require('react-native') as typeof import('react-native')).TurboModuleRegistry.get<NativeKernel>('CowKernel')
+    : NativeModules.CowKernel;
 
 export const LOCAL_SERVER_ID = 'local';
 

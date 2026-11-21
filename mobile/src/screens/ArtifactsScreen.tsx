@@ -5,6 +5,7 @@ import {
   faDownload,
   faLocationCrosshairs,
   faMagnifyingGlass,
+  faShareNodes,
   faThumbtack,
   faXmark,
 } from '@fortawesome/free-solid-svg-icons';
@@ -24,11 +25,11 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {getArtifacts, pinArtifact, serverUrl} from '../api/cowApi';
 import {artifactFile, KIND_ICON, kindGroup, KindTile, openArtifact} from '../components/ArtifactStrip';
 import {Icon} from '../components/Icon';
-import {Sheet} from '../components/Sheet';
+import {Sheet, SHEET_DISMISS_MS} from '../components/Sheet';
 import {SwipeTabs} from '../components/SwipeTabs';
 import {ToastHost} from '../components/Toast';
 import {Chip, EmptyState, GroupLabel, IconButton, PageHeader} from '../components/ui';
-import {downloadFile, openAsWebPage} from '../files/openFile';
+import {downloadFile, openInBrowser, shareFile} from '../files/openFile';
 import {tr, trf} from '../i18n';
 import type {RootStackParamList} from '../navigation/types';
 import type {Artifact} from '../protocol/events';
@@ -332,11 +333,19 @@ export function ArtifactsScreen({navigation, route}: Props) {
               }}
             />
             <SheetAction
-              icon={faArrowUpRightFromSquare}
-              label={tr('file_open_in_browser')}
+              icon={faShareNodes}
+              label={tr('file_share')}
               onPress={() => {
                 setActing(null);
-                openAsWebPage(actingFile);
+                setTimeout(() => shareFile(actingFile), SHEET_DISMISS_MS);
+              }}
+            />
+            <SheetAction
+              icon={faArrowUpRightFromSquare}
+              label={tr('file_open_external')}
+              onPress={() => {
+                setActing(null);
+                openInBrowser(actingFile);
               }}
             />
           </>

@@ -4,6 +4,7 @@ import {
   faDownload,
   faEye,
   faLayerGroup,
+  faShareNodes,
 } from '@fortawesome/free-solid-svg-icons';
 import type {IconDefinition} from '@fortawesome/fontawesome-svg-core';
 import React, {useEffect, useState} from 'react';
@@ -13,7 +14,8 @@ import {
   canPreviewInApp,
   downloadFile,
   openFile,
-  openAsWebPage,
+  openInBrowser,
+  shareFile,
   useImageViewer,
   viewInArtifacts,
 } from '../files/openFile';
@@ -185,10 +187,11 @@ export function FileSheet({
         <SheetRow icon={faEye} label={tr('file_preview')} onPress={then(() => openFile(file))} />
       )}
       <SheetRow icon={faDownload} label={tr('file_download')} onPress={then(() => downloadFile(file))} />
+      <SheetRow icon={faShareNodes} label={tr('file_share')} onPress={then(() => shareFile(file))} />
       <SheetRow
         icon={faArrowUpRightFromSquare}
-        label={tr('file_open_in_browser')}
-        onPress={then(() => openAsWebPage(file))}
+        label={tr('file_open_external')}
+        onPress={then(() => openInBrowser(file))}
       />
       {!!file.path && (
         <SheetRow icon={faLayerGroup} label={tr('file_view_in_artifacts')} onPress={then(() => viewInArtifacts(file))} />
@@ -226,7 +229,7 @@ export function ImageViewerHost() {
       title={file?.name}
       onClose={close}
       onDownload={file ? () => downloadFile(file) : undefined}
-      onOpen={file ? () => openAsWebPage(file) : undefined}
+      onOpen={file ? () => openInBrowser(file) : undefined}
       onLongPress={() => setActing(true)}>
       {file && <FileSheet file={file} visible={acting} onClose={() => setActing(false)} inPreview />}
     </ImageViewer>
