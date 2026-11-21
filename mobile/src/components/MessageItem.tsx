@@ -1,4 +1,5 @@
 import type {IconDefinition} from '@fortawesome/fontawesome-svg-core';
+import {faCopy} from '@fortawesome/free-regular-svg-icons';
 import {
   faChevronRight,
   faCheck,
@@ -39,19 +40,23 @@ import {makeStyles, useTheme} from '../theme/theme';
 import {clockTime, formatCount, formatSeconds, kindFromName} from '../utils/format';
 import {serverFileUrl} from '../api/cowApi';
 import {type ChatFile, sameFile} from '../files/chatFile';
-import {useImageViewer} from '../files/openFile';
+import {openFileRef, useImageViewer} from '../files/openFile';
+import {copyText} from '../utils/clipboard';
 import {AgentAvatar} from './AgentAvatar';
 import {KindTile} from './ArtifactStrip';
 import {Dots} from './Dots';
 import {FileCard, FileSheet, InlineImage} from './FileViews';
 import {Icon} from './Icon';
+import {RowToggleContext, useAnchoredRow, useRowToggle} from './listAnchor';
 import {Markdown} from './Markdown';
+import {showToast} from './Toast';
 
 const MONO = Platform.select({ios: 'Menlo', default: 'monospace'});
 const ROW_PADDING = 14;
 const AVATAR = 28;
 const AVATAR_GAP = 10;
 const BUBBLE_PADDING = 13;
+const BUBBLE_RADIUS = 18;
 /** Everything beside the text of a reply bubble, so its tables size to the bubble. */
 const BUBBLE_INSET = ROW_PADDING * 2 + AVATAR + AVATAR_GAP + BUBBLE_PADDING * 2 + 2;
 /** A finished reply with more steps than this folds the earlier ones away. */
@@ -59,11 +64,38 @@ const FOLD_AFTER = 6;
 const FOLD_KEEP = 3;
 const DETAIL_MAX_CHARS = 20000;
 
-function MessageItemImpl({message, labelled}: {message: ChatMessage; labelled?: boolean}) {
+function MessageItemImpl({
+  message,
+  labelled,
+  onOpenContext,
+}: {
+  message: ChatMessage;
+  labelled?: boolean;
+  /** Opens the conversation's context usage, from a reply's token count. */
+  onOpenContext?: () => void;
+}) {
   if (message.role === 'user') {
     return <UserTurn message={message} />;
   }
-  return <AssistantTurn message={message} labelled={!!labelled || !!message.peer} />;
+  return <AssistantTurn message={message} labelled={!!labelled || !!message.peer} onOpenContext={onOpenContext} />;
+}
+
+const copyMessage = (text: string) =>
+  copyText(text).then(ok => ok && showToast(tr('common_copied')));
+
+function CopyButton({text}: {text: string}) {
+  const t = useTheme();
+  const styles = useStyles();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={tr('common_copy')}
+      hitSlop={10}
+      onPress={() => copyMessage(text)}
+      style={({pressed}) => [styles.copy, pressed && styles.pressed]}>
+      <Icon icon={faCopy} size={11} color={t.t4} />
+    </Pressable>
+  );
 }
 
 export const MessageItem = memo(MessageItemImpl);
@@ -108,7 +140,12 @@ function UserTurn({message}: {message: ChatMessage}) {
         </View>
       )}
       {others.map((f, i) => (
-        <View key={`${f.path}-${i}`} style={styles.userFile}>
+        <Pressable
+          key={`${f.path}-${i}`}
+          accessibilityRole="button"
+          accessibilityLabel={trf('file_open_named', {path: f.name})}
+          onPress={() => openFileRef(f.path)}
+          style={({pressed}) => [styles.userFile, pressed && styles.userFilePressed]}>
           <KindTile
             kind={f.kind === 'directory' ? 'other' : f.kind === 'video' ? 'video' : kindFromName(f.name)}
             size={30}
@@ -119,7 +156,7 @@ function UserTurn({message}: {message: ChatMessage}) {
             </Text>
             <Text style={styles.userFileSub}>{tr(ATTACHMENT_LABEL[f.kind])}</Text>
           </View>
-        </View>
+        </Pressable>
       ))}
       {message.transcribing ? (
         <View style={[styles.userBubble, styles.userBubbleWait]} accessibilityLabel={tr('chat_transcribing')}>
@@ -134,7 +171,12 @@ function UserTurn({message}: {message: ChatMessage}) {
           </View>
         )
       )}
-      {!!message.createdAt && <Text style={styles.userMeta}>{clockTime(message.createdAt)}</Text>}
+      {(!!message.createdAt || !!message.content) && !message.transcribing && (
+        <View style={[styles.metaRow, styles.userMetaRow]}>
+          {!!message.content && <CopyButton text={message.content} />}
+          {!!message.createdAt && <Text style={styles.meta}>{clockTime(message.createdAt)}</Text>}
+        </View>
+      )}
       {actingOn && <FileSheet file={actingOn} visible={acting} onClose={() => setActing(false)} />}
     </View>
   );
@@ -189,15 +231,26 @@ function useSpeaker(speaker?: Speaker) {
   return {agent: profile ?? {id, name}, name, isDefault: !id || id === defaultId};
 }
 
-function AssistantTurn({message, labelled}: {message: ChatMessage; labelled: boolean}) {
+function AssistantTurn({
+  message,
+  labelled,
+  onOpenContext,
+}: {
+  message: ChatMessage;
+  labelled: boolean;
+  onOpenContext?: () => void;
+}) {
   const t = useTheme();
   const styles = useStyles();
   const speaker = useSpeaker(message.speaker);
+  const row = useAnchoredRow();
   const [showAll, setShowAll] = useState(false);
   const steps = message.steps ?? [];
   const foldable = !message.streaming && steps.length > FOLD_AFTER;
   const folded = foldable && !showAll;
   const shown = folded ? steps.slice(-FOLD_KEEP) : steps;
+  const calls = steps.filter(s => s.kind === 'tool').length;
+  const hiddenCalls = steps.slice(0, -FOLD_KEEP).filter(s => s.kind === 'tool').length;
   const files = message.files ?? [];
   // Folding hides how the reply got there, never what it delivered.
   const foldedFiles = folded
@@ -213,87 +266,92 @@ function AssistantTurn({message, labelled}: {message: ChatMessage; labelled: boo
     !!message.content || !!files.length || !!message.cancelled || !!message.runState || !!message.error;
 
   return (
-    <View style={styles.assistantRow}>
-      <View style={styles.avatar}>
-        <AgentAvatar agent={speaker.agent} isDefault={speaker.isDefault} size={AVATAR} />
-      </View>
-      <View style={styles.assistantColumn}>
-        {labelled && (
-          <Text style={styles.speakerName} numberOfLines={1}>
-            {speaker.name}
-          </Text>
-        )}
-        <View style={styles.bubble}>
-          {steps.length > 0 && (
-            <View style={[styles.process, hasAnswer && styles.processDivided]}>
-              {foldable && (
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => setShowAll(v => !v)}
-                  hitSlop={6}
-                  style={styles.fold}>
-                  <Text style={styles.foldText}>
-                    {showAll
-                      ? trf('chat_steps_total', {n: steps.length})
-                      : trf('chat_steps_hidden', {n: steps.length - FOLD_KEEP})}
-                  </Text>
-                  <Text style={styles.foldAction}>
-                    {showAll ? tr('chat_steps_collapse') : tr('chat_steps_show_all')}
-                  </Text>
-                </Pressable>
-              )}
-              {foldedFiles.map(step => (
-                <SentFile key={step.id} file={step.file!} carded={files} />
-              ))}
-              {shown.map(step => (
-                <StepRow key={step.id} step={step} live={step.id === liveThinking} carded={files} />
-              ))}
-            </View>
-          )}
-
-          {waiting && (
-            <View style={styles.waiting}>
-              <Dots />
-            </View>
-          )}
-
-          {!!message.content && <Markdown value={message.content} inset={BUBBLE_INSET} />}
-
-          {files.length > 0 && (
-            <View style={[styles.files, !!message.content && styles.filesAfterText]}>
-              {files.map(f =>
-                f.kind === 'image' ? (
-                  <InlineImage key={f.path ?? f.rawUrl ?? f.name} file={f} />
-                ) : (
-                  <FileCard key={f.path ?? f.rawUrl ?? f.name} file={f} />
-                ),
-              )}
-            </View>
-          )}
-
-          {message.cancelled && (
-            <View style={styles.status}>
-              <Icon icon={faStop} size={9} color={t.t3} />
-              <Text style={styles.statusText}>{tr('chat_stopped')}</Text>
-            </View>
-          )}
-          {!message.cancelled && message.runState && (
-            <View style={styles.status}>
-              <Icon
-                icon={message.runState === 'running' ? faHourglassHalf : faCircleExclamation}
-                size={9}
-                color={t.t3}
-              />
-              <Text style={styles.statusText}>
-                {tr(message.runState === 'running' ? 'chat_still_running' : 'chat_interrupted')}
-              </Text>
-            </View>
-          )}
-          {!!message.error && <Text style={styles.error}>{message.error}</Text>}
+    <RowToggleContext.Provider value={row.toggle}>
+      <View style={styles.assistantRow} onLayout={row.onLayout}>
+        <View style={styles.avatar}>
+          <AgentAvatar agent={speaker.agent} isDefault={speaker.isDefault} size={AVATAR} />
         </View>
-        {!message.streaming && <MetaLine message={message} />}
+        <View style={styles.assistantColumn}>
+          {labelled && (
+            <Text style={styles.speakerName} numberOfLines={1}>
+              {speaker.name}
+            </Text>
+          )}
+          <View style={styles.bubble}>
+            {steps.length > 0 && (
+              <View style={[styles.process, hasAnswer && styles.processDivided]}>
+                {foldable && (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityState={{expanded: showAll}}
+                    onPress={() => row.toggle(() => setShowAll(v => !v))}
+                    hitSlop={6}
+                    style={styles.fold}>
+                    <Text style={styles.foldText} numberOfLines={1}>
+                      {showAll
+                        ? calls
+                          ? trf('chat_calls_total', {n: calls})
+                          : trf('chat_steps_total', {n: steps.length})
+                        : hiddenCalls
+                          ? trf('chat_calls_hidden', {n: hiddenCalls})
+                          : trf('chat_steps_hidden', {n: steps.length - FOLD_KEEP})}
+                    </Text>
+                    <Text style={styles.foldAction}>{showAll ? tr('chat_steps_collapse') : tr('chat_steps_expand')}</Text>
+                  </Pressable>
+                )}
+                {foldedFiles.map(step => (
+                  <SentFile key={step.id} file={step.file!} carded={files} />
+                ))}
+                {shown.map(step => (
+                  <StepRow key={step.id} step={step} live={step.id === liveThinking} carded={files} />
+                ))}
+              </View>
+            )}
+
+            {waiting && (
+              <View style={styles.waiting}>
+                <Dots />
+              </View>
+            )}
+
+            {!!message.content && <Markdown value={message.content} inset={BUBBLE_INSET} />}
+
+            {files.length > 0 && (
+              <View style={[styles.files, !!message.content && styles.filesAfterText]}>
+                {files.map(f =>
+                  f.kind === 'image' ? (
+                    <InlineImage key={f.path ?? f.rawUrl ?? f.name} file={f} />
+                  ) : (
+                    <FileCard key={f.path ?? f.rawUrl ?? f.name} file={f} />
+                  ),
+                )}
+              </View>
+            )}
+
+            {message.cancelled && (
+              <View style={styles.status}>
+                <Icon icon={faStop} size={9} color={t.t3} />
+                <Text style={styles.statusText}>{tr('chat_stopped')}</Text>
+              </View>
+            )}
+            {!message.cancelled && message.runState && (
+              <View style={styles.status}>
+                <Icon
+                  icon={message.runState === 'running' ? faHourglassHalf : faCircleExclamation}
+                  size={9}
+                  color={t.t3}
+                />
+                <Text style={styles.statusText}>
+                  {tr(message.runState === 'running' ? 'chat_still_running' : 'chat_interrupted')}
+                </Text>
+              </View>
+            )}
+            {!!message.error && <Text style={styles.error}>{message.error}</Text>}
+          </View>
+          {!message.streaming && <MetaLine message={message} onOpenContext={onOpenContext} />}
+        </View>
       </View>
-    </View>
+    </RowToggleContext.Provider>
   );
 }
 
@@ -350,6 +408,7 @@ function Chevron({open}: {open: boolean}) {
 function Thinking({text, seconds, live}: {text: string; seconds?: number; live: boolean}) {
   const t = useTheme();
   const styles = useStyles();
+  const toggle = useRowToggle();
   const [userOpen, setUserOpen] = useState(false);
   const open = live || userOpen;
   return (
@@ -357,7 +416,7 @@ function Thinking({text, seconds, live}: {text: string; seconds?: number; live: 
       accessibilityRole="button"
       accessibilityState={{expanded: open}}
       disabled={live}
-      onPress={() => setUserOpen(v => !v)}
+      onPress={() => toggle(() => setUserOpen(v => !v))}
       style={({pressed}) => [styles.thinking, pressed && styles.pressed]}>
       <View style={styles.stepHead}>
         <Icon icon={faLightbulb} size={11} color={t.kind.image[1]} />
@@ -421,6 +480,7 @@ function StatusIcon({
 
 function ToolCard({step}: {step: ToolStep}) {
   const styles = useStyles();
+  const toggle = useRowToggle();
   const [userOpen, setUserOpen] = useState<boolean | null>(null);
   const running = step.status === 'running';
   // Output or sub steps arriving while it runs are worth watching.
@@ -435,7 +495,7 @@ function ToolCard({step}: {step: ToolStep}) {
         accessibilityRole="button"
         accessibilityState={{expanded: open}}
         accessibilityLabel={trf(open ? 'chat_tool_collapse_a11y' : 'chat_tool_expand_a11y', {label})}
-        onPress={() => setUserOpen(!open)}
+        onPress={() => toggle(() => setUserOpen(!open))}
         hitSlop={{top: 4, bottom: 4}}
         style={({pressed}) => [styles.toolHead, pressed && styles.pressed]}>
         <View style={styles.toolIcon}>
@@ -566,7 +626,7 @@ function SubStepRow({sub}: {sub: SubStep}) {
   );
 }
 
-function MetaLine({message}: {message: ChatMessage}) {
+function MetaLine({message, onOpenContext}: {message: ChatMessage; onOpenContext?: () => void}) {
   const styles = useStyles();
   const u = message.usage;
   const total = u ? u.total_tokens ?? (u.prompt_tokens ?? 0) + (u.completion_tokens ?? 0) : 0;
@@ -580,10 +640,27 @@ function MetaLine({message}: {message: ChatMessage}) {
       parts.push(trf('chat_cache_hit', {pct: Math.round((u.prompt_cache_hit_tokens * 100) / u.prompt_tokens)}));
     }
   }
-  if (!parts.length) {
+  if (!parts.length && !message.content) {
     return null;
   }
-  return <Text style={styles.meta}>{parts.join(' · ')}</Text>;
+  const label = parts.length > 0 && <Text style={styles.meta}>{parts.join(' · ')}</Text>;
+  return (
+    <View style={styles.metaRow}>
+      {label && total > 0 && onOpenContext ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityHint={tr('chat_usage_hint')}
+          hitSlop={8}
+          onPress={onOpenContext}
+          style={({pressed}) => pressed && styles.pressed}>
+          {label}
+        </Pressable>
+      ) : (
+        label
+      )}
+      {!!message.content && <CopyButton text={message.content} />}
+    </View>
+  );
 }
 
 const useStyles = makeStyles(t => {
@@ -594,17 +671,16 @@ const useStyles = makeStyles(t => {
     userRow: {paddingHorizontal: ROW_PADDING, paddingTop: 18, alignItems: 'flex-end'},
     userBubble: {
       maxWidth: '80%',
-      paddingHorizontal: 14,
+      paddingHorizontal: 15,
       paddingVertical: 10,
-      borderTopLeftRadius: 18,
-      borderTopRightRadius: 18,
-      borderBottomLeftRadius: 18,
-      borderBottomRightRadius: 6,
+      borderRadius: BUBBLE_RADIUS,
       backgroundColor: t.green,
     },
-    userText: {fontSize: 14, lineHeight: 21, color: t.onAccent, letterSpacing: 0.1},
+    userText: {fontSize: 15, lineHeight: 22.5, color: t.onAccent, letterSpacing: 0.1},
     userBubbleWait: {minWidth: 56, alignItems: 'center'},
-    userMeta: {marginTop: 5, marginRight: 2, fontSize: 11, color: t.t4, fontVariant: ['tabular-nums']},
+    metaRow: {flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 6, marginLeft: 2},
+    userMetaRow: {marginLeft: 0, marginRight: 2},
+    copy: {paddingVertical: 2, paddingHorizontal: 2},
     userImages: {
       flexDirection: 'row',
       flexWrap: 'wrap',
@@ -630,6 +706,7 @@ const useStyles = makeStyles(t => {
       borderWidth: 1,
       borderColor: t.line1,
     },
+    userFilePressed: {backgroundColor: t.bg2},
     userFileText: {flexShrink: 1, minWidth: 0},
     userFileName: {fontSize: 13, fontWeight: '500', color: t.t1},
     userFileSub: {fontSize: 11, color: t.t3, marginTop: 2},
@@ -653,10 +730,7 @@ const useStyles = makeStyles(t => {
     bubble: {
       paddingHorizontal: BUBBLE_PADDING,
       paddingVertical: 11,
-      borderTopLeftRadius: 6,
-      borderTopRightRadius: 18,
-      borderBottomLeftRadius: 18,
-      borderBottomRightRadius: 18,
+      borderRadius: BUBBLE_RADIUS,
       borderWidth: 1,
       borderColor: t.isDark ? t.line1 : t.line2,
       backgroundColor: bubbleBg,
@@ -668,8 +742,8 @@ const useStyles = makeStyles(t => {
       borderBottomWidth: 1,
       borderBottomColor: t.line1,
     },
-    fold: {flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 2},
-    foldText: {fontSize: 12, color: t.t3},
+    fold: {flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 2},
+    foldText: {flex: 1, fontSize: 12, color: t.t3},
     foldAction: {fontSize: 12, fontWeight: '500', color: t.accent},
     waiting: {paddingVertical: 6},
     note: {paddingHorizontal: 2},
@@ -737,8 +811,6 @@ const useStyles = makeStyles(t => {
       overflow: 'hidden',
     },
     meta: {
-      marginTop: 5,
-      marginLeft: 2,
       fontSize: 11,
       color: t.t4,
       letterSpacing: 0.2,
