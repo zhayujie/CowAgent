@@ -1133,11 +1133,12 @@ class AgentStreamExecutor:
                 logger.info(f"[Agent] Turn {turn}")
                 self._emit_event("turn_start", {"turn": turn})
 
-                # Skip blind empty-response retries when silence is an allowed outcome.
+                # Call LLM (enable retry_on_empty for better reliability). Any
+                # loop hint injected by the previous tool turn was meant for
+                # this call only, so drop it as the call returns - success or
+                # error alike.
                 try:
-                    assistant_msg, tool_calls, stop_reason = self._call_llm_stream(
-                        retry_on_empty=not self.allow_empty_response
-                    )
+                    assistant_msg, tool_calls, stop_reason = self._call_llm_stream(retry_on_empty=True)
                 finally:
                     self._drop_pending_loop_hint()
                 final_response = assistant_msg
@@ -1163,14 +1164,16 @@ class AgentStreamExecutor:
 
                 # No tool calls, end loop
                 if not tool_calls:
+                    # 检查是否返回了空响应
                     if not assistant_msg:
-                        if self.allow_empty_response:
-                            final_response = self._empty_response_fallback()
-                        elif turn > 1:
-                            logger.warning("[Agent] LLM returned empty response after retry (no content and no tool calls)")
-                            logger.info("[Agent] This usually happens when LLM thinks the task is complete after tool execution")
+                        logger.warning("[Agent] LLM returned empty response after retry (no content and no tool calls)")
+                        logger.info("[Agent] This usually happens when LLM thinks the task is complete after tool execution")
+                        
+                        # 如果之前有工具调用，强制要求 LLM 生成文本回复
+                        if turn > 1:
                             logger.info("[Agent] Requesting explicit response from LLM...")
-
+                            
+                            # 添加一条消息，明确要求回复用户
                             prompt_msg = {
                                 "role": "user",
                                 "content": [{
@@ -1189,7 +1192,7 @@ class AgentStreamExecutor:
                                 self.messages[:] = [m for m in self.messages if m is not prompt_msg]
                                 logger.debug("[Agent] Removed injected explicit-response prompt from message history")
                             final_response = assistant_msg
-
+                            
                             # If LLM responded with tool_calls instead of text, fall through
                             # to the tool execution path below (don't break the loop).
                             if tool_calls:
@@ -1202,8 +1205,6 @@ class AgentStreamExecutor:
                                 logger.warning("[Agent] Still empty after explicit request")
                                 final_response = self._empty_response_fallback()
                         else:
-                            logger.warning("[Agent] LLM returned empty response after retry (no content and no tool calls)")
-                            logger.info("[Agent] This usually happens when LLM thinks the task is complete after tool execution")
                             # First-turn empty reply, fall back directly
                             final_response = self._empty_response_fallback()
                     else:
@@ -2281,7 +2282,7 @@ class AgentStreamExecutor:
             })
 
         # Check for empty response and retry once if enabled
-        if retry_on_empty and not self.allow_empty_response and not full_content and not tool_calls:
+        if retry_on_empty and not full_content and not tool_calls:
             steer_inbox = getattr(self, "steer_inbox", None)
             if steer_inbox is not None and steer_inbox.has_pending():
                 logger.info("[Agent] steer pending after stream, skipping empty retry")

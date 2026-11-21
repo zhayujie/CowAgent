@@ -77,21 +77,24 @@ class EmptyResponseFallbackTest(unittest.TestCase):
         self.assertIn("返回空", _make_executor(True)._explicit_response_prompt())
         self.assertNotIn("返回空", _make_executor(False)._explicit_response_prompt())
 
-    def test_empty_after_tool_turn_skips_explicit_retry_when_silence_allowed(self):
+    def test_empty_after_tool_turn_still_asks_a_scheduled_run_for_its_answer(self):
+        # Silence is allowed for every scheduled task, not only conditional
+        # ones: a plain daily summary that ends empty after its tools still has
+        # to be asked for the answer, with a prompt that permits returning none.
         executor = _CountingExecutor(
             script=[
-                ("", ["check_price"]),
+                ("", ["fetch_news"]),
                 ("", []),
-                ("(empty filler)", []),
+                ("Today's summary.", []),
             ],
             max_turns=5,
             allow_empty_response=True,
         )
 
-        response = executor.run_stream("notify me only if the price drops")
+        response = executor.run_stream("send me a daily news summary")
 
-        self.assertEqual(response, "")
-        self.assertEqual(executor.calls, 2)
+        self.assertEqual(response, "Today's summary.")
+        self.assertEqual(executor.calls, 3)
 
     def test_empty_after_tool_turn_still_requests_explicit_reply_for_chat(self):
         executor = _CountingExecutor(
@@ -124,40 +127,6 @@ class EmptyResponseFallbackTest(unittest.TestCase):
 
         self.assertIn("无法生成回复", response)
         self.assertEqual(executor.calls, 3)
-
-    def test_stream_skips_retry_on_empty_when_silence_allowed(self):
-        calls = []
-
-        class _SilentStreamModel:
-            model = "test-model"
-
-            def call_stream(self, request):
-                calls.append(request)
-                yield {"choices": [{"delta": {}, "finish_reason": "stop"}]}
-
-        agent = SimpleNamespace(
-            name="test-agent",
-            messages=[],
-            tools=[],
-            workspace_dir=None,
-            last_usage=None,
-            _current_session_id="scheduler_task-1",
-            _current_agent_id="default",
-        )
-        executor = AgentStreamExecutor(
-            agent=agent,
-            model=_SilentStreamModel(),
-            system_prompt="",
-            tools=[],
-            max_turns=3,
-            allow_empty_response=True,
-        )
-        with patch.object(executor, "_trim_messages"), \
-                patch.object(executor, "_validate_and_fix_messages"):
-            response = executor.run_stream("notify me only if the price drops")
-
-        self.assertEqual(response, "")
-        self.assertEqual(len(calls), 1)
 
     def test_stream_retries_on_empty_for_user_facing_run(self):
         calls = []
