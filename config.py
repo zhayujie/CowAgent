@@ -701,6 +701,12 @@ def load_config():
                 else:
                     config[name] = value
 
+    # An endpoint with a default is never meant to be empty: some readers
+    # fill an empty base from another vendor's.
+    for name, default in available_setting.items():
+        if name.endswith("_api_base") and isinstance(default, str) and default and config.get(name) == "":
+            config[name] = default
+
     if config.get("debug", False):
         logger.setLevel(logging.DEBUG)
         logger.debug("[INIT] set log level to DEBUG")

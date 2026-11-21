@@ -2028,6 +2028,14 @@ class ModelsHandler:
             "count": len(models),
         }, ensure_ascii=False)
 
+    @staticmethod
+    def _default_base(provider_id: str, meta: dict) -> str:
+        # CowAgent keeps "" on purpose: it then follows the UI language to
+        # pick its China or global site.
+        if provider_id == "cowagent":
+            return ""
+        return meta.get("api_base_default") or ""
+
     def _handle_set_provider(self, data: dict) -> str:
         provider_id = (data.get("provider_id") or "").strip()
         meta = PROVIDER_MODELS.get(provider_id)
@@ -2044,6 +2052,8 @@ class ModelsHandler:
         # default", whereas a missing key means "no change".
         api_base_present = "api_base" in data
         api_base = (data.get("api_base") or "").strip() if api_base_present else None
+        if api_base_present and not api_base:
+            api_base = self._default_base(provider_id, meta)
 
         applied = {}
         local_config = conf()
@@ -2092,8 +2102,10 @@ class ModelsHandler:
             # restart. (`in local_config` was too strict: provider keys that
             # were ever set then deleted manually wouldn't get reset.)
             previous = local_config.get(field_name)
-            local_config[field_name] = ""
-            file_cfg[field_name] = ""
+            # The key goes; the base returns to the vendor's endpoint.
+            value = self._default_base(provider_id, meta) if field_name == meta.get("api_base_key") else ""
+            local_config[field_name] = value
+            file_cfg[field_name] = value
             cleared.append(field_name)
             # Startup mirrors these keys into os.environ, and readers fall
             # back to env when config is empty, so drop the mirrored copy too.

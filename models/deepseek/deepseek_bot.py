@@ -73,12 +73,13 @@ class DeepSeekBot(Bot, OpenAICompatibleBot):
 
     @property
     def api_base(self):
-        url = (
-            conf().get("deepseek_api_base")
-            or conf().get("open_ai_api_base")
-            or DEFAULT_API_BASE
-        )
-        return url.rstrip("/")
+        # An empty deepseek_api_base means the default endpoint. The OpenAI
+        # base only applies to old setups that also take their key from
+        # open_ai_api_key.
+        url = conf().get("deepseek_api_base")
+        if not url and not conf().get("deepseek_api_key"):
+            url = conf().get("open_ai_api_base")
+        return (url or DEFAULT_API_BASE).rstrip("/")
 
     def get_api_config(self):
         """OpenAICompatibleBot interface — used by call_with_tools()."""

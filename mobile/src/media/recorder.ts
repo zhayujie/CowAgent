@@ -14,7 +14,7 @@ export type RecorderTick = (elapsedMs: number, level: number | null) => void;
 
 const player = new AudioRecorderPlayer();
 
-// Speech only: 16 kHz mono AAC keeps uploads small and is what ASR wants anyway.
+// Speech only: 16 kHz mono keeps uploads small and is what ASR wants anyway.
 const AUDIO_SET = {
   AudioSourceAndroid: AudioSourceAndroidType.MIC,
   OutputFormatAndroid: OutputFormatAndroidType.MPEG_4,
@@ -36,7 +36,19 @@ const AUDIO_SET = {
   AudioChannelsHarmony: 1,
 } as AudioSet;
 
-const MIME: Record<string, string> = {m4a: 'audio/mp4', mp4: 'audio/mp4', aac: 'audio/aac'};
+// Android 10+ records Ogg Opus, which speech APIs take as is: AAC needs ffmpeg on the
+// server to convert, and the kernel inside this app has none.
+const OGG_OPUS = Platform.OS === 'android' && Number(Platform.Version) >= 29;
+const RECORD_SET: AudioSet = OGG_OPUS
+  ? {
+      ...AUDIO_SET,
+      OutputFormatAndroid: OutputFormatAndroidType.OGG,
+      AudioEncoderAndroid: AudioEncoderAndroidType.OPUS,
+      AudioEncodingBitRateAndroid: 32000,
+    }
+  : AUDIO_SET;
+
+const MIME: Record<string, string> = {m4a: 'audio/mp4', mp4: 'audio/mp4', aac: 'audio/aac', ogg: 'audio/ogg'};
 
 export class MicPermissionError extends Error {}
 
@@ -63,7 +75,7 @@ export async function startRecording(onTick: RecorderTick): Promise<void> {
   await ensurePermission();
   const target = (Platform.OS as string) === 'harmony' ? 'voice.m4a' : undefined;
   try {
-    await player.startRecorder(target, AUDIO_SET, true);
+    await player.startRecorder(target, RECORD_SET, true);
   } catch (e) {
     // iOS asks for the microphone inside startRecorder and rejects with this message when refused.
     const denied = Platform.OS === 'ios' && /permission/i.test(e instanceof Error ? e.message : String(e));

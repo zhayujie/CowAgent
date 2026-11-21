@@ -188,6 +188,27 @@ class TestDeepSeekVoiceToText(unittest.TestCase):
         self.assertEqual(reply.type, ReplyType.ERROR)
         post.assert_not_called()
 
+    def test_failures_name_the_cause(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            audio = os.path.join(tmp, "a.wav")
+            _write_wav(audio)
+            m4a = os.path.join(tmp, "a.m4a")
+            Path(m4a).write_bytes(b"\x00\x00\x00\x18ftypM4A ")
+            with patch.object(deepseek_voice, "conf", _conf(deepseek_api_key="k")), \
+                    patch.object(deepseek_voice, "_t", lambda zh, en: en):
+                with patch.object(deepseek_voice.requests, "post", return_value=_response(401, {})):
+                    bad_key = DeepSeekVoice().voiceToText(audio)
+                with patch.object(deepseek_voice.requests, "post",
+                                  side_effect=deepseek_voice.requests.ConnectionError("down")):
+                    offline = DeepSeekVoice().voiceToText(audio)
+                with patch.object(deepseek_voice, "_convert_to_wav", side_effect=ImportError("pydub")), \
+                        patch.object(deepseek_voice.requests, "post") as post:
+                    no_ffmpeg = DeepSeekVoice().voiceToText(m4a)
+        self.assertIn("API key", bad_key.content)
+        self.assertIn("network", offline.content)
+        self.assertIn("ffmpeg", no_ffmpeg.content)
+        post.assert_not_called()
+
 
 class TestDeepSeekTextToVoice(unittest.TestCase):
     def _tts(self, **cfg):

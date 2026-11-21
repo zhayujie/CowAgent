@@ -26,6 +26,7 @@ import wave
 import requests
 
 from bridge.reply import Reply, ReplyType
+from common.i18n import t as _t
 from common.log import logger
 from common.media_download import MAX_FILE_BYTES, MediaTooLargeError, save_response
 from common.tmp_dir import TmpDir
@@ -38,8 +39,34 @@ DEFAULT_TTS_VOICE = "stella"
 REQUEST_TIMEOUT = (5, 120)
 MAX_ASR_BYTES = 8 * 1024 * 1024
 ASR_WAV_RATES = {8000, 16000, 22050, 24000, 32000, 44100, 48000}
-ASR_FAILED_MSG = "我暂时还无法听清您的语音，请稍后再试吧~"
+ASR_FAILED_MSG = "语音识别失败，请稍后再试"
+ASR_FAILED_MSG_EN = "Speech recognition failed, please try again later"
 TTS_FAILED_MSG = "语音合成失败，请稍后再试"
+TTS_FAILED_MSG_EN = "Speech synthesis failed, please try again later"
+
+
+class _ConvertError(Exception):
+    pass
+
+
+def _failure(status: int, zh: str, en: str) -> str:
+    # Name what the user can fix: a wrong key or an empty balance reads as
+    # "try again later" otherwise.
+    if status in (401, 403):
+        return _t("DeepSeek API Key 无效，请在模型配置中检查", "Invalid DeepSeek API key, please check the model settings")
+    if status == 402:
+        return _t("DeepSeek 账户余额不足", "Insufficient DeepSeek account balance")
+    if status == 429:
+        return _t("请求过于频繁，请稍后再试", "Too many requests, please try again later")
+    return f"{_t(zh, en)} (HTTP {status})"
+
+
+def _missing_key() -> str:
+    return _t("未配置 DeepSeek API Key", "DeepSeek API key is not configured")
+
+
+def _unreachable() -> str:
+    return _t("无法连接 DeepSeek 语音服务，请检查网络", "Can't reach the DeepSeek speech service, please check the network")
 
 
 def _api_base() -> str:
@@ -133,9 +160,9 @@ def _prepare_upload(voice_file: str):
     wav = _temp_path(".wav")
     try:
         _convert_to_wav(voice_file, wav)
-    except Exception:
+    except Exception as e:
         _remove_quietly(wav)
-        raise
+        raise _ConvertError(str(e)) from e
     return wav, "audio/wav", wav
 
 
@@ -149,7 +176,7 @@ class DeepSeekVoice(Voice):
             api_key = conf().get("deepseek_api_key", "")
             if not api_key:
                 logger.error("[DeepSeekVoice] deepseek_api_key is not configured")
-                return Reply(ReplyType.ERROR, "未配置 DeepSeek API key")
+                return Reply(ReplyType.ERROR, _missing_key())
 
             upload, mime, converted = _prepare_upload(voice_file)
 
@@ -166,22 +193,31 @@ class DeepSeekVoice(Voice):
                     f"[DeepSeekVoice] voiceToText failed: status={response.status_code} "
                     f"body={response.text[:500]}"
                 )
-                return Reply(ReplyType.ERROR, ASR_FAILED_MSG)
+                return Reply(ReplyType.ERROR, _failure(response.status_code, ASR_FAILED_MSG, ASR_FAILED_MSG_EN))
 
             data = response.json()
             text = data.get("text") if isinstance(data, dict) else None
             if not isinstance(text, str) or not text.strip():
-                logger.error(f"[DeepSeekVoice] voiceToText empty text: {data}")
-                return Reply(ReplyType.ERROR, ASR_FAILED_MSG)
+                logger.warning(f"[DeepSeekVoice] voiceToText empty text: {data}")
+                return Reply(ReplyType.ERROR, _t("没有识别到说话内容，请再说一次", "No speech detected, please try again"))
 
             text = text.strip()
             logger.info(
                 f"[DeepSeekVoice] voiceToText text={text} duration_ms={data.get('duration_ms')}"
             )
             return Reply(ReplyType.TEXT, text)
+        except _ConvertError as e:
+            logger.error(f"[DeepSeekVoice] voiceToText can't convert {voice_file}: {e}")
+            return Reply(ReplyType.ERROR, _t(
+                "无法转换该录音格式，请安装 ffmpeg 后重试",
+                "Can't convert this recording, please install ffmpeg and try again",
+            ))
+        except requests.RequestException as e:
+            logger.error(f"[DeepSeekVoice] voiceToText request failed: {e}")
+            return Reply(ReplyType.ERROR, _unreachable())
         except Exception as e:
             logger.exception(f"[DeepSeekVoice] voiceToText exception: {e}")
-            return Reply(ReplyType.ERROR, ASR_FAILED_MSG)
+            return Reply(ReplyType.ERROR, _t(ASR_FAILED_MSG, ASR_FAILED_MSG_EN))
         finally:
             if converted:
                 _remove_quietly(converted)
@@ -191,7 +227,7 @@ class DeepSeekVoice(Voice):
             api_key = conf().get("deepseek_api_key", "")
             if not api_key:
                 logger.error("[DeepSeekVoice] deepseek_api_key is not configured")
-                return Reply(ReplyType.ERROR, "未配置 DeepSeek API key")
+                return Reply(ReplyType.ERROR, _missing_key())
 
             # tts_voice_id belongs to whichever vendor was picked explicitly;
             # when DeepSeek is only the auto-picked fallback it may name another
@@ -216,7 +252,7 @@ class DeepSeekVoice(Voice):
                     f"body={response.text[:500]} voice={voice_id}"
                 )
                 response.close()
-                return Reply(ReplyType.ERROR, TTS_FAILED_MSG)
+                return Reply(ReplyType.ERROR, _failure(response.status_code, TTS_FAILED_MSG, TTS_FAILED_MSG_EN))
 
             file_name = (
                 TmpDir().path() + datetime.datetime.now().strftime("%Y%m%d%H%M%S")
@@ -228,17 +264,20 @@ class DeepSeekVoice(Voice):
                 result = save_response(response, file_name, MAX_FILE_BYTES)
             except MediaTooLargeError:
                 logger.error(f"[DeepSeekVoice] textToVoice audio too large: over {MAX_FILE_BYTES} bytes")
-                return Reply(ReplyType.ERROR, TTS_FAILED_MSG)
+                return Reply(ReplyType.ERROR, _t(TTS_FAILED_MSG, TTS_FAILED_MSG_EN))
             if result.size == 0:
                 logger.error("[DeepSeekVoice] textToVoice returned empty audio")
                 os.remove(file_name)
-                return Reply(ReplyType.ERROR, TTS_FAILED_MSG)
+                return Reply(ReplyType.ERROR, _t(TTS_FAILED_MSG, TTS_FAILED_MSG_EN))
             _fix_streamed_wav_header(file_name)
 
             logger.info(
                 f"[DeepSeekVoice] textToVoice voice={voice_id} file={file_name} bytes={result.size}"
             )
             return Reply(ReplyType.VOICE, file_name)
+        except requests.RequestException as e:
+            logger.error(f"[DeepSeekVoice] textToVoice request failed: {e}")
+            return Reply(ReplyType.ERROR, _unreachable())
         except Exception as e:
             logger.exception(f"[DeepSeekVoice] textToVoice exception: {e}")
-            return Reply(ReplyType.ERROR, TTS_FAILED_MSG)
+            return Reply(ReplyType.ERROR, _t(TTS_FAILED_MSG, TTS_FAILED_MSG_EN))
