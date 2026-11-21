@@ -310,7 +310,7 @@ export const Dock = forwardRef<TextInput | null, Props>(function DockInner(
               onPress={onStop}
               hitSlop={6}
               style={({pressed}) => [styles.send, styles.stop, pressed && styles.pressed]}>
-              <Icon icon={faStop} size={12} color={t.bg0} />
+              <Icon icon={faStop} size={10} color={t.onAccent} />
             </Pressable>
           ) : voiceMode || !hasContent ? (
             <Pressable
@@ -612,7 +612,7 @@ const useStyles = makeStyles(t => {
       backgroundColor: t.green,
     },
     sendOff: {backgroundColor: t.bg3},
-    stop: {backgroundColor: t.t1},
+    stop: {backgroundColor: t.t4},
     pressed: {opacity: 0.8},
   };
 });

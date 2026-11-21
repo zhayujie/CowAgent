@@ -4,6 +4,12 @@ import type {LayoutChangeEvent} from 'react-native';
 /** Scrolls the message list by `dy` pixels of content, without animation. */
 export const ListShiftContext = createContext<((dy: number) => void) | null>(null);
 
+/**
+ * Told when the reply being streamed grows by `dy`, from `before` px tall.
+ * The list decides whether to hold the page still for a reader scrolled up.
+ */
+export const ListGrowContext = createContext<((dy: number, before: number) => void) | null>(null);
+
 /** Hands a toggle inside a message to the row that measures it. */
 export const RowToggleContext = createContext<((apply: () => void) => void) | null>(null);
 
@@ -15,8 +21,9 @@ const PENDING_MS = 600;
  * bottom edge upwards, the control included, so the list follows by as much
  * as the row grew.
  */
-export function useAnchoredRow() {
+export function useAnchoredRow(streaming = false) {
   const shift = useContext(ListShiftContext);
+  const grow = useContext(ListGrowContext);
   const height = useRef(0);
   const pending = useRef(0);
 
@@ -25,12 +32,17 @@ export function useAnchoredRow() {
       const h = e.nativeEvent.layout.height;
       const before = height.current;
       height.current = h;
-      if (pending.current > Date.now() && before && h !== before) {
+      if (!before || h === before) {
+        return;
+      }
+      if (pending.current > Date.now()) {
         pending.current = 0;
         shift?.(h - before);
+      } else if (streaming) {
+        grow?.(h - before, before);
       }
     },
-    [shift],
+    [shift, grow, streaming],
   );
 
   const toggle = useCallback((apply: () => void) => {

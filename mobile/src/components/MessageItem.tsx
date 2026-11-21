@@ -243,7 +243,7 @@ function AssistantTurn({
   const t = useTheme();
   const styles = useStyles();
   const speaker = useSpeaker(message.speaker);
-  const row = useAnchoredRow();
+  const row = useAnchoredRow(!!message.streaming);
   const [showAll, setShowAll] = useState(false);
   const steps = message.steps ?? [];
   const foldable = !message.streaming && steps.length > FOLD_AFTER;
@@ -262,6 +262,12 @@ function AssistantTurn({
   const liveThinking =
     !!message.streaming && !message.content && last?.kind === 'thinking' ? last.id : null;
   const waiting = !!message.streaming && !message.content && !steps.length;
+  // A running tool spins and streamed text moves on its own. What looks finished is the
+  // wait on the model between them, when nothing arrives, so the dots fill exactly that.
+  const toolBusy = steps.some(s => s.kind === 'tool' && s.status === 'running');
+  const progress = `${message.content.length}:${steps.length}:${last ? stepSize(last) : 0}`;
+  const stalled = useStalled(!!message.streaming && !waiting && !toolBusy, progress);
+  const working = stalled && !liveThinking;
   const hasAnswer =
     !!message.content || !!files.length || !!message.cancelled || !!message.runState || !!message.error;
 
@@ -328,6 +334,12 @@ function AssistantTurn({
               </View>
             )}
 
+            {working && (
+              <View style={styles.working}>
+                <Dots size={3} />
+              </View>
+            )}
+
             {message.cancelled && (
               <View style={styles.status}>
                 <Icon icon={faStop} size={9} color={t.t3} />
@@ -353,6 +365,30 @@ function AssistantTurn({
       </View>
     </RowToggleContext.Provider>
   );
+}
+
+/** How far a step has got, so any streamed addition to it changes the number. */
+function stepSize(step: Step): number {
+  if (step.kind === 'tool') {
+    return (step.progress?.length ?? 0) + (step.substeps?.length ?? 0) + (step.status === 'running' ? 0 : 1);
+  }
+  return step.text.length;
+}
+
+const STALL_MS = 700;
+
+/** True once `progress` has stood still for a moment while `active`. */
+function useStalled(active: boolean, progress: string): boolean {
+  const [stalled, setStalled] = useState(false);
+  useEffect(() => {
+    setStalled(false);
+    if (!active) {
+      return;
+    }
+    const timer = setTimeout(() => setStalled(true), STALL_MS);
+    return () => clearTimeout(timer);
+  }, [active, progress]);
+  return stalled;
 }
 
 function StepRow({step, live, carded}: {step: Step; live: boolean; carded: ChatFile[]}) {
@@ -405,8 +441,10 @@ function Chevron({open}: {open: boolean}) {
   );
 }
 
+// Amber, the same in both themes.
+const BULB = '#FBBF24';
+
 function Thinking({text, seconds, live}: {text: string; seconds?: number; live: boolean}) {
-  const t = useTheme();
   const styles = useStyles();
   const toggle = useRowToggle();
   const [userOpen, setUserOpen] = useState(false);
@@ -419,7 +457,7 @@ function Thinking({text, seconds, live}: {text: string; seconds?: number; live: 
       onPress={() => toggle(() => setUserOpen(v => !v))}
       style={({pressed}) => [styles.thinking, pressed && styles.pressed]}>
       <View style={styles.stepHead}>
-        <Icon icon={faLightbulb} size={11} color={t.kind.image[1]} />
+        <Icon icon={faLightbulb} size={11} color={BULB} />
         <Text style={styles.stepTitle}>{live ? tr('chat_thinking_live') : tr('chat_thinking_done')}</Text>
         {live ? (
           <Dots size={3} />
@@ -746,6 +784,7 @@ const useStyles = makeStyles(t => {
     foldText: {flex: 1, fontSize: 12, color: t.t3},
     foldAction: {fontSize: 12, fontWeight: '500', color: t.accent},
     waiting: {paddingVertical: 6},
+    working: {paddingTop: 8, paddingBottom: 2},
     note: {paddingHorizontal: 2},
     sent: {marginLeft: 18, marginTop: 2, marginBottom: 2},
     files: {gap: 8},

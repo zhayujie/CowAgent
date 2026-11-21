@@ -35,7 +35,7 @@ import {Dock} from '../components/Dock';
 import {DrawerMenu, type DrawerRoute, type DrawerView} from '../components/DrawerMenu';
 import {Icon} from '../components/Icon';
 import {Intro} from '../components/Intro';
-import {ListShiftContext} from '../components/listAnchor';
+import {ListGrowContext, ListShiftContext} from '../components/listAnchor';
 import {MessageItem} from '../components/MessageItem';
 import {ServerSheet} from '../components/ServerSheet';
 import {SessionActions} from '../components/SessionActions';
@@ -78,6 +78,8 @@ const HISTORY_MAX = 20;
 /** Within this of the bottom, a new bubble is followed instead of held below the screen. */
 const FOLLOW_PX = 80;
 const KEEP_POSITION = {minIndexForVisible: 0, autoscrollToTopThreshold: FOLLOW_PX};
+/** The list's padding before the newest message (paddingTop, as the list is inverted). */
+const LIST_PAD = 20;
 
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -336,6 +338,17 @@ export function ChatScreen({route, navigation}: Props) {
     offsetRef.current = next;
     list.current?.scrollToOffset({offset: next, animated: false});
   }, []);
+  // A reply growing at the bottom pushes up whatever is read above it. The list keeps that still
+  // only while the reply sits off screen, so while it is in view the page follows it by hand.
+  const holdForReader = useCallback(
+    (dy: number, before: number) => {
+      const offset = offsetRef.current;
+      if (offset > FOLLOW_PX && offset < before + LIST_PAD) {
+        shiftList(dy);
+      }
+    },
+    [shiftList],
+  );
   // The list is inverted, so its bottom is offset 0; wait a frame for the new bubble to be laid out.
   const toBottom = useCallback(() => {
     requestAnimationFrame(() => list.current?.scrollToOffset({offset: 0, animated: true}));
@@ -722,34 +735,36 @@ export function ChatScreen({route, navigation}: Props) {
             )
           ) : (
             <ListShiftContext.Provider value={shiftList}>
-              <View style={styles.body}>
-                <FlatList
-                  ref={list}
-                  inverted
-                  data={data}
-                  keyExtractor={m => m.id}
-                  renderItem={renderItem}
-                  contentContainerStyle={styles.list}
-                  keyboardShouldPersistTaps="handled"
-                  keyboardDismissMode="interactive"
-                  maintainVisibleContentPosition={KEEP_POSITION}
-                  onScroll={onListScroll}
-                  scrollEventThrottle={32}
-                />
-                {away && (
-                  <Animated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(120)} style={styles.toBottom}>
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel={unread ? tr('chat_back_to_latest_unread') : tr('chat_back_to_latest')}
-                      onPress={toBottom}
-                      hitSlop={8}
-                      style={({pressed}) => [styles.toBottomButton, pressed && styles.agentPressed]}>
-                      <Icon icon={faArrowDown} size={12} color={t.t2} />
-                      {unread && <View style={styles.unreadDot} />}
-                    </Pressable>
-                  </Animated.View>
-                )}
-              </View>
+              <ListGrowContext.Provider value={holdForReader}>
+                <View style={styles.body}>
+                  <FlatList
+                    ref={list}
+                    inverted
+                    data={data}
+                    keyExtractor={m => m.id}
+                    renderItem={renderItem}
+                    contentContainerStyle={styles.list}
+                    keyboardShouldPersistTaps="handled"
+                    keyboardDismissMode="interactive"
+                    maintainVisibleContentPosition={KEEP_POSITION}
+                    onScroll={onListScroll}
+                    scrollEventThrottle={32}
+                  />
+                  {away && (
+                    <Animated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(120)} style={styles.toBottom}>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={unread ? tr('chat_back_to_latest_unread') : tr('chat_back_to_latest')}
+                        onPress={toBottom}
+                        hitSlop={8}
+                        style={({pressed}) => [styles.toBottomButton, pressed && styles.agentPressed]}>
+                        <Icon icon={faArrowDown} size={12} color={t.t2} />
+                        {unread && <View style={styles.unreadDot} />}
+                      </Pressable>
+                    </Animated.View>
+                  )}
+                </View>
+              </ListGrowContext.Provider>
             </ListShiftContext.Provider>
           )}
           <Dock
