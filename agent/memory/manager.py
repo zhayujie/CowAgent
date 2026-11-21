@@ -267,14 +267,16 @@ class MemoryManager:
             user_id: User ID for user-scoped memory
             scope: Memory scope ("shared", "user", "session")
             source: Memory source ("memory" or "session")
-            path: File path (auto-generated if not provided)
+            path: File path (auto-generated if not provided). A generated
+                path is written to disk so sync() keeps its rows; an explicit
+                one belongs to the caller and its file is left untouched.
             metadata: Additional metadata
         """
         if not content.strip():
             return
 
-        # Generate path if not provided
-        if not path:
+        generated = not path
+        if generated:
             content_hash = hashlib.md5(content.encode('utf-8')).hexdigest()[:8]
             if user_id and scope == "user":
                 path = f"memory/users/{user_id}/memory_{content_hash}.md"
@@ -293,7 +295,8 @@ class MemoryManager:
             if candidate == workspace_real or candidate.is_dir():
                 raise ValueError(f"Memory path must point to a file inside workspace: {path}")
             path = rel.as_posix()
-            target = candidate
+            if generated:
+                target = candidate
 
         # Chunk content
         chunks = self.chunker.chunk_text(content)

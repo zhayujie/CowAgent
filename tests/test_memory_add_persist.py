@@ -66,13 +66,13 @@ def test_add_memory_auto_path_persists_file_and_survives_sync(tmp_path):
     assert any(r.path == expected_rel for r in results)
 
 
-def test_add_memory_explicit_path_creates_parents_and_survives_sync(tmp_path):
+def test_add_memory_user_scope_creates_parents_and_survives_sync(tmp_path):
     workspace = tmp_path / "workspace"
     manager = _manager(workspace)
     content = "User note COBALTANCHOR5519 for u1.\n"
-    rel_path = "memory/users/u1/note.md"
+    rel_path = f"memory/users/u1/memory_{hashlib.md5(content.encode('utf-8')).hexdigest()[:8]}.md"
 
-    asyncio.run(manager.add_memory(content, user_id="u1", scope="user", path=rel_path))
+    asyncio.run(manager.add_memory(content, user_id="u1", scope="user"))
 
     persisted = workspace / rel_path
     assert persisted.is_file()
@@ -83,6 +83,23 @@ def test_add_memory_explicit_path_creates_parents_and_survives_sync(tmp_path):
     assert rel_path in manager.storage.list_paths("memory")
     results = asyncio.run(manager.search("COBALTANCHOR5519", user_id="u1", min_score=0.0))
     assert any(r.path == rel_path for r in results)
+
+
+def test_add_memory_leaves_the_file_at_an_explicit_path_alone(tmp_path):
+    # The caller owns an explicit path: writing the snippet there would replace
+    # whatever the file already holds, e.g. the whole of MEMORY.md.
+    workspace = tmp_path / "workspace"
+    manager = _manager(workspace)
+    memory_md = workspace / "MEMORY.md"
+    memory_md.parent.mkdir(parents=True, exist_ok=True)
+    original = "# Memory\n\nLong-standing note SAFFRONBRIDGE6610.\n"
+    memory_md.write_text(original, encoding="utf-8")
+
+    asyncio.run(manager.add_memory("A snippet indexed under MEMORY.md.\n", path="MEMORY.md"))
+    asyncio.run(manager.add_memory("Nothing on disk yet.\n", path="memory/shared/absent.md"))
+
+    assert memory_md.read_text(encoding="utf-8") == original
+    assert not (workspace / "memory/shared/absent.md").exists()
 
 
 def test_add_memory_is_up_to_date_on_next_sync_without_reembedding(tmp_path):
@@ -101,15 +118,15 @@ def test_add_memory_is_up_to_date_on_next_sync_without_reembedding(tmp_path):
 def test_add_memory_does_not_rewrite_identical_existing_file(tmp_path):
     workspace = tmp_path / "workspace"
     manager = _manager(workspace)
-    rel_path = "memory/shared/existing.md"
+    content = "Already written QUARTZHARBOR7742.\n"
+    rel_path = f"memory/shared/memory_{hashlib.md5(content.encode('utf-8')).hexdigest()[:8]}.md"
     existing = workspace / rel_path
     existing.parent.mkdir(parents=True, exist_ok=True)
-    content = "Already written QUARTZHARBOR7742.\n"
     existing.write_text(content, encoding="utf-8")
     fixed_mtime = 1700000000
     os.utime(existing, (fixed_mtime, fixed_mtime))
 
-    asyncio.run(manager.add_memory(content, path=rel_path))
+    asyncio.run(manager.add_memory(content))
 
     assert int(existing.stat().st_mtime) == fixed_mtime
     asyncio.run(manager.sync())
