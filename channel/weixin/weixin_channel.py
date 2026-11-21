@@ -1036,8 +1036,8 @@ class WeixinChannel(ChatChannel):
             return msg.context_token
         return self._context_tokens.get(receiver, "")
 
-    def _check_send_response(self, resp, receiver: str) -> None:
-        """Inspect a send-API response; log failures and drop stale context_token on -14.
+    def _check_send_response(self, resp, receiver: str) -> bool:
+        """Inspect a send-API response; return whether the bubble actually went out.
 
         ilink uses ret/errcode = -14 to signal that the session (and any
         cached context_token) is no longer valid. The plugin keeps running
@@ -1046,10 +1046,10 @@ class WeixinChannel(ChatChannel):
 
         Other non-zero codes (e.g. the user has not messaged the bot within
         the last 24h, or the send quota is used up) come back with HTTP 200,
-        so they would otherwise pass silently.
+        so a caller that ignores this verdict would report them as delivered.
         """
         if not isinstance(resp, dict):
-            return
+            return True
         ret = resp.get("ret")
         errcode = resp.get("errcode")
         if ret == -14 or errcode == -14:
@@ -1058,34 +1058,61 @@ class WeixinChannel(ChatChannel):
                 f"receiver={receiver}; dropping cached context_token"
             )
             self._invalidate_context_token(receiver)
-        elif ret or errcode:
+            return False
+        if ret or errcode:
             logger.error(
                 f"[Weixin] Send failed for receiver={receiver}: ret={ret} "
                 f"errcode={errcode} errmsg={resp.get('errmsg', '')}. The user may "
                 f"need to send a message to the bot to re-open the 24h send window"
             )
+            return False
+        return True
 
     def _send_text(self, text: str, receiver: str, context_token: str):
-        if len(text) <= TEXT_CHUNK_LIMIT:
-            try:
-                resp = self.api.send_text(receiver, text, context_token)
-                self._check_send_response(resp, receiver)
-                logger.debug(f"[Weixin] Text sent to {receiver}, len={len(text)}")
-            except Exception as e:
-                logger.error(f"[Weixin] Failed to send text: {e}")
-            return
+        """Send ``text`` in chunks, raising when the platform refused all of them.
 
+        A silent return means "delivered" to the scheduler, which then deletes a
+        one-time task, so a refusal has to surface as a failure here -- the same
+        reason ``send()`` raises when the context_token is missing. Remaining
+        chunks are still attempted: a rejected middle chunk must not swallow the
+        tail of a long answer.
+
+        A partial delivery is only logged: ``ChatChannel._send`` retries a
+        raising ``send()`` from the first chunk, which would repeat every chunk
+        that already went out.
+        """
         chunks = self._split_text(text, TEXT_CHUNK_LIMIT)
+        rejected = 0
+        reason = ""
         for i, chunk in enumerate(chunks):
             try:
                 resp = self.api.send_text(receiver, chunk, context_token)
-                self._check_send_response(resp, receiver)
-                logger.debug(f"[Weixin] Text chunk {i+1}/{len(chunks)} sent to {receiver}, len={len(chunk)}")
+                if self._check_send_response(resp, receiver):
+                    logger.debug(
+                        f"[Weixin] Text chunk {i+1}/{len(chunks)} sent to "
+                        f"{receiver}, len={len(chunk)}"
+                    )
+                else:
+                    rejected += 1
+                    reason = f"ret={resp.get('ret')} errcode={resp.get('errcode')}"
             except Exception as e:
-                logger.error(f"[Weixin] Failed to send text chunk {i+1}/{len(chunks)}: {e}")
-                break
+                rejected += 1
+                reason = str(e)
+                logger.error(
+                    f"[Weixin] Failed to send text chunk {i+1}/{len(chunks)}: {e}"
+                )
             if i < len(chunks) - 1:
                 time.sleep(0.5)
+
+        if not rejected:
+            return
+        summary = (
+            f"[Weixin] {rejected}/{len(chunks)} text chunk(s) rejected for "
+            f"receiver={receiver}: {reason}"
+        )
+        if rejected == len(chunks):
+            raise RuntimeError(summary)
+        logger.error(summary)
 
     @staticmethod
     def _split_text(text: str, limit: int) -> list:
