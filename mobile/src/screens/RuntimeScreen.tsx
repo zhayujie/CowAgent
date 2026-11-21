@@ -2,7 +2,7 @@ import type {StackScreenProps} from '@react-navigation/stack';
 import React, {useEffect, useState} from 'react';
 import {ScrollView, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import {ChoiceSheet, FieldSheet, Footnote, SettingRow, SwitchRow} from '../components/settings';
+import {ChoiceSheet, FieldSheet, SettingRow, SwitchRow} from '../components/settings';
 import {showToast, ToastHost} from '../components/Toast';
 import {EmptyState, GroupLabel, PageHeader} from '../components/ui';
 import {tr, trf, type MessageKey} from '../i18n';
@@ -102,7 +102,7 @@ export function RuntimeScreen({navigation}: Props) {
         <GroupLabel style={styles.group}>{tr('settings_group_thinking')}</GroupLabel>
         <SwitchRow
           title={tr('settings_thinking')}
-          detail={trf('settings_current_model', {model: config.model || tr('common_not_configured')})}
+          detail={tr('settings_thinking_detail')}
           value={config.enable_thinking}
           onValueChange={v => save({enable_thinking: v})}
           last={!config.enable_thinking || !effortOptions.length}
@@ -134,7 +134,6 @@ export function RuntimeScreen({navigation}: Props) {
           onValueChange={v => save({self_evolution_enabled: v})}
           last
         />
-        <Footnote>{tr('settings_runtime_note')}</Footnote>
       </ScrollView>
 
       <FieldSheet

@@ -316,7 +316,8 @@ function ShareCard({
       </Pressable>
 
       <View style={[styles.link, !(url && live) && styles.linkDim]}>
-        <Text style={styles.linkText} numberOfLines={1} selectable={!!url}>
+        {/* Not selectable: Android wraps selectable text instead of ellipsizing it. */}
+        <Text style={styles.linkText} numberOfLines={1} ellipsizeMode="middle">
           {url || tr('share_no_link')}
         </Text>
         {!!url && (

@@ -1,4 +1,4 @@
-import {faCheck, faChevronDown, faChevronUp, faPlus, faXmark} from '@fortawesome/free-solid-svg-icons';
+import {faCheck, faChevronDown, faChevronUp, faPlus, faSliders, faXmark} from '@fortawesome/free-solid-svg-icons';
 import type {StackScreenProps} from '@react-navigation/stack';
 import React, {useEffect, useMemo, useState} from 'react';
 import {KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View} from 'react-native';
@@ -269,13 +269,22 @@ export function GuestShareEditScreen({navigation, route}: Props) {
           </Section>
 
           <Section style={styles.moreSection}>
-            <InfoRow
-              first
-              title={tr('share_more')}
-              hint={tr('share_more_desc')}
-              right={<Icon icon={more ? faChevronUp : faChevronDown} size={11} color={t.t3} />}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{expanded: more}}
               onPress={() => setMore(v => !v)}
-            />
+              style={({pressed}) => [styles.moreRow, pressed && styles.pressed]}>
+              <View style={styles.moreIcon}>
+                <Icon icon={faSliders} size={14} color={t.accent} />
+              </View>
+              <View style={styles.moreText}>
+                <Text style={styles.moreTitle}>{tr('share_more')}</Text>
+                <Text style={styles.moreDesc} numberOfLines={1}>
+                  {tr('share_more_desc')}
+                </Text>
+              </View>
+              <Icon icon={more ? faChevronUp : faChevronDown} size={12} color={t.accent} />
+            </Pressable>
           </Section>
 
           {more && (
@@ -391,6 +400,18 @@ const useStyles = makeStyles(t => ({
   swatch: {width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center'},
   swatchActive: {borderWidth: 2, borderColor: t.bg1, transform: [{scale: 1.12}]},
   moreSection: {marginTop: 14},
+  moreRow: {flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingVertical: 13},
+  moreIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: t.accentSoft,
+  },
+  moreText: {flex: 1, minWidth: 0},
+  moreTitle: {fontSize: 15, fontWeight: '600', color: t.accent},
+  moreDesc: {fontSize: 12.5, color: t.t3, marginTop: 2},
   chips: {flexDirection: 'row', flexWrap: 'wrap', gap: 8, padding: 12},
   empty: {fontSize: 13, color: t.t3, paddingHorizontal: 14, paddingVertical: 14},
   error: {fontSize: 13, lineHeight: 19, color: t.danger, paddingHorizontal: 18, paddingTop: 16},

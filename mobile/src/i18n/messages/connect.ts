@@ -11,7 +11,7 @@ const zh = {
   connect_manual_short: '输入地址',
   connect_scan_desc: '扫描对方 CowAgent 生成的配对二维码',
   connect_manual_desc: '填写对方的地址和配对码',
-  connect_remote_note: '手机需要能通过网络访问到对方，比如连接同一个 Wi-Fi。二维码在对方 CowAgent 的「设置 › 设备管理」里，点「让其他设备连接我」生成；服务器上可通过运行 cow pair 命令生成配对码。',
+  connect_remote_note: '手机需要和对方在同一网络。配对二维码在对方的「设置 › 设备管理」里生成，服务器上可运行 cow pair 获取配对码',
   connect_manual_title: '手动连接',
   connect_manual_lead: '填写对方 CowAgent 上显示的地址和配对码。',
   connect_address: '地址',
@@ -19,7 +19,7 @@ const zh = {
   connect_code: '配对码',
   connect_code_placeholder: 'XXXX-XXXX',
   connect_submit: '连接',
-  connect_code_footnote: '配对码 5 分钟内有效，只能使用一次。连接后这台手机会拿到独立凭证，可在电脑上随时移除。',
+  connect_code_footnote: '配对码 5 分钟内有效，只能使用一次',
   connect_connecting: '正在连接…',
   connect_connected: '已连接 {name}',
   connect_scan_title: '扫码连接',
@@ -41,10 +41,8 @@ const zh = {
   connect_confirm_title: '连接到这个 CowAgent？',
   connect_confirm_body: '请确认这是你自己的电脑或服务器。连接后，你在这里的对话都会发送到它上面。',
   connect_confirm_ok: '连接',
-  connect_method_device: '扫码配对',
-  connect_method_password: '访问密码',
-  connect_setup_model_title: '还差一步：配置模型',
-  connect_setup_model_desc: 'Agent 需要一个大模型才能工作。选择模型服务商并填写 API Key 即可开始。',
+  connect_setup_model_title: '配置模型',
+  connect_setup_model_desc: 'Agent 需要配置大模型后才能工作，请填写模型 API Key 后开始',
   connect_setup_model_action: '去配置',
 };
 
@@ -61,8 +59,7 @@ const en: Record<keyof typeof zh, string> = {
   connect_manual_short: 'Enter address',
   connect_scan_desc: 'Scan the pairing QR code the other CowAgent shows',
   connect_manual_desc: 'Enter its address and pairing code',
-  connect_remote_note:
-    'The phone must reach it over the network, for example on the same Wi-Fi. On the other CowAgent, open Settings › Devices and choose Let a device connect for a QR code. On a server, run the cow pair command to get a pairing code.',
+  connect_remote_note: "The phone must be on the same network. Get a QR code from the other side's Settings › Devices, or run cow pair on a server",
   connect_manual_title: 'Connect manually',
   connect_manual_lead: 'Enter the address and pairing code the other CowAgent shows.',
   connect_address: 'Address',
@@ -70,8 +67,7 @@ const en: Record<keyof typeof zh, string> = {
   connect_code: 'Pairing code',
   connect_code_placeholder: 'XXXX-XXXX',
   connect_submit: 'Connect',
-  connect_code_footnote:
-    'A pairing code works once, for 5 minutes. This phone then gets its own credential, which you can remove from the computer at any time.',
+  connect_code_footnote: 'The code is valid for 5 minutes and works once',
   connect_connecting: 'Connecting…',
   connect_connected: 'Connected to {name}',
   connect_scan_title: 'Scan to connect',
@@ -96,10 +92,8 @@ const en: Record<keyof typeof zh, string> = {
   connect_confirm_body:
     'Make sure this is your own computer or server. Once connected, what you send here goes to it.',
   connect_confirm_ok: 'Connect',
-  connect_method_device: 'QR pairing',
-  connect_method_password: 'Access password',
-  connect_setup_model_title: 'One more step: set up a model',
-  connect_setup_model_desc: 'The Agent needs a language model to work. Pick a provider and enter its API key to begin.',
+  connect_setup_model_title: 'Set up a model',
+  connect_setup_model_desc: 'The agent needs a model to work. Add a model API key to begin',
   connect_setup_model_action: 'Set up',
 };
 

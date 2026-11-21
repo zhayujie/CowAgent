@@ -1,7 +1,7 @@
 const zh = {
   // Task list
   task_title: '定时任务',
-  task_local_note: '本机 Agent 只在 App 打开时运行，App 切到后台或关闭期间，定时任务不会执行。',
+  task_local_note: '手机内置 Agent 只在 App 打开时运行，后台或关闭期间定时任务不会执行',
   task_new: '新增任务',
   task_tab_tasks: '任务',
   task_runs: '执行记录',
@@ -207,7 +207,7 @@ const zh = {
 const en: Record<keyof typeof zh, string> = {
   // Task list
   task_title: 'Scheduled tasks',
-  task_local_note: "The on-device agent only runs while the app is open. Tasks don't run while it's in the background or closed.",
+  task_local_note: "The built-in phone agent only runs while the app is open, so tasks don't run in the background",
   task_new: 'New task',
   task_tab_tasks: 'Tasks',
   task_runs: 'History',

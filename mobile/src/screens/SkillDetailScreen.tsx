@@ -172,7 +172,6 @@ export function SkillDetailScreen({route, navigation}: Props) {
         <View style={styles.switchWrap}>
           <SwitchRow
             title={tr('skill_enable')}
-            detail={tr('skill_enable_detail')}
             value={skill.enabled}
             onValueChange={toggle}
             last

@@ -450,14 +450,6 @@ export async function savePublicUrl(publicUrl: string) {
   });
 }
 
-/** The server answers first, then restarts on the new address. */
-export async function saveListenHost(host: string) {
-  return http.request<{status: string; reason?: string}>('/api/integrations', {
-    method: 'PUT',
-    body: {web_host: host},
-  });
-}
-
 const SHARES = '/api/guest-shares';
 const shareSlug = (slug: string) => `${SHARES}/${encodeURIComponent(slug)}`;
 
