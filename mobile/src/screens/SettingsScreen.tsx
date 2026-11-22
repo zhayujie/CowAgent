@@ -132,7 +132,14 @@ export function SettingsScreen({navigation}: Props) {
   };
 
   const serverName = local ? localName : server?.name ?? '-';
-  const serverMeta = local ? tr('server_local_meta') : server ? hostOf(server.baseUrl) : '-';
+  // Reading the endpoint keeps this row live as the router moves between addresses.
+  const endpoint = useServerStore(s => s.endpoint);
+  const via = local || !endpoint ? null : tr(endpoint.kind === 'lan' ? 'server_via_lan' : 'server_via_wan');
+  const serverMeta = local
+    ? tr('server_local_meta')
+    : server
+      ? [hostOf(server.baseUrl), via].filter(Boolean).join(' · ')
+      : '-';
 
   const loading = !config;
   return (

@@ -1,5 +1,6 @@
 import {create} from 'zustand';
-import {checkAuth, login, probeServer, updateConfig} from '../api/cowApi';
+import {checkAuth, getIntegrations, login, probeServer, updateConfig} from '../api/cowApi';
+import {endpointKind, endpointRouter, sortEndpoints, type RouterEndpoint} from '../api/endpointRouter';
 import {ApiError, http, normalizeBaseUrl} from '../api/http';
 import {
   discover,
@@ -23,6 +24,7 @@ import {resetServerData} from './reset';
 export interface ServerProfile {
   id: string;
   name: string;
+  /** The address in use, kept current as the endpoint router switches. */
   baseUrl: string;
   wsUrl: string | null;
   /** The kernel embedded in this app; its address may change between launches. */
@@ -31,6 +33,8 @@ export interface ServerProfile {
   via?: 'pairing' | 'password';
   /** The id the server answers discovery with; its token goes nowhere else. */
   instanceId?: string;
+  /** The addresses this server is known to answer at, local ones first. */
+  endpoints?: RouterEndpoint[];
 }
 
 interface PersistedServers {
@@ -44,6 +48,8 @@ interface ServerState {
   activeId: string | null;
   authed: boolean;
   realtimeStatus: RealtimeStatus;
+  /** The address the active server is being reached at now, for the UI. */
+  endpoint: RouterEndpoint | null;
   /** Why the login screen took over from a signed-in server, shown there once. */
   problem: string | null;
   hydrate: () => Promise<void>;
@@ -179,9 +185,11 @@ function guardIdentity(profile: ServerProfile, confirmed = false) {
     return;
   }
   http.setIdentityCheck(async () => {
+    // The router may have moved the server to another of its addresses.
+    const baseUrl = http.getBaseUrl() || profile.baseUrl;
     let info;
     try {
-      info = await discover(profile.baseUrl, 8000);
+      info = await discover(baseUrl, 8000);
     } catch (e) {
       const reason = e instanceof ApiError ? e.body?.reason : undefined;
       if (reason === 'unreachable' || reason === 'timeout') {
@@ -244,17 +252,31 @@ async function requireCurrentServer(baseUrl: string) {
   }
 }
 
+/** The address and token the shared WebSocket is on, so a router switch reconnects there. */
+let realtimeUrl = '';
+let realtimeToken = '';
+
 async function startRealtime(
   server: ServerProfile,
   token: string,
   setStatus: (s: RealtimeStatus) => void,
 ) {
-  realtime.stop();
-  const url = resolveWsUrl(server.baseUrl, server.wsUrl);
+  const url = resolveWsUrl(http.getBaseUrl() || server.baseUrl, server.wsUrl);
   if (!url) {
     // Server has no shared WebSocket yet: chat streams fall back to SSE.
+    if (realtimeUrl) {
+      realtimeUrl = '';
+      realtimeToken = '';
+      realtime.stop();
+    }
     return;
   }
+  if (url === realtimeUrl && token === realtimeToken) {
+    return;
+  }
+  realtimeUrl = url;
+  realtimeToken = token;
+  realtime.stop();
   const lastSeq = await readJSON<number>(seqKey(server.id), 0);
   realtime.start({
     url,
@@ -268,6 +290,131 @@ async function startRealtime(
     onStatus: setStatus,
   });
 }
+
+function stopRealtime() {
+  realtimeUrl = '';
+  realtimeToken = '';
+  realtime.stop();
+}
+
+/** The addresses known for a profile, even one saved before endpoints existed. */
+function endpointsFor(profile: ServerProfile): RouterEndpoint[] {
+  return sortEndpoints([{url: profile.baseUrl, kind: endpointKind(profile.baseUrl)}, ...(profile.endpoints ?? [])]);
+}
+
+/** Point HTTP at the chosen address, remember it, and move the realtime socket along. */
+function applyRouterEndpoint(profile: ServerProfile, token: string, endpoint: RouterEndpoint) {
+  const changed = http.getBaseUrl() !== endpoint.url;
+  if (changed) {
+    http.setBaseUrl(endpoint.url);
+    // Just probed as the same instance, so the token may go there.
+    guardIdentity({...profile, baseUrl: endpoint.url}, true);
+  }
+  useServerStore.setState({endpoint});
+  const {servers, activeId} = useServerStore.getState();
+  const saved = servers.find(s => s.id === profile.id);
+  if (saved && saved.baseUrl !== endpoint.url) {
+    const next = servers.map(s => (s.id === profile.id ? {...s, baseUrl: endpoint.url} : s));
+    useServerStore.setState({servers: next});
+    persist(next, activeId).catch(() => undefined);
+  }
+  startRealtime(profile, token, s => useServerStore.setState({realtimeStatus: s})).catch(() => undefined);
+  if (changed) {
+    // A new address may answer with a different list of its own.
+    refreshEndpoints(profile, token).catch(() => undefined);
+  }
+}
+
+/** Hand the profile's addresses to the router; the embedded kernel has just one. */
+function syncRouter(profile: ServerProfile, token: string | null) {
+  if (profile.local || !token) {
+    endpointRouter.stop();
+    stopEndpointRefresh();
+    useServerStore.setState({endpoint: null});
+    return;
+  }
+  endpointRouter.configure({
+    endpoints: endpointsFor(profile),
+    instanceId: profile.instanceId,
+    apply: endpoint => applyRouterEndpoint(profile, token, endpoint),
+  });
+  endpointRouter.start();
+  // Start the socket on the saved address; the router moves it once it picks.
+  startRealtime(profile, token, s => useServerStore.setState({realtimeStatus: s})).catch(() => undefined);
+  startEndpointRefresh(profile, token);
+}
+
+/**
+ * Ask the server which addresses it answers at. Its own list follows a LAN
+ * address change, and the public URL is only served by the computer itself.
+ */
+async function refreshEndpoints(profile: ServerProfile, token: string) {
+  if (profile.local) {
+    return;
+  }
+  const access = await getIntegrations().catch(() => null);
+  if (!access || useServerStore.getState().activeId !== profile.id) {
+    return;
+  }
+  const current = currentProfile(profile.id);
+  if (!current) {
+    return;
+  }
+  const found: RouterEndpoint[] = [
+    ...(current.endpoints ?? []),
+    {url: current.baseUrl, kind: endpointKind(current.baseUrl)},
+  ];
+  if (access.public_url) {
+    found.push({url: normalizeBaseUrl(access.public_url), kind: endpointKind(access.public_url)});
+  }
+  for (const url of access.lan_urls ?? []) {
+    found.push({url: normalizeBaseUrl(url), kind: 'lan'});
+  }
+  const endpoints = sortEndpoints(found);
+  const stored = current.endpoints ?? [];
+  const changedList =
+    endpoints.length !== stored.length ||
+    endpoints.some((e, i) => e.url !== stored[i]?.url || e.kind !== stored[i]?.kind);
+  if (changedList) {
+    const {servers, activeId} = useServerStore.getState();
+    const next = servers.map(s => (s.id === profile.id ? {...s, endpoints} : s));
+    useServerStore.setState({servers: next});
+    persist(next, activeId).catch(() => undefined);
+  }
+  endpointRouter.configure({
+    endpoints,
+    instanceId: current.instanceId,
+    apply: endpoint => applyRouterEndpoint(current, token, endpoint),
+  });
+}
+
+/**
+ * While reaching the server over the internet, its LAN address may have
+ * changed with the network; ask again now and then, so coming home is noticed.
+ */
+let endpointRefreshTimer: ReturnType<typeof setInterval> | null = null;
+
+function startEndpointRefresh(profile: ServerProfile, token: string) {
+  stopEndpointRefresh();
+  endpointRefreshTimer = setInterval(() => {
+    if (endpointRouter.current()?.kind !== 'wan') {
+      return;
+    }
+    const active = currentProfile(profile.id);
+    if (useServerStore.getState().activeId === profile.id && active) {
+      refreshEndpoints(active, token).catch(() => undefined);
+    }
+  }, 45_000);
+}
+
+function stopEndpointRefresh() {
+  if (endpointRefreshTimer) {
+    clearInterval(endpointRefreshTimer);
+    endpointRefreshTimer = null;
+  }
+}
+
+http.setTransportErrorHandler((kind, url) => endpointRouter.reportFailure(kind, url));
 
 async function signIn(
   baseUrl: string,
@@ -308,7 +455,8 @@ async function activate(profile: ServerProfile, token: string) {
   // Just paired or signed in there.
   guardIdentity(profile, true);
   useServerStore.setState({servers, activeId: profile.id, authed: true, returnTo: null, problem: null});
-  await startRealtime(profile, token, s => useServerStore.setState({realtimeStatus: s}));
+  syncRouter(profile, token);
+  refreshEndpoints(profile, token).catch(() => undefined);
 }
 
 /**
@@ -325,10 +473,12 @@ async function syncKernelLanguage() {
 
 /** Drop the active server's live state; its token stays, so switching back needs no password. */
 function leaveActive() {
-  realtime.stop();
+  endpointRouter.stop();
+  stopEndpointRefresh();
+  stopRealtime();
   http.setToken(null);
   resetServerData();
-  useServerStore.setState({realtimeStatus: 'idle'});
+  useServerStore.setState({realtimeStatus: 'idle', endpoint: null});
 }
 
 export const useServerStore = create<ServerState>((set, get) => ({
@@ -337,6 +487,7 @@ export const useServerStore = create<ServerState>((set, get) => ({
   activeId: null,
   authed: false,
   realtimeStatus: 'idle',
+  endpoint: null,
   problem: null,
   returnTo: null,
   loginForm: false,
@@ -389,7 +540,8 @@ export const useServerStore = create<ServerState>((set, get) => ({
     guardIdentity(active);
     set({hydrated: true, servers, activeId: active.id, authed: !!token});
     if (token) {
-      await startRealtime(active, token, s => set({realtimeStatus: s}));
+      syncRouter(active, token);
+      refreshEndpoints(active, token).catch(() => undefined);
     }
   },
 
@@ -402,7 +554,15 @@ export const useServerStore = create<ServerState>((set, get) => ({
     }
     const wsUrl = get().servers.find(s => s.id === id)?.wsUrl ?? null;
     await activate(
-      {id, name: result.name, baseUrl: result.baseUrl, wsUrl, via: 'pairing', instanceId: result.instanceId || undefined},
+      {
+        id,
+        name: result.name,
+        baseUrl: result.baseUrl,
+        wsUrl,
+        via: 'pairing',
+        instanceId: result.instanceId || undefined,
+        endpoints: result.urls.map(url => ({url, kind: endpointKind(url)})),
+      },
       result.token,
     );
     // Paired again: the token this device held before is of no use to anyone now.
@@ -458,7 +618,8 @@ export const useServerStore = create<ServerState>((set, get) => ({
     await persist(servers, id);
     set({activeId: id, authed: !!token, returnTo: null, loginForm: false, problem: null});
     if (token) {
-      await startRealtime(target, token, s => set({realtimeStatus: s}));
+      syncRouter(target, token);
+      refreshEndpoints(target, token).catch(() => undefined);
     }
   },
 
@@ -489,12 +650,14 @@ export const useServerStore = create<ServerState>((set, get) => ({
     const {activeId} = get();
     const server = activeServer();
     const token = http.getToken();
-    realtime.stop();
+    endpointRouter.stop();
+    stopEndpointRefresh();
+    stopRealtime();
     if (activeId) {
       await secureStore.remove(tokenKey(activeId));
     }
     http.setToken(null);
-    set({authed: false, realtimeStatus: 'idle', returnTo: null, loginForm: false});
+    set({authed: false, realtimeStatus: 'idle', endpoint: null, returnTo: null, loginForm: false});
     resetServerData();
     if (server && token && !server.local) {
       revokeToken(server.baseUrl, token, server.instanceId);

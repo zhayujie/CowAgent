@@ -1,3 +1,4 @@
+import {endpointRouter} from '../api/endpointRouter';
 import {http} from '../api/http';
 import {openEventStream, type EventStreamHandle} from '../api/sse';
 import type {StreamEvent} from '../protocol/events';
@@ -32,6 +33,7 @@ export function subscribeChat(
   let sse: EventStreamHandle | null = null;
   let retryTimer: ReturnType<typeof setTimeout> | null = null;
   let unsubscribeWs: (() => void) | null = null;
+  let unsubscribeRoute: (() => void) | null = null;
 
   const end = (result: ChatStreamEnd) => {
     if (ended) {
@@ -100,6 +102,8 @@ export function subscribeChat(
   const cleanup = () => {
     unsubscribeWs?.();
     unsubscribeWs = null;
+    unsubscribeRoute?.();
+    unsubscribeRoute = null;
     sse?.close();
     sse = null;
     if (retryTimer) {
@@ -116,6 +120,20 @@ export function subscribeChat(
     });
   } else {
     startSse();
+    // The address in use can change under the stream; follow it at once and
+    // resume from the last seq, rather than waiting for the idle timeout.
+    unsubscribeRoute = endpointRouter.subscribe(() => {
+      if (ended) {
+        return;
+      }
+      if (retryTimer) {
+        clearTimeout(retryTimer);
+        retryTimer = null;
+      }
+      sse?.close();
+      sse = null;
+      startSse();
+    });
   }
 
   return () => {

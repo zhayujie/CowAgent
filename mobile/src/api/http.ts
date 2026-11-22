@@ -32,23 +32,34 @@ export function normalizeBaseUrl(raw: string): string {
 const PRIVATE_V4 = [/^10\./, /^127\./, /^192\.168\./, /^172\.(1[6-9]|2\d|3[01])\./, /^169\.254\./, /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./];
 
 /**
- * Plain HTTP to an address outside the local network, where the password and
- * the device token would cross the internet unencrypted. LAN addresses
- * (private, loopback, CGNAT/Tailscale ranges, `.local`, bare host names) are fine.
+ * Whether an address points inside the local network: private, loopback and
+ * CGNAT/Tailscale ranges, `.local`-style names, and bare host names.
  */
-export function isPublicCleartext(raw: string): boolean {
-  const m = /^http:\/\/(\[[^\]]*\]|[^/:?#]+)/i.exec(raw.trim());
+export function isLocalAddress(raw: string): boolean {
+  const m = /^[a-z]+:\/\/(\[[^\]]*\]|[^/:?#]+)/i.exec(raw.trim());
   if (!m) {
     return false;
   }
   const host = m[1].toLowerCase();
   if (host.startsWith('[')) {
-    return !/^\[(::1|f[cd][0-9a-f]{2}:|fe[89ab][0-9a-f]:)/.test(host);
+    return /^\[(::1|f[cd][0-9a-f]{2}:|fe[89ab][0-9a-f]:)/.test(host);
+  }
+  if (host === 'localhost') {
+    return true;
   }
   if (/^\d+\.\d+\.\d+\.\d+$/.test(host)) {
-    return !PRIVATE_V4.some(r => r.test(host));
+    return PRIVATE_V4.some(r => r.test(host));
   }
-  return !(host === 'localhost' || !host.includes('.') || /\.(local|lan|home\.arpa|internal)$/.test(host));
+  return !host.includes('.') || /\.(local|lan|home\.arpa|internal)$/.test(host);
+}
+
+/**
+ * Plain HTTP to an address outside the local network, where the password and
+ * the device token would cross the internet unencrypted. LAN addresses
+ * (private, loopback, CGNAT/Tailscale ranges, `.local`, bare host names) are fine.
+ */
+export function isPublicCleartext(raw: string): boolean {
+  return /^http:\/\//i.test(raw.trim()) && !isLocalAddress(raw);
 }
 
 export interface RequestOptions {
@@ -62,6 +73,13 @@ export interface RequestOptions {
 const IDENTITY_TTL_MS = 60_000;
 
 export type IdentityResult = 'ok' | 'unreachable' | 'wrong_device';
+
+/**
+ * Told about a request that failed before any answer came back, together with
+ * the address it went to; resolves to whether another address took over, in
+ * which case a GET is repeated there.
+ */
+export type TransportErrorHandler = (kind: 'network' | 'timeout', url: string) => Promise<boolean> | boolean;
 
 interface IdentityGate {
   check: () => Promise<IdentityResult>;
@@ -77,9 +95,15 @@ export class HttpClient {
   // goes only where the device that issued it still answers. A check holds
   // for a minute, and until a request finds the address silent.
   private identity: IdentityGate | null = null;
+  private transportError: TransportErrorHandler | null = null;
 
   setBaseUrl(url: string) {
     this.baseUrl = normalizeBaseUrl(url);
+  }
+
+  /** How the endpoint router hears that the address in use stopped working. */
+  setTransportErrorHandler(handler: TransportErrorHandler | null) {
+    this.transportError = handler;
   }
 
   getBaseUrl(): string {
@@ -173,7 +197,7 @@ export class HttpClient {
     });
   }
 
-  private async send<T>(path: string, timeoutMs: number | undefined, init: RequestInit): Promise<T> {
+  private async send<T>(path: string, timeoutMs: number | undefined, init: RequestInit, retried = false): Promise<T> {
     if (!this.baseUrl) {
       throw new ApiError('network', 'Server address is not configured');
     }
@@ -189,7 +213,15 @@ export class HttpClient {
         this.identity.ok = false;
         this.identity.at = 0;
       }
-      if (controller.signal.aborted) {
+      const kind = controller.signal.aborted ? 'timeout' : 'network';
+      const switched = await Promise.resolve()
+        .then(() => this.transportError?.(kind, this.url(path)))
+        .catch(() => false);
+      // Repeating a GET is harmless; a POST may already have run elsewhere.
+      if (switched && !retried && (init.method ?? 'GET') === 'GET') {
+        return this.send<T>(path, timeoutMs, init, true);
+      }
+      if (kind === 'timeout') {
         throw new ApiError('timeout', 'Request timed out');
       }
       throw new ApiError('network', e instanceof Error ? e.message : String(e));

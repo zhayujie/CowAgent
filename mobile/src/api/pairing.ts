@@ -17,6 +17,8 @@ export interface PairResult {
   name: string;
   /** The id the device answers discovery with; its token goes nowhere else. */
   instanceId: string;
+  /** Every address offered, the one that answered first; the router probes the rest. */
+  urls: string[];
 }
 
 /** Answer of `GET /.well-known/cowagent`. */
@@ -194,6 +196,10 @@ export async function redeem(target: PairTarget): Promise<PairResult> {
       token: res.token,
       name: res.instance?.name || baseUrl.replace(/^https?:\/\//, ''),
       instanceId: res.instance?.id || info.id || '',
+      urls: [
+        baseUrl,
+        ...target.urls.map(normalizeBaseUrl).filter(url => url !== baseUrl),
+      ].filter((url, i, all) => all.indexOf(url) === i),
     };
   }
   throw lastError;
