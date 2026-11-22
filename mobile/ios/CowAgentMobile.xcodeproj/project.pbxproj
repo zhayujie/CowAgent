@@ -16,6 +16,7 @@
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
 		FD5F07978E133B4055451057 /* CowKernel.m in Sources */ = {isa = PBXBuildFile; fileRef = 850A7F5F9184E4CFBAA246E1 /* CowKernel.m */; };
 		3E9A41C2B7D05F6A8C1E2D47 /* CowDownloads.m in Sources */ = {isa = PBXBuildFile; fileRef = 6B2F8D13A94E07C5D1B3E8A6 /* CowDownloads.m */; };
+		4C7D2E91A5B3F06D8E1A2C59 /* CowDevice.m in Sources */ = {isa = PBXBuildFile; fileRef = 7A1E5C3D92B4F08E6D2C1B47 /* CowDevice.m */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -44,6 +45,7 @@
 		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = CowAgentMobile/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		850A7F5F9184E4CFBAA246E1 /* CowKernel.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = CowKernel.m; path = CowAgentMobile/CowKernel.m; sourceTree = "<group>"; };
 		6B2F8D13A94E07C5D1B3E8A6 /* CowDownloads.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = CowDownloads.m; path = CowAgentMobile/CowDownloads.m; sourceTree = "<group>"; };
+		7A1E5C3D92B4F08E6D2C1B47 /* CowDevice.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = CowDevice.m; path = CowAgentMobile/CowDevice.m; sourceTree = "<group>"; };
 		A225B396E5B9994DB8D00F2B /* Python.xcframework */ = {isa = PBXFileReference; includeInIndex = 1; name = Python.xcframework; path = "build/cow-python/Python.xcframework"; sourceTree = SOURCE_ROOT; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
@@ -71,6 +73,7 @@
 				13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */,
 				850A7F5F9184E4CFBAA246E1 /* CowKernel.m */,
 				6B2F8D13A94E07C5D1B3E8A6 /* CowDownloads.m */,
+				7A1E5C3D92B4F08E6D2C1B47 /* CowDevice.m */,
 			);
 			name = CowAgentMobile;
 			sourceTree = "<group>";
@@ -295,6 +298,7 @@
 				761780ED2CA45674006654EE /* AppDelegate.swift in Sources */,
 				FD5F07978E133B4055451057 /* CowKernel.m in Sources */,
 				3E9A41C2B7D05F6A8C1E2D47 /* CowDownloads.m in Sources */,
+				4C7D2E91A5B3F06D8E1A2C59 /* CowDevice.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

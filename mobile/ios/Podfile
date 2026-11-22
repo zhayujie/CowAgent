@@ -20,7 +20,7 @@ platform :ios, min_ios_version_supported
 prepare_react_native_project!
 
 # Only what the permissions page reports on; Camera and Microphone also need their usage strings in Info.plist.
-setup_permissions(['Camera', 'Microphone', 'Notifications'])
+setup_permissions(['Calendars', 'Camera', 'Contacts', 'LocationWhenInUse', 'Microphone', 'Notifications'])
 
 linkage = ENV['USE_FRAMEWORKS']
 if linkage != nil

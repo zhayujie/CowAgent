@@ -11,6 +11,7 @@ import {GestureHandlerRootView} from 'react-native-gesture-handler';
 import {SafeAreaProvider} from 'react-native-safe-area-context';
 import {ImageViewerHost} from './components/FileViews';
 import {PairLinkHost} from './components/PairFlow';
+import {PhoneHost} from './components/PhoneHost';
 import {useLangStore} from './i18n';
 import {navigationRef} from './navigation/ref';
 import {watchNotices} from './notify/notice';
@@ -81,6 +82,7 @@ export default function App() {
           </NavigationContainer>
           <ImageViewerHost />
           {hydrated && <PairLinkHost />}
+          {hydrated && <PhoneHost />}
           {hydrated && <SchedulerWatch />}
         </React.Fragment>
       </SafeAreaProvider>

@@ -21,6 +21,7 @@ class MainApplication : Application(), ReactApplication {
           add(CowDownloadsPackage())
           add(CowQrScannerPackage())
           add(CowSystemBarsPackage())
+          add(CowDevicePackage())
         },
     )
   }

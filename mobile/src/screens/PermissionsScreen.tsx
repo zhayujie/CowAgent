@@ -1,4 +1,13 @@
-import {faBell, faCamera, faGear, faMicrophone, faWifi} from '@fortawesome/free-solid-svg-icons';
+import {
+  faAddressBook,
+  faBell,
+  faCalendarDays,
+  faCamera,
+  faGear,
+  faLocationDot,
+  faMicrophone,
+  faWifi,
+} from '@fortawesome/free-solid-svg-icons';
 import type {StackScreenProps} from '@react-navigation/stack';
 import React, {useCallback, useEffect, useState} from 'react';
 import {AppState, Platform, ScrollView, View} from 'react-native';
@@ -18,6 +27,7 @@ import {
   type PermissionState,
 } from '../media/permissions';
 import type {RootStackParamList} from '../navigation/types';
+import {askNotifications} from '../notify/notice';
 import {makeStyles, useTheme} from '../theme/theme';
 
 type Props = StackScreenProps<RootStackParamList, 'Permissions'>;
@@ -26,6 +36,9 @@ const META: Record<AppPermission, {label: MessageKey; use: MessageKey; icon: typ
   notifications: {label: 'perm_notifications', use: 'perm_notifications_use', icon: faBell},
   microphone: {label: 'settings_microphone', use: 'perm_microphone_use', icon: faMicrophone},
   camera: {label: 'settings_camera', use: 'perm_camera_use', icon: faCamera},
+  location: {label: 'perm_location', use: 'perm_location_use', icon: faLocationDot},
+  calendar: {label: 'perm_calendar', use: 'perm_calendar_use', icon: faCalendarDays},
+  contacts: {label: 'perm_contacts', use: 'perm_contacts_use', icon: faAddressBook},
 };
 
 const STATE_LABEL: Record<PermissionState, MessageKey> = {
@@ -58,7 +71,7 @@ export function PermissionsScreen({navigation}: Props) {
 
   const onPress = async (p: AppPermission) => {
     if (states[p] === 'denied') {
-      const next = await requestPermission(p);
+      const next = p === 'notifications' ? await askNotifications() : await requestPermission(p);
       setStates(s => ({...s, [p]: next}));
       return;
     }

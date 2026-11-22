@@ -42,8 +42,8 @@ import {McpIcon, SkillIcon, ToolIcon} from '../components/SkillIcon';
 import {SkillInstallSheet} from '../components/SkillInstallSheet';
 import {showToast, ToastHost} from '../components/Toast';
 import {SwipeTabs} from '../components/SwipeTabs';
-import {EmptyState, IconButton, PageHeader, Segmented} from '../components/ui';
-import {tr, trf} from '../i18n';
+import {EmptyState, GroupLabel, IconButton, PageHeader, Segmented} from '../components/ui';
+import {tr, trf, type MessageKey} from '../i18n';
 import {pickDocuments} from '../media/picker';
 import {openWebPage} from '../navigation/openWeb';
 import type {RootStackParamList} from '../navigation/types';
@@ -57,6 +57,39 @@ import {compareSkills, SKILL_SOURCE_LABEL, skillDescription, skillName, skillRef
 type Props = StackScreenProps<RootStackParamList, 'Skills'>;
 type Tab = 'skills' | 'tools' | 'mcp';
 const TABS: readonly Tab[] = ['skills', 'tools', 'mcp'];
+
+/** The tools the app runs on the phone, named and explained in the user's language. */
+const PHONE_TOOL: Record<string, [MessageKey, MessageKey]> = {
+  phone_open: ['phone_tool_open', 'phone_tool_open_desc'],
+  phone_location: ['phone_tool_location', 'phone_tool_location_desc'],
+  phone_calendar: ['phone_tool_calendar', 'phone_tool_calendar_desc'],
+  phone_contacts: ['phone_tool_contacts', 'phone_tool_contacts_desc'],
+  phone_photos: ['phone_tool_photos', 'phone_tool_photos_desc'],
+  phone_share: ['phone_tool_share', 'phone_tool_share_desc'],
+  phone_device: ['phone_tool_device', 'phone_tool_device_desc'],
+};
+
+const PLATFORM_NAME: Record<string, MessageKey> = {
+  android: 'phone_platform_android',
+  ios: 'phone_platform_ios',
+  harmony: 'phone_platform_harmony',
+};
+
+const platformName = (p: string) => (PLATFORM_NAME[p] ? tr(PLATFORM_NAME[p]) : p);
+
+/** Phone tools first; without any, one unlabelled list as before. */
+function toolGroups(tools: ToolInfo[]) {
+  const phone = tools.filter(t => t.group === 'phone');
+  const rest = tools.filter(t => t.group !== 'phone');
+  if (!phone.length) {
+    return [{key: 'all', label: null, items: tools}];
+  }
+  return [
+    {key: 'phone', label: tr('phone_group'), items: phone},
+    ...(rest.length ? [{key: 'builtin', label: tr('skill_tools_builtin'), items: rest}] : []),
+  ];
+}
+
 type SheetState =
   | {kind: 'add'}
   | {kind: 'market'; source: SkillMarketSource}
@@ -408,29 +441,40 @@ export function SkillsScreen({navigation}: Props) {
             ) : !tools.length ? (
               <Text style={styles.sectionNote}>{tr('skill_no_tools')}</Text>
             ) : (
-              <View style={[styles.group, styles.groupTop]}>
-                {tools.map((tool, i) => {
-                  const open = openTool === tool.name;
-                  return (
-                    <Pressable
-                      key={tool.name}
-                      accessibilityRole="button"
-                      accessibilityState={{expanded: open}}
-                      onPress={() => setOpenTool(open ? null : tool.name)}
-                      style={({pressed}) => [styles.groupRow, i > 0 && styles.groupDivider, pressed && styles.rowPressed]}>
-                      <ToolIcon name={tool.name} />
-                      <View style={styles.rowText}>
-                        <Text style={styles.monoName} numberOfLines={1}>
-                          {tool.name}
-                        </Text>
-                        <Text style={styles.rowDesc} numberOfLines={open ? undefined : 2}>
-                          {tool.description || tr('skill_no_desc')}
-                        </Text>
-                      </View>
-                    </Pressable>
-                  );
-                })}
-              </View>
+              toolGroups(tools).map(({key, label, items}, g) => (
+                <View key={key}>
+                  {label && <GroupLabel style={g ? styles.toolGroupLabel : styles.toolGroupFirst}>{label}</GroupLabel>}
+                  <View style={[styles.group, !label && styles.groupTop]}>
+                    {items.map((tool, i) => {
+                      const open = openTool === tool.name;
+                      const phone = PHONE_TOOL[tool.name];
+                      return (
+                        <Pressable
+                          key={tool.name}
+                          accessibilityRole="button"
+                          accessibilityState={{expanded: open}}
+                          onPress={() => setOpenTool(open ? null : tool.name)}
+                          style={({pressed}) => [styles.groupRow, i > 0 && styles.groupDivider, pressed && styles.rowPressed]}>
+                          <ToolIcon name={tool.name} />
+                          <View style={styles.rowText}>
+                            <Text style={phone ? styles.toolTitle : styles.monoName} numberOfLines={1}>
+                              {phone ? tr(phone[0]) : tool.name}
+                            </Text>
+                            <Text style={styles.rowDesc} numberOfLines={open ? undefined : 2}>
+                              {phone ? tr(phone[1]) : tool.description || tr('skill_no_desc')}
+                            </Text>
+                            {!!tool.platforms?.length && (
+                              <Text style={styles.platforms}>
+                                {trf('phone_platforms', {platforms: tool.platforms.map(platformName).join(' · ')})}
+                              </Text>
+                            )}
+                          </View>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+              ))
             )}
           </ScrollView>
         ) : (
@@ -591,6 +635,10 @@ const useStyles = makeStyles(t => ({
   rowPressed: {backgroundColor: t.bg2},
   rowText: {flex: 1, minWidth: 0},
   monoName: {fontFamily: MONO, fontSize: 13.5, fontWeight: '500', color: t.t1},
+  toolTitle: {fontSize: 14.5, fontWeight: '500', color: t.t1},
+  toolGroupLabel: {marginTop: 22},
+  toolGroupFirst: {marginTop: 10},
+  platforms: {fontSize: 11.5, color: t.t4, marginTop: 5},
   shrink: {flexShrink: 1},
   rowDesc: {fontSize: 12.5, lineHeight: 18, color: t.t3, marginTop: 3},
   target: {fontFamily: MONO, fontSize: 11.5, color: t.t3, marginTop: 4},

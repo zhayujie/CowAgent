@@ -49,6 +49,7 @@ import {FileCard, FileSheet, InlineImage} from './FileViews';
 import {Icon} from './Icon';
 import {RowToggleContext, useAnchoredRow, useRowToggle} from './listAnchor';
 import {Markdown} from './Markdown';
+import {PhoneTrust} from './PhoneTrust';
 import {showToast} from './Toast';
 
 const MONO = Platform.select({ios: 'Menlo', default: 'monospace'});
@@ -655,6 +656,7 @@ function ToolDetail({step}: {step: ToolStep}) {
           ) : null}
         </View>
       )}
+      <PhoneTrust tool={step.name} args={step.args} />
     </View>
   );
 }

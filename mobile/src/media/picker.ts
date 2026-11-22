@@ -72,9 +72,9 @@ function ensureOk(res: {errorCode?: string; errorMessage?: string}) {
   }
 }
 
-export async function pickPhotos(): Promise<PickedFile[]> {
+export async function pickPhotos(limit = MAX_PICK): Promise<PickedFile[]> {
   if (cowNative) {
-    return fromNative(await cowNative.pickPhotos(MAX_PICK).catch(rethrowNative));
+    return fromNative(await cowNative.pickPhotos(limit).catch(rethrowNative));
   }
   const picker = imagePicker();
   if (!picker) {
@@ -82,7 +82,7 @@ export async function pickPhotos(): Promise<PickedFile[]> {
   }
   const res = await picker.launchImageLibrary({
     mediaType: 'photo',
-    selectionLimit: MAX_PICK,
+    selectionLimit: limit,
     quality: 0.8,
     maxWidth: 2560,
     maxHeight: 2560,

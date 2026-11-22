@@ -1,8 +1,11 @@
 import type {IconDefinition} from '@fortawesome/fontawesome-svg-core';
 import {
+  faAddressBook,
+  faArrowUpRightFromSquare,
   faBolt,
   faBookOpen,
   faBrain,
+  faCalendarDays,
   faClock,
   faCloudArrowDown,
   faCodeBranch,
@@ -12,7 +15,11 @@ import {
   faFolderOpen,
   faGlobe,
   faImage,
+  faImages,
   faKey,
+  faLocationDot,
+  faMobileScreen,
+  faShareNodes,
   faMagnifyingGlass,
   faPaperPlane,
   faPenToSquare,
@@ -50,6 +57,13 @@ const TOOL_ICONS: Record<string, IconDefinition> = {
   agent_delegate: faUsers,
   subagent: faCodeBranch,
   evolution_undo: faRotateLeft,
+  phone_open: faArrowUpRightFromSquare,
+  phone_location: faLocationDot,
+  phone_calendar: faCalendarDays,
+  phone_contacts: faAddressBook,
+  phone_photos: faImages,
+  phone_share: faShareNodes,
+  phone_device: faMobileScreen,
 };
 
 export type Tone = 'web' | 'doc' | 'image' | 'media';

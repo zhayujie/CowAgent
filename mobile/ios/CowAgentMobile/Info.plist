@@ -62,10 +62,18 @@
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
 	</dict>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>你让 Agent 查看日程或添加日程时，读取和写入你的日历</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>你让 Agent 查看日程或添加日程时，读取和写入你的日历</string>
 	<key>NSCameraUsageDescription</key>
 	<string>扫码连接电脑，或拍照后作为附件发给 Agent</string>
+	<key>NSContactsUsageDescription</key>
+	<string>你让 Agent 给某人打电话、发短信或邮件时，按名字查找对方的联系方式</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>连接部署在局域网电脑上的 CowAgent 服务</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>你让 Agent 查附近、看天气或导航时，读取你当前的位置</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>用于按住说话，把语音转成文字发给 Agent</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>

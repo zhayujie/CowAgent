@@ -40,6 +40,7 @@ const zh = {
   skill_empty: '还没有技能',
   skill_empty_hint: '点右上角 + 新建一个，或者从 Skill Hub、GitHub 安装',
   skill_no_tools: '没有可用的内置工具',
+  skill_tools_builtin: '内置工具',
   skill_delete_title: '删除技能',
   skill_delete_message: '「{name}」和它目录里的所有文件都会被删除，Agent 也不能再使用它。',
   // sources
@@ -225,6 +226,7 @@ const en: Record<keyof typeof zh, string> = {
   skill_empty: 'No skills yet',
   skill_empty_hint: 'Tap + at the top right to write one, or install from Skill Hub or GitHub',
   skill_no_tools: 'No built-in tools available',
+  skill_tools_builtin: 'Built-in tools',
   skill_delete_title: 'Delete skill',
   skill_delete_message: '"{name}" and every file in its folder will be deleted, and the agent can no longer use it.',
   // sources

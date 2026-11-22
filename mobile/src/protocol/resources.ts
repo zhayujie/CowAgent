@@ -57,6 +57,9 @@ export interface Skill {
 export interface ToolInfo {
   name: string;
   description?: string;
+  /** "phone" for the tools the app carries out on the phone it runs on. */
+  group?: 'phone';
+  platforms?: string[];
 }
 
 /** One entry of a skill's directory, listed depth first in the order a tree draws them. */
