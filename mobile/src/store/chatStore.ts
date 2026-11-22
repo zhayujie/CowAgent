@@ -1,5 +1,5 @@
 import {create} from 'zustand';
-import {cancelRequest, getHistory, sendMessage, serverFileUrl} from '../api/cowApi';
+import {cancelRequest, deleteMessages, getHistory, sendMessage, serverFileUrl} from '../api/cowApi';
 import {STREAM_FLUSH_INTERVAL_MS} from '../config/defaults';
 import {
   type ChatFile,
@@ -104,6 +104,10 @@ export interface ChatMessage {
   /** A replayed reply that never reached its answer. */
   runState?: RunState;
   error?: string;
+  /** A user message: its seq in the stored conversation, once the turn is saved. */
+  seq?: number;
+  /** A reply: the seq of the user message it answered, which retry and edit address. */
+  userSeq?: number;
 }
 
 interface ActiveRequest {
@@ -121,7 +125,12 @@ interface Turn {
   current: string;
   /** Who holds the floor, innermost last; the first is the Agent addressed. */
   floor: Speaker[];
+  /** The user bubble this request answers, until `done` reports its seq. */
+  userId?: string;
 }
+
+/** What retry and edit could do with a message, for the caller's toast. */
+export type MessageActionResult = 'ok' | 'busy' | 'unavailable';
 
 interface ChatState {
   currentSessionId: string | null;
@@ -141,6 +150,14 @@ interface ChatState {
   addTranscribing: (sessionId: string) => string;
   removeMessage: (sessionId: string, id: string) => void;
   cancel: (sessionId: string) => Promise<void>;
+  /** Drops the stored turn behind a reply and asks the question again. */
+  retry: (sessionId: string, replyId: string, agentId?: string | null) => Promise<MessageActionResult>;
+  /** Drops this message and everything after it, handing the text back for the composer. */
+  editMessage: (
+    sessionId: string,
+    messageId: string,
+    agentId?: string | null,
+  ) => Promise<{result: MessageActionResult; text?: string}>;
 }
 
 /**
@@ -334,7 +351,15 @@ function fromHistoryMessage(m: HistoryMessage, index: number): ChatMessage[] {
  * (a run cut off before storing anything has none), so it can't be re-sorted.
  */
 function fromHistory(items: HistoryMessage[]): ChatMessage[] {
-  return items.flatMap((m, i) => fromHistoryMessage(m, i).map(msg => ({...msg, createdAt: m.created_at})));
+  let userSeq: number | undefined;
+  return items.flatMap((m, i): ChatMessage[] => {
+    const bubbles = fromHistoryMessage(m, i).map(msg => ({...msg, createdAt: m.created_at}));
+    if (m.role === 'user') {
+      userSeq = m._seq;
+      return bubbles.map(b => ({...b, seq: m._seq}));
+    }
+    return bubbles.map(b => ({...b, userSeq}));
+  });
 }
 
 const MAX_DELEGATE_DEPTH = 3;
@@ -672,6 +697,14 @@ export const useChatStore = create<ChatState>((set, get) => {
       case 'done':
         stopThinking(sessionId, messageId);
         flush();
+        // The turn is stored: a saved seq is what retry and edit address.
+        if (event.user_seq !== undefined && event.user_seq !== null) {
+          const userSeq = event.user_seq;
+          if (turn.userId) {
+            patch(sessionId, turn.userId, m => ({...m, seq: userSeq}));
+          }
+          turn.ids.forEach(id => patch(sessionId, id, m => ({...m, userSeq})));
+        }
         patch(sessionId, messageId, m => ({
           ...m,
           content: m.cancelled ? m.content : event.content || m.content,
@@ -913,6 +946,7 @@ export const useChatStore = create<ChatState>((set, get) => {
         ids: [botMsg.id],
         current: botMsg.id,
         floor: botMsg.speaker ? [botMsg.speaker] : [],
+        userId: userMsg.id,
       };
       const ctl = control(turn);
 
@@ -978,6 +1012,66 @@ export const useChatStore = create<ChatState>((set, get) => {
         stoppedRequests.add(active.requestId);
         await cancelRequest(active.requestId, sessionId);
       }
+    },
+
+    retry: async (sessionId, replyId, agentId) => {
+      if (get().active[sessionId]) {
+        return 'busy';
+      }
+      const list = get().messages[sessionId] ?? [];
+      const at = list.findIndex(m => m.id === replyId);
+      if (at < 0) {
+        return 'unavailable';
+      }
+      let userAt = -1;
+      for (let i = at - 1; i >= 0; i--) {
+        if (list[i].role === 'user') {
+          userAt = i;
+          break;
+        }
+      }
+      const user = list[userAt];
+      // Only a stored turn can be removed; a reply that never reported its seq
+      // would leave the old question behind for the server to answer twice.
+      if (userAt < 0 || user.seq === undefined) {
+        return 'unavailable';
+      }
+      await deleteMessages(sessionId, user.seq, {deleteUser: true}, agentParam(agentId));
+      // The question and every reply it drew go; later turns keep their place.
+      const nextUser = list.findIndex((m, i) => i > userAt && m.role === 'user');
+      const drop = new Set(list.slice(userAt, nextUser < 0 ? list.length : nextUser).map(m => m.id));
+      set(s => ({
+        messages: {
+          ...s.messages,
+          [sessionId]: (s.messages[sessionId] ?? []).filter(m => !drop.has(m.id)),
+        },
+      }));
+      await get().send(sessionId, user.content, agentId, {attachments: user.attachments});
+      return 'ok';
+    },
+
+    editMessage: async (sessionId, messageId, agentId) => {
+      if (get().active[sessionId]) {
+        return {result: 'busy'};
+      }
+      const list = get().messages[sessionId] ?? [];
+      const at = list.findIndex(m => m.id === messageId && m.role === 'user');
+      const message = list[at];
+      if (at < 0 || message.seq === undefined) {
+        return {result: 'unavailable'};
+      }
+      await deleteMessages(sessionId, message.seq, {deleteUser: true, cascade: true}, agentParam(agentId));
+      // An edit rewrites the conversation from this question on, as the
+      // backend cascade just did.
+      const drop = new Set(list.slice(at).map(m => m.id));
+      set(s => ({
+        messages: {
+          ...s.messages,
+          [sessionId]: (s.messages[sessionId] ?? []).filter(m => !drop.has(m.id)),
+        },
+      }));
+      bumpEpoch(sessionId);
+      return {result: 'ok', text: message.content};
     },
   };
 });
