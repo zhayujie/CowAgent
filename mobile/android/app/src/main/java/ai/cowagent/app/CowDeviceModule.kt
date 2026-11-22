@@ -2,9 +2,11 @@ package ai.cowagent.app
 
 import ai.cowagent.app.reminders.Notices
 import ai.cowagent.app.reminders.TaskReminders
+import android.content.ActivityNotFoundException
 import android.content.ContentUris
 import android.content.ContentValues
 import android.content.Context
+import android.content.Intent
 import android.media.AudioManager
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
@@ -388,6 +390,23 @@ class CowDeviceModule(context: ReactApplicationContext) : ReactContextBaseJavaMo
       promise.resolve(list.length())
     } catch (e: Exception) {
       promise.reject("failed", e.message, e)
+    }
+  }
+
+  /**
+   * The messaging app with the text filled in. Some leave the body of an sms: link percent-encoded,
+   * while the extra is read as is by all of them.
+   */
+  @ReactMethod
+  fun composeSms(number: String, body: String, promise: Promise) {
+    val intent = Intent(Intent.ACTION_SENDTO, Uri.fromParts("smsto", number, null)).putExtra("sms_body", body)
+    val activity = reactApplicationContext.currentActivity
+    try {
+      if (activity != null) activity.startActivity(intent)
+      else reactApplicationContext.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+      promise.resolve(null)
+    } catch (e: ActivityNotFoundException) {
+      promise.reject("no_app", e.message, e)
     }
   }
 

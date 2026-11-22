@@ -50,7 +50,7 @@ function openUrl(args: Args): string {
       return `tel:${target.replace(/[^0-9+*#,;]/g, '')}`;
     case 'sms': {
       const number = target.replace(/[^0-9+]/g, '');
-      // iOS reads the body after "&", Android after "?".
+      // iOS reads the body after "&", Android after "?"; the app hands Android's over natively when it can.
       return text ? `sms:${number}${Platform.OS === 'ios' ? '&' : '?'}body=${q(text)}` : `sms:${number}`;
     }
     case 'email': {
@@ -76,7 +76,11 @@ const open: Handler = {
   run: async args => {
     const url = openUrl(args);
     try {
-      await Linking.openURL(url);
+      if (Platform.OS === 'android' && str(args.action) === 'sms' && str(args.text) && native?.composeSms) {
+        await native.composeSms(str(args.target).replace(/[^0-9+]/g, ''), str(args.text));
+      } else {
+        await Linking.openURL(url);
+      }
     } catch {
       throw new PhoneError('no_app');
     }
@@ -159,6 +163,7 @@ const native:
       createCalendarEvent(event: Record<string, unknown>): Promise<{id: string; calendar: string}>;
       searchContacts(query: string, limit: number): Promise<NativeContact[]>;
       deviceStatus(): Promise<NativeStatus>;
+      composeSms?(number: string, body: string): Promise<void>;
     }
   | undefined = NativeModules.CowDevice;
 
