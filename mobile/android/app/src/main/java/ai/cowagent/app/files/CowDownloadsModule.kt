@@ -6,6 +6,7 @@ import android.media.MediaScannerConnection
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import android.util.Log
 import android.webkit.MimeTypeMap
 import android.webkit.URLUtil
 import androidx.core.content.FileProvider
@@ -262,6 +263,9 @@ class CowDownloadsModule(context: ReactApplicationContext) : ReactContextBaseJav
   private fun launch(file: File, name: String): Boolean {
     val uri = runCatching {
       FileProvider.getUriForFile(reactApplicationContext, "${reactApplicationContext.packageName}.files", file)
+    }.onFailure {
+      // Usually a file outside the roots in res/xml/file_paths.xml.
+      Log.w(TAG, "Cannot share $name: ${it.message}")
     }.getOrNull() ?: return false
     val view = Intent(Intent.ACTION_VIEW).apply {
       setDataAndType(uri, mimeOf(name))
@@ -285,6 +289,8 @@ class CowDownloadsModule(context: ReactApplicationContext) : ReactContextBaseJav
     name.replace(Regex("[\\\\/:*?\"<>|\\p{Cntrl}]"), "_").trim().trimStart('.')
 
   private companion object {
+    const val TAG = "CowDownloads"
+
     val OFFICE_MIME = mapOf(
       "doc" to "application/msword",
       "docx" to "application/vnd.openxmlformats-officedocument.wordprocessingml.document",

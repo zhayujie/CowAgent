@@ -258,8 +258,11 @@ export async function openWithSystem(f: ChatFile) {
   try {
     const result = await work;
     useDownloadStore.getState().finish(id);
-    if (result !== 'opened') {
-      showToast(tr('file_saved_downloads'));
+    // Nothing took the file, so say where it went instead of implying it opened.
+    if (result === 'downloads') {
+      showToast(tr('file_open_no_app'));
+    } else if (result !== 'opened') {
+      showToast(tr('file_saved_files'));
     }
   } catch {
     useDownloadStore.getState().fail(id);
