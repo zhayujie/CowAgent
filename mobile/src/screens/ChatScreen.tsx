@@ -593,7 +593,7 @@ export function ChatScreen({route, navigation}: Props) {
     }
   }, [sessionItem, startNewChat, forgetSession, sessionId]);
 
-  // Swiping right anywhere pulls the features drawer out under the finger.
+  // Swiping right pulls the conversation list out under the finger.
   // It runs as a native gesture so the message list cannot steal a sideways
   // drag; sideways scrollers such as code blocks still win their own drags.
   // Built once: a detector handed a new gesture can stop answering touches, so
@@ -615,7 +615,7 @@ export function ChatScreen({route, navigation}: Props) {
   );
   const swipeStart = useCallback(() => {
     Keyboard.dismiss();
-    setDrawerView('menu');
+    setDrawerView('sessions');
     setDrawerNested(false);
     refreshDrawer();
   }, [refreshDrawer]);
