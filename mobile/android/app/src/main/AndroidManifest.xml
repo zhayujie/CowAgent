@@ -6,6 +6,9 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <!-- Android 13+ only shows the notification prompt to apps that declare it. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Reminders of scheduled tasks while the app is closed, on time, and again after a restart. -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- Saving to Downloads needs it only before Android 10. -->
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
@@ -68,6 +71,12 @@
             android:name="android.support.FILE_PROVIDER_PATHS"
             android:resource="@xml/share_paths" />
       </provider>
+      <receiver android:name=".reminders.ReminderReceiver" android:exported="false" />
+      <receiver android:name=".reminders.RestartReceiver" android:exported="true">
+        <intent-filter>
+            <action android:name="android.intent.action.BOOT_COMPLETED" />
+        </intent-filter>
+      </receiver>
       <!-- The scanner ships landscape-only; follow the phone like the rest of the app. -->
       <activity
         android:name="com.journeyapps.barcodescanner.CaptureActivity"

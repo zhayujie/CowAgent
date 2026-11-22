@@ -28,7 +28,25 @@ object CowKernel {
   private const val ASSET_ROOT = "cow-kernel"
 
   private var endpoint: Endpoint? = null
-  private var thread: Thread? = null
+  @Volatile private var thread: Thread? = null
+
+  /** Running in this process, so its scheduler runs tasks as they come due. */
+  val running: Boolean get() = thread?.isAlive == true
+
+  data class Run(val id: String, val status: String, val error: String, val output: String)
+
+  /**
+   * Has the scheduler check for due tasks now, and waits up to [timeoutS] for its run of [taskId]
+   * started after [since] (epoch seconds) to end. Null while it has not. Blocks.
+   */
+  fun awaitRun(taskId: String, since: Long, timeoutS: Int): Run? {
+    if (!running) return null
+    val run = Python.getInstance().getModule("agent.tools.scheduler.integration")
+      .callAttr("await_run", taskId, since, timeoutS)
+    fun field(key: String) = run.callAttr("get", key, "")?.toString().orEmpty()
+    val id = field("run_id")
+    return if (id.isEmpty()) null else Run(id, field("status"), field("error"), field("output_preview"))
+  }
 
   @Synchronized
   fun start(context: Context): Endpoint {

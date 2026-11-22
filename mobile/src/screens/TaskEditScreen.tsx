@@ -33,6 +33,7 @@ import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
 import {dateVars, daysAgo, fullTime, pad, startOfDay, toDate} from '../utils/format';
 import {AvoidKeyboard} from '../components/AvoidKeyboard';
+import {syncReminders} from '../scheduler/reminders';
 
 type Props = StackScreenProps<RootStackParamList, 'TaskEdit'>;
 type OpenSheet = 'schedule' | 'action' | 'instance' | 'recipient' | 'once' | 'delete' | 'run' | null;
@@ -282,6 +283,7 @@ export function TaskEditScreen({navigation, route}: Props) {
       } else {
         await createScheduledTask(draft);
       }
+      syncReminders(true);
       showToast(task ? tr('common_saved') : tr('task_created'));
       navigation.goBack();
     } catch (e) {
@@ -298,6 +300,7 @@ export function TaskEditScreen({navigation, route}: Props) {
     setBusy('delete');
     try {
       await deleteScheduledTask(task);
+      syncReminders();
       setSheet(null);
       showToast(tr('common_deleted'));
       navigation.goBack();

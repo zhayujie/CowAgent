@@ -123,6 +123,14 @@ interface Turn {
   floor: Speaker[];
 }
 
+const toolDone = new Set<(tool: string) => void>();
+
+/** Told the name of each tool that finishes well in a reply, for what follows from it outside the chat. */
+export function onToolDone(fn: (tool: string) => void): () => void {
+  toolDone.add(fn);
+  return () => toolDone.delete(fn);
+}
+
 interface ChatState {
   currentSessionId: string | null;
   messages: Record<string, ChatMessage[]>;
@@ -581,6 +589,9 @@ export const useChatStore = create<ChatState>((set, get) => {
         patchTool(turn, event.tool_call_id, s => ({...s, progress: event.content || s.progress}));
         break;
       case 'tool_end':
+        if (!event.status || event.status === 'success') {
+          toolDone.forEach(fn => fn(event.tool ?? ''));
+        }
         patchTool(turn, event.tool_call_id, s => ({
           ...s,
           status: event.status && event.status !== 'success' ? 'error' : 'success',

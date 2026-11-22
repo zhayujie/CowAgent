@@ -50,6 +50,9 @@ export class RealtimeClient {
   private pingTimer: ReturnType<typeof setInterval> | null = null;
   private appStateSub: NativeEventSubscription | null = null;
   private listeners = new Set<(envelope: ServerEnvelope) => void>();
+  private held = false;
+  /** In the background with the socket kept open. */
+  private parked = false;
 
   start(config: RealtimeConfig) {
     this.stop();
@@ -62,6 +65,7 @@ export class RealtimeClient {
   stop() {
     this.appStateSub?.remove();
     this.appStateSub = null;
+    this.parked = false;
     this.clearTimers();
     this.closeSocket();
     this.config = null;
@@ -77,23 +81,42 @@ export class RealtimeClient {
     return () => this.listeners.delete(listener);
   }
 
+  /** While held, leaving the screen keeps the socket open, so a reply under way can finish meanwhile. */
+  holdInBackground(held: boolean) {
+    this.held = held;
+    if (!held && this.parked) {
+      this.parked = false;
+      this.sleep();
+    }
+  }
+
   private onAppState = (state: AppStateStatus) => {
     if (!this.config) {
       return;
     }
     if (state === 'active') {
-      // The OS suspends sockets in the background; reconnect right away.
-      if (this.status !== 'open' && this.status !== 'connecting') {
+      // The OS suspends sockets in the background; reconnect right away. One kept open may
+      // have died with the app frozen while still looking open, so it is opened afresh.
+      if (this.parked || (this.status !== 'open' && this.status !== 'connecting')) {
+        this.parked = false;
         this.attempts = 0;
         this.open();
       }
     } else if (state === 'background') {
-      this.flushAck();
-      this.clearTimers();
-      this.closeSocket();
-      this.setStatus('closed');
+      if (this.held) {
+        this.parked = true;
+        return;
+      }
+      this.sleep();
     }
   };
+
+  private sleep() {
+    this.flushAck();
+    this.clearTimers();
+    this.closeSocket();
+    this.setStatus('closed');
+  }
 
   private open() {
     const config = this.config;

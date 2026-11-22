@@ -1,7 +1,14 @@
 const zh = {
   // Task list
   task_title: '定时任务',
-  task_local_note: '手机内置 Agent 只在 App 打开时运行，后台或关闭期间定时任务不会执行',
+  task_local_note:
+    '手机内置 Agent 运行在 App 里：App 被关闭时（iOS 切到后台也是），到点只会发通知提醒，需要 AI 执行的任务要在 10 分钟内打开 App 才会执行',
+  task_reminder_fallback: '定时任务',
+  task_delivered: '{name}：{text}',
+  task_reminder_open: '到时间了，打开 App 执行：{text}',
+  task_done_notice: '任务已完成，点击查看',
+  task_failed_notice: '任务执行失败：{error}',
+  task_running_notice: '任务还在执行，打开 App 查看结果',
   task_new: '新增任务',
   task_tab_tasks: '任务',
   task_runs: '执行记录',
@@ -207,7 +214,14 @@ const zh = {
 const en: Record<keyof typeof zh, string> = {
   // Task list
   task_title: 'Scheduled tasks',
-  task_local_note: "The built-in phone agent only runs while the app is open, so tasks don't run in the background",
+  task_local_note:
+    'The built-in phone agent runs inside the app. While the app is closed (on iOS, also in the background), a due task only sends a reminder, and a task for the AI runs once you open the app within 10 minutes',
+  task_reminder_fallback: 'Scheduled task',
+  task_delivered: '{name}: {text}',
+  task_reminder_open: "It's time. Open the app to run: {text}",
+  task_done_notice: 'The task is done. Tap to view.',
+  task_failed_notice: 'The task failed: {error}',
+  task_running_notice: 'Still running. Open the app for the result.',
   task_new: 'New task',
   task_tab_tasks: 'Tasks',
   task_runs: 'History',

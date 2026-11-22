@@ -1,0 +1,4 @@
+<resources>
+    <string name="reminder_channel">定时提醒</string>
+    <string name="reply_channel">回复完成</string>
+</resources>

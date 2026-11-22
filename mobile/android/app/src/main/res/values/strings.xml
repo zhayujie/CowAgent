@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">CowAgent</string>
+    <string name="reminder_channel">Reminders</string>
+    <string name="reply_channel">Replies</string>
 </resources>

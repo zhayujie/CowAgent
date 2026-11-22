@@ -23,6 +23,7 @@ import {EmptyState, IconButton, PageHeader, Segmented} from '../components/ui';
 import {tr, trf} from '../i18n';
 import type {RootStackParamList} from '../navigation/types';
 import type {ScheduledTask, TaskSchedule} from '../protocol/resources';
+import {syncReminders} from '../scheduler/reminders';
 import {useAgentStore} from '../store/agentStore';
 import {describeConnectError, useLocalServer} from '../store/serverStore';
 import {radius} from '../theme/palette';
@@ -112,6 +113,7 @@ export function TasksScreen({navigation}: Props) {
     setTasks(prev => prev.map(x => (x.id === task.id ? {...x, enabled} : x)));
     try {
       await toggleScheduledTask(task.id, enabled);
+      syncReminders(enabled);
     } catch {
       setTasks(prev => prev.map(x => (x.id === task.id ? {...x, enabled: !enabled} : x)));
     }
