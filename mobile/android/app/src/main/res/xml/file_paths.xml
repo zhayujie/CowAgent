@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Where CowDownloadsModule keeps finished downloads, so another app can be handed one (see launch). -->
+<paths>
+    <cache-path name="downloads" path="downloads/" />
+</paths>

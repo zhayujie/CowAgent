@@ -121,6 +121,38 @@ export function rawUrlOf(f: ChatFile): string {
   return f.path ? serverFileUrl(f.path) : '';
 }
 
+/** One query parameter of a fetch URL, decoded; empty when the URL lacks it. */
+function queryValue(url: string, key: string): string {
+  const query = url.split('?')[1];
+  if (!query) {
+    return '';
+  }
+  for (const part of query.split('&')) {
+    const [k, v = ''] = part.split('=');
+    if (k === key) {
+      try {
+        return decodeURIComponent(v);
+      } catch {
+        return v;
+      }
+    }
+  }
+  return '';
+}
+
+/**
+ * One identity per file generation, whatever URL carried it. The login token changes on every
+ * refresh and the address switches between the local one and the tunnel, so neither may take
+ * part: identity is where the bytes live (`path`) and which generation they are (`v`, the
+ * server's mtime). `v` is second-granularity, so the size only tells two same-second rewrites
+ * apart when it changed - a download keeps the cached bytes for the generation it fetched.
+ */
+export function fileKeyOf(f: ChatFile): string {
+  const url = rawUrlOf(f);
+  const path = queryValue(url, 'path') || url.split('#')[0].split('?')[0];
+  return JSON.stringify([path, queryValue(url, 'v'), f.relPath || f.name, f.size ?? 0]);
+}
+
 /**
  * A page from the server's disk that has no sandboxed `/preview/` link yet.
  * Rendered from `/api/file` its scripts could read the login token in the URL.
