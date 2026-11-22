@@ -1,6 +1,7 @@
 package ai.cowagent.app
 
 import ai.cowagent.app.files.CowDownloadsPackage
+import ai.cowagent.app.files.CowTrustStore
 import ai.cowagent.app.kernel.CowKernelPackage
 import ai.cowagent.app.scan.CowQrScannerPackage
 import android.app.Application
@@ -28,6 +29,8 @@ class MainApplication : Application(), ReactApplication {
 
   override fun onCreate() {
     super.onCreate()
+    // Trust the CA certificates imported in-app before the first network request is built.
+    CowTrustStore.install(this)
     loadReactNative(this)
   }
 }

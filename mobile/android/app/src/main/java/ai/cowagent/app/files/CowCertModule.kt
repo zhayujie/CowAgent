@@ -2,20 +2,24 @@ package ai.cowagent.app.files
 
 import android.app.Activity
 import android.content.Intent
-import android.security.KeyChain
+import android.net.Uri
+import android.provider.Settings
 import com.facebook.react.bridge.ActivityEventListener
+import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.BaseActivityEventListener
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
-import java.security.cert.CertificateFactory
-import java.security.cert.X509Certificate
+import com.facebook.react.bridge.WritableArray
+import java.io.File
 
 /**
- * Installs a user-chosen CA certificate into Android's user certificate store through the
- * system KeyChain flow. Apps that opt in to user certificates (networkSecurityConfig) then
- * trust self-hosted HTTPS endpoints such as personal tunnels without repackaging.
+ * Manages the CA certificates the app trusts on top of the system store.
+ *
+ * Certificates are kept in the app's private directory and added to the TLS trust chain by
+ * [CowTrustStore]. Installing into the system user store from an app is no longer possible on
+ * Android 11+, which only accepts credentials that carry a private key.
  */
 class CowCertModule(private val context: ReactApplicationContext) : ReactContextBaseJavaModule(context) {
   private var pending: Promise? = null
@@ -26,23 +30,16 @@ class CowCertModule(private val context: ReactApplicationContext) : ReactContext
       val promise = pending ?: return
       pending = null
       if (resultCode != Activity.RESULT_OK || data?.data == null) {
-        promise.resolve("cancelled")
+        promise.resolve(null)
         return
       }
+      val uri: Uri = data.data!!
       try {
-        val bytes = context.contentResolver.openInputStream(data.data!!)?.use { it.readBytes() }
+        val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
           ?: throw IllegalArgumentException("Cannot read the chosen file")
-        val cert = CertificateFactory.getInstance("X.509")
-          .generateCertificate(bytes.inputStream()) as X509Certificate
-        val name = data.data!!.lastPathSegment?.substringAfterLast('/')?.substringBeforeLast('.')
-          ?.ifEmpty { null } ?: "CowAgent CA"
-        val install = KeyChain.createInstallIntent().apply {
-          putExtra(KeyChain.EXTRA_CERTIFICATE, cert.encoded)
-          putExtra(KeyChain.EXTRA_NAME, name)
-          addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        context.startActivity(install)
-        promise.resolve("prompted")
+        val name = uri.lastPathSegment?.substringAfterLast('/')?.substringBeforeLast('.')?.ifEmpty { null }
+          ?: "ca-cert"
+        promise.resolve(describe(CowTrustStore.import(context, bytes, name)))
       } catch (e: Exception) {
         promise.reject("cert_invalid", "Not a valid X.509 certificate", e)
       }
@@ -55,16 +52,16 @@ class CowCertModule(private val context: ReactApplicationContext) : ReactContext
 
   override fun getName() = "CowCert"
 
-  /** Opens a document picker for a .crt/.pem file; resolves "prompted" or "cancelled". */
+  /** Opens a document picker; resolves the imported entry, or null when the user cancels. */
   @ReactMethod
-  fun install(promise: Promise) {
+  fun pick(promise: Promise) {
     val activity = reactApplicationContext.currentActivity
     if (activity == null) {
       promise.reject("cert_no_activity", "No foreground activity")
       return
     }
     if (pending != null) {
-      promise.reject("cert_busy", "An install is already in progress")
+      promise.reject("cert_busy", "A picker is already open")
       return
     }
     pending = promise
@@ -74,6 +71,59 @@ class CowCertModule(private val context: ReactApplicationContext) : ReactContext
       putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("application/x-x509-ca-cert", "application/x-pem-file", "application/octet-stream"))
     }
     activity.startActivityForResult(Intent.createChooser(pick, null), PICK_CERT)
+  }
+
+  /** Lists the imported certificates so the settings screen can show and remove them. */
+  @ReactMethod
+  fun list(promise: Promise) {
+    try {
+      val out: WritableArray = Arguments.createArray()
+      for (file in CowTrustStore.files(context)) {
+        runCatching { describe(file) }.getOrNull()?.let { out.pushMap(it) }
+      }
+      promise.resolve(out)
+    } catch (e: Exception) {
+      promise.reject("cert_list_failed", e.message, e)
+    }
+  }
+
+  /** Removes an imported certificate by its file name; the system store is untouched. */
+  @ReactMethod
+  fun remove(name: String, promise: Promise) {
+    try {
+      val file = CowTrustStore.files(context).firstOrNull { it.nameWithoutExtension == name }
+      if (file == null) {
+        promise.resolve(false)
+        return
+      }
+      val removed = file.delete()
+      CowTrustStore.invalidate()
+      promise.resolve(removed)
+    } catch (e: Exception) {
+      promise.reject("cert_remove_failed", e.message, e)
+    }
+  }
+
+  /** Opens the system credential screen for users who prefer the platform trust store. */
+  @ReactMethod
+  fun openSystemSettings(promise: Promise) {
+    try {
+      val intent = Intent(Settings.ACTION_SECURITY_SETTINGS).apply {
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+      }
+      context.startActivity(intent)
+      promise.resolve(true)
+    } catch (e: Exception) {
+      promise.reject("cert_settings_failed", e.message, e)
+    }
+  }
+
+  private fun describe(file: File) = Arguments.createMap().apply {
+    val cert = CowTrustStore.read(file).firstOrNull()
+    putString("name", file.nameWithoutExtension)
+    putString("subject", cert?.subjectX500Principal?.name ?: file.name)
+    putString("expires", cert?.notAfter?.toString())
+    putBoolean("expired", cert?.let { it.notAfter.before(java.util.Date()) } ?: false)
   }
 
   companion object {

@@ -1,4 +1,4 @@
-import {faCertificate, faCopy} from '@fortawesome/free-solid-svg-icons';
+import {faCertificate, faCopy, faTrashCan} from '@fortawesome/free-solid-svg-icons';
 import type {StackScreenProps} from '@react-navigation/stack';
 import React, {useCallback, useEffect, useState} from 'react';
 import {Platform, RefreshControl, ScrollView, View} from 'react-native';
@@ -9,7 +9,7 @@ import {Icon} from '../components/Icon';
 import {FieldSheet} from '../components/settings';
 import {showToast, ToastHost} from '../components/Toast';
 import {EmptyState, PageHeader} from '../components/ui';
-import {installCaCertificate} from '../files/caCert';
+import {caCertSupported, importCaCertificate, listCaCertificates, openSystemCertSettings, removeCaCertificate, type CaCert} from '../files/caCert';
 import {tr} from '../i18n';
 import type {RootStackParamList} from '../navigation/types';
 import type {IntegrationsState} from '../protocol/resources';
@@ -31,6 +31,9 @@ export function AccessScreen({navigation}: Props) {
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [certs, setCerts] = useState<CaCert[]>([]);
+
+  const refreshCerts = useCallback(async () => setCerts(await listCaCertificates()), []);
 
   const load = useCallback(async () => {
     try {
@@ -44,6 +47,21 @@ export function AccessScreen({navigation}: Props) {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    refreshCerts();
+  }, [refreshCerts]);
+
+  const importCert = async () => {
+    if (await importCaCertificate()) {
+      refreshCerts();
+    }
+  };
+
+  const removeCert = async (name: string) => {
+    await removeCaCertificate(name);
+    refreshCerts();
+  };
 
   if (!state) {
     return (
@@ -107,13 +125,27 @@ export function AccessScreen({navigation}: Props) {
           </Section>
         )}
 
-        {Platform.OS === 'android' && (
-          <Section footer={tr('access_ca_cert_footer')}>
+        {Platform.OS === 'android' && caCertSupported && (
+          <Section title={tr('access_ca_cert')} footer={tr('access_ca_cert_footer')}>
+            {certs.map((cert, i) => (
+              <InfoRow
+                key={cert.name}
+                first={i === 0}
+                title={cert.name}
+                hint={cert.expires ? `${cert.subject} · ${cert.expires}` : cert.subject}
+                right={<Icon icon={faTrashCan} size={14} color={t.t3} />}
+                onPress={() => removeCert(cert.name)}
+              />
+            ))}
             <InfoRow
-              first
+              first={certs.length === 0}
               title={tr('access_ca_cert')}
-              right={<Icon icon={faCertificate} size={15} color={t.t3} />}
-              onPress={installCaCertificate}
+              right={<Icon icon={faCertificate} size={15} color={t.accent} />}
+              onPress={importCert}
+            />
+            <InfoRow
+              title={tr('access_ca_cert_system')}
+              onPress={openSystemCertSettings}
             />
           </Section>
         )}
