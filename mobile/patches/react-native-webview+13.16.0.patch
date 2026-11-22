@@ -1,0 +1,33 @@
+diff --git a/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewClient.java b/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewClient.java
+index 0287e1c..8c3de2c 100644
+--- a/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewClient.java
++++ b/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewClient.java
+@@ -38,6 +38,16 @@ import android.webkit.CookieSyncManager;
+ import java.util.concurrent.atomic.AtomicReference;
+ 
+ public class RNCWebViewClient extends WebViewClient {
++    /**
++     * A host app that ships its own certificate anchors, such as a self-signed tunnel's CA,
++     * accepts them here: the platform store is the only judge otherwise.
++     */
++    public interface SslErrorAcceptor {
++        boolean accept(SslError error);
++    }
++
++    public static @Nullable SslErrorAcceptor sslErrorAcceptor = null;
++
+     private static String TAG = "RNCWebViewClient";
+     protected static final int SHOULD_OVERRIDE_URL_LOADING_TIMEOUT = 250;
+ 
+@@ -164,6 +174,11 @@ public class RNCWebViewClient extends WebViewClient {
+         String topWindowUrl = webView.getUrl();
+         String failingUrl = error.getUrl();
+ 
++        if (sslErrorAcceptor != null && sslErrorAcceptor.accept(error)) {
++            handler.proceed();
++            return;
++        }
++
+         // Cancel request after obtaining top-level URL.
+         // If request is cancelled before obtaining top-level URL, undesired behavior may occur.
+         // Undesired behavior: Return value of WebView.getUrl() may be the current URL instead of the failing URL.

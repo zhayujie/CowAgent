@@ -1,7 +1,6 @@
 package ai.cowagent.app.files
 
 import android.content.Context
-import com.facebook.react.modules.network.OkHttpClientFactory
 import com.facebook.react.modules.network.OkHttpClientProvider
 import okhttp3.OkHttpClient
 import java.io.File
@@ -10,6 +9,7 @@ import java.security.cert.CertificateFactory
 import java.security.cert.X509Certificate
 import java.util.concurrent.TimeUnit
 import javax.net.ssl.SSLContext
+import javax.net.ssl.SSLSocketFactory
 import javax.net.ssl.TrustManagerFactory
 import javax.net.ssl.X509TrustManager
 
@@ -109,20 +109,43 @@ object CowTrustStore {
    */
   fun invalidate() {}
 
-  /** Registers the factory once, before React Native makes its first request. */
-  fun install(context: Context) {
-    val app = context.applicationContext
-    OkHttpClientProvider.setOkHttpClientFactory {
-      // One trust manager for both the socket factory and OkHttp, as OkHttp verifies with the
-      // instance it is given rather than the one inside the SSLContext.
-      val trust = Combined(managers(app))
-      val ssl = SSLContext.getInstance("TLS").apply { init(null, arrayOf(trust), null) }
-      OkHttpClientProvider.createClientBuilder(app).apply {
-        sslSocketFactory(ssl.socketFactory, trust)
-        // Endpoints that come and go (tunnels, laptops on a LAN) are common here.
-        retryOnConnectionFailure(true)
-      }.build()
+  /**
+   * For connections that never reach OkHttp - the downloader opens its own
+   * `HttpURLConnection`, which otherwise verifies against the platform store alone.
+   */
+  fun socketFactory(context: Context): SSLSocketFactory {
+    val trust = Combined(managers(context))
+    return SSLContext.getInstance("TLS").apply { init(null, arrayOf(trust), null) }.socketFactory
+  }
+
+  /**
+   * True when the imports accept [leaf]. A WebView hands over the leaf certificate of a failing
+   * chain and nothing more, which is enough here: a tunnel's CA signs the leaf directly.
+   */
+  fun accepts(context: Context, leaf: X509Certificate?): Boolean {
+    if (leaf == null) {
+      return false
     }
-    invalidate()
+    val trust = Combined(managers(context))
+    // The authType only steers key-usage checks; one of these covers every key we may meet.
+    return listOf(leaf.publicKey.algorithm, "RSA", "EC").any { type ->
+      runCatching { trust.checkServerTrusted(arrayOf(leaf), type) }.isSuccess
+    }
+  }
+
+  /**
+   * React Native's client, with the imports in its trust chain. [CowTls] is what registers it;
+   * nothing else should build a client for the app's own requests.
+   */
+  fun okHttpClient(context: Context): OkHttpClient {
+    // One trust manager for both the socket factory and OkHttp, as OkHttp verifies with the
+    // instance it is given rather than the one inside the SSLContext.
+    val trust = Combined(managers(context))
+    val ssl = SSLContext.getInstance("TLS").apply { init(null, arrayOf(trust), null) }
+    return OkHttpClientProvider.createClientBuilder(context).apply {
+      sslSocketFactory(ssl.socketFactory, trust)
+      // Endpoints that come and go (tunnels, laptops on a LAN) are common here.
+      retryOnConnectionFailure(true)
+    }.build()
   }
 }
