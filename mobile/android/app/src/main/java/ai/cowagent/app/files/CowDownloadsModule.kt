@@ -59,10 +59,17 @@ class CowDownloadsModule(context: ReactApplicationContext) : ReactContextBaseJav
     val name = safeName(fileName).ifEmpty { safeName(URLUtil.guessFileName(url, null, null)) }.ifEmpty { "download" }
     io.execute {
       try {
-        openStream(url).use { input ->
+        withDownload(url) { input ->
           if (openWith) {
             val target = writeToCache(name, input)
-            promise.resolve(if (launch(target, name)) "opened" else "downloads")
+            if (launch(target, name)) {
+              promise.resolve("opened")
+            } else {
+              // A file left in the private cache is not a completed download.
+              val saved = target.inputStream().use { saveToDownloads(name, it) }
+              target.delete()
+              promise.resolve(if (saved) "downloads" else "files")
+            }
           } else {
             promise.resolve(if (saveToDownloads(name, input)) "downloads" else "files")
           }
@@ -73,8 +80,8 @@ class CowDownloadsModule(context: ReactApplicationContext) : ReactContextBaseJav
     }
   }
 
-  /** Opens a GET that respects the app network configuration, with timeouts so it cannot hang. */
-  private fun openStream(url: String): InputStream {
+  /** Runs a GET and always releases the connection after the stream is consumed. */
+  private fun <T> withDownload(url: String, block: (InputStream) -> T): T {
     val conn = (URL(url).openConnection() as HttpURLConnection).apply {
       connectTimeout = 15_000
       readTimeout = 60_000
@@ -82,27 +89,28 @@ class CowDownloadsModule(context: ReactApplicationContext) : ReactContextBaseJav
       requestMethod = "GET"
       setRequestProperty("Accept", "*/*")
     }
-    val code = try {
-      conn.responseCode
-    } catch (e: IOException) {
+    try {
+      val code = conn.responseCode
+      if (code !in 200..299) {
+        throw IOException("HTTP $code")
+      }
+      return conn.inputStream.use(block)
+    } finally {
       conn.disconnect()
-      throw e
     }
-    if (code !in 200..299) {
-      conn.disconnect()
-      throw IOException("HTTP $code")
-    }
-    return conn.inputStream
   }
 
   private fun writeToCache(name: String, input: InputStream): File {
     val dir = File(reactApplicationContext.cacheDir, "open").apply { mkdirs() }
-    val target = File(dir, name)
-    if (target.exists()) {
+    // Parallel opens of the same attachment must not truncate each other's file.
+    val target = File(dir, "${System.nanoTime()}-$name")
+    try {
+      target.outputStream().use { output -> input.copyTo(output) }
+      return target
+    } catch (e: Exception) {
       target.delete()
+      throw e
     }
-    target.outputStream().use { output -> input.copyTo(output) }
-    return target
   }
 
   /** Downloads to the public Downloads folder; MediaStore is the only writable path on Android 10+. */
@@ -117,7 +125,8 @@ class CowDownloadsModule(context: ReactApplicationContext) : ReactContextBaseJav
       }
       val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values) ?: return false
       try {
-        resolver.openOutputStream(uri)?.use { output -> input.copyTo(output) } ?: return false
+        val output = resolver.openOutputStream(uri) ?: throw IOException("Cannot open download destination")
+        output.use { input.copyTo(it) }
         values.clear()
         values.put(MediaStore.Downloads.IS_PENDING, 0)
         resolver.update(uri, values, null, null)
@@ -131,10 +140,29 @@ class CowDownloadsModule(context: ReactApplicationContext) : ReactContextBaseJav
     if (!dir.exists() && !dir.mkdirs()) {
       return false
     }
-    val target = File(dir, name)
-    target.outputStream().use { output -> input.copyTo(output) }
-    MediaScannerConnection.scanFile(reactApplicationContext, arrayOf(target.absolutePath), null, null)
-    return true
+    val target = availableFile(dir, name)
+    try {
+      target.outputStream().use { output -> input.copyTo(output) }
+      MediaScannerConnection.scanFile(reactApplicationContext, arrayOf(target.absolutePath), null, null)
+      return true
+    } catch (e: Exception) {
+      target.delete()
+      throw e
+    }
+  }
+
+  private fun availableFile(dir: File, name: String): File {
+    val first = File(dir, name)
+    if (!first.exists()) return first
+    val extension = name.substringAfterLast('.', "")
+    val stem = name.removeSuffix(if (extension.isEmpty()) "" else ".$extension")
+    var index = 2
+    while (true) {
+      val suffix = if (extension.isEmpty()) "" else ".$extension"
+      val candidate = File(dir, "$stem ($index)$suffix")
+      if (!candidate.exists()) return candidate
+      index += 1
+    }
   }
 
   /** Hands the file to another app through FileProvider, which can grant it to a third party. */
