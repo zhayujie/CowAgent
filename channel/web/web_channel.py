@@ -67,7 +67,7 @@ from channel.web.api.scheduler import (  # noqa: F401
     SchedulerCreateHandler, SchedulerDeleteHandler, SchedulerHandler,
     SchedulerInstancesHandler, SchedulerRecipientsHandler,
     SchedulerRunDeleteHandler, SchedulerRunDetailHandler, SchedulerRunHandler,
-    SchedulerRunsHandler, SchedulerToggleHandler, SchedulerUpdateHandler,
+    SchedulerRunsHandler, SchedulerToggleHandler, SchedulerUpcomingHandler, SchedulerUpdateHandler,
 )
 from channel.web.api.sessions import (  # noqa: F401
     HistoryHandler, MessageDeleteHandler, PromptOptimizeHandler,
@@ -181,6 +181,7 @@ URLS = (
     '/api/scheduler/runs/detail', 'SchedulerRunDetailHandler',
     '/api/scheduler/runs/delete', 'SchedulerRunDeleteHandler',
     '/api/scheduler/runs', 'SchedulerRunsHandler',
+    '/api/scheduler/upcoming', 'SchedulerUpcomingHandler',
     '/api/scheduler/run', 'SchedulerRunHandler',
     '/api/scheduler/toggle', 'SchedulerToggleHandler',
     '/api/scheduler/update', 'SchedulerUpdateHandler',

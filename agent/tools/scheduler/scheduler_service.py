@@ -70,6 +70,7 @@ class SchedulerService:
         self.running = False
         self.thread = None
         self._stop_event = None
+        self._wake_event = None
         self._lock = threading.Lock()
         self._execution_lock = threading.Lock()
         self._active_task_ids = set()
@@ -92,8 +93,9 @@ class SchedulerService:
             # Each worker keeps its own stop signal so a restart cannot
             # reactivate a previous worker still finishing a callback.
             self._stop_event = threading.Event()
+            self._wake_event = threading.Event()
             self.thread = threading.Thread(
-                target=self._run_loop, args=(self._stop_event,), daemon=True
+                target=self._run_loop, args=(self._stop_event, self._wake_event), daemon=True
             )
             self.thread.start()
     
@@ -105,21 +107,32 @@ class SchedulerService:
             
             self.running = False
             self._stop_event.set()
+            self._wake_event.set()
             if self.thread:
                 self.thread.join(timeout=5)
             logger.info("[Scheduler] Service stopped")
     
-    def _run_loop(self, stop_event):
-        """Main scheduler loop"""
+    def _run_loop(self, stop_event, wake_event):
+        """Main scheduler loop. ``wake_event`` is the worker's own, like its
+        stop signal, and stop() sets it too."""
         logger.info("[Scheduler] Scheduler loop started")
         
         while self.running and not stop_event.is_set():
+            # Cleared before the check, so a wake() during it brings the next one at once.
+            wake_event.clear()
             try:
                 self._check_and_execute_tasks()
             except Exception as e:
                 logger.error(f"[Scheduler] Error in scheduler loop: {e}")
 
-            stop_event.wait(30)
+            wake_event.wait(30)
+
+    def wake(self):
+        """Check for due tasks now instead of at the next tick, for a host
+        that only lets the process run for a moment when a task comes due."""
+        event = self._wake_event
+        if event is not None:
+            event.set()
     
     def _check_and_execute_tasks(self):
         """Check for due tasks and execute them"""

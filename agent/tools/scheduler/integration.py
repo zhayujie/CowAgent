@@ -555,6 +555,38 @@ def get_scheduler_service(workspace_root: str = None, agent_id: str = None):
     return _scheduler_service
 
 
+def await_run(task_id: str, since: int, timeout: float) -> dict:
+    """Check for due tasks at once, then wait up to ``timeout`` seconds for a
+    run of ``task_id`` started after ``since`` (epoch seconds) to end.
+
+    For a host that only lets the process run for a moment when a task comes
+    due, such as a phone app woken by an alarm, to tell the user the outcome.
+    Returns ``{run_id, status, error, output_preview}``, or {} while it has not
+    ended.
+    """
+    from agent.memory import get_conversation_store
+
+    if _scheduler_service is not None:
+        _scheduler_service.wake()
+    store = get_conversation_store()
+    if store is None:
+        return {}
+    deadline = time.monotonic() + timeout
+    while True:
+        runs = store.list_runs(task_source="scheduler", task_id=task_id, since=since, limit=1)
+        if runs and runs[0].get("status") != "running":
+            run = runs[0]
+            return {
+                "run_id": run.get("run_id") or "",
+                "status": run.get("status") or "",
+                "error": run.get("error") or "",
+                "output_preview": (run.get("extras") or {}).get("output_preview") or "",
+            }
+        if time.monotonic() >= deadline:
+            return {}
+        time.sleep(1)
+
+
 def get_recipient_store(workspace_root: str = None, agent_id: str = None):
     """Get the shared trusted recipient directory.
 

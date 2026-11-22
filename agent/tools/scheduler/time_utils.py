@@ -188,6 +188,41 @@ def next_cron_occurrence(expression: str, after: datetime, zone=None) -> datetim
         # minute, leaving the task immediately due again.
 
 
+def upcoming_occurrences(task: dict, until: datetime, limit: int, now: datetime = None) -> list:
+    """The instants an enabled task fires at, from its next run up to ``until``, as epoch seconds.
+
+    With ``now``, a recurring task whose next run lies past (the process was
+    away when it came due) counts from its first occurrence after ``now``, so
+    past ones do not use up ``limit``.
+    """
+    next_run = task.get("next_run_at")
+    if not task.get("enabled", True) or not isinstance(next_run, str):
+        return []
+    zone = task_timezone(task)
+    schedule = task.get("schedule") if isinstance(task.get("schedule"), dict) else {}
+    kind = schedule.get("type")
+    at = parse_scheduled_time(next_run, zone)
+    until = scheduled_reference_time(task, until)
+    if now is not None:
+        now = scheduled_reference_time(task, now)
+        if at < now and kind == "cron" and schedule.get("expression"):
+            at = next_cron_occurrence(schedule["expression"], now, zone)
+        elif at < now and kind == "interval" and (schedule.get("seconds") or 0) > 0:
+            steps = -(-(now - at).total_seconds() // schedule["seconds"])
+            at = at + timedelta(seconds=steps * schedule["seconds"])
+    found = []
+    while at <= until and len(found) < limit:
+        found.append(at)
+        if kind == "cron" and schedule.get("expression"):
+            at = next_cron_occurrence(schedule["expression"], at, zone)
+        elif kind == "interval" and (schedule.get("seconds") or 0) > 0:
+            at = at + timedelta(seconds=schedule["seconds"])
+        else:
+            break
+    # A naive instant is a local wall clock, which timestamp() reads as such.
+    return [a.timestamp() for a in found]
+
+
 def display_local(value: str, zone=None) -> datetime:
     """Convert a persisted scheduling timestamp for display.
 

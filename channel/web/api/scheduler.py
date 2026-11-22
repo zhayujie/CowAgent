@@ -8,7 +8,9 @@ One handler per route, as web.py wants. They are together because they all
 talk to the same task store, which they reach through _global_task_store().
 """
 
+import hashlib
 import json
+import time
 
 import web
 
@@ -83,6 +85,12 @@ class SchedulerHandler:
             return json.dumps({"status": "error", "message": str(e)})
 
 
+def _runs_etag(runs) -> str:
+    """Changes whenever a run is added, removed or changes status."""
+    marks = "|".join(f"{r.get('run_id', '')}:{r.get('status', '')}" for r in runs)
+    return hashlib.sha1(marks.encode("utf-8")).hexdigest()[:16]
+
+
 class SchedulerRunsHandler:
     """Execution history for scheduled tasks.
 
@@ -91,13 +99,19 @@ class SchedulerRunsHandler:
     cleanly with native turns and needs no extra file. An explicit ``agent_id``
     scopes the list to one Agent; without it the console shows the whole team's
     history. An optional ``task_id`` narrows to a single task's runs.
+
+    ``wait`` (seconds, at most 25) with the ``etag`` of the last answer holds
+    the request until the list changes, for a client that cannot keep a timer
+    running, such as a phone app in the background.
     """
+
+    _MAX_WAIT = 25
 
     def GET(self):
         _require_auth()
         web.header('Content-Type', 'application/json; charset=utf-8')
         try:
-            params = web.input(agent_id='', task_id='', limit='100', since='', offset='0')
+            params = web.input(agent_id='', task_id='', limit='100', since='', offset='0', wait='0', etag='')
             requested = _request_agent_id(params)
             task_id = (getattr(params, 'task_id', '') or '').strip()
             try:
@@ -120,32 +134,105 @@ class SchedulerRunsHandler:
             except (TypeError, ValueError):
                 since = None
 
+            try:
+                wait = max(0, min(self._MAX_WAIT, int(getattr(params, 'wait', '0') or 0)))
+            except (TypeError, ValueError):
+                wait = 0
+            etag = (getattr(params, 'etag', '') or '').strip()
+
             from agent.memory import get_conversation_store
             store = get_conversation_store()
             if store is None:
                 return json.dumps({"status": "success", "runs": []}, ensure_ascii=False)
 
-            runs = store.list_runs(
-                task_source="scheduler",
-                task_id=task_id or None,
-                agent_id=requested,  # None -> whole team; '' -> default Agent
-                since=since,
-                limit=limit,
-                offset=offset,
-            )
-            # Flatten the light extras index onto each row so the client needs no
-            # knowledge of the sidecar shape.
-            for run in runs:
-                extras = run.pop("extras", {}) or {}
-                run["task_name"] = extras.get("task_name", "")
-                run["action_type"] = extras.get("action_type", "")
-                run["channel_type"] = extras.get("channel_type", "")
-                run["instance_id"] = extras.get("instance_id", "")
-                run["trigger"] = extras.get("trigger", "")
-                run["output_preview"] = extras.get("output_preview", "")
-            return json.dumps({"status": "success", "runs": runs}, ensure_ascii=False)
+            def read():
+                runs = store.list_runs(
+                    task_source="scheduler",
+                    task_id=task_id or None,
+                    agent_id=requested,  # None -> whole team; '' -> default Agent
+                    since=since,
+                    limit=limit,
+                    offset=offset,
+                )
+                # Flatten the light extras index onto each row so the client needs no
+                # knowledge of the sidecar shape.
+                for run in runs:
+                    extras = run.pop("extras", {}) or {}
+                    run["task_name"] = extras.get("task_name", "")
+                    run["action_type"] = extras.get("action_type", "")
+                    run["channel_type"] = extras.get("channel_type", "")
+                    run["instance_id"] = extras.get("instance_id", "")
+                    run["trigger"] = extras.get("trigger", "")
+                    run["output_preview"] = extras.get("output_preview", "")
+                return runs
+
+            runs = read()
+            tag = _runs_etag(runs)
+            deadline = time.monotonic() + wait
+            while etag and tag == etag and time.monotonic() < deadline:
+                time.sleep(1)
+                runs = read()
+                tag = _runs_etag(runs)
+            return json.dumps({"status": "success", "runs": runs, "etag": tag}, ensure_ascii=False)
         except Exception as e:
             logger.error(f"[WebChannel] Scheduler runs API error: {e}")
+            return json.dumps({"status": "error", "message": str(e)})
+
+
+class SchedulerUpcomingHandler:
+    """When the enabled tasks fire next, soonest first.
+
+    For a client that cannot stay running, such as a phone app the system
+    suspends, to have the system remind the user on its behalf.
+    ``hours`` bounds how far ahead, ``limit`` how many occurrences in all.
+    """
+
+    def GET(self):
+        _require_auth()
+        web.header('Content-Type', 'application/json; charset=utf-8')
+        try:
+            from datetime import datetime, timedelta
+            from agent.tools.scheduler.integration import _primary_channel_type
+            from agent.tools.scheduler.time_utils import upcoming_occurrences
+
+            params = web.input(hours='72', limit='50')
+            try:
+                hours = max(1, min(24 * 30, int(params.hours)))
+            except (TypeError, ValueError):
+                hours = 72
+            try:
+                limit = max(1, min(200, int(params.limit)))
+            except (TypeError, ValueError):
+                limit = 50
+
+            store = _global_task_store()
+            if store is None:
+                return json.dumps({"status": "success", "runs": []}, ensure_ascii=False)
+            now = time.time()
+            until = datetime.now() + timedelta(hours=hours)
+            runs = []
+            for task in store.list_tasks(enabled_only=True):
+                action = task.get("action") or {}
+                text = action.get("content") if action.get("type") == "send_message" else action.get("task_description")
+                try:
+                    instants = upcoming_occurrences(task, until, limit, now=datetime.now())
+                except Exception as e:
+                    logger.warning(f"[WebChannel] Skip upcoming runs of task {task.get('id')}: {e}")
+                    continue
+                for at in instants:
+                    if at >= now:
+                        runs.append({
+                            "task_id": task.get("id"),
+                            "name": task.get("name") or "",
+                            "at": at,
+                            "action_type": action.get("type") or "",
+                            "channel_type": _primary_channel_type(action.get("channel_type")),
+                            "text": text or "",
+                        })
+            runs.sort(key=lambda r: r["at"])
+            return json.dumps({"status": "success", "runs": runs[:limit]}, ensure_ascii=False)
+        except Exception as e:
+            logger.error(f"[WebChannel] Scheduler upcoming API error: {e}")
             return json.dumps({"status": "error", "message": str(e)})
 
 
