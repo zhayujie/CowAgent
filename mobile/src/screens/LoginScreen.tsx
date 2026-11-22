@@ -1,4 +1,5 @@
 import {
+  faCertificate,
   faCheck,
   faChevronLeft,
   faDesktop,
@@ -19,9 +20,11 @@ import {
   View,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import {Platform} from 'react-native';
 import {isPublicCleartext} from '../api/http';
 import {addressCandidates, parsePairLink, type PairTarget} from '../api/pairing';
 import logo from '../assets/logo-mark.png';
+import {installCaCertificate} from '../files/caCert';
 import {Icon} from '../components/Icon';
 import {usePairAction} from '../components/PairFlow';
 import {QrScanner, qrScannerAvailable} from '../components/QrScanner';
@@ -313,6 +316,16 @@ export function LoginScreen() {
               )}
             </Pressable>
             <Text style={styles.footnote}>{tr('connect_code_footnote')}</Text>
+            {Platform.OS === 'android' && (
+              <Pressable
+                accessibilityRole="button"
+                disabled={busy}
+                onPress={installCaCertificate}
+                style={({pressed}) => [styles.caCert, pressed && styles.caCertPressed]}>
+                <Icon icon={faCertificate} size={13} color={t.accent} />
+                <Text style={styles.caCertText}>{tr('connect_ca_cert')}</Text>
+              </Pressable>
+            )}
             {backLink}
           </>
         )}
@@ -469,5 +482,8 @@ const useStyles = makeStyles(t => ({
   buttonText: {fontSize: 16, fontWeight: '600', color: t.onAccent},
   buttonTextOff: {color: t.t3},
   footnote: {fontSize: 12, lineHeight: 18, color: t.t4, marginTop: 14},
+  caCert: {flexDirection: 'row', alignItems: 'center', alignSelf: 'center', gap: 6, marginTop: 16, paddingVertical: 6, paddingHorizontal: 10},
+  caCertPressed: {opacity: 0.6},
+  caCertText: {fontSize: 13, color: t.accent},
   back: {fontSize: 14, color: t.accent, marginTop: 28, textAlign: 'center'},
 }));
