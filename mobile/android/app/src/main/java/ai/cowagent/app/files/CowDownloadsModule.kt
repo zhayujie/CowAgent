@@ -1,14 +1,11 @@
 package ai.cowagent.app.files
 
-import android.annotation.SuppressLint
-import android.app.DownloadManager
-import android.content.BroadcastReceiver
-import android.content.Context
+import android.content.ContentValues
 import android.content.Intent
-import android.content.IntentFilter
-import android.net.Uri
+import android.media.MediaScannerConnection
 import android.os.Build
 import android.os.Environment
+import android.provider.MediaStore
 import android.webkit.MimeTypeMap
 import android.webkit.URLUtil
 import androidx.core.content.FileProvider
@@ -19,101 +16,129 @@ import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.uimanager.ViewManager
-import java.util.concurrent.ConcurrentHashMap
+import java.io.File
+import java.io.IOException
+import java.io.InputStream
+import java.net.HttpURLConnection
+import java.net.URL
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
 
+/**
+ * Downloads in this process rather than through DownloadManager: the system downloader runs in
+ * its own process, so it cannot use the app's certificate anchors (the self-hosted tunnel) or its
+ * timeouts, and an unreachable address there leaves the request pending forever.
+ */
 class CowDownloadsModule(context: ReactApplicationContext) : ReactContextBaseJavaModule(context) {
-  private val pending = ConcurrentHashMap<Long, Promise>()
-  private val names = ConcurrentHashMap<Long, String>()
-  // Downloads that should be handed to another app once they finish.
-  private val openerIds = java.util.Collections.newSetFromMap(ConcurrentHashMap<Long, Boolean>())
-  private var receiver: BroadcastReceiver? = null
+  private val io: ExecutorService = Executors.newFixedThreadPool(2)
 
   override fun getName() = "CowDownloads"
 
-  /** Queues the file with the system downloader into Downloads; resolves with "downloads" once it is saved. */
+  /** Saves the file into Downloads; resolves with "downloads" once it is written. */
   @ReactMethod
   fun save(url: String, fileName: String, promise: Promise) {
-    enqueue(url, fileName, promise)
+    fetch(url, fileName, promise, openWith = false)
   }
 
   /**
    * Downloads the file and then opens the system "open with" chooser, so Word/WPS can take it.
-   * Resolves with "opened" when the chooser was launched, or "downloads" when the file was saved
-   * but no app could be started (the file is still in Downloads).
+   * Resolves with "opened" when the chooser was launched, or "downloads" when no app could be
+   * started. Rejects as soon as the download fails, so the UI never keeps waiting.
    */
   @ReactMethod
   fun open(url: String, fileName: String, promise: Promise) {
-    enqueue(url, fileName, promise, openWith = true)
+    fetch(url, fileName, promise, openWith = true)
   }
 
   override fun invalidate() {
-    receiver?.let { runCatching { reactApplicationContext.applicationContext.unregisterReceiver(it) } }
-    receiver = null
+    io.shutdownNow()
     super.invalidate()
   }
 
-  private fun manager() = reactApplicationContext.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-
-  /** Queues the download and returns its id, or null when it could not be started. */
-  private fun enqueue(url: String, fileName: String, promise: Promise, openWith: Boolean = false): Long? {
-    return try {
-      val name = safeName(fileName).ifEmpty { safeName(URLUtil.guessFileName(url, null, null)) }.ifEmpty { "download" }
-      val request = DownloadManager.Request(Uri.parse(url))
-        .setTitle(name)
-        .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-        .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, name)
-      listen()
-      val id = manager().enqueue(request)
-      if (openWith) {
-        openerIds.add(id)
+  private fun fetch(url: String, fileName: String, promise: Promise, openWith: Boolean) {
+    val name = safeName(fileName).ifEmpty { safeName(URLUtil.guessFileName(url, null, null)) }.ifEmpty { "download" }
+    io.execute {
+      try {
+        openStream(url).use { input ->
+          if (openWith) {
+            val target = writeToCache(name, input)
+            promise.resolve(if (launch(target, name)) "opened" else "downloads")
+          } else {
+            promise.resolve(if (saveToDownloads(name, input)) "downloads" else "files")
+          }
+        }
+      } catch (e: Exception) {
+        promise.reject("download_failed", e.message ?: "Download failed", e)
       }
-      names[id] = name
-      pending[id] = promise
-      // A small file can finish before it was registered above, and its broadcast found nothing.
-      settle(id, finishedOnly = true)
-      id
-    } catch (e: Exception) {
-      promise.reject("download_failed", e.message, e)
-      null
     }
   }
 
-  private fun settle(id: Long, finishedOnly: Boolean = false) {
-    val status = manager().query(DownloadManager.Query().setFilterById(id))?.use { c ->
-      if (c.moveToFirst()) c.getInt(c.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS)) else null
+  /** Opens a GET that respects the app network configuration, with timeouts so it cannot hang. */
+  private fun openStream(url: String): InputStream {
+    val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+      connectTimeout = 15_000
+      readTimeout = 60_000
+      instanceFollowRedirects = true
+      requestMethod = "GET"
+      setRequestProperty("Accept", "*/*")
     }
-    val done = status == DownloadManager.STATUS_SUCCESSFUL
-    if (finishedOnly && !done && status != DownloadManager.STATUS_FAILED) {
-      return
+    val code = try {
+      conn.responseCode
+    } catch (e: IOException) {
+      conn.disconnect()
+      throw e
     }
-    val promise = pending.remove(id) ?: return
-    val name = names.remove(id)
-    if (!done) {
-      openerIds.remove(id)
-      promise.reject("download_failed", "Download did not complete")
-      return
+    if (code !in 200..299) {
+      conn.disconnect()
+      throw IOException("HTTP $code")
     }
-    if (openerIds.remove(id) && name != null && launch(id, name)) {
-      promise.resolve("opened")
-    } else {
-      promise.resolve("downloads")
-    }
+    return conn.inputStream
   }
 
-  /**
-   * Hands the finished download to another app. The file is copied to the app cache and shared
-   * through FileProvider, because the DownloadManager URI cannot be granted to a third party.
-   */
-  private fun launch(id: Long, name: String): Boolean {
-    val downloaded = runCatching { manager().getUriForDownloadedFile(id) }.getOrNull() ?: return false
-    val file = runCatching {
-      val dir = java.io.File(reactApplicationContext.cacheDir, "open").apply { mkdirs() }
-      val target = java.io.File(dir, name)
-      reactApplicationContext.contentResolver.openInputStream(downloaded)?.use { input ->
-        target.outputStream().use { output -> input.copyTo(output) }
-      } ?: return false
-      target
-    }.getOrNull() ?: return false
+  private fun writeToCache(name: String, input: InputStream): File {
+    val dir = File(reactApplicationContext.cacheDir, "open").apply { mkdirs() }
+    val target = File(dir, name)
+    if (target.exists()) {
+      target.delete()
+    }
+    target.outputStream().use { output -> input.copyTo(output) }
+    return target
+  }
+
+  /** Downloads to the public Downloads folder; MediaStore is the only writable path on Android 10+. */
+  private fun saveToDownloads(name: String, input: InputStream): Boolean {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+      val resolver = reactApplicationContext.contentResolver
+      val values = ContentValues().apply {
+        put(MediaStore.Downloads.DISPLAY_NAME, name)
+        put(MediaStore.Downloads.MIME_TYPE, mimeOf(name))
+        put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+        put(MediaStore.Downloads.IS_PENDING, 1)
+      }
+      val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values) ?: return false
+      try {
+        resolver.openOutputStream(uri)?.use { output -> input.copyTo(output) } ?: return false
+        values.clear()
+        values.put(MediaStore.Downloads.IS_PENDING, 0)
+        resolver.update(uri, values, null, null)
+        return true
+      } catch (e: Exception) {
+        resolver.delete(uri, null, null)
+        throw e
+      }
+    }
+    val dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+    if (!dir.exists() && !dir.mkdirs()) {
+      return false
+    }
+    val target = File(dir, name)
+    target.outputStream().use { output -> input.copyTo(output) }
+    MediaScannerConnection.scanFile(reactApplicationContext, arrayOf(target.absolutePath), null, null)
+    return true
+  }
+
+  /** Hands the file to another app through FileProvider, which can grant it to a third party. */
+  private fun launch(file: File, name: String): Boolean {
     val uri = runCatching {
       FileProvider.getUriForFile(reactApplicationContext, "${reactApplicationContext.packageName}.files", file)
     }.getOrNull() ?: return false
@@ -133,31 +158,6 @@ class CowDownloadsModule(context: ReactApplicationContext) : ReactContextBaseJav
     return MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext)
       ?: OFFICE_MIME[ext]
       ?: "*/*"
-  }
-
-  // The broadcast comes from the system download provider, another app, so the receiver is exported.
-  @SuppressLint("UnspecifiedRegisterReceiverFlag")
-  @Synchronized
-  private fun listen() {
-    if (receiver != null) {
-      return
-    }
-    val r = object : BroadcastReceiver() {
-      override fun onReceive(context: Context, intent: Intent) {
-        val id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1)
-        if (pending.containsKey(id)) {
-          settle(id)
-        }
-      }
-    }
-    val filter = IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE)
-    val app = reactApplicationContext.applicationContext
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-      app.registerReceiver(r, filter, Context.RECEIVER_EXPORTED)
-    } else {
-      app.registerReceiver(r, filter)
-    }
-    receiver = r
   }
 
   private fun safeName(name: String): String =

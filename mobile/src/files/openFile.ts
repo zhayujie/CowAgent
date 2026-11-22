@@ -224,7 +224,8 @@ export async function openWithSystem(f: ChatFile) {
       showToast(tr('file_saved_downloads'));
     }
   } catch {
-    showToast(tr('file_cannot_open'));
+    // The chooser failing still saves the file; anything thrown is the download itself.
+    showToast(tr('file_download_failed'));
   }
 }
 
