@@ -697,11 +697,55 @@ export function ChatScreen({route, navigation}: Props) {
     setContextOnly(true);
     setSessionOpen(true);
   }, []);
+  // A reply's small button: the question behind it is asked again.
+  const retryMessage = useCallback(
+    (message: ChatMessage) => {
+      useChatStore
+        .getState()
+        .retry(sessionId, message.id, useAgentStore.getState().currentId)
+        .then(result => {
+          if (result === 'busy') {
+            showToast(tr('chat_busy_wait'));
+          } else if (result !== 'ok') {
+            showToast(tr('chat_action_unavailable'));
+          }
+        })
+        .catch(e => showToast(trf('chat_action_failed', {error: errorText(e)})));
+    },
+    [sessionId],
+  );
+  // A question's small button: it and every later turn go, and the text comes back to the box.
+  const editMessage = useCallback(
+    (message: ChatMessage) => {
+      useChatStore
+        .getState()
+        .editMessage(sessionId, message.id, useAgentStore.getState().currentId)
+        .then(res => {
+          if (res.result === 'busy') {
+            showToast(tr('chat_busy_wait'));
+          } else if (res.result !== 'ok' || res.text === undefined) {
+            showToast(tr('chat_action_unavailable'));
+          } else {
+            setDraft(res.text);
+            dock.current?.focus();
+          }
+        })
+        .catch(e => showToast(trf('chat_action_failed', {error: errorText(e)})));
+    },
+    [sessionId],
+  );
   const renderItem = useCallback(
     ({item, index}: {item: ChatMessage; index: number}) => (
-      <MessageItem message={item} labelled={shared} newest={index === 0} onOpenContext={openContext} />
+      <MessageItem
+        message={item}
+        labelled={shared}
+        newest={index === 0}
+        onOpenContext={openContext}
+        onRetry={retryMessage}
+        onEdit={editMessage}
+      />
     ),
-    [shared, openContext],
+    [shared, openContext, retryMessage, editMessage],
   );
   const empty = messages.length === 0;
   emptyRef.current = empty;
