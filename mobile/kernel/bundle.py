@@ -8,6 +8,7 @@ selects its mobile behavior at runtime. <dest> is replaced on every run so
 deleted files never linger in the app.
 """
 
+import json
 import os
 import shutil
 import sys
@@ -16,8 +17,10 @@ REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
 PACKAGES = ["agent", "bridge", "channel", "cli", "common", "models", "translate", "voice", "skills"]
 FILES = ["app.py", "config.py", "config-template.json"]
-# Plugins never load on mobile, but app.py star-imports the package itself.
-PLUGIN_FILES = ["__init__.py", "event.py", "plugin.py", "plugin_manager.py", "plugins.json"]
+# The plugin framework, and of the plugins only the one behind the chat's slash commands.
+PLUGIN_FILES = ["__init__.py", "event.py", "plugin.py", "plugin_manager.py"]
+PLUGIN_DIRS = ["cow_cli"]
+PLUGINS_JSON = {"plugins": {"cow_cli": {"enabled": True, "priority": 1000}}}
 
 # The mobile app ships its own UI, so the web console's static assets stay out.
 SKIP_DIRS = {"__pycache__", "tests", "node_modules", ".pytest_cache"}
@@ -49,6 +52,10 @@ def bundle(dest: str) -> None:
     os.makedirs(os.path.join(dest, "plugins"))
     for name in PLUGIN_FILES:
         shutil.copy2(os.path.join(REPO, "plugins", name), os.path.join(dest, "plugins", name))
+    for name in PLUGIN_DIRS:
+        shutil.copytree(os.path.join(REPO, "plugins", name), os.path.join(dest, "plugins", name), ignore=_ignore(REPO))
+    with open(os.path.join(dest, "plugins", "plugins.json"), "w", encoding="utf-8") as f:
+        json.dump(PLUGINS_JSON, f, indent=4)
 
 
 if __name__ == "__main__":

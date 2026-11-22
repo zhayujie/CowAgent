@@ -249,14 +249,15 @@ class ChannelManager:
                 self._primary_channel = channels[0][1]
 
             if first_start:
-                if DESKTOP_MODE:
+                if DESKTOP_MODE or MOBILE_MODE:
                     # Load plugins in the background so command plugins
                     # (cow_cli / godcmd, e.g. /status, #help) work in the
                     # desktop client, without blocking web-service readiness.
+                    # A mobile app ships the commands plugin alone.
                     threading.Thread(
                         target=PluginManager().load_plugins, daemon=True
                     ).start()
-                elif not MOBILE_MODE:
+                else:
                     PluginManager().load_plugins()
 
                 # Cloud client is optional. It is only started when

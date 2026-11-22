@@ -23,6 +23,7 @@ from plugins import Plugin, Event, EventContext, EventAction
 from bridge.context import ContextType
 from bridge.reply import Reply, ReplyType
 from common.atomic_write import write_json_atomic
+from common.deployment import is_mobile
 from common.log import logger
 from common.utils import tail_lines
 from common.i18n import t as _t
@@ -47,6 +48,9 @@ CLI_ONLY_COMMANDS = {"start", "stop", "restart"}
 
 # Commands that can only run from chat (need access to in-process memory)
 CHAT_ONLY_COMMANDS = set()  # context is allowed in both, but behaves differently
+
+# A kernel inside a mobile app has no browser to install.
+NOT_ON_MOBILE_COMMANDS = {"install-browser"}
 
 # Convenience shorthands for the slash form only. Values are *full command
 # strings* so an alias can carry arguments (e.g. "cc" -> "context clear").
@@ -350,6 +354,8 @@ class CowCliPlugin(Plugin):
                 f"⚠️ `cow {cmd}` 只能在命令行终端中执行。\n请在终端运行: cow {cmd}",
                 f"⚠️ `cow {cmd}` can only run in a terminal.\nRun it in your shell: cow {cmd}",
             )
+        if cmd in NOT_ON_MOBILE_COMMANDS and is_mobile():
+            return _t(f"⚠️ /{cmd} 在手机上不可用。", f"⚠️ /{cmd} is not available on a phone.")
 
         handler_attr = "_cmd_" + cmd.replace("-", "_")
         handler = getattr(self, handler_attr, None)
@@ -428,8 +434,8 @@ class CowCliPlugin(Plugin):
                 "💡 也可以用 cow <command> 代替 /<command>",
             ]
         # The `cow` prefix is named after the default product; a renamed build
-        # keeps the slash form only in its help.
-        if os.environ.get("COW_APP_NAME"):
+        # keeps the slash form only in its help, as does a phone, with no terminal.
+        if os.environ.get("COW_APP_NAME") or is_mobile():
             lines = [l for l in lines if "cow <command>" not in l]
         return "\n".join(lines).rstrip()
 
@@ -570,12 +576,13 @@ class CowCliPlugin(Plugin):
         lines = [_t(f"📊 {_app_name()} 运行状态", f"📊 {_app_name()} Status"), ""]
 
         lines.append(_t(f"  版本: v{__version__}", f"  Version: v{__version__}"))
-        lines.append(_t(f"  进程: PID {os.getpid()}", f"  Process: PID {os.getpid()}"))
-
-        channel = cfg.get("channel_type", "unknown")
-        if isinstance(channel, list):
-            channel = ", ".join(channel)
-        lines.append(_t(f"  通道: {channel}", f"  Channel: {channel}"))
+        # Inside a phone app the process and channel are the app's own, the same every time.
+        if not is_mobile():
+            lines.append(_t(f"  进程: PID {os.getpid()}", f"  Process: PID {os.getpid()}"))
+            channel = cfg.get("channel_type", "unknown")
+            if isinstance(channel, list):
+                channel = ", ".join(channel)
+            lines.append(_t(f"  通道: {channel}", f"  Channel: {channel}"))
 
         model_name = cfg.get("model", "unknown")
         lines.append(_t(f"  模型: {model_name}", f"  Model: {model_name}"))
@@ -663,6 +670,10 @@ class CowCliPlugin(Plugin):
             os.path.join(project_root, "nohup.out"),
             os.path.join(project_root, "run.log"),
         ]
+        # Desktop and mobile builds log under their data directory instead.
+        data_dir = os.environ.get("COW_DATA_DIR")
+        if data_dir:
+            candidates.insert(0, os.path.join(os.path.expanduser(data_dir), "run.log"))
         import glob as glob_mod
         candidates.extend(sorted(glob_mod.glob(os.path.join(project_root, "logs", "*.log")), reverse=True))
         for f in candidates:

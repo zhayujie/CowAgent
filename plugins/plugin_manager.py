@@ -13,22 +13,25 @@ from common.sorted_dict import SortedDict
 from config import write_plugin_config, get_data_root, get_resource_root
 
 from .event import *
-from common.deployment import is_desktop
+from common.deployment import is_desktop, is_mobile
 
 
 def _plugins_resource_dir():
     """Read-only plugins source dir. In a frozen bundle it lives under the
-    resource root (sys._MEIPASS); from source it's the CWD-relative ./plugins."""
+    resource root (sys._MEIPASS); a mobile app keeps its kernel sources apart
+    from the working directory; from source it's the CWD-relative ./plugins."""
     if getattr(sys, "frozen", False):
         return os.path.join(get_resource_root(), "plugins")
+    if is_mobile():
+        return os.path.dirname(os.path.abspath(__file__))
     return "./plugins"
 
 
 def _plugins_data_dir():
     """Writable dir for plugin runtime config (plugins.json). In a frozen
-    bundle the resource dir is read-only, so redirect writes to the data root
-    (~/.cow); from source it stays the CWD-relative ./plugins."""
-    if getattr(sys, "frozen", False):
+    bundle or a mobile app the resource dir is read-only, so redirect writes to
+    the data root (~/.cow); from source it stays the CWD-relative ./plugins."""
+    if getattr(sys, "frozen", False) or is_mobile():
         d = os.path.join(get_data_root(), "plugins")
         os.makedirs(d, exist_ok=True)
         return d
