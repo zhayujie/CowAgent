@@ -1,6 +1,7 @@
-import {faClock, faFolderOpen} from '@fortawesome/free-regular-svg-icons';
+import {faCalendar, faClock, faFolderOpen} from '@fortawesome/free-regular-svg-icons';
 import {
   faBook,
+  faLocationDot,
   faMagnifyingGlassChart,
   faMicrochip,
   faPuzzlePiece,
@@ -10,7 +11,9 @@ import type {IconDefinition} from '@fortawesome/fontawesome-svg-core';
 import React, {useEffect, useRef} from 'react';
 import {Pressable, ScrollView, Text, View} from 'react-native';
 import {tr, trf, type MessageKey} from '../i18n';
+import {LOCAL_SERVER_ID} from '../kernel/localKernel';
 import type {AgentProfile} from '../protocol/resources';
+import {useServerStore} from '../store/serverStore';
 import type {Palette} from '../theme/palette';
 import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
@@ -18,16 +21,24 @@ import {greeting} from '../utils/format';
 import {AgentAvatar} from './AgentAvatar';
 import {Icon} from './Icon';
 
-/** The web console's starter cards; the last one sends a command rather than prose. */
-const EXAMPLES: {
+type Example = {
   key: string;
   icon: IconDefinition;
   tint: (t: Palette) => [string, string];
   send?: string;
-}[] = [
+};
+
+const FILES: Example = {key: 'sys', icon: faFolderOpen, tint: t => t.kind.web};
+const TASK: Example = {key: 'task', icon: faClock, tint: t => t.kind.image};
+/** Only the agent on the phone itself reaches the phone's calendar and location. */
+const CALENDAR: Example = {key: 'calendar', icon: faCalendar, tint: t => t.kind.web};
+const NEARBY: Example = {key: 'nearby', icon: faLocationDot, tint: t => t.kind.image};
+
+/** The web console's starter cards; the last one sends a command rather than prose. */
+const examples = (onPhone: boolean): Example[] => [
   {key: 'research', icon: faMagnifyingGlassChart, tint: t => t.kind.doc},
-  {key: 'sys', icon: faFolderOpen, tint: t => t.kind.web},
-  {key: 'task', icon: faClock, tint: t => t.kind.image},
+  onPhone ? CALENDAR : FILES,
+  onPhone ? NEARBY : TASK,
   {key: 'knowledge', icon: faBook, tint: t => t.kind.media},
   {key: 'skill', icon: faPuzzlePiece, tint: t => [t.dangerSoft, t.danger]},
   {key: 'cmd', icon: faTerminal, tint: t => t.kind.other, send: '/help'},
@@ -56,6 +67,7 @@ export function Intro({
     cardsRef.current?.measureInWindow((_x, y, _w, h) => onCardsBand?.({top: y, bottom: y + h}));
   useEffect(() => () => onCardsBand?.(null), [onCardsBand]);
   const custom = !isDefault && agent?.description?.trim();
+  const onPhone = useServerStore(s => s.activeId === LOCAL_SERVER_ID);
 
   return (
     <View style={styles.root}>
@@ -94,7 +106,7 @@ export function Intro({
           keyboardShouldPersistTaps="handled"
           style={styles.cardsScroll}
           contentContainerStyle={styles.cards}>
-          {EXAMPLES.map(e => {
+          {examples(onPhone).map(e => {
             const [bg, fg] = e.tint(t);
             const text = tr(`chat_example_${e.key}_text` as MessageKey);
             return (

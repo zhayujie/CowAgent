@@ -366,9 +366,7 @@ function Choice({
       </View>
       <View style={styles.choiceText}>
         <Text style={styles.choiceTitle}>{title}</Text>
-        <Text style={styles.choiceDesc} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
-          {desc}
-        </Text>
+        <Text style={styles.choiceDesc}>{desc}</Text>
       </View>
       {busy ? (
         <ActivityIndicator color={t.t3} />
