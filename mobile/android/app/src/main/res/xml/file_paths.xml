@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Files copied out of Downloads before handing them to another app (see CowDownloadsModule). -->
+<paths>
+    <cache-path name="open" path="open/" />
+</paths>

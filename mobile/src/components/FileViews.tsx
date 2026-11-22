@@ -3,18 +3,20 @@ import {
   faCopy,
   faDownload,
   faEye,
+  faFileExport,
   faLayerGroup,
   faShareNodes,
 } from '@fortawesome/free-solid-svg-icons';
 import type {IconDefinition} from '@fortawesome/fontawesome-svg-core';
 import React, {useEffect, useState} from 'react';
-import {Image, Pressable, Text, View} from 'react-native';
+import {Image, Platform, Pressable, Text, View} from 'react-native';
 import {type ChatFile, rawUrlOf} from '../files/chatFile';
 import {
   canPreviewInApp,
   downloadFile,
   openFile,
   openInBrowser,
+  openWithSystem,
   shareFile,
   useImageViewer,
   viewInArtifacts,
@@ -185,6 +187,9 @@ export function FileSheet({
     <Sheet visible={visible} onClose={onClose} title={file.name}>
       {!inPreview && canPreviewInApp(file) && (
         <SheetRow icon={faEye} label={tr('file_preview')} onPress={then(() => openFile(file))} />
+      )}
+      {Platform.OS === 'android' && !canPreviewInApp(file) && (
+        <SheetRow icon={faFileExport} label={tr('file_open_with')} onPress={then(() => openWithSystem(file))} />
       )}
       <SheetRow icon={faDownload} label={tr('file_download')} onPress={then(() => downloadFile(file))} />
       <SheetRow icon={faShareNodes} label={tr('file_share')} onPress={then(() => shareFile(file))} />

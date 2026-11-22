@@ -14,7 +14,7 @@ import {PreviewSkeleton} from '../components/Skeleton';
 import {ToastHost} from '../components/Toast';
 import {Chip, IconButton} from '../components/ui';
 import {type ChatFile, fileHttpError, viewUrlOf} from '../files/chatFile';
-import {downloadFile, MEDIA_KINDS, openAsWebPage} from '../files/openFile';
+import {downloadFile, MEDIA_KINDS, openAsWebPage, openWithSystem} from '../files/openFile';
 import {tr, trf} from '../i18n';
 import {EDGE_ONLY, useFullBackSwipe} from '../navigation/gestures';
 import type {RootStackParamList} from '../navigation/types';
@@ -118,8 +118,10 @@ export function FilePreviewScreen({route, navigation}: Props) {
       <View style={styles.failed}>
         <Text style={styles.failedTitle}>{tr('file_unsupported_title')}</Text>
         <Text style={styles.failedHint}>{[file.name, meta].filter(Boolean).join('\n')}</Text>
+        {Platform.OS === 'android' && <Text style={styles.failedNote}>{tr('file_open_with_hint')}</Text>}
         <View style={styles.failedActions}>
           <Chip label={tr('file_download')} active onPress={() => downloadFile(file)} />
+          {Platform.OS === 'android' && <Chip label={tr('file_open_with')} onPress={() => openWithSystem(file)} />}
         </View>
       </View>
     );
@@ -270,5 +272,6 @@ const useStyles = makeStyles(t => ({
   failed: {flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40, paddingBottom: 60},
   failedTitle: {fontSize: 15, fontWeight: '500', color: t.t2},
   failedHint: {fontSize: 13, lineHeight: 20, color: t.t3, marginTop: 8, textAlign: 'center'},
+  failedNote: {fontSize: 12, lineHeight: 18, color: t.t3, marginTop: 14, textAlign: 'center', opacity: 0.8},
   failedActions: {flexDirection: 'row', gap: 8, marginTop: 20},
 }));

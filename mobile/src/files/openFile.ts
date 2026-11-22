@@ -118,7 +118,12 @@ function nameFromUrl(url: string): string {
  * iOS downloads first and then offers the share sheet, HarmonyOS streams into
  * Downloads/<app name>. All settle once the file is kept.
  */
-const systemDownloads: {save(url: string, fileName: string): Promise<SavedTo>} | undefined =
+const systemDownloads:
+  | {
+      save(url: string, fileName: string): Promise<SavedTo>;
+      open?(url: string, fileName: string): Promise<'opened' | 'downloads'>;
+    }
+  | undefined =
   NativeModules.CowDownloads ??
   (cowNative
     ? {
@@ -196,6 +201,31 @@ export function downloadFile(f: ChatFile) {
     return;
   }
   saveWithSystem(url);
+}
+
+/**
+ * Android only: downloads the file and lets the system "open with" chooser hand it to
+ * Word/WPS. Elsewhere the browser takes the link, since no such chooser exists.
+ */
+export async function openWithSystem(f: ChatFile) {
+  const url = rawUrlOf(f);
+  if (Platform.OS !== 'android' || !systemDownloads?.open || !savesNatively(url)) {
+    openInBrowser(f);
+    return;
+  }
+  if (!(await canWriteDownloads())) {
+    showToast(tr('file_download_no_permission'));
+    return;
+  }
+  showToast(trf('file_open_with_starting', {name: f.name}));
+  try {
+    const result = await systemDownloads.open(url, f.name);
+    if (result !== 'opened') {
+      showToast(tr('file_saved_downloads'));
+    }
+  } catch {
+    showToast(tr('file_cannot_open'));
+  }
 }
 
 /** One tap on a file: it always opens in the app; formats it cannot render get a page to save them from. */

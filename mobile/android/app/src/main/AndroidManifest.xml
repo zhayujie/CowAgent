@@ -37,6 +37,16 @@
             <data android:scheme="cowagent" android:host="pair" />
         </intent-filter>
       </activity>
+      <!-- Hands downloaded files to other apps (Word/WPS) for the "open with" chooser. -->
+      <provider
+        android:name="androidx.core.content.FileProvider"
+        android:authorities="${applicationId}.files"
+        android:exported="false"
+        android:grantUriPermissions="true">
+        <meta-data
+          android:name="android.support.FILE_PROVIDER_PATHS"
+          android:resource="@xml/file_paths" />
+      </provider>
       <!-- The scanner ships landscape-only; follow the phone like the rest of the app. -->
       <activity
         android:name="com.journeyapps.barcodescanner.CaptureActivity"
