@@ -524,7 +524,8 @@ class Read(BaseTool):
     
     def _read_office(self, absolute_path: str, display_path: str, file_ext: str,
                      offset: int = None, limit: int = None) -> ToolResult:
-        """Read Office documents (.docx, .xlsx, .pptx) using python-docx / openpyxl / python-pptx."""
+        """Read Office documents (.docx, .xlsx, .pptx) using python-docx / openpyxl / python-pptx;
+        Word and PowerPoint files fall back to the standard library without them."""
         try:
             text = self._extract_office_text(absolute_path, file_ext)
         except ImportError as e:
@@ -553,7 +554,8 @@ class Read(BaseTool):
             try:
                 from docx import Document
             except ImportError:
-                raise ImportError("Error: python-docx library not installed. Install with: pip install python-docx")
+                from common.office_text import docx_text_plain
+                return docx_text_plain(absolute_path)
             from common.office_text import iter_docx_body_text
             doc = Document(absolute_path)
             return '\n'.join(iter_docx_body_text(doc))
@@ -572,13 +574,17 @@ class Read(BaseTool):
             return '\n'.join(parts)
 
         if file_ext in ('.pptx', '.ppt'):
+            parts = []
             try:
                 from pptx import Presentation
             except ImportError:
-                raise ImportError("Error: python-pptx library not installed. Install with: pip install python-pptx")
+                from common.office_text import pptx_slides_plain
+                for i, lines in enumerate(pptx_slides_plain(absolute_path), 1):
+                    parts.append(f"--- Slide {i} ---")
+                    parts.extend(lines)
+                return '\n'.join(parts)
             from common.office_text import iter_pptx_shape_text
             prs = Presentation(absolute_path)
-            parts = []
             for i, slide in enumerate(prs.slides, 1):
                 parts.append(f"--- Slide {i} ---")
                 parts.extend(iter_pptx_shape_text(slide.shapes))

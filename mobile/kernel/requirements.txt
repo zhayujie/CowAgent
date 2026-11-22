@@ -16,3 +16,7 @@ json-repair
 python-dotenv>=1.0.0
 # Mobile systems have no zoneinfo database where Python looks for one.
 tzdata
+# The read tool's PDF and Excel support; both pure Python. Word and PowerPoint
+# are read without python-docx / python-pptx, which need lxml.
+pypdf>=4.0
+openpyxl>=3.1

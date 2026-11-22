@@ -1,11 +1,106 @@
 """Office document text extraction shared by the read and web_fetch tools.
 
 The parsers are optional dependencies, so they are imported lazily (docx) or
-supplied by the caller (openpyxl's ``load_workbook``).
+supplied by the caller (openpyxl's ``load_workbook``). Word and PowerPoint
+files can also be read with the standard library alone, for installs without
+python-docx / python-pptx (which need lxml), such as the mobile apps.
 """
 
+import posixpath
+import zipfile
 from contextlib import contextmanager
 from copy import deepcopy
+from xml.etree import ElementTree
+
+_W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+_A = "{http://schemas.openxmlformats.org/drawingml/2006/main}"
+_P = "{http://schemas.openxmlformats.org/presentationml/2006/main}"
+_R = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
+_REL = "{http://schemas.openxmlformats.org/package/2006/relationships}"
+
+
+def _open_package(file_path):
+    try:
+        return zipfile.ZipFile(file_path)
+    except zipfile.BadZipFile:
+        raise ValueError("Not a .docx/.pptx file. The older .doc/.ppt formats cannot be read; "
+                         "save it as .docx/.pptx first.") from None
+
+
+def docx_text_plain(file_path):
+    """Paragraphs and table rows of a .docx in body order, tracked deletions left out."""
+    with _open_package(file_path) as archive:
+        body = ElementTree.fromstring(archive.read("word/document.xml")).find(f"{_W}body")
+    return "\n".join(_plain_docx_blocks(body)) if body is not None else ""
+
+
+def _plain_docx_blocks(container):
+    for element in container:
+        if element.tag == f"{_W}p":
+            yield _plain_docx_paragraph(element)
+        elif element.tag == f"{_W}sdt":
+            content = element.find(f"{_W}sdtContent")
+            if content is not None:
+                yield from _plain_docx_blocks(content)
+        elif element.tag == f"{_W}tbl":
+            for row in element.findall(f"{_W}tr"):
+                yield "\t".join("\n".join(_plain_docx_blocks(cell)) for cell in row.findall(f"{_W}tc"))
+
+
+def _plain_docx_paragraph(paragraph):
+    parts = []
+    # Only what runs hold: a paragraph's own properties list tab stops as w:tab too.
+    for run in paragraph.iter(f"{_W}r"):
+        for node in run:
+            if node.tag == f"{_W}t":
+                parts.append(node.text or "")
+            elif node.tag == f"{_W}tab":
+                parts.append("\t")
+            elif node.tag in (f"{_W}br", f"{_W}cr"):
+                parts.append("\n")
+    return "".join(parts)
+
+
+def pptx_slides_plain(file_path):
+    """Lines of text per slide of a .pptx, in the presentation's slide order."""
+    with _open_package(file_path) as archive:
+        presentation = ElementTree.fromstring(archive.read("ppt/presentation.xml"))
+        rels = ElementTree.fromstring(archive.read("ppt/_rels/presentation.xml.rels"))
+        targets = {rel.get("Id"): rel.get("Target", "") for rel in rels.iter(f"{_REL}Relationship")}
+        names = set(archive.namelist())
+        slides = []
+        for slide_id in presentation.iter(f"{_P}sldId"):
+            target = targets.get(slide_id.get(f"{_R}id"), "")
+            path = posixpath.normpath(posixpath.join("ppt", target)) if not target.startswith("/") else target[1:]
+            if path in names:
+                slides.append(list(_plain_pptx_shapes(ElementTree.fromstring(archive.read(path)))))
+    return slides
+
+
+def _plain_pptx_shapes(node):
+    for child in node:
+        if child.tag == f"{_A}tbl":
+            for row in child.findall(f"{_A}tr"):
+                # A merged cell's origin holds the text; the cells it covers add none.
+                yield "\t".join(
+                    "\n".join(_plain_pptx_text(p) for p in cell.iter(f"{_A}p")).strip()
+                    for cell in row.findall(f"{_A}tc")
+                    if cell.get("hMerge") != "1" and cell.get("vMerge") != "1"
+                )
+        elif child.tag == f"{_A}p":
+            text = _plain_pptx_text(child).strip()
+            if text:
+                yield text
+        else:
+            yield from _plain_pptx_shapes(child)
+
+
+def _plain_pptx_text(paragraph):
+    return "".join(
+        (node.text or "") if node.tag == f"{_A}t" else "\n"
+        for node in paragraph.iter()
+        if node.tag in (f"{_A}t", f"{_A}br")
+    )
 
 
 def iter_docx_body_text(document):
