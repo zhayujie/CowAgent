@@ -67,17 +67,27 @@ const DETAIL_MAX_CHARS = 20000;
 function MessageItemImpl({
   message,
   labelled,
+  newest,
   onOpenContext,
 }: {
   message: ChatMessage;
   labelled?: boolean;
+  /** The bottom row of the conversation. */
+  newest?: boolean;
   /** Opens the conversation's context usage, from a reply's token count. */
   onOpenContext?: () => void;
 }) {
   if (message.role === 'user') {
     return <UserTurn message={message} />;
   }
-  return <AssistantTurn message={message} labelled={!!labelled || !!message.peer} onOpenContext={onOpenContext} />;
+  return (
+    <AssistantTurn
+      message={message}
+      labelled={!!labelled || !!message.peer}
+      newest={!!newest}
+      onOpenContext={onOpenContext}
+    />
+  );
 }
 
 const copyMessage = (text: string) =>
@@ -234,16 +244,18 @@ function useSpeaker(speaker?: Speaker) {
 function AssistantTurn({
   message,
   labelled,
+  newest,
   onOpenContext,
 }: {
   message: ChatMessage;
   labelled: boolean;
+  newest: boolean;
   onOpenContext?: () => void;
 }) {
   const t = useTheme();
   const styles = useStyles();
   const speaker = useSpeaker(message.speaker);
-  const row = useAnchoredRow(!!message.streaming);
+  const row = useAnchoredRow(newest);
   const [showAll, setShowAll] = useState(false);
   const steps = message.steps ?? [];
   const foldable = !message.streaming && steps.length > FOLD_AFTER;
