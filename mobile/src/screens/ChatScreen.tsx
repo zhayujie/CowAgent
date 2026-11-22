@@ -615,7 +615,9 @@ export function ChatScreen({route, navigation}: Props) {
   );
   const swipeStart = useCallback(() => {
     Keyboard.dismiss();
-    setDrawerView('menu');
+    // A sideways drag is nearly always about switching conversations; the
+    // feature menu has its own button in the header.
+    setDrawerView('sessions');
     setDrawerNested(false);
     refreshDrawer();
   }, [refreshDrawer]);
