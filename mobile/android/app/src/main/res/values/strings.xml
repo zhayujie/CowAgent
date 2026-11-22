@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">CowAgent</string>
+    <string name="notify_channel_replies">回复完成</string>
+    <string name="notify_channel_replies_desc">对话的回复结束时提醒，点按回到该对话</string>
 </resources>

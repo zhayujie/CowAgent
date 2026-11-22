@@ -69,6 +69,8 @@ import {agentParam, useAgentStore, useCurrentAgent} from '../store/agentStore';
 import {MAX_REPLYING, useChatStore, type ChatMessage} from '../store/chatStore';
 import {MAX_ATTACHMENTS, useComposerStore} from '../store/composerStore';
 import {useMenuStore} from '../store/menuStore';
+import {clearNotice} from '../notify/replies';
+import {useUnreadStore} from '../store/unreadStore';
 import {useOverviewStore} from '../store/overviewStore';
 import {useSessionSettingsStore} from '../store/sessionSettingsStore';
 import {useSessionStore} from '../store/sessionStore';
@@ -393,6 +395,26 @@ export function ChatScreen({route, navigation}: Props) {
     setAway(false);
     setUnread(false);
   }, [sessionId]);
+
+  // Reading down to the newest message when the page opens. The list keeps its offset across
+  // conversations, and a stored history can arrive a frame later, so it is put back twice.
+  const settled = useRef('');
+  useEffect(() => {
+    settled.current = '';
+    clearNotice(sessionId);
+    useUnreadStore.getState().clear(sessionId);
+  }, [sessionId]);
+  useEffect(() => {
+    if (loading) {
+      return;
+    }
+    if (settled.current === sessionId) {
+      return;
+    }
+    settled.current = sessionId;
+    list.current?.scrollToOffset({offset: 0, animated: false});
+    requestAnimationFrame(() => list.current?.scrollToOffset({offset: 0, animated: false}));
+  }, [loading, sessionId]);
   const tail = messages[messages.length - 1];
   const tailKey = tail ? `${tail.id}:${tail.content.length}:${tail.steps?.length ?? 0}:${tail.files?.length ?? 0}` : '';
   useEffect(() => {

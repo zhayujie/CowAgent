@@ -13,6 +13,7 @@ import {ImageViewerHost} from './components/FileViews';
 import {PairLinkHost} from './components/PairFlow';
 import {useLangStore} from './i18n';
 import {navigationRef} from './navigation/ref';
+import {drainPendingSession, watchReplies} from './notify/replies';
 import {RootNavigator} from './navigation/RootNavigator';
 import {useServerStore} from './store/serverStore';
 import {paintNavigationBar, routeBackground} from './theme/systemBars';
@@ -36,6 +37,9 @@ export default function App() {
   }, []);
 
   useEffect(() => paintNavigationBar(barColor, t.isDark), [barColor, t.isDark]);
+
+  // A finished reply is announced, and a tapped notice reopens its conversation.
+  useEffect(() => watchReplies(), []);
 
   const navTheme = useMemo<Theme>(() => {
     const base = t.isDark ? DarkTheme : DefaultTheme;
@@ -64,7 +68,11 @@ export default function App() {
             ref={navigationRef}
             theme={navTheme}
             initialState={navState.current}
-            onReady={trackRoute}
+            onReady={() => {
+              trackRoute();
+              // A notice that started the app can only be followed once routes exist.
+              drainPendingSession();
+            }}
             onStateChange={state => {
               navState.current = state;
               trackRoute();

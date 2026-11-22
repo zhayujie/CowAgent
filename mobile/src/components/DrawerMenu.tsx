@@ -13,18 +13,20 @@ import {
   faTerminal,
 } from '@fortawesome/free-solid-svg-icons';
 import type {IconDefinition} from '@fortawesome/fontawesome-svg-core';
-import React, {useMemo, useState} from 'react';
-import {Pressable, ScrollView, Text, View} from 'react-native';
+import React, {useEffect, useMemo, useRef, useState} from 'react';
+import {Animated, Easing, Pressable, ScrollView, Text, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import type {ChatFile} from '../files/chatFile';
 import {tr, trf} from '../i18n';
 import {useLocalDeviceName} from '../kernel/localKernel';
 import {menuSections, type MenuEntry, type MenuRoute} from '../navigation/menuViews';
 import type {SessionItem} from '../protocol/events';
+import {useChatStore} from '../store/chatStore';
 import {useMenuStore} from '../store/menuStore';
 import {useOverviewStore} from '../store/overviewStore';
 import {activeServer, useLocalServer, useServerStore} from '../store/serverStore';
 import {useSessionStore} from '../store/sessionStore';
+import {useUnreadStore} from '../store/unreadStore';
 import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
 import {clockTime, shortTime} from '../utils/format';
@@ -226,6 +228,9 @@ function SessionList({
   const styles = useStyles();
   const sessions = useSessionStore(s => s.sessions);
   const total = useSessionStore(s => s.total);
+  // Live reply state and the finished-but-unseen marks, both keyed by conversation.
+  const busy = useChatStore(s => s.active);
+  const unread = useUnreadStore(s => s.unread);
   const shown = Math.min(sessions.length, RECENT_LIMIT);
   const groups = useMemo(() => groupSessions(sessions.slice(0, RECENT_LIMIT)), [sessions]);
   return (
@@ -266,6 +271,8 @@ function SessionList({
                 label={s.title || tr('menu_untitled_chat')}
                 meta={g.key === 'yesterday' ? clockTime(s.last_active) : shortTime(s.last_active)}
                 active={s.session_id === currentSessionId}
+                busy={!!busy[s.session_id]}
+                unread={!busy[s.session_id] && !!unread[s.session_id]}
                 onPress={() => onOpenSession(s)}
                 onLongPress={() => onSessionActions(s)}
               />
@@ -288,6 +295,8 @@ function Item({
   label,
   meta,
   active,
+  busy,
+  unread,
   external,
   dim,
   onPress,
@@ -298,6 +307,10 @@ function Item({
   /** Quiet text on the right, such as when a chat was last active. */
   meta?: string;
   active?: boolean;
+  /** A reply is streaming into this chat right now. */
+  busy?: boolean;
+  /** Its reply finished while the chat was not on screen. */
+  unread?: boolean;
   /** Opens outside the app, in the browser. */
   external?: boolean;
   dim?: boolean;
@@ -316,7 +329,12 @@ function Item({
       delayLongPress={350}
       style={({pressed}) => [styles.item, active && styles.itemActive, pressed && !active && styles.pressed]}>
       <View style={styles.itemIcon}>
-        <Icon icon={icon} size={15} color={active ? t.accent : dim ? t.t4 : t.t2} />
+        {busy ? (
+          <ReplySpinner color={t.accent} />
+        ) : (
+          <Icon icon={icon} size={15} color={active ? t.accent : dim ? t.t4 : t.t2} />
+        )}
+        {unread && <View style={[styles.unreadDot, {backgroundColor: t.green}]} />}
       </View>
       <Text style={[styles.itemLabel, active && styles.itemLabelActive, dim && styles.itemDim]} numberOfLines={1}>
         {label}
@@ -324,6 +342,29 @@ function Item({
       {!!meta && <Text style={styles.itemMeta}>{meta}</Text>}
       {external && !dim && <Icon icon={faArrowUpRightFromSquare} size={10} color={t.t3} />}
     </Pressable>
+  );
+}
+
+/** A reply in flight: the same green ring as the web console, turning while it waits. */
+function ReplySpinner({color}: {color: string}) {
+  const styles = useStyles();
+  const turn = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.timing(turn, {toValue: 1, duration: 900, easing: Easing.linear, useNativeDriver: true}),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [turn]);
+  return (
+    <Animated.View
+      accessibilityLabel={tr('menu_chat_running')}
+      style={[
+        styles.spinner,
+        {borderColor: `${color}33`, borderTopColor: color},
+        {transform: [{rotate: turn.interpolate({inputRange: [0, 1], outputRange: ['0deg', '360deg']})}]},
+      ]}
+    />
   );
 }
 
@@ -378,7 +419,9 @@ const useStyles = makeStyles(t => ({
     borderRadius: radius.sm,
   },
   pressed: {backgroundColor: t.bg2},
-  itemIcon: {width: 18, alignItems: 'center'},
+  itemIcon: {width: 18, alignItems: 'center', justifyContent: 'center'},
+  spinner: {width: 13, height: 13, borderRadius: 7, borderWidth: 1.5},
+  unreadDot: {position: 'absolute', top: 0, right: -1, width: 6, height: 6, borderRadius: 3},
   itemActive: {backgroundColor: t.accentSoft},
   itemLabel: {flex: 1, fontSize: 16, color: t.t1, letterSpacing: -0.1},
   itemLabelActive: {fontWeight: '500'},
