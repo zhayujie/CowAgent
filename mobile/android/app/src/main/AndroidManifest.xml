@@ -36,7 +36,38 @@
             <category android:name="android.intent.category.BROWSABLE" />
             <data android:scheme="cowagent" android:host="pair" />
         </intent-filter>
+        <!-- Files, pictures and text shared from other apps, or opened with this one, land in the chat composer. -->
+        <intent-filter>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.DEFAULT" />
+            <data android:scheme="content" />
+            <!-- Not */*, which would also offer this app for opening folders. -->
+            <data android:mimeType="application/*" />
+            <data android:mimeType="text/*" />
+            <data android:mimeType="image/*" />
+            <data android:mimeType="audio/*" />
+            <data android:mimeType="video/*" />
+        </intent-filter>
+        <intent-filter>
+            <action android:name="android.intent.action.SEND" />
+            <category android:name="android.intent.category.DEFAULT" />
+            <data android:mimeType="*/*" />
+        </intent-filter>
+        <intent-filter>
+            <action android:name="android.intent.action.SEND_MULTIPLE" />
+            <category android:name="android.intent.category.DEFAULT" />
+            <data android:mimeType="*/*" />
+        </intent-filter>
       </activity>
+      <provider
+        android:name=".files.ShareProvider"
+        android:authorities="${applicationId}.share"
+        android:exported="false"
+        android:grantUriPermissions="true">
+        <meta-data
+            android:name="android.support.FILE_PROVIDER_PATHS"
+            android:resource="@xml/share_paths" />
+      </provider>
       <!-- The scanner ships landscape-only; follow the phone like the rest of the app. -->
       <activity
         android:name="com.journeyapps.barcodescanner.CaptureActivity"

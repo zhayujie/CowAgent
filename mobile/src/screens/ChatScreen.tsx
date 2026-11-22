@@ -63,6 +63,7 @@ import {useMenuStore} from '../store/menuStore';
 import {useOverviewStore} from '../store/overviewStore';
 import {useSessionSettingsStore} from '../store/sessionSettingsStore';
 import {useSessionStore} from '../store/sessionStore';
+import {takeIncomingShare, useIncomingShare} from '../share/incoming';
 import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
 import {chatModelReady} from '../utils/capabilities';
@@ -485,6 +486,37 @@ export function ChatScreen({route, navigation}: Props) {
     },
     [sessionId],
   );
+
+  // What another app shared here goes into the composer of the chat on screen, a new one on a cold
+  // start, for the user to say what to do with it: whatever covers the composer gives way.
+  const incoming = useIncomingShare(s => s.files.length > 0 || !!s.text);
+  useEffect(() => {
+    if (!incoming) {
+      return;
+    }
+    const {files, text} = takeIncomingShare();
+    if (!navigation.isFocused()) {
+      navigation.popToTop();
+    }
+    setDrawerOpen(false);
+    setAttachOpen(false);
+    setModelOpen(false);
+    setPermissionOpen(false);
+    setAgentSheetOpen(false);
+    setServerSheetOpen(false);
+    setTeamSheetOpen(false);
+    setSessionOpen(false);
+    setTimeout(() => dock.current?.focus(), SHEET_DISMISS_MS);
+    if (text) {
+      setDraft(d => (d ? `${d}\n${text}` : text));
+    }
+    if (files.length) {
+      const skipped = useComposerStore.getState().add(files, sessionId, useAgentStore.getState().currentId);
+      if (skipped) {
+        showToast(trf('chat_attach_skipped', {max: MAX_ATTACHMENTS, n: skipped}));
+      }
+    }
+  }, [incoming, sessionId, navigation]);
 
   const optimize = useCallback(async () => {
     const input = draft.trim();

@@ -14,6 +14,7 @@ import {PairLinkHost} from './components/PairFlow';
 import {useLangStore} from './i18n';
 import {navigationRef} from './navigation/ref';
 import {RootNavigator} from './navigation/RootNavigator';
+import {listenForShares} from './share/incoming';
 import {useServerStore} from './store/serverStore';
 import {paintNavigationBar, routeBackground} from './theme/systemBars';
 import {usePrefsStore, useTheme} from './theme/theme';
@@ -33,6 +34,7 @@ export default function App() {
     usePrefsStore.getState().hydrate();
     useLangStore.getState().hydrate();
     useServerStore.getState().hydrate();
+    listenForShares();
   }, []);
 
   useEffect(() => paintNavigationBar(barColor, t.isDark), [barColor, t.isDark]);

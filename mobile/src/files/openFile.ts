@@ -78,8 +78,26 @@ export async function openInBrowser(f: ChatFile) {
   Linking.openURL(url).catch(() => showToast(tr('file_cannot_open')));
 }
 
-/** The system share sheet with the file's link; where there is none, the link is copied instead. */
+const nativeShare: {share(source: string, fileName: string, mime: string): Promise<unknown>} | undefined =
+  NativeModules.CowDownloads?.share ? NativeModules.CowDownloads : undefined;
+
+/**
+ * The system share sheet with the file itself on Android and iOS, so a chat app receives the file
+ * rather than a link that only opens where the server is reachable. Elsewhere, its link.
+ */
 export async function shareFile(f: ChatFile) {
+  const raw = rawUrlOf(f);
+  if (nativeShare && /^https?:/i.test(raw)) {
+    const slow = setTimeout(() => showToast(tr('file_share_preparing')), 500);
+    try {
+      await nativeShare.share(raw, f.name, '');
+      return;
+    } catch {
+      // Falls back to the link below.
+    } finally {
+      clearTimeout(slow);
+    }
+  }
   const url = withoutLoginToken(await outsideLinkOf(f));
   if (!url) {
     showToast(tr('file_share_no_link'));

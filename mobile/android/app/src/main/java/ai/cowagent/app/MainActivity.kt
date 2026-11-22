@@ -1,5 +1,7 @@
 package ai.cowagent.app
 
+import ai.cowagent.app.files.SharedIntake
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import com.facebook.react.ReactActivity
@@ -29,5 +31,28 @@ class MainActivity : ReactActivity() {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
       window.isNavigationBarContrastEnforced = false
     }
+    // A recreated activity already handed its share over.
+    if (savedInstanceState == null) SharedIntake.receive(intent)
+  }
+
+  override fun onNewIntent(intent: Intent) {
+    super.onNewIntent(intent)
+    setIntent(intent)
+    SharedIntake.receive(intent)
+  }
+
+  override fun onStart() {
+    super.onStart()
+    visible = true
+  }
+
+  override fun onStop() {
+    visible = false
+    super.onStop()
+  }
+
+  companion object {
+    /** On screen, where the chat shows a scheduled delivery itself and a reminder would repeat it. */
+    @Volatile var visible = false
   }
 }
