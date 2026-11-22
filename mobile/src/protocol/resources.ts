@@ -189,6 +189,28 @@ export interface WorkspaceHit {
   kind?: string;
 }
 
+export interface ProjectRef {
+  path: string;
+  name: string;
+}
+
+/** `GET /api/projects`: the project bound to this Agent and session. */
+export interface ProjectState {
+  status: string;
+  current: ProjectRef | null;
+  recents: ProjectRef[];
+  default_workspace: string;
+  projects_root: string;
+}
+
+/** `GET /api/projects/browse`: directories on the CowAgent server, not on the phone. */
+export interface ProjectBrowse {
+  status: string;
+  path: string;
+  parent: string | null;
+  dirs: ProjectRef[];
+}
+
 export interface MemoryPage {
   list: MemoryFile[];
   total: number;

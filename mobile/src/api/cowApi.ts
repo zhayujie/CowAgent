@@ -39,6 +39,8 @@ import type {
   ModelsState,
   PairedDevice,
   PairingCode,
+  ProjectBrowse,
+  ProjectState,
   QrPayload,
   ScheduledTask,
   SessionSettings,
@@ -226,6 +228,27 @@ export async function getSessionSettings(sessionId: string, agentId?: string) {
   return http.request<SessionSettings>(
     `/api/sessions/${encodeURIComponent(sessionId)}/settings?${query({agent_id: agentId})}`,
   );
+}
+
+export async function getProjects(sessionId: string, agentId?: string) {
+  return http.request<ProjectState>(`/api/projects?${query({session: sessionId, agent_id: agentId})}`);
+}
+
+/** Pass null to unbind the project and use the Agent's default workspace. */
+export async function selectProject(sessionId: string, projectDir: string | null, agentId?: string) {
+  return http.request<ProjectState>('/api/projects/select', {
+    body: {session: sessionId, project_dir: projectDir, agent_id: agentId},
+  });
+}
+
+export async function createProject(sessionId: string, name: string, agentId?: string) {
+  return http.request<ProjectState & {path: string}>('/api/projects/create', {
+    body: {session: sessionId, name, agent_id: agentId},
+  });
+}
+
+export async function browseProjects(path = '') {
+  return http.request<ProjectBrowse>(`/api/projects/browse?${query({path})}`);
 }
 
 /** Pass null for a field to drop the pin and follow the global setting again. */

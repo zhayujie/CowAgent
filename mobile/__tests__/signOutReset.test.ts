@@ -3,6 +3,7 @@ import {useChatStore} from '../src/store/chatStore';
 import {useComposerStore} from '../src/store/composerStore';
 import {resetServerData} from '../src/store/reset';
 import {useSessionStore} from '../src/store/sessionStore';
+import {useWorkspaceStore, workspaceKey} from '../src/store/workspaceStore';
 
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock'),
@@ -22,6 +23,7 @@ it("drops the last server's data and stops its stream", () => {
   useAgentStore.setState({currentId: 'a1', defaultId: 'a1'});
   useSessionStore.setState({sessions: [{session_id: 's1'}] as never});
   useComposerStore.setState({items: [{id: 'f1'}] as never});
+  useWorkspaceStore.setState({byChat: {[workspaceKey('s1', 'a1')]: {} as never}});
 
   resetServerData();
 
@@ -30,5 +32,6 @@ it("drops the last server's data and stops its stream", () => {
   expect(useAgentStore.getState()).toMatchObject({currentId: null, defaultId: null, agents: []});
   expect(useSessionStore.getState().sessions).toEqual([]);
   expect(useComposerStore.getState().items).toEqual([]);
+  expect(useWorkspaceStore.getState().byChat).toEqual({});
   expect(typeof useChatStore.getState().send).toBe('function');
 });

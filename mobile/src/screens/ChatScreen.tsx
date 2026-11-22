@@ -20,7 +20,15 @@ import {Gesture, GestureDetector} from 'react-native-gesture-handler';
 import Animated, {FadeIn, FadeOut, useSharedValue} from 'react-native-reanimated';
 import {scheduleOnRN} from 'react-native-worklets';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import {getModels, newSessionId, optimizePrompt, searchWorkspace, serverUrl, transcribeVoice} from '../api/cowApi';
+import {
+  browseProjects,
+  getModels,
+  newSessionId,
+  optimizePrompt,
+  searchWorkspace,
+  serverUrl,
+  transcribeVoice,
+} from '../api/cowApi';
 import {AgentAvatar} from '../components/AgentAvatar';
 import {AgentSheet} from '../components/AgentSheet';
 import {
@@ -46,6 +54,7 @@ import {TeamChatSheet} from '../components/TeamChatSheet';
 import {showToast, ToastHost} from '../components/Toast';
 import {Burger, IconButton} from '../components/ui';
 import {VoiceOverlay} from '../components/VoiceInput';
+import {WorkspaceSheet} from '../components/WorkspaceSheet';
 import type {ChatFile} from '../files/chatFile';
 import {openFile} from '../files/openFile';
 import {tr, trf} from '../i18n';
@@ -63,6 +72,7 @@ import {useMenuStore} from '../store/menuStore';
 import {useOverviewStore} from '../store/overviewStore';
 import {useSessionSettingsStore} from '../store/sessionSettingsStore';
 import {useSessionStore} from '../store/sessionStore';
+import {useWorkspaceStore, workspaceKey} from '../store/workspaceStore';
 import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
 import {chatModelReady} from '../utils/capabilities';
@@ -98,6 +108,7 @@ export function ChatScreen({route, navigation}: Props) {
   const currentAgentId = useAgentStore(s => s.currentId);
   const attachments = useComposerStore(s => s.items);
   const settings = useSessionSettingsStore(s => s.bySession[sessionId]);
+  const workspace = useWorkspaceStore(s => s.byChat[workspaceKey(sessionId, currentAgentId)]);
   const team = settings?.team;
   const teamSize = team?.members.length ?? 0;
   const [draft, setDraft] = useState('');
@@ -110,6 +121,8 @@ export function ChatScreen({route, navigation}: Props) {
   const [attachOpen, setAttachOpen] = useState(false);
   const [modelOpen, setModelOpen] = useState(false);
   const [permissionOpen, setPermissionOpen] = useState(false);
+  const [workspaceOpen, setWorkspaceOpen] = useState(false);
+  const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [optimizing, setOptimizing] = useState(false);
   const [sessionOpen, setSessionOpen] = useState(false);
   const [contextOnly, setContextOnly] = useState(false);
@@ -168,12 +181,17 @@ export function ChatScreen({route, navigation}: Props) {
     () => useSessionSettingsStore.getState().load(sessionId, useAgentStore.getState().currentId),
     [sessionId],
   );
+  const loadWorkspace = useCallback(
+    () => useWorkspaceStore.getState().load(sessionId, useAgentStore.getState().currentId),
+    [sessionId],
+  );
 
   useEffect(() => {
     if (currentAgentId) {
       loadSettings().catch(() => undefined);
+      loadWorkspace().catch(() => undefined);
     }
-  }, [loadSettings, currentAgentId]);
+  }, [loadSettings, loadWorkspace, currentAgentId]);
 
   // A finished reply may have titled a new session or produced artifacts.
   const wasReplying = useRef(replying);
@@ -543,6 +561,32 @@ export function ChatScreen({route, navigation}: Props) {
     [sessionId],
   );
 
+  const openWorkspace = useCallback(() => {
+    setWorkspaceOpen(true);
+    // Recents and the current binding may have changed on another device.
+    loadWorkspace().catch(e => {
+      setWorkspaceOpen(false);
+      showToast(trf('composer_workspace_load_failed', {error: errorText(e)}));
+    });
+  }, [loadWorkspace]);
+
+  const selectWorkspace = useCallback(
+    (projectDir: string | null) => {
+      setWorkspaceOpen(false);
+      useWorkspaceStore
+        .getState()
+        .select(sessionId, useAgentStore.getState().currentId, projectDir)
+        .catch(e => showToast(trf('composer_workspace_switch_failed', {error: errorText(e)})));
+    },
+    [sessionId],
+  );
+
+  const createWorkspace = useCallback(
+    (name: string) =>
+      useWorkspaceStore.getState().create(sessionId, useAgentStore.getState().currentId, name),
+    [sessionId],
+  );
+
   const sessionItem = useCallback((): SessionItem => {
     const found = useSessionStore.getState().sessions.find(s => s.session_id === sessionId);
     const current = useAgentStore.getState().currentId;
@@ -830,6 +874,8 @@ export function ChatScreen({route, navigation}: Props) {
               useComposerStore.getState().retry(id, sessionId, useAgentStore.getState().currentId)
             }
             onOpenAttach={() => setAttachOpen(true)}
+            workspace={workspace?.current}
+            onOpenWorkspace={openWorkspace}
             model={modelDisplayName(settings?.model)}
             onOpenModel={() => openSettingsSheet(setModelOpen)}
             permission={settings?.permission.mode}
@@ -909,6 +955,30 @@ export function ChatScreen({route, navigation}: Props) {
           onClose={() => setPermissionOpen(false)}
           settings={settings}
           onSelect={selectPermission}
+        />
+        <WorkspaceSheet
+          visible={workspaceOpen}
+          state={workspace}
+          onClose={() => setWorkspaceOpen(false)}
+          onSelect={selectWorkspace}
+          onCreate={() => {
+            setWorkspaceOpen(false);
+            setTimeout(() => setNewProjectOpen(true), SHEET_DISMISS_MS);
+          }}
+          onBrowse={browseProjects}
+        />
+        <FieldSheet
+          visible={newProjectOpen}
+          title={tr('composer_workspace_new')}
+          placeholder={tr('composer_workspace_name_placeholder')}
+          hint={trf('composer_workspace_new_hint', {root: workspace?.projects_root ?? ''})}
+          allowEmpty={false}
+          submitLabel={tr('common_create')}
+          describe={name =>
+            /[\\/]/.test(name) ? {text: tr('composer_workspace_name_no_slash'), tone: 'danger'} : null
+          }
+          onSubmit={createWorkspace}
+          onClose={() => setNewProjectOpen(false)}
         />
         <SessionSheet
           visible={sessionOpen}

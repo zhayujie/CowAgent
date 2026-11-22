@@ -1,4 +1,4 @@
-import {faFolder, faKeyboard} from '@fortawesome/free-regular-svg-icons';
+import {faFolder, faFolderOpen, faKeyboard} from '@fortawesome/free-regular-svg-icons';
 import {
   faArrowUp,
   faMicrochip,
@@ -22,7 +22,7 @@ import {
 } from 'react-native';
 import {tr, trf} from '../i18n';
 import type {Recording} from '../media/types';
-import type {AgentBadge, PermissionMode, WorkspaceHit} from '../protocol/resources';
+import type {AgentBadge, PermissionMode, ProjectRef, WorkspaceHit} from '../protocol/resources';
 import type {PendingAttachment} from '../store/composerStore';
 import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
@@ -55,6 +55,8 @@ interface Props {
   onRemoveAttachment: (id: string) => void;
   onRetryAttachment: (id: string) => void;
   onOpenAttach: () => void;
+  workspace?: ProjectRef | null;
+  onOpenWorkspace: () => void;
   model?: string;
   onOpenModel: () => void;
   permission?: PermissionMode;
@@ -85,6 +87,8 @@ export const Dock = forwardRef<TextInput | null, Props>(function DockInner(
     onRemoveAttachment,
     onRetryAttachment,
     onOpenAttach,
+    workspace,
+    onOpenWorkspace,
     model,
     onOpenModel,
     permission,
@@ -281,6 +285,22 @@ export const Dock = forwardRef<TextInput | null, Props>(function DockInner(
             hitSlop={4}
             style={({pressed}) => [styles.tool, pressed && styles.toolPressed]}>
             <Icon icon={faPaperclip} size={18} color={t.t2} />
+          </Pressable>
+
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={trf('composer_workspace_a11y', {
+              name: workspace?.name ?? tr('composer_workspace_default'),
+            })}
+            onPress={onOpenWorkspace}
+            hitSlop={4}
+            style={({pressed}) => [styles.tool, workspace && styles.workspaceTool, pressed && styles.toolPressed]}>
+            <Icon icon={faFolderOpen} size={17} color={workspace ? t.accent : t.t2} />
+            {!!workspace && (
+              <Text style={styles.workspaceName} numberOfLines={1}>
+                {workspace.name}
+              </Text>
+            )}
           </Pressable>
 
           <Pressable
@@ -601,6 +621,8 @@ const useStyles = makeStyles(t => {
       justifyContent: 'center',
     },
     toolPressed: {backgroundColor: t.bg2},
+    workspaceTool: {width: 'auto', maxWidth: 116, flexDirection: 'row', gap: 6, paddingHorizontal: 10},
+    workspaceName: {flexShrink: 1, fontSize: 12, color: t.accent},
     spacer: {flex: 1},
     send: {
       width: 38,
