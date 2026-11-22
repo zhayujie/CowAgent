@@ -78,9 +78,12 @@ function firstReachable(
   return new Promise(resolve => {
     let remaining = endpoints.length;
     let settled = false;
+    const delayed: ReturnType<typeof setTimeout>[] = [];
     const settle = (endpoint: RouterEndpoint | null) => {
       if (!settled) {
         settled = true;
+        // A local winner makes delayed public probes unnecessary.
+        delayed.forEach(clearTimeout);
         resolve(endpoint);
       }
     };
@@ -100,7 +103,7 @@ function firstReachable(
           });
       };
       if (ep.kind === 'wan') {
-        setTimeout(probe, WAN_HEAD_START_MS);
+        delayed.push(setTimeout(probe, WAN_HEAD_START_MS));
       } else {
         probe();
       }
@@ -322,7 +325,13 @@ class EndpointRouter {
     } catch {
       // A listener failing must not stop the router.
     }
-    this.listeners.forEach(listener => listener(endpoint));
+    this.listeners.forEach(listener => {
+      try {
+        listener(endpoint);
+      } catch {
+        // One stream consumer failing must not leave the router unscheduled.
+      }
+    });
   }
 }
 
