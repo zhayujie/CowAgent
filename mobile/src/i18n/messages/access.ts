@@ -9,6 +9,12 @@ const zh = {
   access_public_url_auto_restored: '已恢复自动识别',
   access_auto_detect: '自动识别',
   access_lan_urls: '本机地址',
+  access_ca_cert: 'CA 证书',
+  access_ca_cert_footer: '服务器使用自签 HTTPS 证书（如内网穿透、私有隧道）时，在此导入它的 CA 证书，安装到系统用户证书库后即受信任。',
+  access_ca_cert_prompted: '请在系统弹窗中确认安装',
+  access_ca_cert_invalid: '不是有效的证书文件',
+  access_ca_cert_android_only: '仅安卓支持在应用内导入证书',
+  connect_ca_cert: '使用自签证书？导入 CA 证书',
   access_lan_urls_footer: '同一局域网内的设备可用这些地址连接',
   access_copy_failed: '复制失败',
 
@@ -184,6 +190,13 @@ const en: Record<keyof typeof zh, string> = {
   access_public_url_auto_restored: 'Back to auto-detect',
   access_auto_detect: 'Auto-detect',
   access_lan_urls: 'Reachable at',
+  access_ca_cert: 'CA certificate',
+  access_ca_cert_footer:
+    'If the server uses a self-signed HTTPS certificate (e.g. a private tunnel), import its CA certificate here. It is installed into the system user store and trusted afterwards.',
+  access_ca_cert_prompted: 'Confirm the install in the system dialog',
+  access_ca_cert_invalid: 'Not a valid certificate file',
+  access_ca_cert_android_only: 'Importing certificates in the app is only available on Android',
+  connect_ca_cert: 'Self-signed certificate? Import the CA certificate',
   access_lan_urls_footer: 'Devices on the same LAN can connect with these addresses',
   access_copy_failed: 'Copy failed',
 

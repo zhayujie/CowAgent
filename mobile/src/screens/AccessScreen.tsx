@@ -1,7 +1,7 @@
-import {faCopy} from '@fortawesome/free-solid-svg-icons';
+import {faCertificate, faCopy} from '@fortawesome/free-solid-svg-icons';
 import type {StackScreenProps} from '@react-navigation/stack';
 import React, {useCallback, useEffect, useState} from 'react';
-import {RefreshControl, ScrollView, View} from 'react-native';
+import {Platform, RefreshControl, ScrollView, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {getIntegrations, savePublicUrl} from '../api/cowApi';
 import {InfoRow, Section} from '../components/forms';
@@ -9,6 +9,7 @@ import {Icon} from '../components/Icon';
 import {FieldSheet} from '../components/settings';
 import {showToast, ToastHost} from '../components/Toast';
 import {EmptyState, PageHeader} from '../components/ui';
+import {installCaCertificate} from '../files/caCert';
 import {tr} from '../i18n';
 import type {RootStackParamList} from '../navigation/types';
 import type {IntegrationsState} from '../protocol/resources';
@@ -103,6 +104,17 @@ export function AccessScreen({navigation}: Props) {
                 onPress={() => copy(url)}
               />
             ))}
+          </Section>
+        )}
+
+        {Platform.OS === 'android' && (
+          <Section footer={tr('access_ca_cert_footer')}>
+            <InfoRow
+              first
+              title={tr('access_ca_cert')}
+              right={<Icon icon={faCertificate} size={15} color={t.t3} />}
+              onPress={installCaCertificate}
+            />
           </Section>
         )}
       </ScrollView>
