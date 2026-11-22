@@ -2,7 +2,7 @@ import {Linking, NativeModules, Platform, Share} from 'react-native';
 import {create} from 'zustand';
 import {showToast} from '../components/Toast';
 import {serverUrl} from '../api/cowApi';
-import {tr, trf, type MessageKey} from '../i18n';
+import {tr, type MessageKey} from '../i18n';
 import {openWebPage, withoutLoginToken} from '../navigation/openWeb';
 import {navigationRef} from '../navigation/ref';
 import {useAgentStore} from '../store/agentStore';
@@ -20,6 +20,7 @@ import {
 } from './chatFile';
 import {cowNative, nativeError} from '../media/cowNative';
 import {canWriteDownloads} from './downloadPermission';
+import {downloadKey, listenForDownloadProgress, useDownloadStore} from './downloadStore';
 
 /** Read as text or rendered as a page on the preview screen. */
 const IN_APP = new Set(['markdown', 'text', 'csv', 'code', 'html']);
@@ -118,24 +119,31 @@ function nameFromUrl(url: string): string {
  * iOS downloads first and then offers the share sheet, HarmonyOS streams into
  * Downloads/<app name>. All settle once the file is kept.
  */
+const nativeDownloads = NativeModules.CowDownloads;
 const systemDownloads:
   | {
-      save(url: string, fileName: string): Promise<SavedTo>;
-      open?(url: string, fileName: string): Promise<'opened' | 'downloads'>;
+      save(url: string, fileName: string, id: string): Promise<SavedTo>;
+      open?(url: string, fileName: string, id: string): Promise<'opened' | 'downloads'>;
     }
   | undefined =
-  NativeModules.CowDownloads ??
-  (cowNative
-    ? {
-        save: (url, fileName) =>
-          cowNative!.saveDownload(url, fileName || nameFromUrl(url)).then(
-            () => 'downloads' as const,
-            (e: unknown) => {
-              throw nativeError(e);
-            },
-          ),
-      }
-    : undefined);
+  Platform.OS === 'android'
+    ? nativeDownloads
+    : nativeDownloads
+      ? {
+          // iOS predates progress ids and still exports the original two-argument method.
+          save: (url: string, fileName: string) => nativeDownloads.save(url, fileName),
+        }
+      : cowNative
+        ? {
+            save: (url, fileName) =>
+              cowNative!.saveDownload(url, fileName || nameFromUrl(url)).then(
+                () => 'downloads' as const,
+                (e: unknown) => {
+                  throw nativeError(e);
+                },
+              ),
+          }
+        : undefined;
 
 const savesNatively = (url: string) => !!systemDownloads && /^https?:/i.test(url);
 
@@ -145,21 +153,42 @@ const SAVED_TOAST: Partial<Record<NonNullable<SavedTo>, MessageKey>> = {
   files: 'file_saved_files',
 };
 
+const activeDownloads = new Map<string, Promise<SavedTo>>();
+const activeOpens = new Map<string, Promise<'opened' | 'downloads'>>();
+
 /** An empty `fileName` leaves the name to the native side, which can read the server's on iOS. */
 async function saveToDownloads(url: string, name: string, fileName = name) {
+  const id = downloadKey(url, fileName || name);
+  const running = activeDownloads.get(id);
+  if (running) {
+    // Repeated taps join the same request instead of creating another Downloads entry.
+    return running;
+  }
+  const current = useDownloadStore.getState().byId[id];
+  if (current?.status === 'done') {
+    showToast(tr('file_saved_downloads'));
+    return;
+  }
   if (!(await canWriteDownloads())) {
     showToast(tr('file_download_no_permission'));
     return;
   }
-  showToast(trf('file_download_started', {name}));
+  listenForDownloadProgress();
+  useDownloadStore.getState().start(id, url, name);
+  const work = systemDownloads!.save(url, fileName, id);
+  activeDownloads.set(id, work);
   try {
-    const savedTo = await systemDownloads!.save(url, fileName);
+    const savedTo = await work;
+    useDownloadStore.getState().finish(id);
     const key = savedTo ? SAVED_TOAST[savedTo] : undefined;
     if (key) {
       showToast(tr(key));
     }
   } catch {
+    useDownloadStore.getState().fail(id);
     showToast(tr('file_download_failed'));
+  } finally {
+    activeDownloads.delete(id);
   }
 }
 
@@ -217,15 +246,26 @@ export async function openWithSystem(f: ChatFile) {
     showToast(tr('file_download_no_permission'));
     return;
   }
-  showToast(trf('file_open_with_starting', {name: f.name}));
+  const id = downloadKey(url, f.name);
+  const running = activeOpens.get(id);
+  if (running) {
+    return running;
+  }
+  listenForDownloadProgress();
+  useDownloadStore.getState().start(id, url, f.name);
+  const work = systemDownloads.open(url, f.name, id);
+  activeOpens.set(id, work);
   try {
-    const result = await systemDownloads.open(url, f.name);
+    const result = await work;
+    useDownloadStore.getState().finish(id);
     if (result !== 'opened') {
       showToast(tr('file_saved_downloads'));
     }
   } catch {
-    // The chooser failing still saves the file; anything thrown is the download itself.
+    useDownloadStore.getState().fail(id);
     showToast(tr('file_download_failed'));
+  } finally {
+    activeOpens.delete(id);
   }
 }
 

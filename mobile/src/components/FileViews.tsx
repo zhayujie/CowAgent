@@ -26,6 +26,7 @@ import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
 import {copyText} from '../utils/clipboard';
 import {formatBytes} from '../utils/format';
+import {DownloadProgressBar} from './DownloadProgress';
 import {KIND_LABEL, kindGroup, KindTile} from './ArtifactStrip';
 import {Icon} from './Icon';
 import {ImageViewer} from './ImageViewer';
@@ -63,6 +64,7 @@ export function FileCard({file}: {file: ChatFile}) {
           <Text style={styles.cardSub} numberOfLines={1}>
             {fileSubtitle(file)}
           </Text>
+          <DownloadProgressBar file={file} />
         </View>
         <View style={styles.cardActions}>
           {canPreviewInApp(file) && (
