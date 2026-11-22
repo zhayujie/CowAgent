@@ -178,21 +178,24 @@ class TaskStore:
             self.save_tasks(tasks)
         return True
     
-    def update_task(self, task_id: str, updates: dict) -> bool:
+    def update_task(self, task_id: str, updates: dict, *, missing_ok: bool = False) -> bool:
         """
         Update an existing task
         
         Args:
             task_id: Task ID
             updates: Dictionary of fields to update
+            missing_ok: Skip the update if the task has been deleted
             
         Returns:
-            True if successful
+            True if updated, or False if missing and missing_ok is set
         """
         with self.lock:
             tasks = self.load_tasks()
 
             if task_id not in tasks:
+                if missing_ok:
+                    return False
                 raise ValueError(f"Task '{task_id}' not found")
 
             tasks[task_id].update(updates)
