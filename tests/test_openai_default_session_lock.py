@@ -13,14 +13,9 @@ from channel.web.api import openai_compat as api
 
 @pytest.fixture
 def console(tmp_path, monkeypatch):
-    session = "openai:conversation:shared"
-    stripes = len(api._SESSION_LOCKS)
-    # Avoid incidental stripe collisions, which would hide the bug or turn
-    # the independent-Agent control into an unrelated scheduling wait.
-    primary = next(f"primary-{i}" for i in range(256)
-                   if hash((f"primary-{i}", session)) % stripes != hash(("", session)) % stripes)
-    other = next(f"other-{i}" for i in range(256)
-                 if hash((f"other-{i}", session)) % stripes != hash((primary, session)) % stripes)
+    # Each (Agent, session) has its own lock, so no ids need to be picked to
+    # dodge a shared lock stripe.
+    primary, other = "primary", "other"
     registry = AgentRegistry([
         AgentProfile(primary, "Primary", str(tmp_path / "primary")),
         AgentProfile(other, "Other", str(tmp_path / "other")),

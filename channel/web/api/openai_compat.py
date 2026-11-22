@@ -7,6 +7,7 @@ import queue
 import threading
 import time
 import uuid
+import weakref
 from typing import Callable, Iterator
 
 from common.log import logger
@@ -24,7 +25,38 @@ class OpenAIAPIError(Exception):
         self.code = code
 
 
-_SESSION_LOCKS = tuple(threading.Lock() for _ in range(64))
+class _SessionLock:
+    """A lock for one (Agent, session), dropped once nobody holds or awaits it."""
+
+    __slots__ = ("_lock", "__weakref__")
+
+    def __init__(self):
+        self._lock = threading.Lock()
+
+    def acquire(self, blocking: bool = True, timeout: float = -1) -> bool:
+        return self._lock.acquire(blocking, timeout)
+
+    def release(self) -> None:
+        self._lock.release()
+
+    def locked(self) -> bool:
+        return self._lock.locked()
+
+    def __enter__(self):
+        self._lock.acquire()
+        return self
+
+    def __exit__(self, *exc_info) -> None:
+        self._lock.release()
+
+
+# One lock per (Agent, session). Unrelated sessions never share one, so a long
+# run only queues requests in its own conversation. Weak values let an entry
+# go away once the last request holding or waiting on it has finished.
+_SESSION_LOCKS: "weakref.WeakValueDictionary[tuple, _SessionLock]" = (
+    weakref.WeakValueDictionary()
+)
+_SESSION_LOCKS_GUARD = threading.Lock()
 _STREAM_END = object()
 _STREAM_ERROR = object()
 _FIRST_EVENT_TIMEOUT_SECONDS = 30
@@ -344,9 +376,15 @@ def _sse_frame(payload: dict) -> str:
     return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
-def _session_lock(session_id: str, agent_id: str | None = None) -> threading.Lock:
+def _session_lock(session_id: str, agent_id: str | None = None) -> _SessionLock:
     owner = agent_id or _agent_registry().default_agent_id
-    return _SESSION_LOCKS[hash((owner, session_id)) % len(_SESSION_LOCKS)]
+    key = (owner, session_id)
+    with _SESSION_LOCKS_GUARD:
+        lock = _SESSION_LOCKS.get(key)
+        if lock is None:
+            lock = _SessionLock()
+            _SESSION_LOCKS[key] = lock
+        return lock
 
 
 def _request_cancel_scope(
