@@ -14,8 +14,8 @@ import {MediaView, type MediaKind} from '../components/MediaView';
 import {PreviewSkeleton} from '../components/Skeleton';
 import {ToastHost} from '../components/Toast';
 import {Chip, IconButton} from '../components/ui';
-import {type ChatFile, fileHttpError, rawUrlOf, viewUrlOf} from '../files/chatFile';
-import {downloadKey, useDownloadStore} from '../files/downloadStore';
+import {type ChatFile, fileHttpError, fileKeyOf, viewUrlOf} from '../files/chatFile';
+import {useDownloadStore} from '../files/downloadStore';
 import {downloadFile, MEDIA_KINDS, openAsWebPage, openWithSystem} from '../files/openFile';
 import {tr, trf} from '../i18n';
 import {EDGE_ONLY, useFullBackSwipe} from '../navigation/gestures';
@@ -59,7 +59,7 @@ export function FilePreviewScreen({route, navigation}: Props) {
   const [scrolled, setScrolled] = useState(false);
   const [acting, setActing] = useState(false);
   const fullBackSwipe = useFullBackSwipe();
-  const download = useDownloadStore(s => s.byId[downloadKey(rawUrlOf(file), file.name)]);
+  const download = useDownloadStore(s => s.byId[fileKeyOf(file)]);
   const downloadLabel =
     download?.status === 'downloading'
       ? tr('file_downloading')

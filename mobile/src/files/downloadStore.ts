@@ -9,11 +9,13 @@ export interface DownloadProgress {
   status: DownloadStatus;
   loaded: number;
   total: number | null;
+  /** The size the server reported, for responses that arrive without one (chunked). */
+  expected: number | null;
 }
 
 interface DownloadState {
   byId: Record<string, DownloadProgress>;
-  start: (id: string, url: string, name: string) => void;
+  start: (id: string, url: string, name: string, expected?: number) => void;
   progress: (id: string, loaded: number, total: number) => void;
   finish: (id: string) => void;
   fail: (id: string) => void;
@@ -21,23 +23,28 @@ interface DownloadState {
 
 export const useDownloadStore = create<DownloadState>(set => ({
   byId: {},
-  start: (id, url, name) =>
+  start: (id, url, name, expected) =>
     set(s => ({
       byId: {
         ...s.byId,
-        [id]: {url, name, status: 'downloading', loaded: 0, total: null},
+        [id]: {url, name, status: 'downloading', loaded: 0, total: null, expected: expected || null},
       },
     })),
   progress: (id, loaded, total) =>
     set(s => {
       const current = s.byId[id];
-      if (!current) {
+      // An event in flight when the download settles must not bring the bar back.
+      if (!current || current.status === 'done') {
+        return s;
+      }
+      const nextTotal = total > 0 ? total : current.total;
+      if (current.loaded === loaded && current.total === nextTotal) {
         return s;
       }
       return {
         byId: {
           ...s.byId,
-          [id]: {...current, status: 'downloading', loaded, total: total > 0 ? total : null},
+          [id]: {...current, status: 'downloading', loaded, total: nextTotal},
         },
       };
     }),
@@ -53,8 +60,21 @@ export const useDownloadStore = create<DownloadState>(set => ({
     }),
 }));
 
+/**
+ * A key for a URL that is not a known file (a link inside a page, the server log). The login
+ * token rotates on every refresh, so it is stripped; dropping it must not merge two files.
+ */
+const withoutToken = (url: string) => {
+  const [base, query] = url.split('?');
+  if (!query) {
+    return url;
+  }
+  const kept = query.split('&').filter(part => !/^token=/i.test(part));
+  return kept.length ? `${base}?${kept.join('&')}` : base;
+};
+
 /** One identity for a remote file, shared by save, open-with, cards and the preview page. */
-export const downloadKey = (url: string, name: string) => JSON.stringify([url, name]);
+export const downloadKey = (url: string, name: string) => JSON.stringify([withoutToken(url), name]);
 
 let nativeProgress: EmitterSubscription | null = null;
 

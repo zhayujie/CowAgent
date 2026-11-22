@@ -1,11 +1,15 @@
 package ai.cowagent.app.files
 
 import android.content.ContentValues
+import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.media.MediaScannerConnection
 import android.os.Build
 import android.os.Environment
+import android.os.SystemClock
 import android.provider.MediaStore
+import android.provider.OpenableColumns
 import android.util.Log
 import android.webkit.MimeTypeMap
 import android.webkit.URLUtil
@@ -40,6 +44,7 @@ import java.util.concurrent.Executors
 class CowDownloadsModule(context: ReactApplicationContext) : ReactContextBaseJavaModule(context) {
   private val io: ExecutorService = Executors.newFixedThreadPool(2)
   private val fileLocks = ConcurrentHashMap<String, Any>()
+  private val lastEmit = ConcurrentHashMap<String, Long>()
 
   override fun getName() = "CowDownloads"
 
@@ -81,12 +86,14 @@ class CowDownloadsModule(context: ReactApplicationContext) : ReactContextBaseJav
             promise.resolve("opened")
           } else {
             // A file left in the private cache is not a completed public download.
-            promise.resolve(if (saveToDownloads(name, target)) "downloads" else "files")
+            promise.resolve(keepInDownloads(id, name, target))
           }
         } else {
-          promise.resolve(if (saveToDownloads(name, target)) "downloads" else "files")
+          promise.resolve(keepInDownloads(id, name, target))
         }
         } catch (e: Exception) {
+          // The status is what makes a failed retry actionable; keep it in the message.
+          Log.w(TAG, "Download of $name failed: ${e.message}", e)
           promise.reject("download_failed", e.message ?: "Download failed", e)
         }
       }
@@ -100,6 +107,7 @@ class CowDownloadsModule(context: ReactApplicationContext) : ReactContextBaseJav
     if (!resume) {
       partial.delete()
     }
+    // No TLS setup here: CowTls puts the imported anchors on java.net's defaults.
     val conn = (URL(url).openConnection() as HttpURLConnection).apply {
       connectTimeout = 15_000
       readTimeout = 60_000
@@ -155,6 +163,8 @@ class CowDownloadsModule(context: ReactApplicationContext) : ReactContextBaseJav
       if (total >= 0 && partial.length() != total) {
         throw IOException("Incomplete download")
       }
+      emitProgress(id, partial.length(), total, force = true)
+      lastEmit.remove(id)
       publish(partial, target)
     } finally {
       // Do not delete the part on failure: the next tap resumes from this byte.
@@ -179,7 +189,18 @@ class CowDownloadsModule(context: ReactApplicationContext) : ReactContextBaseJav
     }
   }
 
-  private fun emitProgress(id: String, loaded: Long, total: Long) {
+  /**
+   * Progress crosses the JS bridge, and every event costs a render there. An 80 MB file arrives
+   * in ~1300 chunks: sending each one saturates the JS thread, so the bar keeps replaying a
+   * backlog long after the bytes are on disk and the rest of the screen stutters. One update per
+   * [EMIT_INTERVAL_MS] is far more than an eye can take in, and the last one is always sent.
+   */
+  private fun emitProgress(id: String, loaded: Long, total: Long, force: Boolean = false) {
+    val now = SystemClock.elapsedRealtime()
+    if (!force && now - (lastEmit[id] ?: 0L) < EMIT_INTERVAL_MS) {
+      return
+    }
+    lastEmit[id] = now
     if (!reactApplicationContext.hasActiveReactInstance()) {
       return
     }
@@ -195,8 +216,53 @@ class CowDownloadsModule(context: ReactApplicationContext) : ReactContextBaseJav
     }
   }
 
+  /**
+   * Copies into Downloads unless this file is already there. A second tap on download must not
+   * leave a duplicate next to the first one, so the copy is remembered and checked by size.
+   */
+  private fun keepInDownloads(id: String, name: String, source: File): String {
+    val known = remembered(id)
+    if (known != null && stillThere(known)) {
+      return "present"
+    }
+    val uri = saveToDownloads(name, source) ?: return "files"
+    remember(id, uri, source.length())
+    return "downloads"
+  }
+
+  private data class Saved(val uri: Uri, val size: Long)
+
+  private fun remembered(id: String): Saved? {
+    val raw = prefs().getString(SAVED_PREFIX + hash(id), null) ?: return null
+    val uri = runCatching { Uri.parse(raw.substringBefore('|')) }.getOrNull() ?: return null
+    return Saved(uri, raw.substringAfter('|', "").toLongOrNull() ?: return null)
+  }
+
+  /** A row outlives the file itself: the user may have deleted it from Files. */
+  private fun stillThere(saved: Saved): Boolean {
+    val resolver = reactApplicationContext.contentResolver
+    return runCatching {
+      resolver.openAssetFileDescriptor(saved.uri, "r")?.use { it.length == saved.size }
+        ?: resolver.query(saved.uri, arrayOf(OpenableColumns.SIZE), null, null, null)?.use { c ->
+          c.moveToFirst() && c.getLong(0) == saved.size
+        }
+        ?: false
+    }.getOrDefault(false)
+  }
+
+  private fun remember(id: String, uri: Uri, size: Long) {
+    val prefs = prefs()
+    if (prefs.all.size >= MAX_REMEMBERED) {
+      // Cheap ceiling: the table only saves a duplicate copy, so losing it costs little.
+      prefs.edit().clear().apply()
+    }
+    prefs.edit().putString(SAVED_PREFIX + hash(id), "$uri|$size").apply()
+  }
+
+  private fun prefs() = reactApplicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+
   /** Downloads to the public Downloads folder; MediaStore is the only writable path on Android 10+. */
-  private fun saveToDownloads(name: String, source: File): Boolean {
+  private fun saveToDownloads(name: String, source: File): Uri? {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
       val resolver = reactApplicationContext.contentResolver
       val values = ContentValues().apply {
@@ -205,14 +271,14 @@ class CowDownloadsModule(context: ReactApplicationContext) : ReactContextBaseJav
         put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
         put(MediaStore.Downloads.IS_PENDING, 1)
       }
-      val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values) ?: return false
+      val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values) ?: return null
       try {
         val output = resolver.openOutputStream(uri) ?: throw IOException("Cannot open download destination")
         source.inputStream().use { input -> output.use { input.copyTo(it) } }
         values.clear()
         values.put(MediaStore.Downloads.IS_PENDING, 0)
         resolver.update(uri, values, null, null)
-        return true
+        return uri
       } catch (e: Exception) {
         resolver.delete(uri, null, null)
         throw e
@@ -220,13 +286,13 @@ class CowDownloadsModule(context: ReactApplicationContext) : ReactContextBaseJav
     }
     val dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
     if (!dir.exists() && !dir.mkdirs()) {
-      return false
+      return null
     }
     val target = availableFile(dir, name)
     try {
       source.inputStream().use { input -> target.outputStream().use { output -> input.copyTo(output) } }
       MediaScannerConnection.scanFile(reactApplicationContext, arrayOf(target.absolutePath), null, null)
-      return true
+      return Uri.fromFile(target)
     } catch (e: Exception) {
       target.delete()
       throw e
@@ -290,6 +356,10 @@ class CowDownloadsModule(context: ReactApplicationContext) : ReactContextBaseJav
 
   private companion object {
     const val TAG = "CowDownloads"
+    const val PREFS = "cow-downloads"
+    const val SAVED_PREFIX = "saved-"
+    const val MAX_REMEMBERED = 500
+    const val EMIT_INTERVAL_MS = 100L
 
     val OFFICE_MIME = mapOf(
       "doc" to "application/msword",

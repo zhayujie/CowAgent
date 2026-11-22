@@ -2,7 +2,7 @@ import {Linking, NativeModules, Platform, Share} from 'react-native';
 import {create} from 'zustand';
 import {showToast} from '../components/Toast';
 import {serverUrl} from '../api/cowApi';
-import {tr, type MessageKey} from '../i18n';
+import {tr, trf, type MessageKey} from '../i18n';
 import {openWebPage, withoutLoginToken} from '../navigation/openWeb';
 import {navigationRef} from '../navigation/ref';
 import {useAgentStore} from '../store/agentStore';
@@ -10,6 +10,7 @@ import {useChatStore} from '../store/chatStore';
 import {copyText} from '../utils/clipboard';
 import {
   type ChatFile,
+  fileKeyOf,
   isUnsandboxedPage,
   outsideLinkOf,
   rawUrlOf,
@@ -102,7 +103,7 @@ export async function shareFile(f: ChatFile) {
 }
 
 /** Where a native save put the file; null when the user backed out of the iOS share sheet. */
-type SavedTo = 'downloads' | 'photos' | 'files' | 'other' | null;
+type SavedTo = 'downloads' | 'photos' | 'files' | 'other' | 'present' | null;
 
 /** The file name at the end of a URL, decoded; empty when there is none. */
 function nameFromUrl(url: string): string {
@@ -123,7 +124,7 @@ const nativeDownloads = NativeModules.CowDownloads;
 const systemDownloads:
   | {
       save(url: string, fileName: string, id: string): Promise<SavedTo>;
-      open?(url: string, fileName: string, id: string): Promise<'opened' | 'downloads'>;
+      open?(url: string, fileName: string, id: string): Promise<'opened' | 'downloads' | 'present'>;
     }
   | undefined =
   Platform.OS === 'android'
@@ -151,14 +152,34 @@ const SAVED_TOAST: Partial<Record<NonNullable<SavedTo>, MessageKey>> = {
   downloads: 'file_saved_downloads',
   photos: 'file_saved_photos',
   files: 'file_saved_files',
+  present: 'file_saved_already',
 };
 
-const activeDownloads = new Map<string, Promise<SavedTo>>();
-const activeOpens = new Map<string, Promise<'opened' | 'downloads'>>();
+/**
+ * The status the server or the socket gave, when it named one. Telling a reader "HTTP 403"
+ * instead of "failed" is the difference between a retry and a bug report.
+ */
+function failureReason(e: unknown): string {
+  const message = e instanceof Error ? e.message : String(e ?? '');
+  const code = /HTTP\s+(\d{3})/i.exec(message);
+  if (code) {
+    return `HTTP ${code[1]}`;
+  }
+  if (/timeout|timed out|ETIMEDOUT/i.test(message)) {
+    return tr('file_download_timeout');
+  }
+  return '';
+}
 
-/** An empty `fileName` leaves the name to the native side, which can read the server's on iOS. */
-async function saveToDownloads(url: string, name: string, fileName = name) {
-  const id = downloadKey(url, fileName || name);
+const activeDownloads = new Map<string, Promise<SavedTo>>();
+const activeOpens = new Map<string, Promise<'opened' | 'downloads' | 'present'>>();
+
+/**
+ * An empty `fileName` leaves the name to the native side, which can read the server's on iOS.
+ * `key` and `expected` come from the file itself when there is one; a bare link has neither.
+ */
+async function saveToDownloads(url: string, name: string, fileName = name, key?: string, expected?: number) {
+  const id = key || downloadKey(url, fileName || name);
   const running = activeDownloads.get(id);
   if (running) {
     // Repeated taps join the same request instead of creating another Downloads entry.
@@ -166,7 +187,7 @@ async function saveToDownloads(url: string, name: string, fileName = name) {
   }
   const current = useDownloadStore.getState().byId[id];
   if (current?.status === 'done') {
-    showToast(tr('file_saved_downloads'));
+    showToast(tr('file_saved_already'));
     return;
   }
   if (!(await canWriteDownloads())) {
@@ -174,19 +195,20 @@ async function saveToDownloads(url: string, name: string, fileName = name) {
     return;
   }
   listenForDownloadProgress();
-  useDownloadStore.getState().start(id, url, name);
+  useDownloadStore.getState().start(id, url, name, expected);
   const work = systemDownloads!.save(url, fileName, id);
   activeDownloads.set(id, work);
   try {
     const savedTo = await work;
     useDownloadStore.getState().finish(id);
-    const key = savedTo ? SAVED_TOAST[savedTo] : undefined;
-    if (key) {
-      showToast(tr(key));
+    const message = savedTo ? SAVED_TOAST[savedTo] : undefined;
+    if (message) {
+      showToast(tr(message));
     }
-  } catch {
+  } catch (e) {
     useDownloadStore.getState().fail(id);
-    showToast(tr('file_download_failed'));
+    const reason = failureReason(e);
+    showToast(reason ? trf('file_download_failed_reason', {reason}) : tr('file_download_failed'));
   } finally {
     activeDownloads.delete(id);
   }
@@ -209,7 +231,7 @@ export function downloadUrl(url: string, name?: string) {
 export function downloadFile(f: ChatFile) {
   const url = rawUrlOf(f);
   if (savesNatively(url)) {
-    saveToDownloads(url, f.name);
+    saveToDownloads(url, f.name, f.name, fileKeyOf(f), f.size);
     return;
   }
   if (Platform.OS === 'web' && url && typeof document !== 'undefined') {
@@ -246,27 +268,30 @@ export async function openWithSystem(f: ChatFile) {
     showToast(tr('file_download_no_permission'));
     return;
   }
-  const id = downloadKey(url, f.name);
+  const id = fileKeyOf(f);
   const running = activeOpens.get(id);
   if (running) {
     return running;
   }
   listenForDownloadProgress();
-  useDownloadStore.getState().start(id, url, f.name);
+  useDownloadStore.getState().start(id, url, f.name, f.size);
   const work = systemDownloads.open(url, f.name, id);
   activeOpens.set(id, work);
   try {
     const result = await work;
     useDownloadStore.getState().finish(id);
     // Nothing took the file, so say where it went instead of implying it opened.
-    if (result === 'downloads') {
+    if (result === 'present') {
+      showToast(tr('file_saved_already'));
+    } else if (result === 'downloads') {
       showToast(tr('file_open_no_app'));
     } else if (result !== 'opened') {
       showToast(tr('file_saved_files'));
     }
-  } catch {
+  } catch (e) {
     useDownloadStore.getState().fail(id);
-    showToast(tr('file_download_failed'));
+    const reason = failureReason(e);
+    showToast(reason ? trf('file_download_failed_reason', {reason}) : tr('file_download_failed'));
   } finally {
     activeOpens.delete(id);
   }
