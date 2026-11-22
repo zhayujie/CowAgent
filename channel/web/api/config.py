@@ -12,7 +12,7 @@ import threading
 import web
 
 from agent.permission import (
-    MODES as PERMISSION_MODES,
+    available_modes as permission_modes,
     global_mode as permission_global_mode,
     normalize_mode as permission_normalize_mode,
 )
@@ -166,7 +166,7 @@ class ConfigHandler:
                 "subagent_enabled": SubagentSettings.from_config().enabled,
                 # Default permission mode for sessions that have not pinned one.
                 "agent_permission_mode": permission_global_mode(),
-                "permission_modes": list(PERMISSION_MODES),
+                "permission_modes": list(permission_modes()),
                 "api_bases": api_bases,
                 "api_keys": api_keys_masked,
                 "providers": providers,

@@ -143,6 +143,10 @@ _mcp_tools = _import_mcp_tools()
 McpTool = _mcp_tools.get('McpTool')
 McpClientRegistry = _mcp_tools.get('McpClientRegistry')
 
+from agent.tools.phone import (
+    PhoneCalendar, PhoneContacts, PhoneDevice, PhoneLocation, PhoneOpen, PhonePhotos, PhoneShare,
+)
+
 # Export all tools (including optional ones that might be None)
 __all__ = [
     'BaseTool',
@@ -167,6 +171,13 @@ __all__ = [
     'BrowserTool',
     'McpTool',
     'TimeTool',
+    'PhoneOpen',
+    'PhoneLocation',
+    'PhoneCalendar',
+    'PhoneContacts',
+    'PhonePhotos',
+    'PhoneShare',
+    'PhoneDevice',
 ]
 
 """

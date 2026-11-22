@@ -12,9 +12,16 @@ from config import conf
 # can provide.
 _MOBILE_UNAVAILABLE_TOOLS = frozenset({"bash", "browser"})
 
+# Tools the mobile app carries out on its phone; nothing else can.
+_MOBILE_ONLY_TOOLS = frozenset({
+    "phone_open", "phone_location", "phone_calendar", "phone_contacts", "phone_photos", "phone_share", "phone_device",
+})
+
 
 def _available_here(tool_name: str) -> bool:
-    return not (is_mobile() and tool_name in _MOBILE_UNAVAILABLE_TOOLS)
+    if is_mobile():
+        return tool_name not in _MOBILE_UNAVAILABLE_TOOLS
+    return tool_name not in _MOBILE_ONLY_TOOLS
 
 
 def _normalize_mcp_configs(raw) -> list:

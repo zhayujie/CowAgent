@@ -63,6 +63,7 @@ from channel.web.api.openai_compat import (  # noqa: F401
 from channel.web.api.pages import (  # noqa: F401
     AssetsHandler, ChatHandler, HealthHandler, InstanceWorkerHandler, RootHandler,
 )
+from channel.web.api.phone import PHONE_URLS, PhoneAnswerHandler, PhonePollHandler  # noqa: F401
 from channel.web.api.scheduler import (  # noqa: F401
     SchedulerCreateHandler, SchedulerDeleteHandler, SchedulerHandler,
     SchedulerInstancesHandler, SchedulerRecipientsHandler,
@@ -163,6 +164,7 @@ URLS = (
     '/api/weixin/qrlogin', 'WeixinQrHandler',
     '/api/feishu/register', 'FeishuRegisterHandler',
     '/api/tools', 'ToolsHandler',
+    *PHONE_URLS,
     '/api/mcp/servers', 'McpServersHandler',
     '/api/mcp/servers/test', 'McpServerTestHandler',
     '/api/skills', 'SkillsHandler',

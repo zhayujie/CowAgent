@@ -16,7 +16,7 @@ import json
 import web
 
 from agent.permission import (
-    MODES as PERMISSION_MODES,
+    available_modes as permission_modes,
     global_mode as permission_global_mode,
     normalize_mode as permission_normalize_mode,
 )
@@ -672,7 +672,7 @@ def _session_settings_state(session_id: str, agent_id: Optional[str]) -> dict:
             ),
             "source": "session" if prefs.get("permission") else "global",
             "global": global_permission,
-            "modes": list(PERMISSION_MODES),
+            "modes": list(permission_modes()),
         },
         "team": _session_team_state(prefs, agent_id),
     }

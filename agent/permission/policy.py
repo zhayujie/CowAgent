@@ -71,15 +71,21 @@ _ALIASES = {
 _IS_WIN = sys.platform == "win32"
 
 
+def available_modes() -> Tuple[str, ...]:
+    """The modes this deployment offers.
+
+    The phone's agent lives inside the app's sandbox and never reaches the
+    rest of the device, so "full access" would promise what it cannot do.
+    """
+    return tuple(m for m in MODES if m != FULL_ACCESS) if is_mobile() else MODES
+
+
 def normalize_mode(value: Any, default: Optional[str] = None) -> str:
-    """Coerce anything the API or config may hold into a known mode id."""
+    """Coerce anything the API or config may hold into a mode this deployment offers."""
     fallback = default if default in MODES else DEFAULT_MODE
-    if not isinstance(value, str):
-        return fallback
-    v = value.strip().lower()
-    if v in MODES:
-        return v
-    return _ALIASES.get(v, fallback)
+    v = value.strip().lower() if isinstance(value, str) else ""
+    mode = v if v in MODES else _ALIASES.get(v, fallback)
+    return mode if mode in available_modes() else WORKSPACE_WRITE
 
 
 def global_mode() -> str:
@@ -89,7 +95,7 @@ def global_mode() -> str:
 
         return normalize_mode(conf().get(CONFIG_KEY))
     except Exception:
-        return DEFAULT_MODE
+        return normalize_mode(None)
 
 
 @dataclass
@@ -122,6 +128,7 @@ _ACTION_TOOLS: Dict[str, Tuple[str, frozenset]] = {
     # navigating and reading it does not.
     "browser": ("action", frozenset({"click", "fill", "select", "press", "evaluate"})),
     "scheduler": ("action", frozenset({"create", "delete", "enable", "disable"})),
+    "phone_calendar": ("action", frozenset({"create"})),
     "env_config": ("action", frozenset({"set", "delete"})),
 }
 
@@ -131,6 +138,9 @@ _KNOWN_TOOLS = frozenset({
     "read", "ls", "search_files", "memory_search", "memory_get", "web_search",
     "web_fetch", "vision", "send", "subagent", "bash", "write", "edit",
     "browser", "scheduler", "env_config", "evolution_undo", "time",
+    # phone_open and phone_share only hand over to another app, where the user
+    # finishes it, and phone_photos shares only what the user picks.
+    "phone_open", "phone_location", "phone_contacts", "phone_photos", "phone_share", "phone_device",
 })
 
 # MCP tools arrive with names we have never seen. Rather than guess "safe", read

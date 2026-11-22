@@ -52,10 +52,12 @@ class ToolsHandler:
                             "Create, query and manage scheduled tasks (reminders, periodic tasks, etc.).\n\n"
                             "⚠️ IMPORTANT: Only use this tool when delayed or periodic execution is needed."
                         )
-                    tools.append({
-                        "name": name,
-                        "description": desc,
-                    })
+                    entry = {"name": name, "description": desc}
+                    platforms = getattr(cls, "platforms", None)
+                    if platforms:
+                        entry["group"] = "phone"
+                        entry["platforms"] = list(platforms)
+                    tools.append(entry)
                 except Exception:
                     tools.append({"name": name, "description": ""})
             return json.dumps({"status": "success", "tools": tools}, ensure_ascii=False)
