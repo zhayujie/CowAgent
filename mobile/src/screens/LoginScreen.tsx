@@ -2,15 +2,18 @@ import {
   faCertificate,
   faCheck,
   faChevronLeft,
+  faCircleCheck,
   faDesktop,
   faKeyboard,
   faMobileScreen,
   faQrcode,
+  faTrashCan,
 } from '@fortawesome/free-solid-svg-icons';
 import type {IconDefinition} from '@fortawesome/fontawesome-svg-core';
 import React, {useEffect, useRef, useState} from 'react';
 import {
   ActivityIndicator,
+  Animated,
   BackHandler,
   Image,
   Pressable,
@@ -24,7 +27,7 @@ import {Platform} from 'react-native';
 import {isPublicCleartext} from '../api/http';
 import {addressCandidates, parsePairLink, type PairTarget} from '../api/pairing';
 import logo from '../assets/logo-mark.png';
-import {importCaCertificate} from '../files/caCert';
+import {importCaCertificate, listCaCertificates, removeCaCertificate, type CaCert} from '../files/caCert';
 import {Icon} from '../components/Icon';
 import {usePairAction} from '../components/PairFlow';
 import {QrScanner, qrScannerAvailable} from '../components/QrScanner';
@@ -71,10 +74,49 @@ export function LoginScreen() {
   });
   const [secret, setSecret] = useState('');
   const [focus, setFocus] = useState<'address' | 'secret' | null>(null);
+  const [certs, setCerts] = useState<CaCert[]>([]);
   // Sign-ins that need no form input: the built-in agent, or going back to the server left.
   const [pending, setPending] = useState<'local' | 'back' | null>(null);
   // A server that stepped aside (e.g. another machine now at its address) says why, once.
   const [formError, setFormError] = useState<string | null>(() => useServerStore.getState().problem);
+
+  const refreshCerts = React.useCallback(() => {
+    listCaCertificates().then(setCerts).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    refreshCerts();
+  }, [refreshCerts]);
+
+  const [flashName, setFlashName] = useState<string | null>(null);
+  const flashAnim = useRef(new Animated.Value(0)).current;
+
+  const addCert = async () => {
+    const entry = await importCaCertificate();
+    if (!entry) {
+      return;
+    }
+    refreshCerts();
+    // Highlight the row that was just added so the result of the pick is unmistakable.
+    setFlashName(entry.name);
+    flashAnim.stopAnimation();
+    flashAnim.setValue(1);
+    Animated.timing(flashAnim, {
+      toValue: 0,
+      duration: 1400,
+      delay: 300,
+      useNativeDriver: false,
+    }).start(({finished}) => {
+      if (finished) {
+        setFlashName(null);
+      }
+    });
+  };
+
+  const dropCert = async (name: string) => {
+    await removeCaCertificate(name);
+    refreshCerts();
+  };
   useEffect(() => {
     if (useServerStore.getState().problem) {
       useServerStore.setState({problem: null});
@@ -317,14 +359,44 @@ export function LoginScreen() {
             </Pressable>
             <Text style={styles.footnote}>{tr('connect_code_footnote')}</Text>
             {Platform.OS === 'android' && (
-              <Pressable
-                accessibilityRole="button"
-                disabled={busy}
-                onPress={importCaCertificate}
-                style={({pressed}) => [styles.caCert, pressed && styles.caCertPressed]}>
-                <Icon icon={faCertificate} size={13} color={t.accent} />
-                <Text style={styles.caCertText}>{tr('connect_ca_cert')}</Text>
-              </Pressable>
+              <View style={styles.caBox}>
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={busy}
+                  onPress={addCert}
+                  style={({pressed}) => [styles.caCert, pressed && styles.caCertPressed]}>
+                  <Icon icon={faCertificate} size={13} color={t.accent} />
+                  <Text style={styles.caCertText}>{tr('connect_ca_cert')}</Text>
+                </Pressable>
+                {certs.map(cert => (
+                  <Animated.View
+                    key={cert.name}
+                    style={[
+                      styles.caItem,
+                      cert.name === flashName && {
+                        backgroundColor: flashAnim.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [t.bg1, t.accentSoft],
+                        }),
+                        borderColor: flashAnim.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: ['transparent', t.accent],
+                        }),
+                      },
+                    ]}>
+                    <Icon icon={faCircleCheck} size={14} color={t.green} />
+                    <Text style={styles.caItemText} numberOfLines={1}>
+                      {cert.name}
+                    </Text>
+                    <Text style={[styles.caItemDate, cert.expired && {color: t.danger}]}>
+                      {cert.expired ? tr('access_ca_cert_expired') : cert.expires?.split(' ').slice(1, 4).join(' ')}
+                    </Text>
+                    <Pressable accessibilityRole="button" hitSlop={10} onPress={() => dropCert(cert.name)}>
+                      <Icon icon={faTrashCan} size={13} color={t.t3} />
+                    </Pressable>
+                  </Animated.View>
+                ))}
+              </View>
             )}
             {backLink}
           </>
@@ -482,8 +554,22 @@ const useStyles = makeStyles(t => ({
   buttonText: {fontSize: 16, fontWeight: '600', color: t.onAccent},
   buttonTextOff: {color: t.t3},
   footnote: {fontSize: 12, lineHeight: 18, color: t.t4, marginTop: 14},
-  caCert: {flexDirection: 'row', alignItems: 'center', alignSelf: 'center', gap: 6, marginTop: 16, paddingVertical: 6, paddingHorizontal: 10},
+  caBox: {marginTop: 16, gap: 8},
+  caCert: {flexDirection: 'row', alignItems: 'center', alignSelf: 'center', gap: 6, paddingVertical: 6, paddingHorizontal: 10},
   caCertPressed: {opacity: 0.6},
   caCertText: {fontSize: 13, color: t.accent},
+  caItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: 'transparent',
+    backgroundColor: t.bg1,
+  },
+  caItemText: {flex: 1, fontSize: 13, color: t.t1, fontWeight: '600'},
+  caItemDate: {fontSize: 11, color: t.t4},
   back: {fontSize: 14, color: t.accent, marginTop: 28, textAlign: 'center'},
 }));

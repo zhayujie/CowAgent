@@ -61,18 +61,23 @@ object CowTrustStore {
     TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm()).apply {
       init(null as KeyStore?)
     }.trustManagers.filterIsInstance<X509TrustManager>().forEach { result += it }
-
-    val certs = files(context).flatMap { runCatching { read(it) }.getOrDefault(emptyList()) }
-    if (certs.isNotEmpty()) {
-      val store = KeyStore.getInstance(KeyStore.getDefaultType()).apply {
-        load(null, null)
-        certs.forEachIndexed { i, cert -> setCertificateEntry("cow-ca-$i", cert) }
-      }
-      TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm()).apply {
-        init(store)
-      }.trustManagers.filterIsInstance<X509TrustManager>().forEach { result += it }
-    }
+    result += importedManager(context)
     return result
+  }
+
+  /**
+   * Reads the imports on every handshake. React Native hands its OkHttpClient to NetworkingModule
+   * once at startup and never rebuilds it, so a trust manager that caches the files would keep
+   * ignoring certificates imported after that point; reading on demand makes an import effective
+   * immediately, which also removes the need to restart or to touch the cached client.
+   */
+  private fun importedManager(context: Context): X509TrustManager {
+    val store = KeyStore.getInstance(KeyStore.getDefaultType()).apply { load(null, null) }
+    files(context).flatMap { runCatching { read(it) }.getOrDefault(emptyList()) }
+      .forEachIndexed { i, cert -> store.setCertificateEntry("cow-ca-$i", cert) }
+    val factory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm())
+    factory.init(store)
+    return factory.trustManagers.filterIsInstance<X509TrustManager>().first()
   }
 
   /** Wraps the managers together; falls back to the last error so failure messages stay useful. */
@@ -98,15 +103,11 @@ object CowTrustStore {
     override fun getAcceptedIssuers(): Array<X509Certificate> = all.flatMap { it.acceptedIssuers.toList() }.toTypedArray()
   }
 
-  /** Drops the cached React Native client so a just-imported certificate is used right away. */
-  fun invalidate() {
-    runCatching {
-      val f = OkHttpClientProvider::class.java.getDeclaredField("client")
-      f.isAccessible = true
-      // OkHttpClientProvider is a Kotlin object, so the field lives on its single instance.
-      f.set(OkHttpClientProvider, null)
-    }
-  }
+  /**
+   * Trust is evaluated per handshake, so nothing has to be rebuilt here; the helper exists so
+   * call sites read clearly and future caching can hook it.
+   */
+  fun invalidate() {}
 
   /** Registers the factory once, before React Native makes its first request. */
   fun install(context: Context) {

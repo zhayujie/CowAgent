@@ -1,7 +1,7 @@
 import {faCertificate, faCopy, faTrashCan} from '@fortawesome/free-solid-svg-icons';
 import type {StackScreenProps} from '@react-navigation/stack';
 import React, {useCallback, useEffect, useState} from 'react';
-import {Platform, RefreshControl, ScrollView, View} from 'react-native';
+import {Platform, Pressable, RefreshControl, ScrollView, Text, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {getIntegrations, savePublicUrl} from '../api/cowApi';
 import {InfoRow, Section} from '../components/forms';
@@ -9,7 +9,7 @@ import {Icon} from '../components/Icon';
 import {FieldSheet} from '../components/settings';
 import {showToast, ToastHost} from '../components/Toast';
 import {EmptyState, PageHeader} from '../components/ui';
-import {caCertSupported, importCaCertificate, listCaCertificates, openSystemCertSettings, removeCaCertificate, type CaCert} from '../files/caCert';
+import {caCertSupported, importCaCertificate, listCaCertificates, removeCaCertificate, type CaCert} from '../files/caCert';
 import {tr} from '../i18n';
 import type {RootStackParamList} from '../navigation/types';
 import type {IntegrationsState} from '../protocol/resources';
@@ -126,26 +126,36 @@ export function AccessScreen({navigation}: Props) {
         )}
 
         {Platform.OS === 'android' && caCertSupported && (
-          <Section title={tr('access_ca_cert')} footer={tr('access_ca_cert_footer')}>
+          <Section
+            title={tr('access_ca_cert')}
+            action={<Text style={styles.certCount}>{certs.length ? `+${certs.length}` : ''}</Text>}
+            footer={tr('access_ca_cert_footer')}>
             {certs.map((cert, i) => (
               <InfoRow
                 key={cert.name}
                 first={i === 0}
                 title={cert.name}
-                hint={cert.expires ? `${cert.subject} · ${cert.expires}` : cert.subject}
-                right={<Icon icon={faTrashCan} size={14} color={t.t3} />}
-                onPress={() => removeCert(cert.name)}
+                hint={cert.expired ? tr('access_ca_cert_expired') : cert.subject}
+                value={cert.expires?.split(' ').slice(1, 4).join(' ')}
+                danger={cert.expired}
+                right={
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={tr('access_ca_cert_remove')}
+                    hitSlop={10}
+                    onPress={() => removeCert(cert.name)}
+                    style={styles.certRemove}>
+                    <Icon icon={faTrashCan} size={14} color={t.danger} />
+                  </Pressable>
+                }
               />
             ))}
             <InfoRow
               first={certs.length === 0}
-              title={tr('access_ca_cert')}
+              title={tr('access_ca_cert_add')}
+              hint={certs.length ? undefined : tr('access_ca_cert_none')}
               right={<Icon icon={faCertificate} size={15} color={t.accent} />}
               onPress={importCert}
-            />
-            <InfoRow
-              title={tr('access_ca_cert_system')}
-              onPress={openSystemCertSettings}
             />
           </Section>
         )}
@@ -169,4 +179,6 @@ export function AccessScreen({navigation}: Props) {
 
 const useStyles = makeStyles(t => ({
   root: {flex: 1, backgroundColor: t.bg0},
+  certCount: {fontSize: 12, fontWeight: '600', color: t.t3},
+  certRemove: {paddingVertical: 8, paddingLeft: 12},
 }));
