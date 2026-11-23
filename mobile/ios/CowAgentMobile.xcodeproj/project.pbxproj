@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		0C80B921A6F3F58F76C31292 /* libPods-CowAgentMobile.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 5DCACB8F33CDC322A6C60F78 /* libPods-CowAgentMobile.a */; };
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
+		C0A1C0A1C0A1C0A1C0A10001 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = C0A1C0A1C0A1C0A1C0A10002 /* AppIcon.icon */; };
 		16E04128D9ABACFA56A3DA64 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */; };
 		1A7CF4D4EC71B1CB6BFEE593 /* Python.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = A225B396E5B9994DB8D00F2B /* Python.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		25D4EB80D4E9774B5B2734D8 /* Python.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = A225B396E5B9994DB8D00F2B /* Python.xcframework */; };
@@ -35,6 +36,7 @@
 
 /* Begin PBXFileReference section */
 		13B07F961A680F5B00A75B9A /* CowAgentMobile.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CowAgentMobile.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		C0A1C0A1C0A1C0A1C0A10002 /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; name = AppIcon.icon; path = CowAgentMobile/AppIcon.icon; sourceTree = "<group>"; };
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = CowAgentMobile/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = CowAgentMobile/Info.plist; sourceTree = "<group>"; };
 		13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = PrivacyInfo.xcprivacy; path = CowAgentMobile/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
@@ -66,6 +68,7 @@
 		13B07FAE1A68108700A75B9A /* CowAgentMobile */ = {
 			isa = PBXGroup;
 			children = (
+				C0A1C0A1C0A1C0A1C0A10002 /* AppIcon.icon */,
 				13B07FB51A68108700A75B9A /* Images.xcassets */,
 				761780EC2CA45674006654EE /* AppDelegate.swift */,
 				13B07FB61A68108700A75B9A /* Info.plist */,
@@ -189,6 +192,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */,
+				C0A1C0A1C0A1C0A1C0A10001 /* AppIcon.icon in Resources */,
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				16E04128D9ABACFA56A3DA64 /* PrivacyInfo.xcprivacy in Resources */,
 			);

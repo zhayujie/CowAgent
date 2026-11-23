@@ -1,7 +1,8 @@
 import {createStackNavigator} from '@react-navigation/stack';
 import React, {useMemo, type ReactNode} from 'react';
-import {ActivityIndicator, Platform, StyleSheet, View} from 'react-native';
+import {ActivityIndicator, Platform, StyleSheet, Text, View} from 'react-native';
 import {newSessionId} from '../api/cowApi';
+import {Logo} from '../components/Logo';
 import {Sidebar} from '../components/Sidebar';
 import {useLangStore} from '../i18n';
 import {AccessScreen} from '../screens/AccessScreen';
@@ -96,8 +97,13 @@ export function RootNavigator() {
 
   if (!hydrated || !prefsHydrated || !langHydrated) {
     return (
+      // Carries on from the native launch screen, laid out as it is, while the local agent starts.
       <View style={[styles.splash, {backgroundColor: t.bg0}]}>
-        <ActivityIndicator color={t.t3} />
+        <View style={styles.brand}>
+          <Logo size={80} />
+          <Text style={[styles.brandName, {color: t.t1}]}>CowAgent</Text>
+          <ActivityIndicator style={styles.brandSpinner} color={t.t3} />
+        </View>
       </View>
     );
   }
@@ -188,6 +194,10 @@ export function RootNavigator() {
 
 const styles = StyleSheet.create({
   splash: {flex: 1, alignItems: 'center', justifyContent: 'center'},
+  // The launch screen centres the logo 32pt above the middle, the name 16pt under it.
+  brand: {alignItems: 'center', transform: [{translateY: -8}]},
+  brandName: {marginTop: 16, fontSize: 26, lineHeight: 31, fontWeight: '600'},
+  brandSpinner: {position: 'absolute', top: '100%', marginTop: 28},
   split: {flex: 1, flexDirection: 'row'},
   // Pages slide within it, never over the sidebar.
   pane: {flex: 1, overflow: 'hidden'},
