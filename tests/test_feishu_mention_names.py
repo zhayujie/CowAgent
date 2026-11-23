@@ -173,7 +173,7 @@ def _group_post_with_file(monkeypatch, tmp_path, *elements):
 def test_group_post_of_a_file_and_mentions_waits_for_the_question(monkeypatch, tmp_path):
     # "@CowAgent @张三" with a file attached says nothing besides the mentions,
     # so like a file sent on its own it is cached until the question comes.
-    event, cache = _group_post_with_file(
+    event, _ = _group_post_with_file(
         monkeypatch,
         tmp_path,
         _at("@_user_1"),
@@ -182,7 +182,8 @@ def test_group_post_of_a_file_and_mentions_waits_for_the_question(monkeypatch, t
     )
 
     assert _produced(monkeypatch, event) == []
-    assert cache.get("oc_chat") == [{"path": str(tmp_path / "file_v3_report.pdf"), "type": "file"}]
+    question = _event("text", {"text": "@_user_1 总结一下报告"}, _mentions(BOT))
+    assert _agent_input(monkeypatch, question) == f"总结一下报告\n[文件: {tmp_path / 'file_v3_report.pdf'}]"
 
 
 def test_group_post_of_a_file_and_a_question_names_the_people_it_mentions(monkeypatch, tmp_path):

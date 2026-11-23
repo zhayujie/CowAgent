@@ -22,7 +22,7 @@ class FileCache:
         self.ttl = ttl
         self._lock = threading.Lock()
 
-    def add(self, session_id: str, file_path: str, file_type: str = "image"):
+    def add(self, session_id: str, file_path: str, file_type: str = "image", *, source=None):
         """
         添加文件到缓存
 
@@ -30,10 +30,13 @@ class FileCache:
             session_id: 会话ID
             file_path: 文件本地路径
             file_type: 文件类型（image, video, file 等）
+            source: 可选的原始消息资源标识
         """
         # Every add rewrites the entry, so the TTL runs from the most recent
         # file: a burst of files is one batch and must not lose its head.
         file_info = {'path': file_path, 'type': file_type}
+        if source is not None:
+            file_info['source'] = source
         with self._lock:
             files = self.cache.get(session_id) or []
             added = file_info not in files
@@ -55,6 +58,11 @@ class FileCache:
         """
         with self._lock:
             return self.cache.get(session_id) or []
+
+    def pop(self, session_id: str) -> list:
+        """Take the current batch without clearing files added afterwards."""
+        with self._lock:
+            return self.cache.pop(session_id, [])
 
     def clear(self, session_id: str):
         """

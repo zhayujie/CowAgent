@@ -4,6 +4,8 @@ from channel.chat_message import safe_filename
 import json
 import os
 import re
+import uuid
+from pathlib import Path
 import requests
 from common.log import logger
 from common import state_dir, utils
@@ -68,7 +70,8 @@ class FeishuMessage(ChatMessage):
     # Message types __init__ can parse; anything else raises NotImplementedError.
     SUPPORTED_TYPES = ("text", "image", "post", "file", "audio")
 
-    def __init__(self, event: dict, is_group=False, access_token=None, bot_mention_keys=(), domain=FEISHU_DOMAIN):
+    def __init__(self, event: dict, is_group=False, access_token=None, bot_mention_keys=(), domain=FEISHU_DOMAIN,
+                 *, attachment_cache_key=None):
         super().__init__(event)
         msg = event.get("message")
         sender = event.get("sender")
@@ -77,9 +80,12 @@ class FeishuMessage(ChatMessage):
         self.msg_id = msg.get("message_id")
         self.create_time = msg.get("create_time")
         self.is_group = is_group
+        self.attachment_cache_key = attachment_cache_key
         self.quoted_content = ""
         # Attachments belonging to this message, including downloaded quoted images.
         self.attachments = []
+        self.image_paths = {}
+        self.quoted_image_sources = set()
         msg_type = msg.get("message_type")
         # Who each mention key in a group message stands for; bot_mention_keys
         # are the bot's own. Direct messages are left as they are.
@@ -96,12 +102,12 @@ class FeishuMessage(ChatMessage):
             image_key = content.get("image_key")
             
             # 下载图片到工作空间临时目录
-            tmp_dir = str(state_dir.tmp_dir())
-            image_path = os.path.join(tmp_dir, f"{safe_filename(image_key) or 'image'}.png")
-            if _download_resource(self.msg_id, image_key, "image", access_token, image_path, MAX_IMAGE_BYTES, domain=self.domain):
+            image_path = self._download_image(self.msg_id, image_key)
+            if image_path:
                 logger.info(f"[FeiShu] Downloaded single image, key={image_key}, path={image_path}")
                 self.content = image_path
                 self.image_path = image_path  # 保存图片路径
+                self.image_paths[image_key] = image_path
             else:
                 self.content = f"[图片下载失败: {image_key}]"
                 self.image_path = None
@@ -202,11 +208,10 @@ class FeishuMessage(ChatMessage):
 
             # Only successful downloads are recorded as paths; failed ones
             # keep a marker so the agent knows something was sent.
-            self.image_paths = {}
             failed_images = []
             for image_key in dict.fromkeys(image_keys):
-                image_path = os.path.join(tmp_dir, f"{safe_filename(image_key) or 'image'}.png")
-                if _download_resource(self.msg_id, image_key, "image", access_token, image_path, MAX_IMAGE_BYTES, domain=self.domain):
+                image_path = self._download_image(self.msg_id, image_key)
+                if image_path:
                     self.image_paths[image_key] = image_path
                     self.attachments.append((image_path, "image"))
                     logger.info(f"[FeiShu] Image downloaded from post message, key={image_key}, path={image_path}")
@@ -307,6 +312,33 @@ class FeishuMessage(ChatMessage):
             )
         )
 
+    def _download_image(self, message_id, image_key):
+        # Cache entries must keep pointing to the same bytes even if another
+        # message uses the same Feishu resource key.
+        path = str(state_dir.tmp_dir() / f"{uuid.uuid4().hex}.png")
+        if _download_resource(message_id, image_key, "image", self.access_token, path,
+                              MAX_IMAGE_BYTES, domain=self.domain):
+            return path
+        return None
+
+    def _cached_quoted_image(self, parent_id, image_key):
+        if self.attachment_cache_key is None:
+            return None
+
+        from channel.file_cache import get_file_cache
+
+        for item in get_file_cache().get(self.attachment_cache_key):
+            if item["type"] != "image" or item.get("source") != (parent_id, image_key):
+                continue
+            path = Path(item["path"])
+            try:
+                tmp_dir = state_dir.tmp_dir().resolve()
+                if path.resolve(strict=True) == tmp_dir / path.name and path.is_file() and not path.is_symlink():
+                    return str(path)
+            except (OSError, RuntimeError):
+                continue
+        return None
+
     def _fetch_quoted_content(self, parent_id: str) -> dict:
         """Fetch quoted text and download quoted images for the current turn."""
         result = {"text": "", "attachments": []}
@@ -396,16 +428,18 @@ class FeishuMessage(ChatMessage):
             return {"text": "", "attachments": []}
 
         attachments = []
-        tmp_dir = str(state_dir.tmp_dir())
         for image_key in dict.fromkeys(image_keys):
-            image_path = os.path.join(
-                tmp_dir, f"quoted_{safe_filename(parent_id)}_{safe_filename(image_key) or 'image'}.png"
-            )
-            if _download_resource(parent_id, image_key, "image", self.access_token, image_path,
-                                  MAX_IMAGE_BYTES, domain=self.domain):
+            image_path = self._cached_quoted_image(parent_id, image_key)
+            if image_path:
+                logger.info("[FeiShu] Reused cached image for quote")
+            else:
+                image_path = self._download_image(parent_id, image_key)
+                if image_path:
+                    logger.info("[FeiShu] Downloaded quoted image, key=%s, path=%s", image_key, image_path)
+            if image_path:
+                self.quoted_image_sources.add((parent_id, image_key))
                 attachments.append((image_path, "image"))
                 parts.append(f"[图片: {image_path}]")
-                logger.info("[FeiShu] Downloaded quoted image, key=%s, path=%s", image_key, image_path)
             else:
                 parts.append(f"[引用图片下载失败: {image_key}]")
         return {"text": "\n".join(parts).strip(), "attachments": attachments}
