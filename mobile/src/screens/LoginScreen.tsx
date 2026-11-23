@@ -1,17 +1,22 @@
 import {
+  faCertificate,
   faCheck,
   faChevronLeft,
+  faCircleCheck,
   faDesktop,
   faKeyboard,
   faMobileScreen,
   faQrcode,
+  faTrashCan,
 } from '@fortawesome/free-solid-svg-icons';
 import type {IconDefinition} from '@fortawesome/fontawesome-svg-core';
 import React, {useEffect, useRef, useState} from 'react';
 import {
   ActivityIndicator,
+  Animated,
   BackHandler,
   Image,
+  Platform,
   Pressable,
   ScrollView,
   Text,
@@ -22,10 +27,11 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {isPublicCleartext} from '../api/http';
 import {addressCandidates, parsePairLink, type PairTarget} from '../api/pairing';
 import logo from '../assets/logo-mark.png';
+import {importCaCertificate, listCaCertificates, removeCaCertificate, type CaCert} from '../files/caCert';
 import {Icon} from '../components/Icon';
 import {usePairAction} from '../components/PairFlow';
 import {QrScanner, qrScannerAvailable} from '../components/QrScanner';
-import {ChoiceSheet} from '../components/settings';
+import {ChoiceSheet, ConfirmSheet} from '../components/settings';
 import {SHEET_DISMISS_MS} from '../components/Sheet';
 import {tr, trf} from '../i18n';
 import {isLocalKernelAvailable, LOCAL_SERVER_ID, localDeviceName} from '../kernel/localKernel';
@@ -68,10 +74,51 @@ export function LoginScreen() {
   });
   const [secret, setSecret] = useState('');
   const [focus, setFocus] = useState<'address' | 'secret' | null>(null);
+  const [certs, setCerts] = useState<CaCert[]>([]);
+  const [removingCert, setRemovingCert] = useState<string | null>(null);
   // Sign-ins that need no form input: the built-in agent, or going back to the server left.
   const [pending, setPending] = useState<'local' | 'back' | null>(null);
   // A server that stepped aside (e.g. another machine now at its address) says why, once.
   const [formError, setFormError] = useState<string | null>(() => useServerStore.getState().problem);
+
+  const refreshCerts = React.useCallback(() => {
+    listCaCertificates().then(setCerts).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    refreshCerts();
+  }, [refreshCerts]);
+
+  const [flashName, setFlashName] = useState<string | null>(null);
+  const flashAnim = useRef(new Animated.Value(0)).current;
+
+  const addCert = async () => {
+    const entry = await importCaCertificate();
+    if (!entry) {
+      return;
+    }
+    refreshCerts();
+    // Highlight the row that was just added so the result of the pick is unmistakable.
+    setFlashName(entry.name);
+    flashAnim.stopAnimation();
+    flashAnim.setValue(1);
+    Animated.timing(flashAnim, {
+      toValue: 0,
+      duration: 1400,
+      delay: 300,
+      useNativeDriver: false,
+    }).start(({finished}) => {
+      if (finished) {
+        setFlashName(null);
+      }
+    });
+  };
+
+  const dropCert = async (name: string) => {
+    await removeCaCertificate(name);
+    setRemovingCert(null);
+    refreshCerts();
+  };
   useEffect(() => {
     if (useServerStore.getState().problem) {
       useServerStore.setState({problem: null});
@@ -313,6 +360,46 @@ export function LoginScreen() {
               )}
             </Pressable>
             <Text style={styles.footnote}>{tr('connect_code_footnote')}</Text>
+            {Platform.OS === 'android' && (
+              <View style={styles.caBox}>
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={busy}
+                  onPress={addCert}
+                  style={({pressed}) => [styles.caCert, pressed && styles.caCertPressed]}>
+                  <Icon icon={faCertificate} size={13} color={t.accent} />
+                  <Text style={styles.caCertText}>{tr('connect_ca_cert')}</Text>
+                </Pressable>
+                {certs.map(cert => (
+                  <Animated.View
+                    key={cert.name}
+                    style={[
+                      styles.caItem,
+                      cert.name === flashName && {
+                        backgroundColor: flashAnim.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [t.bg1, t.accentSoft],
+                        }),
+                        borderColor: flashAnim.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: ['transparent', t.accent],
+                        }),
+                      },
+                    ]}>
+                    <Icon icon={faCircleCheck} size={14} color={t.green} />
+                    <Text style={styles.caItemText} numberOfLines={1}>
+                      {cert.name}
+                    </Text>
+                    <Text style={[styles.caItemDate, cert.expired && {color: t.danger}]}>
+                      {cert.expired ? tr('access_ca_cert_expired') : cert.expires?.split(' ').slice(1, 4).join(' ')}
+                    </Text>
+                    <Pressable accessibilityRole="button" hitSlop={10} onPress={() => setRemovingCert(cert.name)}>
+                      <Icon icon={faTrashCan} size={13} color={t.t3} />
+                    </Pressable>
+                  </Animated.View>
+                ))}
+              </View>
+            )}
             {backLink}
           </>
         )}
@@ -328,6 +415,15 @@ export function LoginScreen() {
         note={tr('connect_remote_note')}
         onSelect={onRemoteWay}
         onClose={() => setRemoteOpen(false)}
+      />
+      <ConfirmSheet
+        visible={!!removingCert}
+        title={removingCert ? trf('access_ca_cert_remove_title', {name: removingCert}) : ''}
+        message={tr('access_ca_cert_remove_message')}
+        confirmLabel={tr('access_ca_cert_remove')}
+        danger
+        onConfirm={() => (removingCert ? dropCert(removingCert) : undefined)}
+        onClose={() => setRemovingCert(null)}
       />
       <QrScanner visible={scanning} onClose={() => setScanning(false)} onScanned={onScanned} onManual={toManual} />
     </AvoidKeyboard>
@@ -467,5 +563,22 @@ const useStyles = makeStyles(t => ({
   buttonText: {fontSize: 16, fontWeight: '600', color: t.onAccent},
   buttonTextOff: {color: t.t3},
   footnote: {fontSize: 12, lineHeight: 18, color: t.t4, marginTop: 14},
+  caBox: {marginTop: 16, gap: 8},
+  caCert: {flexDirection: 'row', alignItems: 'center', alignSelf: 'center', gap: 6, paddingVertical: 6, paddingHorizontal: 10},
+  caCertPressed: {opacity: 0.6},
+  caCertText: {fontSize: 13, color: t.accent},
+  caItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: 'transparent',
+    backgroundColor: t.bg1,
+  },
+  caItemText: {flex: 1, fontSize: 13, color: t.t1, fontWeight: '600'},
+  caItemDate: {fontSize: 11, color: t.t4},
   back: {fontSize: 14, color: t.accent, marginTop: 28, textAlign: 'center'},
 }));
