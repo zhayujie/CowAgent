@@ -4,6 +4,7 @@ import AudioRecorderPlayer, {
   AudioSourceAndroidType,
   AVEncoderAudioQualityIOSType,
   AVEncodingOption,
+  AVLinearPCMBitDepthKeyIOSType,
   OutputFormatAndroidType,
   type AudioSet,
 } from 'react-native-audio-recorder-player';
@@ -36,8 +37,8 @@ const AUDIO_SET = {
   AudioChannelsHarmony: 1,
 } as AudioSet;
 
-// Android 10+ records Ogg Opus, which speech APIs take as is: AAC needs ffmpeg on the
-// server to convert, and the kernel inside this app has none.
+// Android 10+ records Ogg Opus and iOS 16-bit PCM WAV, which speech APIs take as is: AAC
+// needs ffmpeg on the server to convert, and the kernel inside this app has none.
 const OGG_OPUS = Platform.OS === 'android' && Number(Platform.Version) >= 29;
 const RECORD_SET: AudioSet = OGG_OPUS
   ? {
@@ -46,9 +47,25 @@ const RECORD_SET: AudioSet = OGG_OPUS
       AudioEncoderAndroid: AudioEncoderAndroidType.OPUS,
       AudioEncodingBitRateAndroid: 32000,
     }
-  : AUDIO_SET;
+  : Platform.OS === 'ios'
+    ? {
+        ...AUDIO_SET,
+        AVFormatIDKeyIOS: AVEncodingOption.wav,
+        // The recorder's defaults are big-endian and an odd bit depth, which no WAV reader takes.
+        AVLinearPCMBitDepthKeyIOS: AVLinearPCMBitDepthKeyIOSType.bit16,
+        AVLinearPCMIsBigEndianKeyIOS: false,
+        AVLinearPCMIsFloatKeyIOS: false,
+        AVLinearPCMIsNonInterleavedIOS: false,
+      }
+    : AUDIO_SET;
 
-const MIME: Record<string, string> = {m4a: 'audio/mp4', mp4: 'audio/mp4', aac: 'audio/aac', ogg: 'audio/ogg'};
+const MIME: Record<string, string> = {
+  m4a: 'audio/mp4',
+  mp4: 'audio/mp4',
+  aac: 'audio/aac',
+  ogg: 'audio/ogg',
+  wav: 'audio/wav',
+};
 
 export class MicPermissionError extends Error {}
 

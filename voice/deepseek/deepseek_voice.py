@@ -26,6 +26,7 @@ import wave
 import requests
 
 from bridge.reply import Reply, ReplyType
+from common.deployment import is_mobile
 from common.i18n import t as _t
 from common.log import logger
 from common.media_download import MAX_FILE_BYTES, MediaTooLargeError, save_response
@@ -208,6 +209,9 @@ class DeepSeekVoice(Voice):
             return Reply(ReplyType.TEXT, text)
         except _ConvertError as e:
             logger.error(f"[DeepSeekVoice] voiceToText can't convert {voice_file}: {e}")
+            # Inside the phone app there is no ffmpeg to install.
+            if is_mobile():
+                return Reply(ReplyType.ERROR, _t("暂不支持识别该录音格式", "This recording format isn't supported"))
             return Reply(ReplyType.ERROR, _t(
                 "无法转换该录音格式，请安装 ffmpeg 后重试",
                 "Can't convert this recording, please install ffmpeg and try again",
