@@ -9,20 +9,27 @@ export type Lang = 'zh' | 'en';
 const DICTS: Record<Lang, Record<MessageKey, string>> = {zh, en};
 const LANG_KEY = 'lang';
 
+// The system's own language comes first: iOS reports the app's current locale as one of
+// the app's localizations, so a Chinese iPhone shows up as en_CN there and to Intl.
+const LOCALE_SOURCES: (() => unknown)[] = [
+  () => (Platform.OS === 'web' ? navigator.language : undefined),
+  () => NativeModules.SettingsManager?.settings?.AppleLanguages?.[0],
+  () => (Platform.OS === 'android' ? I18nManager.getConstants?.().localeIdentifier : undefined),
+  () => Intl.DateTimeFormat().resolvedOptions().locale,
+];
+
 function systemLocale(): string {
-  try {
-    if (Platform.OS === 'web') {
-      return navigator.language || '';
+  for (const source of LOCALE_SOURCES) {
+    try {
+      const locale = source();
+      if (typeof locale === 'string' && locale) {
+        return locale;
+      }
+    } catch {
+      // The next source may still answer.
     }
-    return (
-      Intl.DateTimeFormat().resolvedOptions().locale ||
-      NativeModules.SettingsManager?.settings?.AppleLocale ||
-      I18nManager.getConstants?.().localeIdentifier ||
-      ''
-    );
-  } catch {
-    return '';
   }
+  return '';
 }
 
 /** First-run default, as on the desktop client: zh-* systems start in Chinese, everyone else in English. */
