@@ -261,6 +261,7 @@ const ChannelsPage: React.FC<ChannelsPageProps> = ({ baseUrl }) => {
                     channel={ch}
                     multiAgent={multiAgent}
                     onChanged={loadChannels}
+                    projectEditable={isMultiInstanceType(ch.name) && (!multiAgent || !!ch.instance_id)}
                   />
                 ))
               )}
@@ -538,7 +539,11 @@ const ChannelCard: React.FC<{
   // The add panel sets this so connect always mints a new instance rather than
   // editing the existing one of the same type.
   forceNewInstance?: boolean
-}> = ({ channel, onChanged, defaultExpanded = false, multiAgent = false, forceNewInstance = false }) => {
+  // The default project directory lives on a channel_instances record, so only
+  // multi-instance types (an instance card, or the per-type card in
+  // single-Agent mode) can store one.
+  projectEditable?: boolean
+}> = ({ channel, onChanged, defaultExpanded = false, multiAgent = false, forceNewInstance = false, projectEditable = false }) => {
   // A per-instance card (multi-Agent mode, with a concrete instance_id) is the
   // one whose title is the friendly instance name and which can be renamed.
   const isInstance = multiAgent && !!channel.instance_id
@@ -711,7 +716,7 @@ const ChannelCard: React.FC<{
         <ChannelBinding channel={channel} />
       )}
 
-      {channel.active && <ChannelProject channel={channel} onChanged={onChanged} />}
+      {channel.active && projectEditable && <ChannelProject channel={channel} onChanged={onChanged} />}
 
       {/* QR-login channels with no desktop support fall back to the web console. */}
       {isQrLogin && !channel.active && !qrProvider && (
@@ -856,7 +861,7 @@ const ChannelProject: React.FC<{channel: ChannelInfo; onChanged: () => void}> = 
       const data = await apiClient.browseChannelProject(dir)
       if (data.status !== 'success') throw new Error(data.message)
       setListing(data)
-    } catch (e) { setError(String(e)) }
+    } catch (e) { setError(e instanceof Error && e.message ? e.message : t('channels_save_error')) }
   }
   const save = async () => {
     if (path.trim() && !channel.session_namespace && !await askConfirm({
@@ -871,7 +876,7 @@ const ChannelProject: React.FC<{channel: ChannelInfo; onChanged: () => void}> = 
       const data = await apiClient.setChannelProject(channel.name, channel.instance_id || '', path)
       if (data.status !== 'success') throw new Error(data.message)
       onChanged()
-    } catch (e) { setError(String(e)) }
+    } catch (e) { setError(e instanceof Error && e.message ? e.message : t('channels_save_error')) }
     finally { setBusy(false) }
   }
   return <div className="mt-4 pt-4 border-t border-subtle space-y-2">

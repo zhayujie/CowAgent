@@ -484,18 +484,84 @@ def default_instance_name(channel_type: str, records: Iterable[Mapping[str, Any]
 
 def validate_project_dir(value: str) -> str:
     """Validate a server-side directory without creating it."""
-    from common.utils import expand_path
+    from agent.workspace.project_store import _normalize
 
     if not isinstance(value, str):
         raise ValueError("project_dir must be a string")
     if not value.strip():
         return ""
-    path = os.path.realpath(expand_path(value.strip()))
+    path = _normalize(value.strip())
     if not os.path.isdir(path):
         raise ValueError(f"Project directory does not exist: {path}")
-    if not os.access(path, os.R_OK | os.W_OK | os.X_OK):
+    # Write access is not required: a read-only checkout is a valid project.
+    if not os.access(path, os.R_OK | os.X_OK):
         raise ValueError(f"Project directory is not accessible: {path}")
     return path
+
+
+_SESSION_PREFIX = "channel:"
+
+
+def scoped_session_id(instance_id: str, session_id: str) -> str:
+    """Namespace *session_id* under its channel instance."""
+    return _SESSION_PREFIX + json.dumps(
+        [instance_id, session_id], separators=(",", ":"), ensure_ascii=True
+    )
+
+
+def channel_project_dir(session_id: str) -> str:
+    """The default project directory of the instance owning a scoped session.
+
+    Empty when the session is not scoped or its instance has no directory.
+    Raises ValueError when a configured directory is no longer usable, so a
+    caller never silently falls back to the Agent workspace.
+    """
+    if not (session_id or "").startswith(_SESSION_PREFIX):
+        return ""
+    try:
+        from config import conf
+
+        iid, _ = json.loads(session_id[len(_SESSION_PREFIX):])
+        inst = get_instance(conf(), str(iid))
+    except Exception as e:
+        logger.warning(f"[ChannelInstances] channel project lookup failed for '{session_id}': {e}")
+        return ""
+    if not inst or not inst.project_dir:
+        return ""
+    return validate_project_dir(inst.project_dir)
+
+
+def resolve_project_dir(session_id: str, agent_id: Optional[str] = None) -> Optional[str]:
+    """Working directory for a session: its own project, else its channel default.
+
+    None means the Agent workspace. Propagates ``channel_project_dir`` errors.
+    """
+    if not session_id:
+        return None
+    try:
+        from agent.workspace import project_store
+
+        project_dir = project_store.get_project_dir(session_id, agent_id)
+    except Exception as e:
+        logger.warning(f"[ChannelInstances] session project lookup failed for '{session_id}': {e}")
+        project_dir = None
+    return project_dir or channel_project_dir(session_id) or None
+
+
+_INSTANCES_CACHE: tuple = (None, [])
+
+
+def cached_channel_instances(settings: Mapping[str, Any]) -> List[ChannelInstance]:
+    """``resolve_channel_instances`` over the roster, re-read only when it changes."""
+    global _INSTANCES_CACHE
+    from agent import team
+
+    key = (team.stamp(settings), repr(settings.get("channel_type")))
+    cached_key, instances = _INSTANCES_CACHE
+    if cached_key != key:
+        instances = resolve_channel_instances(team.resolve(settings))
+        _INSTANCES_CACHE = (key, instances)
+    return instances
 
 
 def upsert_instance(
@@ -523,22 +589,23 @@ def upsert_instance(
     from agent import team
 
     ctype = _normalize_type((channel_type or "").strip())
+    if project_dir is not None and ctype not in MULTI_INSTANCE_READY:
+        raise ValueError(f"Default project directory is not supported for '{ctype}' channels")
+    normalized_project = validate_project_dir(project_dir) if project_dir is not None else None
     records = read_raw_instances(settings)
-    # A directory edit can be the first roster mutation on a legacy install.
-    # Carry every legacy channel over, not only the one being edited.
     if not records and project_dir is not None:
-        records = [
-            {"instance_id": inst.instance_id, "channel_type": inst.channel_type,
-             "credentials": _filtered_credentials(inst.channel_type, settings)}
-            for inst in _legacy_instances(settings)
-        ]
+        # Editing a legacy channel's directory must keep its flat credentials;
+        # team.write's bootstrap skips any type that already has a record.
+        legacy_roster = team.read(settings)
+        records = bootstrap_legacy_instances(
+            settings, legacy_roster, legacy_roster.get("default_agent_id") or ""
+        )
     taken = {str(r.get("instance_id") or "").strip() for r in records}
 
     target_id = (instance_id or "").strip()
     if not target_id:
         target_id = new_instance_id(ctype, taken)
 
-    normalized_project = validate_project_dir(project_dir) if project_dir is not None else None
     incoming_creds = _filtered_credentials(ctype, credentials or {})
 
     updated = False

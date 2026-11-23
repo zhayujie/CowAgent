@@ -118,14 +118,60 @@ def test_two_bots_same_agent_have_independent_cached_runtimes(settings, tmp_path
     assert a.project_dir == directories['bot-a']
 
 
-def test_legacy_directory_edit_preserves_all_channels(tmp_path, monkeypatch):
+def test_legacy_directory_edit_bootstraps_only_ready_channels(tmp_path, monkeypatch):
+    from app import _resolve_startup_channels
     monkeypatch.setitem(conf(), 'agent_workspace', str(tmp_path / 'state'))
-    monkeypatch.setitem(conf(), 'channel_type', ['feishu', 'qq', 'dingtalk'])
-    team.write(conf(), {})
+    monkeypatch.setitem(conf(), 'channel_type', 'web,wechatmp,feishu')
+    monkeypatch.setitem(conf(), 'feishu_app_id', 'A')
+    monkeypatch.setitem(conf(), 'feishu_app_secret', 'S')
     ci.upsert_instance(conf(), 'feishu', 'feishu', project_dir=str(tmp_path))
-    instances = ci.resolve_channel_instances(team.resolve(conf()))
-    assert {i.instance_id for i in instances} == {'feishu', 'qq', 'dingtalk'}
-    assert ci.get_instance(conf(), 'qq').project_dir == ''
+    records = ci.read_raw_instances(conf())
+    assert [r['instance_id'] for r in records] == ['feishu']
+    assert records[0]['credentials']['feishu_app_id'] == 'A'
+    assert records[0]['project_dir'] == str(tmp_path.resolve())
+    entries = _resolve_startup_channels(conf()['channel_type'])
+    types = [e if isinstance(e, str) else e.channel_type for e in entries]
+    assert sorted(types) == ['feishu', 'web', 'wechatmp']
+    with pytest.raises(ValueError, match='not supported'):
+        ci.upsert_instance(conf(), 'wechatmp', 'wechatmp', project_dir=str(tmp_path))
+    assert [r['instance_id'] for r in ci.read_raw_instances(conf())] == ['feishu']
+
+
+def test_read_only_directory_is_accepted(settings, tmp_path):
+    readonly = tmp_path / 'readonly'
+    readonly.mkdir()
+    readonly.chmod(0o555)
+    try:
+        assert ci.upsert_instance(settings, 'feishu', 'bot-a', project_dir=str(readonly)).project_dir == str(readonly.resolve())
+    finally:
+        readonly.chmod(0o755)
+
+
+def test_session_store_error_falls_back(settings, tmp_path, monkeypatch):
+    from agent.workspace import project_store
+    def broken(*args):
+        raise OSError('store unreadable')
+    monkeypatch.setattr(project_store, 'get_project_dir', broken)
+    seen = []
+    agent = SimpleNamespace(apply_project_dir=seen.append)
+    bridge = object.__new__(AgentBridge)
+    bridge._apply_session_project(agent, 'plain-session', 'default')
+    assert seen == [None]
+    ci.upsert_instance(settings, 'feishu', 'bot-a', project_dir=str(tmp_path))
+    bridge._apply_session_project(agent, context('bot-a')['session_id'], 'default')
+    assert seen[-1] == str(tmp_path.resolve())
+
+
+def test_file_roots_follow_channel_default(settings, tmp_path, monkeypatch):
+    from agent.protocol.artifact import artifact_root_for
+    from agent.workspace import project_store
+    from channel.web.core._common import _get_workspace_root
+    monkeypatch.setattr(project_store, 'get_project_dir', lambda *args: None)
+    ci.upsert_instance(settings, 'feishu', 'bot-a', project_dir=str(tmp_path))
+    sid = context('bot-a')['session_id']
+    assert artifact_root_for(sid, 'default', str(tmp_path / 'ws')) == str(tmp_path.resolve())
+    assert _get_workspace_root(sid, 'default') == str(tmp_path.resolve())
+    assert artifact_root_for('plain-session', 'default', str(tmp_path / 'ws')) == str(tmp_path / 'ws')
 
 
 def test_project_api_validates_and_persists(settings, tmp_path, monkeypatch):
@@ -143,6 +189,9 @@ def test_project_api_validates_and_persists(settings, tmp_path, monkeypatch):
     assert ci.get_instance(settings, 'bot-a').project_dir == str(tmp_path.resolve())
     assert post(project_dir='')['status'] == 'success'
     assert ci.get_instance(settings, 'bot-a').session_namespace
+    unsupported = post(channel='wechatmp', instance_id='', project_dir=str(tmp_path))
+    assert unsupported['status'] == 'error' and 'not supported' in unsupported['message']
+    assert {r['instance_id'] for r in ci.read_raw_instances(settings)} == {'bot-a', 'bot-b'}
 
 
 def test_legacy_default_unchanged_without_setting():

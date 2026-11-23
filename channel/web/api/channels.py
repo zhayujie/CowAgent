@@ -357,7 +357,10 @@ class ChannelsHandler:
                 channels.append(ch_info)
 
             from channel.channel_instances import MULTI_INSTANCE_READY
-            instance_views = {i["channel_type"]: i for i in self._channel_instances_view()}
+            instance_cards = self._channel_instances_view()
+            # A per-type card stands for the record named after its type, the
+            # one a set_project without instance_id edits.
+            instance_views = {i["instance_id"]: i for i in instance_cards}
             for ch in channels:
                 view = instance_views.get(ch["name"], {})
                 ch["project_dir"] = view.get("project_dir", "")
@@ -372,7 +375,7 @@ class ChannelsHandler:
             # In multi-Agent mode the multi-instance-ready types (feishu) render
             # one card per channel_instances record instead of one per type.
             if multi_agent:
-                payload["instances"] = self._channel_instances_view()
+                payload["instances"] = instance_cards
             return json.dumps(payload, ensure_ascii=False)
         except Exception as e:
             logger.error(f"[WebChannel] Channels API error: {e}")
@@ -398,6 +401,8 @@ class ChannelsHandler:
             # "create a new instance".
             from channel.channel_instances import MULTI_INSTANCE_READY
             instance_id = (body.get("instance_id") or "").strip()
+            if action == "set_project":
+                return self._handle_set_project(channel_name, instance_id, body.get("project_dir", ""))
             # A multi-instance-ready type (feishu) is only an *instance* when it
             # carries an instance_id (connect with an empty id creates one). But
             # the same type can still be active the legacy way — enabled in
@@ -405,17 +410,6 @@ class ChannelsHandler:
             # in which case its card has no instance_id. Disconnect/rename on
             # such a card must fall through to the legacy per-type path, or it
             # would be rejected ("instance_id is required") and never removed.
-            if action == "set_project":
-                from channel.channel_instances import get_instance, upsert_instance
-                iid = instance_id or channel_name
-                before = get_instance(conf(), iid)
-                if not before or before.channel_type != channel_name:
-                    return json.dumps({"status": "error", "message": "Channel instance not found"})
-                inst = upsert_instance(
-                    conf(), channel_type=channel_name, instance_id=iid,
-                    project_dir=body.get("project_dir", ""),
-                )
-                return json.dumps({"status": "success", "project_dir": inst.project_dir})
             is_instance_op = action in ("save", "connect") or bool(instance_id)
             if self._multi_agent_mode() and channel_name in MULTI_INSTANCE_READY and is_instance_op:
                 if action == "save":
@@ -771,6 +765,30 @@ class ChannelsHandler:
             {"status": "success", "instance_id": inst.instance_id, "name": inst.name},
             ensure_ascii=False,
         )
+
+    def _handle_set_project(self, channel_name: str, instance_id: str, project_dir):
+        """Set or clear an instance's default project directory.
+
+        Only multi-instance-ready types can store one, since it lives on the
+        channel_instances record. A legacy card carries no instance_id and maps
+        to the record named after its type.
+        """
+        from channel.channel_instances import MULTI_INSTANCE_READY, get_instance, upsert_instance
+
+        if channel_name not in MULTI_INSTANCE_READY:
+            return json.dumps({
+                "status": "error",
+                "message": f"Default project directory is not supported for the {channel_name} channel",
+            })
+        iid = instance_id or channel_name
+        before = get_instance(conf(), iid)
+        if not before or before.channel_type != channel_name:
+            return json.dumps({"status": "error", "message": "Channel instance not found"})
+        try:
+            inst = upsert_instance(conf(), channel_type=channel_name, instance_id=iid, project_dir=project_dir)
+        except ValueError as e:
+            return json.dumps({"status": "error", "message": str(e)}, ensure_ascii=False)
+        return json.dumps({"status": "success", "project_dir": inst.project_dir}, ensure_ascii=False)
 
     def _handle_instance_disconnect(self, channel_name: str, instance_id: str):
         """Remove one instance record from team.json and stop its channel."""

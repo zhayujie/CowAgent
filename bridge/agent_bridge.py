@@ -1318,27 +1318,14 @@ class AgentBridge:
         """Retarget the agent's working directory to the session's project dir.
 
         Priority: explicit session project, channel-instance default, then the
-        Agent workspace (clears any previous override). A configured channel
-        directory is validated on every fetch; failures propagate rather than
-        silently allowing writes in an unintended fallback directory.
+        Agent workspace (clears any previous override). Lookup failures fall
+        back to the workspace, but a configured channel directory that is gone
+        fails the turn rather than silently writing into the workspace.
         """
-        from agent.workspace import project_store
-        project_dir = project_store.get_project_dir(session_id, agent_id)
+        from channel.channel_instances import resolve_project_dir
         # The namespace is part of the conversation identity, so guests and
         # delegated turns resolve the same default without trusting message text.
-        if not project_dir and session_id and session_id.startswith("channel:"):
-            import json
-            from channel.channel_instances import get_instance, validate_project_dir
-            from config import conf
-            try:
-                iid, _ = json.loads(session_id[len("channel:"):])
-            except (ValueError, TypeError):
-                iid = ""
-            inst = get_instance(conf(), iid) if iid else None
-            if inst and inst.project_dir:
-                # Fail closed: never silently write into the Agent state root
-                # when an explicitly configured channel directory disappears.
-                project_dir = validate_project_dir(inst.project_dir)
+        project_dir = resolve_project_dir(session_id, agent_id)
         if getattr(agent, "apply_project_dir", None):
             agent.apply_project_dir(project_dir)
 

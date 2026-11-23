@@ -105,18 +105,14 @@ class Channel(object):
         Namespacing is opt-in, persistent, and idempotent. Old transcripts are
         retained under their original ids rather than reassigned to another bot.
         """
-        from agent import team
-        from channel.channel_instances import resolve_channel_instances
+        from channel.channel_instances import cached_channel_instances, scoped_session_id
         iid = context.get("instance_id") or getattr(self, "instance_id", "")
         ctype = context.get("channel_type") or self.channel_type
-        instances = resolve_channel_instances(team.resolve(conf()))
+        instances = cached_channel_instances(conf())
         inst = next((i for i in instances if i.instance_id == (iid or ctype)), None)
         if inst and inst.session_namespace and context.get("session_id"):
             if not context.get("_instance_session_scoped"):
-                import json
-                context["session_id"] = "channel:" + json.dumps(
-                    [inst.instance_id, context["session_id"]], separators=(",", ":"), ensure_ascii=True
-                )
+                context["session_id"] = scoped_session_id(inst.instance_id, context["session_id"])
                 context["_instance_session_scoped"] = True
         if inst:
             context["instance_id"] = inst.instance_id
