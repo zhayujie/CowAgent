@@ -30,7 +30,7 @@ import logo from '../assets/logo-mark.png';
 import {importCaCertificate, listCaCertificates, removeCaCertificate, type CaCert} from '../files/caCert';
 import {Icon} from '../components/Icon';
 import {usePairAction} from '../components/PairFlow';
-import {QrScanner, qrScannerAvailable} from '../components/QrScanner';
+import {QrScanner, qrScannerAvailable, qrScannerShowsBusy} from '../components/QrScanner';
 import {ChoiceSheet, ConfirmSheet} from '../components/settings';
 import {SHEET_DISMISS_MS} from '../components/Sheet';
 import {tr, trf, useLangStore, type Lang} from '../i18n';
@@ -149,9 +149,13 @@ export function LoginScreen() {
     }
   };
 
-  const onScanned = (target: PairTarget) => {
+  const onScanned = async (target: PairTarget) => {
+    if (!qrScannerShowsBusy) {
+      setScanning(false);
+    }
+    // Signing in swaps the whole stack, unmounting this screen along with the scanner.
+    await pairing.run(target);
     setScanning(false);
-    pairing.run(target);
   };
 
   const toManual = () => {
@@ -452,7 +456,13 @@ export function LoginScreen() {
         onConfirm={() => (removingCert ? dropCert(removingCert) : undefined)}
         onClose={() => setRemovingCert(null)}
       />
-      <QrScanner visible={scanning} onClose={() => setScanning(false)} onScanned={onScanned} onManual={toManual} />
+      <QrScanner
+        visible={scanning}
+        onClose={() => setScanning(false)}
+        onScanned={onScanned}
+        onManual={toManual}
+        busy={pairing.busy}
+      />
     </AvoidKeyboard>
   );
 }

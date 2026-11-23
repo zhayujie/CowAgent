@@ -6,12 +6,15 @@ import {cowNative as scanner} from '../media/cowNative';
 
 /** Builds without the native module fall back to typing the code. */
 export const qrScannerAvailable = scanner != null;
+/** The system scanner closes on its own once it reads a code. */
+export const qrScannerShowsBusy = false;
 
 type Props = {
   visible: boolean;
   onClose: () => void;
   onScanned: (target: PairTarget) => void;
   onManual?: () => void;
+  busy?: boolean;
 };
 
 /** Opens the system scanner (Scan Kit) whenever `visible` turns on; it draws its own UI. */

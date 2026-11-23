@@ -12,6 +12,8 @@ interface CowQrScanner {
 const scanner: CowQrScanner | undefined = NativeModules.CowQrScanner;
 
 export const qrScannerAvailable = !!scanner;
+/** The native scanner closes on its own once it reads a code. */
+export const qrScannerShowsBusy = false;
 
 /** ZXing's full-screen scanner, reading a CowAgent pairing QR code. */
 export function QrScanner({
@@ -23,6 +25,7 @@ export function QrScanner({
   onClose: () => void;
   onScanned: (target: PairTarget) => void;
   onManual?: () => void;
+  busy?: boolean;
 }) {
   const handlers = useRef({onClose, onScanned});
   handlers.current = {onClose, onScanned};

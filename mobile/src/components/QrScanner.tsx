@@ -1,6 +1,7 @@
 import {faBolt, faKeyboard, faXmark} from '@fortawesome/free-solid-svg-icons';
 import React, {useEffect, useRef, useState} from 'react';
 import {
+  ActivityIndicator,
   Linking,
   Modal,
   Pressable,
@@ -18,6 +19,11 @@ import {useTheme} from '../theme/theme';
 import {Icon} from './Icon';
 
 export const qrScannerAvailable = true;
+/**
+ * Stays up through `busy`, showing the connection. On iOS a modal opened while the scanner's is closing,
+ * or closed while still opening, can stay over the app invisibly and swallow every touch.
+ */
+export const qrScannerShowsBusy = true;
 
 type Access = 'checking' | 'granted' | 'denied';
 
@@ -40,12 +46,15 @@ export function QrScanner({
   onClose,
   onScanned,
   onManual,
+  busy = false,
 }: {
   visible: boolean;
   onClose: () => void;
   onScanned: (target: PairTarget) => void;
   /** Offered for codes that can't be scanned; omitted hides the button. */
   onManual?: () => void;
+  /** Connecting with the code read. */
+  busy?: boolean;
 }) {
   const t = useTheme();
   const insets = useSafeAreaInsets();
@@ -128,7 +137,12 @@ export function QrScanner({
             {corner({bottom: 0, left: 0, borderBottomWidth: 3, borderLeftWidth: 3, borderBottomLeftRadius: 16})}
             {corner({bottom: 0, right: 0, borderBottomWidth: 3, borderRightWidth: 3, borderBottomRightRadius: 16})}
           </View>
-          {access === 'denied' ? (
+          {busy ? (
+            <View style={styles.busy}>
+              <ActivityIndicator color="#fff" />
+              <Text style={styles.busyText}>{tr('connect_connecting')}</Text>
+            </View>
+          ) : access === 'denied' ? (
             <Text style={styles.hint}>{tr('connect_scan_no_camera')}</Text>
           ) : (
             <Text style={[styles.hint, wrongCode && {color: t.danger}]}>
@@ -197,6 +211,8 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.85)',
     textAlign: 'center',
   },
+  busy: {flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 28},
+  busyText: {fontSize: 14, lineHeight: 21, color: 'rgba(255,255,255,0.85)'},
   bottom: {position: 'absolute', left: 0, right: 0, bottom: 0, alignItems: 'center', gap: 22},
   roundLarge: {
     width: 52,

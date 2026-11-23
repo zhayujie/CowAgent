@@ -7,7 +7,7 @@ import {isLocalKernelAvailable, LOCAL_SERVER_ID, useLocalDeviceName} from '../ke
 import {describeConnectError, useServerStore} from '../store/serverStore';
 import {makeStyles, useTheme} from '../theme/theme';
 import {usePairAction} from './PairFlow';
-import {QrScanner, qrScannerAvailable} from './QrScanner';
+import {QrScanner, qrScannerAvailable, qrScannerShowsBusy} from './QrScanner';
 import {SHEET_DISMISS_MS, Sheet} from './Sheet';
 import {showToast} from './Toast';
 
@@ -108,9 +108,13 @@ export function useServerPicker() {
     },
   ];
 
-  const onScanned = (target: PairTarget) => {
+  const onScanned = async (target: PairTarget) => {
+    if (!qrScannerShowsBusy) {
+      setScanning(false);
+    }
+    // Once paired the stack is rebuilt for the new server, unmounting this along with the scanner.
+    await pairing.run(target);
     setScanning(false);
-    pairing.run(target);
   };
 
   const overlays = (
@@ -123,8 +127,9 @@ export function useServerPicker() {
           setScanning(false);
           setTimeout(addManually, SHEET_DISMISS_MS);
         }}
+        busy={pairing.busy}
       />
-      {pairing.busy && (
+      {pairing.busy && !qrScannerShowsBusy && (
         <Sheet visible onClose={() => undefined}>
           <View style={styles.busy}>
             <ActivityIndicator color={t.t3} />
