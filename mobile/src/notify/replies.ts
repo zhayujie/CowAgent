@@ -47,7 +47,7 @@ async function tell(sessionId: string) {
   if (!reply || reply.cancelled) {
     return;
   }
-  await notice('reply', sessionId, titleOf(sessionId, messages), bodyOf(reply));
+  await notice('reply', sessionId, titleOf(sessionId, messages), bodyOf(reply), sessionId);
 }
 
 let watching = false;

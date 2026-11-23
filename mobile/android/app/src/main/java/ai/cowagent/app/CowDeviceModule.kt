@@ -1,6 +1,7 @@
 package ai.cowagent.app
 
 import ai.cowagent.app.reminders.Notices
+import ai.cowagent.app.reminders.NotificationTaps
 import ai.cowagent.app.reminders.TaskReminders
 import android.content.ActivityNotFoundException
 import android.content.ContentUris
@@ -370,7 +371,7 @@ class CowDeviceModule(context: ReactApplicationContext) : ReactContextBaseJavaMo
     }
   }
 
-  /** Replaces the reminders of scheduled tasks: `[{at (epoch ms), title, body}]`, soonest first. */
+  /** Replaces the reminders of scheduled tasks: `[{at (epoch ms), title, body, session}]`, soonest first. */
   @ReactMethod
   fun scheduleReminders(items: ReadableArray, promise: Promise) {
     try {
@@ -381,7 +382,7 @@ class CowDeviceModule(context: ReactApplicationContext) : ReactContextBaseJavaMo
           put("at", item.getDouble("at").toLong())
           put("title", item.getString("title").orEmpty())
           put("body", item.getString("body").orEmpty())
-          for (key in TaskReminders.AGENT_KEYS) {
+          for (key in TaskReminders.AGENT_KEYS + TaskReminders.SESSION) {
             if (item.hasKey(key)) put(key, item.getString(key).orEmpty())
           }
         })
@@ -410,14 +411,23 @@ class CowDeviceModule(context: ReactApplicationContext) : ReactContextBaseJavaMo
     }
   }
 
-  /** A reply or a scheduled task's result that came while the app was out of sight; on screen the chat shows it. */
+  /**
+   * A reply or a scheduled task's result that came while the app was out of sight; on screen the
+   * chat shows it. Tapping it opens [session].
+   */
   @ReactMethod
-  fun notice(kind: String, key: String, title: String, body: String, promise: Promise) {
+  fun notice(kind: String, key: String, title: String, body: String, session: String, promise: Promise) {
     if (!MainActivity.visible) {
-      if (kind == "task") Notices.task(reactApplicationContext, key, title, body)
-      else Notices.reply(reactApplicationContext, key, title, body)
+      if (kind == "task") Notices.task(reactApplicationContext, key, title, body, session)
+      else Notices.reply(reactApplicationContext, key, title, body, session)
     }
     promise.resolve(null)
+  }
+
+  /** The chat of the notification the app was last opened from, once. */
+  @ReactMethod
+  fun takeNotificationTap(promise: Promise) {
+    promise.resolve(NotificationTaps.take())
   }
 
   /** Whether the system dropped or turned down one of the app's notifications since last asked. */

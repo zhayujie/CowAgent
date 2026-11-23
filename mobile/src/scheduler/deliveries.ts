@@ -141,7 +141,7 @@ function watchAway(server: string): () => void {
         const body = failed
           ? trf('task_failed_notice', {error: clip(run.error, NOTICE_MAX)})
           : clip(run.output_preview, NOTICE_MAX) || tr('task_done_notice');
-        notice('task', run.run_id, title, body).catch(() => undefined);
+        notice('task', run.run_id, title, body, run.session_id).catch(() => undefined);
       }
     }
   };

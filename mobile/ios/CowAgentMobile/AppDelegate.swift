@@ -2,6 +2,7 @@ import UIKit
 import React
 import React_RCTAppDelegate
 import ReactAppDependencyProvider
+import UserNotifications
 
 @main
 class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -14,6 +15,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
   ) -> Bool {
+    // Set before launching ends, or the tap that launched the app is never handed over.
+    UNUserNotificationCenter.current().delegate = self
+
     let delegate = ReactNativeDelegate()
     let factory = RCTReactNativeFactory(delegate: delegate)
     delegate.dependencyProvider = RCTAppDependencyProvider()
@@ -39,6 +43,29 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     options: [UIApplication.OpenURLOptionsKey: Any] = [:]
   ) -> Bool {
     return RCTLinkingManager.application(app, open: url, options: options)
+  }
+}
+
+extension AppDelegate: UNUserNotificationCenterDelegate {
+  /// Kept for JS, which may not be running yet, to take with CowDevice.takeNotificationTap.
+  func userNotificationCenter(
+    _ center: UNUserNotificationCenter,
+    didReceive response: UNNotificationResponse,
+    withCompletionHandler completionHandler: @escaping () -> Void
+  ) {
+    if let session = response.notification.request.content.userInfo["session"] as? String, !session.isEmpty {
+      UserDefaults.standard.set(session, forKey: "cow.notificationTap")
+    }
+    completionHandler()
+  }
+
+  /// On screen the chat shows it.
+  func userNotificationCenter(
+    _ center: UNUserNotificationCenter,
+    willPresent notification: UNNotification,
+    withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+  ) {
+    completionHandler([])
   }
 }
 

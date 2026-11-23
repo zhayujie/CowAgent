@@ -228,6 +228,8 @@ class SchedulerUpcomingHandler:
                             "action_type": action.get("type") or "",
                             "channel_type": _primary_channel_type(action.get("channel_type")),
                             "text": text or "",
+                            # Where the run's output is written, for a reminder to open.
+                            "session_id": action.get("notify_session_id") or action.get("receiver") or "",
                         })
             runs.sort(key=lambda r: r["at"])
             return json.dumps({"status": "success", "runs": runs[:limit]}, ensure_ascii=False)

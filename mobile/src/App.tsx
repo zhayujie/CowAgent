@@ -16,6 +16,7 @@ import {useLangStore} from './i18n';
 import {navigationRef} from './navigation/ref';
 import {watchNotices} from './notify/notice';
 import {watchReplies} from './notify/replies';
+import {watchNotificationTaps} from './notify/taps';
 import {RootNavigator} from './navigation/RootNavigator';
 import {useScheduledDeliveries} from './scheduler/deliveries';
 import {listenForShares} from './share/incoming';
@@ -42,6 +43,7 @@ export default function App() {
     listenForShares();
     watchReplies();
     watchNotices();
+    watchNotificationTaps();
   }, []);
 
   useEffect(() => paintNavigationBar(barColor, t.isDark), [barColor, t.isDark]);

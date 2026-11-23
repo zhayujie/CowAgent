@@ -7,7 +7,7 @@ import {readJSON, writeJSON} from '../storage/kv';
 
 const native:
   | {
-      notice?(kind: string, key: string, title: string, body: string): Promise<void>;
+      notice?(kind: string, key: string, title: string, body: string, session: string): Promise<void>;
       takeDroppedNotice?(): Promise<boolean>;
     }
   | undefined = NativeModules.CowDevice;
@@ -90,12 +90,13 @@ export function watchNotices(): void {
   AppState.addEventListener('change', state => state === 'active' && onReturn().catch(() => undefined));
 }
 
-export async function notice(kind: 'reply' | 'task', key: string, title: string, body: string): Promise<void> {
+/** Tapping it opens `session`. */
+export async function notice(kind: 'reply' | 'task', key: string, title: string, body: string, session = ''): Promise<void> {
   if (!native?.notice) {
     return;
   }
   pending = true;
   if ((await checkPermission('notifications')) === 'granted') {
-    await native.notice(kind, key, title, body);
+    await native.notice(kind, key, title, body, session);
   }
 }

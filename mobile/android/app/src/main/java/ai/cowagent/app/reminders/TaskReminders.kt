@@ -35,7 +35,10 @@ object TaskReminders {
    */
   val AGENT_KEYS = listOf("task", "done", "failed", "running")
 
-  /** Replaces every reminder set before with these: `{at (epoch ms), title, body}` and [AGENT_KEYS]. */
+  /** The chat a task delivers to, opened by tapping its reminder. */
+  const val SESSION = "session"
+
+  /** Replaces every reminder set before with these: `{at (epoch ms), title, body, session}` and [AGENT_KEYS]. */
   fun replace(context: Context, items: JSONArray) {
     val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     val before = runCatching { JSONArray(prefs.getString(KEY, "[]")) }.getOrDefault(JSONArray())
@@ -79,6 +82,7 @@ object TaskReminders {
     val intent = Intent(context, ReminderReceiver::class.java).setAction(ACTION)
     if (item != null) {
       intent.putExtra("title", item.optString("title")).putExtra("body", item.optString("body")).putExtra("at", item.optLong("at"))
+        .putExtra(SESSION, item.optString(SESSION))
       AGENT_KEYS.forEach { intent.putExtra(it, item.optString(it)) }
     }
     return PendingIntent.getBroadcast(context, index, intent, flags or PendingIntent.FLAG_IMMUTABLE)
@@ -87,39 +91,58 @@ object TaskReminders {
   private fun alarms(context: Context) = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
 
   /** Each reminder its own notification, so two coming due together both stay. */
-  fun show(context: Context, at: Long, title: String, body: String): Thread? =
+  fun show(context: Context, at: Long, title: String, body: String, session: String): Thread? =
     Notices.post(context, CHANNEL, R.string.reminder_channel, NotificationCompat.CATEGORY_REMINDER,
-      ((at / 1000) xor title.hashCode().toLong()).toInt(), title, body)
+      ((at / 1000) xor title.hashCode().toLong()).toInt(), title, body, session)
+}
+
+/** The chat a tapped notification is about, kept until the app asks for it. */
+object NotificationTaps {
+  private const val EXTRA = "ai.cowagent.app.SESSION"
+  @Volatile private var session: String? = null
+
+  fun open(intent: Intent, session: String): Intent = intent.putExtra(EXTRA, session)
+
+  fun receive(intent: Intent?) {
+    val tapped = intent?.getStringExtra(EXTRA)?.takeIf { it.isNotEmpty() } ?: return
+    session = tapped
+    // The activity keeps its intent, which must not open the chat again once recreated.
+    intent.removeExtra(EXTRA)
+  }
+
+  fun take(): String? = session.also { session = null }
 }
 
 object Notices {
   private const val REPLY_CHANNEL = "replies"
 
   /** A reply that finished while the app was away; a newer one in the same chat takes its place. */
-  fun reply(context: Context, key: String, title: String, body: String): Thread? =
-    post(context, REPLY_CHANNEL, R.string.reply_channel, NotificationCompat.CATEGORY_MESSAGE, key.hashCode(), title, body)
+  fun reply(context: Context, key: String, title: String, body: String, session: String): Thread? =
+    post(context, REPLY_CHANNEL, R.string.reply_channel, NotificationCompat.CATEGORY_MESSAGE, key.hashCode(), title, body, session)
 
   /** What a scheduled task came up with, once it has run. */
-  fun task(context: Context, key: String, title: String, body: String): Thread? =
-    post(context, TaskReminders.CHANNEL, R.string.reminder_channel, NotificationCompat.CATEGORY_REMINDER, key.hashCode(), title, body)
+  fun task(context: Context, key: String, title: String, body: String, session: String): Thread? =
+    post(context, TaskReminders.CHANNEL, R.string.reminder_channel, NotificationCompat.CATEGORY_REMINDER, key.hashCode(), title, body, session)
 
   private const val PREFS = "cow_notices"
   private const val DROPPED = "dropped"
   private const val SETTLE_MS = 1500L
 
   /**
-   * Ids are per channel, which is the tag. Tapping opens the app. Then checks, off this thread,
-   * that the system kept it; join the returned thread to have that done before going on.
+   * Ids are per channel, which is the tag. Tapping opens the app on [session], if any. Then checks,
+   * off this thread, that the system kept it; join the returned thread to have that done before going on.
    */
-  fun post(context: Context, channelId: String, channelName: Int, category: String, id: Int, title: String, body: String): Thread? {
+  fun post(context: Context, channelId: String, channelName: Int, category: String, id: Int, title: String, body: String, session: String): Thread? {
     val manager = NotificationManagerCompat.from(context)
     if (!manager.areNotificationsEnabled()) return null
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
       val channel = NotificationChannel(channelId, context.getString(channelName), NotificationManager.IMPORTANCE_HIGH)
       context.getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
     }
+    // Told apart by request code, so each notification keeps its own chat.
     val open = context.packageManager.getLaunchIntentForPackage(context.packageName)?.let {
-      PendingIntent.getActivity(context, 0, it, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+      PendingIntent.getActivity(context, "$channelId:$id".hashCode(), NotificationTaps.open(it, session),
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     }
     val notification = NotificationCompat.Builder(context, channelId)
       .setSmallIcon(R.drawable.ic_notification)
@@ -179,31 +202,32 @@ class ReminderReceiver : BroadcastReceiver() {
     val title = intent.getStringExtra("title").orEmpty()
     val body = intent.getStringExtra("body").orEmpty()
     val task = intent.getStringExtra("task").orEmpty()
+    val session = intent.getStringExtra(TaskReminders.SESSION).orEmpty()
     // In the background the system freezes the app, kernel and all, except while a broadcast
     // like this one is being handled, which may take up to a minute.
     val pending = goAsync()
     thread(name = "cow-reminder") {
       try {
-        tell(context, intent, at, title, body, task)?.join()
+        tell(context, intent, at, title, body, task, session)?.join()
       } catch (e: Throwable) {
-        TaskReminders.show(context, at, title, body)?.join()
+        TaskReminders.show(context, at, title, body, session)?.join()
       } finally {
         pending.finish()
       }
     }
   }
 
-  private fun tell(context: Context, intent: Intent, at: Long, title: String, body: String, task: String): Thread? {
-    if (task.isEmpty() || !CowKernel.running) return TaskReminders.show(context, at, title, body)
+  private fun tell(context: Context, intent: Intent, at: Long, title: String, body: String, task: String, session: String): Thread? {
+    if (task.isEmpty() || !CowKernel.running) return TaskReminders.show(context, at, title, body, session)
     // A run starts once its time has come, so an earlier one of the same task never counts.
     val run = CowKernel.awaitRun(task, at / 1000 - 1, WAIT_S)
-      ?: return TaskReminders.show(context, at, title, intent.getStringExtra("running").orEmpty().ifEmpty { body })
+      ?: return TaskReminders.show(context, at, title, intent.getStringExtra("running").orEmpty().ifEmpty { body }, session)
     val text = if (run.status in DONE) {
       clip(run.output).ifEmpty { intent.getStringExtra("done").orEmpty() }
     } else {
       intent.getStringExtra("failed").orEmpty().replace("{error}", run.error)
     }
-    return Notices.task(context, run.id, title, text)
+    return Notices.task(context, run.id, title, text, session)
   }
 
   private fun clip(text: String): String {

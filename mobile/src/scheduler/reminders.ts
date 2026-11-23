@@ -23,12 +23,15 @@ interface Upcoming {
   action_type: string;
   channel_type: string;
   text: string;
+  session_id?: string;
 }
 
 interface Reminder {
   at: number;
   title: string;
   body: string;
+  /** The chat the task delivers to, opened by tapping the reminder. */
+  session: string;
   /** For a task the agent carries out: its id, and what to say about its run. */
   task?: string;
   done?: string;
@@ -77,13 +80,15 @@ export function syncReminders(ask = false): Promise<void> {
       runs.map((r): Reminder => {
         const name = r.name || tr('task_reminder_fallback');
         const at = r.at * 1000;
+        const session = r.session_id ?? '';
         if (r.action_type === 'send_message') {
-          return {at, title: name, body: r.text || name};
+          return {at, title: name, body: r.text || name, session};
         }
         // A task for the agent only runs with the kernel, which may be gone by then.
         return {
           at,
           title: name,
+          session,
           body: trf('task_reminder_open', {text: r.text || name}),
           task: r.task_id,
           done: tr('task_done_notice'),

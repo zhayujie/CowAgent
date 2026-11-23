@@ -19,6 +19,8 @@ static const NSUInteger MaxEvents = 200;
 static const NSUInteger MaxReminders = 50;
 static NSString *const ReminderPrefix = @"cow-reminder-";
 static NSString *const NoticePrefix = @"cow-notice-";
+/** Shared with AppDelegate, which keeps the chat of a tapped notification under this default. */
+static NSString *const TappedSessionKey = @"cow.notificationTap";
 
 static dispatch_queue_t background(void)
 {
@@ -347,7 +349,7 @@ RCT_EXPORT_METHOD(deviceStatus : (RCTPromiseResolveBlock)resolve reject : (RCTPr
   nw_path_monitor_start(monitor);
 }
 
-/** Replaces the reminders of scheduled tasks: `[{at (epoch ms), title, body}]`, soonest first. */
+/** Replaces the reminders of scheduled tasks: `[{at (epoch ms), title, body, session}]`, soonest first. */
 RCT_EXPORT_METHOD(scheduleReminders : (NSArray *)items resolve : (RCTPromiseResolveBlock)resolve reject : (RCTPromiseRejectBlock)reject)
 {
   UNUserNotificationCenter *center = UNUserNotificationCenter.currentNotificationCenter;
@@ -373,6 +375,7 @@ RCT_EXPORT_METHOD(scheduleReminders : (NSArray *)items resolve : (RCTPromiseReso
       content.title = text(item[@"title"]);
       content.body = text(item[@"body"]);
       content.sound = UNNotificationSound.defaultSound;
+      content.userInfo = @{@"session" : text(item[@"session"])};
       UNTimeIntervalNotificationTrigger *trigger = [UNTimeIntervalNotificationTrigger triggerWithTimeInterval:wait repeats:NO];
       NSString *identifier = [NSString stringWithFormat:@"%@%lu", ReminderPrefix, (unsigned long)added++];
       [center addNotificationRequest:[UNNotificationRequest requestWithIdentifier:identifier content:content trigger:trigger]
@@ -384,14 +387,15 @@ RCT_EXPORT_METHOD(scheduleReminders : (NSArray *)items resolve : (RCTPromiseReso
 
 /**
  * A reply or a scheduled task's result that came while the app was away; a newer one for the
- * same key takes its place. With no delegate asking for it, iOS shows none on screen.
+ * same key takes its place. On screen AppDelegate shows none. Tapping it opens `session`.
  */
-RCT_EXPORT_METHOD(notice : (NSString *)kind key : (NSString *)key title : (NSString *)title body : (NSString *)body resolve : (RCTPromiseResolveBlock)resolve reject : (RCTPromiseRejectBlock)reject)
+RCT_EXPORT_METHOD(notice : (NSString *)kind key : (NSString *)key title : (NSString *)title body : (NSString *)body session : (NSString *)session resolve : (RCTPromiseResolveBlock)resolve reject : (RCTPromiseRejectBlock)reject)
 {
   UNMutableNotificationContent *content = [UNMutableNotificationContent new];
   content.title = text(title);
   content.body = text(body);
   content.sound = UNNotificationSound.defaultSound;
+  content.userInfo = @{@"session" : text(session)};
   NSString *identifier = [NSString stringWithFormat:@"%@%@-%@", NoticePrefix, text(kind), text(key)];
   [UNUserNotificationCenter.currentNotificationCenter
       addNotificationRequest:[UNNotificationRequest requestWithIdentifier:identifier content:content trigger:nil]
@@ -402,6 +406,15 @@ RCT_EXPORT_METHOD(notice : (NSString *)kind key : (NSString *)key title : (NSStr
            resolve(nil);
          }
        }];
+}
+
+/** The chat of the notification the app was last opened from, once. */
+RCT_EXPORT_METHOD(takeNotificationTap : (RCTPromiseResolveBlock)resolve reject : (RCTPromiseRejectBlock)reject)
+{
+  NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+  NSString *session = [defaults stringForKey:TappedSessionKey];
+  [defaults removeObjectForKey:TappedSessionKey];
+  resolve(session.length ? session : nil);
 }
 
 /** Held while a reply is under way, so leaving the app buys it the half minute or so iOS grants. */

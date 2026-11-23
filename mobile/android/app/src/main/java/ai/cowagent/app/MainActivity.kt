@@ -1,6 +1,7 @@
 package ai.cowagent.app
 
 import ai.cowagent.app.files.SharedIntake
+import ai.cowagent.app.reminders.NotificationTaps
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
@@ -32,13 +33,17 @@ class MainActivity : ReactActivity() {
       window.isNavigationBarContrastEnforced = false
     }
     // A recreated activity already handed its share over.
-    if (savedInstanceState == null) SharedIntake.receive(intent)
+    if (savedInstanceState == null) {
+      SharedIntake.receive(intent)
+      NotificationTaps.receive(intent)
+    }
   }
 
   override fun onNewIntent(intent: Intent) {
     super.onNewIntent(intent)
     setIntent(intent)
     SharedIntake.receive(intent)
+    NotificationTaps.receive(intent)
   }
 
   override fun onStart() {
