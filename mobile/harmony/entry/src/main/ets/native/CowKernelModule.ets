@@ -1,6 +1,6 @@
 import { TurboModule } from '@rnoh/react-native-openharmony/ts';
 import { preferences } from '@kit.ArkData';
-import { zlib } from '@kit.BasicServicesKit';
+import { deviceInfo, settings, zlib } from '@kit.BasicServicesKit';
 import { fileIo } from '@kit.CoreFileKit';
 import { cryptoFramework } from '@kit.CryptoArchitectureKit';
 import { i18n } from '@kit.LocalizationKit';
@@ -55,6 +55,19 @@ function removePath(path: string): void {
 export class CowKernelModule extends TurboModule {
   static isAvailable(): boolean {
     return kernel.available();
+  }
+
+  /** What the owner named this phone in Settings > About; its model name when unreadable. */
+  deviceName(): string {
+    try {
+      const name = settings.getValueSync(this.ctx.uiAbilityContext, settings.general.DEVICE_NAME, '');
+      if (name.trim()) {
+        return name;
+      }
+    } catch (e) {
+      // Falls back to the model below.
+    }
+    return deviceInfo.marketName;
   }
 
   /** Resolves with `{port, password}` once the kernel thread is started; it binds shortly after. */

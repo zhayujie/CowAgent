@@ -1,6 +1,7 @@
 import { RNOHPackage } from '@rnoh/react-native-openharmony';
 import { TurboModulesFactory } from '@rnoh/react-native-openharmony/ts';
 import type { TurboModule, TurboModuleContext } from '@rnoh/react-native-openharmony/ts';
+import { COW_DEVICE_MODULE, CowDeviceModule } from './CowDeviceModule';
 import { COW_KERNEL_MODULE, CowKernelModule } from './CowKernelModule';
 import { COW_NATIVE_MODULE, CowNativeModule } from './CowNativeModule';
 
@@ -9,6 +10,9 @@ class CowNativeModulesFactory extends TurboModulesFactory {
     if (name === COW_NATIVE_MODULE) {
       return new CowNativeModule(this.ctx);
     }
+    if (name === COW_DEVICE_MODULE) {
+      return new CowDeviceModule(this.ctx);
+    }
     if (name === COW_KERNEL_MODULE && CowKernelModule.isAvailable()) {
       return new CowKernelModule(this.ctx);
     }
@@ -16,7 +20,8 @@ class CowNativeModulesFactory extends TurboModulesFactory {
   }
 
   hasTurboModule(name: string): boolean {
-    return name === COW_NATIVE_MODULE || (name === COW_KERNEL_MODULE && CowKernelModule.isAvailable());
+    return name === COW_NATIVE_MODULE || name === COW_DEVICE_MODULE ||
+      (name === COW_KERNEL_MODULE && CowKernelModule.isAvailable());
   }
 }
 

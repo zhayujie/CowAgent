@@ -34,6 +34,54 @@
           ],
           "when": "inuse"
         }
+      },
+      // The agent's phone tools; each is asked for when the agent first needs it.
+      {
+        "name": "ohos.permission.APPROXIMATELY_LOCATION",
+        "reason": "$string:location_reason",
+        "usedScene": {
+          "abilities": [
+            "EntryAbility"
+          ],
+          "when": "inuse"
+        }
+      },
+      {
+        "name": "ohos.permission.LOCATION",
+        "reason": "$string:location_reason",
+        "usedScene": {
+          "abilities": [
+            "EntryAbility"
+          ],
+          "when": "inuse"
+        }
+      },
+      {
+        "name": "ohos.permission.READ_CALENDAR",
+        "reason": "$string:calendar_reason",
+        "usedScene": {
+          "abilities": [
+            "EntryAbility"
+          ],
+          "when": "inuse"
+        }
+      },
+      {
+        "name": "ohos.permission.WRITE_CALENDAR",
+        "reason": "$string:calendar_reason",
+        "usedScene": {
+          "abilities": [
+            "EntryAbility"
+          ],
+          "when": "inuse"
+        }
+      },
+      {
+        "name": "ohos.permission.GET_NETWORK_INFO"
+      },
+      // Scheduled tasks are handed to the system as reminders, which fire with the app closed.
+      {
+        "name": "ohos.permission.PUBLISH_AGENT_REMINDER"
       }
     ],
     "metadata": [
@@ -68,6 +116,19 @@
             "actions": [
               "action.system.home"
             ],
+          },
+          // A target in other apps' share panel, for files, pictures and text.
+          {
+            "actions": [
+              "ohos.want.action.sendData"
+            ],
+            "uris": [
+              {
+                "scheme": "file",
+                "utd": "general.object",
+                "maxFileSupported": 9
+              }
+            ]
           }
         ]
       }

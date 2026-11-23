@@ -1,5 +1,6 @@
 import {StackActions} from '@react-navigation/native';
-import {AppState, NativeModules} from 'react-native';
+import {AppState} from 'react-native';
+import {deviceModule} from '../media/cowNative';
 import {navigationRef} from '../navigation/ref';
 import {useAgentStore} from '../store/agentStore';
 import {useSessionStore} from '../store/sessionStore';
@@ -9,7 +10,7 @@ import {useSessionStore} from '../store/sessionStore';
  * possibly before JS runs, and it is kept there until taken here on coming to the front.
  */
 
-const native: {takeNotificationTap?(): Promise<string | null>} | undefined = NativeModules.CowDevice;
+const native = deviceModule<{takeNotificationTap?(): Promise<string | null>}>();
 
 /** iOS may report the tap just after the app turned active. */
 const LATE_TAP_MS = 600;

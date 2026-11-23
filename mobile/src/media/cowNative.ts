@@ -1,4 +1,5 @@
-import {Platform, type TurboModule} from 'react-native';
+import {NativeModules, Platform, type TurboModule} from 'react-native';
+import type {PickedFile} from './types';
 
 /** A file the HarmonyOS module copied into the app sandbox; `path` has no scheme. */
 export interface NativeFile {
@@ -12,8 +13,12 @@ interface CowNativeModule extends TurboModule {
   scan(): Promise<string | null>;
   takePhoto(): Promise<NativeFile | null>;
   pickPhotos(max: number): Promise<NativeFile[]>;
-  /** Saves into Downloads/<app name>; resolves with the name used, which avoids overwriting. */
-  saveDownload(url: string, fileName: string): Promise<string>;
+  /** Saves into Downloads/<app name>; resolves with the name used, which avoids overwriting. With an id, reports progress. */
+  saveDownload(url: string, fileName: string, id?: string): Promise<string>;
+  /** The share panel with the file itself, from a link or a path on the phone. */
+  share(source: string, fileName: string, mime: string): Promise<boolean>;
+  /** What another app shared here, or null when nothing is waiting. */
+  takeShared(): Promise<{files: PickedFile[]; text?: string} | null>;
 }
 
 /**
@@ -30,11 +35,20 @@ export function nativeError(e: unknown): Error {
 }
 
 /**
- * HarmonyOS-only system pickers (harmony/entry/src/main/ets/native). Null on other
- * platforms and on HarmonyOS builds that predate the module. Looked up lazily because
- * react-native-web has no TurboModuleRegistry, and this file is part of the web preview.
+ * A HarmonyOS ArkTS TurboModule (harmony/entry/src/main/ets/native), null elsewhere and on
+ * builds that predate it. Looked up lazily because react-native-web has no TurboModuleRegistry,
+ * and this file is part of the web preview.
  */
-export const cowNative: CowNativeModule | null =
-  (Platform.OS as string) === 'harmony'
-    ? (require('react-native') as typeof import('react-native')).TurboModuleRegistry.get<CowNativeModule>('CowNative')
+function harmonyModule<T extends TurboModule>(name: string): T | null {
+  return (Platform.OS as string) === 'harmony'
+    ? (require('react-native') as typeof import('react-native')).TurboModuleRegistry.get<T>(name)
     : null;
+}
+
+/** HarmonyOS-only system pickers, saving to Downloads and the share panel. */
+export const cowNative = harmonyModule<CowNativeModule>('CowNative');
+
+/** CowDevice: a native module on Android and iOS, an ArkTS TurboModule on HarmonyOS. */
+export function deviceModule<T>(): T | undefined {
+  return ((Platform.OS as string) === 'harmony' ? harmonyModule('CowDevice') : NativeModules.CowDevice) ?? undefined;
+}
