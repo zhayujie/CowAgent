@@ -1,6 +1,6 @@
 {
   "name": "cowagent-mobile",
-  "version": "0.0.1",
+  "version": "2.3.0",
   "private": true,
   "scripts": {
     "android": "react-native run-android",

@@ -1,0 +1,162 @@
+name: Release Android
+
+# Builds the Android app, signed with the release key, and optionally uploads
+# the APK to R2 and registers it in D1, next to the desktop installers.
+#
+# The app is versioned apart from the desktop client: the version given here
+# stamps the APK (iOS ships the same version through the App Store). Rows are
+# registered unpublished unless "latest" is checked, so the update feed keeps
+# offering the previous APK until this one is tested.
+#
+# Every APK must carry the same release key, or phones refuse to install it over
+# the one they have, so the build fails without the key instead of falling back
+# to the debug key.
+#
+# Manual only (workflow_dispatch).
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "App version (e.g. 2.3.0). Must be newer than the last release for phones to update."
+        type: string
+        required: true
+      publish_r2:
+        description: "Upload the APK to R2 + register in D1 (needs Cloudflare secrets)"
+        type: boolean
+        default: false
+      latest:
+        description: "Make it the release the app updates to (with publish_r2)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check inputs and signing key
+        env:
+          VER: ${{ github.event.inputs.version }}
+          KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if ! printf '%s' "$VER" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'; then
+            echo "::error::version must look like 2.3.0 or 2.3.0-beta.1, got '$VER'"
+            exit 1
+          fi
+          if [ -z "$KEYSTORE" ]; then
+            echo "::error::ANDROID_KEYSTORE_BASE64 is not set; see the secrets this workflow reads."
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Chaquopy builds the kernel's packages with a host Python of the same major.minor.
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install mobile deps
+        working-directory: mobile
+        run: npm ci
+
+      - name: Build APK
+        working-directory: mobile/android
+        env:
+          KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          COW_RELEASE_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          COW_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          COW_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          VER: ${{ github.event.inputs.version }}
+        run: |
+          export COW_RELEASE_STORE_FILE="$RUNNER_TEMP/release.jks"
+          printf '%s' "$KEYSTORE" | base64 -d > "$COW_RELEASE_STORE_FILE"
+          trap 'rm -f "$COW_RELEASE_STORE_FILE"' EXIT
+          bash ./gradlew :app:assembleRelease -PreactNativeArchitectures=arm64-v8a \
+            -PcowAppVersion="$VER" -PcowPython="$(command -v python)" --console=plain
+          mkdir -p "$GITHUB_WORKSPACE/android-out"
+          cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/android-out/CowAgent-${VER}.apk"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cowagent-android
+          path: android-out/*.apk
+          retention-days: 7
+
+  # Same bucket layout as the desktop release (desktop/v<ver>/), which the site's
+  # /update/android.json feed and /download/android/<ver> resolve against.
+  publish-r2:
+    name: Publish to R2 + D1
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event.inputs.publish_r2 == 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Guard on Cloudflare secrets
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          if [ -z "$CF_TOKEN" ]; then
+            echo "::error::CLOUDFLARE_API_TOKEN is not set."
+            exit 1
+          fi
+
+      - name: Download the APK
+        uses: actions/download-artifact@v4
+        with:
+          name: cowagent-android
+          path: dist
+
+      - name: Upload the APK to R2
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          VER: ${{ github.event.inputs.version }}
+        run: |
+          # R2 sporadically answers 504 / 7009 mid-upload; re-putting a key overwrites it.
+          for f in dist/*.apk; do
+            key="desktop/v${VER}/$(basename "$f")"
+            echo "==> Uploading $(basename "$f") -> r2://cow-skills/$key"
+            for attempt in 1 2 3 4 5; do
+              if npx --yes wrangler@latest r2 object put "cow-skills/$key" --file "$f" --remote; then
+                break
+              fi
+              if [ "$attempt" = 5 ]; then
+                echo "::error::R2 upload failed after 5 attempts: $key"
+                exit 1
+              fi
+              echo "attempt $attempt failed, retrying in $((attempt * 10))s..."
+              sleep $((attempt * 10))
+            done
+          done
+
+      - name: Register the release in D1
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          VER: ${{ github.event.inputs.version }}
+          LATEST: ${{ github.event.inputs.latest }}
+        run: |
+          flag=""
+          if [ "$LATEST" = "true" ]; then flag="--latest"; fi
+          node .github/scripts/register-releases.mjs --dir dist --version "$VER" --sql d1.sql $flag
+          echo "==> D1 statements:"; cat d1.sql
+          npx --yes wrangler@latest d1 execute cow-desktop --remote --file d1.sql

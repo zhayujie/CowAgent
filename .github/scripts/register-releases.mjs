@@ -6,7 +6,8 @@
 //                                                update_sha512)
 // electron-updater's MacUpdater can only consume a zip, never a dmg, so the
 // feed serves the zip while the website serves the dmg. Windows has only the
-// .exe (stored in the main columns; it's both the download and the update).
+// .exe (stored in the main columns; it's both the download and the update),
+// and Android only the .apk, likewise.
 //
 // We emit ONE `INSERT OR REPLACE` per (version, platform) carrying BOTH halves,
 // because two replaces on the same primary key would drop whichever came first.
@@ -18,6 +19,16 @@
 //   --latest  mark these rows is_latest=1 AND clear the previous latest for
 //             each platform (used by the publish/promote workflow). Without it
 //             rows are written unpublished (is_latest=0) — the build stage.
+//
+// The iOS app ships through the App Store, so its row carries the store page
+// instead of a file; register it once the version is live there:
+//   node register-releases.mjs --version 2.3.0 --app-store <App Store URL> \
+//        --sql ios.sql --latest
+//
+// Likewise for an Android app market (ids as the app names them, e.g. xiaomi,
+// huawei, play): apps installed from it are told to update there once its row
+// says the market carries the version.
+//   node register-releases.mjs --version 2.3.0 --market xiaomi --sql m.sql --latest
 //
 // sha512 is base64 (the exact format electron-updater validates).
 
@@ -37,9 +48,20 @@ const dir = arg('dir', 'dist')
 const version = arg('version')
 const sqlPath = arg('sql', 'd1.sql')
 const makeLatest = arg('latest', false) === true
+const appStore = arg('app-store')
+const market = arg('market')
 
 if (!version) {
   console.error('register-releases: --version is required')
+  process.exit(1)
+}
+if (appStore !== undefined && !/^https:\/\//.test(String(appStore))) {
+  console.error('register-releases: --app-store needs the https:// URL of the App Store page')
+  process.exit(1)
+}
+// The platform column holds 32 characters, "android-" included.
+if (market !== undefined && (typeof market !== 'string' || !/^[a-z0-9]{1,24}$/.test(market))) {
+  console.error('register-releases: --market needs a short lowercase id such as xiaomi')
   process.exit(1)
 }
 
@@ -56,7 +78,14 @@ const q = (s) => String(s).replace(/'/g, "''")
 // platform -> { main: {key,size,sha}, upd: {key,size,sha} }
 const rows = {}
 
-for (const base of fs.readdirSync(dir)) {
+if (appStore) {
+  rows.ios = { main: { key: appStore, size: 0, sha: '' } }
+}
+if (market) {
+  rows[`android-${market}`] = {}
+}
+
+for (const base of appStore || market ? [] : fs.readdirSync(dir)) {
   const f = `${dir}/${base}`
   if (fs.statSync(f).isDirectory()) continue
 
@@ -82,6 +111,9 @@ for (const base of fs.readdirSync(dir)) {
     slot = 'main'
   } else if (/\.exe$/.test(base)) {
     platform = 'win'
+    slot = 'main'
+  } else if (/\.apk$/.test(base)) {
+    platform = 'android'
     slot = 'main'
   } else {
     console.log('Skipping unrecognized artifact:', base)

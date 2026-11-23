@@ -105,13 +105,16 @@ preBuild.dependsOn(bundleCowKernel)
 /**
  * Release signing key, from ~/.gradle/gradle.properties or the environment, never this repo:
  * COW_RELEASE_STORE_FILE, COW_RELEASE_STORE_PASSWORD, COW_RELEASE_KEY_ALIAS, COW_RELEASE_KEY_PASSWORD.
- * Without them release builds fall back to the public debug key, which anyone can sign
- * an "update" with, so such an APK is for testing only.
+ * A release APK must carry it: phones only update an app in place under the same key, and
+ * one signed with another can only be installed after uninstalling, which deletes the app's data.
+ * Without the key, build a debug APK (assembleDebug) to test.
  */
 def releaseSigning = { String name -> findProperty(name) ?: System.getenv(name) }
 def hasReleaseKey = releaseSigning('COW_RELEASE_STORE_FILE') != null
-if (!hasReleaseKey) {
-    logger.warn("COW_RELEASE_STORE_FILE is not set: release builds are signed with the debug key (testing only).")
+gradle.taskGraph.whenReady { graph ->
+    if (!hasReleaseKey && graph.allTasks.any { it.project == project && it.name ==~ /package\w*Release\w*/ }) {
+        throw new GradleException("COW_RELEASE_STORE_FILE is not set: release builds need the release key (use assembleDebug to test).")
+    }
 }
 
 android {
@@ -126,7 +129,9 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         // Minutes since 1970: every build is newer than the last, so phone installers update in place.
         versionCode((int) (System.currentTimeMillis() / 60000L))
-        versionName "1.0"
+        // The app is versioned apart from the kernel inside, in mobile/package.json, which the
+        // iOS MARKETING_VERSION matches; a release build may stamp it with -PcowAppVersion.
+        versionName findProperty('cowAppVersion') ?: new groovy.json.JsonSlurper().parse(file("../../package.json")).version
         ndk {
             // The embedded Python runtime (3.12+) only ships 64-bit builds.
             abiFilters "arm64-v8a", "x86_64"
@@ -158,7 +163,9 @@ android {
             signingConfig signingConfigs.debug
         }
         release {
-            signingConfig hasReleaseKey ? signingConfigs.release : signingConfigs.debug
+            if (hasReleaseKey) {
+                signingConfig signingConfigs.release
+            }
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
         }
