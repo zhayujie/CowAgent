@@ -30,6 +30,22 @@ static NSString *text(id value)
   return [value isKindOfClass:NSString.class] ? value : @"";
 }
 
+static BOOL canReadEvents(EKAuthorizationStatus status)
+{
+  if (@available(iOS 17.0, *)) {
+    return status == EKAuthorizationStatusFullAccess;
+  }
+  return status == EKAuthorizationStatusAuthorized;
+}
+
+static BOOL canAddEvents(EKAuthorizationStatus status)
+{
+  if (@available(iOS 17.0, *)) {
+    return canReadEvents(status) || status == EKAuthorizationStatusWriteOnly;
+  }
+  return canReadEvents(status);
+}
+
 @interface CowDevice : NSObject <RCTBridgeModule, CLLocationManagerDelegate>
 @end
 
@@ -55,10 +71,6 @@ RCT_EXPORT_MODULE()
 /** One location fix, with a street address when the phone can resolve one. */
 RCT_EXPORT_METHOD(currentLocation : (RCTPromiseResolveBlock)resolve reject : (RCTPromiseRejectBlock)reject)
 {
-  if (!CLLocationManager.locationServicesEnabled) {
-    reject(@"location_off", @"Location Services are off", nil);
-    return;
-  }
   if (!_manager) {
     _manager = [CLLocationManager new];
     _manager.delegate = self;
@@ -66,6 +78,17 @@ RCT_EXPORT_METHOD(currentLocation : (RCTPromiseResolveBlock)resolve reject : (RC
     _waiting = [NSMutableArray new];
   }
   CLAuthorizationStatus status = _manager.authorizationStatus;
+  if (status == kCLAuthorizationStatusDenied) {
+    // Also what Location Services being off looks like. Asking which can stall the main thread.
+    dispatch_async(background(), ^{
+      if (CLLocationManager.locationServicesEnabled) {
+        reject(@"permission_denied", @"Location permission not granted", nil);
+      } else {
+        reject(@"location_off", @"Location Services are off", nil);
+      }
+    });
+    return;
+  }
   if (status != kCLAuthorizationStatusAuthorizedWhenInUse && status != kCLAuthorizationStatusAuthorizedAlways) {
     reject(@"permission_denied", @"Location permission not granted", nil);
     return;
@@ -83,7 +106,7 @@ RCT_EXPORT_METHOD(currentLocation : (RCTPromiseResolveBlock)resolve reject : (RC
   dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(FixTimeout * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
     if ([self->_waiting containsObject:callbacks]) {
       [self->_waiting removeObject:callbacks];
-      ((RCTPromiseRejectBlock)callbacks[1])(@"no_fix", @"No location fix", nil);
+      [self answer:@[ callbacks ] code:@"no_fix" message:@"No location fix" error:nil];
     }
   });
 }
@@ -100,15 +123,28 @@ RCT_EXPORT_METHOD(currentLocation : (RCTPromiseResolveBlock)resolve reject : (RC
 
 - (void)locationManager:(CLLocationManager *)manager didFailWithError:(NSError *)error
 {
-  // Not knowing yet is no failure; requestLocation keeps trying until the timeout.
-  if (error.code == kCLErrorLocationUnknown) {
-    return;
-  }
-  NSString *code = error.code == kCLErrorDenied ? @"permission_denied" : @"no_fix";
   NSArray *waiting = [_waiting copy];
   [_waiting removeAllObjects];
+  if (error.code == kCLErrorDenied) {
+    for (NSArray *callbacks in waiting) {
+      ((RCTPromiseRejectBlock)callbacks[1])(@"permission_denied", error.localizedDescription, error);
+    }
+    return;
+  }
+  // requestLocation gives up for good on kCLErrorLocationUnknown too.
+  [self answer:waiting code:@"no_fix" message:error.localizedDescription error:error];
+}
+
+/** Without a new fix, the phone's last one beats none; its time says how old it is. */
+- (void)answer:(NSArray *)waiting code:(NSString *)code message:(NSString *)message error:(NSError *)error
+{
+  CLLocation *last = _manager.location;
   for (NSArray *callbacks in waiting) {
-    ((RCTPromiseRejectBlock)callbacks[1])(code, error.localizedDescription, error);
+    if (last) {
+      [self describe:last resolve:callbacks[0]];
+    } else {
+      ((RCTPromiseRejectBlock)callbacks[1])(code, message, error);
+    }
   }
 }
 
@@ -150,6 +186,11 @@ RCT_EXPORT_METHOD(currentLocation : (RCTPromiseResolveBlock)resolve reject : (RC
 RCT_EXPORT_METHOD(calendarEvents : (double)start end : (double)end resolve : (RCTPromiseResolveBlock)resolve reject : (RCTPromiseRejectBlock)reject)
 {
   dispatch_async(background(), ^{
+    // Without access EventKit finds no events rather than failing.
+    if (!canReadEvents([EKEventStore authorizationStatusForEntityType:EKEntityTypeEvent])) {
+      reject(@"permission_denied", @"Calendar permission not granted", nil);
+      return;
+    }
     EKEventStore *store = [EKEventStore new];
     NSPredicate *predicate = [store predicateForEventsWithStartDate:[NSDate dateWithTimeIntervalSince1970:start / 1000]
                                                             endDate:[NSDate dateWithTimeIntervalSince1970:end / 1000]
@@ -164,7 +205,8 @@ RCT_EXPORT_METHOD(calendarEvents : (double)start end : (double)end resolve : (RC
       [list addObject:@{
         @"title" : text(event.title),
         @"start" : @(event.startDate.timeIntervalSince1970 * 1000),
-        @"end" : @(event.endDate.timeIntervalSince1970 * 1000),
+        // Back to an exclusive end, as events are added and as Android gives them.
+        @"end" : @((event.endDate.timeIntervalSince1970 + (event.allDay ? 1 : 0)) * 1000),
         @"allDay" : @(event.allDay),
         @"location" : text(event.location),
         @"notes" : text(event.notes),
@@ -179,6 +221,10 @@ RCT_EXPORT_METHOD(calendarEvents : (double)start end : (double)end resolve : (RC
 RCT_EXPORT_METHOD(createCalendarEvent : (NSDictionary *)input resolve : (RCTPromiseResolveBlock)resolve reject : (RCTPromiseRejectBlock)reject)
 {
   dispatch_async(background(), ^{
+    if (!canAddEvents([EKEventStore authorizationStatusForEntityType:EKEntityTypeEvent])) {
+      reject(@"permission_denied", @"Calendar permission not granted", nil);
+      return;
+    }
     EKEventStore *store = [EKEventStore new];
     EKCalendar *calendar = store.defaultCalendarForNewEvents;
     if (!calendar) {
