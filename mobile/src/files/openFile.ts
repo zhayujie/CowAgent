@@ -204,11 +204,6 @@ async function saveToDownloads(url: string, name: string, fileName = name, key?:
     // Repeated taps join the same request instead of creating another Downloads entry.
     return running;
   }
-  const current = useDownloadStore.getState().byId[id];
-  if (current?.status === 'done') {
-    showToast(tr('file_saved_already'));
-    return;
-  }
   if (!(await canWriteDownloads())) {
     showToast(tr('file_download_no_permission'));
     return;
@@ -219,6 +214,10 @@ async function saveToDownloads(url: string, name: string, fileName = name, key?:
   activeDownloads.set(id, work);
   try {
     const savedTo = await work;
+    if (savedTo === null) {
+      useDownloadStore.getState().clear(id);
+      return;
+    }
     useDownloadStore.getState().finish(id);
     const message = savedTo ? SAVED_TOAST[savedTo] : undefined;
     if (message) {

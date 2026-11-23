@@ -57,3 +57,11 @@ it('does not let a late event reopen a finished download', () => {
   useDownloadStore.getState().progress(id, 20, 100);
   expect(useDownloadStore.getState().byId[id]).toMatchObject({status: 'done', loaded: 10});
 });
+
+it('forgets a download the user backed out of', () => {
+  const id = downloadKey('https://h/c.pdf', 'c.pdf');
+  const store = useDownloadStore.getState();
+  store.start(id, 'https://h/c.pdf', 'c.pdf');
+  store.clear(id);
+  expect(useDownloadStore.getState().byId[id]).toBeUndefined();
+});

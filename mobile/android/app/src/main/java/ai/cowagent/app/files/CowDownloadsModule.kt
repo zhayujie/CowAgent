@@ -52,9 +52,16 @@ object SharedIntake {
     onArrive?.invoke()
   }
 
-  /** Only what another app hands over through a provider; a file: path could point into this app own files. */
-  fun readable(uri: Uri, context: Context): Boolean =
-    uri.scheme == "content" && uri.authority != "${context.packageName}.share"
+  /** Only what another app hands over through a provider; a file: path could point into this app's own files. */
+  fun readable(uri: Uri, context: Context): Boolean {
+    if (uri.scheme != "content") return false
+    // A "user@" prefix still reaches the provider it names, so compare without it.
+    val authority = uri.authority?.substringAfterLast('@') ?: return false
+    if (authority.startsWith("${context.packageName}.")) return false
+    @Suppress("DEPRECATION")
+    val owner = context.packageManager.resolveContentProvider(authority, 0)?.packageName
+    return owner != context.packageName
+  }
 
   fun take(): Intent? = pending.also { pending = null }
 }
@@ -65,7 +72,8 @@ object SharedIntake {
  * timeouts, and an unreachable address there leaves the request pending forever.
  *
  * Partial files live in the cache and survive a failed request or an app restart. A later call for
- * the same id resumes with Range; the file is published only after the download is complete.
+ * the same id resumes with Range and If-Range; the file is published only after the download is
+ * complete. A finished file is reused only after the server confirms it is unchanged.
  */
 class CowDownloadsModule(context: ReactApplicationContext) : ReactContextBaseJavaModule(context) {
   private val io: ExecutorService = Executors.newFixedThreadPool(2)
@@ -217,9 +225,7 @@ class CowDownloadsModule(context: ReactApplicationContext) : ReactContextBaseJav
       synchronized(lock) {
         try {
         val target = cachedFile(id, name)
-        if (!target.exists()) {
-          download(url, id, target, resume = true)
-        }
+        download(url, id, target, resume = true)
         if (openWith) {
           if (launch(target, name)) {
             promise.resolve("opened")
@@ -242,8 +248,11 @@ class CowDownloadsModule(context: ReactApplicationContext) : ReactContextBaseJav
   /** Downloads into a partial cache file, then atomically makes it the completed cache file. */
   private fun download(url: String, id: String, target: File, resume: Boolean) {
     val partial = partialFile(id)
-    val offset = if (resume) partial.length() else 0L
-    if (!resume) {
+    val known = if (resume) readValidators(id) else null
+    val revalidate = target.exists() && known != null
+    val ifRange = known?.ifRange?.takeUnless { revalidate }
+    val offset = if (ifRange != null) partial.length() else 0L
+    if (offset == 0L) {
       partial.delete()
     }
     // No TLS setup here: CowTls puts the imported anchors on java.net's defaults.
@@ -253,12 +262,20 @@ class CowDownloadsModule(context: ReactApplicationContext) : ReactContextBaseJav
       instanceFollowRedirects = true
       requestMethod = "GET"
       setRequestProperty("Accept", "*/*")
-      if (offset > 0) {
+      if (revalidate) {
+        known?.etag?.let { setRequestProperty("If-None-Match", it) }
+        known?.lastModified?.let { setRequestProperty("If-Modified-Since", it) }
+      } else if (ifRange != null && offset > 0) {
         setRequestProperty("Range", "bytes=$offset-")
+        setRequestProperty("If-Range", ifRange)
       }
     }
     try {
       when (val code = conn.responseCode) {
+        304 -> {
+          if (revalidate) return
+          throw IOException("HTTP $code")
+        }
         416 -> {
           val total = contentRangeTotal(conn.getHeaderField("Content-Range"))
           if (total != null && total == offset) {
@@ -279,8 +296,11 @@ class CowDownloadsModule(context: ReactApplicationContext) : ReactContextBaseJav
       val append = conn.responseCode == 206 && offset > 0
       val start = if (append) offset else 0L
       if (!append) {
-        // A server that ignores Range returns the whole file, never append it to the old part.
+        // A server that ignores Range, or a file that changed since the part was written, sends it
+        // whole: never append it to the old part, and never let the old copy pass revalidation.
         partial.delete()
+        target.delete()
+        writeValidators(id, conn)
       }
       val total = contentRangeTotal(conn.getHeaderField("Content-Range"))
         ?: conn.contentLengthLong.takeIf { it >= 0 }?.let { it + start }
@@ -452,17 +472,66 @@ class CowDownloadsModule(context: ReactApplicationContext) : ReactContextBaseJav
     }
   }
 
-  private fun partialFile(id: String): File =
-    File(File(reactApplicationContext.cacheDir, "downloads").apply { mkdirs() }, "${hash(id)}.part")
+  private fun downloadsDir(): File = File(reactApplicationContext.cacheDir, "downloads").apply { mkdirs() }
 
-  private fun cachedFile(id: String, name: String): File =
-    File(File(reactApplicationContext.cacheDir, "downloads").apply { mkdirs() }, "${hash(id)}-$name")
+  private fun partialFile(id: String): File = File(downloadsDir(), "${hash(id)}.part")
+
+  /** File systems cap a name at 255 bytes, which a long CJK name reaches quickly. */
+  private fun cachedFile(id: String, name: String): File {
+    val prefix = "${hash(id)}-"
+    return File(downloadsDir(), prefix + fitBytes(name, MAX_NAME_BYTES - prefix.length))
+  }
+
+  /** Shortens the stem by whole characters until the UTF-8 name fits, keeping the extension. */
+  private fun fitBytes(name: String, max: Int): String {
+    if (name.toByteArray().size <= max) return name
+    val dot = name.lastIndexOf('.')
+    val ext = if (dot > 0 && name.length - dot <= MAX_EXT_CHARS) name.substring(dot) else ""
+    val stem = name.substring(0, name.length - ext.length)
+    val budget = max - ext.toByteArray().size
+    val out = StringBuilder()
+    var used = 0
+    var i = 0
+    while (i < stem.length) {
+      val end = i + Character.charCount(stem.codePointAt(i))
+      val size = stem.substring(i, end).toByteArray().size
+      if (used + size > budget) break
+      out.append(stem, i, end)
+      used += size
+      i = end
+    }
+    return out.toString() + ext
+  }
+
+  /** What the server said identifies this version of the file; kept next to its part and cache. */
+  private class Validators(val etag: String?, val lastModified: String?) {
+    /** If-Range only takes a strong ETag or a date. */
+    val ifRange: String? get() = etag?.takeUnless { it.startsWith("W/") } ?: lastModified
+  }
+
+  private fun validatorFile(id: String): File = File(downloadsDir(), "${hash(id)}.validators")
+
+  private fun readValidators(id: String): Validators? = runCatching {
+    val lines = validatorFile(id).readLines()
+    Validators(lines.getOrNull(0)?.ifEmpty { null }, lines.getOrNull(1)?.ifEmpty { null })
+  }.getOrNull()?.takeIf { it.etag != null || it.lastModified != null }
+
+  private fun writeValidators(id: String, conn: HttpURLConnection) {
+    val etag = conn.getHeaderField("ETag")
+    val modified = conn.getHeaderField("Last-Modified")
+    val file = validatorFile(id)
+    if (etag == null && modified == null) {
+      file.delete()
+    } else {
+      file.writeText("${etag.orEmpty()}\n${modified.orEmpty()}\n")
+    }
+  }
 
   private fun hash(value: String): String =
     MessageDigest.getInstance("SHA-256").digest(value.toByteArray()).joinToString("") { "%02x".format(it) }
 
   private fun contentRangeTotal(header: String?): Long? =
-    header?.let { Regex("""/(\\d+)$""").find(it)?.groupValues?.get(1)?.toLongOrNull() }
+    header?.let { Regex("""/(\d+)$""").find(it)?.groupValues?.get(1)?.toLongOrNull() }
 
   /** Hands the file to another app through FileProvider, which can grant it to a third party. */
   private fun launch(file: File, name: String): Boolean {
@@ -502,6 +571,8 @@ class CowDownloadsModule(context: ReactApplicationContext) : ReactContextBaseJav
     const val SAVED_PREFIX = "saved-"
     const val MAX_REMEMBERED = 500
     const val EMIT_INTERVAL_MS = 100L
+    const val MAX_NAME_BYTES = 255
+    const val MAX_EXT_CHARS = 16
 
     val OFFICE_MIME = mapOf(
       "doc" to "application/msword",

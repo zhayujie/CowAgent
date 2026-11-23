@@ -1,5 +1,6 @@
 import {DeviceEventEmitter, type EmitterSubscription} from 'react-native';
 import {create} from 'zustand';
+import {omit} from '../utils/object';
 
 export type DownloadStatus = 'downloading' | 'done' | 'failed';
 
@@ -19,6 +20,7 @@ interface DownloadState {
   progress: (id: string, loaded: number, total: number) => void;
   finish: (id: string) => void;
   fail: (id: string) => void;
+  clear: (id: string) => void;
 }
 
 export const useDownloadStore = create<DownloadState>(set => ({
@@ -58,6 +60,7 @@ export const useDownloadStore = create<DownloadState>(set => ({
       const current = s.byId[id];
       return current ? {byId: {...s.byId, [id]: {...current, status: 'failed'}}} : s;
     }),
+  clear: id => set(s => (s.byId[id] ? {byId: omit(s.byId, [id])} : s)),
 }));
 
 /**

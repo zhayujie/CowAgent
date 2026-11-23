@@ -281,6 +281,5 @@ const useStyles = makeStyles(t => ({
   failed: {flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40, paddingBottom: 60},
   failedTitle: {fontSize: 15, fontWeight: '500', color: t.t2},
   failedHint: {fontSize: 13, lineHeight: 20, color: t.t3, marginTop: 8, textAlign: 'center'},
-  failedNote: {fontSize: 12, lineHeight: 18, color: t.t3, marginTop: 14, textAlign: 'center', opacity: 0.8},
   failedActions: {flexDirection: 'row', gap: 8, marginTop: 20},
 }));
