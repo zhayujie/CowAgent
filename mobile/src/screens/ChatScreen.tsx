@@ -197,6 +197,7 @@ export function ChatScreen({route, navigation}: Props) {
   }, []);
   const openDrawer = useCallback(
     (view: DrawerView) => {
+      Keyboard.dismiss();
       setDrawerView(view);
       setDrawerNested(false);
       setDrawerOpen(true);
@@ -729,6 +730,7 @@ export function ChatScreen({route, navigation}: Props) {
               team: teamSize ? trf('chat_agent_a11y_team', {n: teamSize}) : '',
             })}
             onPress={() => {
+              Keyboard.dismiss();
               if (showInfo) {
                 setContextOnly(false);
                 setSessionOpen(true);
@@ -780,7 +782,7 @@ export function ChatScreen({route, navigation}: Props) {
                   renderItem={renderItem}
                   contentContainerStyle={styles.list}
                   keyboardShouldPersistTaps="handled"
-                  keyboardDismissMode="interactive"
+                  keyboardDismissMode="on-drag"
                   maintainVisibleContentPosition={holding ? HOLD_POSITION : FOLLOW_POSITION}
                   onScroll={onListScroll}
                   scrollEventThrottle={32}
