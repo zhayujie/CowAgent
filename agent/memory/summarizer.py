@@ -724,7 +724,8 @@ class MemoryFlushManager:
         Summarize conversation messages using LLM.
         Returns empty string if LLM deems content not worth recording, and
         ``None`` if the LLM call failed and the fallback had nothing either.
-        Rule-based fallback only used when LLM call raises an exception.
+        Rule-based fallback only used when the LLM call raises an exception or
+        answers with no text at all.
         """
         conversation_text = self._format_conversation_for_summary(messages, max_messages)
         if not conversation_text.strip():
@@ -733,6 +734,12 @@ class MemoryFlushManager:
         if self.llm_model:
             try:
                 summary = self._call_llm_for_summary(conversation_text)
+                if not summary or not summary.strip():
+                    # Only the explicit "None"/"无" reply means nothing is worth
+                    # keeping. No text at all is a failed answer, e.g. a
+                    # thinking model that ran out of output budget.
+                    logger.warning("[MemoryFlush] LLM returned no summary text, using fallback")
+                    return self._extract_summary_fallback(messages, max_messages) or None
                 if not _is_empty_sentinel(summary):
                     return summary.strip()
                 logger.info("[MemoryFlush] LLM returned empty sentinel, skipping write")
@@ -810,10 +817,12 @@ class MemoryFlushManager:
         """Call LLM to generate a concise summary of the conversation."""
         from agent.protocol.models import LLMRequest
         
+        # No output cap, as in deep_dream: with thinking on, reasoning tokens
+        # count against max_tokens, and a small cap left no room for the
+        # summary itself. The prompt already asks for a concise record.
         request = LLMRequest(
             messages=[{"role": "user", "content": _summarize_user_prompt().format(conversation=conversation_text)}],
             temperature=0,
-            max_tokens=500,
             stream=False,
             system=_summarize_system_prompt(),
         )
