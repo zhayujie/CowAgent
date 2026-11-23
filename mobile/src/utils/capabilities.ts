@@ -216,6 +216,7 @@ const SEARCH_CONSOLES: Record<string, string> = {
   tavily: 'tavily.com',
   outcrawl: 'outcrawl.ai',
   firecrawl: 'firecrawl.dev',
+  context: 'context.dev',
   specstream: 'specstream.ai',
   olostep: 'olostep.com',
   searchapi: 'searchapi.io',

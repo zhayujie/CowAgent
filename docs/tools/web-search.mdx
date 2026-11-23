@@ -3,7 +3,7 @@ title: web_search - Web Search
 description: "The web_search tool finds real-time information, news and research through multiple backends including Bocha, Baidu Qianfan, Zhipu, Tavily, Serply and SearXNG, configurable in the web console."
 ---
 
-Search the internet for real-time information, news, research, and more. Supports sixteen backends: Bocha, ERNIE, GLM, CowAgent, LinkAI, DeepSeek, AnySearch, Serply, Tavily, Outcrawl, Firecrawl, SpecStream, Olostep, SearchApi, SearXNG, and Keenable. Keenable also has a keyless anonymous mode that you turn on explicitly; each backend is used once its credentials (or that opt-in) are configured.
+Search the internet for real-time information, news, research, and more. Supports seventeen backends: Bocha, ERNIE, GLM, CowAgent, LinkAI, DeepSeek, AnySearch, Serply, Tavily, Outcrawl, Firecrawl, Context.dev, SpecStream, Olostep, SearchApi, SearXNG, and Keenable. Keenable also has a keyless anonymous mode that you turn on explicitly; each backend is used once its credentials (or that opt-in) are configured.
 
 <Tip>
   It is recommended to configure providers and routing strategy visually from the "Model Management → Search" panel in the [Web console](/channels/web), without manually editing the configuration file.
@@ -24,11 +24,14 @@ Search the internet for real-time information, news, research, and more. Support
 | Tavily | `tools.web_search.tavily_api_key` | [Tavily](https://tavily.com) |
 | Outcrawl | `tools.web_search.outcrawl_api_key` | [Outcrawl](https://outcrawl.ai) ([docs](https://outcrawl.ai/docs/search/overview)) |
 | Firecrawl | `tools.web_search.firecrawl_api_key` | [Firecrawl](https://www.firecrawl.dev/?utm_source=cowagent&utm_medium=integration) ([docs](https://docs.firecrawl.dev/features/search?utm_source=cowagent&utm_medium=integration)) |
+| Context.dev | `tools.web_search.context_api_key`, or the `CONTEXT_DEV_API_KEY` environment variable | [Context.dev](https://context.dev) ([docs](https://docs.context.dev/api-reference/web-scraping/search)) |
 | SpecStream | `tools.web_search.specstream_api_key` | [SpecStream](https://specstream.ai) ([docs](https://specstream.ai/docs/search-api)) |
 | Olostep | `tools.web_search.olostep_api_key` | [Olostep](https://www.olostep.com/dashboard/api-keys) ([docs](https://docs.olostep.com/features/search)) |
 | SearchApi | `tools.web_search.searchapi_api_key` | [SearchApi](https://www.searchapi.io) ([docs](https://www.searchapi.io/docs/google)) |
 | SearXNG | `tools.web_search.searxng_url` (self-hosted instance URL, no API key needed) | [SearXNG](https://docs.searxng.org/) |
 | Keenable | Optional `tools.web_search.keenable_api_key`, or `keenable_anonymous: true` for keyless use | [Keenable](https://keenable.ai) |
+
+Context.dev requests query-relevant Highlights for snippets, marks unavailable Highlights as search descriptions, and rejects incomplete responses. It ignores `freshness` and `summary`. Calls consume the connected account's credits.
 
 Bocha, Serply, and Tavily require dedicated keys; Zhipu, ERNIE, CowAgent, LinkAI, and DeepSeek reuse the corresponding model's API key — configuring the model automatically grants search capability. SearXNG is self-hosted and only requires an instance URL. AnySearch is opt-in for keyless use: set `tools.web_search.anysearch_anonymous` to `true` (or save it with an empty key in the console's Search panel) to call it anonymously; configuring `tools.web_search.anysearch_api_key` (falling back to the `ANYSEARCH_API_KEY` environment variable when unset) needs no opt-in, and quota and permissions follow the AnySearch server. Keenable is opt-in: set `tools.web_search.keenable_anonymous` to `true` (or save it with an empty key in the console's Search panel) and it calls a public endpoint with per-IP rate limits (10 requests/s, 1000/hour); an optional `keenable_api_key` (or `KEENABLE_API_KEY`) lifts them and needs no opt-in.
 
@@ -45,7 +48,7 @@ Bocha, Serply, and Tavily require dedicated keys; Zhipu, ERNIE, CowAgent, LinkAI
 }
 ```
 
-- `auto` (default): the Agent intelligently picks among configured providers and may call multiple providers in a single task to gather more comprehensive results; when none is specified, falls back through `deepseek → bocha → qianfan → zhipu → cowagent → linkai → anysearch → serply → tavily → outcrawl → firecrawl → specstream → olostep → searchapi → searxng → keenable`.
+- `auto` (default): the Agent intelligently picks among configured providers and may call multiple providers in a single task to gather more comprehensive results; when none is specified, falls back through `deepseek → bocha → qianfan → zhipu → cowagent → linkai → anysearch → serply → tavily → outcrawl → firecrawl → context → specstream → olostep → searchapi → searxng → keenable`.
 
 - `fixed`: always use the provider specified in `provider`; falls back to the auto order if that provider's credentials are missing.
 
@@ -60,6 +63,6 @@ Bocha, Serply, and Tavily require dedicated keys; Zhipu, ERNIE, CowAgent, LinkAI
 | `provider` | string | No | Available when multiple providers are configured under the `auto` strategy; used to switch provider for a single call |
 
 <Note>
-  If none of the sixteen providers is configured (no key, no instance URL, and no anonymous opt-in), this tool is not registered with the Agent.
+  If none of the seventeen providers is configured (no key, no instance URL, and no anonymous opt-in), this tool is not registered with the Agent.
 </Note>
 

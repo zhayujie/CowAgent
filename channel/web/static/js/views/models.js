@@ -867,10 +867,10 @@ function openSearchAddProviderPicker(missingProviders) {
     modal.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm';
     modal.innerHTML = `
         <div class="bg-panel rounded-xl border border-slate-200 dark:border-white/10
-                    w-full max-w-md mx-4 p-6 shadow-xl">
+                    w-full max-w-md mx-4 p-6 shadow-xl flex flex-col max-h-[calc(100dvh-2rem)]">
             <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-1">${t('models_search_add_provider')}</h3>
             <p class="text-xs text-slate-500 dark:text-slate-400 mb-4">${t('models_search_add_desc')}</p>
-            <div class="space-y-2">${rows}</div>
+            <div class="space-y-2 min-h-0 overflow-y-auto">${rows}</div>
             <div class="flex items-center justify-end mt-5">
                 <button type="button" onclick="document.getElementById('search-add-modal').remove()"
                         class="px-3 py-1.5 rounded-md text-sm text-slate-600 dark:text-slate-300
@@ -894,7 +894,7 @@ function _launchSearchProviderConfig(providerId, providerMeta) {
     // Providers that hold their own credential (dedicated key or, for SearXNG,
     // an instance URL) use the bespoke search-key modal. zhipu/qianfan/linkai
     // reuse a model-vendor key and go through the vendor modal instead.
-    if (['bocha', 'anysearch', 'serply', 'tavily', 'outcrawl', 'firecrawl', 'specstream', 'olostep', 'searchapi', 'searxng', 'keenable'].includes(providerId)) {
+    if (['bocha', 'anysearch', 'serply', 'tavily', 'outcrawl', 'firecrawl', 'context', 'specstream', 'olostep', 'searchapi', 'searxng', 'keenable'].includes(providerId)) {
         openSearchKeyModal(providerId, providerMeta);
     } else if (providerId === 'deepseek') {
         openDeepseekSearchModal();
