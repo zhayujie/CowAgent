@@ -49,6 +49,7 @@ import {tr, trf} from '../i18n';
 import {setLocalDeviceName, systemDeviceName, useLocalDeviceName} from '../kernel/localKernel';
 import type {RootStackParamList} from '../navigation/types';
 import type {DeviceList, PairedDevice, PairingCode} from '../protocol/resources';
+import {useOverviewStore} from '../store/overviewStore';
 import {activeServer, describeConnectError, noteServerName, useLocalServer, useServerStore} from '../store/serverStore';
 import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
@@ -94,6 +95,7 @@ export function DevicesScreen({navigation}: Props) {
   const styles = useStyles();
   const insets = useSafeAreaInsets();
   const local = useLocalServer();
+  const agentVersion = useOverviewStore(s => s.version);
   const server = activeServer();
   const localName = useLocalDeviceName();
   const linkColor = useLinkColor();
@@ -353,7 +355,9 @@ export function DevicesScreen({navigation}: Props) {
   const menuIsCurrent = !!menuShown && menuShown.id === current;
   const others = picker.entries;
   const address = local ? tr('server_local_meta') : server ? hostOf(server.baseUrl) : '-';
-  const version = !local && list?.instance.version ? ` · v${list.instance.version}` : '';
+  // Some hosts answer the device list for the agent and leave its version out; the agent reports it.
+  const instanceVersion = list?.instance.version || agentVersion;
+  const version = !local && instanceVersion ? ` · v${instanceVersion}` : '';
 
   const connectedList = () => {
     if (!list) {
