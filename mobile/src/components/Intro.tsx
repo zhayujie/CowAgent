@@ -9,17 +9,21 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import type {IconDefinition} from '@fortawesome/fontawesome-svg-core';
 import React, {useEffect, useRef} from 'react';
-import {Pressable, ScrollView, Text, View} from 'react-native';
+import {Pressable, ScrollView, Text, useWindowDimensions, View} from 'react-native';
 import {tr, trf, type MessageKey} from '../i18n';
 import {LOCAL_SERVER_ID} from '../kernel/localKernel';
 import type {AgentProfile} from '../protocol/resources';
 import {useServerStore} from '../store/serverStore';
+import {usePaneWidth} from '../theme/layout';
 import type {Palette} from '../theme/palette';
 import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
 import {greeting} from '../utils/format';
 import {AgentAvatar} from './AgentAvatar';
 import {Icon} from './Icon';
+
+const CARD_GAP = 10;
+const CARDS_PAD = 12;
 
 type Example = {
   key: string;
@@ -68,6 +72,34 @@ export function Intro({
   useEffect(() => () => onCardsBand?.(null), [onCardsBand]);
   const custom = !isDefault && agent?.description?.trim();
   const onPhone = useServerStore(s => s.activeId === LOCAL_SERVER_ID);
+  // With room for them, the cards sit in three columns as on the web console instead of one sideways row.
+  const paneWidth = usePaneWidth();
+  const {height} = useWindowDimensions();
+  const grid = paneWidth >= 600 && height >= 600;
+  const cardWidth = grid ? Math.floor((paneWidth - CARDS_PAD * 2 - CARD_GAP * 2) / 3) : undefined;
+  const cards = examples(onPhone).map(e => {
+    const [bg, fg] = e.tint(t);
+    const text = tr(`chat_example_${e.key}_text` as MessageKey);
+    return (
+      <Pressable
+        key={e.key}
+        accessibilityRole="button"
+        onPress={() => onPick(e.send ?? text)}
+        style={({pressed}) => [styles.card, !!cardWidth && {width: cardWidth}, pressed && styles.cardPressed]}>
+        <View style={styles.cardHead}>
+          <View style={[styles.cardIcon, {backgroundColor: bg}]}>
+            <Icon icon={e.icon} size={12} color={fg} />
+          </View>
+          <Text style={styles.cardTitle} numberOfLines={1}>
+            {tr(`chat_example_${e.key}_title` as MessageKey)}
+          </Text>
+        </View>
+        <Text style={styles.cardText} numberOfLines={2}>
+          {text}
+        </Text>
+      </Pressable>
+    );
+  });
 
   return (
     <View style={styles.root}>
@@ -100,36 +132,18 @@ export function Intro({
       </ScrollView>
 
       <View ref={cardsRef} onLayout={measureCards} collapsable={false}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-          style={styles.cardsScroll}
-          contentContainerStyle={styles.cards}>
-          {examples(onPhone).map(e => {
-            const [bg, fg] = e.tint(t);
-            const text = tr(`chat_example_${e.key}_text` as MessageKey);
-            return (
-              <Pressable
-                key={e.key}
-                accessibilityRole="button"
-                onPress={() => onPick(e.send ?? text)}
-                style={({pressed}) => [styles.card, pressed && styles.cardPressed]}>
-                <View style={styles.cardHead}>
-                  <View style={[styles.cardIcon, {backgroundColor: bg}]}>
-                    <Icon icon={e.icon} size={12} color={fg} />
-                  </View>
-                  <Text style={styles.cardTitle} numberOfLines={1}>
-                    {tr(`chat_example_${e.key}_title` as MessageKey)}
-                  </Text>
-                </View>
-                <Text style={styles.cardText} numberOfLines={2}>
-                  {text}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+        {grid ? (
+          <View style={[styles.cards, styles.grid]}>{cards}</View>
+        ) : (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            style={styles.cardsScroll}
+            contentContainerStyle={styles.cards}>
+            {cards}
+          </ScrollView>
+        )}
       </View>
     </View>
   );
@@ -176,7 +190,8 @@ const useStyles = makeStyles(t => ({
   setupAction: {paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999, backgroundColor: t.green},
   setupActionText: {fontSize: 13, fontWeight: '600', color: t.onAccent},
   cardsScroll: {flexGrow: 0},
-  cards: {gap: 10, paddingHorizontal: 12, paddingTop: 4, paddingBottom: 6},
+  cards: {gap: CARD_GAP, paddingHorizontal: CARDS_PAD, paddingTop: 4, paddingBottom: 6},
+  grid: {flexDirection: 'row', flexWrap: 'wrap'},
   card: {
     width: 164,
     paddingHorizontal: 14,

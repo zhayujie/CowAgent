@@ -1,9 +1,10 @@
 import React, {useCallback, useEffect, useRef, useState} from 'react';
-import {Dimensions, Platform, StyleSheet, Text, useWindowDimensions, View} from 'react-native';
+import {Dimensions, Platform, StyleSheet, Text, View} from 'react-native';
 import Svg, {Defs, LinearGradient, Rect, Stop} from 'react-native-svg';
 import {WebView, type WebViewNavigation} from 'react-native-webview';
 import {serverUrl} from '../api/cowApi';
 import type {Artifact} from '../protocol/events';
+import {usePaneWidth} from '../theme/layout';
 import {makeStyles, useTheme} from '../theme/theme';
 import {Markdown} from './Markdown';
 
@@ -257,7 +258,7 @@ const stripMedia = (md: string) =>
 function PaperThumb({uri, kind, width, height}: {uri: string; kind: string; width: number; height: number}) {
   const t = useTheme();
   const styles = useStyles();
-  const {width: windowWidth} = useWindowDimensions();
+  const paneWidth = usePaneWidth();
   const text = useTextHead(uri);
   if (!text?.trim()) {
     return null;
@@ -269,7 +270,7 @@ function PaperThumb({uri, kind, width, height}: {uri: string; kind: string; widt
       <View
         style={[styles.paper, styles.scaled, {height: Math.ceil(height / scale), transform: [{scale}]}]}>
         {kind === 'markdown' ? (
-          <Markdown value={stripMedia(text)} inset={Math.max(0, windowWidth - (PAPER_WIDTH - PAPER_PAD_X * 2))} />
+          <Markdown value={stripMedia(text)} inset={Math.max(0, paneWidth - (PAPER_WIDTH - PAPER_PAD_X * 2))} />
         ) : (
           // Wider than the paper, so lines are cut at the edge instead of wrapping.
           <View style={styles.monoBox}>

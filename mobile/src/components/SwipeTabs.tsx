@@ -1,11 +1,12 @@
 import {useNavigation, type ParamListBase} from '@react-navigation/native';
 import type {StackNavigationProp} from '@react-navigation/stack';
 import React, {useCallback, useEffect, useLayoutEffect, useMemo, useRef, type ReactNode} from 'react';
-import {StyleSheet, useWindowDimensions, type StyleProp, type ViewStyle} from 'react-native';
+import {StyleSheet, type StyleProp, type ViewStyle} from 'react-native';
 import {Gesture, GestureDetector} from 'react-native-gesture-handler';
 import Animated, {Easing, interpolate, useAnimatedStyle, useSharedValue, withTiming} from 'react-native-reanimated';
 import {scheduleOnRN} from 'react-native-worklets';
 import {EDGE_ONLY, useFullBackSwipe} from '../navigation/gestures';
+import {usePaneWidth} from '../theme/layout';
 
 const ACTIVATE = 16;
 /** Moved this far up or down first, the touch is a scroll. */
@@ -41,7 +42,7 @@ export function SwipeTabs<K extends string>({
 }) {
   const navigation = useNavigation<StackNavigationProp<ParamListBase>>();
   const fullBackSwipe = useFullBackSwipe();
-  const {width} = useWindowDimensions();
+  const width = usePaneWidth();
   const index = tabs.indexOf(value);
   const x = useSharedValue(0);
   const w = useSharedValue(width);

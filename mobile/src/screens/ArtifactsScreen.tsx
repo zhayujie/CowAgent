@@ -35,6 +35,7 @@ import {tr, trf} from '../i18n';
 import type {RootStackParamList} from '../navigation/types';
 import type {Artifact} from '../protocol/events';
 import {useAgentStore} from '../store/agentStore';
+import {usePaneWidth} from '../theme/layout';
 import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
 import {dayLabel, shortTime, toDate} from '../utils/format';
@@ -58,6 +59,16 @@ interface Group {
 }
 
 const THUMB_HEIGHT = 92;
+const CARDS_PAD = 14;
+const CARD_GAP = 10;
+const CARD_MIN = 200;
+
+/** Cards fill the row at no less than 200 wide, as the web console's grid, and never fewer than two. */
+function useCardWidth(): number {
+  const inner = usePaneWidth() - CARDS_PAD * 2;
+  const columns = Math.max(2, Math.floor((inner + CARD_GAP) / (CARD_MIN + CARD_GAP)));
+  return Math.floor((inner - CARD_GAP * (columns - 1)) / columns);
+}
 
 /** Pictures, pages and readable documents show as thumbnails; everything else as a row. */
 const isCard = (a: Artifact) => {
@@ -378,6 +389,7 @@ function ArtifactCard({
 }) {
   const t = useTheme();
   const styles = useStyles();
+  const width = useCardWidth();
   const group = kindGroup(a.kind);
   const [bg, fg] = t.kind[group];
   return (
@@ -386,7 +398,7 @@ function ArtifactCard({
       onPress={onPress}
       onLongPress={onLongPress}
       delayLongPress={350}
-      style={({pressed}) => [styles.card, pressed && styles.pressedDim]}>
+      style={({pressed}) => [styles.card, {width}, pressed && styles.pressedDim]}>
       <View style={[styles.thumb, {backgroundColor: bg}]}>
         {group === 'image' && a.preview_url ? (
           <Image
@@ -519,11 +531,8 @@ const useStyles = makeStyles(t => ({
   focusText: {flex: 1, minWidth: 0, fontSize: 13, color: t.t2},
   scrollBody: {flexGrow: 1},
   group: {marginBottom: 18},
-  cards: {flexDirection: 'row', flexWrap: 'wrap', gap: 10, paddingHorizontal: 14, marginBottom: 6},
+  cards: {flexDirection: 'row', flexWrap: 'wrap', gap: CARD_GAP, paddingHorizontal: CARDS_PAD, marginBottom: 6},
   card: {
-    width: '48.5%',
-    flexGrow: 1,
-    maxWidth: '48.5%',
     borderRadius: radius.md,
     overflow: 'hidden',
     backgroundColor: t.bg1,

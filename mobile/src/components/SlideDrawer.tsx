@@ -1,14 +1,13 @@
 import React, {useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode, type Ref} from 'react';
-import {BackHandler, PanResponder, Platform, Pressable, StyleSheet, useWindowDimensions} from 'react-native';
+import {BackHandler, PanResponder, Pressable, StyleSheet} from 'react-native';
 import Animated, {Easing, useAnimatedStyle, useSharedValue, withTiming} from 'react-native-reanimated';
 import {scheduleOnRN} from 'react-native-worklets';
 import {tr} from '../i18n';
+import {useFrameWidth} from '../theme/layout';
 import {makeStyles} from '../theme/theme';
 
 const EASE = Easing.bezier(0.22, 0.61, 0.36, 1);
 const MAX_WIDTH = 304;
-// Web preview renders inside a phone-sized frame (see web/index.html).
-const FRAME_WIDTH = Platform.OS === 'web' ? 430 : Number.POSITIVE_INFINITY;
 
 export interface SlideDrawerHandle {
   /** Pulls the closed drawer out by `dx`, so it follows the finger. */
@@ -30,8 +29,7 @@ export function SlideDrawer({
   ref?: Ref<SlideDrawerHandle>;
 }) {
   const styles = useStyles();
-  const {width: windowWidth} = useWindowDimensions();
-  const width = Math.min(MAX_WIDTH, Math.round(Math.min(windowWidth, FRAME_WIDTH) * 0.8));
+  const width = Math.min(MAX_WIDTH, Math.round(useFrameWidth() * 0.8));
   const progress = useSharedValue(0);
   const [mounted, setMounted] = useState(open);
   const mountedRef = useRef(open);

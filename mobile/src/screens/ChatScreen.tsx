@@ -59,11 +59,13 @@ import type {AgentBadge, PermissionMode, WorkspaceHit} from '../protocol/resourc
 import {agentParam, useAgentStore, useCurrentAgent} from '../store/agentStore';
 import {MAX_REPLYING, useChatStore, type ChatMessage} from '../store/chatStore';
 import {MAX_ATTACHMENTS, useComposerStore} from '../store/composerStore';
+import {useLayoutStore} from '../store/layoutStore';
 import {useMenuStore} from '../store/menuStore';
 import {useOverviewStore} from '../store/overviewStore';
 import {useSessionSettingsStore} from '../store/sessionSettingsStore';
 import {useSessionStore} from '../store/sessionStore';
 import {takeIncomingShare, useIncomingShare} from '../share/incoming';
+import {CHAT_WIDTH, PaneWidthProvider, usePaneWidth, useSidebarLayout} from '../theme/layout';
 import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
 import {chatModelReady} from '../utils/capabilities';
@@ -76,6 +78,7 @@ const OPTIMIZE_CONTEXT = 6;
 /** Further than this from the newest message counts as reading back. */
 const AWAY_PX = 240;
 const HISTORY_MAX = 20;
+const TO_BOTTOM_RIGHT = 22;
 /** Within this of the bottom, a new bubble is followed instead of held below the screen. */
 const FOLLOW_PX = 80;
 /**
@@ -105,6 +108,10 @@ export function ChatScreen({route, navigation}: Props) {
   const team = settings?.team;
   const teamSize = team?.members.length ?? 0;
   const [draft, setDraft] = useState('');
+  // On a wide screen the menu stays open beside the chat instead of sliding over it.
+  const wide = useSidebarLayout();
+  const paneWidth = usePaneWidth();
+  const columnWidth = Math.min(paneWidth, CHAT_WIDTH);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerView, setDrawerView] = useState<DrawerView>('menu');
   const [drawerNested, setDrawerNested] = useState(false);
@@ -198,14 +205,23 @@ export function ChatScreen({route, navigation}: Props) {
   const openDrawer = useCallback(
     (view: DrawerView) => {
       Keyboard.dismiss();
+      if (wide) {
+        useLayoutStore.getState().toggleSidebar(view);
+        return;
+      }
       setDrawerView(view);
       setDrawerNested(false);
       setDrawerOpen(true);
       refreshDrawer();
     },
-    [refreshDrawer],
+    [refreshDrawer, wide],
   );
   const closeDrawer = useCallback(() => setDrawerOpen(false), []);
+  useEffect(() => {
+    if (wide) {
+      setDrawerOpen(false);
+    }
+  }, [wide]);
 
   // Conversations visited in this screen, so back returns to the previous one before leaving the app.
   const visited = useRef<{sessionId: string; agentId: string | null}[]>([]);
@@ -305,6 +321,21 @@ export function ChatScreen({route, navigation}: Props) {
     },
     [navigation],
   );
+
+  useEffect(() => {
+    useLayoutStore.setState({
+      chat: {
+        newChat: startNewChat,
+        openSession,
+        sessionActions: setActingSession,
+        openFile: openMenuFile,
+        openLink,
+        switchServer: () => setServerSheetOpen(true),
+      },
+    });
+  }, [startNewChat, openSession, openMenuFile, openLink]);
+  useEffect(() => () => useLayoutStore.setState({chat: null}), []);
+  useEffect(() => useLayoutStore.setState({sessionId}), [sessionId]);
 
   const startTeamChat = useCallback(
     async (owner: string, members: string[]) => {
@@ -641,8 +672,8 @@ export function ChatScreen({route, navigation}: Props) {
   const bandTop = useSharedValue(-1);
   const bandBottom = useSharedValue(-1);
   useEffect(() => {
-    swipeBlocked.value = drawerOpen;
-  }, [drawerOpen, swipeBlocked]);
+    swipeBlocked.value = drawerOpen || wide;
+  }, [drawerOpen, wide, swipeBlocked]);
   const onCardsBand = useCallback(
     (band: {top: number; bottom: number} | null) => {
       bandTop.value = band ? band.top : -1;
@@ -757,106 +788,117 @@ export function ChatScreen({route, navigation}: Props) {
         </View>
 
         <AvoidKeyboard style={styles.body}>
-          {empty ? (
-            loading ? (
-              <View style={styles.center}>
-                <ActivityIndicator color={t.t3} />
-              </View>
+          <PaneWidthProvider width={columnWidth}>
+            {empty ? (
+              loading ? (
+                <View style={styles.center}>
+                  <ActivityIndicator color={t.t3} />
+                </View>
+              ) : (
+                <View style={[styles.body, styles.column]}>
+                  <Intro
+                    agent={agent}
+                    isDefault={!agent || agent.id === defaultAgentId}
+                    onPick={pickExample}
+                    onCardsBand={onCardsBand}
+                    onSetupModel={modelMissing ? () => navigation.navigate('Models') : undefined}
+                  />
+                </View>
+              )
             ) : (
-              <Intro
-                agent={agent}
-                isDefault={!agent || agent.id === defaultAgentId}
-                onPick={pickExample}
-                onCardsBand={onCardsBand}
-                onSetupModel={modelMissing ? () => navigation.navigate('Models') : undefined}
+              <ListShiftContext.Provider value={shiftList}>
+                <View style={styles.body}>
+                  <FlatList
+                    ref={list}
+                    inverted
+                    data={data}
+                    keyExtractor={m => m.id}
+                    renderItem={renderItem}
+                    contentContainerStyle={[styles.list, styles.column]}
+                    keyboardShouldPersistTaps="handled"
+                    keyboardDismissMode="on-drag"
+                    maintainVisibleContentPosition={holding ? HOLD_POSITION : FOLLOW_POSITION}
+                    onScroll={onListScroll}
+                    scrollEventThrottle={32}
+                  />
+                  {away && (
+                    <Animated.View
+                      entering={FadeIn.duration(160)}
+                      exiting={FadeOut.duration(120)}
+                      style={[styles.toBottom, {right: TO_BOTTOM_RIGHT + (paneWidth - columnWidth) / 2}]}>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={unread ? tr('chat_back_to_latest_unread') : tr('chat_back_to_latest')}
+                        onPress={toBottom}
+                        hitSlop={8}
+                        style={({pressed}) => [styles.toBottomButton, pressed && styles.agentPressed]}>
+                        <Icon icon={faArrowDown} size={12} color={t.t2} />
+                        {unread && <View style={styles.unreadDot} />}
+                      </Pressable>
+                    </Animated.View>
+                  )}
+                </View>
+              </ListShiftContext.Provider>
+            )}
+            <View style={styles.column}>
+              <Dock
+                ref={dock}
+                text={draft}
+                onChangeText={setDraft}
+                placeholder={shared ? tr('composer_placeholder_team') : tr('composer_placeholder')}
+                busy={busy}
+                onSend={sendText}
+                onStop={() => {
+                  useChatStore.getState().cancel(sessionId).catch(() => undefined);
+                }}
+                onVoice={sendVoice}
+                transcribing={transcribing}
+                attachments={attachments}
+                onRemoveAttachment={id => useComposerStore.getState().remove(id)}
+                onRetryAttachment={id =>
+                  useComposerStore.getState().retry(id, sessionId, useAgentStore.getState().currentId)
+                }
+                onOpenAttach={() => setAttachOpen(true)}
+                model={modelDisplayName(settings?.model)}
+                onOpenModel={() => openSettingsSheet(setModelOpen)}
+                permission={settings?.permission.mode}
+                onOpenPermission={() => openSettingsSheet(setPermissionOpen)}
+                roster={roster}
+                defaultAgentId={defaultAgentId}
+                searchFiles={searchFiles}
+                onPickFile={pickFile}
               />
-            )
-          ) : (
-            <ListShiftContext.Provider value={shiftList}>
-              <View style={styles.body}>
-                <FlatList
-                  ref={list}
-                  inverted
-                  data={data}
-                  keyExtractor={m => m.id}
-                  renderItem={renderItem}
-                  contentContainerStyle={styles.list}
-                  keyboardShouldPersistTaps="handled"
-                  keyboardDismissMode="on-drag"
-                  maintainVisibleContentPosition={holding ? HOLD_POSITION : FOLLOW_POSITION}
-                  onScroll={onListScroll}
-                  scrollEventThrottle={32}
-                />
-                {away && (
-                  <Animated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(120)} style={styles.toBottom}>
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel={unread ? tr('chat_back_to_latest_unread') : tr('chat_back_to_latest')}
-                      onPress={toBottom}
-                      hitSlop={8}
-                      style={({pressed}) => [styles.toBottomButton, pressed && styles.agentPressed]}>
-                      <Icon icon={faArrowDown} size={12} color={t.t2} />
-                      {unread && <View style={styles.unreadDot} />}
-                    </Pressable>
-                  </Animated.View>
-                )}
-              </View>
-            </ListShiftContext.Provider>
-          )}
-          <Dock
-            ref={dock}
-            text={draft}
-            onChangeText={setDraft}
-            placeholder={shared ? tr('composer_placeholder_team') : tr('composer_placeholder')}
-            busy={busy}
-            onSend={sendText}
-            onStop={() => {
-              useChatStore.getState().cancel(sessionId).catch(() => undefined);
-            }}
-            onVoice={sendVoice}
-            transcribing={transcribing}
-            attachments={attachments}
-            onRemoveAttachment={id => useComposerStore.getState().remove(id)}
-            onRetryAttachment={id =>
-              useComposerStore.getState().retry(id, sessionId, useAgentStore.getState().currentId)
-            }
-            onOpenAttach={() => setAttachOpen(true)}
-            model={modelDisplayName(settings?.model)}
-            onOpenModel={() => openSettingsSheet(setModelOpen)}
-            permission={settings?.permission.mode}
-            onOpenPermission={() => openSettingsSheet(setPermissionOpen)}
-            roster={roster}
-            defaultAgentId={defaultAgentId}
-            searchFiles={searchFiles}
-            onPickFile={pickFile}
-          />
+            </View>
+          </PaneWidthProvider>
           {!keyboardShown && <View style={{height: insets.bottom}} />}
         </AvoidKeyboard>
 
         <VoiceOverlay />
         <ToastHost bottom={insets.bottom + 150} />
 
-        <SlideDrawer ref={drawerRef} open={drawerOpen} onClose={closeDrawer}>
-          <DrawerMenu
-            view={drawerView}
-            nested={drawerNested}
-            onViewChange={view => {
-              setDrawerView(view);
-              setDrawerNested(view === 'sessions');
-            }}
-            currentSessionId={sessionId}
-            onNewChat={startNewChat}
-            onOpenSession={openSession}
-            onSessionActions={setActingSession}
-            onNavigate={goTo}
-            onOpenFile={openMenuFile}
-            onOpenLink={openLink}
-            onSwitchServer={() => {
-              setDrawerOpen(false);
-              setServerSheetOpen(true);
-            }}
-          />
-        </SlideDrawer>
+        {!wide && (
+          <SlideDrawer ref={drawerRef} open={drawerOpen} onClose={closeDrawer}>
+            <DrawerMenu
+              view={drawerView}
+              nested={drawerNested}
+              onViewChange={view => {
+                setDrawerView(view);
+                setDrawerNested(view === 'sessions');
+              }}
+              currentSessionId={sessionId}
+              onNewChat={startNewChat}
+              onOpenSession={openSession}
+              onSessionActions={setActingSession}
+              onNavigate={goTo}
+              onOpenFile={openMenuFile}
+              onOpenLink={openLink}
+              onSwitchServer={() => {
+                setDrawerOpen(false);
+                setServerSheetOpen(true);
+              }}
+            />
+          </SlideDrawer>
+        )}
 
         <ServerSheet
           visible={serverSheetOpen}
@@ -997,10 +1039,11 @@ const useStyles = makeStyles(t => ({
   stackMoreText: {fontSize: 10, fontWeight: '600', color: t.t2, fontVariant: ['tabular-nums']},
   agentName: {fontSize: 15, fontWeight: '500', letterSpacing: -0.2, color: t.t1, flexShrink: 1},
   body: {flex: 1},
+  column: {width: '100%', maxWidth: CHAT_WIDTH, alignSelf: 'center'},
   center: {flex: 1, alignItems: 'center', justifyContent: 'center'},
   // The list is inverted: flex-end is the visual top, so a short conversation starts there.
   list: {flexGrow: 1, justifyContent: 'flex-end', paddingTop: 20, paddingBottom: 8},
-  toBottom: {position: 'absolute', right: 22, bottom: 10},
+  toBottom: {position: 'absolute', bottom: 10},
   // No elevation: Android draws a fading elevated circle's shadow as a jagged polygon.
   toBottomButton: {
     width: 32,

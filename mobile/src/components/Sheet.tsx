@@ -5,12 +5,14 @@ import {scheduleOnRN} from 'react-native-worklets';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {faChevronRight} from '@fortawesome/free-solid-svg-icons';
 import {tr} from '../i18n';
+import {useDialogLayout} from '../theme/layout';
 import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
 import {Icon} from './Icon';
 import {AvoidKeyboard} from './AvoidKeyboard';
 
 const EASE = Easing.bezier(0.22, 0.61, 0.36, 1);
+const DIALOG_WIDTH = 520;
 
 /** iOS cannot present another modal while the sheet's modal is still dismissing. */
 export const SHEET_DISMISS_MS = Platform.OS === 'ios' ? 360 : 0;
@@ -37,7 +39,10 @@ function useHarmonyKeyboardHeight(active: boolean): number {
   return height;
 }
 
-/** Bottom sheet: slides up over a scrim, closes on scrim tap or back. */
+/**
+ * Bottom sheet: slides up over a scrim, closes on scrim tap or back. On a wide screen it floats
+ * in the middle as a dialog, as the web console's do.
+ */
 export function Sheet({
   visible,
   onClose,
@@ -59,6 +64,7 @@ export function Sheet({
   const [mounted, setMounted] = useState(visible);
   const [panelHeight, setPanelHeight] = useState(420);
   const keyboardHeight = useHarmonyKeyboardHeight(mounted);
+  const floating = useDialogLayout();
 
   useEffect(() => {
     if (visible) {
@@ -74,8 +80,11 @@ export function Sheet({
   // Explicit dependencies keep the web preview working, where no worklets Babel plugin runs.
   const scrim = useAnimatedStyle(() => ({opacity: progress.value}), [progress]);
   const slide = useAnimatedStyle(
-    () => ({transform: [{translateY: (1 - progress.value) * panelHeight}]}),
-    [progress, panelHeight],
+    () =>
+      floating
+        ? {opacity: progress.value, transform: [{translateY: (1 - progress.value) * 24}]}
+        : {transform: [{translateY: (1 - progress.value) * panelHeight}]},
+    [progress, panelHeight, floating],
   );
 
   if (!mounted) {
@@ -84,14 +93,14 @@ export function Sheet({
 
   return (
     <Modal transparent visible animationType="none" onRequestClose={onClose} statusBarTranslucent>
-      <AvoidKeyboard style={[styles.root, {paddingBottom: keyboardHeight}]}>
+      <AvoidKeyboard style={[styles.root, floating && styles.rootFloating, {paddingBottom: keyboardHeight}]}>
         <Animated.View style={[StyleSheet.absoluteFill, styles.scrim, scrim]}>
           <Pressable style={styles.fill} onPress={onClose} accessibilityLabel={tr('common_close')} />
         </Animated.View>
         <Animated.View
           onLayout={e => setPanelHeight(e.nativeEvent.layout.height + 40)}
-          style={[styles.panel, {paddingBottom: insets.bottom + 12}, slide]}>
-          <View style={styles.grabber} />
+          style={[styles.panel, floating ? styles.panelFloating : {paddingBottom: insets.bottom + 12}, slide]}>
+          {!floating && <View style={styles.grabber} />}
           {action ? (
             <View style={styles.head}>
               <Text style={[styles.title, styles.headTitle]} numberOfLines={1}>
@@ -118,6 +127,7 @@ export function Sheet({
 
 const useStyles = makeStyles(t => ({
   root: {flex: 1, justifyContent: 'flex-end'},
+  rootFloating: {justifyContent: 'center', alignItems: 'center', padding: 24},
   fill: {flex: 1},
   scrim: {backgroundColor: t.scrim},
   panel: {
@@ -130,6 +140,15 @@ const useStyles = makeStyles(t => ({
     borderWidth: t.isDark ? 1 : 0,
     borderBottomWidth: 0,
     borderColor: t.line2,
+  },
+  panelFloating: {
+    width: '100%',
+    maxWidth: DIALOG_WIDTH,
+    maxHeight: '80%',
+    paddingTop: 14,
+    paddingBottom: 12,
+    borderRadius: radius.lg + 4,
+    borderBottomWidth: t.isDark ? 1 : 0,
   },
   grabber: {
     alignSelf: 'center',

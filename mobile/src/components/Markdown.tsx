@@ -7,7 +7,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  useWindowDimensions,
   View,
   type ImageStyle,
   type TextStyle,
@@ -24,6 +23,7 @@ import {
 } from '../files/chatFile';
 import {openFileRef, openLink, useImageViewer} from '../files/openFile';
 import {tr, trf} from '../i18n';
+import {usePaneWidth} from '../theme/layout';
 import type {Palette} from '../theme/palette';
 import {useTheme} from '../theme/theme';
 import {languageOf} from '../utils/highlight';
@@ -35,7 +35,6 @@ import {showToast} from './Toast';
 
 const MONO = Platform.select({ios: 'Menlo', default: 'monospace'});
 // Web preview renders inside a phone-sized frame (see web/index.html).
-const MAX_FRAME_WIDTH = Platform.OS === 'web' ? 430 : Number.POSITIVE_INFINITY;
 // Horizontal padding of the message column (and the scrollbar on web).
 const COLUMN_INSET = 18 * 2;
 const MIN_COL_WIDTH = 110;
@@ -306,8 +305,7 @@ function MarkdownImpl({
   onLink?: (href: string) => boolean;
 }) {
   const t = useTheme();
-  const {width} = useWindowDimensions();
-  const contentWidth = Math.min(width, MAX_FRAME_WIDTH) - inset;
+  const contentWidth = usePaneWidth() - inset;
   const cache = compact ? compactCache : styleCache;
   let cached = cache.get(t);
   if (!cached) {

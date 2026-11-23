@@ -48,6 +48,7 @@ export function DrawerMenu({
   nested,
   onViewChange,
   currentSessionId,
+  activeSection,
   onNewChat,
   onOpenSession,
   onSessionActions,
@@ -61,6 +62,8 @@ export function DrawerMenu({
   nested: boolean;
   onViewChange: (view: DrawerView) => void;
   currentSessionId: string;
+  /** The page shown beside a sidebar, marked in the menu; none in the drawer, which covers it. */
+  activeSection?: string;
   onNewChat: () => void;
   onOpenSession: (session: SessionItem) => void;
   /** Long press on a conversation: pin, rename, delete. */
@@ -96,7 +99,8 @@ export function DrawerMenu({
   const renderEntry = (e: MenuEntry) => {
     if (e.kind === 'route') {
       const open = e.view === 'chat' ? () => onViewChange('sessions') : () => onNavigate(e.route);
-      return <Item key={e.key} icon={e.icon} label={e.label} onPress={open} />;
+      const active = !!activeSection && (e.view === 'chat' ? activeSection === 'Chat' : e.route === activeSection);
+      return <Item key={e.key} icon={e.icon} label={e.label} active={active} onPress={open} />;
     }
     if (e.kind === 'file') {
       const file = e.file;
