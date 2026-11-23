@@ -3,9 +3,11 @@ package ai.cowagent.app.files
 import android.content.Context
 import android.net.http.SslCertificate
 import android.net.http.SslError
+import android.os.Build
 import android.util.Log
 import com.facebook.react.modules.network.OkHttpClientProvider
 import com.reactnativecommunity.webview.RNCWebViewClient
+import java.security.cert.CertificateFactory
 import java.security.cert.X509Certificate
 import javax.net.ssl.HttpsURLConnection
 
@@ -65,9 +67,20 @@ object CowTls {
     }
   }
 
-  /** [SslError] only carries a summary; the certificate itself rides along in its saved state. */
+  /**
+   * [SslError] only carries a summary, so the certificate itself has to be recovered from it, and
+   * the platform offers it in two shapes. From API 29 the parsed form is available directly.
+   * Below that - and on any version where the platform kept only the encoding -
+   * [SslCertificate.saveState] stores the DER bytes under `x509-certificate`; note that this is a
+   * byte array, not a certificate object, which is why it is parsed here rather than cast.
+   */
   private fun leafOf(error: SslError): X509Certificate? = runCatching {
-    val state = SslCertificate.saveState(error.certificate) ?: return null
-    state.get("x509-certificate") as? X509Certificate
+    val certificate = error.certificate ?: return null
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+      certificate.x509Certificate?.let { return it }
+    }
+    val state = SslCertificate.saveState(certificate) ?: return null
+    val der = state.getByteArray("x509-certificate") ?: return null
+    CertificateFactory.getInstance("X.509").generateCertificate(der.inputStream()) as? X509Certificate
   }.getOrNull()
 }
