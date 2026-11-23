@@ -1,4 +1,4 @@
-import {NativeModules, Platform, type TurboModule} from 'react-native';
+import {AppState, NativeModules, Platform, type TurboModule} from 'react-native';
 import {create} from 'zustand';
 import {tr} from '../i18n';
 import {readJSON, writeJSON} from '../storage/kv';
@@ -12,6 +12,8 @@ import {readJSON, writeJSON} from '../storage/kv';
 interface NativeKernel extends TurboModule {
   start(): Promise<{port: number; password: string}>;
   deviceName?(): string;
+  /** iOS: has the running kernel listen afresh; false when none is running. */
+  relisten?(): Promise<boolean>;
 }
 
 // HarmonyOS's is an ArkTS TurboModule. Looked up lazily because react-native-web
@@ -65,6 +67,12 @@ export function useLocalDeviceName(): string {
 
 /** First launch unpacks the sources and compiles them, which takes a while on slow phones. */
 const READY_TIMEOUT_MS = 90_000;
+/** Loopback answers at once; a stuck connection would otherwise hold out for iOS's 60 s default. */
+const PROBE_TIMEOUT_MS = 2000;
+
+/** Where the kernel answered in this run, once it has. */
+let answeredAt: string | null = null;
+let watchingForeground = false;
 
 export function isLocalKernelAvailable(): boolean {
   return !!native;
@@ -83,21 +91,50 @@ export async function startLocalKernel(): Promise<LocalKernel> {
   const {port, password} = await native.start();
   const baseUrl = `http://127.0.0.1:${port}`;
   await waitUntilReady(baseUrl);
+  answeredAt = baseUrl;
+  watchForeground();
   return {baseUrl, password};
+}
+
+async function answers(baseUrl: string): Promise<boolean> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${baseUrl}/api/health`, {signal: controller.signal});
+    return res.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function waitUntilReady(baseUrl: string) {
   const deadline = Date.now() + READY_TIMEOUT_MS;
+  // One that answered before is up already: only its listening socket can be gone.
+  let relistened = answeredAt !== baseUrl;
   while (Date.now() < deadline) {
-    try {
-      const res = await fetch(`${baseUrl}/api/health`);
-      if (res.ok) {
-        return;
-      }
-    } catch {
-      // Not listening yet.
+    if (await answers(baseUrl)) {
+      return;
+    }
+    if (!relistened) {
+      relistened = true;
+      await native?.relisten?.().catch(() => false);
     }
     await new Promise<void>(resolve => setTimeout(resolve, 300));
   }
   throw new Error(tr('server_local_timeout'));
+}
+
+/** iOS may reclaim the kernel's listening socket while the app is suspended; restore it on return. */
+function watchForeground() {
+  if (watchingForeground || !native?.relisten) {
+    return;
+  }
+  watchingForeground = true;
+  AppState.addEventListener('change', async state => {
+    if (state === 'active' && answeredAt && !(await answers(answeredAt))) {
+      native.relisten?.().catch(() => false);
+    }
+  });
 }

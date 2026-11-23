@@ -1749,6 +1749,17 @@ class WebChannel(ChatChannel):
 
         threading.Thread(target=swap, daemon=True, name="web-rebind").start()
 
+    def relisten(self) -> None:
+        """Listen afresh on the current address. iOS may reclaim a suspended
+        app's listening socket, after which it accepts no connection, and the
+        mobile app runs this backend in its own process."""
+        server = self._http_server
+        if server is None:
+            return
+        host, port = server.bind_addr[:2]
+        logger.info(f"[WebChannel] Listening again on {host}:{port}")
+        self.rebind(host, port)
+
     def _can_fall_back(self, host: str) -> bool:
         """Whether a failed bind on ``host`` should start on 127.0.0.1 instead
         of not at all: always in the desktop app, whose shell only needs
@@ -1815,3 +1826,10 @@ class WebChannel(ChatChannel):
             except Exception as e:
                 logger.warning(f"[WebChannel] Error stopping HTTP server: {e}")
             self._http_server = None
+
+
+def relisten() -> None:
+    """For the mobile app that embeds this backend: see WebChannel.relisten.
+    Does nothing until the console is serving, so it never builds the channel."""
+    if SERVING.is_set():
+        WebChannel().relisten()

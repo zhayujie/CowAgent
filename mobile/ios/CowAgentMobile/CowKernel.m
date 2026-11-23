@@ -301,6 +301,15 @@ static NSDictionary *StartKernel(NSError **error)
   }
 }
 
+static void Relisten(void)
+{
+  PyGILState_STATE gil = PyGILState_Ensure();
+  if (PyRun_SimpleString("from channel.web.core.channel import relisten\nrelisten()") != 0) {
+    os_log_error(kernelLog, "kernel could not listen again");
+  }
+  PyGILState_Release(gil);
+}
+
 @interface CowKernel : NSObject <RCTBridgeModule>
 @end
 
@@ -348,6 +357,25 @@ RCT_EXPORT_METHOD(start : (RCTPromiseResolveBlock)resolve reject : (RCTPromiseRe
   } else {
     reject(@"kernel_start_failed", error.localizedDescription, error);
   }
+}
+
+/**
+ * iOS may reclaim a suspended app's listening socket, leaving the kernel up but
+ * unreachable: have it listen afresh. Resolves false when no kernel is running.
+ */
+RCT_EXPORT_METHOD(relisten : (RCTPromiseResolveBlock)resolve reject : (RCTPromiseRejectBlock)reject)
+{
+  BOOL live;
+  @synchronized([NSProcessInfo class]) {
+    live = pythonReady && running;
+  }
+  if (live) {
+    // Off this queue: the GIL may be a while coming from a busy kernel.
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+      Relisten();
+    });
+  }
+  resolve(@(live));
 }
 
 @end
