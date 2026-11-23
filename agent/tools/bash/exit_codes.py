@@ -44,6 +44,8 @@ def _last_segment(command: str) -> Tuple[str, bool]:
             continue
         for separator in _SEPARATORS:
             if command.startswith(separator, index):
+                if separator in (";", "\n") and not command[index + len(separator):].strip():
+                    return command[segment_start:index], conditional
                 segment_start = index + len(separator)
                 if separator in ("&&", "||"):
                     conditional = True
