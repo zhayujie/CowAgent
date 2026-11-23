@@ -33,7 +33,7 @@ import {usePairAction} from '../components/PairFlow';
 import {QrScanner, qrScannerAvailable} from '../components/QrScanner';
 import {ChoiceSheet, ConfirmSheet} from '../components/settings';
 import {SHEET_DISMISS_MS} from '../components/Sheet';
-import {tr, trf} from '../i18n';
+import {tr, trf, useLangStore, type Lang} from '../i18n';
 import {isLocalKernelAvailable, LOCAL_SERVER_ID, localDeviceName} from '../kernel/localKernel';
 import {activeServer, describeConnectError, useServerStore} from '../store/serverStore';
 import {radius} from '../theme/palette';
@@ -43,6 +43,12 @@ import {AvoidKeyboard} from '../components/AvoidKeyboard';
 type Step = 'welcome' | 'manual';
 type Where = 'local' | 'remote';
 type RemoteWay = 'scan' | 'manual';
+
+/** Each language names itself, so a wrong pick can always be undone. */
+const LANGS: {key: Lang; label: string}[] = [
+  {key: 'zh', label: '中文'},
+  {key: 'en', label: 'EN'},
+];
 
 /**
  * First screen whenever no server is signed in: run the built-in agent, or
@@ -56,6 +62,7 @@ export function LoginScreen() {
   const returnHost = useServerStore(s => s.servers.find(p => p.id === s.returnTo)?.baseUrl);
   const returnLabel =
     returnTo === LOCAL_SERVER_ID ? localDeviceName() : returnHost?.replace(/^https?:\/\//, '');
+  const lang = useLangStore(s => s.lang);
   const local = isLocalKernelAvailable();
 
   const [step, setStep] = useState<Step>(() => (useServerStore.getState().loginForm ? 'manual' : 'welcome'));
@@ -233,6 +240,25 @@ export function LoginScreen() {
     await pairing.run({code: secret.trim(), urls: addressCandidates(address)});
   };
 
+  // First run only; adding another connection later keeps the language already chosen.
+  const langSwitch = !returnTo && (
+    <View style={styles.langs}>
+      {LANGS.map(l => {
+        const active = lang === l.key;
+        return (
+          <Pressable
+            key={l.key}
+            accessibilityRole="radio"
+            accessibilityState={{selected: active}}
+            onPress={() => useLangStore.getState().setLang(l.key)}
+            style={[styles.lang, active && styles.langActive]}>
+            <Text style={[styles.langText, active && styles.langTextActive]}>{l.label}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+
   const errorBox = !!error && <Text style={styles.error}>{error}</Text>;
 
   const backLink = !!returnTo && !!returnLabel && (
@@ -262,6 +288,7 @@ export function LoginScreen() {
           ) : (
             <View />
           )}
+          {langSwitch}
         </View>
 
         {step === 'welcome' ? (
@@ -480,6 +507,11 @@ const useStyles = makeStyles(t => ({
   body: {flexGrow: 1, paddingHorizontal: 24},
   topBar: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 36, minHeight: 34},
   backButton: {width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: t.bg2},
+  langs: {flexDirection: 'row', padding: 3, borderRadius: 999, backgroundColor: t.bg2},
+  lang: {paddingHorizontal: 11, paddingVertical: 5, borderRadius: 999},
+  langActive: {backgroundColor: t.isDark ? t.bg3 : t.bg0},
+  langText: {fontSize: 12, color: t.t3, fontWeight: '500'},
+  langTextActive: {color: t.t1, fontWeight: '600'},
   logo: {width: 48, height: 48, marginBottom: 24},
   eyebrow: {fontSize: 11, fontWeight: '600', letterSpacing: 1.8, color: t.accent, marginBottom: 10},
   title: {fontSize: 26, lineHeight: 34, fontWeight: '600', letterSpacing: -0.7, color: t.t1},
