@@ -1,5 +1,5 @@
 import React, {useEffect} from 'react';
-import {Text, View} from 'react-native';
+import {AppState, Text, View} from 'react-native';
 import {useDownloadStore} from '../files/downloadStore';
 import {tr, trf} from '../i18n';
 import {radius} from '../theme/palette';
@@ -7,7 +7,7 @@ import {makeStyles, useTheme} from '../theme/theme';
 import {
   allowAppInstalls,
   appVersion,
-  checkAppUpdateDaily,
+  checkAppUpdateQuietly,
   compareVersions,
   installAppUpdate,
   postponeAppUpdate,
@@ -20,8 +20,8 @@ import {ActionButton} from './settings';
 import {Sheet} from './Sheet';
 
 /**
- * Offers a new release once a day. On Android it carries the download through to the installer;
- * on iOS it points to the App Store.
+ * Offers a new release on launch and on return to the app. On Android it carries the download
+ * through to the installer; on iOS it points to the App Store.
  */
 export function AppUpdateHost() {
   const t = useTheme();
@@ -30,7 +30,9 @@ export function AppUpdateHost() {
   const progress = useDownloadStore(s => s.byId[UPDATE_ID]);
 
   useEffect(() => {
-    checkAppUpdateDaily();
+    checkAppUpdateQuietly();
+    const sub = AppState.addEventListener('change', state => state === 'active' && checkAppUpdateQuietly());
+    return () => sub.remove();
   }, []);
 
   if (!release) {
@@ -45,7 +47,7 @@ export function AppUpdateHost() {
   return (
     <Sheet
       visible={prompt}
-      onClose={phase === 'downloading' ? close : postponeAppUpdate}
+      onClose={phase === 'idle' ? postponeAppUpdate : close}
       title={tr(leavingBeta ? 'app_update_store_title' : 'app_update_title')}>
       <View style={styles.body}>
         <Text style={styles.version}>

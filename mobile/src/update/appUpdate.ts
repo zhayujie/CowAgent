@@ -1,4 +1,4 @@
-import {AppState, Linking, NativeModules, Platform} from 'react-native';
+import {Linking, NativeModules, Platform} from 'react-native';
 import {create} from 'zustand';
 import {listenForDownloadProgress, useDownloadStore} from '../files/downloadStore';
 import {getLang} from '../i18n';
@@ -73,10 +73,14 @@ export const appMarket: string | undefined = MARKETS[installer];
 
 // Both sites list the same releases; Chinese users try the one in China first.
 const HOSTS = ['https://cowagent.ai', 'https://cowagent.cn'];
-const CHECK_EVERY_MS = 24 * 60 * 60 * 1000;
+// Checked on every launch, and on return to the foreground once this long has passed.
+const RECHECK_MS = 6 * 60 * 60 * 1000;
 const TIMEOUT_MS = 10_000;
-const CHECKED_KEY = 'app-update-checked';
 const SKIPPED_KEY = 'app-update-skipped';
+// The version whose install waits on the system's install permission page.
+const RESUME_KEY = 'app-update-resume';
+let lastChecked = 0;
+let checking = false;
 
 /** Android installs its own updates; iOS points to the App Store. */
 export const appUpdatesSupported = () => (Platform.OS === 'ios' || !!native?.installUpdate) && !!appVersion;
@@ -168,7 +172,7 @@ export async function checkAppUpdate(): Promise<AppRelease | null> {
   if (failure) {
     throw failure;
   }
-  writeJSON(CHECKED_KEY, Date.now()).catch(() => undefined);
+  lastChecked = Date.now();
   const order = latest ? compareVersions(latest.version, appVersion) : -1;
   const release = latest && (order > 0 || (order === 0 && testFlight)) ? latest : null;
   if (!release) {
@@ -179,18 +183,40 @@ export async function checkAppUpdate(): Promise<AppRelease | null> {
   return release;
 }
 
-/** At most once a day, quietly; offers each new version once. */
-export async function checkAppUpdateDaily(): Promise<void> {
-  if (!appUpdatesSupported() || Date.now() - (await readJSON<number>(CHECKED_KEY, 0)) < CHECK_EVERY_MS) {
+/**
+ * On launch and on return to the foreground, quietly: goes on with an install the user left for
+ * the install permission page, else checks for a release unless one was checked lately. Offers
+ * each new version once.
+ */
+export async function checkAppUpdateQuietly(): Promise<void> {
+  if (!appUpdatesSupported() || checking || useAppUpdate.getState().phase === 'downloading') {
     return;
   }
-  const release = await checkAppUpdate().catch(() => null);
-  if (release && release.version !== (await readJSON<string>(SKIPPED_KEY, ''))) {
-    useAppUpdate.setState({prompt: true});
+  checking = true;
+  try {
+    const resume = await readJSON<string>(RESUME_KEY, '');
+    if (!resume && Date.now() - lastChecked < RECHECK_MS) {
+      return;
+    }
+    const known = useAppUpdate.getState().release;
+    const release = resume && known ? known : await checkAppUpdate().catch(() => null);
+    if (resume) {
+      writeJSON(RESUME_KEY, '').catch(() => undefined);
+    }
+    if (!release) {
+      return;
+    }
+    if (resume === release.version) {
+      installAppUpdate();
+    } else if (release.version !== (await readJSON<string>(SKIPPED_KEY, ''))) {
+      useAppUpdate.setState({prompt: true});
+    }
+  } finally {
+    checking = false;
   }
 }
 
-/** "Later": the daily check stays quiet until a newer version than this one. */
+/** "Later" on the offer: the automatic check stays quiet until a newer version than this one. */
 export function postponeAppUpdate(): void {
   const {release, phase} = useAppUpdate.getState();
   useAppUpdate.setState({prompt: false});
@@ -234,13 +260,14 @@ export async function installAppUpdate(): Promise<void> {
   }
 }
 
-/** The system page for installing apps; the install goes on once the user comes back. */
+/**
+ * The system page for installing apps. The install goes on when the user comes back, even if the
+ * sheet was closed meanwhile or the system restarted the app.
+ */
 export async function allowAppInstalls(): Promise<void> {
+  const {release} = useAppUpdate.getState();
+  if (release) {
+    await writeJSON(RESUME_KEY, release.version).catch(() => undefined);
+  }
   await native?.allowInstalls();
-  const sub = AppState.addEventListener('change', state => {
-    if (state === 'active') {
-      sub.remove();
-      installAppUpdate();
-    }
-  });
 }

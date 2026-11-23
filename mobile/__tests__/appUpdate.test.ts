@@ -7,6 +7,8 @@ const openMarket = jest.fn(() => Promise.resolve());
 
 function load(os: 'android' | 'ios' = 'android', testFlight = false, installer = ''): typeof import('../src/update/appUpdate') {
   jest.resetModules();
+  // A reload is an app restart: what the app stored stays.
+  jest.doMock('@react-native-async-storage/async-storage', () => AsyncStorage);
   const RN = require('react-native');
   RN.Platform.OS = os;
   RN.NativeModules.CowDownloads = {installUpdate: jest.fn(), allowInstalls: jest.fn(), dropUpdate, openMarket};
@@ -58,16 +60,47 @@ it('offers nothing and clears the cached APK when this version is the newest', a
   expect(dropUpdate).toHaveBeenCalled();
 });
 
-it('prompts once per version on the daily check', async () => {
-  const {checkAppUpdateDaily, postponeAppUpdate, useAppUpdate} = load();
+it('checks on every launch and prompts once per version', async () => {
+  let app = load();
   globalThis.fetch = jest.fn().mockResolvedValue(feed('2.2.3'));
-  await checkAppUpdateDaily();
-  expect(useAppUpdate.getState().prompt).toBe(true);
+  await app.checkAppUpdateQuietly();
+  expect(app.useAppUpdate.getState().prompt).toBe(true);
+  app.postponeAppUpdate();
 
-  postponeAppUpdate();
-  await AsyncStorage.removeItem('cow:app-update-checked');
-  await checkAppUpdateDaily();
-  expect(useAppUpdate.getState().prompt).toBe(false);
+  app = load();
+  const fetchMock = jest.fn().mockResolvedValue(feed('2.2.3'));
+  globalThis.fetch = fetchMock;
+  await app.checkAppUpdateQuietly();
+  expect(fetchMock).toHaveBeenCalled();
+  expect(app.useAppUpdate.getState().prompt).toBe(false);
+});
+
+it('checks again on return to the app only after a while, unless the last check failed', async () => {
+  const {checkAppUpdateQuietly} = load();
+  const fetchMock = jest.fn().mockRejectedValue(new Error('offline'));
+  globalThis.fetch = fetchMock;
+  await checkAppUpdateQuietly();
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+
+  fetchMock.mockReset().mockResolvedValue(feed('2.2.2'));
+  await checkAppUpdateQuietly();
+  await checkAppUpdateQuietly();
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+
+it('goes on with the install after the install permission page, even after a restart', async () => {
+  let app = load();
+  globalThis.fetch = jest.fn().mockResolvedValue(feed('2.2.3'));
+  await app.checkAppUpdateQuietly();
+  await app.allowAppInstalls();
+  app.useAppUpdate.setState({prompt: false});
+
+  app = load();
+  const installUpdate = require('react-native').NativeModules.CowDownloads.installUpdate;
+  installUpdate.mockResolvedValue('installing');
+  await app.checkAppUpdateQuietly();
+  expect(installUpdate).toHaveBeenCalledWith(expect.stringContaining('/update/CowAgent-2.2.3.apk'), 'CowAgent-2.2.3.apk', 'x');
+  expect(app.useAppUpdate.getState().prompt).toBe(true);
 });
 
 it('points an App Store build to a newer release on the App Store', async () => {
