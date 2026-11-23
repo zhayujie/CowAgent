@@ -29,9 +29,13 @@ def _open_package(file_path):
 
 def docx_text_plain(file_path):
     """Paragraphs and table rows of a .docx in body order, tracked deletions left out."""
+    return "\n".join(_plain_docx_body(file_path))
+
+
+def _plain_docx_body(file_path):
     with _open_package(file_path) as archive:
         body = ElementTree.fromstring(archive.read("word/document.xml")).find(f"{_W}body")
-    return "\n".join(_plain_docx_blocks(body)) if body is not None else ""
+    return list(_plain_docx_blocks(body)) if body is not None else []
 
 
 def _plain_docx_blocks(container):
@@ -174,6 +178,24 @@ def iter_pptx_shape_text(shapes):
                 text = paragraph.text.strip()
                 if text:
                     yield text
+
+
+def docx_blocks(file_path):
+    """Paragraphs and table rows of a .docx in body order, with python-docx when it is installed."""
+    try:
+        from docx import Document
+    except ImportError:
+        return _plain_docx_body(file_path)
+    return list(iter_docx_body_text(Document(file_path)))
+
+
+def pptx_slides(file_path):
+    """Lines of text per slide of a .pptx, with python-pptx when it is installed."""
+    try:
+        from pptx import Presentation
+    except ImportError:
+        return pptx_slides_plain(file_path)
+    return [list(iter_pptx_shape_text(slide.shapes)) for slide in Presentation(file_path).slides]
 
 def _sheet_rows(cached_sheet, formula_sheet):
     for cached_row, formula_row in zip(cached_sheet.iter_rows(), formula_sheet.iter_rows()):

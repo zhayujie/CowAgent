@@ -624,16 +624,8 @@ class WebFetch(BaseTool):
 
     def _parse_word(self, file_path: str) -> str:
         """Extract text from Word documents (.docx)."""
-        try:
-            from docx import Document
-        except ImportError:
-            raise ImportError(
-                "python-docx library is required for .docx parsing. Install with: pip install python-docx"
-            )
-        from common.office_text import iter_docx_body_text
-        doc = Document(file_path)
-        blocks = [text for text in iter_docx_body_text(doc) if text.strip()]
-        return "\n\n".join(blocks)
+        from common.office_text import docx_blocks
+        return "\n\n".join(text for text in docx_blocks(file_path) if text.strip())
 
     def _parse_text(self, file_path: str, charset: Optional[str] = None) -> str:
         """Read plain text, trying a declared charset before existing fallbacks."""
@@ -674,21 +666,13 @@ class WebFetch(BaseTool):
 
     def _parse_ppt(self, file_path: str) -> str:
         """Extract text from PowerPoint files (.ppt/.pptx)."""
-        try:
-            from pptx import Presentation
-        except ImportError:
-            raise ImportError(
-                "python-pptx library is required for .pptx parsing. Install with: pip install python-pptx"
-            )
-
-        from common.office_text import iter_pptx_shape_text
-        prs = Presentation(file_path)
+        from common.office_text import pptx_slides
+        slides = pptx_slides(file_path)
         text_parts = []
 
-        for slide_num, slide in enumerate(prs.slides, 1):
-            slide_texts = list(iter_pptx_shape_text(slide.shapes))
+        for slide_num, slide_texts in enumerate(slides, 1):
             if slide_texts:
-                text_parts.append(f"--- Slide {slide_num}/{len(prs.slides)} ---\n" + "\n".join(slide_texts))
+                text_parts.append(f"--- Slide {slide_num}/{len(slides)} ---\n" + "\n".join(slide_texts))
 
         return "\n\n".join(text_parts)
 

@@ -551,14 +551,8 @@ class Read(BaseTool):
     def _extract_office_text(absolute_path: str, file_ext: str) -> str:
         """Extract plain text from an Office document."""
         if file_ext in ('.docx', '.doc'):
-            try:
-                from docx import Document
-            except ImportError:
-                from common.office_text import docx_text_plain
-                return docx_text_plain(absolute_path)
-            from common.office_text import iter_docx_body_text
-            doc = Document(absolute_path)
-            return '\n'.join(iter_docx_body_text(doc))
+            from common.office_text import docx_blocks
+            return '\n'.join(docx_blocks(absolute_path))
 
         if file_ext in ('.xlsx', '.xls'):
             try:
@@ -574,20 +568,11 @@ class Read(BaseTool):
             return '\n'.join(parts)
 
         if file_ext in ('.pptx', '.ppt'):
+            from common.office_text import pptx_slides
             parts = []
-            try:
-                from pptx import Presentation
-            except ImportError:
-                from common.office_text import pptx_slides_plain
-                for i, lines in enumerate(pptx_slides_plain(absolute_path), 1):
-                    parts.append(f"--- Slide {i} ---")
-                    parts.extend(lines)
-                return '\n'.join(parts)
-            from common.office_text import iter_pptx_shape_text
-            prs = Presentation(absolute_path)
-            for i, slide in enumerate(prs.slides, 1):
+            for i, lines in enumerate(pptx_slides(absolute_path), 1):
                 parts.append(f"--- Slide {i} ---")
-                parts.extend(iter_pptx_shape_text(slide.shapes))
+                parts.extend(lines)
             return '\n'.join(parts)
 
         return ""
