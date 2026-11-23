@@ -17,6 +17,7 @@ import random
 import re
 import subprocess
 import sys
+from email.utils import formatdate, parsedate_to_datetime
 
 import web
 
@@ -70,11 +71,32 @@ def _file_body(path: str) -> bytes:
     Media players seek, and on phones even start some MP4s, with Range
     requests; without 206 answers a video can only be played straight
     through. Multi-range requests are rare enough to get the whole file.
+
+    Conditional requests are what make an interrupted download resumable: a
+    client only splices the tail onto the bytes it already holds when the file
+    is provably the one they came from. That identity is a strong ETag derived
+    from the file alone - a value that varied per request, or carried the query
+    token, would make every client discard its partial copy.
     """
-    size = os.path.getsize(path)
-    web.header('Accept-Ranges', 'bytes')
+    stat = os.stat(path)
+    size = stat.st_size
+    etag = f'"{size:x}-{stat.st_mtime_ns:x}"'
     env = web.ctx.get('env') or {}
+    web.header('Accept-Ranges', 'bytes')
+    web.header('ETag', etag)
+    web.header('Last-Modified', formatdate(stat.st_mtime, usegmt=True))
+
+    # The client already holds this exact file: answer without the body.
+    if _not_modified(env, etag, stat.st_mtime):
+        web.ctx.status = '304 Not Modified'
+        return b''
+
     m = _RANGE_RE.match((env.get('HTTP_RANGE') or '').strip())
+    # A range only makes sense while the bytes the client holds are still this
+    # file's. Otherwise the whole file is the answer, which clients read as a
+    # signal to start over instead of splicing two versions together.
+    if m and not _if_range_matches(env, etag, stat.st_mtime):
+        m = None
     if not m or not (m.group(1) or m.group(2)):
         with open(path, 'rb') as f:
             return f.read()
@@ -94,6 +116,57 @@ def _file_body(path: str) -> bytes:
     with open(path, 'rb') as f:
         f.seek(start)
         return f.read(end - start + 1)
+
+
+def _not_modified(env: dict, etag: str, mtime: float) -> bool:
+    """Whether the client's copy is still current, by ETag or by date.
+
+    ``If-None-Match`` wins when both are present, as RFC 7232 requires: a date
+    only resolves to the second, while an ETag identifies the bytes.
+    """
+    if_none_match = (env.get('HTTP_IF_NONE_MATCH') or '').strip()
+    if if_none_match:
+        if if_none_match == '*':
+            return True
+        # A list of tags, each optionally weak; the comparison ignores the weak
+        # prefix, not the tag it precedes. Written out because the project still
+        # runs on Python 3.7, where str.removeprefix does not exist.
+        for tag in if_none_match.split(','):
+            tag = tag.strip()
+            if tag == etag or (tag.startswith('W/') and tag[2:] == etag):
+                return True
+        return False
+    if_modified_since = (env.get('HTTP_IF_MODIFIED_SINCE') or '').strip()
+    if if_modified_since:
+        return _not_newer_than(mtime, if_modified_since)
+    return False
+
+
+def _if_range_matches(env: dict, etag: str, mtime: float) -> bool:
+    """Whether a resumed range may be answered, judged by ``If-Range``.
+
+    Without the header no resumption is being attempted, so the range stands on
+    its own. With it, only the same version qualifies: an ETag has to match
+    exactly (weak tags never do), and a date means the file is not newer.
+    """
+    if_range = (env.get('HTTP_IF_RANGE') or '').strip()
+    if not if_range:
+        return True
+    if if_range.startswith(('"', 'W/')):
+        return if_range == etag
+    return _not_newer_than(mtime, if_range)
+
+
+def _not_newer_than(mtime: float, http_date: str) -> bool:
+    """A resource is unchanged when it was last modified no later than the date given.
+
+    ``Last-Modified`` carries whole seconds, so the comparison is at that
+    resolution; a sub-second mtime is truncated rather than rounded up.
+    """
+    try:
+        return int(mtime) <= int(parsedate_to_datetime(http_date).timestamp())
+    except (TypeError, ValueError, OverflowError, OSError):
+        return False
 
 
 def _decode_dir_token(token: str) -> str:
