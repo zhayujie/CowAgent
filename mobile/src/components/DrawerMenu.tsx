@@ -173,7 +173,7 @@ export function DrawerMenu({
         ))}
       </ScrollView>
 
-      <View style={[styles.footer, {paddingBottom: insets.bottom + 10}]}>
+      <View style={[styles.footer, {paddingBottom: Math.max(insets.bottom, 8)}]}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={versionLabel}
