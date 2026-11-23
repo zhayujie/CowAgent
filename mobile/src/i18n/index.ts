@@ -1,4 +1,4 @@
-import {I18nManager, NativeModules, Platform} from 'react-native';
+import {I18nManager, Platform, Settings} from 'react-native';
 import {create} from 'zustand';
 import {readJSON, writeJSON} from '../storage/kv';
 import {en, zh, type MessageKey} from './messages';
@@ -13,7 +13,7 @@ const LANG_KEY = 'lang';
 // the app's localizations, so a Chinese iPhone shows up as en_CN there and to Intl.
 const LOCALE_SOURCES: (() => unknown)[] = [
   () => (Platform.OS === 'web' ? navigator.language : undefined),
-  () => NativeModules.SettingsManager?.settings?.AppleLanguages?.[0],
+  () => (Platform.OS === 'ios' ? Settings.get('AppleLanguages')?.[0] : undefined),
   () => (Platform.OS === 'android' ? I18nManager.getConstants?.().localeIdentifier : undefined),
   () => Intl.DateTimeFormat().resolvedOptions().locale,
 ];
