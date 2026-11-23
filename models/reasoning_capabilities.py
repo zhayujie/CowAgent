@@ -101,6 +101,21 @@ def get_reasoning_capability(provider_id: str, model_name: str = "") -> dict:
     base_pid = _base_provider_id(provider_id)
     model = (model_name or "").strip().lower()
 
+    # GPT-6 Responses and Codex use explicit reasoning effort. Keep the
+    # selectable set scoped to known GPT-6 variants rather than advertising
+    # unsupported options for arbitrary OpenAI-compatible models.
+    if base_pid == "codex":
+        # The CLI catalog is authoritative for all models it knows.
+        try:
+            from models.codex.app_server import cached_reasoning_capability
+            known = cached_reasoning_capability(model)
+            if known:
+                return known
+        except (ImportError, OSError, ValueError):
+            pass
+    if base_pid in ("openai", "codex") and model.startswith("gpt-6"):
+        return _capability(["low", "medium", "high", "xhigh", "max"], default="low", thinking_only=True)
+
     if base_pid == "deepseek" and model.startswith(DEEPSEEK_THINKING_MODELS):
         return _capability(DEEPSEEK_VALUES, default="high")
 

@@ -2378,7 +2378,7 @@ class ModelsHandler:
         model = (data.get("model") or "").strip()
 
         if capability == "chat":
-            return self._set_chat(provider_id, model)
+            return self._set_chat(provider_id, model, data.get("reasoning_effort"))
         if capability == "chat_fallback":
             return self._set_chat_fallback(
                 provider_id,
@@ -2484,7 +2484,7 @@ class ModelsHandler:
             "model": model,
         })
 
-    def _set_chat(self, provider_id: str, model: str) -> str:
+    def _set_chat(self, provider_id: str, model: str, reasoning_effort=None) -> str:
         # Accept expanded custom provider ids ("custom:<id>") as well as the
         # built-in vendors, so the chat capability card and the custom
         # providers section behave consistently.
@@ -2505,9 +2505,21 @@ class ModelsHandler:
                 return json.dumps({"status": "error", "message": "Sign in to Codex from the Models console or run 'cow codex login'."})
             model = model or available[0]
 
+        if reasoning_effort is not None:
+            from models.reasoning_capabilities import get_reasoning_capability
+            cap = get_reasoning_capability(provider_id, model)
+            if reasoning_effort not in [o["value"] for o in cap.get("options", [])]:
+                return json.dumps({"status": "error", "message": "unsupported reasoning effort"})
         applied = {}
         local_config = conf()
         file_cfg = self._read_file_config()
+        if reasoning_effort is not None:
+            key = f"{provider_id}:{model.lower()}"
+            values = dict(local_config.get("reasoning_effort_by_model") or {})
+            values[key] = reasoning_effort
+            local_config["reasoning_effort_by_model"] = values
+            file_cfg["reasoning_effort_by_model"] = values
+            applied["reasoning_effort_by_model"] = {key: reasoning_effort}
 
         # The runtime prefers the custom provider's model over the global one.
         if model and custom_provider:

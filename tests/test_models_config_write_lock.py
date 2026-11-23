@@ -201,3 +201,14 @@ def test_model_discovery_does_not_hold_the_save_lock(console, monkeypatch):
 
     assert json.loads(resp.data)["status"] == "success"
     assert seen == [False], "a read-only network probe held the config save lock"
+
+
+def test_chat_model_effort_saved_and_invalid_rejected(console):
+    post, _, path = console
+    good = post({'action': 'set_capability', 'capability': 'chat', 'provider_id': 'deepseek', 'model': 'deepseek-v4-flash', 'reasoning_effort': 'low'})
+    assert json.loads(good.data)['status'] == 'success'
+    cfg = json.loads(path.read_text())
+    assert cfg['reasoning_effort_by_model']['deepseek:deepseek-v4-flash'] == 'low'
+    bad = post({'action': 'set_capability', 'capability': 'chat', 'provider_id': 'deepseek', 'model': 'deepseek-v4-flash', 'reasoning_effort': 'bogus'})
+    assert json.loads(bad.data)['status'] == 'error'
+    assert json.loads(path.read_text())['reasoning_effort_by_model']['deepseek:deepseek-v4-flash'] == 'low'

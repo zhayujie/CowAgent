@@ -52,6 +52,9 @@ const MODELS_PROVIDER_LOGO_DARK_INVERT = new Set([
 ]);
 
 let modelsState = { providers: [], capabilities: {} };
+let chatEffortConfig = null;
+let chatEffortDraft = '';
+
 
 // One-shot: { capabilityId, providerId } stashed before a Models reload,
 // consumed by renderCapabilityBody to preselect a just-configured vendor.
@@ -76,7 +79,8 @@ function loadModelsView(opts) {
     loading.classList.remove('hidden');
     content.classList.add('hidden');
 
-    fetch('/api/models').then(r => r.json()).then(data => {
+    Promise.all([fetch('/api/models').then(r => r.json()), fetch('/config').then(r => r.json()).catch(() => null)]).then(([data, config]) => {
+        chatEffortConfig = config;
         if (data.status !== 'success') {
             loading.innerHTML = `<span class="text-sm text-red-400">${escapeHtml(data.message || 'Failed to load')}</span>`;
             return;
@@ -1313,7 +1317,8 @@ function renderCapabilityBody(def, cap, body) {
     // wrapper carries its own `space-y-4` because the body's `space-y-4` only
     // applies to *direct* children: without it the provider/model rows would
     // collapse against each other (and against the label above them).
-    const pickersHtml = `<div id="cap-${def.id}-pickers" class="space-y-4">${providerHtml + modelHtml + dimHtml}</div>`;
+    const effortHtml = def.id === 'chat' ? `<div id="cap-chat-effort-wrap" class="hidden"><label class="block text-sm mb-1.5">${t('config_reasoning_effort')}</label><div id="cap-chat-effort" class="cfg-dropdown" tabindex="0"><div class="cfg-dropdown-selected"><span class="cfg-dropdown-text">--</span><i class="fas fa-chevron-down cfg-dropdown-arrow"></i></div><div class="cfg-dropdown-menu"></div></div></div>` : '';
+    const pickersHtml = `<div id="cap-${def.id}-pickers" class="space-y-4">${providerHtml + modelHtml + effortHtml + dimHtml}</div>`;
     body.innerHTML = toggleHtml + pickersHtml + footer;
 
     // TTS: mount reply-mode above provider; defer off-mode toggle to the end.
@@ -1415,6 +1420,11 @@ function renderCapabilityBody(def, cap, body) {
         rebuildCapabilityModelDropdown(def, initialProviderValue, cap.current_model || '', body);
         // No provider (auto or pending config) means there is no model to pick.
         setCapabilityModelPickerVisible(def, initialProviderValue !== '', body);
+        if (def.id === 'chat') {
+            const input = body.querySelector('#cap-chat-model-custom');
+            if (input) input.addEventListener('input', () => syncChatEffort());
+            syncChatEffort(body);
+        }
     }
 
     if (def.id === 'tts') {
@@ -1755,6 +1765,7 @@ function rebuildCapabilityModelDropdown(def, providerId, selectedModel, scope) {
                 customWrap.classList.add('hidden');
             }
         }
+        if (def.id === 'chat') syncChatEffort();
         // TTS voice catalog may be scoped per engine model (aggregating
         // gateways). Rebuild the voice picker whenever the model changes.
         if (def.id === 'tts') {
@@ -1877,6 +1888,7 @@ function onCapabilityProviderChange(def, providerId, scope) {
         }
         setCapabilityModelPickerVisible(def, showModel, scope);
     }
+    if (def.id === 'chat') syncChatEffort(scope);
     if (def.id === 'tts') {
         rebuildCapabilityVoiceDropdown(providerId, '', scope);
     }
@@ -2025,12 +2037,15 @@ function saveCapability(capId) {
         provider = '';
         model = '';
     }
-    _persistCapability(capId, provider, model, onAfterSuccess, { voice, enabled, chain });
+    const effortWrap = document.getElementById('cap-chat-effort-wrap');
+    const effort = capId === 'chat' && effortWrap && !effortWrap.classList.contains('hidden') ? chatEffortDraft : undefined;
+    _persistCapability(capId, provider, model, onAfterSuccess, { voice, enabled, chain, effort });
 }
 
 function _persistCapability(capId, provider, model, onAfterSuccess, extras) {
     const payload = { action: 'set_capability', capability: capId, provider_id: provider, model: model };
     if (extras && extras.voice !== undefined) payload.voice = extras.voice;
+    if (extras && extras.effort !== undefined) payload.reasoning_effort = extras.effort;
     // Opt-in capabilities (the chat fallback) carry their on/off switch.
     if (extras && extras.enabled !== undefined) payload.enabled = extras.enabled;
     // Only the chat fallback carries an ordered chain; every other capability
@@ -3122,3 +3137,22 @@ function clearVendorModal() {
     });
 }
 
+
+function syncChatEffort(scope) {
+    const root = scope || document;
+    const wrap = root.querySelector('#cap-chat-effort-wrap');
+    const dd = root.querySelector('#cap-chat-effort');
+    const pd = root.querySelector('#cap-chat-provider');
+    const md = root.querySelector('#cap-chat-model');
+    if (!wrap || !dd || !pd || !md || !chatEffortConfig) return;
+    const provider = getDropdownValue(pd);
+    let model = getDropdownValue(md);
+    if (model === '__custom__') model = root.querySelector('#cap-chat-model-custom')?.value.trim() || '';
+    const meta = chatEffortConfig.providers?.[provider]?.reasoning_by_model?.[model];
+    const options = meta?.supported ? meta.options || [] : [];
+    if (!options.length || (!meta.thinking_only && !chatEffortConfig.enable_thinking)) { wrap.classList.add('hidden'); return; }
+    wrap.classList.remove('hidden');
+    const saved = chatEffortConfig.reasoning_effort_by_model?.[`${provider}:${model.toLowerCase()}`] || chatEffortConfig.reasoning_effort;
+    chatEffortDraft = options.some(o => o.value === saved) ? saved : meta.default || options[0].value;
+    initDropdown(dd, options, chatEffortDraft, value => { chatEffortDraft = value; });
+}
