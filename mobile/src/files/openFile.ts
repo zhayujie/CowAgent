@@ -81,10 +81,10 @@ export async function openInBrowser(f: ChatFile) {
 }
 
 const nativeShare: {share(source: string, fileName: string, mime: string): Promise<unknown>} | undefined =
-  NativeModules.CowDownloads?.share ? NativeModules.CowDownloads : undefined;
+  cowNative ?? (NativeModules.CowDownloads?.share ? NativeModules.CowDownloads : undefined);
 
 /**
- * The system share sheet with the file itself on Android and iOS, so a chat app receives the file
+ * The system share sheet with the file itself on the phones, so a chat app receives the file
  * rather than a link that only opens where the server is reachable. Elsewhere, its link.
  */
 
@@ -155,8 +155,8 @@ const systemDownloads:
         }
       : cowNative
         ? {
-            save: (url, fileName) =>
-              cowNative!.saveDownload(url, fileName || nameFromUrl(url)).then(
+            save: (url, fileName, id) =>
+              cowNative!.saveDownload(url, fileName || nameFromUrl(url), id).then(
                 () => 'downloads' as const,
                 (e: unknown) => {
                   throw nativeError(e);

@@ -1,16 +1,15 @@
-import {Alert, AppState, NativeModules, Platform} from 'react-native';
+import {Alert, AppState, Platform} from 'react-native';
 import {tr, type MessageKey} from '../i18n';
+import {deviceModule} from '../media/cowNative';
 import {checkPermission, openAppSettings, requestPermission, type PermissionState} from '../media/permissions';
 import {readJSON, writeJSON} from '../storage/kv';
 
 /** System notifications for what happened while the app was away; on screen the chat shows it. */
 
-const native:
-  | {
-      notice?(kind: string, key: string, title: string, body: string, session: string): Promise<void>;
-      takeDroppedNotice?(): Promise<boolean>;
-    }
-  | undefined = NativeModules.CowDevice;
+const native = deviceModule<{
+  notice?(kind: string, key: string, title: string, body: string, session: string): Promise<void>;
+  takeDroppedNotice?(): Promise<boolean>;
+}>();
 
 export const canNotify = () => !!native?.notice;
 

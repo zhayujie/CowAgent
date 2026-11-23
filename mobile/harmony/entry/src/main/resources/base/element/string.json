@@ -15,6 +15,14 @@
     {
       "name": "microphone_reason",
       "value": "用于按住说话，把语音转成文字发给 Agent"
+    },
+    {
+      "name": "location_reason",
+      "value": "在你让 Agent 查询当前位置时使用"
+    },
+    {
+      "name": "calendar_reason",
+      "value": "在你让 Agent 查看或添加日程时使用"
     }
   ]
 }

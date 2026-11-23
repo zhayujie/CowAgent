@@ -1,5 +1,6 @@
-import {AppState, NativeModules} from 'react-native';
+import {AppState} from 'react-native';
 import {tr, trf} from '../i18n';
+import {deviceModule} from '../media/cowNative';
 import {realtime} from '../realtime/RealtimeClient';
 import {useChatStore, type ChatMessage} from '../store/chatStore';
 import {useSessionStore} from '../store/sessionStore';
@@ -8,10 +9,10 @@ import {canNotify, notice} from './notice';
 /**
  * A reply that finishes while the app is away is told with a notification. While one is
  * under way the app keeps its connection through the background: Android lets it run on,
- * iOS gives about half a minute, enough for a short reply.
+ * iOS gives about half a minute and HarmonyOS a few minutes, enough for a short reply.
  */
 
-const native: {holdBackground?(): void; releaseBackground?(): void} | undefined = NativeModules.CowDevice;
+const native = deviceModule<{holdBackground?(): void; releaseBackground?(): void}>();
 
 const BODY_MAX = 200;
 const TITLE_MAX = 40;

@@ -1,11 +1,12 @@
 import {DeviceEventEmitter, Linking, NativeModules, Platform} from 'react-native';
 import {create} from 'zustand';
+import {cowNative} from '../media/cowNative';
 import type {PickedFile} from '../media/types';
 
 /**
  * Files, pictures and text shared into the app from another one, such as a chat
- * app's "share" or "open with": Android hands them over as a share, iOS opens the
- * app with a copy of the file. They wait here until the chat composer takes them.
+ * app's "share" or "open with": Android and HarmonyOS hand them over as a share, iOS
+ * opens the app with a copy of the file. They wait here until the chat composer takes them.
  */
 export const useIncomingShare = create<{files: PickedFile[]; text: string}>(() => ({files: [], text: ''}));
 
@@ -16,7 +17,7 @@ export function takeIncomingShare(): {files: PickedFile[]; text: string} {
 }
 
 const native: {takeShared?(): Promise<{files: PickedFile[]; text?: string} | null>} | undefined =
-  NativeModules.CowDownloads;
+  cowNative ?? NativeModules.CowDownloads;
 
 const MIME: Record<string, string> = {
   jpg: 'image/jpeg',
@@ -56,7 +57,7 @@ const arrive = (files: PickedFile[], text = '') =>
   (files.length || text) &&
   useIncomingShare.setState(s => ({files: [...s.files, ...files], text: [s.text, text].filter(Boolean).join('\n')}));
 
-const takeFromAndroid = () =>
+const takeShared = () =>
   native?.takeShared?.().then(
     got => got && arrive(got.files ?? [], got.text ?? ''),
     () => undefined,
@@ -70,9 +71,9 @@ export function listenForShares(): void {
     return;
   }
   listening = true;
-  if (Platform.OS === 'android') {
-    takeFromAndroid();
-    DeviceEventEmitter.addListener('cowShared', takeFromAndroid);
+  if (Platform.OS === 'android' || cowNative) {
+    takeShared();
+    DeviceEventEmitter.addListener('cowShared', takeShared);
   } else if (Platform.OS === 'ios') {
     const take = (url: string | null) => url?.startsWith('file:') && arrive([fromFileUrl(url)]);
     Linking.getInitialURL().then(take, () => undefined);

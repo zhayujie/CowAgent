@@ -1,4 +1,5 @@
 import {Linking, NativeModules, Platform} from 'react-native';
+import {cowNative, deviceModule} from '../media/cowNative';
 import {checkPermission, requestPermission, type AppPermission} from '../media/permissions';
 import {pickPhotos} from '../media/picker';
 import {setPurpose, showBlocked, showLocationOff} from './prompts';
@@ -27,6 +28,8 @@ interface Handler {
 }
 
 const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
+
+const harmony = (Platform.OS as string) === 'harmony';
 
 // Schemes that would reach into this app's own files or run script rather than hand off to another app.
 const REFUSED_SCHEMES = /^(file|content|intent|javascript|data|about|blob):/i;
@@ -69,6 +72,9 @@ function openKind(args: Args): string {
   return action === 'url' ? (web ? 'url' : 'app') : action;
 }
 
+/** HarmonyOS has no app for geo: links by default; the web map offers its app when there is one. */
+const webMap = (target: string) => `https://uri.amap.com/search?keyword=${encodeURIComponent(target)}`;
+
 const open: Handler = {
   ask: args => ({action: openKind(args), target: str(args.target)}),
   // Allowing links for good does not allow calls, messages or other apps.
@@ -78,6 +84,8 @@ const open: Handler = {
     try {
       if (Platform.OS === 'android' && str(args.action) === 'sms' && str(args.text) && native?.composeSms) {
         await native.composeSms(str(args.target).replace(/[^0-9+]/g, ''), str(args.text));
+      } else if (harmony && str(args.action) === 'navigate') {
+        await Linking.openURL(url).catch(() => Linking.openURL(webMap(str(args.target))));
       } else {
         await Linking.openURL(url);
       }
@@ -156,19 +164,17 @@ interface NativeContact {
   organization: string;
 }
 
-const native:
-  | {
-      currentLocation(): Promise<Fix>;
-      calendarEvents(start: number, end: number): Promise<NativeEvent[]>;
-      createCalendarEvent(event: Record<string, unknown>): Promise<{id: string; calendar: string}>;
-      searchContacts(query: string, limit: number): Promise<NativeContact[]>;
-      deviceStatus(): Promise<NativeStatus>;
-      composeSms?(number: string, body: string): Promise<void>;
-    }
-  | undefined = NativeModules.CowDevice;
+const native = deviceModule<{
+  currentLocation(): Promise<Fix>;
+  calendarEvents(start: number, end: number): Promise<NativeEvent[]>;
+  createCalendarEvent(event: Record<string, unknown>): Promise<{id: string; calendar: string}>;
+  searchContacts(query: string, limit: number): Promise<NativeContact[]>;
+  deviceStatus(): Promise<NativeStatus>;
+  composeSms?(number: string, body: string): Promise<void>;
+}>();
 
 const files: {share(source: string, fileName: string, mime: string): Promise<unknown>} | undefined =
-  NativeModules.CowDownloads;
+  cowNative ?? NativeModules.CowDownloads;
 
 /** What a native call failed with, as one of the codes the kernel knows; anything else is `failed`. */
 function nativeFailure(e: unknown, known: string[]): PhoneError {
@@ -341,22 +347,39 @@ const contacts: Handler = {
     const found = await native!.searchContacts(str(args.query), MAX_CONTACTS).catch(e => {
       throw nativeFailure(e, ['permission_denied']);
     });
-    return {
-      contacts: found.map(c => ({
-        name: c.name,
-        phones: distinctBy(c.phones, p => p.value.replace(/[^0-9+]/g, '')).map(p => ({
-          number: p.value,
-          ...(p.label && {label: p.label}),
-        })),
-        emails: distinctBy(c.emails, e => e.value.toLowerCase()).map(e => ({
-          address: e.value,
-          ...(e.label && {label: e.label}),
-        })),
-        ...(c.organization && {organization: c.organization}),
-      })),
-    };
+    return contactsFound(found);
   },
 };
+
+/**
+ * HarmonyOS keeps the address book behind a restricted permission; the system picker opens
+ * instead, and choosing there is the user's consent, so nothing is asked before.
+ */
+const pickedContacts: Handler = {
+  run: async args => {
+    const found = await native!.searchContacts(str(args.query), MAX_CONTACTS).catch(e => {
+      throw nativeFailure(e, []);
+    });
+    return {...contactsFound(found), ...(!found.length && {picked: false})};
+  },
+};
+
+function contactsFound(found: NativeContact[]) {
+  return {
+    contacts: found.map(c => ({
+      name: c.name,
+      phones: distinctBy(c.phones, p => p.value.replace(/[^0-9+]/g, '')).map(p => ({
+        number: p.value,
+        ...(p.label && {label: p.label}),
+      })),
+      emails: distinctBy(c.emails, e => e.value.toLowerCase()).map(e => ({
+        address: e.value,
+        ...(e.label && {label: e.label}),
+      })),
+      ...(c.organization && {organization: c.organization}),
+    })),
+  };
+}
 
 const MAX_PHOTOS = 9;
 
@@ -406,14 +429,19 @@ const share: Handler = {
   },
 };
 
-/** What this phone can do for the agent. HarmonyOS joins once its side is built and tested. */
+/** What this phone can do for the agent. */
 export const HANDLERS: Record<string, Handler> =
-  Platform.OS === 'android' || Platform.OS === 'ios'
+  Platform.OS === 'android' || Platform.OS === 'ios' || harmony
     ? {
         phone_open: open,
         phone_photos: photos,
         ...(files?.share && {phone_share: share}),
-        ...(native && {phone_location: location, phone_calendar: calendar, phone_contacts: contacts, phone_device: device}),
+        ...(native && {
+          phone_location: location,
+          phone_calendar: calendar,
+          phone_contacts: harmony ? pickedContacts : contacts,
+          phone_device: device,
+        }),
       }
     : {};
 

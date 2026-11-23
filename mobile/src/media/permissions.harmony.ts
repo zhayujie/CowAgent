@@ -1,13 +1,13 @@
-export type AppPermission = 'notifications' | 'microphone' | 'camera';
+export type AppPermission = 'notifications' | 'microphone' | 'camera' | 'location' | 'calendar';
 
 /** `denied` can still be asked for in the app; `blocked` only changes in the system settings. */
 export type PermissionState = 'granted' | 'denied' | 'blocked' | 'unavailable';
 
 /**
- * No camera: scanning, taking photos and picking them all run in system pickers
- * (ets/native), so module.json5 declares neither the camera nor the photo library.
+ * No camera or contacts: scanning, taking photos, picking them and picking contacts all run
+ * in system pickers (ets/native), so module.json5 declares none of those.
  */
-export const APP_PERMISSIONS: AppPermission[] = ['notifications', 'microphone'];
+export const APP_PERMISSIONS: AppPermission[] = ['notifications', 'microphone', 'location', 'calendar'];
 
 export const canOpenAppSettings = true;
 
@@ -56,9 +56,36 @@ async function requestNotifications(): Promise<PermissionState> {
   }
 }
 
+const WORST: PermissionState[] = ['unavailable', 'blocked', 'denied', 'granted'];
+
+/**
+ * Asked for together in one dialog. Precise location can only be asked for along with the
+ * approximate one, which is enough on its own; the calendar needs reading and adding both.
+ */
+const GROUPS: Partial<Record<AppPermission, {all: string[]; enough: (states: PermissionState[]) => PermissionState}>> = {
+  location: {
+    all: [perms.PERMISSIONS.HARMONY.APPROXIMATELY_LOCATION, perms.PERMISSIONS.HARMONY.LOCATION],
+    enough: ([approximate]) => approximate,
+  },
+  calendar: {
+    all: [perms.PERMISSIONS.HARMONY.READ_CALENDAR, perms.PERMISSIONS.HARMONY.WRITE_CALENDAR],
+    enough: states => WORST.find(s => states.includes(s)) ?? 'unavailable',
+  },
+};
+
 function viaPermission(p: AppPermission, ask: boolean): Promise<PermissionState> {
   if (p === 'notifications') {
     return ask ? requestNotifications() : checkNotifications();
+  }
+  const group = GROUPS[p];
+  if (group) {
+    return (ask ? perms.requestMultiple(group.all) : perms.checkMultiple(group.all)).then(
+      (r: Record<string, string>) => group.enough(group.all.map(name => toState(r[name]))),
+      unavailable,
+    );
+  }
+  if (p !== 'microphone') {
+    return Promise.resolve('unavailable');
   }
   const mic = perms.PERMISSIONS.HARMONY.MICROPHONE;
   return (ask ? perms.request(mic) : perms.check(mic)).then(toState, unavailable);

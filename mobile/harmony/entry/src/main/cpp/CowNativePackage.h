@@ -5,73 +5,63 @@
 
 namespace rnoh {
 
-// Forwards JS calls to the ArkTS module in ets/native/CowNativeModule.ets.
+// Registers `method` as forwarded to the ArkTS module of the same name: `callAsync`
+// for an ArkTS method that returns a promise, `call` for one that returns at once
+// (a JS promise on a method returning nothing would never settle).
+#define COW_ARKTS_METHOD(kind, method, argc)                                   \
+  methodMap_[#method] = MethodMetadata{                                         \
+      argc,                                                                     \
+      [](facebook::jsi::Runtime& rt,                                            \
+         facebook::react::TurboModule& turboModule,                             \
+         const facebook::jsi::Value* args,                                      \
+         size_t count) {                                                        \
+        return static_cast<ArkTSTurboModule&>(turboModule)                      \
+            .kind(rt, #method, args, count);                                    \
+      }}
+
+// ets/native/CowNativeModule.ets
 class JSI_EXPORT CowNativeTurboModule : public ArkTSTurboModule {
  public:
   CowNativeTurboModule(const ArkTSTurboModule::Context ctx, const std::string name)
       : ArkTSTurboModule(ctx, name) {
-    methodMap_["scan"] = MethodMetadata{0, scan};
-    methodMap_["takePhoto"] = MethodMetadata{0, takePhoto};
-    methodMap_["pickPhotos"] = MethodMetadata{1, pickPhotos};
-    methodMap_["saveDownload"] = MethodMetadata{2, saveDownload};
-  }
-
- private:
-  static facebook::jsi::Value scan(
-      facebook::jsi::Runtime& rt,
-      facebook::react::TurboModule& turboModule,
-      const facebook::jsi::Value* args,
-      size_t count) {
-    return static_cast<ArkTSTurboModule&>(turboModule)
-        .callAsync(rt, "scan", args, count);
-  }
-
-  static facebook::jsi::Value takePhoto(
-      facebook::jsi::Runtime& rt,
-      facebook::react::TurboModule& turboModule,
-      const facebook::jsi::Value* args,
-      size_t count) {
-    return static_cast<ArkTSTurboModule&>(turboModule)
-        .callAsync(rt, "takePhoto", args, count);
-  }
-
-  static facebook::jsi::Value pickPhotos(
-      facebook::jsi::Runtime& rt,
-      facebook::react::TurboModule& turboModule,
-      const facebook::jsi::Value* args,
-      size_t count) {
-    return static_cast<ArkTSTurboModule&>(turboModule)
-        .callAsync(rt, "pickPhotos", args, count);
-  }
-
-  static facebook::jsi::Value saveDownload(
-      facebook::jsi::Runtime& rt,
-      facebook::react::TurboModule& turboModule,
-      const facebook::jsi::Value* args,
-      size_t count) {
-    return static_cast<ArkTSTurboModule&>(turboModule)
-        .callAsync(rt, "saveDownload", args, count);
+    COW_ARKTS_METHOD(callAsync, scan, 0);
+    COW_ARKTS_METHOD(callAsync, takePhoto, 0);
+    COW_ARKTS_METHOD(callAsync, pickPhotos, 1);
+    COW_ARKTS_METHOD(callAsync, saveDownload, 3);
+    COW_ARKTS_METHOD(callAsync, share, 3);
+    COW_ARKTS_METHOD(callAsync, takeShared, 0);
   }
 };
 
-// Forwards JS calls to the ArkTS module in ets/native/CowKernelModule.ets.
+// ets/native/CowDeviceModule.ets
+class JSI_EXPORT CowDeviceTurboModule : public ArkTSTurboModule {
+ public:
+  CowDeviceTurboModule(const ArkTSTurboModule::Context ctx, const std::string name)
+      : ArkTSTurboModule(ctx, name) {
+    COW_ARKTS_METHOD(callAsync, currentLocation, 0);
+    COW_ARKTS_METHOD(callAsync, calendarEvents, 2);
+    COW_ARKTS_METHOD(callAsync, createCalendarEvent, 1);
+    COW_ARKTS_METHOD(callAsync, searchContacts, 2);
+    COW_ARKTS_METHOD(callAsync, deviceStatus, 0);
+    COW_ARKTS_METHOD(callAsync, notice, 5);
+    COW_ARKTS_METHOD(callAsync, takeNotificationTap, 0);
+    COW_ARKTS_METHOD(call, holdBackground, 0);
+    COW_ARKTS_METHOD(call, releaseBackground, 0);
+    COW_ARKTS_METHOD(callAsync, scheduleReminders, 1);
+  }
+};
+
+// ets/native/CowKernelModule.ets
 class JSI_EXPORT CowKernelTurboModule : public ArkTSTurboModule {
  public:
   CowKernelTurboModule(const ArkTSTurboModule::Context ctx, const std::string name)
       : ArkTSTurboModule(ctx, name) {
-    methodMap_["start"] = MethodMetadata{0, start};
-  }
-
- private:
-  static facebook::jsi::Value start(
-      facebook::jsi::Runtime& rt,
-      facebook::react::TurboModule& turboModule,
-      const facebook::jsi::Value* args,
-      size_t count) {
-    return static_cast<ArkTSTurboModule&>(turboModule)
-        .callAsync(rt, "start", args, count);
+    COW_ARKTS_METHOD(callAsync, start, 0);
+    COW_ARKTS_METHOD(call, deviceName, 0);
   }
 };
+
+#undef COW_ARKTS_METHOD
 
 class CowNativeFactoryDelegate : public TurboModuleFactoryDelegate {
  public:
@@ -79,6 +69,9 @@ class CowNativeFactoryDelegate : public TurboModuleFactoryDelegate {
       const override {
     if (name == "CowNative") {
       return std::make_shared<CowNativeTurboModule>(ctx, name);
+    }
+    if (name == "CowDevice") {
+      return std::make_shared<CowDeviceTurboModule>(ctx, name);
     }
     // The ArkTS side only offers the kernel when this build embeds Python;
     // claiming it without that would be a fatal error.

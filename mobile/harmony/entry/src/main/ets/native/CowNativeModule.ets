@@ -1,15 +1,89 @@
-import { TurboModule } from '@rnoh/react-native-openharmony/ts';
+import { TurboModule, TurboModuleContext } from '@rnoh/react-native-openharmony/ts';
 import { scanBarcode, scanCore } from '@kit.ScanKit';
 import { camera, cameraPicker } from '@kit.CameraKit';
 import { photoAccessHelper } from '@kit.MediaLibraryKit';
 import { fileIo, fileUri, picker } from '@kit.CoreFileKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { http } from '@kit.NetworkKit';
+import { systemShare } from '@kit.ShareKit';
+import { uniformTypeDescriptor } from '@kit.ArkData';
+import { util } from '@kit.ArkTS';
+import { SharedIntake } from './SharedIntake';
 
 const DOWNLOAD_TIMEOUT_MS = 10 * 60 * 1000;
+const PROGRESS_INTERVAL_MS = 100;
+const MAX_SHARED = 9;
+const KEEP_MS = 24 * 60 * 60 * 1000;
 
 function safeName(name: string): string {
   return name.replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_').trim().replace(/^\.+/, '');
+}
+
+function lastSegment(url: string): string {
+  const last = url.split(/[?#]/)[0].split('/').pop() ?? '';
+  try {
+    return decodeURIComponent(last);
+  } catch (e) {
+    return last;
+  }
+}
+
+function utdOf(name: string): string {
+  const dot = name.lastIndexOf('.');
+  try {
+    return dot > 0 ? uniformTypeDescriptor.getUniformDataTypeByFilenameExtension(name.substring(dot)) : 'general.file';
+  } catch (e) {
+    return 'general.file';
+  }
+}
+
+function mimeOf(utd: string): string {
+  try {
+    return uniformTypeDescriptor.getTypeDescriptor(utd).mimeTypes[0] ?? 'application/octet-stream';
+  } catch (e) {
+    return 'application/octet-stream';
+  }
+}
+
+/** Only a file another app hands over; one naming this app, or no app, could reach into its own sandbox. */
+function fromOtherApp(uri: string, bundleName: string): boolean {
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(uri);
+  } catch (e) {
+    return false;
+  }
+  const match = /^file:\/\/([^/?#]*)/i.exec(decoded);
+  const authority = match === null ? '' : match[1].substring(match[1].lastIndexOf('@') + 1);
+  return authority !== '' && authority.toLowerCase() !== bundleName.toLowerCase() &&
+    !/(^|\/)\.\.(\/|$)/.test(decoded);
+}
+
+function removeTree(path: string): void {
+  if (fileIo.statSync(path).isDirectory()) {
+    fileIo.rmdirSync(path);
+  } else {
+    fileIo.unlinkSync(path);
+  }
+}
+
+/** A new folder under `root`, after clearing out what earlier calls left there a day ago. */
+function freshFolder(root: string): string {
+  if (fileIo.accessSync(root)) {
+    const cutoff = (Date.now() - KEEP_MS) / 1000;
+    for (const name of fileIo.listFileSync(root)) {
+      try {
+        if (fileIo.statSync(`${root}/${name}`).mtime < cutoff) {
+          removeTree(`${root}/${name}`);
+        }
+      } catch (e) {
+        // Gone already.
+      }
+    }
+  }
+  const folder = `${root}/${util.generateRandomUUID()}`;
+  fileIo.mkdirSync(folder, true);
+  return folder;
 }
 
 export const COW_NATIVE_MODULE = 'CowNative';
@@ -21,13 +95,45 @@ export interface NativeFile {
   size: number;
 }
 
+/** A file another app shared, as the chat composer takes picked files. */
+export interface SharedFile {
+  uri: string;
+  name: string;
+  type: string;
+  size: number;
+}
+
+export interface SharedIn {
+  files: SharedFile[];
+  text: string;
+}
+
+interface Progress {
+  id: string;
+  loaded: number;
+  total: number;
+}
+
 /**
- * System pickers (Scan Kit, camera picker, photo picker) and saving to Downloads. The
- * pickers run in a system process and hand back only what the user chose, and the
- * Downloads folder comes from the document picker, so none of it needs a permission.
+ * System pickers (Scan Kit, camera picker, photo picker), saving to Downloads and the
+ * share panel. The pickers run in a system process and hand back only what the user
+ * chose, and the Downloads folder comes from the document picker, so none of it needs
+ * a permission.
  */
 export class CowNativeModule extends TurboModule {
   private downloadDir: string | null = null;
+  private readonly sharedArrived = () => this.ctx.rnInstance.emitDeviceEvent('cowShared', null);
+
+  constructor(ctx: TurboModuleContext) {
+    super(ctx);
+    SharedIntake.onArrive = this.sharedArrived;
+  }
+
+  __onDestroy__(): void {
+    if (SharedIntake.onArrive === this.sharedArrived) {
+      SharedIntake.onArrive = null;
+    }
+  }
   /** Resolves with the QR code text, or null when the user backs out. */
   async scan(): Promise<string | null> {
     const options: scanBarcode.ScanOptions = {
@@ -94,16 +200,95 @@ export class CowNativeModule extends TurboModule {
     return files;
   }
 
-  /** Streams the file into Downloads/<app name>; resolves with the name it was saved under. */
-  async saveDownload(url: string, fileName: string): Promise<string> {
+  /**
+   * Streams the file into Downloads/<app name>; resolves with the name it was saved under.
+   * With an `id`, `cowDownloadProgress` events tell how far it got.
+   */
+  async saveDownload(url: string, fileName: string, id?: string): Promise<string> {
     const dir = await this.getDownloadDir();
-    const name = this.freeName(dir, safeName(fileName) || 'download');
-    const path = `${dir}/${name}`;
+    const name = this.freeName(dir, safeName(fileName) || safeName(lastSegment(url)) || 'download');
+    await this.fetchInto(url, `${dir}/${name}`, id);
+    return name;
+  }
+
+  /** The system share panel with the file itself: a link is fetched first, a path on the phone copied. */
+  async share(source: string, fileName: string, _mime: string): Promise<boolean> {
+    const name = safeName(fileName) || safeName(lastSegment(source)) || 'file';
+    const path = `${freshFolder(`${this.ctx.uiAbilityContext.cacheDir}/share`)}/${name}`;
+    if (/^https?:\/\//i.test(source)) {
+      await this.fetchInto(source, path);
+    } else {
+      fileIo.copyFileSync(source.startsWith('file://') ? new fileUri.FileUri(source).path : source, path);
+    }
+    const data = new systemShare.SharedData({ utd: utdOf(name), uri: fileUri.getUriFromPath(path), title: name });
+    await new systemShare.ShareController(data).show(this.ctx.uiAbilityContext, {
+      previewMode: systemShare.SharePreviewMode.DETAIL,
+      selectionMode: systemShare.SelectionMode.SINGLE,
+    });
+    return true;
+  }
+
+  /** What another app last shared here, copied into the cache; null when nothing is waiting. */
+  async takeShared(): Promise<SharedIn | null> {
+    const want = SharedIntake.take();
+    if (want === null) {
+      return null;
+    }
+    const records = (await systemShare.getSharedData(want)).getRecords();
+    const bundleName = this.ctx.uiAbilityContext.abilityInfo.bundleName;
+    const folder = freshFolder(`${this.ctx.uiAbilityContext.cacheDir}/shared-in`);
+    const files: SharedFile[] = [];
+    const texts: string[] = [];
+    for (let i = 0; i < records.length && files.length < MAX_SHARED; i++) {
+      const record = records[i];
+      if (!record.uri) {
+        if (record.content) {
+          texts.push(record.content);
+        }
+        continue;
+      }
+      if (!fromOtherApp(record.uri, bundleName)) {
+        continue;
+      }
+      // One the sender no longer lets this app read is left out, not the whole share.
+      try {
+        // A title may be a caption without the extension the file name has.
+        const title = safeName(record.title ?? '');
+        const name = (title.includes('.') ? title : safeName(new fileUri.FileUri(record.uri).name)) || title || 'file';
+        const dir = `${folder}/${i}`;
+        fileIo.mkdirSync(dir);
+        const path = `${dir}/${name}`;
+        const src = fileIo.openSync(record.uri, fileIo.OpenMode.READ_ONLY);
+        try {
+          fileIo.copyFileSync(src.fd, path);
+        } finally {
+          fileIo.closeSync(src);
+        }
+        files.push({ uri: `file://${path}`, name, type: mimeOf(record.utd), size: fileIo.statSync(path).size });
+      } catch (e) {
+        continue;
+      }
+    }
+    return { files, text: texts.join('\n') };
+  }
+
+  private async fetchInto(url: string, path: string, id?: string): Promise<void> {
     const file = fileIo.openSync(path, fileIo.OpenMode.CREATE | fileIo.OpenMode.WRITE_ONLY | fileIo.OpenMode.TRUNC);
     const req = http.createHttp();
     req.on('dataReceive', (data: ArrayBuffer) => {
       fileIo.writeSync(file.fd, data);
     });
+    if (id) {
+      let last = 0;
+      req.on('dataReceiveProgress', (info: http.DataReceiveProgressInfo) => {
+        const now = Date.now();
+        if (now - last >= PROGRESS_INTERVAL_MS || info.receiveSize === info.totalSize) {
+          last = now;
+          const progress: Progress = { id, loaded: info.receiveSize, total: info.totalSize };
+          this.ctx.rnInstance.emitDeviceEvent('cowDownloadProgress', progress);
+        }
+      });
+    }
     let saved = false;
     try {
       const code = await req.requestInStream(url, {
@@ -117,13 +302,15 @@ export class CowNativeModule extends TurboModule {
       saved = true;
     } finally {
       req.off('dataReceive');
+      if (id) {
+        req.off('dataReceiveProgress');
+      }
       req.destroy();
       fileIo.closeSync(file);
       if (!saved) {
         fileIo.unlinkSync(path);
       }
     }
-    return name;
   }
 
   /** DOWNLOAD mode shows no UI: it hands back the app's own folder under Downloads. */

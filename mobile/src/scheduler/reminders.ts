@@ -1,8 +1,9 @@
 import {useEffect} from 'react';
-import {AppState, NativeModules} from 'react-native';
+import {AppState} from 'react-native';
 import {http} from '../api/http';
 import {tr, trf} from '../i18n';
 import {LOCAL_SERVER_ID} from '../kernel/localKernel';
+import {deviceModule} from '../media/cowNative';
 import {askNotifications} from '../notify/notice';
 import {onToolDone} from '../store/chatStore';
 import {useServerStore} from '../store/serverStore';
@@ -39,7 +40,7 @@ interface Reminder {
   running?: string;
 }
 
-const native: {scheduleReminders?(items: Reminder[]): Promise<number>} | undefined = NativeModules.CowDevice;
+const native = deviceModule<{scheduleReminders?(items: Reminder[]): Promise<number>}>();
 
 const AHEAD_HOURS = 24 * 7;
 const MAX_REMINDERS = 50;
