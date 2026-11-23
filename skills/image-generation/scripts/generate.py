@@ -23,6 +23,12 @@ promoted to the front of the queue):
 Dependencies: requests (stdlib: json, sys, os, base64, io, abc, uuid, pathlib, urllib)
 """
 
+# Defer annotation evaluation so ``X | None`` / ``list[str]`` signatures below
+# do not raise TypeError on Python 3.7-3.9 (PEP 563). This script is executed
+# with the same interpreter as the agent, and 3.9 is the documented
+# recommended version.
+from __future__ import annotations
+
 import json
 import sys
 import os
