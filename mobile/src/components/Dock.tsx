@@ -251,7 +251,8 @@ export const Dock = forwardRef<TextInput | null, Props>(function DockInner(
         )}
 
         {voiceMode ? (
-          <HoldToTalk disabled={busy || transcribing} onRecorded={onVoice} />
+          // A voice message takes only the attachments already uploaded.
+          <HoldToTalk disabled={busy || transcribing || uploading} onRecorded={onVoice} />
         ) : (
           <TextInput
             ref={input}
@@ -312,29 +313,35 @@ export const Dock = forwardRef<TextInput | null, Props>(function DockInner(
               style={({pressed}) => [styles.send, styles.stop, pressed && styles.pressed]}>
               <Icon icon={faStop} size={10} color={t.onAccent} />
             </Pressable>
-          ) : voiceMode || !hasContent ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={voiceMode ? tr('composer_to_keyboard') : tr('composer_to_voice')}
-              onPress={toggleVoice}
-              hitSlop={4}
-              style={({pressed}) => [styles.tool, pressed && styles.toolPressed]}>
-              <Icon icon={voiceMode ? faKeyboard : faMicrophone} size={18} color={t.t2} />
-            </Pressable>
           ) : (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={uploading ? tr('composer_uploading_a11y') : tr('composer_send')}
-              onPress={submit}
-              disabled={!canSend}
-              hitSlop={6}
-              style={({pressed}) => [styles.send, !canSend && styles.sendOff, pressed && styles.pressed]}>
-              {uploading ? (
-                <ActivityIndicator size="small" color={t.t3} />
-              ) : (
-                <Icon icon={faArrowUp} size={16} color={canSend ? t.onAccent : t.t3} />
+            <>
+              {/* Attachments alone still leave the choice of saying what to do with them. */}
+              {(voiceMode || !text.trim()) && (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={voiceMode ? tr('composer_to_keyboard') : tr('composer_to_voice')}
+                  onPress={toggleVoice}
+                  hitSlop={4}
+                  style={({pressed}) => [styles.tool, pressed && styles.toolPressed]}>
+                  <Icon icon={voiceMode ? faKeyboard : faMicrophone} size={18} color={t.t2} />
+                </Pressable>
               )}
-            </Pressable>
+              {!voiceMode && hasContent && (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={uploading ? tr('composer_uploading_a11y') : tr('composer_send')}
+                  onPress={submit}
+                  disabled={!canSend}
+                  hitSlop={6}
+                  style={({pressed}) => [styles.send, !canSend && styles.sendOff, pressed && styles.pressed]}>
+                  {uploading ? (
+                    <ActivityIndicator size="small" color={t.t3} />
+                  ) : (
+                    <Icon icon={faArrowUp} size={16} color={canSend ? t.onAccent : t.t3} />
+                  )}
+                </Pressable>
+              )}
+            </>
           )}
         </View>
       </View>
