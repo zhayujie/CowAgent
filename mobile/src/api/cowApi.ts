@@ -53,8 +53,6 @@ import type {
   TaskRun,
   TaskSchedule,
   ToolInfo,
-  UpdateCheck,
-  UpdateStatus,
   UploadedFile,
   VersionInfo,
   VoiceReplyMode,
@@ -331,18 +329,6 @@ export function agentAvatarUrl(agent: {id: string; avatar_rev?: string}): string
 
 export async function getVersion() {
   return http.request<VersionInfo>('/api/version');
-}
-
-export async function checkForUpdate() {
-  return http.request<UpdateCheck>('/api/update/check', {body: {}, timeoutMs: 30_000});
-}
-
-export async function startUpdate() {
-  return http.request<{update: UpdateStatus}>('/api/update/start', {body: {}});
-}
-
-export async function getUpdateStatus() {
-  return http.request<UpdateStatus>('/api/update/status');
 }
 
 export async function getConfig() {

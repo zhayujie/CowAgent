@@ -623,29 +623,6 @@ export interface VersionInfo {
   platform?: string;
 }
 
-export interface ReleaseBrief {
-  tag: string;
-  name?: string;
-  body?: string;
-  html_url?: string;
-  published_at?: string;
-}
-
-export interface UpdateCheck {
-  current_version: string;
-  up_to_date: boolean;
-  latest: ReleaseBrief | null;
-  newer_releases?: ReleaseBrief[];
-  update_supported?: boolean;
-  unsupported_reason?: string;
-}
-
-export interface UpdateStatus {
-  state: 'idle' | 'running' | 'restarting' | 'success' | 'failed' | (string & {});
-  step?: string;
-  message?: string;
-}
-
 export type MenuItem =
   | {id: string; type: 'builtin'; view: string; title: string; icon: string; hidden?: boolean}
   | {
