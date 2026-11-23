@@ -14,6 +14,7 @@ class-level annotated assignments) so the gap is caught without a 3.9 runner.
 """
 
 import ast
+import subprocess
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -81,8 +82,23 @@ def _needs_newer_python(annotation):
     return False
 
 
+def _candidate_sources():
+    # Tracked files only: a checkout may hold ignored local trees (reference
+    # code, scratch dirs) that are never shipped.
+    try:
+        out = subprocess.run(
+            ["git", "ls-files", "-z", "--", "*.py"],
+            cwd=REPO_ROOT, capture_output=True, check=True,
+        ).stdout
+    except (OSError, subprocess.CalledProcessError):
+        return REPO_ROOT.rglob("*.py")
+    return (REPO_ROOT / name for name in out.decode("utf-8").split("\0") if name)
+
+
 def _shipped_sources():
-    for path in REPO_ROOT.rglob("*.py"):
+    for path in _candidate_sources():
+        if not path.is_file():
+            continue
         parts = path.relative_to(REPO_ROOT).parts
         if any(part in SKIP_DIRS for part in parts):
             continue
