@@ -221,7 +221,7 @@ class SchedulerService:
                     self.task_store.update_task(task_id, {
                         "last_run_at": format_scheduled_time(now),
                         "last_manual_run_at": format_scheduled_time(now),
-                    })
+                    }, missing_ok=True)
                     logger.info(f"[Scheduler] Manual execution completed: {task_id}")
                 else:
                     logger.warning(f"[Scheduler] Manual execution failed: {task_id}")
@@ -410,5 +410,5 @@ class SchedulerService:
             self.task_store.update_task(task['id'], {
                 "last_error": str(e),
                 "last_error_at": datetime.now().isoformat()
-            })
+            }, missing_ok=True)
             return False
