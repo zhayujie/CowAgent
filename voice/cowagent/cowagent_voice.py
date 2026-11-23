@@ -12,7 +12,7 @@ from voice.custom.custom_voice import CustomVoice
 
 
 class CowAgentVoice(CustomVoice):
-    DEFAULT_ASR_MODEL = "seed-asr"
+    DEFAULT_ASR_MODEL = "deepseek-asr"
     DEFAULT_TTS_MODEL = "seed-tts-2.0"
     DEFAULT_VOICE = "zh_female_vv_uranus_bigtts"
 

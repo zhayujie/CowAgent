@@ -389,6 +389,8 @@ class ModelsHandler:
             {"value": "mimo-v2.5-asr", "hint": "中英文 · 支持方言"},
         ],
         "cowagent": [
+            {"value": "", "hint": "默认"},
+            {"value": "deepseek-asr", "hint": "DeepSeek"},
             {"value": "seed-asr", "hint": "豆包语音识别 · 中英文"},
         ],
         # LinkAI gateway routes ASR by `model` (see
@@ -396,10 +398,10 @@ class ModelsHandler:
         # value means "let the gateway pick its default engine".
         "linkai": [
             {"value": "", "hint": "默认"},
+            {"value": "deepseek-asr", "hint": "DeepSeek"},
             {"value": "doubao", "hint": "火山豆包"},
             {"value": "whisper-1", "hint": "OpenAI Whisper"},
             {"value": "baidu", "hint": "百度"},
-            {"value": "deepseek-asr", "hint": "DeepSeek"},
         ],
     }
 
