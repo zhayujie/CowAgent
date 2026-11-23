@@ -7,8 +7,9 @@
                     <div id="vendor-modal-key-icon" class="w-10 h-10 rounded-xl bg-primary-50 dark:bg-primary-900/20 flex items-center justify-center flex-shrink-0">
                         <i class="fas fa-key text-primary-500"></i>
                     </div>
-                    <img id="vendor-modal-codex-icon" src="/assets/logos/codex.png" alt="" width="40" height="40"
-                         class="hidden w-10 h-10 flex-shrink-0 rounded-xl">
+                    <div id="vendor-modal-codex-icon" class="hidden w-10 h-10 rounded-xl bg-slate-50 dark:bg-white/5 flex items-center justify-center flex-shrink-0">
+                        <img src="/assets/logos/codex.svg" alt="" width="26" height="26">
+                    </div>
                     <div class="min-w-0 flex-1">
                         <h3 id="vendor-modal-title" class="font-semibold text-slate-800 dark:text-slate-100 text-base"></h3>
                         <p id="vendor-modal-subtitle" class="text-xs text-slate-500 dark:text-slate-400 mt-0.5 font-mono"></p>
@@ -28,16 +29,29 @@
                 </div>
 
                 <div id="vendor-modal-codex-login" class="hidden space-y-4 text-sm">
-                    <div class="flex items-center gap-3 rounded-lg border border-slate-200 dark:border-white/10
-                                bg-slate-50 dark:bg-white/5 p-3.5">
-                        <i id="codex-status-icon" aria-hidden="true" class="fas fa-circle-notch fa-spin text-slate-400"></i>
-                        <p id="codex-status-message" class="min-w-0 break-words text-slate-700 dark:text-slate-200" role="status">
-                            <span data-i18n="models_codex_starting">正在启动 Codex…</span>
-                        </p>
+                    <div id="codex-intro" class="hidden space-y-2 text-slate-600 dark:text-slate-300 leading-relaxed">
+                        <p data-i18n="models_codex_intro">使用 ChatGPT 账号登录后，CowAgent 会用你的 ChatGPT 订阅额度调用 Codex 模型，无需 API Key。</p>
+                        <p id="codex-intro-install" class="text-xs text-slate-500 dark:text-slate-400"></p>
                     </div>
-                    <div id="codex-device" class="hidden space-y-2.5 rounded-lg border border-slate-200 dark:border-white/10 p-3.5">
-                        <label for="codex-device-code" class="block font-medium text-slate-700 dark:text-slate-200"
-                               data-i18n="models_codex_device_code">设备码</label>
+                    <div id="codex-status-box" class="space-y-2.5 rounded-lg border border-slate-200 dark:border-white/10
+                                bg-slate-50 dark:bg-white/5 p-3.5">
+                        <div class="flex items-center gap-3">
+                            <i id="codex-status-icon" aria-hidden="true" class="fas fa-circle-notch fa-spin text-slate-400"></i>
+                            <p id="codex-status-message" class="min-w-0 break-words text-slate-700 dark:text-slate-200" role="status">
+                                <span data-i18n="models_codex_checking">正在读取 Codex 状态…</span>
+                            </p>
+                        </div>
+                        <div id="codex-progress" class="hidden h-1.5 overflow-hidden rounded-full bg-slate-200 dark:bg-white/10">
+                            <div id="codex-progress-bar" class="h-full w-0 rounded-full bg-primary-500 transition-all duration-300"></div>
+                        </div>
+                    </div>
+                    <div id="codex-device" class="hidden space-y-3 rounded-lg border border-slate-200 dark:border-white/10 p-3.5">
+                        <ol class="list-decimal space-y-1 pl-5 text-slate-600 dark:text-slate-300">
+                            <li data-i18n="models_codex_step_open">点击下方按钮，复制设备码并打开 OpenAI 授权页面</li>
+                            <li data-i18n="models_codex_step_sign_in">登录你的 ChatGPT 账号</li>
+                            <li data-i18n="models_codex_step_code">粘贴设备码并确认授权，完成后此窗口会自动更新</li>
+                        </ol>
+                        <label for="codex-device-code" class="sr-only" data-i18n="models_codex_device_code">设备码</label>
                         <div class="flex flex-wrap items-center gap-2">
                             <input id="codex-device-code" type="text" readonly autocomplete="off"
                                    class="min-w-0 flex-1 rounded-lg border border-slate-200 dark:border-white/10
@@ -49,8 +63,6 @@
                                            hover:bg-slate-50 dark:hover:bg-white/5 cursor-pointer"
                                     data-i18n="config_api_copy">复制</button>
                         </div>
-                        <p class="text-xs leading-relaxed text-slate-500 dark:text-slate-400"
-                           data-i18n="models_codex_device_help"></p>
                     </div>
                     <details id="codex-models" class="hidden border-t border-slate-100 dark:border-white/10 pt-3">
                         <summary class="cursor-pointer text-sm font-medium text-slate-700 dark:text-slate-200">
@@ -182,7 +194,7 @@
                     <a id="codex-device-link" target="_blank" rel="noopener noreferrer"
                        class="hidden px-4 py-2 rounded-lg bg-primary-500 hover:bg-primary-600
                               text-white text-sm font-medium cursor-pointer transition-colors">
-                        <span data-i18n="models_codex_open">打开授权页面</span>
+                        <span data-i18n="models_codex_open">复制并打开授权页面</span>
                         <i aria-hidden="true" class="fas fa-arrow-up-right-from-square ml-1 text-[10px]"></i>
                     </a>
                 </div>

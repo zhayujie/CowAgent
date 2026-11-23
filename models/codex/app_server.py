@@ -10,6 +10,7 @@ from threading import Thread
 import time
 
 from common.atomic_write import write_json_atomic
+from common.log import logger
 from models.codex.install import find_codex
 
 # Pass network and OS settings needed by the CLI. CowAgent's API keys and
@@ -22,6 +23,7 @@ _ENV_KEYS = {
 }
 _AUTH_OPTIONS = ('-c', 'cli_auth_credentials_store="file"')
 _MODELS_CACHE = "cowagent-models.json"
+_ACCOUNT_CACHE = "cowagent-account.json"
 TOOL_NAMESPACE = "cowagent"
 LOGIN_REQUIRED = "Sign in with ChatGPT in the Models console or run 'cow codex login'."
 
@@ -42,7 +44,7 @@ def _launch_settings():
     home = codex_home()
     executable = find_codex(home)
     if not executable:
-        raise CodexError("Install Codex in the Models console or run 'cow codex install'.", 503)
+        raise CodexError("Codex CLI is not installed. Sign in from the Models console or run 'cow codex install'.", 503)
     home.mkdir(mode=0o700, parents=True, exist_ok=True)
     env = {key: value for key, value in os.environ.items() if key.upper() in _ENV_KEYS}
     env["CODEX_HOME"] = str(home.resolve())
@@ -58,10 +60,25 @@ def run_auth_command(*args):
 
 
 def clear_model_cache():
+    for name in (_MODELS_CACHE, _ACCOUNT_CACHE):
+        try:
+            (codex_home() / name).unlink()
+        except FileNotFoundError:
+            pass
+
+
+def cached_account():
+    """The signed-in ChatGPT account as of the last sync: email and plan."""
+    home = codex_home()
+    if not (home / "auth.json").is_file():
+        return {}
     try:
-        (codex_home() / _MODELS_CACHE).unlink()
-    except FileNotFoundError:
-        pass
+        account = json.loads((home / _ACCOUNT_CACHE).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(account, dict):
+        return {}
+    return {key: account[key] for key in ("email", "plan") if isinstance(account.get(key), str)}
 
 
 def cached_models():
@@ -78,7 +95,7 @@ def cached_models():
 def refresh_models():
     """Refresh the public model slugs used by CowAgent's pickers."""
     with AppServer() as server:
-        server.require_chatgpt()
+        account = server.require_chatgpt()
         models = []
         cursor = None
         while True:
@@ -89,17 +106,26 @@ def refresh_models():
                 break
     models = list(dict.fromkeys(models))
     write_json_atomic(codex_home() / _MODELS_CACHE, models)
+    write_json_atomic(codex_home() / _ACCOUNT_CACHE, {
+        "email": account.get("email") or "", "plan": account.get("planType") or "",
+    })
     return models
 
 
 class AppServer:
-    """One isolated child for a model call or a short account operation."""
+    """One isolated child for a model call or a short account operation.
 
-    def __init__(self, timeout=120):
+    ``timeout`` bounds the whole session, or with ``idle=True`` the silence
+    between two messages, so a long streamed answer is not cut off.
+    """
+
+    def __init__(self, timeout=120, idle=False):
         self.timeout = timeout
+        self.idle = idle
         self._next_id = 0
         self._messages = Queue()
         self._turn_events = deque()
+        self._stderr = deque(maxlen=20)
 
     def __enter__(self):
         executable, home, env = _launch_settings()
@@ -113,11 +139,13 @@ class AppServer:
              # Keep CowAgent functions visible even for Code Mode models.
              "-c", f'features.code_mode.direct_only_tool_namespaces=["{TOOL_NAMESPACE}"]'],
             cwd=home, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL, encoding="utf-8",
+            stderr=subprocess.PIPE, encoding="utf-8", errors="replace",
         )
         self._deadline = time.monotonic() + self.timeout
         self._reader = Thread(target=self._read_stdout, daemon=True)
         self._reader.start()
+        self._stderr_reader = Thread(target=self._read_stderr, daemon=True)
+        self._stderr_reader.start()
         try:
             self.request("initialize", {
                 "clientInfo": {"name": "cowagent", "title": "CowAgent", "version": "1.0.0"},
@@ -150,6 +178,23 @@ class AppServer:
             self._process.stdout.close()
             self._messages.put(None)
 
+    def _read_stderr(self):
+        try:
+            for line in self._process.stderr:
+                if line.strip():
+                    self._stderr.append(line.rstrip())
+        except (OSError, ValueError):
+            pass
+
+    def _exit_error(self):
+        # stdout closing first does not mean the last stderr lines are in.
+        self._stderr_reader.join(timeout=1)
+        detail = self._stderr[-1] if self._stderr else ""
+        if self._stderr:
+            logger.warning("[Codex] App Server stderr:\n" + "\n".join(self._stderr))
+        message = "Codex App Server exited or returned an invalid message."
+        return CodexError(f"{message} {detail}".strip())
+
     def _send(self, message):
         try:
             self._process.stdin.write(json.dumps(message) + "\n")
@@ -171,7 +216,9 @@ class AppServer:
                 return None
             raise CodexError("Codex App Server timed out.", 504) from exc
         if not isinstance(message, dict):
-            raise CodexError("Codex App Server exited or returned an invalid message. Check your Codex CLI version.")
+            raise self._exit_error()
+        if self.idle:
+            self._deadline = time.monotonic() + self.timeout
         return message
 
     def reject(self, message):

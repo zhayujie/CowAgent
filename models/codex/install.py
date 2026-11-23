@@ -37,15 +37,19 @@ def _binary_name():
 
 
 def find_codex(home):
+    # Only the pinned build: the App Server protocol and the flags passed to it
+    # change between releases, so a codex found on PATH may not speak it.
     managed = home / "bin" / _binary_name()
     if managed.is_file() and os.access(managed, os.X_OK):
         return str(managed.resolve())
-    external = shutil.which("codex")
-    return str(Path(external).absolute()) if external else None
+    return None
 
 
-def install_codex(home):
-    """Reuse an existing CLI or install a verified release without sudo."""
+def install_codex(home, progress=None):
+    """Install the pinned, verified release into *home* without sudo.
+
+    ``progress(done, total)`` receives download byte counts; total may be 0.
+    """
     executable = find_codex(home)
     if executable:
         return executable
@@ -53,7 +57,7 @@ def install_codex(home):
     target = f"{_ARCHES.get(platform.machine().lower())}-{_SYSTEMS.get(platform.system())}"
     expected = _ASSETS.get(target)
     if not expected:
-        raise InstallError("Automatic Codex installation supports x64 and ARM64 on Linux, macOS and Windows.")
+        raise InstallError("Automatic Codex CLI installation supports x64 and ARM64 on Linux, macOS and Windows.")
 
     destination = home / "bin" / _binary_name()
     destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -62,7 +66,7 @@ def install_codex(home):
         archive = Path(temporary) / "codex.tar.gz"
         binary = Path(temporary) / _binary_name()
         try:
-            _download(_RELEASE + member_name + ".tar.gz", archive, expected)
+            _download(_RELEASE + member_name + ".tar.gz", archive, expected, progress)
             with tarfile.open(archive, "r:gz") as package:
                 for entry in package:
                     if Path(entry.name).name == member_name and entry.isfile() and entry.size <= _MAX_BINARY:
@@ -70,7 +74,7 @@ def install_codex(home):
                             shutil.copyfileobj(source, output)
                         break
                 else:
-                    raise InstallError("The Codex archive does not contain the expected executable.")
+                    raise InstallError("The Codex CLI archive does not contain the expected executable.")
             binary.chmod(0o700)
             check = subprocess.run([str(binary.resolve()), "--version"], capture_output=True, timeout=15)
             if check.returncode or check.stdout.strip() != f"codex-cli {VERSION}".encode():
@@ -87,19 +91,25 @@ def install_codex(home):
     return str(destination.resolve())
 
 
-def _download(url, archive, expected):
+def _download(url, archive, expected, progress=None):
     digest = hashlib.sha256()
-    deadline = time.monotonic() + 300
+    deadline = time.monotonic() + 900
     size = 0
     with urlopen(url, timeout=30) as source, archive.open("wb") as output:
+        try:
+            total = int(source.headers.get("Content-Length") or 0)
+        except (AttributeError, ValueError):
+            total = 0
         while True:
             block = source.read(1024 * 1024)
             if not block:
                 break
             size += len(block)
             if size > _MAX_ARCHIVE or time.monotonic() > deadline:
-                raise InstallError("The Codex download exceeded its size or time limit.")
+                raise InstallError("The Codex CLI download exceeded its size or time limit.")
             digest.update(block)
             output.write(block)
+            if progress:
+                progress(size, total)
     if digest.hexdigest() != expected:
-        raise InstallError("The Codex download failed SHA-256 verification.")
+        raise InstallError("The Codex CLI download failed SHA-256 verification.")

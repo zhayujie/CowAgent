@@ -3,7 +3,7 @@
 import hashlib
 import json
 import re
-from threading import Lock
+from threading import BoundedSemaphore
 from uuid import uuid4
 
 from bridge.context import ContextType
@@ -16,8 +16,13 @@ from models.openai.responses_adapter import messages_to_input
 from models.openai_compatible_bot import OpenAICompatibleBot
 from models.session_manager import SessionManager
 
-# One child at a time can refresh this instance's managed OAuth credentials.
-_MODEL_CALL = Lock()
+# Each model call runs its own App Server child; cap how many run at once.
+# Codex reloads auth.json when another child has refreshed the token.
+_MODEL_CALLS = BoundedSemaphore(4)
+# Silence allowed between two App Server messages during a turn.
+_IDLE_TIMEOUT = 300
+# Parallel calls of one response arrive back to back; wait this long for more.
+_TOOL_CALL_GRACE = 0.2
 _BASE_INSTRUCTIONS = "You are the model powering CowAgent. Answer in the user's language."
 _TOOL_EXECUTION_INSTRUCTIONS = (
     "CowAgent is the host for this conversation. It executes the supplied cowagent tools and "
@@ -59,6 +64,15 @@ def _turn_input(history):
             for part in parts
         ]
     return [{"type": "text", "text": "Continue using the conversation and any tool results above."}]
+
+
+def _usage(params):
+    tokens = params["tokenUsage"]["total"]
+    return {
+        "prompt_tokens": tokens["inputTokens"], "completion_tokens": tokens["outputTokens"],
+        "total_tokens": tokens["totalTokens"],
+        "prompt_tokens_details": {"cached_tokens": tokens.get("cachedInputTokens", 0)},
+    }
 
 
 def _chunk(model, delta=None, finish=None, usage=None):
@@ -119,7 +133,8 @@ class CodexBot(Bot, OpenAICompatibleBot):
             })
         instructions = f"{_BASE_INSTRUCTIONS}\n\n{system}" if system else _BASE_INSTRUCTIONS
         try:
-            with _MODEL_CALL, AppServer(timeout=conf().get("request_timeout") or 120) as server:
+            idle = max(conf().get("request_timeout") or 0, _IDLE_TIMEOUT)
+            with _MODEL_CALLS, AppServer(timeout=idle, idle=True) as server:
                 server.require_chatgpt()
                 result = server.request("thread/start", {
                     "model": model, "modelProvider": "openai", "ephemeral": True,
@@ -149,6 +164,18 @@ class CodexBot(Bot, OpenAICompatibleBot):
             yield {"error": True, "message": str(exc), "status_code": getattr(exc, "status_code", 503)}
 
     @staticmethod
+    def _tool_call(event, names):
+        """A CowAgent function call from an ``item/tool/call`` request, else None."""
+        if event.get("method") != "item/tool/call" or "id" not in event:
+            return None
+        params = event.get("params") or {}
+        name = names.get(params.get("tool")) if params.get("namespace") == TOOL_NAMESPACE else None
+        arguments = params.get("arguments")
+        if not name or not isinstance(arguments, dict):
+            return None
+        return {"name": name, "arguments": json.dumps(arguments, ensure_ascii=False)}
+
+    @staticmethod
     def _turn_events(server, model, thread_id, turn_id, names):
         usage = None
         streamed_items = set()
@@ -163,15 +190,27 @@ class CodexBot(Bot, OpenAICompatibleBot):
                 continue
 
             if method == "item/tool/call" and "id" in event:
-                name = names.get(params.get("tool")) if params.get("namespace") == TOOL_NAMESPACE else None
-                arguments = params.get("arguments")
-                if name and isinstance(arguments, dict):
+                call = CodexBot._tool_call(event, names)
+                if call:
                     # CowAgent owns tool execution. End this isolated App Server
-                    # call and replay the real result from CowAgent on the next call.
-                    yield _chunk(model, {"tool_calls": [{
-                        "index": 0, "type": "function", "id": "call_cow_" + uuid4().hex,
-                        "function": {"name": name, "arguments": json.dumps(arguments, ensure_ascii=False)},
-                    }]})
+                    # call and replay the real results from CowAgent on the next call.
+                    calls = [call]
+                    while True:
+                        more = server.receive(wait=_TOOL_CALL_GRACE)
+                        if not more:
+                            break
+                        same_thread = (more.get("params") or {}).get("threadId") == thread_id
+                        extra = CodexBot._tool_call(more, names) if same_thread else None
+                        if extra:
+                            calls.append(extra)
+                        elif more.get("method") == "thread/tokenUsage/updated":
+                            usage = _usage(more["params"])
+                        elif more.get("method") and "id" in more:
+                            server.reject(more)
+                    yield _chunk(model, {"tool_calls": [
+                        {"index": i, "type": "function", "id": "call_cow_" + uuid4().hex, "function": fn}
+                        for i, fn in enumerate(calls)
+                    ]})
                     yield _chunk(model, finish="tool_calls", usage=usage)
                     return
             if method and "id" in event:
@@ -184,12 +223,7 @@ class CodexBot(Bot, OpenAICompatibleBot):
                 if item["type"] == "agentMessage" and item["id"] not in streamed_items and item.get("text"):
                     yield _chunk(model, {"content": item["text"]})
             elif method == "thread/tokenUsage/updated":
-                tokens = params["tokenUsage"]["total"]
-                usage = {
-                    "prompt_tokens": tokens["inputTokens"], "completion_tokens": tokens["outputTokens"],
-                    "total_tokens": tokens["totalTokens"],
-                    "prompt_tokens_details": {"cached_tokens": tokens.get("cachedInputTokens", 0)},
-                }
+                usage = _usage(params)
             elif method == "turn/completed" and params["turn"]["id"] == turn_id:
                 turn = params["turn"]
                 if turn["status"] != "completed":

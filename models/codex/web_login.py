@@ -3,8 +3,10 @@
 from threading import Event, Lock, Thread
 from urllib.parse import urlsplit
 
-from models.codex.app_server import AppServer, CodexError, cached_models, clear_model_cache, codex_home, refresh_models
-from models.codex.install import InstallError, find_codex, install_codex
+from models.codex.app_server import (
+    AppServer, CodexError, cached_account, cached_models, clear_model_cache, codex_home, refresh_models,
+)
+from models.codex.install import VERSION, InstallError, find_codex, install_codex
 
 
 class CodexSetup:
@@ -29,10 +31,16 @@ class CodexSetup:
         home = codex_home()
         models = cached_models()
         return {
-            **self._state, "installed": bool(find_codex(home)),
+            **self._state, "installed": bool(find_codex(home)), "cli_version": VERSION,
             "signed_in": (home / "auth.json").is_file(),
             "models_ready": bool(models), "models": models,
+            "account": cached_account(),
         }
+
+    def _install_progress(self, done, total):
+        with self._lock:
+            if self._state.get("phase") == "installing":
+                self._state = {"phase": "installing", "downloaded": done, "total": total}
 
     def _update(self, phase, **fields):
         with self._lock:
@@ -42,8 +50,8 @@ class CodexSetup:
         try:
             if action == "login":
                 if not find_codex(codex_home()):
-                    self._update("installing")
-                    install_codex(codex_home())
+                    self._update("installing", downloaded=0, total=0)
+                    install_codex(codex_home(), progress=self._install_progress)
                 self._update("starting")
                 if self._login():
                     self._update("refreshing")

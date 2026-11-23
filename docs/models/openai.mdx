@@ -30,17 +30,18 @@ OpenAI offers the most complete coverage and can simultaneously serve text chat,
 
 ## Codex with a ChatGPT subscription
 
-For a personal CowAgent installation, the **Codex** provider uses
-your ChatGPT account's Codex allowance for chat. It uses the official Codex
+For a personal CowAgent installation, the **Codex** provider calls GPT
+models through your ChatGPT subscription, with no API key. It uses the official Codex
 App Server over standard input and output. CowAgent handles conversation
 history and executes its own tools under the existing permission settings.
 
 ### Sign in from the web console
 
-Open **Models → Chat → Codex**. Click **Sign in with ChatGPT**, or
-**Install and sign in** when Codex CLI is missing. Follow the OpenAI link,
-enter the displayed device code and authorize with your ChatGPT account. The
-model list syncs automatically when you finish. Select a model and save.
+Open **Models → Chat → Codex** and click **Sign in with ChatGPT**. On the
+first sign-in CowAgent downloads the official Codex CLI (about 110 MB) and
+shows the progress. Copy the device code, open the OpenAI page, sign in with
+your ChatGPT account and enter the code. The model list syncs automatically
+when you finish and Codex becomes available in the chat model selector.
 Use the provider dialog to sync the list again or sign out. Set a web access
 password to manage Codex from a remote console.
 
@@ -51,7 +52,8 @@ Run `cow codex login` as the CowAgent service user with its usual
 `cow codex login --yes` to accept automatically or `cow codex install` to
 install without signing in. The installer verifies the official Codex
 0.171.0 release for Linux, macOS and Windows on x64 or ARM64 and keeps it in
-this CowAgent instance's data directory. It reuses an existing CLI if present.
+this CowAgent instance's data directory, separate from any Codex CLI you
+installed yourself and its sign-in.
 On a machine with a local browser you can also run `cow codex login --browser`.
 
 If OpenAI prompts you to enable device-code authorization, turn it on in

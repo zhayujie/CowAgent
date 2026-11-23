@@ -25,7 +25,7 @@ def install():
 
 @codex.command()
 @click.option("--browser", is_flag=True, help="Use a local browser instead of a device code.")
-@click.option("-y", "--yes", is_flag=True, help="Install Codex automatically if it is missing.")
+@click.option("-y", "--yes", is_flag=True, help="Install the Codex CLI automatically if it is missing.")
 def login(browser, yes):
     """Sign in with ChatGPT on this CowAgent host."""
     from common.i18n import t
@@ -60,7 +60,8 @@ def status():
             account = server.require_chatgpt()
     except (CodexError, OSError) as exc:
         raise click.ClickException(str(exc)) from exc
-    click.echo(f"ChatGPT ({account.get('planType') or 'unknown plan'})")
+    who = account.get("email") or "ChatGPT"
+    click.echo(f"{who} ({account.get('planType') or 'unknown plan'})")
 
 
 @codex.command()

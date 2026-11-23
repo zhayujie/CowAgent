@@ -83,13 +83,6 @@ PROVIDER_MODELS = OrderedDict([
         "api_base_placeholder": _PLACEHOLDER_V1,
         "models": [const.GPT_62_SOL, const.GPT_62_ASTRA, const.GPT_61_TERRA, const.GPT_61_SOL, const.GPT_6_LUNA, const.GPT_6_SOL, const.GPT_6_ASTRA, const.GPT_56_LUNA, const.GPT_56_TERRA, const.GPT_56_SOL, const.GPT_55, const.GPT_54, const.GPT_54_MINI, const.GPT_54_NANO, const.GPT_5, const.GPT_41, const.GPT_4o],
     }),
-    (const.CODEX, {
-        "label": "Codex",
-        "api_key_field": None,
-        "api_base_key": None,
-        "api_base_default": "",
-        "models": [],
-    }),
     ("gemini", {
         "label": "Gemini",
         "api_key_field": "gemini_api_key",
@@ -153,6 +146,13 @@ PROVIDER_MODELS = OrderedDict([
         "api_base_default": "https://api.xiaomimimo.com/v1",
         "api_base_placeholder": _PLACEHOLDER_V1,
         "models": [const.MIMO_V2_6_PRO, const.MIMO_V2_6_FLASH],
+    }),
+    (const.CODEX, {
+        "label": "Codex",
+        "api_key_field": None,
+        "api_base_key": None,
+        "api_base_default": "",
+        "models": [],
     }),
     ("cowagent", {
         "label": "CowAgent",

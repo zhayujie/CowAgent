@@ -29,9 +29,12 @@ for line in sys.stdin:
         continue
     if method == "initialize":
         assert params["capabilities"]["experimentalApi"]
+        if sys.argv[1] == "crash":
+            print("error: unsupported flag --disable", file=sys.stderr, flush=True)
+            sys.exit(2)
         result = {}
     elif method == "account/read":
-        result = {"account": {"type": sys.argv[1], "planType": "plus"}}
+        result = {"account": {"type": sys.argv[1], "planType": "plus", "email": "user@example.com"}}
     elif method == "model/list":
         assert params["modelProvider"] == "openai"
         if not params["cursor"]:
@@ -62,6 +65,11 @@ for line in sys.stdin:
                 **address, "tool": tools[0]["name"], "namespace": "cowagent", "callId": "upstream-call",
                 "arguments": {"path": "cowagent.txt", "content": "written by CowAgent"},
             }})
+            if len(sys.argv) > 2 and sys.argv[2] == "parallel":
+                send({"method": "item/tool/call", "id": "tool-request-2", "params": {
+                    **address, "tool": tools[0]["name"], "namespace": "cowagent", "callId": "upstream-call-2",
+                    "arguments": {"path": "second.txt", "content": "second"},
+                }})
         else:
             if tools:
                 assert [item["type"] for item in history] == [
@@ -92,7 +100,7 @@ for line in sys.stdin:
 """
 
 
-def _fake_server(monkeypatch, tmp_path, account_type="chatgpt"):
+def _fake_server(monkeypatch, tmp_path, account_type="chatgpt", *extra):
     real_popen = subprocess.Popen
     children = []
     monkeypatch.setattr(app_server, "codex_home", lambda: tmp_path)
@@ -105,7 +113,7 @@ def _fake_server(monkeypatch, tmp_path, account_type="chatgpt"):
         assert "OPENAI_API_KEY" not in kwargs["env"]
         assert "OPENAI_BASE_URL" not in kwargs["env"]
         assert kwargs["env"]["CODEX_HOME"] == str(tmp_path.resolve())
-        child = real_popen([sys.executable, "-u", "-c", _FAKE_SERVER, account_type], **kwargs)
+        child = real_popen([sys.executable, "-u", "-c", _FAKE_SERVER, account_type, *extra], **kwargs)
         children.append(child)
         return child
 
@@ -169,6 +177,24 @@ def test_codex_continues_with_cowagent_tool_results(monkeypatch, tmp_path):
     assert len(_tool_alias("mcp:tool/name" * 10)) <= 64
 
 
+def test_codex_returns_parallel_tool_calls_together(monkeypatch, tmp_path):
+    _fake_server(monkeypatch, tmp_path, "chatgpt", "parallel")
+    bot = _routed_bot(monkeypatch)
+    tools = build_tools_schema([Write({"cwd": str(tmp_path)})])
+    messages = [{"role": "user", "content": [{"type": "text", "text": "Write two files."}]}]
+    system = "Use CowAgent tools according to this session's permissions."
+    result = bot.call_with_tools(messages, tools, system=system)
+    calls = result["choices"][0]["message"]["tool_calls"]
+    assert [json.loads(c["function"]["arguments"])["path"] for c in calls] == ["cowagent.txt", "second.txt"]
+    assert len({c["id"] for c in calls}) == 2
+
+
+def test_codex_exit_reports_stderr(monkeypatch, tmp_path):
+    _fake_server(monkeypatch, tmp_path, "crash")
+    result = _routed_bot(monkeypatch).call_with_tools([{"role": "user", "content": "Hi"}])
+    assert result["error"] and "unsupported flag" in result["message"]
+
+
 def test_codex_rejects_api_key_accounts(monkeypatch, tmp_path):
     children = _fake_server(monkeypatch, tmp_path, account_type="apiKey")
     result = _routed_bot(monkeypatch).call_with_tools([{"role": "user", "content": "Hi"}])
@@ -184,9 +210,11 @@ def test_model_list_reaches_web_and_session_pickers(monkeypatch, tmp_path):
 
     (tmp_path / "auth.json").touch()
     assert app_server.refresh_models() == ["codex-test", "codex-other"]
+    assert app_server.cached_account() == {"email": "user@example.com", "plan": "plus"}
     card = next(row for row in ModelsHandler._provider_overview() if row["id"] == "codex")
     assert card["configured"] and not card["api_key_masked"]
     entry = next(row for row in _session_model_catalog() if row["id"] == "codex")
     assert entry["models"] == ["codex-test", "codex-other"]
     (tmp_path / "auth.json").unlink()
     assert not any(row["id"] == "codex" for row in _session_model_catalog())
+    assert app_server.cached_account() == {}

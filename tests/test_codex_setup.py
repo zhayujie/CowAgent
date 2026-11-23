@@ -34,7 +34,9 @@ def test_install_verifies_archive_before_publishing(monkeypatch, tmp_path):
 
     monkeypatch.setattr(install.platform, "system", lambda: "Linux")
     monkeypatch.setattr(install.platform, "machine", lambda: "x86_64")
-    monkeypatch.setattr(install.shutil, "which", lambda _name: None)
+    # A codex on PATH is never used in place of the pinned build.
+    monkeypatch.setattr(install.shutil, "which", lambda _name: "/usr/bin/codex")
+    assert install.find_codex(tmp_path) is None
     monkeypatch.setattr(install, "urlopen", lambda *args, **kwargs: io.BytesIO(archive.getvalue()))
     monkeypatch.setattr(install.subprocess, "run", lambda *args, **kwargs: SimpleNamespace(
         stdout=f"codex-cli {install.VERSION}\n".encode(), returncode=0,
@@ -59,10 +61,11 @@ def test_web_setup_installs_signs_in_and_syncs(monkeypatch, tmp_path, cancel):
     calls = []
     installed = False
 
-    def install_cli(home):
+    def install_cli(home, progress=None):
         nonlocal installed
         assert home == tmp_path
         calls.append("install")
+        progress(1024, 2048)
         installed = True
 
     class Server:
@@ -95,6 +98,7 @@ def test_web_setup_installs_signs_in_and_syncs(monkeypatch, tmp_path, cancel):
     monkeypatch.setattr(web_login, "find_codex", lambda _home: "codex" if installed else None)
     monkeypatch.setattr(web_login, "install_codex", install_cli)
     monkeypatch.setattr(web_login, "AppServer", Server)
+    monkeypatch.setattr(web_login, "cached_account", lambda: {})
     monkeypatch.setattr(web_login, "clear_model_cache", lambda: calls.append("clear"))
     monkeypatch.setattr(web_login, "refresh_models", lambda: calls.append("refresh"))
 
