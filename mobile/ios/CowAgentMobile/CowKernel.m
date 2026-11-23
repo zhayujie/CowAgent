@@ -2,6 +2,7 @@
 
 #import <Python/Python.h>
 #import <Security/SecRandom.h>
+#import <UIKit/UIKit.h>
 #include <arpa/inet.h>
 #include <os/log.h>
 #include <sys/socket.h>
@@ -326,6 +327,15 @@ RCT_EXPORT_MODULE()
     queue = dispatch_queue_create("ai.cowagent.kernel", DISPATCH_QUEUE_SERIAL);
   });
   return queue;
+}
+
+/**
+ * What the owner calls this device, for naming the local agent; never leaves the device. Since iOS 16 this is
+ * the plain model ("iPhone", "iPad") unless the app holds the user-assigned device name entitlement.
+ */
+RCT_EXPORT_BLOCKING_SYNCHRONOUS_METHOD(deviceName)
+{
+  return UIDevice.currentDevice.name ?: @"";
 }
 
 /** Resolves with `{port, password}` once the kernel thread is started; it binds shortly after. */
