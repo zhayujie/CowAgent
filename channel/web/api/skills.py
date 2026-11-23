@@ -34,6 +34,7 @@ class ToolsHandler:
         _require_auth()
         web.header('Content-Type', 'application/json; charset=utf-8')
         try:
+            from agent.tools.phone.base import PhoneTool
             from agent.tools.tool_manager import ToolManager
             from common import i18n
             tm = ToolManager()
@@ -53,10 +54,9 @@ class ToolsHandler:
                             "⚠️ IMPORTANT: Only use this tool when delayed or periodic execution is needed."
                         )
                     entry = {"name": name, "description": desc}
-                    platforms = getattr(cls, "platforms", None)
-                    if platforms:
+                    if issubclass(cls, PhoneTool):
                         entry["group"] = "phone"
-                        entry["platforms"] = list(platforms)
+                        entry["platforms"] = list(cls.platforms)
                     tools.append(entry)
                 except Exception:
                     tools.append({"name": name, "description": ""})

@@ -1,11 +1,8 @@
 import type {IconDefinition} from '@fortawesome/fontawesome-svg-core';
 import {
-  faAddressBook,
-  faArrowUpRightFromSquare,
   faBolt,
   faBookOpen,
   faBrain,
-  faCalendarDays,
   faClock,
   faCloudArrowDown,
   faCodeBranch,
@@ -15,11 +12,7 @@ import {
   faFolderOpen,
   faGlobe,
   faImage,
-  faImages,
   faKey,
-  faLocationDot,
-  faMobileScreen,
-  faShareNodes,
   faMagnifyingGlass,
   faPaperPlane,
   faPenToSquare,
@@ -32,6 +25,7 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import React, {useEffect, useState} from 'react';
 import {Image, View} from 'react-native';
+import {PHONE_TOOLS} from '../phone/catalog';
 import type {Skill} from '../protocol/resources';
 import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
@@ -57,13 +51,6 @@ const TOOL_ICONS: Record<string, IconDefinition> = {
   agent_delegate: faUsers,
   subagent: faCodeBranch,
   evolution_undo: faRotateLeft,
-  phone_open: faArrowUpRightFromSquare,
-  phone_location: faLocationDot,
-  phone_calendar: faCalendarDays,
-  phone_contacts: faAddressBook,
-  phone_photos: faImages,
-  phone_share: faShareNodes,
-  phone_device: faMobileScreen,
 };
 
 export type Tone = 'web' | 'doc' | 'image' | 'media';
@@ -106,7 +93,7 @@ export function SkillIcon({skill, size = 38}: {skill: Skill; size?: number}) {
 }
 
 export function ToolIcon({name, size = 34}: {name: string; size?: number}) {
-  return <Tile icon={TOOL_ICONS[name] ?? faWrench} tone="web" size={size} />;
+  return <Tile icon={TOOL_ICONS[name] ?? PHONE_TOOLS[name]?.icon ?? faWrench} tone="web" size={size} />;
 }
 
 export function McpIcon({off, size = 34}: {off?: boolean; size?: number}) {

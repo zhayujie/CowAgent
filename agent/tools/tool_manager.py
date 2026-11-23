@@ -4,6 +4,7 @@ import threading
 from pathlib import Path
 from typing import Dict
 from agent.tools.base_tool import BaseTool
+from agent.tools.phone.base import PhoneTool
 from common.deployment import is_mobile
 from common.log import logger
 from config import conf
@@ -12,16 +13,12 @@ from config import conf
 # can provide.
 _MOBILE_UNAVAILABLE_TOOLS = frozenset({"bash", "browser"})
 
-# Tools the mobile app carries out on its phone; nothing else can.
-_MOBILE_ONLY_TOOLS = frozenset({
-    "phone_open", "phone_location", "phone_calendar", "phone_contacts", "phone_photos", "phone_share", "phone_device",
-})
 
-
-def _available_here(tool_name: str) -> bool:
+def _available_here(tool_name: str, cls: type) -> bool:
     if is_mobile():
         return tool_name not in _MOBILE_UNAVAILABLE_TOOLS
-    return tool_name not in _MOBILE_ONLY_TOOLS
+    # The mobile app carries these out on its phone; nothing else can.
+    return not issubclass(cls, PhoneTool)
 
 
 def _normalize_mcp_configs(raw) -> list:
@@ -192,7 +189,7 @@ class ToolManager:
                                     # Create a temporary instance to get the name
                                     temp_instance = cls()
                                     tool_name = temp_instance.name
-                                    if not _available_here(tool_name):
+                                    if not _available_here(tool_name, cls):
                                         logger.debug(f"Skipped tool {tool_name} (unavailable in this deployment)")
                                         continue
                                     # Store the class, not the instance
@@ -259,7 +256,7 @@ class ToolManager:
                                 # Create a temporary instance to get the name
                                 temp_instance = cls()
                                 tool_name = temp_instance.name
-                                if not _available_here(tool_name):
+                                if not _available_here(tool_name, cls):
                                     continue
                                 # Store the class, not the instance
                                 self.tool_classes[tool_name] = cls

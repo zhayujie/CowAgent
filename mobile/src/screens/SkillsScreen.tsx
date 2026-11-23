@@ -47,6 +47,7 @@ import {tr, trf, type MessageKey} from '../i18n';
 import {pickDocuments} from '../media/picker';
 import {openWebPage} from '../navigation/openWeb';
 import type {RootStackParamList} from '../navigation/types';
+import {PHONE_TOOLS} from '../phone/catalog';
 import type {Skill, SkillMarketSource, SkillPreview, ToolInfo} from '../protocol/resources';
 import {MCP_STATUS, MCP_TRANSPORT_LABEL, mcpTarget, mcpTransport, useMcpStore} from '../store/mcpStore';
 import {describeConnectError, useLocalServer} from '../store/serverStore';
@@ -57,17 +58,6 @@ import {compareSkills, SKILL_SOURCE_LABEL, skillDescription, skillName, skillRef
 type Props = StackScreenProps<RootStackParamList, 'Skills'>;
 type Tab = 'skills' | 'tools' | 'mcp';
 const TABS: readonly Tab[] = ['skills', 'tools', 'mcp'];
-
-/** The tools the app runs on the phone, named and explained in the user's language. */
-const PHONE_TOOL: Record<string, [MessageKey, MessageKey]> = {
-  phone_open: ['phone_tool_open', 'phone_tool_open_desc'],
-  phone_location: ['phone_tool_location', 'phone_tool_location_desc'],
-  phone_calendar: ['phone_tool_calendar', 'phone_tool_calendar_desc'],
-  phone_contacts: ['phone_tool_contacts', 'phone_tool_contacts_desc'],
-  phone_photos: ['phone_tool_photos', 'phone_tool_photos_desc'],
-  phone_share: ['phone_tool_share', 'phone_tool_share_desc'],
-  phone_device: ['phone_tool_device', 'phone_tool_device_desc'],
-};
 
 const PLATFORM_NAME: Record<string, MessageKey> = {
   android: 'phone_platform_android',
@@ -447,7 +437,7 @@ export function SkillsScreen({navigation}: Props) {
                   <View style={[styles.group, !label && styles.groupTop]}>
                     {items.map((tool, i) => {
                       const open = openTool === tool.name;
-                      const phone = PHONE_TOOL[tool.name];
+                      const phone = PHONE_TOOLS[tool.name];
                       return (
                         <Pressable
                           key={tool.name}
@@ -458,10 +448,10 @@ export function SkillsScreen({navigation}: Props) {
                           <ToolIcon name={tool.name} />
                           <View style={styles.rowText}>
                             <Text style={phone ? styles.toolTitle : styles.monoName} numberOfLines={1}>
-                              {phone ? tr(phone[0]) : tool.name}
+                              {phone ? tr(phone.title) : tool.name}
                             </Text>
                             <Text style={styles.rowDesc} numberOfLines={open ? undefined : 2}>
-                              {phone ? tr(phone[1]) : tool.description || tr('skill_no_desc')}
+                              {phone ? tr(phone.desc) : tool.description || tr('skill_no_desc')}
                             </Text>
                             {!!tool.platforms?.length && (
                               <Text style={styles.platforms}>

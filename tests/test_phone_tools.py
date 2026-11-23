@@ -117,12 +117,14 @@ def test_cancel_tells_the_app(phone):
 def test_phone_tools_load_on_mobile_only(monkeypatch):
     from agent.tools.tool_manager import _available_here
 
+    from agent.tools.bash.bash import Bash
+
     monkeypatch.delenv("COW_DEPLOYMENT", raising=False)
-    assert not _available_here("phone_open")
-    assert _available_here("bash")
+    assert not _available_here("phone_open", PhoneOpen)
+    assert _available_here("bash", Bash)
     monkeypatch.setenv("COW_DEPLOYMENT", "mobile")
-    assert _available_here("phone_location")
-    assert not _available_here("bash")
+    assert _available_here("phone_location", PhoneLocation)
+    assert not _available_here("bash", Bash)
 
 
 def test_calendar_passes_times_on(phone):
