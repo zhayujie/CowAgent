@@ -12,8 +12,6 @@ const DEVICE_ICONS = {
     ios: 'fab fa-apple', android: 'fab fa-android', harmony: 'fas fa-mobile-screen-button',
     desktop: 'fas fa-desktop', web: 'fas fa-globe', other: 'fas fa-circle-nodes',
 };
-// Off until the mobile app is published: hides the QR code and the app step.
-const DEVICES_MOBILE_PAIRING = false;
 const DEVICES_REFRESH_MS = 30000;
 const DEVICES_SEP = '<span class="mx-1.5 text-slate-300 dark:text-slate-600">·</span>';
 const DEVICES_BTN = 'px-3 py-1.5 rounded-lg border border-slate-200 dark:border-white/10 text-xs font-medium text-slate-600 dark:text-slate-300 cursor-pointer transition-colors';
@@ -375,15 +373,13 @@ function renderDevicePairing() {
         : `<div class="w-full h-full rounded-xl bg-slate-100 dark:bg-white/5 flex items-center justify-center text-xs text-slate-400">${escapeHtml(t('devices_no_qr'))}</div>`;
     const urls = (p.urls || []).map(u => `<div class="font-mono text-xs text-slate-600 dark:text-slate-300 break-all">${escapeHtml(u)}</div>`).join('');
     const step = (n, text) => `<li class="flex gap-2.5"><span class="w-5 h-5 rounded-full bg-primary-500/10 text-primary-600 dark:text-primary-400 text-[11px] font-semibold flex items-center justify-center flex-shrink-0">${n}</span><span>${escapeHtml(text)}</span></li>`;
-    const steps = DEVICES_MOBILE_PAIRING
-        ? `<ol class="grid gap-2 text-sm text-slate-600 dark:text-slate-300">${step(1, t('devices_step_app'))}${step(2, t('devices_step_other'))}</ol>`
-        : `<p class="text-sm text-slate-600 dark:text-slate-300">${escapeHtml(t('devices_step_other'))}</p>`;
+    const steps = `<ol class="grid gap-2 text-sm text-slate-600 dark:text-slate-300">${step(1, t('devices_step_app'))}${step(2, t('devices_step_other'))}</ol>`;
     box.innerHTML = `
         <div class="flex flex-col md:flex-row gap-6 p-5 mb-3 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50/70 dark:bg-white/[0.03]">
-            ${DEVICES_MOBILE_PAIRING ? `<div class="dev-pair-ring self-center md:self-start">
+            <div class="dev-pair-ring self-center md:self-start">
                 ${qr}
                 ${p.expired ? `<button onclick="startDevicePairing()" class="absolute inset-0 m-auto w-28 h-9 rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-xs font-medium cursor-pointer shadow">${escapeHtml(t('devices_regenerate'))}</button>` : ''}
-            </div>` : ''}
+            </div>
             <div class="min-w-0 flex-1 grid gap-4 content-start">
                 ${steps}
                 <div class="grid sm:grid-cols-2 gap-4">
@@ -400,8 +396,6 @@ function renderDevicePairing() {
                     <span class="inline-flex items-center gap-1.5 ${p.expired ? 'text-red-500' : 'text-slate-400 dark:text-slate-500'}">
                         <i class="far fa-clock"></i>${escapeHtml(p.expired ? t('devices_expired') : t('devices_expires_in').replace('{t}', clock))}
                     </span>
-                    ${p.expired && !DEVICES_MOBILE_PAIRING ? `<button onclick="startDevicePairing()" class="inline-flex items-center gap-1.5 text-primary-500 hover:text-primary-600 cursor-pointer">
-                        <i class="fas fa-rotate-right"></i>${escapeHtml(t('devices_regenerate'))}</button>` : ''}
                     ${p.expired ? '' : `<span class="inline-flex items-center gap-1.5 text-slate-400 dark:text-slate-500"><i class="fas fa-spinner fa-spin text-[10px]"></i>${escapeHtml(t('devices_waiting'))}</span>`}
                 </div>
             </div>
