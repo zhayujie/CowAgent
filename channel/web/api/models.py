@@ -18,6 +18,8 @@ import web
 
 from channel.web.core._common import (
     _config_write_guard,
+    _is_loopback_request,
+    _is_password_enabled,
     _read_config_file_for_write,
     _require_auth,
     _write_config_file_for_write,
@@ -27,6 +29,7 @@ from channel.web.core.providers import (
     is_real_key,
     legacy_custom_in_use,
     mask_key,
+    provider_model_names,
 )
 from common import const
 from common.log import logger
@@ -908,10 +911,10 @@ class ModelsHandler:
                 # An unset base follows the UI language; show that site, or saving
                 # the form would pin the default one and break keys from the other.
                 raw_base = resolve_cowagent_credentials()[1]
-            configured = is_real_key(raw_key)
             overrides = catalog_map.get(pid) or []
             hidden = hidden_map.get(pid) or []
             seed = [] if pid == "custom" else cls._preset_seed(pid)
+            configured = bool(seed) if pid == const.CODEX else is_real_key(raw_key)
             # The editor prefills from the effective list (presets minus
             # removals, plus overrides), so the user always edits the full
             # list — adding one model can no longer wipe the rest.
@@ -938,7 +941,7 @@ class ModelsHandler:
                 # The full effective list the editor loads as its rows.
                 "effective": effective,
                 "models": [e["name"] for e in effective] if effective
-                          else list(p.get("models") or []),
+                          else list(p["models"]),
             })
 
         def _sort_key(it):
@@ -1069,11 +1072,7 @@ class ModelsHandler:
         model lists, so a vendor without a catalog still offers its presets
         while a catalogued one offers its catalog instead.
         """
-        out = {}
-        for pid, meta in PROVIDER_MODELS.items():
-            models = (meta or {}).get("models")
-            out[pid] = list(models) if isinstance(models, (list, tuple)) else []
-        return out
+        return {pid: list(provider_model_names(pid)) for pid in PROVIDER_MODELS}
 
     @classmethod
     def _chat_fallback_capability(cls, local_config: dict) -> dict:
@@ -1833,7 +1832,7 @@ class ModelsHandler:
             if cap not in entry["capabilities"]:
                 entry["capabilities"].append(cap)
 
-        for m in PROVIDER_MODELS.get(pid, {}).get("models") or []:
+        for m in provider_model_names(pid):
             add(m if isinstance(m, str) else m.get("value"), "text")
         tables = (
             ("vision", cls._VISION_PROVIDER_MODELS),
@@ -1919,6 +1918,8 @@ class ModelsHandler:
         try:
             data = json.loads(web.data() or b"{}")
             action = data.get("action") or ""
+            if action in ("codex_status", "codex_login", "codex_cancel", "codex_refresh", "codex_logout"):
+                return self._handle_codex_setup(action[len("codex_"):])
             if action == "discover_models":
                 # Read-only: this probes the provider's /models endpoint with a
                 # 10s timeout and never writes config.json. Holding the save
@@ -1938,6 +1939,18 @@ class ModelsHandler:
         except Exception as e:
             logger.error(f"[ModelsHandler] POST failed: {e}")
             return json.dumps({"status": "error", "message": str(e)})
+
+    @staticmethod
+    def _handle_codex_setup(action: str) -> str:
+        from models.codex.web_login import codex_setup
+
+        web.header("Cache-Control", "no-store")
+        content_type = (web.ctx.env.get("CONTENT_TYPE") or "").split(";", 1)[0].strip().lower()
+        if content_type != "application/json":
+            return json.dumps({"status": "error", "message": "Expected application/json."})
+        if not _is_password_enabled() and not _is_loopback_request():
+            return json.dumps({"status": "error", "message_key": "models_codex_requires_password"})
+        return json.dumps({"status": "success", **codex_setup.dispatch(action)})
 
     def _dispatch_write_action(self, action: str, data: dict) -> str:
         """The POST actions that persist config (all run under the save lock)."""
@@ -2485,6 +2498,12 @@ class ModelsHandler:
                 return json.dumps({"status": "error", "message": f"unknown custom provider id: {custom_id}"})
         elif provider_id and provider_id not in PROVIDER_MODELS:
             return json.dumps({"status": "error", "message": f"unknown provider: {provider_id}"})
+
+        if provider_id == const.CODEX:
+            available = provider_model_names(provider_id)
+            if not available:
+                return json.dumps({"status": "error", "message": "Sign in to Codex from the Models console or run 'cow codex login'."})
+            model = model or available[0]
 
         applied = {}
         local_config = conf()

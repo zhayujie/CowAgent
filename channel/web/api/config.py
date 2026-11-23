@@ -28,6 +28,7 @@ from channel.web.core.providers import (
     PROVIDER_MODELS,
     legacy_custom_in_use,
     mask_key,
+    provider_model_names,
 )
 from common import i18n
 from common.log import logger
@@ -92,13 +93,14 @@ class ConfigHandler:
             providers = {}
             provider_model = local_config.get("model", "")
             for pid, p in PROVIDER_MODELS.items():
+                models = provider_model_names(pid)
                 reasoning_by_model = {
                     model: provider_reasoning_metadata(pid, model)
-                    for model in p["models"]
+                    for model in models
                 }
                 providers[pid] = {
                     "label": p["label"],
-                    "models": p["models"],
+                    "models": models,
                     "api_base_key": p["api_base_key"],
                     "api_base_default": p["api_base_default"],
                     "api_base_placeholder": p.get("api_base_placeholder", ""),

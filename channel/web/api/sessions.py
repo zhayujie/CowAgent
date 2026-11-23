@@ -31,7 +31,7 @@ from channel.web.core._common import (
     _roster_from_members,
 )
 from channel.web.core.channel import WebChannel
-from channel.web.core.providers import PROVIDER_MODELS
+from channel.web.core.providers import PROVIDER_MODELS, provider_model_names
 from common import const
 from common.log import logger
 from config import conf
@@ -522,11 +522,12 @@ def _session_model_catalog() -> List[dict]:
 
     catalog: List[dict] = []
     for pid, pinfo in PROVIDER_MODELS.items():
-        if pid == "custom" or not pinfo.get("models"):
+        presets = provider_model_names(pid)
+        if pid == "custom" or not presets:
             continue
         key_field = pinfo.get("api_key_field")
         has_key = bool(key_field and str(local_config.get(key_field) or "").strip())
-        if not has_key and pid != active_provider:
+        if pid != const.CODEX and not has_key and pid != active_provider:
             continue
         # Overlay onto the presets, then keep only text-tagged entries — only
         # those belong in the conversation switcher. Without an overlay this is
@@ -536,7 +537,7 @@ def _session_model_catalog() -> List[dict]:
                 pid, ModelsHandler._preset_seed(pid), catalog_map, hidden_map)
             models = [e["name"] for e in effective if "text" in (e.get("capabilities") or [])]
         else:
-            models = list(pinfo["models"])
+            models = list(presets)
         if not models:
             continue
         # The user can pin a custom model name to a built-in provider (via the

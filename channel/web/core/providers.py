@@ -15,6 +15,7 @@ handlers to each other.
 from collections import OrderedDict
 
 from common import const
+from models.codex.app_server import cached_models
 
 
 _RECOMMENDED_MODELS = [
@@ -146,6 +147,13 @@ PROVIDER_MODELS = OrderedDict([
         "api_base_placeholder": _PLACEHOLDER_V1,
         "models": [const.MIMO_V2_6_PRO, const.MIMO_V2_6_FLASH],
     }),
+    (const.CODEX, {
+        "label": "Codex",
+        "api_key_field": None,
+        "api_base_key": None,
+        "api_base_default": "",
+        "models": [],
+    }),
     ("cowagent", {
         "label": "CowAgent",
         "api_key_field": "cowagent_api_key",
@@ -192,6 +200,13 @@ PROVIDER_MODELS = OrderedDict([
 # split across ConfigHandler and ModelsHandler, and each handler needed one
 # from the other, which is a cycle the moment the two live in separate
 # modules. They are about the catalogue above, so they belong here.
+
+def provider_model_names(provider_id: str):
+    """Return local subscription models or the built-in provider presets."""
+    if provider_id == const.CODEX:
+        return cached_models()
+    return PROVIDER_MODELS.get(provider_id, {}).get("models") or []
+
 
 def is_real_key(value: str) -> bool:
     """False for an unset key and for the placeholders the form ships with."""
