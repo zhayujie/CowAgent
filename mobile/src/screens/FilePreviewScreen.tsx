@@ -5,6 +5,7 @@ import {Platform, ScrollView, StyleSheet, Text, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {KIND_LABEL, kindGroup} from '../components/ArtifactStrip';
 import {CodeText} from '../components/CodeText';
+import {DownloadProgressBar} from '../components/DownloadProgress';
 import {FileSheet} from '../components/FileViews';
 import {HtmlView} from '../components/HtmlView';
 import {LoadBar} from '../components/LoadBar';
@@ -13,8 +14,9 @@ import {MediaView, type MediaKind} from '../components/MediaView';
 import {PreviewSkeleton} from '../components/Skeleton';
 import {ToastHost} from '../components/Toast';
 import {Chip, IconButton} from '../components/ui';
-import {type ChatFile, fileHttpError, viewUrlOf} from '../files/chatFile';
-import {downloadFile, MEDIA_KINDS, openAsWebPage} from '../files/openFile';
+import {type ChatFile, fileHttpError, fileKeyOf, viewUrlOf} from '../files/chatFile';
+import {useDownloadStore} from '../files/downloadStore';
+import {downloadFile, MEDIA_KINDS, openAsWebPage, openWithSystem} from '../files/openFile';
 import {tr, trf} from '../i18n';
 import {EDGE_ONLY, useFullBackSwipe} from '../navigation/gestures';
 import type {RootStackParamList} from '../navigation/types';
@@ -57,6 +59,13 @@ export function FilePreviewScreen({route, navigation}: Props) {
   const [scrolled, setScrolled] = useState(false);
   const [acting, setActing] = useState(false);
   const fullBackSwipe = useFullBackSwipe();
+  const download = useDownloadStore(s => s.byId[fileKeyOf(file)]);
+  const downloadLabel =
+    download?.status === 'downloading'
+      ? tr('file_downloading')
+      : download?.status === 'failed'
+        ? tr('file_download_resume')
+        : tr('file_download');
   // Code and tables scroll sideways, so they keep back to the screen edge.
   const sideways = live || file.kind === 'code' || file.kind === 'csv';
 
@@ -118,8 +127,10 @@ export function FilePreviewScreen({route, navigation}: Props) {
       <View style={styles.failed}>
         <Text style={styles.failedTitle}>{tr('file_unsupported_title')}</Text>
         <Text style={styles.failedHint}>{[file.name, meta].filter(Boolean).join('\n')}</Text>
+        <DownloadProgressBar file={file} wide />
         <View style={styles.failedActions}>
-          <Chip label={tr('file_download')} active onPress={() => downloadFile(file)} />
+          <Chip label={downloadLabel} active onPress={() => downloadFile(file)} />
+          {Platform.OS === 'android' && <Chip label={tr('file_open_with')} onPress={() => openWithSystem(file)} />}
         </View>
       </View>
     );
@@ -214,7 +225,7 @@ export function FilePreviewScreen({route, navigation}: Props) {
           )}
         </View>
         <View style={styles.panes}>
-          <IconButton icon={faDownload} label={tr('file_download')} onPress={() => downloadFile(file)} size={14} />
+          <IconButton icon={faDownload} label={downloadLabel} onPress={() => downloadFile(file)} size={14} />
           <View style={styles.panesDivider} />
           <IconButton icon={faEllipsis} label={tr('ui_more_actions')} onPress={() => setActing(true)} size={15} />
         </View>

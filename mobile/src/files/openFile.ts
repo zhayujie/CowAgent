@@ -10,6 +10,7 @@ import {useChatStore} from '../store/chatStore';
 import {copyText} from '../utils/clipboard';
 import {
   type ChatFile,
+  fileKeyOf,
   isUnsandboxedPage,
   outsideLinkOf,
   rawUrlOf,
@@ -20,6 +21,7 @@ import {
 } from './chatFile';
 import {cowNative, nativeError} from '../media/cowNative';
 import {canWriteDownloads} from './downloadPermission';
+import {downloadKey, listenForDownloadProgress, useDownloadStore} from './downloadStore';
 
 /** Read as text or rendered as a page on the preview screen. */
 const IN_APP = new Set(['markdown', 'text', 'csv', 'code', 'html']);
@@ -85,6 +87,7 @@ const nativeShare: {share(source: string, fileName: string, mime: string): Promi
  * The system share sheet with the file itself on Android and iOS, so a chat app receives the file
  * rather than a link that only opens where the server is reachable. Elsewhere, its link.
  */
+
 export async function shareFile(f: ChatFile) {
   const raw = rawUrlOf(f);
   if (nativeShare && /^https?:/i.test(raw)) {
@@ -119,7 +122,7 @@ export async function shareFile(f: ChatFile) {
 }
 
 /** Where a native save put the file; null when the user backed out of the iOS share sheet. */
-type SavedTo = 'downloads' | 'photos' | 'files' | 'other' | null;
+type SavedTo = 'downloads' | 'photos' | 'files' | 'other' | 'present' | null;
 
 /** The file name at the end of a URL, decoded; empty when there is none. */
 function nameFromUrl(url: string): string {
@@ -136,19 +139,31 @@ function nameFromUrl(url: string): string {
  * iOS downloads first and then offers the share sheet, HarmonyOS streams into
  * Downloads/<app name>. All settle once the file is kept.
  */
-const systemDownloads: {save(url: string, fileName: string): Promise<SavedTo>} | undefined =
-  NativeModules.CowDownloads ??
-  (cowNative
-    ? {
-        save: (url, fileName) =>
-          cowNative!.saveDownload(url, fileName || nameFromUrl(url)).then(
-            () => 'downloads' as const,
-            (e: unknown) => {
-              throw nativeError(e);
-            },
-          ),
-      }
-    : undefined);
+const nativeDownloads = NativeModules.CowDownloads;
+const systemDownloads:
+  | {
+      save(url: string, fileName: string, id: string): Promise<SavedTo>;
+      open?(url: string, fileName: string, id: string): Promise<'opened' | 'downloads' | 'present'>;
+    }
+  | undefined =
+  Platform.OS === 'android'
+    ? nativeDownloads
+    : nativeDownloads
+      ? {
+          // iOS predates progress ids and still exports the original two-argument method.
+          save: (url: string, fileName: string) => nativeDownloads.save(url, fileName),
+        }
+      : cowNative
+        ? {
+            save: (url, fileName) =>
+              cowNative!.saveDownload(url, fileName || nameFromUrl(url)).then(
+                () => 'downloads' as const,
+                (e: unknown) => {
+                  throw nativeError(e);
+                },
+              ),
+          }
+        : undefined;
 
 const savesNatively = (url: string) => !!systemDownloads && /^https?:/i.test(url);
 
@@ -156,23 +171,64 @@ const SAVED_TOAST: Partial<Record<NonNullable<SavedTo>, MessageKey>> = {
   downloads: 'file_saved_downloads',
   photos: 'file_saved_photos',
   files: 'file_saved_files',
+  present: 'file_saved_already',
 };
 
-/** An empty `fileName` leaves the name to the native side, which can read the server's on iOS. */
-async function saveToDownloads(url: string, name: string, fileName = name) {
+/**
+ * The status the server or the socket gave, when it named one. Telling a reader "HTTP 403"
+ * instead of "failed" is the difference between a retry and a bug report.
+ */
+function failureReason(e: unknown): string {
+  const message = e instanceof Error ? e.message : String(e ?? '');
+  const code = /HTTP\s+(\d{3})/i.exec(message);
+  if (code) {
+    return `HTTP ${code[1]}`;
+  }
+  if (/timeout|timed out|ETIMEDOUT/i.test(message)) {
+    return tr('file_download_timeout');
+  }
+  return '';
+}
+
+const activeDownloads = new Map<string, Promise<SavedTo>>();
+const activeOpens = new Map<string, Promise<'opened' | 'downloads' | 'present'>>();
+
+/**
+ * An empty `fileName` leaves the name to the native side, which can read the server's on iOS.
+ * `key` and `expected` come from the file itself when there is one; a bare link has neither.
+ */
+async function saveToDownloads(url: string, name: string, fileName = name, key?: string, expected?: number) {
+  const id = key || downloadKey(url, fileName || name);
+  const running = activeDownloads.get(id);
+  if (running) {
+    // Repeated taps join the same request instead of creating another Downloads entry.
+    return running;
+  }
   if (!(await canWriteDownloads())) {
     showToast(tr('file_download_no_permission'));
     return;
   }
-  showToast(trf('file_download_started', {name}));
+  listenForDownloadProgress();
+  useDownloadStore.getState().start(id, url, name, expected);
+  const work = systemDownloads!.save(url, fileName, id);
+  activeDownloads.set(id, work);
   try {
-    const savedTo = await systemDownloads!.save(url, fileName);
-    const key = savedTo ? SAVED_TOAST[savedTo] : undefined;
-    if (key) {
-      showToast(tr(key));
+    const savedTo = await work;
+    if (savedTo === null) {
+      useDownloadStore.getState().clear(id);
+      return;
     }
-  } catch {
-    showToast(tr('file_download_failed'));
+    useDownloadStore.getState().finish(id);
+    const message = savedTo ? SAVED_TOAST[savedTo] : undefined;
+    if (message) {
+      showToast(tr(message));
+    }
+  } catch (e) {
+    useDownloadStore.getState().fail(id);
+    const reason = failureReason(e);
+    showToast(reason ? trf('file_download_failed_reason', {reason}) : tr('file_download_failed'));
+  } finally {
+    activeDownloads.delete(id);
   }
 }
 
@@ -193,7 +249,7 @@ export function downloadUrl(url: string, name?: string) {
 export function downloadFile(f: ChatFile) {
   const url = rawUrlOf(f);
   if (savesNatively(url)) {
-    saveToDownloads(url, f.name);
+    saveToDownloads(url, f.name, f.name, fileKeyOf(f), f.size);
     return;
   }
   if (Platform.OS === 'web' && url && typeof document !== 'undefined') {
@@ -214,6 +270,49 @@ export function downloadFile(f: ChatFile) {
     return;
   }
   saveWithSystem(url);
+}
+
+/**
+ * Android only: downloads the file and lets the system "open with" chooser hand it to
+ * Word/WPS. Elsewhere the browser takes the link, since no such chooser exists.
+ */
+export async function openWithSystem(f: ChatFile) {
+  const url = rawUrlOf(f);
+  if (Platform.OS !== 'android' || !systemDownloads?.open || !savesNatively(url)) {
+    openInBrowser(f);
+    return;
+  }
+  if (!(await canWriteDownloads())) {
+    showToast(tr('file_download_no_permission'));
+    return;
+  }
+  const id = fileKeyOf(f);
+  const running = activeOpens.get(id);
+  if (running) {
+    return running;
+  }
+  listenForDownloadProgress();
+  useDownloadStore.getState().start(id, url, f.name, f.size);
+  const work = systemDownloads.open(url, f.name, id);
+  activeOpens.set(id, work);
+  try {
+    const result = await work;
+    useDownloadStore.getState().finish(id);
+    // Nothing took the file, so say where it went instead of implying it opened.
+    if (result === 'present') {
+      showToast(tr('file_saved_already'));
+    } else if (result === 'downloads') {
+      showToast(tr('file_open_no_app'));
+    } else if (result !== 'opened') {
+      showToast(tr('file_saved_files'));
+    }
+  } catch (e) {
+    useDownloadStore.getState().fail(id);
+    const reason = failureReason(e);
+    showToast(reason ? trf('file_download_failed_reason', {reason}) : tr('file_download_failed'));
+  } finally {
+    activeOpens.delete(id);
+  }
 }
 
 /** One tap on a file: it always opens in the app; formats it cannot render get a page to save them from. */
