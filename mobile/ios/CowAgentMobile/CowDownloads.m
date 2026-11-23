@@ -19,10 +19,33 @@ static NSString *SafeName(NSString *name)
   return clean;
 }
 
+// Copies handed to other apps are only needed while those read them.
+static const NSTimeInterval KeepCopies = 24 * 60 * 60;
+
+static NSString *CopiesRoot(void)
+{
+  return [NSTemporaryDirectory() stringByAppendingPathComponent:@"shared"];
+}
+
+/** Removes what `root` holds from before the last day. */
+static void Sweep(NSString *root)
+{
+  NSFileManager *files = NSFileManager.defaultManager;
+  NSDate *cutoff = [NSDate dateWithTimeIntervalSinceNow:-KeepCopies];
+  for (NSString *name in [files contentsOfDirectoryAtPath:root error:nil]) {
+    NSString *path = [root stringByAppendingPathComponent:name];
+    NSDate *modified = [files attributesOfItemAtPath:path error:nil].fileModificationDate;
+    if (modified && [modified compare:cutoff] == NSOrderedAscending) {
+      [files removeItemAtPath:path error:nil];
+    }
+  }
+}
+
 /** A fresh folder in the temporary directory, so the file keeps its own name without clashing. */
 static NSURL *TempFile(NSString *name, NSError **error)
 {
-  NSString *folder = [NSTemporaryDirectory() stringByAppendingPathComponent:NSUUID.UUID.UUIDString];
+  Sweep(CopiesRoot());
+  NSString *folder = [CopiesRoot() stringByAppendingPathComponent:NSUUID.UUID.UUIDString];
   if (![NSFileManager.defaultManager createDirectoryAtPath:folder withIntermediateDirectories:YES attributes:nil error:error]) {
     return nil;
   }
@@ -112,6 +135,19 @@ RCT_EXPORT_MODULE()
 + (BOOL)requiresMainQueueSetup
 {
   return NO;
+}
+
+- (instancetype)init
+{
+  if ((self = [super init])) {
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+      Sweep(CopiesRoot());
+      // Files opened in the app from another one are copied here, which iOS keeps and backs up.
+      NSString *documents = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
+      Sweep([documents stringByAppendingPathComponent:@"Inbox"]);
+    });
+  }
+  return self;
 }
 
 /** Fetches the file, then offers the share sheet, which is where iOS saves files from. */
