@@ -20,6 +20,8 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- Saving to Downloads needs it only before Android 10. -->
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
+    <!-- Updates: the downloaded APK goes to the system installer, which the user confirms. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
     <application

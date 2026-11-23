@@ -33,7 +33,6 @@ import {openWebPage} from '../navigation/openWeb';
 import type {RootStackParamList} from '../navigation/types';
 import type {PermissionMode} from '../protocol/resources';
 import {useConfigStore} from '../store/configStore';
-import {useOverviewStore} from '../store/overviewStore';
 import {
   activeServer,
   changingPassword,
@@ -43,6 +42,7 @@ import {
 } from '../store/serverStore';
 import {radius} from '../theme/palette';
 import {makeStyles, usePrefsStore, useTheme, type ThemeMode} from '../theme/theme';
+import {useAgentVersion} from '../update/useAgentVersion';
 import {PASSWORD_MIN_LENGTH, PASSWORD_STRENGTH_TEXT, passwordStrength} from '../utils/passwordStrength';
 
 type Props = StackScreenProps<RootStackParamList, 'Settings'>;
@@ -72,7 +72,7 @@ export function SettingsScreen({navigation}: Props) {
   const lang = useLangStore(s => s.lang);
   const setLang = useLangStore(s => s.setLang);
   const relogin = useServerStore(s => s.relogin);
-  const version = useOverviewStore(s => s.version);
+  const version = useAgentVersion();
   const config = useConfigStore(s => s.config);
   const externalApi = useConfigStore(s => s.externalApi);
   const loadConfig = useConfigStore(s => s.load);

@@ -62,6 +62,22 @@ import org.json.JSONObject
 class CowDeviceModule(context: ReactApplicationContext) : ReactContextBaseJavaModule(context) {
   override fun getName() = "CowDevice"
 
+  override fun getConstants(): Map<String, Any> {
+    val context = reactApplicationContext
+    val packages = context.packageManager
+    val version = runCatching { packages.getPackageInfo(context.packageName, 0).versionName }.getOrNull()
+    // The app market it came from, which then also delivers its updates; empty when sideloaded via adb.
+    val installer = runCatching {
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        packages.getInstallSourceInfo(context.packageName).installingPackageName
+      } else {
+        @Suppress("DEPRECATION")
+        packages.getInstallerPackageName(context.packageName)
+      }
+    }.getOrNull()
+    return mapOf("appVersion" to (version ?: ""), "installer" to (installer ?: ""))
+  }
+
   private val main = Handler(Looper.getMainLooper())
   private val worker = Executors.newSingleThreadExecutor()
 

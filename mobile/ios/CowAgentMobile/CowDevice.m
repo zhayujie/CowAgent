@@ -64,6 +64,21 @@ RCT_EXPORT_MODULE()
   return NO;
 }
 
+/** What the update check compares against; a TestFlight build also moves to the same version on the App Store. */
+- (NSDictionary *)constantsToExport
+{
+  NSBundle *bundle = NSBundle.mainBundle;
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+  // AppTransaction, its replacement, is Swift-only and asynchronous.
+  BOOL testFlight = [bundle.appStoreReceiptURL.lastPathComponent isEqualToString:@"sandboxReceipt"];
+#pragma clang diagnostic pop
+  return @{
+    @"appVersion" : text([bundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"]),
+    @"testFlight" : @(testFlight),
+  };
+}
+
 - (dispatch_queue_t)methodQueue
 {
   // CLLocationManager calls back on the thread it was made on, which needs a run loop.

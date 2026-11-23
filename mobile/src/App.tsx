@@ -9,6 +9,7 @@ import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {StatusBar, StyleSheet} from 'react-native';
 import {GestureHandlerRootView} from 'react-native-gesture-handler';
 import {SafeAreaProvider} from 'react-native-safe-area-context';
+import {AppUpdateHost} from './components/AppUpdateHost';
 import {ImageViewerHost} from './components/FileViews';
 import {PairLinkHost} from './components/PairFlow';
 import {PhoneHost} from './components/PhoneHost';
@@ -86,6 +87,7 @@ export default function App() {
           {hydrated && <PairLinkHost />}
           {hydrated && <PhoneHost />}
           {hydrated && <SchedulerWatch />}
+          {hydrated && <AppUpdateHost />}
         </React.Fragment>
       </SafeAreaProvider>
     </GestureHandlerRootView>

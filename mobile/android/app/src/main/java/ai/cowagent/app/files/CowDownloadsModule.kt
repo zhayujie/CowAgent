@@ -1,5 +1,6 @@
 package ai.cowagent.app.files
 
+import android.content.ActivityNotFoundException
 import android.content.ContentValues
 import android.content.ClipData
 import android.content.Context
@@ -11,6 +12,8 @@ import android.os.Environment
 import android.os.SystemClock
 import android.provider.MediaStore
 import android.provider.OpenableColumns
+import android.provider.Settings
+import android.util.Base64
 import android.util.Log
 import android.webkit.MimeTypeMap
 import android.webkit.URLUtil
@@ -203,6 +206,123 @@ class CowDownloadsModule(context: ReactApplicationContext) : ReactContextBaseJav
   @ReactMethod
   fun open(url: String, fileName: String, id: String, promise: Promise) {
     fetch(url, fileName, id, promise, openWith = true)
+  }
+
+  /**
+   * Downloads a release of this app, checks it against the SHA-512 (base64) the release lists, and
+   * hands it to the system installer, which also refuses an APK signed with another key. Resolves
+   * "installing", or "blocked" while this app may not install apps; the file stays for the next call.
+   * Progress goes out under [UPDATE_ID].
+   */
+  @ReactMethod
+  fun installUpdate(url: String, fileName: String, sha512: String, promise: Promise) {
+    val name = safeName(fileName).ifEmpty { "update.apk" }
+    io.execute {
+      synchronized(fileLocks.getOrPut(UPDATE_ID) { Any() }) {
+        try {
+          val target = cachedFile(UPDATE_ID, name)
+          if (!target.exists() || sha512Of(target) != sha512) {
+            download(url, UPDATE_ID, target, resume = true)
+          }
+          when {
+            sha512Of(target) != sha512 -> {
+              dropUpdateFiles()
+              promise.reject("corrupt", "The download does not match the release")
+            }
+            !canInstall() -> promise.resolve("blocked")
+            else -> {
+              startInstaller(target)
+              promise.resolve("installing")
+            }
+          }
+        } catch (e: Exception) {
+          Log.w(TAG, "Update download failed: ${e.message}", e)
+          promise.reject("download_failed", e.message ?: "Download failed", e)
+        }
+      }
+    }
+  }
+
+  /** The system page where the user lets this app install apps. */
+  @ReactMethod
+  fun allowInstalls(promise: Promise) {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+      promise.resolve(null)
+      return
+    }
+    val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${reactApplicationContext.packageName}"))
+    try {
+      val activity = reactApplicationContext.currentActivity
+      if (activity != null) activity.startActivity(intent)
+      else reactApplicationContext.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+      promise.resolve(null)
+    } catch (e: Exception) {
+      promise.reject("no_settings", e.message, e)
+    }
+  }
+
+  /** This app's page in the app market [market] (its package), or in any market when that one cannot show it. */
+  @ReactMethod
+  fun openMarket(market: String, promise: Promise) {
+    val page = Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=${reactApplicationContext.packageName}"))
+    val activity = reactApplicationContext.currentActivity
+    val start = { intent: Intent ->
+      if (activity != null) activity.startActivity(intent)
+      else reactApplicationContext.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    }
+    try {
+      try {
+        start(Intent(page).setPackage(market))
+      } catch (e: ActivityNotFoundException) {
+        start(page)
+      }
+      promise.resolve(null)
+    } catch (e: Exception) {
+      promise.reject("no_market", e.message, e)
+    }
+  }
+
+  /** Removes a downloaded release once it is installed or no longer the newest. */
+  @ReactMethod
+  fun dropUpdate(promise: Promise) {
+    io.execute {
+      synchronized(fileLocks.getOrPut(UPDATE_ID) { Any() }) { dropUpdateFiles() }
+      promise.resolve(null)
+    }
+  }
+
+  private fun dropUpdateFiles() {
+    val prefix = "${hash(UPDATE_ID)}-"
+    downloadsDir().listFiles()?.filter { it.name.startsWith(prefix) }?.forEach { it.delete() }
+    partialFile(UPDATE_ID).delete()
+    validatorFile(UPDATE_ID).delete()
+  }
+
+  private fun canInstall(): Boolean =
+    Build.VERSION.SDK_INT < Build.VERSION_CODES.O || reactApplicationContext.packageManager.canRequestPackageInstalls()
+
+  private fun startInstaller(apk: File) {
+    val uri = FileProvider.getUriForFile(reactApplicationContext, "${reactApplicationContext.packageName}.files", apk)
+    val intent = Intent(Intent.ACTION_VIEW).apply {
+      setDataAndType(uri, "application/vnd.android.package-archive")
+      addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    val activity = reactApplicationContext.currentActivity
+    if (activity != null) activity.startActivity(intent)
+    else reactApplicationContext.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+  }
+
+  private fun sha512Of(file: File): String {
+    val digest = MessageDigest.getInstance("SHA-512")
+    file.inputStream().use { input ->
+      val buffer = ByteArray(64 * 1024)
+      while (true) {
+        val count = input.read(buffer)
+        if (count < 0) break
+        digest.update(buffer, 0, count)
+      }
+    }
+    return Base64.encodeToString(digest.digest(), Base64.NO_WRAP)
   }
 
   // NativeModules event emitters expect these two methods on Android.
@@ -567,6 +687,7 @@ class CowDownloadsModule(context: ReactApplicationContext) : ReactContextBaseJav
     private const val MAX_SHARED = 9
     private const val KEEP_MS = 24 * 60 * 60 * 1000L
     const val TAG = "CowDownloads"
+    const val UPDATE_ID = "app-update"
     const val PREFS = "cow-downloads"
     const val SAVED_PREFIX = "saved-"
     const val MAX_REMEMBERED = 500

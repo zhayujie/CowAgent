@@ -17,7 +17,6 @@ const ALLOWED: Record<string, string[]> = {
   'screens/SettingsScreen.tsx': ['简体中文'],
   'screens/LoginScreen.tsx': ['中文'],
   'utils/guestShares.ts': ['简体中文', '繁體中文'],
-  'screens/VersionScreen.tsx': ['中文'],
   'store/chatStore.ts': [
     '工作空间文件', '工作空间檔案', '工作空间目录', '工作空间目錄',
     '图片', '圖片', '视频', '影片', '目录', '目錄', '文件', '檔案',
