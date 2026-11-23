@@ -1,5 +1,6 @@
 package ai.cowagent.app
 
+import ai.cowagent.app.files.CowCertPackage
 import ai.cowagent.app.files.CowDownloadsPackage
 import ai.cowagent.app.files.CowTls
 import ai.cowagent.app.kernel.CowKernelPackage
@@ -20,6 +21,7 @@ class MainApplication : Application(), ReactApplication {
         PackageList(this).packages.apply {
           add(CowKernelPackage())
           add(CowDownloadsPackage())
+          add(CowCertPackage())
           add(CowQrScannerPackage())
           add(CowSystemBarsPackage())
           add(CowDevicePackage())

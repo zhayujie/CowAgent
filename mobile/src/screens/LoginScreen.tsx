@@ -16,6 +16,7 @@ import {
   Animated,
   BackHandler,
   Image,
+  Platform,
   Pressable,
   ScrollView,
   Text,
@@ -23,7 +24,6 @@ import {
   View,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import {Platform} from 'react-native';
 import {isPublicCleartext} from '../api/http';
 import {addressCandidates, parsePairLink, type PairTarget} from '../api/pairing';
 import logo from '../assets/logo-mark.png';
@@ -31,7 +31,7 @@ import {importCaCertificate, listCaCertificates, removeCaCertificate, type CaCer
 import {Icon} from '../components/Icon';
 import {usePairAction} from '../components/PairFlow';
 import {QrScanner, qrScannerAvailable} from '../components/QrScanner';
-import {ChoiceSheet} from '../components/settings';
+import {ChoiceSheet, ConfirmSheet} from '../components/settings';
 import {SHEET_DISMISS_MS} from '../components/Sheet';
 import {tr, trf} from '../i18n';
 import {isLocalKernelAvailable, LOCAL_SERVER_ID, localDeviceName} from '../kernel/localKernel';
@@ -75,6 +75,7 @@ export function LoginScreen() {
   const [secret, setSecret] = useState('');
   const [focus, setFocus] = useState<'address' | 'secret' | null>(null);
   const [certs, setCerts] = useState<CaCert[]>([]);
+  const [removingCert, setRemovingCert] = useState<string | null>(null);
   // Sign-ins that need no form input: the built-in agent, or going back to the server left.
   const [pending, setPending] = useState<'local' | 'back' | null>(null);
   // A server that stepped aside (e.g. another machine now at its address) says why, once.
@@ -115,6 +116,7 @@ export function LoginScreen() {
 
   const dropCert = async (name: string) => {
     await removeCaCertificate(name);
+    setRemovingCert(null);
     refreshCerts();
   };
   useEffect(() => {
@@ -391,7 +393,7 @@ export function LoginScreen() {
                     <Text style={[styles.caItemDate, cert.expired && {color: t.danger}]}>
                       {cert.expired ? tr('access_ca_cert_expired') : cert.expires?.split(' ').slice(1, 4).join(' ')}
                     </Text>
-                    <Pressable accessibilityRole="button" hitSlop={10} onPress={() => dropCert(cert.name)}>
+                    <Pressable accessibilityRole="button" hitSlop={10} onPress={() => setRemovingCert(cert.name)}>
                       <Icon icon={faTrashCan} size={13} color={t.t3} />
                     </Pressable>
                   </Animated.View>
@@ -413,6 +415,15 @@ export function LoginScreen() {
         note={tr('connect_remote_note')}
         onSelect={onRemoteWay}
         onClose={() => setRemoteOpen(false)}
+      />
+      <ConfirmSheet
+        visible={!!removingCert}
+        title={removingCert ? trf('access_ca_cert_remove_title', {name: removingCert}) : ''}
+        message={tr('access_ca_cert_remove_message')}
+        confirmLabel={tr('access_ca_cert_remove')}
+        danger
+        onConfirm={() => (removingCert ? dropCert(removingCert) : undefined)}
+        onClose={() => setRemovingCert(null)}
       />
       <QrScanner visible={scanning} onClose={() => setScanning(false)} onScanned={onScanned} onManual={toManual} />
     </AvoidKeyboard>

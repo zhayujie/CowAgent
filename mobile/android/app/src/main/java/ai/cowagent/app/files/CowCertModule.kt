@@ -3,15 +3,17 @@ package ai.cowagent.app.files
 import android.app.Activity
 import android.content.Intent
 import android.net.Uri
-import android.provider.Settings
+import com.facebook.react.ReactPackage
 import com.facebook.react.bridge.ActivityEventListener
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.BaseActivityEventListener
+import com.facebook.react.bridge.NativeModule
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.WritableArray
+import com.facebook.react.uimanager.ViewManager
 import java.io.File
 
 /**
@@ -104,20 +106,6 @@ class CowCertModule(private val context: ReactApplicationContext) : ReactContext
     }
   }
 
-  /** Opens the system credential screen for users who prefer the platform trust store. */
-  @ReactMethod
-  fun openSystemSettings(promise: Promise) {
-    try {
-      val intent = Intent(Settings.ACTION_SECURITY_SETTINGS).apply {
-        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-      }
-      context.startActivity(intent)
-      promise.resolve(true)
-    } catch (e: Exception) {
-      promise.reject("cert_settings_failed", e.message, e)
-    }
-  }
-
   private fun describe(file: File) = Arguments.createMap().apply {
     val cert = CowTrustStore.read(file).firstOrNull()
     putString("name", file.nameWithoutExtension)
@@ -129,4 +117,12 @@ class CowCertModule(private val context: ReactApplicationContext) : ReactContext
   companion object {
     private const val PICK_CERT = 0xC3A7
   }
+}
+
+class CowCertPackage : ReactPackage {
+  override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> =
+    listOf(CowCertModule(reactContext))
+
+  override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<in Nothing, in Nothing>> =
+    emptyList()
 }

@@ -255,7 +255,7 @@ class CowDownloadsModule(context: ReactApplicationContext) : ReactContextBaseJav
 
 class CowDownloadsPackage : ReactPackage {
   override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> =
-    listOf(CowDownloadsModule(reactContext), CowCertModule(reactContext))
+    listOf(CowDownloadsModule(reactContext))
 
   override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<in Nothing, in Nothing>> =
     emptyList()

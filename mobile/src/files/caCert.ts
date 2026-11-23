@@ -13,7 +13,6 @@ interface CowCertModule {
   pick(): Promise<CaCert | null>;
   list(): Promise<CaCert[]>;
   remove(name: string): Promise<boolean>;
-  openSystemSettings(): Promise<boolean>;
 }
 
 const cowCert: CowCertModule | undefined = NativeModules.CowCert;
@@ -62,18 +61,5 @@ export async function removeCaCertificate(name: string): Promise<boolean> {
     return await cowCert.remove(name);
   } catch {
     return false;
-  }
-}
-
-/** Opens the system credential screen for users who prefer installing into the platform store. */
-export async function openSystemCertSettings() {
-  if (!caCertSupported || !cowCert) {
-    showToast(tr('access_ca_cert_android_only'));
-    return;
-  }
-  try {
-    await cowCert.openSystemSettings();
-  } catch {
-    /* ignore */
   }
 }

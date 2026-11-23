@@ -8,6 +8,7 @@ import java.security.KeyStore
 import java.security.cert.CertificateFactory
 import java.security.cert.X509Certificate
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import javax.net.ssl.SSLContext
 import javax.net.ssl.SSLSocketFactory
 import javax.net.ssl.TrustManagerFactory
@@ -52,6 +53,14 @@ object CowTrustStore {
     return target
   }
 
+  /** Bumped on every import or removal so [Live] knows its managers are stale. */
+  private val version = AtomicInteger()
+
+  /** Must follow every change to [dir]; the next handshake then sees the new set. */
+  fun invalidate() {
+    version.incrementAndGet()
+  }
+
   /**
    * The system trust manager plus one built from the imported files. A handshake succeeds when
    * either accepts the chain, so this only ever adds trust and never removes it.
@@ -61,20 +70,18 @@ object CowTrustStore {
     TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm()).apply {
       init(null as KeyStore?)
     }.trustManagers.filterIsInstance<X509TrustManager>().forEach { result += it }
-    result += importedManager(context)
+    importedManager(context)?.let { result += it }
     return result
   }
 
-  /**
-   * Reads the imports on every handshake. React Native hands its OkHttpClient to NetworkingModule
-   * once at startup and never rebuilds it, so a trust manager that caches the files would keep
-   * ignoring certificates imported after that point; reading on demand makes an import effective
-   * immediately, which also removes the need to restart or to touch the cached client.
-   */
-  private fun importedManager(context: Context): X509TrustManager {
+  /** Null when nothing is imported, as some providers refuse an empty anchor set. */
+  private fun importedManager(context: Context): X509TrustManager? {
+    val certs = files(context).flatMap { runCatching { read(it) }.getOrDefault(emptyList()) }
+    if (certs.isEmpty()) {
+      return null
+    }
     val store = KeyStore.getInstance(KeyStore.getDefaultType()).apply { load(null, null) }
-    files(context).flatMap { runCatching { read(it) }.getOrDefault(emptyList()) }
-      .forEachIndexed { i, cert -> store.setCertificateEntry("cow-ca-$i", cert) }
+    certs.forEachIndexed { i, cert -> store.setCertificateEntry("cow-ca-$i", cert) }
     val factory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm())
     factory.init(store)
     return factory.trustManagers.filterIsInstance<X509TrustManager>().first()
@@ -104,29 +111,49 @@ object CowTrustStore {
   }
 
   /**
-   * Trust is evaluated per handshake, so nothing has to be rebuilt here; the helper exists so
-   * call sites read clearly and future caching can hook it.
+   * React Native hands its OkHttpClient to NetworkingModule once at startup and the java.net
+   * factory is process-wide, so neither can be rebuilt after an import. This trust manager sits
+   * inside both and swaps the managers it delegates to whenever [version] moves.
    */
-  fun invalidate() {}
+  private class Live(private val context: Context) : X509TrustManager {
+    @Volatile private var built: Pair<Int, Combined>? = null
+
+    private fun current(): Combined {
+      val v = CowTrustStore.version.get()
+      built?.let { (at, combined) -> if (at == v) return combined }
+      return Combined(CowTrustStore.managers(context)).also { built = v to it }
+    }
+
+    override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) =
+      current().checkClientTrusted(chain, authType)
+
+    override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) =
+      current().checkServerTrusted(chain, authType)
+
+    override fun getAcceptedIssuers(): Array<X509Certificate> = current().getAcceptedIssuers()
+  }
+
+  @Volatile private var live: Live? = null
+
+  private fun trustManager(context: Context): X509TrustManager =
+    live ?: synchronized(this) { live ?: Live(context.applicationContext).also { live = it } }
 
   /**
    * For connections that never reach OkHttp - the downloader opens its own
    * `HttpURLConnection`, which otherwise verifies against the platform store alone.
    */
-  fun socketFactory(context: Context): SSLSocketFactory {
-    val trust = Combined(managers(context))
-    return SSLContext.getInstance("TLS").apply { init(null, arrayOf(trust), null) }.socketFactory
-  }
+  fun socketFactory(context: Context): SSLSocketFactory =
+    SSLContext.getInstance("TLS").apply { init(null, arrayOf(trustManager(context)), null) }.socketFactory
 
   /**
-   * True when the imports accept [leaf]. A WebView hands over the leaf certificate of a failing
-   * chain and nothing more, which is enough here: a tunnel's CA signs the leaf directly.
+   * True when the imports alone accept [leaf]. A WebView hands over the leaf certificate of a
+   * failing chain and nothing more, which is enough here: a tunnel's CA signs the leaf directly.
    */
   fun accepts(context: Context, leaf: X509Certificate?): Boolean {
     if (leaf == null) {
       return false
     }
-    val trust = Combined(managers(context))
+    val trust = importedManager(context) ?: return false
     // The authType only steers key-usage checks; one of these covers every key we may meet.
     return listOf(leaf.publicKey.algorithm, "RSA", "EC").any { type ->
       runCatching { trust.checkServerTrusted(arrayOf(leaf), type) }.isSuccess
@@ -140,7 +167,7 @@ object CowTrustStore {
   fun okHttpClient(context: Context): OkHttpClient {
     // One trust manager for both the socket factory and OkHttp, as OkHttp verifies with the
     // instance it is given rather than the one inside the SSLContext.
-    val trust = Combined(managers(context))
+    val trust = trustManager(context)
     val ssl = SSLContext.getInstance("TLS").apply { init(null, arrayOf(trust), null) }
     return OkHttpClientProvider.createClientBuilder(context).apply {
       sslSocketFactory(ssl.socketFactory, trust)

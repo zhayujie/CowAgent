@@ -1,12 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
     <!-- LAN servers are plain HTTP on arbitrary IPs, which domain-config cannot express. -->
-    <!-- User certificates stay trusted so a self-hosted HTTPS endpoint (e.g. a private tunnel
-         with its own CA) works after the user installs that CA through Settings. -->
-    <base-config cleartextTrafficPermitted="true">
-        <trust-anchors>
-            <certificates src="system" />
-            <certificates src="user" />
-        </trust-anchors>
-    </base-config>
+    <base-config cleartextTrafficPermitted="true" />
 </network-security-config>

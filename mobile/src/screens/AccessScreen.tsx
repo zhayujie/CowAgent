@@ -6,11 +6,11 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {getIntegrations, savePublicUrl} from '../api/cowApi';
 import {InfoRow, Section} from '../components/forms';
 import {Icon} from '../components/Icon';
-import {FieldSheet} from '../components/settings';
+import {ConfirmSheet, FieldSheet} from '../components/settings';
 import {showToast, ToastHost} from '../components/Toast';
 import {EmptyState, PageHeader} from '../components/ui';
 import {caCertSupported, importCaCertificate, listCaCertificates, removeCaCertificate, type CaCert} from '../files/caCert';
-import {tr} from '../i18n';
+import {tr, trf} from '../i18n';
 import type {RootStackParamList} from '../navigation/types';
 import type {IntegrationsState} from '../protocol/resources';
 import {activeServer, describeConnectError} from '../store/serverStore';
@@ -32,6 +32,7 @@ export function AccessScreen({navigation}: Props) {
   const [refreshing, setRefreshing] = useState(false);
   const [editing, setEditing] = useState(false);
   const [certs, setCerts] = useState<CaCert[]>([]);
+  const [removing, setRemoving] = useState<string | null>(null);
 
   const refreshCerts = useCallback(async () => setCerts(await listCaCertificates()), []);
 
@@ -60,6 +61,7 @@ export function AccessScreen({navigation}: Props) {
 
   const removeCert = async (name: string) => {
     await removeCaCertificate(name);
+    setRemoving(null);
     refreshCerts();
   };
 
@@ -143,7 +145,7 @@ export function AccessScreen({navigation}: Props) {
                     accessibilityRole="button"
                     accessibilityLabel={tr('access_ca_cert_remove')}
                     hitSlop={10}
-                    onPress={() => removeCert(cert.name)}
+                    onPress={() => setRemoving(cert.name)}
                     style={styles.certRemove}>
                     <Icon icon={faTrashCan} size={14} color={t.danger} />
                   </Pressable>
@@ -171,6 +173,15 @@ export function AccessScreen({navigation}: Props) {
         mono
         onSubmit={savePublic}
         onClose={() => setEditing(false)}
+      />
+      <ConfirmSheet
+        visible={!!removing}
+        title={removing ? trf('access_ca_cert_remove_title', {name: removing}) : ''}
+        message={tr('access_ca_cert_remove_message')}
+        confirmLabel={tr('access_ca_cert_remove')}
+        danger
+        onConfirm={() => (removing ? removeCert(removing) : undefined)}
+        onClose={() => setRemoving(null)}
       />
       <ToastHost bottom={insets.bottom + 28} />
     </View>

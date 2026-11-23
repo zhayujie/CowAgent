@@ -1,7 +1,6 @@
 import {
   faArrowsRotate,
   faBars,
-  faCertificate,
   faChevronRight,
   faCircleHalfStroke,
   faCode,
@@ -20,7 +19,7 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import type {StackScreenProps} from '@react-navigation/stack';
 import React, {useEffect, useState} from 'react';
-import {Platform, Pressable, RefreshControl, ScrollView, Text, View} from 'react-native';
+import {Pressable, RefreshControl, ScrollView, Text, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {PERMISSION_META} from '../components/ComposerSheets';
 import {Icon} from '../components/Icon';
@@ -199,13 +198,6 @@ export function SettingsScreen({navigation}: Props) {
             <CardLabel>{tr('settings_group_access')}</CardLabel>
             <SettingCard>
               <SettingRow icon={faGlobe} title={tr('settings_access_url')} onPress={() => navigation.navigate('Access')} />
-              {Platform.OS === 'android' && (
-                <SettingRow
-                  icon={faCertificate}
-                  title={tr('settings_ca_cert')}
-                  onPress={() => navigation.navigate('Access')}
-                />
-              )}
               <SettingRow
                 icon={faShareNodes}
                 title={tr('settings_guest_pages')}

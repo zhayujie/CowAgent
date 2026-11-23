@@ -1,13 +1,17 @@
 package ai.cowagent.app.files
 
 import android.content.Context
+import android.net.Uri
 import android.net.http.SslCertificate
 import android.net.http.SslError
+import android.os.Build
 import android.util.Log
 import com.facebook.react.modules.network.OkHttpClientProvider
 import com.reactnativecommunity.webview.RNCWebViewClient
+import java.security.cert.CertificateFactory
 import java.security.cert.X509Certificate
 import javax.net.ssl.HttpsURLConnection
+import okhttp3.internal.tls.OkHostnameVerifier
 
 /**
  * The one place TLS trust is wired. The certificates a user imports have to reach every transport
@@ -50,10 +54,7 @@ object CowTls {
   private fun installWebView(app: Context) {
     runCatching {
       RNCWebViewClient.sslErrorAcceptor = RNCWebViewClient.SslErrorAcceptor { error ->
-        // Only "the platform does not know this authority" is ours to answer. An expired
-        // certificate or a hostname mismatch stays fatal, as it should.
-        val unknownIssuer = error.primaryError == SslError.SSL_UNTRUSTED
-        val trusted = unknownIssuer && CowTrustStore.accepts(app, leafOf(error))
+        val trusted = onlyUntrusted(error) && accepts(app, error)
         if (!trusted) {
           Log.w(TAG, "Rejected ${error.url}: ${error.primaryError}")
         }
@@ -65,9 +66,36 @@ object CowTls {
     }
   }
 
-  /** [SslError] only carries a summary; the certificate itself rides along in its saved state. */
+  private val FATAL_ERRORS = intArrayOf(
+    SslError.SSL_NOTYETVALID,
+    SslError.SSL_EXPIRED,
+    SslError.SSL_IDMISMATCH,
+    SslError.SSL_DATE_INVALID,
+    SslError.SSL_INVALID,
+  )
+
+  /**
+   * Only "the platform does not know this authority" is ours to answer. [SslError.getPrimaryError]
+   * reports the most severe error alone, so every other one has to be ruled out explicitly.
+   */
+  private fun onlyUntrusted(error: SslError): Boolean =
+    error.hasError(SslError.SSL_UNTRUSTED) && FATAL_ERRORS.none { error.hasError(it) }
+
+  /** The imports must anchor the leaf and the leaf must name the host that was asked for. */
+  private fun accepts(app: Context, error: SslError): Boolean {
+    val leaf = leafOf(error) ?: return false
+    val host = error.url?.let { Uri.parse(it).host } ?: return false
+    return CowTrustStore.accepts(app, leaf) && OkHostnameVerifier.verify(host, leaf)
+  }
+
   private fun leafOf(error: SslError): X509Certificate? = runCatching {
-    val state = SslCertificate.saveState(error.certificate) ?: return null
-    state.get("x509-certificate") as? X509Certificate
+    val cert = error.certificate ?: return null
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+      cert.x509Certificate
+    } else {
+      // Older releases only expose the encoded certificate through the saved state.
+      val encoded = SslCertificate.saveState(cert)?.getByteArray("x509-certificate") ?: return null
+      CertificateFactory.getInstance("X.509").generateCertificate(encoded.inputStream()) as X509Certificate
+    }
   }.getOrNull()
 }
