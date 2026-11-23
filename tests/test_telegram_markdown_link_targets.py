@@ -4,6 +4,18 @@ import pytest
 from channel.telegram.telegram_markdown import to_telegram_html
 
 
+@pytest.mark.parametrize("source, expected", [
+    (
+        "[Function](https://en.wikipedia.org/wiki/Function_(mathematics))",
+        '<a href="https://en.wikipedia.org/wiki/Function_(mathematics)">Function</a>',
+    ),
+    ("[a](https://x.y)", '<a href="https://x.y">a</a>'),
+    ("[a](https://x.y) (note)", '<a href="https://x.y">a</a> (note)'),
+])
+def test_link_destination_parentheses(source, expected):
+    assert to_telegram_html(source) == expected
+
+
 @pytest.mark.parametrize("url", [
     "https://example.invalid/__archive__/report",
     "https://example.invalid/a*b*c",

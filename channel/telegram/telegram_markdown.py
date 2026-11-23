@@ -31,7 +31,7 @@ _STRIKE_RE = re.compile(r"~~(.+?)~~")
 # The inner \S guards keep arithmetic like "2 * 3 * 4" from reading as emphasis.
 _ITALIC_RE = re.compile(r"(?<![\w*])\*(?!\s)([^*\n]+?)(?<!\s)\*(?![\w*])")
 _ITALIC_ALT_RE = re.compile(r"(?<![\w_])_(?!\s)([^_\n]+?)(?<!\s)_(?![\w_])")
-_LINK_RE = re.compile(r"\[([^\]]+)\]\(([^)\s]+)\)")
+_LINK_RE = re.compile(r"\[([^\]]+)\]\(((?:[^()\s]|\([^()\s]*\))+)\)")
 
 _PLACEHOLDER_RE = re.compile("\x00(\\d+)\x00")
 
