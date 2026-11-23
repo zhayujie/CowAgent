@@ -15,14 +15,20 @@ These tests pin the flag being undone when card creation fails, kept on
 success and on a cancelled tool turn, with requests mocked at the module
 boundary.
 """
+import json
 import os
 import sys
 import unittest
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from bridge.context import Context, ContextType
+from bridge.reply import Reply, ReplyType
 from channel.feishu.feishu_channel import FeiShuChanel
+from channel.feishu.feishu_message import FeishuMessage
 
 
 def _channel():
@@ -46,6 +52,44 @@ def _denied_card_response():
     res = MagicMock()
     res.json.return_value = {"code": 99991672, "msg": "no cardkit permission"}
     return res
+
+
+@pytest.mark.parametrize("stream", ["progress", "plain"])
+@pytest.mark.parametrize("chat_id", ["oc_chat", None])
+def test_private_reply_and_text_fallback_use_the_same_address(stream, chat_id):
+    channel = _channel()
+    context = Context(ContextType.TEXT, "hello", _context())
+    context["msg"] = FeishuMessage(
+        {
+            "message": {
+                "chat_id": chat_id,
+                "message_type": "text",
+                "content": json.dumps({"text": "hello"}),
+            },
+            "sender": {"sender_id": {"open_id": "ou_1"}},
+        },
+        access_token="token",
+    )
+    make_callback = getattr(channel, f"_make_feishu_stream_callback_{stream}")
+    on_event = make_callback(context, "token")
+    rejected_send = MagicMock()
+    rejected_send.json.return_value = {"code": 230101}
+
+    with patch("channel.feishu.feishu_channel.requests.post",
+               side_effect=[_ok_card_response(), rejected_send, _ok_card_response()]) as post:
+        on_event({"type": "agent_end", "data": {"final_response": "hello"}})
+        assert not context.get("feishu_streamed")
+        channel.send(Reply(ReplyType.TEXT, "hello"), context)
+
+    card, text = post.call_args_list[1:]
+    expected_id_type = "chat_id" if chat_id else "open_id"
+    assert card.args[0] == text.kwargs["url"] == "https://open.feishu.cn/open-apis/im/v1/messages"
+    for call in (card, text):
+        assert call.kwargs["params"] == {"receive_id_type": expected_id_type}
+        assert call.kwargs["json"]["receive_id"] == (chat_id or "ou_1")
+    assert card.kwargs["json"]["msg_type"] == "interactive"
+    assert text.kwargs["json"]["msg_type"] == "text"
+    assert context["receiver"] == "ou_1"
 
 
 class TestStreamedFlagFallback(unittest.TestCase):

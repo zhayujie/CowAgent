@@ -99,7 +99,9 @@ def test_feishu_message_uses_message_id_for_precise_recall(monkeypatch, routed_a
     assert produced[0]["request_id"] == "om_recall_me"
     # produce() resolved the route, and that is what keys the queue the recall
     # has to look into; a patched-out produce() leaves the agent unset.
-    assert channel._message_sessions.get("om_recall_me") == ("ou_user", routed_agent)
+    session_id = produced[0]["session_id"]
+    assert session_id.startswith("feishu-private-")
+    assert channel._message_sessions.get("om_recall_me") == (session_id, routed_agent)
 
 
 def test_feishu_recall_cancels_only_the_original_message(monkeypatch):

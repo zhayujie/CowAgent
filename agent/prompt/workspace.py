@@ -503,6 +503,8 @@ _RULE_TEMPLATE_ZH = """# RULE.md - 工作空间规则
 
 ### 自动写入（不要询问，直接写入）
 
+当前会话的知识库访问权限以系统提示中的知识系统为准。只有会话有写入权限时，才执行以下写入规则。
+
 当对话中产生了有沉淀价值的知识——无论是用户分享的资料、讨论的结论、学到的概念、还是重要的决策——你**必须**在回复的同时主动写入知识库，**无需问用户"要不要存到知识库"**。
 
 **关键原则**：学完就记是你的本能，不要征求确认。回复中可以顺带告知"已存入知识库"。
@@ -601,6 +603,8 @@ When the user shares info, choose where to store it by type:
 The knowledge base `knowledge/` is structured knowledge you accumulate over time. Unlike memory, knowledge is organized and compiled, with clear topics and cross-references.
 
 ### Auto-write (don't ask, just write)
+
+Follow the session's knowledge access in the system prompt. Apply the following writing rules only when the session can write to the knowledge base.
 
 When a conversation produces knowledge worth keeping — material the user shared, a conclusion reached, a concept learned, or an important decision — you **must** proactively write it to the knowledge base alongside your reply, **without asking "should I save this to the knowledge base?"**.
 

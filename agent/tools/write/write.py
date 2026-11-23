@@ -4,6 +4,7 @@ Creates or overwrites files, automatically creates parent directories
 """
 
 import os
+from pathlib import Path
 from typing import Dict, Any
 
 from agent.tools.base_tool import BaseTool, ToolResult
@@ -16,9 +17,8 @@ from agent.tools.utils.diff import (
     restore_line_endings,
 )
 from agent.tools.utils.file_state import note_write, staleness_warning
-from agent.tools.utils.memory_path import feeds_memory_index
+from agent.tools.utils.memory_path import feeds_memory_index, file_tool_path, selected_knowledge_root
 from agent.tools.utils.syntax_check import review as syntax_review
-from common.utils import expand_path
 
 
 class Write(BaseTool):
@@ -72,6 +72,10 @@ class Write(BaseTool):
         try:
             # Resolve path (may raise PermissionError for protected locations)
             absolute_path = self._resolve_path(path)
+            from agent.memory.feishu_identity import memory_path_denial
+            denial = memory_path_denial(self, absolute_path)
+            if denial:
+                return ToolResult.fail(f"Error: Access denied: {denial}")
 
             # Create parent directory (if needed)
             parent_dir = os.path.dirname(absolute_path)
@@ -146,12 +150,8 @@ class Write(BaseTool):
         :return: Absolute path
         :raises PermissionError: if the path targets a protected location
         """
-        # Expand ~ to user home directory
-        path = expand_path(path)
-        if os.path.isabs(path):
-            absolute = path
-        else:
-            absolute = os.path.abspath(os.path.join(self.cwd, path))
+        scope = getattr(self, "feishu_memory_scope", None)
+        absolute = file_tool_path(path, self.cwd, scope[0] if scope else None)
 
         real = os.path.realpath(absolute)
 
@@ -164,8 +164,12 @@ class Write(BaseTool):
         # Optional workspace confinement. Off by default to preserve existing
         # behavior; enable via config.json tools.write.restrict_to_workspace.
         if self.config.get("restrict_to_workspace"):
-            ws = os.path.realpath(self.cwd)
-            if os.path.commonpath([ws, real]) != ws:
+            target = Path(real)
+            workspace = Path(self.cwd).resolve()
+            if target != workspace and workspace not in target.parents:
+                knowledge = selected_knowledge_root(scope[0]) if scope else None
+                if knowledge is not None and (target == knowledge or knowledge in target.parents):
+                    return absolute
                 raise PermissionError(
                     f"writing outside the workspace is not allowed: {path}"
                 )

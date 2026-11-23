@@ -9,7 +9,6 @@ from typing import Dict, Any
 
 from agent.tools.base_tool import BaseTool, ToolResult
 from common.atomic_write import write_text_atomic
-from common.utils import expand_path
 from agent.tools.utils.credentials import DENIED_MESSAGE, is_credential_path
 from agent.tools.utils.diff import (
     strip_bom,
@@ -24,7 +23,7 @@ from agent.tools.utils.diff import (
     trim_outer_newlines,
 )
 from agent.tools.utils.file_state import note_write, staleness_warning
-from agent.tools.utils.memory_path import feeds_memory_index
+from agent.tools.utils.memory_path import feeds_memory_index, file_tool_path
 from agent.tools.utils.syntax_check import review as syntax_review
 
 
@@ -93,6 +92,10 @@ class Edit(BaseTool):
         
         # Resolve path
         absolute_path = self._resolve_path(path)
+        from agent.memory.feishu_identity import memory_path_denial
+        denial = memory_path_denial(self, absolute_path)
+        if denial:
+            return ToolResult.fail(f"Error: Access denied: {denial}")
 
         # Same guard the read tool applies. Editing is also a read: the success
         # result carries a diff whose context lines would expose the secrets.
@@ -271,8 +274,5 @@ class Edit(BaseTool):
         :param path: Relative or absolute path
         :return: Absolute path
         """
-        # Expand ~ to user home directory
-        path = expand_path(path)
-        if os.path.isabs(path):
-            return path
-        return os.path.abspath(os.path.join(self.cwd, path))
+        scope = getattr(self, "feishu_memory_scope", None)
+        return file_tool_path(path, self.cwd, scope[0] if scope else None)

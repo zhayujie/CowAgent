@@ -13,12 +13,12 @@ description: "Connect CowAgent to a Feishu (Lark) custom app for direct and grou
 
 ### Option 1: One-click Scan to Create (Recommended)
 
-No need to manually create an app on the Feishu Developer Platform. Start the Cow project, open the web console (default `http://127.0.0.1:9899/`), go to **Channels**, click **Add Channel**, choose **Feishu**, then under the **Scan QR** tab click **One-click Create Feishu App** and scan with the **Feishu App** to complete app creation and connection automatically.
+Open **Channels → Add Channel → Feishu** in the web console and scan to create an app. If Feishu returns the scanning user's Open ID, CowAgent automatically adds it to that instance's Owner list.
 
 <img src="https://cdn.link-ai.tech/doc/20260505181126.png" width="800"/>
 
 <Note>
-  1. Requires `lark-oapi` ≥ 1.5.5.
+  1. Requires `lark-oapi` ≥ 1.7.1.
   2. The created app comes with all required permissions (messaging, card read/write, group events, etc.) and event subscriptions pre-configured — no manual setup on the developer console needed. Currently only the Feishu mainland version is supported (Lark international not yet supported).
 </Note>
 
@@ -72,6 +72,8 @@ im:message,im:message.group_at_msg,im:message.group_at_msg:readonly,im:message.p
     | --- | --- | --- |
     | `feishu_app_id` | Feishu app App ID | - |
     | `feishu_app_secret` | Feishu app App Secret | - |
+    | `feishu_owner_open_ids` | Optional list of owner Open IDs for this bot | `[]` |
+    | `feishu_private_memory_mode` | Direct chat memory mode for the instance | `owner_workspace` |
     | `feishu_stream_reply` | Enable streaming typewriter reply | `true` |
     | `feishu_detailed_card` | Use a detailed card (tool calls, thinking process, elapsed time) for streaming replies; off keeps the plain typewriter card | `true` |
   </Tab>
@@ -117,3 +119,29 @@ After connection, search for the bot name in Feishu to start a chat.
 To use in groups, add the bot to a group and @-mention it.
 
 Send `/tasks` in a private chat, or @-mention the bot with `/tasks` in a group, to manage tasks belonging to that chat.
+
+**Receive direct messages** is enabled by default. You can turn it off for each bot in the Feishu channel settings in the web console or desktop app. Group messages still work.
+
+### Member profiles and memory
+
+Set the owner list on each bot using Open IDs (`ou_...`) for its app. In manual setup, **Look up Feishu application owner** requires `application:application:self_manage` or `admin:app.info:readonly`. When the lookup succeeds, select **Add as Owner** and save the settings. If Feishu returns the scanning user's Open ID during registration, CowAgent adds that ID to the target instance automatically.
+
+Both settings live in the instance's `credentials` in `<agent_workspace>/agents/team.json`. Startup migration matches the old App ID to a single instance and respects existing lists, including empty lists. After saving the instance, CowAgent removes the old flat fields. Ambiguous bindings stay on disk for review.
+
+If an existing single-Agent installation does not yet have `team.json`, migration creates it and adds the Feishu settings. Other legacy channels such as DingTalk continue reading their settings from `config.json`.
+
+- `owner_workspace` (default) gives configured Owners the workspace `USER.md`, `MEMORY.md`, and daily memory. Other senders use separate memory. An empty list gives everyone separate memory.
+- `per_user` gives every direct chat sender a separate profile and memory, including configured Owners.
+- `shared` gives all direct chat senders with a valid identity the same workspace profile and memory. A verified legacy bot can retain shared behavior by selecting this mode.
+
+Conversation history stays separate by sender. Earlier transcripts remain under their original sessions. New incoming messages use sessions keyed by app, instance, and memory access, so switching to personal memory won't load the workspace transcript.
+
+To verify an existing Owner binding, temporarily set `"debug": true` in `config.json` and restart CowAgent. Send a recognizable private message to the bot, then compare `event.sender.sender_id.open_id` in the matching receive event in `run.log` with the instance's Owner list. Restore the previous log level afterward.
+
+- **Group chats** share memory per group within the same Feishu app and Agent workspace, even with shared sessions disabled. Each sender has a separate Markdown profile in that group. Group chats skip the workspace's root `USER.md`, `MEMORY.md`, and `BOOTSTRAP.md`.
+- **Direct chats** outside the workspace scope use a private profile and memory for that sender. Memory search, reads, and automatic summaries follow the same scope.
+- **Profile updates** use the workspace's root `USER.md` in direct chats with workspace access. Group chats and scoped direct chats use `member_profile`. Earlier profiles and unlabeled messages remain available in their original locations.
+
+<Note>
+  File and memory tools apply the selected scope. Personal chats and group chats use a restricted set of tools.
+</Note>

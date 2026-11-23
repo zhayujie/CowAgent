@@ -197,7 +197,7 @@ def test_quote_reuses_only_its_conversations_pending_images(tmp_path, monkeypatc
     from channel.file_cache import FileCache
     from common import state_dir
 
-    monkeypatch.setattr(state_dir, "tmp_dir", lambda: tmp_path)
+    monkeypatch.setattr(state_dir, "shared_root", lambda: tmp_path)
     cache = FileCache()
     monkeypatch.setattr("channel.file_cache.get_file_cache", lambda: cache)
     monkeypatch.setattr("channel.feishu.feishu_channel._ensure_lark_imported", lambda: None)
@@ -252,3 +252,91 @@ def test_quote_reuses_only_its_conversations_pending_images(tmp_path, monkeypatc
     assert downloads == [("om_image", "ordinary")] + [("om_parent", "quoted")] * quote_downloads
     channel._handle_message_event(event("om_next_query"))
     assert not _IMAGE_MARKER_RE.search(contexts[-1].content)
+
+
+def test_routed_feishu_vision_can_read_only_its_conversations_images(tmp_path, monkeypatch):
+    from agent.memory.feishu_identity import attach_identity, feishu_identity
+    from agent.protocol.agent_stream import _IMAGE_MARKER_RE
+    from agent.tools.base_tool import ToolResult
+    from agent.tools.vision.vision import Vision
+    from channel.feishu.feishu_channel import FeiShuChanel
+    from channel.file_cache import FileCache
+    from common import state_dir
+
+    default_workspace = tmp_path / "default"
+    speaker_workspace = tmp_path / "team"
+    project = tmp_path / "project"
+    monkeypatch.setattr(state_dir, "shared_root", lambda: default_workspace)
+    cache = FileCache()
+    monkeypatch.setattr("channel.file_cache.get_file_cache", lambda: cache)
+    monkeypatch.setattr("channel.feishu.feishu_channel._ensure_lark_imported", lambda: None)
+
+    def download(message_id, key, kind, token, path, limit, **kwargs):
+        Path(path).write_bytes(key.encode())
+        return True
+
+    monkeypatch.setattr("channel.feishu.feishu_message._download_resource", download)
+    quote = {"msg_type": "image", "body": {"content": json.dumps({"image_key": "quoted"})}}
+    monkeypatch.setattr("channel.feishu.feishu_message.requests.get", lambda **kwargs:
+                        _response({"code": 0, "data": {"items": [quote]}}))
+
+    def make_channel(instance_id):
+        channel = FeiShuChanel.new_instance()
+        channel.apply_instance(instance_id, "team", {"feishu_app_id": "cli_bot"})
+        monkeypatch.setattr(channel, "fetch_access_token", lambda: "tenant-token")
+        monkeypatch.setattr(channel, "_make_feishu_stream_callback", lambda *_: None)
+        monkeypatch.setattr(channel, "produce", contexts.append)
+        return channel
+
+    def event(message_id, sender="ou_user", parent_id=None, image_key=None):
+        payload = _event(parent_id)
+        payload["sender"] = {"sender_id": {"open_id": sender}, "sender_type": "user"}
+        payload["message"].update(message_id=message_id, chat_type="p2p")
+        if image_key:
+            payload["message"].update(message_type="image", content=json.dumps({"image_key": image_key}))
+        return payload
+
+    contexts = []
+    channel = make_channel("feishu-one")
+    other_bot = make_channel("feishu-two")
+    channel._handle_message_event(event("om_image", image_key="ordinary"))
+    other_bot._handle_message_event(event("om_other_bot"))
+    channel._handle_message_event(event("om_other_user", sender="ou_other"))
+    channel._handle_message_event(event("om_query", parent_id="om_parent"))
+    assert len(contexts) == 3
+    assert all(not _IMAGE_MARKER_RE.search(ctx.content) for ctx in contexts[:2])
+    query = contexts[-1]
+    assert query["bound_agent_id"] == "team"
+    images = _IMAGE_MARKER_RE.findall(query.content)
+    assert [Path(path).read_bytes() for path in images] == [b"quoted", b"ordinary"]
+
+    # Exercise the same Vision instance across sessions to catch stale grants.
+    vision = Vision({"cwd": str(project)})
+    agent = SimpleNamespace(tools=[vision], workspace_dir=str(speaker_workspace))
+    monkeypatch.setattr(vision, "_resolve_providers", lambda: [object()])
+    monkeypatch.setattr(vision, "_call_with_fallback", lambda *args: ToolResult.success(args[-1]))
+
+    def authorize(ctx):
+        msg = ctx["msg"]
+        attach_identity(agent, feishu_identity(msg), image_dir=msg.image_dir)
+
+    authorize(query)
+    for path in images:
+        result = vision.execute({"image": path, "question": "What is in the image?"})
+        assert result.status == "success"
+        assert vision._build_image_content(path)["type"] == "image_url"
+
+    unrelated = default_workspace / "tmp" / "old.png"
+    unrelated.write_bytes(b"outside")
+    denied = vision.execute({"image": str(unrelated), "question": "Read it"})
+    assert "path outside Feishu workspace and project directory" in denied.result
+    for ctx in contexts[:2]:
+        authorize(ctx)
+        denied = vision.execute({"image": images[0], "question": "Read it"})
+        assert "Feishu image outside current conversation" in denied.result
+        with pytest.raises(PermissionError, match="outside current conversation"):
+            vision._build_image_content(images[0])
+
+    attach_identity(agent, None)
+    with pytest.raises(PermissionError, match="outside current conversation"):
+        vision._build_image_content(images[0])

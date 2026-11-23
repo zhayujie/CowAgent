@@ -12,6 +12,8 @@ Maintain a persistent, structured knowledge base in the `knowledge/` directory.
 
 ## Core Operations
 
+Follow the session's knowledge access and directory in the system prompt. In a read-only session, use the query operation.
+
 ### 1. Ingest — User shares an article, document, or resource
 
 1. Read and understand the source material

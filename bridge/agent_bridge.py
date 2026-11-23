@@ -1657,12 +1657,38 @@ class AgentBridge:
             if cached:
                 self._sync_shared_transcript(agent, session_id, resolved_agent_id)
             
+            # Bind platform identity before prompt rebuild, retrieval or memory flush.
+            from agent.memory.feishu_identity import feishu_identity, attach_identity, attributed_query
+            sender_identity = None
+            image_dir = None
+            if context.get("channel_type") == "feishu":
+                msg = context.get("msg")
+                sender_identity = feishu_identity(
+                    msg, owner_open_ids=getattr(msg, "identity_owner_open_ids", ()),
+                    private_memory_mode=getattr(msg, "identity_private_memory_mode", "owner_workspace"),
+                )
+                context["sender_identity"] = sender_identity
+                model_query = attributed_query(model_query, sender_identity)
+                image_dir = getattr(msg, "image_dir", None)
+            attach_identity(agent, sender_identity, image_dir=image_dir)
+            if sender_identity:
+                for tool in agent.tools:
+                    if tool.name == "member_profile":
+                        tool.identity["current_text"] = query
+
             # Create event handler for logging and channel communication
             event_handler = AgentEventHandler(context=context, original_callback=on_event)
             
             # Filter tools based on context
             original_tools = agent.tools
             filtered_tools = original_tools
+            if sender_identity and (not sender_identity["legacy_private"] or not sender_identity["is_owner"]):
+                scoped_tools = {
+                    "read", "write", "edit", "send", "vision", "ls", "member_profile",
+                    "memory_search", "memory_get", "web_fetch", "web_search", "current_time",
+                }
+                filtered_tools = [tool for tool in filtered_tools if tool.name in scoped_tools]
+                agent.tools = filtered_tools
             
             # If this is a scheduled task execution, exclude scheduler tool to prevent recursion
             if context and context.get("is_scheduled_task"):
@@ -2113,6 +2139,12 @@ class AgentBridge:
             display = context.get("display") if context else None
             if display:
                 user_msg["extras"] = {"display": display}
+            identity = context.get("sender_identity") if context else None
+            if identity:
+                user_msg.setdefault("extras", {})["sender_identity"] = identity
+                from agent.memory.feishu_identity import attributed_query
+                user_msg["content"][0]["text"] = attributed_query(query, identity)
+                user_msg["extras"].setdefault("display", query)
             store.append_messages(session_id, [user_msg], channel_type=channel_type)
             return True
         except Exception as e:

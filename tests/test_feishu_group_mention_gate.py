@@ -14,10 +14,18 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from channel.channel_factory import create_channel
 from channel.feishu.feishu_channel import FeiShuChanel
+from config import conf
 
 BOT_OPEN_ID = "ou_bot"
 OTHER_OPEN_ID = "ou_other"
+
+
+@pytest.fixture(autouse=True)
+def skip_websocket_sdk(monkeypatch):
+    # These tests exercise the event handler shared by both transports.
+    monkeypatch.setattr("channel.feishu.feishu_channel._ensure_lark_imported", lambda: None)
 
 
 def _mentions(*open_ids):
@@ -103,3 +111,66 @@ def test_unsupported_message_types_are_skipped_without_parsing(monkeypatch):
     channel._handle_message_event(event)
 
     assert produced == []
+
+
+@pytest.mark.parametrize(
+    "global_enabled, instance_enabled, chat_type, answered",
+    [
+        pytest.param(None, None, "p2p", True, id="default-enabled"),
+        pytest.param(False, None, "p2p", True, id="ignores-old-global-setting"),
+        pytest.param(True, False, "p2p", False, id="instance-disabled"),
+        pytest.param(False, True, "p2p", True, id="instance-enabled"),
+        pytest.param(False, False, "group", True, id="group-still-answers"),
+    ],
+)
+def test_feishu_private_chat_setting(monkeypatch, global_enabled, instance_enabled, chat_type, answered):
+    key = "feishu_private_chat_enabled"
+    if global_enabled is None:
+        monkeypatch.delitem(conf(), key, raising=False)
+    else:
+        monkeypatch.setitem(conf(), key, global_enabled)
+    credentials = {} if instance_enabled is None else {key: instance_enabled}
+    channel = create_channel("feishu", instance_id="feishu-test", credentials=credentials)
+    monkeypatch.setattr(channel, "_bot_open_id", BOT_OPEN_ID)
+    fetch_token = MagicMock(return_value="tenant-token")
+    monkeypatch.setattr(channel, "fetch_access_token", fetch_token)
+    monkeypatch.setattr(channel, "_make_feishu_stream_callback", lambda *_: MagicMock())
+    produced = []
+    monkeypatch.setattr(channel, "produce", produced.append)
+
+    event = _event("text", _mentions(BOT_OPEN_ID), "om_private_chat_setting")
+    event["message"]["chat_type"] = chat_type
+    channel._handle_message_event(event)
+
+    assert bool(produced) is answered
+    assert fetch_token.called is answered
+
+
+def test_private_messages_use_only_instance_owner_settings(monkeypatch):
+    from channel.feishu.owner_config import MEMORY_MODE, OWNER_IDS
+
+    monkeypatch.setitem(conf(), "feishu_app_id", "cli_old")
+    monkeypatch.setitem(conf(), "feishu_owner_open_id", "ou_legacy")
+    monkeypatch.setitem(conf(), MEMORY_MODE, "shared")
+    bots = (
+        (FeiShuChanel.new_instance(), "cli_old", [], "owner_workspace"),
+        (create_channel("feishu", instance_id="bot-other"), "cli_other", [], "owner_workspace"),
+        (create_channel("feishu", instance_id="bot-owner", credentials={
+            "feishu_app_id": "cli_owner", OWNER_IDS: ["ou_a", "ou_b"], MEMORY_MODE: "per_user",
+        }), "cli_owner", ["ou_a", "ou_b"], "per_user"),
+    )
+    for channel, app_id, owners, mode in bots:
+        monkeypatch.setattr(channel, "feishu_app_id", app_id)
+        monkeypatch.setattr(channel, "fetch_access_token", lambda: "tenant-token")
+        monkeypatch.setattr(channel, "_make_feishu_stream_callback", lambda *_: MagicMock())
+        produced = []
+        monkeypatch.setattr(channel, "produce", produced.append)
+        event = _event("text", [], f"om_{app_id}")
+        event["app_id"] = app_id
+        event["message"]["chat_type"] = "p2p"
+
+        channel._handle_message_event(event)
+
+        msg = produced[0]["msg"]
+        assert msg.identity_owner_open_ids == owners
+        assert msg.identity_private_memory_mode == mode

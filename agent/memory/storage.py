@@ -19,6 +19,7 @@ from agent.memory.vector_backend import (
     SQLiteVectorBackend,
     VectorBackend,
     VectorRecord,
+    search_visibility,
 )
 
 try:
@@ -894,7 +895,8 @@ class MemoryStorage:
         query_embedding: List[float],
         user_id: Optional[str] = None,
         scopes: List[str] = None,
-        limit: int = 10
+        limit: int = 10,
+        include_knowledge: bool = False,
     ) -> List[SearchResult]:
         """Search the configured vector backend."""
         if scopes is None:
@@ -904,6 +906,8 @@ class MemoryStorage:
         metadata_filter = {"scopes": scopes}
         if user_id:
             metadata_filter["user_id"] = user_id
+        if include_knowledge:
+            metadata_filter["include_knowledge"] = True
         matches = self.vector_backend.search(
             query_embedding,
             limit=limit,
@@ -928,7 +932,8 @@ class MemoryStorage:
         query: str,
         user_id: Optional[str] = None,
         scopes: List[str] = None,
-        limit: int = 10
+        limit: int = 10,
+        include_knowledge: bool = False,
     ) -> List[SearchResult]:
         """
         Keyword search using FTS5 + LIKE fallback
@@ -955,7 +960,7 @@ class MemoryStorage:
                 and not MemoryStorage._contains_cjk(query)
                 and MemoryStorage._build_fts_query(query)):
             fts1_attempted = True
-            fts_results = self._search_fts5(query, user_id, scopes, limit)
+            fts_results = self._search_fts5(query, user_id, scopes, limit, include_knowledge)
             if fts_results:
                 return fts_results
 
@@ -965,7 +970,7 @@ class MemoryStorage:
         if self.trigram_fts5_available and (
             MemoryStorage._contains_cjk(query) or fts1_attempted
         ):
-            trigram_results = self._search_fts5_trigram(query, user_id, scopes, limit)
+            trigram_results = self._search_fts5_trigram(query, user_id, scopes, limit, include_knowledge)
             if trigram_results:
                 return trigram_results
 
@@ -974,7 +979,7 @@ class MemoryStorage:
         if (not self.fts5_available
                 or MemoryStorage._contains_cjk(query)
                 or fts1_attempted):
-            return self._search_like(query, user_id, scopes, limit)
+            return self._search_like(query, user_id, scopes, limit, include_knowledge)
 
         return []
     
@@ -983,39 +988,24 @@ class MemoryStorage:
         query: str,
         user_id: Optional[str],
         scopes: List[str],
-        limit: int
+        limit: int,
+        include_knowledge: bool = False,
     ) -> List[SearchResult]:
         """FTS5 full-text search"""
         fts_query = self._build_fts_query(query)
         if not fts_query:
             return []
         
-        scope_placeholders = ','.join('?' * len(scopes))
-        params = [fts_query] + scopes
-        
-        if user_id:
-            sql_query = f"""
-                SELECT chunks.*, bm25(chunks_fts) as rank
-                FROM chunks_fts
-                JOIN chunks ON chunks.rowid = chunks_fts.rowid
-                WHERE chunks_fts MATCH ? 
-                AND chunks.scope IN ({scope_placeholders})
-                AND (chunks.scope = 'shared' OR chunks.user_id = ?)
-                ORDER BY rank
-                LIMIT ?
-            """
-            params.extend([user_id, limit])
-        else:
-            sql_query = f"""
-                SELECT chunks.*, bm25(chunks_fts) as rank
-                FROM chunks_fts
-                JOIN chunks ON chunks.rowid = chunks_fts.rowid
-                WHERE chunks_fts MATCH ? 
-                AND chunks.scope IN ({scope_placeholders})
-                ORDER BY rank
-                LIMIT ?
-            """
-            params.append(limit)
+        visibility, scope_params = search_visibility(scopes, user_id, include_knowledge)
+        sql_query = f"""
+            SELECT chunks.*, bm25(chunks_fts) as rank
+            FROM chunks_fts
+            JOIN chunks ON chunks.rowid = chunks_fts.rowid
+            WHERE chunks_fts MATCH ? AND {visibility}
+            ORDER BY rank
+            LIMIT ?
+        """
+        params = [fts_query, *scope_params, limit]
         
         try:
             rows = self.conn.execute(sql_query, params).fetchall()
@@ -1042,7 +1032,8 @@ class MemoryStorage:
         query: str,
         user_id: Optional[str],
         scopes: List[str],
-        limit: int
+        limit: int,
+        include_knowledge: bool = False,
     ) -> List[SearchResult]:
         """LIKE-based search.
 
@@ -1064,8 +1055,6 @@ class MemoryStorage:
         words = cjk_words + [t for t in re.findall(r'\w+', word_text) if len(t) >= 3]
         if not words:
             return []
-
-        scope_placeholders = ','.join('?' * len(scopes))
 
         # Build LIKE conditions for each word (case-insensitive for ASCII)
         like_conditions = []
@@ -1092,27 +1081,15 @@ class MemoryStorage:
             order_by = ""
             score_params = []
 
-        if user_id:
-            sql_query = f"""
-                {select}
-                FROM chunks
-                WHERE ({where_clause})
-                AND scope IN ({scope_placeholders})
-                AND (scope = 'shared' OR user_id = ?)
-                {order_by}
-                LIMIT ?
-            """
-            params = score_params + params + scopes + [user_id, limit]
-        else:
-            sql_query = f"""
-                {select}
-                FROM chunks
-                WHERE ({where_clause})
-                AND scope IN ({scope_placeholders})
-                {order_by}
-                LIMIT ?
-            """
-            params = score_params + params + scopes + [limit]
+        visibility, scope_params = search_visibility(scopes, user_id, include_knowledge)
+        sql_query = f"""
+            {select}
+            FROM chunks
+            WHERE ({where_clause}) AND {visibility}
+            {order_by}
+            LIMIT ?
+        """
+        params = score_params + params + scope_params + [limit]
         
         try:
             rows = self.conn.execute(sql_query, params).fetchall()
@@ -1330,39 +1307,24 @@ class MemoryStorage:
         query: str,
         user_id: Optional[str],
         scopes: List[str],
-        limit: int
+        limit: int,
+        include_knowledge: bool = False,
     ) -> List[SearchResult]:
         """Trigram FTS5 search — handles CJK and mixed queries with BM25 ranking."""
         trigram_query = self._build_trigram_query(query)
         if not trigram_query:
             return []
 
-        scope_placeholders = ','.join('?' * len(scopes))
-        params = [trigram_query] + list(scopes)
-
-        if user_id:
-            sql = f"""
-                SELECT chunks.*, bm25(chunks_fts_trigram) as rank
-                FROM chunks_fts_trigram
-                JOIN chunks ON chunks.rowid = chunks_fts_trigram.rowid
-                WHERE chunks_fts_trigram MATCH ?
-                AND chunks.scope IN ({scope_placeholders})
-                AND (chunks.scope = 'shared' OR chunks.user_id = ?)
-                ORDER BY rank
-                LIMIT ?
-            """
-            params.extend([user_id, limit])
-        else:
-            sql = f"""
-                SELECT chunks.*, bm25(chunks_fts_trigram) as rank
-                FROM chunks_fts_trigram
-                JOIN chunks ON chunks.rowid = chunks_fts_trigram.rowid
-                WHERE chunks_fts_trigram MATCH ?
-                AND chunks.scope IN ({scope_placeholders})
-                ORDER BY rank
-                LIMIT ?
-            """
-            params.append(limit)
+        visibility, scope_params = search_visibility(scopes, user_id, include_knowledge)
+        sql = f"""
+            SELECT chunks.*, bm25(chunks_fts_trigram) as rank
+            FROM chunks_fts_trigram
+            JOIN chunks ON chunks.rowid = chunks_fts_trigram.rowid
+            WHERE chunks_fts_trigram MATCH ? AND {visibility}
+            ORDER BY rank
+            LIMIT ?
+        """
+        params = [trigram_query, *scope_params, limit]
 
         try:
             rows = self.conn.execute(sql, params).fetchall()

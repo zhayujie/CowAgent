@@ -1332,14 +1332,15 @@ class ApiClient {
   }
 
   // Feishu one-click register
-  async getFeishuRegister(): Promise<{ status: string; register_status?: string; qrcode_url?: string; qr_image?: string; expire_in?: number; message?: string }> {
-    return this.request('/api/feishu/register')
+  async getFeishuRegister(instanceId: string, replace: boolean): Promise<{ status: string; registration_id?: string; register_status?: string; qrcode_url?: string; qr_image?: string; expire_in?: number; message?: string }> {
+    const query = new URLSearchParams({ instance_id: instanceId, replace: replace ? '1' : '0' })
+    return this.request(`/api/feishu/register?${query}`)
   }
 
-  async feishuRegisterPoll(): Promise<Record<string, unknown> & { status: string }> {
+  async feishuRegisterPoll(registrationId: string, action: 'poll' | 'cancel' = 'poll'): Promise<Record<string, unknown> & { status: string }> {
     return this.request('/api/feishu/register', {
       method: 'POST',
-      body: JSON.stringify({ action: 'poll' }),
+      body: JSON.stringify({ action, registration_id: registrationId }),
     })
   }
 

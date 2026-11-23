@@ -18,6 +18,7 @@ interface QrScanPanelProps {
   // Existing instance this card belongs to. Its QR is read off that channel,
   // and a confirm reconnects the same id; an empty id would mint a second card.
   instanceId?: string
+  replaceApp?: boolean
 }
 
 const POLL_INTERVAL = 2000
@@ -29,7 +30,7 @@ const WEIXIN_QR_PENDING_MAX_TRIES = 15
 // the web console: fetch a QR, poll its status, then connect the channel. The
 // scan starts as soon as the panel mounts, so the caller decides when to show
 // it rather than wiring up a separate "start" button.
-const QrScanPanel: React.FC<QrScanPanelProps> = ({ provider, onConnected, newInstance, instanceId }) => {
+const QrScanPanel: React.FC<QrScanPanelProps> = ({ provider, onConnected, newInstance, instanceId, replaceApp = false }) => {
   // When minting a new instance, pass instance_id ''; an existing card passes
   // its own id. Omit it entirely for the legacy per-type path.
   const instanceArg = newInstance ? '' : instanceId || undefined
@@ -37,6 +38,9 @@ const QrScanPanel: React.FC<QrScanPanelProps> = ({ provider, onConnected, newIns
   const [qr, setQr] = useState('')
   const [openLink, setOpenLink] = useState('')
   const [errMsg, setErrMsg] = useState('')
+  const [ownerMissing, setOwnerMissing] = useState(false)
+  const [saveFailed, setSaveFailed] = useState(false)
+  const registrationRef = useRef('')
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const aliveRef = useRef(true)
 
@@ -151,17 +155,17 @@ const QrScanPanel: React.FC<QrScanPanelProps> = ({ provider, onConnected, newIns
   }
 
   // ---- Feishu: GET qr, POST poll {done|expired|denied|error} ----------------
-  const pollFeishu = () => {
+  const pollFeishu = (registrationId: string) => {
     timerRef.current = setTimeout(async () => {
       if (!aliveRef.current) return
       try {
-        const data = await apiClient.feishuRegisterPoll()
+        const data = await apiClient.feishuRegisterPoll(registrationId)
         if (!aliveRef.current) return
         if (data.status !== 'success') return fail((data.message as string) || t('feishu_scan_fail'))
         const rs = data.register_status as string
         if (rs === 'downloading') {
           setPhase('downloading')
-          return pollFeishu()
+          return pollFeishu(registrationId)
         }
         // The QR may only appear after the bundle finished downloading, in
         // which case the initial GET could not carry it.
@@ -172,17 +176,13 @@ const QrScanPanel: React.FC<QrScanPanelProps> = ({ provider, onConnected, newIns
           setPhase((p) => (p === 'downloading' ? 'waiting' : p))
         }
         if (rs === 'done') {
+          registrationRef.current = ''
           setPhase('success')
-          await apiClient.channelAction(
-            'connect',
-            'feishu',
-            {
-              feishu_app_id: data.app_id,
-              feishu_app_secret: data.app_secret,
-            },
-            instanceArg
-          )
-          if (aliveRef.current) onConnected()
+          if (data.owner_bound) onConnected()
+          else setOwnerMissing(true)
+        } else if (rs === 'save_failed') {
+          setSaveFailed(true)
+          fail(t('feishu_save_scan_failed'))
         } else if (rs === 'expired') {
           fail(t('feishu_scan_expired'))
         } else if (rs === 'denied') {
@@ -190,10 +190,10 @@ const QrScanPanel: React.FC<QrScanPanelProps> = ({ provider, onConnected, newIns
         } else if (rs === 'error') {
           fail((data.message as string) || t('feishu_scan_fail'))
         } else {
-          pollFeishu()
+          pollFeishu(registrationId)
         }
       } catch {
-        pollFeishu()
+        if (aliveRef.current) pollFeishu(registrationId)
       }
     }, POLL_INTERVAL)
   }
@@ -201,18 +201,22 @@ const QrScanPanel: React.FC<QrScanPanelProps> = ({ provider, onConnected, newIns
   const startFeishu = async () => {
     setPhase('loading')
     try {
-      const data = await apiClient.getFeishuRegister()
-      if (!aliveRef.current) return
-      if (data.status !== 'success') return fail(data.message || t('feishu_scan_fail'))
+      const data = await apiClient.getFeishuRegister(instanceArg || '', replaceApp)
+      if (!aliveRef.current) {
+        if (data.registration_id) void apiClient.feishuRegisterPoll(data.registration_id, 'cancel').catch(() => {})
+        return
+      }
+      if (data.status !== 'success' || !data.registration_id) return fail(data.message || t('feishu_scan_fail'))
+      registrationRef.current = data.registration_id
       if (data.register_status === 'downloading') {
         // First run in the desktop build: the SDK bundle lands before the QR.
         setPhase('downloading')
-        return pollFeishu()
+        return pollFeishu(data.registration_id)
       }
       setQr(data.qr_image || data.qrcode_url || '')
       setOpenLink(data.qrcode_url || '')
       setPhase('waiting')
-      pollFeishu()
+      pollFeishu(data.registration_id)
     } catch {
       fail(t('feishu_scan_fail'))
     }
@@ -230,6 +234,8 @@ const QrScanPanel: React.FC<QrScanPanelProps> = ({ provider, onConnected, newIns
     return () => {
       aliveRef.current = false
       stopPoll()
+      const registrationId = registrationRef.current
+      if (registrationId) void apiClient.feishuRegisterPoll(registrationId, 'cancel').catch(() => {})
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [provider])
@@ -295,6 +301,10 @@ const QrScanPanel: React.FC<QrScanPanelProps> = ({ provider, onConnected, newIns
           <p className="text-sm font-medium text-accent">
             {isWeixin ? t('weixin_scan_success') : t('feishu_scan_success')}
           </p>
+          {ownerMissing && <>
+            <p role="status" className="mt-2 text-sm text-content-secondary">{t('feishu_scan_owner_missing')}</p>
+            <button className="mt-2 text-sm text-accent" onClick={onConnected}>{t('feishu_scan_done')}</button>
+          </>}
         </div>
       )}
 
@@ -302,11 +312,17 @@ const QrScanPanel: React.FC<QrScanPanelProps> = ({ provider, onConnected, newIns
         <div className="flex flex-col items-center py-8">
           <p className="text-sm text-danger text-center mb-3">{errMsg}</p>
           <button
-            onClick={start}
+            onClick={() => {
+              if (saveFailed && registrationRef.current) {
+                setSaveFailed(false)
+                setPhase('loading')
+                pollFeishu(registrationRef.current)
+              } else start()
+            }}
             className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-btn border border-strong text-sm text-content-secondary hover:bg-inset-2 cursor-pointer transition-colors"
           >
             <RotateCcw size={13} />
-            {t('feishu_scan_retry')}
+            {t(saveFailed ? 'feishu_save_scan_retry' : 'feishu_scan_retry')}
           </button>
         </div>
       )}

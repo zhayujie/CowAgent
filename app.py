@@ -65,41 +65,22 @@ def _has_web_entry(channel_names: list) -> bool:
 
 
 def _resolve_startup_channels(raw_channel):
-    """Startup channel list = config.json's channels plus team.json's instances,
-    de-duplicated by channel *type* for multi-instance-ready types.
-
-    config.json stays the source of truth for anything it configures: its
-    ``channel_type`` list (dingtalk, wecom, ...) always starts, exactly as a
-    legacy install expects. team.json's ``channel_instances`` carries the
-    explicit multi-instance bots (feishu today), each with its own credentials
-    and Agent binding.
-
-    The subtlety is feishu: config.json's flat ``feishu`` entry and a
-    ``channel_instances`` feishu record are the *same kind of connection*. Once
-    team.json manages feishu (at least one feishu instance exists), feishu's
-    single source of truth is ``channel_instances`` — the flat config entry is
-    dropped so the same bot is not started twice on one websocket. This holds no
-    matter which Agent the instances are bound to: rebinding every feishu
-    instance away from the default Agent must NOT resurrect config.json's feishu
-    as a stray default-bound bot. Non-multi-instance types are never managed by
-    instances, so config keeps starting them untouched.
-
-    A legacy single-Agent install has no team.json / no channel_instances and
-    this returns exactly ``_parse_channel_type(raw_channel)`` as before.
-    """
+    """Combine flat channels and explicit instances without double-starting a bot."""
     from channel.channel_instances import MULTI_INSTANCE_READY, _normalize_type
 
     names = _parse_channel_type(raw_channel)
 
     instances = []
+    limited_imports = False
     try:
         from agent import team
         from channel.channel_instances import resolve_channel_instances
 
         settings = team.resolve(conf())
+        limited_imports = team.LEGACY_CHANNEL_IMPORT_TYPES in settings
         raw_instances = settings.get("channel_instances")
         if isinstance(raw_instances, list) and raw_instances:
-            instances = resolve_channel_instances(settings)
+            instances = [inst for inst in resolve_channel_instances(settings) if not inst.legacy]
     except Exception as e:
         logger.warning(
             f"[App] Failed to resolve channel_instances, using config.json "
@@ -114,10 +95,16 @@ def _resolve_startup_channels(raw_channel):
         for inst in instances
         if inst.channel_type in MULTI_INSTANCE_READY
     }
+    pending = {inst.instance_id: inst for inst in instances}
 
     entries = []
     for name in names:
-        if _normalize_type(name) in managed_types:
+        ctype = _normalize_type(name)
+        if ctype in managed_types:
+            # Preserve the legacy startup position of a bot imported in place.
+            if limited_imports and ctype in pending and pending[ctype].channel_type == ctype:
+                entries.append(pending.pop(ctype))
+                continue
             logger.info(
                 f"[App] channel_type '{name}' is managed by channel_instances; "
                 f"skipping the flat config.json entry to avoid a duplicate bot"
@@ -130,7 +117,7 @@ def _resolve_startup_channels(raw_channel):
             f"[App] Starting channel_instances: "
             f"{[(i.instance_id, i.channel_type, i.agent_id) for i in instances]}"
         )
-        entries.extend(instances)
+        entries.extend(pending.values())
 
     if not entries:
         entries = ["web"]
@@ -193,6 +180,8 @@ class ChannelManager:
         from channel.channel_instances import ChannelInstance
 
         if isinstance(entry, ChannelInstance):
+            if entry.channel_type == const.FEISHU and entry.legacy and not entry.credentials:
+                return entry.instance_id, entry.channel_type, {}
             return (
                 entry.instance_id,
                 entry.channel_type,
@@ -406,7 +395,9 @@ class ChannelManager:
         try:
             from config import conf
             from channel.channel_instances import get_instance
-            return get_instance(conf(), name)
+            instance = get_instance(conf(), name)
+            if instance and not instance.legacy:
+                return instance
         except Exception:
             return None
 
@@ -646,9 +637,12 @@ def _migrate_team_roster():
         import os
 
         from agent import team
+        from channel.feishu.feishu_config_migration import migrate_feishu_settings
         from config import conf, get_data_root
 
-        team.migrate(conf(), os.path.join(get_data_root(), "config.json"))
+        config_path = os.path.join(get_data_root(), "config.json")
+        team.migrate(conf(), config_path)
+        migrate_feishu_settings(conf(), config_path)
     except Exception as e:
         # Never a reason not to start: read() still falls back to config.json.
         logger.warning(f"[App] Could not move the roster into its own file: {e}")
