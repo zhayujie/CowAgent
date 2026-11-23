@@ -439,7 +439,7 @@ const styles = StyleSheet.create({
   imageWrap: {alignSelf: 'flex-start', marginVertical: 6},
   image: {borderRadius: 10},
   imageMissing: {fontSize: 12, marginVertical: 4},
-  fileChip: {fontWeight: '500', textDecorationLine: 'underline', textDecorationStyle: 'dotted'},
+  fileChip: {fontWeight: '500', textDecorationLine: 'underline'},
   codeBox: {overflow: 'hidden'},
   inlineCode: {
     paddingHorizontal: INLINE_BOX_PAD,
