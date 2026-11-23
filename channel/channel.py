@@ -99,6 +99,25 @@ class Channel(object):
             context["peers"] = [dict(p) for p in peers]
         return context
 
+    def prepare_project_context(self, context):
+        """Resolve hot-edited instance defaults before queue/cancel/session lookup.
+
+        Namespacing is opt-in, persistent, and idempotent. Old transcripts are
+        retained under their original ids rather than reassigned to another bot.
+        """
+        from channel.channel_instances import cached_channel_instances, scoped_session_id
+        iid = context.get("instance_id") or getattr(self, "instance_id", "")
+        ctype = context.get("channel_type") or self.channel_type
+        instances = cached_channel_instances(conf())
+        inst = next((i for i in instances if i.instance_id == (iid or ctype)), None)
+        if inst and inst.session_namespace and context.get("session_id"):
+            if not context.get("_instance_session_scoped"):
+                context["session_id"] = scoped_session_id(inst.instance_id, context["session_id"])
+                context["_instance_session_scoped"] = True
+        if inst:
+            context["instance_id"] = inst.instance_id
+        return context
+
     def startup(self):
         """
         init channel

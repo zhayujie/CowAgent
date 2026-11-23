@@ -535,15 +535,16 @@ def _get_upload_dir(agent_id: str = None) -> str:
 def _get_workspace_root(session_id: str = None, agent_id: str = None) -> str:
     """Resolve the working directory for this request.
 
-    When a session has opened a project directory, that project is the working
-    directory the file panel / preview / ``@`` picker operate in. Otherwise it
-    is the Agent's workspace (``state_root``, e.g. ``~/cow``). Memory and skills
-    always stay in ``state_root`` regardless; only the working root moves.
+    When a session has opened a project directory (or its channel instance has
+    a default one), that project is the working directory the file panel /
+    preview / ``@`` picker operate in. Otherwise it is the Agent's workspace
+    (``state_root``, e.g. ``~/cow``). Memory and skills always stay in
+    ``state_root`` regardless; only the working root moves.
     """
     if session_id:
         try:
-            from agent.workspace import project_store
-            project_dir = project_store.get_project_dir(session_id, agent_id)
+            from channel.channel_instances import resolve_project_dir
+            project_dir = resolve_project_dir(session_id, agent_id)
             if project_dir:
                 return project_dir
         except Exception as e:

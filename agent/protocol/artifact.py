@@ -424,11 +424,11 @@ def artifact_root_for(
     workspace_root: Optional[str] = None,
 ) -> str:
     """The directory a session's file tools resolve paths against: the project
-    it has open, else the Agent's workspace."""
+    it has open (or its channel's default), else the Agent's workspace."""
     if session_id:
         try:
-            from agent.workspace import project_store
-            project_dir = project_store.get_project_dir(session_id, agent_id)
+            from channel.channel_instances import resolve_project_dir
+            project_dir = resolve_project_dir(session_id, agent_id)
             if project_dir:
                 return project_dir
         except Exception:

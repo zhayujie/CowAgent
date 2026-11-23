@@ -32,7 +32,7 @@ function _applyConfirmTone(tone) {
     document.getElementById('confirm-dialog-icon').className = style.icon;
 }
 
-function showConfirmDialog({ title, message, okText, cancelText, onConfirm, hideCancel, tone }) {
+function showConfirmDialog({ title, message, okText, cancelText, onConfirm, onCancel: cancelCallback, hideCancel, tone }) {
     const overlay = document.getElementById('confirm-dialog-overlay');
     _applyConfirmTone(tone);
     document.getElementById('confirm-dialog-title').textContent = title || '';
@@ -49,8 +49,8 @@ function showConfirmDialog({ title, message, okText, cancelText, onConfirm, hide
         overlay.removeEventListener('click', onOverlayClick);
     }
     function onOk() { cleanup(); if (onConfirm) onConfirm(); }
-    function onCancel() { cleanup(); }
-    function onOverlayClick(e) { if (e.target === overlay) cleanup(); }
+    function onCancel() { cleanup(); if (cancelCallback) cancelCallback(); }
+    function onOverlayClick(e) { if (e.target === overlay) onCancel(); }
 
     const okBtn = document.getElementById('confirm-dialog-ok');
     okBtn.addEventListener('click', onOk);

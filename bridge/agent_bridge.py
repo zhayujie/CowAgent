@@ -1317,17 +1317,17 @@ class AgentBridge:
     def _apply_session_project(self, agent, session_id: str, agent_id: str) -> None:
         """Retarget the agent's working directory to the session's project dir.
 
-        A no-op when the session has no project selected (clears any previous
-        override). Failures are swallowed: a bad project setting must not break
-        the chat, it just falls back to the default workspace.
+        Priority: explicit session project, channel-instance default, then the
+        Agent workspace (clears any previous override). Lookup failures fall
+        back to the workspace, but a configured channel directory that is gone
+        fails the turn rather than silently writing into the workspace.
         """
-        try:
-            from agent.workspace import project_store
-            project_dir = project_store.get_project_dir(session_id, agent_id)
-            if getattr(agent, "apply_project_dir", None):
-                agent.apply_project_dir(project_dir)
-        except Exception as e:
-            logger.debug(f"[AgentBridge] apply_session_project failed: {e}")
+        from channel.channel_instances import resolve_project_dir
+        # The namespace is part of the conversation identity, so guests and
+        # delegated turns resolve the same default without trusting message text.
+        project_dir = resolve_project_dir(session_id, agent_id)
+        if getattr(agent, "apply_project_dir", None):
+            agent.apply_project_dir(project_dir)
 
     def apply_session_prefs(
         self,

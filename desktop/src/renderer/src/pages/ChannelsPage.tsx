@@ -47,7 +47,7 @@ const pendingState = (ch: ChannelInfo): Pending => {
 }
 
 // An icon component that takes a `size` prop (lucide icons and our PaperPlaneIcon).
-type IconComponent = React.FC<{ size?: number }>
+type IconComponent = LucideIcon | React.FC<{ size?: number }>
 
 // Per-channel icon + accent color, mirroring the web console's FontAwesome
 // icon + Tailwind color palette (we use lucide here, with hex colors so the
@@ -261,6 +261,7 @@ const ChannelsPage: React.FC<ChannelsPageProps> = ({ baseUrl }) => {
                     channel={ch}
                     multiAgent={multiAgent}
                     onChanged={loadChannels}
+                    projectEditable={isMultiInstanceType(ch.name) && (!multiAgent || !!ch.instance_id)}
                   />
                 ))
               )}
@@ -538,7 +539,11 @@ const ChannelCard: React.FC<{
   // The add panel sets this so connect always mints a new instance rather than
   // editing the existing one of the same type.
   forceNewInstance?: boolean
-}> = ({ channel, onChanged, defaultExpanded = false, multiAgent = false, forceNewInstance = false }) => {
+  // The default project directory lives on a channel_instances record, so only
+  // multi-instance types (an instance card, or the per-type card in
+  // single-Agent mode) can store one.
+  projectEditable?: boolean
+}> = ({ channel, onChanged, defaultExpanded = false, multiAgent = false, forceNewInstance = false, projectEditable = false }) => {
   // A per-instance card (multi-Agent mode, with a concrete instance_id) is the
   // one whose title is the friendly instance name and which can be renamed.
   const isInstance = multiAgent && !!channel.instance_id
@@ -711,6 +716,8 @@ const ChannelCard: React.FC<{
         <ChannelBinding channel={channel} />
       )}
 
+      {channel.active && projectEditable && <ChannelProject channel={channel} onChanged={onChanged} />}
+
       {/* QR-login channels with no desktop support fall back to the web console. */}
       {isQrLogin && !channel.active && !qrProvider && (
         <p className="text-xs text-content-tertiary mt-3 pl-12">{t('channels_qr_hint')}</p>
@@ -840,6 +847,57 @@ const ChannelBinding: React.FC<{ channel: ChannelInfo }> = ({ channel }) => {
       />
     </div>
   )
+}
+
+const ChannelProject: React.FC<{channel: ChannelInfo; onChanged: () => void}> = ({channel, onChanged}) => {
+  const [path, setPath] = useState(channel.project_dir || '')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [listing, setListing] = useState<Awaited<ReturnType<typeof apiClient.browseChannelProject>> | null>(null)
+  useEffect(() => { setPath(channel.project_dir || '') }, [channel.project_dir])
+  const browse = async (dir: string) => {
+    try {
+      setError('')
+      const data = await apiClient.browseChannelProject(dir)
+      if (data.status !== 'success') throw new Error(data.message)
+      setListing(data)
+    } catch (e) { setError(e instanceof Error && e.message ? e.message : t('channels_save_error')) }
+  }
+  const save = async () => {
+    if (path.trim() && !channel.session_namespace && !await askConfirm({
+      titleKey: 'channels_project_isolate_title',
+      msgKey: 'channels_project_isolate_message',
+      okKey: 'channels_save',
+      tone: 'primary',
+    })) return
+    setBusy(true)
+    setError('')
+    try {
+      const data = await apiClient.setChannelProject(channel.name, channel.instance_id || '', path)
+      if (data.status !== 'success') throw new Error(data.message)
+      onChanged()
+    } catch (e) { setError(e instanceof Error && e.message ? e.message : t('channels_save_error')) }
+    finally { setBusy(false) }
+  }
+  return <div className="mt-4 pt-4 border-t border-subtle space-y-2">
+    <label className="text-xs text-content-secondary">{t('channels_project_label')}</label>
+    <div className="flex gap-2">
+      <input className="flex-1 min-w-0 bg-transparent border rounded px-2 text-sm" value={path} onChange={e => setPath(e.target.value)} placeholder={t('channels_project_placeholder')} />
+      <Btn disabled={busy} onClick={() => void browse(path)}>{t('channels_project_browse')}</Btn>
+      <Btn disabled={busy} onClick={() => void save()}>{t('channels_save')}</Btn>
+    </div>
+    <p className="text-xs text-content-tertiary">{t('channels_project_hint')}</p>
+    {listing && <div className="border rounded p-2 space-y-2">
+      <div className="text-xs break-all">{listing.path}</div>
+      <div className="flex gap-2">
+        <Btn onClick={() => void browse(listing.parent || '')}>{t('channels_project_up')}</Btn>
+        <Btn onClick={() => setListing(null)}>{t('cancel')}</Btn>
+        <Btn disabled={listing.path === '__DRIVES__'} onClick={() => {setPath(listing.path); setListing(null)}}>{t('channels_project_select_here')}</Btn>
+      </div>
+      <div className="max-h-48 overflow-auto">{listing.dirs.map(dir => <button type="button" key={dir.path} className="block text-sm p-1" onClick={() => void browse(dir.path)}>{dir.name}</button>)}</div>
+    </div>}
+    {error && <p role="alert" className="text-xs text-red-500">{error}</p>}
+  </div>
 }
 
 const FieldRow: React.FC<{
