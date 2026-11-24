@@ -138,6 +138,8 @@ _KNOWN_TOOLS = frozenset({
     "read", "ls", "search_files", "memory_search", "memory_get", "web_search",
     "web_fetch", "vision", "send", "subagent", "bash", "write", "edit",
     "browser", "scheduler", "env_config", "evolution_undo", "time",
+    # Confined while it runs, write by write (see check_write_path).
+    "python",
     # phone_open and phone_share only hand over to another app, where the user
     # finishes it, and phone_photos shares only what the user picks.
     "phone_open", "phone_location", "phone_contacts", "phone_photos", "phone_share", "phone_device",
@@ -717,6 +719,34 @@ def check_tool_call(
     if mode == READ_ONLY:
         return _check_read_only(tool_name, args, shell)
     return _check_workspace_write(tool_name, args, cwd, write_roots, protected_paths, shell)
+
+
+def check_write_path(
+    mode: str,
+    path: str,
+    cwd: Optional[str] = None,
+    write_roots: Optional[Iterable[str]] = None,
+    protected_paths: Optional[Iterable[str]] = None,
+) -> Decision:
+    """Whether code running under ``mode`` may write ``path``.
+
+    For tools that run code in-process and so see each write as it happens,
+    rather than reading the targets from their arguments up front.
+    """
+    mode = normalize_mode(mode)
+    if mode == FULL_ACCESS:
+        return ALLOW
+    if mode == READ_ONLY:
+        return _deny(f"'{path}' was not written: this session is read-only.", READ_ONLY)
+    if _is_protected(path, _normalize_protected(protected_paths), cwd):
+        return _deny_protected(path)
+    roots = _normalize_roots(write_roots, cwd)
+    if not _inside_roots(path, roots, cwd):
+        return _deny(
+            f"'{path}' is outside the writable area ({_roots_hint(roots)}), so it was not written.",
+            WORKSPACE_WRITE,
+        )
+    return ALLOW
 
 
 def _check_read_only(tool_name: str, args: Dict[str, Any], shell: Optional[str]) -> Decision:

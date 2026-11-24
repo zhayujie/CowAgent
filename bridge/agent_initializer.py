@@ -1023,7 +1023,7 @@ class AgentInitializer:
                     # config.json's `tools.<name>` section) instead of replacing
                     # it, otherwise per-tool user configs (e.g. browser.cdp_endpoint)
                     # would be silently dropped.
-                    if tool_name in ['read', 'write', 'edit', 'bash', 'search_files', 'ls', 'web_fetch', 'send', 'browser']:
+                    if tool_name in ['read', 'write', 'edit', 'bash', 'python', 'search_files', 'ls', 'web_fetch', 'send', 'browser']:
                         merged_config = dict(getattr(tool, 'config', None) or {})
                         merged_config.update(file_config)
                         tool.config = merged_config

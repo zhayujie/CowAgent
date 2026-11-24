@@ -602,6 +602,15 @@ const prettyArgs = (args: Record<string, unknown> | undefined) => {
   }
 };
 
+/** Code reads as code rather than as one JSON string full of \n. */
+function inputText(step: ToolStep): string {
+  const {code, ...rest} = step.args ?? {};
+  if (step.name !== 'python' || typeof code !== 'string') {
+    return prettyArgs(step.args);
+  }
+  return Object.keys(rest).length ? `${asText(code)}\n\n${prettyArgs(rest)}` : asText(code);
+}
+
 /** A JSON result laid out like the input above it; anything else as it came. */
 function prettyResult(result: string): string {
   const text = asText(result);
@@ -654,7 +663,7 @@ function ToolDetail({step}: {step: ToolStep}) {
     <View style={styles.toolDetail}>
       <View style={styles.section}>
         <Text style={styles.sectionLabel}>INPUT</Text>
-        <Pre text={prettyArgs(step.args)} />
+        <Pre text={inputText(step)} />
       </View>
 
       {!!step.substeps?.length && (

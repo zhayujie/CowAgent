@@ -12,13 +12,16 @@ from config import conf
 # Tools that need a shell or a local browser, neither of which the mobile app
 # can provide.
 _MOBILE_UNAVAILABLE_TOOLS = frozenset({"bash", "browser"})
+# Runs code in the kernel's own process, standing in for the shell the mobile
+# app lacks; everywhere else bash does the same in a process of its own.
+_MOBILE_ONLY_TOOLS = frozenset({"python"})
 
 
 def _available_here(tool_name: str, cls: type) -> bool:
     if is_mobile():
         return tool_name not in _MOBILE_UNAVAILABLE_TOOLS
     # The mobile app carries these out on its phone; nothing else can.
-    return not issubclass(cls, PhoneTool)
+    return not issubclass(cls, PhoneTool) and tool_name not in _MOBILE_ONLY_TOOLS
 
 
 def _normalize_mcp_configs(raw) -> list:

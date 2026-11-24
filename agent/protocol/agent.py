@@ -194,7 +194,7 @@ class Agent:
     # Tools whose cwd defines the working directory. Memory and other tools
     # deliberately keep their own paths and are not retargeted here.
     _CWD_TOOLS = frozenset(
-        {"read", "write", "edit", "bash", "search_files", "ls", "web_fetch", "send", "browser"}
+        {"read", "write", "edit", "bash", "python", "search_files", "ls", "web_fetch", "send", "browser"}
     )
 
     def effective_cwd(self) -> str:

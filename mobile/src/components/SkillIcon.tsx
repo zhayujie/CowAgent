@@ -5,6 +5,7 @@ import {
   faBrain,
   faClock,
   faCloudArrowDown,
+  faCode,
   faCodeBranch,
   faEye,
   faFileLines,
@@ -33,6 +34,7 @@ import {Icon} from './Icon';
 
 const TOOL_ICONS: Record<string, IconDefinition> = {
   bash: faTerminal,
+  python: faCode,
   edit: faPenToSquare,
   read: faFileLines,
   write: faFilePen,

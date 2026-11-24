@@ -7,6 +7,7 @@ from agent.tools.read.read import Read
 from agent.tools.write.write import Write
 from agent.tools.edit.edit import Edit
 from agent.tools.bash.bash import Bash
+from agent.tools.python.python_tool import Python
 from agent.tools.ls.ls import Ls
 from agent.tools.send.send import Send
 from agent.tools.search_files.search_files import SearchFiles
@@ -155,6 +156,7 @@ __all__ = [
     'Write',
     'Edit',
     'Bash',
+    'Python',
     'Ls',
     'Send',
     'SearchFiles',

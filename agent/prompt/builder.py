@@ -227,6 +227,7 @@ def _build_tooling_section(tools: List[Any], language: str) -> List[str]:
             "ls": "list directory contents",
             "search_files": "search inside files by regex, or find files by name",
             "bash": "run shell commands",
+            "python": "run Python code (this device has no shell)",
             "terminal": "manage background processes",
             "web_search": "web search",
             "web_fetch": "fetch URL content",
@@ -248,6 +249,7 @@ def _build_tooling_section(tools: List[Any], language: str) -> List[str]:
             "ls": "列出目录内容",
             "search_files": "按正则搜索文件内容，或按文件名查找文件",
             "bash": "执行shell命令",
+            "python": "运行 Python 代码（本设备没有 shell）",
             "terminal": "管理后台进程",
             "web_search": "网络搜索",
             "web_fetch": "获取URL内容",
@@ -265,7 +267,7 @@ def _build_tooling_section(tools: List[Any], language: str) -> List[str]:
     # Preferred display order
     tool_order = [
         "read", "write", "edit", "ls", "search_files",
-        "bash", "terminal",
+        "bash", "python", "terminal",
         "web_search", "web_fetch", "browser",
         "memory_search", "memory_get",
         "env_config", "time", "scheduler", "send", "vision", "subagent",
