@@ -742,8 +742,77 @@ export const useChatStore = create<ChatState>((set, get) => {
 
   const bumpEpoch = (sessionId: string) => turnEpoch.set(sessionId, (turnEpoch.get(sessionId) ?? 0) + 1);
 
+  /** How often the stored page is asked for the seq of a turn that ended without one. */
+  const SEQ_TRIES = 6;
+  const SEQ_RETRY_MS = 400;
+
+  const normalText = (text?: string) => (text ?? '').replace(/\s+/g, ' ').trim();
+
+  /**
+   * The seq of the question a reply answers is what retry and edit address. A
+   * `done` reports it once the turn is stored, but a turn stopped here closes
+   * its stream before that arrives, and one that fails may never get one; both
+   * leave the buttons hidden until the conversation is loaded again. The web
+   * console waits for the trailing event, this reads the same seq back from the
+   * page the turn was stored on.
+   */
+  const catchUpSeqs = (turn: Turn, agentId?: string | null) => {
+    const {sessionId, ids, userId} = turn;
+    const own = new Set(ids);
+    const bubbles = () => (get().messages[sessionId] ?? []).filter(m => own.has(m.id));
+    if (!bubbles().length || bubbles().some(m => m.userSeq !== undefined)) {
+      return;
+    }
+    // Anything stored after this turn answers a newer question, which must not
+    // be taken for this one's: retry would then remove the wrong turn.
+    const known = (get().messages[sessionId] ?? [])
+      .filter(m => !own.has(m.id))
+      .reduce((max, m) => Math.max(max, m.seq ?? m.userSeq ?? 0), 0);
+    const asked = normalText((get().messages[sessionId] ?? []).find(m => m.id === userId)?.content).slice(0, 80);
+    let tries = 0;
+    const ask = async (): Promise<void> => {
+      tries += 1;
+      const again = () => {
+        if (tries < SEQ_TRIES && bubbles().length && !bubbles().some(m => m.userSeq !== undefined)) {
+          setTimeout(() => ask().catch(() => undefined), SEQ_RETRY_MS);
+        }
+      };
+      let found: number | undefined;
+      let newer = false;
+      try {
+        const page = await getHistory(sessionId, agentId ?? undefined, 1, 6);
+        const items = page?.messages ?? [];
+        // The question itself says which turn this is, whatever was said after
+        // it; without one the newest stored turn has to stand for it.
+        if (asked) {
+          found = items.find(m => m.role === 'user' && normalText(m.content).startsWith(asked))?._seq;
+          // A question stored after this turn means it is not the last one; no
+          // amount of asking will make its seq the answer.
+          newer = found === undefined && items.some(m => m.role === 'user' && (m._seq ?? 0) > known);
+        } else {
+          found = [...fromHistory(items)].reverse().find(m => m.userSeq !== undefined)?.userSeq;
+        }
+      } catch {
+        again();
+        return;
+      }
+      if (found === undefined || found <= known) {
+        if (!newer) {
+          again();
+        }
+        return;
+      }
+      const userSeq = found;
+      if (userId) {
+        patch(sessionId, userId, m => ({...m, seq: userSeq}));
+      }
+      ids.forEach(id => patch(sessionId, id, m => ({...m, userSeq})));
+    };
+    ask().catch(() => undefined);
+  };
+
   /** Ends a turn on screen; its first bubble stays even if nothing was written into it. */
-  const control = (turn: Turn) => {
+  const control = (turn: Turn, agentId?: string | null) => {
     const {sessionId} = turn;
     const ownId = turn.ids[0];
     const ctl = {
@@ -790,6 +859,10 @@ export const useChatStore = create<ChatState>((set, get) => {
         ctl.unsubscribe?.();
         patch(sessionId, turn.current, m => ({...m, cancelled: true}));
         ctl.finish();
+        // The stream closed before the `done` that carries the seq, so it is read
+        // back: without it this turn offers neither retry nor edit until the
+        // conversation is loaded again.
+        catchUpSeqs(turn, agentId);
       },
     };
     return ctl;
@@ -810,6 +883,11 @@ export const useChatStore = create<ChatState>((set, get) => {
           // The answer is stored; with auto TTS on, `stream_end` waits up to a
           // minute for the audio. Free the composer now, as the web console does.
           if (event.type === 'done') {
+            // A turn stored without a seq reported (an error ends this way) is
+            // asked for it once more, or retry and edit stay hidden.
+            if (event.user_seq === undefined || event.user_seq === null) {
+              catchUpSeqs(turn, agentId);
+            }
             ctl.finish();
           }
         },
@@ -821,6 +899,7 @@ export const useChatStore = create<ChatState>((set, get) => {
           }
           if (end.kind === 'failed') {
             patch(turn.sessionId, turn.current, m => ({...m, error: end.error}));
+            catchUpSeqs(turn, agentId);
           }
           ctl.finish();
           if (end.kind === 'resync') {
@@ -870,7 +949,7 @@ export const useChatStore = create<ChatState>((set, get) => {
       current: bubble.id,
       floor: bubble.speaker ? [bubble.speaker] : [],
     };
-    const ctl = control(turn);
+    const ctl = control(turn, agentId);
     bumpEpoch(sessionId);
     set(s => ({
       messages: {...s.messages, [sessionId]: stored ? [...list.slice(0, -1), bubble] : [...list, bubble]},
@@ -959,7 +1038,7 @@ export const useChatStore = create<ChatState>((set, get) => {
         floor: botMsg.speaker ? [botMsg.speaker] : [],
         userId: userMsg.id,
       };
-      const ctl = control(turn);
+      const ctl = control(turn, agentId);
 
       bumpEpoch(sessionId);
       set(s => ({
