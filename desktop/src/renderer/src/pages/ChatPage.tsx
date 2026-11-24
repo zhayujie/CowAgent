@@ -273,7 +273,7 @@ const ChatPage: React.FC<ChatPageProps> = ({ baseUrl }) => {
       observer.disconnect()
       cancelQueuedScroll()
     }
-  }, [cancelQueuedScroll, scrollToBottom, updateScrollButton])
+  }, [activeId, cancelQueuedScroll, scrollToBottom, updateScrollButton])
 
   useEffect(() => {
     const el = scrollRef.current
@@ -464,9 +464,12 @@ const ChatPage: React.FC<ChatPageProps> = ({ baseUrl }) => {
   return (
     <div className="flex flex-col flex-1 min-h-0 relative">
       {!isEmpty && (
-        <ChatTimeline sessionId={activeId} scrollRef={scrollRef} revision={timelineRevision} />
+        <ChatTimeline key={activeId} sessionId={activeId} scrollRef={scrollRef} revision={timelineRevision} />
       )}
+      {/* Remount the viewport per session: Chromium can keep painting the old
+          session's content-visibility rows after they are removed. */}
       <div
+        key={activeId}
         ref={scrollRef}
         className="relative min-h-0 flex-1 overflow-y-auto"
         onScroll={handleScroll}
