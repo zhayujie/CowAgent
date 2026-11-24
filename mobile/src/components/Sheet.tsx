@@ -1,6 +1,6 @@
-import React, {useEffect, useState, type ReactNode} from 'react';
+import React, {useEffect, useRef, useState, type ReactNode} from 'react';
 import {Keyboard, Modal, Platform, Pressable, StyleSheet, Text, View} from 'react-native';
-import Animated, {Easing, useAnimatedStyle, useSharedValue, withTiming} from 'react-native-reanimated';
+import Animated, {Easing, useAnimatedStyle, useSharedValue, withTiming, type SharedValue} from 'react-native-reanimated';
 import {scheduleOnRN} from 'react-native-worklets';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {faChevronRight} from '@fortawesome/free-solid-svg-icons';
@@ -14,8 +14,168 @@ import {AvoidKeyboard} from './AvoidKeyboard';
 const EASE = Easing.bezier(0.22, 0.61, 0.36, 1);
 const DIALOG_WIDTH = 520;
 
-/** iOS cannot present another modal while the sheet's modal is still dismissing. */
-export const SHEET_DISMISS_MS = Platform.OS === 'ios' ? 360 : 0;
+const IOS = Platform.OS === 'ios';
+
+/**
+ * How long to wait after closing a sheet before presenting anything native (share, camera) or
+ * navigating. Sheets themselves wait their turn (see usePresence).
+ */
+export const SHEET_DISMISS_MS = IOS ? 360 : 0;
+
+/** Past this a native callback counts as lost, so one that never comes holds no sheet back. */
+const NATIVE_WAIT_MS = 1500;
+
+// Sheets whose modal is still on screen while they close, and sheets waiting for those to go.
+const leaving = new Set<object>();
+const waiting = new Set<() => void>();
+
+function setLeaving(owner: object, on: boolean) {
+  if (on) {
+    leaving.add(owner);
+    return;
+  }
+  leaving.delete(owner);
+  if (!leaving.size) {
+    const ready = [...waiting];
+    waiting.clear();
+    ready.forEach(fn => fn());
+  }
+}
+
+type Phase = 'gone' | 'queued' | 'in' | 'out' | 'dismissing';
+
+/**
+ * When the sheet's modal is mounted and shown. iOS refuses to present a modal while another is
+ * still up, and ignores a dismissal while its modal is still being presented: the app then shows
+ * something other than what it believes, at worst an invisible modal that takes every touch. So
+ * on iOS a sheet waits for closing ones to be gone before it shows, and to be shown before it goes.
+ */
+function usePresence(visible: boolean, progress: SharedValue<number>) {
+  const [phase, setPhaseState] = useState<Phase>('gone');
+  const visibleRef = useRef(visible);
+  visibleRef.current = visible;
+  const [m] = useState(() => {
+    const self = {
+      phase: 'gone' as Phase,
+      shown: false,
+      onShown: null as (() => void) | null,
+      timer: null as ReturnType<typeof setTimeout> | null,
+      set(next: Phase) {
+        self.phase = next;
+        setPhaseState(next);
+      },
+      wait(fn: () => void) {
+        self.clearTimer();
+        self.timer = setTimeout(fn, NATIVE_WAIT_MS);
+      },
+      clearTimer() {
+        if (self.timer) {
+          clearTimeout(self.timer);
+          self.timer = null;
+        }
+      },
+      open() {
+        if (IOS && leaving.size) {
+          self.set('queued');
+          waiting.add(self.retry);
+          return;
+        }
+        self.shown = false;
+        self.set('in');
+        progress.value = withTiming(1, {duration: 280, easing: EASE});
+      },
+      retry() {
+        if (self.phase === 'queued') {
+          self.set('gone');
+          if (visibleRef.current) {
+            self.open();
+          }
+        }
+      },
+      close() {
+        self.set('out');
+        if (IOS) {
+          setLeaving(self, true);
+        }
+        const slidOut = self.slidOut;
+        progress.value = withTiming(0, {duration: 200, easing: EASE}, done => {
+          if (done) {
+            scheduleOnRN(slidOut);
+          }
+        });
+      },
+      slidOut() {
+        if (self.phase !== 'out') {
+          return;
+        }
+        if (!IOS) {
+          self.set('gone');
+          return;
+        }
+        const dismiss = () => {
+          self.onShown = null;
+          if (self.phase === 'out') {
+            self.set('dismissing');
+            self.wait(self.dismissed);
+          }
+        };
+        if (self.shown) {
+          dismiss();
+        } else {
+          self.onShown = dismiss;
+          self.wait(dismiss);
+        }
+      },
+      shownNow() {
+        self.shown = true;
+        const next = self.onShown;
+        if (next) {
+          self.clearTimer();
+          next();
+        }
+      },
+      dismissed() {
+        if (self.phase !== 'dismissing') {
+          return;
+        }
+        self.clearTimer();
+        self.set('gone');
+        setLeaving(self, false);
+        if (visibleRef.current) {
+          self.open();
+        }
+      },
+      dispose() {
+        self.clearTimer();
+        waiting.delete(self.retry);
+        setLeaving(self, false);
+      },
+    };
+    return self;
+  });
+
+  useEffect(() => {
+    if (visible) {
+      if (m.phase === 'out') {
+        // Still on screen: slide back instead of leaving.
+        setLeaving(m, false);
+        m.set('in');
+        progress.value = withTiming(1, {duration: 280, easing: EASE});
+      } else if (m.phase === 'gone') {
+        m.open();
+      }
+    } else if (m.phase === 'queued') {
+      waiting.delete(m.retry);
+      m.set('gone');
+    } else if (m.phase === 'in') {
+      m.close();
+    }
+  }, [visible, m, progress]);
+
+  useEffect(() => () => m.dispose(), [m]);
+
+  return {phase, onShow: m.shownNow, onDismiss: m.dismissed};
+}
 
 /**
  * HarmonyOS draws a Modal in its own dialog layer, which the page's keyboard
@@ -61,21 +221,11 @@ export function Sheet({
   const styles = useStyles();
   const insets = useSafeAreaInsets();
   const progress = useSharedValue(0);
-  const [mounted, setMounted] = useState(visible);
+  const {phase, onShow, onDismiss} = usePresence(visible, progress);
+  const mounted = phase !== 'gone' && phase !== 'queued';
   const [panelHeight, setPanelHeight] = useState(420);
   const keyboardHeight = useHarmonyKeyboardHeight(mounted);
   const floating = useDialogLayout();
-
-  useEffect(() => {
-    if (visible) {
-      setMounted(true);
-    }
-    progress.value = withTiming(visible ? 1 : 0, {duration: visible ? 280 : 200, easing: EASE}, done => {
-      if (done && !visible) {
-        scheduleOnRN(setMounted, false);
-      }
-    });
-  }, [visible, progress]);
 
   // Explicit dependencies keep the web preview working, where no worklets Babel plugin runs.
   const scrim = useAnimatedStyle(() => ({opacity: progress.value}), [progress]);
@@ -92,7 +242,14 @@ export function Sheet({
   }
 
   return (
-    <Modal transparent visible animationType="none" onRequestClose={onClose} statusBarTranslucent>
+    <Modal
+      transparent
+      visible={phase !== 'dismissing'}
+      animationType="none"
+      onRequestClose={onClose}
+      onShow={onShow}
+      onDismiss={onDismiss}
+      statusBarTranslucent>
       <AvoidKeyboard style={[styles.root, floating && styles.rootFloating, {paddingBottom: keyboardHeight}]}>
         <Animated.View style={[StyleSheet.absoluteFill, styles.scrim, scrim]}>
           <Pressable style={styles.fill} onPress={onClose} accessibilityLabel={tr('common_close')} />
