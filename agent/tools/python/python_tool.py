@@ -42,13 +42,66 @@ def _no_input(*_args, **_kwargs):
 
 
 def _peak_mb() -> Optional[float]:
-    """The process's peak memory so far; it only grows, which is enough to see a run's growth."""
+    """The process's peak memory so far. It never falls, so growth below an earlier peak goes unseen."""
     try:
         import resource
         peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
     except Exception:
         return None
     return peak / (1024 * 1024) if sys.platform in ("darwin", "ios") else peak / 1024
+
+
+def _statm_reader():
+    page = os.sysconf("SC_PAGE_SIZE")
+
+    def read() -> float:
+        with open("/proc/self/statm") as f:
+            return int(f.read().split()[1]) * page / (1024 * 1024)
+    return read
+
+
+def _mach_reader():
+    """The footprint iOS weighs when it picks an app to close (task_vm_info.phys_footprint)."""
+    import ctypes
+
+    class VmInfo(ctypes.Structure):
+        _fields_ = ([("virtual_size", ctypes.c_uint64), ("region_count", ctypes.c_int32),
+                     ("page_size", ctypes.c_int32)]
+                    + [(f"_{i}", ctypes.c_uint64) for i in range(16)]
+                    + [("phys_footprint", ctypes.c_uint64)])
+
+    libc = ctypes.CDLL(None)
+    task = ctypes.c_uint.in_dll(libc, "mach_task_self_").value
+    task_vm_info = 22
+
+    def read() -> float:
+        info = VmInfo()
+        count = ctypes.c_uint(ctypes.sizeof(VmInfo) // 4)
+        if libc.task_info(task, task_vm_info, ctypes.byref(info), ctypes.byref(count)) != 0:
+            raise OSError("task_info failed")
+        return info.phys_footprint / (1024 * 1024)
+    return read
+
+
+_memory_reader = None
+
+
+def _memory_mb() -> Optional[float]:
+    """The process's memory now, or its peak where that cannot be read."""
+    global _memory_reader
+    if _memory_reader is None:
+        _memory_reader = _peak_mb
+        for make in ((_mach_reader,) if sys.platform in ("darwin", "ios") else (_statm_reader,)):
+            try:
+                reader = make()
+                reader()
+                _memory_reader = reader
+            except Exception:
+                pass
+    try:
+        return _memory_reader()
+    except Exception:
+        return None
 
 
 def _compile(source: str, filename: str):
@@ -217,19 +270,19 @@ class Python(BaseTool):
             sys.path.insert(0, script_dir)
 
         thread = self._start(target)
-        baseline = _peak_mb()
+        baseline = _memory_mb()
         deadline = time.monotonic() + timeout
         stop = None
         while thread.is_alive():
             thread.join(0.2)
             if not thread.is_alive():
                 break
-            peak = _peak_mb()
+            used = _memory_mb()
             if self.is_cancelled():
                 stop = _Cancelled
             elif time.monotonic() > deadline:
                 stop = _Timeout
-            elif baseline is not None and peak is not None and peak - baseline > self.MEMORY_LIMIT_MB:
+            elif baseline is not None and used is not None and used - baseline > self.MEMORY_LIMIT_MB:
                 stop = _TooMuchMemory
             if stop:
                 guard.interrupt(run, stop)

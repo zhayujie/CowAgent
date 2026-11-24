@@ -79,6 +79,13 @@ def test_a_run_eating_memory_is_stopped(dirs):
     assert "MB of memory" in result.result and "finished" not in result.result
 
 
+def test_memory_is_watched_below_an_earlier_peak(dirs):
+    spike = bytearray(400 << 20)
+    spike[::4096] = b"x" * len(spike[::4096])
+    del spike
+    test_a_run_eating_memory_is_stopped(dirs)
+
+
 def test_cancelling_the_turn_stops_the_run(dirs):
     import threading
     tool = _tool(dirs[0])
