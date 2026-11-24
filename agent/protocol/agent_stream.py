@@ -312,7 +312,35 @@ def _parse_tool_args(args_str: str, finish_reason: Optional[str],
                     return repaired, None
             except Exception:
                 pass
-        return {}, f"Invalid JSON in tool arguments: {e.msg}"
+        return {}, (
+            f"Invalid JSON in tool arguments ({e.msg}), so the call did not run and nothing was "
+            "changed. Call the tool again with valid JSON arguments."
+        )
+
+
+def _tool_call_slot(buffer: dict, tc_delta: dict) -> int:
+    """Buffer slot a streamed tool-call delta belongs to.
+
+    Some providers send complete calls without `index`. Defaulting every one
+    to slot 0 would glue parallel calls into a single unparseable argument
+    string, so an unindexed delta that names a new call gets a new slot.
+    """
+    index = tc_delta.get("index")
+    if index is not None:
+        return index
+    if not buffer:
+        return 0
+    last = max(buffer)
+    current = buffer[last]
+    call_id = tc_delta.get("id")
+    if call_id:
+        for slot, call in buffer.items():
+            if call["id"] == call_id:
+                return slot
+        return last + 1 if current["id"] or current["name"] else last
+    if (tc_delta.get("function") or {}).get("name") and current["name"]:
+        return last + 1
+    return last
 
 
 class AgentStreamExecutor:
@@ -1976,7 +2004,7 @@ class AgentStreamExecutor:
                     # Handle tool calls
                     if "tool_calls" in delta and delta["tool_calls"]:
                         for tc_delta in delta["tool_calls"]:
-                            index = tc_delta.get("index", 0)
+                            index = _tool_call_slot(tool_calls_buffer, tc_delta)
 
                             if index not in tool_calls_buffer:
                                 tool_calls_buffer[index] = {
