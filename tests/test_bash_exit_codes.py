@@ -46,6 +46,16 @@ def test_separators_inside_quotes_do_not_split_the_command():
     assert interpret('echo "a; b"; grep x f', 1) == (False, "No matches found")
 
 
+@pytest.mark.parametrize("separator", [";", "\n", "; \t", "\n \t"])
+def test_trailing_separator_preserves_informational_exit_1(separator):
+    assert interpret("grep -q needle README.md" + separator, 1) == (False, "No matches found")
+
+
+@pytest.mark.parametrize("separator", [";", "\n", "; \t", "\n \t"])
+def test_trailing_separator_preserves_conditional_flag(separator):
+    assert interpret("false && grep x f" + separator, 1) == (True, None)
+
+
 def test_env_assignment_prefix_is_skipped():
     assert interpret("VAR=1 grep x f", 1) == (False, "No matches found")
 
