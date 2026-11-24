@@ -2,6 +2,7 @@ import json
 import os
 import subprocess
 import sys
+import threading
 import pytest
 from agent.tools.read.read import Read
 
@@ -22,16 +23,23 @@ def test_read_fifo_returns_error_without_waiting_for_writer(tmp_path, alias):
         stderr=subprocess.PIPE,
         text=True,
     )
+    # Everything is read through process.stdout: its read-ahead can already hold the result
+    # line, which communicate() would miss as it reads the pipe underneath.
+    watchdog = threading.Timer(2, process.kill)
     try:
-        for line in process.stdout:
+        for line in iter(process.stdout.readline, ""):
             if line.strip() == "ready":
                 break
         else:
             pytest.fail("child exited before the FIFO read")
-        output, error = process.communicate(timeout=2)
-        assert process.returncode == 0, error
+        watchdog.start()
+        output = process.stdout.read()
+        error = process.stderr.read()
+        process.wait()
+        assert process.returncode == 0, error or "the read blocked on the FIFO"
         assert json.loads(output)["status"] == "error"
     finally:
+        watchdog.cancel()
         if process.poll() is None:
             process.kill()
             process.communicate()
