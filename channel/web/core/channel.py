@@ -374,6 +374,9 @@ class WebChannel(ChatChannel):
                 if delta:
                     publish({"type": "delta", "content": delta})
 
+            elif event_type == "user_stored":
+                publish({"type": "user_stored", "user_seq": data.get("user_seq")})
+
             elif event_type == "peer_message_start":
                 # A teammate takes over for a stretch of this turn. What follows
                 # is its reply, in the same event types as any other, until the

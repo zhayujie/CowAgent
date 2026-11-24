@@ -1724,6 +1724,12 @@ class AgentBridge:
             pre_persisted = self._pre_persist_user_message(
                 session_id, query, context, clear_history, resolved_agent_id
             )
+            if pre_persisted:
+                # Retry and edit address the turn by this seq. Announced now, so
+                # a client that stops the turn or sees it fail still has it.
+                user_seq = self._latest_user_seq(session_id, resolved_agent_id)
+                if user_seq is not None:
+                    event_handler.handle_event({"type": "user_stored", "data": {"user_seq": user_seq}})
 
             channel_type = (context.get("channel_type") or "") if context else ""
 
@@ -2114,6 +2120,13 @@ class AgentBridge:
                 f"[AgentBridge] Failed to pre-persist user message for session={session_id}: {e}"
             )
             return False
+
+    def _latest_user_seq(self, session_id: str, agent_id: str = None) -> Optional[int]:
+        try:
+            return self.get_conversation_store(agent_id).get_latest_pair_seqs(session_id).get("user_seq")
+        except Exception as e:
+            logger.debug(f"[AgentBridge] Could not read the stored user seq: {e}")
+            return None
 
     def _persist_messages(
         self,

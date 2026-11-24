@@ -24,77 +24,51 @@ beforeEach(() => {
     handlers = h;
     return unsubscribe;
   });
+  jest.mocked(sendMessage).mockResolvedValue({request_id: 'r1'} as never);
 });
 
 const asked = (text: string) => useChatStore.getState().messages.s1.find(m => m.role === 'user' && m.content === text)!;
 const reply = () => useChatStore.getState().messages.s1.find(m => m.role === 'assistant')!;
-const settle = async () => {
-  for (let i = 0; i < 8; i++) {
-    await Promise.resolve();
-  }
-};
-
-const page = (question: string, seq: number) => ({
-  messages: [
-    {role: 'user', content: question, created_at: 0, _seq: seq},
-    {role: 'assistant', content: '', created_at: 0, _seq: seq + 1},
-  ],
-  total: 2,
-  page: 1,
-  page_size: 6,
-  has_more: false,
-});
 
 /**
- * The stream closes on a stop, before the `done` that reports the seq, so the
- * buttons that address the turn have nothing to point at until the conversation
- * is loaded again.
+ * The stream closes on a stop, before the `done` that reports the seq; the seq
+ * announced when the question was stored is what keeps retry and edit.
  */
-it('learns the seq of a stopped turn from what was stored', async () => {
-  jest.mocked(sendMessage).mockResolvedValue({request_id: 'r1'} as never);
-  jest.mocked(getHistory).mockResolvedValue(page('今天天气怎么样', 7) as never);
+it('keeps the seq of a stopped turn', async () => {
   await useChatStore.getState().send('s1', '今天天气怎么样');
+  handlers.onEvent({type: 'user_stored', user_seq: 7} as never);
 
   await useChatStore.getState().cancel('s1');
-  await settle();
 
-  expect(getHistory).toHaveBeenCalledWith('s1', undefined, 1, 6);
   expect(reply().userSeq).toBe(7);
   expect(asked('今天天气怎么样').seq).toBe(7);
-});
-
-it('keeps a done that already reported its seq', async () => {
-  jest.mocked(sendMessage).mockResolvedValue({request_id: 'r1'} as never);
-  await useChatStore.getState().send('s1', 'hi');
-
-  handlers.onEvent({type: 'done', content: 'hello', user_seq: 3, bot_seq: 4} as never);
-  await settle();
-
   expect(getHistory).not.toHaveBeenCalled();
-  expect(reply().userSeq).toBe(3);
 });
 
-it('reads the seq back when a done carries none', async () => {
-  jest.mocked(sendMessage).mockResolvedValue({request_id: 'r1'} as never);
-  jest.mocked(getHistory).mockResolvedValue(page('hi', 5) as never);
+it('keeps the seq of a turn whose stream failed', async () => {
   await useChatStore.getState().send('s1', 'hi');
+  handlers.onEvent({type: 'user_stored', user_seq: 5} as never);
 
-  handlers.onEvent({type: 'done', content: '❌ failed'} as never);
-  await settle();
+  handlers.onEnd({kind: 'failed', error: 'Stream closed'});
 
   expect(reply().userSeq).toBe(5);
   expect(asked('hi').seq).toBe(5);
 });
 
-/** Retry removes the turn it addresses, so a seq of another question is worse than none. */
-it('never takes a newer question for the stopped one', async () => {
-  jest.mocked(sendMessage).mockResolvedValue({request_id: 'r1'} as never);
-  jest.mocked(getHistory).mockResolvedValue(page('另一件事', 9) as never);
-  await useChatStore.getState().send('s1', '今天天气怎么样');
+it('keeps a done that reports its seq', async () => {
+  await useChatStore.getState().send('s1', 'hi');
 
-  await useChatStore.getState().cancel('s1');
-  await settle();
+  handlers.onEvent({type: 'done', content: 'hello', user_seq: 3, bot_seq: 4} as never);
 
-  expect(reply().userSeq).toBeUndefined();
-  expect(asked('今天天气怎么样').seq).toBeUndefined();
+  expect(reply().userSeq).toBe(3);
+  expect(asked('hi').seq).toBe(3);
+});
+
+it('a done without a seq leaves the announced one', async () => {
+  await useChatStore.getState().send('s1', 'hi');
+  handlers.onEvent({type: 'user_stored', user_seq: 5} as never);
+
+  handlers.onEvent({type: 'done', content: '❌ failed'} as never);
+
+  expect(reply().userSeq).toBe(5);
 });

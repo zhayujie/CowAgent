@@ -1,4 +1,4 @@
-import {cancelRequest, getHistory, sendMessage} from '../src/api/cowApi';
+import {cancelRequest, sendMessage} from '../src/api/cowApi';
 import {subscribeChat, type ChatStreamHandlers} from '../src/realtime/chatStream';
 import {useChatStore} from '../src/store/chatStore';
 
@@ -24,15 +24,6 @@ beforeEach(() => {
     handlers = h;
     return unsubscribe;
   });
-  // A stopped turn asks the stored page for its seq, which the stop path has
-  // covered in chatStopSeqs.test.ts; here the answer keeps it from asking again.
-  jest.mocked(getHistory).mockResolvedValue({
-    messages: [{role: 'user', content: 'hi', created_at: 0, _seq: 1}],
-    total: 1,
-    page: 1,
-    page_size: 6,
-    has_more: false,
-  } as never);
 });
 
 const reply = () => useChatStore.getState().messages.s1.find(m => m.role === 'assistant')!;
