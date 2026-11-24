@@ -125,8 +125,10 @@ interface Turn {
   current: string;
   /** Who holds the floor, innermost last; the first is the Agent addressed. */
   floor: Speaker[];
-  /** The user bubble this request answers, until `done` reports its seq. */
+  /** The user bubble this request answers. */
   userId?: string;
+  /** The stored seq of that question, which retry and edit address. */
+  userSeq?: number;
 }
 
 const toolDone = new Set<(tool: string) => void>();
@@ -563,12 +565,24 @@ export const useChatStore = create<ChatState>((set, get) => {
       streaming: true,
       speaker: turn.floor[turn.floor.length - 1],
       peer: turn.floor.length > 1 || undefined,
+      userSeq: turn.userSeq,
     };
     turn.ids.push(msg.id);
     turn.current = msg.id;
     set(s => ({
       messages: {...s.messages, [turn.sessionId]: [...(s.messages[turn.sessionId] ?? []), msg]},
     }));
+  };
+
+  const learnSeq = (turn: Turn, userSeq?: number | null) => {
+    if (userSeq === undefined || userSeq === null) {
+      return;
+    }
+    turn.userSeq = userSeq;
+    if (turn.userId) {
+      patch(turn.sessionId, turn.userId, m => ({...m, seq: userSeq}));
+    }
+    turn.ids.forEach(id => patch(turn.sessionId, id, m => ({...m, userSeq})));
   };
 
   const sealBubble = (turn: Turn) => {
@@ -705,17 +719,15 @@ export const useChatStore = create<ChatState>((set, get) => {
         });
         break;
       }
+      // Sent as soon as the question is stored, so a turn that is stopped or
+      // fails before its `done` can still be retried and edited.
+      case 'user_stored':
+        learnSeq(turn, event.user_seq);
+        break;
       case 'done':
         stopThinking(sessionId, messageId);
         flush();
-        // The turn is stored: a saved seq is what retry and edit address.
-        if (event.user_seq !== undefined && event.user_seq !== null) {
-          const userSeq = event.user_seq;
-          if (turn.userId) {
-            patch(sessionId, turn.userId, m => ({...m, seq: userSeq}));
-          }
-          turn.ids.forEach(id => patch(sessionId, id, m => ({...m, userSeq})));
-        }
+        learnSeq(turn, event.user_seq);
         patch(sessionId, messageId, m => ({
           ...m,
           content: m.cancelled ? m.content : event.content || m.content,

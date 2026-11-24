@@ -22,6 +22,7 @@ export type StreamEventType =
   | 'peer_end'
   | 'subagent_step'
   | 'text'
+  | 'user_stored'
   | 'done'
   | 'cancelled'
   | 'stream_end'
