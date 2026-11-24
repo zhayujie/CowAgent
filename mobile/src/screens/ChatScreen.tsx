@@ -11,7 +11,6 @@ import {
   Platform,
   Pressable,
   Text,
-  TextInput,
   View,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
@@ -30,7 +29,7 @@ import {
   PermissionSheet,
   type AttachSource,
 } from '../components/ComposerSheets';
-import {Dock} from '../components/Dock';
+import {Dock, type DockHandle} from '../components/Dock';
 import {DrawerMenu, type DrawerRoute, type DrawerView} from '../components/DrawerMenu';
 import {Icon} from '../components/Icon';
 import {Intro} from '../components/Intro';
@@ -127,7 +126,7 @@ export function ChatScreen({route, navigation}: Props) {
   const [renameOpen, setRenameOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [actingSession, setActingSession] = useState<SessionItem | null>(null);
-  const dock = useRef<TextInput>(null);
+  const dock = useRef<DockHandle>(null);
   // The keyboard covers the home indicator, so the composer sits right on it.
   const [keyboardShown, setKeyboardShown] = useState(false);
   useEffect(() => {
@@ -185,6 +184,15 @@ export function ChatScreen({route, navigation}: Props) {
       loadSettings().catch(() => undefined);
     }
   }, [loadSettings, currentAgentId]);
+
+  // Back from the model settings, the composer shows the model the chat now runs on.
+  useFocusEffect(
+    useCallback(() => {
+      if (useSessionSettingsStore.getState().bySession[sessionId]) {
+        loadSettings().catch(() => undefined);
+      }
+    }, [sessionId, loadSettings]),
+  );
 
   // A finished reply may have titled a new session or produced artifacts.
   const wasReplying = useRef(replying);
@@ -576,15 +584,17 @@ export function ChatScreen({route, navigation}: Props) {
     }
   }, [draft, messages]);
 
+  // Vendors and models may have changed since the settings were read, so they are read again.
   const openSettingsSheet = useCallback(
     (open: (v: boolean) => void) => {
       open(true);
-      if (!useSessionSettingsStore.getState().bySession[sessionId]) {
-        loadSettings().catch(e => {
+      const cached = !!useSessionSettingsStore.getState().bySession[sessionId];
+      loadSettings().catch(e => {
+        if (!cached) {
           open(false);
           showToast(trf('session_settings_load_failed', {error: errorText(e)}));
-        });
-      }
+        }
+      });
     },
     [sessionId, loadSettings],
   );
