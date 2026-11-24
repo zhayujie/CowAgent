@@ -10,6 +10,7 @@ import time
 from channel import channel_factory
 from common import const
 from common.log import logger
+from common.connect_deadline import install as install_connect_deadline
 from common.ssl_certs import ensure_ca_bundle
 from config import load_config, conf
 from plugins import *
@@ -805,6 +806,8 @@ def run():
         bundle = ensure_ca_bundle()
         if bundle:
             logger.debug(f"[App] using certifi CA bundle: {bundle}")
+        if not install_connect_deadline():
+            logger.debug("[App] urllib3 without the expected helpers; connect deadline not installed")
         # load config
         load_config()
         _register_pid_file()

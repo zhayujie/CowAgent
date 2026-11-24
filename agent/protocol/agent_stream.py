@@ -107,6 +107,35 @@ def _is_retryable_error(error_str_lower: str) -> bool:
     )
 
 
+# The request never reached the provider: the name didn't resolve or no address
+# answered. requests/urllib3 phrase it like this whichever provider made the call;
+# a read timeout ("read timed out") means the provider was reached and isn't one.
+_UNREACHABLE_TEXT_MARKERS = (
+    'newconnectionerror', 'nameresolutionerror', 'connecttimeouterror', 'connect timeout=',
+    'failed to establish a new connection', 'failed to resolve',
+    'name or service not known', 'nodename nor servname', 'temporary failure in name resolution',
+    'connection refused', 'network is unreachable', 'no route to host',
+)
+_UNREACHABLE_HOST_RE = re.compile(r"host='([^']+)'")
+
+
+def _is_unreachable_error(error_str_lower: str) -> bool:
+    """True if the provider couldn't be reached at all, which retrying the same address won't change."""
+    return any(marker in error_str_lower for marker in _UNREACHABLE_TEXT_MARKERS)
+
+
+def _unreachable_message(error_str: str) -> str:
+    match = _UNREACHABLE_HOST_RE.search(error_str)
+    host = f" ({match.group(1)})" if match else ""
+    return _t(
+        f"无法连接到模型服务{host}，请检查网络，或确认当前网络能访问这个地址。"
+        "部分服务在某些网络下无法直连，可以在模型设置里检查接口地址或换用其他服务商。",
+        f"Can't connect to the model service{host}. Check the network, or whether this address "
+        "is reachable from it. Some services can't be reached directly from every network; "
+        "check the API address in the model settings or switch to another provider.",
+    )
+
+
 # Image references the channels append to the user query, e.g. "[图片: tmp/a.png]".
 _IMAGE_MARKER_RE = re.compile(r"\[(?:图片|Image):\s*([^\]]+)\]")
 _IMAGE_ATTACHED = (
@@ -2126,6 +2155,9 @@ class AgentStreamExecutor:
             
             # Check if error is retryable (timeout, connection, server busy, etc.)
             is_retryable = _is_retryable_error(error_str_lower)
+            # Each attempt at an unreachable address already spent the whole
+            # connect budget; retrying it only multiplies the user's wait.
+            is_unreachable = _is_unreachable_error(error_str_lower)
             
             # A fallback link gets a single attempt. Giving every link the
             # primary's full retry budget would multiply the wait by the chain
@@ -2134,7 +2166,7 @@ class AgentStreamExecutor:
             # the user would see a dropped connection instead of a reply.
             # Links are tried in order precisely because the whole point is to
             # move on to a different provider, not to wait out this one.
-            link_retries = 0 if _on_fallback else max_retries
+            link_retries = 0 if (_on_fallback or is_unreachable) else max_retries
 
             # A rate limit is the one error where waiting is the wrong move
             # *when a backup exists*: the backup is a different provider with
@@ -2224,6 +2256,8 @@ class AgentStreamExecutor:
                 logger.error(f"❌ LLM API error after {max_retries} retries: {e}", exc_info=True)
             else:
                 logger.error(f"❌ LLM call error (non-retryable): {e}", exc_info=True)
+            if is_unreachable:
+                raise Exception(_unreachable_message(error_str)) from e
             raise
 
         # Persist the provider-reported usage (if any) so the context-usage
