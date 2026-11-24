@@ -48,3 +48,17 @@ def test_the_agent_model_is_checked_not_the_global_config_model(monkeypatch):
     bot = DeepSeekBot.__new__(DeepSeekBot)
     assert _vision("deepseek-flash")._main_bot_supports_vision(bot)
     assert not _vision("deepseek-v4-pro")._main_bot_supports_vision(bot)
+
+
+@pytest.mark.parametrize("model,expected", [
+    ("deepseek-flash", True),
+    ("deepseek-v4-pro", False),
+    ("qwen3.8-flash", True),
+    ("qwen-plus", False),
+    ("claude-sonnet-5", True),
+])
+def test_linkai_defers_to_the_upstream_vendor_rule(model, expected):
+    from models.linkai.link_ai_bot import LinkAIBot
+
+    bot = LinkAIBot.__new__(LinkAIBot)
+    assert _vision(model)._main_bot_supports_vision(bot) is expected

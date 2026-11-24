@@ -94,6 +94,28 @@ class LinkAIBot(Bot, OpenAICompatibleBot):
     NO_QUOTA_CODE = 406
     # call_with_tools takes the calling agent's id, sent only alongside client_id.
     accepts_agent_id = True
+    # Model-name prefix -> vendor bot whose model_supports_vision knows which
+    # of that vendor's models accept images.
+    _VISION_DELEGATES = (
+        ("deepseek-", "models.deepseek.deepseek_bot", "DeepSeekBot"),
+        ("qwen", "models.dashscope.dashscope_bot", "DashscopeBot"),
+        ("ernie-", "models.qianfan.qianfan_bot", "QianfanBot"),
+        ("minimax-", "models.minimax.minimax_bot", "MinimaxBot"),
+        ("mimo-", "models.mimo.mimo_bot", "MimoBot"),
+    )
+
+    @classmethod
+    def model_supports_vision(cls, model_name: str):
+        """LinkAI serves other vendors' models, so defer to that vendor's rule.
+        Returns None (no verdict) for vendors without one, so the caller keeps
+        its own name-based heuristic."""
+        name = (model_name or "").strip().lower()
+        for prefix, module, class_name in cls._VISION_DELEGATES:
+            if name.startswith(prefix):
+                import importlib
+                vendor = getattr(importlib.import_module(module), class_name)
+                return vendor.model_supports_vision(model_name)
+        return None
 
     def __init__(self):
         super().__init__()
