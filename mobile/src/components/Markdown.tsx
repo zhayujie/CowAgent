@@ -1,5 +1,14 @@
 import {faCopy} from '@fortawesome/free-regular-svg-icons';
-import React, {Fragment, memo, useEffect, useMemo, useState, type ReactNode} from 'react';
+import React, {
+  cloneElement,
+  Fragment,
+  isValidElement,
+  memo,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react';
 import {
   Image,
   Platform,
@@ -9,6 +18,7 @@ import {
   Text,
   View,
   type ImageStyle,
+  type TextProps,
   type TextStyle,
   type ViewStyle,
 } from 'react-native';
@@ -47,6 +57,17 @@ function monoWidth(text: string, fontSize: number): number {
     width += /[\u1100-\uffef]/.test(ch) ? fontSize : fontSize * 0.62;
   }
   return width;
+}
+
+/**
+ * Tables scroll sideways, so a drag that starts as a text selection in a cell is taken over by
+ * the scroll and the system magnifier never hears the touch end, staying on screen. The copy
+ * button under the reply still copies the table.
+ */
+function unselectable(nodes: ReactNode[]): ReactNode[] {
+  return nodes.map(node =>
+    isValidElement<TextProps>(node) && node.type === Text ? cloneElement(node, {selectable: false}) : node,
+  );
 }
 
 // The stock renderer sizes every column at ~43% of the window width, which hides
@@ -186,7 +207,7 @@ class ChatRenderer extends Renderer {
               {width: colWidth},
               i > 0 && [styles.colDivider, {borderLeftColor: t.line1}],
             ]}>
-            {cell}
+            {unselectable(cell)}
           </View>
         ))}
       </View>
