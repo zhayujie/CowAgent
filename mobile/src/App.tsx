@@ -11,6 +11,7 @@ import {GestureHandlerRootView} from 'react-native-gesture-handler';
 import {SafeAreaProvider} from 'react-native-safe-area-context';
 import {AppUpdateHost} from './components/AppUpdateHost';
 import {ImageViewerHost} from './components/FileViews';
+import {MessageMenuHost} from './components/MessageMenu';
 import {PairLinkHost} from './components/PairFlow';
 import {PhoneHost} from './components/PhoneHost';
 import {useLangStore} from './i18n';
@@ -83,6 +84,7 @@ export default function App() {
             }}>
             <RootNavigator />
           </NavigationContainer>
+          <MessageMenuHost />
           <ImageViewerHost />
           {hydrated && <PairLinkHost />}
           {hydrated && <PhoneHost />}

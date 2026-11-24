@@ -1,5 +1,5 @@
 import type {IconDefinition} from '@fortawesome/fontawesome-svg-core';
-import {faCopy} from '@fortawesome/free-regular-svg-icons';
+import {faCopy, faPenToSquare} from '@fortawesome/free-regular-svg-icons';
 import {
   faChevronRight,
   faCheck,
@@ -9,7 +9,6 @@ import {
   faHourglassHalf,
   faLightbulb,
   faMinus,
-  faPenToSquare,
   faRotateRight,
   faShare,
   faStop,
@@ -44,7 +43,6 @@ import {clockTime, formatCount, formatSeconds, kindFromName} from '../utils/form
 import {serverFileUrl} from '../api/cowApi';
 import {type ChatFile, sameFile} from '../files/chatFile';
 import {openFileRef, useImageViewer} from '../files/openFile';
-import {copyText} from '../utils/clipboard';
 import {markdownText} from '../utils/markdownText';
 import {AgentAvatar} from './AgentAvatar';
 import {KindTile} from './ArtifactStrip';
@@ -54,9 +52,7 @@ import {Icon} from './Icon';
 import {RowToggleContext, useAnchoredRow, useRowToggle} from './listAnchor';
 import {Markdown} from './Markdown';
 import {PhoneTrust} from './PhoneTrust';
-import {useSelectText} from './SelectTextSheet';
-import {showToast} from './Toast';
-
+import {copyMessage, useMessageMenu} from './MessageMenu';
 const MONO = Platform.select({ios: 'Menlo', default: 'monospace'});
 const ROW_PADDING = 14;
 const AVATAR = 28;
@@ -103,9 +99,6 @@ function MessageItemImpl({
   );
 }
 
-const copyMessage = (text: string) =>
-  copyText(text).then(ok => ok && showToast(tr('common_copied')));
-
 /** A small icon action under a bubble, like the web console's message buttons. */
 function ActionButton({icon, label, onPress}: {icon: IconDefinition; label: string; onPress: () => void}) {
   const t = useTheme();
@@ -137,7 +130,14 @@ function UserTurn({message, onEdit}: {message: ChatMessage; onEdit?: (message: C
   // Kept after closing so the sheet still has its file while it slides away.
   const [actingOn, setActingOn] = useState<ChatFile | null>(null);
   const [acting, setActing] = useState(false);
-  const selectText = useSelectText(() => message.content);
+  const menuGesture = useMessageMenu(() => ({
+    text: message.content,
+    plain: message.content,
+    actions:
+      message.seq !== undefined && onEdit
+        ? [{icon: faPenToSquare, label: tr('chat_edit'), onPress: () => onEdit(message)}]
+        : [],
+  }));
   const files = message.attachments ?? [];
   const images = files.filter(a => a.kind === 'image' && a.previewUri);
   const others = files.filter(a => !(a.kind === 'image' && a.previewUri));
@@ -193,7 +193,7 @@ function UserTurn({message, onEdit}: {message: ChatMessage; onEdit?: (message: C
         </View>
       ) : (
         !!message.content && (
-          <GestureDetector gesture={selectText.gesture}>
+          <GestureDetector gesture={menuGesture}>
             <View style={styles.userBubble}>
               <Text style={styles.userText}>{message.content}</Text>
             </View>
@@ -202,15 +202,11 @@ function UserTurn({message, onEdit}: {message: ChatMessage; onEdit?: (message: C
       )}
       {(!!message.createdAt || !!message.content) && !message.transcribing && (
         <View style={[styles.metaRow, styles.userMetaRow]}>
-          {message.seq !== undefined && onEdit && (
-            <ActionButton icon={faPenToSquare} label={tr('chat_edit')} onPress={() => onEdit(message)} />
-          )}
           {!!message.content && <CopyButton text={message.content} />}
           {!!message.createdAt && <Text style={styles.meta}>{clockTime(message.createdAt)}</Text>}
         </View>
       )}
       {actingOn && <FileSheet file={actingOn} visible={acting} onClose={() => setActing(false)} />}
-      {selectText.sheet}
     </View>
   );
 }
@@ -282,7 +278,14 @@ function AssistantTurn({
   const speaker = useSpeaker(message.speaker);
   const row = useAnchoredRow(newest);
   const [showAll, setShowAll] = useState(false);
-  const selectText = useSelectText(() => markdownText(message.content));
+  const menuGesture = useMessageMenu(() => ({
+    text: message.content,
+    plain: markdownText(message.content),
+    actions:
+      message.userSeq !== undefined && onRetry && !message.streaming
+        ? [{icon: faRotateRight, label: tr('chat_retry'), onPress: () => onRetry(message)}]
+        : [],
+  }));
   const steps = message.steps ?? [];
   const foldable = !message.streaming && steps.length > FOLD_AFTER;
   const folded = foldable && !showAll;
@@ -361,7 +364,7 @@ function AssistantTurn({
             )}
 
             {!!message.content && (
-              <GestureDetector gesture={selectText.gesture}>
+              <GestureDetector gesture={menuGesture}>
                 <View>
                   <Markdown value={message.content} inset={BUBBLE_INSET} selectable={false} />
                 </View>
@@ -411,7 +414,6 @@ function AssistantTurn({
           )}
         </View>
       </View>
-      {selectText.sheet}
     </RowToggleContext.Provider>
   );
 }
@@ -735,7 +737,9 @@ function MetaLine({
 }) {
   const styles = useStyles();
   const u = message.usage;
-  const canRetry = message.userSeq !== undefined && !!onRetry;
+  // With text, retry sits in the long-press menu; a reply that failed or stopped before any text
+  // has nothing to press on, so it keeps the button.
+  const canRetry = message.userSeq !== undefined && !!onRetry && !message.content;
   const total = u ? u.total_tokens ?? (u.prompt_tokens ?? 0) + (u.completion_tokens ?? 0) : 0;
   const parts: string[] = [];
   if (message.createdAt) {
