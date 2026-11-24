@@ -2,8 +2,8 @@
   "app": {
     "bundleName": "ai.cowagent.hmos",
     "vendor": "cowagent",
-    "versionCode": 1000005,
-    "versionName": "1.0.5",
+    "versionCode": 1000007,
+    "versionName": "1.0.7",
     "icon": "$media:app_icon",
     "label": "$string:app_name",
   }
