@@ -276,6 +276,10 @@ def resolve_reasoning_effort(
         if key in by_model:
             return _validate_effort(by_model[key], capability)
 
+    # The global effort predates catalogs that carry their own default; using
+    # it there would silently change how hard an unconfigured model thinks.
+    if capability.get("inherit_global") is False:
+        return capability.get("default")
     return normalize_reasoning_effort(base, model, legacy_value)
 
 

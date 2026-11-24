@@ -24,6 +24,7 @@ _ENV_KEYS = {
 _AUTH_OPTIONS = ('-c', 'cli_auth_credentials_store="file"')
 _MODELS_CACHE = "cowagent-models.json"
 _ACCOUNT_CACHE = "cowagent-account.json"
+_REASONING_CACHE = "cowagent-reasoning.json"
 TOOL_NAMESPACE = "cowagent"
 LOGIN_REQUIRED = "Sign in with ChatGPT in the Models console or run 'cow codex login'."
 
@@ -60,7 +61,7 @@ def run_auth_command(*args):
 
 
 def clear_model_cache():
-    for name in (_MODELS_CACHE, _ACCOUNT_CACHE, "cowagent-reasoning.json"):
+    for name in (_MODELS_CACHE, _ACCOUNT_CACHE, _REASONING_CACHE):
         try:
             (codex_home() / name).unlink()
         except FileNotFoundError:
@@ -95,7 +96,7 @@ def cached_models():
 def cached_reasoning_capability(model):
     """Read optional model capabilities captured during the last CLI sync."""
     try:
-        data = json.loads((codex_home() / "cowagent-reasoning.json").read_text(encoding="utf-8"))
+        data = json.loads((codex_home() / _REASONING_CACHE).read_text(encoding="utf-8"))
         entry = data.get(model, {})
         values = entry.get("values", [])
         allowed = {"low", "medium", "high", "xhigh", "max", "ultra"}
@@ -104,7 +105,8 @@ def cached_reasoning_capability(model):
             return None
         default = entry.get("default")
         return {"supported": True, "param": "reasoning_effort", "default": default if default in values else values[0],
-                "options": [{"value": v, "label": v} for v in values], "thinking_only": True}
+                "options": [{"value": v, "label": v} for v in values], "thinking_only": True,
+                "inherit_global": False}
     except (OSError, ValueError, AttributeError, TypeError):
         return None
 
@@ -130,7 +132,7 @@ def refresh_models():
                 break
     models = list(dict.fromkeys(models))
     write_json_atomic(codex_home() / _MODELS_CACHE, models)
-    write_json_atomic(codex_home() / "cowagent-reasoning.json", reasoning)
+    write_json_atomic(codex_home() / _REASONING_CACHE, reasoning)
     write_json_atomic(codex_home() / _ACCOUNT_CACHE, {
         "email": account.get("email") or "", "plan": account.get("planType") or "",
     })

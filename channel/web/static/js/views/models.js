@@ -3152,7 +3152,8 @@ function syncChatEffort(scope) {
     const options = meta?.supported ? meta.options || [] : [];
     if (!options.length || (!meta.thinking_only && !chatEffortConfig.enable_thinking)) { wrap.classList.add('hidden'); return; }
     wrap.classList.remove('hidden');
-    const saved = chatEffortConfig.reasoning_effort_by_model?.[`${provider}:${model.toLowerCase()}`] || chatEffortConfig.reasoning_effort;
+    const saved = chatEffortConfig.reasoning_effort_by_model?.[`${provider}:${model.toLowerCase()}`]
+        || (meta.inherit_global === false ? '' : chatEffortConfig.reasoning_effort);
     chatEffortDraft = options.some(o => o.value === saved) ? saved : meta.default || options[0].value;
     initDropdown(dd, options, chatEffortDraft, value => { chatEffortDraft = value; });
 }

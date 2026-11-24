@@ -441,7 +441,7 @@ function syncReasoningEffortOptions() {
         // the lowercased model name, matching the backend resolve path.
         const savedForModel = configReasoningByModel[`${cfgProviderValue}:${selectedModel.trim().toLowerCase()}`]
             || configReasoningByModel[cfgProviderValue + ':' + selectedModel];
-        const saved = savedForModel || cfgReasoningEffortValue;
+        const saved = savedForModel || (reasoning.inherit_global === false ? '' : cfgReasoningEffortValue);
         // Fall back to the active model's native enum when the saved value is
         // not valid here. Resolved even while hidden so a save never writes
         // another model's enum under this model's key.
