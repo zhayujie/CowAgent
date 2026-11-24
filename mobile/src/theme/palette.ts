@@ -37,6 +37,9 @@ export interface Palette {
   avatarBg: string;
   avatarText: string;
   codeBg: string;
+  /** A code block's title strip, a step deeper than its body as on the web console. */
+  codeHeadBg: string;
+  codeLine: string;
   inlineCodeBg: string;
   inlineCodeText: string;
   /** Tints for artifact kinds: [background, foreground]. */
@@ -68,7 +71,9 @@ export const dark: Palette = {
   scrim: 'rgba(0,0,0,0.52)',
   avatarBg: '#1E3A29',
   avatarText: '#9FE0B6',
-  codeBg: '#141416',
+  codeBg: '#1E1E22',
+  codeHeadBg: '#151518',
+  codeLine: 'rgba(255,255,255,0.12)',
   inlineCodeBg: 'rgba(53,168,91,0.16)',
   inlineCodeText: '#7DD69A',
   kind: {
@@ -105,7 +110,9 @@ export const light: Palette = {
   scrim: 'rgba(15,15,20,0.32)',
   avatarBg: '#E3F5E9',
   avatarText: '#228547',
-  codeBg: '#F5F6F8',
+  codeBg: '#F7F8FA',
+  codeHeadBg: '#EEF0F3',
+  codeLine: 'rgba(15,15,20,0.10)',
   inlineCodeBg: 'rgba(53,168,91,0.10)',
   inlineCodeText: '#1C6B3B',
   kind: {

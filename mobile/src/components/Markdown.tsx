@@ -239,7 +239,7 @@ function buildStyles(t: Palette): MarkedStyles {
       borderRadius: 12,
       backgroundColor: t.codeBg,
       borderWidth: 1,
-      borderColor: t.line1,
+      borderColor: t.codeLine,
     },
     codeText: {fontFamily: MONO, fontSize: 12.5, lineHeight: 19, color: t.t1},
     blockquote: {
@@ -366,8 +366,8 @@ function CodeBlock({
   const copy = () => copyText(code).then(ok => ok && showToast(tr('common_copied')));
   return (
     <View style={[boxStyle, styles.codeBox]}>
-      <View style={styles.codeHead}>
-        <Text style={[styles.codeLang, {color: t.t3}]} numberOfLines={1}>
+      <View style={[styles.codeHead, {backgroundColor: t.codeHeadBg, borderBottomColor: t.codeLine}]}>
+        <Text style={[styles.codeLang, {color: t.t2}]} numberOfLines={1}>
           {language?.trim() || lang || 'text'}
         </Text>
         <Pressable
@@ -376,8 +376,8 @@ function CodeBlock({
           hitSlop={8}
           onPress={copy}
           style={({pressed}) => [styles.codeCopy, pressed && styles.pressed]}>
-          <Icon icon={faCopy} size={11} color={t.t3} />
-          <Text style={[styles.codeCopyText, {color: t.t3}]}>{tr('common_copy')}</Text>
+          <Icon icon={faCopy} size={11} color={t.t2} />
+          <Text style={[styles.codeCopyText, {color: t.t2}]}>{tr('common_copy')}</Text>
         </Pressable>
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.codeScroll}>
@@ -464,11 +464,18 @@ const styles = StyleSheet.create({
     transform: [{translateY: Platform.OS === 'android' ? 4 : 2}],
   },
   inlineCodeText: {lineHeight: 18},
-  codeHead: {flexDirection: 'row', alignItems: 'center', paddingLeft: 12, paddingRight: 8, paddingTop: 7},
-  codeLang: {flex: 1, fontSize: 11.5, letterSpacing: 0.3},
+  codeHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: 12,
+    paddingRight: 8,
+    paddingVertical: 5,
+    borderBottomWidth: 1,
+  },
+  codeLang: {flex: 1, fontSize: 11.5, fontWeight: '500', letterSpacing: 0.3, textTransform: 'lowercase'},
   codeCopy: {flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 6, paddingVertical: 3},
   codeCopyText: {fontSize: 11.5},
-  codeScroll: {paddingHorizontal: 12, paddingTop: 6, paddingBottom: 12},
+  codeScroll: {paddingHorizontal: 12, paddingTop: 10, paddingBottom: 12},
   pressed: {opacity: 0.55},
   codeLink: {textDecorationLine: 'underline'},
 });
