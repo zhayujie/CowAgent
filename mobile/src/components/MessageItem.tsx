@@ -300,6 +300,8 @@ function AssistantTurn({
   const progress = `${message.content.length}:${steps.length}:${last ? stepSize(last) : 0}`;
   const stalled = useStalled(!!message.streaming && !waiting && !toolBusy, progress);
   const working = stalled && !liveThinking;
+  // Room for the dots stays for the whole reply: a pause in the stream must not move the page.
+  const dotsRoom = !!message.streaming && !waiting;
   const hasAnswer =
     !!message.content || !!files.length || !!message.cancelled || !!message.runState || !!message.error;
 
@@ -366,9 +368,9 @@ function AssistantTurn({
               </View>
             )}
 
-            {working && (
+            {dotsRoom && (
               <View style={styles.working}>
-                <Dots size={3} />
+                {working ? <Dots size={WORKING_DOT} /> : <View style={styles.workingIdle} />}
               </View>
             )}
 
@@ -410,6 +412,7 @@ function stepSize(step: Step): number {
 }
 
 const STALL_MS = 700;
+const WORKING_DOT = 3;
 
 /** True once `progress` has stood still for a moment while `active`. */
 function useStalled(active: boolean, progress: string): boolean {
@@ -832,6 +835,7 @@ const useStyles = makeStyles(t => {
     foldAction: {fontSize: 12, fontWeight: '500', color: t.accent},
     waiting: {paddingVertical: 6},
     working: {paddingTop: 8, paddingBottom: 2},
+    workingIdle: {height: WORKING_DOT},
     note: {paddingHorizontal: 2},
     sent: {marginLeft: 18, marginTop: 2, marginBottom: 2},
     files: {gap: 8},
