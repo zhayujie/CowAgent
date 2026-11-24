@@ -57,12 +57,14 @@ import type {RootStackParamList} from '../navigation/types';
 import type {SessionItem} from '../protocol/events';
 import type {AgentBadge, PermissionMode, WorkspaceHit} from '../protocol/resources';
 import {agentParam, useAgentStore, useCurrentAgent} from '../store/agentStore';
+import {chatToResume, trackOpenChat} from '../store/chatResume';
 import {MAX_REPLYING, useChatStore, type ChatMessage} from '../store/chatStore';
 import {MAX_ATTACHMENTS, useComposerStore} from '../store/composerStore';
 import {useLayoutStore} from '../store/layoutStore';
 import {useMenuStore} from '../store/menuStore';
 import {useOverviewStore} from '../store/overviewStore';
 import {useSessionSettingsStore} from '../store/sessionSettingsStore';
+import {useServerStore} from '../store/serverStore';
 import {useSessionStore} from '../store/sessionStore';
 import {takeIncomingShare, useIncomingShare} from '../share/incoming';
 import {CHAT_WIDTH, PaneWidthProvider, usePaneWidth, useSidebarLayout} from '../theme/layout';
@@ -107,7 +109,17 @@ export function ChatScreen({route, navigation}: Props) {
   const settings = useSessionSettingsStore(s => s.bySession[sessionId]);
   const team = settings?.team;
   const teamSize = team?.members.length ?? 0;
-  const [draft, setDraft] = useState('');
+  const serverId = useServerStore(s => s.activeId);
+  const [draft, setDraft] = useState(() => {
+    const resumed = chatToResume(useServerStore.getState().activeId);
+    return resumed?.sessionId === sessionId ? resumed.draft : '';
+  });
+  const unsent = !!isNew && !messages.length;
+  useEffect(() => {
+    if (serverId) {
+      trackOpenChat({serverId, sessionId, isNew: unsent, draft});
+    }
+  }, [serverId, sessionId, unsent, draft]);
   // On a wide screen the menu stays open beside the chat instead of sliding over it.
   const wide = useSidebarLayout();
   const paneWidth = usePaneWidth();

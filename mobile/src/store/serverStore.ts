@@ -18,6 +18,7 @@ import type {ServerEnvelope, ServerInfo} from '../protocol/envelope';
 import {realtime, type RealtimeStatus} from '../realtime/RealtimeClient';
 import {readJSON, removeKey, writeJSON} from '../storage/kv';
 import {secureStore} from '../storage/secureStore';
+import {loadChatResume} from './chatResume';
 import {resetServerData} from './reset';
 
 export interface ServerProfile {
@@ -345,6 +346,7 @@ export const useServerStore = create<ServerState>((set, get) => ({
     const [saved] = await Promise.all([
       readJSON<PersistedServers>(SERVERS_KEY, {servers: [], activeId: null}),
       loadLocalDeviceName().catch(() => undefined),
+      loadChatResume().catch(() => undefined),
     ]);
     let servers = saved.servers;
     if (servers.length === 0 && DEFAULT_SERVER_URL) {

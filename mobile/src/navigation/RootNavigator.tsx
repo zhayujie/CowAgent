@@ -46,6 +46,7 @@ import {TasksScreen} from '../screens/TasksScreen';
 import {VersionScreen} from '../screens/VersionScreen';
 import {WebPageScreen} from '../screens/WebPageScreen';
 import {WebSearchScreen} from '../screens/WebSearchScreen';
+import {chatToResume} from '../store/chatResume';
 import {useLayoutStore} from '../store/layoutStore';
 import {useServerStore} from '../store/serverStore';
 import {PAGE_WIDTH, PaneWidthProvider, SIDEBAR_WIDTH, useFrameWidth, usePaneWidth, useSidebarLayout} from '../theme/layout';
@@ -89,8 +90,12 @@ export function RootNavigator() {
   const langHydrated = useLangStore(s => s.hydrated);
   const authed = useServerStore(s => s.authed);
   const activeId = useServerStore(s => s.activeId);
-  // A fresh chat for every sign-in or server switch; the last one's session lives on the server left.
-  const initialSessionId = useMemo(newSessionId, [authed, activeId]);
+  // A fresh chat for every sign-in or server switch, short of reopening the one iOS just closed;
+  // the last one's session lives on the server left.
+  const initialChat = useMemo(() => {
+    const resumed = authed ? chatToResume(activeId) : null;
+    return resumed ? {sessionId: resumed.sessionId, isNew: resumed.isNew} : {sessionId: newSessionId(), isNew: true};
+  }, [authed, activeId]);
   const frame = useFrameWidth();
   const sidebarHidden = useLayoutStore(s => s.sidebarHidden);
   const sidebar = useSidebarLayout() && authed && !sidebarHidden;
@@ -140,7 +145,7 @@ export function RootNavigator() {
                 <Stack.Screen
                   name="Chat"
                   component={ChatScreen}
-                  initialParams={{sessionId: initialSessionId, isNew: true}}
+                  initialParams={initialChat}
                 />
                 <Stack.Screen name="Sessions" component={SessionsScreen} />
                 <Stack.Screen name="Artifacts" component={ArtifactsScreen} />
