@@ -17,6 +17,7 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import React, {memo, useEffect, useState} from 'react';
 import {ActivityIndicator, Image, Platform, Pressable, ScrollView, Text, View} from 'react-native';
+import {GestureDetector} from 'react-native-gesture-handler';
 import Animated, {
   cancelAnimation,
   Easing,
@@ -136,7 +137,7 @@ function UserTurn({message, onEdit}: {message: ChatMessage; onEdit?: (message: C
   // Kept after closing so the sheet still has its file while it slides away.
   const [actingOn, setActingOn] = useState<ChatFile | null>(null);
   const [acting, setActing] = useState(false);
-  const selectText = useSelectText();
+  const selectText = useSelectText(() => message.content);
   const files = message.attachments ?? [];
   const images = files.filter(a => a.kind === 'image' && a.previewUri);
   const others = files.filter(a => !(a.kind === 'image' && a.previewUri));
@@ -192,13 +193,11 @@ function UserTurn({message, onEdit}: {message: ChatMessage; onEdit?: (message: C
         </View>
       ) : (
         !!message.content && (
-          <Pressable
-            accessible={false}
-            onLongPress={() => selectText.open(message.content)}
-            delayLongPress={350}
-            style={styles.userBubble}>
-            <Text style={styles.userText}>{message.content}</Text>
-          </Pressable>
+          <GestureDetector gesture={selectText.gesture}>
+            <View style={styles.userBubble}>
+              <Text style={styles.userText}>{message.content}</Text>
+            </View>
+          </GestureDetector>
         )
       )}
       {(!!message.createdAt || !!message.content) && !message.transcribing && (
@@ -283,7 +282,7 @@ function AssistantTurn({
   const speaker = useSpeaker(message.speaker);
   const row = useAnchoredRow(newest);
   const [showAll, setShowAll] = useState(false);
-  const selectText = useSelectText();
+  const selectText = useSelectText(() => markdownText(message.content));
   const steps = message.steps ?? [];
   const foldable = !message.streaming && steps.length > FOLD_AFTER;
   const folded = foldable && !showAll;
@@ -362,12 +361,11 @@ function AssistantTurn({
             )}
 
             {!!message.content && (
-              <Pressable
-                accessible={false}
-                onLongPress={() => selectText.open(markdownText(message.content))}
-                delayLongPress={350}>
-                <Markdown value={message.content} inset={BUBBLE_INSET} selectable={false} />
-              </Pressable>
+              <GestureDetector gesture={selectText.gesture}>
+                <View>
+                  <Markdown value={message.content} inset={BUBBLE_INSET} selectable={false} />
+                </View>
+              </GestureDetector>
             )}
 
             {files.length > 0 && (

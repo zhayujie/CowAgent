@@ -1,5 +1,6 @@
-import React, {useCallback, useState} from 'react';
+import React, {useMemo, useRef, useState} from 'react';
 import {Platform, ScrollView, Text, TextInput} from 'react-native';
+import {Gesture} from 'react-native-gesture-handler';
 import {tr} from '../i18n';
 import {makeStyles, useTheme} from '../theme/theme';
 import {Sheet} from './Sheet';
@@ -31,17 +32,30 @@ function SelectTextSheet({text, visible, onClose}: {text: string; visible: boole
   );
 }
 
-/** Opens a message's text for selecting; the sheet keeps it while sliding away. */
-export function useSelectText() {
+/**
+ * A long press that opens a message's text for selecting; the sheet keeps it while sliding away.
+ * A native gesture rather than a Pressable: on Android a pressed Pressable takes every later touch,
+ * so code blocks and tables inside could no longer scroll sideways.
+ */
+export function useSelectText(getText: () => string) {
   const [text, setText] = useState<string | null>(null);
   const [visible, setVisible] = useState(false);
-  const open = useCallback((value: string) => {
-    setText(value);
-    setVisible(true);
-  }, []);
+  const read = useRef(getText);
+  read.current = getText;
+  const gesture = useMemo(
+    () =>
+      Gesture.LongPress()
+        .minDuration(350)
+        .runOnJS(true)
+        .onStart(() => {
+          setText(read.current());
+          setVisible(true);
+        }),
+    [],
+  );
   const sheet =
     text === null ? null : <SelectTextSheet text={text} visible={visible} onClose={() => setVisible(false)} />;
-  return {open, sheet};
+  return {gesture, sheet};
 }
 
 const useStyles = makeStyles(t => ({
