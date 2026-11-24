@@ -327,14 +327,8 @@ export const Dock = forwardRef<DockHandle, Props>(function DockInner(
               accessibilityLabel={trf('composer_ws_a11y', {name: project || tr('composer_ws_default')})}
               onPress={onOpenWorkspace}
               hitSlop={4}
-              style={({pressed}) => [styles.tool, !!project && styles.toolChip, pressed && styles.toolPressed]}>
-              <Icon icon={faFolderOpen} size={17} color={project ? t.accent : t.t2} />
-              {/* The default workspace is the resting state; only a chosen project is named. */}
-              {!!project && (
-                <Text style={styles.toolChipText} numberOfLines={1}>
-                  {project}
-                </Text>
-              )}
+              style={({pressed}) => [styles.tool, pressed && styles.toolPressed]}>
+              <Icon icon={faFolderOpen} size={17} color={t.t2} />
             </Pressable>
           )}
 
@@ -644,18 +638,6 @@ const useStyles = makeStyles(t => {
       justifyContent: 'center',
     },
     toolPressed: {backgroundColor: t.bg2},
-    toolChip: {
-      width: undefined,
-      flexDirection: 'row',
-      gap: 6,
-      flexShrink: 1,
-      maxWidth: 150,
-      height: 34,
-      marginHorizontal: 3,
-      paddingHorizontal: 11,
-      backgroundColor: t.accentSoft,
-    },
-    toolChipText: {flexShrink: 1, fontSize: 13, fontWeight: '500', color: t.accent},
     spacer: {flex: 1},
     send: {
       width: 38,
