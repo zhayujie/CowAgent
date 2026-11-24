@@ -100,6 +100,11 @@ const zh = {
 
   workspace_empty: '这个文件夹是空的',
   workspace_truncated: '文件较多，只列出了一部分',
+  workspace_search_placeholder: '搜索文件',
+  workspace_no_results: '没有匹配的文件',
+  workspace_edit_too_large: '文件过大，无法在手机上编辑',
+  workspace_edit_encoding: '不是 UTF-8 编码，编辑会损坏内容',
+  workspace_edit_unsupported: '这类文件不能编辑',
 };
 
 const en: Record<keyof typeof zh, string> = {
@@ -204,6 +209,11 @@ const en: Record<keyof typeof zh, string> = {
 
   workspace_empty: 'This folder is empty',
   workspace_truncated: 'Too many files; only some are listed',
+  workspace_search_placeholder: 'Search files',
+  workspace_no_results: 'No matching files',
+  workspace_edit_too_large: 'Too large to edit on the phone',
+  workspace_edit_encoding: 'Not UTF-8; editing would corrupt it',
+  workspace_edit_unsupported: "This kind of file can't be edited",
 };
 
 export default {zh, en};

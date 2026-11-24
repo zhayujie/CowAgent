@@ -19,6 +19,8 @@ export type RootStackParamList = {
   /** `edit` opens straight into the editor, as a freshly created page does. */
   KnowledgeDoc: {path: string; title: string; agentId?: string; edit?: boolean};
   FilePreview: {file: ChatFile};
+  /** A text file where the chat works, opened for editing; `path` may be absolute. */
+  WorkspaceFile: {path: string; name: string; kind: string; relPath?: string};
   /** Any http(s) page; `title` shows until the page names itself. */
   WebPage: {url: string; title?: string};
   /** One folder of where the chat works; each level deeper is another page, so going back goes up. */

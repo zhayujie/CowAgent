@@ -190,6 +190,11 @@ export interface WorkspaceHit {
   path: string;
   is_dir?: boolean;
   kind?: string;
+  /** Files only: where to fetch them, as a listing gives. */
+  abs_path?: string;
+  raw_url?: string;
+  preview_url?: string;
+  size?: number;
 }
 
 /** One row of `GET /api/workspace/tree`. */
