@@ -74,6 +74,7 @@ export function Sidebar() {
         currentSessionId={sessionId}
         activeSection={section}
         onNewChat={() => inChat(c => c.newChat())}
+        onNewChatIn={space => inChat(c => c.newChatIn(space))}
         onOpenSession={(session: SessionItem) => inChat(c => c.openSession(session))}
         onSessionActions={session => chat()?.sessionActions(session)}
         onNavigate={openSection}

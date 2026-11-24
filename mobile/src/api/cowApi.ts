@@ -263,6 +263,21 @@ export async function createProject(sessionId: string, name: string, agentId?: s
   });
 }
 
+/** Only the name shown changes; the folder keeps its name on disk. */
+export async function renameProject(path: string, name: string) {
+  return http.request<{name: string}>('/api/projects/manage', {method: 'PUT', body: {path, name}});
+}
+
+/** Forgets the project, leaving its files; the chats in it go back to the default workspace. */
+export async function deleteProject(path: string) {
+  return http.request<{unbound: number}>('/api/projects/manage', {method: 'DELETE', body: {path}});
+}
+
+/** `order` lists project paths, with `__default__` for the default workspace. */
+export async function setProjectOrder(order: string[]) {
+  return http.request<{order: string[]}>('/api/projects/order', {body: {order}});
+}
+
 /** Sub-folders of `path` on the server's computer; an empty path starts at its home folder. */
 export async function browseFolders(path = '') {
   return http.request<FolderListing>(`/api/projects/browse?${query({path})}`);
@@ -754,9 +769,12 @@ export async function getMemoryContent(filename: string, category: MemoryCategor
   return http.request<MemoryContent>(`/api/memory/content?${query({filename, category, agent_id: agentId})}`);
 }
 
-/** No session: memory lives in the Agent's state root, not in whatever project a session has open. */
-export async function readWorkspaceText(path: string, agentId?: string) {
-  return http.request<WorkspaceText>(`/api/workspace/read?${query({path, agent_id: agentId})}`);
+/**
+ * Without `sessionId` this reads the Agent's state root, where memory lives; with it, the
+ * project folder the session works in.
+ */
+export async function readWorkspaceText(path: string, agentId?: string, sessionId?: string) {
+  return http.request<WorkspaceText>(`/api/workspace/read?${query({path, agent_id: agentId, session: sessionId})}`);
 }
 
 /** Files and folders whose name matches `q`, rooted where the session works. */
@@ -767,9 +785,15 @@ export async function searchWorkspace(q: string, sessionId?: string, agentId?: s
 }
 
 /** A stale `expectedMtime` fails with an ApiError whose body carries `code: "conflict"`. */
-export async function writeWorkspaceText(path: string, content: string, expectedMtime: number | null, agentId?: string) {
+export async function writeWorkspaceText(
+  path: string,
+  content: string,
+  expectedMtime: number | null,
+  agentId?: string,
+  sessionId?: string,
+) {
   return http.request<{path: string; size: number; mtime: number}>('/api/workspace/write', {
-    body: {path, content, expected_mtime: expectedMtime, agent_id: agentId},
+    body: {path, content, expected_mtime: expectedMtime, agent_id: agentId, session: sessionId},
   });
 }
 

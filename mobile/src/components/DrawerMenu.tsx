@@ -29,10 +29,12 @@ import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
 import {useAgentVersion} from '../update/useAgentVersion';
 import {clockTime, shortTime} from '../utils/format';
-import {groupSessions} from '../utils/sessionGroups';
+import {groupSessions, type SessionGroup, type Space} from '../utils/sessionGroups';
 import {Icon} from './Icon';
+import {SpaceActions} from './SessionActions';
 import {ChoiceSheet} from './settings';
 import {SHEET_DISMISS_MS} from './Sheet';
+import {SpaceHeader} from './SpaceHeader';
 
 /** Pages the version sheet in the footer leads to. */
 type AboutKey = 'Version' | 'Logs' | 'MenuEditor';
@@ -51,6 +53,7 @@ export function DrawerMenu({
   currentSessionId,
   activeSection,
   onNewChat,
+  onNewChatIn,
   onOpenSession,
   onSessionActions,
   onNavigate,
@@ -66,6 +69,8 @@ export function DrawerMenu({
   /** The page shown beside a sidebar, marked in the menu; none in the drawer, which covers it. */
   activeSection?: string;
   onNewChat: () => void;
+  /** A new chat working in the given space; a null path is the default workspace. */
+  onNewChatIn: (space: Space) => void;
   onOpenSession: (session: SessionItem) => void;
   /** Long press on a conversation: pin, rename, delete. */
   onSessionActions: (session: SessionItem) => void;
@@ -134,6 +139,7 @@ export function DrawerMenu({
           currentSessionId={currentSessionId}
           onBack={nested ? () => onViewChange('menu') : undefined}
           onNewChat={onNewChat}
+          onNewChatIn={onNewChatIn}
           onOpenSession={onOpenSession}
           onSessionActions={onSessionActions}
           onViewAll={() => onNavigate('Sessions')}
@@ -216,6 +222,7 @@ function SessionList({
   currentSessionId,
   onBack,
   onNewChat,
+  onNewChatIn,
   onOpenSession,
   onSessionActions,
   onViewAll,
@@ -224,6 +231,7 @@ function SessionList({
   /** Leads back to the menu; absent when the list was opened on its own. */
   onBack?: () => void;
   onNewChat: () => void;
+  onNewChatIn: (space: Space) => void;
   onOpenSession: (session: SessionItem) => void;
   onSessionActions: (session: SessionItem) => void;
   onViewAll: () => void;
@@ -233,8 +241,16 @@ function SessionList({
   const sessions = useSessionStore(s => s.sessions);
   const total = useSessionStore(s => s.total);
   const failed = useSessionStore(s => !!s.error);
+  const groupMode = useSessionStore(s => s.groupMode);
+  const projectOrder = useSessionStore(s => s.projectOrder);
+  const collapsed = useSessionStore(s => s.collapsed);
+  const [actingSpace, setActingSpace] = useState<SessionGroup | null>(null);
   const shown = Math.min(sessions.length, RECENT_LIMIT);
-  const groups = useMemo(() => groupSessions(sessions.slice(0, RECENT_LIMIT)), [sessions]);
+  const groups = useMemo(
+    () => groupSessions(sessions.slice(0, RECENT_LIMIT), groupMode, projectOrder),
+    [sessions, groupMode, projectOrder],
+  );
+  const bySpace = groupMode === 'project';
   return (
     <>
       <View style={styles.listHead}>
@@ -263,22 +279,36 @@ function SessionList({
         </Pressable>
       </View>
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollBody} showsVerticalScrollIndicator={false}>
-        {groups.map((g, i) => (
-          <React.Fragment key={g.title}>
-            <Text style={[styles.section, i === 0 && styles.sectionFirst]}>{g.title}</Text>
-            {g.data.map(s => (
-              <Item
-                key={s.session_id}
-                icon={faMessage}
-                label={s.title || tr('menu_untitled_chat')}
-                meta={g.key === 'yesterday' ? clockTime(s.last_active) : shortTime(s.last_active)}
-                active={s.session_id === currentSessionId}
-                onPress={() => onOpenSession(s)}
-                onLongPress={() => onSessionActions(s)}
-              />
-            ))}
-          </React.Fragment>
-        ))}
+        {groups.map((g, i) => {
+          const folded = bySpace && collapsed.includes(g.key);
+          return (
+            <React.Fragment key={g.key}>
+              {bySpace ? (
+                <SpaceHeader
+                  group={g}
+                  collapsed={folded}
+                  onToggle={() => useSessionStore.getState().toggleCollapsed(g.key)}
+                  onLongPress={() => setActingSpace(g)}
+                  style={i === 0 ? styles.spaceFirst : styles.space}
+                />
+              ) : (
+                <Text style={[styles.section, i === 0 && styles.sectionFirst]}>{g.title}</Text>
+              )}
+              {!folded &&
+                g.data.map(s => (
+                  <Item
+                    key={s.session_id}
+                    icon={faMessage}
+                    label={s.title || tr('menu_untitled_chat')}
+                    meta={g.key === 'yesterday' ? clockTime(s.last_active) : shortTime(s.last_active)}
+                    active={s.session_id === currentSessionId}
+                    onPress={() => onOpenSession(s)}
+                    onLongPress={() => onSessionActions(s)}
+                  />
+                ))}
+            </React.Fragment>
+          );
+        })}
         {!groups.length && <Text style={styles.empty}>{tr(failed ? 'menu_chats_failed' : 'menu_no_chats')}</Text>}
         {total > shown && (
           <Pressable accessibilityRole="button" hitSlop={6} onPress={onViewAll} style={styles.more}>
@@ -286,6 +316,12 @@ function SessionList({
           </Pressable>
         )}
       </ScrollView>
+      <SpaceActions
+        group={actingSpace}
+        keys={groups.map(g => g.key)}
+        onClose={() => setActingSpace(null)}
+        onNewChat={onNewChatIn}
+      />
     </>
   );
 }
@@ -376,6 +412,8 @@ const useStyles = makeStyles(t => ({
     marginBottom: 6,
   },
   sectionFirst: {marginTop: 14},
+  space: {marginTop: 14, marginBottom: 2},
+  spaceFirst: {marginTop: 8, marginBottom: 2},
   item: {
     flexDirection: 'row',
     alignItems: 'center',
