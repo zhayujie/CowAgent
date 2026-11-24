@@ -46,6 +46,7 @@ import {TasksScreen} from '../screens/TasksScreen';
 import {VersionScreen} from '../screens/VersionScreen';
 import {WebPageScreen} from '../screens/WebPageScreen';
 import {WebSearchScreen} from '../screens/WebSearchScreen';
+import {WorkspaceScreen} from '../screens/WorkspaceScreen';
 import {chatToResume} from '../store/chatResume';
 import {useLayoutStore} from '../store/layoutStore';
 import {useServerStore} from '../store/serverStore';
@@ -159,6 +160,7 @@ export function RootNavigator() {
                 <Stack.Screen name="KnowledgeDoc" component={KnowledgeDocScreen} />
                 <Stack.Screen name="FilePreview" component={FilePreviewScreen} options={{gestureResponseDistance: EDGE_ONLY}} />
                 <Stack.Screen name="WebPage" component={WebPageScreen} options={{gestureResponseDistance: EDGE_ONLY}} />
+                <Stack.Screen name="Workspace" component={WorkspaceScreen} />
                 <Stack.Screen name="Tasks" component={TasksScreen} />
                 <Stack.Screen name="TaskEdit" component={TaskEditScreen} />
                 <Stack.Screen name="TaskRuns" component={TaskRunsScreen} />
