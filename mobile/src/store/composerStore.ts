@@ -24,6 +24,8 @@ interface ComposerState {
   add: (files: PickedFile[], sessionId: string, agentId: string | null) => number;
   /** A file already in the workspace, referenced in place instead of uploaded. */
   addRef: (path: string, name: string) => void;
+  /** Files of an edited message, already on the server, back in the tray. */
+  restore: (files: MessageAttachment[]) => void;
   remove: (id: string) => void;
   retry: (id: string, sessionId: string, agentId: string | null) => void;
   clear: () => void;
@@ -99,6 +101,19 @@ export const useComposerStore = create<ComposerState>((set, get) => {
         path,
       };
       set(s => ({items: [...s.items, ref]}));
+    },
+
+    restore: files => {
+      const room = Math.max(0, MAX_ATTACHMENTS - get().items.length);
+      const restored = files.slice(0, room).map(file => ({
+        id: `att-${Date.now()}-${++seq}`,
+        name: file.name,
+        kind: file.kind,
+        localUri: file.previewUri || '',
+        status: 'done' as const,
+        path: file.path,
+      }));
+      set(s => ({items: [...s.items, ...restored]}));
     },
 
     remove: id => {

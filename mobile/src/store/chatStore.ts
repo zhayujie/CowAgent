@@ -158,14 +158,14 @@ interface ChatState {
   addTranscribing: (sessionId: string) => string;
   removeMessage: (sessionId: string, id: string) => void;
   cancel: (sessionId: string) => Promise<void>;
-  /** Drops the stored turn behind a reply and asks the question again. */
+  /** Drops the turn behind a reply and everything after it, then asks the question again. */
   retry: (sessionId: string, replyId: string, agentId?: string | null) => Promise<MessageActionResult>;
-  /** Drops this message and everything after it, handing the text back for the composer. */
+  /** Drops this message and everything after it, handing it back for the composer. */
   editMessage: (
     sessionId: string,
     messageId: string,
     agentId?: string | null,
-  ) => Promise<{result: MessageActionResult; text?: string}>;
+  ) => Promise<{result: MessageActionResult; text?: string; attachments?: MessageAttachment[]}>;
 }
 
 /**
@@ -1026,7 +1026,9 @@ export const useChatStore = create<ChatState>((set, get) => {
     },
 
     retry: async (sessionId, replyId, agentId) => {
-      if (get().active[sessionId]) {
+      // Checked before deleting: a send refused afterwards would lose the turn.
+      const {active} = get();
+      if (active[sessionId] || Object.keys(active).length >= MAX_REPLYING) {
         return 'busy';
       }
       const list = get().messages[sessionId] ?? [];
@@ -1047,10 +1049,10 @@ export const useChatStore = create<ChatState>((set, get) => {
       if (userAt < 0 || user.seq === undefined) {
         return 'unavailable';
       }
-      await deleteMessages(sessionId, user.seq, {deleteUser: true}, agentParam(agentId));
-      // The question and every reply it drew go; later turns keep their place.
-      const nextUser = list.findIndex((m, i) => i > userAt && m.role === 'user');
-      const drop = new Set(list.slice(userAt, nextUser < 0 ? list.length : nextUser).map(m => m.id));
+      // Later turns go too: answered again, the question becomes the newest turn,
+      // and the stored conversation keeps the order the screen shows.
+      await deleteMessages(sessionId, user.seq, {deleteUser: true, cascade: true}, agentParam(agentId));
+      const drop = new Set(list.slice(userAt).map(m => m.id));
       set(s => ({
         messages: {
           ...s.messages,
@@ -1082,7 +1084,7 @@ export const useChatStore = create<ChatState>((set, get) => {
         },
       }));
       bumpEpoch(sessionId);
-      return {result: 'ok', text: message.content};
+      return {result: 'ok', text: message.content, attachments: message.attachments};
     },
   };
 });

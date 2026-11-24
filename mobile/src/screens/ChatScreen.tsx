@@ -705,7 +705,11 @@ export function ChatScreen({route, navigation}: Props) {
         .retry(sessionId, message.id, useAgentStore.getState().currentId)
         .then(result => {
           if (result === 'busy') {
-            showToast(tr('chat_busy_wait'));
+            showToast(
+              useChatStore.getState().active[sessionId]
+                ? tr('chat_busy_wait')
+                : trf('chat_too_many_replying', {n: MAX_REPLYING}),
+            );
           } else if (result !== 'ok') {
             showToast(tr('chat_action_unavailable'));
           }
@@ -714,7 +718,7 @@ export function ChatScreen({route, navigation}: Props) {
     },
     [sessionId],
   );
-  // A question's small button: it and every later turn go, and the text comes back to the box.
+  // A question's small button: it and every later turn go, and its text and files come back to the box.
   const editMessage = useCallback(
     (message: ChatMessage) => {
       useChatStore
@@ -727,6 +731,9 @@ export function ChatScreen({route, navigation}: Props) {
             showToast(tr('chat_action_unavailable'));
           } else {
             setDraft(res.text);
+            if (res.attachments?.length) {
+              useComposerStore.getState().restore(res.attachments);
+            }
             dock.current?.focus();
           }
         })
