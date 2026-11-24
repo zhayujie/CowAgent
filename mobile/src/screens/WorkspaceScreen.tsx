@@ -18,7 +18,7 @@ import {useProjectStore} from '../store/projectStore';
 import {describeConnectError} from '../store/serverStore';
 import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
-import {formatBytes, shortTime} from '../utils/format';
+import {formatBytes} from '../utils/format';
 
 type Props = StackScreenProps<RootStackParamList, 'Workspace'>;
 
@@ -124,9 +124,11 @@ export function WorkspaceScreen({navigation, route}: Props) {
               <Text style={styles.name} numberOfLines={1} ellipsizeMode="middle">
                 {item.name}
               </Text>
-              <Text style={styles.meta} numberOfLines={1}>
-                {[item.is_dir ? '' : formatBytes(item.size), shortTime(item.mtime)].filter(Boolean).join(' · ')}
-              </Text>
+              {!item.is_dir && (
+                <Text style={styles.meta} numberOfLines={1}>
+                  {formatBytes(item.size)}
+                </Text>
+              )}
             </View>
             {item.is_dir && <Icon icon={faChevronRight} size={10} color={t.t4} />}
           </Pressable>
