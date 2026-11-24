@@ -282,3 +282,25 @@ def test_normalization_always_outputs_valid_native_enum():
                 f"{provider}:{model} legacy={value!r} -> {result!r} "
                 f"not in allowed {allowed}"
             )
+
+
+def test_codex_catalog_default_wins_over_the_global_effort(tmp_path, monkeypatch):
+    import json
+
+    from models.codex import app_server
+
+    monkeypatch.setattr(app_server, "codex_home", lambda: tmp_path)
+    (tmp_path / app_server._REASONING_CACHE).write_text(json.dumps({
+        "gpt-5.5": {"values": ["low", "medium", "high", "xhigh"], "default": "medium"},
+    }))
+
+    cap = get_reasoning_capability("codex", "gpt-5.5")
+    assert _values(cap) == ["low", "medium", "high", "xhigh"]
+    assert resolve_reasoning_effort("codex", "gpt-5.5", {}, "high") == "medium"
+    assert resolve_reasoning_effort("codex", "gpt-5.5", {"codex:gpt-5.5": "xhigh"}, "high") == "xhigh"
+
+
+def test_gpt6_exposes_explicit_effort_values():
+    cap = get_reasoning_capability("openai", "gpt-6-sol")
+    assert cap["thinking_only"] is True
+    assert _values(cap) == ["low", "medium", "high", "xhigh", "max"]
