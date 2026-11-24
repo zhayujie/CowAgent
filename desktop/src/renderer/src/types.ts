@@ -897,6 +897,8 @@ export type ModelsAction =
   // server-side when omitted; anonymous is AnySearch-only (save with an empty
   // key to enable the anonymous tier).
   | { action: 'set_search_credential'; provider?: string; api_key?: string; url?: string; anonymous?: boolean }
+  // ChatGPT-subscription (Codex) device sign-in; every call returns the setup snapshot.
+  | { action: 'codex_status' | 'codex_login' | 'codex_cancel' | 'codex_refresh' | 'codex_logout' }
 
 // ============================================================
 // Channels

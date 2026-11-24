@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { Sparkles, KeyRound, Loader2, ArrowRight, ArrowLeft, ExternalLink } from 'lucide-react'
 import { t, getLang, setLang, type Lang } from '../i18n'
 import apiClient from '../api/client'
@@ -7,6 +7,13 @@ import { Field, Dropdown, TextInput, type DropdownOption } from '../pages/settin
 import { resolveModels, providerLabel } from '../pages/settings/modelsHelpers'
 import { useOnboardingStore } from '../store/onboardingStore'
 import { BasePresetChips, activeBasePreset, initialApiBase, orderedBasePresets } from './ApiBasePresets'
+import {
+  CODEX_PROVIDER_ID,
+  CodexPanel,
+  CodexPrimaryActions,
+  CodexSecondaryActions,
+  useCodexSetup,
+} from '../pages/settings/CodexLogin'
 
 interface OnboardingWizardProps {
   // Called after the wizard finishes so the host can refresh language/state.
@@ -62,13 +69,23 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onDone }) => {
     return ids.map((id) => ({ value: id, label: providerLabel(models, id) }))
   }, [models])
 
+  const isCodex = provider === CODEX_PROVIDER_ID
+  // Codex models come from the signed-in account, not the provider presets.
+  const [codexModels, setCodexModels] = useState<string[] | null>(null)
+
   const modelOptions: DropdownOption[] = useMemo(() => {
+    if (isCodex) return (codexModels || []).map((m) => ({ value: m, label: m }))
     return resolveModels(models, provider, models?.capabilities?.chat?.provider_models).map((o) => ({
       value: o.value,
       label: o.value,
       hint: o.hint,
     }))
-  }, [models, provider])
+  }, [models, provider, isCodex, codexModels])
+
+  const onCodexModels = useCallback((list: string[] | null) => {
+    setCodexModels(list)
+    if (list) setModel((cur) => (list.includes(cur) ? cur : list[0] || ''))
+  }, [])
 
   // The currently selected provider's api_base placeholder/default, if any.
   const providerMeta = models?.providers?.find((p) => p.id === provider)
@@ -79,6 +96,11 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onDone }) => {
   const handleProvider = (id: string) => {
     setProvider(id)
     setApiBase(initialApiBase(models?.providers?.find((p) => p.id === id)))
+    if (id === CODEX_PROVIDER_ID) {
+      setCodexModels(null)
+      setModel('')
+      return
+    }
     const first = resolveModels(models, id, models?.capabilities?.chat?.provider_models)[0]
     setModel(first?.value || '')
   }
@@ -92,7 +114,7 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onDone }) => {
   }
 
   // Step 1 (language) can always advance; step 2 needs a provider, key, model.
-  const canNext = step === 1 || (!!provider && !!apiKey.trim() && !!model)
+  const canNext = step === 1 || (!!provider && (isCodex ? !!codexModels : !!apiKey.trim()) && !!model)
 
   const goNext = async () => {
     setError('')
@@ -105,18 +127,22 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onDone }) => {
     // capability at it, then finish straight into the chat (no extra step).
     setSaving(true)
     try {
-      await apiClient.modelsAction({
-        action: 'set_provider',
-        provider_id: provider,
-        api_key: apiKey.trim(),
-        ...(apiBase.trim() ? { api_base: apiBase.trim() } : {}),
-      })
-      await apiClient.modelsAction({
+      // Codex has no key to store; signing in already set up its credentials.
+      if (!isCodex) {
+        await apiClient.modelsAction({
+          action: 'set_provider',
+          provider_id: provider,
+          api_key: apiKey.trim(),
+          ...(apiBase.trim() ? { api_base: apiBase.trim() } : {}),
+        })
+      }
+      const res = await apiClient.modelsAction({
         action: 'set_capability',
         capability: 'chat',
         provider_id: provider,
         model,
       })
+      if (res.status !== 'success') throw new Error(String(res.message || ''))
     } catch {
       setSaving(false)
       setError(t('onboarding_save_failed'))
@@ -202,7 +228,18 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onDone }) => {
                   onChange={handleProvider}
                 />
               </Field>
-              {provider && (
+              {isCodex && <OnboardingCodexLogin onModels={onCodexModels} />}
+              {isCodex && codexModels && (
+                <Field label={t('onboarding_model')}>
+                  <Dropdown
+                    value={model}
+                    options={modelOptions}
+                    placeholder={t('onboarding_select_model')}
+                    onChange={setModel}
+                  />
+                </Field>
+              )}
+              {provider && !isCodex && (
                 <>
                   <Field label={t('onboarding_apikey')}>
                     <TextInput
@@ -291,6 +328,31 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onDone }) => {
             </button>
           </div>
         </div>
+      </div>
+    </div>
+  )
+}
+
+// Inline ChatGPT sign-in for the Codex provider. Reports the account's model
+// list once signed in (null while signed out).
+const OnboardingCodexLogin: React.FC<{ onModels: (models: string[] | null) => void }> = ({ onModels }) => {
+  const setup = useCodexSetup({ configured: false })
+  const { signedIn, snap } = setup
+  const ready = signedIn && !!snap.models_ready
+  const list = ready ? (snap.models || []).join('\n') : ''
+  useEffect(() => {
+    onModels(list ? list.split('\n') : null)
+  }, [list, onModels])
+  useEffect(() => () => onModels(null), [onModels])
+
+  return (
+    <div className="space-y-3 rounded-card border border-default p-4">
+      <CodexPanel setup={setup} />
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <div className="mr-auto flex items-center gap-2">
+          <CodexSecondaryActions setup={setup} showLogout={false} />
+        </div>
+        <CodexPrimaryActions setup={setup} />
       </div>
     </div>
   )

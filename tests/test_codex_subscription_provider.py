@@ -48,11 +48,11 @@ for line in sys.stdin:
         assert params["config"]["include_permissions_instructions"] is False
         assert params["config"]["include_environment_context"] is False
         assert "CowAgent is the host" in params["developerInstructions"]
-        assert "Use CowAgent tools according to this session's permissions." in params["baseInstructions"]
         assert params["ephemeral"] and params["model"] == "codex-test"
         namespaces = params["dynamicTools"]
         if namespaces:
             assert namespaces[0]["name"] == "cowagent"
+            assert "Use CowAgent tools according to this session's permissions." in params["baseInstructions"]
         tools = namespaces[0]["tools"] if namespaces else []
         result = {"thread": {"id": "thread"}, "model": "codex-test"}
     elif method == "thread/inject_items":
@@ -193,6 +193,22 @@ def test_codex_exit_reports_stderr(monkeypatch, tmp_path):
     _fake_server(monkeypatch, tmp_path, "crash")
     result = _routed_bot(monkeypatch).call_with_tools([{"role": "user", "content": "Hi"}])
     assert result["error"] and "unsupported flag" in result["message"]
+
+
+def test_codex_reply_text_serves_session_titles(monkeypatch, tmp_path):
+    _fake_server(monkeypatch, tmp_path)
+    bot = _routed_bot(monkeypatch)
+    monkeypatch.setattr("bridge.bridge.Bridge", lambda: SimpleNamespace(get_bot=lambda kind: bot))
+    from agent.chat.session_service import generate_session_title
+
+    assert generate_session_title("What is the answer?") == "The answer is 42."
+
+
+def test_codex_reply_text_reports_failure(monkeypatch, tmp_path):
+    _fake_server(monkeypatch, tmp_path, "crash")
+    session = SimpleNamespace(messages=[{"role": "user", "content": "Hi"}])
+    result = _routed_bot(monkeypatch).reply_text(session)
+    assert result["completion_tokens"] == 0 and "unsupported flag" in result["content"]
 
 
 def test_codex_rejects_api_key_accounts(monkeypatch, tmp_path):

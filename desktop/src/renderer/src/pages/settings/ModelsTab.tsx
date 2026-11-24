@@ -38,6 +38,7 @@ import {
 import { normEntries, providerLabel, resolveVoices, CUSTOM_OPTION } from './modelsHelpers'
 import { product } from '@product'
 import { BasePresetChips, ManageKeyLink, activeBasePreset, initialApiBase, orderedBasePresets } from '../../components/ApiBasePresets'
+import { CODEX_PROVIDER_ID, CodexVendorModal } from './CodexLogin'
 
 // Whether the "add custom provider" entry is available. Defaults to true.
 const allowCustomProviders = product.models?.allowCustomProviders !== false
@@ -464,7 +465,11 @@ const VendorModal: React.FC<{
   // the single "custom vendor" option below, so an empty custom placeholder must
   // not show up here as a second, duplicate custom entry.
   const builtins = useMemo(() => data.providers.filter((p) => !p.is_custom), [data.providers])
-  const firstUnconfigured = builtins.find((p) => !p.configured) || builtins[0]
+  // Codex signs in with an account rather than a key, so the add flow never opens on it.
+  const firstUnconfigured =
+    builtins.find((p) => !p.configured && p.id !== CODEX_PROVIDER_ID) ||
+    builtins.find((p) => !p.configured) ||
+    builtins[0]
   const [pickId, setPickId] = useState('')
 
   const effective: ModelProvider | undefined = provider || builtins.find((p) => p.id === pickId)
@@ -557,6 +562,24 @@ const VendorModal: React.FC<{
     }
   }
 
+  const picker = addMode && (
+    <Field label={t('models_provider')}>
+      <Dropdown value={pickId} options={pickOptions} onChange={onPick} />
+    </Field>
+  )
+
+  if (effective?.id === CODEX_PROVIDER_ID) {
+    return (
+      <CodexVendorModal
+        title={addMode ? t('models_add_vendor') : localizedLabel(effective.label)}
+        header={picker}
+        configured={!!effective.configured}
+        onClose={onClose}
+        onSaved={onSaved}
+      />
+    )
+  }
+
   return (
     <Modal
       open={open}
@@ -579,11 +602,7 @@ const VendorModal: React.FC<{
         </>
       }
     >
-      {addMode && (
-        <Field label={t('models_provider')}>
-          <Dropdown value={pickId} options={pickOptions} onChange={onPick} />
-        </Field>
-      )}
+      {picker}
       <Field
         label="API Key"
         labelAction={
