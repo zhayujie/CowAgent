@@ -39,6 +39,21 @@ export function systemLang(): Lang {
 
 let current: Lang = systemLang();
 
+/**
+ * UIKit's own text (the copy / paste menu, pickers) follows the app's language list, not
+ * ours, and only reads it at launch: the choice shows there from the next start on.
+ */
+function syncSystemLang(lang: Lang) {
+  if (Platform.OS !== 'ios') {
+    return;
+  }
+  try {
+    Settings.set({AppleLanguages: [lang === 'zh' ? 'zh-Hans' : 'en']});
+  } catch {
+    // Without the native settings module the system text simply keeps its language.
+  }
+}
+
 interface LangState {
   hydrated: boolean;
   lang: Lang;
@@ -54,6 +69,7 @@ export const useLangStore = create<LangState>(set => ({
     const saved = await readJSON<Lang | null>(LANG_KEY, null);
     if (saved === 'zh' || saved === 'en') {
       current = saved;
+      syncSystemLang(saved);
     }
     set({hydrated: true, lang: current});
   },
@@ -61,6 +77,7 @@ export const useLangStore = create<LangState>(set => ({
     current = lang;
     set({lang});
     writeJSON(LANG_KEY, lang).catch(() => undefined);
+    syncSystemLang(lang);
   },
 }));
 

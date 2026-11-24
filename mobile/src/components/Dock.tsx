@@ -71,7 +71,12 @@ type Suggestion =
   | {kind: 'agent'; key: string; agent: AgentBadge}
   | {kind: 'file'; key: string; hit: WorkspaceHit};
 
-export const Dock = forwardRef<TextInput | null, Props>(function DockInner(
+export interface DockHandle {
+  /** Leaves voice mode first, since text can only be typed or sent from the keyboard mode. */
+  focus: () => void;
+}
+
+export const Dock = forwardRef<DockHandle, Props>(function DockInner(
   {
     text,
     onChangeText,
@@ -99,7 +104,6 @@ export const Dock = forwardRef<TextInput | null, Props>(function DockInner(
   const t = useTheme();
   const styles = useStyles();
   const input = useRef<TextInput>(null);
-  useImperativeHandle(ref, () => input.current as TextInput);
   const [height, setHeight] = useState(MIN_HEIGHT);
   const [voiceMode, setVoiceMode] = useState(false);
   const [cursor, setCursor] = useState(0);
@@ -189,10 +193,19 @@ export const Dock = forwardRef<TextInput | null, Props>(function DockInner(
     setHeight(MIN_HEIGHT);
   };
 
+  const toKeyboard = () => {
+    setVoiceMode(false);
+    // The text box mounts on the next render.
+    setTimeout(() => input.current?.focus(), 60);
+  };
+
+  useImperativeHandle(ref, () => ({
+    focus: () => (input.current ? input.current.focus() : toKeyboard()),
+  }));
+
   const toggleVoice = () => {
     if (voiceMode) {
-      setVoiceMode(false);
-      setTimeout(() => input.current?.focus(), 60);
+      toKeyboard();
     } else {
       Keyboard.dismiss();
       setVoiceMode(true);
