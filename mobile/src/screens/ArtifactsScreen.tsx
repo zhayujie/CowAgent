@@ -3,6 +3,7 @@ import {
   faArrowUpRightFromSquare,
   faChevronRight,
   faDownload,
+  faFolderTree,
   faLocationCrosshairs,
   faMagnifyingGlass,
   faShareNodes,
@@ -34,7 +35,9 @@ import {downloadFile, openInBrowser, shareFile} from '../files/openFile';
 import {tr, trf} from '../i18n';
 import type {RootStackParamList} from '../navigation/types';
 import type {Artifact} from '../protocol/events';
-import {useAgentStore} from '../store/agentStore';
+import {agentParam, useAgentStore} from '../store/agentStore';
+import {openChatSession} from '../store/chatResume';
+import {useServerStore} from '../store/serverStore';
 import {usePaneWidth} from '../theme/layout';
 import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
@@ -222,12 +225,25 @@ export function ArtifactsScreen({navigation, route}: Props) {
           onBack={navigation.goBack}
           right={
             focus ? undefined : (
-              <IconButton
-                icon={faMagnifyingGlass}
-                label={tr('common_search')}
-                onPress={() => setSearching(true)}
-                size={14}
-              />
+              <View style={styles.headerActions}>
+                <IconButton
+                  icon={faFolderTree}
+                  label={tr('composer_ws_title')}
+                  onPress={() =>
+                    navigation.navigate('Workspace', {
+                      sessionId: openChatSession(useServerStore.getState().activeId),
+                      agentId: agentParam(useAgentStore.getState().currentId),
+                    })
+                  }
+                  size={15}
+                />
+                <IconButton
+                  icon={faMagnifyingGlass}
+                  label={tr('common_search')}
+                  onPress={() => setSearching(true)}
+                  size={14}
+                />
+              </View>
             )
           }
         />
@@ -498,6 +514,7 @@ function SheetAction({
 
 const useStyles = makeStyles(t => ({
   root: {flex: 1, backgroundColor: t.bg0},
+  headerActions: {flexDirection: 'row', alignItems: 'center', gap: 6},
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',

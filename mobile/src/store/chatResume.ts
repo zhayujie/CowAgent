@@ -36,6 +36,11 @@ export function trackOpenChat(chat: OpenChat): void {
   open = chat;
 }
 
+/** The last chat shown on `serverId`, whose opened folder pages outside it should follow. */
+export function openChatSession(serverId: string | null): string | undefined {
+  return open && open.serverId === serverId && !open.isNew ? open.sessionId : undefined;
+}
+
 AppState.addEventListener('change', state => {
   if (state === 'background' && open) {
     writeJSON(KEY, {...open, at: Date.now()}).catch(() => undefined);

@@ -38,7 +38,7 @@ export function WorkspaceScreen({navigation, route}: Props) {
   const t = useTheme();
   const styles = useStyles();
   const insets = useSafeAreaInsets();
-  const project = useProjectStore(s => s.bySession[sessionId]?.current?.name);
+  const project = useProjectStore(s => (sessionId ? s.bySession[sessionId]?.current?.name : undefined));
   const space = project || tr('composer_ws_default');
   const [listing, setListing] = useState<WorkspaceListing | null>(null);
   const [error, setError] = useState<string | null>(null);

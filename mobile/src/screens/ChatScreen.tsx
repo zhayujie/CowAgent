@@ -1,5 +1,5 @@
 import {faComments} from '@fortawesome/free-regular-svg-icons';
-import {faArrowDown, faChevronDown, faFolderTree, faPlus} from '@fortawesome/free-solid-svg-icons';
+import {faArrowDown, faChevronDown, faPlus} from '@fortawesome/free-solid-svg-icons';
 import {useFocusEffect} from '@react-navigation/native';
 import type {StackScreenProps} from '@react-navigation/stack';
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
@@ -954,16 +954,6 @@ export function ChatScreen({route, navigation}: Props) {
             <Icon icon={faChevronDown} size={8} color={t.t3} />
           </Pressable>
           <View style={styles.topRight}>
-            {remote && (
-              <IconButton
-                icon={faFolderTree}
-                label={tr('composer_ws_title')}
-                onPress={() =>
-                  navigation.navigate('Workspace', {sessionId, agentId: agentParam(useAgentStore.getState().currentId)})
-                }
-                size={16}
-              />
-            )}
             {!empty && (
               <IconButton icon={faPlus} label={tr('session_new')} onPress={startNewChat} size={18} />
             )}
@@ -1052,7 +1042,7 @@ export function ChatScreen({route, navigation}: Props) {
                 permission={settings?.permission.mode}
                 onOpenPermission={() => openSettingsSheet(setPermissionOpen)}
                 project={remote ? projects?.current?.name ?? null : null}
-                onOpenWorkspace={projects ? openWorkspace : undefined}
+                onOpenWorkspace={remote && projects ? openWorkspace : undefined}
                 roster={roster}
                 defaultAgentId={defaultAgentId}
                 searchFiles={searchFiles}

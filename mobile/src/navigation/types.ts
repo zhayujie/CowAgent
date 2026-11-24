@@ -22,7 +22,8 @@ export type RootStackParamList = {
   /** Any http(s) page; `title` shows until the page names itself. */
   WebPage: {url: string; title?: string};
   /** One folder of where the chat works; each level deeper is another page, so going back goes up. */
-  Workspace: {sessionId: string; agentId?: string; path?: string; name?: string};
+  /** Without `sessionId` it shows the Agent's own workspace. */
+  Workspace: {sessionId?: string; agentId?: string; path?: string; name?: string};
   Tasks: undefined;
   /** Without `task` the form creates a new one. */
   TaskEdit: {task?: ScheduledTask} | undefined;

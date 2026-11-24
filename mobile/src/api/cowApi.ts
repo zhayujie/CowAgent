@@ -269,7 +269,7 @@ export async function browseFolders(path = '') {
 }
 
 /** One folder level, rooted where the session works; an empty path is that root. */
-export async function getWorkspaceTree(path: string, sessionId: string, agentId?: string) {
+export async function getWorkspaceTree(path: string, sessionId?: string, agentId?: string) {
   return http.request<WorkspaceListing>(
     `/api/workspace/tree?${query({path, session: sessionId, agent_id: agentId})}`,
   );
