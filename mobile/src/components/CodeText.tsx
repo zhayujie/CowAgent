@@ -4,12 +4,22 @@ import {useTheme} from '../theme/theme';
 import {CODE_THEMES, highlightCode} from '../utils/highlight';
 
 /** Source text in the web console's GitHub colours; unknown languages are guessed when short. */
-function CodeTextImpl({code, lang, style}: {code: string; lang?: string; style?: TextStyle}) {
+function CodeTextImpl({
+  code,
+  lang,
+  style,
+  selectable = true,
+}: {
+  code: string;
+  lang?: string;
+  style?: TextStyle;
+  selectable?: boolean;
+}) {
   const t = useTheme();
   const tokens = useMemo(() => highlightCode(code, lang), [code, lang]);
   const palette = t.isDark ? CODE_THEMES.dark : CODE_THEMES.light;
   return (
-    <Text selectable style={[style, {color: palette.base}]}>
+    <Text selectable={selectable} style={[style, {color: palette.base}]}>
       {tokens.map((tok, i) => {
         const color = tok.scope ? palette.scopes[tok.scope] : undefined;
         return color ? (
