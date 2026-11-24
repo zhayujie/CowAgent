@@ -171,6 +171,14 @@ def test_runs_a_script_with_args_and_forgets_its_modules(dirs):
     assert "helper_mod_for_test" not in sys.modules
 
 
+def test_a_script_sees_the_workspace_as_it_would_under_a_shell(dirs, monkeypatch):
+    monkeypatch.delenv("AGENT_WORKSPACE", raising=False)
+    workspace = dirs[0]
+    result = _tool(workspace).execute({"code": "import os\nos.environ['AGENT_WORKSPACE']"})
+    assert result.result == repr(str(workspace))
+    assert "AGENT_WORKSPACE" not in os.environ
+
+
 def test_input_has_no_one_to_answer(dirs):
     result = _tool(dirs[0]).execute({"code": "input('name? ')"})
     assert "EOFError" in result.result

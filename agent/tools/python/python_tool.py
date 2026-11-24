@@ -16,6 +16,7 @@ from typing import Any, Dict, Optional
 
 from agent.tools.base_tool import BaseTool, ToolResult
 from agent.tools.python import guard
+from agent.tools.utils.script_env import script_env
 from agent.tools.utils.truncate import truncate_tail
 from common.log import logger
 
@@ -139,6 +140,8 @@ class Python(BaseTool):
         "(requests or urllib). Printed output is returned, plus the value of a final expression.\n\n"
         "AVAILABLE: the standard library plus requests, PyYAML, openpyxl, pypdf, regex and chardet. "
         "Nothing can be installed and no programs can be started (subprocess, os.system).\n"
+        "SKILL SCRIPTS: a skill command written for a shell, like `python <script> '<json>'`, runs here "
+        "as path=<script> with args=['<json>'].\n"
         "PATHS: the variable WORKSPACE holds the workspace path. The current directory is not the "
         "workspace, so build paths from WORKSPACE or use absolute paths. Writes are confined by the "
         "session's permission mode.\n"
@@ -268,6 +271,10 @@ class Python(BaseTool):
         sys.argv = [filename if script_dir else "-c"] + args
         if script_dir:
             sys.path.insert(0, script_dir)
+        # Skill scripts read these from the environment, as they would under a shell.
+        env = script_env(cwd)
+        saved_env = {name: os.environ.get(name) for name in env}
+        os.environ.update(env)
 
         thread = self._start(target)
         baseline = _memory_mb()
@@ -291,6 +298,11 @@ class Python(BaseTool):
 
         stuck = thread.is_alive()
         sys.argv, sys.path[:] = saved_argv, saved_path
+        for name, value in saved_env.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
         if script_dir and not stuck:
             self._forget_modules(saved_modules, script_dir)
         return self._result(run, outcome, stop, stuck, timeout)

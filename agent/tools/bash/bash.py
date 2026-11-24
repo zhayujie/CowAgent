@@ -15,6 +15,7 @@ from typing import Dict, Any
 from agent.tools.base_tool import BaseTool, ToolResult
 from agent.tools.bash import background, exit_codes
 from agent.tools.bash.decode import decode_output
+from agent.tools.utils.script_env import script_env
 from agent.tools.utils.truncate import truncate_tail, format_size, DEFAULT_MAX_LINES, DEFAULT_MAX_BYTES
 from common.log import logger
 from common.utils import expand_path
@@ -262,29 +263,7 @@ SAFETY:
             for _name in ("CLOUD_DEPLOYMENT_ID", "CLOUD_CLIENT_ID"):
                 env.pop(_name, None)
 
-            # Anchor artifact outputs to the workspace/project dir regardless of
-            # any `cd` inside the command, so tools (e.g. image-generation) can
-            # resolve a stable output dir instead of relying on the live cwd.
-            if self.cwd:
-                env["AGENT_WORKSPACE"] = self.cwd
-
-            # Pass the current run/source identity into child processes
-            try:
-                from common import utils as _cow_utils
-                _attr = {}
-                _cow_utils.apply_client_source(_attr)
-                _header_to_env = {
-                    "X-Agent-Run-Id": "COW_AGENT_RUN_ID",
-                    "X-Client-Source": "COW_CLIENT_SOURCE",
-                    "X-Client-OS": "COW_CLIENT_OS",
-                    "X-Client-Version": "COW_CLIENT_VERSION",
-                    "X-Deployment-Id": "COW_DEPLOYMENT_ID",
-                }
-                for _h, _e in _header_to_env.items():
-                    if _attr.get(_h):
-                        env[_e] = _attr[_h]
-            except Exception:
-                pass
+            env.update(script_env(self.cwd))
 
             # Load environment variables from ~/.cow/.env if it exists
             env_file = expand_path("~/.cow/.env")
