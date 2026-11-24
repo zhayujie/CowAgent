@@ -113,7 +113,13 @@ class LinkAIBot(Bot, OpenAICompatibleBot):
         for prefix, module, class_name in cls._VISION_DELEGATES:
             if name.startswith(prefix):
                 import importlib
-                vendor = getattr(importlib.import_module(module), class_name)
+                try:
+                    vendor = getattr(importlib.import_module(module), class_name)
+                except Exception as e:
+                    # A vendor module whose SDK is missing must not break the
+                    # check; the caller's name heuristic still applies.
+                    logger.debug(f"[LINKAI] vision rule of {class_name} unavailable: {e}")
+                    return None
                 return vendor.model_supports_vision(model_name)
         return None
 

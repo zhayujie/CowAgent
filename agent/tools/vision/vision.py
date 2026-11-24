@@ -610,13 +610,18 @@ class Vision(BaseTool):
                 return bool(verdict)
         if hasattr(bot, "supports_vision"):
             return bool(getattr(bot, "supports_vision"))
-        main_model = self._current_main_model().lower()
+        return self.model_name_suggests_vision(self._current_main_model())
+
+    @classmethod
+    def model_name_suggests_vision(cls, model_name: str) -> bool:
+        """Name-based guess for bots without a per-model vision rule."""
+        main_model = (model_name or "").lower()
         if not main_model:
             return False
         # Gateways namespace upstream models ("cn:glm-5v", "openai/gpt-4o").
         # The bot still sends the full name; only the match uses the tail.
         for name in {main_model, re.split(r"[:/]", main_model)[-1]}:
-            if name.startswith(_OPENAI_MODEL_PREFIXES) or self._infer_provider_from_model(name):
+            if name.startswith(_OPENAI_MODEL_PREFIXES) or cls._infer_provider_from_model(name):
                 return True
         return False
 

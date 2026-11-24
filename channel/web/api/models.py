@@ -1157,6 +1157,19 @@ class ModelsHandler:
         ("mimo",      "mimo_api_key",      const.MIMO_V2_6_PRO),
     ]
 
+    @staticmethod
+    def _linkai_model_sees_images(model: str) -> bool:
+        """Same verdict the vision tool reaches for a main model served by LinkAI."""
+        try:
+            from models.linkai.link_ai_bot import LinkAIBot
+            verdict = LinkAIBot.model_supports_vision(model)
+            if verdict is not None:
+                return bool(verdict)
+            from agent.tools.vision.vision import Vision
+            return Vision.model_name_suggests_vision(model)
+        except Exception:
+            return False
+
     @classmethod
     def _predict_vision_auto(cls, local_config: dict) -> dict:
         """Predict which provider vision.py will actually dispatch to when
@@ -1192,8 +1205,11 @@ class ModelsHandler:
             fallback = allowed[0] if allowed else model_default
             return {"provider": pid, "model": fallback}
 
-        # 1. use_linkai → LinkAI is tried first with its default vision model.
+        # 1. use_linkai → a main model that sees images gets them directly;
+        #    otherwise LinkAI's default vision model reads them.
         if use_linkai_flag and linkai_configured:
+            if main_model and cls._linkai_model_sees_images(main_model):
+                return {"provider": "linkai", "model": main_model}
             return {"provider": "linkai", "model": cls._VISION_PROVIDER_MODELS["linkai"][0]}
 
         # 2. Main bot — only when it natively supports vision. We approximate
