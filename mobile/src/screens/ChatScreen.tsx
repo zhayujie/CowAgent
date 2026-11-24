@@ -1,5 +1,5 @@
 import {faComments} from '@fortawesome/free-regular-svg-icons';
-import {faArrowDown, faChevronDown, faPlus} from '@fortawesome/free-solid-svg-icons';
+import {faArrowDown, faChevronDown, faFolderTree, faPlus} from '@fortawesome/free-solid-svg-icons';
 import {useFocusEffect} from '@react-navigation/native';
 import type {StackScreenProps} from '@react-navigation/stack';
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
@@ -47,9 +47,11 @@ import {TeamChatSheet} from '../components/TeamChatSheet';
 import {showToast, ToastHost} from '../components/Toast';
 import {Burger, IconButton} from '../components/ui';
 import {VoiceOverlay} from '../components/VoiceInput';
+import {WorkspaceSheet} from '../components/WorkspaceSheet';
 import type {ChatFile} from '../files/chatFile';
 import {openFile} from '../files/openFile';
 import {tr, trf} from '../i18n';
+import {LOCAL_SERVER_ID} from '../kernel/localKernel';
 import {canTakePhoto, pickDocuments, pickPhotos, takePhoto} from '../media/picker';
 import type {Recording} from '../media/types';
 import {linkAsPage} from '../navigation/menuViews';
@@ -65,6 +67,7 @@ import {useLayoutStore} from '../store/layoutStore';
 import {useLinkStore} from '../store/linkStore';
 import {useMenuStore} from '../store/menuStore';
 import {useOverviewStore} from '../store/overviewStore';
+import {useProjectStore} from '../store/projectStore';
 import {useSessionSettingsStore} from '../store/sessionSettingsStore';
 import {useServerStore} from '../store/serverStore';
 import {useSessionStore} from '../store/sessionStore';
@@ -112,6 +115,9 @@ export function ChatScreen({route, navigation}: Props) {
   const team = settings?.team;
   const teamSize = team?.members.length ?? 0;
   const serverId = useServerStore(s => s.activeId);
+  // The kernel on this phone has no folders of a computer to work in, only its default workspace.
+  const remote = !!serverId && serverId !== LOCAL_SERVER_ID;
+  const projects = useProjectStore(s => s.bySession[sessionId]);
   const [draft, setDraft] = useState(() => {
     const resumed = chatToResume(useServerStore.getState().activeId);
     return resumed?.sessionId === sessionId ? resumed.draft : '';
@@ -135,6 +141,8 @@ export function ChatScreen({route, navigation}: Props) {
   const [attachOpen, setAttachOpen] = useState(false);
   const [modelOpen, setModelOpen] = useState(false);
   const [permissionOpen, setPermissionOpen] = useState(false);
+  const [workspaceOpen, setWorkspaceOpen] = useState(false);
+  const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [optimizing, setOptimizing] = useState(false);
   const [sessionOpen, setSessionOpen] = useState(false);
   const [contextOnly, setContextOnly] = useState(false);
@@ -193,6 +201,7 @@ export function ChatScreen({route, navigation}: Props) {
     useSessionStore.getState().refresh();
     useOverviewStore.getState().load().catch(() => undefined);
     getModels().then(state => setModelMissing(!chatModelReady(state)), () => undefined);
+    useProjectStore.getState().load(sessionId, useAgentStore.getState().currentId).catch(() => undefined);
     if (!isNew && !useChatStore.getState().messages[sessionId]?.length) {
       useChatStore.getState().loadHistory(sessionId, useAgentStore.getState().currentId).catch(() => undefined);
     }
@@ -218,6 +227,18 @@ export function ChatScreen({route, navigation}: Props) {
       loadSettings().catch(() => undefined);
     }
   }, [loadSettings, currentAgentId]);
+
+  const loadProjects = useCallback(
+    () => useProjectStore.getState().load(sessionId, useAgentStore.getState().currentId),
+    [sessionId],
+  );
+
+  // Until the server answers, or if it fails, the composer shows no folder button.
+  useEffect(() => {
+    if (currentAgentId) {
+      loadProjects().catch(() => undefined);
+    }
+  }, [loadProjects, currentAgentId]);
 
   // Back from the model settings, the composer shows the model the chat now runs on.
   useFocusEffect(
@@ -596,6 +617,8 @@ export function ChatScreen({route, navigation}: Props) {
     setAttachOpen(false);
     setModelOpen(false);
     setPermissionOpen(false);
+    setWorkspaceOpen(false);
+    setNewProjectOpen(false);
     setAgentSheetOpen(false);
     setServerSheetOpen(false);
     setTeamSheetOpen(false);
@@ -671,6 +694,41 @@ export function ChatScreen({route, navigation}: Props) {
         .getState()
         .setPermission(sessionId, useAgentStore.getState().currentId, mode)
         .catch(e => showToast(trf('composer_perm_switch_failed', {error: errorText(e)})));
+    },
+    [sessionId],
+  );
+
+  // Recent projects may have been opened from another device since they were read.
+  const openWorkspace = useCallback(() => {
+    setWorkspaceOpen(true);
+    loadProjects().catch(() => undefined);
+  }, [loadProjects]);
+
+  const selectWorkspace = useCallback(
+    (projectDir: string | null) => {
+      setWorkspaceOpen(false);
+      useProjectStore
+        .getState()
+        .select(sessionId, useAgentStore.getState().currentId, projectDir)
+        .catch(e => showToast(trf('composer_ws_switch_failed', {error: errorText(e)})));
+    },
+    [sessionId],
+  );
+
+  const openNewProject = useCallback(() => {
+    setWorkspaceOpen(false);
+    setTimeout(() => setNewProjectOpen(true), SHEET_DISMISS_MS);
+  }, []);
+
+  const createWorkspace = useCallback(
+    async (name: string) => {
+      if (!name) {
+        throw new Error(tr('composer_ws_name_required'));
+      }
+      if (/[/\\]/.test(name)) {
+        throw new Error(tr('composer_ws_name_no_slash'));
+      }
+      await useProjectStore.getState().create(sessionId, useAgentStore.getState().currentId, name);
     },
     [sessionId],
   );
@@ -896,6 +954,16 @@ export function ChatScreen({route, navigation}: Props) {
             <Icon icon={faChevronDown} size={8} color={t.t3} />
           </Pressable>
           <View style={styles.topRight}>
+            {remote && (
+              <IconButton
+                icon={faFolderTree}
+                label={tr('composer_ws_title')}
+                onPress={() =>
+                  navigation.navigate('Workspace', {sessionId, agentId: agentParam(useAgentStore.getState().currentId)})
+                }
+                size={16}
+              />
+            )}
             {!empty && (
               <IconButton icon={faPlus} label={tr('session_new')} onPress={startNewChat} size={18} />
             )}
@@ -983,6 +1051,8 @@ export function ChatScreen({route, navigation}: Props) {
                 onOpenModel={() => openSettingsSheet(setModelOpen)}
                 permission={settings?.permission.mode}
                 onOpenPermission={() => openSettingsSheet(setPermissionOpen)}
+                project={remote ? projects?.current?.name ?? null : null}
+                onOpenWorkspace={projects ? openWorkspace : undefined}
                 roster={roster}
                 defaultAgentId={defaultAgentId}
                 searchFiles={searchFiles}
@@ -1062,6 +1132,25 @@ export function ChatScreen({route, navigation}: Props) {
           onClose={() => setPermissionOpen(false)}
           settings={settings}
           onSelect={selectPermission}
+        />
+        <WorkspaceSheet
+          visible={workspaceOpen}
+          onClose={() => setWorkspaceOpen(false)}
+          state={projects}
+          withProjects={remote}
+          onSelect={selectWorkspace}
+          onNew={openNewProject}
+        />
+        <FieldSheet
+          visible={newProjectOpen}
+          title={tr('composer_ws_new_title')}
+          placeholder={tr('composer_ws_new_placeholder')}
+          hint={projects ? trf('composer_ws_new_hint', {root: projects.projects_root}) : undefined}
+          describe={v => (/[/\\]/.test(v) ? {text: tr('composer_ws_name_no_slash'), tone: 'danger'} : null)}
+          allowEmpty={false}
+          submitLabel={tr('composer_ws_create')}
+          onSubmit={createWorkspace}
+          onClose={() => setNewProjectOpen(false)}
         />
         <SessionSheet
           visible={sessionOpen}
