@@ -256,6 +256,8 @@ function buildStyles(t: Palette): MarkedStyles {
       backgroundColor: t.inlineCodeBg,
     },
     code: {
+      // The title bar and the code each pad themselves; the library's own padding would inset both.
+      padding: 0,
       marginVertical: 8,
       borderRadius: 12,
       backgroundColor: t.codeBg,
