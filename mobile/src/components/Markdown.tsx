@@ -1,5 +1,14 @@
 import {faCopy} from '@fortawesome/free-regular-svg-icons';
-import React, {Fragment, memo, useEffect, useMemo, useState, type ReactNode} from 'react';
+import React, {
+  cloneElement,
+  Fragment,
+  isValidElement,
+  memo,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react';
 import {
   Image,
   Platform,
@@ -9,6 +18,7 @@ import {
   Text,
   View,
   type ImageStyle,
+  type TextProps,
   type TextStyle,
   type ViewStyle,
 } from 'react-native';
@@ -49,6 +59,17 @@ function monoWidth(text: string, fontSize: number): number {
   return width;
 }
 
+/**
+ * Tables scroll sideways, so a drag that starts as a text selection in a cell is taken over by
+ * the scroll and the system magnifier never hears the touch end, staying on screen. The copy
+ * button under the reply still copies the table.
+ */
+function unselectable(nodes: ReactNode[]): ReactNode[] {
+  return nodes.map(node =>
+    isValidElement<TextProps>(node) && node.type === Text ? cloneElement(node, {selectable: false}) : node,
+  );
+}
+
 // The stock renderer sizes every column at ~43% of the window width, which hides
 // most columns off-screen; fit columns to the message column and scroll only when needed.
 class ChatRenderer extends Renderer {
@@ -56,8 +77,9 @@ class ChatRenderer extends Renderer {
     private contentWidth: number,
     private t: Palette,
     private onLink?: (href: string) => boolean,
+    private canSelect = true,
   ) {
-    super();
+    super({selectable: canSelect});
   }
 
   private follow(href: string) {
@@ -73,7 +95,7 @@ class ChatRenderer extends Renderer {
     }
     const {t} = this;
     return (
-      <Text key={this.getKey()} selectable style={textStyle}>
+      <Text key={this.getKey()} selectable={this.canSelect} style={textStyle}>
         {parts.map((p, i) =>
           typeof p === 'string' ? (
             p
@@ -94,7 +116,14 @@ class ChatRenderer extends Renderer {
 
   code(text: string, language?: string, containerStyle?: ViewStyle, textStyle?: TextStyle): ReactNode {
     return (
-      <CodeBlock key={this.getKey()} code={text} language={language} boxStyle={containerStyle} textStyle={textStyle} />
+      <CodeBlock
+        key={this.getKey()}
+        code={text}
+        language={language}
+        boxStyle={containerStyle}
+        textStyle={textStyle}
+        selectable={this.canSelect}
+      />
     );
   }
 
@@ -115,7 +144,7 @@ class ChatRenderer extends Renderer {
       }
       // A box cannot wrap, so code longer than a line keeps only its typeface and colour.
       return (
-        <Text key={this.getKey()} selectable style={glyphs}>
+        <Text key={this.getKey()} selectable={this.canSelect} style={glyphs}>
           {text}
         </Text>
       );
@@ -123,7 +152,7 @@ class ChatRenderer extends Renderer {
     return (
       <Text
         key={this.getKey()}
-        selectable
+        selectable={this.canSelect}
         accessibilityRole="link"
         accessibilityLabel={trf('file_open_named', {path})}
         onPress={() => openFileRef(path)}
@@ -137,7 +166,7 @@ class ChatRenderer extends Renderer {
     return (
       <Text
         key={this.getKey()}
-        selectable
+        selectable={this.canSelect}
         accessibilityRole="link"
         onPress={() => this.follow(href)}
         style={linkStyle}>
@@ -186,7 +215,7 @@ class ChatRenderer extends Renderer {
               {width: colWidth},
               i > 0 && [styles.colDivider, {borderLeftColor: t.line1}],
             ]}>
-            {cell}
+            {unselectable(cell)}
           </View>
         ))}
       </View>
@@ -231,7 +260,7 @@ function buildStyles(t: Palette): MarkedStyles {
       borderRadius: 12,
       backgroundColor: t.codeBg,
       borderWidth: 1,
-      borderColor: t.line1,
+      borderColor: t.codeLine,
     },
     codeText: {fontFamily: MONO, fontSize: 12.5, lineHeight: 19, color: t.t1},
     blockquote: {
@@ -296,6 +325,7 @@ function MarkdownImpl({
   compact,
   inset = COLUMN_INSET,
   onLink,
+  selectable = true,
 }: {
   value: string;
   compact?: boolean;
@@ -303,6 +333,8 @@ function MarkdownImpl({
   inset?: number;
   /** Gets first say on a tapped link; returning true keeps it from opening externally. */
   onLink?: (href: string) => boolean;
+  /** Off in the chat list, which is inverted: selecting there scrolls it the wrong way. */
+  selectable?: boolean;
 }) {
   const t = useTheme();
   const contentWidth = usePaneWidth() - inset;
@@ -314,8 +346,11 @@ function MarkdownImpl({
   }
   // Element keys come from a counter that never resets, so a renderer reused
   // across streamed updates would give every element a new key and remount it.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const renderer = useMemo(() => new ChatRenderer(contentWidth, t, onLink), [contentWidth, t, value, onLink]);
+  const renderer = useMemo(
+    () => new ChatRenderer(contentWidth, t, onLink, selectable),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [contentWidth, t, value, onLink, selectable],
+  );
   const elements = useMarkdown(value, {
     styles: cached.styles,
     theme: cached.theme,
@@ -339,19 +374,21 @@ function CodeBlock({
   language,
   boxStyle,
   textStyle,
+  selectable,
 }: {
   code: string;
   language?: string;
   boxStyle?: ViewStyle;
   textStyle?: TextStyle;
+  selectable: boolean;
 }) {
   const t = useTheme();
   const lang = languageOf(language);
   const copy = () => copyText(code).then(ok => ok && showToast(tr('common_copied')));
   return (
     <View style={[boxStyle, styles.codeBox]}>
-      <View style={styles.codeHead}>
-        <Text style={[styles.codeLang, {color: t.t3}]} numberOfLines={1}>
+      <View style={[styles.codeHead, {backgroundColor: t.codeHeadBg, borderBottomColor: t.codeLine}]}>
+        <Text style={[styles.codeLang, {color: t.t2}]} numberOfLines={1}>
           {language?.trim() || lang || 'text'}
         </Text>
         <Pressable
@@ -360,12 +397,12 @@ function CodeBlock({
           hitSlop={8}
           onPress={copy}
           style={({pressed}) => [styles.codeCopy, pressed && styles.pressed]}>
-          <Icon icon={faCopy} size={11} color={t.t3} />
-          <Text style={[styles.codeCopyText, {color: t.t3}]}>{tr('common_copy')}</Text>
+          <Icon icon={faCopy} size={11} color={t.t2} />
+          <Text style={[styles.codeCopyText, {color: t.t2}]}>{tr('common_copy')}</Text>
         </Pressable>
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.codeScroll}>
-        <CodeText code={code} lang={lang} style={textStyle} />
+        <CodeText code={code} lang={lang} style={textStyle} selectable={selectable} />
       </ScrollView>
     </View>
   );
@@ -448,11 +485,18 @@ const styles = StyleSheet.create({
     transform: [{translateY: Platform.OS === 'android' ? 4 : 2}],
   },
   inlineCodeText: {lineHeight: 18},
-  codeHead: {flexDirection: 'row', alignItems: 'center', paddingLeft: 12, paddingRight: 8, paddingTop: 7},
-  codeLang: {flex: 1, fontSize: 11.5, letterSpacing: 0.3},
+  codeHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: 12,
+    paddingRight: 8,
+    paddingVertical: 5,
+    borderBottomWidth: 1,
+  },
+  codeLang: {flex: 1, fontSize: 11.5, fontWeight: '500', letterSpacing: 0.3, textTransform: 'lowercase'},
   codeCopy: {flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 6, paddingVertical: 3},
   codeCopyText: {fontSize: 11.5},
-  codeScroll: {paddingHorizontal: 12, paddingTop: 6, paddingBottom: 12},
+  codeScroll: {paddingHorizontal: 12, paddingTop: 10, paddingBottom: 12},
   pressed: {opacity: 0.55},
   codeLink: {textDecorationLine: 'underline'},
 });

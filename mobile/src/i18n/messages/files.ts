@@ -97,6 +97,9 @@ const zh = {
   ui_doc_placeholder: '用 Markdown 书写',
   ui_doc_empty: '还没有内容',
   ui_doc_empty_hint: '点右侧的笔形图标开始写',
+
+  workspace_empty: '这个文件夹是空的',
+  workspace_truncated: '文件较多，只列出了一部分',
 };
 
 const en: Record<keyof typeof zh, string> = {
@@ -198,6 +201,9 @@ const en: Record<keyof typeof zh, string> = {
   ui_doc_placeholder: 'Write in Markdown',
   ui_doc_empty: 'Nothing here yet',
   ui_doc_empty_hint: 'Tap the pen icon on the right to start writing',
+
+  workspace_empty: 'This folder is empty',
+  workspace_truncated: 'Too many files; only some are listed',
 };
 
 export default {zh, en};

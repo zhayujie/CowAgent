@@ -28,6 +28,7 @@
 #include <Python.h>
 #include <hilog/log.h>
 #include <pthread.h>
+#include <signal.h>
 
 // The regex package's extension module, linked in from libcowpython.a.
 extern "C" PyObject* PyInit__regex(void);
@@ -184,6 +185,11 @@ void LogError(const std::string& message) {
 }
 
 bool InitPython(const KernelConfig& config) {
+  // Python ignores SIGPIPE only when it installs its signal handlers, which it must not do here.
+  // Without this, writing to a connection the app already closed (a stopped reply's stream)
+  // ends the whole app instead of raising BrokenPipeError.
+  signal(SIGPIPE, SIG_IGN);
+
   PyPreConfig preconfig;
   PyPreConfig_InitIsolatedConfig(&preconfig);
   preconfig.utf8_mode = 1;

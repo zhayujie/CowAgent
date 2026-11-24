@@ -20,6 +20,7 @@ import type {
   DeviceList,
   ExternalApiState,
   FallbackLink,
+  FolderListing,
   GlobalConfig,
   GuestShare,
   GuestShareConfig,
@@ -39,6 +40,7 @@ import type {
   ModelsState,
   PairedDevice,
   PairingCode,
+  ProjectState,
   QrPayload,
   ScheduledTask,
   SessionSettings,
@@ -57,6 +59,7 @@ import type {
   VersionInfo,
   VoiceReplyMode,
   WorkspaceHit,
+  WorkspaceListing,
   WorkspaceText,
 } from '../protocol/resources';
 import {appendFile, type PickedFile} from '../media/types';
@@ -240,6 +243,36 @@ export async function updateSessionSettings(
   return http.request<SessionSettings>(`/api/sessions/${encodeURIComponent(sessionId)}/settings`, {
     body: {...patch, agent_id: agentId},
   });
+}
+
+export async function getProjects(sessionId: string, agentId?: string) {
+  return http.request<ProjectState>(`/api/projects?${query({session: sessionId, agent: agentId})}`);
+}
+
+/** null sends the session back to the Agent's own workspace. */
+export async function selectProject(sessionId: string, projectDir: string | null, agentId?: string) {
+  return http.request<ProjectState>('/api/projects/select', {
+    body: {session: sessionId, project_dir: projectDir, agent: agentId},
+  });
+}
+
+/** Creates the folder under the projects root and has the session work in it. */
+export async function createProject(sessionId: string, name: string, agentId?: string) {
+  return http.request<ProjectState>('/api/projects/create', {
+    body: {session: sessionId, name, agent: agentId},
+  });
+}
+
+/** Sub-folders of `path` on the server's computer; an empty path starts at its home folder. */
+export async function browseFolders(path = '') {
+  return http.request<FolderListing>(`/api/projects/browse?${query({path})}`);
+}
+
+/** One folder level, rooted where the session works; an empty path is that root. */
+export async function getWorkspaceTree(path: string, sessionId: string, agentId?: string) {
+  return http.request<WorkspaceListing>(
+    `/api/workspace/tree?${query({path, session: sessionId, agent_id: agentId})}`,
+  );
 }
 
 const sessionPath = (sessionId: string, tail: string) =>

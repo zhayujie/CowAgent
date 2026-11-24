@@ -192,6 +192,52 @@ export interface WorkspaceHit {
   kind?: string;
 }
 
+/** One row of `GET /api/workspace/tree`. */
+export interface WorkspaceEntry {
+  name: string;
+  /** Relative to the session's working root. */
+  path: string;
+  abs_path: string;
+  is_dir: boolean;
+  kind: string;
+  size: number;
+  /** Unix seconds. */
+  mtime: number;
+  raw_url?: string;
+  preview_url?: string;
+}
+
+export interface WorkspaceListing {
+  path: string;
+  root: string;
+  /** Folders first, then files newest first. */
+  entries: WorkspaceEntry[];
+  /** The folder holds more than the server lists at once. */
+  truncated: boolean;
+}
+
+/** An absolute directory on the computer the agent runs on. */
+export interface FolderRef {
+  path: string;
+  name: string;
+}
+
+/** Where a session works: a project folder, or the Agent's own workspace when `current` is null. */
+export interface ProjectState {
+  current: FolderRef | null;
+  default_workspace: string;
+  /** Where a new project's folder is created. */
+  projects_root: string;
+  recents: FolderRef[];
+}
+
+export interface FolderListing {
+  /** `__DRIVES__` on Windows stands for the list of drives, which is not itself a folder. */
+  path: string;
+  parent: string | null;
+  dirs: FolderRef[];
+}
+
 export interface MemoryPage {
   list: MemoryFile[];
   total: number;

@@ -1,0 +1,44 @@
+diff --git a/node_modules/react-native-image-picker/android/src/main/java/com/imagepicker/ImagePickerModuleImpl.java b/node_modules/react-native-image-picker/android/src/main/java/com/imagepicker/ImagePickerModuleImpl.java
+index 4bd8732..c613b9b 100644
+--- a/node_modules/react-native-image-picker/android/src/main/java/com/imagepicker/ImagePickerModuleImpl.java
++++ b/node_modules/react-native-image-picker/android/src/main/java/com/imagepicker/ImagePickerModuleImpl.java
+@@ -150,6 +150,24 @@ public class ImagePickerModuleImpl implements ActivityEventListener {
+                 .setMediaType(mediaType)
+                 .build();
+ 
++        // Without a photo picker (Android 12 and older lacking Play system updates and Play services,
++        // as on most phones sold in China) PickVisualMedia falls back to the document UI, which opens
++        // a file manager. The gallery app answers ACTION_PICK there instead.
++        if (isPhoto && this.options.restrictMimeTypes.length == 0
++                && !PickVisualMedia.isPhotoPickerAvailable(this.reactContext)) {
++            Intent galleryIntent = new Intent(Intent.ACTION_PICK);
++            galleryIntent.setDataAndType(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, "image/*");
++            if (!isSingleSelect) {
++                galleryIntent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
++            }
++            try {
++                currentActivity.startActivityForResult(galleryIntent, requestCode);
++                return;
++            } catch (ActivityNotFoundException e) {
++                // No gallery app: the document UI below still works.
++            }
++        }
++
+         // https://developer.android.com/training/data-storage/shared/photopicker
+         if (isSingleSelect) {
+             libraryIntent = new PickVisualMedia().createIntent(this.reactContext.getApplicationContext(), mediaRequest);
+@@ -218,7 +236,13 @@ public class ImagePickerModuleImpl implements ActivityEventListener {
+                 break;
+ 
+             case REQUEST_LAUNCH_LIBRARY:
+-                onAssetsObtained(collectUrisFromData(data));
++                List<Uri> picked = collectUrisFromData(data);
++                // A gallery app answering ACTION_PICK knows nothing of the limit.
++                int limit = options.selectionLimit;
++                if (limit > 0 && picked.size() > limit) {
++                    picked = picked.subList(0, limit);
++                }
++                onAssetsObtained(picked);
+                 break;
+ 
+             case REQUEST_LAUNCH_VIDEO_CAPTURE:

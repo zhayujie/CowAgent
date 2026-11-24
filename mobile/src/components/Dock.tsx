@@ -1,4 +1,4 @@
-import {faFolder, faKeyboard} from '@fortawesome/free-regular-svg-icons';
+import {faFolder, faFolderOpen, faKeyboard} from '@fortawesome/free-regular-svg-icons';
 import {
   faArrowUp,
   faMicrochip,
@@ -59,6 +59,10 @@ interface Props {
   onOpenModel: () => void;
   permission?: PermissionMode;
   onOpenPermission: () => void;
+  /** The project folder the chat works in; null for the default workspace. */
+  project?: string | null;
+  /** Absent where the server has no folders to choose from. */
+  onOpenWorkspace?: () => void;
   /** Who `@` can address; empty outside a shared conversation. */
   roster: AgentBadge[];
   defaultAgentId: string | null;
@@ -94,6 +98,8 @@ export const Dock = forwardRef<DockHandle, Props>(function DockInner(
     onOpenModel,
     permission,
     onOpenPermission,
+    project,
+    onOpenWorkspace,
     roster,
     defaultAgentId,
     searchFiles,
@@ -314,6 +320,23 @@ export const Dock = forwardRef<DockHandle, Props>(function DockInner(
             style={({pressed}) => [styles.tool, pressed && styles.toolPressed]}>
             <Icon icon={perm?.icon ?? faShieldHalved} size={16} color={t.t2} />
           </Pressable>
+
+          {onOpenWorkspace && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={trf('composer_ws_a11y', {name: project || tr('composer_ws_default')})}
+              onPress={onOpenWorkspace}
+              hitSlop={4}
+              style={({pressed}) => [styles.tool, !!project && styles.toolChip, pressed && styles.toolPressed]}>
+              <Icon icon={faFolderOpen} size={17} color={project ? t.accent : t.t2} />
+              {/* The default workspace is the resting state; only a chosen project is named. */}
+              {!!project && (
+                <Text style={styles.toolChipText} numberOfLines={1}>
+                  {project}
+                </Text>
+              )}
+            </Pressable>
+          )}
 
           <View style={styles.spacer} />
 
@@ -621,6 +644,18 @@ const useStyles = makeStyles(t => {
       justifyContent: 'center',
     },
     toolPressed: {backgroundColor: t.bg2},
+    toolChip: {
+      width: undefined,
+      flexDirection: 'row',
+      gap: 6,
+      flexShrink: 1,
+      maxWidth: 150,
+      height: 34,
+      marginHorizontal: 3,
+      paddingHorizontal: 11,
+      backgroundColor: t.accentSoft,
+    },
+    toolChipText: {flexShrink: 1, fontSize: 13, fontWeight: '500', color: t.accent},
     spacer: {flex: 1},
     send: {
       width: 38,

@@ -35,6 +35,7 @@
     "@react-navigation/native": "^7.1.0",
     "@react-navigation/stack": "7.12.1",
     "highlight.js": "11.11.1",
+    "marked": "18.0.14",
     "react": "19.1.1",
     "react-native": "0.82.1",
     "react-native-audio-recorder-player": "3.6.14",

@@ -5,6 +5,7 @@
 #import <UIKit/UIKit.h>
 #include <arpa/inet.h>
 #include <os/log.h>
+#include <signal.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -124,6 +125,11 @@ static BOOL InitPython(NSError **error)
   NSString *resources = NSBundle.mainBundle.resourcePath;
   NSString *pycache = [NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES).firstObject
       stringByAppendingPathComponent:@"cow-pycache"];
+
+  // Python ignores SIGPIPE only when it installs its signal handlers, which it must not do here.
+  // Without this, writing to a connection the app already closed (a stopped reply's stream, or a
+  // socket iOS reclaimed while suspended) ends the whole app instead of raising BrokenPipeError.
+  signal(SIGPIPE, SIG_IGN);
 
   PyPreConfig preconfig;
   PyPreConfig_InitIsolatedConfig(&preconfig);

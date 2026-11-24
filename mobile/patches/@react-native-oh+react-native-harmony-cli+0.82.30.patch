@@ -1,0 +1,34 @@
+diff --git a/node_modules/@react-native-oh/react-native-harmony-cli/dist/autolinking/JSON5Writer.js b/node_modules/@react-native-oh/react-native-harmony-cli/dist/autolinking/JSON5Writer.js
+index eb736b5..e77e845 100644
+--- a/node_modules/@react-native-oh/react-native-harmony-cli/dist/autolinking/JSON5Writer.js
++++ b/node_modules/@react-native-oh/react-native-harmony-cli/dist/autolinking/JSON5Writer.js
+@@ -36,7 +36,11 @@ class JSON5Writer {
+         // Return the modified source with JSON5-style formatting
+         // Use double quotes for both keys and values, and trailing commas
+         // quoteKeys: true ensures keys with special characters (like @, /, -) are properly quoted
+-        return writer.toSource({ quote: 'double', quoteKeys: true, trailingComma: true }) + '\n';
++        // json5-writer emits the OS line ending and keeps the old trailing blank lines; follow the
++        // file's own line ending and end with exactly one, so an unchanged run leaves it untouched.
++        const eol = content.includes('\r\n') ? '\r\n' : '\n';
++        const source = writer.toSource({ quote: 'double', quoteKeys: true, trailingComma: true });
++        return source.trimEnd().replace(/\r?\n/g, eol) + eol;
+     }
+     /**
+      * Updates dependencies with fallback to standard JSON5 stringify if preservation fails.
+diff --git a/node_modules/@react-native-oh/react-native-harmony-cli/src/autolinking/JSON5Writer.ts b/node_modules/@react-native-oh/react-native-harmony-cli/src/autolinking/JSON5Writer.ts
+index daff8a0..db1409c 100644
+--- a/node_modules/@react-native-oh/react-native-harmony-cli/src/autolinking/JSON5Writer.ts
++++ b/node_modules/@react-native-oh/react-native-harmony-cli/src/autolinking/JSON5Writer.ts
+@@ -40,7 +40,11 @@ export class JSON5Writer {
+     // Return the modified source with JSON5-style formatting
+     // Use double quotes for both keys and values, and trailing commas
+     // quoteKeys: true ensures keys with special characters (like @, /, -) are properly quoted
+-    return writer.toSource({ quote: 'double', quoteKeys: true, trailingComma: true }) + '\n';
++    // json5-writer emits the OS line ending and keeps the old trailing blank lines; follow the
++    // file's own line ending and end with exactly one, so an unchanged run leaves it untouched.
++    const eol = content.includes('\r\n') ? '\r\n' : '\n';
++    const source = writer.toSource({ quote: 'double', quoteKeys: true, trailingComma: true });
++    return source.trimEnd().replace(/\r?\n/g, eol) + eol;
+   }
+ 
+   /**

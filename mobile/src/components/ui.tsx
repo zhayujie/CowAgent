@@ -158,23 +158,26 @@ export function EmptyState({
   hint,
   loading,
   icon,
+  style,
 }: {
   title: string;
   hint?: string;
   loading?: boolean;
   icon?: IconDefinition;
+  /** An inverted list turns its empty component back upright through this. */
+  style?: StyleProp<ViewStyle>;
 }) {
   const t = useTheme();
   const styles = useStyles();
   if (loading) {
     return (
-      <View style={styles.empty}>
+      <View style={[styles.empty, style]}>
         <ActivityIndicator color={t.t3} />
       </View>
     );
   }
   return (
-    <View style={styles.empty}>
+    <View style={[styles.empty, style]}>
       {icon && (
         <View style={styles.emptyIcon}>
           <Icon icon={icon} size={22} color={t.t3} />
