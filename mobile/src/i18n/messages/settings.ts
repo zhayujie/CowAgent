@@ -340,6 +340,7 @@ const zh = {
   menu_new_chat: '新对话',
   menu_untitled_chat: '未命名对话',
   menu_no_chats: '目前暂无会话',
+  menu_chats_failed: '会话加载失败',
   menu_view_all: '查看全部 {n} 个对话',
   menu_new_team_chat: '多智能体对话',
   menu_new_team_chat_desc: '选几个智能体一起参与对话',
@@ -351,7 +352,10 @@ const zh = {
   menu_about_menu_desc: '调整侧边栏里的分组和入口',
   menu_not_connected: '未连接',
   menu_reconnecting: '重新连接中',
+  menu_unreachable: '无法连接',
   menu_remote_device: '远程设备',
+  link_down: '无法连接到 {name}',
+  link_down_hint: '检查网络，或确认设备上的服务在运行',
 };
 
 const en: Record<keyof typeof zh, string> = {
@@ -698,6 +702,7 @@ const en: Record<keyof typeof zh, string> = {
   menu_new_chat: 'New chat',
   menu_untitled_chat: 'Untitled chat',
   menu_no_chats: 'No chats yet',
+  menu_chats_failed: "Couldn't load chats",
   menu_view_all: 'View all {n} chats',
   menu_new_team_chat: 'Group chat',
   menu_new_team_chat_desc: 'Bring several agents into one chat',
@@ -709,7 +714,10 @@ const en: Record<keyof typeof zh, string> = {
   menu_about_menu_desc: 'Arrange the groups and entries in the sidebar',
   menu_not_connected: 'Not connected',
   menu_reconnecting: 'Reconnecting',
+  menu_unreachable: "Can't connect",
   menu_remote_device: 'Remote device',
+  link_down: "Can't reach {name}",
+  link_down_hint: 'Check your network, or make sure the service is running on that device',
 };
 
 export default {zh, en};

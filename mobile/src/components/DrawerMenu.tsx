@@ -21,6 +21,7 @@ import {tr, trf} from '../i18n';
 import {useLocalDeviceName} from '../kernel/localKernel';
 import {menuSections, type MenuEntry, type MenuRoute} from '../navigation/menuViews';
 import type {SessionItem} from '../protocol/events';
+import {useLinkStore} from '../store/linkStore';
 import {useMenuStore} from '../store/menuStore';
 import {activeServer, useLocalServer, useServerStore} from '../store/serverStore';
 import {useSessionStore} from '../store/sessionStore';
@@ -87,11 +88,12 @@ export function DrawerMenu({
   // Servers go by the name they gave themselves; the address is only a fallback.
   const localName = useLocalDeviceName();
   const name = server?.local ? localName : server?.name || server?.baseUrl.replace(/^https?:\/\//, '');
-  const offline = realtime === 'closed';
+  const down = useLinkStore(s => s.down);
+  const offline = realtime === 'closed' || down;
   const status = !server
     ? tr('menu_not_connected')
     : offline
-      ? tr('menu_reconnecting')
+      ? tr(down ? 'menu_unreachable' : 'menu_reconnecting')
       : server.local
         ? tr('server_local_meta')
         : tr('menu_remote_device');
@@ -230,6 +232,7 @@ function SessionList({
   const styles = useStyles();
   const sessions = useSessionStore(s => s.sessions);
   const total = useSessionStore(s => s.total);
+  const failed = useSessionStore(s => !!s.error);
   const shown = Math.min(sessions.length, RECENT_LIMIT);
   const groups = useMemo(() => groupSessions(sessions.slice(0, RECENT_LIMIT)), [sessions]);
   return (
@@ -276,7 +279,7 @@ function SessionList({
             ))}
           </React.Fragment>
         ))}
-        {!groups.length && <Text style={styles.empty}>{tr('menu_no_chats')}</Text>}
+        {!groups.length && <Text style={styles.empty}>{tr(failed ? 'menu_chats_failed' : 'menu_no_chats')}</Text>}
         {total > shown && (
           <Pressable accessibilityRole="button" hitSlop={6} onPress={onViewAll} style={styles.more}>
             <Text style={styles.moreText}>{trf('menu_view_all', {n: total})}</Text>

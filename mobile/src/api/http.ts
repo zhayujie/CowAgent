@@ -77,6 +77,8 @@ export class HttpClient {
   // goes only where the device that issued it still answers. A check holds
   // for a minute, and until a request finds the address silent.
   private identity: IdentityGate | null = null;
+  /** Told after each request whether the server at `baseUrl` answered at all. */
+  onReach: ((baseUrl: string, answered: boolean) => void) | null = null;
 
   setBaseUrl(url: string) {
     this.baseUrl = normalizeBaseUrl(url);
@@ -180,11 +182,14 @@ export class HttpClient {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs ?? HTTP_TIMEOUT_MS);
     let res: Response;
+    const baseUrl = this.baseUrl;
     try {
       // The token travels in the header. Letting the login cookie into the native
       // cookie jar would hand it to every page the WebView opens on this server.
       res = await fetch(this.url(path), {...init, credentials: 'omit', signal: controller.signal});
+      this.onReach?.(baseUrl, true);
     } catch (e) {
+      this.onReach?.(baseUrl, false);
       if (this.identity) {
         this.identity.ok = false;
         this.identity.at = 0;

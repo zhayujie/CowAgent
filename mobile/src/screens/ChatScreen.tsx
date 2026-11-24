@@ -34,6 +34,7 @@ import {Dock, type DockHandle} from '../components/Dock';
 import {DrawerMenu, type DrawerRoute, type DrawerView} from '../components/DrawerMenu';
 import {Icon} from '../components/Icon';
 import {Intro} from '../components/Intro';
+import {LinkBanner} from '../components/LinkBanner';
 import {ListShiftContext} from '../components/listAnchor';
 import {MessageItem} from '../components/MessageItem';
 import {ServerSheet} from '../components/ServerSheet';
@@ -61,6 +62,7 @@ import {chatToResume, trackOpenChat} from '../store/chatResume';
 import {MAX_REPLYING, useChatStore, type ChatMessage} from '../store/chatStore';
 import {MAX_ATTACHMENTS, useComposerStore} from '../store/composerStore';
 import {useLayoutStore} from '../store/layoutStore';
+import {useLinkStore} from '../store/linkStore';
 import {useMenuStore} from '../store/menuStore';
 import {useOverviewStore} from '../store/overviewStore';
 import {useSessionSettingsStore} from '../store/sessionSettingsStore';
@@ -181,6 +183,25 @@ export function ChatScreen({route, navigation}: Props) {
       chat.loadHistory(sessionId, useAgentStore.getState().currentId).catch(() => undefined);
     }
   }, [sessionId, isNew]);
+
+  // Whatever failed to load while the device was out of reach loads once it answers again.
+  const recovered = useLinkStore(s => s.recovered);
+  const reloadMissed = useRef(() => {});
+  reloadMissed.current = () => {
+    useAgentStore.getState().load().catch(() => undefined);
+    useMenuStore.getState().load().catch(() => undefined);
+    useSessionStore.getState().refresh();
+    useOverviewStore.getState().load().catch(() => undefined);
+    getModels().then(state => setModelMissing(!chatModelReady(state)), () => undefined);
+    if (!isNew && !useChatStore.getState().messages[sessionId]?.length) {
+      useChatStore.getState().loadHistory(sessionId, useAgentStore.getState().currentId).catch(() => undefined);
+    }
+  };
+  useEffect(() => {
+    if (recovered) {
+      reloadMissed.current();
+    }
+  }, [recovered]);
 
   // Uploads are filed under the session they were picked in; never carry them over.
   useEffect(() => {
@@ -880,6 +901,7 @@ export function ChatScreen({route, navigation}: Props) {
             )}
           </View>
         </View>
+        <LinkBanner />
 
         <AvoidKeyboard style={styles.body}>
           <PaneWidthProvider width={columnWidth}>
