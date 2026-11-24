@@ -727,9 +727,10 @@ class ModelsHandler:
             "doubao-seed-2-1-turbo",
         ],
         # LinkAI proxies the underlying vendor; surface a curated set of
-        # multimodal models. Order: gpt-4.1-mini → gpt-5.4-mini as the
-        # cross-vendor baselines, then each vendor's recommended default.
+        # multimodal models. The first entry is the auto-picked vision model,
+        # then the cross-vendor baselines and each vendor's recommended default.
         "linkai":    [
+            const.DEEPSEEK_FLASH,
             const.GPT_41_MINI,
             const.GPT_54_MINI,
             const.QWEN38_FLASH,
@@ -1158,6 +1159,19 @@ class ModelsHandler:
         ("mimo",      "mimo_api_key",      const.MIMO_V2_6_PRO),
     ]
 
+    @staticmethod
+    def _linkai_model_sees_images(model: str) -> bool:
+        """Same verdict the vision tool reaches for a main model served by LinkAI."""
+        try:
+            from models.linkai.link_ai_bot import LinkAIBot
+            verdict = LinkAIBot.model_supports_vision(model)
+            if verdict is not None:
+                return bool(verdict)
+            from agent.tools.vision.vision import Vision
+            return Vision.model_name_suggests_vision(model)
+        except Exception:
+            return False
+
     @classmethod
     def _predict_vision_auto(cls, local_config: dict) -> dict:
         """Predict which provider vision.py will actually dispatch to when
@@ -1193,11 +1207,12 @@ class ModelsHandler:
             fallback = allowed[0] if allowed else model_default
             return {"provider": pid, "model": fallback}
 
-        # 1. use_linkai → suppress the hint entirely. LinkAI is a proxy and
-        #    we don't observe which underlying model it picks; surfacing
-        #    "LinkAI" with no model would not tell the user anything useful.
+        # 1. use_linkai → a main model that sees images gets them directly;
+        #    otherwise LinkAI's default vision model reads them.
         if use_linkai_flag and linkai_configured:
-            return {"provider": "", "model": ""}
+            if main_model and cls._linkai_model_sees_images(main_model):
+                return {"provider": "linkai", "model": main_model}
+            return {"provider": "linkai", "model": cls._VISION_PROVIDER_MODELS["linkai"][0]}
 
         # 2. Main bot — only when it natively supports vision. We approximate
         #    "natively supports" by membership in _VISION_PROVIDER_MODELS,
@@ -1224,7 +1239,7 @@ class ModelsHandler:
 
         # 6. LinkAI as last resort (only reached when use_linkai is off)
         if linkai_configured:
-            return {"provider": "linkai", "model": const.GPT_41_MINI}
+            return {"provider": "linkai", "model": cls._VISION_PROVIDER_MODELS["linkai"][0]}
 
         return {"provider": "", "model": ""}
 

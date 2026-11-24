@@ -89,6 +89,9 @@ _MODEL_PREFIX_TO_PROVIDER = [
 # Vision model of the CowAgent API when the user has not pinned one.
 _COWAGENT_VISION_MODEL = "deepseek-v4.1-flash"
 
+# Vision model of LinkAI when the user has not pinned one.
+_LINKAI_VISION_MODEL = const.DEEPSEEK_FLASH
+
 # Model prefixes that natively belong to OpenAI / LinkAI (raw HTTP providers).
 _OPENAI_MODEL_PREFIXES = ("gpt-", "o1-", "o3-", "o4-", "chatgpt-")
 
@@ -340,8 +343,7 @@ class Vision(BaseTool):
         user_model = self._resolve_user_vision_model()
         if user_model:
             return user_model.lower() == main_model.lower()
-        # On auto with use_linkai set, that provider's default vision model goes first.
-        return not (conf().get("use_linkai", False) and conf().get("linkai_api_key"))
+        return True
 
     @staticmethod
     def _resolve_user_vision_model() -> Optional[str]:
@@ -603,16 +605,23 @@ class Vision(BaseTool):
         # model or an engaged fallback.
         per_model = getattr(type(bot), "model_supports_vision", None)
         if callable(per_model) and self._current_main_model():
-            return bool(per_model(self._current_main_model()))
+            verdict = per_model(self._current_main_model())
+            if verdict is not None:
+                return bool(verdict)
         if hasattr(bot, "supports_vision"):
             return bool(getattr(bot, "supports_vision"))
-        main_model = self._current_main_model().lower()
+        return self.model_name_suggests_vision(self._current_main_model())
+
+    @classmethod
+    def model_name_suggests_vision(cls, model_name: str) -> bool:
+        """Name-based guess for bots without a per-model vision rule."""
+        main_model = (model_name or "").lower()
         if not main_model:
             return False
         # Gateways namespace upstream models ("cn:glm-5v", "openai/gpt-4o").
         # The bot still sends the full name; only the match uses the tail.
         for name in {main_model, re.split(r"[:/]", main_model)[-1]}:
-            if name.startswith(_OPENAI_MODEL_PREFIXES) or self._infer_provider_from_model(name):
+            if name.startswith(_OPENAI_MODEL_PREFIXES) or cls._infer_provider_from_model(name):
                 return True
         return False
 
@@ -699,7 +708,7 @@ class Vision(BaseTool):
             api_key=api_key,
             api_base=self._ensure_v1(api_base),
             extra_headers=extra,
-            model_override=preferred_model,
+            model_override=preferred_model or _LINKAI_VISION_MODEL,
         )
 
     def _build_cowagent_provider(self, preferred_model: Optional[str] = None) -> Optional[VisionProvider]:

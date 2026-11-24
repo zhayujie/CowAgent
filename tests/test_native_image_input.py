@@ -123,12 +123,7 @@ def _other_vision_model(model, mp):
     mp.setitem(conf(), "tools", {"vision": {"model": "some-other-vision-model"}})
 
 
-def _provider_default_auto(model, mp):
-    mp.setitem(conf(), "use_linkai", True)
-    mp.setitem(conf(), "linkai_api_key", "k")
-
-
-@pytest.mark.parametrize("setup", [_text_only_main, _other_vision_model, _provider_default_auto])
+@pytest.mark.parametrize("setup", [_text_only_main, _other_vision_model])
 def test_images_stay_with_the_vision_tool_when_the_main_model_is_not_its_target(workspace, monkeypatch, setup):
     model = _Model()
     setup(model, monkeypatch)
@@ -139,6 +134,15 @@ def test_images_stay_with_the_vision_tool_when_the_main_model_is_not_its_target(
 
     assert _images(sent) == []
     assert _has_note(sent[-1]) and not _has_note(sent[-1], _IMAGE_ATTACHED)
+
+
+def test_use_linkai_on_auto_sends_images_to_a_vision_capable_main_model(workspace, monkeypatch):
+    monkeypatch.setitem(conf(), "use_linkai", True)
+    monkeypatch.setitem(conf(), "linkai_api_key", "k")
+    ex = _executor(workspace, _Model())
+    _start_run(ex, "[图片: tmp/photo.png]")
+
+    assert len(_images(ex._prepare_messages())) == 1
 
 
 def test_vision_model_set_to_the_main_model_counts_as_main(workspace, monkeypatch):
