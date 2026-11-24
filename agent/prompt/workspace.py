@@ -138,8 +138,8 @@ def load_context_files(workspace_dir: str, files_to_load: Optional[List[str]] = 
         if not os.path.exists(filepath):
             continue
         
-        # Auto-cleanup: if BOOTSTRAP.md still exists but AGENT.md is already
-        # filled in, the agent forgot to delete it — clean up and skip loading
+        # Onboarding ends here, not with the agent deleting the file: it may
+        # have no shell to do so, and a written name is the real signal.
         if filename == DEFAULT_BOOTSTRAP_FILENAME:
             if _is_onboarding_done(workspace_dir):
                 try:
@@ -257,8 +257,8 @@ _ONBOARDING_PLACEHOLDERS = {
 def _is_onboarding_done(workspace_dir: str) -> bool:
     """Check if AGENT.md or USER.md has had its name placeholder filled in.
 
-    BOOTSTRAP.md itself marks onboarding as pending; this only backs up an agent
-    that filled the files but forgot to delete it. Looking at the placeholder
+    BOOTSTRAP.md marks onboarding as pending until this holds, and is then
+    removed by load_context_files. Looking at the placeholder
     rather than comparing with the template keeps the check stable across
     template rewording, a language switch, or text added elsewhere in the file.
     """
@@ -708,7 +708,7 @@ _你刚刚启动，这是你的第一次对话。_ ✨
 
 ## 🎉 全部完成后
 
-当 AGENT.md 和 USER.md 的核心字段都已填写后，用 bash 执行 `rm BOOTSTRAP.md` 删除此文件。你不再需要引导脚本了——你已经是你了。
+当 AGENT.md 和 USER.md 的核心字段都已填写后，引导就完成了，此文件会被自动删除。你不再需要引导脚本了——你已经是你了。
 """
 
 
@@ -743,7 +743,7 @@ Whenever the user provides a name, what to call them, a style, or any onboarding
 
 ## 🎉 Once everything is complete
 
-When the core fields of AGENT.md and USER.md are filled in, run `rm BOOTSTRAP.md` via bash to delete this file. You no longer need the onboarding script — you're you now.
+When the core fields of AGENT.md and USER.md are filled in, onboarding is complete and this file is removed automatically. You no longer need the onboarding script — you're you now.
 """
 
 
