@@ -36,6 +36,9 @@ const micSupported =
   !!navigator.mediaDevices?.getUserMedia &&
   typeof window.MediaRecorder !== 'undefined'
 
+// Dispatched on window to start or stop voice input from outside the input.
+export const VOICE_TOGGLE_EVENT = 'cow:toggle-voice'
+
 interface SlashCommand {
   cmd: string
   desc: string
@@ -234,6 +237,16 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     if (micState === 'recording') stopRecording()
     else if (micState === 'idle') startRecording()
   }
+  const toggleMicRef = useRef(toggleMic)
+  toggleMicRef.current = toggleMic
+
+  // The app menu's Voice Input shortcut.
+  useEffect(() => {
+    if (!micSupported) return
+    const onToggle = () => toggleMicRef.current()
+    window.addEventListener(VOICE_TOGGLE_EVENT, onToggle)
+    return () => window.removeEventListener(VOICE_TOGGLE_EVENT, onToggle)
+  }, [])
 
   // Release the mic and timers when the chat page unmounts.
   useEffect(() => {

@@ -42,6 +42,9 @@ export function buildAppMenu(getWindow: () => BrowserWindow | null) {
     label: 'File',
     submenu: [
       { label: 'New Chat', accelerator: 'CmdOrCtrl+N', click: () => emit(win(), 'new-chat') },
+      // Starts or stops recording in the chat input, so a key mapper (e.g. a
+      // remote's voice button) can drive voice input without the mouse.
+      { label: 'Voice Input', accelerator: 'CmdOrCtrl+Shift+M', click: () => emit(win(), 'toggle-voice') },
       ...(!isMac
         ? ([
             { label: 'Settings', accelerator: 'Ctrl+,', click: () => emit(win(), 'open-settings') },

@@ -26,6 +26,7 @@ import { checkRemote, useInstanceStore } from './store/instanceStore'
 import apiClient from './api/client'
 import { t } from './i18n'
 import ChatPage from './pages/ChatPage'
+import { VOICE_TOGGLE_EVENT } from './components/ChatInput'
 import SettingsPage from './pages/SettingsPage'
 import KnowledgePage from './pages/KnowledgePage'
 import SkillsPage from './pages/SkillsPage'
@@ -246,6 +247,10 @@ const App: React.FC = () => {
   // Handle app-menu / shortcut actions forwarded from the main process.
   useEffect(() => {
     const off = window.electronAPI?.onMenuAction?.(async (action) => {
+      if (action === 'toggle-voice') {
+        window.dispatchEvent(new Event(VOICE_TOGGLE_EVENT))
+        return
+      }
       // Each of these leaves the current page, taking any open editor with it.
       if (!(await guardDocEditors())) return
       if (action === 'new-chat') {
