@@ -909,6 +909,27 @@ export async function resolveWorkspacePath(path: string, sessionId?: string, age
   );
 }
 
+/**
+ * Removes a stored turn. `cascade` also drops every turn that came after it,
+ * which is what an edit needs before the message is sent again.
+ */
+export async function deleteMessages(
+  sessionId: string,
+  userSeq: number,
+  opts: {deleteUser?: boolean; cascade?: boolean} = {},
+  agentId?: string | null,
+) {
+  return http.request<{status: string; deleted?: number}>('/api/messages/delete', {
+    body: {
+      session_id: sessionId,
+      user_seq: userSeq,
+      delete_user: opts.deleteUser ?? true,
+      cascade: !!opts.cascade,
+      agent_id: agentId || undefined,
+    },
+  });
+}
+
 export async function cancelRequest(requestId: string, sessionId: string) {
   return http.request<{status: string}>('/cancel', {
     body: {request_id: requestId, session_id: sessionId},

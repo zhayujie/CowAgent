@@ -9,6 +9,8 @@ import {
   faHourglassHalf,
   faLightbulb,
   faMinus,
+  faPenToSquare,
+  faRotateRight,
   faShare,
   faStop,
   faXmark,
@@ -70,6 +72,8 @@ function MessageItemImpl({
   labelled,
   newest,
   onOpenContext,
+  onRetry,
+  onEdit,
 }: {
   message: ChatMessage;
   labelled?: boolean;
@@ -77,9 +81,13 @@ function MessageItemImpl({
   newest?: boolean;
   /** Opens the conversation's context usage, from a reply's token count. */
   onOpenContext?: () => void;
+  /** Asks the stored turn behind a reply again. */
+  onRetry?: (message: ChatMessage) => void;
+  /** Drops this question and everything after it, to write it again. */
+  onEdit?: (message: ChatMessage) => void;
 }) {
   if (message.role === 'user') {
-    return <UserTurn message={message} />;
+    return <UserTurn message={message} onEdit={onEdit} />;
   }
   return (
     <AssistantTurn
@@ -87,6 +95,7 @@ function MessageItemImpl({
       labelled={!!labelled || !!message.peer}
       newest={!!newest}
       onOpenContext={onOpenContext}
+      onRetry={onRetry}
     />
   );
 }
@@ -94,19 +103,24 @@ function MessageItemImpl({
 const copyMessage = (text: string) =>
   copyText(text).then(ok => ok && showToast(tr('common_copied')));
 
-function CopyButton({text}: {text: string}) {
+/** A small icon action under a bubble, like the web console's message buttons. */
+function ActionButton({icon, label, onPress}: {icon: IconDefinition; label: string; onPress: () => void}) {
   const t = useTheme();
   const styles = useStyles();
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={tr('common_copy')}
+      accessibilityLabel={label}
       hitSlop={10}
-      onPress={() => copyMessage(text)}
+      onPress={onPress}
       style={({pressed}) => [styles.copy, pressed && styles.pressed]}>
-      <Icon icon={faCopy} size={11} color={t.t4} />
+      <Icon icon={icon} size={11} color={t.t4} />
     </Pressable>
   );
+}
+
+function CopyButton({text}: {text: string}) {
+  return <ActionButton icon={faCopy} label={tr('common_copy')} onPress={() => copyMessage(text)} />;
 }
 
 export const MessageItem = memo(MessageItemImpl);
@@ -114,7 +128,7 @@ export const MessageItem = memo(MessageItemImpl);
 /** The server copy of a picture the user sent, which the viewer shows and the save options fetch. */
 const sentImage = (a: MessageAttachment): ChatFile => ({name: a.name, kind: 'image', rawUrl: serverFileUrl(a.path)});
 
-function UserTurn({message}: {message: ChatMessage}) {
+function UserTurn({message, onEdit}: {message: ChatMessage; onEdit?: (message: ChatMessage) => void}) {
   const t = useTheme();
   const styles = useStyles();
   // Kept after closing so the sheet still has its file while it slides away.
@@ -184,6 +198,9 @@ function UserTurn({message}: {message: ChatMessage}) {
       )}
       {(!!message.createdAt || !!message.content) && !message.transcribing && (
         <View style={[styles.metaRow, styles.userMetaRow]}>
+          {message.seq !== undefined && onEdit && (
+            <ActionButton icon={faPenToSquare} label={tr('chat_edit')} onPress={() => onEdit(message)} />
+          )}
           {!!message.content && <CopyButton text={message.content} />}
           {!!message.createdAt && <Text style={styles.meta}>{clockTime(message.createdAt)}</Text>}
         </View>
@@ -247,11 +264,13 @@ function AssistantTurn({
   labelled,
   newest,
   onOpenContext,
+  onRetry,
 }: {
   message: ChatMessage;
   labelled: boolean;
   newest: boolean;
   onOpenContext?: () => void;
+  onRetry?: (message: ChatMessage) => void;
 }) {
   const t = useTheme();
   const styles = useStyles();
@@ -373,7 +392,9 @@ function AssistantTurn({
             )}
             {!!message.error && <Text style={styles.error}>{message.error}</Text>}
           </View>
-          {!message.streaming && <MetaLine message={message} onOpenContext={onOpenContext} />}
+          {!message.streaming && (
+            <MetaLine message={message} onOpenContext={onOpenContext} onRetry={onRetry} />
+          )}
         </View>
       </View>
     </RowToggleContext.Provider>
@@ -678,9 +699,18 @@ function SubStepRow({sub}: {sub: SubStep}) {
   );
 }
 
-function MetaLine({message, onOpenContext}: {message: ChatMessage; onOpenContext?: () => void}) {
+function MetaLine({
+  message,
+  onOpenContext,
+  onRetry,
+}: {
+  message: ChatMessage;
+  onOpenContext?: () => void;
+  onRetry?: (message: ChatMessage) => void;
+}) {
   const styles = useStyles();
   const u = message.usage;
+  const canRetry = message.userSeq !== undefined && !!onRetry;
   const total = u ? u.total_tokens ?? (u.prompt_tokens ?? 0) + (u.completion_tokens ?? 0) : 0;
   const parts: string[] = [];
   if (message.createdAt) {
@@ -692,7 +722,7 @@ function MetaLine({message, onOpenContext}: {message: ChatMessage; onOpenContext
       parts.push(trf('chat_cache_hit', {pct: Math.round((u.prompt_cache_hit_tokens * 100) / u.prompt_tokens)}));
     }
   }
-  if (!parts.length && !message.content) {
+  if (!parts.length && !message.content && !canRetry) {
     return null;
   }
   const label = parts.length > 0 && <Text style={styles.meta}>{parts.join(' · ')}</Text>;
@@ -711,6 +741,9 @@ function MetaLine({message, onOpenContext}: {message: ChatMessage; onOpenContext
         label
       )}
       {!!message.content && <CopyButton text={message.content} />}
+      {canRetry && (
+        <ActionButton icon={faRotateRight} label={tr('chat_retry')} onPress={() => onRetry(message)} />
+      )}
     </View>
   );
 }
