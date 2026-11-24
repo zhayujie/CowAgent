@@ -240,6 +240,23 @@ class CodexBot(Bot, OpenAICompatibleBot):
                 yield _chunk(model, finish="stop", usage=usage)
                 return
 
+    def reply_text(self, session, **kwargs) -> dict:
+        """One-shot completion for helpers such as session titles and prompt optimization.
+
+        Same shape as the other bots: a call that failed reports ``completion_tokens=0``.
+        """
+        result = self.call_with_tools(session.messages, model=kwargs.get("model"))
+        if result.get("error"):
+            return {"content": result.get("message", ""), "completion_tokens": 0, "total_tokens": 0}
+        content = result["choices"][0]["message"]["content"]
+        usage = result.get("usage") or {}
+        return {
+            "content": content,
+            # Callers treat 0 as failure, so a reply without usage still counts when it has text.
+            "completion_tokens": usage.get("completion_tokens") or (1 if content else 0),
+            "total_tokens": usage.get("total_tokens", 0),
+        }
+
     def reply(self, query, context=None):
         if context is None or context.type != ContextType.TEXT:
             return Reply(ReplyType.ERROR, "The Codex provider supports text chat.")
