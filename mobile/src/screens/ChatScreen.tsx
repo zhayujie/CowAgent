@@ -12,6 +12,7 @@ import {
   Pressable,
   Text,
   View,
+  type LayoutChangeEvent,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from 'react-native';
@@ -387,6 +388,26 @@ export function ChatScreen({route, navigation}: Props) {
     offsetRef.current = next;
     list.current?.scrollToOffset({offset: next, animated: false});
   }, []);
+  // A conversation shorter than the screen sits at its top (flex-end, inverted), so the newest row moves
+  // up as it grows. Keeping that row in place would scroll the page away and animate it back every chunk.
+  const [overflowing, setOverflowing] = useState(false);
+  const listHeight = useRef(0);
+  const contentHeight = useRef(0);
+  const checkOverflow = useCallback(() => setOverflowing(contentHeight.current > listHeight.current + 1), []);
+  const onListLayout = useCallback(
+    (e: LayoutChangeEvent) => {
+      listHeight.current = e.nativeEvent.layout.height;
+      checkOverflow();
+    },
+    [checkOverflow],
+  );
+  const onListContentSize = useCallback(
+    (_w: number, h: number) => {
+      contentHeight.current = h;
+      checkOverflow();
+    },
+    [checkOverflow],
+  );
   // The list is inverted, so its bottom is offset 0; wait a frame for the new bubble to be laid out.
   const toBottom = useCallback(() => {
     requestAnimationFrame(() => list.current?.scrollToOffset({offset: 0, animated: true}));
@@ -878,7 +899,11 @@ export function ChatScreen({route, navigation}: Props) {
                     contentContainerStyle={[styles.list, styles.column]}
                     keyboardShouldPersistTaps="handled"
                     keyboardDismissMode="on-drag"
-                    maintainVisibleContentPosition={holding ? HOLD_POSITION : FOLLOW_POSITION}
+                    maintainVisibleContentPosition={
+                      overflowing ? (holding ? HOLD_POSITION : FOLLOW_POSITION) : undefined
+                    }
+                    onLayout={onListLayout}
+                    onContentSizeChange={onListContentSize}
                     onScroll={onListScroll}
                     scrollEventThrottle={32}
                   />
