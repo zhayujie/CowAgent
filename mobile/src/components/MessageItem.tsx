@@ -276,7 +276,7 @@ function AssistantTurn({
   const t = useTheme();
   const styles = useStyles();
   const speaker = useSpeaker(message.speaker);
-  const row = useAnchoredRow(newest);
+  const row = useAnchoredRow(message.id, newest);
   const [showAll, setShowAll] = useState(false);
   // Every text in the reply opens the same menu; copy takes the part pressed, retry the whole turn.
   const menuFor = (text: string): MessageMenuItems => ({

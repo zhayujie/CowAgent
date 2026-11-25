@@ -35,7 +35,7 @@ import {DrawerMenu, type DrawerRoute, type DrawerView} from '../components/Drawe
 import {Icon} from '../components/Icon';
 import {Intro} from '../components/Intro';
 import {LinkBanner} from '../components/LinkBanner';
-import {ListShiftContext} from '../components/listAnchor';
+import {ListPinContext, ListShiftContext} from '../components/listAnchor';
 import {MessageItem} from '../components/MessageItem';
 import {ServerSheet} from '../components/ServerSheet';
 import {SessionActions} from '../components/SessionActions';
@@ -95,6 +95,8 @@ const FOLLOW_PX = 80;
  */
 const FOLLOW_POSITION = {minIndexForVisible: 0, autoscrollToTopThreshold: FOLLOW_PX};
 const HOLD_POSITION = {minIndexForVisible: 1, autoscrollToTopThreshold: FOLLOW_PX};
+/** How long the row above a toggled message stays held, past the frames it takes to lay out. */
+const PIN_MS = 600;
 const SHOW_AI_NOTICE = (Platform.OS as string) === 'harmony';
 
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -467,6 +469,38 @@ export function ChatScreen({route, navigation}: Props) {
     offsetRef.current = next;
     list.current?.scrollToOffset({offset: next, animated: false});
   }, []);
+  // While a message opens or closes something, the row above it holds still and the message grows downwards.
+  const [heldRow, setHeldRow] = useState<number | null>(null);
+  const heldRef = useRef<number | null>(null);
+  const pinApply = useRef<(() => void) | null>(null);
+  const pinTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const dataRef = useRef<ChatMessage[]>([]);
+  const pinRow = useCallback((id: string, apply: () => void) => {
+    const above = dataRef.current.findIndex(m => m.id === id) + 1;
+    if (above <= 0 || above >= dataRef.current.length) {
+      return false;
+    }
+    clearTimeout(pinTimer.current);
+    pinTimer.current = setTimeout(() => {
+      heldRef.current = null;
+      setHeldRow(null);
+    }, PIN_MS);
+    if (heldRef.current === above) {
+      apply();
+      return true;
+    }
+    pinApply.current = apply;
+    heldRef.current = above;
+    setHeldRow(above);
+    return true;
+  }, []);
+  // The toggle waits for the hold to reach the list, or the first frame would still move.
+  useEffect(() => {
+    const apply = pinApply.current;
+    pinApply.current = null;
+    apply?.();
+  }, [heldRow]);
+  useEffect(() => () => clearTimeout(pinTimer.current), []);
   // A conversation shorter than the screen sits at its top (flex-end, inverted), so the newest row moves
   // up as it grows. Keeping that row in place would scroll the page away and animate it back every chunk.
   const [overflowing, setOverflowing] = useState(false);
@@ -870,6 +904,7 @@ export function ChatScreen({route, navigation}: Props) {
 
   // Inverted list keeps the newest message pinned to the bottom while streaming.
   const data = useMemo(() => [...messages].reverse(), [messages]);
+  dataRef.current = data;
   // A shared conversation names whoever said each reply.
   const shared = teamSize > 0;
   const openContext = useCallback(() => {
@@ -1005,6 +1040,7 @@ export function ChatScreen({route, navigation}: Props) {
                 </View>
               )
             ) : (
+              <ListPinContext.Provider value={pinRow}>
               <ListShiftContext.Provider value={shiftList}>
                 <View style={styles.body}>
                   <FlatList
@@ -1017,7 +1053,13 @@ export function ChatScreen({route, navigation}: Props) {
                     keyboardShouldPersistTaps="handled"
                     keyboardDismissMode="on-drag"
                     maintainVisibleContentPosition={
-                      overflowing ? (holding ? HOLD_POSITION : FOLLOW_POSITION) : undefined
+                      heldRow !== null
+                        ? {minIndexForVisible: heldRow}
+                        : overflowing
+                          ? holding
+                            ? HOLD_POSITION
+                            : FOLLOW_POSITION
+                          : undefined
                     }
                     onLayout={onListLayout}
                     onContentSizeChange={onListContentSize}
@@ -1042,6 +1084,7 @@ export function ChatScreen({route, navigation}: Props) {
                   )}
                 </View>
               </ListShiftContext.Provider>
+              </ListPinContext.Provider>
             )}
             <View style={styles.column}>
               <Dock
