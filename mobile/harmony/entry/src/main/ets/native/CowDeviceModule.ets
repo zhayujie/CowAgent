@@ -9,7 +9,7 @@ import type { BusinessError } from '@kit.BasicServicesKit';
 import { statfs } from '@kit.CoreFileKit';
 import { connection } from '@kit.NetworkKit';
 import { audio } from '@kit.AudioKit';
-import { wantAgent } from '@kit.AbilityKit';
+import { bundleManager, wantAgent } from '@kit.AbilityKit';
 import type { ApplicationStateChangeCallback } from '@kit.AbilityKit';
 import { NotificationTap, SESSION_PARAM } from './SharedIntake';
 
@@ -94,6 +94,10 @@ export interface NativeStatus {
   system: string;
 }
 
+export interface DeviceConstants {
+  appVersion: string;
+}
+
 export interface Reminder {
   at: number;
   title: string;
@@ -140,6 +144,16 @@ export class CowDeviceModule extends TurboModule {
   __onDestroy__(): void {
     this.releaseBackground();
     this.ctx.uiAbilityContext.getApplicationContext().off('applicationStateChange', this.watcher);
+  }
+
+  /** The app's versionName, as CowDevice reports it on Android. */
+  getConstants(): DeviceConstants {
+    try {
+      const info = bundleManager.getBundleInfoForSelfSync(bundleManager.BundleFlag.GET_BUNDLE_INFO_DEFAULT);
+      return { appVersion: info.versionName };
+    } catch (e) {
+      return { appVersion: '' };
+    }
   }
 
   async currentLocation(): Promise<Fix> {
