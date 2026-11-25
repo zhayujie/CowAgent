@@ -1,0 +1,117 @@
+---
+title: v2.3.0
+description: CowAgent 2.3.0：发布移动端 App，新增设备管理与多设备连接，新增 CowAgent 模型服务与 Codex 订阅接入，工具、通道与安全性完善
+---
+
+🌐 [English](https://docs.cowagent.ai/releases/v2.3.0) | [中文](https://docs.cowagent.ai/zh/releases/v2.3.0)
+
+## 📱 移动端 App
+
+CowAgent 推出移动端 App，支持 iOS、Android 与鸿蒙，适配手机与平板。App 提供两种使用方式：直接在手机上运行 Agent，或连接电脑、服务器上的 CowAgent。
+
+> 目前为公开测试阶段，iOS 需通过 TestFlight 安装，Android 可直接下载 APK 文件，鸿蒙通过应用市场的测试链接安装，正式版即将上架各应用商店。前往 [下载页](https://cowagent.cn/zh/download/#mobile) 扫码即可安装，欢迎体验并通过 [GitHub Issues](https://github.com/zhayujie/CowAgent/issues) 反馈问题和建议。
+
+<Frame>
+  <img src="https://cdn.link-ai.tech/doc/mobile-app-zh.png" alt="移动端 App" width="800" />
+</Frame>
+
+- **在手机上运行**：App 内置完整的 Agent 内核，无需电脑或服务器，配置模型后即可使用对话、技能、记忆、知识库和定时任务，数据保存在手机本地。
+- **连接其他设备**：扫描配对二维码即可连接电脑或服务器上的 CowAgent，在手机上继续对话、查看产物、管理任务等；可保存多个设备，随时切换。
+- **手机能力**：在手机上运行时，Agent 可以打开应用和链接（导航、拨号、短信、邮件）、获取位置、读写日历、查询通讯录、选取照片、分享文件和查看设备状态。每次操作前都会询问，也可设为始终允许。
+- **通知与提醒**：App 在后台时，回复完成和定时任务结果通过系统通知送达，点击直接进入对应会话；手机上创建的定时任务交由系统按时执行。
+- **对话体验**：支持流式回复、附件与语音输入，多个会话可同时回复；回复可随时停止，中断的回复可以继续生成，也可重新生成回复或编辑已发送的问题。
+- **文件**：其他应用中的文件和文字可直接分享到对话，对话中的文件也可分享到其他应用。
+- **完整管理**：Agent、技能、MCP、知识库、记忆、定时任务、通道、访客页面、模型与能力等配置与 Web 控制台保持一致，均可在手机上管理。
+- **其他**：支持多语言界面；设备凭证保存在 iOS 钥匙串和 Android Keystore 中。
+
+Thanks @zkjqd、@a1094174619
+
+下载地址：[手机 APP 下载](https://cowagent.cn/zh/download/#mobile)
+
+相关文档：[移动端使用](https://docs.cowagent.ai/zh/guide/mobile)
+
+## 🔗 设备管理
+
+Web 控制台、桌面客户端与移动端新增设备管理，各端可以互相连接，在一处操作多台设备上的 CowAgent：
+
+- **配对连接**：在「设备管理」中点击「让其他设备连接我」，生成二维码与配对码（5 分钟内有效，仅可使用一次）；手机扫码连接，电脑输入地址和配对码连接。没有界面的服务器上可运行 `cow pair`，在终端中显示配对码和二维码。
+- **设备切换**：Web 控制台、移动端、桌面客户端可连接其他电脑或服务器上的 CowAgent 实例，并在设备之间切换操作，例如在手机或笔记本上管理服务器上的 Agent。
+- **云端实例**：[云端托管](https://docs.cowagent.ai/zh/guide/cloud) 的实例同样支持通过配对连接，手机扫码后不受网络环境限制，随时随地可用。
+- **设备列表**：「连接我的设备」列出所有已连接的设备，显示连接方式（配对连接或密码登录）和最近活跃时间，可修改名称或移除，移除后立即断开。
+- **独立凭证**：每台设备使用独立的登录凭证，Agent 无法读取。
+
+<Frame>
+  <img src="https://cdn.link-ai.tech/doc/devices-zh.png" alt="设备管理" width="800" />
+</Frame>
+
+相关文档：[设备管理](https://docs.cowagent.ai/zh/guide/devices)
+
+## 🤖 模型能力
+
+- **CowAgent 模型服务**：一个 API Key 即可使用 Claude、GPT、Gemini、DeepSeek、Qwen 等主流模型，同时覆盖图像理解、图像生成、语音、向量和联网搜索。相关文档：[CowAgent 模型服务](https://docs.cowagent.ai/zh/models/cowagent)
+- **Codex 订阅**：使用 ChatGPT 授权登录后，CowAgent 会通过你的账号订阅调用 GPT 模型，无需 API Key，Web 控制台与桌面客户端均可登录（Thanks @shuaiplus #4019、@6vision #4052）。
+- **新模型**：新增 `gemini-4-neon`（Gemini 默认模型）、`gemini-4-carbon`、`gemini-4-hydrogen`、`gpt-6.2-sol`（OpenAI 默认模型）、`gpt-6.2-astra`、`claude-fable-5-2`，图像生成新增 `gpt-image-2.6-flare`、`gpt-image-2.6-sunburst`、`gemini-nano-banana-2.1`。
+- **语音**：新增 DeepSeek 语音识别与语音合成。
+- **思考强度**：Web 控制台的模型设置中可配置思考强度（Thanks @shuaiplus #4040）。
+- **图像理解**：LinkAI 图像理解默认使用 `deepseek-flash`，主模型具备视觉能力时直接传图（Thanks @6vision #4048）。
+- **稳定性**：Claude 多轮工具调用时保留思考内容；仅返回心跳的流式连接会按时结束，不再长时间挂起（Thanks @c020627 #3892, #3909, #3912、@eric7h #3930）；OpenAI Responses 接口兼容带 `dependentRequired` 的 MCP 工具参数，并保留流式错误信息（Thanks @linzch3 #4005, #4006、@Alion548 #4002）。
+- **其他**：Gemini 返回准确的结束原因，限制远程图片下载大小（Thanks @c020627 #3903, #4009）；补充 Kimi K3.1 上下文长度（Thanks @JohnQsk #3876）；ModelScope 工具调用携带系统提示词（Thanks @pcbeingused333 #3974）；对话 API 不同会话的请求互不阻塞（Thanks @thejesh23 #4034）；LinkAI 对话历史按上下文预算裁剪（Thanks @c020627 #3922）；修复讯飞语音的若干问题，语音识别多次修正后不再残留旧文字，长语音不再丢失结尾内容（Thanks @c020627 #3899、@MrGendo #3968、@nurlanmnn #4059、@pcbeingused333 #4066）。
+
+## 🔍 联网搜索与网页读取
+
+- **搜索厂商**：新增 Outcrawl、Firecrawl、SpecStream、Olostep、SearchApi、Context.dev，其中 Olostep 还可作为网页读取后端（Thanks @heydryft #3881、@JuampiHernandez #3908、@Specstreamai #3915、@Olostep-devs #3933、@gabsferreira #3936、@mrmps #4018）。
+- **网页读取**：无需额外依赖即可读取 Word 和 PowerPoint 文档，网页中的图片以 Markdown 形式保留；准确识别中日韩等页面编码，代码块保留缩进（Thanks @tanishqbaweja #3878, #3879, #3882）；博查搜索无结果时不再报错（Thanks @MrGendo #3954）。
+
+## 🖥 桌面客户端与 Web 控制台
+
+- **会话状态**：会话列表显示运行状态和未读标记，每个会话单独保存未发送的草稿（Thanks @6vision #3942）。
+- **语音快捷键**：桌面客户端可通过 `Cmd/Ctrl + Shift + M` 开始或结束语音输入，可配合遥控器、鼠标侧键等设备使用（Thanks @baqideli #4020）。
+- **流畅度**：修复长会话在回复过程中卡顿、切换会话后残留旧画面的问题；窗口位于已断开的显示器时自动移回可见区域（Thanks @6vision #3919, #3920, #4042）。
+- **知识库**：桌面客户端支持移动、重命名和删除知识库文档（Thanks @zkjqd #3859）。
+- **文件**：已发送的文件可在应用内直接预览（Thanks @6vision #4003）。
+- **显示**：默认跟随系统的浅色与深色模式；对话文本按原样显示，不再自动转换 `(c)`、`..`、引号等字符（Thanks @tanishqbaweja #3901）；设置了显示名称的模型同时显示原始模型 ID（Thanks @tanishqbaweja #3866）；桌面客户端的搜索厂商列表补全智谱、千帆等共用模型密钥的厂商（Thanks @fanjiahe #3867、@592774447 #3865）。
+
+## 🧩 Agent 与工具
+
+- **并行工具**：并行执行的工具在中途追加消息或取消时，已完成的结果完整保留，记录顺序正确（Thanks @deosiree #3926、@forevercrab321-svg #3925、@anpenghhh #3947、@bingdongni #3904）。
+- **子 Agent**：模板中 `tools: []` 表示不使用任何工具，超时状态正确记录（Thanks @nurlanmnn #4016、@anpenghhh #3989）。
+- **终端**：Windows 下可选用 PowerShell 7 执行命令（Thanks @kkmaple #3944）；后台任务限定在发起它的对话中（Thanks @c020627 #3880）；命令以 `;` 或换行结尾时退出码判断准确（Thanks @nurlanmnn #4046）；Windows 命令输出编码正确解析（Thanks @b84330808 #3897）。
+- **记忆**：向量检索与 Token 估算速度显著提升（Thanks @b84330808 #3932, #3946）；中文长查询的关键词召回与混合检索排序更准确（Thanks @MrGendo #3981, #3995, #3996）；新增的记忆文件不会在同步时被误删，空摘要不再被误判（Thanks @NieZhuZhu #4013、@MrGendo #3973、@thejesh23 #4035）；上下文压力按实际裁剪预算计算（Thanks @divya0795 #3976）。
+- **定时任务**：长任务执行期间到期的任务会在结束后补跑（Thanks @compiler-segfault #3907、@Evanscery #3905）；仅消息发送失败时不再重复执行，删除任务后正在进行的执行可正常结束，跳过空结果的重试（Thanks @divya0795 #3975、@Ymmcc #4021、@NieZhuZhu #4014）；相对时间解析更严格，任务查询限定在当前 Agent（Thanks @MrGendo #3953、@c020627 #3829, #4012）。
+- **Windows 兼容**：图像压缩、知识库导入、本地技能安装、技能创建、长行读取与记忆路径识别在 Windows 下工作正常（Thanks @tanishqbaweja #3861, #3862, #3863, #3877, #3890、@MrGendo #3969）。
+- **其他**：MCP 兼容仅支持 SSE 的旧版服务；团队协作中不匹配的 @ 前缀原样保留（Thanks @yunyv #3931）；图像生成技能恢复对 Python 3.7–3.9 的支持（Thanks @cosolar #4032）；安装技能时可直接使用从浏览器复制的 GitHub 链接（Thanks @nurlanmnn #4064）；修复限流识别、工具参数空值等问题（Thanks @MrGendo #3963, #3964, #3965, #3977, #3978, #3979）。
+
+## 📡 通道能力
+
+- **飞书**：支持 Lark 国际版域名，长连接断开后持续重连（Thanks @kkmaple #3927、@GemShine #3910）；引用消息中的图片可直接交给主模型识别，保留引用内容中的代码块，@ 提及显示真实姓名（Thanks @kkmaple #4004, #4036、@chuenchen309 #4017、@tanishqbaweja #3888）；修复无内容回复时的状态问题（Thanks @MrGendo #3970）。
+- **多实例通道**：可为每个通道实例单独设置默认项目目录（Thanks @kkmaple #3998）。
+- **微信 / 企业微信**：企业微信智能机器人群消息不再丢失 @ 之后的内容，代码与公式中的 `**` 正确保留（Thanks @tanishqbaweja #3883, #3896）；连接与凭证续期更稳定，发送失败如实提示（Thanks @c020627 #3875, #3891, #3895, #4008, #4010, #4011）。
+- **Telegram / Discord / Slack**：长回复分段时代码块保持完整，Telegram 链接中的括号正确保留（Thanks @tanishqbaweja #3885、@nurlanmnn #4045）。
+- **钉钉**：发送视频时使用真实时长（Thanks @MrGendo #3972）。
+
+## 🛡 安全加固
+
+- **跨站请求防护**：拒绝其他网站发起的写请求；未设置密码时，可通过 `web_allowed_hosts` 限制可访问的域名，防范 DNS 重绑定（Thanks @failsafesecurity #3789, #3790）。
+- **登录凭证**：登录凭证与密码解耦，泄露的凭证无法用于反推密码；仅信任本机反向代理传递的客户端 IP，日志中的密钥与密码自动脱敏。
+- **漏洞修复**：修复 MCP 授权回调页 XSS，图像理解工具遵守凭证路径保护，加强插件安装、技能名称与管理口令校验，修复命令权限判断遗漏（Thanks @MrGendo #3948, #3949, #3950, #3951, #3958, #3959, #3961）；飞书长连接启用 TLS 证书校验（Thanks @failsafesecurity #3796）；SSRF 防护覆盖运营商共享地址段与飞书图片链接（Thanks @rudycelekli #3913、@c020627 #3916）；控制台中的脚本类文件以沙箱方式打开（Thanks @zkjqd #3938）。
+- **资源与边界**：限制技能下载大小、浏览器超时与各类子进程执行时间，校验知识库分类名与 Windows 保留文件名，配置文件并发写入不再相互覆盖，Agent 加载异常时不会读取到其他 Agent 的数据（Thanks @c020627 #3736, #3824, #3831, #3836, #3886, #3887, #3893, #3894, #3911, #3914, #3921、@eric7h #3928, #3935、@MrGendo #3952, #3955, #3956, #3967）。
+
+## 🛠 其他
+
+- **Docker 镜像**：浏览器改为仅安装无头 Chromium，体积减少约 580MB；内置 Node.js 与 uv，基于 npx、uvx 的 MCP 服务和技能开箱即用。
+- **浏览器安装**：`cow install-browser` 在 Homebrew 等受系统管理的 Python 环境中可正常安装，浏览器固定下载到项目目录，不再受执行命令时所在目录影响（Thanks @lvxinrong #4057）。
+- **代码质量**：细化插件与翻译模块的异常类型（Thanks @Cmz9111 #3982, #3983, #3986, #3987, #3988, #3990）；测试与文档修正（Thanks @MrGendo #3957、@tonydzi #3917、@psycho-ken00 #3898）。
+
+## 📦 升级方式
+
+- **源码部署**：执行 `cow update` 一键升级，或在 Web 控制台侧边栏版本菜单中一键更新，也可手动拉取代码后重启。详见 [更新升级文档](https://docs.cowagent.ai/zh/guide/upgrade)。
+- **桌面客户端**：可在客户端内自动检查并一键更新，或前往 [下载页](https://cowagent.cn/zh/download/) 获取最新版本。
+- **移动端**：公开测试中，iOS 通过 TestFlight 安装，Android 下载安装包，鸿蒙通过华为应用市场邀请测试安装，详见 [下载页](https://cowagent.cn/zh/download/#mobile) 与 [移动端文档](https://docs.cowagent.ai/zh/guide/mobile#下载安装)。
+
+升级前请注意：
+
+- 移动端与其他设备连接时，对方的 CowAgent 需升级至 2.3.0 及以上，且监听地址可被访问（不能只监听本机），建议设置访问密码。
+- 如有其他网站的页面需要调用控制台接口，请将该网站加入 `web_allowed_origins`。
+- 通过 Nginx 等反向代理访问时，请转发 `Host` 与 `X-Real-IP` 请求头，以便正确识别访问地址和客户端 IP。
+
+**发布日期**：2026.11.26 | [Full Changelog](https://github.com/zhayujie/CowAgent/compare/2.2.2...2.3.0)

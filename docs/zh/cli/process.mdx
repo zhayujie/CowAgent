@@ -1,6 +1,6 @@
 ---
 title: 进程管理
-description: "使用 cow 命令管理 CowAgent 后台进程：start 启动、stop 停止、restart 重启、update 一键更新代码与依赖并重启、status 查看运行状态，以及日志查看等进程管理操作。"
+description: "使用 cow 命令管理 CowAgent 后台进程：start 启动、stop 停止、restart 重启、update 一键更新代码与依赖并重启、status 查看运行状态，以及日志查看、设备配对、Codex 登录等操作。"
 ---
 
 进程管理命令用于控制 CowAgent 后台进程的生命周期。这些命令仅在终端中可用。
@@ -115,6 +115,39 @@ cow install-browser
 <Tip>
   仅在需要使用浏览器工具（如网页浏览、截图等）时才需要安装。
 </Tip>
+
+## pair
+
+生成一次性配对码，让手机或其他电脑连接到正在运行的 CowAgent，适合没有图形界面的服务器。终端会显示配对码、连接地址和二维码，并等待设备连接。
+
+```bash
+cow pair
+```
+
+**选项：**
+
+| 选项 | 说明 |
+| --- | --- |
+| `--url` | 其他设备访问本机的地址，如 `http://203.0.113.5:9899`，未自动识别公网地址时使用 |
+| `--no-wait` | 只输出配对码，不等待连接 |
+
+配对码 5 分钟内有效，只能使用一次。服务只监听 `127.0.0.1` 时其他设备无法连接，需先设置 `web_password` 并重启。详见 [设备管理](/zh/guide/devices)。
+
+## codex
+
+管理 [Codex 厂商](/zh/models/openai) 使用的 ChatGPT 登录。
+
+```bash
+cow codex login
+```
+
+| 命令 | 说明 |
+| --- | --- |
+| `cow codex login` | 使用 ChatGPT 登录，未安装 Codex CLI 时提示安装；`--yes` 自动确认安装，`--browser` 使用本机浏览器登录 |
+| `cow codex install` | 仅安装官方 Codex CLI |
+| `cow codex status` | 查看登录状态 |
+| `cow codex models` | 同步可用模型列表 |
+| `cow codex logout` | 退出登录 |
 
 ## run.sh 兼容
 

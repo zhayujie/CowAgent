@@ -106,11 +106,19 @@
             "tab": "Get Started",
             "groups": [
               {
-                "group": "Installation",
+                "group": "Getting Started",
                 "pages": [
+                  "guide/index",
                   "guide/quick-start",
                   "guide/desktop",
-                  "guide/cloud",
+                  "guide/mobile",
+                  "guide/cloud"
+                ]
+              },
+              {
+                "group": "Deploy & Manage",
+                "pages": [
+                  "guide/devices",
                   "guide/manual-install",
                   "guide/upgrade"
                 ]
@@ -321,6 +329,7 @@
                 "group": "Release Notes",
                 "pages": [
                   "releases/overview",
+                  "releases/v2.3.0",
                   "releases/v2.2.2",
                   "releases/v2.2.1",
                   "releases/v2.2.0",
@@ -390,11 +399,19 @@
             "tab": "快速开始",
             "groups": [
               {
-                "group": "安装部署",
+                "group": "开始使用",
                 "pages": [
+                  "zh/guide/index",
                   "zh/guide/quick-start",
                   "zh/guide/desktop",
-                  "zh/guide/cloud",
+                  "zh/guide/mobile",
+                  "zh/guide/cloud"
+                ]
+              },
+              {
+                "group": "部署与管理",
+                "pages": [
+                  "zh/guide/devices",
                   "zh/guide/manual-install",
                   "zh/guide/upgrade"
                 ]
@@ -524,8 +541,8 @@
                 "group": "接入渠道",
                 "pages": [
                   "zh/channels/index",
-                  "zh/channels/weixin",
                   "zh/channels/web",
+                  "zh/channels/weixin",
                   "zh/channels/feishu",
                   "zh/channels/dingtalk",
                   "zh/channels/wecom-bot",
@@ -605,6 +622,7 @@
                 "group": "发布记录",
                 "pages": [
                   "zh/releases/overview",
+                  "zh/releases/v2.3.0",
                   "zh/releases/v2.2.2",
                   "zh/releases/v2.2.1",
                   "zh/releases/v2.2.0",
@@ -674,10 +692,19 @@
             "tab": "クイックスタート",
             "groups": [
               {
-                "group": "インストール",
+                "group": "はじめに",
                 "pages": [
+                  "ja/guide/index",
                   "ja/guide/quick-start",
                   "ja/guide/desktop",
+                  "ja/guide/mobile",
+                  "ja/guide/cloud"
+                ]
+              },
+              {
+                "group": "デプロイと管理",
+                "pages": [
+                  "ja/guide/devices",
                   "ja/guide/manual-install",
                   "ja/guide/upgrade"
                 ]
@@ -807,8 +834,8 @@
                 "group": "プラットフォーム",
                 "pages": [
                   "ja/channels/index",
-                  "ja/channels/weixin",
                   "ja/channels/web",
+                  "ja/channels/weixin",
                   "ja/channels/feishu",
                   "ja/channels/dingtalk",
                   "ja/channels/wecom-bot",
@@ -887,6 +914,7 @@
                 "group": "リリースノート",
                 "pages": [
                   "ja/releases/overview",
+                  "ja/releases/v2.3.0",
                   "ja/releases/v2.2.2",
                   "ja/releases/v2.2.1",
                   "ja/releases/v2.2.0",

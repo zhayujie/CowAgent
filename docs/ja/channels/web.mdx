@@ -25,6 +25,8 @@ Web コンソールは CowAgent のデフォルトチャネルです。起動後
 | `web_public_url` | 表示アドレス。API の URL、共有リンク、埋め込みコードに使われます。ドメインでアクセスする場合はドメインを入力、空欄なら自動検出 | `""` |
 | `web_password` | アクセスパスワード。空欄の場合はパスワード保護が無効。`0.0.0.0` でリスンする場合は設定を推奨 | `""` |
 | `web_session_expire_days` | ログインセッションの有効日数 | `30` |
+| `web_allowed_origins` | コンソールへの書き込みリクエストを許可する他の Web サイト。例：`["https://my.dashboard.com"]`。デフォルトではクロスサイトの書き込みリクエストをすべて拒否します | `[]` |
+| `web_allowed_hosts` | パスワード未設定時にアクセスを許可するドメイン。設定すると、コンソールは `localhost`、IP アドレス、表示アドレスのドメイン、ここに列挙したドメインにのみ応答し、DNS リバインディング攻撃を防ぎます | `[]` |
 | `web_file_serve_root` | web コンソールが直接読み取り/送信できるファイルの追加ルートディレクトリ（デフォルトはユーザーのホームディレクトリ）。設定済みの Agent ワークスペース（無効化された Agent を含む）と開いているプロジェクトディレクトリも常に許可されます。`/` に設定するとファイルシステム全体を許可 | `"~"` |
 | `enable_thinking` | 深い思考モードを有効化するか | `false` |
 
@@ -68,6 +70,7 @@ server {
         proxy_pass http://127.0.0.1:9899;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         # Replies stream over SSE: keep connections open and unbuffered
@@ -78,6 +81,8 @@ server {
     }
 }
 ```
+
+`Host` と `X-Real-IP` ヘッダーは削除しないでください。コンソールはこれらを使ってアクセスアドレスとクライアント IP を識別し、ログイン制限、デバイス一覧、ペアリングアドレスに利用します。セキュリティのため、コンソールが信頼するのは同じマシン上のリバースプロキシから渡されたクライアント IP だけです。
 
 **方法 2：HTTPS を直接有効化**。コンソール自身が TLS を提供します：
 
@@ -141,6 +146,12 @@ Web コンソールのポートでは OpenAI 互換のチャット API `/v1/chat
 Agent が作成した Web ページ、ドキュメント、画像、動画をタイムラインにまとめ、プレビュー、ピン留め、元の会話への移動ができます。初期状態では非表示で、[カスタムメニュー](/ja/extensions/custom-menu) のエディタから表示できます：
 
 <img width="850" src="https://cdn.jsdelivr.net/gh/zhayujie/cowagent-assets@main/screenshots/en/web-console-artifacts.png" />
+
+### デバイス管理
+
+「設定 → デバイス管理」でペアリングコードを生成すると、スマートフォンや他の PC から現在の CowAgent に接続できます。他のデバイス上の CowAgent に接続して切り替えて操作することもできます。詳しくは [デバイス管理](/ja/guide/devices) を参照してください：
+
+<img width="850" src="https://cdn.jsdelivr.net/gh/zhayujie/cowagent-assets@main/screenshots/en/devices.png" />
 
 ### モデル管理
 

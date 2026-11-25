@@ -25,6 +25,8 @@ Web 控制台是 CowAgent 的默认通道，启动后会自动运行，通过浏
 | `web_public_url` | 展示地址，用于接口地址、分享链接和嵌入代码。通过域名访问时可填写域名，留空自动识别 | `""` |
 | `web_password` | 访问密码，留空表示不启用密码保护；监听 `0.0.0.0` 时建议设置 | `""` |
 | `web_session_expire_days` | 登录会话有效天数 | `30` |
+| `web_allowed_origins` | 允许向控制台发起写请求的其他网站，如 `["https://my.dashboard.com"]`。默认拒绝所有跨站写请求 | `[]` |
+| `web_allowed_hosts` | 未设置密码时允许访问的域名。设置后，控制台只响应 `localhost`、IP 地址、展示地址的域名和这里列出的域名，用于防范 DNS 重绑定攻击 | `[]` |
 | `web_file_serve_root` | web 端可直接读取/发送文件的额外根目录（默认为用户主目录）。已配置的 Agent 工作空间（包括已停用的 Agent）和已打开的项目目录也始终允许访问；设为 `/` 可放开整个文件系统 | `"~"` |
 | `enable_thinking` | 是否启用深度思考模式 | `false` |
 
@@ -68,6 +70,7 @@ server {
         proxy_pass http://127.0.0.1:9899;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         # Replies stream over SSE: keep connections open and unbuffered
@@ -78,6 +81,8 @@ server {
     }
 }
 ```
+
+请保留 `Host` 与 `X-Real-IP` 请求头：控制台据此识别访问地址和客户端 IP，用于登录限制、设备列表和配对地址。出于安全考虑，控制台只信任本机反向代理传递的客户端 IP。
 
 **方式二：直接启用 HTTPS**。由控制台自身提供 TLS：
 
@@ -141,6 +146,12 @@ Web 控制台的端口同时提供 OpenAI 兼容的对话接口 `/v1/chat/comple
 按时间线汇集 Agent 生成的网页、文档、图片和视频，支持预览、置顶和跳转回原对话。页面默认隐藏，可在 [自定义菜单](/zh/extensions/custom-menu) 中开启：
 
 <img width="850" src="https://cdn.link-ai.tech/doc/artifacts-zh.png" />
+
+### 设备管理
+
+在「配置 → 设备管理」中生成配对码，让手机或其他电脑连接当前 CowAgent，也可以连接其他设备上的 CowAgent 并切换操作。详见 [设备管理](/zh/guide/devices)：
+
+<img width="850" src="https://cdn.link-ai.tech/doc/devices-zh.png" />
 
 ### 模型管理
 

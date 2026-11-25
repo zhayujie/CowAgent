@@ -37,7 +37,7 @@ The desktop client has built-in auto-update. When a new version is available it 
 ## Desktop vs. Command-line Deployment
 
 - **Desktop client**: best for personal use on your own computer — works out of the box, GUI-based, auto-updating.
-- **Command-line deployment**: best for developers or long-running servers with more customization. See [Quick Start](/guide/quick-start).
+- **Command-line deployment**: best for developers or long-running servers with more customization. See [One-click Source Install](/guide/quick-start).
 
 ## Access from a Browser
 
@@ -45,7 +45,11 @@ Once the desktop client is running, it listens on port `9876` locally, and its b
 
 If that port is unavailable (for example reserved by Hyper-V/WSL2 on Windows), the client automatically falls back to another one and still starts normally. The actual port is shown on the `Local access` line in `run.log`, and you can pin one by setting `web_port` in `config.json`.
 
-By default only this machine can connect. To open it from other devices on the same network (a phone, for example), change the listen address to `0.0.0.0` or this machine's local IP under **Settings → Integrations** (an access password is required first); the addresses other devices can open are shown below it.
+By default only this machine can connect. To open it from other devices on the same network, change the listen address to `0.0.0.0` or this machine's local IP under **Config → Integrations** (an access password is required first); the addresses other devices can open are shown below it.
+
+## Connect Your Phone and Other Devices
+
+After changing the listen address, go to **Config → Devices**, click "Let a device connect", and scan with the [CowAgent app](/guide/mobile) to use the Agent on your computer from your phone. The client can also connect to CowAgent on other computers, servers, or cloud instances and switch between devices. See [Device Management](/guide/devices).
 
 ## Local Data Storage
 

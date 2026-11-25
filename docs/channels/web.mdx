@@ -26,6 +26,8 @@ The Web Console is CowAgent's default channel. It runs automatically once starte
 | `web_port` | Web service listen port | `9899` |
 | `web_public_url` | Display address used in API URLs, share links and embed code. Enter your domain if you have one; leave empty to detect it | `""` |
 | `web_password` | Access password. Leave empty to disable password protection; recommended when listening on `0.0.0.0` | `""` |
+| `web_allowed_origins` | Other websites allowed to send write requests to the console, such as `["https://my.dashboard.com"]`. Cross-site write requests are rejected by default | `[]` |
+| `web_allowed_hosts` | Domains allowed when no password is set. Once set, the console only responds to `localhost`, IP addresses, the display address's domain, and the domains listed here, protecting against DNS rebinding | `[]` |
 | `external_api_enabled` | Turn on the [Chat API](/extensions/chat-api) | `false` |
 | `external_api_token` | API key of the [Chat API](/extensions/chat-api), kept while the API is off | `""` |
 | `web_session_expire_days` | Login session validity in days | `30` |
@@ -72,6 +74,7 @@ server {
         proxy_pass http://127.0.0.1:9899;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         # Replies stream over SSE: keep connections open and unbuffered
@@ -82,6 +85,8 @@ server {
     }
 }
 ```
+
+Keep the `Host` and `X-Real-IP` headers: the console uses them to identify the access address and client IP for login protection, the device list, and pairing addresses. For security, the console only trusts client IPs passed by a reverse proxy on the same machine.
 
 **Option 2: direct HTTPS.** The console serves TLS itself:
 
@@ -145,6 +150,12 @@ Each session can run under its own permission mode, controlling how far the Agen
 Collects the pages, documents, images and videos your agents create on one timeline, with preview, pinning, and a jump back to the original conversation. The page is hidden by default; show it from the [Custom Menu](/extensions/custom-menu) editor:
 
 <img width="850" src="https://cdn.jsdelivr.net/gh/zhayujie/cowagent-assets@main/screenshots/en/web-console-artifacts.png" />
+
+### Device Management
+
+Generate a pairing code under "Config → Devices" so a phone or another computer can connect to this CowAgent, or connect to CowAgent on other devices and switch between them. See [Device Management](/guide/devices):
+
+<img width="850" src="https://cdn.jsdelivr.net/gh/zhayujie/cowagent-assets@main/screenshots/en/devices.png" />
 
 ### Model Management
 

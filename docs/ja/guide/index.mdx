@@ -1,0 +1,34 @@
+---
+title: 利用方法を選ぶ
+description: "CowAgent はソースインストール、デスクトップクライアント、モバイルアプリ、CowAgent Cloud の 4 つの方法で利用できます。実行場所と利用シーンに合わせて選ぶほか、組み合わせて使うこともできます。"
+---
+
+CowAgent は次の方法で利用できます。用途に合ったものを選んで始めてください：
+
+<CardGroup cols={2}>
+  <Card title="ワンクリックソースインストール" icon="terminal" href="/ja/guide/quick-start">
+    1 行のコマンドで Linux、macOS、Windows にインストールします。開発者やサーバーでの運用に適しており、カスタマイズ性が最も高い方法です。
+  </Card>
+  <Card title="デスクトップクライアント" icon="desktop" href="/ja/guide/desktop">
+    macOS / Windows 用クライアント。実行環境を内蔵しており、Python などの依存関係をインストールせずにすぐ使えます。
+  </Card>
+  <Card title="モバイルアプリ" icon="mobile-screen-button" href="/ja/guide/mobile">
+    iOS / Android / HarmonyOS アプリ（公開ベータ版）。スマートフォン上で Agent を実行するか、QR コードで PC やサーバー上の CowAgent に接続します。
+  </Card>
+  <Card title="CowAgent Cloud" icon="cloud" href="/ja/guide/cloud">
+    サーバーも API キーも不要。モデルサービスを内蔵した専用インスタンスがクラウド上で 24 時間 365 日稼働します。
+  </Card>
+</CardGroup>
+
+## 選び方
+
+| | ソースインストール | デスクトップクライアント | モバイルアプリ | CowAgent Cloud |
+| --- | --- | --- | --- | --- |
+| 実行場所 | 自分の PC またはサーバー | この PC | スマートフォン、または接続した他のデバイス | クラウド上の専用インスタンス |
+| モデル設定 | 自分で設定 | 自分で設定 | 自分で設定 | 内蔵、自分で設定も可能 |
+| 稼働時間 | マシンによる | PC の起動中 | 実行場所による | 24 時間 365 日 |
+| 向いている用途 | カスタマイズ、サーバー運用 | 個人のローカル利用 | どこからでも利用 | 運用不要、常時稼働 |
+
+これらの方法は組み合わせて使えます。たとえば PC でデスクトップクライアントやソースインストール版を動かし、モバイルアプリから QR コードで接続すれば、外出先からでも PC 上の Agent を使えます。複数のデバイス間の接続と切り替えについては [デバイス管理](/ja/guide/devices) を参照してください。
+
+Docker や手動でデプロイする場合は [手動インストール](/ja/guide/manual-install) を参照してください。

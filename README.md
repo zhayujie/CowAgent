@@ -58,6 +58,7 @@ CowAgent is multi-model, multi-channel and multi-agent, lightweight and built to
 | Multimodal | First-class support for text, images, voice, and files — recognition, generation, and delivery |
 | [Models](https://docs.cowagent.ai/models/index) | Claude, GPT, Gemini, DeepSeek, Qwen, GLM, Kimi, MiniMax, Doubao, and more — swap providers from the Web console with one click |
 | [Deploy](https://docs.cowagent.ai/guide/quick-start) | One-line installer or desktop client, unified Web console, multiple deployment modes (local, Docker, server) |
+| [Mobile](https://docs.cowagent.ai/guide/mobile) | iOS / Android / HarmonyOS app (public beta): run the Agent on your phone, or scan a code to connect to CowAgent on a computer or server |
 
 <br/>
 
@@ -108,9 +109,12 @@ cow status | logs                  # status and logs
 cow update                         # pull latest code and restart
 cow skill install <name>           # install a skill
 cow install-browser                # install browser automation
+cow pair                           # generate a pairing code to connect a phone or other device
 ```
 
 > 💻 Desktop client: download the **[CowAgent Desktop client](https://cowagent.ai/download/)** (macOS / Windows) — the backend is bundled, ready to use out of the box.
+
+> 📱 Mobile: **[download the CowAgent app](https://cowagent.ai/download/#mobile)** (iOS / Android / HarmonyOS, public beta) to run on your phone or scan a code to connect to a computer or server. See the [mobile docs](https://docs.cowagent.ai/guide/mobile).
 
 > ☁️ Prefer not to deploy? **[Open the cloud console](https://cloud.cowagent.ai/?utm_source=github)** to create a dedicated instance with built-in models, online 24/7.
 
@@ -230,6 +234,8 @@ Learn more: [Skills overview](https://docs.cowagent.ai/skills/index) · [Creatin
 <br/>
 
 ## 🏷 Changelog
+
+> **2026.11.25:** [v2.3.0](https://github.com/zhayujie/CowAgent/releases/tag/2.3.0) — Mobile app (iOS / Android / HarmonyOS, public beta), device management and multi-device connections, the CowAgent model service and Codex subscription access, tool, channel and security improvements.
 
 > **2026.10.30:** [v2.2.2](https://github.com/zhayujie/CowAgent/releases/tag/2.2.2) — Standalone guest pages and embeddable chat windows, custom themes, native multimodal input for the main model, new models, tool, channel and security improvements.
 

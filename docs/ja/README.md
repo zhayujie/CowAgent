@@ -58,6 +58,7 @@ CowAgent は軽量でデプロイしやすく、拡張性に優れています�
 | マルチモーダル | テキスト・画像・音声・ファイルをフルサポート — 認識・生成・双方向送受信 |
 | [モデル](https://docs.cowagent.ai/ja/models/index) | Claude、GPT、Gemini、DeepSeek、GLM、Qwen、Kimi、MiniMax、Doubao など、設定 1 行で切り替え可能 |
 | [デプロイ](https://docs.cowagent.ai/ja/guide/quick-start) | ワンラインインストーラー、統合された Web コンソール、複数のデプロイモード（ローカル / Docker / サーバー） |
+| [モバイル](https://docs.cowagent.ai/ja/guide/mobile) | iOS / Android / HarmonyOS アプリ（公開ベータ版）。スマートフォン上で Agent を実行するか、QR コードで PC やサーバー上の CowAgent に接続 |
 
 <br/>
 
@@ -108,9 +109,12 @@ cow status | logs                  # ステータスとログ
 cow update                         # 最新コード取得後に再起動
 cow skill install <名前>           # Skill のインストール
 cow install-browser                # ブラウザツールのインストール
+cow pair                           # ペアリングコードを生成し、スマートフォンなどのデバイスを接続
 ```
 
 > 💻 デスクトップクライアント：**[CowAgent デスクトップクライアント](https://cowagent.ai/download/)**（macOS / Windows）はバックエンドを内蔵し、ダウンロードしてすぐに使えます。
+
+> 📱 モバイル：**[CowAgent アプリをダウンロード](https://cowagent.ai/download/#mobile)**（iOS / Android / HarmonyOS、公開ベータ版）。スマートフォン上で直接実行するほか、QR コードで PC やサーバーに接続できます。詳しくは [モバイルアプリのドキュメント](https://docs.cowagent.ai/ja/guide/mobile) を参照してください。
 
 <br/>
 
@@ -225,6 +229,8 @@ CowAgent は主要な LLM プロバイダーすべてに対応しています。
 <br/>
 
 ## 🏷 更新履歴
+
+> **2026.11.25:** [v2.3.0](https://github.com/zhayujie/CowAgent/releases/tag/2.3.0) — モバイルアプリの公開（iOS / Android / HarmonyOS、公開ベータ版）、デバイス管理と複数デバイスの接続、CowAgent モデルサービスと Codex サブスクリプションへの対応、ツール・チャネル・セキュリティの改善。
 
 > **2026.10.30:** [v2.2.2](https://github.com/zhayujie/CowAgent/releases/tag/2.2.2) — ゲストページ（独立ページとウィンドウ埋め込み）の追加、カスタムテーマ対応、メインモデルのネイティブマルチモーダル入力、新モデルの追加、ツール・チャネル・セキュリティの改善。
 

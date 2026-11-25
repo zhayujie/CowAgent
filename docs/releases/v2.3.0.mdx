@@ -1,0 +1,117 @@
+---
+title: v2.3.0
+description: "CowAgent 2.3.0: mobile app, device management and multi-device connections, the CowAgent model service and Codex subscription access, plus improvements to tools, channels, and security"
+---
+
+🌐 [English](https://docs.cowagent.ai/releases/v2.3.0) | [中文](https://docs.cowagent.ai/zh/releases/v2.3.0)
+
+## 📱 Mobile App
+
+CowAgent now has a mobile app for iOS, Android, and HarmonyOS, on both phones and tablets. The app works in two ways: run the Agent directly on your phone, or connect to CowAgent on a computer or server.
+
+> The app is in public beta. On iOS, install it through TestFlight; on Android, download the APK directly; on HarmonyOS, install it through the invitation test in Huawei AppGallery. The official release is coming to app stores soon. Scan the code on the [download page](https://cowagent.ai/download/#mobile) to install. Give it a try, and share issues or suggestions through [GitHub Issues](https://github.com/zhayujie/CowAgent/issues).
+
+<Frame>
+  <img src="https://cdn.jsdelivr.net/gh/zhayujie/cowagent-assets@main/screenshots/en/mobile-app.png" alt="Mobile app" width="800" />
+</Frame>
+
+- **Run on your phone**: the app includes the full Agent core, so no computer or server is needed. Once a model is configured, chat, skills, memory, the knowledge base, and scheduled tasks are all available, with data stored locally on the phone.
+- **Connect to other devices**: scan a pairing QR code to connect to CowAgent on a computer or server, then continue conversations, view artifacts, and manage tasks from your phone. Multiple devices can be saved and switched at any time.
+- **Phone capabilities**: when running on the phone, the Agent can open apps and links (navigation, calls, texts, email), get your location, read and write the calendar, look up contacts, pick photos, share files, and check device status. It asks before each action, and you can choose to always allow it.
+- **Notifications and reminders**: while the app is in the background, completed replies and scheduled task results arrive as system notifications, and tapping one opens the conversation. Scheduled tasks created on the phone are run on time by the system.
+- **Chat experience**: supports streaming replies, attachments, and voice input, and multiple sessions can reply at the same time. Replies can be stopped at any time, interrupted replies can be continued, and you can regenerate a reply or edit a sent question.
+- **Files**: files and text from other apps can be shared straight into a conversation, and files in a conversation can be shared to other apps.
+- **Full management**: Agents, skills, MCP, the knowledge base, memory, scheduled tasks, channels, guest pages, models, and capabilities are configured the same way as in the Web console, and can all be managed on the phone.
+- **Other**: multilingual interface; device credentials are stored in the iOS Keychain and Android Keystore.
+
+Thanks @zkjqd, @a1094174619
+
+Download: [Mobile App Download](https://cowagent.ai/download/#mobile)
+
+Related docs: [Mobile App](https://docs.cowagent.ai/guide/mobile)
+
+## 🔗 Device Management
+
+The Web console, desktop client, and mobile app now have device management. They can connect to each other, so CowAgent on multiple devices can be operated from one place:
+
+- **Pairing**: on the Devices page, click "Let a device connect" to generate a QR code and pairing code (valid for 5 minutes and usable once). Phones connect by scanning the code; computers connect by entering the address and pairing code. On a server without a graphical interface, run `cow pair` to show the pairing code and QR code in the terminal.
+- **Device switching**: the Web console, mobile app, and desktop client can connect to CowAgent instances on other computers or servers and switch between devices, for example to manage the Agent on a server from your phone or laptop.
+- **Cloud instances**: instances on [CowAgent Cloud](https://docs.cowagent.ai/guide/cloud) also support pairing. After scanning the code, your phone can use the instance from any network, wherever you are.
+- **Device list**: "Devices connected to me" lists every connected device with its connection method (paired or password sign-in) and last active time. Devices can be renamed or removed, and a removed device is disconnected immediately.
+- **Separate credentials**: each device has its own sign-in credentials, which the Agent cannot read.
+
+<Frame>
+  <img src="https://cdn.jsdelivr.net/gh/zhayujie/cowagent-assets@main/screenshots/en/devices.png" alt="Device management" width="800" />
+</Frame>
+
+Related docs: [Device Management](https://docs.cowagent.ai/guide/devices)
+
+## 🤖 Model Capabilities
+
+- **CowAgent model service**: a single API key gives access to mainstream models such as Claude, GPT, Gemini, DeepSeek, and Qwen, and also covers image understanding, image generation, speech, embeddings, and web search. Related docs: [CowAgent Model Service](https://docs.cowagent.ai/models/cowagent)
+- **Codex subscription**: after signing in with ChatGPT, CowAgent calls GPT models through your account's subscription, with no API key needed; sign in from either the web console or the desktop client (Thanks @shuaiplus #4019, @6vision #4052).
+- **New models**: added `gemini-4-neon` (Gemini's default model), `gemini-4-carbon`, `gemini-4-hydrogen`, `gpt-6.2-sol` (OpenAI's default model), `gpt-6.2-astra`, and `claude-fable-5-2`; image generation adds `gpt-image-2.6-flare`, `gpt-image-2.6-sunburst`, and `gemini-nano-banana-2.1`.
+- **Speech**: added DeepSeek speech recognition and speech synthesis.
+- **Thinking effort**: thinking effort can be configured in the Web console's model settings (Thanks @shuaiplus #4040).
+- **Image understanding**: LinkAI image understanding uses `deepseek-flash` by default, and images are passed directly to the main model when it supports vision (Thanks @6vision #4048).
+- **Stability**: Claude keeps its thinking content across multi-turn tool calls; streaming connections that only return heartbeats now end on time instead of hanging (Thanks @c020627 #3892, #3909, #3912, @eric7h #3930); the OpenAI Responses API accepts MCP tool parameters with `dependentRequired` and keeps streaming error messages (Thanks @linzch3 #4005, #4006, @Alion548 #4002).
+- **Other**: Gemini returns accurate finish reasons, and remote image downloads are size-limited (Thanks @c020627 #3903, #4009); added the Kimi K3.1 context length (Thanks @JohnQsk #3876); ModelScope tool calls include the system prompt (Thanks @pcbeingused333 #3974); Chat API requests in different sessions no longer block each other (Thanks @thejesh23 #4034); LinkAI conversation history is trimmed to the context budget (Thanks @c020627 #3922); fixed several iFLYTEK speech issues, and speech recognition no longer keeps stale text after repeated corrections or drops the end of long clips (Thanks @c020627 #3899, @MrGendo #3968, @nurlanmnn #4059, @pcbeingused333 #4066).
+
+## 🔍 Web Search & Page Reading
+
+- **Search providers**: added Outcrawl, Firecrawl, SpecStream, Olostep, SearchApi, and Context.dev; Olostep can also serve as the page reading backend (Thanks @heydryft #3881, @JuampiHernandez #3908, @Specstreamai #3915, @Olostep-devs #3933, @gabsferreira #3936, @mrmps #4018).
+- **Page reading**: Word and PowerPoint documents can be read without extra dependencies, and images on web pages are kept as Markdown; page encodings such as Chinese, Japanese, and Korean are detected accurately, and code blocks keep their indentation (Thanks @tanishqbaweja #3878, #3879, #3882); Bocha search no longer errors when there are no results (Thanks @MrGendo #3954).
+
+## 🖥 Desktop Client & Web Console
+
+- **Session status**: the session list shows running status and unread markers, and each session keeps its own unsent draft (Thanks @6vision #3942).
+- **Voice shortcut**: in the desktop client, `Cmd/Ctrl + Shift + M` starts or stops voice input, and works with devices such as remotes and mouse side buttons (Thanks @baqideli #4020).
+- **Smoothness**: fixed long sessions stuttering while a reply is generated and old content lingering after switching sessions; a window on a disconnected display moves back into view automatically (Thanks @6vision #3919, #3920, #4042).
+- **Knowledge base**: the desktop client can move, rename, and delete knowledge base documents (Thanks @zkjqd #3859).
+- **Files**: sent files can be previewed directly in the app (Thanks @6vision #4003).
+- **Display**: follows the system light or dark mode by default; chat text is shown as written, without automatically converting `(c)`, `..`, quotation marks, and similar characters (Thanks @tanishqbaweja #3901); models with a display name also show the original model ID (Thanks @tanishqbaweja #3866); the desktop client's search provider list now includes providers that share model keys, such as Zhipu and Qianfan (Thanks @fanjiahe #3867, @592774447 #3865).
+
+## 🧩 Agent & Tools
+
+- **Parallel tools**: when a message is added or a run is cancelled while tools run in parallel, completed results are kept in full and recorded in the correct order (Thanks @deosiree #3926, @forevercrab321-svg #3925, @anpenghhh #3947, @bingdongni #3904).
+- **Sub-agents**: `tools: []` in a template means no tools are used, and timeouts are recorded correctly (Thanks @nurlanmnn #4016, @anpenghhh #3989).
+- **Terminal**: PowerShell 7 can be used to run commands on Windows (Thanks @kkmaple #3944); background tasks are scoped to the conversation that started them (Thanks @c020627 #3880); exit codes are detected correctly when a command ends with `;` or a newline (Thanks @nurlanmnn #4046); Windows command output is decoded correctly (Thanks @b84330808 #3897).
+- **Memory**: vector search and token estimation are significantly faster (Thanks @b84330808 #3932, #3946); keyword recall for long Chinese queries and hybrid search ranking are more accurate (Thanks @MrGendo #3981, #3995, #3996); newly added memory files are no longer deleted during sync, and empty summaries are no longer misjudged (Thanks @NieZhuZhu #4013, @MrGendo #3973, @thejesh23 #4035); context pressure is calculated from the actual trimming budget (Thanks @divya0795 #3976).
+- **Scheduled tasks**: tasks that come due while a long task is running are run after it finishes (Thanks @compiler-segfault #3907, @Evanscery #3905); a task is no longer run again when only message delivery failed, an in-progress run finishes normally after its task is deleted, and retries are skipped for empty results (Thanks @divya0795 #3975, @Ymmcc #4021, @NieZhuZhu #4014); relative time parsing is stricter, and task queries are scoped to the current Agent (Thanks @MrGendo #3953, @c020627 #3829, #4012).
+- **Windows compatibility**: image compression, knowledge base import, local skill installation, skill creation, long-line reading, and memory path detection work correctly on Windows (Thanks @tanishqbaweja #3861, #3862, #3863, #3877, #3890, @MrGendo #3969).
+- **Other**: MCP supports older servers that only offer SSE; unmatched @ prefixes in team collaboration are kept as written (Thanks @yunyv #3931); the image generation skill supports Python 3.7–3.9 again (Thanks @cosolar #4032); skills install straight from GitHub links copied from the browser (Thanks @nurlanmnn #4064); fixed rate limit detection, empty tool arguments, and other issues (Thanks @MrGendo #3963, #3964, #3965, #3977, #3978, #3979).
+
+## 📡 Channels
+
+- **Feishu**: supports Lark international domains and keeps reconnecting after the long connection drops (Thanks @kkmaple #3927, @GemShine #3910); images in quoted messages can be passed straight to the main model, code blocks in quoted content are kept, and @mentions show real names (Thanks @kkmaple #4004, #4036, @chuenchen309 #4017, @tanishqbaweja #3888); fixed the status of replies with no content (Thanks @MrGendo #3970).
+- **Multi-instance channels**: each channel instance can have its own default project directory (Thanks @kkmaple #3998).
+- **WeChat / WeCom**: WeCom Bot group messages no longer lose the content after an @mention, and `**` in code and formulas is kept (Thanks @tanishqbaweja #3883, #3896); connections and credential renewal are more stable, and send failures are reported accurately (Thanks @c020627 #3875, #3891, #3895, #4008, #4010, #4011).
+- **Telegram / Discord / Slack**: code blocks stay intact when long replies are split, and parentheses in Telegram links are kept (Thanks @tanishqbaweja #3885, @nurlanmnn #4045).
+- **DingTalk**: videos are sent with their actual duration (Thanks @MrGendo #3972).
+
+## 🛡 Security Hardening
+
+- **Cross-site request protection**: write requests from other websites are rejected; when no password is set, `web_allowed_hosts` can restrict which domains may access the console, protecting against DNS rebinding (Thanks @failsafesecurity #3789, #3790).
+- **Sign-in credentials**: credentials are decoupled from the password, so a leaked credential cannot be used to recover the password; only client IPs passed by a reverse proxy on the same machine are trusted, and keys and passwords in logs are masked automatically.
+- **Vulnerability fixes**: fixed an XSS in the MCP authorization callback page, the image understanding tool respects credential path protection, validation of plugin installs, skill names, and admin passwords is stricter, and a gap in command permission checks is fixed (Thanks @MrGendo #3948, #3949, #3950, #3951, #3958, #3959, #3961); the Feishu long connection verifies TLS certificates (Thanks @failsafesecurity #3796); SSRF protection covers the carrier-grade NAT range and Feishu image links (Thanks @rudycelekli #3913, @c020627 #3916); script-type files are opened in a sandbox in the console (Thanks @zkjqd #3938).
+- **Resources and boundaries**: limits on skill download size, browser timeouts, and the run time of subprocesses; knowledge base category names and Windows reserved file names are validated; concurrent writes to the config file no longer overwrite each other; and an Agent that fails to load never reads another Agent's data (Thanks @c020627 #3736, #3824, #3831, #3836, #3886, #3887, #3893, #3894, #3911, #3914, #3921, @eric7h #3928, #3935, @MrGendo #3952, #3955, #3956, #3967).
+
+## 🛠 Other
+
+- **Docker image**: only headless Chromium is installed for the browser, reducing the image by about 580 MB; Node.js and uv are built in, so MCP servers and skills based on npx and uvx work out of the box.
+- **Browser install**: `cow install-browser` now works on externally managed Python environments such as Homebrew, and the browser is always downloaded to the project directory regardless of where the command is run (Thanks @lvxinrong #4057).
+- **Code quality**: more specific exception types in the plugin and translation modules (Thanks @Cmz9111 #3982, #3983, #3986, #3987, #3988, #3990); test and documentation fixes (Thanks @MrGendo #3957, @tonydzi #3917, @psycho-ken00 #3898).
+
+## 📦 How to Upgrade
+
+- **Source deployment**: run `cow update` for a one-click upgrade, update from the version menu in the Web console sidebar, or pull the latest code and restart. See the [upgrade guide](https://docs.cowagent.ai/guide/upgrade).
+- **Desktop client**: check for updates and update with one click inside the client, or get the latest version from the [download page](https://cowagent.ai/download/).
+- **Mobile app**: in public beta. Install through TestFlight on iOS, download the installer on Android, or join the invitation test in Huawei AppGallery on HarmonyOS. See the [download page](https://cowagent.ai/download/#mobile) and the [mobile docs](https://docs.cowagent.ai/guide/mobile#download-and-install).
+
+Before upgrading, note:
+
+- To connect from the mobile app or another device, the CowAgent being connected to must be 2.3.0 or later, and its listen address must be reachable (not local-only). Setting an access password is recommended.
+- If pages on another website need to call the console API, add that site to `web_allowed_origins`.
+- When accessing through a reverse proxy such as Nginx, forward the `Host` and `X-Real-IP` headers so the access address and client IP are identified correctly.
+
+**Release date**: 2026.11.26 | [Full Changelog](https://github.com/zhayujie/CowAgent/compare/2.2.2...2.3.0)

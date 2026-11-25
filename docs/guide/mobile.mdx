@@ -1,0 +1,135 @@
+---
+title: Mobile App
+description: "CowAgent mobile app (public beta) for iOS, Android, and HarmonyOS: run the Agent directly on your phone, or scan a code to connect to a computer, server, or cloud instance."
+---
+
+The CowAgent app is in **public beta**. It supports iOS, Android, and HarmonyOS, on both phones and tablets, and can be used in two ways:
+
+- **Run on this phone**: the Agent runs on the phone and its data stays on the phone. With your permission, it can use phone capabilities such as the calendar, contacts, photos, and location.
+- **Connect a computer**: scan a code to connect to CowAgent on a computer, server, or cloud instance and use all of its capabilities from the phone, including running commands, reading and writing files, and operating the browser.
+
+You can switch between the two at any time from the sidebar.
+
+**Download**: [cowagent.ai/download](https://cowagent.ai/download/#mobile)
+
+<Frame>
+  <img src="https://cdn.jsdelivr.net/gh/zhayujie/cowagent-assets@main/screenshots/en/mobile-app.png" alt="CowAgent mobile app" width="800" />
+</Frame>
+
+## Download and Install
+
+The easiest way is the [download page](https://cowagent.ai/download/#mobile): open it on a computer and scan the code with your phone, or open it on your phone directly, and you are taken to the install method for your system. You can also install manually:
+
+<Tabs>
+  <Tab title="iOS">
+    Supports iPhone and iPad on iOS 15.1 or later.
+
+    1. Install Apple's "TestFlight" app from the App Store.
+    2. Open the [public beta link](https://testflight.apple.com/join/JG9VxmXj) on your phone, tap "Accept", then tap "Install".
+    3. TestFlight notifies you when a new version is available.
+  </Tab>
+  <Tab title="Android">
+    Supports Android 7.0 or later.
+
+    1. Open the [download link](https://cowagent.ai/download/android/latest) in your phone's browser to download the installer (APK).
+    2. Open the downloaded file to install it. If you are told that installing unknown apps is blocked, allow the browser to install apps as prompted.
+    3. The app shows an update prompt when a new version is available; you can also check manually under "Settings → Updates".
+  </Tab>
+  <Tab title="HarmonyOS">
+    Supports phones and tablets on HarmonyOS 5.0 or later.
+
+    1. Open the [invitation test link](https://appgallery.huawei.com/link/invite-test-wap?taskId=534ec7245d8f271ca2d1ef0bc73f38b5&invitationCode=5MsQJ5iPGD6) on your phone and join the test in Huawei AppGallery.
+    2. Tap "Install", then open the app once it is installed.
+    3. Update the app in AppGallery when a new version is available.
+  </Tab>
+</Tabs>
+
+If you run into problems, report them through [GitHub Issues](https://github.com/zhayujie/CowAgent/issues) or by email to support@cowagent.ai. Please include your phone model, OS version, app version ("Settings → Updates"), and how you use the app (running on the phone or connected to a computer).
+
+## Run on This Phone
+
+1. When you first open the app, choose "Run on this phone" and tap "Next".
+2. On the chat page, tap "Set up" on the "Set up a model" card, enter an API key from a model provider (such as DeepSeek, Qwen, or CowAgent), and save.
+3. Go back to the chat page to start chatting.
+
+In this mode, conversations, memory, the knowledge base, and other data are stored locally on the phone, and conversation content is sent only to the model provider you configured. Phones have no command line or browser, so the Agent cannot run commands or operate a browser; it uses the built-in Python for computation and file processing instead. For the full set of capabilities, connect to a computer.
+
+### Phone Capabilities
+
+When running on the phone, the Agent can use the following phone capabilities. It asks before each action, and you can also choose "Always allow, don't ask again":
+
+| Capability | Description |
+| --- | --- |
+| Open apps and links | Open web pages or other apps, start navigation, calls, texts, and emails for you to finish in that app |
+| Location | Read the current location for nearby places, weather, and directions |
+| Calendar | Read your schedule, add events and reminders |
+| Contacts | Look up a contact's phone number and email by name |
+| Pick photos | You pick photos from your library for the Agent; only the selected photos are shared |
+| Share files | Open the system share sheet to send files to other apps |
+| Device status | Check battery, network, storage, power saving mode, and other status |
+| Run Python | Computation, data processing, and file conversion (CSV / Excel / PDF, etc.), and scripts in skills |
+
+The first time a capability is used, the system asks for the corresponding permission. You can check each permission under "Settings → App permissions". For an action set to always allow, tap "Ask every time" below that step in the conversation to bring the prompt back.
+
+### Notifications and Scheduled Tasks
+
+While the app is in the background, completed replies and scheduled task results arrive as system notifications, and tapping a notification opens the conversation. Scheduled tasks and reminders created on the phone are triggered by the system on time, without keeping the app in the foreground.
+
+## Connect a Computer
+
+Once connected, the phone uses the Agent on the computer or server, and conversations and data are stored on that device.
+
+**Prerequisites**:
+
+- The CowAgent you connect to is version 2.3.0 or later.
+- The phone can reach it: usually both are on the same Wi-Fi, or it has a publicly reachable address. When exposing a server port publicly, set an access password and configure the security group.
+- It is not listening on this machine only (`127.0.0.1`). You can change this under "Config → Integrations → Access URL".
+
+**Steps**:
+
+1. In CowAgent on the computer, open "Config → Devices" and click "Let a device connect" to generate a pairing QR code. On a server, you can also run `cow pair` to get a pairing code.
+2. In the app, choose "Connect a computer" (when opening it for the first time), or choose "Scan to connect" from the device switcher in the sidebar.
+3. Scan the QR code and confirm to start using the Agent on the computer.
+
+<Frame>
+  <img src="https://cdn.jsdelivr.net/gh/zhayujie/cowagent-assets@main/screenshots/en/devices-pair.png" alt="Generate a pairing QR code" width="800" />
+</Frame>
+
+If you cannot scan, choose "Enter an address" and fill in the address and pairing code instead. A pairing code is valid for 5 minutes and can be used once. After connecting, you can switch between "This device" and connected devices from the sidebar at any time.
+
+For details, see [Device Management](/guide/devices).
+
+### Connect to a Cloud Instance
+
+Without a computer or server, you can connect to an instance on [CowAgent Cloud](/guide/cloud): in the cloud console, open the "···" menu at the top right of the instance card, click "Devices", and scan the pairing QR code with the app. Cloud instances have a public address, so the phone can use them from any network, wherever you are.
+
+<Frame>
+  <img src="https://cdn.jsdelivr.net/gh/zhayujie/cowagent-assets@main/screenshots/en/cloud-devices.png" alt="Connect to a cloud instance" width="800" />
+</Frame>
+
+## Main Features
+
+- **Chat**: streaming replies, voice input, and image and file attachments, with two sessions able to reply at the same time. Replies can be stopped at any time, interrupted replies can be continued, and you can regenerate a reply or edit a sent question.
+- **Files**: files and text from other apps can be shared straight into the app, and files in a conversation can be shared to other apps. Files are downloaded inside the app, with resumable downloads.
+- **Management**: Agents, skills, MCP, the knowledge base, memory, scheduled tasks, channels, guest pages, and model configuration work the same as in the Web console.
+- **Interface**: Chinese and English, light and dark mode, and landscape, portrait, and split view on iPad and tablets.
+
+## Updates
+
+- **iOS**: TestFlight sends a notification when a new version is available; tap "Update" in TestFlight.
+- **Android**: the app shows an update prompt when a new version is available. After downloading, it verifies the installer and hands it to the system to install. You can also check manually under "Settings → Updates".
+- **HarmonyOS**: update the app in Huawei AppGallery when a new version is available.
+
+## FAQ
+
+**Can't connect after scanning?**
+
+Make sure the phone and computer are on the same network, CowAgent is running on the computer, and it is not listening on this machine only. If the connection times out, the computer's firewall may be blocking it.
+
+**Told the version is too old?**
+
+The app needs the CowAgent you connect to to be 2.3.0 or later. [Upgrade](/guide/upgrade) it first.
+
+**Told to sign in first?**
+
+There is a sign-in gateway in front of it (such as authentication on a reverse proxy), so the app cannot connect with a pairing code. Turn off the gateway or open separate access for CowAgent.

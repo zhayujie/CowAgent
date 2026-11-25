@@ -1,0 +1,81 @@
+---
+title: Device Management
+description: "Connect CowAgent across devices with one-time pairing codes: scan with your phone to connect to a computer or server, switch between instances in the Web console and desktop client, and manage connected devices in one place."
+---
+
+Device management connects CowAgent across multiple devices. For example, you can scan a code with your phone to use the Agent on your computer, switch from your laptop to the computer or server at home, and review or remove connected devices at any time.
+
+It is under "Config → Devices" in the Web console and desktop client, and under "Settings → Devices" in the mobile app.
+
+<Frame>
+  <img src="https://cdn.jsdelivr.net/gh/zhayujie/cowagent-assets@main/screenshots/en/devices.png" alt="Device management" width="800" />
+</Frame>
+
+The page has three parts:
+
+- **This device**: the name and version of the current CowAgent. Click the edit button next to the name to rename it; other devices show the same name.
+- **Devices I connect to**: other CowAgent instances this device has connected to, which you can switch to and operate.
+- **Devices connected to me**: phones, computers, and browsers connected to the current CowAgent, which can be removed at any time.
+
+## Let a Device Connect
+
+Under "Devices connected to me", click "Let a device connect". The page shows a pairing QR code, a pairing code, and the address:
+
+- **Phone**: scan the QR code with the CowAgent app.
+- **Computer**: on the other device, go to "Config → Devices", click "Connect to a device", and enter the address and pairing code.
+
+A pairing code is valid for 5 minutes and can be used once. The page tells you when the other device has connected.
+
+<Frame>
+  <img src="https://cdn.jsdelivr.net/gh/zhayujie/cowagent-assets@main/screenshots/en/devices-pair.png" alt="Generate a pairing code" width="800" />
+</Frame>
+
+<Note>
+  Other devices must be able to reach the current CowAgent. If the service listens on this machine only (`127.0.0.1`), the page shows a hint; you can change the listen address under "Config → Integrations → Access URL". If it is accessed through a domain, set the display address, and the pairing QR code will use it first.
+</Note>
+
+### Generate a Pairing Code on a Server
+
+On a server without a graphical interface, run:
+
+```bash
+cow pair
+```
+
+The terminal shows the pairing code, the address, and a QR code, and waits for a device to connect. If the server's public address is not detected automatically, specify it with `--url`:
+
+```bash
+cow pair --url http://203.0.113.5:9899
+```
+
+Add `--no-wait` to print the pairing code only, without waiting for a connection.
+
+## Connect to a Device
+
+In the Web console or desktop client, click "Connect to a device" under "Devices I connect to", and fill in the other device's address and pairing code, or paste a pairing link. For connecting from a phone, see [Mobile App](/guide/mobile#connect-a-computer).
+
+After connecting:
+
+- Click "Switch" under "Devices I connect to", or use the device switcher at the top of the sidebar, to operate the other CowAgent. Conversations, configuration, and files all come from that device.
+- The sidebar always shows the device you are operating; click "Back to this device" to return.
+- If the other device is shut down, offline, or at a new address, it is shown as unreachable in the list. If it has removed you, you need to pair again.
+
+<Note>
+  To switch devices in a browser, the page must be opened over `localhost` or HTTPS. An HTTPS page cannot connect to an HTTP address; use an HTTPS address or connect from the desktop client instead.
+</Note>
+
+## Devices Connected to Me
+
+The list shows every device connected to the current CowAgent, including its name, connection method (paired or password sign-in), version, IP, and last active time.
+
+- **Rename**: makes it easier to tell devices apart.
+- **Remove**: a removed device is disconnected immediately and must pair or sign in again.
+
+## Security
+
+- Connected devices have full access, including running commands and reading and writing files. Only pair devices you trust.
+- Each device has its own sign-in credentials, so removing one does not affect the others. When the access password changes, only devices signed in with the password need to sign in again.
+- Device data is stored in `~/.cow/device`, which the Agent cannot read.
+- Without an access password, anyone on the same network can open the console. The page warns about this; set a password before opening access to other devices.
+- If there is a sign-in gateway in front of CowAgent (such as authentication on a reverse proxy), devices cannot connect with a pairing code.
+- When accessing through a reverse proxy such as Nginx, forward the `Host` and `X-Real-IP` headers so the access address and device IPs are identified correctly. See [Web Console](/channels/web#https-and-domain-access).

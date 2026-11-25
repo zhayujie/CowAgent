@@ -1,6 +1,6 @@
 ---
 title: Process Management
-description: "Manage the CowAgent background process with the cow command: start, stop, restart, update (pull code, update dependencies and restart), check status and view logs."
+description: "Manage the CowAgent background process with the cow command: start, stop, restart, update (pull code, update dependencies and restart), check status, view logs, pair devices, and sign in to Codex."
 ---
 
 Process management commands control the CowAgent background process. These commands are only available in the terminal.
@@ -104,6 +104,39 @@ cow install-browser
 <Tip>
   Only needed when using browser tools (web browsing, screenshots, etc.).
 </Tip>
+
+## pair
+
+Generate a one-time pairing code so a phone or another computer can connect to the running CowAgent. This suits servers without a graphical interface. The terminal shows the pairing code, the address, and a QR code, and waits for a device to connect.
+
+```bash
+cow pair
+```
+
+**Options:**
+
+| Option | Description |
+| --- | --- |
+| `--url` | The address other devices use to reach this machine, such as `http://203.0.113.5:9899`. Use it when the public address is not detected automatically |
+| `--no-wait` | Print the pairing code only, without waiting for a connection |
+
+A pairing code is valid for 5 minutes and can be used once. If the service listens on `127.0.0.1` only, other devices cannot connect; set `web_password` and restart first. See [Device Management](/guide/devices).
+
+## codex
+
+Manage the ChatGPT sign-in used by the [Codex provider](/models/openai).
+
+```bash
+cow codex login
+```
+
+| Command | Description |
+| --- | --- |
+| `cow codex login` | Sign in with ChatGPT, prompting to install the Codex CLI if it is missing; `--yes` confirms the installation automatically, `--browser` signs in with a browser on this machine |
+| `cow codex install` | Install the official Codex CLI only |
+| `cow codex status` | Check the sign-in status |
+| `cow codex models` | Sync the list of available models |
+| `cow codex logout` | Sign out |
 
 ## run.sh Compatibility
 

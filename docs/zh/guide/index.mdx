@@ -1,0 +1,34 @@
+---
+title: 选择使用方式
+description: "CowAgent 支持源码部署、桌面客户端、移动端和云端托管四种使用方式，可按运行位置和使用场景选择，也可以组合使用。"
+---
+
+CowAgent 提供以下几种使用方式，选择适合你的一种开始：
+
+<CardGroup cols={2}>
+  <Card title="一键源码安装" icon="terminal" href="/zh/guide/quick-start">
+    一行命令安装到 Linux、macOS 或 Windows，适合开发者和服务器部署，可定制性最强。
+  </Card>
+  <Card title="桌面客户端" icon="desktop" href="/zh/guide/desktop">
+    macOS / Windows 客户端，内置运行环境，无需安装 Python 或其他依赖，下载即用。
+  </Card>
+  <Card title="移动端" icon="mobile-screen-button" href="/zh/guide/mobile">
+    iOS / Android / 鸿蒙 App（公开测试），可在手机上运行 Agent，或扫码连接电脑、服务器上的 CowAgent。
+  </Card>
+  <Card title="云端托管" icon="cloud" href="/zh/guide/cloud">
+    无需服务器和 API Key，在云端运行专属实例，内置模型服务，7×24 小时在线。
+  </Card>
+</CardGroup>
+
+## 如何选择
+
+| | 源码安装 | 桌面客户端 | 移动端 | 云端托管 |
+| --- | --- | --- | --- | --- |
+| 运行位置 | 自己的电脑或服务器 | 本机 | 手机，或连接其他设备 | 云端独立实例 |
+| 模型配置 | 自行配置 | 自行配置 | 自行配置 | 已内置，也可自行配置 |
+| 在线时间 | 取决于机器 | 电脑开机时 | 取决于运行位置 | 7×24 小时 |
+| 适合 | 二次开发、服务器部署 | 个人本地使用 | 随时随地使用 | 免运维、持续在线 |
+
+几种方式可以组合使用。例如在电脑上运行桌面客户端或源码部署，再用手机 App 扫码连接，在外也能使用电脑上的 Agent；多台设备之间的连接与切换见 [设备管理](/zh/guide/devices)。
+
+需要使用 Docker 或手动部署时，见 [手动安装](/zh/guide/manual-install)。

@@ -28,6 +28,50 @@ OpenAI 是覆盖最完整的厂商，可同时承担文本对话、视觉理解�
 | `open_ai_api_type` | 可选，接口协议，默认 `auto`（仅 `gpt-6` 系列（含 `gpt-6.1` / `gpt-6.2`）走 Responses 接口，其余走 Chat Completions）；若接入的服务不再提供 `/chat/completions`，设为 `responses` 让所有请求改走 `/responses`；设为 `chat` 则始终走 `/chat/completions`。Docker 部署可通过环境变量 `OPEN_AI_API_TYPE` 设置 |
 | `bot_type` | 使用 OpenAI 官方模型时无需填写；通过兼容协议接入厂商模型时需设为 `openai` |
 
+## Codex（ChatGPT 订阅）
+
+**Codex** 厂商通过你的 ChatGPT 订阅调用 GPT 模型，无需 API Key，适合个人使用。CowAgent 通过官方 Codex CLI 发起请求，对话历史和工具调用仍由 CowAgent 管理，遵循现有的权限设置。
+
+### 在 Web 控制台登录
+
+1. 在「配置 › 模型配置」中将厂商选为 Codex，点击「使用 ChatGPT 登录」。首次登录会自动下载官方 Codex CLI（约 110 MB）并显示进度。
+2. 复制设备码，打开 OpenAI 授权页面，登录 ChatGPT 账号后粘贴设备码并确认。
+3. 授权完成后模型列表自动同步，即可在对话中选择 Codex 模型。
+
+在厂商弹窗中可以重新同步模型列表或退出登录。通过远程控制台管理 Codex 登录前，需先设置访问密码。
+
+### 在终端登录
+
+以运行 CowAgent 服务的用户执行：
+
+```bash
+cow codex login
+```
+
+未安装 Codex CLI 时会提示安装，加上 `--yes` 可自动确认；本机有浏览器时可使用 `cow codex login --browser`。其他命令：
+
+| 命令 | 说明 |
+| --- | --- |
+| `cow codex install` | 仅安装 Codex CLI，不登录 |
+| `cow codex status` | 查看登录状态 |
+| `cow codex models` | 同步可用模型列表 |
+| `cow codex logout` | 退出登录 |
+
+如果 OpenAI 提示需要开启设备码授权，请在 ChatGPT 的安全设置中开启。Codex CLI 及其登录凭证保存在当前 CowAgent 实例的数据目录中，与你自行安装的 Codex CLI 互不影响。
+
+### 通过配置文件使用
+
+```json
+{
+  "bot_type": "codex",
+  "model": "MODEL_SLUG"
+}
+```
+
+`model` 填写 `cow codex models` 列出的模型。启用了 LinkAI 时需将 `use_linkai` 设为 `false`。
+
+Codex 厂商仅用于文本对话和工具调用，图像理解、图像生成、语音和向量需另行配置。可用模型和用量限制以你的 ChatGPT 套餐为准。
+
 ## 图像理解
 
 `gpt-5.5`、`gpt-5.4`、`gpt-4o`、`gpt-4.1` 等 OpenAI 模型均原生支持视觉，配置 `open_ai_api_key` 后 Agent 的 Vision 工具会自动使用主模型识别图像。若主模型不支持视觉或希望显式指定，可在配置文件中配置：
