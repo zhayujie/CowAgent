@@ -132,7 +132,7 @@ class ChatRenderer extends Renderer {
 
   codespan(text: string, codeStyle?: TextStyle): ReactNode {
     const path = codeFilePath(text);
-    // Text spans can only paint square tints, so the tint goes on a rounded box or not at all.
+    // Text spans can only paint square tints, so the tint goes on a rounded box when the code fits one.
     const {backgroundColor, ...glyphs} = StyleSheet.flatten(codeStyle) ?? {};
     if (!path) {
       // Android rests an inline box on the baseline; the nudge puts its text back on the line.
@@ -146,9 +146,9 @@ class ChatRenderer extends Renderer {
           </View>
         );
       }
-      // Code too long for a box keeps only its typeface and colour, and wraps with the text.
+      // Code too long for a box keeps its tint as a square span and wraps with the text.
       return (
-        <Text key={this.getKey()} selectable={this.canSelect} style={glyphs}>
+        <Text key={this.getKey()} selectable={this.canSelect} style={[glyphs, {backgroundColor}]}>
           {text}
         </Text>
       );
