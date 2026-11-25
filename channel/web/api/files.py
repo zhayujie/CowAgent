@@ -459,13 +459,33 @@ var keep=o&&o.preventScroll;focus.call(this,Object.assign({},o,{preventScroll:tr
 if(!keep&&this.isConnected)this.scrollIntoView({block:'nearest'});};
 })();</script>"""
 
+# The sandbox gives the page an opaque origin, where reading localStorage,
+# sessionStorage or document.cookie throws. Pages commonly read a saved theme
+# first thing, and the exception stops the rest of their script, leaving content
+# that fades in on load invisible. In-memory stand-ins keep such pages working;
+# nothing persists, and the console's own storage stays out of reach.
+_PREVIEW_STORAGE_SHIM_JS = """<script>(function(){
+function mem(){var d={};return Object.create(Storage.prototype,{
+getItem:{value:function(k){k=String(k);return Object.prototype.hasOwnProperty.call(d,k)?d[k]:null;}},
+setItem:{value:function(k,v){d[String(k)]=String(v);}},
+removeItem:{value:function(k){delete d[String(k)];}},
+clear:{value:function(){d={};}},
+key:{value:function(i){var k=Object.keys(d);return i<k.length?k[i]:null;}},
+length:{get:function(){return Object.keys(d).length;}}});}
+['localStorage','sessionStorage'].forEach(function(n){
+try{window[n];}catch(e){try{Object.defineProperty(window,n,{value:mem(),configurable:true});}catch(e2){}}});
+try{document.cookie;}catch(e){var jar={};try{Object.defineProperty(document,'cookie',{configurable:true,
+get:function(){return Object.keys(jar).map(function(k){return k+'='+jar[k];}).join('; ');},
+set:function(v){var p=String(v).split(';')[0],i=p.indexOf('=');if(i>0)jar[p.slice(0,i).trim()]=p.slice(i+1).trim();}});}catch(e2){}}
+})();</script>"""
+
 _HEAD_OPEN_RE = re.compile(rb"<head\b[^>]*>", re.IGNORECASE)
 _HTML_OPEN_RE = re.compile(rb"<html\b[^>]*>", re.IGNORECASE)
 
 
 def _inject_preview_chrome(raw: bytes) -> bytes:
-    """Insert the scrollbar stylesheet and the scroll guard into a previewed HTML document."""
-    chrome = (_PREVIEW_SCROLLBAR_CSS + _PREVIEW_SCROLL_GUARD_JS).encode("utf-8")
+    """Insert the storage shim, the scrollbar stylesheet and the scroll guard into a previewed HTML document."""
+    chrome = (_PREVIEW_STORAGE_SHIM_JS + _PREVIEW_SCROLLBAR_CSS + _PREVIEW_SCROLL_GUARD_JS).encode("utf-8")
     for pattern in (_HEAD_OPEN_RE, _HTML_OPEN_RE):
         m = pattern.search(raw)
         if m:

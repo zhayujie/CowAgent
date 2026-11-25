@@ -28,3 +28,14 @@ def test_fragment_gets_the_guard_prepended():
 def test_guard_is_injected_once():
     out = _inject_preview_chrome(b"<html><head></head><body><head></head></body></html>")
     assert out.count(b"E.scrollIntoView=") == 1
+
+
+def test_storage_stand_ins_come_before_everything_else():
+    # The sandbox makes reading localStorage throw; a page that reads a saved
+    # theme first would otherwise stop before showing its content.
+    page = b"<!doctype html><html><head><script>localStorage.getItem('theme')</script></head></html>"
+    out = _inject_preview_chrome(page)
+    shim = out.index(b"['localStorage','sessionStorage']")
+    assert shim < _guard_at(out)
+    assert shim < out.index(b"localStorage.getItem('theme')")
+    assert out.count(b"['localStorage','sessionStorage']") == 1
