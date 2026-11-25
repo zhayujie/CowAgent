@@ -49,6 +49,9 @@ const MONO = Platform.select({ios: 'Menlo', default: 'monospace'});
 const COLUMN_INSET = 18 * 2;
 const MIN_COL_WIDTH = 110;
 const INLINE_BOX_PAD = 5;
+// A box cannot wrap, and a list marker or the punctuation after it needs room on the same line;
+// a box near a full line has no line it fits on, so Android leaves it past the edge.
+const INLINE_BOX_MAX_SHARE = 0.6;
 
 /** Rough width of a monospace run: wide (CJK) glyphs take about twice a narrow one. */
 function monoWidth(text: string, fontSize: number): number {
@@ -134,7 +137,8 @@ class ChatRenderer extends Renderer {
     if (!path) {
       // Android rests an inline box on the baseline; the nudge puts its text back on the line.
       const fits =
-        !text.includes('\n') && monoWidth(text, glyphs.fontSize ?? 13) + INLINE_BOX_PAD * 2 <= this.contentWidth;
+        !text.includes('\n') &&
+        monoWidth(text, glyphs.fontSize ?? 13) + INLINE_BOX_PAD * 2 <= this.contentWidth * INLINE_BOX_MAX_SHARE;
       if (fits) {
         return (
           <View key={this.getKey()} style={[styles.inlineCode, {backgroundColor, maxWidth: this.contentWidth}]}>
@@ -142,7 +146,7 @@ class ChatRenderer extends Renderer {
           </View>
         );
       }
-      // A box cannot wrap, so code longer than a line keeps only its typeface and colour.
+      // Code too long for a box keeps only its typeface and colour, and wraps with the text.
       return (
         <Text key={this.getKey()} selectable={this.canSelect} style={glyphs}>
           {text}
