@@ -1,6 +1,6 @@
 from models.bot_factory import create_bot
 from bridge.context import Context
-from bridge.reply import Reply
+from bridge.reply import Reply, ReplyType
 from common import const
 from common.log import logger
 from common.singleton import singleton
@@ -88,6 +88,7 @@ class Bridge(object):
 
         self.bots = {}
         self.chat_bots = {}
+        self.asr_bots = {}
         self._agent_bridge = None
 
     def refresh_voice(self):
@@ -107,16 +108,41 @@ class Bridge(object):
         self.btype["text_to_voice"] = new_t2v
         self.bots.pop("voice_to_text", None)
         self.bots.pop("text_to_voice", None)
+        self.asr_bots = {}
         logger.info(f"[Bridge] voice refreshed: voice_to_text={new_v2t}, text_to_voice={new_t2v}")
 
-    @staticmethod
-    def _pick_by_api_key(candidates) -> str:
-        def has(k: str) -> bool:
-            v = (conf().get(k) or "").strip()
-            return v != "" and v not in ("YOUR API KEY", "YOUR_API_KEY")
+    # ASR vendors in the web console's order, each with its api key field.
+    _ASR_KEYS = (
+        ("deepseek_api_key", "deepseek"),
+        ("open_ai_api_key", "openai"),
+        ("dashscope_api_key", "dashscope"),
+        ("zhipu_ai_api_key", "zhipu"),
+        ("mimo_api_key", "mimo"),
+        ("cowagent_api_key", "cowagent"),
+        ("linkai_api_key", "linkai"),
+    )
 
+    # Chat bot types whose vendor also offers speech recognition.
+    _ASR_BY_CHAT = {
+        const.OPENAI: "openai",
+        const.CHATGPT: "openai",
+        const.DEEPSEEK: "deepseek",
+        const.QWEN_DASHSCOPE: "dashscope",
+        const.ZHIPU_AI: "zhipu",
+        const.MIMO: "mimo",
+        const.COWAGENT: "cowagent",
+        const.LINKAI: "linkai",
+    }
+
+    @staticmethod
+    def _has_key(key: str) -> bool:
+        v = (conf().get(key) or "").strip()
+        return v != "" and v not in ("YOUR API KEY", "YOUR_API_KEY")
+
+    @classmethod
+    def _pick_by_api_key(cls, candidates) -> str:
         for key, provider in candidates:
-            if has(key):
+            if cls._has_key(key):
                 return provider
         return ""
 
@@ -127,15 +153,32 @@ class Bridge(object):
         zhipu → mimo → cowagent → linkai. Falls back to 'openai' when nothing
         is configured so the original "missing key" error is preserved.
         """
-        return cls._pick_by_api_key((
-            ("deepseek_api_key", "deepseek"),
-            ("open_ai_api_key", "openai"),
-            ("dashscope_api_key", "dashscope"),
-            ("zhipu_ai_api_key", "zhipu"),
-            ("mimo_api_key", "mimo"),
-            ("cowagent_api_key", "cowagent"),
-            ("linkai_api_key", "linkai"),
-        )) or "openai"
+        return cls._pick_by_api_key(cls._ASR_KEYS) or "openai"
+
+    def _voice_to_text_chain(self) -> list:
+        """ASR providers to try in order. An explicitly chosen provider is
+        used alone, so audio never reaches a vendor the user did not pick.
+        Auto mode starts with the main model's vendor, then every other
+        vendor that has an api key.
+        """
+        explicit = (conf().get("voice_to_text") or "").strip()
+        legacy_linkai = (explicit == "openai" and conf().get("use_linkai")
+                         and self._has_key("linkai_api_key"))
+        if explicit and not legacy_linkai:
+            return [explicit]
+
+        chain = []
+        chat_type = str(self.btype.get("chat") or "")
+        main = self._ASR_BY_CHAT.get(chat_type)
+        main_key = next((k for k, p in self._ASR_KEYS if p == main), "")
+        if chat_type.startswith("custom:"):
+            chain.append(chat_type)
+        elif main_key and self._has_key(main_key):
+            chain.append(main)
+        for key, provider in self._ASR_KEYS:
+            if provider not in chain and self._has_key(key):
+                chain.append(provider)
+        return chain or [self.btype["voice_to_text"]]
 
     @classmethod
     def _auto_pick_text_to_voice(cls) -> str:
@@ -175,7 +218,23 @@ class Bridge(object):
         return self.get_bot("chat").reply(query, context)
 
     def fetch_voice_to_text(self, voiceFile) -> Reply:
-        return self.get_bot("voice_to_text").voiceToText(voiceFile)
+        chain = self._voice_to_text_chain()
+        for provider in chain[:-1]:
+            try:
+                reply = self._asr_bot(provider).voiceToText(voiceFile)
+                if reply is not None and reply.type == ReplyType.TEXT:
+                    return reply
+                reason = reply.content if reply is not None else "no reply"
+            except Exception as e:
+                reason = e
+            logger.warning(f"[Bridge] voice_to_text via {provider} failed ({reason}), trying the next provider")
+        return self._asr_bot(chain[-1]).voiceToText(voiceFile)
+
+    def _asr_bot(self, provider: str):
+        if provider not in self.asr_bots:
+            logger.info(f"create bot {provider} for voice_to_text")
+            self.asr_bots[provider] = create_voice(provider)
+        return self.asr_bots[provider]
 
     def fetch_text_to_voice(self, text) -> Reply:
         return self.get_bot("text_to_voice").textToVoice(text)
