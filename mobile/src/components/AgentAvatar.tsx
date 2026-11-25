@@ -3,6 +3,7 @@ import {Image, Text, View} from 'react-native';
 import {agentAvatarUrl} from '../api/cowApi';
 import logo from '../assets/logo-mark.png';
 import type {AgentProfile} from '../protocol/resources';
+import {useAgentStore} from '../store/agentStore';
 import {makeStyles} from '../theme/theme';
 
 const isImageUrl = (s: string) => /^(https?:|data:image\/)/i.test(s);
@@ -23,15 +24,18 @@ export function AgentAvatar({
   size?: number;
 }) {
   const styles = useStyles();
+  // The roster is read from disk, while badges from older servers can predate an upload.
+  const known = useAgentStore(s => (agent?.id ? s.agents.find(a => a.id === agent.id) : undefined));
   const box = {width: size, height: size, borderRadius: Math.round(size * 0.3)};
-  const avatar = agent?.avatar?.trim();
+  const avatar = (known ? known.avatar : agent?.avatar)?.trim();
+  const rev = known ? known.avatar_rev : agent?.avatar_rev;
   if (isDefault && !avatar) {
     return <Image source={logo} style={{width: size, height: size}} />;
   }
   if (avatar === UPLOADED && agent?.id) {
     return (
       <Image
-        source={{uri: agentAvatarUrl({id: agent.id, avatar_rev: agent.avatar_rev})}}
+        source={{uri: agentAvatarUrl({id: agent.id, avatar_rev: rev})}}
         style={[styles.image, box]}
         resizeMethod="resize"
       />

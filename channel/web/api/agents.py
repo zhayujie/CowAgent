@@ -365,6 +365,26 @@ def _avatar_rev(agent_id: str) -> Optional[str]:
         return None
 
 
+def _refresh_live_avatar(agent_id: str) -> None:
+    """Mark the running registry's profile as carrying an uploaded image.
+
+    The upload skips the runtime reload, so the registry the session and team
+    endpoints read would otherwise keep the profile from before the upload and
+    badge the Agent with its initial until the next restart.
+    """
+    from dataclasses import replace
+
+    from agent.registry import get_agent_registry
+
+    try:
+        registry = get_agent_registry()
+        profile = registry.get(agent_id, require_enabled=False)
+        if profile.avatar != AVATAR_IMAGE_TOKEN:
+            registry.upsert(replace(profile, avatar=AVATAR_IMAGE_TOKEN))
+    except Exception as e:
+        logger.warning(f"[WebChannel] could not refresh the avatar of agent={agent_id}: {e}")
+
+
 def _annotate_avatar_revs(snapshot: dict) -> dict:
     """Attach ``avatar_rev`` to every Agent that carries an uploaded image."""
     for agent in snapshot.get("agents") or []:
@@ -446,6 +466,7 @@ class AgentAvatarHandler:
             # An avatar is a file plus a metadata flag; it changes nothing about
             # routing, sessions or schedulers. Skipping the full runtime reload
             # keeps the upload instant instead of tearing everything down.
+            _refresh_live_avatar(agent_id)
             # Hand back the fresh revision so the console can patch its roster in
             # place without a full reload and without going stale on the next edit.
             revision = service.snapshot().get("revision")
