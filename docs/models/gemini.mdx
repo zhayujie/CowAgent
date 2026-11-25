@@ -13,19 +13,19 @@ Google Gemini supports text chat, image understanding, and image generation (Nan
 
 ```json
 {
-  "model": "gemini-4-carbon",
+  "model": "gemini-4-neon",
   "gemini_api_key": "YOUR_API_KEY"
 }
 ```
 
 | Parameter | Description |
 | --- | --- |
-| `model` | Recommended: `gemini-4-carbon`; also supports `gemini-4-neon`, `gemini-4-hydrogen`, `gemini-4-argon`, `gemini-3.8-flash`, `gemini-3.7-flash`, `gemini-3.6-flash`, `gemini-3.5-flash`, `gemini-3.1-pro-preview`, `gemini-3.1-flash-lite-preview`, `gemini-3-flash-preview`, `gemini-3-pro-preview`, etc. See [official docs](https://ai.google.dev/gemini-api/docs/models) |
+| `model` | Recommended: `gemini-4-neon`; also supports `gemini-4-carbon`, `gemini-4-hydrogen`, `gemini-4-argon`, `gemini-3.8-flash`, `gemini-3.7-flash`, `gemini-3.6-flash`, `gemini-3.5-flash`, `gemini-3.1-pro-preview`, `gemini-3.1-flash-lite-preview`, `gemini-3-flash-preview`, `gemini-3-pro-preview`, etc. See [official docs](https://ai.google.dev/gemini-api/docs/models) |
 | `gemini_api_key` | Create one in [Google AI Studio](https://aistudio.google.com/app/apikey) |
 | `gemini_api_base` | Optional, defaults to `https://generativelanguage.googleapis.com`. Can be changed to a third-party proxy |
 
 <Note>
-  Gemini 4 models always think, and the thinking level is adjustable in the model settings of the Web console. `gemini-4-carbon` is the strongest at reasoning, with `low` / `medium` / `high` (default `medium`); `gemini-4-neon` pairs frontier capability with speed and `gemini-4-hydrogen` is faster and cheaper, both with `low` / `medium` / `high` / `xhigh` (default `high`).
+  Gemini 4 models always think, and the thinking level is adjustable in the model settings of the Web console. `gemini-4-neon` pairs frontier capability with speed and `gemini-4-hydrogen` is faster and cheaper, both with `low` / `medium` / `high` / `xhigh` (default `high`); `gemini-4-carbon` is built for deep reasoning, with `low` / `medium` / `high` (default `medium`).
 </Note>
 
 ## Image Understanding

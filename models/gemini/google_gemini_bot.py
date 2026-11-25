@@ -121,9 +121,9 @@ class GoogleGeminiBot(Bot):
 
     @property
     def model(self):
-        model_name = conf().get("model") or "gemini-4-carbon"
+        model_name = conf().get("model") or "gemini-4-neon"
         if model_name == "gemini":
-            model_name = "gemini-4-carbon"
+            model_name = "gemini-4-neon"
         return model_name
 
     @property
