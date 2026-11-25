@@ -95,6 +95,7 @@ const FOLLOW_PX = 80;
  */
 const FOLLOW_POSITION = {minIndexForVisible: 0, autoscrollToTopThreshold: FOLLOW_PX};
 const HOLD_POSITION = {minIndexForVisible: 1, autoscrollToTopThreshold: FOLLOW_PX};
+const SHOW_AI_NOTICE = (Platform.OS as string) === 'harmony';
 
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -1072,6 +1073,7 @@ export function ChatScreen({route, navigation}: Props) {
                 searchFiles={searchFiles}
                 onPickFile={pickFile}
               />
+              {SHOW_AI_NOTICE && <Text style={styles.aiNotice}>{tr('chat_ai_notice')}</Text>}
             </View>
           </PaneWidthProvider>
           {!keyboardShown && <View style={{height: insets.bottom}} />}
@@ -1264,6 +1266,7 @@ const useStyles = makeStyles(t => ({
   agentName: {fontSize: 15, fontWeight: '500', letterSpacing: -0.2, color: t.t1, flexShrink: 1},
   body: {flex: 1},
   column: {width: '100%', maxWidth: CHAT_WIDTH, alignSelf: 'center'},
+  aiNotice: {fontSize: 11, lineHeight: 14, color: t.t3, textAlign: 'center', paddingBottom: 6},
   center: {flex: 1, alignItems: 'center', justifyContent: 'center'},
   // The list is inverted: flex-end is the visual top, so a short conversation starts there.
   list: {flexGrow: 1, justifyContent: 'flex-end', paddingTop: 20, paddingBottom: 8},
