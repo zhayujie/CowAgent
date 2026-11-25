@@ -20,6 +20,7 @@ from channel.web.core._common import (
     _require_auth,
 )
 from common.log import logger
+from common.moved_paths import rebase_moved_path
 
 
 def _workspace_service(session_id: str = None, agent_id: str = None):
@@ -123,7 +124,7 @@ class WorkspaceResolveHandler:
 
             svc = _workspace_service(params.session or None, params.agent or params.agent_id or None)
             if os.path.isabs(os.path.expanduser(raw_path)):
-                abs_path = os.path.realpath(os.path.expanduser(raw_path))
+                abs_path = os.path.realpath(rebase_moved_path(os.path.expanduser(raw_path)))
                 if not _is_path_allowed(abs_path):
                     return json.dumps({"status": "error", "message": "Path not allowed"})
                 is_dir = os.path.isdir(abs_path)

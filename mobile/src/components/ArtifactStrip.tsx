@@ -16,6 +16,7 @@ import type {Artifact} from '../protocol/events';
 import type {Palette} from '../theme/palette';
 import {useTheme} from '../theme/theme';
 import {Icon} from './Icon';
+import {showToast} from './Toast';
 
 export type KindGroup = keyof Palette['kind'];
 
@@ -72,6 +73,10 @@ export function artifactFile(a: Artifact): ChatFile | null {
 }
 
 export function openArtifact(a: Artifact) {
+  if (a.exists === false) {
+    showToast(tr('file_not_found'));
+    return;
+  }
   const file = artifactFile(a);
   if (file) {
     openFile(file);

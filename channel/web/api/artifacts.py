@@ -15,6 +15,7 @@ import web
 
 from channel.web.core._common import _build_preview_url, _require_auth
 from common.log import logger
+from common.moved_paths import rebase_moved_path
 
 # Filter chips in the view -> the stored kinds they cover.
 KIND_GROUPS = {
@@ -46,7 +47,7 @@ def _display_path(path: str, workspace: str) -> str:
 def _payload(row: dict, profile, default_id: str) -> dict:
     from agent.protocol.artifact import is_previewable
 
-    path = row["path"]
+    path = rebase_moved_path(row["path"])
     exists = os.path.isfile(path)
     size = row["size"]
     version = 0

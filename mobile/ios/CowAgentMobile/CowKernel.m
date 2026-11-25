@@ -120,11 +120,29 @@ static PyObject *LogWrite(PyObject *self, PyObject *args)
 
 static PyMethodDef logWriteDef = {"log_write", LogWrite, METH_VARARGS, NULL};
 
+// Compiled modules are cached under their source's absolute path, and iOS moves both the bundle and
+// the data container on every update or reinstall, so whatever an earlier install cached is never
+// read again and would only pile up.
+static void DropStalePycache(NSString *pycache)
+{
+  NSString *marker = [pycache stringByAppendingPathComponent:@".install"];
+  NSString *install = [NSString stringWithFormat:@"%@\n%@", NSBundle.mainBundle.bundlePath, NSHomeDirectory()];
+  NSString *cached = [NSString stringWithContentsOfFile:marker encoding:NSUTF8StringEncoding error:NULL];
+  if ([cached isEqualToString:install]) {
+    return;
+  }
+  NSFileManager *files = NSFileManager.defaultManager;
+  [files removeItemAtPath:pycache error:NULL];
+  [files createDirectoryAtPath:pycache withIntermediateDirectories:YES attributes:nil error:NULL];
+  [install writeToFile:marker atomically:YES encoding:NSUTF8StringEncoding error:NULL];
+}
+
 static BOOL InitPython(NSError **error)
 {
   NSString *resources = NSBundle.mainBundle.resourcePath;
   NSString *pycache = [NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES).firstObject
       stringByAppendingPathComponent:@"cow-pycache"];
+  DropStalePycache(pycache);
 
   // Python ignores SIGPIPE only when it installs its signal handlers, which it must not do here.
   // Without this, writing to a connection the app already closed (a stopped reply's stream, or a

@@ -7,6 +7,7 @@ from typing import Optional
 from urllib.parse import urlparse
 from common.log import logger
 from common.markdown_fence import transform_outside_fences
+from common.moved_paths import rebase_moved_path
 from common.deployment import is_desktop
 
 def fsize(file):
@@ -185,7 +186,7 @@ def expand_path(path: str) -> str:
             elif path.startswith('~/') or path.startswith('~\\'):
                 expanded = os.path.join(home, path[2:])
     
-    return expanded
+    return rebase_moved_path(expanded)
 
 
 def constant_time_equals(left: str, right: str) -> bool:

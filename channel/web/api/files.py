@@ -39,6 +39,7 @@ from channel.web.core._common import (
 )
 from channel.web.core.channel import WebChannel
 from common.log import logger
+from common.moved_paths import rebase_moved_path
 from common.utils import constant_time_equals
 
 
@@ -344,7 +345,7 @@ class FileServeHandler:
             # so this endpoint can't be abused to read arbitrary files (e.g. /etc/passwd, ~/.ssh).
             # Defaults to the user home dir plus the agent workspace; set web_file_serve_root="/"
             # to allow the whole filesystem.
-            file_path = os.path.realpath(file_path)
+            file_path = os.path.realpath(rebase_moved_path(file_path))
             if not _is_path_allowed(file_path):
                 raise web.notfound()
             if not os.path.isfile(file_path):
@@ -492,7 +493,7 @@ class PreviewHandler:
             rel_path = unquote(rel_path)
 
             try:
-                base_dir = _decode_dir_token(token)
+                base_dir = rebase_moved_path(_decode_dir_token(token))
             except ValueError:
                 raise web.notfound()
 
