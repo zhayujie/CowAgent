@@ -461,6 +461,19 @@ function useStalled(active: boolean, progress: string): boolean {
   return stalled;
 }
 
+/**
+ * Copy and select through a long press. Selectable text in the inverted list takes focus on a tap,
+ * and Android scrolls the list to the wrong place to reveal it.
+ */
+function HoldToCopy({text, plain, children}: {text: string; plain?: string; children: React.ReactNode}) {
+  const menu = useMessageMenu(() => ({text, plain: plain ?? text, actions: []}));
+  return (
+    <GestureDetector gesture={menu}>
+      <View>{children}</View>
+    </GestureDetector>
+  );
+}
+
 type MenuFor = (text: string) => MessageMenuItems;
 
 function StepRow({
@@ -701,35 +714,20 @@ function summarizeArgs(args: Record<string, unknown> | undefined): string {
 }
 
 /** Output past the cap is cut, so one giant result can't stall the list. */
-/** Tool input and output offer copy and select only; retrying the turn belongs to the reply. */
-const detailMenu = (text: string): MessageMenuItems => ({text, plain: text, actions: []});
-
 function Pre({text, error}: {text: string; error?: boolean}) {
   const styles = useStyles();
-  const gesture = useMessageMenu(() => detailMenu(text));
   const cut = text.length > DETAIL_MAX_CHARS;
   return (
     <ScrollView style={styles.preScroll} nestedScrollEnabled>
-      <GestureDetector gesture={gesture}>
+      <HoldToCopy text={text}>
         <Text style={[styles.pre, error && styles.preError]}>
           {cut ? `${text.slice(0, DETAIL_MAX_CHARS)}…` : text}
         </Text>
-      </GestureDetector>
+      </HoldToCopy>
       {cut && (
         <Text style={styles.preNote}>{trf('chat_output_truncated', {max: DETAIL_MAX_CHARS, total: text.length})}</Text>
       )}
     </ScrollView>
-  );
-}
-
-function DisplayText({text}: {text: string}) {
-  const gesture = useMessageMenu(() => ({...detailMenu(text), plain: markdownText(text)}));
-  return (
-    <GestureDetector gesture={gesture}>
-      <View>
-        <Markdown value={text} compact inset={BUBBLE_INSET + 40} selectable={false} />
-      </View>
-    </GestureDetector>
   );
 }
 
@@ -762,7 +760,9 @@ function ToolDetail({step}: {step: ToolStep}) {
           <Text style={styles.sectionLabel}>{failed ? 'ERROR' : 'OUTPUT'}</Text>
           {step.display ? (
             <ScrollView style={styles.display} nestedScrollEnabled>
-              <DisplayText text={step.display} />
+              <HoldToCopy text={step.display} plain={markdownText(step.display)}>
+                <Markdown value={step.display} compact inset={BUBBLE_INSET + 40} selectable={false} />
+              </HoldToCopy>
             </ScrollView>
           ) : output ? (
             <Pre text={step.result ? prettyResult(step.result) : asText(output)} error={failed} />
