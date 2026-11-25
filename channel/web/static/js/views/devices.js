@@ -372,8 +372,10 @@ function renderDevicePairing() {
         ? `<img src="${p.qr_image}" alt="QR" class="${p.expired ? 'opacity-20' : ''}">`
         : `<div class="w-full h-full rounded-xl bg-slate-100 dark:bg-white/5 flex items-center justify-center text-xs text-slate-400">${escapeHtml(t('devices_no_qr'))}</div>`;
     const urls = (p.urls || []).map(u => `<div class="font-mono text-xs text-slate-600 dark:text-slate-300 break-all">${escapeHtml(u)}</div>`).join('');
-    const step = (n, text) => `<li class="flex gap-2.5"><span class="w-5 h-5 rounded-full bg-primary-500/10 text-primary-600 dark:text-primary-400 text-[11px] font-semibold flex items-center justify-center flex-shrink-0">${n}</span><span>${escapeHtml(text)}</span></li>`;
-    const steps = `<ol class="grid gap-2 text-sm text-slate-600 dark:text-slate-300">${step(1, t('devices_step_app'))}${step(2, t('devices_step_other'))}</ol>`;
+    const step = (n, html) => `<li class="flex gap-2.5"><span class="w-5 h-5 rounded-full bg-primary-500/10 text-primary-600 dark:text-primary-400 text-[11px] font-semibold flex items-center justify-center flex-shrink-0">${n}</span><span>${html}</span></li>`;
+    const appLink = `<a href="${escapeHtml(t('devices_app_url'))}" target="_blank" rel="noopener" class="text-primary-500 hover:text-primary-600 hover:underline">${escapeHtml(t('devices_app_name'))}</a>`;
+    const appStep = escapeHtml(t('devices_step_app')).replace('{app}', appLink);
+    const steps = `<ol class="grid gap-2 text-sm text-slate-600 dark:text-slate-300">${step(1, appStep)}${step(2, escapeHtml(t('devices_step_other')))}</ol>`;
     box.innerHTML = `
         <div class="flex flex-col md:flex-row gap-6 p-5 mb-3 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50/70 dark:bg-white/[0.03]">
             <div class="dev-pair-ring self-center md:self-start">

@@ -421,6 +421,16 @@ const DevicesTab: React.FC<{
 
   const left = pairing ? Math.max(0, Math.round((pairing.expiresAt - Date.now()) / 1000)) : 0
   const clock = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`
+  const [appBefore, appAfter = ''] = t('devices_step_app').split('{app}')
+  const appStep = (
+    <>
+      {appBefore}
+      <a href={t('devices_app_url')} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
+        {t('devices_app_name')}
+      </a>
+      {appAfter}
+    </>
+  )
 
   return (
     <div className="space-y-5">
@@ -633,7 +643,7 @@ const DevicesTab: React.FC<{
             </div>
             <div className="min-w-0 flex-1 space-y-4">
               <ol className="space-y-2 text-sm text-content-secondary">
-                {[t('devices_step_app'), t('devices_step_other')].map((text, i) => (
+                {[appStep, t('devices_step_other')].map((text, i) => (
                   <li key={i} className="flex gap-2.5">
                     <span className="w-5 h-5 rounded-full bg-accent-soft text-accent text-[11px] font-semibold flex items-center justify-center flex-shrink-0">
                       {i + 1}
