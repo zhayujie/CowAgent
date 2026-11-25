@@ -103,6 +103,16 @@ def test_ambiguous_slug_asks_for_the_owner_instead_of_using_the_mirror(hub):
     assert not (live / "gog").exists()
 
 
+def test_hub_name_on_an_ambiguous_slug_uses_the_hub_mirror(hub):
+    live, calls, _ = hub
+    result = skill_cmd.install_skill("gog")
+
+    assert result.error is None, result.error
+    assert result.installed == ["gog"]
+    assert any(body and body.get("mirror") for _, body in calls["post"])
+    assert (live / "gog" / "SKILL.md").exists()
+
+
 def test_owner_request_never_falls_back_to_the_slug_only_mirror(hub, monkeypatch):
     _, calls, _ = hub
 

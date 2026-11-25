@@ -1403,7 +1403,10 @@ def _install_hub(name, result: InstallResult, provider=None, agent_id: str = Non
                 except Exception as e:
                     dl_err = e
                     status = getattr(getattr(e, "response", None), "status_code", None)
-                    if status == 409 and not owner:
+                    # A Skill Hub name already names one publisher's skill, whose
+                    # mirror the hub serves; only an explicit registry install
+                    # has nobody to fall back to.
+                    if status == 409 and not owner and (provider or not has_mirror):
                         raise SkillInstallError(
                             f"More than one publisher on {src_provider} has a skill named '{name}'. "
                             f"Include the publisher, e.g. {provider or src_provider}:<owner>/{name}, "
