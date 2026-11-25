@@ -78,6 +78,8 @@ type Suggestion =
 export interface DockHandle {
   /** Leaves voice mode first, since text can only be typed or sent from the keyboard mode. */
   focus: () => void;
+  /** Drops focus so a closing overlay cannot bring the keyboard back. */
+  blur: () => void;
 }
 
 export const Dock = forwardRef<DockHandle, Props>(function DockInner(
@@ -207,6 +209,10 @@ export const Dock = forwardRef<DockHandle, Props>(function DockInner(
 
   useImperativeHandle(ref, () => ({
     focus: () => (input.current ? input.current.focus() : toKeyboard()),
+    blur: () => {
+      input.current?.blur();
+      Keyboard.dismiss();
+    },
   }));
 
   const toggleVoice = () => {

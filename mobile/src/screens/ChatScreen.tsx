@@ -268,7 +268,8 @@ export function ChatScreen({route, navigation}: Props) {
   }, []);
   const openDrawer = useCallback(
     (view: DrawerView) => {
-      Keyboard.dismiss();
+      // Blur, don't only dismiss: on Android a still-focused box reopens the keyboard when the drawer leaves.
+      dock.current?.blur();
       if (wide) {
         useLayoutStore.getState().toggleSidebar(view);
         return;
@@ -378,6 +379,7 @@ export function ChatScreen({route, navigation}: Props) {
 
   const goTo = useCallback(
     (target: DrawerRoute) => {
+      dock.current?.blur();
       setDrawerOpen(false);
       navigation.navigate(target);
     },
@@ -385,12 +387,14 @@ export function ChatScreen({route, navigation}: Props) {
   );
 
   const openMenuFile = useCallback((file: ChatFile) => {
+    dock.current?.blur();
     setDrawerOpen(false);
     openFile(file);
   }, []);
 
   const openLink = useCallback(
     (label: string, url: string, external: boolean) => {
+      dock.current?.blur();
       setDrawerOpen(false);
       if (external) {
         openWebPage(serverUrl(url), label);
@@ -824,7 +828,7 @@ export function ChatScreen({route, navigation}: Props) {
     [bandTop, bandBottom],
   );
   const swipeStart = useCallback(() => {
-    Keyboard.dismiss();
+    dock.current?.blur();
     setDrawerView('menu');
     setDrawerNested(false);
     refreshDrawer();
