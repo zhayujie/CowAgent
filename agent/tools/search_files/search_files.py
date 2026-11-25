@@ -762,7 +762,10 @@ class SearchFiles(BaseTool):
 
         out: List[dict] = []
         count = 0
-        for line_no, raw in enumerate(content.split("\n"), start=1):
+        lines = content.split("\n")
+        if lines[-1] == "":
+            lines.pop()  # Empty files and final newlines do not add a line.
+        for line_no, raw in enumerate(lines, start=1):
             line = raw[:-1] if raw.endswith("\r") else raw
             if time.monotonic() >= opts.deadline:
                 return out, True, False
