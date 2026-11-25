@@ -14,10 +14,14 @@ const appleSettings = () => (require('react-native') as typeof import('react-nat
 
 // The system's own language comes first: iOS reports the app's current locale as one of
 // the app's localizations, so a Chinese iPhone shows up as en_CN there and to Intl.
+// Intl on HarmonyOS doesn't follow the system language, so a Chinese phone started in English.
 const LOCALE_SOURCES: (() => unknown)[] = [
   () => (Platform.OS === 'web' ? navigator.language : undefined),
   () => (Platform.OS === 'ios' ? appleSettings().get('AppleLanguages')?.[0] : undefined),
-  () => (Platform.OS === 'android' ? I18nManager.getConstants?.().localeIdentifier : undefined),
+  () =>
+    Platform.OS === 'android' || (Platform.OS as string) === 'harmony'
+      ? I18nManager.getConstants?.().localeIdentifier
+      : undefined,
   () => Intl.DateTimeFormat().resolvedOptions().locale,
 ];
 

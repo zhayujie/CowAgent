@@ -1,4 +1,5 @@
-import {getLang, localizedLabel, tr, trf, useLangStore} from '../src/i18n';
+import {I18nManager, Platform} from 'react-native';
+import {getLang, localizedLabel, systemLang, tr, trf, useLangStore} from '../src/i18n';
 import {MESSAGE_MODULES} from '../src/i18n/messages';
 
 const placeholders = (s: string) => (s.match(/\{\w+\}/g) ?? []).sort();
@@ -31,6 +32,27 @@ describe('message modules', () => {
         expect([key, enVars]).toEqual([key, zhVars]);
       }
     }
+  });
+});
+
+describe('system language', () => {
+  const os = Platform.OS;
+  afterEach(() => {
+    Platform.OS = os;
+    jest.restoreAllMocks();
+  });
+
+  it('reads the HarmonyOS system language rather than Intl', () => {
+    Platform.OS = 'harmony' as typeof Platform.OS;
+    jest.spyOn(I18nManager, 'getConstants').mockReturnValue({
+      isRTL: false,
+      doLeftAndRightSwapInRTL: false,
+      localeIdentifier: 'zh-Hans',
+    });
+    jest.spyOn(Intl, 'DateTimeFormat').mockReturnValue({
+      resolvedOptions: () => ({locale: 'en-US'}),
+    } as Intl.DateTimeFormat);
+    expect(systemLang()).toBe('zh');
   });
 });
 
