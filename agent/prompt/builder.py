@@ -842,10 +842,7 @@ def _build_workspace_section(
                 "",
             ]
 
-    # Cloud deployment: inject websites directory info and access URL
-    cloud_website_lines = _build_cloud_website_section(workspace_dir)
-    if cloud_website_lines:
-        lines.extend(cloud_website_lines)
+    lines.extend(_build_publish_section(workspace_dir))
     
     return lines
 
@@ -920,18 +917,17 @@ def _build_project_workspace_section(
                 "",
             ]
 
-    cloud_website_lines = _build_cloud_website_section(workspace_dir)
-    if cloud_website_lines:
-        lines.extend(cloud_website_lines)
+    lines.extend(_build_publish_section(workspace_dir))
     return lines
 
 
-def _build_cloud_website_section(workspace_dir: str) -> List[str]:
-    """Build cloud website access prompt when cloud deployment is configured."""
+def _build_publish_section(workspace_dir: str) -> List[str]:
+    """Build the file sharing rules when the websites/ dir has a public URL."""
     try:
-        from common.cloud_client import build_website_prompt
-        return build_website_prompt(workspace_dir)
-    except Exception:
+        from common.publish import build_publish_prompt
+        return build_publish_prompt(workspace_dir)
+    except Exception as e:
+        logger.warning(f"[PromptBuilder] publish rules skipped: {e}")
         return []
 
 

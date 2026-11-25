@@ -330,6 +330,22 @@ def test_history_cards_include_sent_documents_but_not_inline_media(tmp_path, mon
     assert cards[0]["abs_path"] == str(doc)
 
 
+def test_a_sent_document_with_a_public_link_keeps_its_card(tmp_path, monkeypatch):
+    from channel.web.api import sessions
+
+    doc = _touch(tmp_path / "websites" / "page.html")
+    monkeypatch.setattr(sessions, "_get_workspace_root", lambda *a: str(tmp_path))
+
+    def sent(path, url):
+        return {"type": "tool", "name": "send", "arguments": {"path": path},
+                "result": json.dumps({"type": "file_to_send", "path": path, "file_type": "document", "url": url})}
+
+    remote = "https://files.example.com/report.pdf"
+    steps = [sent(str(doc), "https://files.example.com/page.html"), sent(remote, remote)]
+    cards = sessions._artifacts_from_steps(steps, session_id="s1")
+    assert [(c["rel_path"], c["abs_path"]) for c in cards] == [("websites/page.html", str(doc))]
+
+
 def test_a_sent_file_without_a_card_is_left_to_the_download_link(tmp_path, monkeypatch):
     from channel.web.api import sessions
 

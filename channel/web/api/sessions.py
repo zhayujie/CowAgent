@@ -78,9 +78,11 @@ def _path_sent_by_step(step: dict) -> str:
         return ""
     if not isinstance(payload, dict) or payload.get("type") != "file_to_send":
         return ""
-    if payload.get("file_type") in ("image", "video") or payload.get("url"):
+    if payload.get("file_type") in ("image", "video"):
         return ""
-    return str(payload.get("path") or "").strip()
+    path = str(payload.get("path") or "").strip()
+    # A local document keeps its card even when it also has a public link.
+    return "" if path.lower().startswith(("http://", "https://")) else path
 
 
 def _artifacts_from_steps(steps, session_id: str = None, agent_id: str = None) -> list:

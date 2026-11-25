@@ -368,8 +368,9 @@ function _renderSentFileFromToolResult(step, carded) {
     // only trace of the delivery.
     if (carded && carded.has(payload.path)) return '';
     // A local document gets the same card as the live stream shows, so it
-    // still previews after a reload; remote URLs stay a download link.
-    const isRemote = /^https?:\/\//i.test(payload.url || payload.path);
+    // still previews after a reload, even when it also has a public link;
+    // remote URLs stay a download link.
+    const isRemote = /^https?:\/\//i.test(payload.path);
     if (!isRemote && typeof renderFileCard === 'function') {
         const kind = payload.kind || wsKindOf(fileName);
         return `<div class="agent-step"><div class="file-card-list" data-artifact-path="${escapeHtml(payload.path)}">` +

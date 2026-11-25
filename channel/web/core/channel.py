@@ -544,9 +544,11 @@ class WebChannel(ChatChannel):
                 file_name = data.get("file_name", os.path.basename(file_path))
                 file_type = data.get("file_type", "file")
                 # Remote URLs are passed through as-is; local files are served
-                # via the backend /api/file endpoint.
+                # via the backend /api/file endpoint. A local file that also has
+                # a public link stays a local file, with the link alongside.
                 remote_url = data.get("url", "")
-                is_remote = bool(remote_url) and remote_url.lower().startswith(("http://", "https://"))
+                has_remote = bool(remote_url) and remote_url.lower().startswith(("http://", "https://"))
+                is_remote = has_remote and not (file_path and os.path.isfile(file_path))
                 if is_remote:
                     web_url = remote_url
                 else:
@@ -574,6 +576,8 @@ class WebChannel(ChatChannel):
                             "size": data.get("size", 0),
                             "preview_url": _build_preview_url(file_path),
                         })
+                    if has_remote:
+                        payload["public_url"] = remote_url
                 publish(payload)
 
             elif event_type == "artifact":

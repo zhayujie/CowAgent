@@ -118,10 +118,10 @@ class Send(BaseTool):
         }
 
         try:
-            from common.cloud_client import get_website_base_url, copy_send_file
+            from common.publish import get_publish_base_url, copy_send_file
 
-            # Do nothing when in local env
-            if get_website_base_url():
+            # Do nothing when publishing is off
+            if get_publish_base_url():
                 url = copy_send_file(absolute_path, self.cwd)
                 if url:
                     result["url"] = url

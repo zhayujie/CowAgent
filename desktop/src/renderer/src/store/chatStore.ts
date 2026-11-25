@@ -176,13 +176,11 @@ function attachmentsFromSteps(steps: MessageStep[]): Attachment[] {
     const rawPath = (payload.path as string) || ''
     const url = (payload.url as string) || ''
     if (!rawPath && !url) continue
-    const isRemote = url.toLowerCase().startsWith('http://') || url.toLowerCase().startsWith('https://')
-    // Local files are served via /api/file; remote URLs are used directly.
-    const previewUrl = isRemote
-      ? url
-      : rawPath.toLowerCase().startsWith('http')
-        ? rawPath
-        : apiClient.getServeFileUrl(rawPath)
+    const isHttp = (v: string) => /^https?:\/\//i.test(v)
+    // Local files are served via /api/file, even when they also have a public
+    // link; remote URLs are used directly.
+    const isRemote = !rawPath || isHttp(rawPath)
+    const previewUrl = !isRemote ? apiClient.getServeFileUrl(rawPath) : isHttp(url) ? url : rawPath
     const kind = (payload.file_type as string) || 'file'
     const fileType: Attachment['file_type'] =
       kind === 'image' ? 'image' : kind === 'video' ? 'video' : 'file'
