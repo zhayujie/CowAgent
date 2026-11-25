@@ -15,6 +15,7 @@ import {
   checkAppUpdate,
   compareVersions,
   installAppUpdate,
+  storeButtonKey,
   testFlight,
   useAppUpdate,
 } from '../update/appUpdate';
@@ -97,7 +98,7 @@ export function VersionScreen({navigation}: Props) {
               <ActionButton
                 label={tr(
                   appRelease.storeUrl
-                    ? 'app_update_store'
+                    ? storeButtonKey
                     : appRelease.market
                       ? 'app_update_market'
                       : 'settings_update_now',

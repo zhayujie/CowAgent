@@ -25,6 +25,10 @@
 //   node register-releases.mjs --version 2.3.0 --app-store <App Store URL> \
 //        --sql ios.sql --latest
 //
+// The HarmonyOS app ships through AppGallery the same way:
+//   node register-releases.mjs --version 2.3.0 --app-gallery <AppGallery URL> \
+//        --sql harmony.sql --latest
+//
 // Likewise for an Android app market (ids as the app names them, e.g. xiaomi,
 // huawei, play): apps installed from it are told to update there once its row
 // says the market carries the version.
@@ -49,6 +53,7 @@ const version = arg('version')
 const sqlPath = arg('sql', 'd1.sql')
 const makeLatest = arg('latest', false) === true
 const appStore = arg('app-store')
+const appGallery = arg('app-gallery')
 const market = arg('market')
 
 if (!version) {
@@ -57,6 +62,10 @@ if (!version) {
 }
 if (appStore !== undefined && !/^https:\/\//.test(String(appStore))) {
   console.error('register-releases: --app-store needs the https:// URL of the App Store page')
+  process.exit(1)
+}
+if (appGallery !== undefined && !/^https:\/\//.test(String(appGallery))) {
+  console.error('register-releases: --app-gallery needs the https:// URL of the AppGallery page')
   process.exit(1)
 }
 // The platform column holds 32 characters, "android-" included.
@@ -81,11 +90,14 @@ const rows = {}
 if (appStore) {
   rows.ios = { main: { key: appStore, size: 0, sha: '' } }
 }
+if (appGallery) {
+  rows.harmony = { main: { key: appGallery, size: 0, sha: '' } }
+}
 if (market) {
   rows[`android-${market}`] = {}
 }
 
-for (const base of appStore || market ? [] : fs.readdirSync(dir)) {
+for (const base of appStore || appGallery || market ? [] : fs.readdirSync(dir)) {
   const f = `${dir}/${base}`
   if (fs.statSync(f).isDirectory()) continue
 

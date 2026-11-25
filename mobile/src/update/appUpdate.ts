@@ -2,7 +2,7 @@ import {Linking, NativeModules, Platform} from 'react-native';
 import {create} from 'zustand';
 import {listenForDownloadProgress, useDownloadStore} from '../files/downloadStore';
 import {deviceModule} from '../media/cowNative';
-import {getLang} from '../i18n';
+import {getLang, type MessageKey} from '../i18n';
 import {readJSON, writeJSON} from '../storage/kv';
 
 /** The newest release of the app, as the project's site lists it. */
@@ -15,7 +15,7 @@ export interface AppRelease {
   sha512: string;
   /** The site that answered, which the APK is then fetched from too. */
   host: string;
-  /** iOS: the app's App Store page, where the update is installed. */
+  /** iOS and HarmonyOS: the app's App Store or AppGallery page, where the update is installed. */
   storeUrl?: string;
   /** Android, installed from an app market: that market's package, which delivers the update. */
   market?: string;
@@ -83,10 +83,17 @@ const RESUME_KEY = 'app-update-resume';
 let lastChecked = 0;
 let checking = false;
 
-/** Android installs its own updates; iOS points to the App Store. */
-export const appUpdatesSupported = () => (Platform.OS === 'ios' || !!native?.installUpdate) && !!appVersion;
+const isHarmony = (Platform.OS as string) === 'harmony';
+// Installed and updated from a store page the feed links to.
+const fromStore = Platform.OS === 'ios' || isHarmony;
 
-const FEED = Platform.OS === 'ios' ? 'ios.json' : 'android.json';
+/** The label of the button that opens a release's store page. */
+export const storeButtonKey: MessageKey = isHarmony ? 'app_update_market' : 'app_update_store';
+
+/** Android installs its own updates; iOS and HarmonyOS point to their app store. */
+export const appUpdatesSupported = () => (fromStore || !!native?.installUpdate) && !!appVersion;
+
+const FEED = Platform.OS === 'ios' ? 'ios.json' : isHarmony ? 'harmony.json' : 'android.json';
 
 const parts = (v: string) => {
   const [core, pre = ''] = v.replace(/^v/i, '').split('-', 2);
@@ -138,7 +145,7 @@ async function fetchFeed(host: string): Promise<AppRelease | null> {
       // Markets carry the app, but no APK is listed for direct installs.
       return null;
     }
-    if (Platform.OS === 'ios') {
+    if (fromStore) {
       if (typeof body.url !== 'string' || !/^https:\/\//.test(body.url)) {
         throw new Error('Unexpected release feed');
       }
@@ -228,8 +235,8 @@ export function postponeAppUpdate(): void {
 
 /**
  * Android: downloads the release, with its progress in the update sheet, and opens the system
- * installer, which asks the user to confirm. iOS, and apps from an app market: opens the app's
- * page there.
+ * installer, which asks the user to confirm. iOS, HarmonyOS, and apps from an app market: opens
+ * the app's page there.
  */
 export async function installAppUpdate(): Promise<void> {
   const {release, phase} = useAppUpdate.getState();

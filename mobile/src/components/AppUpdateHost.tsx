@@ -11,6 +11,7 @@ import {
   compareVersions,
   installAppUpdate,
   postponeAppUpdate,
+  storeButtonKey,
   testFlight,
   UPDATE_ID,
   useAppUpdate,
@@ -21,7 +22,7 @@ import {Sheet} from './Sheet';
 
 /**
  * Offers a new release on launch and on return to the app. On Android it carries the download
- * through to the installer; on iOS it points to the App Store.
+ * through to the installer; on iOS and HarmonyOS it points to the app store.
  */
 export function AppUpdateHost() {
   const t = useTheme();
@@ -82,7 +83,7 @@ export function AppUpdateHost() {
                     : phase === 'failed'
                       ? tr('common_retry')
                       : release.storeUrl
-                        ? tr('app_update_store')
+                        ? tr(storeButtonKey)
                         : release.market
                           ? tr('app_update_market')
                           : tr('app_update_install')
