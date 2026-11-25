@@ -357,10 +357,20 @@ class BrowserTool(BaseTool):
         text = self._get_service().snapshot(selector=selector)
         return ToolResult.success(text)
 
+    @staticmethod
+    def _missing_target(ref, selector) -> Optional[ToolResult]:
+        # Checked before _get_service() so a malformed call never starts a browser.
+        if ref is None and not selector:
+            return ToolResult.fail("Error: Provide either ref (from snapshot) or selector")
+        return None
+
     def _do_click(self, args: Dict[str, Any]) -> ToolResult:
         ref = args.get("ref")
         selector = args.get("selector")
         timeout = args.get("timeout", 5000)
+        missing = self._missing_target(ref, selector)
+        if missing is not None:
+            return missing
         result = self._get_service().click(ref=ref, selector=selector, timeout=timeout)
         if "error" in result:
             return ToolResult.fail(result["error"])
@@ -373,6 +383,9 @@ class BrowserTool(BaseTool):
         timeout = args.get("timeout", 5000)
         if not isinstance(text, str):
             return ToolResult.fail("Error: 'text' is required for fill action")
+        missing = self._missing_target(ref, selector)
+        if missing is not None:
+            return missing
         result = self._get_service().fill(text, ref=ref, selector=selector, timeout=timeout)
         if "error" in result:
             return ToolResult.fail(result["error"])
@@ -385,6 +398,9 @@ class BrowserTool(BaseTool):
         timeout = args.get("timeout", 5000)
         if not isinstance(value, str):
             return ToolResult.fail("Error: 'value' is required for select action")
+        missing = self._missing_target(ref, selector)
+        if missing is not None:
+            return missing
         result = self._get_service().select(value, ref=ref, selector=selector, timeout=timeout)
         if "error" in result:
             return ToolResult.fail(result["error"])

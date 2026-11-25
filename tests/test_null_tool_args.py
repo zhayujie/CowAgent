@@ -53,6 +53,19 @@ class TestNullStringArgs(unittest.TestCase):
             str(_run(BrowserTool({}), {"action": "click", "selector": None}).result),
         )
 
+    def test_browser_action_without_target_does_not_start_a_browser(self):
+        cases = [
+            ("_do_click", {"selector": None}),
+            ("_do_fill", {"text": "x", "selector": None}),
+            ("_do_select", {"value": "x", "selector": ""}),
+        ]
+        for handler, args in cases:
+            with self.subTest(handler=handler):
+                tool = BrowserTool({})
+                result = getattr(tool, handler)(args)
+                self.assertIn("Provide either ref", str(result.result))
+                self.assertIsNone(tool._service)
+
     def test_vision_null_parameters_report_the_missing_parameter(self):
         tool = Vision({"cwd": os.getcwd()})
         self.assertIn("'image' parameter is required",

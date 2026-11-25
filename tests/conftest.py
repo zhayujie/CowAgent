@@ -126,6 +126,35 @@ def console_template_cache_not_poisoned():
 
 
 @pytest.fixture(autouse=True, scope="session")
+def no_real_browser_launch():
+    """Refuse to start a real browser unless the native suite is opted into.
+
+    A tool driven with its default config is headed and resolves to the
+    system Chrome, so a test that reaches the launch by accident opens a
+    window on the developer's desktop -- and with HOME redirected above,
+    macOS follows it with a "keychain not found" prompt. Tests that exercise
+    the launch path replace ``_launch_browser`` on the instance, which still
+    takes precedence over this class-level stand-in.
+    """
+    if os.environ.get("COW_BROWSER_NATIVE_TEST") == "1":
+        yield
+        return
+
+    from agent.tools.browser.browser_service import BrowserService
+
+    real_launch = BrowserService._launch_browser
+
+    def refuse_launch(self):
+        raise RuntimeError("real browser launch is disabled in tests (set COW_BROWSER_NATIVE_TEST=1)")
+
+    BrowserService._launch_browser = refuse_launch
+    try:
+        yield
+    finally:
+        BrowserService._launch_browser = real_launch
+
+
+@pytest.fixture(autouse=True, scope="session")
 def workspace_out_of_the_way():
     import config as config_module
 
