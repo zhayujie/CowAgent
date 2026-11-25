@@ -7,6 +7,21 @@ export const MCP_JSON_PLACEHOLDER = JSON.stringify(
   2,
 );
 
+/** For the built-in agent, which only reaches MCP servers over the network. */
+export const MCP_JSON_REMOTE_PLACEHOLDER = JSON.stringify(
+  {
+    mcpServers: {
+      myserver: {
+        type: 'streamable-http',
+        url: 'https://mcp.example.com/mcp',
+        headers: {Authorization: 'Bearer YOUR_API_KEY'},
+      },
+    },
+  },
+  null,
+  2,
+);
+
 /** `KEY=value` per line; a line without `=`, or with nothing before it, is skipped. */
 export function kvToObject(text: string): Record<string, string> {
   const out: Record<string, string> = {};

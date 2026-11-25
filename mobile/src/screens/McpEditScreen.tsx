@@ -14,7 +14,14 @@ import {MCP_TRANSPORT_LABEL, mcpTransport, useMcpStore} from '../store/mcpStore'
 import {describeConnectError, useLocalServer} from '../store/serverStore';
 import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
-import {kvToObject, MCP_JSON_PLACEHOLDER, mcpServersToJson, objectToKv, parseMcpJson} from '../utils/mcp';
+import {
+  kvToObject,
+  MCP_JSON_PLACEHOLDER,
+  MCP_JSON_REMOTE_PLACEHOLDER,
+  mcpServersToJson,
+  objectToKv,
+  parseMcpJson,
+} from '../utils/mcp';
 import {omit} from '../utils/object';
 import {AvoidKeyboard} from '../components/AvoidKeyboard';
 
@@ -118,8 +125,17 @@ export function McpEditScreen({route, navigation}: Props) {
     return cfg;
   };
 
-  const read = (): McpServer[] => {
+  const parse = (): McpServer[] => {
     const list = mode === 'json' ? parseMcpJson(json) : [fromForm()];
+    // An existing stdio entry may still be edited, e.g. turned off.
+    if (local && list.some(s => mcpTransport(s) === 'stdio' && s.name !== originalName)) {
+      throw new Error(tr('mcp_local_note'));
+    }
+    return list;
+  };
+
+  const read = (): McpServer[] => {
+    const list = parse();
     if (originalName && list.length > 1) {
       throw new Error(tr('mcp_edit_single'));
     }
@@ -192,7 +208,7 @@ export function McpEditScreen({route, navigation}: Props) {
   const test = async () => {
     let list: McpServer[];
     try {
-      list = mode === 'json' ? parseMcpJson(json) : [fromForm()];
+      list = parse();
     } catch (e) {
       setResult({kind: 'error', text: (e as Error).message});
       return;
@@ -341,7 +357,7 @@ export function McpEditScreen({route, navigation}: Props) {
           ) : (
             <>
               <Text style={styles.jsonHint}>{trf('mcp_json_hint', {format: '{"mcpServers": {...}}'})}</Text>
-              {input(json, setJson, {placeholder: MCP_JSON_PLACEHOLDER, mono: true, lines: 12})}
+              {input(json, setJson, {placeholder: local ? MCP_JSON_REMOTE_PLACEHOLDER : MCP_JSON_PLACEHOLDER, mono: true, lines: 12})}
             </>
           )}
 
