@@ -24,7 +24,7 @@ CowAgent 支持多模型、多通道、多智能体，轻量且易于扩展，�
 <p align="center">
   <a href="https://cowagent.cn/?utm_source=github">🌐 官网</a> &nbsp;·&nbsp;
   <a href="https://docs.cowagent.ai/zh/">📖 文档中心</a> &nbsp;·&nbsp;
-  <a href="https://docs.cowagent.ai/zh/guide/quick-start">🚀 快速开始</a> &nbsp;·&nbsp;
+  <a href="https://docs.cowagent.ai/zh/guide">🚀 快速开始</a> &nbsp;·&nbsp;
   <a href="https://skills.cowagent.ai/">🧩 技能广场</a> &nbsp;·&nbsp;
   <a href="https://cowagent.cn/zh/download/">💻 下载客户端</a> &nbsp;·&nbsp;
   <a href="https://cloud.cowagent.cn/?utm_source=github">☁️ 在线使用</a>
@@ -74,6 +74,10 @@ CowAgent 是一个完整的 **Agent Harness**：消息从各类**通道**进入�
 
 ## 🚀 快速开始
 
+CowAgent 支持源码部署、桌面客户端、移动端和云端托管四种使用方式，可按运行位置和使用场景选择，详见 [选择使用方式](https://docs.cowagent.ai/zh/guide)。
+
+### 源码部署
+
 项目提供一键安装脚本，自动完成依赖安装、配置和启动：
 
 **Linux / macOS：**
@@ -99,7 +103,7 @@ docker compose up -d
 
 > 服务器部署且需要公网访问控制台时，请在 `config.json` 中将 `web_host` 设为 `0.0.0.0`（同时强烈建议设置 `web_password` 启用鉴权），然后访问 `http://<server-ip>:9899`，并确保防火墙/安全组放行 `9899` 端口。
 
-> 📖 详细安装指南：[快速开始](https://docs.cowagent.ai/zh/guide/quick-start) · [源码安装](https://docs.cowagent.ai/zh/guide/manual-install) · [升级](https://docs.cowagent.ai/zh/guide/upgrade)
+> 📖 详细安装指南：[一键源码安装](https://docs.cowagent.ai/zh/guide/quick-start) · [源码安装](https://docs.cowagent.ai/zh/guide/manual-install) · [升级](https://docs.cowagent.ai/zh/guide/upgrade)
 
 安装后可使用 `cow` [CLI 命令](https://docs.cowagent.ai/zh/cli) 管理服务：
 
@@ -112,11 +116,17 @@ cow install-browser                # 安装浏览器工具
 cow pair                           # 生成配对码，连接手机等设备
 ```
 
-> 💻 桌面客户端：前往 **[下载 CowAgent 桌面客户端](https://cowagent.cn/zh/download/)**（macOS / Windows），内置 Agent 运行环境，开箱即用。
+### 桌面客户端
 
-> 📱 移动端：**[下载 CowAgent App](https://cowagent.cn/zh/download/#mobile)**（iOS / Android / 鸿蒙，公开测试），可直接在手机上运行，也可扫码连接电脑或服务器，详见 [移动端文档](https://docs.cowagent.ai/zh/guide/mobile)。
+💻 前往 **[下载 CowAgent 桌面客户端](https://cowagent.cn/zh/download/)**（macOS / Windows），内置 Agent 运行环境，开箱即用，详见 [桌面客户端](https://docs.cowagent.ai/zh/guide/desktop)。
 
-> ☁️ 在线使用：不想自己部署，也可以直接 **[打开云端控制台](https://cloud.cowagent.cn/?utm_source=github)** 创建专属实例，内置模型服务，7×24 小时在线。
+### 移动端
+
+📱 **[下载 CowAgent App](https://cowagent.cn/zh/download/#mobile)**（iOS / Android / 鸿蒙，公开测试），可直接在手机上运行，也可扫码连接电脑或服务器，详见 [移动端](https://docs.cowagent.ai/zh/guide/mobile)。
+
+### 云端托管
+
+☁️ 不想自己部署，也可以直接 **[打开云端控制台](https://cloud.cowagent.cn/?utm_source=github)** 创建专属实例，内置模型服务，7×24 小时在线，详见 [云端托管](https://docs.cowagent.ai/zh/guide/cloud)。
 
 <br/>
 

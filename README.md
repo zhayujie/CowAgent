@@ -24,7 +24,7 @@ CowAgent is multi-model, multi-channel and multi-agent, lightweight and built to
 <p align="center">
   <a href="https://cowagent.ai/?utm_source=github">🌐 Website</a> &nbsp;·&nbsp;
   <a href="https://docs.cowagent.ai/intro/index">📖 Docs</a> &nbsp;·&nbsp;
-  <a href="https://docs.cowagent.ai/guide/quick-start">🚀 Quick Start</a> &nbsp;·&nbsp;
+  <a href="https://docs.cowagent.ai/guide">🚀 Quick Start</a> &nbsp;·&nbsp;
   <a href="https://skills.cowagent.ai/">🧩 Skill Hub</a> &nbsp;·&nbsp;
   <a href="https://cowagent.ai/download/">💻 Download</a> &nbsp;·&nbsp;
   <a href="https://cloud.cowagent.ai/?utm_source=github">☁️ Try Online</a>
@@ -74,6 +74,10 @@ Read more in [Architecture](https://docs.cowagent.ai/intro/architecture).
 
 ## 🚀 Quick Start
 
+CowAgent can be used through a source install, the desktop client, the mobile app, or CowAgent Cloud. See [Choose How to Use](https://docs.cowagent.ai/guide) to compare them.
+
+### Source Install
+
 A one-line installer takes care of dependencies, configuration, and startup:
 
 **Linux / macOS:**
@@ -99,7 +103,7 @@ Once started, open `http://localhost:9899` to access the **Web console** — you
 
 > Deploying on a server? Set `web_host` to `0.0.0.0` in `config.json` to make the console reachable from outside, and set `web_password` to protect it. Don't forget to open port `9899` in your firewall or security group.
 
-> 📖 Detailed guides: [Quick Start](https://docs.cowagent.ai/guide/quick-start) · [Install from Source](https://docs.cowagent.ai/guide/manual-install) · [Upgrade](https://docs.cowagent.ai/guide/upgrade)
+> 📖 Detailed guides: [One-click Source Install](https://docs.cowagent.ai/guide/quick-start) · [Install from Source](https://docs.cowagent.ai/guide/manual-install) · [Upgrade](https://docs.cowagent.ai/guide/upgrade)
 
 After installation, manage the service with the [cow CLI](https://docs.cowagent.ai/cli/index):
 
@@ -112,11 +116,17 @@ cow install-browser                # install browser automation
 cow pair                           # generate a pairing code to connect a phone or other device
 ```
 
-> 💻 Desktop client: download the **[CowAgent Desktop client](https://cowagent.ai/download/)** (macOS / Windows) — the backend is bundled, ready to use out of the box.
+### Desktop Client
 
-> 📱 Mobile: **[download the CowAgent app](https://cowagent.ai/download/#mobile)** (iOS / Android / HarmonyOS, public beta) to run on your phone or scan a code to connect to a computer or server. See the [mobile docs](https://docs.cowagent.ai/guide/mobile).
+💻 **[Download the CowAgent Desktop client](https://cowagent.ai/download/)** (macOS / Windows). The backend is bundled, so it is ready to use out of the box. See [Desktop Client](https://docs.cowagent.ai/guide/desktop).
 
-> ☁️ Prefer not to deploy? **[Open the cloud console](https://cloud.cowagent.ai/?utm_source=github)** to create a dedicated instance with built-in models, online 24/7.
+### Mobile App
+
+📱 **[Download the CowAgent app](https://cowagent.ai/download/#mobile)** (iOS / Android / HarmonyOS, public beta) to run the Agent on your phone, or scan a code to connect to CowAgent on a computer or server. See [Mobile App](https://docs.cowagent.ai/guide/mobile).
+
+### CowAgent Cloud
+
+☁️ Prefer not to deploy? **[Open the cloud console](https://cloud.cowagent.ai/?utm_source=github)** to create a dedicated instance with built-in models, online 24/7. See [CowAgent Cloud](https://docs.cowagent.ai/guide/cloud).
 
 <br/>
 

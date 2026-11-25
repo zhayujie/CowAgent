@@ -24,7 +24,7 @@ CowAgent は軽量でデプロイしやすく、拡張性に優れています�
 <p align="center">
   <a href="https://cowagent.ai/?utm_source=github">🌐 ウェブサイト</a> &nbsp;·&nbsp;
   <a href="https://docs.cowagent.ai/ja/intro/index">📖 ドキュメント</a> &nbsp;·&nbsp;
-  <a href="https://docs.cowagent.ai/ja/guide/quick-start">🚀 クイックスタート</a> &nbsp;·&nbsp;
+  <a href="https://docs.cowagent.ai/ja/guide">🚀 クイックスタート</a> &nbsp;·&nbsp;
   <a href="https://skills.cowagent.ai/">🧩 Skill Hub</a> &nbsp;·&nbsp;
   <a href="https://cowagent.ai/download/">💻 ダウンロード</a> &nbsp;·&nbsp;
   <a href="https://link-ai.tech/cowagent/create?utm_source=cowagent&utm_medium=readme&utm_campaign=nav">☁️ オンラインで試す</a>
@@ -74,6 +74,10 @@ CowAgent は完全な **Agent Harness** です：メッセージは各種**チ�
 
 ## 🚀 クイックスタート
 
+CowAgent はソースインストール、デスクトップクライアント、モバイルアプリ、CowAgent Cloud の 4 つの方法で利用できます。違いは [利用方法を選ぶ](https://docs.cowagent.ai/ja/guide) を参照してください。
+
+### ソースインストール
+
 依存関係のインストール、設定、起動を自動で行うワンラインインストーラーを提供しています：
 
 **Linux / macOS:**
@@ -99,7 +103,7 @@ docker compose up -d
 
 > サーバーデプロイでコンソールに公開アクセスする場合は、`config.json` の `web_host` を `0.0.0.0` に設定してください（あわせて `web_password` の設定も強く推奨）。その後 `http://<server-ip>:9899` にアクセスし、ファイアウォール／セキュリティグループで `9899` ポートを開放することも忘れずに。
 
-> 📖 詳細ガイド: [クイックスタート](https://docs.cowagent.ai/ja/guide/quick-start) · [ソースからインストール](https://docs.cowagent.ai/ja/guide/manual-install) · [アップグレード](https://docs.cowagent.ai/ja/guide/upgrade)
+> 📖 詳細ガイド: [ワンクリックソースインストール](https://docs.cowagent.ai/ja/guide/quick-start) · [ソースからインストール](https://docs.cowagent.ai/ja/guide/manual-install) · [アップグレード](https://docs.cowagent.ai/ja/guide/upgrade)
 
 インストール後は、[`cow` CLI](https://docs.cowagent.ai/ja/cli/index) でサービスを管理できます：
 
@@ -112,9 +116,17 @@ cow install-browser                # ブラウザツールのインストール
 cow pair                           # ペアリングコードを生成し、スマートフォンなどのデバイスを接続
 ```
 
-> 💻 デスクトップクライアント：**[CowAgent デスクトップクライアント](https://cowagent.ai/download/)**（macOS / Windows）はバックエンドを内蔵し、ダウンロードしてすぐに使えます。
+### デスクトップクライアント
 
-> 📱 モバイル：**[CowAgent アプリをダウンロード](https://cowagent.ai/download/#mobile)**（iOS / Android / HarmonyOS、公開ベータ版）。スマートフォン上で直接実行するほか、QR コードで PC やサーバーに接続できます。詳しくは [モバイルアプリのドキュメント](https://docs.cowagent.ai/ja/guide/mobile) を参照してください。
+💻 **[CowAgent デスクトップクライアント](https://cowagent.ai/download/)**（macOS / Windows）はバックエンドを内蔵し、ダウンロードしてすぐに使えます。詳しくは [デスクトップクライアント](https://docs.cowagent.ai/ja/guide/desktop) を参照してください。
+
+### モバイルアプリ
+
+📱 **[CowAgent アプリをダウンロード](https://cowagent.ai/download/#mobile)**（iOS / Android / HarmonyOS、公開ベータ版）。スマートフォン上で直接実行するほか、QR コードで PC やサーバーに接続できます。詳しくは [モバイルアプリ](https://docs.cowagent.ai/ja/guide/mobile) を参照してください。
+
+### CowAgent Cloud
+
+☁️ デプロイせずに使いたい場合は、**[クラウドコンソールを開く](https://cloud.cowagent.ai/?utm_source=github)** から専用インスタンスを作成できます。モデルを内蔵し、24 時間 365 日オンラインです。詳しくは [CowAgent Cloud](https://docs.cowagent.ai/ja/guide/cloud) を参照してください。
 
 <br/>
 
