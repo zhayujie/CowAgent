@@ -2,6 +2,7 @@
 
 import os
 import sys
+import sysconfig
 import shutil
 import subprocess
 from typing import Callable, Optional
@@ -86,15 +87,37 @@ def _is_china_network() -> bool:
         return False
 
 
+def _pip_supports_break_system_packages(python: str) -> bool:
+    try:
+        output = subprocess.check_output(
+            [python, "-m", "pip", "install", "--help"], stderr=subprocess.DEVNULL
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return False
+    return b"--break-system-packages" in output
+
+
 def _pip_install(package_spec: str, stream: StreamFn) -> int:
-    """Install a package, preferring prebuilt wheels; retry with --user on perm error."""
+    """Install a package, preferring prebuilt wheels and retrying on failure."""
     python = sys.executable
     base = [python, "-m", "pip", "install", "--prefer-binary"]
     ret = subprocess.call(base + [package_spec])
-    if ret != 0:
-        stream("  Retrying with --user flag...", "yellow")
-        ret = subprocess.call(base + ["--user", package_spec])
-    return ret
+    if ret == 0:
+        return 0
+
+    # Match run.sh for managed macOS Python, without overriding pip in a venv.
+    if (
+        sys.platform == "darwin"
+        and sys.prefix == sys.base_prefix
+        and os.path.isfile(os.path.join(sysconfig.get_path("stdlib"), "EXTERNALLY-MANAGED"))
+        and _pip_supports_break_system_packages(python)
+    ):
+        stream("  Retrying with --break-system-packages for externally managed Python...", "yellow")
+        if subprocess.call(base + ["--break-system-packages", package_spec]) == 0:
+            return 0
+
+    stream("  Retrying with --user flag...", "yellow")
+    return subprocess.call(base + ["--user", package_spec])
 
 
 def _is_frozen() -> bool:
