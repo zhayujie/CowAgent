@@ -76,6 +76,7 @@ import {CHAT_WIDTH, PaneWidthProvider, usePaneWidth, useSidebarLayout} from '../
 import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
 import {chatModelReady} from '../utils/capabilities';
+import type {Space} from '../utils/sessionGroups';
 import {AvoidKeyboard} from '../components/AvoidKeyboard';
 
 type Props = StackScreenProps<RootStackParamList, 'Chat'>;
@@ -343,11 +344,26 @@ export function ChatScreen({route, navigation}: Props) {
     visited.current = visited.current.filter(v => v.sessionId !== id);
   }, []);
 
-  const startNewChat = useCallback(() => {
-    setDrawerOpen(false);
-    setDraft('');
-    navigation.setParams({sessionId: newSessionId(), isNew: true});
-  }, [navigation]);
+  /** null leaves the new chat in the Agent's own workspace, without asking the server. */
+  const openNewChat = useCallback(
+    (space: Space | null) => {
+      setDrawerOpen(false);
+      setDraft('');
+      const id = newSessionId();
+      if (space) {
+        useProjectStore
+          .getState()
+          .startIn(id, useAgentStore.getState().currentId, space)
+          .catch(e => showToast(trf('composer_ws_switch_failed', {error: errorText(e)})));
+      }
+      navigation.setParams({sessionId: id, isNew: true});
+    },
+    [navigation],
+  );
+
+  // A new chat keeps working in the project the current one is in.
+  const inherited = remote ? projects?.current : null;
+  const startNewChat = useCallback(() => openNewChat(inherited ?? null), [openNewChat, inherited]);
 
   const openSession = useCallback(
     (session: SessionItem) => {
@@ -389,6 +405,7 @@ export function ChatScreen({route, navigation}: Props) {
     useLayoutStore.setState({
       chat: {
         newChat: startNewChat,
+        newChatIn: openNewChat,
         openSession,
         sessionActions: setActingSession,
         openFile: openMenuFile,
@@ -396,7 +413,7 @@ export function ChatScreen({route, navigation}: Props) {
         switchServer: () => setServerSheetOpen(true),
       },
     });
-  }, [startNewChat, openSession, openMenuFile, openLink]);
+  }, [startNewChat, openNewChat, openSession, openMenuFile, openLink]);
   useEffect(() => () => useLayoutStore.setState({chat: null}), []);
   useEffect(() => useLayoutStore.setState({sessionId}), [sessionId]);
 
@@ -422,12 +439,15 @@ export function ChatScreen({route, navigation}: Props) {
   const switchAgent = useCallback(
     (agentId: string) => {
       setAgentSheetOpen(false);
-      if (agentId !== useAgentStore.getState().currentId) {
-        useAgentStore.getState().select(agentId);
+      if (agentId === useAgentStore.getState().currentId) {
+        startNewChat();
+        return;
       }
-      startNewChat();
+      // The project record belongs to the Agent left behind, so the new one starts on its own.
+      useAgentStore.getState().select(agentId);
+      openNewChat(null);
     },
-    [startNewChat],
+    [startNewChat, openNewChat],
   );
 
   const list = useRef<FlatList<ChatMessage>>(null);
@@ -1067,6 +1087,7 @@ export function ChatScreen({route, navigation}: Props) {
               }}
               currentSessionId={sessionId}
               onNewChat={startNewChat}
+              onNewChatIn={openNewChat}
               onOpenSession={openSession}
               onSessionActions={setActingSession}
               onNavigate={goTo}

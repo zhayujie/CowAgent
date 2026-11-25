@@ -1,6 +1,6 @@
-import {faChevronLeft, faDownload, faEllipsis} from '@fortawesome/free-solid-svg-icons';
+import {faChevronLeft, faDownload, faEllipsis, faPen} from '@fortawesome/free-solid-svg-icons';
 import type {StackScreenProps} from '@react-navigation/stack';
-import React, {useEffect, useLayoutEffect, useState} from 'react';
+import React, {useCallback, useEffect, useLayoutEffect, useRef, useState} from 'react';
 import {Platform, ScrollView, StyleSheet, Text, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {KIND_LABEL, kindGroup} from '../components/ArtifactStrip';
@@ -107,14 +107,36 @@ export function FilePreviewScreen({route, navigation}: Props) {
     };
   }, [file, isPage, live, unsupported, attempt]);
 
-  const retry = () => {
+  const retry = useCallback(() => {
     setError(null);
     setText(null);
     setPageReady(false);
     setProgress(undefined);
     setScrolled(false);
     setAttempt(a => a + 1);
+  }, []);
+
+  // The server edits files by their path on its disk; links and uploads elsewhere have none.
+  const editable = !!file.path && (isPage || TEXT_KINDS.has(file.kind));
+  const editing = useRef(false);
+  const edit = () => {
+    if (file.path) {
+      editing.current = true;
+      navigation.navigate('WorkspaceFile', {path: file.path, name: file.name, kind: file.kind, relPath: file.relPath});
+    }
   };
+
+  // Back from the editor, the preview shows what was saved.
+  useEffect(
+    () =>
+      navigation.addListener('focus', () => {
+        if (editing.current) {
+          editing.current = false;
+          retry();
+        }
+      }),
+    [navigation, retry],
+  );
 
   const loading = !error && !unsupported && (live ? !pageReady : text === null);
   const tooLong = text !== null && text.length > MAX_PREVIEW_CHARS;
@@ -225,6 +247,12 @@ export function FilePreviewScreen({route, navigation}: Props) {
           )}
         </View>
         <View style={styles.panes}>
+          {editable && (
+            <>
+              <IconButton icon={faPen} label={tr('common_edit')} onPress={edit} size={13} />
+              <View style={styles.panesDivider} />
+            </>
+          )}
           <IconButton icon={faDownload} label={downloadLabel} onPress={() => downloadFile(file)} size={14} />
           <View style={styles.panesDivider} />
           <IconButton icon={faEllipsis} label={tr('ui_more_actions')} onPress={() => setActing(true)} size={15} />

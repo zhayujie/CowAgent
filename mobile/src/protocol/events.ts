@@ -179,6 +179,8 @@ export interface SessionItem {
   msg_count: number;
   pinned?: boolean;
   agent?: {id: string; name: string; avatar?: string};
+  /** The project folder it works in; null or absent for the default workspace. */
+  project?: {path: string; name: string} | null;
 }
 
 export interface SessionsPage {
@@ -187,6 +189,10 @@ export interface SessionsPage {
   page: number;
   page_size: number;
   has_more: boolean;
+  /** `project` once conversations work in more than one space; absent on older servers. */
+  group_mode?: 'project' | 'time';
+  /** The user's order of spaces: project paths, with `__default__` for the default workspace. */
+  project_order?: string[];
 }
 
 export interface SendMessageResult {

@@ -46,6 +46,7 @@ import {TasksScreen} from '../screens/TasksScreen';
 import {VersionScreen} from '../screens/VersionScreen';
 import {WebPageScreen} from '../screens/WebPageScreen';
 import {WebSearchScreen} from '../screens/WebSearchScreen';
+import {WorkspaceFileScreen} from '../screens/WorkspaceFileScreen';
 import {WorkspaceScreen} from '../screens/WorkspaceScreen';
 import {chatToResume} from '../store/chatResume';
 import {useLayoutStore} from '../store/layoutStore';
@@ -156,6 +157,7 @@ export function RootNavigator() {
                 <Stack.Screen name="SkillCreate" component={SkillCreateScreen} />
                 <Stack.Screen name="Memory" component={MemoryScreen} />
                 <Stack.Screen name="MemoryDoc" component={MemoryDocScreen} />
+                <Stack.Screen name="WorkspaceFile" component={WorkspaceFileScreen} />
                 <Stack.Screen name="Knowledge" component={KnowledgeScreen} options={{gestureResponseDistance: EDGE_ONLY}} />
                 <Stack.Screen name="KnowledgeDoc" component={KnowledgeDocScreen} />
                 <Stack.Screen name="FilePreview" component={FilePreviewScreen} options={{gestureResponseDistance: EDGE_ONLY}} />

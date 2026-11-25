@@ -2,10 +2,12 @@ import {create} from 'zustand';
 import type {DrawerView} from '../components/DrawerMenu';
 import type {ChatFile} from '../files/chatFile';
 import type {SessionItem} from '../protocol/events';
+import type {Space} from '../utils/sessionGroups';
 
 /** What the sidebar asks of the chat page, which stays mounted at the bottom of the stack. */
 export interface ChatCommands {
   newChat: () => void;
+  newChatIn: (space: Space) => void;
   openSession: (session: SessionItem) => void;
   sessionActions: (session: SessionItem) => void;
   openFile: (file: ChatFile) => void;

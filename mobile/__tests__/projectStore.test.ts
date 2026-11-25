@@ -44,6 +44,37 @@ it('keeps a switch that answers before an older read', async () => {
   expect(useProjectStore.getState().bySession.s1.current?.name).toBe('app');
 });
 
+it('reads after a switch still in flight', async () => {
+  const write = deferred<ProjectState>();
+  jest.mocked(selectProject).mockReturnValue(write.promise);
+  jest.mocked(getProjects).mockResolvedValue(state('app'));
+
+  const switching = useProjectStore.getState().select('s1', null, '/p/app');
+  const loading = useProjectStore.getState().load('s1', null);
+  await Promise.resolve();
+  expect(getProjects).not.toHaveBeenCalled();
+
+  write.resolve(state('app'));
+  await Promise.all([switching, loading]);
+
+  expect(getProjects).toHaveBeenCalledTimes(1);
+  expect(useProjectStore.getState().bySession.s1.current?.name).toBe('app');
+});
+
+it('shows a new chat in its space before the server answers', async () => {
+  jest.mocked(getProjects).mockResolvedValue(state(null));
+  await useProjectStore.getState().load('s1', null);
+  const write = deferred<ProjectState>();
+  jest.mocked(selectProject).mockReturnValue(write.promise);
+
+  const starting = useProjectStore.getState().startIn('s2', null, {path: '/p/app', name: 'app'});
+
+  expect(useProjectStore.getState().bySession.s2.current).toEqual({path: '/p/app', name: 'app'});
+  expect(selectProject).toHaveBeenCalledWith('s2', '/p/app', undefined);
+  write.resolve(state('app'));
+  await starting;
+});
+
 it('drops an answer that lands after a sign-out', async () => {
   const read = deferred<ProjectState>();
   jest.mocked(getProjects).mockReturnValue(read.promise);
