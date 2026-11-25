@@ -88,6 +88,13 @@ def _replace_skill_dir(source: str, target: str) -> None:
     replace_directory(source, target)
 
 
+def _strip_github_url_suffix(url: str) -> str:
+    """Remove browser query strings and fragments from GitHub install URLs."""
+    if url.startswith(("http://github.com/", "https://github.com/")):
+        return urlparse(url)._replace(query="", fragment="").geturl()
+    return url
+
+
 def _parse_github_url(url: str):
     """Parse a full GitHub URL into (owner, repo, branch, subpath).
 
@@ -98,7 +105,7 @@ def _parse_github_url(url: str):
       https://github.com/owner/repo/tree/branch/path/to/skill
       https://github.com/owner/repo/blob/branch/path/to/skill
     """
-    m = _GITHUB_URL_RE.match(url.strip())
+    m = _GITHUB_URL_RE.match(_strip_github_url_suffix(url.strip()))
     if not m:
         return None
     owner, repo, branch, subpath = m.groups()
@@ -978,6 +985,8 @@ def _route_install(name: str, result: InstallResult, agent_id: str = None):
     if is_local_path(name):
         _install_local(name, result, agent_id=agent_id)
         return
+
+    name = _strip_github_url_suffix(name)
 
     # --- Direct SKILL.md URL ---
     if name.startswith(("http://", "https://")) and name.rstrip("/").endswith("SKILL.md"):
