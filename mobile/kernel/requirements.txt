@@ -14,6 +14,9 @@ regex>=2019.3.12
 markdown-it-py>=3.0.0
 json-repair
 python-dotenv>=1.0.0
+# Skill installs from the console and the agent go through cli.commands.skill,
+# which declares its commands with click at import time.
+click>=8.0
 # Mobile systems have no zoneinfo database where Python looks for one.
 tzdata
 # The read tool's PDF and Excel support; both pure Python. Word and PowerPoint
