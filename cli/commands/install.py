@@ -86,15 +86,39 @@ def _is_china_network() -> bool:
         return False
 
 
+def _pip_supports_break_system_packages(python: str) -> bool:
+    """Whether this pip knows --break-system-packages (pip >= 23); older ones reject the flag."""
+    try:
+        out = subprocess.run(
+            [python, "-m", "pip", "install", "--help"],
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=60,
+        ).stdout.decode("utf-8", "replace")
+    except Exception:
+        return False
+    return "--break-system-packages" in out
+
+
 def _pip_install(package_spec: str, stream: StreamFn) -> int:
-    """Install a package, preferring prebuilt wheels; retry with --user on perm error."""
+    """Install a package, preferring prebuilt wheels.
+
+    On failure, retry with --break-system-packages when pip supports it: an
+    externally managed interpreter (PEP 668, e.g. Homebrew Python) rejects
+    both the plain and the --user install. This is the interpreter run.sh
+    already installed CowAgent's own requirements into the same way.
+    --user stays the last resort for plain permission errors.
+    """
     python = sys.executable
     base = [python, "-m", "pip", "install", "--prefer-binary"]
     ret = subprocess.call(base + [package_spec])
-    if ret != 0:
-        stream("  Retrying with --user flag...", "yellow")
-        ret = subprocess.call(base + ["--user", package_spec])
-    return ret
+    if ret == 0:
+        return 0
+    if _pip_supports_break_system_packages(python):
+        stream("  Retrying with --break-system-packages (externally managed Python)...", "yellow")
+        ret = subprocess.call(base + ["--break-system-packages", package_spec])
+        if ret == 0:
+            return 0
+    stream("  Retrying with --user flag...", "yellow")
+    return subprocess.call(base + ["--user", package_spec])
 
 
 def _is_frozen() -> bool:

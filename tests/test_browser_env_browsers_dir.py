@@ -38,3 +38,14 @@ def test_has_downloaded_chromium_follows_env_var(monkeypatch, tmp_path):
     monkeypatch.setenv("COW_DATA_DIR", str(tmp_path / "empty-data"))
 
     assert browser_env.has_downloaded_chromium() is True
+
+
+def test_default_ignores_working_directory(monkeypatch, tmp_path):
+    # `cow install-browser` may run from any directory while the service runs
+    # from the project root; both must resolve the same download dir.
+    monkeypatch.delenv("PLAYWRIGHT_BROWSERS_PATH", raising=False)
+    monkeypatch.delenv("COW_DATA_DIR", raising=False)
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    monkeypatch.chdir(tmp_path)
+
+    assert browser_env.browsers_download_dir() == os.path.join(project_root, "ms-playwright")

@@ -29,18 +29,23 @@ from common import deployment
 # Chromium-based Edge shipped on every Windows 10/11.
 _PREFERRED_CHANNELS = ("chrome", "msedge", "chrome-beta", "msedge-beta")
 
+# agent/tools/browser/ sits three levels below the project root.
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
 
 def get_data_root() -> str:
-    """Writable data root (~/.cow on desktop, else CWD-based).
+    """Writable data root (~/.cow on desktop, else the project root).
 
-    Mirrors the logic in common/log.py without importing config, to avoid a
+    Mirrors config.get_data_root() without importing config, to avoid a
     circular import. The desktop build sets COW_DATA_DIR; source deployments
-    fall back to the current working directory.
+    use the project root rather than the working directory, so
+    `cow install-browser` run from any directory downloads Chromium to where
+    the service (started from the project root) looks it up.
     """
     data_dir = os.environ.get("COW_DATA_DIR")
     if data_dir:
         return os.path.expanduser(data_dir)
-    return os.getcwd()
+    return _PROJECT_ROOT
 
 
 def browsers_download_dir() -> str:
