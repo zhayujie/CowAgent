@@ -1,0 +1,29 @@
+---
+title: LLMTR
+description: "Configure LLMTR in CowAgent: paste an LLMTR API key and chat through the OpenAI-compatible gateway at https://llmtr.com/v1."
+---
+
+LLMTR is an OpenAI-compatible gateway. A single `llmtr_api_key` is enough for text chat through `https://llmtr.com/v1`.
+
+<Tip>
+  You can also add the provider on the Model Management page in the Web Console, without editing the configuration file.
+</Tip>
+
+## Text Chat
+
+```json
+{
+  "bot_type": "llmtr",
+  "model": "qwen/qwen-flash",
+  "llmtr_api_key": "YOUR_API_KEY"
+}
+```
+
+| Parameter | Description |
+| --- | --- |
+| `bot_type` | Set this to `llmtr` so the model name is not inferred as another vendor (for example a `qwen/...` id). |
+| `model` | An LLMTR model id, usually `provider/model`. Examples: `qwen/qwen-flash`, `qwen/qwen-plus`, `qwen/qwen3-coder-flash`. |
+| `llmtr_api_key` | Create a key at [llmtr.com](https://llmtr.com). Keys use the `llmtr-` prefix. |
+| `llmtr_api_base` | Optional, defaults to `https://llmtr.com/v1`. |
+
+LLMTR uses prepaid credit. Platform margin is applied at top-up. See [LLMTR docs](https://llmtr.com/docs) for current account and billing details. The public catalog is also listed on [models.dev](https://models.dev/providers/llmtr/).

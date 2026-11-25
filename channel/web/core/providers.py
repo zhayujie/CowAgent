@@ -177,6 +177,25 @@ PROVIDER_MODELS = OrderedDict([
         ],
         "models": _COWAGENT_MODELS,
     }),
+    ("llmtr", {
+        "label": "LLMTR",
+        "api_key_field": "llmtr_api_key",
+        "api_base_key": "llmtr_api_base",
+        "api_base_default": const.LLMTR_API_BASE,
+        "api_base_placeholder": _PLACEHOLDER_V1,
+        # Ids as listed for LLMTR on models.dev (25 November 2026). The
+        # settings form can still be given any other id the gateway serves.
+        "models": [
+            "qwen/qwen-flash",
+            "qwen/qwen-plus",
+            "qwen/qwen3-coder-flash",
+            "qwen/qwen3.6-flash",
+            "qwen/qwen3.7-plus",
+            "gemma-4",
+            "thinkingmachines/inkling-small",
+            "mimo/mimo-v2.5-pro",
+        ],
+    }),
     ("linkai", {
         "label": "LinkAI",
         "api_key_field": "linkai_api_key",

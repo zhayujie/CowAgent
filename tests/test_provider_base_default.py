@@ -54,3 +54,16 @@ def test_empty_base_in_config_file_is_filled_on_load(tmp_path, monkeypatch):
     config_module.load_config()
     assert config_module.conf().get("deepseek_api_base") == "https://api.deepseek.com/v1"
     assert config_module.conf().get("cowagent_api_base") == ""
+
+
+def test_llmtr_empty_base_uses_the_public_endpoint(tmp_path, monkeypatch):
+    import config as config_module
+
+    (tmp_path / "config.json").write_text(
+        '{"llmtr_api_base": ""}', encoding="utf-8",
+    )
+    monkeypatch.setenv("COW_DATA_DIR", str(tmp_path))
+    monkeypatch.delenv("LLMTR_API_BASE", raising=False)
+    monkeypatch.setattr(config_module, "config", config_module.config)
+    config_module.load_config()
+    assert config_module.conf().get("llmtr_api_base") == "https://llmtr.com/v1"

@@ -1,0 +1,29 @@
+---
+title: LLMTR
+description: "在 CowAgent 中配置 LLMTR：填入 API 密钥，通过 https://llmtr.com/v1 的 OpenAI 兼容网关对话。"
+---
+
+LLMTR 是一个 OpenAI 兼容网关。只需配置 `llmtr_api_key`，即可通过 `https://llmtr.com/v1` 进行文本对话。
+
+<Tip>
+  也可以在 Web 控制台的「模型管理」页面添加该服务商，不必手工改配置文件。
+</Tip>
+
+## 文本对话
+
+```json
+{
+  "bot_type": "llmtr",
+  "model": "qwen/qwen-flash",
+  "llmtr_api_key": "YOUR_API_KEY"
+}
+```
+
+| 参数 | 说明 |
+| --- | --- |
+| `bot_type` | 请设为 `llmtr`，避免模型名被推断成其他厂商（例如 `qwen/...` 开头的 ID）。 |
+| `model` | LLMTR 的模型 ID，通常是 `provider/model`。例如 `qwen/qwen-flash`、`qwen/qwen-plus`、`qwen/qwen3-coder-flash`。 |
+| `llmtr_api_key` | 在 [llmtr.com](https://llmtr.com) 创建，密钥以 `llmtr-` 开头。 |
+| `llmtr_api_base` | 可选，默认 `https://llmtr.com/v1`。 |
+
+LLMTR 使用预付费余额，平台抽成在充值时收取。账户与计费细节见 [LLMTR 文档](https://llmtr.com/docs)。公开目录也列在 [models.dev](https://models.dev/providers/llmtr/)。

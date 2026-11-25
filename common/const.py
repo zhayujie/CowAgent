@@ -18,6 +18,7 @@ MiniMax = "minimax"
 DEEPSEEK = "deepseek"
 MIMO = "mimo"  # Xiaomi MiMo
 COWAGENT = "cowagent"  # CowAgent model API, OpenAI-compatible
+LLMTR = "llmtr"  # LLMTR OpenAI-compatible gateway
 CUSTOM = "custom"  # custom OpenAI-compatible API, bot_type won't auto-switch on model change
 MODELSCOPE = "modelscope"
 
@@ -25,6 +26,7 @@ MODELSCOPE = "modelscope"
 # only works against the site that issued it.
 COWAGENT_API_BASE_CN = "https://api.cowagent.cn/v1"
 COWAGENT_API_BASE_GLOBAL = "https://api.cowagent.ai/v1"
+LLMTR_API_BASE = "https://llmtr.com/v1"
 
 # Model list
 # Claude (Anthropic)

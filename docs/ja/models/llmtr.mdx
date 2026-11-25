@@ -1,0 +1,29 @@
+---
+title: LLMTR
+description: "CowAgent で LLMTR を設定する。API キーを入れて https://llmtr.com/v1 の OpenAI 互換ゲートウェイ経由で会話します。"
+---
+
+LLMTR は OpenAI 互換ゲートウェイです。`llmtr_api_key` を設定すれば `https://llmtr.com/v1` 経由でテキストチャットできます。
+
+<Tip>
+  Web コンソールのモデル管理ページからも追加でき、設定ファイルを直接編集する必要はありません。
+</Tip>
+
+## テキストチャット
+
+```json
+{
+  "bot_type": "llmtr",
+  "model": "qwen/qwen-flash",
+  "llmtr_api_key": "YOUR_API_KEY"
+}
+```
+
+| パラメータ | 説明 |
+| --- | --- |
+| `bot_type` | `llmtr` を指定してください。`qwen/...` のような ID が別ベンダーとして推論されないようにします。 |
+| `model` | LLMTR のモデル ID。多くは `provider/model` 形式です。例: `qwen/qwen-flash`、`qwen/qwen-plus`、`qwen/qwen3-coder-flash`。 |
+| `llmtr_api_key` | [llmtr.com](https://llmtr.com) で作成します。キーは `llmtr-` で始まります。 |
+| `llmtr_api_base` | 任意。デフォルトは `https://llmtr.com/v1`。 |
+
+LLMTR はプリペイド残高です。手数料はチャージ時に適用されます。課金の詳細は [LLMTR ドキュメント](https://llmtr.com/docs) を参照してください。公開カタログは [models.dev](https://models.dev/providers/llmtr/) にもあります。

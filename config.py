@@ -268,6 +268,8 @@ available_setting = {
     "use_linkai": False,
     "cowagent_api_key": "",
     "cowagent_api_base": "",  # empty means const.COWAGENT_API_BASE_CN
+    "llmtr_api_key": "",
+    "llmtr_api_base": "https://llmtr.com/v1",
     "linkai_api_key": "",
     "linkai_app_code": "",
     "linkai_api_base": "https://api.link-ai.tech",
@@ -542,6 +544,8 @@ CONFIG_TO_ENV = {
     "open_ai_api_base": "OPENAI_API_BASE",
     "cowagent_api_key": "COWAGENT_API_KEY",
     "cowagent_api_base": "COWAGENT_API_BASE",
+    "llmtr_api_key": "LLMTR_API_KEY",
+    "llmtr_api_base": "LLMTR_API_BASE",
     "linkai_api_key": "LINKAI_API_KEY",
     "linkai_api_base": "LINKAI_API_BASE",
     "claude_api_key": "CLAUDE_API_KEY",
