@@ -169,15 +169,18 @@ function SelectableText({text}: {text: string}) {
   const t = useTheme();
   const styles = useStyles();
   return Platform.OS === 'ios' ? (
-    // On iOS only a text view selects part of a text; a Text copies it whole.
-    <TextInput
-      value={text}
-      editable={false}
-      multiline
-      scrollEnabled
-      selectionColor={t.accent}
-      style={[styles.text, styles.input]}
-    />
+    // On iOS only a text view selects part of a text; a Text copies it whole. A text view
+    // sized to its text does not scroll inside a sheet capped in height, so the page scrolls it.
+    <ScrollView style={styles.scroll}>
+      <TextInput
+        value={text}
+        editable={false}
+        multiline
+        scrollEnabled={false}
+        selectionColor={t.accent}
+        style={[styles.text, styles.input]}
+      />
+    </ScrollView>
   ) : (
     <ScrollView style={styles.scroll}>
       <Text selectable style={[styles.text, styles.plain]}>
