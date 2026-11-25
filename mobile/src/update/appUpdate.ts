@@ -1,6 +1,7 @@
 import {Linking, NativeModules, Platform} from 'react-native';
 import {create} from 'zustand';
 import {listenForDownloadProgress, useDownloadStore} from '../files/downloadStore';
+import {deviceModule} from '../media/cowNative';
 import {getLang} from '../i18n';
 import {readJSON, writeJSON} from '../storage/kv';
 
@@ -44,9 +45,9 @@ const native:
     }
   | undefined = Platform.OS === 'android' ? NativeModules.CowDownloads : undefined;
 
-const device = NativeModules.CowDevice;
-const constants: {appVersion?: string; testFlight?: boolean; installer?: string} =
-  device?.getConstants?.() ?? device ?? {};
+type DeviceConstants = {appVersion?: string; testFlight?: boolean; installer?: string};
+const device = deviceModule<DeviceConstants & {getConstants?: () => DeviceConstants}>();
+const constants: DeviceConstants = device?.getConstants?.() ?? device ?? {};
 export const appVersion: string = constants.appVersion ?? '';
 /** A TestFlight build, which is also offered the App Store release of its own version. */
 export const testFlight = Platform.OS === 'ios' && !!constants.testFlight;

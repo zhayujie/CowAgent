@@ -38,6 +38,7 @@ class JSI_EXPORT CowDeviceTurboModule : public ArkTSTurboModule {
  public:
   CowDeviceTurboModule(const ArkTSTurboModule::Context ctx, const std::string name)
       : ArkTSTurboModule(ctx, name) {
+    COW_ARKTS_METHOD(call, getConstants, 0);
     COW_ARKTS_METHOD(callAsync, currentLocation, 0);
     COW_ARKTS_METHOD(callAsync, calendarEvents, 2);
     COW_ARKTS_METHOD(callAsync, createCalendarEvent, 1);
