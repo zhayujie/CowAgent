@@ -106,10 +106,10 @@ def on_message(ws, message):
                 rep = temp1["rg"]
                 rep_start = rep[0]
                 rep_end = rep[1]
-                for sn in range(rep_start,rep_end+1):
+                for replaced_sn in range(rep_start,rep_end+1):
                     #print("before pop",whole_dict)
                     #print("sn",sn)
-                    whole_dict.pop(sn,None)
+                    whole_dict.pop(replaced_sn,None)
                     #print("after pop",whole_dict)
                 results = ""
                 for i in data:
