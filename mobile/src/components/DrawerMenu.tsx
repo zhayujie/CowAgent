@@ -4,7 +4,6 @@ import {
   faArrowsRotate,
   faBars,
   faChevronLeft,
-  faChevronRight,
   faChevronUp,
   faGear,
   faMobileScreen,
@@ -316,17 +315,6 @@ function SessionList({
               {tr('menu_chat')}
             </Text>
           )}
-          {total > 0 && (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={tr('session_all_title')}
-              hitSlop={8}
-              onPress={onViewAll}
-              style={({pressed}) => [styles.listCount, pressed && styles.pressed]}>
-              <Text style={styles.listCountText}>{total}</Text>
-              <Icon icon={faChevronRight} size={8} color={t.t3} />
-            </Pressable>
-          )}
         </View>
         <Pressable
           accessibilityRole="button"
@@ -527,8 +515,6 @@ const useStyles = makeStyles(t => ({
   listTitleRow: {flexDirection: 'row', alignItems: 'center', gap: 2},
   listTitle: {fontSize: 18, fontWeight: '600', color: t.t1, letterSpacing: -0.3},
   listTitleAlone: {paddingHorizontal: 12, paddingVertical: 8},
-  listCount: {flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 6, borderRadius: radius.sm},
-  listCountText: {fontSize: 13, color: t.t3, fontVariant: ['tabular-nums']},
   newChat: {
     flexDirection: 'row',
     alignItems: 'center',
