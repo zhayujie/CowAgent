@@ -453,13 +453,28 @@ function useStalled(active: boolean, progress: string): boolean {
   return stalled;
 }
 
+/**
+ * Copy and select through a long press. Selectable text in the inverted list takes focus on a tap,
+ * and Android scrolls the list to the wrong place to reveal it.
+ */
+function HoldToCopy({text, plain, children}: {text: string; plain?: string; children: React.ReactNode}) {
+  const menu = useMessageMenu(() => ({text, plain: plain ?? text, actions: []}));
+  return (
+    <GestureDetector gesture={menu}>
+      <View>{children}</View>
+    </GestureDetector>
+  );
+}
+
 function StepRow({step, live, carded}: {step: Step; live: boolean; carded: ChatFile[]}) {
   const styles = useStyles();
   if (step.kind === 'text') {
     return (
-      <View style={styles.note}>
-        <Markdown value={step.text} compact inset={BUBBLE_INSET} />
-      </View>
+      <HoldToCopy text={step.text} plain={markdownText(step.text)}>
+        <View style={styles.note}>
+          <Markdown value={step.text} compact inset={BUBBLE_INSET} selectable={false} />
+        </View>
+      </HoldToCopy>
     );
   }
   if (step.kind === 'thinking') {
@@ -529,12 +544,11 @@ function Thinking({text, seconds, live}: {text: string; seconds?: number; live: 
         <View style={styles.flex} />
         {!live && <Chevron open={open} />}
       </View>
-      <Text
-        selectable={open}
-        style={styles.thinkText}
-        numberOfLines={open ? undefined : 2}>
-        {text.trim()}
-      </Text>
+      <HoldToCopy text={text.trim()}>
+        <Text style={styles.thinkText} numberOfLines={open ? undefined : 2}>
+          {text.trim()}
+        </Text>
+      </HoldToCopy>
     </Pressable>
   );
 }
@@ -668,9 +682,11 @@ function Pre({text, error}: {text: string; error?: boolean}) {
   const cut = text.length > DETAIL_MAX_CHARS;
   return (
     <ScrollView style={styles.preScroll} nestedScrollEnabled>
-      <Text selectable style={[styles.pre, error && styles.preError]}>
-        {cut ? `${text.slice(0, DETAIL_MAX_CHARS)}…` : text}
-      </Text>
+      <HoldToCopy text={text}>
+        <Text style={[styles.pre, error && styles.preError]}>
+          {cut ? `${text.slice(0, DETAIL_MAX_CHARS)}…` : text}
+        </Text>
+      </HoldToCopy>
       {cut && (
         <Text style={styles.preNote}>{trf('chat_output_truncated', {max: DETAIL_MAX_CHARS, total: text.length})}</Text>
       )}
@@ -707,7 +723,9 @@ function ToolDetail({step}: {step: ToolStep}) {
           <Text style={styles.sectionLabel}>{failed ? 'ERROR' : 'OUTPUT'}</Text>
           {step.display ? (
             <ScrollView style={styles.display} nestedScrollEnabled>
-              <Markdown value={step.display} compact inset={BUBBLE_INSET + 40} />
+              <HoldToCopy text={step.display} plain={markdownText(step.display)}>
+                <Markdown value={step.display} compact inset={BUBBLE_INSET + 40} selectable={false} />
+              </HoldToCopy>
             </ScrollView>
           ) : output ? (
             <Pre text={step.result ? prettyResult(step.result) : asText(output)} error={failed} />
