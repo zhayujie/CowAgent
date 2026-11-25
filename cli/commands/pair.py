@@ -22,8 +22,6 @@ import click
 from cli.utils import get_cli_language, get_device_dir
 
 POLL_SECONDS = 2
-# Off until the mobile app is published: skips the QR code and the app hint.
-MOBILE_PAIRING = False
 
 
 class _Unreachable(Exception):
@@ -152,13 +150,9 @@ def pair(url, no_wait):
 
     click.echo("")
     click.echo(click.style(_t(f"让其他设备连接 · {title}", f"Let another device connect · {title}"), bold=True))
-    if MOBILE_PAIRING:
-        _print_qr(res.get("link") or "")
-        click.echo(_t("  用 CowAgent App 扫码；或在另一台设备的「连接其他设备」中输入：",
-                      "  Scan with the CowAgent app, or enter on the other device under \"Connect to a device\":"))
-    else:
-        click.echo(_t("  在另一台设备的「连接其他设备」中输入：",
-                      "  Enter on the other device under \"Connect to a device\":"))
+    _print_qr(res.get("link") or "")
+    click.echo(_t("  用 CowAgent App 扫码；或在另一台设备的「连接其他设备」中输入：",
+                  "  Scan with the CowAgent app, or enter on the other device under \"Connect to a device\":"))
     label_addr, label_code = _t("地址", "Address"), _t("配对码", "Code")
     width = max(_width(label_addr), _width(label_code)) + 2
     for i, address in enumerate(urls):
