@@ -105,7 +105,7 @@ def test_the_sessions_endpoint_clamps_before_merging_agents(store, tmp_path):
     from channel.web.api import sessions as sessions_api
 
     params = types.SimpleNamespace(
-        page="1", page_size="-1", agent_id="", agent="", scope="all"
+        page="1", page_size="-1", agent_id="", agent="", scope="all", space=""
     )
 
     with patch.object(sessions_api, "_require_auth"), \

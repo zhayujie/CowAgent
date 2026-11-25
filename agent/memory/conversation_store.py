@@ -2163,6 +2163,29 @@ class ConversationStore:
                 conn.close()
         return [r[0] for r in rows]
 
+    def list_session_births(self, channel_type: Optional[str] = None) -> List[tuple]:
+        """Every session as ``(session_id, created_at)``, optionally filtered by channel.
+
+        Enough to count the sessions in each project space and to keep a space
+        in the place it first appeared, without reading full session rows.
+        """
+        with self._lock:
+            conn = self._connect()
+            try:
+                if channel_type:
+                    rows = conn.execute(
+                        "SELECT session_id, created_at FROM sessions WHERE agent_id = ? AND channel_type = ?",
+                        (self._agent_id, channel_type),
+                    ).fetchall()
+                else:
+                    rows = conn.execute(
+                        "SELECT session_id, created_at FROM sessions WHERE agent_id = ?",
+                        (self._agent_id,),
+                    ).fetchall()
+            finally:
+                conn.close()
+        return [(r[0], r[1]) for r in rows]
+
     def get_stats(self) -> Dict[str, Any]:
         """Return basic stats keyed by channel_type, for monitoring."""
         with self._lock:

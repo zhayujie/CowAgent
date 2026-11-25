@@ -194,38 +194,81 @@ def _annotate_sessions_with_projects(store, result: dict, agent_id: Optional[str
                   exactly as before projects existed.
     - ``project`` several spaces in use - group by project, so multi-project
                   users can find a conversation by where it belongs.
+
+    ``spaces`` lists every space in use with its true session count, so a client
+    can show each project even when none of its sessions is on the loaded pages.
     """
     from agent.workspace import project_store
     from common.state_dir import state_root_str
 
     project_map = project_store.get_project_map(agent_id)
-    default_workspace = state_root_str()
-
     for session in result.get("sessions") or []:
-        path = project_map.get(session["session_id"])
-        session["project"] = (
-            {"path": path, "name": project_store.display_name_for(path)}
-            if path else None
-        )
+        _attach_project(session, project_map.get(session["session_id"]))
 
-    # Distinct spaces across every web session, default workspace included as
-    # one space when any session is still using it.
-    space_paths = set()
-    uses_default = False
-    for sid in store.list_session_ids(channel_type="web"):
-        path = project_map.get(sid)
-        if path:
-            space_paths.add(path)
-        else:
-            uses_default = True
-
-    result["space_count"] = len(space_paths) + (1 if uses_default else 0)
-    result["group_mode"] = "project" if result["space_count"] > 1 else "time"
-    result["default_workspace"] = default_workspace
+    births = {
+        sid: (project_map.get(sid), created)
+        for sid, created in store.list_session_births(channel_type="web")
+    }
+    _add_space_summary(result, births)
+    result["default_workspace"] = state_root_str()
     # The user's chosen sidebar order of spaces (project paths + the default
     # sentinel). The client uses it to sort project groups; unspecified spaces
     # fall back after the ordered ones.
     result["project_order"] = project_store.get_order()
+
+
+def _attach_project(session: dict, path: Optional[str]) -> None:
+    from agent.workspace import project_store
+
+    session["project"] = (
+        {"path": path, "name": project_store.display_name_for(path)}
+        if path else None
+    )
+
+
+def _space_key(session: dict) -> str:
+    from agent.workspace import project_store
+
+    return (session.get("project") or {}).get("path") or project_store.DEFAULT_SPACE_KEY
+
+
+def _add_space_summary(result: dict, births: Dict[str, tuple]) -> None:
+    """Fill ``spaces``, ``space_count`` and ``group_mode`` from every session's
+    ``(project path, created_at)``, keyed by session id."""
+    from agent.workspace import project_store
+
+    spaces: Dict[str, dict] = {}
+    for path, created in births.values():
+        key = path or project_store.DEFAULT_SPACE_KEY
+        space = spaces.get(key)
+        if space is None:
+            space = spaces[key] = {
+                "key": key,
+                "path": path or None,
+                "name": project_store.display_name_for(path) if path else "",
+                "count": 0,
+                "born": 0,
+            }
+        space["count"] += 1
+        born = _as_epoch(created)
+        if born and (not space["born"] or born < space["born"]):
+            space["born"] = born
+    result["spaces"] = list(spaces.values())
+    result["space_count"] = len(spaces)
+    result["group_mode"] = "project" if len(spaces) > 1 else "time"
+
+
+def _page_of_space(sessions: List[dict], space: str, page: int, page_size: int) -> dict:
+    """One page of the sessions working in ``space``, already sorted."""
+    inside = [s for s in sessions if _space_key(s) == space]
+    offset = (max(1, page) - 1) * page_size
+    return {
+        "sessions": inside[offset:offset + page_size],
+        "total": len(inside),
+        "page": max(1, page),
+        "page_size": page_size,
+        "has_more": len(inside) > offset + page_size,
+    }
 
 
 def _as_epoch(value) -> int:
@@ -254,7 +297,7 @@ def _as_epoch(value) -> int:
     return 0
 
 
-def _list_sessions_across_agents(page: int, page_size: int) -> dict:
+def _list_sessions_across_agents(page: int, page_size: int, space: str = "") -> dict:
     """One page of every Agent's conversations, merged.
 
     Sessions are stored one database per Agent, so "all conversations" is a
@@ -274,8 +317,7 @@ def _list_sessions_across_agents(page: int, page_size: int) -> dict:
     take = max(1, page) * page_size
     merged: List[dict] = []
     total = 0
-    space_paths = set()
-    uses_default = False
+    births: Dict[str, tuple] = {}
     try:
         members_index = session_prefs.members_index()
     except Exception as e:
@@ -286,9 +328,11 @@ def _list_sessions_across_agents(page: int, page_size: int) -> dict:
     for profile in get_agent_registry().list(include_disabled=False):
         try:
             store = get_conversation_store(profile.workspace)
-            chunk = store.list_sessions(channel_type="web", page=1, page_size=take)
+            agent_births = store.list_session_births(channel_type="web")
+            # A single space can draw its page from anywhere in the list.
+            rows = max(1, len(agent_births)) if space else take
+            chunk = store.list_sessions(channel_type="web", page=1, page_size=rows)
             project_map = project_store.get_project_map(profile.id)
-            session_ids = store.list_session_ids(channel_type="web")
         except Exception as e:
             # One unreadable workspace must not blank out the whole list; the
             # other Agents' conversations are still perfectly readable.
@@ -310,18 +354,11 @@ def _list_sessions_across_agents(page: int, page_size: int) -> dict:
             )
             if len(roster) > 1:
                 session["participants"] = roster
-            session["project"] = (
-                {"path": path, "name": project_store.display_name_for(path)}
-                if path else None
-            )
+            _attach_project(session, path)
             merged.append(session)
 
-        for sid in session_ids:
-            path = project_map.get(sid)
-            if path:
-                space_paths.add(path)
-            else:
-                uses_default = True
+        for sid, created in agent_births:
+            births.setdefault(sid, (project_map.get(sid), created))
 
     # One row per conversation. A session id can exist in more than one Agent's
     # store (an older client once let a conversation change hands mid-way, and
@@ -348,18 +385,20 @@ def _list_sessions_across_agents(page: int, page_size: int) -> dict:
             -_as_epoch(s.get("last_active")),
         )
     )
-    offset = (max(1, page) - 1) * page_size
-    result = {
-        "sessions": merged[offset:offset + page_size],
-        "total": total,
-        "page": max(1, page),
-        "page_size": page_size,
-        "has_more": total > offset + page_size,
-        "space_count": len(space_paths) + (1 if uses_default else 0),
-        "default_workspace": state_root_str(),
-        "project_order": project_store.get_order(),
-    }
-    result["group_mode"] = "project" if result["space_count"] > 1 else "time"
+    if space:
+        result = _page_of_space(merged, space, page, page_size)
+    else:
+        offset = (max(1, page) - 1) * page_size
+        result = {
+            "sessions": merged[offset:offset + page_size],
+            "total": total,
+            "page": max(1, page),
+            "page_size": page_size,
+            "has_more": total > offset + page_size,
+        }
+    _add_space_summary(result, births)
+    result["default_workspace"] = state_root_str()
+    result["project_order"] = project_store.get_order()
     return result
 
 
@@ -369,12 +408,15 @@ class SessionsHandler:
         web.header('Content-Type', 'application/json; charset=utf-8')
         try:
             params = web.input(
-                page='1', page_size='50', agent_id='', agent='', scope=''
+                page='1', page_size='50', agent_id='', agent='', scope='', space=''
             )
             from agent.memory.conversation_store import page_window
             page, page_size = page_window(params.page, params.page_size, 50)
+            # One project space only: its key is the project path, or the
+            # default-space sentinel for the Agent's own workspace.
+            space = (params.space or '').strip()
             if (params.scope or '').strip() == 'all':
-                result = _list_sessions_across_agents(page, page_size)
+                result = _list_sessions_across_agents(page, page_size, space)
                 return json.dumps({"status": "success", **result}, ensure_ascii=False)
 
             agent_id = _request_agent_id(params)
@@ -383,12 +425,17 @@ class SessionsHandler:
             store = get_conversation_store(
                 _get_workspace_root(agent_id=agent_id)
             )
-            result = store.list_sessions(
-                channel_type="web",
-                page=page,
-                page_size=page_size,
-            )
-            _annotate_sessions_with_projects(store, result, agent_id)
+            if space:
+                everything = store.list_sessions(channel_type="web", page=1, page_size=10 ** 9)
+                _annotate_sessions_with_projects(store, everything, agent_id)
+                result = {**everything, **_page_of_space(everything["sessions"], space, page, page_size)}
+            else:
+                result = store.list_sessions(
+                    channel_type="web",
+                    page=page,
+                    page_size=page_size,
+                )
+                _annotate_sessions_with_projects(store, result, agent_id)
             badge = _agent_badge(
                 get_agent_registry().get(agent_id or None, require_enabled=False)
             )
