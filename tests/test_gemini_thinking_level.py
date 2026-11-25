@@ -43,6 +43,23 @@ def test_gemini_4_sends_thinking_level(monkeypatch, effort):
     assert captured["timeout"] == (15, 900)
 
 
+@pytest.mark.parametrize("model", ["gemini-4-carbon", "gemini-4-neon", "gemini-4-hydrogen"])
+def test_new_gemini_4_models_send_thinking_level(monkeypatch, model):
+    captured = _call(monkeypatch, model, reasoning_effort="high")
+
+    assert captured["payload"]["generationConfig"]["thinkingConfig"] == {"thinkingLevel": "high"}
+    assert captured["timeout"] == (15, 900)
+
+
+def test_xhigh_is_sent_only_to_models_that_accept_it(monkeypatch):
+    for model in ("gemini-4-neon", "gemini-4-hydrogen"):
+        captured = _call(monkeypatch, model, reasoning_effort="xhigh")
+        assert captured["payload"]["generationConfig"]["thinkingConfig"] == {"thinkingLevel": "xhigh"}
+
+    captured = _call(monkeypatch, "gemini-4-carbon", reasoning_effort="xhigh")
+    assert "generationConfig" not in captured["payload"]
+
+
 def test_gemini_4_without_effort_uses_server_default(monkeypatch):
     captured = _call(monkeypatch, "gemini-4-argon")
 

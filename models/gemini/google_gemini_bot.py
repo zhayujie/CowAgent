@@ -49,6 +49,8 @@ def _openai_usage(usage_meta) -> dict:
 
 _THINKING_LEVEL_MODELS = ("gemini-4",)
 _THINKING_LEVELS = ("low", "medium", "high")
+# Only these models accept xhigh; others reject it with HTTP 400.
+_XHIGH_THINKING_MODELS = ("gemini-4-neon", "gemini-4-hydrogen")
 
 # Gemini names the stop cause in its own vocabulary. The agent reads the OpenAI
 # name instead: a turn that returns text and no tool calls looks finished either
@@ -90,8 +92,11 @@ STREAM_KEEPALIVE_MAX_SECONDS = 180
 
 def _thinking_level(model_name: str, effort) -> Optional[str]:
     """Map the resolved reasoning effort to Gemini 4's thinkingLevel, if applicable."""
-    if not (model_name or "").lower().startswith(_THINKING_LEVEL_MODELS):
+    name = (model_name or "").lower()
+    if not name.startswith(_THINKING_LEVEL_MODELS):
         return None
+    if effort == "xhigh":
+        return effort if name.startswith(_XHIGH_THINKING_MODELS) else None
     return effort if effort in _THINKING_LEVELS else None
 
 
@@ -116,9 +121,9 @@ class GoogleGeminiBot(Bot):
 
     @property
     def model(self):
-        model_name = conf().get("model") or "gemini-4-argon"
+        model_name = conf().get("model") or "gemini-4-carbon"
         if model_name == "gemini":
-            model_name = "gemini-4-argon"
+            model_name = "gemini-4-carbon"
         return model_name
 
     @property

@@ -590,7 +590,7 @@ select_model() {
         "DeepSeek (deepseek-flash, deepseek-v4-pro, etc.)" \
         "Claude (claude-opus-5-5, claude-sonnet-5-5, etc.)" \
         "OpenAI (gpt-6.2-sol, gpt-6.2-astra, etc.)" \
-        "Gemini (gemini-4-argon, gemini-3.8-flash, etc.)" \
+        "Gemini (gemini-4-carbon, gemini-3.8-flash, etc.)" \
         "MiniMax (MiniMax-M3.1-Flash, MiniMax-M3, etc.)" \
         "GLM (glm-5.3-flash, glm-5.3, etc.)" \
         "Qwen (qwen3.8-flash, qwen3.8-max, etc.)" \
@@ -622,7 +622,7 @@ configure_model() {
         1) read_model_config "DeepSeek" "deepseek-flash" "DEEPSEEK_KEY" ;;
         2) read_model_config "Claude" "claude-opus-5-5" "CLAUDE_KEY" ;;
         3) read_model_config "OpenAI" "gpt-6.2-sol" "OPENAI_KEY" ;;
-        4) read_model_config "Gemini" "gemini-4-argon" "GEMINI_KEY" ;;
+        4) read_model_config "Gemini" "gemini-4-carbon" "GEMINI_KEY" ;;
         5) read_model_config "MiniMax" "MiniMax-M3.1-Flash" "MINIMAX_KEY" ;;
         6) read_model_config "GLM" "glm-5.3-flash" "ZHIPU_KEY" ;;
         7) read_model_config "Qwen (DashScope)" "qwen3.8-flash" "DASHSCOPE_KEY" ;;

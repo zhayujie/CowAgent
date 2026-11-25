@@ -532,7 +532,7 @@ function Add-ScriptsDirToPath {
 $ModelChoices = @{
     1  = @{ Provider = "DeepSeek";                Default = "deepseek-flash";                      Field = "deepseek_api_key" }
     2  = @{ Provider = "Claude";                  Default = "claude-opus-5-5";                     Field = "claude_api_key";    BaseField = "claude_api_base" }
-    3  = @{ Provider = "Gemini";                  Default = "gemini-4-argon";                      Field = "gemini_api_key";    BaseField = "gemini_api_base" }
+    3  = @{ Provider = "Gemini";                  Default = "gemini-4-carbon";                     Field = "gemini_api_key";    BaseField = "gemini_api_base" }
     4  = @{ Provider = "OpenAI";                  Default = "gpt-6.2-sol";                         Field = "open_ai_api_key";   BaseField = "open_ai_api_base" }
     5  = @{ Provider = "MiniMax";                 Default = "MiniMax-M3.1-Flash";                  Field = "minimax_api_key" }
     6  = @{ Provider = "GLM";                     Default = "glm-5.3-flash";                       Field = "zhipu_ai_api_key" }
@@ -549,7 +549,7 @@ function Select-Model {
     $options = @(
         "DeepSeek (deepseek-flash, deepseek-v4-pro, etc.)",
         "Claude (claude-opus-5-5, claude-sonnet-5-5, etc.)",
-        "Gemini (gemini-4-argon, gemini-3.8-flash, etc.)",
+        "Gemini (gemini-4-carbon, gemini-3.8-flash, etc.)",
         "OpenAI (gpt-6.2-sol, gpt-6.2-astra, etc.)",
         "MiniMax (MiniMax-M3.1-Flash, MiniMax-M3, etc.)",
         "GLM (glm-5.3-flash, glm-5.3, etc.)",

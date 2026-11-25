@@ -133,7 +133,7 @@ CowAgent 支援國內外主流廠商的大語言模型。**文字對話、影像
 | [DeepSeek](https://docs.cowagent.ai/zh/models/deepseek) | deepseek-flash (V4.1) / pro | ✅ | ✅ | | | | |
 | [Claude](https://docs.cowagent.ai/zh/models/claude) | claude-opus-5-5 / sonnet-5-5 | ✅ | ✅ | | | | |
 | [OpenAI](https://docs.cowagent.ai/zh/models/openai) | gpt-6.2-sol / gpt-6.2-astra | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| [Gemini](https://docs.cowagent.ai/zh/models/gemini) | gemini-4-argon | ✅ | ✅ | ✅ | | | |
+| [Gemini](https://docs.cowagent.ai/zh/models/gemini) | gemini-4-carbon | ✅ | ✅ | ✅ | | | |
 | [MiniMax](https://docs.cowagent.ai/zh/models/minimax) | MiniMax-M3.1-Flash / M3 | ✅ | ✅ | ✅ | | ✅ | |
 | [智譜 GLM](https://docs.cowagent.ai/zh/models/glm) | glm-5.3-flash、glm-5v-turbo | ✅ | ✅ | | ✅ | | ✅ |
 | [通義千問](https://docs.cowagent.ai/zh/models/qwen) | qwen3.8-flash | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |

@@ -694,7 +694,7 @@ class ModelsHandler:
         # entry is the auto-picked vision model, and image understanding does
         # not justify the Opus price.
         "claudeAPI": [const.CLAUDE_SONNET_5, const.CLAUDE_OPUS_5_5, const.CLAUDE_SONNET_5_5, const.CLAUDE_HAIKU_5_5, const.CLAUDE_OPUS_5, const.CLAUDE_FABLE_5_1, const.CLAUDE_FABLE_5, const.CLAUDE_4_8_OPUS, const.CLAUDE_4_7_OPUS, const.CLAUDE_4_6_SONNET, const.CLAUDE_4_6_OPUS],
-        "gemini":    [const.GEMINI_4_ARGON, const.GEMINI_38_FLASH, const.GEMINI_37_FLASH, const.GEMINI_36_FLASH, const.GEMINI_35_FLASH, const.GEMINI_31_FLASH_LITE_PRE, const.GEMINI_31_PRO_PRE, const.GEMINI_3_FLASH_PRE],
+        "gemini":    [const.GEMINI_4_CARBON, const.GEMINI_4_NEON, const.GEMINI_4_HYDROGEN, const.GEMINI_4_ARGON, const.GEMINI_38_FLASH, const.GEMINI_37_FLASH, const.GEMINI_36_FLASH, const.GEMINI_35_FLASH, const.GEMINI_31_FLASH_LITE_PRE, const.GEMINI_31_PRO_PRE, const.GEMINI_3_FLASH_PRE],
         "qianfan":   [const.ERNIE_45_TURBO_VL],
         # glm-5.3-flash is natively multimodal and dispatched as-is; the
         # text-only chat models (glm-5.2, glm-5-turbo, etc.) fall back to the
@@ -719,6 +719,9 @@ class ModelsHandler:
             "claude-haiku-5-5",
             "claude-fable-5-2",
             "claude-fable-5-1",
+            "gemini-4-carbon",
+            "gemini-4-neon",
+            "gemini-4-hydrogen",
             "gemini-4-argon",
             "glm-5.3-flash",
             "qwen3.8-flash",
@@ -1823,6 +1826,9 @@ class ModelsHandler:
         "claude-opus-4-7": {"context_window": 200000, "max_output_tokens": 64000},
         "claude-sonnet-4-6": {"context_window": 200000, "max_output_tokens": 64000},
         "claude-opus-4-6": {"context_window": 200000, "max_output_tokens": 64000},
+        "gemini-4-carbon": {"context_window": 1048576, "max_output_tokens": 65536},
+        "gemini-4-neon": {"context_window": 1048576, "max_output_tokens": 65536},
+        "gemini-4-hydrogen": {"context_window": 1048576, "max_output_tokens": 65536},
         "gemini-4-argon": {"context_window": 1048576, "max_output_tokens": 65536},
         "gemini-3.7-flash": {"context_window": 1048576, "max_output_tokens": 65536},
         "gemini-3.6-flash": {"context_window": 1048576, "max_output_tokens": 65536},

@@ -168,6 +168,25 @@ def test_gemini_4_exposes_thinking_levels():
     assert normalize_reasoning_effort("gemini", "gemini-4-argon", "max") == "medium"
 
 
+def test_gemini_4_carbon_matches_argon_levels():
+    cap = get_reasoning_capability("gemini", "gemini-4-carbon")
+
+    assert cap["default"] == "medium"
+    assert _values(cap) == ["low", "medium", "high"]
+    assert normalize_reasoning_effort("gemini", "gemini-4-carbon", "xhigh") == "medium"
+
+
+@pytest.mark.parametrize("model", ["gemini-4-neon", "gemini-4-hydrogen"])
+def test_gemini_4_neon_and_hydrogen_add_xhigh(model):
+    cap = get_reasoning_capability("gemini", model)
+
+    assert cap["param"] == "thinking_level"
+    assert cap["default"] == "high"
+    assert cap["thinking_only"] is True
+    assert _values(cap) == ["low", "medium", "high", "xhigh"]
+    assert normalize_reasoning_effort("gemini", model, "xhigh") == "xhigh"
+
+
 def test_unsupported_provider_returns_hidden_capability():
     cap = get_reasoning_capability("gemini", "gemini-3.5-flash")
 

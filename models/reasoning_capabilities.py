@@ -23,6 +23,9 @@ KIMI_K3_VALUES = ["low", "high", "max"]
 # Gemini 4 always thinks; depth is set via generationConfig.thinkingConfig.thinkingLevel.
 GEMINI4_VALUES = ["low", "medium", "high"]
 GEMINI4_MODELS = ("gemini-4",)
+# Neon and Hydrogen also accept xhigh and think at high by default.
+GEMINI4_XHIGH_VALUES = ["low", "medium", "high", "xhigh"]
+GEMINI4_XHIGH_MODELS = ("gemini-4-neon", "gemini-4-hydrogen")
 CLAUDE_XHIGH_MODELS = (
     "claude-fable-5-1",
     "claude-fable-5",
@@ -155,6 +158,9 @@ def get_reasoning_capability(provider_id: str, model_name: str = "") -> dict:
 
     if base_pid == "moonshot" and model.startswith("kimi-k3"):
         return _capability(KIMI_K3_VALUES, default="max", thinking_only=True)
+
+    if base_pid == "gemini" and model.startswith(GEMINI4_XHIGH_MODELS):
+        return _capability(GEMINI4_XHIGH_VALUES, default="high", param="thinking_level", thinking_only=True)
 
     if base_pid == "gemini" and model.startswith(GEMINI4_MODELS):
         return _capability(GEMINI4_VALUES, default="medium", param="thinking_level", thinking_only=True)
