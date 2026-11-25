@@ -313,6 +313,8 @@ function AssistantTurn({
   const dotsRoom = !!message.streaming && !waiting;
   const hasAnswer =
     !!message.content || !!files.length || !!message.cancelled || !!message.runState || !!message.error;
+  // Steps end in a divider with its own spacing, so only text or files push the notes below down.
+  const afterBody = !!message.content || !!files.length;
 
   return (
     <RowToggleContext.Provider value={row.toggle}>
@@ -390,13 +392,13 @@ function AssistantTurn({
             )}
 
             {message.cancelled && (
-              <View style={styles.status}>
+              <View style={[styles.status, afterBody && styles.statusAfterBody]}>
                 <Icon icon={faStop} size={9} color={t.t3} />
                 <Text style={styles.statusText}>{tr('chat_stopped')}</Text>
               </View>
             )}
             {!message.cancelled && message.runState && (
-              <View style={styles.status}>
+              <View style={[styles.status, afterBody && styles.statusAfterBody]}>
                 <Icon
                   icon={message.runState === 'running' ? faHourglassHalf : faCircleExclamation}
                   size={9}
@@ -407,7 +409,15 @@ function AssistantTurn({
                 </Text>
               </View>
             )}
-            {!!message.error && <Text style={styles.error}>{message.error}</Text>}
+            {!!message.error && (
+              <Text
+                style={[
+                  styles.error,
+                  (afterBody || !!message.cancelled || !!message.runState) && styles.errorAfterBody,
+                ]}>
+                {message.error}
+              </Text>
+            )}
           </View>
           {!message.streaming && (
             <MetaLine message={message} onOpenContext={onOpenContext} onRetry={onRetry} />
@@ -913,10 +923,10 @@ const useStyles = makeStyles(t => {
     subFailed: {color: t.danger},
     subTime: {fontSize: 10.5, color: t.t4, fontVariant: ['tabular-nums']},
 
-    status: {flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6},
+    status: {flexDirection: 'row', alignItems: 'center', gap: 6},
+    statusAfterBody: {marginTop: 6},
     statusText: {fontSize: 12, color: t.t3},
     error: {
-      marginTop: 8,
       paddingHorizontal: 12,
       paddingVertical: 9,
       borderRadius: radius.sm,
@@ -926,6 +936,7 @@ const useStyles = makeStyles(t => {
       backgroundColor: t.dangerSoft,
       overflow: 'hidden',
     },
+    errorAfterBody: {marginTop: 8},
     meta: {
       fontSize: 11,
       color: t.t4,
