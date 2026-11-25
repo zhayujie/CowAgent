@@ -1,5 +1,13 @@
 import React, {useEffect, useState} from 'react';
-import {Keyboard, KeyboardAvoidingView, Platform, type KeyboardAvoidingViewProps} from 'react-native';
+import {
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  type KeyboardAvoidingViewProps,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
+import Animated, {useAnimatedKeyboard, useAnimatedStyle} from 'react-native-reanimated';
 
 /**
  * iOS, and Android 15+ where pages are drawn edge to edge, keep the window's
@@ -32,4 +40,24 @@ export function AvoidKeyboard({children, ...props}: Omit<KeyboardAvoidingViewPro
       {children}
     </KeyboardAvoidingView>
   );
+}
+
+/**
+ * iOS: pads by the keyboard's height frame by frame, less the bottom inset the
+ * caller already leaves. KeyboardAvoidingView tweens its padding with
+ * LayoutAnimation, which on the new architecture slides the rows of an
+ * inverted list away and back while the keyboard opens.
+ */
+export function TrackKeyboard({
+  children,
+  inset = 0,
+  style,
+}: {
+  children: React.ReactNode;
+  inset?: number;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const keyboard = useAnimatedKeyboard();
+  const pad = useAnimatedStyle(() => ({paddingBottom: Math.max(0, keyboard.height.value - inset)}));
+  return <Animated.View style={[style, pad]}>{children}</Animated.View>;
 }

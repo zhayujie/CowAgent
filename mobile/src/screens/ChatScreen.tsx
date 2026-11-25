@@ -15,6 +15,8 @@ import {
   type LayoutChangeEvent,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
+  type StyleProp,
+  type ViewStyle,
 } from 'react-native';
 import {Gesture, GestureDetector} from 'react-native-gesture-handler';
 import Animated, {FadeIn, FadeOut, useSharedValue} from 'react-native-reanimated';
@@ -77,7 +79,7 @@ import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
 import {chatModelReady} from '../utils/capabilities';
 import type {Space} from '../utils/sessionGroups';
-import {AvoidKeyboard} from '../components/AvoidKeyboard';
+import {AvoidKeyboard, TrackKeyboard} from '../components/AvoidKeyboard';
 
 type Props = StackScreenProps<RootStackParamList, 'Chat'>;
 
@@ -95,6 +97,17 @@ const FOLLOW_PX = 80;
  */
 const FOLLOW_POSITION = {minIndexForVisible: 0, autoscrollToTopThreshold: FOLLOW_PX};
 const HOLD_POSITION = {minIndexForVisible: 1, autoscrollToTopThreshold: FOLLOW_PX};
+/** iOS follows the keyboard frame by frame, above the home-indicator inset kept under the composer. */
+function KeyboardBody({children, inset, style}: {children: React.ReactNode; inset: number; style: StyleProp<ViewStyle>}) {
+  return Platform.OS === 'ios' ? (
+    <TrackKeyboard style={style} inset={inset}>
+      {children}
+    </TrackKeyboard>
+  ) : (
+    <AvoidKeyboard style={style}>{children}</AvoidKeyboard>
+  );
+}
+
 /** How long the row above a toggled message stays held, past the frames it takes to lay out. */
 const PIN_MS = 600;
 const SHOW_AI_NOTICE = (Platform.OS as string) === 'harmony';
@@ -1021,7 +1034,7 @@ export function ChatScreen({route, navigation}: Props) {
         </View>
         <LinkBanner />
 
-        <AvoidKeyboard style={styles.body}>
+        <KeyboardBody style={styles.body} inset={insets.bottom}>
           <PaneWidthProvider width={columnWidth}>
             {empty ? (
               loading ? (
@@ -1119,8 +1132,8 @@ export function ChatScreen({route, navigation}: Props) {
               {SHOW_AI_NOTICE && <Text style={styles.aiNotice}>{tr('chat_ai_notice')}</Text>}
             </View>
           </PaneWidthProvider>
-          {!keyboardShown && <View style={{height: insets.bottom}} />}
-        </AvoidKeyboard>
+          {(Platform.OS === 'ios' || !keyboardShown) && <View style={{height: insets.bottom}} />}
+        </KeyboardBody>
 
         <VoiceOverlay />
         <ToastHost bottom={insets.bottom + 150} />
