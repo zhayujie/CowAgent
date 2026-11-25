@@ -8,8 +8,9 @@ import {
   updateSession,
 } from '../api/cowApi';
 import {ApiError} from '../api/http';
-import type {SessionItem} from '../protocol/events';
+import type {SessionItem, SpaceSummary} from '../protocol/events';
 import {readJSON, writeJSON} from '../storage/kv';
+import {DEFAULT_SPACE} from '../utils/sessionGroups';
 import {agentParam} from './agentStore';
 import {resetOnSignOut} from './reset';
 import {onServerEnvelope, useServerStore} from './serverStore';
@@ -28,10 +29,20 @@ interface SessionState {
   /** `project` once chats work in more than one space, as the server decides. */
   groupMode: 'project' | 'time';
   projectOrder: string[];
+  /** Every space in use with its true chat count; empty when the server does not report it. */
+  spaces: SpaceSummary[];
+  /** Pages of each space fetched on their own, by space key. */
+  spacePages: Record<string, number>;
+  /** Spaces whose next page is on its way. */
+  spacesLoading: string[];
   /** Space keys folded shut, kept on the phone. */
   collapsed: string[];
   refresh: () => Promise<void>;
   loadMore: () => Promise<void>;
+  /** Loads the next page of one space's chats into the list. */
+  loadSpace: (key: string) => Promise<void>;
+  /** Unfolds a space if it is folded. */
+  expand: (key: string) => void;
   rename: (session: SessionItem, title: string) => Promise<void>;
   setPinned: (session: SessionItem, pinned: boolean) => Promise<void>;
   remove: (session: SessionItem) => Promise<void>;
@@ -73,6 +84,9 @@ export const useSessionStore = create<SessionState>((set, get) => {
     error: null,
     groupMode: 'time',
     projectOrder: [],
+    spaces: [],
+    spacePages: {},
+    spacesLoading: [],
     collapsed: [],
 
     refresh: async () => {
@@ -88,6 +102,8 @@ export const useSessionStore = create<SessionState>((set, get) => {
           loading: false,
           groupMode: res.group_mode === 'project' ? 'project' : 'time',
           projectOrder: res.project_order ?? [],
+          spaces: res.spaces ?? [],
+          spacePages: {},
         });
       } catch (e) {
         set({loading: false, error: await handleError(e)});
@@ -114,6 +130,34 @@ export const useSessionStore = create<SessionState>((set, get) => {
       }
     },
 
+    loadSpace: async key => {
+      const {spacePages, spacesLoading} = get();
+      if (spacesLoading.includes(key)) {
+        return;
+      }
+      const page = (spacePages[key] ?? 0) + 1;
+      set(s => ({spacesLoading: [...s.spacesLoading, key]}));
+      try {
+        const res = await getSessions(page, PAGE_SIZE, key);
+        const known = new Set(get().sessions.map(s => s.session_id));
+        set(s => ({
+          sessions: [...s.sessions, ...res.sessions.filter(x => !known.has(x.session_id))],
+          spacePages: {...s.spacePages, [key]: page},
+          spacesLoading: s.spacesLoading.filter(k => k !== key),
+          spaces: s.spaces.map(x => (x.key === key ? {...x, count: res.total} : x)),
+        }));
+      } catch (e) {
+        set(s => ({spacesLoading: s.spacesLoading.filter(k => k !== key)}));
+        await handleError(e);
+      }
+    },
+
+    expand: key => {
+      if (get().collapsed.includes(key)) {
+        get().toggleCollapsed(key);
+      }
+    },
+
     rename: async (session, title) => {
       const previous = session.title;
       patchLocal(session.session_id, {title});
@@ -137,9 +181,11 @@ export const useSessionStore = create<SessionState>((set, get) => {
 
     remove: async session => {
       await deleteSession(session.session_id, agentParam(session.agent?.id));
+      const key = session.project?.path ?? DEFAULT_SPACE;
       set(s => ({
         sessions: s.sessions.filter(x => x.session_id !== session.session_id),
         total: Math.max(0, s.total - 1),
+        spaces: s.spaces.map(x => (x.key === key ? {...x, count: Math.max(0, x.count - 1)} : x)),
       }));
     },
 
@@ -159,7 +205,7 @@ export const useSessionStore = create<SessionState>((set, get) => {
       const shown = [...keys];
       shown.splice(to, 0, ...shown.splice(from, 1));
       const previous = get().projectOrder;
-      // Spaces not listed (the drawer shows only recent chats) keep their saved places after these.
+      // Spaces not listed keep their saved places after these.
       const order = [...shown, ...previous.filter(k => !shown.includes(k))];
       set({projectOrder: order});
       try {
@@ -172,8 +218,10 @@ export const useSessionStore = create<SessionState>((set, get) => {
 
     renameSpace: async (path, name) => {
       const res = await renameProject(path, name);
+      const renamed = res.name || name;
       set(s => ({
-        sessions: s.sessions.map(x => (x.project?.path === path ? {...x, project: {path, name: res.name || name}} : x)),
+        sessions: s.sessions.map(x => (x.project?.path === path ? {...x, project: {path, name: renamed}} : x)),
+        spaces: s.spaces.map(x => (x.path === path ? {...x, name: renamed} : x)),
       }));
     },
 

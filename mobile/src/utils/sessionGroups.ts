@@ -1,5 +1,5 @@
 import {tr} from '../i18n';
-import type {SessionItem} from '../protocol/events';
+import type {SessionItem, SpaceSummary} from '../protocol/events';
 import {daysAgo, toDate} from './format';
 
 type Bucket = 'today' | 'yesterday' | 'week' | 'earlier';
@@ -20,6 +20,8 @@ export interface SessionGroup {
   data: SessionItem[];
   /** Set in project mode only. */
   space?: Space;
+  /** Every chat in the space, loaded or not; only when the server reports it. */
+  count?: number;
 }
 
 const ORDER: Bucket[] = ['today', 'yesterday', 'week', 'earlier'];
@@ -32,13 +34,17 @@ const bucketTitle = (bucket: Bucket) =>
     earlier: tr('session_group_earlier'),
   })[bucket];
 
-/** `project` mode groups by the folder each chat works in, in the user's saved order. */
+/**
+ * `project` mode groups by the folder each chat works in, in the user's saved order.
+ * `spaces` lists every space in use, so one shows even before any of its chats is loaded.
+ */
 export function groupSessions(
   sessions: SessionItem[],
   mode: 'project' | 'time' = 'time',
   order: string[] = [],
+  spaces: SpaceSummary[] = [],
 ): SessionGroup[] {
-  return mode === 'project' ? bySpace(sessions, order) : byTime(sessions);
+  return mode === 'project' ? bySpace(sessions, order, spaces) : byTime(sessions);
 }
 
 function byTime(sessions: SessionItem[]): SessionGroup[] {
@@ -67,8 +73,21 @@ function byTime(sessions: SessionItem[]): SessionGroup[] {
   return groups;
 }
 
-function bySpace(sessions: SessionItem[], order: string[]): SessionGroup[] {
+function bySpace(sessions: SessionItem[], order: string[], spaces: SpaceSummary[]): SessionGroup[] {
   const groups = new Map<string, SessionGroup & {born: number}>();
+  for (const summary of spaces) {
+    const space: Space = summary.path
+      ? {path: summary.path, name: summary.name}
+      : {path: null, name: tr('composer_ws_default')};
+    groups.set(summary.key, {
+      key: summary.key,
+      title: space.name,
+      data: [],
+      space,
+      count: summary.count,
+      born: summary.born ? summary.born * 1000 : Infinity,
+    });
+  }
   for (const s of sessions) {
     const key = s.project?.path ?? DEFAULT_SPACE;
     let group = groups.get(key);
@@ -94,6 +113,7 @@ function bySpace(sessions: SessionItem[], order: string[]): SessionGroup[] {
     .sort((a, b) => (rank(a.key) !== rank(b.key) ? rank(a.key) - rank(b.key) : a.born - b.born))
     .map(({born: _born, ...group}) => ({
       ...group,
+      count: group.count === undefined ? undefined : Math.max(group.count, group.data.length),
       data: [...group.data.filter(s => s.pinned), ...group.data.filter(s => !s.pinned)],
     }));
 }

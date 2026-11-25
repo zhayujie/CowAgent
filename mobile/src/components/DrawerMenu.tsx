@@ -4,6 +4,7 @@ import {
   faArrowsRotate,
   faBars,
   faChevronLeft,
+  faChevronRight,
   faChevronUp,
   faGear,
   faMobileScreen,
@@ -13,8 +14,8 @@ import {
   faTerminal,
 } from '@fortawesome/free-solid-svg-icons';
 import type {IconDefinition} from '@fortawesome/fontawesome-svg-core';
-import React, {useMemo, useState} from 'react';
-import {Pressable, ScrollView, Text, View} from 'react-native';
+import React, {useEffect, useMemo, useRef, useState} from 'react';
+import {ActivityIndicator, Pressable, ScrollView, SectionList, Text, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import type {ChatFile} from '../files/chatFile';
 import {tr, trf} from '../i18n';
@@ -29,26 +30,26 @@ import {radius} from '../theme/palette';
 import {makeStyles, useTheme} from '../theme/theme';
 import {useAgentVersion} from '../update/useAgentVersion';
 import {clockTime, shortTime} from '../utils/format';
-import {groupSessions, type SessionGroup, type Space} from '../utils/sessionGroups';
+import {DEFAULT_SPACE, groupSessions, type SessionGroup, type Space} from '../utils/sessionGroups';
 import {Icon} from './Icon';
 import {SpaceActions} from './SessionActions';
 import {ChoiceSheet} from './settings';
 import {SHEET_DISMISS_MS} from './Sheet';
-import {SpaceHeader} from './SpaceHeader';
+import {SpaceHeader, SpaceMore} from './SpaceHeader';
 
 /** Pages the version sheet in the footer leads to. */
 type AboutKey = 'Version' | 'Logs' | 'MenuEditor';
 
 export type DrawerRoute = MenuRoute | AboutKey;
 
-/** The menu, or the recent conversations it leads to. */
+/** The menu, or the conversations it leads to. */
 export type DrawerView = 'menu' | 'sessions';
 
-const RECENT_LIMIT = 30;
 
 export function DrawerMenu({
   view,
   nested,
+  open = true,
   onViewChange,
   currentSessionId,
   activeSection,
@@ -64,6 +65,8 @@ export function DrawerMenu({
   view: DrawerView;
   /** The conversations were opened from the menu, so they offer a way back to it. */
   nested: boolean;
+  /** Whether the drawer is showing; a sidebar always is. */
+  open?: boolean;
   onViewChange: (view: DrawerView) => void;
   currentSessionId: string;
   /** The page shown beside a sidebar, marked in the menu; none in the drawer, which covers it. */
@@ -105,9 +108,9 @@ export function DrawerMenu({
 
   const renderEntry = (e: MenuEntry) => {
     if (e.kind === 'route') {
-      const open = e.view === 'chat' ? () => onViewChange('sessions') : () => onNavigate(e.route);
+      const go = e.view === 'chat' ? () => onViewChange('sessions') : () => onNavigate(e.route);
       const active = !!activeSection && (e.view === 'chat' ? activeSection === 'Chat' : e.route === activeSection);
-      return <Item key={e.key} icon={e.icon} label={e.label} active={active} onPress={open} />;
+      return <Item key={e.key} icon={e.icon} label={e.label} active={active} onPress={go} />;
     }
     if (e.kind === 'file') {
       const file = e.file;
@@ -136,6 +139,7 @@ export function DrawerMenu({
     return (
       <View style={[styles.root, {paddingTop: insets.top, paddingBottom: insets.bottom}]}>
         <SessionList
+          open={open}
           currentSessionId={currentSessionId}
           onBack={nested ? () => onViewChange('menu') : undefined}
           onNewChat={onNewChat}
@@ -219,6 +223,7 @@ export function DrawerMenu({
 }
 
 function SessionList({
+  open,
   currentSessionId,
   onBack,
   onNewChat,
@@ -227,6 +232,7 @@ function SessionList({
   onSessionActions,
   onViewAll,
 }: {
+  open: boolean;
   currentSessionId: string;
   /** Leads back to the menu; absent when the list was opened on its own. */
   onBack?: () => void;
@@ -241,34 +247,87 @@ function SessionList({
   const sessions = useSessionStore(s => s.sessions);
   const total = useSessionStore(s => s.total);
   const failed = useSessionStore(s => !!s.error);
+  const loading = useSessionStore(s => s.loading);
+  const loadingMore = useSessionStore(s => s.loadingMore);
   const groupMode = useSessionStore(s => s.groupMode);
   const projectOrder = useSessionStore(s => s.projectOrder);
+  const spaces = useSessionStore(s => s.spaces);
+  const spacesLoading = useSessionStore(s => s.spacesLoading);
   const collapsed = useSessionStore(s => s.collapsed);
   const [actingSpace, setActingSpace] = useState<SessionGroup | null>(null);
-  const shown = Math.min(sessions.length, RECENT_LIMIT);
-  const groups = useMemo(
-    () => groupSessions(sessions.slice(0, RECENT_LIMIT), groupMode, projectOrder),
-    [sessions, groupMode, projectOrder],
-  );
+  const list = useRef<SectionList<SessionItem, SessionGroup & {group: SessionGroup}>>(null);
+  // A list too short to scroll, say with every group folded, must not page through every chat on its own.
+  const scrolled = useRef(false);
   const bySpace = groupMode === 'project';
+  // Spaces page on their own once the server lists them; older servers page the whole list.
+  const pagesAll = !bySpace || !spaces.length;
+  const groups = useMemo(
+    () => groupSessions(sessions, groupMode, projectOrder, spaces),
+    [sessions, groupMode, projectOrder, spaces],
+  );
+  const sections = useMemo(
+    () => groups.map(g => ({...g, group: g, data: bySpace && collapsed.includes(g.key) ? [] : g.data})),
+    [groups, bySpace, collapsed],
+  );
+  const latest = useRef(sections);
+  latest.current = sections;
+  const firstKey = sections[0]?.key;
+  const ready = sessions.length > 0;
+
+  // Opening the list lands on the current chat, its space unfolded.
+  useEffect(() => {
+    if (!open || !ready) {
+      return;
+    }
+    const current = useSessionStore.getState().sessions.find(s => s.session_id === currentSessionId);
+    if (!current) {
+      return;
+    }
+    if (useSessionStore.getState().groupMode === 'project') {
+      useSessionStore.getState().expand(current.project?.path ?? DEFAULT_SPACE);
+    }
+    const timer = setTimeout(() => {
+      const sectionIndex = latest.current.findIndex(sec => sec.data.some(s => s.session_id === currentSessionId));
+      if (sectionIndex < 0) {
+        return;
+      }
+      const itemIndex = latest.current[sectionIndex].data.findIndex(s => s.session_id === currentSessionId);
+      list.current?.scrollToLocation({sectionIndex, itemIndex, viewPosition: 0.3, animated: false});
+    }, 60);
+    return () => clearTimeout(timer);
+  }, [open, ready, currentSessionId]);
+
   return (
     <>
       <View style={styles.listHead}>
-        {onBack ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={tr('chat_features')}
-            hitSlop={6}
-            onPress={onBack}
-            style={({pressed}) => [styles.listBack, pressed && styles.pressed]}>
-            <Icon icon={faChevronLeft} size={13} color={t.t2} />
-            <Text style={styles.listTitle}>{tr('menu_chat')}</Text>
-          </Pressable>
-        ) : (
-          <Text style={[styles.listTitle, styles.listTitleAlone]} accessibilityRole="header">
-            {tr('menu_chat')}
-          </Text>
-        )}
+        <View style={styles.listTitleRow}>
+          {onBack ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={tr('chat_features')}
+              hitSlop={6}
+              onPress={onBack}
+              style={({pressed}) => [styles.listBack, pressed && styles.pressed]}>
+              <Icon icon={faChevronLeft} size={13} color={t.t2} />
+              <Text style={styles.listTitle}>{tr('menu_chat')}</Text>
+            </Pressable>
+          ) : (
+            <Text style={[styles.listTitle, styles.listTitleAlone]} accessibilityRole="header">
+              {tr('menu_chat')}
+            </Text>
+          )}
+          {total > 0 && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={tr('session_all_title')}
+              hitSlop={8}
+              onPress={onViewAll}
+              style={({pressed}) => [styles.listCount, pressed && styles.pressed]}>
+              <Text style={styles.listCountText}>{total}</Text>
+              <Icon icon={faChevronRight} size={8} color={t.t3} />
+            </Pressable>
+          )}
+        </View>
         <Pressable
           accessibilityRole="button"
           hitSlop={4}
@@ -278,44 +337,72 @@ function SessionList({
           <Text style={styles.newChatText}>{tr('menu_new_chat')}</Text>
         </Pressable>
       </View>
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollBody} showsVerticalScrollIndicator={false}>
-        {groups.map((g, i) => {
-          const folded = bySpace && collapsed.includes(g.key);
-          return (
-            <React.Fragment key={g.key}>
-              {bySpace ? (
-                <SpaceHeader
-                  group={g}
-                  collapsed={folded}
-                  onToggle={() => useSessionStore.getState().toggleCollapsed(g.key)}
-                  onLongPress={() => setActingSpace(g)}
-                  style={i === 0 ? styles.spaceFirst : styles.space}
-                />
-              ) : (
-                <Text style={[styles.section, i === 0 && styles.sectionFirst]}>{g.title}</Text>
-              )}
-              {!folded &&
-                g.data.map(s => (
-                  <Item
-                    key={s.session_id}
-                    icon={faMessage}
-                    label={s.title || tr('menu_untitled_chat')}
-                    meta={g.key === 'yesterday' ? clockTime(s.last_active) : shortTime(s.last_active)}
-                    active={s.session_id === currentSessionId}
-                    onPress={() => onOpenSession(s)}
-                    onLongPress={() => onSessionActions(s)}
-                  />
-                ))}
-            </React.Fragment>
-          );
-        })}
-        {!groups.length && <Text style={styles.empty}>{tr(failed ? 'menu_chats_failed' : 'menu_no_chats')}</Text>}
-        {total > shown && (
-          <Pressable accessibilityRole="button" hitSlop={6} onPress={onViewAll} style={styles.more}>
-            <Text style={styles.moreText}>{trf('menu_view_all', {n: total})}</Text>
-          </Pressable>
+      <SectionList
+        ref={list}
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollBody}
+        showsVerticalScrollIndicator={false}
+        sections={sections}
+        keyExtractor={s => s.session_id}
+        stickySectionHeadersEnabled={false}
+        initialNumToRender={20}
+        windowSize={7}
+        onScrollToIndexFailed={info =>
+          list.current?.getScrollResponder()?.scrollTo({y: info.averageItemLength * info.index, animated: false})
+        }
+        renderSectionHeader={({section}) =>
+          bySpace ? (
+            <SpaceHeader
+              group={section.group}
+              collapsed={collapsed.includes(section.key)}
+              onToggle={() => useSessionStore.getState().toggleCollapsed(section.key)}
+              onLongPress={() => setActingSpace(section.group)}
+              style={section.key === firstKey ? styles.spaceFirst : styles.space}
+            />
+          ) : (
+            <Text style={[styles.section, section.key === firstKey && styles.sectionFirst]}>{section.title}</Text>
+          )
+        }
+        renderSectionFooter={({section}) =>
+          bySpace && !collapsed.includes(section.key) ? (
+            <SpaceMore
+              group={section.group}
+              loading={spacesLoading.includes(section.key)}
+              onPress={() => useSessionStore.getState().loadSpace(section.key)}
+              style={styles.spaceMore}
+            />
+          ) : null
+        }
+        renderItem={({item, section}) => (
+          <Item
+            icon={faMessage}
+            label={item.title || tr('menu_untitled_chat')}
+            meta={section.key === 'yesterday' ? clockTime(item.last_active) : shortTime(item.last_active)}
+            active={item.session_id === currentSessionId}
+            onPress={() => onOpenSession(item)}
+            onLongPress={() => onSessionActions(item)}
+          />
         )}
-      </ScrollView>
+        onScrollBeginDrag={() => (scrolled.current = true)}
+        onEndReachedThreshold={0.5}
+        onEndReached={() => pagesAll && scrolled.current && useSessionStore.getState().loadMore()}
+        ListEmptyComponent={
+          loading ? (
+            <ActivityIndicator style={styles.loading} color={t.t3} />
+          ) : (
+            <Text style={styles.empty}>{tr(failed ? 'menu_chats_failed' : 'menu_no_chats')}</Text>
+          )
+        }
+        ListFooterComponent={
+          loadingMore ? (
+            <ActivityIndicator style={styles.loading} color={t.t3} />
+          ) : ready ? (
+            <Pressable accessibilityRole="button" hitSlop={6} onPress={onViewAll} style={styles.more}>
+              <Text style={styles.moreText}>{trf('menu_view_all', {n: total})}</Text>
+            </Pressable>
+          ) : null
+        }
+      />
       <SpaceActions
         group={actingSpace}
         keys={groups.map(g => g.key)}
@@ -437,8 +524,11 @@ const useStyles = makeStyles(t => ({
     marginTop: 14,
   },
   listBack: {flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 10, paddingVertical: 8, borderRadius: radius.sm},
+  listTitleRow: {flexDirection: 'row', alignItems: 'center', gap: 2},
   listTitle: {fontSize: 18, fontWeight: '600', color: t.t1, letterSpacing: -0.3},
   listTitleAlone: {paddingHorizontal: 12, paddingVertical: 8},
+  listCount: {flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 6, borderRadius: radius.sm},
+  listCountText: {fontSize: 13, color: t.t3, fontVariant: ['tabular-nums']},
   newChat: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -451,8 +541,10 @@ const useStyles = makeStyles(t => ({
   newChatPressed: {opacity: 0.7},
   newChatText: {fontSize: 14, fontWeight: '600', color: t.accent},
   empty: {fontSize: 14, lineHeight: 21, color: t.t3, paddingHorizontal: 12, marginTop: 20},
+  loading: {paddingVertical: 14},
   more: {paddingHorizontal: 12, paddingVertical: 14},
-  moreText: {fontSize: 14, color: t.accent},
+  moreText: {fontSize: 13, color: t.accent},
+  spaceMore: {paddingLeft: 43},
   footer: {
     flexDirection: 'row',
     alignItems: 'center',

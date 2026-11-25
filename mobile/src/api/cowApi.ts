@@ -134,9 +134,11 @@ const query = (params: Record<string, string | number | undefined | null>) =>
     .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`)
     .join('&');
 
-export async function getSessions(page = 1, pageSize = 50) {
+/** `space` narrows the list to one project space, by its key; older servers ignore it. */
+export async function getSessions(page = 1, pageSize = 50, space?: string) {
+  const only = space ? `&space=${encodeURIComponent(space)}` : '';
   return http.request<SessionsPage>(
-    `/api/sessions?page=${page}&page_size=${pageSize}&scope=all`,
+    `/api/sessions?page=${page}&page_size=${pageSize}&scope=all${only}`,
   );
 }
 

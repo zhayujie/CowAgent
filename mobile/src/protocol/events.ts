@@ -193,6 +193,18 @@ export interface SessionsPage {
   group_mode?: 'project' | 'time';
   /** The user's order of spaces: project paths, with `__default__` for the default workspace. */
   project_order?: string[];
+  /** Every space in use with its true chat count, loaded or not; absent on older servers. */
+  spaces?: SpaceSummary[];
+}
+
+export interface SpaceSummary {
+  /** The project path, or `__default__` for the default workspace. */
+  key: string;
+  path: string | null;
+  name: string;
+  count: number;
+  /** When its first chat began, in epoch seconds; 0 when unknown. */
+  born: number;
 }
 
 export interface SendMessageResult {

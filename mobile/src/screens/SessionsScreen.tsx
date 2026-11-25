@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {SessionActions, SpaceActions} from '../components/SessionActions';
-import {SpaceHeader} from '../components/SpaceHeader';
+import {SpaceHeader, SpaceMore} from '../components/SpaceHeader';
 import {EmptyState, GroupLabel, PageHeader} from '../components/ui';
 import {tr, trf} from '../i18n';
 import type {RootStackParamList} from '../navigation/types';
@@ -39,6 +39,8 @@ export function SessionsScreen({navigation}: Props) {
   const agentCount = useAgentStore(s => s.agents.length);
   const groupMode = useSessionStore(s => s.groupMode);
   const projectOrder = useSessionStore(s => s.projectOrder);
+  const spaces = useSessionStore(s => s.spaces);
+  const spacesLoading = useSessionStore(s => s.spacesLoading);
   const collapsed = useSessionStore(s => s.collapsed);
   const [acting, setActing] = useState<SessionItem | null>(null);
   const [actingSpace, setActingSpace] = useState<SessionGroup | null>(null);
@@ -48,7 +50,12 @@ export function SessionsScreen({navigation}: Props) {
   }, []);
 
   const bySpace = groupMode === 'project';
-  const groups = useMemo(() => groupSessions(sessions, groupMode, projectOrder), [sessions, groupMode, projectOrder]);
+  // Spaces page on their own once the server lists them; older servers page the whole list.
+  const pagesAll = !bySpace || !spaces.length;
+  const groups = useMemo(
+    () => groupSessions(sessions, groupMode, projectOrder, spaces),
+    [sessions, groupMode, projectOrder, spaces],
+  );
   const sections = useMemo(
     () => groups.map(g => ({...g, group: g, data: bySpace && collapsed.includes(g.key) ? [] : g.data})),
     [groups, bySpace, collapsed],
@@ -87,6 +94,16 @@ export function SessionsScreen({navigation}: Props) {
             <GroupLabel style={styles.groupLabel} small>{section.title}</GroupLabel>
           )
         }
+        renderSectionFooter={({section}) =>
+          bySpace && !collapsed.includes(section.key) ? (
+            <SpaceMore
+              group={section.group}
+              loading={spacesLoading.includes(section.key)}
+              onPress={() => useSessionStore.getState().loadSpace(section.key)}
+              style={styles.spaceMore}
+            />
+          ) : null
+        }
         renderItem={({item}) => (
           <SessionRow
             session={item}
@@ -105,7 +122,7 @@ export function SessionsScreen({navigation}: Props) {
           />
         }
         onEndReachedThreshold={0.4}
-        onEndReached={() => useSessionStore.getState().loadMore()}
+        onEndReached={() => pagesAll && useSessionStore.getState().loadMore()}
         ListEmptyComponent={
           <EmptyState
             loading={loading}
@@ -172,6 +189,7 @@ const useStyles = makeStyles(t => ({
   list: {paddingTop: 10, flexGrow: 1},
   groupLabel: {marginTop: 14},
   space: {marginHorizontal: 10, marginTop: 10},
+  spaceMore: {marginHorizontal: 10, paddingHorizontal: 12},
   row: {
     flexDirection: 'row',
     alignItems: 'center',

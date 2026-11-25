@@ -1087,6 +1087,7 @@ export function ChatScreen({route, navigation}: Props) {
             <DrawerMenu
               view={drawerView}
               nested={drawerNested}
+              open={drawerOpen}
               onViewChange={view => {
                 setDrawerView(view);
                 setDrawerNested(view === 'sessions');
