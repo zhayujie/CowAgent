@@ -2,8 +2,10 @@
   "app": {
     "bundleName": "ai.cowagent.hmos",
     "vendor": "cowagent",
-    "versionCode": 1000007,
-    "versionName": "1.0.7",
+    // versionCode = major * 1000000 + minor * 10000 + patch * 100 + build (each part 0-99).
+    // Bump build for another package of the same versionName; it must grow with every upload.
+    "versionCode": 2030000,
+    "versionName": "2.3.0",
     "icon": "$media:app_icon",
     "label": "$string:app_name",
   }
