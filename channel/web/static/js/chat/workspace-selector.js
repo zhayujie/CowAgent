@@ -149,22 +149,39 @@ let _fpCurrent = '';   // absolute path currently listed
 let _fpBound = false;  // one-time listener binding guard
 
 let _fpSelectCallback = null;
+let _fpClearCallback = null;
 
-function openServerFolderPicker(onSelect) {
+// opts: title, description, okText, start (directory to list first), and
+// onClear + clearText for a footer action that drops the current choice.
+function openServerFolderPicker(onSelect, opts = {}) {
     _fpSelectCallback = onSelect;
-    wsSelOpenProjectDialog(true);
+    _fpClearCallback = opts.onClear || null;
+    wsSelOpenProjectDialog(true, opts);
 }
 
-function wsSelOpenProjectDialog(custom = false) {
-    if (!custom) _fpSelectCallback = null;
+function wsSelOpenProjectDialog(custom = false, opts = {}) {
+    if (!custom) {
+        _fpSelectCallback = null;
+        _fpClearCallback = null;
+    }
     _wsSelHide();
     _fpBindOnce();
     const overlay = document.getElementById('folder-picker-overlay');
+    document.getElementById('folder-picker-title').textContent = opts.title || t('ws_sel_open');
+    const desc = document.getElementById('folder-picker-desc');
+    desc.textContent = opts.description || '';
+    desc.classList.toggle('hidden', !opts.description);
     document.getElementById('folder-picker-cancel').textContent = t('channels_cancel') || t('ws_sel_up');
-    document.getElementById('folder-picker-open').textContent = t('ws_sel_open_here');
-    document.getElementById('folder-picker-hint').textContent = t('ws_sel_dblclick_hint');
+    document.getElementById('folder-picker-open').textContent = opts.okText || t('ws_sel_open_here');
+    const hint = document.getElementById('folder-picker-hint');
+    hint.textContent = t('ws_sel_dblclick_hint');
+    hint.classList.toggle('hidden', !!_fpClearCallback);
+    const clear = document.getElementById('folder-picker-clear');
+    clear.textContent = opts.clearText || '';
+    clear.classList.toggle('hidden', !_fpClearCallback);
     overlay.classList.remove('hidden');
-    _fpBrowse('');  // '' => backend starts at ~
+    // '' => backend starts at ~; a start dir that is gone falls back to it.
+    _fpBrowse(opts.start || '', opts.start ? '' : undefined);
 }
 
 function _fpBindOnce() {
@@ -174,8 +191,14 @@ function _fpBindOnce() {
     const close = () => {
         overlay.classList.add('hidden');
         _fpSelectCallback = null;
+        _fpClearCallback = null;
     };
     document.getElementById('folder-picker-cancel').addEventListener('click', close);
+    document.getElementById('folder-picker-clear').addEventListener('click', () => {
+        const onClear = _fpClearCallback;
+        close();
+        if (onClear) onClear();
+    });
     overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
     document.getElementById('folder-picker-open').addEventListener('click', async () => {
         if (!_fpCurrent) return;
@@ -193,13 +216,17 @@ function _fpBindOnce() {
 // Virtual path (Windows) that lists logical drives; not a real openable dir.
 const _FP_DRIVES = '__DRIVES__';
 
-async function _fpBrowse(path) {
+async function _fpBrowse(path, fallback) {
     const list = document.getElementById('folder-picker-list');
     list.innerHTML = `<div class="fp-empty"><i class="fas fa-spinner fa-spin"></i></div>`;
     try {
         const res = await fetch(`/api/projects/browse?path=${encodeURIComponent(path || '')}`);
         const data = await res.json();
-        if (data.status !== 'success') { list.innerHTML = `<div class="fp-empty">${escapeHtml(data.message || 'error')}</div>`; return; }
+        if (data.status !== 'success') {
+            if (fallback !== undefined) return _fpBrowse(fallback);
+            list.innerHTML = `<div class="fp-empty">${escapeHtml(data.message || 'error')}</div>`;
+            return;
+        }
         const isDrives = data.path === _FP_DRIVES;
         _fpCurrent = isDrives ? null : data.path;
         // Drives view is a selector, not a real directory: show a label and

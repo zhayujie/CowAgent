@@ -17,13 +17,18 @@ import {
   QrCode,
   KeyRound,
   Pencil,
+  Folder,
+  FolderOpen,
+  ArrowUp,
+  House,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { t, localizedLabel, getLang } from '../i18n'
+import { t, tf, localizedLabel, getLang } from '../i18n'
 import apiClient from '../api/client'
 import type { ChannelInfo, ChannelField } from '../types'
-import { Toggle, Btn, FieldTip } from './settings/primitives'
+import { Toggle, Btn, FieldTip, Modal } from './settings/primitives'
 import QrScanPanel from '../components/QrScanPanel'
+import Tooltip from '../components/Tooltip'
 import { PaperPlaneIcon } from '../components/icons'
 import ChannelTeamSelect from '../components/ChannelTeamSelect'
 import { useAgentStore } from '../store/agentStore'
@@ -700,9 +705,12 @@ const ChannelCard: React.FC<{
         </div>
 
         {channel.active ? (
-          <Btn variant="danger" onClick={() => run('disconnect')} disabled={busy}>
-            {t('channels_disconnect')}
-          </Btn>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {projectEditable && <ChannelProjectButton channel={channel} onChanged={onChanged} />}
+            <Btn variant="danger" onClick={() => run('disconnect')} disabled={busy}>
+              {t('channels_disconnect')}
+            </Btn>
+          </div>
         ) : isQrLogin || dualMode || defaultExpanded ? null : (
           <Btn variant="ghost" onClick={() => setExpanded((v) => !v)}>
             {t('channels_add')}
@@ -715,8 +723,6 @@ const ChannelCard: React.FC<{
       {multiAgent && channel.active && channel.instance_id && (
         <ChannelBinding channel={channel} />
       )}
-
-      {channel.active && projectEditable && <ChannelProject channel={channel} onChanged={onChanged} />}
 
       {/* QR-login channels with no desktop support fall back to the web console. */}
       {isQrLogin && !channel.active && !qrProvider && (
@@ -849,55 +855,190 @@ const ChannelBinding: React.FC<{ channel: ChannelInfo }> = ({ channel }) => {
   )
 }
 
-const ChannelProject: React.FC<{channel: ChannelInfo; onChanged: () => void}> = ({channel, onChanged}) => {
-  const [path, setPath] = useState(channel.project_dir || '')
+const ChannelProjectButton: React.FC<{ channel: ChannelInfo; onChanged: () => void }> = ({ channel, onChanged }) => {
+  const [open, setOpen] = useState(false)
+  const dir = channel.project_dir || ''
+
+  const save = async (path: string) => {
+    // The first directory moves the channel onto fresh conversations.
+    if (
+      path &&
+      !channel.session_namespace &&
+      !(await askConfirm({
+        titleKey: 'channels_project_isolate_title',
+        msgKey: 'channels_project_isolate_message',
+        okKey: 'channels_save',
+        tone: 'primary',
+      }))
+    )
+      return
+    const data = await apiClient.setChannelProject(channel.name, channel.instance_id || '', path)
+    if (data.status !== 'success') throw new Error(data.message || t('channels_save_error'))
+    setOpen(false)
+    onChanged()
+  }
+
+  return (
+    <>
+      <Tooltip label={dir ? tf('channels_project_current', { path: dir }) : t('channels_project_set')} placement="bottom">
+        <button
+          type="button"
+          aria-label={t('channels_project_label')}
+          onClick={() => setOpen(true)}
+          className={`w-9 h-9 rounded-btn flex items-center justify-center cursor-pointer transition-colors ${
+            dir ? 'text-accent bg-accent-soft' : 'text-content-tertiary hover:text-content hover:bg-surface-2'
+          }`}
+        >
+          {dir ? <FolderOpen size={16} /> : <Folder size={16} />}
+        </button>
+      </Tooltip>
+      {open && <ChannelProjectDialog current={dir} onClose={() => setOpen(false)} onSave={save} />}
+    </>
+  )
+}
+
+type DirListing = Awaited<ReturnType<typeof apiClient.browseChannelProject>>
+// Windows lists its drives under this virtual path; it is not a directory to pick.
+const DRIVES = '__DRIVES__'
+
+// Browses directories on the machine CowAgent runs on, which is a remote one
+// when this window operates another device, so the native picker can't serve.
+const ChannelProjectDialog: React.FC<{
+  current: string
+  onClose: () => void
+  onSave: (path: string) => Promise<void>
+}> = ({ current, onClose, onSave }) => {
+  const [listing, setListing] = useState<DirListing | null>(null)
+  const [selected, setSelected] = useState('')
+  const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const [listing, setListing] = useState<Awaited<ReturnType<typeof apiClient.browseChannelProject>> | null>(null)
-  useEffect(() => { setPath(channel.project_dir || '') }, [channel.project_dir])
-  const browse = async (dir: string) => {
+
+  const browse = async (dir: string, fallback?: string): Promise<void> => {
+    setLoading(true)
+    setError('')
     try {
-      setError('')
       const data = await apiClient.browseChannelProject(dir)
-      if (data.status !== 'success') throw new Error(data.message)
+      if (data.status !== 'success') {
+        if (fallback !== undefined) return browse(fallback)
+        throw new Error(data.message)
+      }
       setListing(data)
-    } catch (e) { setError(e instanceof Error && e.message ? e.message : t('channels_save_error')) }
+      setSelected('')
+    } catch (e) {
+      setError(e instanceof Error && e.message ? e.message : t('channels_save_error'))
+    } finally {
+      setLoading(false)
+    }
   }
-  const save = async () => {
-    if (path.trim() && !channel.session_namespace && !await askConfirm({
-      titleKey: 'channels_project_isolate_title',
-      msgKey: 'channels_project_isolate_message',
-      okKey: 'channels_save',
-      tone: 'primary',
-    })) return
+
+  useEffect(() => {
+    // A directory that has since gone away opens the home directory instead.
+    void browse(current, current ? '' : undefined)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const submit = async (path: string) => {
     setBusy(true)
     setError('')
     try {
-      const data = await apiClient.setChannelProject(channel.name, channel.instance_id || '', path)
-      if (data.status !== 'success') throw new Error(data.message)
-      onChanged()
-    } catch (e) { setError(e instanceof Error && e.message ? e.message : t('channels_save_error')) }
-    finally { setBusy(false) }
+      await onSave(path)
+    } catch (e) {
+      setError(e instanceof Error && e.message ? e.message : t('channels_save_error'))
+    } finally {
+      setBusy(false)
+    }
   }
-  return <div className="mt-4 pt-4 border-t border-subtle space-y-2">
-    <label className="text-xs text-content-secondary">{t('channels_project_label')}</label>
-    <div className="flex gap-2">
-      <input className="flex-1 min-w-0 bg-transparent border rounded px-2 text-sm" value={path} onChange={e => setPath(e.target.value)} placeholder={t('channels_project_placeholder')} />
-      <Btn disabled={busy} onClick={() => void browse(path)}>{t('channels_project_browse')}</Btn>
-      <Btn disabled={busy} onClick={() => void save()}>{t('channels_save')}</Btn>
-    </div>
-    <p className="text-xs text-content-tertiary">{t('channels_project_hint')}</p>
-    {listing && <div className="border rounded p-2 space-y-2">
-      <div className="text-xs break-all">{listing.path}</div>
-      <div className="flex gap-2">
-        <Btn onClick={() => void browse(listing.parent || '')}>{t('channels_project_up')}</Btn>
-        <Btn onClick={() => setListing(null)}>{t('cancel')}</Btn>
-        <Btn disabled={listing.path === '__DRIVES__'} onClick={() => {setPath(listing.path); setListing(null)}}>{t('channels_project_select_here')}</Btn>
+
+  const isDrives = listing?.path === DRIVES
+  const target = selected || (isDrives ? '' : listing?.path || '')
+  const shown = selected || (isDrives ? t('channels_project_drives') : listing?.path || '')
+  const toolBtn =
+    'w-8 h-8 rounded-btn border border-default flex items-center justify-center text-content-secondary hover:bg-surface-2 cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed'
+
+  return (
+    <Modal
+      open
+      title={t('channels_project_label')}
+      onClose={() => !busy && onClose()}
+      footer={
+        <>
+          {current && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void submit('')}
+              className="mr-auto text-xs text-content-tertiary hover:text-accent cursor-pointer transition-colors disabled:opacity-50"
+            >
+              {t('channels_project_reset')}
+            </button>
+          )}
+          <Btn disabled={busy} onClick={onClose}>
+            {t('cancel')}
+          </Btn>
+          <Btn variant="primary" disabled={busy || loading || !target} onClick={() => void submit(target)}>
+            {t('channels_project_select_here')}
+          </Btn>
+        </>
+      }
+    >
+      <p className="text-xs text-content-secondary leading-relaxed">{t('channels_project_hint')}</p>
+      <div className="flex items-center gap-2">
+        <Tooltip label={t('channels_project_up')} placement="bottom">
+          <button
+            type="button"
+            className={toolBtn}
+            disabled={loading || !listing?.parent}
+            onClick={() => void browse(listing?.parent || '')}
+          >
+            <ArrowUp size={14} />
+          </button>
+        </Tooltip>
+        <Tooltip label="~" placement="bottom">
+          <button type="button" className={toolBtn} disabled={loading} onClick={() => void browse('~')}>
+            <House size={14} />
+          </button>
+        </Tooltip>
+        <span className="flex-1 min-w-0 text-xs font-mono text-content-tertiary truncate" title={shown}>
+          {shown}
+        </span>
       </div>
-      <div className="max-h-48 overflow-auto">{listing.dirs.map(dir => <button type="button" key={dir.path} className="block text-sm p-1" onClick={() => void browse(dir.path)}>{dir.name}</button>)}</div>
-    </div>}
-    {error && <p role="alert" className="text-xs text-red-500">{error}</p>}
-  </div>
+      <div className="h-64 overflow-y-auto rounded-btn border border-default p-1.5">
+        {loading ? (
+          <div className="h-full flex items-center justify-center text-content-tertiary">
+            <Loader2 size={16} className="animate-spin" />
+          </div>
+        ) : listing && listing.dirs.length > 0 ? (
+          listing.dirs.map((d) => (
+            <button
+              type="button"
+              key={d.path}
+              title={d.path}
+              onClick={() => setSelected(d.path)}
+              onDoubleClick={() => void browse(d.path)}
+              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-btn text-sm text-left cursor-pointer transition-colors ${
+                selected === d.path ? 'bg-accent-soft text-accent' : 'text-content hover:bg-surface-2'
+              }`}
+            >
+              <Folder size={15} className={selected === d.path ? 'text-accent' : 'text-content-tertiary'} />
+              <span className="truncate">{d.name}</span>
+            </button>
+          ))
+        ) : (
+          <div className="h-full flex flex-col items-center justify-center gap-2 text-content-tertiary">
+            <FolderOpen size={20} />
+            <span className="text-xs">{listing ? t('channels_project_empty') : ''}</span>
+          </div>
+        )}
+      </div>
+      <p className="text-xs text-content-tertiary">{t('channels_project_pick_hint')}</p>
+      {error && (
+        <p role="alert" className="text-xs text-danger">
+          {error}
+        </p>
+      )}
+    </Modal>
+  )
 }
 
 const FieldRow: React.FC<{

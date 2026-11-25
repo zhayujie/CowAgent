@@ -125,13 +125,23 @@ function renderActiveChannels() {
                     </div>
                     <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5 font-mono">${escapeHtml(isInstance ? `${label} · ${iid}` : iid)}</p>
                 </div>
-                <button onclick="disconnectChannel('${ch.name}', '${isInstance ? iid : ''}')"
-                    class="px-3 py-1.5 rounded-lg text-xs font-medium
-                           bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400
-                           hover:bg-red-100 dark:hover:bg-red-900/40
-                           cursor-pointer transition-colors flex-shrink-0">
-                    ${t('channels_disconnect')}
-                </button>
+                <div class="flex items-center gap-2 flex-shrink-0">
+                    ${projectEditable ? `<button type="button" data-project-open data-tip-float data-tooltip-pos="bottom"
+                        data-tooltip="${escapeHtml(ch.project_dir ? t('channels_project_current').replace('{path}', ch.project_dir) : t('channels_project_set'))}"
+                        class="w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer transition-colors
+                               ${ch.project_dir
+                                   ? 'text-primary-500 bg-primary-50 dark:bg-primary-900/20 hover:bg-primary-100 dark:hover:bg-primary-900/40'
+                                   : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/5'}">
+                        <i class="fas ${ch.project_dir ? 'fa-folder-open' : 'fa-folder'} text-sm"></i>
+                    </button>` : ''}
+                    <button onclick="disconnectChannel('${ch.name}', '${isInstance ? iid : ''}')"
+                        class="px-3 py-1.5 rounded-lg text-xs font-medium
+                               bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400
+                               hover:bg-red-100 dark:hover:bg-red-900/40
+                               cursor-pointer transition-colors">
+                        ${t('channels_disconnect')}
+                    </button>
+                </div>
             </div>
             ${multiAgentMode() ? `<div class="channel-agent-bind">
                 <span class="text-xs text-slate-500 whitespace-nowrap" title="${escapeHtml(t('channel_bound_agent_hint'))}">${escapeHtml(t('channel_bound_agent'))}</span>
@@ -143,16 +153,6 @@ function renderActiveChannels() {
                     </div>
                     <div class="cfg-dropdown-menu"></div>
                 </div>
-            </div>` : ''}
-            ${projectEditable ? `<div class="my-4 space-y-2">
-                <label class="text-xs text-slate-500">${t('channels_project_label')}</label>
-                <div class="flex gap-2">
-                    <input id="ch-project-${iid}" value="${escapeHtml(ch.project_dir || '')}" class="flex-1 min-w-0 cfg-input" placeholder="${escapeHtml(t('channels_project_placeholder'))}">
-                    <button type="button" class="text-sm text-primary-500" data-project-browse>${t('channels_project_browse')}</button>
-                    <button type="button" class="text-sm text-primary-500" data-project-save>${t('channels_save')}</button>
-                </div>
-                <p class="text-xs text-slate-400">${t('channels_project_hint')}</p>
-                <p class="text-xs text-red-500" data-project-error></p>
             </div>` : ''}
             ${weixinWaiting ? weixinScanPromptHtml(iid) : ''}
             ${isFeishu ? buildFeishuPanel(ch, true) : (isWecomBot ? buildWecomBotPanel(ch, true) : (hasFields ? `<div class="space-y-4">
@@ -169,7 +169,7 @@ function renderActiveChannels() {
         container.appendChild(card);
         bindSecretFieldEvents(card);
         initChannelTeam(ch);
-        if (projectEditable) bindChannelProject(card, ch, iid);
+        if (projectEditable) bindChannelProject(card, ch);
 
         if (weixinWaiting) {
             startWeixinActiveStatusPoll(iid);
@@ -181,30 +181,36 @@ function renderActiveChannels() {
         .map(ch => ch.iid));
 }
 
-function bindChannelProject(card, ch, iid) {
-    const projectInput = document.getElementById(`ch-project-${iid}`);
-    card.querySelector('[data-project-browse]').onclick = () => {
-        openServerFolderPicker(path => { projectInput.value = path; });
-    };
-    card.querySelector('[data-project-save]').onclick = async function () {
-        this.disabled = true;
-        const error = card.querySelector('[data-project-error]');
-        error.textContent = '';
-        try {
-            if (projectInput.value.trim() && !ch.session_namespace && !await new Promise(resolve => showConfirmDialog({
-                title: t('channels_project_label'), message: t('channels_project_isolate_message'),
-                okText: t('channels_save'), cancelText: t('channels_cancel'),
-                onConfirm: () => resolve(true), onCancel: () => resolve(false)
-            }))) return;
-            const res = await fetch('/api/channels', { method: 'POST', headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({action: 'set_project', channel: ch.name,
-                    instance_id: ch.instance_id || '', project_dir: projectInput.value}) });
-            const data = await res.json();
-            if (data.status !== 'success') throw new Error(data.message || t('channels_save_error'));
-            loadChannelsView();
-        } catch (e) { error.textContent = e.message || String(e); }
-        finally { this.disabled = false; }
-    };
+function bindChannelProject(card, ch) {
+    card.querySelector('[data-project-open]').onclick = () => openServerFolderPicker(
+        path => saveChannelProject(ch, path),
+        {
+            title: t('channels_project_label'),
+            description: t('channels_project_hint'),
+            okText: t('channels_project_select_here'),
+            start: ch.project_dir || '',
+            onClear: ch.project_dir ? () => saveChannelProject(ch, '') : null,
+            clearText: t('channels_project_reset'),
+        });
+}
+
+async function saveChannelProject(ch, path) {
+    try {
+        // The first directory moves the channel onto fresh conversations.
+        if (path && !ch.session_namespace && !await new Promise(resolve => showConfirmDialog({
+            title: t('channels_project_isolate_title'), message: t('channels_project_isolate_message'),
+            okText: t('channels_save'), cancelText: t('channels_cancel'),
+            onConfirm: () => resolve(true), onCancel: () => resolve(false)
+        }))) return;
+        const res = await fetch('/api/channels', { method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({action: 'set_project', channel: ch.name,
+                instance_id: ch.instance_id || '', project_dir: path}) });
+        const data = await res.json();
+        if (data.status !== 'success') throw new Error(data.message || t('channels_save_error'));
+        loadChannelsView();
+    } catch (e) {
+        _wsToast(e.message || t('channels_save_error'));
+    }
 }
 
 // One multi-select per channel card, same idea as creating a team in the chat

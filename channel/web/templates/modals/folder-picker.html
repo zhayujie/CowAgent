@@ -8,15 +8,18 @@
                         <i class="fas fa-folder-open text-primary-500"></i>
                     </div>
                     <div class="min-w-0 flex-1">
-                        <h3 class="font-semibold text-slate-800 dark:text-slate-100 text-base" data-i18n="ws_sel_open">打开项目</h3>
+                        <h3 id="folder-picker-title" class="font-semibold text-slate-800 dark:text-slate-100 text-base" data-i18n="ws_sel_open">打开项目</h3>
                         <p id="folder-picker-path" class="text-xs text-slate-500 dark:text-slate-400 mt-0.5 font-mono truncate"></p>
                     </div>
                 </div>
+                <p id="folder-picker-desc" class="hidden text-xs text-slate-500 dark:text-slate-400 -mt-1 mb-3"></p>
                 <div id="folder-picker-toolbar" class="flex items-center gap-2 mb-2"></div>
             </div>
             <div id="folder-picker-list" class="flex-1 overflow-y-auto px-3 pb-2 min-h-[220px]"></div>
             <div class="flex items-center justify-between gap-3 px-6 py-4 border-t border-slate-100 dark:border-white/5">
                 <span class="text-xs text-slate-400 dark:text-slate-500" id="folder-picker-hint"></span>
+                <button id="folder-picker-clear"
+                        class="hidden text-xs text-slate-500 dark:text-slate-400 hover:text-primary-500 cursor-pointer transition-colors"></button>
                 <div class="flex items-center gap-3">
                     <button id="folder-picker-cancel"
                             class="px-4 py-2 rounded-lg border border-slate-200 dark:border-white/10
