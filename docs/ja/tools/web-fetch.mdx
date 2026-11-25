@@ -75,6 +75,16 @@ Olostep はブラウザでページを描画して Markdown として返すた�
 取得ごとに Olostep のクレジットを消費するためオプトイン制です。SSRF ガードは引き続き適用され、
 ドキュメント URL（PDF、Word など）は引き続きローカルでダウンロード・解析されます。
 
+## SerpApi Extract バックエンド（オプトイン）
+
+`tools.web_fetch.provider` を `"serpapi"` に設定すると、1 ページの URL を
+[SerpApi Extract API](https://serpapi.com/extract-api) に送り、Markdown を返します。
+検索と同じ `tools.web_search.serpapi_api_key`（未設定時は環境変数 `SERPAPI_API_KEY`）
+を使用し、キーを設定しただけでは既定の `"direct"` から切り替わりません。
+Extract はアカウントの利用枠を使い、JavaScript は実行しません。送信前に CowAgent の
+設定に従って URL を検査し、PDF などの文書 URL は従来どおりローカルで取得・解析します。
+Extract のページ取得タイムアウトは既定で 30 秒のため、CowAgent の読み取りタイムアウトは 35 秒です。
+
 <Note>
   デフォルトの `direct` バックエンドは静的 HTML のみ取得できます。JavaScript レンダリングが必要なページ（SPA など）は、上記の DeepSeek または Olostep バックエンドに切り替えるか、`browser` ツールを使用してください。
 </Note>

@@ -1535,7 +1535,7 @@ class ModelsHandler:
 
     # Canonical search provider order. Mirrors PROVIDER_ORDER in
     # agent/tools/web_search/web_search.py — keep them in sync.
-    _SEARCH_PROVIDERS = ("deepseek", "bocha", "qianfan", "zhipu", "cowagent", "linkai", "anysearch", "serply", "tavily", "outcrawl", "firecrawl", "context", "specstream", "olostep", "searchapi", "searxng", "keenable")
+    _SEARCH_PROVIDERS = ("deepseek", "bocha", "qianfan", "zhipu", "cowagent", "linkai", "anysearch", "serply", "tavily", "outcrawl", "firecrawl", "context", "specstream", "olostep", "searchapi", "searxng", "keenable", "serpapi")
 
     _SEARCH_PROVIDER_LABELS = {
         "bocha":   {"zh": "博查", "en": "Bocha"},
@@ -1555,11 +1555,15 @@ class ModelsHandler:
         "searchapi": {"zh": "SearchApi", "en": "SearchApi"},
         "searxng": {"zh": "SearXNG", "en": "SearXNG"},
         "keenable": {"zh": "Keenable", "en": "Keenable"},
+        "serpapi": {"zh": "SerpApi", "en": "SerpApi"},
     }
 
     @classmethod
     def _search_provider_key(cls, provider: str, local_config: dict) -> str:
         """Resolve the (raw) key for a given search provider."""
+        if provider == "serpapi":
+            from agent.tools.utils.serpapi import api_key
+            return api_key(local_config)
         if provider == "bocha":
             tools_cfg = local_config.get("tools") or {}
             block = tools_cfg.get("web_search") or {} if isinstance(tools_cfg, dict) else {}
@@ -1674,7 +1678,7 @@ class ModelsHandler:
                 # to surface.
                 # Lets the frontend badge "匿名/anonymous" only in anonymous mode.
                 "anonymous": pid in ("anysearch", "keenable") and ok and not raw_key,
-                "needs_dedicated_key": pid in ("bocha", "anysearch", "serply", "tavily", "outcrawl", "firecrawl", "context", "specstream", "olostep", "searchapi", "keenable"),
+                "needs_dedicated_key": pid in ("bocha", "anysearch", "serply", "tavily", "outcrawl", "firecrawl", "context", "specstream", "olostep", "searchapi", "keenable", "serpapi"),
                 "needs_url": pid == "searxng",
                 # SearXNG stores an instance URL (not a secret), so echo it back
                 # verbatim to prefill/edit; other providers mask their key.
@@ -2916,7 +2920,7 @@ class ModelsHandler:
         instead.
         """
         provider = (data.get("provider") or "bocha").strip().lower()
-        if provider not in ("bocha", "anysearch", "serply", "tavily", "outcrawl", "firecrawl", "context", "specstream", "olostep", "searchapi", "searxng", "keenable"):
+        if provider not in ("bocha", "anysearch", "serply", "tavily", "outcrawl", "firecrawl", "context", "specstream", "olostep", "searchapi", "searxng", "keenable", "serpapi"):
             return json.dumps({"status": "error", "message": f"unsupported search provider: {provider!r}"})
 
         if provider in ("anysearch", "keenable"):

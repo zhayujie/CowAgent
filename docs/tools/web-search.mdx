@@ -3,7 +3,7 @@ title: web_search - Web Search
 description: "The web_search tool finds real-time information, news and research through multiple backends including Bocha, Baidu Qianfan, Zhipu, Tavily, Serply and SearXNG, configurable in the web console."
 ---
 
-Search the internet for real-time information, news, research, and more. Supports seventeen backends: Bocha, ERNIE, GLM, CowAgent, LinkAI, DeepSeek, AnySearch, Serply, Tavily, Outcrawl, Firecrawl, Context.dev, SpecStream, Olostep, SearchApi, SearXNG, and Keenable. Keenable also has a keyless anonymous mode that you turn on explicitly; each backend is used once its credentials (or that opt-in) are configured.
+Search the internet for real-time information, news, research, and more. Supports eighteen backends: Bocha, ERNIE, GLM, CowAgent, LinkAI, DeepSeek, AnySearch, Serply, Tavily, Outcrawl, Firecrawl, Context.dev, SpecStream, Olostep, SearchApi, SearXNG, Keenable, and SerpApi. Keenable also has a keyless anonymous mode that you turn on explicitly; each backend is used once its credentials (or that opt-in) are configured.
 
 <Tip>
   It is recommended to configure providers and routing strategy visually from the "Model Management → Search" panel in the [Web console](/channels/web), without manually editing the configuration file.
@@ -30,6 +30,9 @@ Search the internet for real-time information, news, research, and more. Support
 | SearchApi | `tools.web_search.searchapi_api_key` | [SearchApi](https://www.searchapi.io) ([docs](https://www.searchapi.io/docs/google)) |
 | SearXNG | `tools.web_search.searxng_url` (self-hosted instance URL, no API key needed) | [SearXNG](https://docs.searxng.org/) |
 | Keenable | Optional `tools.web_search.keenable_api_key`, or `keenable_anonymous: true` for keyless use | [Keenable](https://keenable.ai) |
+| SerpApi | `tools.web_search.serpapi_api_key`, or `SERPAPI_API_KEY` | [SerpApi dashboard](https://serpapi.com/manage-api-key) ([Google Search API](https://serpapi.com/search-api)) |
+
+SerpApi makes one Google search per call and returns up to `count` organic results (maximum 10). It does not paginate, request generated summaries, or apply `freshness`. Calls use the configured SerpApi account's quota. Adding a key does not change which previously configured provider wins in automatic routing.
 
 Context.dev requests query-relevant Highlights for snippets, marks unavailable Highlights as search descriptions, and rejects incomplete responses. It ignores `freshness` and `summary`. Calls consume the connected account's credits.
 
@@ -48,7 +51,7 @@ Bocha, Serply, and Tavily require dedicated keys; Zhipu, ERNIE, CowAgent, LinkAI
 }
 ```
 
-- `auto` (default): the Agent intelligently picks among configured providers and may call multiple providers in a single task to gather more comprehensive results; when none is specified, falls back through `deepseek → bocha → qianfan → zhipu → cowagent → linkai → anysearch → serply → tavily → outcrawl → firecrawl → context → specstream → olostep → searchapi → searxng → keenable`.
+- `auto` (default): the Agent intelligently picks among configured providers and may call multiple providers in a single task to gather more comprehensive results; when none is specified, falls back through `deepseek → bocha → qianfan → zhipu → cowagent → linkai → anysearch → serply → tavily → outcrawl → firecrawl → context → specstream → olostep → searchapi → searxng → keenable → serpapi`.
 
 - `fixed`: always use the provider specified in `provider`; falls back to the auto order if that provider's credentials are missing.
 
@@ -63,6 +66,6 @@ Bocha, Serply, and Tavily require dedicated keys; Zhipu, ERNIE, CowAgent, LinkAI
 | `provider` | string | No | Available when multiple providers are configured under the `auto` strategy; used to switch provider for a single call |
 
 <Note>
-  If none of the seventeen providers is configured (no key, no instance URL, and no anonymous opt-in), this tool is not registered with the Agent.
+  If none of the eighteen providers is configured (no key, no instance URL, and no anonymous opt-in), this tool is not registered with the Agent.
 </Note>
 
