@@ -1,7 +1,7 @@
 version: '2.0'
 services:
   chatgpt-on-wechat:
-    image: zhayujie/chatgpt-on-wechat
+    image: zhayujie/cowagent
     container_name: chatgpt-on-wechat
     security_opt:
       - seccomp:unconfined
