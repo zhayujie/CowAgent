@@ -69,6 +69,15 @@ function groupByTime(sessions: SessionItem[]): { key: string; label: string; ite
   ].filter((g) => g.items.length > 0)
 }
 
+function nearBottom(el: HTMLElement): boolean {
+  return el.scrollHeight - el.scrollTop - el.clientHeight < 80
+}
+
+function isAppend(prev: SessionItem[], next: SessionItem[]): boolean {
+  if (prev.length === 0 || next.length <= prev.length) return false
+  return prev.every((s, i) => next[i].session_id === s.session_id)
+}
+
 type SpaceGroup = {
   key: string
   label: string
@@ -185,6 +194,8 @@ const SessionList: React.FC = () => {
   const [deleteSessionTarget, setDeleteSessionTarget] = useState<SessionItem | null>(null)
   const [busy, setBusy] = useState(false)
   const activeRef = useRef<HTMLDivElement>(null)
+  const revealPending = useRef(false)
+  const scrollRef = useRef<HTMLDivElement>(null)
   const unread = useUnreadStore((s) => s.unread)
   const drafts = useDraftIds((s) => s.ids)
   // Sessions with a reply in progress, as a joined string so streamed deltas
@@ -228,6 +239,7 @@ const SessionList: React.FC = () => {
   }
 
   const toggleCollapse = (key: string) => {
+    revealPending.current = false
     setCollapsed((prev) => {
       const next = new Set(prev)
       if (next.has(key)) next.delete(key)
@@ -273,29 +285,58 @@ const SessionList: React.FC = () => {
     }
   }
 
-  // Whenever the active session changes, make sure its group is expanded so the
-  // user can see which conversation is selected (the row itself is highlighted
-  // via isActive; scrolling into view is handled by the browser on focus).
+  // Whenever the active session changes (or moves to another space), make sure
+  // its group is expanded so the user can see which conversation is selected.
+  // Only once per session+space: list reloads must not re-open a group the
+  // user has since collapsed by hand.
+  const lastExpanded = useRef('')
   useEffect(() => {
     if (groupMode !== 'project') return
     const active = sessions.find((s) => s.session_id === activeId)
     if (!active) return
     const key = active.project?.path || DEFAULT_SPACE_KEY
+    const sig = `${activeId}\n${key}`
+    if (lastExpanded.current === sig) return
+    lastExpanded.current = sig
     expandSpace(key)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeId, sessions, groupMode])
 
   // Scroll the active session into view after its group is expanded/rendered.
-  // Depends on `sessions` too, so switching/creating a project (which inserts a
-  // new group, often at the bottom) re-scrolls to the active session even
-  // though activeId itself did not change. `center` makes a bottom group clearly
-  // visible rather than just peeking above the fold.
+  // A reveal is requested when the active session changes or the list is
+  // reshuffled (switching/creating a project inserts a new group, often at the
+  // bottom). It stays pending until the row is actually rendered, so a group
+  // auto-expanded above still gets scrolled to. Appending the next page or the
+  // user toggling a group never requests one, so the list stays where it is.
+  // `center` makes a bottom group clearly visible rather than just peeking
+  // above the fold.
+  const lastScrollDeps = useRef<{ activeId: string; sessions: SessionItem[] } | null>(null)
   useEffect(() => {
+    const prev = lastScrollDeps.current
+    lastScrollDeps.current = { activeId, sessions }
+    if (
+      !prev ||
+      prev.activeId !== activeId ||
+      (prev.sessions !== sessions && !isAppend(prev.sessions, sessions))
+    )
+      revealPending.current = true
+    if (!revealPending.current) return
     const el = activeRef.current
     if (!el) return
-    const id = requestAnimationFrame(() => el.scrollIntoView({ block: 'center' }))
+    const id = requestAnimationFrame(() => {
+      revealPending.current = false
+      el.scrollIntoView({ block: 'center' })
+    })
     return () => cancelAnimationFrame(id)
   }, [activeId, collapsed, sessions])
+
+  // Paging is driven by scroll events, so a list too short to scroll (e.g. most
+  // groups collapsed) would never fetch the rest. Keep loading until it either
+  // overflows or runs out.
+  useEffect(() => {
+    const el = scrollRef.current
+    if (el && hasMore && !loading && nearBottom(el)) loadMore()
+  }, [sessions, collapsed, hasMore, loading, loadMore])
 
   const commitRename = async () => {
     if (!renameTarget) return
@@ -362,10 +403,10 @@ const SessionList: React.FC = () => {
       </div>
 
       <div
+        ref={scrollRef}
         className="flex-1 overflow-y-auto px-2 pb-2 pt-1.5"
         onScroll={(e) => {
-          const el = e.currentTarget
-          if (el.scrollHeight - el.scrollTop - el.clientHeight < 80 && hasMore && !loading) loadMore()
+          if (nearBottom(e.currentTarget) && hasMore && !loading) loadMore()
         }}
       >
         {sessions.length === 0 && !loading && (
