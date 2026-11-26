@@ -1290,6 +1290,10 @@ def _execute_skill_call(
             context["msg"] = None
         elif channel_type == "wecom_bot":
             context["msg"] = None
+        # Same marker as _execute_agent_task: the bridge strips the scheduler
+        # tool for a scheduled run, so this task cannot create another one, and
+        # an empty skill result is a legitimate outcome instead of a retry.
+        context["is_scheduled_task"] = True
         context["delegated_permission_mode"] = _task_permission_mode(task, agent_id)
 
         try:
