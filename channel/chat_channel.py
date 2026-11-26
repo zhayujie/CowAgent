@@ -704,10 +704,17 @@ class ChatChannel(Channel):
                 self.futures[session_id].append(future)
         elif semaphore._initial_value == semaphore._value + 1:  # 除了当前，没有任务再申请到信号量，说明所有任务都处理完毕
             with self.lock:
+                # The empty() check above ran without the lock, so produce()
+                # may have filed a message since then (cancel_session() may
+                # also have swapped in a new queue). Retiring the session now
+                # would drop that message unanswered; dispatch it next tick.
+                refilled = not self.sessions[session_id][0].empty()
                 # futures[session_id] only exists once a context was submitted,
                 # so a session that never got one has no entry here.
                 pending = [t for t in self.futures.get(session_id, []) if not t.done()]
-                if pending:
+                if refilled:
+                    pass
+                elif pending:
                     # Tasks are still running, so keep the session and let the
                     # next tick look again instead of dropping their handles.
                     self.futures[session_id] = pending
@@ -718,7 +725,7 @@ class ChatChannel(Channel):
                 else:
                     self.futures.pop(session_id, None)
                     del self.sessions[session_id]
-            if pending:
+            if refilled or pending:
                 semaphore.release()
         else:
             semaphore.release()
