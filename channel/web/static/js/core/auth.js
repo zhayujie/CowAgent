@@ -166,13 +166,6 @@ function initApp() {
     refreshWorkspaceSelector();
     refreshSessionSettings();
 
-    fetch('/api/knowledge/list').then(r => r.json()).then(data => {
-        if (data.status === 'success') {
-            _knowledgeTreeData = data.tree || [];
-            _knowledgeRootFiles = data.root_files || [];
-        }
-    }).catch(() => {});
-
     fetch('/api/version').then(r => r.json()).then(data => {
         APP_VERSION = `v${data.version}`;
         UPDATE_META = {

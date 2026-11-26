@@ -15,6 +15,7 @@ import posixpath
 import re
 import asyncio
 import shutil
+import stat
 import threading
 from pathlib import Path
 from typing import Dict, Optional, Iterable
@@ -623,6 +624,114 @@ class KnowledgeService:
     # ------------------------------------------------------------------
     # list — directory tree with stats
     # ------------------------------------------------------------------
+    BROWSER_PAGE_SIZE = 100
+
+    @classmethod
+    def _visible_browser_name(cls, name: str) -> bool:
+        return not (name.startswith(".")
+                    or cls.INVALID_NAME_RE.search(name) or "\\" in name)
+
+    @staticmethod
+    def _is_browser_junction(path) -> bool:
+        if os.name != "nt":
+            return False
+        try:
+            return os.lstat(path).st_reparse_tag == stat.IO_REPARSE_TAG_MOUNT_POINT
+        except FileNotFoundError:
+            return False
+
+    def _browser_entries(self, directory: Path, *, categories_only=False) -> list:
+        entries = []
+        try:
+            with os.scandir(directory) as children:
+                for child in children:
+                    if not self._visible_browser_name(child.name):
+                        continue
+                    if child.is_dir(follow_symlinks=False):
+                        if not self._is_browser_junction(child.path):
+                            entries.append((child.name, "folder"))
+                    elif (not categories_only and child.name.lower().endswith(".md")
+                          and child.is_file(follow_symlinks=False)):
+                        entries.append((child.name, "file"))
+        except FileNotFoundError:
+            pass  # A missing knowledge root or a category removed during navigation.
+        return sorted(entries)
+
+    def _browser_title(self, path: Path, relative: str) -> str:
+        return path.stem if relative in self.PROTECTED_FILES else self._extract_title(path, path.stem)
+
+    def list_folder(self, folder: str = "", offset: int = 0, focus: str = "") -> dict:
+        directory = Path(self.knowledge_dir)
+        if folder:
+            folder, directory = self._resolve_path(folder, kind="category")
+            root = Path(self.knowledge_dir).resolve()
+            for parent in (directory, *directory.parents):
+                if parent == root:
+                    break
+                if (not self._visible_browser_name(parent.name) or parent.is_symlink()
+                        or self._is_browser_junction(parent)):
+                    raise ValueError("invalid knowledge category")
+            if directory.exists() and not directory.is_dir():
+                raise ValueError("not a category")
+
+        entries = self._browser_entries(directory)
+        entries.sort(key=lambda entry: entry[1] != "folder")
+        limit = self.BROWSER_PAGE_SIZE
+        last_offset = max(0, (len(entries) - 1) // limit * limit)
+        offset = min(max(0, offset) // limit * limit, last_offset)
+        if focus:
+            position = next((i for i, (name, _) in enumerate(entries) if name == focus), None)
+            if position is not None:
+                offset = position // limit * limit
+
+        items = []
+        for name, kind in entries[offset:offset + limit]:
+            relative = f"{folder}/{name}" if folder else name
+            item = {"name": name, "path": relative, "kind": kind}
+            if kind == "file":
+                item["title"] = self._browser_title(directory / name, relative)
+            items.append(item)
+        return {"items": items, "offset": offset, "total": len(entries),
+                "previous": offset - limit if offset else None,
+                "next": offset + limit if offset + limit < len(entries) else None}
+
+    def list_categories(self) -> list:
+        def walk(directory, prefix):
+            for name, _ in self._browser_entries(directory, categories_only=True):
+                parts = (*prefix, name)
+                yield "/".join(parts)
+                yield from walk(directory / name, parts)
+
+        return list(walk(Path(self.knowledge_dir), ()))
+
+    def search_titles(self, query: str, after: str = "") -> dict:
+        query = query.strip().casefold()
+        if not query:
+            return {"items": [], "next": None}
+        if after:
+            after, _ = self._resolve_path(after, kind="document")
+        cursor = tuple(after.split("/")) if after else ()
+
+        def walk(directory, prefix):
+            for name, kind in self._browser_entries(directory):
+                parts = (*prefix, name)
+                if kind == "folder":
+                    # Skip subtrees that end before the cursor. Folder names
+                    # and file names share the same sort order.
+                    if parts >= cursor[:len(parts)]:
+                        yield from walk(directory / name, parts)
+                elif parts > cursor:
+                    yield directory / name, "/".join(parts)
+
+        matches = []
+        for path, relative in walk(Path(self.knowledge_dir), ()):
+            title = self._browser_title(path, relative)
+            if query in path.name.casefold() or query in title.casefold():
+                if len(matches) == self.BROWSER_PAGE_SIZE:
+                    return {"items": matches, "next": matches[-1]["path"]}
+                matches.append({"name": path.name, "path": relative, "title": title, "kind": "file"})
+        return {"items": matches, "next": None}
+
     def list_tree(self) -> dict:
         """
         Return the knowledge directory tree grouped by category,

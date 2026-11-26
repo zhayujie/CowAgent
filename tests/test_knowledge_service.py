@@ -727,3 +727,60 @@ def test_windows_reserved_device_names_are_rejected(tmp_path):
         assert (tmp_path / "knowledge" / path).read_text(encoding="utf-8") == "# ok\n"
     category = svc.dispatch("create_category", {"path": "convention"})
     assert category["payload"]["created"] is True
+
+
+def test_web_folder_page_reads_only_immediate_visible_titles(tmp_path):
+    svc, _ = service(tmp_path)
+    root = tmp_path / "knowledge"
+    folder = root / "notes"
+    nested = folder / "nested"
+    nested.mkdir(parents=True)
+    (nested / "secret.md").write_text("# Nested only", encoding="utf-8")
+    (root / "root.md").write_text("# Top", encoding="utf-8")
+    (root / ".hidden").mkdir()
+    for index in range(251):
+        (folder / f"file-{index:03}.md").write_text(f"# Doc {index}", encoding="utf-8")
+
+    with patch.object(svc, "_extract_title", wraps=svc._extract_title) as read_title:
+        initial = svc.list_folder()
+        assert [item["path"] for item in initial["items"]] == ["notes", "root.md"]
+        assert read_title.call_count == 1
+
+        read_title.reset_mock()
+        first = svc.list_folder("notes")
+        assert (first["offset"], first["next"], first["total"]) == (0, 100, 252)
+        assert len(first["items"]) == 100
+        assert read_title.call_count == 99
+
+        last = svc.list_folder("notes", focus="file-250.md")
+        assert (last["offset"], last["previous"], last["next"]) == (200, 100, None)
+        assert last["items"][-1]["title"] == "Doc 250"
+        assert svc.list_categories() == ["notes", "notes/nested"]
+
+
+def test_web_title_search_paginates_across_unloaded_folders(tmp_path):
+    svc, _ = service(tmp_path)
+    root = tmp_path / "knowledge"
+    for folder, filename, title in [
+        ("a", "a.md", "NEEDLE title"),
+        ("a/nested", "needle.md", "Other title"),
+        ("a-long", "a.md", "Needle again"),
+        (".hidden", "ignored.md", "Needle"),
+    ]:
+        directory = root / folder
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / filename).write_text(f"# {title}", encoding="utf-8")
+    svc.BROWSER_PAGE_SIZE = 1
+    after = ""
+    paths = []
+    while True:
+        page = svc.search_titles(" needle ", after)
+        paths.extend(item["path"] for item in page["items"])
+        after = page["next"]
+        if after is None:
+            break
+    assert paths == ["a/a.md", "a/nested/needle.md", "a-long/a.md"]
+    assert svc.read_file(paths[1])["content"] == "# Other title"
+    (root / paths[0]).replace(root / "a/new.md")
+    assert svc.list_folder("a", focus="new.md")["items"][-1]["path"] == "a/new.md"
+    assert svc.search_titles("needle")["items"][0]["path"] == "a/nested/needle.md"

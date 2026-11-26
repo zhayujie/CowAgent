@@ -1,4 +1,5 @@
 import json
+from types import SimpleNamespace
 from unittest.mock import patch
 
 
@@ -94,7 +95,7 @@ def test_knowledge_frontend_management_contract():
     assert "fetch(_kbUrl('/api/knowledge/import')" in js
     assert "initKnowledgeImportDropZone()" in js
 
-    knowledge_section = js[js.index("// Knowledge View"):js.index("function _hasFilterMatch")]
+    knowledge_section = js[js.index("// Knowledge View"):js.index("function resolveKnowledgePath")]
     assert "prompt(" not in knowledge_section
     assert "alert(" not in knowledge_section
     assert "if (path === 'index.md' || path === 'log.md') return '';" in knowledge_section
@@ -118,11 +119,8 @@ def test_knowledge_document_editor_contract():
     assert "data.payload?.conflict ? 'conflict' : data.code" in js
     # Every way out of an open text area asks before dropping what is in it.
     assert "memoryEditor.guard(next) && skillEditor.guard(next) && knowledgeEditor.guard(next)" in js
-    for leaving in ("openKnowledgeFile(path, title)", "switchKnowledgeTab(tab)",
+    for leaving in ("openKnowledgeFile(path, title, reveal, rootRequest)", "switchKnowledgeTab(tab)",
                     "selectKnowledgeAgent(agentId)", "knowledgeMobileBack",
-                    # These end in loadKnowledgeView(), which redraws the tree
-                    # and the viewer with it, so they drop an open text area
-                    # just as surely as opening another document does.
                     "createKnowledgeCategory", "createKnowledgeDocument",
                     "renameKnowledgeCategory(path)", "deleteKnowledgeCategory(path)",
                     "deleteKnowledgeDocument(path)", "moveKnowledgeDocument(path)",
@@ -179,3 +177,21 @@ def test_knowledge_import_handler_rejects_large_content_length(tmp_path):
     assert response["status"] == "error"
     assert response["code"] == 413
     assert response["message"] == "import batch too large"
+
+
+def test_web_knowledge_list_uses_folder_view_without_recursive_tree(tmp_path):
+    from channel.web.api.knowledge import KnowledgeListHandler
+
+    root = tmp_path / "knowledge"
+    (root / "notes").mkdir(parents=True)
+    (root / "notes" / "page.md").write_text("# Deep page", encoding="utf-8")
+    params = SimpleNamespace(agent_id="default", view="folder", folder="", offset="0", focus="")
+    with patch("channel.web.api.knowledge._require_auth"), \
+         patch("channel.web.api.knowledge.web.header"), \
+         patch("channel.web.api.knowledge.web.input", return_value=params), \
+         patch("channel.web.api.knowledge._request_agent_id", return_value="default"), \
+         patch("channel.web.api.knowledge._get_workspace_root", return_value=str(tmp_path)), \
+         patch("agent.knowledge.service.KnowledgeService.list_tree", side_effect=AssertionError):
+        data = json.loads(KnowledgeListHandler().GET())
+    assert data["status"] == "success"
+    assert data["items"] == [{"kind": "folder", "name": "notes", "path": "notes"}]

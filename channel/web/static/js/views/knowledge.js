@@ -5,8 +5,8 @@
 // =====================================================================
 // Knowledge View
 // =====================================================================
-let _knowledgeTreeData = [];
-let _knowledgeRootFiles = [];
+let _knowledgeView;
+let _knowledgeDocumentRequest;
 let _knowledgeCurrentFile = null;
 let _knowledgeGraphLoaded = false;
 // Which tab is selected, and whether the base has anything to show in it.
@@ -85,6 +85,7 @@ async function knowledgeReadDoc(path) {
  * code it offers to overwrite, and the new mtime as the next baseline.
  */
 async function knowledgeWriteDoc(doc, content, expectedMtime) {
+    const view = _knowledgeView;
     const res = await fetch('/api/knowledge/action', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -95,7 +96,7 @@ async function knowledgeWriteDoc(doc, content, expectedMtime) {
         }),
     });
     const data = await res.json();
-    if (data.status === 'success') _refreshKnowledgeTree();
+    if (data.status === 'success' && view === _knowledgeView) _refreshKnowledgeTree([doc.path]);
     return {
         status: data.status,
         code: data.payload?.conflict ? 'conflict' : data.code,
@@ -104,203 +105,290 @@ async function knowledgeWriteDoc(doc, content, expectedMtime) {
     };
 }
 
-/**
- * Reload the tree and the stats line, leaving the viewer alone.
- *
- * A save may have rewritten the page's H1 — its title in the tree — and its
- * size, but the document on screen, or the text area still open over it after
- * Ctrl+S, must stay exactly where it is.
- */
-async function _refreshKnowledgeTree() {
+async function _knowledgeList(view, params = {}, signal) {
+    const query = new URLSearchParams({view, ...params});
+    const response = await fetch(_kbUrl('/api/knowledge/list?' + query), {signal});
+    const data = await response.json();
+    if (data.status !== 'success') throw new Error(data.message || 'list failed');
+    return data;
+}
+
+function _knowledgeTreeMessage(key) {
+    const labels = {
+        loading: ['加载中…', 'Loading…'],
+        error: ['加载失败，点击重试', 'Loading failed. Retry'],
+        empty: ['此目录没有文档', 'This folder is empty'],
+        no_results: ['没有匹配的文档', 'No matching documents'],
+        previous: ['上一页', 'Previous'],
+        next: ['下一页', 'Next'],
+    };
+    return labels[key][currentLang === 'zh' ? 0 : 1];
+}
+
+function _knowledgeTreeButton(label, handler, depth = 0) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'knowledge-tree-file';
+    button.style.paddingLeft = (8 + depth * 12) + 'px';
+    button.textContent = label;
+    button.onclick = handler;
+    return button;
+}
+
+function _knowledgeTreeText(key) {
+    const message = document.createElement('p');
+    message.className = 'px-2 py-1 text-xs text-slate-500';
+    message.textContent = _knowledgeTreeMessage(key);
+    return message;
+}
+
+async function _loadKnowledgeFolder(view, folder, offset = 0, focus = '') {
+    const request = {offset, focus};
+    view.requests.set(folder, request);
+    view.errors.delete(folder);
+    renderKnowledgeTree();
     try {
-        const data = await fetch(_kbUrl('/api/knowledge/list')).then(r => r.json());
-        if (data.status !== 'success') return;
-        _knowledgeTreeData = data.tree || [];
-        _knowledgeRootFiles = data.root_files || [];
-        _renderKnowledgeStats(data.stats || {});
-        renderKnowledgeTree(_knowledgeTreeData, _knowledgeRootFiles,
-                            document.getElementById('knowledge-search')?.value || '');
-        const doc = knowledgeEditor.current();
-        const title = doc ? _findKnowledgeFileTitle(doc.path) : null;
-        if (doc && title !== null) {
-            doc.title = title;
-            docRenderTitle('knowledge-viewer-title', title, {dirty: knowledgeEditor.isDirty()});
-        }
+        const page = await _knowledgeList('folder', {folder, offset, focus});
+        if (view !== _knowledgeView || view.requests.get(folder) !== request) return;
+        view.folders.set(folder, page);
+        if (!folder) _applyKnowledgeRoot(page);
+        return page;
     } catch (error) {
-        /* The tree on screen is merely stale; the save itself went through. */
+        if (view === _knowledgeView && view.requests.get(folder) === request) {
+            view.errors.set(folder, request);
+            if (!folder && !view.folders.has('')) {
+                const empty = document.getElementById('knowledge-empty');
+                const message = empty.querySelector('p');
+                message.replaceChildren(_knowledgeTreeButton(_knowledgeTreeMessage('error'), () => loadKnowledgeView(view.target)));
+            }
+        }
+    } finally {
+        if (view.requests.get(folder) === request) view.requests.delete(folder);
+        if (view === _knowledgeView) renderKnowledgeTree();
     }
 }
 
-function _renderKnowledgeStats(stats) {
-    const size = stats.size || 0;
-    const sizeStr = size < 1024 ? size + ' B' : (size / 1024).toFixed(1) + ' KB';
-    document.getElementById('knowledge-stats').textContent = (stats.pages || 0) + ' pages · ' + sizeStr;
+function _applyKnowledgeRoot(page) {
+    const empty = document.getElementById('knowledge-empty');
+    _knowledgeHasPages = page.total > 0;
+    if (!_knowledgeHasPages) empty.querySelector('p').textContent = t('knowledge_empty_hint');
+    document.getElementById('knowledge-empty-guide').classList.toggle('hidden', _knowledgeHasPages);
+    document.getElementById('knowledge-stats').textContent = currentLang === 'zh'
+        ? `根目录 ${page.total} 项` : `${page.total} root items`;
+    _applyKnowledgePanels();
+}
+
+function _resetKnowledgeDocument() {
+    _knowledgeDocumentRequest = null;
+    _knowledgeCurrentFile = null;
+    knowledgeEditor.forget();
+    document.getElementById('knowledge-sidebar').classList.remove('hidden');
+    document.getElementById('knowledge-content-placeholder').classList.toggle('hidden', window.innerWidth < 768);
+    document.getElementById('knowledge-content-viewer').classList.add('hidden');
 }
 
 function loadKnowledgeView(targetPath) {
-    // Reset to docs tab
-    switchKnowledgeTab('docs');
-    _knowledgeGraphLoaded = false;
-    _knowledgeCurrentFile = null;
-    // The tree about to be drawn decides which document is open, so no editor
-    // state may survive into it. Callers that could lose an edit this way ask
-    // first, through knowledgeEditor.guard().
-    knowledgeEditor.forget();
-
-    // Drop a deleted Agent selection so we never point at a ghost.
+    _knowledgeView?.searchRequest?.abort();
+    clearTimeout(_knowledgeView?.searchTimer);
+    const view = {
+        folders: new Map(), expanded: new Set(), requests: new Map(), errors: new Map(),
+        target: targetPath, search: null, searchRequest: null, searchTimer: null,
+    };
+    _knowledgeView = view;
     if (knowledgeAgentId && agentCatalog.length && !agentCatalog.some(a => a.id === knowledgeAgentId)) {
         knowledgeAgentId = '';
         localStorage.removeItem('cow_knowledge_agent');
     }
+    _resetKnowledgeDocument();
+    _knowledgeGraphLoaded = false;
+    _knowledgeHasPages = false;
+    document.getElementById('knowledge-search').value = '';
+    document.getElementById('knowledge-stats').textContent = '';
+    const empty = document.getElementById('knowledge-empty');
+    empty.querySelector('p').textContent = t('knowledge_loading');
+    document.getElementById('knowledge-empty-guide').classList.add('hidden');
+    switchKnowledgeTab('docs');
     renderKnowledgeAgentSelect();
+    initKnowledgeImportDropZone();
 
-    fetch(_kbUrl('/api/knowledge/list')).then(r => r.json()).then(data => {
-        if (data.status !== 'success') return;
-        initKnowledgeImportDropZone();
+    const rootRequest = _loadKnowledgeFolder(view, '');
+    if (targetPath) openKnowledgeFile(targetPath, undefined, true, rootRequest);
+}
 
-        const emptyEl = document.getElementById('knowledge-empty');
-
-        const tree = data.tree || [];
-        const rootFiles = data.root_files || [];
-        _knowledgeTreeData = tree;
-        _knowledgeRootFiles = rootFiles;
-        const stats = data.stats || {};
-        const totalPages = stats.pages || 0;
-        _renderKnowledgeStats(stats);
-
-        _knowledgeHasPages = !(totalPages === 0 && tree.length === 0 && rootFiles.length === 0);
-        if (!_knowledgeHasPages) {
-            emptyEl.querySelector('p').textContent = t('knowledge_empty_hint');
-            const guideEl = document.getElementById('knowledge-empty-guide');
-            if (guideEl) guideEl.classList.remove('hidden');
+async function _revealKnowledgeFile(view, path) {
+    const parts = path.split('/');
+    let folder = '';
+    for (const name of parts) {
+        if (view !== _knowledgeView || _knowledgeCurrentFile !== path) return;
+        let page = view.folders.get(folder);
+        if (!page?.items.some(item => item.name === name)) {
+            page = await _loadKnowledgeFolder(view, folder, page?.offset, name);
         }
-        // Reveal the panel for the tab that is selected *now*, not the docs
-        // tab: a link to /knowledge/graph switches tabs while this request is
-        // still in flight, and unhiding docs here stacked both panels.
-        _applyKnowledgePanels();
-        if (!_knowledgeHasPages) return;
-
-        renderKnowledgeTree(tree, rootFiles);
-
-        // Prefer opening the just created/imported file; ensure its group is
-        // expanded so the active item is visible in the tree.
-        const targetTitle = targetPath ? _findKnowledgeFileTitle(targetPath) : null;
-        if (targetTitle !== null) {
-            _expandKnowledgeGroupFor(targetPath);
-            openKnowledgeFile(targetPath, targetTitle);
-            return;
+        const item = page?.items.find(entry => entry.name === name);
+        if (!item) return;
+        if (item.kind === 'folder') {
+            folder = item.path;
+            view.expanded.add(folder);
         }
+    }
+    if (view === _knowledgeView) renderKnowledgeTree();
+}
 
-        // Auto-select the first file (desktop only)
-        if (window.innerWidth >= 768) {
-            const firstFile = rootFiles.length > 0 ? rootFiles[0] : null;
-            const firstGroup = !firstFile ? tree.find(g => g.files && g.files.length > 0) : null;
-            if (firstFile) {
-                openKnowledgeFile(firstFile.name, firstFile.title);
-            } else if (firstGroup) {
-                const gf = firstGroup.files[0];
-                openKnowledgeFile(firstGroup.dir + '/' + gf.name, gf.title);
+function _knowledgeFileRow(item, depth, showPath = false) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'knowledge-tree-file' + (_knowledgeCurrentFile === item.path ? ' active' : '');
+    button.dataset.path = item.path;
+    button.title = item.path;
+    button.style.paddingLeft = (8 + 12 * depth) + 'px';
+    const subtitle = showPath ? `<span class="block truncate text-[10px]">${escapeHtml(item.path)}</span>` : '';
+    button.innerHTML = `<i class="fas fa-file-lines text-[10px] text-slate-400"></i><span class="truncate">${escapeHtml(item.title)}${subtitle}</span>${_knowledgeFileActions(item.path)}`;
+    button.onclick = () => openKnowledgeFile(item.path, item.title);
+    return button;
+}
+
+function _renderKnowledgeFolder(view, container, path, depth) {
+    const page = view.folders.get(path);
+    const failed = view.errors.get(path);
+    if (failed) {
+        container.appendChild(_knowledgeTreeButton(_knowledgeTreeMessage('error'),
+            () => _loadKnowledgeFolder(view, path, failed.offset, failed.focus), depth));
+    }
+    if (!page) {
+        if (view.requests.has(path)) container.appendChild(_knowledgeTreeText('loading'));
+        return;
+    }
+    if (!page.items.length) container.appendChild(_knowledgeTreeText('empty'));
+    for (const item of page.items) {
+        if (item.kind === 'file') {
+            container.appendChild(_knowledgeFileRow(item, depth));
+            continue;
+        }
+        const isOpen = view.expanded.has(item.path);
+        const group = document.createElement('div');
+        group.className = 'knowledge-tree-group' + (isOpen ? ' open' : '');
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'knowledge-tree-group-btn';
+        button.style.paddingLeft = (8 + 12 * depth) + 'px';
+        button.setAttribute('aria-expanded', String(isOpen));
+        button.innerHTML = `<i class="fas fa-chevron-right chevron"></i><i class="fas fa-folder text-amber-400 text-[11px]"></i><span class="truncate">${escapeHtml(item.name)}</span>${_knowledgeCategoryActions(item.path)}`;
+        button.onclick = () => {
+            if (view.expanded.delete(item.path)) {
+                renderKnowledgeTree();
+            } else {
+                view.expanded.add(item.path);
+                if (!view.folders.has(item.path) && !view.requests.has(item.path)) {
+                    _loadKnowledgeFolder(view, item.path);
+                } else {
+                    renderKnowledgeTree();
+                }
             }
-        } else {
-            document.getElementById('knowledge-content-placeholder').classList.add('hidden');
-            document.getElementById('knowledge-content-viewer').classList.add('hidden');
+            document.querySelector(`[data-knowledge-folder="${CSS.escape(item.path)}"]`)?.focus({preventScroll: true});
+        };
+        button.dataset.knowledgeFolder = item.path;
+        group.appendChild(button);
+        if (isOpen) _renderKnowledgeFolder(view, group, item.path, depth + 1);
+        container.appendChild(group);
+    }
+    for (const direction of ['previous', 'next']) {
+        if (page[direction] != null) {
+            const button = _knowledgeTreeButton(_knowledgeTreeMessage(direction),
+                () => _loadKnowledgeFolder(view, path, page[direction]), depth);
+            button.disabled = view.requests.has(path);
+            container.appendChild(button);
         }
-    }).catch(() => {});
-}
-
-// Find a file's display title by its relative path within the knowledge tree.
-// Returns the title, or null when the path is not present.
-function _findKnowledgeFileTitle(path) {
-    if (!path) return null;
-    const rootHit = (_knowledgeRootFiles || []).find(f => f.name === path);
-    if (rootHit) return rootHit.title || rootHit.name;
-    const walk = (groups, parentPath) => {
-        for (const group of groups || []) {
-            const groupPath = parentPath ? `${parentPath}/${group.dir}` : group.dir;
-            const hit = (group.files || []).find(f => `${groupPath}/${f.name}` === path);
-            if (hit) return hit.title || hit.name;
-            const childHit = walk(group.children, groupPath);
-            if (childHit !== null) return childHit;
-        }
-        return null;
-    };
-    return walk(_knowledgeTreeData, '');
-}
-
-// Open every ancestor group of the given file path so it is visible.
-function _expandKnowledgeGroupFor(path) {
-    if (!path || !path.includes('/')) return;
-    const target = document.querySelector(`.knowledge-tree-file[data-path="${CSS.escape(path)}"]`);
-    let node = target ? target.closest('.knowledge-tree-group') : null;
-    while (node) {
-        node.classList.add('open');
-        node = node.parentElement ? node.parentElement.closest('.knowledge-tree-group') : null;
     }
 }
 
-function renderKnowledgeTree(tree, rootFilesOrFilter, filter) {
+function renderKnowledgeTree() {
+    const view = _knowledgeView;
     const container = document.getElementById('knowledge-tree');
-    container.innerHTML = '';
-    let rootFiles, lowerFilter;
-    if (typeof rootFilesOrFilter === 'string') {
-        rootFiles = _knowledgeRootFiles;
-        lowerFilter = (rootFilesOrFilter || '').toLowerCase();
-    } else {
-        rootFiles = rootFilesOrFilter || _knowledgeRootFiles;
-        lowerFilter = (filter || '').toLowerCase();
+    container.replaceChildren();
+    if (!view.search) {
+        _renderKnowledgeFolder(view, container, '', 0);
+        return;
     }
-    (rootFiles || []).forEach(f => {
-        if (lowerFilter && !f.title.toLowerCase().includes(lowerFilter) && !f.name.toLowerCase().includes(lowerFilter)) return;
-        const fbtn = document.createElement('button');
-        fbtn.className = 'knowledge-tree-file' + (_knowledgeCurrentFile === f.name ? ' active' : '');
-        fbtn.dataset.path = f.name;
-        fbtn.innerHTML = `<i class="fas fa-file-lines text-[10px] text-slate-400"></i><span class="truncate">${escapeHtml(f.title)}</span>${_knowledgeFileActions(f.name)}`;
-        fbtn.onclick = () => openKnowledgeFile(f.name, f.title);
-        container.appendChild(fbtn);
-    });
-    _renderKnowledgeGroups(container, tree, '', lowerFilter, 0);
+    const {page, loading, error, cursors} = view.search;
+    if (loading) {
+        container.appendChild(_knowledgeTreeText('loading'));
+    } else if (error) {
+        container.appendChild(_knowledgeTreeButton(_knowledgeTreeMessage('error'), () => _loadKnowledgeSearch(view)));
+    } else if (page) {
+        if (!page.items.length) container.appendChild(_knowledgeTreeText('no_results'));
+        for (const item of page.items) container.appendChild(_knowledgeFileRow(item, 0, true));
+        if (cursors.length > 1) {
+            container.appendChild(_knowledgeTreeButton(_knowledgeTreeMessage('previous'),
+                () => { cursors.pop(); _loadKnowledgeSearch(view); }));
+        }
+        if (page.next) {
+            container.appendChild(_knowledgeTreeButton(_knowledgeTreeMessage('next'),
+                () => { cursors.push(page.next); _loadKnowledgeSearch(view); }));
+        }
+    }
 }
 
-function _renderKnowledgeGroups(container, groups, parentPath, lowerFilter, depth) {
-    const indent = depth * 12;
-    groups.forEach(group => {
-        const groupPath = parentPath ? parentPath + '/' + group.dir : group.dir;
-        const files = (group.files || []).filter(f =>
-            !lowerFilter || f.title.toLowerCase().includes(lowerFilter) || f.name.toLowerCase().includes(lowerFilter)
-        );
-        const children = group.children || [];
-        const hasMatchingChildren = lowerFilter ? _hasFilterMatch(children, lowerFilter) : children.length > 0;
-        if (files.length === 0 && !hasMatchingChildren && lowerFilter) return;
-
-        const div = document.createElement('div');
-        div.className = 'knowledge-tree-group open';
-
-        const fileCount = _countFiles(group);
-        const btn = document.createElement('button');
-        btn.className = 'knowledge-tree-group-btn';
-        btn.style.paddingLeft = (8 + indent) + 'px';
-        btn.innerHTML = `<i class="fas fa-chevron-right chevron"></i><i class="fas fa-folder text-amber-400 text-[11px]"></i><span>${escapeHtml(group.dir)}</span><span class="ml-auto text-[10px] text-slate-400">${fileCount}</span>${_knowledgeCategoryActions(groupPath)}`;
-        btn.onclick = () => div.classList.toggle('open');
-        div.appendChild(btn);
-
-        const items = document.createElement('div');
-        items.className = 'knowledge-tree-group-items';
-        files.forEach(f => {
-            const fbtn = document.createElement('button');
-            const fpath = groupPath + '/' + f.name;
-            fbtn.className = 'knowledge-tree-file' + (_knowledgeCurrentFile === fpath ? ' active' : '');
-            fbtn.dataset.path = fpath;
-            fbtn.style.paddingLeft = (24 + indent) + 'px';
-            fbtn.innerHTML = `<i class="fas fa-file-lines text-[10px] text-slate-400"></i><span class="truncate">${escapeHtml(f.title)}</span>${_knowledgeFileActions(fpath)}`;
-            fbtn.onclick = () => openKnowledgeFile(fpath, f.title);
-            items.appendChild(fbtn);
-        });
-        if (children.length > 0) {
-            _renderKnowledgeGroups(items, children, groupPath, lowerFilter, depth + 1);
+async function _loadKnowledgeSearch(view) {
+    const search = view.search;
+    if (view !== _knowledgeView || !search) return;
+    view.searchRequest?.abort();
+    const controller = new AbortController();
+    view.searchRequest = controller;
+    search.loading = true;
+    search.error = false;
+    renderKnowledgeTree();
+    try {
+        search.page = await _knowledgeList('search', {query: search.query, after: search.cursors.at(-1)}, controller.signal);
+    } catch (error) {
+        if (!controller.signal.aborted) search.error = true;
+    } finally {
+        if (view === _knowledgeView && view.searchRequest === controller && !controller.signal.aborted) {
+            search.loading = false;
+            renderKnowledgeTree();
         }
-        div.appendChild(items);
-        container.appendChild(div);
-    });
+    }
+}
+
+function filterKnowledgeTree(query) {
+    const view = _knowledgeView;
+    clearTimeout(view.searchTimer);
+    view.searchRequest?.abort();
+    query = query.trim();
+    view.search = query ? {query, cursors: [''], loading: true} : null;
+    renderKnowledgeTree();
+    if (query) view.searchTimer = setTimeout(() => _loadKnowledgeSearch(view), 300);
+}
+
+async function _refreshKnowledgeTree(paths, removedFolder) {
+    const view = _knowledgeView;
+    if (removedFolder) {
+        const removed = path => path === removedFolder || path.startsWith(removedFolder + '/');
+        for (const entries of [view.folders, view.expanded, view.requests, view.errors]) {
+            for (const path of entries.keys()) {
+                if (removed(path)) entries.delete(path);
+            }
+        }
+    }
+    const folders = new Set(['']);
+    for (const path of paths.filter(Boolean)) {
+        const parts = path.split('/');
+        parts.pop();
+        while (parts.length) {
+            folders.add(parts.join('/'));
+            parts.pop();
+        }
+    }
+    if (view.search) filterKnowledgeTree(view.search.query);
+    await Promise.all([...folders].filter(folder => view.folders.has(folder) || view.requests.has(folder))
+        .map(folder => _loadKnowledgeFolder(view, folder, view.folders.get(folder)?.offset)));
+    if (view !== _knowledgeView) return;
+    const doc = knowledgeEditor.current();
+    const parent = doc?.path.split('/').slice(0, -1).join('/');
+    const file = view.folders.get(parent)?.items.find(item => item.path === doc?.path);
+    if (file) {
+        doc.title = file.title;
+        docRenderTitle('knowledge-viewer-title', doc.title, {dirty: knowledgeEditor.isDirty()});
+    }
 }
 
 function _knowledgeActionButton(icon, title, handler) {
@@ -310,16 +398,17 @@ function _knowledgeActionButton(icon, title, handler) {
 
 function _knowledgeFileActions(path) {
     if (path === 'index.md' || path === 'log.md') return '';
-    const value = JSON.stringify(path).replace(/"/g, '&quot;');
+    const value = escapeHtml(JSON.stringify(path)).replace(/"/g, '&quot;');
     return `<span class="knowledge-actions">${_knowledgeActionButton('fa-arrow-right-arrow-left', '移动', `moveKnowledgeDocument(${value})`)}${_knowledgeActionButton('fa-trash', '删除', `deleteKnowledgeDocument(${value})`)}</span>`;
 }
 
 function _knowledgeCategoryActions(path) {
-    const value = JSON.stringify(path).replace(/"/g, '&quot;');
+    const value = escapeHtml(JSON.stringify(path)).replace(/"/g, '&quot;');
     return `<span class="knowledge-actions">${_knowledgeActionButton('fa-pen', '重命名', `renameKnowledgeCategory(${value})`)}${_knowledgeActionButton('fa-trash', '删除', `deleteKnowledgeCategory(${value})`)}</span>`;
 }
 
 async function dispatchKnowledgeAction(action, payload, openPathResolver) {
+    const view = _knowledgeView;
     _setKnowledgeStatus(currentLang === 'zh' ? '处理中...' : 'Working...', false, true);
     try {
         const response = await fetch('/api/knowledge/action', {
@@ -328,15 +417,33 @@ async function dispatchKnowledgeAction(action, payload, openPathResolver) {
             body: JSON.stringify({action, payload, agent_id: viewingKnowledgeAgentId()}),
         });
         const result = await response.json();
+        if (view !== _knowledgeView) return result.payload;
+        const paths = [payload.path, payload.new_path, ...(payload.paths || [])];
+        if (payload.target_category) paths.push(payload.target_category + '/');
         if (result.status !== 'success') {
             _setKnowledgeStatus(result.message || (currentLang === 'zh' ? '操作失败' : 'Operation failed'), true);
-            loadKnowledgeView();
+            _refreshKnowledgeTree(paths);
             return null;
         }
         _setKnowledgeStatus(_knowledgeResultMessage(action, result.payload), false);
-        // Optionally auto-open the affected file after the tree refreshes.
-        const openPath = openPathResolver ? openPathResolver(result.payload) : null;
-        loadKnowledgeView(openPath || undefined);
+        const current = _knowledgeCurrentFile;
+        let next = openPathResolver?.(result.payload);
+        let removedFolder;
+        if (action === 'rename_category' || action === 'delete_category') {
+            removedFolder = result.payload?.old_path || result.payload?.path;
+            if (removedFolder && current?.startsWith(removedFolder + '/')) {
+                if (action === 'rename_category') next = result.payload.path + current.slice(removedFolder.length);
+                _resetKnowledgeDocument();
+            }
+        } else if (action === 'move_documents' || action === 'delete_documents') {
+            const affected = result.payload?.results?.find(item => item.path === current);
+            if (affected?.moved || affected?.deleted || affected?.reason === 'not_found') {
+                if (affected.moved) next = affected.target;
+                _resetKnowledgeDocument();
+            }
+        }
+        const refresh = _refreshKnowledgeTree(paths, removedFolder);
+        if (next) openKnowledgeFile(next, undefined, true, refresh);
         return result.payload;
     } catch (error) {
         _setKnowledgeStatus(currentLang === 'zh' ? '请求失败，请稍后重试' : 'Request failed, please try again', true);
@@ -372,13 +479,14 @@ function _knowledgeResultMessage(action, payload) {
         `已删除 ${payload?.deleted || 0} 个文档`;
 }
 
-function _knowledgeCategoryPaths(groups, parent = '') {
-    const paths = [];
-    for (const group of groups || []) {
-        const path = parent ? `${parent}/${group.dir}` : group.dir;
-        paths.push(path, ..._knowledgeCategoryPaths(group.children || [], path));
+async function _knowledgeCategoryPaths(view) {
+    try {
+        const data = await _knowledgeList('categories');
+        return view === _knowledgeView ? data.categories : null;
+    } catch (error) {
+        if (view === _knowledgeView) _setKnowledgeStatus(currentLang === 'zh' ? '无法加载分类' : 'Could not load categories', true);
+        return null;
     }
-    return paths;
 }
 
 function openKnowledgeDialog(options) {
@@ -488,10 +596,6 @@ function toggleKnowledgeNewMenu(event) {
     }
 }
 
-// Every one of these ends in loadKnowledgeView(), which redraws the tree and
-// with it the viewer, so an open text area does not survive them. Asked here,
-// before the action's own dialog, rather than after the user has already
-// confirmed a deletion that cannot be called off.
 function createKnowledgeCategory() {
     if (!knowledgeEditor.guard(createKnowledgeCategory)) return;
     openKnowledgeDialog({
@@ -504,9 +608,10 @@ function createKnowledgeCategory() {
     });
 }
 
-function createKnowledgeDocument() {
+async function createKnowledgeDocument() {
     if (!knowledgeEditor.guard(createKnowledgeDocument)) return;
-    const categories = _knowledgeCategoryPaths(_knowledgeTreeData);
+    const categories = await _knowledgeCategoryPaths(_knowledgeView);
+    if (!categories) return;
     if (!categories.length) {
         _setKnowledgeStatus(currentLang === 'zh' ? '请先创建分类' : 'Create a category first', true);
         return;
@@ -567,14 +672,15 @@ function selectKnowledgeImportFiles() {
     input.click();
 }
 
-function openKnowledgeImportDialog(files) {
+async function openKnowledgeImportDialog(files) {
     if (!knowledgeEditor.guard(() => openKnowledgeImportDialog(files))) return;
     const validationError = validateKnowledgeImportFiles(files);
     if (validationError) {
         _setKnowledgeStatus(validationError, true);
         return;
     }
-    const choices = _knowledgeCategoryPaths(_knowledgeTreeData);
+    const choices = await _knowledgeCategoryPaths(_knowledgeView);
+    if (!choices) return;
     openKnowledgeDialog({
         title: currentLang === 'zh' ? '导入文档' : 'Import documents',
         subtitle: currentLang === 'zh' ? `已选择 ${files.length} 个文件` : `${files.length} file(s) selected`,
@@ -589,6 +695,7 @@ function openKnowledgeImportDialog(files) {
 }
 
 async function importKnowledgeDocuments(files, targetCategory) {
+    const view = _knowledgeView;
     const validationError = validateKnowledgeImportFiles(files);
     if (validationError) {
         _setKnowledgeStatus(validationError, true);
@@ -607,15 +714,17 @@ async function importKnowledgeDocuments(files, targetCategory) {
     try {
         const response = await fetch(_kbUrl('/api/knowledge/import'), { method: 'POST', body: formData });
         const result = await response.json();
+        if (view !== _knowledgeView) return result.payload;
         if (result.status !== 'success') {
             _setKnowledgeStatus(result.message || (currentLang === 'zh' ? '导入失败' : 'Import failed'), true);
-            loadKnowledgeView();
+            _refreshKnowledgeTree([targetCategory + '/']);
             return null;
         }
         _setKnowledgeStatus(_knowledgeResultMessage('import_documents', result.payload), false);
         // Auto-open the first successfully imported document.
         const firstImported = (result.payload?.results || []).find(item => item.status === 'imported');
-        loadKnowledgeView(firstImported ? firstImported.path : undefined);
+        const refresh = _refreshKnowledgeTree([targetCategory + '/']);
+        if (firstImported) openKnowledgeFile(firstImported.path, undefined, true, refresh);
         return result.payload;
     } catch (error) {
         _setKnowledgeStatus(currentLang === 'zh' ? '导入请求失败' : 'Import request failed', true);
@@ -701,10 +810,12 @@ function deleteKnowledgeDocument(path) {
     });
 }
 
-function moveKnowledgeDocument(path) {
+async function moveKnowledgeDocument(path) {
     if (!knowledgeEditor.guard(() => moveKnowledgeDocument(path))) return;
     const currentCategory = path.includes('/') ? path.split('/').slice(0, -1).join('/') : '';
-    const choices = _knowledgeCategoryPaths(_knowledgeTreeData).filter(value => value !== currentCategory);
+    const categories = await _knowledgeCategoryPaths(_knowledgeView);
+    if (!categories) return;
+    const choices = categories.filter(value => value !== currentCategory);
     openKnowledgeDialog({
         title: currentLang === 'zh' ? '移动文档' : 'Move document',
         subtitle: path,
@@ -715,28 +826,6 @@ function moveKnowledgeDocument(path) {
         icon: 'fa-arrow-right-arrow-left',
         onSubmit: target => dispatchKnowledgeAction('move_documents', {paths: [path], target_category: target}),
     });
-}
-
-function _hasFilterMatch(groups, lowerFilter) {
-    for (const g of groups) {
-        for (const f of (g.files || [])) {
-            if (f.title.toLowerCase().includes(lowerFilter) || f.name.toLowerCase().includes(lowerFilter)) return true;
-        }
-        if (_hasFilterMatch(g.children || [], lowerFilter)) return true;
-    }
-    return false;
-}
-
-function _countFiles(group) {
-    let count = (group.files || []).length;
-    for (const child of (group.children || [])) {
-        count += _countFiles(child);
-    }
-    return count;
-}
-
-function filterKnowledgeTree(query) {
-    renderKnowledgeTree(_knowledgeTreeData, _knowledgeRootFiles, query);
 }
 
 function resolveKnowledgePath(currentFilePath, relativeHref) {
@@ -756,15 +845,16 @@ function resolveKnowledgePath(currentFilePath, relativeHref) {
 function bindKnowledgeLinks(container, currentFilePath) {
     container.querySelectorAll('a').forEach(a => {
         const href = a.getAttribute('href');
-        if (!href || !href.endsWith('.md')) return;
-        // Skip absolute URLs
-        if (/^https?:\/\//.test(href)) return;
+        if (!href || /^(?:[a-z][\w+.-]*:|\/\/)/i.test(href)) return;
+        let decoded;
+        try { decoded = decodeURIComponent(href); } catch { decoded = href; }
+        if (!/\.md$/i.test(decoded)) return;
 
         a.addEventListener('click', (e) => {
             e.preventDefault();
-            const resolved = resolveKnowledgePath(currentFilePath, href);
+            const resolved = resolveKnowledgePath(currentFilePath, decoded);
             const linkTitle = a.textContent.trim() || resolved.replace(/\.md$/, '').split('/').pop();
-            openKnowledgeFile(resolved, linkTitle);
+            openKnowledgeFile(resolved, linkTitle, true);
         });
         a.style.cursor = 'pointer';
         a.classList.add('text-primary-500', 'hover:underline');
@@ -805,35 +895,42 @@ function renderKnowledgeDoc(doc) {
     bindKnowledgeImages(bodyEl, doc.dir);
 }
 
-function openKnowledgeFile(path, title) {
+function openKnowledgeFile(path, title, reveal = false, rootRequest) {
     // Another document is about to take the viewer over, text area included.
-    if (!knowledgeEditor.guard(() => openKnowledgeFile(path, title))) return;
+    if (!knowledgeEditor.guard(() => openKnowledgeFile(path, title, reveal, rootRequest))) return;
+    const view = _knowledgeView;
+    const request = {};
+    _knowledgeDocumentRequest = request;
     _knowledgeCurrentFile = path;
     // Update active state in tree via data-path
     document.querySelectorAll('.knowledge-tree-file').forEach(el => {
         el.classList.toggle('active', el.dataset.path === path);
     });
 
-    // Immediately hide placeholder
-    document.getElementById('knowledge-content-placeholder').classList.add('hidden');
-
     knowledgeReadDoc(path).then(data => {
+        if (_knowledgeDocumentRequest !== request) return;
+        document.getElementById('knowledge-content-placeholder').classList.add('hidden');
         document.getElementById('knowledge-viewer-path').textContent = path;
         document.getElementById('knowledge-content-viewer').classList.remove('hidden');
         knowledgeEditor.open({
             path: path,
-            title: title,
+            title: title || data.title || path.split('/').pop(),
             content: data.content || '',
             // Absolute dir of the page, for resolving its relative image srcs.
             dir: data.dir,
             editable: !!data.editable,
         });
 
+        if (reveal) Promise.resolve(rootRequest).then(() => _revealKnowledgeFile(view, path));
+
         // Mobile: hide sidebar, show content
         if (window.innerWidth < 768) {
             document.getElementById('knowledge-sidebar').classList.add('hidden');
         }
     }).catch(error => {
+        if (_knowledgeDocumentRequest !== request) return;
+        _knowledgeCurrentFile = knowledgeEditor.current()?.path || null;
+        renderKnowledgeTree();
         // The viewer is still showing whatever was open before the click, and
         // the tree has already moved its highlight: say why it did not follow.
         _setKnowledgeStatus(currentLang === 'zh' ? '文档加载失败' : 'Failed to load document', true);
@@ -842,9 +939,8 @@ function openKnowledgeFile(path, title) {
 
 function knowledgeMobileBack() {
     if (!knowledgeEditor.guard(knowledgeMobileBack)) return;
-    knowledgeEditor.forget();
-    document.getElementById('knowledge-sidebar').classList.remove('hidden');
-    document.getElementById('knowledge-content-viewer').classList.add('hidden');
+    _resetKnowledgeDocument();
+    renderKnowledgeTree();
 }
 
 function switchKnowledgeTab(tab) {

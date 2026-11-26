@@ -26,11 +26,19 @@ class KnowledgeListHandler:
         web.header('Content-Type', 'application/json; charset=utf-8')
         try:
             from agent.knowledge.service import KnowledgeService
-            params = web.input(agent_id='')
+            params = web.input(agent_id='', view='tree', folder='', offset='0', focus='', query='', after='')
             svc = KnowledgeService(
                 _get_workspace_root(agent_id=_request_agent_id(params))
             )
-            result = svc.list_tree()
+            if params.view == 'folder':
+                result = svc.list_folder(params.folder, int(params.offset), params.focus)
+            elif params.view == 'search':
+                result = svc.search_titles(params.query, params.after)
+            elif params.view == 'categories':
+                result = {"categories": svc.list_categories()}
+            else:
+                # Older desktop clients still consume the recursive shape.
+                result = svc.list_tree()
             return json.dumps({"status": "success", **result}, ensure_ascii=False)
         except Exception as e:
             logger.error(f"[WebChannel] Knowledge list error: {e}")
