@@ -125,10 +125,14 @@ def test_feishu_card_quote_reads_its_markdown():
     from channel.feishu.feishu_message import FeishuMessage
     from channel.feishu.feishu_static_card import build_markdown_card
 
+    msg = FeishuMessage.__new__(FeishuMessage)
     card = build_markdown_card("【任务 #5 已完成】周报\n\n**要点**")
     item = {"msg_type": "interactive", "body": {"content": json.dumps(card, ensure_ascii=False)}}
-    assert FeishuMessage._extract_quoted_text(item).startswith("【任务 #5 已完成】")
-    assert FeishuMessage._extract_quoted_text({"msg_type": "interactive", "body": {"content": "{}"}}) == ""
+    quoted = msg._extract_quoted_content(item, "om_parent")
+    assert quoted["text"].startswith("【任务 #5 已完成】")
+    assert quoted["attachments"] == []
+    empty = {"msg_type": "interactive", "body": {"content": "{}"}}
+    assert msg._extract_quoted_content(empty, "om_parent")["text"] == ""
 
 
 def test_weixin_keeps_the_quote_apart():

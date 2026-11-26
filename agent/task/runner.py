@@ -165,7 +165,7 @@ class TaskRunner:
             logger.info(f"[Task] #{task_id} waiting for approval")
             return
         if task.get("require_accept"):
-            from agent.task.notify import action_summary, notify_accept_pending
+            from agent.task.notify import notify_accept_pending
 
             approval = store.create_approval(
                 kind=st.KIND_ACCEPT, task_id=task_id, agent_id=task.get("agent_id", ""),
