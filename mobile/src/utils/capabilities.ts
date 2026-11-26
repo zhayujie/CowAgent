@@ -199,13 +199,14 @@ export function searchEditor(p: SearchProviderMeta): SearchEditor {
   return p.needs_dedicated_key ? 'key' : 'vendor';
 }
 
-/** AnySearch and Keenable work without a key. */
-export const searchAllowsAnonymous = (id: string) => id === 'anysearch' || id === 'keenable';
+/** AnySearch, Keenable and WebRouter work without a key. */
+export const searchAllowsAnonymous = (id: string) => id === 'anysearch' || id === 'keenable' || id === 'webrouter';
 
 const SEARCH_HELP: Record<string, MessageKey> = {
   bocha: 'settings_search_help_bocha',
   anysearch: 'settings_search_help_anysearch',
   keenable: 'settings_search_help_keenable',
+  webrouter: 'settings_search_help_webrouter',
   searxng: 'settings_search_help_searxng',
   deepseek: 'settings_search_help_deepseek',
 };

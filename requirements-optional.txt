@@ -24,6 +24,9 @@ python-pptx
 # memory rerank: install on demand for rerank_provider=local (pulls in torch)
 # sentence-transformers
 
+# web_search / web_fetch: WebRouter provider (tools.web_search.webrouter_enabled), needs Python 3.11+
+webrouter>=0.16; python_version >= "3.11"
+
 # i18n: zh-Hant high-quality conversion
 # Built-in fallback provides basic conversion without this dependency
 opencc-python-reimplemented

@@ -3,7 +3,7 @@ title: web_search - 联网搜索
 description: "web_search 工具联网搜索实时信息、新闻和研究资料，支持博查、百度千帆、智谱、CowAgent、Tavily、Serply、SearXNG 等多个搜索后端及匿名模式，可在 Web 控制台可视化配置厂商与策略。"
 ---
 
-搜索互联网获取实时信息、新闻、研究等内容。支持博查、百度千帆、智谱、CowAgent、LinkAI、DeepSeek、AnySearch、Serply、Tavily、Outcrawl、Firecrawl、Context.dev、SpecStream、Olostep、SearchApi、SearXNG、Keenable 十七个后端。Keenable 另提供需手动开启的匿名模式（无需密钥）；各厂商配置凭证（或开启匿名模式）后即可使用。
+搜索互联网获取实时信息、新闻、研究等内容。支持博查、百度千帆、智谱、CowAgent、LinkAI、DeepSeek、AnySearch、Serply、Tavily、Outcrawl、Firecrawl、Context.dev、SpecStream、Olostep、SearchApi、SearXNG、Keenable、WebRouter 十八个后端。Keenable 另提供匿名模式（无需密钥），WebRouter 也无需密钥，二者均需手动开启；各厂商配置凭证（或开启匿名模式）后即可使用。
 
 <Tip>
   推荐通过 [Web 控制台](/zh/channels/web) 的「模型管理 → 搜索」面板可视化配置厂商与策略，无需手动编辑配置文件。
@@ -30,10 +30,13 @@ description: "web_search 工具联网搜索实时信息、新闻和研究资料�
 | SearchApi | `tools.web_search.searchapi_api_key` | [SearchApi](https://www.searchapi.io)（[文档](https://www.searchapi.io/docs/google)） |
 | SearXNG | `tools.web_search.searxng_url`（自托管实例 URL，无需 API Key） | [SearXNG](https://docs.searxng.org/) |
 | Keenable | 可选配置项 `tools.web_search.keenable_api_key`，或设置 `keenable_anonymous: true` 免密钥使用 | [Keenable](https://keenable.ai) |
+| WebRouter | 无需密钥；设置 `webrouter_enabled: true` 并执行 `pip install webrouter`（Python 3.11+） | [WebRouter](https://github.com/Nimbleway/webrouter)（[文档](https://docs.webrouter.net)） |
 
 Context.dev 请求与查询相关的 Highlights 作为摘要；Highlights 不可用时标注为搜索描述，结果不完整时返回错误。该后端忽略 `freshness` 和 `summary`；调用消耗所配置账户的积分。
 
 博查、Serply、Tavily 需要单独配置专用密钥；智谱、百度千帆、CowAgent、LinkAI、DeepSeek 直接复用对应模型的 API Key，配好模型即同时获得搜索能力。SearXNG 为自托管方案，只需配置实例 URL。AnySearch 需手动开启匿名模式：将 `tools.web_search.anysearch_anonymous` 设为 `true`（或在控制台「搜索」面板留空密钥保存）后即可免密钥调用；配置 `tools.web_search.anysearch_api_key`（未配置时回退到环境变量 `ANYSEARCH_API_KEY`）后无需开启匿名模式，额度与权限以 AnySearch 服务端为准。Keenable 需手动开启：将 `tools.web_search.keenable_anonymous` 设为 `true`（或在控制台「搜索」面板留空密钥保存）后调用公共接口，按 IP 限流（10 次/秒、1000 次/小时）；配置可选的 `keenable_api_key`（或 `KEENABLE_API_KEY`）后限制解除，且无需开启匿名模式。
+
+WebRouter 是一个开源 Python 库，会把一次搜索依次交给多个搜索 API，某个调用失败或无结果时自动切换到下一个。它需要 Python 3.11+，未包含在 `requirements.txt` 中：先执行 `pip install webrouter`，再将 `tools.web_search.webrouter_enabled` 设为 `true`（或在控制台「搜索」面板保存）。未配置任何密钥时使用免密钥的搜索后端；它还会读取进程环境变量中的服务商密钥（如 `TAVILY_API_KEY`、`EXA_API_KEY`）并将这些服务商加入路由，发往这些服务商的搜索按对应密钥计费。`freshness` 支持命名取值，不支持日期区间写法；`summary` 会被忽略。
 
 ## 路由策略
 
@@ -48,7 +51,7 @@ Context.dev 请求与查询相关的 Highlights 作为摘要；Highlights 不可
 }
 ```
 
-- `auto`（默认）：由 Agent 在已配置的厂商中智能选择，并可在一次任务中多次调用、切换不同厂商以获取更全面的结果；未指定时按 `deepseek → bocha → qianfan → zhipu → cowagent → linkai → anysearch → serply → tavily → outcrawl → firecrawl → context → specstream → olostep → searchapi → searxng → keenable` 顺序兜底。
+- `auto`（默认）：由 Agent 在已配置的厂商中智能选择，并可在一次任务中多次调用、切换不同厂商以获取更全面的结果；未指定时按 `deepseek → bocha → qianfan → zhipu → cowagent → linkai → anysearch → serply → tavily → outcrawl → firecrawl → context → specstream → olostep → searchapi → searxng → keenable → webrouter` 顺序兜底。
 
 - `fixed`：固定使用 `provider` 指定的厂商；该厂商凭证缺失时自动回落到 auto 顺序。
 
@@ -63,6 +66,6 @@ Context.dev 请求与查询相关的 Highlights 作为摘要；Highlights 不可
 | `provider` | string | 否 | `auto` 策略下配置了多个厂商时可见，用于单次切换厂商 |
 
 <Note>
-  十七家厂商均未配置（既无密钥、无实例 URL，也未开启匿名模式）时，该工具不会注册到 Agent。
+  十八家厂商均未配置（既无密钥、无实例 URL，也未开启免密钥模式）时，该工具不会注册到 Agent。
 </Note>
 

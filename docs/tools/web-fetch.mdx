@@ -75,6 +75,31 @@ Each scrape uses Olostep credits, so the backend stays opt-in. The SSRF guard
 still applies, and document URLs (PDF, Word, etc.) are still downloaded and
 parsed locally.
 
+## WebRouter backend (opt-in)
+
+Set `tools.web_fetch.provider` to `"webrouter"` to fetch through
+[WebRouter](https://docs.webrouter.net), an open-source Python library that
+tries several extract APIs in turn and returns the page as Markdown. It needs
+no key: with none it uses keyless extract backends.
+
+```json
+{
+  "tools": {
+    "web_fetch": {
+      "provider": "webrouter"
+    }
+  }
+}
+```
+
+The backend needs the `webrouter` package (`pip install webrouter`, Python
+3.11+). WebRouter also reads provider keys from the process environment (such
+as `TAVILY_API_KEY` or `FIRECRAWL_API_KEY`) and adds those providers to its
+routing, so fetches it sends to them are billed to those keys. The page is
+fetched by those hosted APIs, not from this machine. The SSRF guard still
+applies to the URL, and document URLs (PDF, Word, etc.) are still downloaded
+and parsed locally.
+
 <Note>
   The default `direct` backend only retrieves static HTML. For pages that require JavaScript rendering (such as SPAs), switch to the DeepSeek or Olostep backend above, or use the `browser` tool.
 </Note>

@@ -898,7 +898,7 @@ function _launchSearchProviderConfig(providerId, providerMeta) {
     // Providers that hold their own credential (dedicated key or, for SearXNG,
     // an instance URL) use the bespoke search-key modal. zhipu/qianfan/linkai
     // reuse a model-vendor key and go through the vendor modal instead.
-    if (['bocha', 'anysearch', 'serply', 'tavily', 'outcrawl', 'firecrawl', 'context', 'specstream', 'olostep', 'searchapi', 'searxng', 'keenable'].includes(providerId)) {
+    if (['bocha', 'anysearch', 'serply', 'tavily', 'outcrawl', 'firecrawl', 'context', 'specstream', 'olostep', 'searchapi', 'searxng', 'keenable', 'webrouter'].includes(providerId)) {
         openSearchKeyModal(providerId, providerMeta);
     } else if (providerId === 'deepseek') {
         openDeepseekSearchModal();
@@ -960,7 +960,9 @@ function openSearchKeyModal(providerId, providerMeta) {
     }
     // SearXNG URL is not masked, so it's safe to keep editable (not a sentinel).
     const hasKey = !!masked;
-    const isAnonymous = (providerId === 'anysearch' || providerId === 'keenable')
+    // WebRouter holds no key: the modal only turns it on or off.
+    const isWebRouter = providerId === 'webrouter';
+    const isAnonymous = (providerId === 'anysearch' || providerId === 'keenable' || isWebRouter)
         && !!((providerMeta && providerMeta.anonymous) || (prov && prov.anonymous));
     const clearBtnHtml = (hasKey || isAnonymous)
         ? `<button type="button" id="search-key-clear"
@@ -984,7 +986,8 @@ function openSearchKeyModal(providerId, providerMeta) {
              class="bg-panel rounded-xl border border-slate-200 dark:border-white/10
                     w-full max-w-md mx-4 p-6 shadow-xl">
             <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-1">${t('models_search_' + providerId + '_title')}</h3>
-            <p class="text-xs text-slate-500 dark:text-slate-400 mb-4">${descText}</p>
+            <p id="search-key-desc" class="text-xs text-slate-500 dark:text-slate-400 mb-4">${descText}</p>
+            ${isWebRouter ? '' : `
             <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">${providerId === 'searxng' ? 'Instance URL' : 'API Key'}</label>
             <input id="search-key-input" type="text" autocomplete="off" data-1p-ignore data-lpignore="true"
                    class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600
@@ -992,7 +995,7 @@ function openSearchKeyModal(providerId, providerMeta) {
                           focus:outline-none focus:border-primary-500 ${isSearxng ? '' : 'font-mono'} ${(hasKey && !isSearxng) ? 'cfg-key-masked' : ''}"
                    value="${escapeHtml(masked)}"
                    data-masked="${(hasKey && !isSearxng) ? '1' : ''}"
-                   placeholder="${isSearxng ? 'https://searxng.example.com' : 'sk-...'}" />
+                   placeholder="${isSearxng ? 'https://searxng.example.com' : 'sk-...'}" />`}
             <div class="flex items-center justify-between gap-3 mt-5">
                 <div>${clearBtnHtml}</div>
                 <div class="flex items-center gap-3">
@@ -1047,6 +1050,25 @@ function openSearchKeyModal(providerId, providerMeta) {
 
 
 function _saveSearchKey(providerId) {
+    // WebRouter: saving turns it on. The backend refuses the switch when the
+    // webrouter package is not installed, and the modal shows why.
+    if (providerId === 'webrouter') {
+        fetch('/api/models', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'set_search_credential', provider: providerId, anonymous: true }),
+        }).then(r => r.json()).then(data => {
+            if (data.status === 'success') {
+                const modal = document.getElementById('search-key-modal');
+                if (modal) modal.remove();
+                loadModelsView({ preserveScroll: true });
+            } else {
+                const desc = document.getElementById('search-key-desc');
+                if (desc) desc.textContent = data.message || t('models_save_failed');
+            }
+        });
+        return;
+    }
     const input = document.getElementById('search-key-input');
     if (!input) return;
     if (input.dataset.masked === '1') {

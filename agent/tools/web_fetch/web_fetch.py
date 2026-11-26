@@ -11,6 +11,9 @@ Supports:
 - Olostep backend (opt-in via tools.web_fetch.provider="olostep"):
   returns the rendered page as Markdown through Olostep's Scrape API
   (https://docs.olostep.com/features/scrapes)
+- WebRouter backend (opt-in via tools.web_fetch.provider="webrouter"):
+  returns the page as Markdown through WebRouter's extract, which tries its
+  extract backends in turn (https://docs.webrouter.net); keyless
 """
 
 import os
@@ -36,6 +39,9 @@ PAGE_READ_SECONDS = 60
 # Olostep waits about 55s for a scrape before it answers HTTP 504, so the
 # client waits a little longer than that to receive the 504.
 OLOSTEP_TIMEOUT = 60
+# WebRouter may try several extract backends for one page, so it gets the
+# same whole-page budget as a direct page read.
+WEBROUTER_TIMEOUT = 60
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
 
 DEFAULT_HEADERS = {
@@ -99,13 +105,14 @@ def _conf_str(value, default: str = "") -> str:
 
 def _fetch_provider() -> str:
     """The fetch backend: "direct" (default, fetch and parse locally),
-    "deepseek" (DeepSeek's official Fetch API, returns the page as Markdown)
-    or "olostep" (Olostep's Scrape API, returns the rendered page as Markdown).
+    "deepseek" (DeepSeek's official Fetch API, returns the page as Markdown),
+    "olostep" (Olostep's Scrape API, returns the rendered page as Markdown)
+    or "webrouter" (WebRouter's extract, returns the page as Markdown).
     Unknown values fail loudly so a typo never silently changes backends."""
     provider = _conf_str(_tools_web_fetch_conf().get("provider"), "direct").lower()
-    if provider not in ("direct", "deepseek", "olostep"):
+    if provider not in ("direct", "deepseek", "olostep", "webrouter"):
         raise ValueError(
-            f"Unknown tools.web_fetch.provider {provider!r}; expected 'direct', 'deepseek' or 'olostep'"
+            f"Unknown tools.web_fetch.provider {provider!r}; expected 'direct', 'deepseek', 'olostep' or 'webrouter'"
         )
     return provider
 
@@ -305,8 +312,8 @@ class WebFetch(BaseTool):
 
         # SSRF guard: reject URLs that resolve to private/loopback/link-local/
         # cloud-metadata addresses before any request is issued. Applies to
-        # every backend, including DeepSeek Fetch and Olostep (the URL still
-        # leaves this machine's policy boundary via their API).
+        # every backend, including DeepSeek Fetch, Olostep and WebRouter (the
+        # URL still leaves this machine's policy boundary via their API).
         try:
             validate_url_safe(url)
         except ValueError as e:
@@ -325,6 +332,9 @@ class WebFetch(BaseTool):
 
         if provider == "olostep":
             return self._fetch_olostep(url)
+
+        if provider == "webrouter":
+            return self._fetch_webrouter(url)
 
         return self._fetch_webpage(url)
 
@@ -385,6 +395,40 @@ class WebFetch(BaseTool):
         if not content.strip():
             return ToolResult.fail(f"Error: DeepSeek Fetch returned no content for URL: {url}")
         return ToolResult.success(f"Title: {title}\n\nContent:\n{content}")
+
+    # ---- WebRouter backend ----
+
+    def _fetch_webrouter(self, url: str) -> ToolResult:
+        """Fetch a page as Markdown through WebRouter's extract.
+
+        WebRouter tries its extract backends in turn and moves to the next one
+        when a backend fails. It needs no key: with none it uses keyless
+        backends, and it adds any provider whose key is in the environment.
+        """
+        from agent.tools.web_search.web_search import webrouter_installed
+        if not webrouter_installed():
+            return ToolResult.fail(
+                "Error: tools.web_fetch.provider is 'webrouter' but the webrouter package is not installed. "
+                "Run: pip install webrouter (Python 3.11+)."
+            )
+        from web_router import WebRouter
+
+        logger.debug(f"[WebFetch] webrouter: url='{url}'")
+        try:
+            # data_apis=False keeps the result to the page itself.
+            resp = WebRouter().extract(url, format="markdown", timeout=WEBROUTER_TIMEOUT, data_apis=False)
+        except Exception as e:
+            # When every backend fails, the message lists each one's error and
+            # can run long, so the agent gets the start of it.
+            logger.warning(f"[WebFetch] WebRouter extract failed: {e}")
+            return ToolResult.fail(f"Error: WebRouter extract failed - {str(e)[:500]}")
+
+        doc = resp.documents[0] if resp.documents else None
+        if doc is None or not (doc.content or "").strip():
+            reason = resp.failures[0].error if resp.failures else "no content"
+            return ToolResult.fail(f"Error: WebRouter returned no content for URL: {url} ({reason})")
+        title = doc.title or "Untitled"
+        return ToolResult.success(f"Title: {title}\n\nContent:\n{doc.content}")
 
     # ---- Olostep backend ----
 

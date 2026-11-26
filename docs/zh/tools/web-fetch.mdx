@@ -70,6 +70,27 @@ SSRF 防护仍然生效：内网、回环及云元数据地址在请求发出前
 每次抓取消耗 Olostep 额度，因此保持为手动开启。SSRF 防护同样生效，文档链接（PDF、Word 等）
 仍在本地下载解析。
 
+## WebRouter 后端（可选）
+
+将 `tools.web_fetch.provider` 设为 `"webrouter"` 可改用
+[WebRouter](https://docs.webrouter.net) 抓取。WebRouter 是一个开源 Python 库，
+会依次尝试多个网页抓取 API，并以 Markdown 返回页面内容；无需密钥，未配置密钥时使用免密钥的抓取后端。
+
+```json
+{
+  "tools": {
+    "web_fetch": {
+      "provider": "webrouter"
+    }
+  }
+}
+```
+
+该后端需要安装 `webrouter` 包（`pip install webrouter`，Python 3.11+）。WebRouter
+还会读取进程环境变量中的服务商密钥（如 `TAVILY_API_KEY`、`FIRECRAWL_API_KEY`）并将这些服务商加入路由，
+发往这些服务商的抓取按对应密钥计费。页面由这些托管 API 抓取，而不是从本机发起。SSRF 防护同样作用于该 URL，
+文档链接（PDF、Word 等）仍在本地下载解析。
+
 <Note>
   默认的 `direct` 后端只能获取静态 HTML 内容。如果页面需要 JavaScript 渲染（如 SPA 单页应用），可改用上文的 DeepSeek 或 Olostep 后端，或使用 `browser` 工具。
 </Note>

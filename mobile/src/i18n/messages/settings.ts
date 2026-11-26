@@ -168,6 +168,7 @@ const zh = {
   settings_search_help_anysearch: '前往 anysearch.com 控制台创建 API Key，留空则用匿名模式（每日有免费额度）',
   settings_search_help_console: '前往 {site} 控制台创建 API Key',
   settings_search_help_keenable: '留空则用匿名模式；填入密钥可提升频率上限，前往 keenable.ai 获取',
+  settings_search_help_webrouter: '无需密钥，留空保存即启用；需安装 webrouter 包（Python 3.11+），会使用环境变量中的服务商密钥',
   settings_search_help_searxng: '自托管 SearXNG 实例的地址，无需 API Key',
   settings_search_help_deepseek: '与 DeepSeek 模型共用同一组 API Key 和 API Base，修改后模型调用也会生效',
 
@@ -206,7 +207,7 @@ const zh = {
   settings_search_used_vendor: '使用的厂商',
   settings_search_fixed_footer: '只能指定已配置的厂商',
   settings_search_addable: '可添加',
-  settings_search_addable_footer: 'AnySearch 和 Keenable 无需密钥即可使用',
+  settings_search_addable_footer: 'AnySearch、Keenable 和 WebRouter 无需密钥即可使用',
   settings_instance_url_title: '{name} 实例地址',
   settings_api_key_title: '{name} API Key',
   settings_anonymous_ph: '留空使用匿名模式',
@@ -530,6 +531,7 @@ const en: Record<keyof typeof zh, string> = {
     'Create an API key in the anysearch.com console; leave empty for anonymous mode (daily free quota)',
   settings_search_help_console: 'Create an API key in the {site} console',
   settings_search_help_keenable: 'Leave empty for anonymous mode; a key from keenable.ai lifts the rate limits',
+  settings_search_help_webrouter: 'No key: save empty to turn it on. Needs the webrouter package (Python 3.11+); uses provider keys found in the environment',
   settings_search_help_searxng: 'URL of your self-hosted SearXNG instance; no API key needed',
   settings_search_help_deepseek: 'Shares the API key and base URL with the DeepSeek model; changes apply to model calls too',
 
@@ -568,7 +570,7 @@ const en: Record<keyof typeof zh, string> = {
   settings_search_used_vendor: 'Provider in use',
   settings_search_fixed_footer: 'Only configured providers can be pinned',
   settings_search_addable: 'Available',
-  settings_search_addable_footer: 'AnySearch and Keenable work without a key',
+  settings_search_addable_footer: 'AnySearch, Keenable and WebRouter work without a key',
   settings_instance_url_title: '{name} instance URL',
   settings_api_key_title: '{name} API key',
   settings_anonymous_ph: 'Leave empty for anonymous mode',

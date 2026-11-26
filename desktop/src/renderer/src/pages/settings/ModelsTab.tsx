@@ -1184,7 +1184,9 @@ const SearchKeyModal: React.FC<{
 }> = ({ provider, busy, onClose, onSave }) => {
   const open = !!provider
   // anysearch and keenable share the "save empty = enable anonymous tier" contract.
-  const isAnonymousProvider = provider?.id === 'anysearch' || provider?.id === 'keenable'
+  // WebRouter holds no key at all: saving turns it on.
+  const isWebRouter = provider?.id === 'webrouter'
+  const isAnonymousProvider = provider?.id === 'anysearch' || provider?.id === 'keenable' || isWebRouter
   const isSearxng = provider?.id === 'searxng' || !!provider?.needs_url
   // SearXNG prefills its plain instance URL; others prefill the masked key.
   const initial = isSearxng ? provider?.url_masked || '' : provider?.api_key_masked || ''
@@ -1204,6 +1206,10 @@ const SearchKeyModal: React.FC<{
   const desc = t(`models_search_${provider.id}_desc`)
 
   const handleSave = () => {
+    if (isWebRouter) {
+      onSave('', true)
+      return
+    }
     if (isSearxng) {
       // URL is plain text (never masked). Empty is a no-op here — use the
       // configured chip / clear flow to remove it.
@@ -1252,21 +1258,23 @@ const SearchKeyModal: React.FC<{
       }
     >
       <p className="text-xs text-content-tertiary mb-3">{desc}</p>
-      <Field label={fieldLabel} hint={fieldHint}>
-        <TextInput
-          className={isSearxng ? '' : 'font-mono'}
-          value={value}
-          placeholder={placeholder}
-          onFocus={() => {
-            // Only API keys use a masked sentinel; URLs stay as-is.
-            if (!isSearxng && !dirty && MASK_RE.test(value)) setValue('')
-          }}
-          onChange={(e) => {
-            setValue(e.target.value)
-            setDirty(true)
-          }}
-        />
-      </Field>
+      {!isWebRouter && (
+        <Field label={fieldLabel} hint={fieldHint}>
+          <TextInput
+            className={isSearxng ? '' : 'font-mono'}
+            value={value}
+            placeholder={placeholder}
+            onFocus={() => {
+              // Only API keys use a masked sentinel; URLs stay as-is.
+              if (!isSearxng && !dirty && MASK_RE.test(value)) setValue('')
+            }}
+            onChange={(e) => {
+              setValue(e.target.value)
+              setDirty(true)
+            }}
+          />
+        </Field>
+      )}
     </Modal>
   )
 }

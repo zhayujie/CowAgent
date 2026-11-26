@@ -1,4 +1,4 @@
-"""Web Search tool. Supports seventeen backends with a unified response format:
+"""Web Search tool. Supports eighteen backends with a unified response format:
   - deepseek (https://api-docs.deepseek.com/guides/search, official Search API)
   - bocha   (https://open.bochaai.com)
   - zhipu   (https://docs.bigmodel.cn/cn/guide/tools/web-search)
@@ -16,13 +16,16 @@
   - searchapi (https://www.searchapi.io, Google SERP API)
   - searxng (https://docs.searxng.org, self-hosted meta search engine)
   - keenable (https://keenable.ai, keyless tier behind an explicit opt-in)
+  - webrouter (https://docs.webrouter.net, open-source library that routes one
+    search across many search APIs with fallback; keyless, behind an explicit opt-in)
 
 Provider selection
   - strategy 'auto' (default): pick the first configured provider in the
     canonical order [deepseek, bocha, qianfan, zhipu, cowagent, linkai, anysearch,
-    serply, tavily, outcrawl, firecrawl, context, specstream, olostep, searchapi, searxng, keenable].
+    serply, tavily, outcrawl, firecrawl, context, specstream, olostep, searchapi, searxng, keenable, webrouter].
     Keenable counts as configured with a key or with the explicit `keenable_anonymous` opt-in (same contract as
-    `anysearch_anonymous`). When the caller passes an explicit `provider`
+    `anysearch_anonymous`). WebRouter counts as configured with the explicit `webrouter_enabled` opt-in once the
+    optional `webrouter` package is installed. When the caller passes an explicit `provider`
     it overrides the pick; an invalid/unconfigured one silently falls back
     to the auto order.
   - strategy 'fixed': use the configured provider; if its credential is
@@ -51,8 +54,13 @@ Credentials
   - keenable: tools.web_search.keenable_api_key -> env KEENABLE_API_KEY (optional,
               only lifts the rate limits of the keyless public endpoint);
               keyless use is opt-in via tools.web_search.keenable_anonymous
+  - webrouter: no key of its own; opt-in via tools.web_search.webrouter_enabled.
+              WebRouter reads provider keys (TAVILY_API_KEY, EXA_API_KEY, ...)
+              from the process environment and adds those providers to its
+              routing; with none it uses keyless search backends.
 """
 
+import importlib.util
 import json
 import math
 import os
@@ -75,8 +83,9 @@ DEFAULT_TIMEOUT = 30
 # anysearch, serply (global Google/Bing SERP, last since it isn't
 # benchmarked against the Chinese-market providers above), tavily, outcrawl,
 # firecrawl, context, specstream, olostep, searchapi, searxng, keenable (global index, keyless tier behind an explicit
-# opt-in; placed last so any provider the user paid for wins).
-PROVIDER_ORDER = ("deepseek", "bocha", "qianfan", "zhipu", "cowagent", "linkai", "anysearch", "serply", "tavily", "outcrawl", "firecrawl", "context", "specstream", "olostep", "searchapi", "searxng", "keenable")
+# opt-in; placed last so any provider the user paid for wins), webrouter (keyless
+# routing library behind an explicit opt-in, also last for the same reason).
+PROVIDER_ORDER = ("deepseek", "bocha", "qianfan", "zhipu", "cowagent", "linkai", "anysearch", "serply", "tavily", "outcrawl", "firecrawl", "context", "specstream", "olostep", "searchapi", "searxng", "keenable", "webrouter")
 
 PROVIDER_LABELS = {
     "bocha":   "Bocha",
@@ -96,7 +105,12 @@ PROVIDER_LABELS = {
     "searchapi": "SearchApi",
     "searxng": "SearXNG",
     "keenable": "Keenable",
+    "webrouter": "WebRouter",
 }
+
+# WebRouter maps the shared freshness tokens onto its own recency values; the
+# `2025-01-01..2025-02-01` range form has no equivalent there and is ignored.
+_WEBROUTER_RECENCY = {"oneDay": "day", "oneWeek": "week", "oneMonth": "month", "oneYear": "year"}
 
 
 def _tools_web_search_conf() -> dict:
@@ -198,6 +212,22 @@ def _keenable_anonymous_enabled() -> bool:
     return anonymous_opt_in(_tools_web_search_conf().get("keenable_anonymous"))
 
 
+def _webrouter_enabled() -> bool:
+    """Check if the WebRouter provider is turned on via config."""
+    return anonymous_opt_in(_tools_web_search_conf().get("webrouter_enabled"))
+
+
+def webrouter_installed() -> bool:
+    """Whether the optional `webrouter` package (import name `web_router`) is
+    installed. It needs Python 3.11+, so it is not in requirements.txt."""
+    return importlib.util.find_spec("web_router") is not None
+
+
+def webrouter_available() -> bool:
+    """WebRouter is usable for search: turned on and installed."""
+    return _webrouter_enabled() and webrouter_installed()
+
+
 def _get_searxng_url() -> str:
     """Resolve SearXNG instance URL from config or environment."""
     url = _conf_str(_tools_web_search_conf().get("searxng_url"), "")
@@ -237,6 +267,8 @@ def configured_providers() -> List[str]:
             result.append(p)
         elif p == "keenable" and _keenable_anonymous_enabled():
             result.append(p)
+        elif p == "webrouter" and webrouter_available():
+            result.append(p)
     return result
 
 def _configured_strategy() -> str:
@@ -271,6 +303,7 @@ class WebSearch(BaseTool):
                     "'noLimit' (default), 'oneDay', 'oneWeek', 'oneMonth', 'oneYear', "
                     "or date range like '2025-01-01..2025-02-01'. "
                     "Honored by bocha/zhipu/qianfan/linkai/deepseek/keenable; ignored by anysearch. "
+                    "WebRouter honors the named ranges only. "
                     "DeepSeek has no native freshness parameter, so it is translated into the "
                     "documented after:/before: query operators."
                 )
@@ -384,7 +417,7 @@ class WebSearch(BaseTool):
             return ToolResult.fail(
                 "Error: No search provider configured. "
                 "Configure one of BOCHA_API_KEY / zhipu_ai_api_key / qianfan_api_key / linkai_api_key / "
-                "deepseek_api_key / anysearch_api_key / SERPLY_API_KEY / TAVILY_API_KEY / OUTCRAWL_API_KEY / FIRECRAWL_API_KEY / CONTEXT_DEV_API_KEY / SPECSTREAM_API_KEY / OLOSTEP_API_KEY / SEARCHAPI_API_KEY / SEARXNG_URL."
+                "deepseek_api_key / anysearch_api_key / SERPLY_API_KEY / TAVILY_API_KEY / OUTCRAWL_API_KEY / FIRECRAWL_API_KEY / CONTEXT_DEV_API_KEY / SPECSTREAM_API_KEY / OLOSTEP_API_KEY / SEARCHAPI_API_KEY / SEARXNG_URL, or turn on tools.web_search.webrouter_enabled."
             )
 
         # Always log the routing decision so multi-provider deployments can
@@ -432,6 +465,8 @@ class WebSearch(BaseTool):
                 return self._search_searxng(query, count)
             if provider == "keenable":
                 return self._search_keenable(query, count, freshness, summary)
+            if provider == "webrouter":
+                return self._search_webrouter(query, count, freshness)
             return ToolResult.fail(f"Error: Unknown provider '{provider}'")
         except requests.Timeout:
             return ToolResult.fail(f"Error: Search request timed out after {DEFAULT_TIMEOUT}s")
@@ -1479,5 +1514,42 @@ class WebSearch(BaseTool):
             })
         return ToolResult.success({
             "query": query, "backend": "searxng",
+            "total": len(results), "count": len(results), "results": results,
+        })
+
+    # ------------------------------------------------------------------
+    # WebRouter
+    # ------------------------------------------------------------------
+
+    def _search_webrouter(self, query: str, count: int, freshness: str) -> ToolResult:
+        """Search through WebRouter, which tries its search backends in turn
+        and falls back to the next one when a call fails or comes back empty."""
+        from web_router import WebRouter
+
+        recency = _WEBROUTER_RECENCY.get(freshness)
+        logger.debug(f"[WebSearch] webrouter: query='{query}', count={count}, recency={recency}")
+        try:
+            # data_apis=False keeps the results to plain web pages.
+            resp = WebRouter().search(
+                query, max_results=count, recency=recency, timeout=DEFAULT_TIMEOUT, data_apis=False,
+            )
+        except Exception as e:
+            # When every backend fails, the message lists each one's error and
+            # can run long, so the agent gets the start of it.
+            logger.warning(f"[WebSearch] WebRouter search failed: {e}")
+            return ToolResult.fail(f"Error: WebRouter search failed - {str(e)[:500]}")
+
+        results = []
+        for it in resp.results:
+            results.append({
+                "title": it.title or "",
+                "url": it.url or "",
+                # `description` is the result snippet; some backends only fill
+                # `content` (page text), so it is cut to snippet length.
+                "snippet": it.description or (it.content or "")[:500],
+                "datePublished": it.published_date or "",
+            })
+        return ToolResult.success({
+            "query": query, "backend": "webrouter",
             "total": len(results), "count": len(results), "results": results,
         })

@@ -1535,7 +1535,7 @@ class ModelsHandler:
 
     # Canonical search provider order. Mirrors PROVIDER_ORDER in
     # agent/tools/web_search/web_search.py — keep them in sync.
-    _SEARCH_PROVIDERS = ("deepseek", "bocha", "qianfan", "zhipu", "cowagent", "linkai", "anysearch", "serply", "tavily", "outcrawl", "firecrawl", "context", "specstream", "olostep", "searchapi", "searxng", "keenable")
+    _SEARCH_PROVIDERS = ("deepseek", "bocha", "qianfan", "zhipu", "cowagent", "linkai", "anysearch", "serply", "tavily", "outcrawl", "firecrawl", "context", "specstream", "olostep", "searchapi", "searxng", "keenable", "webrouter")
 
     _SEARCH_PROVIDER_LABELS = {
         "bocha":   {"zh": "博查", "en": "Bocha"},
@@ -1555,6 +1555,7 @@ class ModelsHandler:
         "searchapi": {"zh": "SearchApi", "en": "SearchApi"},
         "searxng": {"zh": "SearXNG", "en": "SearXNG"},
         "keenable": {"zh": "Keenable", "en": "Keenable"},
+        "webrouter": {"zh": "WebRouter", "en": "WebRouter"},
     }
 
     @classmethod
@@ -1639,11 +1640,12 @@ class ModelsHandler:
         if not isinstance(ws_cfg, dict):
             ws_cfg = {}
 
-        from agent.tools.web_search.web_search import anonymous_opt_in, parse_provider_list
+        from agent.tools.web_search.web_search import anonymous_opt_in, parse_provider_list, webrouter_installed
 
         disabled = set(parse_provider_list(ws_cfg.get("disabled_providers")))
         anonymous_on = anonymous_opt_in(ws_cfg.get("anysearch_anonymous"))
         keenable_anonymous_on = anonymous_opt_in(ws_cfg.get("keenable_anonymous"))
+        webrouter_on = anonymous_opt_in(ws_cfg.get("webrouter_enabled")) and webrouter_installed()
         searxng_url = (ws_cfg.get("searxng_url") or "").strip() if isinstance(ws_cfg, dict) else ""
         providers = []
         configured_ids = []
@@ -1655,6 +1657,10 @@ class ModelsHandler:
             elif pid == "keenable":
                 # Keenable: real key, or an explicit anonymous opt-in.
                 ok = is_real_key(raw_key) or keenable_anonymous_on
+            elif pid == "webrouter":
+                # WebRouter: no key of its own, an explicit opt-in plus the
+                # optional webrouter package.
+                ok = webrouter_on
             elif pid == "searxng":
                 # SearXNG: self-hosted, no auth — available when instance URL is set.
                 ok = bool(searxng_url)
@@ -1673,8 +1679,8 @@ class ModelsHandler:
                 # Frontend uses this hint to decide which credential editor
                 # to surface.
                 # Lets the frontend badge "匿名/anonymous" only in anonymous mode.
-                "anonymous": pid in ("anysearch", "keenable") and ok and not raw_key,
-                "needs_dedicated_key": pid in ("bocha", "anysearch", "serply", "tavily", "outcrawl", "firecrawl", "context", "specstream", "olostep", "searchapi", "keenable"),
+                "anonymous": pid in ("anysearch", "keenable", "webrouter") and ok and not raw_key,
+                "needs_dedicated_key": pid in ("bocha", "anysearch", "serply", "tavily", "outcrawl", "firecrawl", "context", "specstream", "olostep", "searchapi", "keenable", "webrouter"),
                 "needs_url": pid == "searxng",
                 # SearXNG stores an instance URL (not a secret), so echo it back
                 # verbatim to prefill/edit; other providers mask their key.
@@ -2911,13 +2917,17 @@ class ModelsHandler:
 
         bocha, anysearch, serply and keenable own their keys here; anysearch
         and keenable also take an ``anonymous`` flag that, with an empty key,
-        turns on their keyless tier (``<provider>_anonymous``). zhipu/qianfan/
+        turns on their keyless tier (``<provider>_anonymous``). webrouter holds
+        no key: ``anonymous`` sets ``webrouter_enabled``. zhipu/qianfan/
         linkai reuse model-vendor credentials and go through set_provider
         instead.
         """
         provider = (data.get("provider") or "bocha").strip().lower()
-        if provider not in ("bocha", "anysearch", "serply", "tavily", "outcrawl", "firecrawl", "context", "specstream", "olostep", "searchapi", "searxng", "keenable"):
+        if provider not in ("bocha", "anysearch", "serply", "tavily", "outcrawl", "firecrawl", "context", "specstream", "olostep", "searchapi", "searxng", "keenable", "webrouter"):
             return json.dumps({"status": "error", "message": f"unsupported search provider: {provider!r}"})
+
+        if provider == "webrouter":
+            return self._set_webrouter_enabled(data)
 
         if provider in ("anysearch", "keenable"):
             anonymous = data.get("anonymous", False)
@@ -2966,6 +2976,36 @@ class ModelsHandler:
             self._write_file_config(file_cfg)
             logger.info(f"[ModelsHandler] search credential set: {key_field}={'***' if api_key else ''}")
             return json.dumps({"status": "success", "provider": provider})
+
+    def _set_webrouter_enabled(self, data: dict) -> str:
+        """Turn the WebRouter search provider on or off (``webrouter_enabled``).
+
+        WebRouter has no key of its own: it reads provider keys from the
+        environment, so a key sent here is refused rather than stored.
+        """
+        from agent.tools.web_search.web_search import webrouter_installed
+
+        api_key = (data.get("api_key") or "").strip() if isinstance(data.get("api_key"), str) else ""
+        if api_key:
+            return json.dumps({"status": "error", "message": (
+                "WebRouter takes no API key here; it reads provider keys such as "
+                "TAVILY_API_KEY from the environment. Save with the field empty."
+            )})
+        enabled = bool(data.get("anonymous", False))
+        if enabled and not webrouter_installed():
+            return json.dumps({"status": "error", "message": (
+                "The webrouter package is not installed. Run: pip install webrouter (Python 3.11+)."
+            )})
+
+        local_config = conf()
+        file_cfg = self._read_file_config()
+        self._set_nested_namespace_value(local_config, "tools", "web_search", "webrouter_enabled", enabled)
+        self._set_nested_namespace_value(file_cfg, "tools", "web_search", "webrouter_enabled", enabled)
+        if enabled:
+            self._set_search_provider_disabled(local_config, file_cfg, "webrouter", False)
+        self._write_file_config(file_cfg)
+        logger.info(f"[ModelsHandler] search credential set: webrouter_enabled={enabled}")
+        return json.dumps({"status": "success", "provider": "webrouter"})
 
     def _handle_set_search_provider_enabled(self, data: dict) -> str:
         """Switch a search provider on/off without touching its credential.

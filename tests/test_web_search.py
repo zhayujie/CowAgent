@@ -90,7 +90,7 @@ class TestProviderOrder(unittest.TestCase):
         self.assertEqual(
             web_search_module.PROVIDER_ORDER,
             ("deepseek", "bocha", "qianfan", "zhipu", "cowagent", "linkai", "anysearch", "serply", "tavily", "outcrawl", "firecrawl", "context",
-             "specstream", "olostep", "searchapi", "searxng", "keenable"),
+             "specstream", "olostep", "searchapi", "searxng", "keenable", "webrouter"),
         )
 
     def test_web_console_provider_list_stays_in_sync(self):

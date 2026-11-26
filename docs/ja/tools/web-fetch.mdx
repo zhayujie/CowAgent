@@ -75,6 +75,29 @@ Olostep はブラウザでページを描画して Markdown として返すた�
 取得ごとに Olostep のクレジットを消費するためオプトイン制です。SSRF ガードは引き続き適用され、
 ドキュメント URL（PDF、Word など）は引き続きローカルでダウンロード・解析されます。
 
+## WebRouter バックエンド（オプトイン）
+
+`tools.web_fetch.provider` を `"webrouter"` に設定すると、
+[WebRouter](https://docs.webrouter.net) 経由で取得します。WebRouter はオープンソースの
+Python ライブラリで、複数の抽出 API を順に試し、ページを Markdown として返します。
+Key は不要で、Key がない場合は Key 不要の抽出バックエンドを使用します。
+
+```json
+{
+  "tools": {
+    "web_fetch": {
+      "provider": "webrouter"
+    }
+  }
+}
+```
+
+このバックエンドには `webrouter` パッケージ（`pip install webrouter`、Python 3.11+）が必要です。
+WebRouter はプロセスの環境変数にあるプロバイダーの Key（`TAVILY_API_KEY`、`FIRECRAWL_API_KEY` など）も読み取って
+そのプロバイダーをルーティングに加えるため、そこへ送られた取得はその Key に課金されます。ページはこれらのホスト型 API が取得し、
+このマシンからは取得しません。SSRF ガードは引き続きこの URL に適用され、ドキュメント URL（PDF、Word など）は
+引き続きローカルでダウンロード・解析されます。
+
 <Note>
   デフォルトの `direct` バックエンドは静的 HTML のみ取得できます。JavaScript レンダリングが必要なページ（SPA など）は、上記の DeepSeek または Olostep バックエンドに切り替えるか、`browser` ツールを使用してください。
 </Note>
