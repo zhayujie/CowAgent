@@ -14,6 +14,8 @@ jobs:
   test:
     name: pytest (${{ matrix.python }})
     runs-on: ubuntu-latest
+    # The suite takes ~4 minutes; a hung test otherwise holds the runner for an hour.
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -36,7 +38,8 @@ jobs:
           python -m pip install -r requirements.txt
 
       - name: Run backend test suite
-        run: python -m pytest tests/ -q
+        # Dump every thread's stack if a single test runs longer than 2 minutes.
+        run: python -m pytest tests/ -q -o faulthandler_timeout=120
 
   lint:
     name: ruff (F-class gate)
