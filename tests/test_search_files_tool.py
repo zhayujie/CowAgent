@@ -388,6 +388,43 @@ def test_no_matches_returns_empty_success_not_error(tmp_path):
     assert result.result["match_count"] == 0
 
 
+@pytest.mark.parametrize("pattern", [r"^$", r"^\s*$"])
+@pytest.mark.parametrize("mode", ["content", "files", "count"])
+@pytest.mark.parametrize("content, expected_lines", [
+    (b"", []),
+    (b"text", []),
+    (b"text\n", []),
+    (b"text\r\n", []),
+    (b"\n", [1]),
+    (b"\n\n", [1, 2]),
+    (b"text\n\n", [2]),
+    (b"text\n\nlast", [2]),
+    (b"\r\n", [1]),
+    (b"text\r\n\r\n", [2]),
+])
+def test_python_blank_line_patterns_only_match_real_lines(
+    tmp_path, pattern, mode, content, expected_lines
+):
+    (tmp_path / "file.txt").write_bytes(content)
+    tool = _make_tool(tmp_path)
+    result = tool.execute({"pattern": pattern, "output_mode": mode})
+
+    assert result.status == "success"
+    assert result.result["match_count"] == (
+        int(bool(expected_lines)) if mode == "files" else len(expected_lines)
+    )
+    if mode == "content":
+        assert _matches(result) == [
+            {"file": "file.txt", "line": line, "match": ""} for line in expected_lines
+        ]
+    elif mode == "files":
+        assert result.result["files"] == (["file.txt"] if expected_lines else [])
+    else:
+        assert result.result["counts"] == (
+            [{"file": "file.txt", "count": len(expected_lines)}] if expected_lines else []
+        )
+
+
 def test_file_glob_filters_results(tmp_path):
     _write(tmp_path, "match.py", "TARGET\n")
     _write(tmp_path, "match.txt", "TARGET\n")
