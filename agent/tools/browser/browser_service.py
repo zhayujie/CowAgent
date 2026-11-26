@@ -612,31 +612,7 @@ class BrowserService:
                 continue
             if task is None:
                 break
-            fn, args, kwargs, result_slot = task
-            # Keep consuming instead of exiting, so no caller is left waiting on
-            # a queue nobody reads; close() on the next request does the teardown.
-            if self._driver_connection_lost():
-                result_slot["error"] = RuntimeError(
-                    "Browser connection lost; it will be relaunched on the next request."
-                )
-                result_slot["event"].set()
-                self._needs_restart = True
-                continue
-            try:
-                result_slot["value"] = fn(*args, **kwargs)
-            except Exception as e:
-                result_slot["error"] = e
-                if _is_browser_dead_error(e):
-                    self._needs_restart = True
-                    logger.warning(
-                        f"[Browser] Detected closed page/context ({e}); "
-                        "will relaunch on next request."
-                    )
-            finally:
-                result_slot["event"].set()
-            if self._driver_connection_lost():
-                self._needs_restart = True
-                logger.warning("[Browser] Driver connection lost; will relaunch on next request.")
+            self._run_task(task)
 
         if self._thread is me or self._thread is None:
             self._shutdown_browser()
@@ -646,6 +622,42 @@ class BrowserService:
             logger.info("[Browser] Abandoned thread skipped browser shutdown")
         self._drain_queue(RuntimeError("Browser thread stopped"), task_queue)
         logger.info("[Browser] Background thread exited")
+
+    def _run_task(self, task) -> None:
+        """Run one queued task and publish its outcome on the caller's slot."""
+        fn, args, kwargs, result_slot = task
+        if result_slot.get("abandoned"):
+            # The caller already hit its budget and was told the action failed.
+            # These calls are not idempotent — running a click or a form submit
+            # now would perform it a second time once the model retries.
+            logger.warning(
+                "[Browser] Dropping a task whose caller timed out before it started"
+            )
+            return
+        # Keep consuming instead of exiting, so no caller is left waiting on
+        # a queue nobody reads; close() on the next request does the teardown.
+        if self._driver_connection_lost():
+            result_slot["error"] = RuntimeError(
+                "Browser connection lost; it will be relaunched on the next request."
+            )
+            result_slot["event"].set()
+            self._needs_restart = True
+            return
+        try:
+            result_slot["value"] = fn(*args, **kwargs)
+        except Exception as e:
+            result_slot["error"] = e
+            if _is_browser_dead_error(e):
+                self._needs_restart = True
+                logger.warning(
+                    f"[Browser] Detected closed page/context ({e}); "
+                    "will relaunch on next request."
+                )
+        finally:
+            result_slot["event"].set()
+        if self._driver_connection_lost():
+            self._needs_restart = True
+            logger.warning("[Browser] Driver connection lost; will relaunch on next request.")
 
     def _driver_connection_lost(self) -> bool:
         """True once the connection to the Playwright driver has dropped.
@@ -1018,6 +1030,10 @@ class BrowserService:
         # Timeout prevents permanent hang if the background thread crashes
         completed = result_slot["event"].wait(timeout=_BROWSER_OP_BUDGET_S)
         if not completed:
+            # The task may still be sitting in the queue. It has not run yet, so
+            # let the worker skip it rather than performing an action we just
+            # reported as failed — a retry would otherwise submit/click twice.
+            result_slot["abandoned"] = True
             if self._driver_connection_lost():
                 self._needs_restart = True
             raise TimeoutError(f"Browser operation timed out ({_BROWSER_OP_BUDGET_S}s)")
