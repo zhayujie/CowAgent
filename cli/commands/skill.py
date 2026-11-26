@@ -121,7 +121,11 @@ def _parse_gitlab_url(url: str):
       https://gitlab.com/owner/repo/-/tree/branch
       https://gitlab.com/owner/repo/-/tree/branch/path/to/skill
     """
-    m = _GITLAB_URL_RE.match(url.strip())
+    url = url.strip()
+    if url.startswith(("http://gitlab.com/", "https://gitlab.com/")):
+        # GitLab's tree links carry ?ref_type=heads
+        url = urlparse(url)._replace(query="", fragment="").geturl()
+    m = _GITLAB_URL_RE.match(url)
     if not m:
         return None
     owner, repo, branch, subpath = m.groups()
