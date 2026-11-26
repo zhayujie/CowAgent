@@ -159,7 +159,7 @@ CowAgent 支持国内外主流厂商的大语言模型。**文本对话、图像
 | [小米 MiMo](https://docs.cowagent.ai/zh/models/mimo) | mimo-v2.6-pro / v2.6-flash | ✅ | ✅ | | ✅ | ✅ | |
 | [CowAgent](https://docs.cowagent.ai/zh/models/cowagent) | 一个 Key 接入 DeepSeek / Claude / GPT 等 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | [LinkAI](https://docs.cowagent.ai/zh/models/linkai) | LinkAI 平台模型接入 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| [自定义](https://docs.cowagent.ai/zh/models/custom) | 本地模型 / 三方代理 | ✅ | | | | | |
+| [自定义](https://docs.cowagent.ai/zh/models/custom) | 本地模型 / 三方代理 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 > 推荐通过 Web 控制台在线配置，无需手动编辑文件。手动配置请参考各厂商文档，详见 [模型概览](https://docs.cowagent.ai/zh/models)。
 
