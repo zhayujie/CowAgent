@@ -73,11 +73,6 @@ function nearBottom(el: HTMLElement): boolean {
   return el.scrollHeight - el.scrollTop - el.clientHeight < 80
 }
 
-function isAppend(prev: SessionItem[], next: SessionItem[]): boolean {
-  if (prev.length === 0 || next.length <= prev.length) return false
-  return prev.every((s, i) => next[i].session_id === s.session_id)
-}
-
 type SpaceGroup = {
   key: string
   label: string
@@ -303,23 +298,24 @@ const SessionList: React.FC = () => {
   }, [activeId, sessions, groupMode])
 
   // Scroll the active session into view after its group is expanded/rendered.
-  // A reveal is requested when the active session changes or the list is
-  // reshuffled (switching/creating a project inserts a new group, often at the
-  // bottom). It stays pending until the row is actually rendered, so a group
-  // auto-expanded above still gets scrolled to. Appending the next page or the
-  // user toggling a group never requests one, so the list stays where it is.
-  // `center` makes a bottom group clearly visible rather than just peeking
-  // above the fold.
-  const lastScrollDeps = useRef<{ activeId: string; sessions: SessionItem[] } | null>(null)
+  // A reveal is requested only on mount, when the active session changes, or
+  // when it moves to another space (switching/creating a project inserts a new
+  // group, often at the bottom). Edits to other rows, paging and group toggles
+  // leave the list where it is. The request stays pending until the row is
+  // rendered, so a group auto-expanded above still gets scrolled to; the user
+  // scrolling drops it. `center` makes a bottom group clearly visible rather
+  // than just peeking above the fold.
+  const lastReveal = useRef<{ activeId: string; space: string | null } | null>(null)
   useEffect(() => {
-    const prev = lastScrollDeps.current
-    lastScrollDeps.current = { activeId, sessions }
-    if (
-      !prev ||
-      prev.activeId !== activeId ||
-      (prev.sessions !== sessions && !isAppend(prev.sessions, sessions))
-    )
+    const active = sessions.find((s) => s.session_id === activeId)
+    const space = active ? active.project?.path || DEFAULT_SPACE_KEY : null
+    const prev = lastReveal.current
+    const sameActive = prev?.activeId === activeId
+    // An unknown space (row not loaded yet) is not a move: finding the row on a
+    // later page must not yank the user there.
+    if (!sameActive || (space !== null && prev!.space !== null && prev!.space !== space))
       revealPending.current = true
+    lastReveal.current = { activeId, space: space ?? (sameActive ? prev!.space : null) }
     if (!revealPending.current) return
     const el = activeRef.current
     if (!el) return
@@ -406,6 +402,7 @@ const SessionList: React.FC = () => {
         ref={scrollRef}
         className="flex-1 overflow-y-auto px-2 pb-2 pt-1.5"
         onScroll={(e) => {
+          revealPending.current = false
           if (nearBottom(e.currentTarget) && hasMore && !loading) loadMore()
         }}
       >
