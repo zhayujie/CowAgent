@@ -10,6 +10,18 @@ from agent.tools.base_tool import BaseTool
 from agent.tools.utils.credentials import DENIED_MESSAGE, is_credential_path
 
 
+def _split_lines(content: str) -> list:
+    """Split into lines, dropping the empty element after a trailing newline.
+
+    Without this a file ending in "\n" reports one line too many and includes a
+    phantom blank line at the end. Matches the read tool's split_lines helper.
+    """
+    lines = content.split("\n")
+    if lines and lines[-1] == "":
+        lines.pop()
+    return lines
+
+
 class MemoryGetTool(BaseTool):
     """Tool for reading memory file contents"""
     
@@ -139,7 +151,7 @@ class MemoryGetTool(BaseTool):
                 return ToolResult.fail(f"Error: {path} is not a regular file")
             
             content = file_path.read_text(encoding='utf-8')
-            lines = content.split('\n')
+            lines = _split_lines(content)
             
             # Handle line range
             if start_line < 1:
@@ -158,10 +170,14 @@ class MemoryGetTool(BaseTool):
             # Add metadata
             total_lines = len(lines)
             shown_lines = len(selected_lines)
-            
+            if shown_lines:
+                line_span = f"{start_line}-{start_line + shown_lines - 1}"
+            else:
+                line_span = "none"
+
             output = [
                 f"File: {path}",
-                f"Lines: {start_line}-{start_line + shown_lines - 1} (total: {total_lines})",
+                f"Lines: {line_span} (total: {total_lines})",
                 "",
                 result
             ]
