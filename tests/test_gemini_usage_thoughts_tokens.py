@@ -95,3 +95,27 @@ def test_sync_response_without_usage_metadata_keeps_the_usage_empty():
     result = _bot()._handle_gemini_rest_sync_response(_SyncResponse(None), "gemini-2.5-flash")
 
     assert result["usage"] == {}
+
+
+# Gemini counts cached prompt tokens inside promptTokenCount.
+CACHED_USAGE = dict(USAGE, cachedContentTokenCount=24)
+CACHED_OPENAI_USAGE = {
+    "prompt_tokens": 31,
+    "completion_tokens": 50,
+    "total_tokens": 81,
+    "prompt_tokens_details": {"cached_tokens": 24},
+}
+
+
+def test_sync_response_reports_cached_prompt_tokens():
+    result = _bot()._handle_gemini_rest_sync_response(_SyncResponse(CACHED_USAGE), "gemini-2.5-flash")
+
+    assert result["usage"] == CACHED_OPENAI_USAGE
+
+
+def test_stream_final_chunk_reports_cached_prompt_tokens(monkeypatch):
+    monkeypatch.setitem(USAGE, "cachedContentTokenCount", 24)
+
+    chunks = list(_bot()._handle_gemini_rest_stream_response(_StreamResponse(), "gemini-2.5-flash"))
+
+    assert chunks[-1]["usage"] == CACHED_OPENAI_USAGE
