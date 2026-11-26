@@ -51,6 +51,29 @@ def test_existing_feishu_image_keys_and_regular_links_are_untouched():
     assert feishu_static_card.resolve_markdown_images(markdown, unexpected) == markdown
 
 
+@pytest.mark.parametrize("markdown, url, expected", [
+    (
+        "![plot](https://upload.wikimedia.org/a/Function_(mathematics).png) done",
+        "https://upload.wikimedia.org/a/Function_(mathematics).png",
+        "![plot](img_v2_plot) done",
+    ),
+    (
+        "![plot](https://cdn.example.com/plot.png) (source)",
+        "https://cdn.example.com/plot.png",
+        "![plot](img_v2_plot) (source)",
+    ),
+])
+def test_remote_image_url_may_contain_parentheses(markdown, url, expected):
+    calls = []
+
+    def upload(target):
+        calls.append(target)
+        return "img_v2_plot"
+
+    assert feishu_static_card.resolve_markdown_images(markdown, upload) == expected
+    assert calls == [url]
+
+
 def test_failed_remote_image_upload_degrades_to_readable_alt_text():
     markdown = "Result: ![latency chart](https://cdn.example.com/chart.png)"
 
