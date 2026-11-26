@@ -428,3 +428,22 @@ def find_first_user_text_block(turns: List[Dict]):
                     if isinstance(block, dict) and block.get("type") == "text":
                         return block
     return None
+
+
+def merge_run_history(base: List[Dict], current: List[Dict], run_messages: List[Dict]) -> List[Dict]:
+    """Return the history an Agent keeps when a run ends.
+
+    *base* is ``agent.messages`` as the run copied it, *current* is
+    ``agent.messages`` now, and *run_messages* is the executor's history
+    (possibly trimmed, plus this run's messages).
+
+    The run works on a copy, so other writers can append to
+    ``agent.messages`` while it is in flight (a scheduled task's output, see
+    ``AgentBridge.remember_scheduled_output``). Replacing the history with
+    *run_messages* alone would drop them, so messages appended after *base*
+    are kept after the run's own. Anything else (an untouched history, or one
+    rewritten rather than appended to) keeps the run's history, as before.
+    """
+    if len(current) > len(base) and all(a is b for a, b in zip(current, base)):
+        return list(run_messages) + list(current[len(base):])
+    return list(run_messages)
