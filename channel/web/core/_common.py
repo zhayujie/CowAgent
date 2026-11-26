@@ -635,7 +635,9 @@ def _build_preview_url(abs_path: str) -> str:
 # for every agent. Only *relative* refs are touched — absolute paths, http(s)
 # URLs, file:// and already-routed /api or /preview links are left untouched,
 # so nothing that worked before (including the default agent) changes.
-_MD_IMAGE_RE = re.compile(r"(!\[[^\]]*\]\()([^)\s]+)(\s*(?:\"[^\"]*\")?\s*\))")
+_MD_IMAGE_RE = re.compile(
+    r"(!\[[^\]]*\]\()((?:[^()\s]|\([^()\s]*\))+)(\s*(?:\"[^\"]*\")?\s*\))"
+)
 _HTML_IMG_SRC_RE = re.compile(r"(<img\b[^>]*?\bsrc=[\"'])([^\"']+)([\"'])", re.IGNORECASE)
 
 
