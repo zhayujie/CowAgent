@@ -34,6 +34,8 @@ description: "web_search ツールはリアルタイムの情報やニュース�
 
 SerpApi は Google の自然検索結果を 1 ページだけ取得し、`count` 件まで（最大 10 件）返します。ページ送り、要約の生成、`freshness` による絞り込みは行いません。呼び出しには SerpApi アカウントの利用枠を使用します。キーを追加しても既存の自動選択順は変わりません。
 
+検索と Extract はリクエスト URL に `api_key` を含めます。HTTP クライアントやプロキシのログには、警告も含めて URL 全体が記録されることがあるため、保存や共有の前にキーを取り除いてください。直接取得と同じく、CowAgent はチャンクを読み取るたびに転送期限を確認します。サーバーが少しずつデータを送り続ける場合は、期限を超えることがあります。
+
 Context.dev はクエリに関連する Highlights をスニペットとして取得します。利用できない場合は検索結果の説明と明示し、不完全なレスポンスはエラーにします。`freshness` と `summary` は無視され、呼び出しには設定したアカウントのクレジットを使用します。
 
 Bocha、Serply、Tavily については専用キーを別途設定する必要があります。智谱、百度 Qianfan、CowAgent、LinkAI、DeepSeek は対応するモデルの API キーをそのまま流用でき、モデルを設定すれば同時に検索機能も利用可能になります。SearXNG はセルフホスト型で、インスタンス URL のみ設定が必要です。AnySearch は Key なし利用がオプトイン方式です。`tools.web_search.anysearch_anonymous` を `true` に設定（またはコンソールの「検索」パネルで Key を空のまま保存）すると匿名で呼び出せます。`tools.web_search.anysearch_api_key`（未設定時は環境変数 `ANYSEARCH_API_KEY` にフォールバック）を設定した場合はオプトイン不要で、利用枠と権限は AnySearch サーバー側に従います。Keenable はオプトイン方式です。`tools.web_search.keenable_anonymous` を `true` に設定（またはコンソールの「検索」パネルで Key を空のまま保存）すると、IP 単位のレート制限（10 リクエスト/秒、1000 リクエスト/時）がある公開エンドポイントを呼び出します。任意の `keenable_api_key`（または `KEENABLE_API_KEY`）を設定すると制限が解除され、オプトインは不要です。

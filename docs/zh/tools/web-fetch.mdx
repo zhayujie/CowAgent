@@ -77,6 +77,8 @@ SSRF 防护仍然生效：内网、回环及云元数据地址在请求发出前
 该后端复用 `tools.web_search.serpapi_api_key`，未设置时读取 `SERPAPI_API_KEY`。
 仅配置密钥不会改变默认的 `"direct"` 模式。Extract 使用账户额度，不执行 JavaScript。
 Extract 获取页面的默认超时时间为 30 秒，CowAgent 的读取超时时间为 35 秒，以便接收结果。
+与直接抓取一样，CowAgent 在读取每个数据块后检查总传输时限，而不是在每个字节到达时检查。
+Extract 通过请求 URL 传递 `api_key`。保存或分享 HTTP 客户端或代理的日志（包括警告）前，请隐去密钥。
 CowAgent 在发送前按配置检查 URL；PDF 等文档链接仍由本地下载和解析。
 
 <Note>

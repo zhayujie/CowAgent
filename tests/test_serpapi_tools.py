@@ -1,11 +1,11 @@
 """Offline contract tests for the SerpApi backends behind web_search and web_fetch."""
 
+import gzip
 import io
 import json
-import logging
 import os
 import socket
-from http import client
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 from urllib.parse import parse_qs, quote_plus, urlsplit
 
@@ -31,7 +31,9 @@ def cfg(monkeypatch):
         monkeypatch.setattr(module, "conf", lambda: config)
     monkeypatch.setattr("models.cowagent_provider.resolve_cowagent_credentials", lambda: ("", ""))
     monkeypatch.setattr(socket, "getaddrinfo", Mock(side_effect=AssertionError("unexpected DNS lookup")))
-    with patch.dict(os.environ, {"SERPAPI_API_KEY": KEY, "WEB_SECURITY_SSRF_PROTECTION": "true"}, clear=True):
+    with patch.dict(os.environ, {
+        "SERPAPI_API_KEY": KEY, "WEB_SECURITY_SSRF_PROTECTION": "true", "NO_PROXY": "*",
+    }, clear=True):
         yield config
 
 
@@ -46,14 +48,17 @@ def http(monkeypatch):
 
     monkeypatch.setattr(connection.HTTPSConnection, "connect", connect)
 
-    def respond(payload=None, status=200, raw=None, headers=b"", header_delay=0):
+    def respond(payload=None, status=200, raw=None, headers=b"", header_delay=0, body_error=None):
         body = raw if raw is not None else json.dumps(payload).encode()
         reply = f"HTTP/1.1 {status} Test\r\nContent-Length: {len(body)}\r\n".encode() + headers + b"\r\n" + body
 
         def makefile(*args):
+            stream = io.BytesIO(reply)
             if header_delay and header_delay > wire.settimeout.call_args.args[0]:
-                raise socket.timeout("response not ready")
-            return io.BytesIO(reply)
+                stream.readline = Mock(side_effect=socket.timeout("response not ready"))
+            if body_error is not None:
+                stream.read = Mock(side_effect=body_error)
+            return stream
 
         wire.makefile.side_effect = makefile
         return wire
@@ -80,6 +85,11 @@ def run_search(count=10):
 
 def run_fetch(url=URL):
     return fetch.WebFetch().execute({"url": url})
+
+
+def assert_key_redacted(message):
+    assert KEY not in message
+    assert quote_plus(KEY) not in message
 
 
 @pytest.mark.parametrize("count,expected", [(2, 2), (50, 10)])
@@ -170,35 +180,70 @@ def test_failures_never_echo_key(cfg, http, run, payload, status, raw, caplog, c
     conn = http(payload, status, raw)
     result = run()
     assert result.status == "error"
-    assert KEY not in result.result + caplog.text + capsys.readouterr().out
+    app_logs = "".join(record.getMessage() for record in caplog.records if record.name == "log")
+    assert_key_redacted(result.result + app_logs + capsys.readouterr().out)
     conn.sendall.assert_called_once()
 
 
 @pytest.mark.parametrize("run", [run_search, run_fetch])
-def test_connection_exception_is_sanitized(cfg, http, run, caplog):
-    conn = http()
-    conn.makefile.side_effect = OSError("failed: /search.json?api_key=" + quote_plus(KEY))
+@pytest.mark.parametrize("exception,expected", [
+    (requests.ConnectionError, "Failed to connect"), (requests.ConnectTimeout, "connection timed out after 30s"),
+])
+def test_connection_exception_is_sanitized(cfg, run, monkeypatch, caplog, exception, expected):
+    error = exception(f"Could not read /search.json?api_key={quote_plus(KEY)} ({KEY})")
+    monkeypatch.setattr(requests.adapters.HTTPAdapter, "send", Mock(side_effect=error))
     result = run()
-    assert result.status == "error" and quote_plus(KEY) not in result.result + caplog.text
-    conn.close.assert_called()
+    assert result.status == "error" and expected in result.result
+    assert_key_redacted(result.result + caplog.text)
+
+
+def test_invalid_ca_bundle_is_a_sanitized_fetch_error(cfg, http, monkeypatch, tmp_path):
+    monkeypatch.setenv("REQUESTS_CA_BUNDLE", str(tmp_path / quote_plus(KEY)))
+    wire = http()
+    result = run_fetch()
+    assert result.status == "error" and quote_plus(KEY) not in result.result
+    wire.connect.assert_not_called()
 
 
 def test_extract_timeout_does_not_retry(cfg, http):
     conn = http({"markdown": "too late"}, header_delay=36)
     result = run_fetch()
-    assert result.status == "error" and "timed out after 35s" in result.result and KEY not in result.result
+    assert result.status == "error" and "timed out after 35s" in result.result
+    assert_key_redacted(result.result)
     conn.sendall.assert_called_once()
 
 
+@pytest.mark.parametrize("run,exception,expected", [
+    (run_search, socket.timeout, "timed out after 30s"),
+    (run_fetch, socket.timeout, "timed out after 35s"),
+    (run_fetch, ConnectionResetError, "Failed to connect to or read"),
+])
+def test_stalled_or_broken_body_closes_without_leaking_the_key(cfg, http, run, exception, expected):
+    wire = http(raw=b"body", body_error=exception(quote_plus(KEY)))
+    result = run()
+    assert result.status == "error" and expected in result.result
+    assert_key_redacted(result.result)
+    wire.close.assert_called()
+
+
+def test_extract_checks_transfer_deadline_when_a_chunk_arrives(cfg, http, monkeypatch):
+    from common import media_download
+
+    monkeypatch.setattr(media_download, "time", SimpleNamespace(monotonic=Mock(side_effect=[0, 61])))
+    wire = http({"markdown": "too late"})
+    result = run_fetch()
+    assert result.status == "error" and "timed out after 60s" in result.result
+    assert_key_redacted(result.result)
+    wire.close.assert_called()
+
+
 @pytest.mark.parametrize("bypass", [False, True])
-def test_requests_proxy_ca_and_debug_redaction(cfg, http, monkeypatch, tmp_path, capsys, caplog, bypass):
+def test_requests_honors_proxy_and_ca_settings(cfg, http, monkeypatch, tmp_path, bypass):
     ca_bundle = tmp_path / "custom-ca.pem"
     ca_bundle.touch()  # TLS is stubbed; inspect the actual connection's selected CA path.
     monkeypatch.setenv("HTTPS_PROXY", "http://proxy.invalid:3128")
     monkeypatch.setenv("NO_PROXY", "serpapi.com" if bypass else "")
     monkeypatch.setenv("REQUESTS_CA_BUNDLE", str(ca_bundle))
-    monkeypatch.setattr(client.HTTPConnection, "debuglevel", 1)
-    caplog.set_level(logging.DEBUG, logger="urllib3.connectionpool")
     wire = http({"organic_results": []})
     result = run_search()
     assert result.status == "success"
@@ -207,10 +252,6 @@ def test_requests_proxy_ca_and_debug_redaction(cfg, http, monkeypatch, tmp_path,
     assert tunnel == (None if bypass else "serpapi.com")
     assert ca == str(ca_bundle)
     assert quote_plus(KEY).encode() in wire.sendall.call_args.args[0]
-    assert "GET /search.json?" in caplog.text
-    captured = capsys.readouterr()
-    for secret in (KEY, quote_plus(KEY)):
-        assert secret not in captured.out + captured.err + caplog.text
 
 
 def test_key_is_not_attached_to_unrelated_requests(cfg, http):
@@ -303,3 +344,28 @@ def test_fetch_download_and_output_limits(cfg, http, monkeypatch):
     monkeypatch.setattr(fetch, "MAX_FILE_SIZE", 32)
     http({"markdown": "x" * 100})
     assert run_fetch().status == "error"
+
+
+def test_reads_encoded_json_and_caps_the_decoded_body(cfg, http, monkeypatch):
+    data = json.dumps({"markdown": "x" * 1024}).encode()
+    compressed = gzip.compress(data)
+    wire = http(raw=compressed, headers=b"Content-Encoding: gzip\r\n")
+    assert run_fetch().status == "success"
+    wire.close.reset_mock()
+    monkeypatch.setattr(fetch, "MAX_FILE_SIZE", len(compressed))
+    result = run_fetch()
+    assert result.status == "error" and "download limit" in result.result
+    assert_key_redacted(result.result)
+    wire.close.assert_called()
+
+
+def test_fetch_stops_reading_at_the_limit_and_closes_the_stream(cfg, monkeypatch):
+    monkeypatch.setattr(fetch, "MAX_FILE_SIZE", 32)
+    response = requests.Response()
+    response.status_code = 200
+    response.raw = Mock(spec=["read", "close"])
+    response.raw.read.side_effect = [b"x" * 65536, AssertionError("read past the cap")]
+    monkeypatch.setattr(requests.adapters.HTTPAdapter, "send", Mock(return_value=response))
+    result = run_fetch()
+    assert result.status == "error" and "download limit" in result.result
+    response.raw.close.assert_called_once()
