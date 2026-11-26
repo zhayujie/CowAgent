@@ -208,6 +208,10 @@ def truncate_tail(content: str, max_lines: Optional[int] = None, max_bytes: Opti
             max_bytes=max_bytes
         )
     
+    # Don't let a trailing newline hide the oversized-line fallback.
+    if len(lines) > 1 and lines[-1] == "" and len(lines[-2].encode('utf-8')) > max_bytes:
+        lines.pop()
+
     # Work backwards from the end
     output_lines_arr = []
     output_bytes_count = 0

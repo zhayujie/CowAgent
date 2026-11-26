@@ -437,7 +437,8 @@ SAFETY:
 
                 if truncation.last_line_partial:
                     # Edge case: last line alone > 30KB
-                    last_line = output.split('\n')[-1] if output else ""
+                    trimmed = output[:-1] if output.endswith('\n') else output
+                    last_line = trimmed.split('\n')[-1]
                     last_line_size = format_size(len(last_line.encode('utf-8')))
                     output_text += f"\n\n[Showing last {format_size(truncation.output_bytes)} of line {end_line} (line is {last_line_size}). Full output: {temp_file_path}]"
                 elif truncation.truncated_by == "lines":
