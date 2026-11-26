@@ -49,6 +49,16 @@ V4_AGENT_MAX_TOKENS = 128 * 1024
 STREAM_KEEPALIVE_MAX_SECONDS = 180
 
 
+def _estimate_completion_tokens(text: str) -> int:
+    """Rough output size for a reply whose gateway reported no `usage`.
+
+    Only used to keep such a reply out of the error path: `reply()` treats
+    `completion_tokens == 0` as "nothing was generated". Never exact, and never
+    preferred over a reported count.
+    """
+    return max(1, len(text) // 2)
+
+
 class DeepSeekBot(Bot, OpenAICompatibleBot):
     def __init__(self):
         super().__init__()
@@ -197,10 +207,28 @@ class DeepSeekBot(Bot, OpenAICompatibleBot):
             )
             if res.status_code == 200:
                 response = res.json()
+                choices = response.get("choices") or []
+                content = ""
+                if choices:
+                    content = (choices[0].get("message") or {}).get("content") or ""
+                # `usage` is bookkeeping the gateway may leave out (a self-hosted
+                # `deepseek_api_base` proxy, an OpenAI-compatible shim). Indexing
+                # it raised KeyError, the retry loop then re-ran the same call
+                # three times, and a reply the model had already produced was
+                # replaced with "我现在有点累了" — `completion_tokens == 0` is how
+                # reply() recognises an error, so an unreported count has to be
+                # estimated rather than defaulted to 0.
+                usage = response.get("usage")
+                usage = usage if isinstance(usage, dict) else {}
+                total_tokens = usage.get("total_tokens") or 0
+                completion_tokens = usage.get("completion_tokens") or 0
+                if content and not completion_tokens:
+                    completion_tokens = _estimate_completion_tokens(content)
+                    total_tokens = total_tokens or completion_tokens
                 return {
-                    "total_tokens": response["usage"]["total_tokens"],
-                    "completion_tokens": response["usage"]["completion_tokens"],
-                    "content": response["choices"][0]["message"]["content"],
+                    "total_tokens": total_tokens,
+                    "completion_tokens": completion_tokens,
+                    "content": content,
                 }
             else:
                 error = read_error_body(res)
