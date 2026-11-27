@@ -85,6 +85,36 @@ class TestGetPcmFromWav(unittest.TestCase):
         self.assertEqual(closed, [True], "wave handle left open when the read raised")
 
 
+class TestAnyToWavSilkWithoutPydub(unittest.TestCase):
+    """Silk decodes with pysilk alone, so pydub/ffmpeg must not be required."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory(prefix="audio-convert-")
+        self.addCleanup(self._tmp.cleanup)
+        self.src = os.path.join(self._tmp.name, "wx_1.silk")
+        self.dst = os.path.join(self._tmp.name, "wx_1.wav")
+        with open(self.src, "wb") as f:
+            f.write(b"SILK")
+
+    def test_silk_converts_when_pydub_is_missing(self):
+        pysilk = SimpleNamespace(
+            decode_file=lambda path, to_wav=False, sample_rate=None: b"RIFF-wav"
+        )
+        with patch.object(audio_convert, "_pydub_available", False), patch.object(
+            audio_convert, "pysilk", pysilk, create=True
+        ):
+            audio_convert.any_to_wav(self.src, self.dst)
+        with open(self.dst, "rb") as f:
+            self.assertEqual(f.read(), b"RIFF-wav")
+
+    def test_other_formats_still_require_pydub(self):
+        mp3 = os.path.join(self._tmp.name, "a.mp3")
+        open(mp3, "wb").close()
+        with patch.object(audio_convert, "_pydub_available", False):
+            with self.assertRaises(ImportError):
+                audio_convert.any_to_wav(mp3, self.dst)
+
+
 class _FakeSegment:
     """Minimal stand-in for pydub's AudioSegment."""
 
