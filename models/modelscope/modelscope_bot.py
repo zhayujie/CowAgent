@@ -132,10 +132,19 @@ class ModelScopeBot(Bot):
             
             if res.status_code == 200:
                 response = res.json()
+                # The caller rebuilds an OpenAI-shaped reply from these keys; a
+                # tool-call turn has `content: null` and the calls under
+                # `message.tool_calls`, so both have to come back or the calls
+                # are lost on the floor.
+                choice = (response.get("choices") or [{}])[0]
+                message = choice.get("message") or {}
+                usage = response.get("usage") or {}
                 return {
-                    "total_tokens": response.get("usage", {}).get("total_tokens", 0),
-                    "completion_tokens": response.get("usage", {}).get("completion_tokens", 0),
-                    "content": response["choices"][0]["message"]["content"] if response.get("choices") else ""
+                    "total_tokens": usage.get("total_tokens", 0),
+                    "completion_tokens": usage.get("completion_tokens", 0),
+                    "content": message.get("content"),
+                    "tool_calls": message.get("tool_calls"),
+                    "finish_reason": choice.get("finish_reason"),
                 }
             else:
                 response = res.json()
@@ -546,7 +555,10 @@ class ModelScopeBot(Bot):
                     "content": content,
                     "tool_calls": tool_calls
                 },
-                "finish_reason": "stop"
+                # Pass the provider's verdict through: the agent reads
+                # "length" as "cut off at the output limit" and a hard-coded
+                # "stop" would make a truncated answer look complete.
+                "finish_reason": result.get("finish_reason") or ("tool_calls" if tool_calls else "stop")
             }],
             "usage": {
                 "prompt_tokens": 0,
