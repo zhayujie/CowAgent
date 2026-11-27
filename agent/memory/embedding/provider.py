@@ -351,11 +351,14 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
                 raise ValueError("Embedding batch response count does not match input count")
             # Some gateways answer out of order; `index` is the request position.
             if any("index" in item for item in items):
-                indices = [item.get("index") for item in items]
+                # Some gateways omit the default index of zero. The exact
+                # coverage check rejects multiple omissions or an explicit zero
+                # alongside an omission.
+                indices = [item.get("index", 0) for item in items]
                 if (any(type(index) is not int for index in indices)
                         or set(indices) != set(range(len(chunk)))):
                     raise ValueError("Embedding batch indexes must cover every input exactly once")
-                items = sorted(items, key=lambda item: item["index"])
+                items = sorted(items, key=lambda item: item.get("index", 0))
             out.extend(self._post_process(item["embedding"]) for item in items)
         return out
 

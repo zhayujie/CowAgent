@@ -25,6 +25,7 @@ from agent.guest import policy, store
 from agent.guest.access import LoginLimiter, login_limiter
 from agent.guest.paths import GuestPathError, PathGuard
 from agent.guest.profile import guests_root, write_profile
+from tests.sleep_stub import stub_sleep
 
 
 @pytest.fixture
@@ -738,7 +739,7 @@ def test_the_console_stays_reachable_when_an_address_cannot_be_bound(monkeypatch
                 raise OSError("bind failed")
 
     channel = WebChannel.__wrapped__.__new__(WebChannel.__wrapped__)
-    monkeypatch.setattr("channel.web.core.channel.time.sleep", lambda s: None)
+    stub_sleep(monkeypatch)
 
     free = {("127.0.0.1", 9899)}
     server = channel._bind_again(lambda h, p: FakeServer(h, p, free), ("10.9.9.9", 9900), ("0.0.0.0", 9899))

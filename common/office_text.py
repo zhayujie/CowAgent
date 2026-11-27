@@ -145,11 +145,11 @@ def _iter_docx_blocks(container, parent):
 
 
 def _docx_paragraph_text(element, parent):
-    """Include inline controls and cached field text without changing the source."""
+    """Include inline controls, tracked insertions and cached fields without changing the source."""
     from docx.oxml.ns import qn
     from docx.text.paragraph import Paragraph
 
-    tags = (qn("w:sdt"), qn("w:fldSimple"))
+    tags = (qn("w:sdt"), qn("w:fldSimple"), qn("w:ins"))
     if any(element.find(".//" + tag) is not None for tag in tags):
         element = deepcopy(element)
         for control in list(element.iter(*tags)):

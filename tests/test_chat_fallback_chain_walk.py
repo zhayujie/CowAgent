@@ -15,6 +15,7 @@ user would see a dropped connection instead of a reply.
 import pytest
 
 from agent.protocol.agent_stream import AgentStreamExecutor
+from tests.sleep_stub import stub_sleep
 
 
 class _FailingModel:
@@ -56,7 +57,7 @@ def _executor(model, monkeypatch):
     monkeypatch.setattr(executor, "_emit_event", lambda *a, **k: None)
     monkeypatch.setattr(executor, "_is_thinking_enabled", lambda: False)
     # Never actually sleep — the point of these tests is the call sequence.
-    monkeypatch.setattr("agent.protocol.agent_stream.time.sleep", lambda s: None)
+    stub_sleep(monkeypatch)
     return executor
 
 

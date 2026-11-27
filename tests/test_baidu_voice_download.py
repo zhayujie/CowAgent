@@ -25,6 +25,7 @@ if "aip" not in sys.modules:
 from bridge.reply import ReplyType  # noqa: E402
 from common.media_download import MAX_FILE_BYTES  # noqa: E402
 from voice.baidu.baidu_voice import BaiduVoice  # noqa: E402
+from tests.sleep_stub import stub_sleep  # noqa: E402
 
 
 def _voice():
@@ -36,7 +37,7 @@ def _voice():
     return voice
 
 
-def test_long_text_synthesis_rejects_oversized_audio():
+def test_long_text_synthesis_rejects_oversized_audio(monkeypatch):
     created = MagicMock()
     created.json.return_value = {"task_id": "task-1"}
     finished = MagicMock()
@@ -59,9 +60,9 @@ def test_long_text_synthesis_rejects_oversized_audio():
     def _post(url, **kwargs):
         return finished if "query" in url else created
 
+    stub_sleep(monkeypatch)
     with patch("voice.baidu.baidu_voice.requests.post", side_effect=_post), \
-            patch.object(requests, "get", return_value=audio), \
-            patch("voice.baidu.baidu_voice.time.sleep", lambda *_a, **_k: None):
+            patch.object(requests, "get", return_value=audio):
         reply = _voice()._long_text_synthesis("你好")
 
     assert reply.type == ReplyType.ERROR

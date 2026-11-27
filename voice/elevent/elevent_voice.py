@@ -9,10 +9,6 @@ from common.tmp_dir import TmpDir
 from voice.voice import Voice
 from config import conf
 
-XI_API_KEY = conf().get("xi_api_key")
-client = ElevenLabs(api_key=XI_API_KEY)
-name = conf().get("xi_voice_id")
-
 class ElevenLabsVoice(Voice):
 
     def __init__(self):
@@ -25,6 +21,8 @@ class ElevenLabsVoice(Voice):
         fileName = TmpDir().path() + "reply-" + uuid.uuid4().hex + ".mp3"
 
         try:
+            client = ElevenLabs(api_key=conf().get("xi_api_key"))
+            name = conf().get("xi_voice_id")
             audio = client.generate(
                 text=text,
                 voice=name,

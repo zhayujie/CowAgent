@@ -6,6 +6,7 @@ import pytest
 
 from bridge.context import Context, ContextType
 from models.linkai import link_ai_bot
+from tests.sleep_stub import current_thread_sleep
 
 CONF = {"linkai_api_base": "https://api.example.test", "linkai_api_key": "test-key",
         "linkai_app_code": "app-1", "model": "gpt-4o", "channel_type": "web"}
@@ -38,7 +39,7 @@ def test_rejection_without_openai_error_is_not_retried(call):
     post = Mock(return_value=_response(400, {"detail": "Not Found"}))
     with patch.object(link_ai_bot, "conf", lambda: dict(CONF)), \
             patch.object(link_ai_bot.requests, "post", post), \
-            patch.object(link_ai_bot.time, "sleep", lambda _s: None):
+            patch.object(link_ai_bot.time, "sleep", current_thread_sleep()):
         if call == "chat":
             content = bot._chat("hi", Context(ContextType.TEXT, "hi", {"session_id": "u1"})).content
         else:

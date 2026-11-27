@@ -15,7 +15,8 @@ _BLOCK_MARKDOWN = re.compile(
 )
 _INLINE_MARKDOWN = re.compile(r"(`[^`\n]+`|\*\*[^*\n]+\*\*|\[[^]\n]+\]\([^)\n]+\))")
 _TABLE_SEPARATOR = re.compile(r"(?m)^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?\s*$")
-_MARKDOWN_IMAGE = re.compile(r"!\[([^\]\n]*)\]\(([^)\s]+)\)")
+# A URL may hold one level of balanced parentheses, as in Wikipedia file names.
+_MARKDOWN_IMAGE = re.compile(r"!\[([^\]\n]*)\]\(((?:[^()\s]|\([^()\s]*\))+)\)")
 # An inline code span on one line: a backtick run closed by the next run of the
 # same length.
 _CODE_SPAN = re.compile(r"(?<!`)(`+)(?!`).*?(?<!`)\1(?!`)")

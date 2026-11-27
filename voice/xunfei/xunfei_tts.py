@@ -26,6 +26,7 @@ from datetime import datetime
 from time import mktime
 import _thread as thread
 import os
+from threading import Lock
 
 
 
@@ -143,7 +144,7 @@ def on_error(ws, error):
 
 
 # 收到websocket关闭的处理
-def on_close(ws):
+def on_close(ws, close_status_code, close_msg):
     print("### closed ###")
 
 
@@ -164,24 +165,30 @@ WS_PING_TIMEOUT = 10
 stream_error = None
 
 
+_call_lock = Lock()
+
+
 def xunfei_tts(APPID, APIKey, APISecret,BusinessArgsTTS, Text, OutFile):
     global outfile
     global wsParam
     global stream_error
-    stream_error = None
-    outfile = OutFile
-    wsParam1 = Ws_Param(APPID,APIKey,APISecret,BusinessArgsTTS,Text)
-    wsParam = wsParam1
-    websocket.enableTrace(False)
-    wsUrl = wsParam.create_url()
-    ws = websocket.WebSocketApp(wsUrl, on_message=on_message, on_error=on_error, on_close=on_close)
-    ws.on_open = on_open
-    ws.run_forever(sslopt={"context": ssl.create_default_context()},
-                   ping_interval=WS_PING_INTERVAL,
-                   ping_timeout=WS_PING_TIMEOUT)
-    if stream_error:
-        # Hand the failure to the caller instead of returning a file that was
-        # never written: XunfeiVoice.textToVoice turns it into an ERROR reply.
-        raise RuntimeError("[Xunfei] text-to-speech stream failed: {}".format(stream_error))
-    return outfile
+    # outfile, wsParam and stream_error are module globals that the callbacks use, so a
+    # second call made while one is running would send its text into this call's file.
+    with _call_lock:
+        stream_error = None
+        outfile = OutFile
+        wsParam1 = Ws_Param(APPID,APIKey,APISecret,BusinessArgsTTS,Text)
+        wsParam = wsParam1
+        websocket.enableTrace(False)
+        wsUrl = wsParam.create_url()
+        ws = websocket.WebSocketApp(wsUrl, on_message=on_message, on_error=on_error, on_close=on_close)
+        ws.on_open = on_open
+        ws.run_forever(sslopt={"context": ssl.create_default_context()},
+                       ping_interval=WS_PING_INTERVAL,
+                       ping_timeout=WS_PING_TIMEOUT)
+        if stream_error:
+            # Hand the failure to the caller instead of returning a file that was
+            # never written: XunfeiVoice.textToVoice turns it into an ERROR reply.
+            raise RuntimeError("[Xunfei] text-to-speech stream failed: {}".format(stream_error))
+        return outfile
      

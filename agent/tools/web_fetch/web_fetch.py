@@ -11,6 +11,8 @@ Supports:
 - Olostep backend (opt-in via tools.web_fetch.provider="olostep"):
   returns the rendered page as Markdown through Olostep's Scrape API
   (https://docs.olostep.com/features/scrapes)
+- SerpApi backend (opt-in via tools.web_fetch.provider="serpapi"):
+  returns one page as Markdown through https://serpapi.com/extract-api
 """
 
 import os
@@ -23,7 +25,8 @@ from urllib.parse import urlparse, unquote, urljoin
 import requests
 
 from agent.tools.base_tool import BaseTool, ToolResult
-from agent.tools.utils.truncate import truncate_head, format_size
+from agent.tools.utils import serpapi
+from agent.tools.utils.truncate import DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES, truncate_head, format_size
 from agent.tools.utils.url_safety import validate_url_safe, safe_get
 from common.log import logger
 from common.media_download import MediaTooLargeError, read_response, save_response
@@ -36,6 +39,8 @@ PAGE_READ_SECONDS = 60
 # Olostep waits about 55s for a scrape before it answers HTTP 504, so the
 # client waits a little longer than that to receive the 504.
 OLOSTEP_TIMEOUT = 60
+# Extract may spend 30s fetching the page before it can send the response.
+SERPAPI_EXTRACT_READ_TIMEOUT = 35
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
 
 DEFAULT_HEADERS = {
@@ -99,13 +104,12 @@ def _conf_str(value, default: str = "") -> str:
 
 def _fetch_provider() -> str:
     """The fetch backend: "direct" (default, fetch and parse locally),
-    "deepseek" (DeepSeek's official Fetch API, returns the page as Markdown)
-    or "olostep" (Olostep's Scrape API, returns the rendered page as Markdown).
+    or an explicitly selected Markdown provider: DeepSeek, Olostep or SerpApi.
     Unknown values fail loudly so a typo never silently changes backends."""
     provider = _conf_str(_tools_web_fetch_conf().get("provider"), "direct").lower()
-    if provider not in ("direct", "deepseek", "olostep"):
+    if provider not in ("direct", "deepseek", "olostep", "serpapi"):
         raise ValueError(
-            f"Unknown tools.web_fetch.provider {provider!r}; expected 'direct', 'deepseek' or 'olostep'"
+            f"Unknown tools.web_fetch.provider {provider!r}; expected 'direct', 'deepseek', 'olostep' or 'serpapi'"
         )
     return provider
 
@@ -305,8 +309,7 @@ class WebFetch(BaseTool):
 
         # SSRF guard: reject URLs that resolve to private/loopback/link-local/
         # cloud-metadata addresses before any request is issued. Applies to
-        # every backend, including DeepSeek Fetch and Olostep (the URL still
-        # leaves this machine's policy boundary via their API).
+        # every backend, including those that send the URL to a third party.
         try:
             validate_url_safe(url)
         except ValueError as e:
@@ -325,6 +328,9 @@ class WebFetch(BaseTool):
 
         if provider == "olostep":
             return self._fetch_olostep(url)
+
+        if provider == "serpapi":
+            return self._fetch_serpapi(url)
 
         return self._fetch_webpage(url)
 
@@ -438,6 +444,42 @@ class WebFetch(BaseTool):
         if not content.strip():
             return ToolResult.fail(f"Error: Olostep returned no content for URL: {url}")
         return ToolResult.success(f"Title: {title}\n\nContent:\n{content}")
+
+    def _fetch_serpapi(self, url: str) -> ToolResult:
+        key = serpapi.api_key(conf())
+        try:
+            data = serpapi.request_json({"engine": "extract", "url": url}, key,
+                                        connect_timeout=DEFAULT_TIMEOUT, read_timeout=SERPAPI_EXTRACT_READ_TIMEOUT,
+                                        max_bytes=MAX_FILE_SIZE, read_seconds=PAGE_READ_SECONDS)
+        except serpapi.SerpApiError as e:
+            return ToolResult.fail(f"Error: {e}")
+
+        content = serpapi.text(data.get("markdown"), key)
+        if not content.strip():
+            return ToolResult.fail("Error: SerpApi Extract returned no Markdown.")
+        info = data.get("page_information")
+        info = info if isinstance(info, dict) else {}
+        final_url = info.get("final_url")
+        if final_url and final_url != url:
+            if not isinstance(final_url, str):
+                return ToolResult.fail("Error: Invalid SerpApi Extract final URL.")
+            try:
+                validate_url_safe(final_url)
+            except ValueError:
+                return ToolResult.fail("Error: SerpApi Extract final URL blocked by URL safety checks.")
+        title = serpapi.text(info.get("title"), key)
+        output = f"Title: {title.strip() or 'Untitled'}\n\nContent:\n{content}"
+        try:
+            encoded = output.encode("utf-8")
+        except UnicodeEncodeError:
+            return ToolResult.fail("Error: Invalid Unicode in SerpApi Extract response.")
+        if len(encoded) > DEFAULT_MAX_BYTES or output.count("\n") >= DEFAULT_MAX_LINES:
+            marker = "\n[Content truncated]"
+            # Markdown paragraphs can be a single long line. Keep a valid UTF-8
+            # prefix of it rather than discarding the entire paragraph.
+            prefix = encoded[:DEFAULT_MAX_BYTES - len(marker)].decode("utf-8", errors="ignore")
+            output = "\n".join(prefix.split("\n", DEFAULT_MAX_LINES - 1)[:DEFAULT_MAX_LINES - 1]) + marker
+        return ToolResult.success(output)
 
     # ---- Safe request helper ----
 

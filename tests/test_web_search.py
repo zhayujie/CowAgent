@@ -82,15 +82,13 @@ class TestAnySearchKeyResolution(unittest.TestCase):
 
 
 class TestProviderOrder(unittest.TestCase):
-    """DeepSeek leads (it reuses the model key), and keenable stays last —
-    its keyless tier must come after every provider the user may have paid
-    for."""
+    """New backends must not displace previously configured providers."""
 
     def test_provider_order(self):
         self.assertEqual(
             web_search_module.PROVIDER_ORDER,
             ("deepseek", "bocha", "qianfan", "zhipu", "cowagent", "linkai", "anysearch", "serply", "tavily", "outcrawl", "firecrawl", "context",
-             "specstream", "olostep", "searchapi", "searxng", "keenable"),
+             "specstream", "olostep", "searchapi", "searxng", "keenable", "serpapi"),
         )
 
     def test_web_console_provider_list_stays_in_sync(self):
@@ -176,15 +174,14 @@ class TestProviderOrder(unittest.TestCase):
 _ALL_SEARCH_ENV = (
     "BOCHA_API_KEY", "ZHIPUAI_API_KEY", "QIANFAN_API_KEY", "LINKAI_API_KEY",
     "DEEPSEEK_API_KEY",
-    "ANYSEARCH_API_KEY", "SERPLY_API_KEY", "SEARCHAPI_API_KEY", "KEENABLE_API_KEY",
+    "ANYSEARCH_API_KEY", "SERPLY_API_KEY", "SEARCHAPI_API_KEY", "KEENABLE_API_KEY", "SERPAPI_API_KEY",
 )
 
 
 class TestKeenableOptIn(unittest.TestCase):
     """Keenable's keyless tier is opt-in, mirroring anysearch_anonymous: a
     fresh install configures nothing and the tool is not registered; with
-    keenable_anonymous (or a key) keenable is configured. A keyed provider
-    still wins because keenable sits last in PROVIDER_ORDER."""
+    keenable_anonymous (or a key) keenable is configured."""
 
     def test_fresh_install_leaves_keenable_unconfigured(self):
         with patch.object(web_search_module, "conf", lambda: {}), \

@@ -1,4 +1,4 @@
-"""Web Search tool. Supports seventeen backends with a unified response format:
+"""Web Search tool. Supports eighteen backends with a unified response format:
   - deepseek (https://api-docs.deepseek.com/guides/search, official Search API)
   - bocha   (https://open.bochaai.com)
   - zhipu   (https://docs.bigmodel.cn/cn/guide/tools/web-search)
@@ -16,11 +16,12 @@
   - searchapi (https://www.searchapi.io, Google SERP API)
   - searxng (https://docs.searxng.org, self-hosted meta search engine)
   - keenable (https://keenable.ai, keyless tier behind an explicit opt-in)
+  - serpapi (https://serpapi.com, Google organic search)
 
 Provider selection
   - strategy 'auto' (default): pick the first configured provider in the
     canonical order [deepseek, bocha, qianfan, zhipu, cowagent, linkai, anysearch,
-    serply, tavily, outcrawl, firecrawl, context, specstream, olostep, searchapi, searxng, keenable].
+    serply, tavily, outcrawl, firecrawl, context, specstream, olostep, searchapi, searxng, keenable, serpapi].
     Keenable counts as configured with a key or with the explicit `keenable_anonymous` opt-in (same contract as
     `anysearch_anonymous`). When the caller passes an explicit `provider`
     it overrides the pick; an invalid/unconfigured one silently falls back
@@ -51,6 +52,7 @@ Credentials
   - keenable: tools.web_search.keenable_api_key -> env KEENABLE_API_KEY (optional,
               only lifts the rate limits of the keyless public endpoint);
               keyless use is opt-in via tools.web_search.keenable_anonymous
+  - serpapi : tools.web_search.serpapi_api_key -> env SERPAPI_API_KEY
 """
 
 import json
@@ -62,6 +64,7 @@ from urllib.parse import urlencode, urlsplit
 import requests
 
 from agent.tools.base_tool import BaseTool, ToolResult
+from agent.tools.utils import serpapi
 from common.log import logger
 from config import conf
 
@@ -75,8 +78,8 @@ DEFAULT_TIMEOUT = 30
 # anysearch, serply (global Google/Bing SERP, last since it isn't
 # benchmarked against the Chinese-market providers above), tavily, outcrawl,
 # firecrawl, context, specstream, olostep, searchapi, searxng, keenable (global index, keyless tier behind an explicit
-# opt-in; placed last so any provider the user paid for wins).
-PROVIDER_ORDER = ("deepseek", "bocha", "qianfan", "zhipu", "cowagent", "linkai", "anysearch", "serply", "tavily", "outcrawl", "firecrawl", "context", "specstream", "olostep", "searchapi", "searxng", "keenable")
+# opt-in), then serpapi so it never displaces an existing auto route.
+PROVIDER_ORDER = ("deepseek", "bocha", "qianfan", "zhipu", "cowagent", "linkai", "anysearch", "serply", "tavily", "outcrawl", "firecrawl", "context", "specstream", "olostep", "searchapi", "searxng", "keenable", "serpapi")
 
 PROVIDER_LABELS = {
     "bocha":   "Bocha",
@@ -96,6 +99,7 @@ PROVIDER_LABELS = {
     "searchapi": "SearchApi",
     "searxng": "SearXNG",
     "keenable": "Keenable",
+    "serpapi": "SerpApi",
 }
 
 
@@ -169,6 +173,8 @@ def _get_api_key(provider: str) -> str:
     if provider == "searchapi":
         key = _conf_str(_tools_web_search_conf().get("searchapi_api_key"), "")
         return key or os.environ.get("SEARCHAPI_API_KEY", "").strip()
+    if provider == "serpapi":
+        return serpapi.api_key(conf())
     if provider == "keenable":
         key = _conf_str(_tools_web_search_conf().get("keenable_api_key"), "")
         return key or os.environ.get("KEENABLE_API_KEY", "").strip()
@@ -220,8 +226,8 @@ def disabled_providers() -> List[str]:
 
 def configured_providers() -> List[str]:
     """Configured providers in canonical order. anysearch and keenable qualify
-    with a real key OR an explicit anonymous opt-in (still last in fallback
-    order); nothing goes keyless unless the user turned it on. searxng
+    with a real key OR an explicit anonymous opt-in; nothing goes keyless
+    unless the user turned it on. searxng
     qualifies when an instance URL is configured. Providers listed in
     tools.web_search.disabled_providers are skipped."""
     disabled = set(disabled_providers())
@@ -384,7 +390,7 @@ class WebSearch(BaseTool):
             return ToolResult.fail(
                 "Error: No search provider configured. "
                 "Configure one of BOCHA_API_KEY / zhipu_ai_api_key / qianfan_api_key / linkai_api_key / "
-                "deepseek_api_key / anysearch_api_key / SERPLY_API_KEY / TAVILY_API_KEY / OUTCRAWL_API_KEY / FIRECRAWL_API_KEY / CONTEXT_DEV_API_KEY / SPECSTREAM_API_KEY / OLOSTEP_API_KEY / SEARCHAPI_API_KEY / SEARXNG_URL."
+                "deepseek_api_key / anysearch_api_key / SERPLY_API_KEY / TAVILY_API_KEY / OUTCRAWL_API_KEY / FIRECRAWL_API_KEY / CONTEXT_DEV_API_KEY / SPECSTREAM_API_KEY / OLOSTEP_API_KEY / SEARCHAPI_API_KEY / SEARXNG_URL / SERPAPI_API_KEY."
             )
 
         # Always log the routing decision so multi-provider deployments can
@@ -432,6 +438,8 @@ class WebSearch(BaseTool):
                 return self._search_searxng(query, count)
             if provider == "keenable":
                 return self._search_keenable(query, count, freshness, summary)
+            if provider == "serpapi":
+                return self._search_serpapi(query, count)
             return ToolResult.fail(f"Error: Unknown provider '{provider}'")
         except requests.Timeout:
             return ToolResult.fail(f"Error: Search request timed out after {DEFAULT_TIMEOUT}s")
@@ -1420,6 +1428,48 @@ class WebSearch(BaseTool):
             })
         return ToolResult.success({
             "query": query, "backend": "searchapi",
+            "total": len(results), "count": len(results), "results": results,
+        })
+
+    # ------------------------------------------------------------------
+    # SerpApi
+    # ------------------------------------------------------------------
+
+    def _search_serpapi(self, query: str, count: int) -> ToolResult:
+        key = _get_api_key("serpapi")
+        try:
+            data = serpapi.request_json({"engine": "google", "q": query}, key,
+                                        connect_timeout=DEFAULT_TIMEOUT, read_timeout=DEFAULT_TIMEOUT,
+                                        max_bytes=2 * 1024 * 1024, read_seconds=DEFAULT_TIMEOUT)
+        except serpapi.SerpApiError as e:
+            return ToolResult.fail(f"Error: {e}")
+
+        pages = data.get("organic_results", [] if "search_metadata" in data else None)
+        if not isinstance(pages, list):
+            return ToolResult.fail("Error: Invalid SerpApi organic results.")
+        results = []
+        for page in pages:
+            if not isinstance(page, dict):
+                continue
+            url = serpapi.text(page.get("link"), key)
+            try:
+                parsed = urlsplit(url)
+                if parsed.scheme not in ("http", "https") or not parsed.hostname:
+                    continue
+            except ValueError:
+                continue
+            results.append({
+                "title": serpapi.text(page.get("title"), key), "url": url,
+                "snippet": serpapi.text(page.get("snippet"), key),
+                "siteName": serpapi.text(page.get("source"), key),
+                "datePublished": serpapi.text(page.get("date"), key),
+            })
+            if len(results) >= min(count, 10):
+                break
+        if pages and not results:
+            return ToolResult.fail("Error: No usable links in SerpApi organic results.")
+        return ToolResult.success({
+            "query": serpapi.text(query, key), "backend": "serpapi",
             "total": len(results), "count": len(results), "results": results,
         })
 

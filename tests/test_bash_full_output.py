@@ -70,3 +70,16 @@ def test_failed_line_truncated_command_keeps_exit_status_and_full_log(tool):
     path = Path(result.result["details"]["full_output_path"])
     assert path.read_text() == eval(expression, {"range": range, "str": str})
     assert "Command exited with code 2" in result.result["output"]
+
+
+def test_oversized_line_with_trailing_newline_has_content_and_correct_notice(tool):
+    result = _run(tool, f"'x'*{DEFAULT_MAX_BYTES + 1024} + '\\n'")
+
+    assert result.status == "success", result.result
+    output = result.result["output"]
+    assert output.startswith("x" * DEFAULT_MAX_BYTES)
+    assert "(no output)" not in output
+    assert "line is 51.0KB" in output
+    details = result.result["details"]
+    assert details["truncation"]["last_line_partial"] is True
+    assert Path(details["full_output_path"]).read_text() == "x" * (DEFAULT_MAX_BYTES + 1024) + "\n"

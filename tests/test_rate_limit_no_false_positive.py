@@ -13,6 +13,7 @@ The harness mirrors tests/test_chat_fallback_ratelimit.py.
 import pytest
 
 from agent.protocol.agent_stream import AgentStreamExecutor
+from tests.sleep_stub import stub_sleep
 
 PRIMARY_ATTEMPTS = 3
 
@@ -54,7 +55,7 @@ def _executor(model, monkeypatch):
     monkeypatch.setattr(executor, "_identify_complete_turns", lambda: [])
     monkeypatch.setattr(executor, "_emit_event", lambda *a, **k: None)
     monkeypatch.setattr(executor, "_is_thinking_enabled", lambda: False)
-    monkeypatch.setattr("agent.protocol.agent_stream.time.sleep", lambda s: None)
+    stub_sleep(monkeypatch)
     return executor
 
 

@@ -50,3 +50,27 @@ def test_install_preserves_non_github_url_query():
 
     assert result.error is None, result.error
     install.assert_called_once_with(url, result, agent_id=None)
+
+
+@pytest.mark.parametrize("suffix", ["", "?ref_type=heads", "#readme"])
+@pytest.mark.parametrize("path,branch,subpath", [
+    ("", None, None),
+    ("/-/tree/main", "main", None),
+    ("/-/tree/main/skills/pdf", "main", "skills/pdf"),
+])
+def test_parse_gitlab_url_ignores_suffix(path, branch, subpath, suffix):
+    url = "https://gitlab.com/group/skills" + path + suffix
+
+    assert skill_cmd._parse_gitlab_url(url) == ("group", "skills", branch, subpath)
+
+
+def test_install_routes_gitlab_url_without_suffix():
+    with patch.object(skill_cmd, "_install_gitlab") as install:
+        result = skill_cmd.install_skill(
+            "https://gitlab.com/group/skills/-/tree/main/skills/pdf?ref_type=heads",
+            agent_id="demo",
+        )
+
+    assert result.error is None, result.error
+    install.assert_called_once_with("group/skills", result, subpath="skills/pdf",
+                                    branch="main", agent_id="demo")

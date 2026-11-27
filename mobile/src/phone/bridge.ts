@@ -65,9 +65,37 @@ async function carryOut(req: PhoneRequest) {
   }
 }
 
-/** Whether requests are carried out now; one taken while not is turned down as such. */
+/** Whether requests are carried out now. */
 let active = false;
 let polling = false;
+
+/**
+ * A poll still out when the app leaves the screen can bring a request back, and
+ * Android counts a permission dialog or a call overlay as leaving. Such a
+ * request waits for the app to return, as long as the kernel would have waited
+ * to deliver it, before it is turned down.
+ */
+const HOLD_MS = 15000;
+const held = new Map<string, {req: PhoneRequest; timer: ReturnType<typeof setTimeout>}>();
+
+function hold(req: PhoneRequest) {
+  const timer = setTimeout(() => {
+    held.delete(req.id);
+    reply(req.id, {ok: false, error: 'app_inactive'});
+  }, HOLD_MS);
+  held.set(req.id, {req, timer});
+}
+
+function drop(id: string) {
+  clearTimeout(held.get(id)?.timer);
+  held.delete(id);
+}
+
+function releaseHeld() {
+  const reqs = [...held.values()].map(h => h.req);
+  reqs.forEach(req => drop(req.id));
+  reqs.forEach(carryOut);
+}
 
 /** One loop at most: coming back while a poll is still out only turns the flag back on. */
 function poll() {
@@ -85,8 +113,11 @@ function poll() {
           timeoutMs: (POLL_WAIT_S + 15) * 1000,
         });
         backoff = 1000;
-        res.cancelled?.forEach(dismissPrompt);
-        res.requests?.forEach(req => (active ? carryOut(req) : reply(req.id, {ok: false, error: 'app_inactive'})));
+        res.cancelled?.forEach(id => {
+          drop(id);
+          dismissPrompt(id);
+        });
+        res.requests?.forEach(req => (active ? carryOut(req) : hold(req)));
       } catch (e) {
         // A kernel from before phone tools; asked again only on the next activation.
         if (e instanceof ApiError && e.status === 404) {
@@ -117,11 +148,13 @@ export function usePhoneBridge(): void {
     if (!local) {
       // Nothing asked by the kernel left behind can still be carried out.
       clearPrompts();
+      [...held.keys()].forEach(drop);
     }
     if (!local || !shown || !PHONE_CAPABILITIES.length) {
       return;
     }
     active = true;
+    releaseHeld();
     poll();
     return () => {
       active = false;

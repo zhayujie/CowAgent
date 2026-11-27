@@ -10,6 +10,7 @@ Harness mirrors tests/test_chat_fallback_ratelimit.py.
 import pytest
 
 from agent.protocol.agent_stream import AgentStreamExecutor, _is_retryable_error
+from tests.sleep_stub import stub_sleep
 
 ATTEMPTS = 3
 TOTAL_CALLS = ATTEMPTS + 1  # the budget plus the final failing call
@@ -52,9 +53,7 @@ def _executor(model, monkeypatch):
     monkeypatch.setattr(executor, "_identify_complete_turns", lambda: [])
     monkeypatch.setattr(executor, "_emit_event", lambda *a, **k: None)
     monkeypatch.setattr(executor, "_is_thinking_enabled", lambda: False)
-    slept = []
-    monkeypatch.setattr("agent.protocol.agent_stream.time.sleep", lambda s: slept.append(s))
-    return executor, slept
+    return executor, stub_sleep(monkeypatch)
 
 
 DETERMINISTIC_ERRORS = [

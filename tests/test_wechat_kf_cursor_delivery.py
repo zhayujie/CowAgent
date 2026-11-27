@@ -4,6 +4,7 @@ import pytest
 
 from bridge.context import ContextType
 from channel.wechat_kf import wechat_kf_channel
+from tests.sleep_stub import stub_sleep
 
 
 class FakeMessage:
@@ -24,7 +25,7 @@ def make_channel(monkeypatch, pages):
     channel.produce = Mock()
     monkeypatch.setattr(wechat_kf_channel, "WechatKfMessage", FakeMessage)
     monkeypatch.setattr(wechat_kf_channel, "get_file_cache", lambda: Mock(get=lambda *_: []))
-    monkeypatch.setattr(wechat_kf_channel.time, "sleep", lambda *_: None)
+    stub_sleep(monkeypatch)
     return channel
 
 
