@@ -1399,20 +1399,43 @@ class CowCliPlugin(Plugin):
 
         return _t(f"✅ 技能 '{name}' 已卸载", f"✅ Skill '{name}' uninstalled")
 
-    @staticmethod
-    def _resolve_skill_dir(name: str, skills_dir: str):
-        """Find actual directory for a skill whose folder name may differ from its config name."""
+    @classmethod
+    def _resolve_skill_dir(cls, name: str, skills_dir: str):
+        """Find the directory of the skill *name* when its folder has another name.
+
+        A folder is only accepted when it declares this skill. Matching on the
+        folder name alone made `image` resolve to `image-generation` -- one name
+        is a prefix of the other -- and the uninstall path deletes whatever this
+        returns, so `/skill uninstall image` removed a skill the user never named
+        while reporting that `image` had been uninstalled.
+        """
         if not os.path.isdir(skills_dir):
             return None
-        for entry in os.listdir(skills_dir):
+        # Sorted so an ambiguous library resolves the same way twice.
+        for entry in sorted(os.listdir(skills_dir)):
             entry_path = os.path.join(skills_dir, entry)
             if not os.path.isdir(entry_path) or entry.startswith("."):
                 continue
-            if entry == name or entry.startswith(name + "-") or entry.endswith("-" + name):
-                skill_md = os.path.join(entry_path, "SKILL.md")
-                if os.path.exists(skill_md):
-                    return entry_path
+            if not (entry == name or entry.startswith(name + "-") or entry.endswith("-" + name)):
+                continue
+            skill_md = os.path.join(entry_path, "SKILL.md")
+            if not os.path.exists(skill_md):
+                continue
+            if entry == name:
+                return entry_path
+            if cls._declared_skill_name(skill_md) == name:
+                return entry_path
         return None
+
+    @classmethod
+    def _declared_skill_name(cls, skill_md: str) -> str:
+        """The ``name`` a SKILL.md declares, or "" when it declares none."""
+        try:
+            with open(skill_md, "r", encoding="utf-8-sig") as f:
+                meta, _ = cls._strip_frontmatter(f.read())
+        except OSError:
+            return ""
+        return (meta.get("name") or "").strip()
 
     @staticmethod
     def _strip_frontmatter(content: str):
