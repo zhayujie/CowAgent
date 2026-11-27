@@ -49,6 +49,17 @@ class TestCompactKnowledgeIndex(unittest.TestCase):
         self.assertIn("## Cat 2", text)
         self.assertIn("- [Title 2-19](cat2/p19.md)", text)
 
+    def test_a_title_with_brackets_is_kept(self):
+        content = _index(per_category=20) + (
+            "\n- [[WIP] Plan](cat0/wip.md) — draft"
+            "\n- [list[int] notes](cat0/li.md) — typing"
+        )
+        text, omitted, compacted = _compact_knowledge_index(content)
+        self.assertTrue(compacted)
+        self.assertEqual(omitted, 0)
+        self.assertIn("- [[WIP] Plan](cat0/wip.md)", text)
+        self.assertIn("- [list[int] notes](cat0/li.md)", text)
+
     def test_titles_past_the_cap_are_counted_not_injected(self):
         content = _index(per_category=400, summary_len=10, title="T" * 80)
         text, omitted, compacted = _compact_knowledge_index(content)
