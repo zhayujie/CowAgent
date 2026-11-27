@@ -394,12 +394,15 @@ class ClaudeAPIBot(Bot, OpenAIImage):
         (e.g. a future claude-*-6) does not silently regress to a tiny cap —
         no code change needed per new model.
         - Claude 3.5/3.7: 8192
-        - Claude 3 Opus: 4096
+        - Claude 3 Opus/Sonnet/Haiku: 4096
         - Claude 4+ / default: 64000
         """
         if model and (model.startswith("claude-3-5") or model.startswith("claude-3-7")):
             return 8192
-        elif model and model.startswith("claude-3") and "opus" in model:
+        elif model and model.startswith("claude-3"):
+            # The whole Claude 3 line is capped at 4096, not just Opus. Sonnet
+            # and Haiku reject a larger max_tokens outright, so asking for the
+            # 64K default turns every request into a 400 instead of a clamp.
             return 4096
         return 64000
 
