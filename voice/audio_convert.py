@@ -76,13 +76,14 @@ def any_to_wav(any_path, wav_path):
     """
     把任意格式转成wav文件
     """
-    if not _pydub_available:
-        raise ImportError("pydub is required for audio conversion. Please install it with: pip install pydub")
     if any_path.endswith(".wav"):
         shutil.copy2(any_path, wav_path)
         return
+    # Silk decodes with pysilk alone, so WeChat voice notes need neither pydub nor ffmpeg.
     if any_path.endswith(".sil") or any_path.endswith(".silk") or any_path.endswith(".slk"):
         return sil_to_wav(any_path, wav_path)
+    if not _pydub_available:
+        raise ImportError("pydub is required for audio conversion. Please install it with: pip install pydub")
     # pydub 0.23.0+ 会将 parameters 追加到 ffmpeg 命令的输出文件 `-` 之后，
     # 因此 -nostdin 可能被当作"尾部选项"处理，是否生效取决于 ffmpeg 版本。
     # 目的是防止后台服务中 ffmpeg 子进程继承父进程的 stdin，避免死锁。

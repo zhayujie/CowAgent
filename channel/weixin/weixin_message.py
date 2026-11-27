@@ -132,7 +132,7 @@ class WeixinMessage(ChatMessage):
             self.content = save_path
 
             def _download():
-                path = self._download_media(item, ITEM_VIDEO, cdn_base_url)
+                path = self._download_media(item, ITEM_VIDEO, cdn_base_url, save_path)
                 self.content = path or ""
             self._prepare_fn = _download
 
@@ -151,7 +151,7 @@ class WeixinMessage(ChatMessage):
             self.content = save_path
 
             def _download():
-                path = self._download_media(item, ITEM_VOICE, cdn_base_url)
+                path = self._download_media(item, ITEM_VOICE, cdn_base_url, save_path)
                 self.content = path or ""
             self._prepare_fn = _download
 
@@ -171,8 +171,13 @@ class WeixinMessage(ChatMessage):
             self._file_download_path = os.path.join(_get_tmp_dir(), prefix + name)
         return self._file_download_path
 
-    def _download_media(self, item: dict, media_type: int, cdn_base_url: str) -> str:
-        """Download media from CDN, returns local file path or empty string."""
+    def _download_media(self, item: dict, media_type: int, cdn_base_url: str, save_path: str = "") -> str:
+        """Download media from CDN, returns local file path or empty string.
+
+        Lazy downloads must pass the path already exposed as ``content``: the
+        context is built from it before the worker thread binds an Agent, so
+        resolving tmp_dir() again would land in a different directory.
+        """
         type_key_map = {
             ITEM_IMAGE: "image_item",
             ITEM_VIDEO: "video_item",
@@ -191,7 +196,9 @@ class WeixinMessage(ChatMessage):
             logger.warning(f"[Weixin] Missing CDN params for media download (type={media_type})")
             return ""
 
-        if media_type == ITEM_FILE:
+        if save_path:
+            pass
+        elif media_type == ITEM_FILE:
             save_path = self._file_save_path(item)
         else:
             ext_map = {ITEM_IMAGE: ".jpg", ITEM_VIDEO: ".mp4", ITEM_VOICE: ".silk"}
