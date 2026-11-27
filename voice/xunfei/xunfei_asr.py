@@ -27,7 +27,7 @@ from wsgiref.handlers import format_date_time
 from datetime import datetime
 from time import mktime
 import _thread as thread
-from threading import Event
+from threading import Event, Lock
 import wave
 
 
@@ -194,26 +194,31 @@ def on_open(ws):
 
     thread.start_new_thread(run, ())
 
+_call_lock = Lock()
+
 #提供给xunfei_voice调用的函数
 def xunfei_asr(APPID,APISecret,APIKey,BusinessArgsASR,AudioFile):
     global whole_dict
     global wsParam
-    whole_dict = {}
-    wsParam1 = Ws_Param(APPID=APPID, APISecret=APISecret,
-                       APIKey=APIKey,BusinessArgs=BusinessArgsASR,
-                       AudioFile=AudioFile)
-    #wsParam是global变量，给上面on_open函数调用使用的
-    wsParam = wsParam1
-    websocket.enableTrace(False)
-    wsUrl = wsParam.create_url()
-    ws = websocket.WebSocketApp(wsUrl, on_message=on_message, on_error=on_error, on_close=on_close)
-    ws.final_result_received = Event()
-    ws.on_open = on_open
-    ws.run_forever(sslopt={"context": ssl.create_default_context()})
-    #把字典的值合并起来做最后识别的输出
-    whole_words = ""
-    for i in sorted(whole_dict.keys()):
-        whole_words += whole_dict[i]
-    return whole_words
+    # wsParam and whole_dict are module globals that the callbacks read, so a second
+    # call made while one is running would send its audio and clear its transcript.
+    with _call_lock:
+        whole_dict = {}
+        wsParam1 = Ws_Param(APPID=APPID, APISecret=APISecret,
+                           APIKey=APIKey,BusinessArgs=BusinessArgsASR,
+                           AudioFile=AudioFile)
+        #wsParam是global变量，给上面on_open函数调用使用的
+        wsParam = wsParam1
+        websocket.enableTrace(False)
+        wsUrl = wsParam.create_url()
+        ws = websocket.WebSocketApp(wsUrl, on_message=on_message, on_error=on_error, on_close=on_close)
+        ws.final_result_received = Event()
+        ws.on_open = on_open
+        ws.run_forever(sslopt={"context": ssl.create_default_context()})
+        #把字典的值合并起来做最后识别的输出
+        whole_words = ""
+        for i in sorted(whole_dict.keys()):
+            whole_words += whole_dict[i]
+        return whole_words
 
      
