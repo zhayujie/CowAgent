@@ -870,6 +870,14 @@ class FeiShuChanel(ChatChannel):
                 file_cache.add(cache_key, feishu_msg.image_path, file_type='image',
                                source=image_sources[feishu_msg.image_path])
                 logger.info("[FeiShu] Image cached, waiting for user query")
+            else:
+                # Download failed: nothing was cached, so the follow-up question
+                # ("what is in this picture?") would reach an agent that never
+                # saw it. Say so, like the file branch below already does.
+                logger.warning(
+                    f"[FeiShu] image download failed, msg_id={feishu_msg.msg_id}"
+                )
+                self._notify_download_failed(feishu_msg, is_group, receive_id_type, label="图片")
             # 单张图片不直接处理，等待用户提问
             return
 
@@ -885,7 +893,7 @@ class FeiShuChanel(ChatChannel):
             except Exception as e:
                 logger.warning(f"[FeiShu] prepare file failed: {e}")
                 # 文件下载失败时主动通知用户，避免静默丢失
-                self._notify_file_download_failed(feishu_msg, is_group, receive_id_type, e)
+                self._notify_download_failed(feishu_msg, is_group, receive_id_type, e)
                 return
             file_cache.add(cache_key, feishu_msg.content, file_type='file')
             logger.info(f"[FeiShu] File cached: {feishu_msg.content}")
@@ -902,7 +910,7 @@ class FeiShuChanel(ChatChannel):
                 f"[FeiShu] {len(feishu_msg.attachments)} post attachment(s) cached"
             )
             if feishu_msg.failed_files:
-                self._notify_file_download_failed(
+                self._notify_download_failed(
                     feishu_msg, is_group, receive_id_type, ", ".join(feishu_msg.failed_files)
                 )
             return
@@ -959,9 +967,13 @@ class FeiShuChanel(ChatChannel):
             self._message_sessions[msg_id] = (context["session_id"], context.get("agent_id"))
         logger.debug(f"[FeiShu] query={feishu_msg.content}, type={feishu_msg.ctype}")
 
-    def _notify_file_download_failed(self, feishu_msg, is_group, receive_id_type, detail):
+    def _notify_download_failed(self, feishu_msg, is_group, receive_id_type,
+                                detail=None, label="文件"):
         try:
-            err_reply = Reply(ReplyType.TEXT, f"⚠️ 文件下载失败，请重新发送：{detail}")
+            text = f"⚠️ {label}下载失败，请重新发送"
+            if detail:
+                text = f"{text}：{detail}"
+            err_reply = Reply(ReplyType.TEXT, text)
             self._send(err_reply, self._compose_context(
                 ContextType.TEXT, "",
                 isgroup=is_group, msg=feishu_msg,
