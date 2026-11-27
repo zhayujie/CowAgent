@@ -280,7 +280,7 @@ class ClaudeAPIBot(Bot, OpenAIImage):
                 if msg.get("role") == "system":
                     system_prompt = msg["content"]
                 else:
-                    claude_messages.append(msg)
+                    claude_messages.append(self._without_private_keys(msg))
 
             # Prepare request data
             data = {
@@ -711,6 +711,24 @@ class ClaudeAPIBot(Bot, OpenAIImage):
         }
 
     @staticmethod
+    def _without_private_keys(msg: dict) -> dict:
+        """Drop ``_``-prefixed in-memory markers from a message.
+
+        ``agent_stream`` records Gemini's ``_gemini_raw_parts`` on the assistant
+        message so the thoughtSignature can be replayed to Gemini. Anthropic
+        rejects unknown message fields with a 400, so switching a session from
+        Gemini to Claude left every later turn failing on that one message until
+        it aged out of the context window. ``openai_compatible_bot`` skips these
+        keys for the same reason before building its request.
+
+        Returns *msg* itself when there is nothing to drop, so the common path
+        does not copy the shared history.
+        """
+        if not any(isinstance(k, str) and k.startswith("_") for k in msg):
+            return msg
+        return {k: v for k, v in msg.items() if not (isinstance(k, str) and k.startswith("_"))}
+
+    @staticmethod
     def _sanitize_message(msg: dict) -> dict:
         """Strip thinking blocks without a ``signature`` from assistant messages.
 
@@ -718,10 +736,12 @@ class ClaudeAPIBot(Bot, OpenAIImage):
         the in-memory history may contain thinking blocks that lack the
         ``signature`` field required by the Anthropic API, causing 400 errors.
         OpenAI-style ``image_url`` blocks in user messages are converted to
-        Claude image blocks.
+        Claude image blocks. In-memory ``_``-prefixed markers are dropped first,
+        because the API rejects unknown message fields outright.
 
         We create a shallow copy so the original history is not mutated.
         """
+        msg = ClaudeAPIBot._without_private_keys(msg)
         content = msg.get("content")
         if not isinstance(content, list):
             return msg
