@@ -17,6 +17,7 @@ from bridge.reply import Reply, ReplyType
 from channel.wechat_kf import wechat_kf_channel as kf_module
 from channel.wechatcom import wechatcomapp_channel as app_module
 from channel.wechatmp import wechatmp_channel as mp_module
+from tests.sleep_stub import current_thread_sleep
 
 
 def _app_channel():
@@ -66,7 +67,7 @@ def _patched_voice(module, convert, **split_kwargs):
         for name in ("any_to_amr", "any_to_mp3"):
             if hasattr(module, name):
                 stack.enter_context(patch.object(module, name, convert))
-        stack.enter_context(patch.object(module.time, "sleep"))
+        stack.enter_context(patch.object(module.time, "sleep", current_thread_sleep()))
         yield
 
 

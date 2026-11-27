@@ -9,6 +9,7 @@ read timeout, where the provider was reached, keeps its retries.
 import pytest
 
 from agent.protocol.agent_stream import AgentStreamExecutor, _is_unreachable_error
+from tests.sleep_stub import stub_sleep
 
 CONNECT_TIMEOUT = (
     "HTTPSConnectionPool(host='generativelanguage.googleapis.com', port=443): Max retries exceeded with url: "
@@ -62,7 +63,7 @@ def _executor(model, monkeypatch):
     monkeypatch.setattr(executor, "_identify_complete_turns", lambda: [])
     monkeypatch.setattr(executor, "_emit_event", lambda *a, **k: None)
     monkeypatch.setattr(executor, "_is_thinking_enabled", lambda: False)
-    monkeypatch.setattr("agent.protocol.agent_stream.time.sleep", lambda s: None)
+    stub_sleep(monkeypatch)
     return executor
 
 

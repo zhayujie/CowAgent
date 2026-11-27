@@ -26,6 +26,7 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from channel.wecom_bot import wecom_bot_channel as wbc  # noqa: E402
+from tests.sleep_stub import stub_sleep  # noqa: E402
 
 
 class FakeStop:
@@ -92,9 +93,7 @@ def fast_constants(monkeypatch):
     monkeypatch.setattr(wbc, "WS_RECONNECT_STABLE_SECONDS", 60, raising=False)
     FakeApp.instances = []
     # Old code sleeps here, and would make the suite take 5s per reconnect.
-    sleeps = []
-    monkeypatch.setattr(wbc.time, "sleep", lambda s: sleeps.append(s))
-    yield sleeps
+    yield stub_sleep(monkeypatch)
 
 
 def _drive(bot, monkeypatch, stop_after_connection=None, safety_limit=20):

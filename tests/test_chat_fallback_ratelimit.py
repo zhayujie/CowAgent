@@ -12,6 +12,7 @@ must stay: failing a turn outright over a transient rate limit would be worse.
 import pytest
 
 from agent.protocol.agent_stream import AgentStreamExecutor
+from tests.sleep_stub import stub_sleep
 
 RATE_LIMITED = "Rate limit reached (Status: 429)"
 OTHER_ERROR = "server is busy (Status: 503)"
@@ -58,7 +59,7 @@ def _executor(model, monkeypatch):
     monkeypatch.setattr(executor, "_identify_complete_turns", lambda: [])
     monkeypatch.setattr(executor, "_emit_event", lambda *a, **k: None)
     monkeypatch.setattr(executor, "_is_thinking_enabled", lambda: False)
-    monkeypatch.setattr("agent.protocol.agent_stream.time.sleep", lambda s: None)
+    stub_sleep(monkeypatch)
     return executor
 
 
@@ -104,9 +105,7 @@ class TestRateLimitWithABackup:
         model = _Model([{"provider": "openai", "model": "backup-1"}])
         executor = _executor(model, monkeypatch)
         monkeypatch.setattr(executor.model, "call_stream", _always_down(model, RATE_LIMITED))
-        slept = []
-        monkeypatch.setattr("agent.protocol.agent_stream.time.sleep",
-                            lambda s: slept.append(s))
+        slept = stub_sleep(monkeypatch)
 
         with pytest.raises(Exception):
             executor._call_llm_stream(retry_on_empty=False)
@@ -131,9 +130,7 @@ class TestRateLimitWithoutABackup:
         model = _Model([])
         executor = _executor(model, monkeypatch)
         monkeypatch.setattr(executor.model, "call_stream", _always_down(model, RATE_LIMITED))
-        slept = []
-        monkeypatch.setattr("agent.protocol.agent_stream.time.sleep",
-                            lambda s: slept.append(s))
+        slept = stub_sleep(monkeypatch)
 
         with pytest.raises(Exception):
             executor._call_llm_stream(retry_on_empty=False)

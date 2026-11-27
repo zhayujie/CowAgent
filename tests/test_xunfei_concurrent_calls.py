@@ -10,6 +10,8 @@ from threading import Barrier, BrokenBarrierError, Event, Thread, Timer
 from types import ModuleType
 import wave
 
+from tests.sleep_stub import stub_sleep
+
 
 def _load(monkeypatch, name):
     monkeypatch.setitem(sys.modules, "websocket", ModuleType("websocket"))
@@ -77,7 +79,7 @@ def test_concurrent_asr_calls_keep_their_own_audio_and_transcript(monkeypatch):
             self.on_close(self, None, None)
 
     monkeypatch.setattr(asr.websocket, "WebSocketApp", FakeWebSocketApp, raising=False)
-    monkeypatch.setattr(asr.time, "sleep", lambda _: None)
+    stub_sleep(monkeypatch)
 
     results = _run_two_at_once(lambda n: asr.xunfei_asr("app", "secret", "key", {}, _wav(n.encode())))
 
