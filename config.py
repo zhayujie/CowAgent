@@ -137,6 +137,8 @@ available_setting = {
     "qwen_node_id": "",  # id used by workflow-orchestration models; keep it an empty string if qwen_node_id is unused
     # Alibaba Lingji (Tongyi new sdk) model api key
     "dashscope_api_key": "",
+    # DashScope endpoint override; the SDK's own default is used when empty.
+    "dashscope_api_base": "",
     # Google Gemini Api Key
     "gemini_api_key": "",
     # Embedding model config
@@ -213,6 +215,9 @@ available_setting = {
     "dingtalk_client_id": "",  # DingTalk bot Client ID
     "dingtalk_client_secret": "",  # DingTalk bot Client Secret
     "dingtalk_card_enabled": False,
+    # QQ bot config
+    "qq_app_id": "",  # QQ bot AppID
+    "qq_app_secret": "",  # QQ bot AppSecret
     # WeCom smart bot config (long connection mode)
     "wecom_bot_id": "",  # WeCom smart bot BotID
     "wecom_bot_secret": "",  # WeCom smart bot long-connection secret
@@ -275,8 +280,10 @@ available_setting = {
     "cloud_port": None,
     "cloud_deployment_id": "",
     "minimax_api_key": "",
-    "Minimax_group_id": "",
-    "Minimax_base_url": "",
+    # minimax_bot reads this name; the older capitalised "Minimax_base_url"
+    # entry could never be reached, because environment names arrive lowered
+    # and nothing looked it up.
+    "minimax_api_base": "https://api.minimaxi.com/v1",
     "deepseek_api_key": "",
     "deepseek_api_base": "https://api.deepseek.com/v1",
     # Xiaomi MiMo LLM
@@ -559,9 +566,12 @@ CONFIG_TO_ENV = {
     "zhipu_ai_api_key": "ZHIPU_AI_API_KEY",
     "zhipu_ai_api_base": "ZHIPU_AI_API_BASE",
     "moonshot_api_key": "MOONSHOT_API_KEY",
-    "moonshot_api_base": "MOONSHOT_API_BASE",
+    # The bots read `moonshot_base_url` / `ark_base_url`; the table used to name
+    # `*_api_base`, which no reader looked up, so those two variables only ever
+    # created a dead key.
+    "moonshot_base_url": "MOONSHOT_API_BASE",
     "ark_api_key": "ARK_API_KEY",
-    "ark_api_base": "ARK_API_BASE",
+    "ark_base_url": "ARK_API_BASE",
     "dashscope_api_key": "DASHSCOPE_API_KEY",
     "dashscope_api_base": "DASHSCOPE_API_BASE",
     # Channel credentials (used by skills that check env vars)
@@ -582,6 +592,13 @@ CONFIG_TO_ENV = {
     "qq_app_secret": "QQ_APP_SECRET",
     "weixin_token": "WEIXIN_TOKEN",
 }
+
+# The same table read backwards, for the import pass below. It is the authority
+# on which variable feeds which key, because the two spellings are not always
+# related: OPENAI_API_KEY feeds `open_ai_api_key`. Looking a variable up by its
+# own name alone silently dropped it, which is what happened to every name here
+# whose key differed -- including the conventional OPENAI_API_KEY.
+ENV_TO_CONFIG = {env.lower(): key for key, env in CONFIG_TO_ENV.items()}
 
 
 def load_config():
@@ -676,15 +693,18 @@ def load_config():
         # ''), not a request to wipe what the user saved in config.json.
         if value == "":
             continue
-        if name in available_setting:
+        # A variable whose name is not itself a key still feeds one when the
+        # export table says so (OPENAI_API_KEY -> open_ai_api_key).
+        target = name if name in available_setting else ENV_TO_CONFIG.get(name, "")
+        if target in available_setting:
             logger.info("[INIT] override config by environ args: {}={}".format(
-                name, drag_sensitive({name: value})[name]))
+                target, drag_sensitive({target: value})[target]))
             try:
                 # SECURITY: Use ast.literal_eval instead of eval().
                 # ast.literal_eval only parses Python literals (strings, numbers,
                 # tuples, lists, dicts, booleans, None) and CANNOT execute
                 # arbitrary code, preventing environment-variable injection.
-                config[name] = ast.literal_eval(value)
+                config[target] = ast.literal_eval(value)
             except Exception:
                 # literal_eval can raise ValueError/SyntaxError for non-literal
                 # strings, but also TypeError/RecursionError on malformed input
@@ -692,14 +712,14 @@ def load_config():
                 # startup, and fall back to treating the value as a plain string.
                 # Numeric keys reject it instead: a string there fails much later.
                 if value.lower() == "false":
-                    config[name] = False
+                    config[target] = False
                 elif value.lower() == "true":
-                    config[name] = True
-                elif type(available_setting[name]) in (int, float):
+                    config[target] = True
+                elif type(available_setting[target]) in (int, float):
                     logger.warning("[INIT] ignoring environment override {}: not a {}".format(
-                        name, type(available_setting[name]).__name__))
+                        target, type(available_setting[target]).__name__))
                 else:
-                    config[name] = value
+                    config[target] = value
 
     # An endpoint with a default is never meant to be empty: some readers
     # fill an empty base from another vendor's.
