@@ -269,11 +269,18 @@ def build_responses_payload(
 def _cc_usage(usage: Any) -> Optional[Dict[str, Any]]:
     if not isinstance(usage, dict):
         return None
-    return {
+    cc_usage = {
         "prompt_tokens": usage.get("input_tokens") or 0,
         "completion_tokens": usage.get("output_tokens") or 0,
         "total_tokens": usage.get("total_tokens") or 0,
     }
+    # Cache hits are part of input_tokens; the agent reads them from the
+    # Chat Completions field.
+    details = usage.get("input_tokens_details")
+    cached = details.get("cached_tokens") if isinstance(details, dict) else None
+    if cached:
+        cc_usage["prompt_tokens_details"] = {"cached_tokens": cached}
+    return cc_usage
 
 
 def _status_to_finish_reason(response: Dict[str, Any], has_tool_calls: bool) -> str:
