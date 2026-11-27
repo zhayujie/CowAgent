@@ -338,11 +338,16 @@ class ToolManager:
             return (mtime, None)
         return (mtime, digest)
 
-    def _load_mcp_configs(self) -> list:
+    def _load_mcp_configs(self, strict: bool = False) -> list:
         """
         Load MCP server configs with priority:
           1. ~/cow/mcp.json  (supports both mcpServers and mcp_servers keys)
           2. config.json mcp_servers field (fallback)
+
+        ``strict`` is for the reconcile path: there, an unreadable or
+        unparseable mcp.json must raise instead of falling back, because the
+        fallback reads as "this file declares no servers" and would shut down
+        every running server over a half-written file.
         """
         import os
         import json as _json
@@ -367,6 +372,8 @@ class ToolManager:
                     from agent.tools.mcp.service import mcp_is_disabled
                     return [cfg for cfg in _normalize_mcp_configs(raw) if not mcp_is_disabled(cfg)]
             except Exception as e:
+                if strict:
+                    raise
                 logger.warning(f"[ToolManager] Failed to read {mcp_json_path}: {e}, falling back to config.json")
 
         raw = conf().get("mcp_servers", [])
@@ -437,7 +444,7 @@ class ToolManager:
                 return  # no-op fast path
 
             try:
-                new_configs = self._load_mcp_configs()
+                new_configs = self._load_mcp_configs(strict=True)
             except Exception as e:
                 logger.warning(f"[ToolManager] MCP reload — failed to parse config: {e}")
                 return
