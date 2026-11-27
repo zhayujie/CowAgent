@@ -170,8 +170,7 @@ class TextChunker:
     # v2: keep text before the first heading; end a heading's body at the next
     # heading of any level (skipped levels used to be indexed twice).
     # v3: hard-split pieces of one over-long line carry a part ordinal in their id.
-    # v4: don't count a phantom line after a trailing newline, matching memory_get.
-    CHUNKER_VERSION = 4
+    CHUNKER_VERSION = 3
 
     def chunk_markdown(self, text: str) -> List[TextChunk]:
         """Chunk a markdown file while respecting its heading structure.
