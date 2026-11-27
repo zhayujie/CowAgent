@@ -28,6 +28,7 @@ from agent.guest.profile import (
     parse_expires,
     reference_paths,
 )
+from agent.tools.utils.url_safety import host_allowed
 
 # Files and directories inside an Agent workspace a visitor may never read,
 # not even when the owner points a reference directory at them.
@@ -199,10 +200,10 @@ def meet(confirmed: Dict[str, Any], current: Dict[str, Any]) -> Tuple[Dict[str, 
                 pending.append("network: allow any domain")
                 eff["network"]["allow_domains"] = c_domains
             else:
-                added = [d for d in n_domains if d not in c_domains]
+                added = [d for d in n_domains if not host_allowed(d, c_domains)]
                 if added:
                     pending.append(f"network: allow {', '.join(added)}")
-                    kept = [d for d in n_domains if d in c_domains]
+                    kept = [d for d in n_domains if host_allowed(d, c_domains)]
                     eff["network"]["allow_domains"] = kept
                     if not kept:
                         eff["network"]["enabled"] = False
