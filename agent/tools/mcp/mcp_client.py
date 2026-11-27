@@ -305,8 +305,20 @@ class McpClient:
         tool returned nothing" — the server's own message is dropped. The
         handshake already treats ``error`` as fatal; a tools/list and a
         tools/call are no different.
+
+        A missing response is that same failure with even less to say. A
+        JSON-RPC response carries exactly one of ``result`` or ``error``, so a
+        dict with neither is not a response: ``_streamable_http_post`` hands
+        back ``{}`` when a server answers ``202 Accepted`` (or 200 with an
+        empty body) to a request that expected one, and ``call_tool`` read that
+        as a successful call with no output.
         """
-        error = (resp or {}).get("error")
+        error = resp.get("error") if isinstance(resp, dict) else None
+        if error is None and (not isinstance(resp, dict) or "result" not in resp):
+            raise RuntimeError(
+                f"MCP server returned no JSON-RPC response for [{self.name}] "
+                "(neither result nor error)"
+            )
         if not error:
             return
         if isinstance(error, dict):
