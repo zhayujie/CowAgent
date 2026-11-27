@@ -1709,8 +1709,10 @@ def _install_zip_bytes(content, name, skills_dir, result: InstallResult = None, 
 
         target = os.path.join(skills_dir, name)
         _replace_skill_dir(pkg_root, target)
-
-
+        _register_installed_skill(name, source=source_label, display_name=display_name, agent_id=agent_id)
+        if result is not None:
+            result.installed.append(name)
+            result.messages.append(f"Installed '{name}' from {source_label}.")
 
 
 # ------------------------------------------------------------------
