@@ -570,7 +570,8 @@ def _build_memory_section(
 # memory_search, and the prompt says so.
 _INDEX_FULL_CHARS = 8000
 _INDEX_MAX_CHARS = 20000
-_INDEX_ENTRY_RE = re.compile(r"^\s*[-*]\s+\[[^\]]*\]\([^)]*\)")
+# Titles come from each page's H1 and may contain brackets ("[WIP] Plan").
+_INDEX_ENTRY_RE = re.compile(r"^\s*[-*]\s+\[.*?\]\([^)]*\)")
 
 
 def _compact_knowledge_index(content: str) -> Tuple[str, int, bool]:
