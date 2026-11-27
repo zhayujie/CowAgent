@@ -210,6 +210,22 @@ def test_a_new_reference_waits_for_the_owner_but_its_note_does_not(guest_env, tm
     assert pending == [f"references: add {extra}"]
 
 
+@pytest.mark.parametrize("confirmed_domains, current_domains, kept, pending", [
+    (["example.com"], ["docs.example.com"], ["docs.example.com"], []),
+    (["example.com"], ["other.com"], [], ["network: allow other.com"]),
+    (["docs.example.com"], ["example.com"], [], ["network: allow example.com"]),
+    (["example.com"], ["docs.example.com", "other.com"], ["docs.example.com"], ["network: allow other.com"]),
+])
+def test_network_domain_narrowing_applies_and_widening_stays_pending(confirmed_domains, current_domains, kept, pending):
+    from agent.guest.profile import normalize_config
+
+    confirmed = normalize_config({"network": {"enabled": True, "allow_domains": confirmed_domains}})[0]
+    current = normalize_config({"network": {"enabled": True, "allow_domains": current_domains}})[0]
+    eff, actual_pending = policy.meet(confirmed, current)
+    assert eff["network"] == {"enabled": bool(kept), "allow_domains": kept}
+    assert actual_pending == pending
+
+
 def test_references_reach_the_prompt_with_their_notes():
     from agent.prompt.guest import build_guest_system_prompt
 
