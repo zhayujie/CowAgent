@@ -109,14 +109,14 @@ Codex プロバイダーはテキスト対話とツール呼び出しにのみ�
 ```json
 {
   "voice_to_text": "openai",
-  "voice_to_text_model": "gpt-4o-mini-transcribe"
+  "voice_to_text_model": "gpt-transcribe"
 }
 ```
 
 | パラメータ | 説明 |
 | --- | --- |
 | `voice_to_text` | `openai` に設定すると OpenAI 音声認識が有効になります |
-| `voice_to_text_model` | 任意。デフォルトは `gpt-4o-mini-transcribe`。`gpt-4o-transcribe`、`whisper-1` も指定可能 |
+| `voice_to_text_model` | 任意。デフォルトは `gpt-transcribe`。`gpt-4o-mini-transcribe`、`gpt-4o-transcribe`、`whisper-1` は 2027-02-26 に提供終了 |
 
 認証情報は `open_ai_api_key` を自動的に再利用します。
 
@@ -125,15 +125,17 @@ Codex プロバイダーはテキスト対話とツール呼び出しにのみ�
 ```json
 {
   "text_to_voice": "openai",
-  "text_to_voice_model": "tts-1",
-  "tts_voice_id": "alloy"
+  "text_to_voice_model": "gpt-realtime-2.1-mini",
+  "tts_voice_id": "marin"
 }
 ```
 
 | パラメータ | 説明 |
 | --- | --- |
-| `text_to_voice_model` | `tts-1`、`tts-1-hd`、`gpt-4o-mini-tts` |
-| `tts_voice_id` | 音色：`alloy`、`echo`、`fable`、`onyx`、`nova`、`shimmer`、`ash`、`ballad`、`coral`、`sage`、`verse` |
+| `text_to_voice_model` | 任意。デフォルトは `gpt-realtime-2.1-mini`（Realtime API）。`tts-1`、`tts-1-hd`、`gpt-4o-mini-tts` は 2027-01-06 の提供終了まで利用可能 |
+| `tts_voice_id` | 音色：`marin`、`cedar`、`alloy`、`ash`、`ballad`、`coral`、`echo`、`sage`、`shimmer`、`verse`。`fable`、`onyx`、`nova` は `tts-*` モデルのみ |
+
+デフォルトモデルの使用時、API ベースが Realtime API に対応していない場合は `tts-1` に自動で切り替わります。
 
 ## ベクトル
 

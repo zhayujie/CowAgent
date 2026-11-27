@@ -52,7 +52,8 @@ class TestOpenaiVoiceTtsStatusCheck(unittest.TestCase):
     def _synthesize(self, response, tmp):
         """Run textToVoice with the tmp dir pointed at ``tmp`` (a real dir)."""
         voice = OpenaiVoice()
-        with patch("voice.openai.openai_voice.conf", _conf(open_ai_api_key="sk-test")):
+        with patch("voice.openai.openai_voice.conf",
+                   _conf(open_ai_api_key="sk-test", text_to_voice_model="tts-1")):
             with patch("voice.openai.openai_voice.requests.post", return_value=response):
                 with patch("voice.openai.openai_voice.TmpDir") as tmp_dir:
                     tmp_dir.return_value.path.return_value = tmp + os.sep

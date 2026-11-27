@@ -109,14 +109,14 @@ Supported image generation models: `gpt-image-2.5-flare` (recommended default), 
 ```json
 {
   "voice_to_text": "openai",
-  "voice_to_text_model": "gpt-4o-mini-transcribe"
+  "voice_to_text_model": "gpt-transcribe"
 }
 ```
 
 | Parameter | Description |
 | --- | --- |
 | `voice_to_text` | Set to `openai` to enable OpenAI speech-to-text |
-| `voice_to_text_model` | Optional, defaults to `gpt-4o-mini-transcribe`; can also be `gpt-4o-transcribe`, `whisper-1` |
+| `voice_to_text_model` | Optional, defaults to `gpt-transcribe`; `gpt-4o-mini-transcribe`, `gpt-4o-transcribe` and `whisper-1` shut down on 2027-02-26 |
 
 Credentials are automatically reused from `open_ai_api_key`.
 
@@ -125,15 +125,17 @@ Credentials are automatically reused from `open_ai_api_key`.
 ```json
 {
   "text_to_voice": "openai",
-  "text_to_voice_model": "tts-1",
-  "tts_voice_id": "alloy"
+  "text_to_voice_model": "gpt-realtime-2.1-mini",
+  "tts_voice_id": "marin"
 }
 ```
 
 | Parameter | Description |
 | --- | --- |
-| `text_to_voice_model` | `tts-1`, `tts-1-hd`, `gpt-4o-mini-tts` |
-| `tts_voice_id` | Voices: `alloy`, `echo`, `fable`, `onyx`, `nova`, `shimmer`, `ash`, `ballad`, `coral`, `sage`, `verse` |
+| `text_to_voice_model` | Optional, defaults to `gpt-realtime-2.1-mini` (Realtime API). `tts-1`, `tts-1-hd` and `gpt-4o-mini-tts` still work until they shut down on 2027-01-06 |
+| `tts_voice_id` | Voices: `marin`, `cedar`, `alloy`, `ash`, `ballad`, `coral`, `echo`, `sage`, `shimmer`, `verse`; `fable`, `onyx` and `nova` are only available on the `tts-*` models |
+
+With the default model, if the API base does not support the Realtime API, CowAgent falls back to `tts-1`.
 
 ## Embedding
 

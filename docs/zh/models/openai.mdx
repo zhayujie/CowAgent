@@ -109,14 +109,14 @@ Codex 厂商仅用于文本对话和工具调用，图像理解、图像生成�
 ```json
 {
   "voice_to_text": "openai",
-  "voice_to_text_model": "gpt-4o-mini-transcribe"
+  "voice_to_text_model": "gpt-transcribe"
 }
 ```
 
 | 参数 | 说明 |
 | --- | --- |
 | `voice_to_text` | 设为 `openai` 启用 OpenAI 语音识别 |
-| `voice_to_text_model` | 可选，默认 `gpt-4o-mini-transcribe`；也可填 `gpt-4o-transcribe`、`whisper-1` |
+| `voice_to_text_model` | 可选，默认 `gpt-transcribe`；`gpt-4o-mini-transcribe`、`gpt-4o-transcribe`、`whisper-1` 将于 2027-02-26 下线 |
 
 凭证自动复用 `open_ai_api_key`。
 
@@ -125,15 +125,17 @@ Codex 厂商仅用于文本对话和工具调用，图像理解、图像生成�
 ```json
 {
   "text_to_voice": "openai",
-  "text_to_voice_model": "tts-1",
-  "tts_voice_id": "alloy"
+  "text_to_voice_model": "gpt-realtime-2.1-mini",
+  "tts_voice_id": "marin"
 }
 ```
 
 | 参数 | 说明 |
 | --- | --- |
-| `text_to_voice_model` | `tts-1`、`tts-1-hd`、`gpt-4o-mini-tts` |
-| `tts_voice_id` | 音色：`alloy`、`echo`、`fable`、`onyx`、`nova`、`shimmer`、`ash`、`ballad`、`coral`、`sage`、`verse` |
+| `text_to_voice_model` | 可选，默认 `gpt-realtime-2.1-mini`（Realtime API）；`tts-1`、`tts-1-hd`、`gpt-4o-mini-tts` 在 2027-01-06 下线前仍可使用 |
+| `tts_voice_id` | 音色：`marin`、`cedar`、`alloy`、`ash`、`ballad`、`coral`、`echo`、`sage`、`shimmer`、`verse`；`fable`、`onyx`、`nova` 仅 `tts-*` 模型可用 |
+
+使用默认模型时，如果接口地址不支持 Realtime API，会自动回退到 `tts-1`。
 
 ## 向量
 
