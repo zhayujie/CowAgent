@@ -96,6 +96,7 @@ def resolve_family_spec(model_name: str):
     return None, None
 from agent.protocol.models import LLMModel
 from agent.protocol.agent_stream import AgentStreamExecutor
+from agent.protocol.message_utils import merge_run_history
 from agent.protocol.result import AgentAction, AgentActionType, ToolResult
 from agent.tools.base_tool import BaseTool, ToolStage, is_tool_available
 
@@ -826,6 +827,9 @@ class Agent:
         with self.messages_lock:
             messages_copy = self.messages.copy()
             original_length = len(self.messages)
+            # The executor grows messages_copy in place; keep what it started
+            # from so the write-back can tell what was appended meanwhile.
+            base_messages = self.messages.copy()
 
         # Get max_context_turns from config
         from config import conf
@@ -900,7 +904,8 @@ class Agent:
                 self._last_run_new_messages = list(executor.messages[new_start:])
             else:
                 self._last_run_new_messages = list(executor.messages[original_length:])
-            self.messages = list(executor.messages)
+            # Keep messages appended to self.messages while the run was busy.
+            self.messages = merge_run_history(base_messages, self.messages, executor.messages)
         
         # Store executor reference for agent_bridge to access files_to_send
         self.stream_executor = executor

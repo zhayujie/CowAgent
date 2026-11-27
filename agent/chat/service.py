@@ -372,8 +372,12 @@ class ChatService:
         with agent.messages_lock:
             messages_copy = agent.messages.copy()
             original_length = len(agent.messages)
+            # The executor grows messages_copy in place; keep what it started
+            # from so the write-back can tell what was appended meanwhile.
+            base_messages = agent.messages.copy()
 
         from agent.protocol.agent_stream import AgentStreamExecutor
+        from agent.protocol.message_utils import merge_run_history
 
         # Register a cancel token so /cancel can abort this in-flight run.
         # API calls can key by request; IM channels remain session scoped.
@@ -508,7 +512,8 @@ class ChatService:
                 new_messages = list(executor.messages[new_start:])
             else:
                 new_messages = list(executor.messages[original_length:])
-            agent.messages = list(executor.messages)
+            # Keep messages appended to agent.messages while the run was busy.
+            agent.messages = merge_run_history(base_messages, agent.messages, executor.messages)
 
         # Persist new messages to SQLite so they survive restarts and
         # can be queried via the HISTORY interface. Steps already stored at
