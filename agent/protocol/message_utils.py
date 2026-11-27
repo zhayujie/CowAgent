@@ -437,13 +437,26 @@ def merge_run_history(base: List[Dict], current: List[Dict], run_messages: List[
     ``agent.messages`` now, and *run_messages* is the executor's history
     (possibly trimmed, plus this run's messages).
 
-    The run works on a copy, so other writers can append to
-    ``agent.messages`` while it is in flight (a scheduled task's output, see
-    ``AgentBridge.remember_scheduled_output``). Replacing the history with
-    *run_messages* alone would drop them, so messages appended after *base*
-    are kept after the run's own. Anything else (an untouched history, or one
-    rewritten rather than appended to) keeps the run's history, as before.
+    The run works on a copy, so other writers can change ``agent.messages``
+    while it is in flight. ``AgentBridge.remember_scheduled_output`` appends a
+    scheduled task's output and then prunes older scheduler pairs. Replacing
+    the history with *run_messages* alone would drop the new output.
+
+    Messages are compared by identity:
+
+    - a message in *current* but not in *base* arrived during the run and is
+      kept after the run's own messages;
+    - a message in *base* but no longer in *current* was removed during the
+      run and is dropped from the run's messages too.
+
+    When *current* shares no message with a non-empty *base*, the history was
+    rewritten as a whole (cleared, or reloaded from the store as new dicts),
+    so the run's history is kept, as before.
     """
-    if len(current) > len(base) and all(a is b for a, b in zip(current, base)):
-        return list(run_messages) + list(current[len(base):])
-    return list(run_messages)
+    base_ids = {id(m) for m in base}
+    current_ids = {id(m) for m in current}
+    if base and not base_ids & current_ids:
+        return list(run_messages)
+    removed = base_ids - current_ids
+    arrived = [m for m in current if id(m) not in base_ids]
+    return [m for m in run_messages if id(m) not in removed] + arrived

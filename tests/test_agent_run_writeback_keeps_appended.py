@@ -147,6 +147,66 @@ def test_merge_keeps_appends_after_the_run_trimmed_its_history():
     assert _texts(merged) == ["q2", "a2", "q3", "a3", "[SCHEDULED] t", "out"]
 
 
+def test_merge_keeps_appends_when_older_scheduler_pairs_were_pruned():
+    from agent.protocol.message_utils import merge_run_history
+
+    pairs = [[_q(f"[SCHEDULED] t{i}"), _a(f"out{i}")] for i in range(3)]
+    base = [_q("q1"), _a("a1")] + pairs[0] + pairs[1] + pairs[2]
+    new_pair = [_q("[SCHEDULED] t3"), _a("out3")]
+    # The append pruned the oldest pair, so current is not base plus a tail.
+    current = [base[0], base[1]] + pairs[1] + pairs[2] + new_pair
+    run = base + [_q("q2"), _a("a2")]
+
+    merged = merge_run_history(base, current, run)
+
+    assert _texts(merged) == [
+        "q1", "a1",
+        "[SCHEDULED] t1", "out1", "[SCHEDULED] t2", "out2",
+        "q2", "a2",
+        "[SCHEDULED] t3", "out3",
+    ]
+
+
+def test_merge_drops_messages_removed_during_the_run():
+    from agent.protocol.message_utils import merge_run_history
+
+    base = [_q("q1"), _a("a1"), _q("q2"), _a("a2")]
+    current = [base[2], base[3]]
+    run = base + [_q("q3"), _a("a3")]
+
+    assert _texts(merge_run_history(base, current, run)) == ["q2", "a2", "q3", "a3"]
+
+
+def test_scheduled_output_survives_pruning_during_a_run(monkeypatch):
+    from config import conf
+
+    monkeypatch.setitem(conf(), "scheduler_inject_max_per_session", 3)
+    history = [_q("q1"), _a("a1")]
+    for i in range(3):
+        history += [_q(f"{AgentBridge._SCHEDULED_MARKER} t{i}"), _a(f"out{i}")]
+    agent = _agent(history)
+    bridge = _receiver_bridge(agent)
+
+    def deliver():
+        worker = threading.Thread(
+            target=bridge.remember_scheduled_output,
+            args=("s1", "out3"),
+            kwargs={"task_description": "t3"},
+        )
+        worker.start()
+        worker.join(timeout=5)
+
+    _ExecutorWithDelivery.during_run = staticmethod(deliver)
+    with patch("agent.protocol.agent.AgentStreamExecutor", _ExecutorWithDelivery):
+        assert agent.run_stream("q2") == "answer"
+
+    texts = _texts(agent.messages)
+    assert "out3" in texts, texts
+    # The oldest pair was pruned while the run was busy and stays pruned.
+    assert "out0" not in texts, texts
+    assert [t for t in texts if t.startswith("out")] == ["out1", "out2", "out3"], texts
+
+
 def test_chat_service_run_keeps_scheduled_output_delivered_mid_run(monkeypatch):
     """ChatService.run has its own copy of the write-back."""
     from agent.chat.service import ChatService
