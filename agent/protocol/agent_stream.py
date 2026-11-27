@@ -2807,6 +2807,29 @@ class AgentStreamExecutor:
         """
         return identify_complete_turns(self.messages)
     
+    def _tool_schema_tokens(self) -> int:
+        """Estimated tokens the injected tool schemas add to every request.
+
+        The trim budgets used to cover only the system prompt and history;
+        with many MCP tools or skills registered the real prompt silently
+        exceeded the estimate, and the run paid a 400-overflow round-trip
+        before compaction could react. Upper bound on purpose (all available
+        tools, not the per-turn retrieved subset): the budget must hold even
+        in the worst injection case.
+        """
+        try:
+            schema = build_tools_schema(
+                [t for t in self.tools.values() if is_tool_available(t)]
+            )
+            if not schema:
+                return 0
+            return self.agent._estimate_text_tokens(
+                json.dumps(schema, ensure_ascii=False)
+            )
+        except Exception as e:
+            logger.debug(f"[Agent] Tool schema token estimate skipped: {e}")
+            return 0
+
     def _estimate_turn_tokens(self, turn: Dict) -> int:
         """估算一个轮次的 tokens"""
         return sum(
@@ -2896,7 +2919,8 @@ class AgentStreamExecutor:
         system_tokens = self.agent._estimate_message_tokens(
             {"role": "system", "content": self.system_prompt}
         )
-        budget = int((window - completion - system_tokens) * 0.9)
+        tools_tokens = self._tool_schema_tokens()
+        budget = int((window - completion - system_tokens - tools_tokens) * 0.9)
         return max(2000, budget)
 
     def _smart_compact_to_budget(self, error_str: str) -> bool:
@@ -3094,7 +3118,11 @@ class AgentStreamExecutor:
             max_tokens = input_ceiling
 
         system_tokens = self.agent._estimate_message_tokens({"role": "system", "content": self.system_prompt})
-        budget = max_tokens - system_tokens
+        # Tool schemas ride on every request too — budget them or the window
+        # math is quietly optimistic on tool-heavy installs (see
+        # _tool_schema_tokens).
+        tools_tokens = self._tool_schema_tokens()
+        budget = max_tokens - system_tokens - tools_tokens
         current_tokens = sum(self._estimate_turn_tokens(turn) for turn in turns)
 
         # Step 3: Trim to satisfy BOTH constraints (AND):
@@ -3104,7 +3132,8 @@ class AgentStreamExecutor:
         # History is only kept when it fits within the token budget AND the
         # turn cap. If both are already satisfied, keep everything untouched
         # (no trimming, no summary LLM call).
-        if current_tokens + system_tokens <= max_tokens and len(turns) <= self.max_context_turns:
+        if (current_tokens + system_tokens + tools_tokens <= max_tokens
+                and len(turns) <= self.max_context_turns):
             new_messages = []
             for turn in turns:
                 new_messages.extend(turn['messages'])
@@ -3161,7 +3190,7 @@ class AgentStreamExecutor:
         # already thin. This keeps the user query + final reply of each turn.
         COMPRESS_THRESHOLD = 5
         if (not kept_previous and len(kept_turns) < COMPRESS_THRESHOLD
-                and kept_tokens + system_tokens > max_tokens):
+                and kept_tokens + system_tokens + tools_tokens > max_tokens):
             compressed_turns = []
             for t in kept_turns:
                 compressed = compress_turn_to_text_only(t)
