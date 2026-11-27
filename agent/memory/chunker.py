@@ -9,6 +9,19 @@ from typing import List
 from dataclasses import dataclass
 
 
+def _split_lines(text: str) -> list:
+    """Split into lines, dropping the empty element after a trailing newline.
+
+    Without this a file ending in "\n" is numbered one line too long, so
+    memory_search reports a phantom line past the end. Matches memory_get and
+    the read tool.
+    """
+    lines = text.split('\n')
+    if lines and lines[-1] == '':
+        lines.pop()
+    return lines
+
+
 @dataclass
 class TextChunk:
     """Represents a text chunk with line numbers"""
@@ -48,7 +61,7 @@ class TextChunker:
         if not text.strip():
             return []
         
-        lines = text.split('\n')
+        lines = _split_lines(text)
         chunks = []
         
         max_chars = self.max_tokens * self.chars_per_token
@@ -184,7 +197,7 @@ class TextChunker:
         """
         if not text.strip():
             return []
-        lines = text.split('\n')
+        lines = _split_lines(text)
 
         # Whole file under target: single chunk (semantic isolation).
         if len(text) <= self.MD_CHUNK_TARGET:
