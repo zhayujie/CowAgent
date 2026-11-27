@@ -57,6 +57,37 @@ PPT_SUFFIXES: Set[str] = {".ppt", ".pptx"}
 
 ALL_DOC_SUFFIXES = PDF_SUFFIXES | WORD_SUFFIXES | TEXT_SUFFIXES | SPREADSHEET_SUFFIXES | PPT_SUFFIXES
 
+# Content-Type prefix -> the suffix the payload is saved under. This is the one
+# place that decides "this response is a document, not a web page": the binary
+# check and the suffix lookup used to be separate lists, and
+# `application/msword` (Word 97-2003 .doc) matched neither -- so it fell through
+# to the HTML path and was decoded as a page, returning mojibake with a success
+# status. A suffix absent from ALL_DOC_SUFFIXES means "a document we recognise
+# but cannot parse", and the caller says so rather than guessing.
+DOCUMENT_CONTENT_TYPES = {
+    "application/pdf": ".pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml": ".docx",
+    "application/vnd.ms-word": ".doc",
+    "application/msword": ".doc",
+    "application/vnd.ms-excel": ".xls",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml": ".xlsx",
+    "application/vnd.ms-powerpoint": ".ppt",
+    "application/vnd.openxmlformats-officedocument.presentationml": ".pptx",
+}
+
+# The generic "unknown binary" type. Anything else that is not a document we
+# recognise is a page as far as this tool knows.
+GENERIC_BINARY_CONTENT_TYPE = "application/octet-stream"
+
+
+def _match_document_content_type(content_type: str) -> str:
+    """The suffix *content_type* declares, or "" when it is not a document type."""
+    ct_lower = (content_type or "").lower()
+    for ct_prefix, suffix in DOCUMENT_CONTENT_TYPES.items():
+        if ct_prefix in ct_lower:
+            return suffix
+    return ""
+
 _CHARSET_RE = re.compile(r'charset\s*=\s*["\']?\s*([\w\-]+)', re.IGNORECASE)
 _META_CHARSET_RE = re.compile(rb'<meta[^>]+charset\s*=\s*["\']?\s*([\w\-]+)', re.IGNORECASE)
 _META_HTTP_EQUIV_RE = re.compile(
@@ -783,32 +814,13 @@ class WebFetch(BaseTool):
     @staticmethod
     def _is_binary_content_type(content_type: str) -> bool:
         """Check if Content-Type indicates a binary/document response."""
-        binary_types = [
-            "application/pdf",
-            "application/vnd.openxmlformats",
-            "application/vnd.ms-excel",
-            "application/vnd.ms-powerpoint",
-            "application/octet-stream",
-        ]
-        ct_lower = content_type.lower()
-        return any(bt in ct_lower for bt in binary_types)
+        if _match_document_content_type(content_type):
+            return True
+        return GENERIC_BINARY_CONTENT_TYPE in (content_type or "").lower()
 
     def _handle_download_by_content_type(self, url: str, response: requests.Response, content_type: str) -> ToolResult:
         """Handle a URL that returned binary content instead of HTML."""
-        ct_lower = content_type.lower()
-        suffix_map = {
-            "application/pdf": ".pdf",
-            "application/vnd.openxmlformats-officedocument.wordprocessingml": ".docx",
-            "application/vnd.ms-excel": ".xls",
-            "application/vnd.openxmlformats-officedocument.spreadsheetml": ".xlsx",
-            "application/vnd.ms-powerpoint": ".ppt",
-            "application/vnd.openxmlformats-officedocument.presentationml": ".pptx",
-        }
-        detected_suffix = None
-        for ct_prefix, ext in suffix_map.items():
-            if ct_prefix in ct_lower:
-                detected_suffix = ext
-                break
+        detected_suffix = _match_document_content_type(content_type) or None
 
         if detected_suffix and detected_suffix in ALL_DOC_SUFFIXES:
             # Content-Type selects the parser, not a different network URL.
