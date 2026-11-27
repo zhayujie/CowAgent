@@ -30,6 +30,21 @@ def _is_vision_capable_model(model_name: Optional[str]) -> bool:
     return bool(name) and name.startswith(_VISION_CAPABLE_MODEL_PREFIXES)
 
 
+def _openai_usage(usage) -> dict:
+    """Map a zai-sdk CompletionUsage to the OpenAI usage shape the agent reads."""
+    result = {
+        "prompt_tokens": usage.prompt_tokens,
+        "completion_tokens": usage.completion_tokens,
+        "total_tokens": usage.total_tokens,
+    }
+    # Cache hits are part of prompt_tokens, and absent when nothing was cached.
+    details = getattr(usage, "prompt_tokens_details", None)
+    cached = getattr(details, "cached_tokens", None)
+    if cached:
+        result["prompt_tokens_details"] = {"cached_tokens": cached}
+    return result
+
+
 # ZhipuAI对话模型API
 class ZHIPUAIBot(Bot, ZhipuAIImage):
     def __init__(self):
@@ -361,11 +376,7 @@ class ZHIPUAIBot(Bot, ZhipuAIImage):
                     },
                     "finish_reason": response.choices[0].finish_reason
                 }],
-                "usage": {
-                    "prompt_tokens": response.usage.prompt_tokens,
-                    "completion_tokens": response.usage.completion_tokens,
-                    "total_tokens": response.usage.total_tokens
-                }
+                "usage": _openai_usage(response.usage)
             }
             
         except Exception as e:
@@ -389,11 +400,7 @@ class ZHIPUAIBot(Bot, ZhipuAIImage):
                 chunk_usage = getattr(chunk, "usage", None)
                 if chunk_usage is not None:
                     try:
-                        stream_usage = {
-                            "prompt_tokens": chunk_usage.prompt_tokens,
-                            "completion_tokens": chunk_usage.completion_tokens,
-                            "total_tokens": chunk_usage.total_tokens,
-                        }
+                        stream_usage = _openai_usage(chunk_usage)
                     except AttributeError:
                         pass
 
