@@ -11,9 +11,37 @@ import re
 from common.markdown_fence import replace_fenced_blocks
 
 # Bot API limits. Telegram counts these after entity parsing, so measuring the
-# markdown source against them errs on the safe side (tags add no length).
+# markdown source against them errs on the safe side (tags add no length) —
+# except that Telegram counts in UTF-16 code units, not characters: astral
+# characters (emoji) weigh 2 each, so len() under-counts dense-emoji text.
 TEXT_LIMIT = 4096
 CAPTION_LIMIT = 1024
+
+
+def utf16_len(text: str) -> int:
+    """Length in UTF-16 code units — the unit Telegram's limits are counted in."""
+    return len(text.encode("utf-16-le")) // 2
+
+
+def split_plain_by_utf16(text: str, limit: int):
+    """Hard-split plain text into chunks of at most ``limit`` UTF-16 units.
+
+    Used only on the plain-text fallback path, where a chunk that passed a
+    code-point check can still be over the cap when it is dense in astral
+    characters: resending it verbatim would fail exactly like the attempt
+    before it.
+    """
+    out, buf, size = [], [], 0
+    for ch in text:
+        weight = 2 if ord(ch) > 0xFFFF else 1
+        if size + weight > limit and buf:
+            out.append("".join(buf))
+            buf, size = [], 0
+        buf.append(ch)
+        size += weight
+    if buf:
+        out.append("".join(buf))
+    return out
 
 _FENCE_RE = re.compile(r"```([^\n]*)\n(.*?)```", re.S)
 _TABLE_RE = re.compile(r"(?:^[ \t]*\|.*\|[ \t]*\n?)+", re.M)
