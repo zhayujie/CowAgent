@@ -4,6 +4,7 @@ The document tree, a document's contents, the relation graph, and importing
 new documents.
 """
 
+import gzip
 import json
 
 import web
@@ -19,6 +20,20 @@ from channel.web.core._common import (
 )
 from common.log import logger
 
+# A large base lists to megabytes of JSON; compressing shrinks that roughly
+# tenfold for a remote console, and small bodies are not worth the CPU.
+_GZIP_MIN_BYTES = 64 * 1024
+
+
+def _json_body(payload):
+    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    env = getattr(web.ctx, "env", None) or {}
+    if len(body) >= _GZIP_MIN_BYTES and "gzip" in env.get("HTTP_ACCEPT_ENCODING", ""):
+        web.header('Content-Encoding', 'gzip')
+        web.header('Vary', 'Accept-Encoding')
+        return gzip.compress(body, compresslevel=1)
+    return body
+
 
 class KnowledgeListHandler:
     def GET(self):
@@ -26,20 +41,11 @@ class KnowledgeListHandler:
         web.header('Content-Type', 'application/json; charset=utf-8')
         try:
             from agent.knowledge.service import KnowledgeService
-            params = web.input(agent_id='', view='tree', folder='', offset='0', focus='', query='', after='')
+            params = web.input(agent_id='')
             svc = KnowledgeService(
                 _get_workspace_root(agent_id=_request_agent_id(params))
             )
-            if params.view == 'folder':
-                result = svc.list_folder(params.folder, int(params.offset), params.focus)
-            elif params.view == 'search':
-                result = svc.search_titles(params.query, params.after)
-            elif params.view == 'categories':
-                result = {"categories": svc.list_categories()}
-            else:
-                # Older desktop clients still consume the recursive shape.
-                result = svc.list_tree()
-            return json.dumps({"status": "success", **result}, ensure_ascii=False)
+            return _json_body({"status": "success", **svc.list_tree()})
         except Exception as e:
             logger.error(f"[WebChannel] Knowledge list error: {e}")
             return json.dumps({"status": "error", "message": str(e)})
@@ -80,7 +86,7 @@ class KnowledgeGraphHandler:
             svc = KnowledgeService(
                 _get_workspace_root(agent_id=_request_agent_id(params))
             )
-            return json.dumps(svc.build_graph(), ensure_ascii=False)
+            return _json_body(svc.build_graph())
         except Exception as e:
             logger.error(f"[WebChannel] Knowledge graph error: {e}")
             return json.dumps({"nodes": [], "links": []})

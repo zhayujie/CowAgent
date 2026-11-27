@@ -729,58 +729,80 @@ def test_windows_reserved_device_names_are_rejected(tmp_path):
     assert category["payload"]["created"] is True
 
 
-def test_web_folder_page_reads_only_immediate_visible_titles(tmp_path):
+def _count_opens(target):
+    """Patch builtins.open and count the calls that open ``target``'s files."""
+    import builtins
+    real_open = builtins.open
+    opened = []
+
+    def spy(file, *args, **kwargs):
+        if str(file).startswith(str(target)):
+            opened.append(str(file))
+        return real_open(file, *args, **kwargs)
+
+    return patch("builtins.open", spy), opened
+
+
+def test_listing_reuses_cached_titles_until_a_page_changes(tmp_path):
     svc, _ = service(tmp_path)
     root = tmp_path / "knowledge"
-    folder = root / "notes"
-    nested = folder / "nested"
-    nested.mkdir(parents=True)
-    (nested / "secret.md").write_text("# Nested only", encoding="utf-8")
-    (root / "root.md").write_text("# Top", encoding="utf-8")
-    (root / ".hidden").mkdir()
-    for index in range(251):
-        (folder / f"file-{index:03}.md").write_text(f"# Doc {index}", encoding="utf-8")
+    (root / "notes").mkdir(parents=True)
+    page = root / "notes" / "a.md"
+    page.write_text("# First title\n", encoding="utf-8")
+    (root / "notes" / "b.md").write_text("\n\n# Below blank lines\n", encoding="utf-8")
+    (root / "notes" / "c.md").write_text("\ufeff# With BOM\n", encoding="utf-8")
 
-    with patch.object(svc, "_extract_title", wraps=svc._extract_title) as read_title:
-        initial = svc.list_folder()
-        assert [item["path"] for item in initial["items"]] == ["notes", "root.md"]
-        assert read_title.call_count == 1
+    titles = {f["name"]: f["title"] for f in svc.list_tree()["tree"][0]["files"]}
+    assert titles == {"a.md": "First title", "b.md": "Below blank lines", "c.md": "With BOM"}
 
-        read_title.reset_mock()
-        first = svc.list_folder("notes")
-        assert (first["offset"], first["next"], first["total"]) == (0, 100, 252)
-        assert len(first["items"]) == 100
-        assert read_title.call_count == 99
+    spy, opened = _count_opens(root)
+    with spy:
+        svc.list_tree()
+    assert opened == []
 
-        last = svc.list_folder("notes", focus="file-250.md")
-        assert (last["offset"], last["previous"], last["next"]) == (200, 100, None)
-        assert last["items"][-1]["title"] == "Doc 250"
-        assert svc.list_categories() == ["notes", "notes/nested"]
+    page.write_text("# Second title, longer\n", encoding="utf-8")
+    with spy:
+        files = svc.list_tree()["tree"][0]["files"]
+    assert opened == [str(page)]
+    assert files[0]["title"] == "Second title, longer"
 
 
-def test_web_title_search_paginates_across_unloaded_folders(tmp_path):
+def test_graph_shares_the_page_cache_and_rereads_only_changed_pages(tmp_path):
     svc, _ = service(tmp_path)
     root = tmp_path / "knowledge"
-    for folder, filename, title in [
-        ("a", "a.md", "NEEDLE title"),
-        ("a/nested", "needle.md", "Other title"),
-        ("a-long", "a.md", "Needle again"),
-        (".hidden", "ignored.md", "Needle"),
-    ]:
-        directory = root / folder
-        directory.mkdir(parents=True, exist_ok=True)
-        (directory / filename).write_text(f"# {title}", encoding="utf-8")
-    svc.BROWSER_PAGE_SIZE = 1
-    after = ""
-    paths = []
-    while True:
-        page = svc.search_titles(" needle ", after)
-        paths.extend(item["path"] for item in page["items"])
-        after = page["next"]
-        if after is None:
-            break
-    assert paths == ["a/a.md", "a/nested/needle.md", "a-long/a.md"]
-    assert svc.read_file(paths[1])["content"] == "# Other title"
-    (root / paths[0]).replace(root / "a/new.md")
-    assert svc.list_folder("a", focus="new.md")["items"][-1]["path"] == "a/new.md"
-    assert svc.search_titles("needle")["items"][0]["path"] == "a/nested/needle.md"
+    (root / "notes").mkdir(parents=True)
+    (root / "notes" / "a.md").write_text("# A\n\nSee [B](b.md).\n", encoding="utf-8")
+    (root / "notes" / "b.md").write_text("# B\n", encoding="utf-8")
+
+    svc.list_tree()
+    graph = svc.build_graph()
+    assert graph["links"] == [{"source": "notes/a.md", "target": "notes/b.md"}]
+
+    spy, opened = _count_opens(root)
+    with spy:
+        again = svc.build_graph()
+        svc.list_tree()
+    assert opened == []
+    assert again == graph
+
+    (root / "notes" / "b.md").write_text("# B renamed\n\n[A](a.md)\n", encoding="utf-8")
+    with spy:
+        labels = {n["id"]: n["label"] for n in svc.build_graph()["nodes"]}
+    assert opened == [str(root / "notes" / "b.md")]
+    assert labels["notes/b.md"] == "B renamed"
+
+
+def test_listing_skips_symlinked_folders(tmp_path):
+    svc, _ = service(tmp_path)
+    root = tmp_path / "knowledge"
+    (root / "notes").mkdir(parents=True)
+    (root / "notes" / "a.md").write_text("# A\n", encoding="utf-8")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "secret.md").write_text("# Secret\n", encoding="utf-8")
+    try:
+        os.symlink(outside, root / "linked", target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks unavailable")
+
+    assert [group["dir"] for group in svc.list_tree()["tree"]] == ["notes"]

@@ -5,7 +5,15 @@
 // =====================================================================
 // Knowledge View
 // =====================================================================
-let _knowledgeView;
+// The whole tree arrives in one request (the server caches page titles), but
+// rows are only built for open folders and a folder renders its files a page
+// at a time, so a base of tens of thousands of pages stays as responsive as a
+// small one without a request per click.
+const KNOWLEDGE_EXPAND_ALL_LIMIT = 1000;
+const KNOWLEDGE_FOLDER_PAGE = 200;
+const KNOWLEDGE_SEARCH_LIMIT = 300;
+// Replaced on every load, so async work can tell it belongs to an older view.
+let _knowledgeState = null;
 let _knowledgeDocumentRequest;
 let _knowledgeCurrentFile = null;
 let _knowledgeGraphLoaded = false;
@@ -40,6 +48,8 @@ function renderKnowledgeAgentSelect() {
     const current = viewingKnowledgeAgentId();
     const list = agentCatalog.length ? agentCatalog : enabledAgents();
     const options = list.map(a => ({ value: a.id, label: a.name || a.id, agent: a }));
+    // Nothing to switch between with a single Agent (or before the roster loads).
+    el.style.display = options.length < 2 ? 'none' : '';
     initDropdown(el, options, current, (value) => selectKnowledgeAgent(value), { withAvatar: true });
 }
 
@@ -85,7 +95,7 @@ async function knowledgeReadDoc(path) {
  * code it offers to overwrite, and the new mtime as the next baseline.
  */
 async function knowledgeWriteDoc(doc, content, expectedMtime) {
-    const view = _knowledgeView;
+    const state = _knowledgeState;
     const res = await fetch('/api/knowledge/action', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -96,7 +106,7 @@ async function knowledgeWriteDoc(doc, content, expectedMtime) {
         }),
     });
     const data = await res.json();
-    if (data.status === 'success' && view === _knowledgeView) _refreshKnowledgeTree([doc.path]);
+    if (data.status === 'success' && state === _knowledgeState) _refreshKnowledgeTree();
     return {
         status: data.status,
         code: data.payload?.conflict ? 'conflict' : data.code,
@@ -105,77 +115,95 @@ async function knowledgeWriteDoc(doc, content, expectedMtime) {
     };
 }
 
-async function _knowledgeList(view, params = {}, signal) {
-    const query = new URLSearchParams({view, ...params});
-    const response = await fetch(_kbUrl('/api/knowledge/list?' + query), {signal});
-    const data = await response.json();
-    if (data.status !== 'success') throw new Error(data.message || 'list failed');
-    return data;
+function _knowledgeLabel(zh, en) {
+    return currentLang === 'zh' ? zh : en;
 }
 
-function _knowledgeTreeMessage(key) {
-    const labels = {
-        loading: ['加载中…', 'Loading…'],
-        error: ['加载失败，点击重试', 'Loading failed. Retry'],
-        empty: ['此目录没有文档', 'This folder is empty'],
-        no_results: ['没有匹配的文档', 'No matching documents'],
-        previous: ['上一页', 'Previous'],
-        next: ['下一页', 'Next'],
-    };
-    return labels[key][currentLang === 'zh' ? 0 : 1];
+// Rows at the root use the stylesheet's padding; inside a folder they indent
+// one step past the folder's own button.
+function _knowledgeRowPadding(depth) {
+    return depth ? (24 + (depth - 1) * 12) + 'px' : '';
 }
 
 function _knowledgeTreeButton(label, handler, depth = 0) {
     const button = document.createElement('button');
     button.type = 'button';
-    button.className = 'knowledge-tree-file';
-    button.style.paddingLeft = (8 + depth * 12) + 'px';
+    button.className = 'knowledge-tree-file text-slate-500';
+    button.style.paddingLeft = _knowledgeRowPadding(depth);
     button.textContent = label;
     button.onclick = handler;
     return button;
 }
 
-function _knowledgeTreeText(key) {
+function _knowledgeTreeText(label) {
     const message = document.createElement('p');
     message.className = 'px-2 py-1 text-xs text-slate-500';
-    message.textContent = _knowledgeTreeMessage(key);
+    message.textContent = label;
     return message;
 }
 
-async function _loadKnowledgeFolder(view, folder, offset = 0, focus = '') {
-    const request = {offset, focus};
-    view.requests.set(folder, request);
-    view.errors.delete(folder);
-    renderKnowledgeTree();
-    try {
-        const page = await _knowledgeList('folder', {folder, offset, focus});
-        if (view !== _knowledgeView || view.requests.get(folder) !== request) return;
-        view.folders.set(folder, page);
-        if (!folder) _applyKnowledgeRoot(page);
-        return page;
-    } catch (error) {
-        if (view === _knowledgeView && view.requests.get(folder) === request) {
-            view.errors.set(folder, request);
-            if (!folder && !view.folders.has('')) {
-                const empty = document.getElementById('knowledge-empty');
-                const message = empty.querySelector('p');
-                message.replaceChildren(_knowledgeTreeButton(_knowledgeTreeMessage('error'), () => loadKnowledgeView(view.target)));
-            }
+// Flatten the list response into folder nodes keyed by path (in display
+// order) and every page in the order the tree shows them.
+function _indexKnowledgeTree(data) {
+    const files = [];
+    const byPath = new Map();
+    const folders = new Map();
+    const build = (name, path, rawFiles, rawChildren) => {
+        const node = {name, path, files: [], children: [], count: 0};
+        folders.set(path, node);
+        for (const f of rawFiles || []) {
+            const file = {path: path ? `${path}/${f.name}` : f.name, name: f.name, title: f.title || f.name};
+            file.search = `${file.title}\n${file.name}`.toLowerCase();
+            node.files.push(file);
+            files.push(file);
+            byPath.set(file.path, file);
         }
-    } finally {
-        if (view.requests.get(folder) === request) view.requests.delete(folder);
-        if (view === _knowledgeView) renderKnowledgeTree();
-    }
+        for (const group of rawChildren || []) {
+            node.children.push(build(group.dir, path ? `${path}/${group.dir}` : group.dir, group.files, group.children));
+        }
+        node.count = node.files.length + node.children.reduce((sum, child) => sum + child.count, 0);
+        return node;
+    };
+    const root = build('', '', data.root_files, data.tree);
+    return {root, files, byPath, folders, stats: data.stats || {}};
 }
 
-function _applyKnowledgeRoot(page) {
+async function _fetchKnowledgeTree() {
+    const response = await fetch(_kbUrl('/api/knowledge/list'));
+    const data = await response.json();
+    if (data.status !== 'success') throw new Error(data.message || 'list failed');
+    return _indexKnowledgeTree(data);
+}
+
+// Take over a freshly fetched tree, keeping the folders the user opened. In a
+// small base every folder starts open, including ones that appear later.
+function _adoptKnowledgeTree(state, tree) {
+    const expandAll = tree.files.length <= KNOWLEDGE_EXPAND_ALL_LIMIT;
+    for (const path of [...state.expanded]) {
+        if (!tree.folders.has(path)) state.expanded.delete(path);
+    }
+    for (const path of tree.folders.keys()) {
+        if (path && expandAll && !state.known.has(path)) state.expanded.add(path);
+    }
+    state.known = new Set(tree.folders.keys());
+    state.tree = tree;
+    _knowledgeHasPages = tree.files.length > 0 || tree.root.children.length > 0;
+    _knowledgeGraphLoaded = false;
     const empty = document.getElementById('knowledge-empty');
-    _knowledgeHasPages = page.total > 0;
     if (!_knowledgeHasPages) empty.querySelector('p').textContent = t('knowledge_empty_hint');
     document.getElementById('knowledge-empty-guide').classList.toggle('hidden', _knowledgeHasPages);
-    document.getElementById('knowledge-stats').textContent = currentLang === 'zh'
-        ? `根目录 ${page.total} 项` : `${page.total} root items`;
+    _renderKnowledgeStats(tree.stats);
     _applyKnowledgePanels();
+}
+
+function _renderKnowledgeStats(stats) {
+    const pages = stats.pages || 0;
+    const size = stats.size || 0;
+    const sizeStr = size < 1024 ? `${size} B`
+        : size < 1024 * 1024 ? `${(size / 1024).toFixed(1)} KB`
+        : `${(size / 1024 / 1024).toFixed(1)} MB`;
+    document.getElementById('knowledge-stats').textContent =
+        _knowledgeLabel(`${pages} 篇 · ${sizeStr}`, `${pages} pages · ${sizeStr}`);
 }
 
 function _resetKnowledgeDocument() {
@@ -188,13 +216,9 @@ function _resetKnowledgeDocument() {
 }
 
 function loadKnowledgeView(targetPath) {
-    _knowledgeView?.searchRequest?.abort();
-    clearTimeout(_knowledgeView?.searchTimer);
-    const view = {
-        folders: new Map(), expanded: new Set(), requests: new Map(), errors: new Map(),
-        target: targetPath, search: null, searchRequest: null, searchTimer: null,
-    };
-    _knowledgeView = view;
+    if (_knowledgeState) clearTimeout(_knowledgeState.searchTimer);
+    const state = {tree: null, expanded: new Set(), shown: new Map(), known: new Set(), query: '', searchTimer: null};
+    _knowledgeState = state;
     if (knowledgeAgentId && agentCatalog.length && !agentCatalog.some(a => a.id === knowledgeAgentId)) {
         knowledgeAgentId = '';
         localStorage.removeItem('cow_knowledge_agent');
@@ -204,6 +228,7 @@ function loadKnowledgeView(targetPath) {
     _knowledgeHasPages = false;
     document.getElementById('knowledge-search').value = '';
     document.getElementById('knowledge-stats').textContent = '';
+    document.getElementById('knowledge-tree').replaceChildren();
     const empty = document.getElementById('knowledge-empty');
     empty.querySelector('p').textContent = t('knowledge_loading');
     document.getElementById('knowledge-empty-guide').classList.add('hidden');
@@ -211,183 +236,231 @@ function loadKnowledgeView(targetPath) {
     renderKnowledgeAgentSelect();
     initKnowledgeImportDropZone();
 
-    const rootRequest = _loadKnowledgeFolder(view, '');
-    if (targetPath) openKnowledgeFile(targetPath, undefined, true, rootRequest);
+    _fetchKnowledgeTree().then(tree => {
+        if (state !== _knowledgeState) return;
+        _adoptKnowledgeTree(state, tree);
+        if (!_knowledgeHasPages) return;
+        renderKnowledgeTree();
+        _openInitialKnowledgeFile(targetPath);
+    }).catch(() => {
+        if (state !== _knowledgeState) return;
+        empty.querySelector('p').replaceChildren(_knowledgeTreeButton(
+            _knowledgeLabel('加载失败，点击重试', 'Loading failed. Retry'), () => loadKnowledgeView(targetPath)));
+    });
 }
 
-async function _revealKnowledgeFile(view, path) {
-    const parts = path.split('/');
-    let folder = '';
-    for (const name of parts) {
-        if (view !== _knowledgeView || _knowledgeCurrentFile !== path) return;
-        let page = view.folders.get(folder);
-        if (!page?.items.some(item => item.name === name)) {
-            page = await _loadKnowledgeFolder(view, folder, page?.offset, name);
+// Land on the requested page, else the index, else the first page in the tree.
+function _openInitialKnowledgeFile(targetPath) {
+    const tree = _knowledgeState?.tree;
+    if (!tree) return;
+    if (targetPath) {
+        openKnowledgeFile(targetPath, undefined, true);
+        return;
+    }
+    // On a phone the tree is the landing screen; a page opens over it on tap.
+    if (window.innerWidth < 768) {
+        document.getElementById('knowledge-content-placeholder').classList.add('hidden');
+        document.getElementById('knowledge-content-viewer').classList.add('hidden');
+        return;
+    }
+    const first = tree.byPath.get('index.md') || tree.files[0];
+    if (first) openKnowledgeFile(first.path, first.title, true);
+}
+
+// Open every folder above a page, page its folder forward far enough to
+// include it, and scroll its row into view.
+function _revealKnowledgeFile(path) {
+    const state = _knowledgeState;
+    const tree = state?.tree;
+    if (!tree) return;
+    let changed = false;
+    if (!state.query) {
+        const parts = path.split('/');
+        parts.pop();
+        for (let i = 1; i <= parts.length; i++) {
+            const folder = parts.slice(0, i).join('/');
+            if (!tree.folders.has(folder)) return;
+            if (!state.expanded.has(folder)) {
+                state.expanded.add(folder);
+                changed = true;
+            }
         }
-        const item = page?.items.find(entry => entry.name === name);
-        if (!item) return;
-        if (item.kind === 'folder') {
-            folder = item.path;
-            view.expanded.add(folder);
+        const parent = tree.folders.get(parts.join('/'));
+        const index = parent ? parent.files.findIndex(file => file.path === path) : -1;
+        const shown = Math.max(state.shown.get(parent?.path) || 0, KNOWLEDGE_FOLDER_PAGE);
+        if (index >= shown) {
+            state.shown.set(parent.path, Math.ceil((index + 1) / KNOWLEDGE_FOLDER_PAGE) * KNOWLEDGE_FOLDER_PAGE);
+            changed = true;
         }
     }
-    if (view === _knowledgeView) renderKnowledgeTree();
+    if (changed) renderKnowledgeTree();
+    document.querySelector(`#knowledge-tree .knowledge-tree-file[data-path="${CSS.escape(path)}"]`)
+        ?.scrollIntoView({block: 'nearest'});
 }
 
-function _knowledgeFileRow(item, depth, showPath = false) {
+function _markKnowledgeActive(path) {
+    document.querySelectorAll('#knowledge-tree .knowledge-tree-file.active').forEach(el => el.classList.remove('active'));
+    if (!path) return;
+    document.querySelector(`#knowledge-tree .knowledge-tree-file[data-path="${CSS.escape(path)}"]`)?.classList.add('active');
+}
+
+function _knowledgeFileRow(file, depth) {
     const button = document.createElement('button');
     button.type = 'button';
-    button.className = 'knowledge-tree-file' + (_knowledgeCurrentFile === item.path ? ' active' : '');
-    button.dataset.path = item.path;
-    button.title = item.path;
-    button.style.paddingLeft = (8 + 12 * depth) + 'px';
-    const subtitle = showPath ? `<span class="block truncate text-[10px]">${escapeHtml(item.path)}</span>` : '';
-    button.innerHTML = `<i class="fas fa-file-lines text-[10px] text-slate-400"></i><span class="truncate">${escapeHtml(item.title)}${subtitle}</span>${_knowledgeFileActions(item.path)}`;
-    button.onclick = () => openKnowledgeFile(item.path, item.title);
+    button.className = 'knowledge-tree-file' + (_knowledgeCurrentFile === file.path ? ' active' : '');
+    button.dataset.path = file.path;
+    button.style.paddingLeft = _knowledgeRowPadding(depth);
+    button.innerHTML = `<i class="fas fa-file-lines text-[10px] text-slate-400"></i><span class="truncate">${escapeHtml(file.title)}</span>${_knowledgeFileActions(file.path)}`;
+    button.onclick = () => openKnowledgeFile(file.path, file.title);
     return button;
 }
 
-function _renderKnowledgeFolder(view, container, path, depth) {
-    const page = view.folders.get(path);
-    const failed = view.errors.get(path);
-    if (failed) {
-        container.appendChild(_knowledgeTreeButton(_knowledgeTreeMessage('error'),
-            () => _loadKnowledgeFolder(view, path, failed.offset, failed.focus), depth));
+function _knowledgeFolderGroup(node, depth, filter) {
+    const open = !!filter || _knowledgeState.expanded.has(node.path);
+    const group = document.createElement('div');
+    group.className = 'knowledge-tree-group' + (open ? ' open' : '');
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'knowledge-tree-group-btn';
+    button.style.paddingLeft = (8 + depth * 12) + 'px';
+    button.setAttribute('aria-expanded', String(open));
+    const count = filter ? filter.counts.get(node.path) : node.count;
+    button.innerHTML = `<i class="fas fa-chevron-right chevron"></i><i class="fas fa-folder text-amber-400 text-[11px]"></i><span class="truncate">${escapeHtml(node.name)}</span><span class="ml-auto text-[10px] text-slate-400">${count}</span>${_knowledgeCategoryActions(node.path)}`;
+    button.onclick = () => _toggleKnowledgeFolder(group, node, depth, filter);
+    group.appendChild(button);
+    if (open) group.appendChild(_knowledgeFolderItems(node, depth + 1, filter));
+    return group;
+}
+
+// Only the toggled folder changes: its rows are built on open and dropped on
+// close, so collapsing a huge folder also frees its DOM.
+function _toggleKnowledgeFolder(group, node, depth, filter) {
+    const open = !group.classList.contains('open');
+    group.classList.toggle('open', open);
+    group.firstElementChild.setAttribute('aria-expanded', String(open));
+    if (filter) return;
+    if (open) {
+        _knowledgeState.expanded.add(node.path);
+        group.appendChild(_knowledgeFolderItems(node, depth + 1));
+    } else {
+        _knowledgeState.expanded.delete(node.path);
+        group.querySelector(':scope > .knowledge-tree-group-items')?.remove();
     }
-    if (!page) {
-        if (view.requests.has(path)) container.appendChild(_knowledgeTreeText('loading'));
-        return;
+}
+
+function _knowledgeFolderItems(node, depth, filter) {
+    const items = document.createElement('div');
+    items.className = 'knowledge-tree-group-items';
+    _fillKnowledgeFolder(items, node, depth, filter);
+    return items;
+}
+
+// Files first, then sub-folders, as the tree has always listed them. Past a
+// page of files, a "show more" row renders the next page in place.
+function _fillKnowledgeFolder(container, node, depth, filter) {
+    const state = _knowledgeState;
+    const files = filter ? node.files.filter(file => filter.files.has(file.path)) : node.files;
+    const limit = filter ? files.length : Math.max(state.shown.get(node.path) || 0, KNOWLEDGE_FOLDER_PAGE);
+    for (let i = 0; i < files.length && i < limit; i++) container.appendChild(_knowledgeFileRow(files[i], depth));
+    if (files.length > limit) {
+        const rest = files.length - limit;
+        container.appendChild(_knowledgeTreeButton(_knowledgeLabel(`显示更多（还有 ${rest} 篇）`, `Show more (${rest} left)`), () => {
+            state.shown.set(node.path, limit + KNOWLEDGE_FOLDER_PAGE);
+            container.replaceChildren();
+            _fillKnowledgeFolder(container, node, depth, filter);
+        }, depth));
     }
-    if (!page.items.length) container.appendChild(_knowledgeTreeText('empty'));
-    for (const item of page.items) {
-        if (item.kind === 'file') {
-            container.appendChild(_knowledgeFileRow(item, depth));
-            continue;
+    for (const child of node.children) {
+        if (filter && !filter.counts.has(child.path)) continue;
+        container.appendChild(_knowledgeFolderGroup(child, depth, filter));
+    }
+}
+
+// Matches in tree order, capped, with per-folder match counts for the labels.
+function _knowledgeFilter(tree, query) {
+    const needle = query.toLowerCase();
+    const files = new Set();
+    const counts = new Map();
+    let total = 0;
+    for (const file of tree.files) {
+        if (!file.search.includes(needle)) continue;
+        total++;
+        if (files.size >= KNOWLEDGE_SEARCH_LIMIT) continue;
+        files.add(file.path);
+        const parts = file.path.split('/');
+        for (let i = parts.length - 1; i > 0; i--) {
+            const folder = parts.slice(0, i).join('/');
+            counts.set(folder, (counts.get(folder) || 0) + 1);
         }
-        const isOpen = view.expanded.has(item.path);
-        const group = document.createElement('div');
-        group.className = 'knowledge-tree-group' + (isOpen ? ' open' : '');
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'knowledge-tree-group-btn';
-        button.style.paddingLeft = (8 + 12 * depth) + 'px';
-        button.setAttribute('aria-expanded', String(isOpen));
-        button.innerHTML = `<i class="fas fa-chevron-right chevron"></i><i class="fas fa-folder text-amber-400 text-[11px]"></i><span class="truncate">${escapeHtml(item.name)}</span>${_knowledgeCategoryActions(item.path)}`;
-        button.onclick = () => {
-            if (view.expanded.delete(item.path)) {
-                renderKnowledgeTree();
-            } else {
-                view.expanded.add(item.path);
-                if (!view.folders.has(item.path) && !view.requests.has(item.path)) {
-                    _loadKnowledgeFolder(view, item.path);
-                } else {
-                    renderKnowledgeTree();
-                }
-            }
-            document.querySelector(`[data-knowledge-folder="${CSS.escape(item.path)}"]`)?.focus({preventScroll: true});
-        };
-        button.dataset.knowledgeFolder = item.path;
-        group.appendChild(button);
-        if (isOpen) _renderKnowledgeFolder(view, group, item.path, depth + 1);
-        container.appendChild(group);
     }
-    for (const direction of ['previous', 'next']) {
-        if (page[direction] != null) {
-            const button = _knowledgeTreeButton(_knowledgeTreeMessage(direction),
-                () => _loadKnowledgeFolder(view, path, page[direction]), depth);
-            button.disabled = view.requests.has(path);
-            container.appendChild(button);
-        }
-    }
+    return {files, counts, total};
 }
 
 function renderKnowledgeTree() {
-    const view = _knowledgeView;
+    const state = _knowledgeState;
     const container = document.getElementById('knowledge-tree');
+    const scrollTop = container.scrollTop;
     container.replaceChildren();
-    if (!view.search) {
-        _renderKnowledgeFolder(view, container, '', 0);
+    if (!state?.tree) return;
+    const filter = state.query ? _knowledgeFilter(state.tree, state.query) : null;
+    if (filter && !filter.files.size) {
+        container.appendChild(_knowledgeTreeText(_knowledgeLabel('没有匹配的文档', 'No matching documents')));
         return;
     }
-    const {page, loading, error, cursors} = view.search;
-    if (loading) {
-        container.appendChild(_knowledgeTreeText('loading'));
-    } else if (error) {
-        container.appendChild(_knowledgeTreeButton(_knowledgeTreeMessage('error'), () => _loadKnowledgeSearch(view)));
-    } else if (page) {
-        if (!page.items.length) container.appendChild(_knowledgeTreeText('no_results'));
-        for (const item of page.items) container.appendChild(_knowledgeFileRow(item, 0, true));
-        if (cursors.length > 1) {
-            container.appendChild(_knowledgeTreeButton(_knowledgeTreeMessage('previous'),
-                () => { cursors.pop(); _loadKnowledgeSearch(view); }));
-        }
-        if (page.next) {
-            container.appendChild(_knowledgeTreeButton(_knowledgeTreeMessage('next'),
-                () => { cursors.push(page.next); _loadKnowledgeSearch(view); }));
-        }
+    _fillKnowledgeFolder(container, state.tree.root, 0, filter);
+    if (filter && filter.total > filter.files.size) {
+        container.appendChild(_knowledgeTreeText(_knowledgeLabel(
+            `共 ${filter.total} 篇匹配，仅显示前 ${filter.files.size} 篇`,
+            `Showing the first ${filter.files.size} of ${filter.total} matches`)));
     }
-}
-
-async function _loadKnowledgeSearch(view) {
-    const search = view.search;
-    if (view !== _knowledgeView || !search) return;
-    view.searchRequest?.abort();
-    const controller = new AbortController();
-    view.searchRequest = controller;
-    search.loading = true;
-    search.error = false;
-    renderKnowledgeTree();
-    try {
-        search.page = await _knowledgeList('search', {query: search.query, after: search.cursors.at(-1)}, controller.signal);
-    } catch (error) {
-        if (!controller.signal.aborted) search.error = true;
-    } finally {
-        if (view === _knowledgeView && view.searchRequest === controller && !controller.signal.aborted) {
-            search.loading = false;
-            renderKnowledgeTree();
-        }
-    }
+    container.scrollTop = scrollTop;
 }
 
 function filterKnowledgeTree(query) {
-    const view = _knowledgeView;
-    clearTimeout(view.searchTimer);
-    view.searchRequest?.abort();
-    query = query.trim();
-    view.search = query ? {query, cursors: [''], loading: true} : null;
-    renderKnowledgeTree();
-    if (query) view.searchTimer = setTimeout(() => _loadKnowledgeSearch(view), 300);
+    const state = _knowledgeState;
+    if (!state) return;
+    clearTimeout(state.searchTimer);
+    const apply = () => {
+        state.query = query.trim();
+        renderKnowledgeTree();
+    };
+    // Filtering is in memory; only a large base needs typing to pause first.
+    if (!state.tree || state.tree.files.length <= KNOWLEDGE_EXPAND_ALL_LIMIT) apply();
+    else state.searchTimer = setTimeout(apply, 150);
 }
 
-async function _refreshKnowledgeTree(paths, removedFolder) {
-    const view = _knowledgeView;
-    if (removedFolder) {
-        const removed = path => path === removedFolder || path.startsWith(removedFolder + '/');
-        for (const entries of [view.folders, view.expanded, view.requests, view.errors]) {
-            for (const path of entries.keys()) {
-                if (removed(path)) entries.delete(path);
-            }
+/**
+ * Refetch the tree after a change, keeping open folders, the search and the
+ * viewer. A save may have rewritten the page's H1, its title in the tree, but
+ * the document on screen, or the text area still open over it, stays put.
+ */
+async function _refreshKnowledgeTree() {
+    const state = _knowledgeState;
+    try {
+        const tree = await _fetchKnowledgeTree();
+        if (state !== _knowledgeState) return;
+        _adoptKnowledgeTree(state, tree);
+        renderKnowledgeTree();
+        const doc = knowledgeEditor.current();
+        const file = doc && tree.byPath.get(doc.path);
+        if (file && file.title !== doc.title) {
+            doc.title = file.title;
+            docRenderTitle('knowledge-viewer-title', doc.title, {dirty: knowledgeEditor.isDirty()});
         }
+    } catch (error) {
+        /* The tree on screen is merely stale; the change itself went through. */
     }
-    const folders = new Set(['']);
-    for (const path of paths.filter(Boolean)) {
-        const parts = path.split('/');
-        parts.pop();
-        while (parts.length) {
-            folders.add(parts.join('/'));
-            parts.pop();
+}
+
+// Keep a renamed folder, and everything open beneath it, open under its new path.
+function _remapKnowledgeFolders(state, oldPath, newPath) {
+    const moved = path => path === oldPath || path.startsWith(oldPath + '/');
+    for (const set of [state.expanded, state.known]) {
+        for (const path of [...set]) {
+            if (!moved(path)) continue;
+            set.delete(path);
+            set.add(newPath + path.slice(oldPath.length));
         }
-    }
-    if (view.search) filterKnowledgeTree(view.search.query);
-    await Promise.all([...folders].filter(folder => view.folders.has(folder) || view.requests.has(folder))
-        .map(folder => _loadKnowledgeFolder(view, folder, view.folders.get(folder)?.offset)));
-    if (view !== _knowledgeView) return;
-    const doc = knowledgeEditor.current();
-    const parent = doc?.path.split('/').slice(0, -1).join('/');
-    const file = view.folders.get(parent)?.items.find(item => item.path === doc?.path);
-    if (file) {
-        doc.title = file.title;
-        docRenderTitle('knowledge-viewer-title', doc.title, {dirty: knowledgeEditor.isDirty()});
     }
 }
 
@@ -408,7 +481,7 @@ function _knowledgeCategoryActions(path) {
 }
 
 async function dispatchKnowledgeAction(action, payload, openPathResolver) {
-    const view = _knowledgeView;
+    const state = _knowledgeState;
     _setKnowledgeStatus(currentLang === 'zh' ? '处理中...' : 'Working...', false, true);
     try {
         const response = await fetch('/api/knowledge/action', {
@@ -417,22 +490,20 @@ async function dispatchKnowledgeAction(action, payload, openPathResolver) {
             body: JSON.stringify({action, payload, agent_id: viewingKnowledgeAgentId()}),
         });
         const result = await response.json();
-        if (view !== _knowledgeView) return result.payload;
-        const paths = [payload.path, payload.new_path, ...(payload.paths || [])];
-        if (payload.target_category) paths.push(payload.target_category + '/');
+        if (state !== _knowledgeState) return result.payload;
         if (result.status !== 'success') {
             _setKnowledgeStatus(result.message || (currentLang === 'zh' ? '操作失败' : 'Operation failed'), true);
-            _refreshKnowledgeTree(paths);
+            _refreshKnowledgeTree();
             return null;
         }
         _setKnowledgeStatus(_knowledgeResultMessage(action, result.payload), false);
         const current = _knowledgeCurrentFile;
         let next = openPathResolver?.(result.payload);
-        let removedFolder;
         if (action === 'rename_category' || action === 'delete_category') {
-            removedFolder = result.payload?.old_path || result.payload?.path;
-            if (removedFolder && current?.startsWith(removedFolder + '/')) {
-                if (action === 'rename_category') next = result.payload.path + current.slice(removedFolder.length);
+            const oldPath = result.payload?.old_path || result.payload?.path;
+            if (oldPath && action === 'rename_category') _remapKnowledgeFolders(state, oldPath, result.payload.path);
+            if (oldPath && current?.startsWith(oldPath + '/')) {
+                if (action === 'rename_category') next = result.payload.path + current.slice(oldPath.length);
                 _resetKnowledgeDocument();
             }
         } else if (action === 'move_documents' || action === 'delete_documents') {
@@ -442,8 +513,10 @@ async function dispatchKnowledgeAction(action, payload, openPathResolver) {
                 _resetKnowledgeDocument();
             }
         }
-        const refresh = _refreshKnowledgeTree(paths, removedFolder);
-        if (next) openKnowledgeFile(next, undefined, true, refresh);
+        await _refreshKnowledgeTree();
+        if (state !== _knowledgeState) return result.payload;
+        if (next) openKnowledgeFile(next, undefined, true);
+        else if (!_knowledgeCurrentFile) _openInitialKnowledgeFile();
         return result.payload;
     } catch (error) {
         _setKnowledgeStatus(currentLang === 'zh' ? '请求失败，请稍后重试' : 'Request failed, please try again', true);
@@ -479,14 +552,9 @@ function _knowledgeResultMessage(action, payload) {
         `已删除 ${payload?.deleted || 0} 个文档`;
 }
 
-async function _knowledgeCategoryPaths(view) {
-    try {
-        const data = await _knowledgeList('categories');
-        return view === _knowledgeView ? data.categories : null;
-    } catch (error) {
-        if (view === _knowledgeView) _setKnowledgeStatus(currentLang === 'zh' ? '无法加载分类' : 'Could not load categories', true);
-        return null;
-    }
+function _knowledgeCategoryPaths() {
+    const tree = _knowledgeState?.tree;
+    return tree ? [...tree.folders.keys()].filter(Boolean) : [];
 }
 
 function openKnowledgeDialog(options) {
@@ -608,10 +676,9 @@ function createKnowledgeCategory() {
     });
 }
 
-async function createKnowledgeDocument() {
+function createKnowledgeDocument() {
     if (!knowledgeEditor.guard(createKnowledgeDocument)) return;
-    const categories = await _knowledgeCategoryPaths(_knowledgeView);
-    if (!categories) return;
+    const categories = _knowledgeCategoryPaths();
     if (!categories.length) {
         _setKnowledgeStatus(currentLang === 'zh' ? '请先创建分类' : 'Create a category first', true);
         return;
@@ -672,15 +739,14 @@ function selectKnowledgeImportFiles() {
     input.click();
 }
 
-async function openKnowledgeImportDialog(files) {
+function openKnowledgeImportDialog(files) {
     if (!knowledgeEditor.guard(() => openKnowledgeImportDialog(files))) return;
     const validationError = validateKnowledgeImportFiles(files);
     if (validationError) {
         _setKnowledgeStatus(validationError, true);
         return;
     }
-    const choices = await _knowledgeCategoryPaths(_knowledgeView);
-    if (!choices) return;
+    const choices = _knowledgeCategoryPaths();
     openKnowledgeDialog({
         title: currentLang === 'zh' ? '导入文档' : 'Import documents',
         subtitle: currentLang === 'zh' ? `已选择 ${files.length} 个文件` : `${files.length} file(s) selected`,
@@ -695,7 +761,7 @@ async function openKnowledgeImportDialog(files) {
 }
 
 async function importKnowledgeDocuments(files, targetCategory) {
-    const view = _knowledgeView;
+    const state = _knowledgeState;
     const validationError = validateKnowledgeImportFiles(files);
     if (validationError) {
         _setKnowledgeStatus(validationError, true);
@@ -714,17 +780,17 @@ async function importKnowledgeDocuments(files, targetCategory) {
     try {
         const response = await fetch(_kbUrl('/api/knowledge/import'), { method: 'POST', body: formData });
         const result = await response.json();
-        if (view !== _knowledgeView) return result.payload;
+        if (state !== _knowledgeState) return result.payload;
         if (result.status !== 'success') {
             _setKnowledgeStatus(result.message || (currentLang === 'zh' ? '导入失败' : 'Import failed'), true);
-            _refreshKnowledgeTree([targetCategory + '/']);
+            _refreshKnowledgeTree();
             return null;
         }
         _setKnowledgeStatus(_knowledgeResultMessage('import_documents', result.payload), false);
         // Auto-open the first successfully imported document.
         const firstImported = (result.payload?.results || []).find(item => item.status === 'imported');
-        const refresh = _refreshKnowledgeTree([targetCategory + '/']);
-        if (firstImported) openKnowledgeFile(firstImported.path, undefined, true, refresh);
+        await _refreshKnowledgeTree();
+        if (firstImported && state === _knowledgeState) openKnowledgeFile(firstImported.path, undefined, true);
         return result.payload;
     } catch (error) {
         _setKnowledgeStatus(currentLang === 'zh' ? '导入请求失败' : 'Import request failed', true);
@@ -810,12 +876,10 @@ function deleteKnowledgeDocument(path) {
     });
 }
 
-async function moveKnowledgeDocument(path) {
+function moveKnowledgeDocument(path) {
     if (!knowledgeEditor.guard(() => moveKnowledgeDocument(path))) return;
     const currentCategory = path.includes('/') ? path.split('/').slice(0, -1).join('/') : '';
-    const categories = await _knowledgeCategoryPaths(_knowledgeView);
-    if (!categories) return;
-    const choices = categories.filter(value => value !== currentCategory);
+    const choices = _knowledgeCategoryPaths().filter(value => value !== currentCategory);
     openKnowledgeDialog({
         title: currentLang === 'zh' ? '移动文档' : 'Move document',
         subtitle: path,
@@ -895,17 +959,14 @@ function renderKnowledgeDoc(doc) {
     bindKnowledgeImages(bodyEl, doc.dir);
 }
 
-function openKnowledgeFile(path, title, reveal = false, rootRequest) {
+function openKnowledgeFile(path, title, reveal = false) {
     // Another document is about to take the viewer over, text area included.
-    if (!knowledgeEditor.guard(() => openKnowledgeFile(path, title, reveal, rootRequest))) return;
-    const view = _knowledgeView;
+    if (!knowledgeEditor.guard(() => openKnowledgeFile(path, title, reveal))) return;
     const request = {};
     _knowledgeDocumentRequest = request;
     _knowledgeCurrentFile = path;
-    // Update active state in tree via data-path
-    document.querySelectorAll('.knowledge-tree-file').forEach(el => {
-        el.classList.toggle('active', el.dataset.path === path);
-    });
+    _markKnowledgeActive(path);
+    if (reveal) _revealKnowledgeFile(path);
 
     knowledgeReadDoc(path).then(data => {
         if (_knowledgeDocumentRequest !== request) return;
@@ -914,14 +975,12 @@ function openKnowledgeFile(path, title, reveal = false, rootRequest) {
         document.getElementById('knowledge-content-viewer').classList.remove('hidden');
         knowledgeEditor.open({
             path: path,
-            title: title || data.title || path.split('/').pop(),
+            title: title || _knowledgeState?.tree?.byPath.get(path)?.title || data.title || path.split('/').pop(),
             content: data.content || '',
             // Absolute dir of the page, for resolving its relative image srcs.
             dir: data.dir,
             editable: !!data.editable,
         });
-
-        if (reveal) Promise.resolve(rootRequest).then(() => _revealKnowledgeFile(view, path));
 
         // Mobile: hide sidebar, show content
         if (window.innerWidth < 768) {
@@ -930,7 +989,7 @@ function openKnowledgeFile(path, title, reveal = false, rootRequest) {
     }).catch(error => {
         if (_knowledgeDocumentRequest !== request) return;
         _knowledgeCurrentFile = knowledgeEditor.current()?.path || null;
-        renderKnowledgeTree();
+        _markKnowledgeActive(_knowledgeCurrentFile);
         // The viewer is still showing whatever was open before the click, and
         // the tree has already moved its highlight: say why it did not follow.
         _setKnowledgeStatus(currentLang === 'zh' ? '文档加载失败' : 'Failed to load document', true);
@@ -940,7 +999,7 @@ function openKnowledgeFile(path, title, reveal = false, rootRequest) {
 function knowledgeMobileBack() {
     if (!knowledgeEditor.guard(knowledgeMobileBack)) return;
     _resetKnowledgeDocument();
-    renderKnowledgeTree();
+    _markKnowledgeActive(null);
 }
 
 function switchKnowledgeTab(tab) {
@@ -989,6 +1048,8 @@ function ensureD3Loaded() {
 
 function loadKnowledgeGraph() {
     _knowledgeGraphLoaded = true;
+    const state = _knowledgeState;
+    const isCurrent = () => state === _knowledgeState && _knowledgeGraphLoaded;
     const container = document.getElementById('knowledge-graph-container');
     container.innerHTML = '<div class="flex items-center justify-center h-full text-slate-400 text-sm"><i class="fas fa-spinner fa-spin mr-2"></i>Loading graph...</div>';
 
@@ -996,20 +1057,37 @@ function loadKnowledgeGraph() {
         ensureD3Loaded(),
         fetch(_kbUrl('/api/knowledge/graph')).then(r => r.json()),
     ]).then(([, data]) => {
+        if (!isCurrent()) return;
         const nodes = data.nodes || [];
         const links = data.links || [];
         if (nodes.length === 0) {
             container.innerHTML = `<div class="flex flex-col items-center justify-center h-full text-slate-400"><i class="fas fa-diagram-project text-3xl mb-3 opacity-40"></i><p class="text-sm">${t('knowledge_empty_hint')}</p></div>`;
             return;
         }
-        container.innerHTML = '';
-        renderKnowledgeGraph(container, nodes, links);
+        return renderKnowledgeGraph(container, nodes, links, isCurrent);
     }).catch(() => {
+        if (!isCurrent()) return;
         container.innerHTML = '<div class="flex items-center justify-center h-full text-slate-400 text-sm">Failed to load graph</div>';
     });
 }
 
-function renderKnowledgeGraph(container, nodes, links) {
+// Run the force layout to rest in slices of about a frame, so a large graph
+// keeps the page responsive while the spinner is still up.
+async function _settleKnowledgeGraph(simulation, ticks, isCurrent) {
+    simulation.alphaDecay(1 - Math.pow(simulation.alphaMin(), 1 / ticks));
+    for (let i = 0; i < ticks;) {
+        const start = performance.now();
+        while (i < ticks && performance.now() - start < 16) {
+            simulation.tick();
+            i++;
+        }
+        await new Promise(resolve => setTimeout(resolve, 0));
+        if (!isCurrent()) return false;
+    }
+    return true;
+}
+
+async function renderKnowledgeGraph(container, nodes, links, isCurrent = () => true) {
     const width = container.clientWidth;
     const height = container.clientHeight || 600;
 
@@ -1022,13 +1100,34 @@ function renderKnowledgeGraph(container, nodes, links) {
     );
     const colorScale = d3.scaleOrdinal(d3.schemeTableau10).domain(categories);
 
-    // Connection count for sizing
-    const connCount = {};
-    nodes.forEach(n => connCount[n.id] = 0);
+    // Degree for sizing and neighbour sets for hover highlighting, taken while
+    // link ends are still ids (forceLink swaps them for node objects).
+    const degree = new Map(nodes.map(n => [n.id, 0]));
+    const neighbors = new Map(nodes.map(n => [n.id, new Set([n.id])]));
     links.forEach(l => {
-        connCount[l.source] = (connCount[l.source] || 0) + 1;
-        connCount[l.target] = (connCount[l.target] || 0) + 1;
+        degree.set(l.source, (degree.get(l.source) || 0) + 1);
+        degree.set(l.target, (degree.get(l.target) || 0) + 1);
+        neighbors.get(l.source)?.add(l.target);
+        neighbors.get(l.target)?.add(l.source);
     });
+
+    function getNodeRadius(d) {
+        return Math.min(11, 4 + Math.sqrt(degree.get(d.id) || 0) * 1.6);
+    }
+
+    // Lay the graph out before anything is drawn. Animating from a cold start
+    // swelled the graph past the panel and then shrank it back once it was
+    // fitted, which read as the page jumping.
+    const simulation = d3.forceSimulation(nodes)
+        .force('link', d3.forceLink(links).id(d => d.id).distance(45).strength(0.5))
+        .force('charge', d3.forceManyBody().strength(-70).distanceMax(320))
+        .force('x', d3.forceX(0).strength(0.07))
+        .force('y', d3.forceY(0).strength(0.07))
+        .force('collision', d3.forceCollide().radius(d => getNodeRadius(d) + 5))
+        .stop();
+    const ticks = Math.max(80, Math.min(300, Math.round(300000 / nodes.length)));
+    if (!await _settleKnowledgeGraph(simulation, ticks, isCurrent)) return;
+    container.innerHTML = '';
 
     const svg = d3.select(container)
         .append('svg')
@@ -1037,48 +1136,95 @@ function renderKnowledgeGraph(container, nodes, links) {
 
     const g = svg.append('g');
 
-    // Zoom with adaptive label visibility
-    let currentZoomScale = 1;
-    // Set once the graph is fitted to the viewport. Labels hide below it, so
-    // zooming out past the default view still declutters.
-    let fittedScale = 1;
+    // Labels keep a constant on-screen size: the font is set once on their
+    // group, divided by the zoom scale. Only labels that fit are shown:
+    // better-connected pages claim their spot first, a label blocked on the
+    // right of its node tries the left, and one blocked on both sides waits
+    // until zooming in makes room. Sparse outer pages stay labelled while the
+    // dense core thins out.
+    const LABEL_FONT = 11;
+    const LABEL_HEIGHT = 14;
+    const LABEL_CELL = 40;
+    const labelText = d => d.label.length > 15 ? d.label.slice(0, 14) + '…' : d.label;
+    const labelOrder = [...nodes].sort((a, b) => degree.get(b.id) - degree.get(a.id));
+    const labelWidth = new Map(nodes.map(n => [n.id,
+        [...labelText(n)].reduce((w, ch) => w + (ch.charCodeAt(0) > 255 ? LABEL_FONT : LABEL_FONT * 0.6), 0)]));
+    let labelGroup = null;
+    let label = null;
+    let labelScale = 1;
+    let labelFrame = 0;
+    // Node id -> 'right' | 'left' for every label currently shown.
+    let shownLabels = new Map();
+
+    function placeLabels() {
+        labelFrame = 0;
+        if (!label) return;
+        const k = labelScale;
+        const grid = new Map();
+        const cells = (x, y, w, fn) => {
+            for (let cx = Math.floor(x / LABEL_CELL); cx <= Math.floor((x + w) / LABEL_CELL); cx++) {
+                for (let cy = Math.floor(y / LABEL_CELL); cy <= Math.floor((y + LABEL_HEIGHT) / LABEL_CELL); cy++) {
+                    if (fn(cx + ',' + cy)) return true;
+                }
+            }
+            return false;
+        };
+        const fits = (x, y, w) => !cells(x, y, w, key => (grid.get(key) || []).some(b =>
+            x < b[0] + b[2] && b[0] < x + w && y < b[1] + LABEL_HEIGHT && b[1] < y + LABEL_HEIGHT));
+        const shown = new Map();
+        for (const n of labelOrder) {
+            const gap = (getNodeRadius(n) + 3) * k;
+            const y = n.y * k - LABEL_HEIGHT / 2;
+            const w = labelWidth.get(n.id);
+            let x = n.x * k + gap;
+            let side = 'right';
+            if (!fits(x, y, w)) {
+                x = n.x * k - gap - w;
+                side = 'left';
+                if (!fits(x, y, w)) continue;
+            }
+            const box = [x, y, w];
+            cells(x, y, w, key => {
+                if (!grid.has(key)) grid.set(key, []);
+                grid.get(key).push(box);
+            });
+            shown.set(n.id, side);
+        }
+        shownLabels = shown;
+        showLabels(id => shown.has(id));
+    }
+
+    // Touch only the labels whose visibility or side changed; a zoom gesture
+    // re-places labels every frame.
+    function showLabels(visible) {
+        label.each(function (d) {
+            const side = visible(d.id) ? (shownLabels.get(d.id) || 'right') : null;
+            if (this.__labelSide === side) return;
+            this.__labelSide = side;
+            if (!side) {
+                this.setAttribute('display', 'none');
+                return;
+            }
+            this.removeAttribute('display');
+            const gap = getNodeRadius(d) + 3;
+            this.setAttribute('dx', side === 'left' ? -gap : gap);
+            this.setAttribute('text-anchor', side === 'left' ? 'end' : 'start');
+        });
+    }
+    const scheduleLabels = () => {
+        if (!labelFrame) labelFrame = requestAnimationFrame(placeLabels);
+    };
+
     const zoom = d3.zoom()
-        .scaleExtent([0.2, 5])
+        .scaleExtent([0.1, 5])
         .on('zoom', (event) => {
             g.attr('transform', event.transform);
-            currentZoomScale = event.transform.k;
-            updateLabelVisibility();
+            if (!labelGroup) return;
+            labelScale = event.transform.k;
+            labelGroup.attr('font-size', LABEL_FONT / labelScale);
+            scheduleLabels();
         });
     svg.call(zoom);
-
-    function updateLabelVisibility() {
-        if (!label) return;
-        // Fitting a graph of any size into the panel lands well below scale 1,
-        // so a fixed threshold would hide every label in the default view.
-        // Compare against the fitted scale instead, and keep the text a
-        // constant size on screen — inside the zoomed <g>, that means dividing
-        // by the scale.
-        if (currentZoomScale < fittedScale * 0.9) {
-            label.attr('opacity', 0);
-            return;
-        }
-        label.attr('opacity', 1)
-            .attr('font-size', 10 / currentZoomScale)
-            .attr('dx', d => getNodeRadius(d) + 4 / currentZoomScale)
-            .attr('dy', 3 / currentZoomScale);
-    }
-
-    const simulation = d3.forceSimulation(nodes)
-        .force('link', d3.forceLink(links).id(d => d.id).distance(90))
-        .force('charge', d3.forceManyBody().strength(-180))
-        .force('center', d3.forceCenter(width / 2, height / 2))
-        .force('x', d3.forceX(width / 2).strength(0.06))
-        .force('y', d3.forceY(height / 2).strength(0.06))
-        .force('collision', d3.forceCollide().radius(d => getNodeRadius(d) + 30));
-
-    function getNodeRadius(d) {
-        return Math.max(5, Math.min(16, 5 + (connCount[d.id] || 0) * 2));
-    }
 
     const link = g.append('g')
         .selectAll('line')
@@ -1097,22 +1243,24 @@ function renderKnowledgeGraph(container, nodes, links) {
         .attr('stroke', '#fff')
         .attr('stroke-width', 1.5)
         .style('cursor', 'pointer')
+        // A gentle reheat, so dragging one node nudges its neighbours instead
+        // of setting the whole settled graph in motion again.
         .call(d3.drag()
-            .on('start', (event, d) => { if (!event.active) simulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+            .on('start', (event, d) => { if (!event.active) simulation.alphaTarget(0.08).restart(); d.fx = d.x; d.fy = d.y; })
             .on('drag', (event, d) => { d.fx = event.x; d.fy = event.y; })
             .on('end', (event, d) => { if (!event.active) simulation.alphaTarget(0); d.fx = null; d.fy = null; })
         );
 
-    const label = g.append('g')
+    labelGroup = g.append('g')
+        .attr('fill', '#64748b')
+        .style('pointer-events', 'none');
+    label = labelGroup
         .selectAll('text')
         .data(nodes)
         .join('text')
-        .text(d => d.label.length > 15 ? d.label.slice(0, 14) + '…' : d.label)
-        .attr('font-size', 9)
-        .attr('dx', d => getNodeRadius(d) + 4)
-        .attr('dy', 3)
-        .attr('fill', '#64748b')
-        .style('pointer-events', 'none');
+        .text(labelText)
+        .attr('dx', d => getNodeRadius(d) + 3)
+        .attr('dy', '0.35em');
 
     // Tooltip
     const tooltip = document.createElement('div');
@@ -1126,9 +1274,11 @@ function renderKnowledgeGraph(container, nodes, links) {
         tooltip.style.left = (event.offsetX + 12) + 'px';
         tooltip.style.top = (event.offsetY - 8) + 'px';
         // Highlight connections
+        const near = neighbors.get(d.id);
         link.attr('stroke-opacity', l => (l.source.id === d.id || l.target.id === d.id) ? 0.8 : 0.1);
-        node.attr('opacity', n => n.id === d.id || links.some(l => (l.source.id === d.id && l.target.id === n.id) || (l.target.id === d.id && l.source.id === n.id)) ? 1 : 0.2);
-        label.attr('opacity', n => n.id === d.id || links.some(l => (l.source.id === d.id && l.target.id === n.id) || (l.target.id === d.id && l.source.id === n.id)) ? 1 : 0.1);
+        node.attr('opacity', n => near.has(n.id) ? 1 : 0.2);
+        label.attr('opacity', n => near.has(n.id) ? 1 : 0.1);
+        showLabels(id => near.has(id) || shownLabels.has(id));
     }).on('mousemove', (event) => {
         tooltip.style.left = (event.offsetX + 12) + 'px';
         tooltip.style.top = (event.offsetY - 8) + 'px';
@@ -1137,41 +1287,38 @@ function renderKnowledgeGraph(container, nodes, links) {
         link.attr('stroke-opacity', 0.3);
         node.attr('opacity', 1);
         label.attr('opacity', 1);
+        showLabels(id => shownLabels.has(id));
     }).on('click', (event, d) => {
         // Switch to docs tab and open the file
         switchKnowledgeTab('docs');
-        openKnowledgeFile(d.id, d.label);
+        openKnowledgeFile(d.id, d.label, true);
     });
 
-    simulation.on('tick', () => {
+    const draw = () => {
         link.attr('x1', d => d.source.x).attr('y1', d => d.source.y)
             .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
         node.attr('cx', d => d.x).attr('cy', d => d.y);
         label.attr('x', d => d.x).attr('y', d => d.y);
-    });
+    };
+    draw();
+    simulation.on('tick', () => { draw(); scheduleLabels(); });
 
-    // Auto fit-to-view when simulation settles
-    simulation.on('end', () => {
-        const pad = 16;
-        let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-        nodes.forEach(n => {
-            if (n.x < x0) x0 = n.x;
-            if (n.y < y0) y0 = n.y;
-            if (n.x > x1) x1 = n.x;
-            if (n.y > y1) y1 = n.y;
-        });
-        const bw = x1 - x0 + pad * 2;
-        const bh = y1 - y0 + pad * 2;
-        if (bw > 0 && bh > 0) {
-            const scale = Math.min(width / bw, height / bh, 4);
-            fittedScale = scale;
-            const tx = width / 2 - (x0 + x1) / 2 * scale;
-            const ty = height / 2 - (y0 + y1) / 2 * scale;
-            svg.transition().duration(500).call(
-                zoom.transform, d3.zoomIdentity.translate(tx, ty).scale(scale)
-            );
-        }
+    // Fit the settled layout once, without animation. The scale is clamped so
+    // nodes and labels stay readable: a large graph may run past the panel
+    // edges and is explored by dragging and zooming instead.
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    nodes.forEach(n => {
+        if (n.x < x0) x0 = n.x;
+        if (n.y < y0) y0 = n.y;
+        if (n.x > x1) x1 = n.x;
+        if (n.y > y1) y1 = n.y;
     });
+    const pad = 40;
+    const fit = Math.min(width / (x1 - x0 + pad * 2), height / (y1 - y0 + pad * 2));
+    const scale = Math.max(0.75, Math.min(1.3, fit));
+    svg.call(zoom.transform, d3.zoomIdentity
+        .translate(width / 2 - (x0 + x1) / 2 * scale, height / 2 - (y0 + y1) / 2 * scale)
+        .scale(scale));
 
     // Legend
     const legendDiv = document.createElement('div');

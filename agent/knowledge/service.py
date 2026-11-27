@@ -28,6 +28,68 @@ from agent.memory.config import MemoryConfig
 from agent.memory.manager import MemoryManager
 
 
+# Trailing "#anchor" is optional so section links still count as edges;
+# "<...>" is the CommonMark form for targets containing spaces.
+_GRAPH_LINK_RE = re.compile(r'\[[^\]]*\]\(\s*<?([^)#<>]+?\.md)>?(?:#[^)]*)?\s*\)', re.IGNORECASE)
+
+# Per-page H1 and outgoing links, keyed by absolute path and reused while the
+# file's mtime and size are unchanged. Listing a large base otherwise opens
+# every page on every request, which dominates the cost of the tree and graph.
+_PAGE_META: Dict[str, tuple] = {}
+_PAGE_META_MAX = 200_000
+_PAGE_META_TITLE_LINES = 20
+
+
+def _page_meta(path: str, st: os.stat_result, with_links: bool = False) -> tuple:
+    """Return ``(h1, links)`` for a markdown page, reading it only on a miss.
+
+    ``h1`` is the text of a "# " heading on the first non-blank line, or None.
+    ``links`` is None unless ``with_links`` is set.
+    """
+    key = (st.st_mtime_ns, st.st_size)
+    cached = _PAGE_META.get(path)
+    if cached is not None and cached[0] == key and (not with_links or cached[2] is not None):
+        return cached[1], cached[2]
+
+    first_line, links = "", None
+    try:
+        # utf-8-sig: files saved by Windows editors may carry a BOM, which
+        # would otherwise hide the "# " title line.
+        with open(path, "r", encoding="utf-8-sig") as f:
+            if with_links:
+                content = f.read()
+                first_line = content.lstrip().split("\n", 1)[0].strip()
+                links = _GRAPH_LINK_RE.findall(content)
+            else:
+                for _ in range(_PAGE_META_TITLE_LINES):
+                    line = f.readline()
+                    if not line or line.strip():
+                        first_line = line.strip()
+                        break
+    except Exception:
+        if with_links:
+            links = []
+    h1 = (first_line[2:].strip() or None) if first_line.startswith("# ") else None
+    if len(_PAGE_META) >= _PAGE_META_MAX:
+        _PAGE_META.clear()
+    _PAGE_META[path] = (key, h1, links)
+    return h1, links
+
+
+def _is_junction(path: str) -> bool:
+    """Whether ``path`` is a Windows directory junction, which ``is_symlink``
+    does not report and which can point outside the knowledge root."""
+    if os.name != "nt":
+        return False
+    isjunction = getattr(os.path, "isjunction", None)
+    if isjunction is not None:
+        return isjunction(path)
+    try:
+        return os.lstat(path).st_reparse_tag == stat.IO_REPARSE_TAG_MOUNT_POINT
+    except (OSError, AttributeError):
+        return False
+
+
 class KnowledgeService:
     """
     High-level service for knowledge base queries.
@@ -624,114 +686,6 @@ class KnowledgeService:
     # ------------------------------------------------------------------
     # list — directory tree with stats
     # ------------------------------------------------------------------
-    BROWSER_PAGE_SIZE = 100
-
-    @classmethod
-    def _visible_browser_name(cls, name: str) -> bool:
-        return not (name.startswith(".")
-                    or cls.INVALID_NAME_RE.search(name) or "\\" in name)
-
-    @staticmethod
-    def _is_browser_junction(path) -> bool:
-        if os.name != "nt":
-            return False
-        try:
-            return os.lstat(path).st_reparse_tag == stat.IO_REPARSE_TAG_MOUNT_POINT
-        except FileNotFoundError:
-            return False
-
-    def _browser_entries(self, directory: Path, *, categories_only=False) -> list:
-        entries = []
-        try:
-            with os.scandir(directory) as children:
-                for child in children:
-                    if not self._visible_browser_name(child.name):
-                        continue
-                    if child.is_dir(follow_symlinks=False):
-                        if not self._is_browser_junction(child.path):
-                            entries.append((child.name, "folder"))
-                    elif (not categories_only and child.name.lower().endswith(".md")
-                          and child.is_file(follow_symlinks=False)):
-                        entries.append((child.name, "file"))
-        except FileNotFoundError:
-            pass  # A missing knowledge root or a category removed during navigation.
-        return sorted(entries)
-
-    def _browser_title(self, path: Path, relative: str) -> str:
-        return path.stem if relative in self.PROTECTED_FILES else self._extract_title(path, path.stem)
-
-    def list_folder(self, folder: str = "", offset: int = 0, focus: str = "") -> dict:
-        directory = Path(self.knowledge_dir)
-        if folder:
-            folder, directory = self._resolve_path(folder, kind="category")
-            root = Path(self.knowledge_dir).resolve()
-            for parent in (directory, *directory.parents):
-                if parent == root:
-                    break
-                if (not self._visible_browser_name(parent.name) or parent.is_symlink()
-                        or self._is_browser_junction(parent)):
-                    raise ValueError("invalid knowledge category")
-            if directory.exists() and not directory.is_dir():
-                raise ValueError("not a category")
-
-        entries = self._browser_entries(directory)
-        entries.sort(key=lambda entry: entry[1] != "folder")
-        limit = self.BROWSER_PAGE_SIZE
-        last_offset = max(0, (len(entries) - 1) // limit * limit)
-        offset = min(max(0, offset) // limit * limit, last_offset)
-        if focus:
-            position = next((i for i, (name, _) in enumerate(entries) if name == focus), None)
-            if position is not None:
-                offset = position // limit * limit
-
-        items = []
-        for name, kind in entries[offset:offset + limit]:
-            relative = f"{folder}/{name}" if folder else name
-            item = {"name": name, "path": relative, "kind": kind}
-            if kind == "file":
-                item["title"] = self._browser_title(directory / name, relative)
-            items.append(item)
-        return {"items": items, "offset": offset, "total": len(entries),
-                "previous": offset - limit if offset else None,
-                "next": offset + limit if offset + limit < len(entries) else None}
-
-    def list_categories(self) -> list:
-        def walk(directory, prefix):
-            for name, _ in self._browser_entries(directory, categories_only=True):
-                parts = (*prefix, name)
-                yield "/".join(parts)
-                yield from walk(directory / name, parts)
-
-        return list(walk(Path(self.knowledge_dir), ()))
-
-    def search_titles(self, query: str, after: str = "") -> dict:
-        query = query.strip().casefold()
-        if not query:
-            return {"items": [], "next": None}
-        if after:
-            after, _ = self._resolve_path(after, kind="document")
-        cursor = tuple(after.split("/")) if after else ()
-
-        def walk(directory, prefix):
-            for name, kind in self._browser_entries(directory):
-                parts = (*prefix, name)
-                if kind == "folder":
-                    # Skip subtrees that end before the cursor. Folder names
-                    # and file names share the same sort order.
-                    if parts >= cursor[:len(parts)]:
-                        yield from walk(directory / name, parts)
-                elif parts > cursor:
-                    yield directory / name, "/".join(parts)
-
-        matches = []
-        for path, relative in walk(Path(self.knowledge_dir), ()):
-            title = self._browser_title(path, relative)
-            if query in path.name.casefold() or query in title.casefold():
-                if len(matches) == self.BROWSER_PAGE_SIZE:
-                    return {"items": matches, "next": matches[-1]["path"]}
-                matches.append({"name": path.name, "path": relative, "title": title, "kind": "file"})
-        return {"items": matches, "next": None}
-
     def list_tree(self) -> dict:
         """
         Return the knowledge directory tree grouped by category,
@@ -786,33 +740,37 @@ class KnowledgeService:
         """
         files = []
         children = []
-        for name in sorted(os.listdir(dir_path)):
+        try:
+            with os.scandir(dir_path) as it:
+                entries = sorted(it, key=lambda e: e.name)
+        except OSError:
+            return files, children
+        for entry in entries:
+            name = entry.name
             if name.startswith("."):
                 continue
-            full = os.path.join(dir_path, name)
-            if os.path.islink(full):
+            try:
+                if entry.is_symlink() or _is_junction(entry.path):
+                    continue
+                if entry.is_dir(follow_symlinks=False):
+                    sub_files, sub_children = self._scan_dir(entry.path, stats)
+                    children.append({"dir": name, "files": sub_files, "children": sub_children})
+                    continue
+                if not name.lower().endswith(".md"):
+                    continue
+                st = entry.stat(follow_symlinks=False)
+            except OSError:
                 continue
-            if os.path.isdir(full):
-                sub_files, sub_children = self._scan_dir(full, stats)
-                children.append({"dir": name, "files": sub_files, "children": sub_children})
-            elif name.lower().endswith(".md"):
-                size = os.path.getsize(full)
-                if not is_root:
-                    stats["pages"] += 1
-                    stats["size"] += size
-                # Prefer the H1 heading as a readable title for normal docs.
-                # System files (index.md / log.md) keep their filename so the
-                # tree never hides what they actually are.
-                title = name[:-3]
-                if name not in self.PROTECTED_FILES:
-                    try:
-                        with open(full, "r", encoding="utf-8") as f:
-                            first_line = f.readline().strip()
-                        if first_line.startswith("# "):
-                            title = first_line[2:].strip() or title
-                    except Exception:
-                        pass
-                files.append({"name": name, "title": title, "size": size})
+            if not is_root:
+                stats["pages"] += 1
+                stats["size"] += st.st_size
+            # Prefer the H1 heading as a readable title for normal docs.
+            # System files (index.md / log.md) keep their filename so the
+            # tree never hides what they actually are.
+            title = name[:-3]
+            if name not in self.PROTECTED_FILES:
+                title = _page_meta(entry.path, st)[0] or title
+            files.append({"name": name, "title": title, "size": st.st_size})
         return files, children
 
     # ------------------------------------------------------------------
@@ -874,10 +832,6 @@ class KnowledgeService:
 
         nodes = {}
         hrefs = {}
-        # Trailing "#anchor" is optional so section links still count as edges;
-        # "<...>" is the CommonMark form for targets containing spaces.
-        link_re = re.compile(r'\[[^\]]*\]\(\s*<?([^)#<>]+?\.md)>?(?:#[^)]*)?\s*\)', re.IGNORECASE)
-
         for md_file in knowledge_path.rglob("*.[mM][dD]"):
             # as_posix() rather than str(): on Windows str() keeps the
             # backslashes, and the console consumes these paths with "/"
@@ -889,14 +843,9 @@ class KnowledgeService:
             category = parts[0] if len(parts) > 1 else "root"
             title = md_file.stem.replace("-", " ").title()
             try:
-                # utf-8-sig: files saved by Windows editors may carry a BOM,
-                # which would otherwise hide the "# " title line.
-                content = md_file.read_text(encoding="utf-8-sig")
-                first_line = content.strip().split("\n")[0]
-                if first_line.startswith("# "):
-                    title = first_line[2:].strip()
-                hrefs[rel] = link_re.findall(content)
-            except Exception:
+                h1, hrefs[rel] = _page_meta(str(md_file), md_file.stat(), with_links=True)
+                title = h1 or title
+            except OSError:
                 pass
             nodes[rel] = {"id": rel, "label": title, "category": category}
 

@@ -141,6 +141,8 @@ function loadAgentCatalog() {
             else closeAgentDetail();
             renderComposerIdentity();
             renderMemoryAgentSelect();
+            // The knowledge page may have drawn its picker before the roster arrived.
+            if (typeof renderKnowledgeAgentSelect === 'function') renderKnowledgeAgentSelect();
             // The new-chat button only sprouts a menu (and its caret) once there
             // is more than one Agent to choose between.
             document.getElementById('new-chat-caret')?.classList.toggle('hidden', !multiAgentMode());

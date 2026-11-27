@@ -225,11 +225,7 @@ function navigateTo(viewId, tab) {
     // loadKnowledgeView lands on the docs tab itself, so unlike the views
     // above there is no default to pass -- only a route-named tab to override
     // it with.
-    else if (viewId === 'knowledge') {
-        const target = _routeApplying && tab !== 'graph' ? new URLSearchParams(location.search).get('path') : null;
-        loadKnowledgeView(target);
-        if (tab) switchKnowledgeTab(tab);
-    }
+    else if (viewId === 'knowledge') { loadKnowledgeView(); if (tab) switchKnowledgeTab(tab); }
     else if (viewId === 'channels') loadChannelsView();
     else if (viewId === 'tasks') { switchTasksTab(tab || 'tasks'); loadTasksView(); }
     else if (viewId === 'logs') startLogStream();
