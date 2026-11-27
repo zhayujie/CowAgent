@@ -10,7 +10,7 @@ being converted to voice, the user loses the text answer too.
 import sys
 import types
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -67,8 +67,8 @@ def test_a_failed_edge_synthesis_becomes_an_error_reply():
 
 def test_a_failed_elevenlabs_synthesis_becomes_an_error_reply():
     voice = elevent_voice.ElevenLabsVoice()
-    with patch.object(elevent_voice.client, "generate",
-                      side_effect=RuntimeError("401 Unauthorized")):
+    with patch.object(elevent_voice, "ElevenLabs") as client_factory:
+        client_factory.return_value.generate.side_effect = RuntimeError("synthesis failed")
         reply = voice.textToVoice("hello")
 
     assert reply.type == ReplyType.ERROR
@@ -106,3 +106,32 @@ def test_a_successful_elevenlabs_synthesis_still_returns_a_voice_reply():
         reply = voice.textToVoice("hello")
 
     assert reply.type == ReplyType.VOICE
+
+
+def test_elevenlabs_refresh_uses_current_credentials_and_voice():
+    from bridge import bridge as bridge_module
+
+    live = {"text_to_voice": "elevenlabs", "xi_api_key": "key-one", "xi_voice_id": "Adam"}
+    with patch.object(bridge_module, "conf", lambda: live), \
+            patch.object(elevent_voice, "conf", lambda: live), \
+            patch.object(elevent_voice, "ElevenLabs") as client_factory, \
+            patch.object(elevent_voice, "save"):
+        bridge = bridge_module.Bridge.__wrapped__()
+        first = bridge.fetch_text_to_voice("first")
+        live.update(xi_api_key="key-two", xi_voice_id="Rachel")
+        bridge.refresh_voice()
+        second = bridge.fetch_text_to_voice("second")
+
+    assert first.type == second.type == ReplyType.VOICE
+    assert client_factory.call_args_list == [call(api_key="key-one"), call(api_key="key-two")]
+    assert client_factory.return_value.generate.call_args_list == [
+        call(text="first", voice="Adam", model="eleven_multilingual_v2"),
+        call(text="second", voice="Rachel", model="eleven_multilingual_v2"),
+    ]
+
+
+def test_a_failed_elevenlabs_client_creation_becomes_an_error_reply():
+    with patch.object(elevent_voice, "ElevenLabs", side_effect=ValueError("missing API key")):
+        reply = elevent_voice.ElevenLabsVoice().textToVoice("hello")
+
+    assert reply.type == ReplyType.ERROR
