@@ -9,6 +9,19 @@ from typing import List
 from dataclasses import dataclass
 
 
+def _split_lines(text: str) -> list:
+    """Split into lines, dropping the empty element after a trailing newline.
+
+    Without this a file ending in "\n" is numbered one line too long, so
+    memory_search reports a phantom line past the end. Matches memory_get and
+    the read tool.
+    """
+    lines = text.split('\n')
+    if lines and lines[-1] == '':
+        lines.pop()
+    return lines
+
+
 @dataclass
 class TextChunk:
     """Represents a text chunk with line numbers"""
@@ -48,7 +61,7 @@ class TextChunker:
         if not text.strip():
             return []
         
-        lines = text.split('\n')
+        lines = _split_lines(text)
         chunks = []
         
         max_chars = self.max_tokens * self.chars_per_token
@@ -157,7 +170,8 @@ class TextChunker:
     # v2: keep text before the first heading; end a heading's body at the next
     # heading of any level (skipped levels used to be indexed twice).
     # v3: hard-split pieces of one over-long line carry a part ordinal in their id.
-    CHUNKER_VERSION = 3
+    # v4: don't count a phantom line after a trailing newline, matching memory_get.
+    CHUNKER_VERSION = 4
 
     def chunk_markdown(self, text: str) -> List[TextChunk]:
         """Chunk a markdown file while respecting its heading structure.
@@ -184,7 +198,7 @@ class TextChunker:
         """
         if not text.strip():
             return []
-        lines = text.split('\n')
+        lines = _split_lines(text)
 
         # Whole file under target: single chunk (semantic isolation).
         if len(text) <= self.MD_CHUNK_TARGET:
