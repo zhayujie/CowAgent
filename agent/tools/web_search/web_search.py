@@ -413,7 +413,7 @@ class WebSearch(BaseTool):
             if provider == "cowagent":
                 return self._search_cowagent(query, count, freshness, summary)
             if provider == "linkai":
-                return self._search_linkai(query, count, freshness)
+                return self._search_linkai(query, count, freshness, summary)
             if provider == "deepseek":
                 return self._search_deepseek(query, count, freshness, summary)
             if provider == "anysearch":
@@ -637,7 +637,7 @@ class WebSearch(BaseTool):
     # LinkAI (plugin)
     # ------------------------------------------------------------------
 
-    def _search_linkai(self, query: str, count: int, freshness: str) -> ToolResult:
+    def _search_linkai(self, query: str, count: int, freshness: str, summary: bool) -> ToolResult:
         api_key = _get_api_key("linkai")
         api_base = (conf().get("linkai_api_base") or "https://api.link-ai.tech").rstrip("/")
         url = f"{api_base}/v1/plugin/execute"
@@ -645,7 +645,9 @@ class WebSearch(BaseTool):
         from common.utils import get_cloud_headers
         headers = get_cloud_headers(api_key)
 
-        payload = {"code": "web-search", "args": {"query": query, "count": count, "freshness": freshness}}
+        payload = {"code": "web-search",
+                   "args": {"query": query, "count": count, "freshness": freshness,
+                            "summary": bool(summary)}}
         logger.debug(f"[WebSearch] linkai: query='{query}', count={count}")
         resp = requests.post(url, headers=headers, json=payload, timeout=DEFAULT_TIMEOUT)
 
@@ -669,26 +671,30 @@ class WebSearch(BaseTool):
                     "total": 1, "count": 1, "results": [{"content": raw}],
                 })
 
-        if isinstance(raw, dict):
-            pages = (raw.get("webPages") or {}).get("value", []) or []
-            if pages:
-                results = []
-                for p in pages:
-                    item = {
-                        "title": p.get("name", ""),
-                        "url": p.get("url", ""),
-                        "snippet": p.get("snippet", ""),
-                        "siteName": p.get("siteName", ""),
-                        "datePublished": p.get("datePublished") or p.get("dateLastCrawled", ""),
-                    }
-                    if p.get("summary"):
-                        item["summary"] = p["summary"]
-                    results.append(item)
-                total = (raw.get("webPages") or {}).get("totalEstimatedMatches", len(results))
-                return ToolResult.success({
-                    "query": query, "backend": "linkai",
-                    "total": total, "count": len(results), "results": results,
-                })
+        if isinstance(raw, dict) and "webPages" in raw:
+            # Same shape bocha documents: a no-result query comes back with
+            # `"webPages": null` or an empty `value`, not with a missing key.
+            # Reporting that as one hit made the model answer "found 1 result"
+            # with nothing to cite, so an empty page has to stay empty.
+            web_pages = raw.get("webPages") or {}
+            pages = web_pages.get("value", []) or []
+            results = []
+            for p in pages:
+                item = {
+                    "title": p.get("name", ""),
+                    "url": p.get("url", ""),
+                    "snippet": p.get("snippet", ""),
+                    "siteName": p.get("siteName", ""),
+                    "datePublished": p.get("datePublished") or p.get("dateLastCrawled", ""),
+                }
+                if p.get("summary"):
+                    item["summary"] = p["summary"]
+                results.append(item)
+            total = web_pages.get("totalEstimatedMatches", len(results))
+            return ToolResult.success({
+                "query": query, "backend": "linkai",
+                "total": total, "count": len(results), "results": results,
+            })
 
         return ToolResult.success({
             "query": query, "backend": "linkai",
