@@ -40,11 +40,16 @@ def _openai_usage(usage_meta) -> dict:
     """
     if not isinstance(usage_meta, dict) or not usage_meta:
         return {}
-    return {
+    usage = {
         "prompt_tokens": usage_meta.get("promptTokenCount", 0),
         "completion_tokens": _completion_tokens(usage_meta),
         "total_tokens": usage_meta.get("totalTokenCount", 0),
     }
+    # Cache hits are part of promptTokenCount, and absent when nothing was cached.
+    cached = usage_meta.get("cachedContentTokenCount")
+    if cached:
+        usage["prompt_tokens_details"] = {"cached_tokens": cached}
+    return usage
 
 
 _THINKING_LEVEL_MODELS = ("gemini-4",)
@@ -1004,14 +1009,10 @@ class GoogleGeminiBot(Bot):
                     )
                 }]
             }
-            if last_usage_meta is not None:
-                # Map Gemini's usageMetadata to the OpenAI usage shape the agent
-                # reads (prompt_tokens is what the context indicator needs).
-                final_chunk["usage"] = {
-                    "prompt_tokens": last_usage_meta.get("promptTokenCount", 0),
-                    "completion_tokens": _completion_tokens(last_usage_meta),
-                    "total_tokens": last_usage_meta.get("totalTokenCount", 0),
-                }
+            usage = _openai_usage(last_usage_meta)
+            if usage:
+                # prompt_tokens is what the context indicator needs.
+                final_chunk["usage"] = usage
             yield final_chunk
                     
         except Exception as e:
