@@ -511,10 +511,19 @@ class LinkAIProvider(ImageProvider):
             raise RuntimeError(result["error"].get("message", str(result["error"])))
 
         paths = []
-        for item in result.get("data", []):
+        # `data` is `null` on some proxies when the upstream produced nothing;
+        # iterating it raised `TypeError` where the message below is the useful one.
+        for item in result.get("data") or []:
             raw = _decode_image_item(item, url_first=True)
             if raw:
                 paths.append(_save_image(raw, output_dir))
+        if not paths:
+            # Every other provider raises here, and `main` relies on that: it
+            # reports success for any provider that returns, so an empty list
+            # became `{"images": []}` with exit code 0 — the model was told the
+            # image existed and had nothing to show the user. A 200 response
+            # with no usable `data` entry is a failure, not an empty success.
+            raise RuntimeError("LinkAI returned no image (empty data)")
         return paths
 
 
