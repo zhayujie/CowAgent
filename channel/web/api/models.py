@@ -338,7 +338,12 @@ class ModelsHandler:
         "deepseek": [
             {"value": "", "hint": "默认"},
         ],
-        "openai":    ["tts-1", "tts-1-hd", "gpt-4o-mini-tts"],
+        "openai": [
+            {"value": "gpt-realtime-2.1-mini", "hint": "默认 · Realtime API"},
+            {"value": "tts-1",           "hint": "2027-01-06 下线"},
+            {"value": "tts-1-hd",        "hint": "2027-01-06 下线"},
+            {"value": "gpt-4o-mini-tts", "hint": "2027-01-06 下线"},
+        ],
         "minimax": [
             {"value": "speech-2.8-hd",    "hint": "情绪渲染融合语气词,自然听感"},
             {"value": "speech-2.8-turbo", "hint": "极致生成速度,更自然逼真"},
@@ -375,9 +380,10 @@ class ModelsHandler:
             {"value": "", "hint": "默认"},
         ],
         "openai": [
-            {"value": "gpt-4o-mini-transcribe", "hint": "默认 · 速度快"},
-            {"value": "gpt-4o-transcribe",      "hint": "更高准确率"},
-            {"value": "whisper-1",              "hint": "经典 Whisper"},
+            {"value": "gpt-transcribe",         "hint": "默认"},
+            {"value": "gpt-4o-mini-transcribe", "hint": "2027-02-26 下线"},
+            {"value": "gpt-4o-transcribe",      "hint": "2027-02-26 下线"},
+            {"value": "whisper-1",              "hint": "2027-02-26 下线"},
         ],
         "dashscope": [
             {"value": "qwen3-asr-flash", "hint": "覆盖普通话、方言与主流外语"},
@@ -415,8 +421,10 @@ class ModelsHandler:
             {"value": "tide",   "hint": "暗潮 · 男声"},
         ],
         "openai":    [
-            "alloy", "echo", "fable", "onyx", "nova", "shimmer",
-            "ash", "ballad", "coral", "sage", "verse",
+            "marin", "cedar", "alloy", "ash", "ballad", "coral",
+            "echo", "sage", "shimmer", "verse",
+            # /audio/speech (tts-*) only.
+            "fable", "onyx", "nova",
         ],
         "minimax": [
             # Mandarin Chinese (full catalog)

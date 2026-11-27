@@ -5,7 +5,8 @@ from voice.openai import openai_voice as module
 @pytest.mark.parametrize('suffix', ['', '/', '///'])
 @pytest.mark.parametrize('method, endpoint', [('voiceToText', 'transcriptions'), ('textToVoice', 'speech')])
 def test_audio_endpoint_has_one_separator(tmp_path, monkeypatch, suffix, method, endpoint):
-    monkeypatch.setattr(module, 'conf', lambda: {'open_ai_api_base': 'https://gateway.example/v1' + suffix, 'open_ai_api_key': 'test'})
+    monkeypatch.setattr(module, 'conf', lambda: {'open_ai_api_base': 'https://gateway.example/v1' + suffix,
+                                                 'open_ai_api_key': 'test', 'text_to_voice_model': 'tts-1'})
     urls = []
     def post(url, **kwargs):
         urls.append(url)

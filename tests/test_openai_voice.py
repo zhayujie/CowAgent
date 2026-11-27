@@ -92,7 +92,8 @@ class TestOpenaiVoice(unittest.TestCase):
 
         voice = OpenaiVoice()
         with tempfile.TemporaryDirectory() as tmp:
-            with patch("voice.openai.openai_voice.conf", _conf(open_ai_api_key="sk-test")):
+            with patch("voice.openai.openai_voice.conf",
+                       _conf(open_ai_api_key="sk-test", text_to_voice_model="tts-1")):
                 with patch("voice.openai.openai_voice.requests.post", return_value=response) as post:
                     with patch("voice.openai.openai_voice.TmpDir") as tmp_dir:
                         tmp_dir.return_value.path.return_value = tmp + os.sep
