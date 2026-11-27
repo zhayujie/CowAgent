@@ -220,6 +220,7 @@ const SEARCH_CONSOLES: Record<string, string> = {
   specstream: 'specstream.ai',
   olostep: 'olostep.com',
   searchapi: 'searchapi.io',
+  serpapi: 'serpapi.com',
 };
 
 export const searchHelp = (id: string): string => {

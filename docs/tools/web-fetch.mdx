@@ -75,6 +75,19 @@ Each scrape uses Olostep credits, so the backend stays opt-in. The SSRF guard
 still applies, and document URLs (PDF, Word, etc.) are still downloaded and
 parsed locally.
 
+## SerpApi Extract backend (opt-in)
+
+Set `tools.web_fetch.provider` to `"serpapi"` to send a single page URL to the
+[SerpApi Extract API](https://serpapi.com/extract-api) and return its Markdown.
+It uses the search key (`tools.web_search.serpapi_api_key`, falling back to
+`SERPAPI_API_KEY`). Setting the key alone leaves fetch on `"direct"`.
+Extract uses the account's quota and does not run JavaScript.
+CowAgent uses a 35-second read timeout to allow for Extract's 30-second page fetch.
+Like direct fetch, it checks the total transfer deadline between chunks, not on every byte.
+Extract sends `api_key` in the request URL. Redact it before storing or sharing HTTP client or proxy logs, including warnings.
+CowAgent applies its configured URL safety checks before sending the URL;
+document URLs such as PDFs still use the local download and parser.
+
 <Note>
   The default `direct` backend only retrieves static HTML. For pages that require JavaScript rendering (such as SPAs), switch to the DeepSeek or Olostep backend above, or use the `browser` tool.
 </Note>

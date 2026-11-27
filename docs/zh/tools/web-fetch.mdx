@@ -70,6 +70,17 @@ SSRF 防护仍然生效：内网、回环及云元数据地址在请求发出前
 每次抓取消耗 Olostep 额度，因此保持为手动开启。SSRF 防护同样生效，文档链接（PDF、Word 等）
 仍在本地下载解析。
 
+## SerpApi Extract 后端（可选）
+
+将 `tools.web_fetch.provider` 设为 `"serpapi"` 会把单个网页 URL 发送给
+[SerpApi Extract API](https://serpapi.com/extract-api)，并返回 Markdown。
+该后端复用 `tools.web_search.serpapi_api_key`，未设置时读取 `SERPAPI_API_KEY`。
+仅配置密钥不会改变默认的 `"direct"` 模式。Extract 使用账户额度，不执行 JavaScript。
+Extract 获取页面的默认超时时间为 30 秒，CowAgent 的读取超时时间为 35 秒，以便接收结果。
+与直接抓取一样，CowAgent 在读取每个数据块后检查总传输时限，而不是在每个字节到达时检查。
+Extract 通过请求 URL 传递 `api_key`。保存或分享 HTTP 客户端或代理的日志（包括警告）前，请隐去密钥。
+CowAgent 在发送前按配置检查 URL；PDF 等文档链接仍由本地下载和解析。
+
 <Note>
   默认的 `direct` 后端只能获取静态 HTML 内容。如果页面需要 JavaScript 渲染（如 SPA 单页应用），可改用上文的 DeepSeek 或 Olostep 后端，或使用 `browser` 工具。
 </Note>
