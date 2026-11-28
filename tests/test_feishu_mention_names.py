@@ -151,7 +151,7 @@ def test_group_post_names_the_people_it_mentions(monkeypatch):
 
 
 def _group_post_with_file(monkeypatch, tmp_path, *elements):
-    """A group post of these elements with report.pdf attached, and the file cache the channel uses."""
+    """A group post of these elements with report.pdf attached."""
     def download(message_id, key, resource_type, access_token, path, max_bytes, domain=None):
         Path(path).write_bytes(b"data")
         return True
@@ -167,13 +167,13 @@ def _group_post_with_file(monkeypatch, tmp_path, *elements):
         "content": [list(elements)],
         "files": [{"file_key": "file_v3_report", "file_name": "report.pdf"}],
     }
-    return _event("post", post, _mentions(BOT, ZHANG)), cache
+    return _event("post", post, _mentions(BOT, ZHANG))
 
 
 def test_group_post_of_a_file_and_mentions_waits_for_the_question(monkeypatch, tmp_path):
     # "@CowAgent @张三" with a file attached says nothing besides the mentions,
     # so like a file sent on its own it is cached until the question comes.
-    event, _ = _group_post_with_file(
+    event = _group_post_with_file(
         monkeypatch,
         tmp_path,
         _at("@_user_1"),
@@ -182,13 +182,53 @@ def test_group_post_of_a_file_and_mentions_waits_for_the_question(monkeypatch, t
     )
 
     assert _produced(monkeypatch, event) == []
-    question = _event("text", {"text": "@_user_1 总结一下报告"}, _mentions(BOT))
-    assert _agent_input(monkeypatch, question) == f"总结一下报告\n[文件: {tmp_path / 'file_v3_report.pdf'}]"
+    question = _event("text", {"text": "@_user_1 看看这份报告"}, _mentions(BOT))
+    assert _agent_input(monkeypatch, question).splitlines() == [
+        "看看这份报告",
+        f"[文件: {tmp_path / 'file_v3_report.pdf'}]",
+    ]
+    assert _agent_input(monkeypatch, question) == "看看这份报告"
+
+
+@pytest.mark.parametrize("share_group", [True, False], ids=["shared", "per-member"])
+def test_group_image_followup_across_sender_tenants(monkeypatch, tmp_path, share_group):
+    from agent.protocol.agent_stream import _IMAGE_MARKER_RE
+
+    def download(message_id, key, kind, token, path, limit, **kwargs):
+        Path(path).write_bytes(b"group image")
+        return True
+
+    monkeypatch.setattr(feishu_message.state_dir, "shared_root", lambda: tmp_path)
+    monkeypatch.setattr(feishu_message, "_download_resource", download)
+    cache = file_cache.FileCache()
+    monkeypatch.setattr(file_cache, "get_file_cache", lambda: cache)
+    monkeypatch.setitem(conf(), "group_shared_session", share_group)
+
+    image = _event("image", {"image_key": "img_group"}, None)
+    image["sender"].update(tenant_key="tenant_a", sender_type="user")
+    assert _produced(monkeypatch, image) == []
+
+    question = _event("text", {"text": "@_user_1 Describe the image"}, _mentions(BOT))
+    question["sender"] = {
+        "sender_id": {"open_id": "ou_colleague"},
+        "tenant_key": "tenant_b",
+        "sender_type": "user",
+    }
+    question["message"]["chat_id"] = "oc_other_group"
+    assert not _IMAGE_MARKER_RE.search(_agent_input(monkeypatch, question))
+
+    question["message"]["chat_id"] = image["message"]["chat_id"]
+    attachments = _IMAGE_MARKER_RE.findall(_agent_input(monkeypatch, question))
+    assert [Path(path).read_bytes() for path in attachments] == ([b"group image"] if share_group else [])
+
+    question["sender"] = image["sender"]
+    remaining = _IMAGE_MARKER_RE.findall(_agent_input(monkeypatch, question))
+    assert [Path(path).read_bytes() for path in remaining] == ([] if share_group else [b"group image"])
 
 
 def test_group_post_of_a_file_and_a_question_names_the_people_it_mentions(monkeypatch, tmp_path):
     # "@CowAgent 把这份报告发给 @张三" with a file attached is answered at once.
-    event, _ = _group_post_with_file(
+    event = _group_post_with_file(
         monkeypatch,
         tmp_path,
         _at("@_user_1"),

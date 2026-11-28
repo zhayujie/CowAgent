@@ -690,6 +690,7 @@ def check_tool_call(
     write_roots: Optional[Iterable[str]] = None,
     protected_paths: Optional[Iterable[str]] = None,
     shell: Optional[str] = None,
+    knowledge_workspace: Optional[str] = None,
 ) -> Decision:
     """Decide whether ``tool_name`` may run with ``arguments`` under ``mode``.
 
@@ -704,6 +705,7 @@ def check_tool_call(
         shell: the Windows shell the bash tool runs (``"pwsh"`` or ``"cmd"``),
             or None for a POSIX shell. Windows shells keep backslashes literal,
             and pwsh binds aliases such as ``rm`` and ``cp`` as cmdlets.
+        knowledge_workspace: Agent workspace for a file write to its knowledge base.
 
     Returns:
         A :class:`Decision` whose ``reason`` is written for the model: what was
@@ -718,6 +720,16 @@ def check_tool_call(
 
     if mode == READ_ONLY:
         return _check_read_only(tool_name, args, shell)
+    if knowledge_workspace and tool_name in _FILE_WRITE_TOOLS and args.get("path"):
+        from agent.tools.utils.memory_path import file_tool_path, selected_knowledge_root
+
+        knowledge = selected_knowledge_root(knowledge_workspace)
+        if knowledge is not None:
+            # This extra root applies only to write/edit. Shell and every
+            # other tool keep the original workspace boundaries.
+            write_roots = [*(write_roots or ()), str(knowledge)]
+            path = file_tool_path(str(args["path"]).strip(), cwd or os.getcwd(), knowledge_workspace)
+            args = {**args, "path": path}
     return _check_workspace_write(tool_name, args, cwd, write_roots, protected_paths, shell)
 
 

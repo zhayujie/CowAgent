@@ -29,7 +29,7 @@ zai-sdk>=0.2.3
 dashscope
 
 # feishu
-lark-oapi>=1.5.5
+lark-oapi>=1.7.1
 # dingtalk
 dingtalk_stream
 # wecom bot websocket mode

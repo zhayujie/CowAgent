@@ -187,10 +187,12 @@ class Vision(BaseTool):
 
         # The file is sent to an external API, so it gets the same credential
         # guard as the file tools; the resolved path also catches symlinks.
+        local_path = None
         if not image.startswith(("http://", "https://")):
-            resolved = self._resolve_path(image)
-            if is_credential_path(resolved):
-                return ToolResult.fail(DENIED_MESSAGE)
+            try:
+                local_path = self._checked_image_path(image)
+            except PermissionError as e:
+                return ToolResult.fail(str(e))
 
         providers = self._resolve_providers()
         if not providers:
@@ -204,7 +206,10 @@ class Vision(BaseTool):
             )
 
         try:
-            image_content = self._build_image_content(image)
+            image_content = (
+                self._build_local_image_content(image, local_path)
+                if local_path else self._build_image_content(image)
+            )
         except Exception as e:
             return ToolResult.fail(f"Error: {e}")
 
@@ -833,6 +838,17 @@ class Vision(BaseTool):
         """
         validate_url_safe(url)
 
+    def _checked_image_path(self, image: str) -> str:
+        from agent.memory.feishu_identity import memory_path_denial
+
+        resolved = self._resolve_path(image)
+        denial = memory_path_denial(self, resolved)
+        if denial:
+            raise PermissionError(f"Error: Access denied: {denial}")
+        if is_credential_path(resolved):
+            raise PermissionError(DENIED_MESSAGE)
+        return resolved
+
     def _build_image_content(self, image: str) -> dict:
         """
         Build the image_url content block.
@@ -843,7 +859,9 @@ class Vision(BaseTool):
             self._validate_url_safe(image)
             return self._download_to_data_url(image)
 
-        resolved = self._resolve_path(image)
+        return self._build_local_image_content(image, self._checked_image_path(image))
+
+    def _build_local_image_content(self, image: str, resolved: str) -> dict:
         if not os.path.isfile(resolved):
             raise FileNotFoundError(
                 f"Image file not found: {image}"

@@ -7,11 +7,46 @@ Over-reporting costs one hash-based re-scan; under-reporting costs the agent
 knowledge it just wrote down, so the checks below err towards reporting.
 """
 
+from __future__ import annotations
+
 import os
+from pathlib import Path
 
 # Trees and files MemoryManager.sync() scans, relative to the workspace root.
 INDEXED_DIRS = ("memory", "knowledge")
 INDEXED_FILES = ("MEMORY.md",)
+
+
+def selected_knowledge_root(workspace: str | Path) -> Path | None:
+    """Resolve only the Agent's own directory or the registered shared copy."""
+    from common import state_dir
+
+    try:
+        workspace = Path(workspace).resolve()
+        selected = state_dir.knowledge_dir(base=workspace).resolve()
+        if selected == workspace / "knowledge":
+            return selected
+        shared = state_dir.shared_root().resolve() / "knowledge"
+    except (OSError, RuntimeError, ValueError):
+        return None
+    return selected if selected == shared else None
+
+
+def file_tool_path(path: str, cwd: str, knowledge_workspace: str | None = None) -> str:
+    """Resolve an ordinary file argument, including a linkless shared wiki."""
+    from common.utils import expand_path
+
+    path = expand_path(path)
+    if not os.path.isabs(path):
+        path = os.path.abspath(os.path.join(cwd, path))
+    if knowledge_workspace:
+        absolute = Path(os.path.abspath(path))
+        own = Path(knowledge_workspace).resolve() / "knowledge"
+        if own in absolute.parents and not os.path.lexists(own):
+            selected = selected_knowledge_root(knowledge_workspace)
+            if selected is not None:
+                return str(selected / absolute.relative_to(own))
+    return path
 
 
 def _real(path: str) -> str:

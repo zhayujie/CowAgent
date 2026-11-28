@@ -13,14 +13,14 @@ description: "将 CowAgent 接入飞书（Lark）自建应用，支持单聊和�
 
 ### 方式一：扫码一键接入（推荐）
 
-启动 Cow 项目后在终端中即可完成扫码创建。或打开 Web 控制台（本地链接：http://127.0.0.1:9899 ），选择 **通道** 菜单，点击 **接入通道**，选择 **飞书**，点击 **一键创建飞书应用**，使用 **飞书 App** 扫描二维码即可自动完成应用创建并接入:
+启动 CowAgent 后，可以在终端扫码创建，也可以在 Web 控制台的 **通道 → 接入通道 → 飞书** 中扫码创建。飞书返回扫码人 Open ID 时，CowAgent 自动将其加入本次接入实例的 Owner 名单。
 
 
 <img src="https://cdn.link-ai.tech/doc/20260505181126.png" width="800"/>
 
 
 <Note>
-  1. `lark-oapi` 依赖版本需要 >=1.5.5
+  1. `lark-oapi` 依赖版本需要 >=1.7.1
   2. 扫码创建出的应用会自动预置全部所需权限（消息收发、卡片读写、群聊事件等）和事件订阅，无需到开发者后台手动配置。
 </Note>
 
@@ -73,6 +73,8 @@ im:message,im:message.group_at_msg,im:message.group_at_msg:readonly,im:message.p
     | --- | --- | --- |
     | `feishu_app_id` | 飞书应用 App ID | - |
     | `feishu_app_secret` | 飞书应用 App Secret | - |
+    | `feishu_owner_open_ids` | 可选，当前飞书应用的 Owner Open ID 列表 | `[]` |
+    | `feishu_private_memory_mode` | 实例的私聊记忆模式 | `owner_workspace` |
     | `feishu_stream_reply` | 是否开启流式打字机回复 | `true` |
     | `feishu_detailed_card` | 流式回复是否使用详细卡片（工具调用、思考过程、耗时展示）；关闭时用普通打字机卡片 | `true` |
   </Tab>
@@ -118,3 +120,29 @@ im:message,im:message.group_at_msg,im:message.group_at_msg:readonly,im:message.p
 如需在群聊中使用，将机器人添加到群中，@机器人发送消息即可。
 
 私聊发送 `/tasks`，或在群聊中 @机器人并发送 `/tasks`，即可管理属于当前会话的定时任务。
+
+### 成员档案与记忆隔离
+
+在 Web 控制台或桌面端的「手动填写」页，可以为每个机器人保存多个 Owner，填写同一飞书应用的 `open_id`（`ou_...`），用逗号分隔。手动接入可以**查询飞书应用所有者**，查到后点击**采用为 Owner**，再保存设置。查询需要应用已开通 `application:application:self_manage` 或 `admin:app.info:readonly`。扫码注册拿到扫码人 Open ID 时自动绑定到本次接入的实例，缺字段时仍可接入。
+
+Owner 名单和私聊记忆模式写入 `<agent_workspace>/agents/team.json` 对应实例的 `credentials`。启动迁移按 `config.json` 的原 App ID 查找唯一匹配实例，已有名单优先，包括空名单。保存实例后清理全局旧字段。匹配不明确时保留旧配置供人工核对。
+
+旧版单 Agent 安装如果还没有 `team.json`，升级时会新建该文件并写入飞书配置。钉钉等其他旧频道仍从 `config.json` 读取配置。
+
+- `owner_workspace`（默认）：名单内的 Owner 使用工作区根目录的 `USER.md`、`MEMORY.md` 和每日记忆，其余用户各自隔离。空名单时所有人按人隔离。
+- `per_user`：所有私聊用户各自隔离，包括 Owner。
+- `shared`：所有有有效身份的私聊用户共用工作区档案和记忆。已明确配置过共享的机器人可继续共享，也可为确认曾共享的老机器人手动选择这个模式。
+
+私聊对话仍按发送者分开。升级后旧私聊记录保留在原会话，新的入站消息使用带应用、实例和记忆权限的会话，切换到个人范围时不会载入工作区会话。
+
+要核对已有绑定，可临时在 `config.json` 设置 `"debug": true` 并重启 CowAgent，然后用自己的飞书账号给同一个机器人发一条便于识别的私聊消息。在 `run.log` 中找到这条消息对应的接收事件，查看 `event.sender.sender_id.open_id` 是否与该实例 Owner 名单中的某个 ID 完全一致。核对后恢复日志级别。
+
+在 Web 控制台或桌面端的飞书通道「手动填写」页，可以为每个机器人保存「接收私聊消息」开关。开关默认开启。关闭后 CowAgent 忽略发给该机器人的私聊消息，群聊照常处理。
+
+- **群聊**在同一飞书应用和 Agent 工作区内按群共享记忆，即使关闭共享会话也是如此。每位发言人在当前群中有独立的 Markdown 档案。群聊跳过工作区根目录的 `USER.md`、`MEMORY.md` 和 `BOOTSTRAP.md`。
+- **个人范围**内的记忆搜索、读取和自动摘要使用该发言人的私聊记忆。使用工作区范围的私聊会读写共用记忆。
+- **更新档案**时，使用工作区范围的私聊会更新根目录的 `USER.md`。群聊和使用个人范围的私聊通过 `member_profile` 更新发言人自己的档案。没有发言人标记的旧消息仍保留为身份未知。如需从空白上下文开始，请新建会话。
+
+<Note>
+  文件和记忆工具会应用对应的访问范围。个人范围和群聊使用受限工具集。
+</Note>

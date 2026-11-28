@@ -4,6 +4,7 @@ import re
 import time
 import threading
 
+from common import i18n
 from common.log import logger
 
 
@@ -322,6 +323,7 @@ class Agent:
         Falls back to the cached self.system_prompt on error.
         """
         try:
+            from agent.permission import WORKSPACE_WRITE
             from agent.prompt import load_context_files, PromptBuilder
 
             if self.skill_manager:
@@ -329,14 +331,20 @@ class Agent:
 
             context_files = None
             if self.workspace_dir and not self.skip_context_files:
-                context_files = load_context_files(self.workspace_dir)
+                identity = getattr(self, "_sender_identity", None)
+                if identity and not identity["legacy_private"]:
+                    # Root USER/MEMORY and onboarding belong to the owner, not
+                    # to every user who can reach this bot.
+                    context_files = load_context_files(self.workspace_dir, ["AGENT.md", "RULE.md"])
+                else:
+                    context_files = load_context_files(self.workspace_dir)
 
             try:
-                from common import i18n
                 lang = i18n.get_language()
             except Exception:
                 lang = "zh"
             builder = PromptBuilder(workspace_dir=self.workspace_dir or "", language=lang)
+            permission_mode = self.effective_permission_mode()
             full = builder.build(
                 # Same list the model is offered this turn: describing a tool
                 # in the prompt that is not in the schema invites it to call
@@ -344,15 +352,39 @@ class Agent:
                 tools=[tool for tool in self.tools if is_tool_available(tool)],
                 context_files=context_files,
                 skill_manager=self.skill_manager,
-                memory_manager=self.memory_manager,
+                memory_manager=(None if getattr(self, "_sender_identity", None)
+                                and not self._sender_identity["legacy_private"] else self.memory_manager),
                 runtime_info=self.runtime_info,
                 project_dir=self.project_dir,
-                permission_mode=self.effective_permission_mode(),
+                permission_mode=permission_mode,
+                protected_paths=self.protected_paths() if permission_mode == WORKSPACE_WRITE else None,
             )
+            identity = getattr(self, "_sender_identity", None)
+            if identity:
+                from agent.memory.feishu_identity import identity_prompt
+                full += "\n\n" + identity_prompt(self.workspace_dir, identity)
+                if not identity["legacy_private"]:
+                    full += "\n" + i18n.t(
+                        "本轮覆盖默认记忆路径：只允许使用 {memory_dir}/ 下的记忆。"
+                        "过往事件必须先 memory_search，再 memory_get，检索无结果就说明不知道，禁止回退到根记忆。"
+                        "群/当前场景长期记忆可写 {memory_dir}/MEMORY.md，每日记忆用同目录 YYYY-MM-DD.md。"
+                        "不要使用根 MEMORY.md 或根 daily 记忆；member_profile 是更新本人档案的入口。",
+                        "For this turn, use only memory under {memory_dir}/. "
+                        "For past events, call memory_search before memory_get. "
+                        "If the search returns nothing, say you don't know. Do not fall back to root memory. "
+                        "When writing long-term memory, use {memory_dir}/MEMORY.md. "
+                        "For daily memory, use YYYY-MM-DD.md in the same directory. "
+                        "Do not use the root MEMORY.md or root daily memory files. "
+                        "Use member_profile to update the current sender's profile.",
+                    ).format(memory_dir=f"memory/users/{identity['memory_scope']}")
             if self.extra_system_suffix:
                 full = f"{full}\n\n{self.extra_system_suffix}"
             return full
         except Exception as e:
+            if getattr(self, "_sender_identity", None):
+                # Cached initialization prompts may contain the owner's private
+                # files. Fail closed rather than leak them on a rebuild error.
+                raise RuntimeError("Cannot safely build platform identity prompt") from e
             logger.warning(f"Failed to rebuild system prompt, using cached version: {e}")
             if self.extra_system_suffix:
                 return f"{self.system_prompt}\n\n{self.extra_system_suffix}"

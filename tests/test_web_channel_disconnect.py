@@ -10,6 +10,8 @@ that routing decision so the disconnect bug does not regress.
 """
 
 import json
+from types import SimpleNamespace
+from unittest.mock import Mock
 
 import web
 
@@ -98,6 +100,52 @@ def test_single_agent_always_uses_legacy_path(monkeypatch):
     assert calls == ["_handle_disconnect"]
 
 
+def test_feishu_instance_leaves_legacy_dingtalk_visible_and_editable(tmp_path, monkeypatch):
+    from channel.channel_instances import read_raw_instances, upsert_instance
+    from channel.web.core import _common
+
+    cfg = {"agent_workspace": str(tmp_path), "channel_type": "web,dingtalk", "dingtalk_client_id": "old-ding"}
+    config_path = tmp_path / "config.json"
+    config_path.write_text(json.dumps(cfg), encoding="utf-8")
+    upsert_instance(cfg, "feishu", "feishu-new", credentials={"feishu_app_id": "cli_new"})
+    monkeypatch.setattr(channels_api, "conf", lambda: cfg)
+    monkeypatch.setattr(channels_api, "get_data_root", lambda: str(tmp_path))
+    monkeypatch.setattr(_common, "get_data_root", lambda: str(tmp_path))
+    monkeypatch.setattr(channels_api, "_require_auth", lambda: None)
+    monkeypatch.setattr(channels_api, "threading", SimpleNamespace(Thread=Mock()))
+    monkeypatch.setattr(web, "header", lambda *args: None)
+    monkeypatch.setattr(web, "input", lambda: {})
+    handler = ChannelsHandler()
+
+    def post(action, **fields):
+        body = {"action": action, "channel": "dingtalk", **fields}
+        monkeypatch.setattr(web, "data", lambda: json.dumps(body))
+        result = json.loads(handler.POST())
+        assert result["status"] == "success", result
+        return result
+
+    view = json.loads(handler.GET())
+    assert view["multi_instance_types"] == ["feishu"]
+    assert "dingtalk" in view["project_channel_types"]
+    assert [card["instance_id"] for card in view["instances"]] == ["feishu-new"]
+    assert next(card for card in view["channels"] if card["name"] == "dingtalk")["active"]
+
+    post("save", config={"dingtalk_client_id": "saved-ding"})
+    assert json.loads(config_path.read_text(encoding="utf-8"))["dingtalk_client_id"] == "saved-ding"
+    post("disconnect")
+    assert cfg["channel_type"] == "web"
+    post("connect", config={"dingtalk_client_id": "reconnected-ding"})
+    assert cfg["channel_type"] == "web,dingtalk"
+    assert [r["channel_type"] for r in read_raw_instances(cfg)] == ["feishu"]
+
+    post("set_project", project_dir=str(tmp_path))
+    post("save", instance_id="dingtalk", config={"dingtalk_client_id": "instance-ding"})
+    ding = next(r for r in read_raw_instances(cfg) if r["channel_type"] == "dingtalk")
+    assert ding["credentials"]["dingtalk_client_id"] == "instance-ding"
+    assert ding["project_dir"] == str(tmp_path.resolve())
+    assert json.loads(config_path.read_text(encoding="utf-8"))["dingtalk_client_id"] == "reconnected-ding"
+
+
 # ---------------------------------------------------------------------------
 # The real bug: a bootstrapped legacy instance must stay gone after disconnect.
 #
@@ -111,7 +159,6 @@ def _disconnect_env(monkeypatch, tmp_path):
     """Wire ChannelsHandler's config/read/write helpers to a temp workspace with
     a legacy dingtalk enabled via config.json channel_type."""
     import json as _json
-    import config
     from agent import team
     from channel import channel_instances as ci
 
@@ -166,7 +213,6 @@ def test_disconnecting_bootstrapped_legacy_instance_stays_removed(monkeypatch, t
 
 
 def test_disconnecting_one_of_several_keeps_the_type(monkeypatch, tmp_path):
-    from agent import team
     from channel import channel_instances as ci
 
     cfg, config_path = _disconnect_env(monkeypatch, tmp_path)
@@ -184,3 +230,34 @@ def test_disconnecting_one_of_several_keeps_the_type(monkeypatch, tmp_path):
     on_disk = _json.loads(config_path.read_text(encoding="utf-8"))
     # feishu still has the bootstrapped instance, so its type stays
     assert "feishu" in on_disk["channel_type"]
+
+
+def test_feishu_private_chat_setting_persists_per_bot(monkeypatch, tmp_path):
+    from channel import channel_instances as ci
+
+    cfg, config_path = _disconnect_env(monkeypatch, tmp_path)
+    ci.upsert_instance(
+        cfg, "feishu", "feishu-second", agent_id="cust",
+        credentials={"feishu_app_id": "FA2", "feishu_app_secret": "FS2"},
+    )
+
+    key = "feishu_private_chat_enabled"
+    monkeypatch.setitem(cfg, key, False)
+    monkeypatch.setattr(channels_api, "_require_auth", lambda: None)
+    monkeypatch.setattr(web, "header", lambda *args: None)
+    monkeypatch.setattr(web, "input", lambda: {})
+    handler = ChannelsHandler()
+    monkeypatch.setattr(handler, "_channel_mgr", lambda: None)
+    response = handler._handle_instance_save("feishu", "feishu-second", {key: False})
+
+    assert json.loads(response)["status"] == "success"
+    assert ci.get_instance(cfg, "feishu-second").credentials[key] is False
+    assert key not in ci.get_instance(cfg, "feishu").credentials
+    assert key not in json.loads(config_path.read_text(encoding="utf-8"))
+    payload = json.loads(handler.GET())
+    feishu = next(channel for channel in payload["channels"] if channel["name"] == "feishu")
+    assert next(field for field in feishu["fields"] if field["key"] == key)["value"] is True
+    cards = {card["instance_id"]: card for card in payload["instances"]}
+    for instance_id, expected in (("feishu-second", False), ("feishu", True)):
+        field = next(field for field in cards[instance_id]["fields"] if field["key"] == key)
+        assert field["value"] is expected

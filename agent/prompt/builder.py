@@ -92,6 +92,7 @@ def build_agent_system_prompt(
     runtime_info: Optional[Dict[str, Any]] = None,
     project_dir: Optional[str] = None,
     permission_mode: Optional[str] = None,
+    protected_paths: Optional[List[str]] = None,
     **kwargs
 ) -> str:
     """
@@ -141,13 +142,16 @@ def build_agent_system_prompt(
 
     # 3.5 Knowledge (structured knowledge base)
     if conf().get("knowledge", True):
-        sections.extend(_build_knowledge_section(workspace_dir, language, project_dir))
+        sections.extend(_build_knowledge_section(
+            workspace_dir, language, project_dir,
+            tools=tools, permission_mode=permission_mode, protected_paths=protected_paths,
+        ))
 
-    # 4. Workspace (working environment description). Two of its blocks only
-    # hold when the context files were actually loaded, which sub agents skip.
+    # 4. Workspace (working environment description).
+    context_paths = [file.path for file in context_files or ()]
     sections.extend(
         _build_workspace_section(
-            workspace_dir, language, bool(context_files), project_dir=project_dir
+            workspace_dir, language, context_paths, project_dir=project_dir
         )
     )
 
@@ -514,7 +518,6 @@ def _build_memory_section(
         "**Storage rules**:",
         f"- Long-term core info → `{mem_md}`",
         f"- Today's events/progress → `{mem_dir}/{today_file}`",
-        f"- Structured knowledge → `{kb_dir}/` (see the knowledge system)",
             "- Append → `edit` tool with empty oldText",
             "- Modify → `edit` tool with oldText set to the text to replace",
             "- **Never write sensitive info** (API keys, tokens, etc.)",
@@ -552,7 +555,6 @@ def _build_memory_section(
             "**存储规则**:",
             f"- 长期核心信息 → `{mem_md}`",
             f"- 当天事件/进展 → `{mem_dir}/{today_file}`",
-            f"- 结构化知识 → `{kb_dir}/`（见知识系统）",
             "- 追加 → `edit` 工具，oldText 留空",
             "- 修改 → `edit` 工具，oldText 填写要替换的文本",
             "- **禁止写入敏感信息**（API密钥、令牌等）",
@@ -599,8 +601,35 @@ def _compact_knowledge_index(content: str) -> Tuple[str, int, bool]:
     return "\n".join(kept), omitted, True
 
 
+def _can_write_knowledge(knowledge_root, index_path, tools, permission_mode, protected_paths, workspace_dir):
+    from agent.memory.feishu_identity import memory_path_denial
+    from agent.permission import check_tool_call
+
+    for name in ("write", "edit"):
+        tool = tools.get(name)
+        if tool is None:
+            return False
+        memory_scope = getattr(tool, "feishu_memory_scope", None)
+        for path in (knowledge_root, index_path):
+            try:
+                if name == "write":
+                    tool._resolve_path(path)
+                if memory_path_denial(tool, path):
+                    return False
+            except (OSError, ValueError):
+                return False
+            if permission_mode and not check_tool_call(
+                permission_mode, name, {"path": path}, cwd=tool.cwd,
+                write_roots=[tool.cwd, workspace_dir], protected_paths=protected_paths,
+                knowledge_workspace=memory_scope[0] if memory_scope else None,
+            ).allowed:
+                return False
+    return True
+
+
 def _build_knowledge_section(
-    workspace_dir: str, language: str, project_dir: Optional[str] = None
+    workspace_dir: str, language: str, project_dir: Optional[str] = None,
+    *, tools=None, permission_mode=None, protected_paths=None,
 ) -> List[str]:
     """Build knowledge wiki section. Injects knowledge/index.md when present.
 
@@ -615,6 +644,18 @@ def _build_knowledge_section(
     if not os.path.exists(index_path):
         return []
 
+    writable = True
+    if tools is not None:
+        from agent.memory.feishu_identity import memory_path_denial
+
+        file_tools = {getattr(tool, "name", None): tool for tool in tools}
+        reader = file_tools.get("read")
+        if reader and memory_path_denial(reader, index_path):
+            return []
+        writable = _can_write_knowledge(
+            knowledge_root, index_path, file_tools, permission_mode, protected_paths, workspace_dir,
+        )
+
     try:
         with open(index_path, 'r', encoding='utf-8') as f:
             index_content = f.read().strip()
@@ -625,7 +666,26 @@ def _build_knowledge_section(
     # shared root when this Agent reads the shared copy.
     kb = _knowledge_base_path(workspace_dir, project_dir)
 
-    if language == "en":
+    if not writable:
+        if language == "en":
+            lines = [
+                "## 📚 Knowledge",
+                "",
+                f"The knowledge base `{kb}/` is read-only in this session.",
+                "This session's access overrides any automatic knowledge-writing instructions in RULE.md or skills.",
+                "If the user asks to save a page, explain that the session has read-only access and direct them to the Knowledge section of the CowAgent console.",
+                "",
+            ]
+        else:
+            lines = [
+                "## 📚 知识系统",
+                "",
+                f"本会话对知识库 `{kb}/` 只有读取权限。",
+                "本会话的权限优先于 RULE.md 或技能中的自动写入要求。",
+                "如果用户要求保存文档，说明本会话只有读取权限，并指引用户在 CowAgent 控制台的「知识」中保存。",
+                "",
+            ]
+    elif language == "en":
         lines = [
             "## 📚 Knowledge",
             "",
@@ -728,15 +788,13 @@ def _build_docs_section(workspace_dir: str, language: str) -> List[str]:
 
 
 def _build_workspace_section(
-    workspace_dir: str, language: str, context_files_loaded: bool = True,
+    workspace_dir: str, language: str, context_paths: List[str],
     project_dir: Optional[str] = None,
 ) -> List[str]:
     """Build the workspace section.
 
-    ``context_files_loaded`` gates the two blocks that are only true for an
-    Agent serving a user directly. A sub agent gets neither the context files
-    nor a user to talk to, so telling it that AGENT.md is already loaded would
-    both misinform it and talk it out of reading the workspace rules itself.
+    ``context_paths`` lists the files injected into this prompt. An empty list
+    omits the file notice and direct-user communication guidance.
 
     ``project_dir`` switches the section to the dual-directory layout used when
     the user has pointed the session at a project: the *project* is the working
@@ -753,7 +811,7 @@ def _build_workspace_section(
 
     if normalized_project:
         return _build_project_workspace_section(
-            workspace_dir, normalized_project, language, context_files_loaded
+            workspace_dir, normalized_project, language, context_paths
         )
 
     if language == "en":
@@ -779,16 +837,19 @@ def _build_workspace_section(
             "4. **When unsure**: run `bash pwd` to confirm the current directory, or `ls .` to see where you are",
             "",
         ]
-        if context_files_loaded:
+        if context_paths:
+            file_notes = {
+                "AGENT.md": "- ✅ `AGENT.md`: loaded - your persona and soul; follow it strictly. When your name, personality or style changes, proactively `edit` this file",
+                "USER.md": "- ✅ `USER.md`: loaded - private user profile. Use `edit` to update the relevant details when the user changes their name or preferred form of address.",
+                "RULE.md": "- ✅ `RULE.md`: loaded - workspace guide and rules; follow them strictly",
+                "MEMORY.md": "- ✅ `MEMORY.md`: loaded - long-term memory index",
+            }
             lines += [
                 "**Important - files already auto-loaded**:",
                 "",
-                "The following files are **already auto-loaded** into the system prompt at session start, so you **don't need to read them again with the read tool**:",
+                "The following files are **already auto-loaded** into this system prompt, so you **don't need to read them again with the read tool**:",
                 "",
-                "- ✅ `AGENT.md`: loaded - your persona and soul; follow it strictly. When your name, personality or style changes, proactively `edit` this file",
-                "- ✅ `USER.md`: loaded - the user's identity info. When the user changes how they're addressed, their name, etc., `edit` this file",
-                "- ✅ `RULE.md`: loaded - workspace guide and rules; follow them strictly",
-                "- ✅ `MEMORY.md`: loaded - long-term memory index",
+                *(file_notes.get(path, f"- ✅ `{path}`") for path in context_paths),
                 "",
                 "**💬 Communication norms**:",
                 "",
@@ -822,16 +883,19 @@ def _build_workspace_section(
             "4. **不确定时**: 先用 `bash pwd` 确认当前目录，或用 `ls .` 查看当前位置",
             "",
         ]
-        if context_files_loaded:
+        if context_paths:
+            file_notes = {
+                "AGENT.md": "- ✅ `AGENT.md`: 已加载 - 你的人格和灵魂设定，请严格遵循。当你的名字、性格或交流风格发生变化时，主动用 `edit` 更新此文件",
+                "USER.md": "- ✅ `USER.md`: 已加载 - 私人用户档案。当用户修改姓名或称呼时，用 `edit` 更新对应内容。",
+                "RULE.md": "- ✅ `RULE.md`: 已加载 - 工作空间使用指南和规则，请严格遵循",
+                "MEMORY.md": "- ✅ `MEMORY.md`: 已加载 - 长期记忆索引",
+            }
             lines += [
                 "**重要说明 - 文件已自动加载**:",
                 "",
-                "以下文件在会话启动时**已经自动加载**到系统提示词中，你**无需再用 read 工具读取**：",
+                "以下文件**已自动加载**到本轮系统提示词中，你**无需再用 read 工具读取**：",
                 "",
-                "- ✅ `AGENT.md`: 已加载 - 你的人格和灵魂设定，请严格遵循。当你的名字、性格或交流风格发生变化时，主动用 `edit` 更新此文件",
-                "- ✅ `USER.md`: 已加载 - 用户的身份信息。当用户修改称呼、姓名等身份信息时，用 `edit` 更新此文件",
-                "- ✅ `RULE.md`: 已加载 - 工作空间使用指南和规则，请严格遵循",
-                "- ✅ `MEMORY.md`: 已加载 - 长期记忆索引",
+                *(file_notes.get(path, f"- ✅ `{path}`") for path in context_paths),
                 "",
                 "**💬 交流规范**:",
                 "",
@@ -849,7 +913,7 @@ def _build_workspace_section(
 
 
 def _build_project_workspace_section(
-    workspace_dir: str, project_dir: str, language: str, context_files_loaded: bool
+    workspace_dir: str, project_dir: str, language: str, context_paths: List[str]
 ) -> List[str]:
     """Workspace section for a session pointed at a project directory.
 
@@ -906,15 +970,17 @@ def _build_project_workspace_section(
             "",
         ]
 
-    if context_files_loaded:
+    if context_paths:
+        separator = ", " if language == "en" else "、"
+        loaded_files = separator.join(f"`{path}`" for path in context_paths)
         if language == "en":
             lines += [
-                "**Files already auto-loaded** (no need to `read` again): `AGENT.md`, `USER.md`, `RULE.md`, `MEMORY.md` (from the system directory).",
+                f"**Files already auto-loaded** (no need to `read` again): {loaded_files} (from the system directory).",
                 "",
             ]
         else:
             lines += [
-                "**已自动加载的文件**（无需再次 `read`）：`AGENT.md`、`USER.md`、`RULE.md`、`MEMORY.md`（来自系统目录）。",
+                f"**已自动加载的文件**（无需再次 `read`）：{loaded_files}（来自系统目录）。",
                 "",
             ]
 

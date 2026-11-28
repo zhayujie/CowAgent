@@ -10,6 +10,7 @@ import os
 import shutil
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 ASSET_DIR = Path(__file__).resolve().parent.parent / "agent" / "subagent" / "assets"
@@ -569,39 +570,38 @@ def test_a_timed_out_call_returns_without_waiting_for_the_worker(parent, workspa
     """Joining the abandoned thread would make the call overrun the very budget
     the timeout exists to enforce."""
     settings = SubagentSettings(enabled=True, max_depth=1, max_concurrent=2, timeout_seconds=0.2)
+    worker_started = threading.Event()
     release = threading.Event()
-    worker_finished = threading.Event()
 
-    def on_state(_index, state):
-        if state.get("status") in ("cancelled", "completed", "failed"):
-            worker_finished.set()
+    class _WorkerPool(ThreadPoolExecutor):
+        def submit(self, fn, /, *args, **kwargs):
+            self.future = super().submit(fn, *args, **kwargs)
+            # Let the child reach run_stream before run_tasks starts its deadline.
+            assert worker_started.wait(timeout=5), "worker did not enter run_stream"
+            return self.future
 
     class _Stuck:
         def __init__(self, **kwargs):
             self.extra_system_suffix = None
 
         def run_stream(self, goal, clear_history=False, cancel_event=None, on_event=None, steer_inbox=None):
+            worker_started.set()
             release.wait(timeout=10)  # ignores the cancel, as a wedged run would
             return ""
 
     monkeypatch.setattr("agent.protocol.agent.Agent", _Stuck)
 
-    started = time.time()
-    results = run_tasks(
-        parent,
-        [SubagentTask(goal="stuck")],
-        load_templates(str(workspace)),
-        settings,
-        on_state=on_state,
-    )
-    elapsed = time.time() - started
-    release.set()
-    # run_tasks must return without joining, but the test must not leak its
-    # abandoned worker into the next test after monkeypatch restores Agent.
-    assert worker_finished.wait(timeout=5)
-
-    assert results[0]["status"] == "timeout"
-    assert elapsed < 5, f"run_tasks blocked for {elapsed:.1f}s waiting on the abandoned worker"
+    # The test owns the final join so the worker exits before monkeypatch teardown.
+    with _WorkerPool(max_workers=1) as pool:
+        monkeypatch.setattr("agent.subagent.runner.ThreadPoolExecutor", lambda **_: pool)
+        try:
+            results = run_tasks(
+                parent, [SubagentTask(goal="stuck")], load_templates(str(workspace)), settings,
+            )
+            assert results[0]["status"] == "timeout"
+            assert pool.future.running(), "run_tasks waited for the stalled worker"
+        finally:
+            release.set()
 
 
 def test_siblings_do_not_share_tool_instances(parent, workspace, enabled, monkeypatch):

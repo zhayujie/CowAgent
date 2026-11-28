@@ -185,6 +185,11 @@ class BaseTool:
             params, error = self._coerce_integer_args(params)
             if error:
                 return ToolResult.fail(error)
+            if getattr(self, "feishu_restricted", False) and self.name in {"web_fetch", "vision", "send"}:
+                from agent.tools.utils.url_safety import strict_url_guard
+
+                with strict_url_guard():
+                    return self.execute(params)
             return self.execute(params)
         except Exception as e:
             logger.error(f"[{self.name}] execution failed: {e}", exc_info=True)

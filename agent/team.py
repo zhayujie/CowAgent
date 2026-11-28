@@ -20,9 +20,13 @@ first write migrates them and clears the old keys.
 from __future__ import annotations
 
 import json
+from contextlib import contextmanager
+from threading import RLock
 from pathlib import Path
 from typing import Any, Dict, Iterable, Mapping, Optional
 
+from channel.feishu.feishu_config_migration import FEISHU_CONFIG_MIGRATION_KEY
+from common import const
 from common.atomic_write import write_text_atomic
 from common.log import logger
 from common.utils import expand_path
@@ -33,7 +37,18 @@ from common.utils import expand_path
 #: source of truth for inbound routing. It is opt-in: absent, channel startup
 #: falls back to ``channel_type`` + flat credentials in config.json, so a legacy
 #: single-Agent install keeps working untouched.
-TEAM_KEYS = ("agents", "default_agent_id", "channel_instances")
+LEGACY_CHANNEL_IMPORT_TYPES = "legacy_channel_import_types"
+TEAM_KEYS = (
+    "agents", "default_agent_id", "channel_instances", FEISHU_CONFIG_MIGRATION_KEY,
+    LEGACY_CHANNEL_IMPORT_TYPES,
+)
+_roster_lock = RLock()
+
+
+@contextmanager
+def roster_transaction():
+    with _roster_lock:
+        yield
 
 FILE_NAME = "team.json"
 
@@ -46,12 +61,18 @@ def team_file(settings: Mapping[str, Any]) -> Path:
     return instance_root(settings) / "agents" / FILE_NAME
 
 
+def limit_new_feishu_roster(settings: Mapping[str, Any], roster: Dict[str, Any]) -> None:
+    """When Feishu creates the roster, keep other flat channels in config.json."""
+    if not team_file(settings).exists() and not roster.get("agents") and not roster.get("channel_instances"):
+        roster[LEGACY_CHANNEL_IMPORT_TYPES] = [const.FEISHU]
+
+
 def _legacy(settings: Mapping[str, Any]) -> Dict[str, Any]:
     """The roster as an older install still has it, inside ``config.json``."""
     return {key: settings[key] for key in TEAM_KEYS if key in settings}
 
 
-def read(settings: Mapping[str, Any]) -> Dict[str, Any]:
+def read(settings: Mapping[str, Any], *, strict=False) -> Dict[str, Any]:
     """The roster keys, from the file if there is one.
 
     Falls back to ``config.json`` so an install that predates the file keeps
@@ -64,18 +85,24 @@ def read(settings: Mapping[str, Any]) -> Dict[str, Any]:
     except FileNotFoundError:
         return _legacy(settings)
     except OSError as e:
+        if strict:
+            raise
         logger.warning(f"[Roster] Cannot read {path}, using config.json: {e}")
         return _legacy(settings)
 
     try:
         data = json.loads(raw)
     except ValueError as e:
+        if strict:
+            raise
         # Better to fall back than to start with no Agents at all: the
         # registry would substitute a lone default and the console would
         # look like every Agent had been deleted.
         logger.error(f"[Roster] {path} is not valid JSON, using config.json: {e}")
         return _legacy(settings)
     if not isinstance(data, dict):
+        if strict:
+            raise ValueError("Team configuration must contain an object")
         logger.error(f"[Roster] {path} must contain an object, using config.json")
         return _legacy(settings)
     return {key: data[key] for key in TEAM_KEYS if key in data}
@@ -128,18 +155,19 @@ def compact(
     return stored
 
 
-def write(settings: Mapping[str, Any], roster: Mapping[str, Any]) -> Path:
+@roster_transaction()
+def write(settings: Mapping[str, Any], roster: Mapping[str, Any], *, strict=False) -> Path:
     """Replace the roster file atomically. Returns where it was written.
 
-    Crossing into multi-Agent territory is the moment a legacy channel (its
-    credentials still flat in config.json) has to be carried into
-    ``channel_instances`` or it goes dark, since multi-Agent startup routes
-    entirely off that list. ``bootstrap_legacy_instances`` does this once and is
-    idempotent, so it is safe to run on every write.
+    A roster created solely for Feishu keeps the other legacy channels in
+    config.json. Once a second Agent is added, apply the usual team import.
     """
     path = team_file(settings)
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {key: roster[key] for key in TEAM_KEYS if key in roster}
+    agents = payload.get("agents")
+    if isinstance(agents, list) and len(agents) > 1:
+        payload.pop(LEGACY_CHANNEL_IMPORT_TYPES, None)
     from channel.channel_instances import bootstrap_legacy_instances
 
     bootstrapped = bootstrap_legacy_instances(
@@ -147,7 +175,11 @@ def write(settings: Mapping[str, Any], roster: Mapping[str, Any]) -> Path:
     )
     if bootstrapped:
         payload["channel_instances"] = bootstrapped
-    write_text_atomic(path, json.dumps(payload, indent=4, ensure_ascii=False) + "\n")
+    contents = json.dumps(payload, indent=4, ensure_ascii=False) + "\n"
+    if strict:
+        write_text_atomic(path, contents, allow_in_place=False)
+    else:
+        write_text_atomic(path, contents)
     return path
 
 
@@ -159,18 +191,19 @@ def migrate(settings: Mapping[str, Any], config_path: Optional[Any] = None) -> O
     the thing the move is for. Waiting for an edit leaves that window open
     indefinitely and leaves two copies to wonder about in the meantime.
 
-    A single-Agent install has nothing to move and gets no file.
+    An install without a roster or explicit channel instances gets no file.
     """
     path = team_file(settings)
     if path.exists():
         return None
     legacy = _legacy(settings)
-    if not legacy.get("agents"):
+    if not legacy.get("agents") and not legacy.get("channel_instances"):
         return None
     roster = dict(legacy)
-    roster["agents"] = compact(
-        roster["agents"], settings, roster.get("default_agent_id") or ""
-    )
+    if roster.get("agents"):
+        roster["agents"] = compact(
+            roster["agents"], settings, roster.get("default_agent_id") or ""
+        )
     try:
         written = write(settings, roster)
     except OSError as e:
@@ -183,14 +216,14 @@ def migrate(settings: Mapping[str, Any], config_path: Optional[Any] = None) -> O
     return written
 
 
+@roster_transaction()
 def adopt_legacy_channels(settings: Mapping[str, Any]) -> Optional[Path]:
     """Fold legacy channels into a roster file that already exists.
 
     ``write`` carries them over, but only when something writes: a channel set
     up in ``config.json`` after the file appeared (an older build run against
     the same data) would otherwise run without a record, so the console cannot
-    show or manage it. Only ever adds records, and never touches a file it
-    cannot parse.
+    show or manage it. Leaves unreadable files alone.
     """
     path = team_file(settings)
     try:
@@ -200,12 +233,10 @@ def adopt_legacy_channels(settings: Mapping[str, Any]) -> Optional[Path]:
     if not isinstance(data, dict):
         return None
     roster = {key: data[key] for key in TEAM_KEYS if key in data}
-    existing = roster.get("channel_instances")
-    before = len(existing) if isinstance(existing, list) else 0
     from channel.channel_instances import bootstrap_legacy_instances
 
     after = bootstrap_legacy_instances(settings, roster, roster.get("default_agent_id") or "")
-    if len(after) <= before:
+    if not after or after == roster.get("channel_instances"):
         return None
     roster["channel_instances"] = after
     try:
@@ -213,10 +244,11 @@ def adopt_legacy_channels(settings: Mapping[str, Any]) -> Optional[Path]:
     except OSError as e:
         logger.warning(f"[Team] Could not add legacy channels to {path}: {e}")
         return None
-    logger.info(f"[Team] Added legacy channels to {written}")
+    logger.info(f"[Team] Applied legacy channel settings to {written}")
     return written
 
 
+@roster_transaction()
 def retire_legacy(config_path: Optional[Path]) -> None:
     """Take the roster keys out of ``config.json``, once the file has them.
 

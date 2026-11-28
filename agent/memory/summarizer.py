@@ -17,6 +17,9 @@ from common.atomic_write import write_text_atomic
 from common.log import logger
 
 
+_daily_memory_write_lock = threading.Lock()
+
+
 SUMMARIZE_SYSTEM_PROMPT_ZH = """你是一个对话记录助手。请将对话内容归纳为当天的日常记录。
 
 ## 要求
@@ -26,6 +29,7 @@ SUMMARIZE_SYSTEM_PROMPT_ZH = """你是一个对话记录助手。请将对话内
 - 合并同一件事的多轮对话
 - 只记录有意义的事件，忽略闲聊和问候
 - 保留关键的决策、结论和待办事项
+- 存在平台发言人署名时，保留 sender_id 与发言归属，不得把多人观点合并成当前用户的偏好；无署名的旧消息身份未知
 
 当对话没有任何记录价值（仅含问候或无意义内容），直接回复"无"。"""
 
@@ -38,6 +42,7 @@ Summarize by "event", not turn by turn:
 - Merge multiple turns about the same thing
 - Only record meaningful events; ignore small talk and greetings
 - Keep key decisions, conclusions and to-dos
+- Preserve platform sender_id labels and attribution; never merge multiple speakers' preferences into the current user. Old unlabeled messages have unknown authors.
 
 If the conversation has no record value (only greetings or meaningless content), reply with exactly "None"."""
 
@@ -220,7 +225,7 @@ class MemoryFlushManager:
         self._last_flushed_content_hash: str = ""  # Content hash at last flush, for daily dedup
         self._daily_flushed_hashes: set = set()  # Day-level hashes that have landed
         self._daily_inflight_hashes: set = set()  # Day-level hashes dispatched, not yet settled
-        self._last_dream_input_hash: str = ""  # "{date}:{daily_hash}" of last dream, for dedup
+        self._last_dream_input_hashes: Dict[Optional[str], str] = {}
         self._last_flush_thread: Optional[threading.Thread] = None
     
     def get_today_memory_file(self, user_id: Optional[str] = None, ensure_exists: bool = False) -> Path:
@@ -303,7 +308,7 @@ class MemoryFlushManager:
                     text = self._extract_text_from_content(m.get("content", ""))
                     if not text or not text.strip():
                         continue
-                    h = hashlib.md5(text.encode("utf-8")).hexdigest()
+                    h = hashlib.md5(f"{user_id or ''}\0{text}".encode("utf-8")).hexdigest()
                     if h in self._trim_flushed_hashes or h in self._trim_inflight_hashes:
                         continue
                     self._trim_inflight_hashes.add(h)
@@ -419,15 +424,16 @@ class MemoryFlushManager:
         if not summary:
             return False
         try:
-            daily_file = ensure_daily_memory_file(self.workspace_dir, user_id)
             headers = {
                 "overflow": f"## Context Overflow Recovery ({datetime.now().strftime('%H:%M')})",
                 "trim": f"## Trimmed Context ({datetime.now().strftime('%H:%M')})",
                 "daily_summary": f"## Daily Summary ({datetime.now().strftime('%H:%M')})",
             }
             header = headers.get(reason, f"## Session Notes ({datetime.now().strftime('%H:%M')})")
-            with open(daily_file, "a", encoding="utf-8") as f:
-                f.write(f"\n{header}\n\n{summary}\n")
+            with _daily_memory_write_lock:
+                daily_file = ensure_daily_memory_file(self.workspace_dir, user_id)
+                with open(daily_file, "a", encoding="utf-8") as f:
+                    f.write(f"\n{header}\n\n{summary}\n")
             logger.info(f"[MemoryFlush] Wrote daily memory to {daily_file.name} (reason={reason}, chars={len(summary)})")
             self.last_flush_timestamp = datetime.now()
             return True
@@ -479,7 +485,7 @@ class MemoryFlushManager:
             self._extract_text_from_content(m.get("content", ""))
             for m in messages
         )
-        content_hash = hashlib.md5(content.encode("utf-8")).hexdigest()
+        content_hash = hashlib.md5(f"{user_id or ''}\0{content}".encode("utf-8")).hexdigest()
         with self._flush_hashes_lock:
             if content_hash in self._daily_flushed_hashes or content_hash in self._daily_inflight_hashes:
                 logger.debug("[MemoryFlush] Daily summary skipped: no new content since last flush")
@@ -549,7 +555,7 @@ class MemoryFlushManager:
         daily_hash = hashlib.md5(daily_content.encode("utf-8")).hexdigest()
         today_str = datetime.now().strftime("%Y-%m-%d")
         dedup_key = f"{today_str}:{daily_hash}"
-        if not force and dedup_key == self._last_dream_input_hash:
+        if not force and dedup_key == self._last_dream_input_hashes.get(user_id):
             logger.info("[DeepDream] Already dreamed today with same daily content, skipping")
             return False
 
@@ -644,7 +650,7 @@ class MemoryFlushManager:
         logger.info("[DeepDream] ✅ Deep Dream completed successfully")
         # Mark as dreamed only after a fully successful run, so a failed
         # attempt remains retryable the same day.
-        self._last_dream_input_hash = dedup_key
+        self._last_dream_input_hashes[user_id] = dedup_key
         return True
 
     def _read_main_memory(self, user_id: Optional[str] = None) -> str:

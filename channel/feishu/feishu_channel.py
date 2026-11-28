@@ -22,12 +22,12 @@ from urllib.parse import urlparse
 import requests
 import web
 
-from common.atomic_write import write_json_atomic
 from bridge.context import Context
 from bridge.context import ContextType
 from bridge.reply import Reply, ReplyType
 from channel.chat_channel import ChatChannel, check_prefix
 from channel.feishu.feishu_message import FeishuMessage
+from channel.feishu.owner_config import PRIVATE_CHAT_ENABLED, registration_owner_id
 from channel.feishu.feishu_static_card import (
     build_text_delivery,
     resolve_markdown_images,
@@ -64,6 +64,15 @@ _MAX_REMOTE_VIDEO_SECONDS = 300
 from channel.feishu import lark_install
 
 lark = None  # will be populated on first use via _ensure_lark_imported()
+
+
+def _message_send_target(msg, receiver, receive_id_type):
+    # Reply to the existing private chat. Feishu can reject sending by open_id
+    # even when the bot can reply in that chat.
+    chat_id = getattr(msg, "chat_id", None)
+    if chat_id and not msg.is_group:
+        return chat_id, "chat_id"
+    return receiver, receive_id_type
 
 
 def _ensure_lark_imported():
@@ -143,57 +152,26 @@ def _print_qr_to_terminal(qr_url: str):
     logger.info("[FeiShu] One-click 飞书应用创建二维码（请用飞书 App 扫码）：\n" + "\n".join(full))
 
 
-def _persist_feishu_credentials(app_id: str, app_secret: str) -> bool:
-    """Write feishu_app_id / feishu_app_secret + ensure feishu in channel_type into config.json.
+def _persist_feishu_credentials(app_id, app_secret, scanner=""):
+    from channel.channel_instances import get_instance, save_feishu_registration
 
-    Returns True on success, False on failure (e.g. config.json missing or unwritable).
-    """
     try:
-        config_path = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-            "config.json",
-        )
-        if os.path.exists(config_path):
-            with open(config_path, "r", encoding="utf-8-sig") as f:
-                file_cfg = json.load(f)
-        else:
-            file_cfg = {}
-
-        file_cfg["feishu_app_id"] = app_id
-        file_cfg["feishu_app_secret"] = app_secret
-
-        # 保证 channel_type 中包含 feishu（用户可能纯通过 CLI 启动单通道）
-        ch_type = file_cfg.get("channel_type", conf().get("channel_type", "")) or ""
-        existing = [s.strip() for s in ch_type.split(",") if s.strip()]
-        if "feishu" not in existing:
-            existing.append("feishu")
-            file_cfg["channel_type"] = ",".join(existing)
-
-        write_json_atomic(config_path, file_cfg)
-
-        # 同步到内存中的 conf()，让本次启动直接生效
-        conf()["feishu_app_id"] = app_id
-        conf()["feishu_app_secret"] = app_secret
-        if "channel_type" in file_cfg:
-            conf()["channel_type"] = file_cfg["channel_type"]
-
-        try:
-            os.chmod(config_path, 0o600)
-        except Exception:
-            pass
-        return True
-    except Exception as e:
-        logger.error(f"[FeiShu] Failed to persist credentials to config.json: {e}")
-        return False
+        expected = get_instance(conf(), "feishu")
+        if expected and not expected.legacy:
+            raise ValueError("The terminal registration target is already configured")
+        return save_feishu_registration(conf(), "feishu", expected, app_id, app_secret, scanner)
+    except (OSError, ValueError) as exc:
+        logger.error(f"[FeiShu] Failed to save the terminal registration: {type(exc).__name__}")
+        return None
 
 
-def _register_via_qr_in_terminal() -> bool:
+def _register_via_qr_in_terminal():
     """CLI-side one-click app creation via lark_oapi.register_app.
 
     Blocks the calling thread (typically the channel startup thread) until the user
     finishes scanning, the QR code expires, or registration is cancelled.
 
-    Returns True if credentials were obtained AND persisted; False otherwise.
+    Returns the persisted channel instance on success.
     The caller should fall back to the original "missing credentials" error in that case.
     """
     try:
@@ -212,7 +190,7 @@ def _register_via_qr_in_terminal() -> bool:
             installed = "unknown"
         logger.error(
             f"[FeiShu] 当前 lark-oapi 版本 ({installed}) 不支持一键创建应用，需要 >= 1.5.5。"
-            "请执行 pip install -U 'lark-oapi>=1.5.5' 后重试，或手动在 config.json 中填入凭据。"
+            "请执行 pip install -U 'lark-oapi>=1.7.1' 后重试，或手动在 config.json 中填入凭据。"
         )
         return False
 
@@ -236,6 +214,7 @@ def _register_via_qr_in_terminal() -> bool:
             on_qr_code=_on_qr,
             on_status_change=_on_status,
             source="cowagent",
+            create_only=True,
         )
     except Exception as e:
         err_cls = e.__class__.__name__
@@ -253,16 +232,10 @@ def _register_via_qr_in_terminal() -> bool:
         logger.error("[FeiShu] 创建结果缺少 app_id/app_secret，无法继续。")
         return False
 
-    if not _persist_feishu_credentials(app_id, app_secret):
-        logger.error(
-            "[FeiShu] 应用创建成功但写入 config.json 失败，请手动复制以下值到配置文件：\n"
-            f"        feishu_app_id     = {app_id}\n"
-            f"        feishu_app_secret = {app_secret}"
-        )
-        return False
-
-    logger.info(f"[FeiShu] 应用创建成功，凭据已写入 config.json (app_id={app_id})。")
-    return True
+    instance = _persist_feishu_credentials(app_id, app_secret, registration_owner_id(result))
+    if instance is None:
+        logger.error("[FeiShu] 应用已创建，但保存实例失败。请在飞书开发者后台查看凭据并手动接入。")
+    return instance
 
 
 @singleton
@@ -343,10 +316,11 @@ class FeiShuChanel(ChatChannel):
         self.feishu_domain = FEISHU_DOMAIN
 
         # 命令行启动场景：缺少凭据时尝试通过 lark.register_app 在终端弹二维码
-        # 引导用户扫码创建应用。Web 控制台启动同样会走到这里，但控制台用户通常
-        # 已经通过 /api/feishu/register 完成了创建并写回 config.json。
+        # 引导用户扫码创建应用。Web 控制台通过 /api/feishu/register 保存实例后启动。
         if not self.feishu_app_id or not self.feishu_app_secret:
-            if _register_via_qr_in_terminal():
+            instance = _register_via_qr_in_terminal() if not self.instance_id else None
+            if instance:
+                self.apply_instance(instance.instance_id, instance.agent_id, instance.credentials)
                 self.feishu_app_id = self.cfg('feishu_app_id')
                 self.feishu_app_secret = self.cfg('feishu_app_secret')
             else:
@@ -442,10 +416,11 @@ class FeiShuChanel(ChatChannel):
     def _startup_webhook(self):
         """启动HTTP服务器接收事件(webhook模式)"""
         logger.debug("[FeiShu] Starting in webhook mode...")
-        urls = (
-            '/', 'channel.feishu.feishu_channel.FeishuController'
-        )
-        app = web.application(urls, globals(), autoreload=False)
+        class InstanceController(FeishuController):
+            def __init__(controller):
+                super().__init__(self)
+
+        app = web.application(("/", InstanceController), {}, autoreload=False)
         port = self.cfg("feishu_port", 9891)
         func = web.httpserver.StaticMiddleware(app.wsgifunc())
         func = web.httpserver.LogMiddleware(func)
@@ -677,12 +652,15 @@ class FeiShuChanel(ChatChannel):
             )
         else:
             url = self.feishu_domain + "/open-apis/im/v1/messages"
+            receiver, receive_id_type = _message_send_target(
+                feishu_msg, feishu_msg.other_user_id, receive_id_type
+            )
             response = requests.post(
                 url,
                 headers=headers,
                 params={"receive_id_type": receive_id_type},
                 json={
-                    "receive_id": feishu_msg.other_user_id,
+                    "receive_id": receiver,
                     "msg_type": "interactive",
                     "content": content,
                 },
@@ -763,6 +741,9 @@ class FeiShuChanel(ChatChannel):
             return
 
         msg = event.get("message")
+        chat_type = msg.get("chat_type")
+        if chat_type == "p2p" and self._creds.get(PRIVATE_CHAT_ENABLED) is False:
+            return
 
         # 幂等判断
         msg_id = msg.get("message_id")
@@ -795,7 +776,6 @@ class FeiShuChanel(ChatChannel):
 
         is_group = False
         bot_mention_keys = set()
-        chat_type = msg.get("chat_type")
 
         if chat_type == "group":
             # A rich-text (post) message carries text and @mentions just like a
@@ -833,22 +813,12 @@ class FeiShuChanel(ChatChannel):
             )
             return
 
-        # Scope pending attachments to this bot and the same group/session split
-        # used for messages. Shared groups intentionally omit the sender.
-        sender_id = (event["sender"].get("sender_id") or {}).get("open_id")
-        shared_group = is_group and conf().get("group_shared_session", True)
-        cache_key = "feishu:" + json.dumps([
-            self.instance_id,
-            self.cfg("feishu_app_id") or event.get("app_id"),
-            chat_type,
-            msg.get("chat_id") if is_group else None,
-            None if shared_group else sender_id,
-        ])
-
         # 构造飞书消息对象
         feishu_msg = FeishuMessage(
             event, is_group=is_group, access_token=self.fetch_access_token(), bot_mention_keys=bot_mention_keys,
-            domain=self.feishu_domain, attachment_cache_key=cache_key,
+            domain=self.feishu_domain, instance_id=self.instance_id or "feishu",
+            app_id=self.feishu_app_id, identity_settings=self._creds if self.instance_id else None,
+            share_group=conf().get("group_shared_session", True),
         )
         if not feishu_msg:
             return
@@ -862,6 +832,7 @@ class FeiShuChanel(ChatChannel):
         from channel.file_cache import get_file_cache
         file_cache = get_file_cache()
 
+        cache_key = str(feishu_msg.image_dir)
         image_sources = {path: (feishu_msg.msg_id, key) for key, path in feishu_msg.image_paths.items()}
 
         # 如果是单张图片消息，缓存起来
@@ -1101,9 +1072,12 @@ class FeiShuChanel(ChatChannel):
         else:
             # 发送新消息（私聊或群聊中无msg_id的情况，如定时任务）
             url = self.feishu_domain + "/open-apis/im/v1/messages"
-            params = {"receive_id_type": context.get("receive_id_type") or "open_id"}
+            receiver, receive_id_type = _message_send_target(
+                msg, context.get("receiver"), context.get("receive_id_type") or "open_id"
+            )
+            params = {"receive_id_type": receive_id_type}
             data = {
-                "receive_id": context.get("receiver"),
+                "receive_id": receiver,
                 "msg_type": msg_type,
                 "content": content_json
             }
@@ -1128,7 +1102,7 @@ class FeiShuChanel(ChatChannel):
                     timeout=(5, 10),
                 )
             else:
-                fallback_data["receive_id"] = context.get("receiver")
+                fallback_data["receive_id"] = receiver
                 fallback_res = requests.post(
                     url=url,
                     headers=headers,
@@ -1247,8 +1221,9 @@ class FeiShuChanel(ChatChannel):
 
         msg = context.get("msg")
         is_group = context.get("isgroup", False)
-        receiver = context.get("receiver")
-        receive_id_type = context.get("receive_id_type", "open_id")
+        receiver, receive_id_type = _message_send_target(
+            msg, context.get("receiver"), context.get("receive_id_type", "open_id")
+        )
         headers = {
             "Authorization": "Bearer " + access_token,
             "Content-Type": "application/json; charset=utf-8",
@@ -1597,8 +1572,9 @@ class FeiShuChanel(ChatChannel):
 
         msg = context.get("msg")
         is_group = context.get("isgroup", False)
-        receiver = context.get("receiver")
-        receive_id_type = context.get("receive_id_type", "open_id")
+        receiver, receive_id_type = _message_send_target(
+            msg, context.get("receiver"), context.get("receive_id_type", "open_id")
+        )
         # 客户端打字机渲染参数（飞书 App 侧实际"出字"速度）：
         #   - print_freq_ms：每次刷新的间隔
         #   - print_step：每次刷新出多少个字符
@@ -2315,21 +2291,10 @@ class FeiShuChanel(ChatChannel):
 
         cmsg = context["msg"]
 
-        # Set session_id based on chat type
-        if cmsg.is_group:
-            # Group chat: check if group_shared_session is enabled
-            if conf().get("group_shared_session", True):
-                # All users in the group share the same session context
-                context["session_id"] = cmsg.other_user_id  # group_id
-            else:
-                # Each user has their own session within the group
-                # This ensures:
-                # - Same user in different groups have separate conversation histories
-                # - Same user in private chat and group chat have separate histories
-                context["session_id"] = f"{cmsg.from_user_id}:{cmsg.other_user_id}"
-        else:
-            # Private chat: use user_id only
-            context["session_id"] = cmsg.from_user_id
+        from agent.memory.feishu_identity import feishu_session_id
+        context["session_id"] = feishu_session_id(
+            cmsg, self.instance_id or "feishu", conf().get("group_shared_session", True)
+        )
 
         context["receiver"] = cmsg.other_user_id
 
@@ -2385,12 +2350,15 @@ class FeishuController:
     MESSAGE_RECALLED_TYPE = "im.message.recalled_v1"
     CARD_ACTION_TYPE = "card.action.trigger"
 
+    def __init__(self, channel=None):
+        self._channel = channel
+
     def GET(self):
         return "Feishu service start success!"
 
     def POST(self):
         try:
-            channel = FeiShuChanel()
+            channel = self._channel if self._channel is not None else FeiShuChanel()
 
             request = json.loads(web.data().decode("utf-8"))
             logger.debug(f"[FeiShu] receive request: {_redact_request_tokens(request)}")

@@ -87,6 +87,7 @@ const ChannelsPage: React.FC<ChannelsPageProps> = ({ baseUrl }) => {
   // a legacy backend that omits these fields renders exactly as before.
   const [multiAgent, setMultiAgent] = useState(false)
   const [multiInstanceTypes, setMultiInstanceTypes] = useState<string[]>([])
+  const [projectChannelTypes, setProjectChannelTypes] = useState<string[]>([])
   const [instances, setInstances] = useState<ChannelInfo[]>([])
   const [loading, setLoading] = useState(true)
   // Whether the "add channel" panel is open, and the channel chosen in it.
@@ -107,6 +108,7 @@ const ChannelsPage: React.FC<ChannelsPageProps> = ({ baseUrl }) => {
       setChannels(data.channels || [])
       setMultiAgent(!!data.multi_agent)
       setMultiInstanceTypes(data.multi_instance_types || [])
+      setProjectChannelTypes(data.project_channel_types || data.multi_instance_types || [])
       setInstances(data.instances || [])
     } catch (err) {
       console.error('Failed to load channels:', err)
@@ -266,7 +268,9 @@ const ChannelsPage: React.FC<ChannelsPageProps> = ({ baseUrl }) => {
                     channel={ch}
                     multiAgent={multiAgent}
                     onChanged={loadChannels}
-                    projectEditable={isMultiInstanceType(ch.name) && (!multiAgent || !!ch.instance_id)}
+                    projectEditable={projectChannelTypes.includes(ch.name) && (
+                      !multiAgent || !isMultiInstanceType(ch.name) || !!ch.instance_id
+                    )}
                   />
                 ))
               )}
@@ -565,13 +569,14 @@ const ChannelCard: React.FC<{
   const weixinQr = qrProvider === 'weixin' && (pending === 'scanning' || (!channel.active && defaultExpanded))
   // Feishu's scan creates a brand new app, so it stays behind a button.
   const [feishuScanning, setFeishuScanning] = useState(false)
+  const [replaceFeishuApp, setReplaceFeishuApp] = useState(false)
   // Stored credentials mean the user most likely wants to edit them.
   const [mode, setMode] = useState<'scan' | 'manual'>(() =>
-    channel.fields.some((f) => f.type !== 'bool' && !!f.value) ? 'manual' : 'scan'
+    channel.fields.some((f) => f.key === 'feishu_app_id' && !!f.value) ? 'manual' : 'scan'
   )
   const [expanded, setExpanded] = useState(defaultExpanded)
   const [values, setValues] = useState<Record<string, string>>(() =>
-    Object.fromEntries(channel.fields.map((f) => [f.key, f.value != null ? String(f.value) : '']))
+    Object.fromEntries(channel.fields.map((f) => [f.key, String(f.value ?? f.default ?? '')]))
   )
   // Track which secret fields still hold the server-provided mask.
   const [masked, setMasked] = useState<Record<string, boolean>>(() =>
@@ -581,8 +586,25 @@ const ChannelCard: React.FC<{
   )
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState('')
+  const [ownerCandidate, setOwnerCandidate] = useState('')
+  const [ownerLookupStatus, setOwnerLookupStatus] = useState('')
+  const [ownerLookupBusy, setOwnerLookupBusy] = useState(false)
+  const ownerLookupRevision = useRef(0)
 
-  const setField = (key: string, val: string) => setValues((p) => ({ ...p, [key]: val }))
+  const setField = (key: string, val: string) => {
+    if (key === 'feishu_app_id' || key === 'feishu_app_secret') {
+      ownerLookupRevision.current++
+      setOwnerCandidate('')
+      setOwnerLookupStatus('')
+      setOwnerLookupBusy(false)
+    }
+    setValues((prev) => {
+      if (key === 'feishu_app_id' && val !== prev[key]) {
+        return { ...prev, [key]: val, feishu_owner_open_ids: '', feishu_private_memory_mode: 'owner_workspace' }
+      }
+      return { ...prev, [key]: val }
+    })
+  }
 
   // Only send fields the user actually changed; masked secrets are skipped so
   // the backend keeps the stored value (mirrors the web console behavior).
@@ -591,8 +613,12 @@ const ChannelCard: React.FC<{
     channel.fields.forEach((f) => {
       const v = values[f.key]
       if (f.type === 'secret' && masked[f.key]) return
-      if (v === '' || v == null) return
-      cfg[f.key] = f.type === 'number' ? Number(v) : v
+      if (v == null || (v === '' && f.key !== 'feishu_owner_open_ids')) return
+      if (f.type === 'bool') {
+        cfg[f.key] = v === 'true' || v === '1'
+      } else {
+        cfg[f.key] = f.type === 'number' ? Number(v) : v
+      }
     })
     return cfg
   }
@@ -605,6 +631,28 @@ const ChannelCard: React.FC<{
     if (forceNewInstance) return ''
     if (channel.instance_id) return channel.instance_id
     return undefined
+  }
+
+  const lookupFeishuOwner = async () => {
+    const revision = ++ownerLookupRevision.current
+    const appId = values.feishu_app_id.trim()
+    setOwnerLookupBusy(true)
+    setOwnerCandidate('')
+    setOwnerLookupStatus('')
+    try {
+      const res = await apiClient.channelAction('lookup_owner', 'feishu', {
+        feishu_app_id: appId,
+        feishu_app_secret: masked.feishu_app_secret ? '' : values.feishu_app_secret,
+      }, instanceIdArg())
+      if (revision !== ownerLookupRevision.current) return
+      const candidate = res.status === 'success' && res.app_id === appId ? String(res.owner_open_id || '') : ''
+      setOwnerCandidate(candidate)
+      setOwnerLookupStatus(candidate || t('feishu_lookup_owner_missing'))
+    } catch {
+      if (revision === ownerLookupRevision.current) setOwnerLookupStatus(t('feishu_lookup_owner_missing'))
+    } finally {
+      if (revision === ownerLookupRevision.current) setOwnerLookupBusy(false)
+    }
   }
 
   const run = async (action: 'save' | 'connect' | 'disconnect') => {
@@ -661,6 +709,18 @@ const ChannelCard: React.FC<{
           }}
         />
       ))}
+      {channel.name === 'feishu' && <div className="flex flex-wrap items-center gap-2 text-xs">
+        <button type="button" className="text-accent" disabled={ownerLookupBusy || !values.feishu_app_id} onClick={lookupFeishuOwner}>
+          {t('feishu_lookup_owner')}
+        </button>
+        {ownerCandidate && <button type="button" className="text-accent" onClick={() => {
+          const ids = new Set((values.feishu_owner_open_ids || '').split(/[,，\s]+/).filter(Boolean))
+          ids.add(ownerCandidate)
+          setField('feishu_owner_open_ids', [...ids].join(', '))
+          setOwnerCandidate('')
+        }}>{t('feishu_use_owner')}</button>}
+        <span role="status">{ownerLookupStatus}</span>
+      </div>}
       <div className="flex items-center justify-end gap-3 pt-1">
         <span className={`text-xs transition-opacity ${status ? 'opacity-100' : 'opacity-0'} ${status === t('channels_save_ok') ? 'text-accent' : 'text-danger'}`}>
           {status || '\u00a0'}
@@ -767,18 +827,21 @@ const ChannelCard: React.FC<{
           {mode !== 'scan' ? (
             fieldEditor
           ) : feishuScanning ? (
-            <QrScanPanel provider="feishu" onConnected={onChanged} newInstance={multiAgent && (forceNewInstance || !channel.instance_id)} />
+            <QrScanPanel provider="feishu" onConnected={onChanged} instanceId={channel.instance_id}
+              newInstance={forceNewInstance || !channel.instance_id} replaceApp={replaceFeishuApp} />
           ) : (
             <div className="flex flex-col items-center py-3">
               <p className="text-sm text-content-secondary mb-4 text-center max-w-sm leading-relaxed">
-                {channel.active ? t('feishu_scan_replace_desc') : t('feishu_scan_panel_desc')}
+                {channel.active ? t('feishu_scan_reconnect') : t('feishu_scan_panel_desc')}
               </p>
-              <Btn variant="primary" onClick={() => setFeishuScanning(true)}>
+              <Btn variant="primary" onClick={() => { setReplaceFeishuApp(false); setFeishuScanning(true) }}>
                 <span className="flex items-center gap-1.5">
                   <QrCode size={15} />
-                  {t('feishu_scan_btn')}
+                  {t(channel.active ? 'feishu_scan_reconnect' : 'feishu_scan_btn')}
                 </span>
               </Btn>
+              {channel.active && <button title={t('feishu_scan_replace_desc')} className="mt-3 text-sm text-accent"
+                onClick={() => { setReplaceFeishuApp(true); setFeishuScanning(true) }}>{t('feishu_scan_replace')}</button>}
             </div>
           )}
         </div>
@@ -1047,21 +1110,32 @@ const FieldRow: React.FC<{
   onChange: (v: string) => void
   onFocusSecret: () => void
 }> = ({ field, value, onChange, onFocusSecret }) => {
+  const label = localizedLabel(field.label)
+  if (field.type === 'select') {
+    return <label className="block text-sm text-content-secondary">
+      {label}
+      <select value={value || String(field.default)} onChange={(e) => onChange(e.target.value)}
+        className="mt-1 w-full px-3 py-2 rounded-btn border border-strong bg-inset text-content">
+        {(['owner_workspace', 'per_user', 'shared'] as const).map((mode) =>
+          <option key={mode} value={mode}>{t(`feishu_memory_${mode}`)}</option>)}
+      </select>
+    </label>
+  }
   if (field.type === 'bool') {
     return (
       <div className="flex items-center justify-between">
-        <span className="text-sm text-content-secondary">{field.label}</span>
+        <span className="text-sm text-content-secondary">{label}</span>
         <Toggle checked={value === 'true' || value === '1'} onChange={(v) => onChange(v ? 'true' : 'false')} />
       </div>
     )
   }
   return (
     <div>
-      <label className="block text-sm text-content-secondary mb-1.5">{field.label}</label>
+      <label className="block text-sm text-content-secondary mb-1.5">{label}</label>
       <input
         type={field.type === 'number' ? 'number' : 'text'}
         value={value}
-        placeholder={field.label}
+        placeholder={label}
         onChange={(e) => onChange(e.target.value)}
         onFocus={onFocusSecret}
         className="w-full px-3 py-2 rounded-btn border border-strong bg-inset text-sm text-content placeholder:text-content-tertiary focus:outline-none focus:border-accent font-mono transition-colors"

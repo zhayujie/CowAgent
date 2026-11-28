@@ -71,16 +71,35 @@ class FeishuMessage(ChatMessage):
     SUPPORTED_TYPES = ("text", "image", "post", "file", "audio")
 
     def __init__(self, event: dict, is_group=False, access_token=None, bot_mention_keys=(), domain=FEISHU_DOMAIN,
-                 *, attachment_cache_key=None):
+                 *, instance_id=None, app_id=None, identity_settings=None, share_group=True):
         super().__init__(event)
         msg = event.get("message")
         sender = event.get("sender")
         self.access_token = access_token
         self.domain = domain.rstrip("/")
         self.msg_id = msg.get("message_id")
+        self.chat_id = msg.get("chat_id")
         self.create_time = msg.get("create_time")
         self.is_group = is_group
-        self.attachment_cache_key = attachment_cache_key
+        self.identity_app_id = app_id or event.get("app_id", "")
+        self.identity_tenant_key = sender.get("tenant_key", "")
+        self.identity_sender_type = sender.get("sender_type", "user" if instance_id is None else "")
+        self.from_user_id = (sender.get("sender_id") or {}).get("open_id")
+        self.to_user_id = event.get("app_id")
+        self.actual_user_id = self.from_user_id
+        self.other_user_id = self.chat_id if is_group else self.from_user_id
+        self.actual_user_nickname = ""
+        self.image_dir = None
+        if instance_id is not None:
+            from agent.memory.feishu_identity import feishu_image_dir
+            from channel.feishu.owner_config import memory_mode, owner_ids
+
+            settings = identity_settings or {}
+            if settings.get("feishu_app_id") != self.identity_app_id:
+                settings = {}
+            self.identity_owner_open_ids = owner_ids(settings)
+            self.identity_private_memory_mode = memory_mode(settings)
+            self.image_dir = feishu_image_dir(self, instance_id, share_group)
         self.quoted_content = ""
         # Attachments belonging to this message, including downloaded quoted images.
         self.attachments = []
@@ -199,10 +218,6 @@ class FeishuMessage(ChatMessage):
             # The post's own words: @-mentions alone don't make a post of files
             # a question, so the channel still caches its files until one comes.
             self.post_text = "\n".join(p for i, p in enumerate(text_parts) if i not in mention_parts).strip()
-            # (local_path, file_type) of every successfully downloaded attachment
-            # Keep any quoted-image attachments collected before parsing this post.
-            self.attachments = list(getattr(self, "attachments", []))
-            tmp_dir = str(state_dir.tmp_dir())
             text = "\n".join(text_parts).strip()
             content_parts = [text] if text else []
 
@@ -224,6 +239,7 @@ class FeishuMessage(ChatMessage):
 
             self.failed_files = []
             seen_file_keys = set()
+            tmp_dir = str(state_dir.tmp_dir()) if file_items else None
             for file_key, file_name, file_type in file_items:
                 if file_key in seen_file_keys:
                     continue
@@ -288,18 +304,8 @@ class FeishuMessage(ChatMessage):
             self.quoted_content = quoted["text"]
             self.attachments.extend(quoted["attachments"])
 
-        self.from_user_id = sender.get("sender_id").get("open_id")
-        self.to_user_id = event.get("app_id")
         if is_group:
-            # 群聊
-            self.other_user_id = msg.get("chat_id")
-            self.actual_user_id = self.from_user_id
             self.content = _name_mentions(self.content, mention_labels).strip()
-            self.actual_user_nickname = ""
-        else:
-            # 私聊
-            self.other_user_id = self.from_user_id
-            self.actual_user_id = self.from_user_id
 
     def content_with_quote(self) -> str:
         """Return user text with optional quoted-message context for the agent."""
@@ -315,25 +321,35 @@ class FeishuMessage(ChatMessage):
     def _download_image(self, message_id, image_key):
         # Cache entries must keep pointing to the same bytes even if another
         # message uses the same Feishu resource key.
-        path = str(state_dir.tmp_dir() / f"{uuid.uuid4().hex}.png")
+        try:
+            directory = state_dir.tmp_dir() if self.image_dir is None else self.image_dir
+            if self.image_dir is not None:
+                if directory.resolve() != directory:
+                    raise OSError("Feishu image directory resolves outside its configured path")
+                directory.mkdir(parents=True, exist_ok=True)
+            path = str(directory / f"{uuid.uuid4().hex}.png")
+        except OSError as exc:
+            logger.warning("[FeiShu] Could not prepare image directory: %s", exc)
+            return None
         if _download_resource(message_id, image_key, "image", self.access_token, path,
                               MAX_IMAGE_BYTES, domain=self.domain):
             return path
         return None
 
     def _cached_quoted_image(self, parent_id, image_key):
-        if self.attachment_cache_key is None:
+        if self.image_dir is None:
             return None
 
         from channel.file_cache import get_file_cache
 
-        for item in get_file_cache().get(self.attachment_cache_key):
+        for item in get_file_cache().get(str(self.image_dir)):
             if item["type"] != "image" or item.get("source") != (parent_id, image_key):
                 continue
             path = Path(item["path"])
             try:
-                tmp_dir = state_dir.tmp_dir().resolve()
-                if path.resolve(strict=True) == tmp_dir / path.name and path.is_file() and not path.is_symlink():
+                if (self.image_dir.resolve() == self.image_dir
+                        and path.resolve(strict=True) == self.image_dir / path.name
+                        and path.is_file() and not path.is_symlink()):
                     return str(path)
             except (OSError, RuntimeError):
                 continue

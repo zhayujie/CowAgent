@@ -192,6 +192,11 @@ class Read(BaseTool):
             if shared_page:
                 absolute_path = shared_page
 
+        from agent.memory.feishu_identity import memory_path_denial
+        denial = memory_path_denial(self, absolute_path)
+        if denial:
+            return ToolResult.fail(f"Error: Access denied: {denial}")
+
         # Security check: block credential files and their aliases.
         # See issue #2913 (/proc/self/environ bypass) and #2863 (scope).
         if self._is_credential_path(absolute_path):
@@ -275,7 +280,16 @@ class Read(BaseTool):
             return None
         try:
             from common import state_dir
-            root = os.path.realpath(str(state_dir.knowledge_dir(base=self.cwd)))
+            scope = getattr(self, "feishu_memory_scope", None)
+            if scope:
+                from agent.tools.utils.memory_path import selected_knowledge_root
+
+                knowledge = selected_knowledge_root(scope[0])
+                if knowledge is None:
+                    return None
+                root = str(knowledge)
+            else:
+                root = os.path.realpath(str(state_dir.knowledge_dir(base=self.cwd)))
         except Exception:
             return None
         candidate = os.path.realpath(os.path.join(root, *parts[1:]))

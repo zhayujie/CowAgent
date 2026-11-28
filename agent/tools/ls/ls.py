@@ -63,6 +63,10 @@ class Ls(BaseTool):
         
         # Resolve path
         absolute_path = self._resolve_path(path)
+        from agent.memory.feishu_identity import memory_path_denial
+        denial = memory_path_denial(self, absolute_path)
+        if denial:
+            return ToolResult.fail(f"Error: Access denied: {denial}")
         
         # Security check: Prevent accessing sensitive config directory
         env_config_dir = expand_path("~/.cow")
