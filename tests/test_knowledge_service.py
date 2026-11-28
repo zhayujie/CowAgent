@@ -767,6 +767,33 @@ def test_listing_reuses_cached_titles_until_a_page_changes(tmp_path):
     assert files[0]["title"] == "Second title, longer"
 
 
+def test_rebuild_index_keeps_an_h1_hidden_by_a_utf8_bom(tmp_path):
+    """A Windows-saved page starts with a UTF-8 BOM.
+
+    list_tree already strips it (via _page_meta) so the tree shows the H1.
+    rebuild_index_md used a different reader that left the BOM in place, so
+    the heading no longer started with "# " and the index fell back to the
+    file stem. The console editor's read_file path had the same gap: the
+    BOM stayed in the body, so the H1 did not render as a heading.
+    """
+    svc, _ = service(tmp_path)
+    root = tmp_path / "knowledge"
+    (root / "notes").mkdir(parents=True)
+    (root / "notes" / "plan.md").write_bytes(b"\xef\xbb\xbf# Release Plan\n\nbody\n")
+
+    titles = {f["name"]: f["title"] for f in svc.list_tree()["tree"][0]["files"]}
+    assert titles == {"plan.md": "Release Plan"}
+
+    svc.rebuild_index_md()
+    index = (root / "index.md").read_text(encoding="utf-8")
+    assert "[Release Plan](./notes/plan.md)" in index
+    assert "[plan](./notes/plan.md)" not in index
+
+    page = svc.read_file("notes/plan.md")
+    assert page["content"].startswith("# Release Plan\n")
+    assert not page["content"].startswith("\ufeff")
+
+
 def test_graph_shares_the_page_cache_and_rereads_only_changed_pages(tmp_path):
     svc, _ = service(tmp_path)
     root = tmp_path / "knowledge"
