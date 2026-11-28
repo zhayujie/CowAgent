@@ -776,6 +776,18 @@ def _check_read_only(tool_name: str, args: Dict[str, Any], shell: Optional[str])
     if tool_name == "bash":
         return _check_bash_read_only(args, shell)
 
+    if tool_name not in _KNOWN_TOOLS:
+        from agent import plugin
+        writes = plugin.tool_writes(tool_name)
+        if writes is not None:
+            if writes:
+                return _deny(
+                    f"'{tool_name}' comes from a plugin that declares write access, "
+                    f"and this session is read-only.",
+                    READ_ONLY,
+                )
+            return ALLOW
+
     if tool_name not in _KNOWN_TOOLS and _MUTATING_NAME_RE.search(tool_name):
         return _deny(
             f"'{tool_name}' looks like it changes state (judged from its name) and "

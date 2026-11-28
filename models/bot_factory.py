@@ -95,4 +95,9 @@ def create_bot(bot_type, credential_bot_type=None):
         from models.doubao.doubao_bot import DoubaoBot
         return DoubaoBot()
 
+    from agent import plugin
+    factory = plugin.provider_factory(bot_type)
+    if factory is not None:
+        return factory()
+
     raise RuntimeError
