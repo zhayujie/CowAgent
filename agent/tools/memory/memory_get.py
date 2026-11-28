@@ -150,7 +150,9 @@ class MemoryGetTool(BaseTool):
             if not file_path.is_file():
                 return ToolResult.fail(f"Error: {path} is not a regular file")
             
-            content = file_path.read_text(encoding='utf-8')
+            # utf-8-sig: match the read tool so a Windows BOM is not part
+            # of the first line and does not hide a leading heading marker.
+            content = file_path.read_text(encoding='utf-8-sig')
             lines = _split_lines(content)
             
             # Handle line range
