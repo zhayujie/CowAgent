@@ -176,6 +176,10 @@ def build_agent_system_prompt(
     if context_files:
         sections.extend(_build_context_files_section(context_files, language))
 
+    # 6.5 Sections contributed by enabled plugins (short and labeled)
+    from agent import plugin
+    sections.extend(plugin.prompt_sections(language=language, workspace_dir=workspace_dir))
+
     # 7. Runtime info (meta info, goes last)
     if runtime_info:
         sections.extend(_build_runtime_section(runtime_info, language))

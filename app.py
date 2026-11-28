@@ -845,6 +845,11 @@ def run():
         _sync_builtin_skills()
         _scaffold_subagent_assets()
 
+        # Plugins before MCP warmup and channels: they may provide MCP servers,
+        # channel types and model providers.
+        from agent.plugin import load_plugins
+        load_plugins()
+
         # Kick off MCP server loading in the background so first-message
         # latency isn't dominated by npx package downloads. Skipped in the app
         # shells (MCP relies on external npx/uvx runtimes that aren't bundled).

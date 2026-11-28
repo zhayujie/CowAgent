@@ -1577,6 +1577,8 @@ class AgentStreamExecutor:
                 self._emit_event("agent_cancelled", {"final_response": final_response})
             logger.info(f"[Agent] 🏁 Done ({turn} turns)" + (" [cancelled]" if cancelled else ""))
             self._emit_event("agent_end", {"final_response": final_response, "cancelled": cancelled})
+            from agent import plugin
+            plugin.turn_end(final_response=final_response, cancelled=cancelled)
 
         return final_response
 
@@ -1838,6 +1840,8 @@ class AgentStreamExecutor:
             ToolManager().sync_mcp_into_agent(self)
         except Exception as e:
             logger.debug(f"[Agent] MCP sync skipped: {e}")
+        from agent import plugin
+        plugin.sync_tools_into_agent(self)
 
         # Prepare tool definitions. Kept as None (rather than []) when the agent
         # has no tools at all, which is what LLMRequest expects.
@@ -2659,9 +2663,10 @@ class AgentStreamExecutor:
                 tool.tool_call_id = None
             execution_time = time.time() - start_time
 
+            from agent import plugin
             result_dict = {
                 "status": result.status,
-                "result": result.result,
+                "result": plugin.after_tool(tool_name, arguments, result.result),
                 "execution_time": execution_time
             }
 
