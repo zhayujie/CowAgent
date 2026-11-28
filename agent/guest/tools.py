@@ -80,6 +80,21 @@ class GuestTool(BaseTool):
         if not self.write or not self.max_work_bytes:
             return None
         incoming = len(str(args.get("content") or args.get("newText") or "").encode("utf-8"))
+        if self.name == "write":
+            try:
+                incoming -= os.path.getsize(args.get("path") or "")
+            except OSError:
+                pass
+        elif self.name == "edit":
+            old_text = str(args.get("oldText") or "").encode("utf-8")
+            occurrences = 1
+            if old_text and args.get("replaceAll"):
+                try:
+                    with open(args.get("path") or "", "rb") as f:
+                        occurrences = f.read().count(old_text)
+                except OSError:
+                    occurrences = 0
+            incoming = (incoming - len(old_text)) * occurrences
         if self.guard.work_usage_bytes() + incoming > self.max_work_bytes:
             return "Error: this conversation's storage is full; no more files can be written."
         return None
