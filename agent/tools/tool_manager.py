@@ -113,7 +113,7 @@ class ToolManager:
         if not hasattr(self, '_mcp_signature'):
             # (mtime, sha256) of mcp.json the last time we loaded.
             # Used by refresh_mcp_if_changed() to skip re-parsing when nothing changed.
-            self._mcp_signature: tuple = (None, None)
+            self._mcp_signature: tuple = (None, None, 0)
         if not hasattr(self, '_mcp_active_configs'):
             # server_name -> normalized config dict, for diff-based reload.
             self._mcp_active_configs: dict = {}
@@ -320,23 +320,27 @@ class ToolManager:
 
     def _read_mcp_json_signature(self):
         """
-        Return (mtime, sha256_of_bytes) for ~/cow/mcp.json without parsing.
-        Returns (None, None) if the file doesn't exist or is unreadable.
+        Return (mtime, sha256_of_bytes, plugin_revision) for ~/cow/mcp.json
+        without parsing. The file fields are None if it doesn't exist or is
+        unreadable; the revision changes when plugins add or drop MCP servers.
         Cheap enough (one stat + one small read) to call on every agent init.
         """
         import os
         import hashlib
+        from agent import plugin
+
         path = self._mcp_json_path()
+        revision = plugin.mcp_revision()
         try:
             mtime = os.path.getmtime(path)
         except OSError:
-            return (None, None)
+            return (None, None, revision)
         try:
             with open(path, "rb") as f:
                 digest = hashlib.sha256(f.read()).hexdigest()
         except OSError:
-            return (mtime, None)
-        return (mtime, digest)
+            return (mtime, None, revision)
+        return (mtime, digest, revision)
 
     def _load_mcp_configs(self) -> list:
         """
@@ -365,13 +369,29 @@ class ToolManager:
                     # mcp.json; the real boot is logged once at INFO further below.
                     logger.debug(f"[ToolManager] Loading MCP config from {mcp_json_path}")
                     from agent.tools.mcp.service import mcp_is_disabled
-                    return [cfg for cfg in _normalize_mcp_configs(raw) if not mcp_is_disabled(cfg)]
+                    return self._with_plugin_mcp(
+                        [cfg for cfg in _normalize_mcp_configs(raw) if not mcp_is_disabled(cfg)]
+                    )
             except Exception as e:
                 logger.warning(f"[ToolManager] Failed to read {mcp_json_path}: {e}, falling back to config.json")
 
         raw = conf().get("mcp_servers", [])
         from agent.tools.mcp.service import mcp_is_disabled
-        return [cfg for cfg in _normalize_mcp_configs(raw) if not mcp_is_disabled(cfg)]
+        return self._with_plugin_mcp(
+            [cfg for cfg in _normalize_mcp_configs(raw) if not mcp_is_disabled(cfg)]
+        )
+
+    @staticmethod
+    def _with_plugin_mcp(configs: list) -> list:
+        """Append MCP servers shipped by enabled plugins; the user's own
+        servers keep their names."""
+        from agent import plugin
+
+        extra = plugin.mcp_servers()
+        if not extra:
+            return configs
+        names = {cfg.get("name") for cfg in configs}
+        return configs + [cfg for cfg in extra if cfg.get("name") not in names]
 
     def _load_mcp_tools(self):
         """

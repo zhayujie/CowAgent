@@ -102,6 +102,10 @@ def _build_channel(channel_type, multi_instance) -> Channel:
         ch = _fresh(WeixinChannel) if multi_instance else WeixinChannel()
         channel_type = const.WEIXIN
     else:
-        raise RuntimeError(f"unsupported channel_type: {channel_type!r}")
+        from agent import plugin
+        factory = plugin.channel_factory(channel_type)
+        if factory is None:
+            raise RuntimeError(f"unsupported channel_type: {channel_type!r}")
+        ch = factory()
     ch.channel_type = channel_type
     return ch

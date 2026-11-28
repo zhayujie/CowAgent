@@ -1543,6 +1543,14 @@ class CloudClient(LinkAIClient):
         with _acting_user(user_id), self._chat_identity(agent_id, user_id, session_id):
             # Intercept cow/slash commands before the agent runs
             try:
+                from agent import plugin
+                result = plugin.dispatch_command(query, channel_type="console", session_id=session_id)
+                if result is not None:
+                    send_chunk_fn({"chunk_type": "content", "delta": result, "segment_id": 0})
+                    return
+            except Exception as e:
+                logger.warning(f"[CloudClient] plugin command failed: {e}")
+            try:
                 from plugins import PluginManager
                 mgr = PluginManager()
                 instance = mgr.instances.get("COW_CLI")

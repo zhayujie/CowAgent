@@ -220,7 +220,21 @@ class ChatChannel(Channel):
             session_id=context.get("session_id"),
         )
 
+    def _plugin_info(self, context: Context) -> dict:
+        return {
+            "channel_type": context.get("channel_type") or getattr(self, "channel_type", None),
+            "session_id": context.get("session_id"),
+            "is_group": bool(context.get("isgroup", False)),
+            "context": context,
+        }
+
     def _generate_reply(self, context: Context, reply: Reply = Reply()) -> Reply:
+        if context.type == ContextType.TEXT and isinstance(context.content, str):
+            from agent import plugin
+            handled = plugin.on_message(context.content, **self._plugin_info(context))
+            if handled["reply"] is not None:
+                return Reply(ReplyType.TEXT, handled["reply"])
+            context.content = handled["text"]
         e_context = PluginManager().emit_event(
             EventContext(
                 Event.ON_HANDLE_CONTEXT,
@@ -322,6 +336,8 @@ class ChatChannel(Channel):
 
     def _decorate_reply(self, context: Context, reply: Reply) -> Reply:
         if reply and reply.type:
+            from agent import plugin
+            reply = plugin.render_reply(reply, **self._plugin_info(context))
             e_context = PluginManager().emit_event(
                 EventContext(
                     Event.ON_DECORATE_REPLY,

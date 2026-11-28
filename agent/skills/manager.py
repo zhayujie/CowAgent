@@ -158,8 +158,23 @@ class SkillManager:
             custom_dir=self.custom_dir,
             use_cache=use_cache,
         )
+        self._add_plugin_skills(use_cache)
         self._sync_skills_config()
         logger.debug(f"SkillManager: Loaded {len(self.skills)} skills")
+
+    def _add_plugin_skills(self, use_cache: bool):
+        """Skills shipped by enabled plugins. Built-in and custom skills keep
+        their name: a plugin cannot replace a skill the user already has."""
+        from agent import plugin
+
+        for skill_dir in plugin.skill_dirs():
+            try:
+                result = self.loader.load_skills_from_dir(skill_dir, source="plugin", use_cache=use_cache)
+                for skill in result.skills:
+                    if skill.name not in self.skills:
+                        self.skills[skill.name] = self.loader._create_skill_entry(skill)
+            except Exception as e:
+                logger.warning(f"[SkillManager] plugin skills in {skill_dir} skipped: {e}")
 
     # ------------------------------------------------------------------
     # skills_config.json management

@@ -40,6 +40,14 @@ def _plugins_data_dir():
 
 @singleton
 class PluginManager:
+    """Plugin system v1, event based.
+
+    Deprecated: new plugins should use plugin system v2 in ``agent.plugin``
+    (a ``plugin.yaml`` manifest plus ``apply(ctx)``), which can also provide
+    tools, skills, MCP servers, channels and model providers. This manager
+    keeps working for existing plugins and will be removed in a later version.
+    """
+
     def __init__(self):
         self.plugins = SortedDict(lambda k, v: v.priority, reverse=True)
         self.listening_plugins = {}

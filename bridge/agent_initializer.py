@@ -1064,6 +1064,13 @@ class AgentInitializer:
                     f"[AgentInitializer] Added {len(names)} MCP tool(s): {names}"
                 )
 
+        # Add tools provided by enabled plugins
+        from agent import plugin
+        plugin_tools = plugin.plugin_tools()
+        if plugin_tools:
+            known = {t.name for t in tools}
+            tools.extend(t for t in plugin_tools if t.name not in known)
+
         # Add memory tools
         if memory_tools:
             tools.extend(memory_tools)
