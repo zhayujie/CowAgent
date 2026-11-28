@@ -1,9 +1,12 @@
-"""Plugin system: extensions written for the runtime rather than for the model.
+"""Plugin system v2: extensions written for the runtime rather than for the model.
 
 A plugin is a directory with a ``plugin.yaml`` and an entry module defining
 ``apply(ctx)``. Through ``ctx`` it registers tools, slash commands, lifecycle
 hooks, skills, MCP servers, channels and model providers; disabling it revokes
 all of them at once.
+
+It replaces the v1 event-based system in ``plugins/``, which keeps working
+for existing plugins until it is removed.
 
 The functions below are the kernel's call sites. Each one is a no-op when no
 plugin is enabled and never raises, so a broken plugin cannot break the
