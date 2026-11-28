@@ -285,7 +285,9 @@ class KnowledgeService:
     def _extract_title(md_path: Path, fallback: str) -> str:
         """Read a markdown file's H1 title, falling back to the file stem."""
         try:
-            with open(md_path, "r", encoding="utf-8") as f:
+            # utf-8-sig: match _page_meta so a Windows BOM cannot hide the H1
+            # and leave rebuild_index_md falling back to the file stem.
+            with open(md_path, "r", encoding="utf-8-sig") as f:
                 for _ in range(20):
                     line = f.readline()
                     if not line:
@@ -792,7 +794,9 @@ class KnowledgeService:
         if not full_path.is_file():
             raise FileNotFoundError(f"file not found: {rel_path}")
 
-        with open(full_path, "r", encoding="utf-8") as f:
+        # utf-8-sig: the same BOM that would hide the H1 in _extract_title
+        # would otherwise stay in the editor body and break heading render.
+        with open(full_path, "r", encoding="utf-8-sig") as f:
             content = f.read()
         stat = full_path.stat()
         return {
